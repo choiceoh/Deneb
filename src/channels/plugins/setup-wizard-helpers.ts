@@ -484,7 +484,7 @@ export function setChannelDmPolicyWithAllowFrom(params: {
 }): OpenClawConfig {
   const { cfg, channel, dmPolicy } = params;
   const allowFrom =
-    dmPolicy === "open" ? addWildcardAllowFrom(cfg.channels?.[channel]?.allowFrom) : undefined;
+    dmPolicy === "open" ? addWildcardAllowFrom(cfg.channels?.[channel]?.allowFrom as (string | number)[] | null | undefined) : undefined;
   return {
     ...cfg,
     channels: {

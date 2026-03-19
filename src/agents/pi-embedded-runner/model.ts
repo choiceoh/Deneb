@@ -411,25 +411,8 @@ export async function resolveModelAsync(
 
 /**
  * Build a more helpful error when the model is not found.
- *
- * Local providers (ollama, vllm) need a dummy API key to be registered.
- * Users often configure `agents.defaults.model.primary: "ollama/…"` but
- * forget to set `OLLAMA_API_KEY`, resulting in a confusing "Unknown model"
- * error.  This detects known providers that require opt-in auth and adds
- * a hint.
- *
- * See: https://github.com/openclaw/openclaw/issues/17328
  */
-const LOCAL_PROVIDER_HINTS: Record<string, string> = {
-  ollama:
-    "Ollama requires authentication to be registered as a provider. " +
-    'Set OLLAMA_API_KEY="ollama-local" (any value works) or run "openclaw configure". ' +
-    "See: https://docs.openclaw.ai/providers/ollama",
-  vllm:
-    "vLLM requires authentication to be registered as a provider. " +
-    'Set VLLM_API_KEY (any value works) or run "openclaw configure". ' +
-    "See: https://docs.openclaw.ai/providers/vllm",
-};
+const LOCAL_PROVIDER_HINTS: Record<string, string> = {};
 
 function buildUnknownModelError(provider: string, modelId: string): string {
   const suppressed = buildSuppressedBuiltInModelError({ provider, id: modelId });

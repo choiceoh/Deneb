@@ -19,7 +19,6 @@ import mistralPlugin from "../../../extensions/mistral/index.js";
 import modelStudioPlugin from "../../../extensions/modelstudio/index.js";
 import moonshotPlugin from "../../../extensions/moonshot/index.js";
 import nvidiaPlugin from "../../../extensions/nvidia/index.js";
-import ollamaPlugin from "../../../extensions/ollama/index.js";
 import openAIPlugin from "../../../extensions/openai/index.js";
 import opencodeGoPlugin from "../../../extensions/opencode-go/index.js";
 import opencodePlugin from "../../../extensions/opencode/index.js";
@@ -27,12 +26,10 @@ import openrouterPlugin from "../../../extensions/openrouter/index.js";
 import perplexityPlugin from "../../../extensions/perplexity/index.js";
 import qianfanPlugin from "../../../extensions/qianfan/index.js";
 import qwenPortalAuthPlugin from "../../../extensions/qwen-portal-auth/index.js";
-import sglangPlugin from "../../../extensions/sglang/index.js";
 import syntheticPlugin from "../../../extensions/synthetic/index.js";
 import togetherPlugin from "../../../extensions/together/index.js";
 import venicePlugin from "../../../extensions/venice/index.js";
 import vercelAiGatewayPlugin from "../../../extensions/vercel-ai-gateway/index.js";
-import vllmPlugin from "../../../extensions/vllm/index.js";
 import volcenginePlugin from "../../../extensions/volcengine/index.js";
 import xaiPlugin from "../../../extensions/xai/index.js";
 import xiaomiPlugin from "../../../extensions/xiaomi/index.js";
@@ -370,19 +367,16 @@ const bundledProviderPlugins = dedupePlugins([
   modelStudioPlugin,
   moonshotPlugin,
   nvidiaPlugin,
-  ollamaPlugin,
   openAIPlugin,
   opencodePlugin,
   opencodeGoPlugin,
   openrouterPlugin,
   qianfanPlugin,
   qwenPortalAuthPlugin,
-  sglangPlugin,
   syntheticPlugin,
   togetherPlugin,
   venicePlugin,
   vercelAiGatewayPlugin,
-  vllmPlugin,
   volcenginePlugin,
   xaiPlugin,
   xiaomiPlugin,

@@ -6,6 +6,7 @@ import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import { writeFileWithinRoot } from "../infra/fs-safe.js";
+import { sleep } from "../utils.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { isFileMissingError, statRegularFile } from "./fs-utils.js";
 import { resolveCliSpawnInvocation, runCliCommand } from "./qmd-process.js";
@@ -1042,7 +1043,7 @@ export class QmdMemoryManager implements MemorySearchManager {
         log.warn(
           `qmd update retry ${attempt}/${maxAttempts - 1} after failure (${reason}): ${String(err)}`,
         );
-        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+        await sleep(delayMs);
       }
     }
   }
@@ -1193,8 +1194,6 @@ export class QmdMemoryManager implements MemorySearchManager {
       spawnInvocation: resolveCliSpawnInvocation({
         command: this.qmd.command,
         args,
-        env: this.env,
-        packageName: "qmd",
       }),
       env: this.env,
       cwd: this.workspaceDir,
@@ -1247,8 +1246,6 @@ export class QmdMemoryManager implements MemorySearchManager {
     const spawnInvocation = resolveCliSpawnInvocation({
       command: "mcporter",
       args,
-      env: this.env,
-      packageName: "mcporter",
     });
     return await runCliCommand({
       commandSummary: `${spawnInvocation.command} ${spawnInvocation.argv.join(" ")}`,

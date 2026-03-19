@@ -23,7 +23,6 @@ import {
   CUSTOM_LOCAL_AUTH_MARKER,
   isKnownEnvApiKeyMarker,
   isNonSecretApiKeyMarker,
-  OLLAMA_LOCAL_AUTH_MARKER,
 } from "./model-auth-markers.js";
 import { normalizeProviderId, normalizeProviderIdForAuth } from "./model-selection.js";
 
@@ -181,13 +180,6 @@ function resolveSyntheticLocalProviderAuth(params: {
   }
 
   const normalizedProvider = normalizeProviderId(params.provider);
-  if (normalizedProvider === "ollama") {
-    return {
-      apiKey: OLLAMA_LOCAL_AUTH_MARKER,
-      source: "models.providers.ollama (synthetic local key)",
-      mode: "api-key",
-    };
-  }
 
   const authOverride = resolveProviderAuthOverride(params.cfg, params.provider);
   if (authOverride && authOverride !== "api-key") {

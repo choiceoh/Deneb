@@ -12,7 +12,7 @@ import { formatTokenCount, formatUsd } from "../../utils/usage-format.js";
 import { parseActivationCommand } from "../group-activation.js";
 import { parseSendPolicyCommand } from "../send-policy.js";
 import { normalizeFastMode, normalizeUsageDisplay, resolveResponseUsageMode } from "../thinking.js";
-import { isDiscordSurface, isTelegramSurface, resolveChannelAccountId } from "./channel-context.js";
+import { isTelegramSurface, resolveChannelAccountId } from "./channel-context.js";
 import { handleAbortTrigger, handleStopCommand } from "./commands-session-abort.js";
 import { persistSessionEntry } from "./commands-session-store.js";
 import type { CommandHandler } from "./commands-types.js";
@@ -362,59 +362,30 @@ export const handleSessionCommand: CommandHandler = async (params, allowTextComm
     };
   }
 
-  const onDiscord = isDiscordSurface(params);
   const onTelegram = isTelegramSurface(params);
-  if (!onDiscord && !onTelegram) {
+  if (!onTelegram) {
     return {
       shouldContinue: false,
       reply: {
-        text: "⚠️ /session idle and /session max-age are currently available for Discord and Telegram bound sessions.",
+        text: "⚠️ /session idle and /session max-age are currently available for Telegram bound sessions.",
       },
     };
   }
 
   const accountId = resolveChannelAccountId(params);
   const sessionBindingService = getSessionBindingService();
-  const threadId =
-    params.ctx.MessageThreadId != null ? String(params.ctx.MessageThreadId).trim() : "";
-  const telegramConversationId = onTelegram ? resolveTelegramConversationId(params) : undefined;
+  const telegramConversationId = resolveTelegramConversationId(params);
   const channelRuntime = getChannelRuntime();
 
-  const discordManager = onDiscord
-    ? channelRuntime.discord.threadBindings.getManager(accountId)
-    : null;
-  if (onDiscord && !discordManager) {
-    return {
-      shouldContinue: false,
-      reply: { text: "⚠️ Discord thread bindings are unavailable for this account." },
-    };
-  }
-
-  const discordBinding =
-    onDiscord && threadId ? discordManager?.getByThreadId(threadId) : undefined;
   const telegramBinding =
-    onTelegram && telegramConversationId
+    telegramConversationId
       ? sessionBindingService.resolveByConversation({
           channel: "telegram",
           accountId,
           conversationId: telegramConversationId,
         })
       : null;
-  if (onDiscord && !discordBinding) {
-    if (onDiscord && !threadId) {
-      return {
-        shouldContinue: false,
-        reply: {
-          text: "⚠️ /session idle and /session max-age must be run inside a focused Discord thread.",
-        },
-      };
-    }
-    return {
-      shouldContinue: false,
-      reply: { text: "ℹ️ This thread is not currently focused." },
-    };
-  }
-  if (onTelegram && !telegramBinding) {
+  if (!telegramBinding) {
     if (!telegramConversationId) {
       return {
         shouldContinue: false,
@@ -429,32 +400,12 @@ export const handleSessionCommand: CommandHandler = async (params, allowTextComm
     };
   }
 
-  const idleTimeoutMs = onDiscord
-    ? channelRuntime.discord.threadBindings.resolveIdleTimeoutMs({
-        record: discordBinding!,
-        defaultIdleTimeoutMs: discordManager!.getIdleTimeoutMs(),
-      })
-    : resolveTelegramBindingDurationMs(telegramBinding!, "idleTimeoutMs", 24 * 60 * 60 * 1000);
-  const idleExpiresAt = onDiscord
-    ? channelRuntime.discord.threadBindings.resolveInactivityExpiresAt({
-        record: discordBinding!,
-        defaultIdleTimeoutMs: discordManager!.getIdleTimeoutMs(),
-      })
-    : idleTimeoutMs > 0
+  const idleTimeoutMs = resolveTelegramBindingDurationMs(telegramBinding!, "idleTimeoutMs", 24 * 60 * 60 * 1000);
+  const idleExpiresAt = idleTimeoutMs > 0
       ? resolveTelegramBindingLastActivityAt(telegramBinding!) + idleTimeoutMs
       : undefined;
-  const maxAgeMs = onDiscord
-    ? channelRuntime.discord.threadBindings.resolveMaxAgeMs({
-        record: discordBinding!,
-        defaultMaxAgeMs: discordManager!.getMaxAgeMs(),
-      })
-    : resolveTelegramBindingDurationMs(telegramBinding!, "maxAgeMs", 0);
-  const maxAgeExpiresAt = onDiscord
-    ? channelRuntime.discord.threadBindings.resolveMaxAgeExpiresAt({
-        record: discordBinding!,
-        defaultMaxAgeMs: discordManager!.getMaxAgeMs(),
-      })
-    : maxAgeMs > 0
+  const maxAgeMs = resolveTelegramBindingDurationMs(telegramBinding!, "maxAgeMs", 0);
+  const maxAgeExpiresAt = maxAgeMs > 0
       ? telegramBinding!.boundAt + maxAgeMs
       : undefined;
 
@@ -498,16 +449,12 @@ export const handleSessionCommand: CommandHandler = async (params, allowTextComm
   }
 
   const senderId = params.command.senderId?.trim() || "";
-  const boundBy = onDiscord
-    ? discordBinding!.boundBy
-    : resolveTelegramBindingBoundBy(telegramBinding!);
+  const boundBy = resolveTelegramBindingBoundBy(telegramBinding!);
   if (boundBy && boundBy !== "system" && senderId && senderId !== boundBy) {
     return {
       shouldContinue: false,
       reply: {
-        text: onDiscord
-          ? `⚠️ Only ${boundBy} can update session lifecycle settings for this thread.`
-          : `⚠️ Only ${boundBy} can update session lifecycle settings for this conversation.`,
+        text: `⚠️ Only ${boundBy} can update session lifecycle settings for this conversation.`,
       },
     };
   }
@@ -522,21 +469,7 @@ export const handleSessionCommand: CommandHandler = async (params, allowTextComm
     };
   }
 
-  const updatedBindings = (() => {
-    if (onDiscord) {
-      return action === SESSION_ACTION_IDLE
-        ? channelRuntime.discord.threadBindings.setIdleTimeoutBySessionKey({
-            targetSessionKey: discordBinding!.targetSessionKey,
-            accountId,
-            idleTimeoutMs: durationMs,
-          })
-        : channelRuntime.discord.threadBindings.setMaxAgeBySessionKey({
-            targetSessionKey: discordBinding!.targetSessionKey,
-            accountId,
-            maxAgeMs: durationMs,
-          });
-    }
-    return action === SESSION_ACTION_IDLE
+  const updatedBindings = action === SESSION_ACTION_IDLE
       ? channelRuntime.telegram.threadBindings.setIdleTimeoutBySessionKey({
           targetSessionKey: telegramBinding!.targetSessionKey,
           accountId,
@@ -547,7 +480,6 @@ export const handleSessionCommand: CommandHandler = async (params, allowTextComm
           accountId,
           maxAgeMs: durationMs,
         });
-  })();
   if (updatedBindings.length === 0) {
     return {
       shouldContinue: false,

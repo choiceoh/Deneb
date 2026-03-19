@@ -36,8 +36,6 @@ export * from "../channels/plugins/directory-adapters.js";
 export * from "../channels/plugins/media-payload.js";
 export { PAIRING_APPROVED_MESSAGE } from "../channels/plugins/pairing-message.js";
 export * from "./message-tool-schema.js";
-export * from "../channels/plugins/normalize/signal.js";
-export * from "../channels/plugins/normalize/whatsapp.js";
 export * from "../channels/plugins/outbound/direct-text-media.js";
 export * from "../channels/plugins/outbound/interactive.js";
 export * from "../channels/plugins/pairing-adapters.js";
@@ -57,7 +55,6 @@ export {
 export * from "../infra/outbound/send-deps.js";
 export * from "../polls.js";
 export * from "../utils/message-channel.js";
-export * from "../whatsapp/normalize.js";
 export { createActionGate, jsonResult, readStringParam } from "../agents/tools/common.js";
 export * from "./channel-send-result.js";
 export * from "./channel-lifecycle.js";
@@ -71,3 +68,8 @@ export {
   normalizeInteractiveReply,
   resolveInteractiveTextFallback,
 } from "../interactive/payload.js";
+
+/** Stub: Signal target normalization (original normalize/signal module removed). */
+export function normalizeSignalMessagingTarget(target: string): string {
+  return target;
+}

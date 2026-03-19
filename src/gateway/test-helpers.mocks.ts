@@ -15,6 +15,7 @@ import type { TailscaleWhoisIdentity } from "../infra/tailscale.js";
 import type { PluginRegistry } from "../plugins/registry.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
 import { DEFAULT_ACCOUNT_ID } from "../routing/session-key.js";
+import { sleep } from "../utils.js";
 
 type StubChannelOptions = {
   id: ChannelPlugin["id"];
@@ -292,7 +293,7 @@ vi.mock("../config/sessions.js", async () => {
     saveSessionStore: vi.fn(async (storePath: string, store: unknown) => {
       const delay = sessionStoreSaveDelayMs.value;
       if (delay > 0) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await sleep(delay);
       }
       return actual.saveSessionStore(storePath, store as never);
     }),

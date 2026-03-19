@@ -1,7 +1,7 @@
 import type { HeartbeatEventPayload } from "../infra/heartbeat-events.js";
 import { normalizeUpdateChannel, resolveUpdateChannelDisplay } from "../infra/update-channels.js";
 import type { RuntimeEnv } from "../runtime.js";
-import { getDaemonStatusSummary, getNodeDaemonStatusSummary } from "./status.daemon.js";
+import { getDaemonStatusSummary } from "./status.daemon.js";
 import { scanStatusJsonFast } from "./status.scan.fast-json.js";
 
 let providerUsagePromise: Promise<typeof import("../infra/provider-usage.js")> | undefined;
@@ -70,9 +70,8 @@ export async function statusJsonCommand(
         }).catch(() => null)
       : null;
 
-  const [daemon, nodeDaemon] = await Promise.all([
+  const [daemon] = await Promise.all([
     getDaemonStatusSummary(),
-    getNodeDaemonStatusSummary(),
   ]);
   const channelInfo = resolveUpdateChannelDisplay({
     configChannel: normalizeUpdateChannel(scan.cfg.update?.channel),
@@ -103,7 +102,6 @@ export async function statusJsonCommand(
           authWarning: scan.gatewayProbeAuthWarning ?? null,
         },
         gatewayService: daemon,
-        nodeService: nodeDaemon,
         agents: scan.agentStatus,
         securityAudit,
         secretDiagnostics: scan.secretDiagnostics,

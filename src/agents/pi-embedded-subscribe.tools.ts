@@ -133,16 +133,13 @@ export function extractToolResultText(result: unknown): string | undefined {
 // Core tool names that are allowed to emit local MEDIA: paths.
 // Plugin/MCP tools are intentionally excluded to prevent untrusted file reads.
 const TRUSTED_TOOL_RESULT_MEDIA = new Set([
-  "agents_list",
   "apply_patch",
   "browser",
-  "canvas",
   "cron",
   "edit",
   "exec",
   "gateway",
   "image",
-  "image_generate",
   "memory_get",
   "memory_search",
   "message",
@@ -155,7 +152,6 @@ const TRUSTED_TOOL_RESULT_MEDIA = new Set([
   "sessions_send",
   "sessions_spawn",
   "subagents",
-  "tts",
   "web_fetch",
   "web_search",
   "write",

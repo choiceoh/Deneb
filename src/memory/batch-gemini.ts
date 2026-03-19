@@ -9,6 +9,7 @@ import { debugEmbeddingsLog } from "./embeddings-debug.js";
 import type { GeminiEmbeddingClient, GeminiTextEmbeddingRequest } from "./embeddings-gemini.js";
 import { hashText } from "./internal.js";
 import { withRemoteHttpResponse } from "./remote-http.js";
+import { sleep } from "../utils.js";
 
 export type GeminiBatchRequest = {
   custom_id: string;
@@ -257,7 +258,7 @@ async function waitForGeminiBatch(params: {
       throw new Error(`gemini batch ${params.batchName} timed out after ${params.timeoutMs}ms`);
     }
     params.debug?.(`gemini batch ${params.batchName} ${state}; waiting ${params.pollIntervalMs}ms`);
-    await new Promise((resolve) => setTimeout(resolve, params.pollIntervalMs));
+    await sleep(params.pollIntervalMs);
     current = undefined;
   }
 }

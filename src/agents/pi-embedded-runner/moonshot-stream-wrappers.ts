@@ -66,14 +66,7 @@ export function shouldApplyMoonshotPayloadCompat(params: {
     return true;
   }
 
-  // Ollama Cloud exposes Kimi variants through OpenAI-compatible model IDs such
-  // as `kimi-k2.5:cloud`, but they still need the same payload normalization as
-  // native Moonshot endpoints when thinking/tool_choice are enabled together.
-  return (
-    normalizedProvider === "ollama" &&
-    normalizedModelId.startsWith("kimi-k") &&
-    normalizedModelId.includes(":cloud")
-  );
+  return false;
 }
 
 export function createSiliconFlowThinkingWrapper(baseStreamFn: StreamFn | undefined): StreamFn {

@@ -1,4 +1,3 @@
-import { hasAnyWhatsAppAuth } from "openclaw/plugin-sdk/whatsapp";
 import { normalizeProviderId } from "../agents/model-selection.js";
 import { hasMeaningfulChannelConfig } from "../channels/config-presence.js";
 import {
@@ -79,29 +78,6 @@ const STRUCTURED_CHANNEL_CONFIG_SPECS: Record<string, StructuredChannelConfigSpe
     stringKeys: ["botToken", "tokenFile"],
     accountStringKeys: ["botToken", "tokenFile"],
   },
-  discord: {
-    envAny: ["DISCORD_BOT_TOKEN"],
-    stringKeys: ["token"],
-    accountStringKeys: ["token"],
-  },
-  irc: {
-    envAll: ["IRC_HOST", "IRC_NICK"],
-    stringKeys: ["host", "nick"],
-    accountStringKeys: ["host", "nick"],
-  },
-  slack: {
-    envAny: ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_USER_TOKEN"],
-    stringKeys: ["botToken", "appToken", "userToken"],
-    accountStringKeys: ["botToken", "appToken", "userToken"],
-  },
-  signal: {
-    stringKeys: ["account", "httpUrl", "httpHost", "cliPath"],
-    numberKeys: ["httpPort"],
-    accountStringKeys: ["account", "httpUrl", "httpHost", "cliPath"],
-  },
-  imessage: {
-    stringKeys: ["cliPath"],
-  },
 };
 
 function envHasAnyKeys(env: NodeJS.ProcessEnv, keys: readonly string[]): boolean {
@@ -159,17 +135,6 @@ function isStructuredChannelConfigured(
   return hasMeaningfulChannelConfig(entry);
 }
 
-function isWhatsAppConfigured(cfg: OpenClawConfig): boolean {
-  if (hasAnyWhatsAppAuth(cfg)) {
-    return true;
-  }
-  const entry = resolveChannelConfig(cfg, "whatsapp");
-  if (!entry) {
-    return false;
-  }
-  return hasMeaningfulChannelConfig(entry);
-}
-
 function isGenericChannelConfigured(cfg: OpenClawConfig, channelId: string): boolean {
   const entry = resolveChannelConfig(cfg, channelId);
   return hasMeaningfulChannelConfig(entry);
@@ -180,9 +145,6 @@ export function isChannelConfigured(
   channelId: string,
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  if (channelId === "whatsapp") {
-    return isWhatsAppConfigured(cfg);
-  }
   const spec = STRUCTURED_CHANNEL_CONFIG_SPECS[channelId];
   if (spec) {
     return isStructuredChannelConfigured(cfg, channelId, env, spec);
@@ -392,7 +354,9 @@ function isPluginDenied(cfg: OpenClawConfig, pluginId: string): boolean {
 function resolvePreferredOverIds(pluginId: string, env: NodeJS.ProcessEnv): string[] {
   const normalized = normalizeChatChannelId(pluginId);
   if (normalized) {
-    return getChatChannelMeta(normalized).preferOver ?? [];
+    const meta = getChatChannelMeta(normalized);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (meta as any)?.preferOver ?? [];
   }
   const catalogEntry = getChannelPluginCatalogEntry(pluginId, { env });
   return catalogEntry?.meta.preferOver ?? [];
@@ -462,7 +426,8 @@ function formatAutoEnableChange(entry: PluginEnableChange): string {
   let reason = entry.reason.trim();
   const channelId = normalizeChatChannelId(entry.pluginId);
   if (channelId) {
-    const label = getChatChannelMeta(channelId).label;
+    const meta = getChatChannelMeta(channelId);
+    const label = meta?.label ?? channelId;
     reason = reason.replace(new RegExp(`^${channelId}\\b`, "i"), label);
   }
   return `${reason}, enabled automatically.`;

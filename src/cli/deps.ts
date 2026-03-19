@@ -47,22 +47,6 @@ export function createDefaultDeps(): CliDeps {
       "telegram",
       () => import("./send-runtime/telegram.js") as Promise<RuntimeSendModule>,
     ),
-    discord: createLazySender(
-      "discord",
-      () => import("./send-runtime/discord.js") as Promise<RuntimeSendModule>,
-    ),
-    slack: createLazySender(
-      "slack",
-      () => import("./send-runtime/slack.js") as Promise<RuntimeSendModule>,
-    ),
-    signal: createLazySender(
-      "signal",
-      () => import("./send-runtime/signal.js") as Promise<RuntimeSendModule>,
-    ),
-    imessage: createLazySender(
-      "imessage",
-      () => import("./send-runtime/imessage.js") as Promise<RuntimeSendModule>,
-    ),
   };
 }
 

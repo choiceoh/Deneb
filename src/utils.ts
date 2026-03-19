@@ -226,6 +226,57 @@ export function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * 조건이 truthy가 될 때까지 폴링 대기
+ */
+export async function waitFor<T>(
+  fn: () => T | Promise<T>,
+  options: {
+    timeoutMs?: number;      // 기본 30_000
+    intervalMs?: number;     // 기본 500
+    signal?: AbortSignal;
+  } = {}
+): Promise<T> {
+  const { timeoutMs = 30_000, intervalMs = 500, signal } = options;
+  const start = Date.now();
+  while (true) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    const result = await fn();
+    if (result) return result;
+    if (Date.now() - start > timeoutMs) throw new Error(`waitFor timed out after ${timeoutMs}ms`);
+    await sleep(intervalMs);
+  }
+}
+
+/**
+ * EventEmitter의 단일 이벤트 대기
+ */
+export function waitForEvent<T = any>(
+  emitter: { once: (event: string, fn: (...args: any[]) => void) => void; off: (event: string, fn: (...args: any[]) => void) => void },
+  event: string,
+  options: {
+    timeoutMs?: number;  // 기본 30_000
+    signal?: AbortSignal;
+  } = {}
+): Promise<T> {
+  const { timeoutMs = 30_000, signal } = options;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error(`waitForEvent("${event}") timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    const onEvent = (val: T) => { cleanup(); resolve(val); };
+    const onAbort = () => { cleanup(); reject(new DOMException("Aborted", "AbortError")); };
+    const cleanup = () => {
+      clearTimeout(timer);
+      emitter.off(event, onEvent);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    emitter.once(event, onEvent);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 function isHighSurrogate(codeUnit: number): boolean {
   return codeUnit >= 0xd800 && codeUnit <= 0xdbff;
 }

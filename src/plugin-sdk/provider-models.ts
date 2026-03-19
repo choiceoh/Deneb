@@ -55,7 +55,6 @@ export {
   CHUTES_MODEL_CATALOG,
   discoverChutesModels,
 } from "../agents/chutes-models.js";
-export { resolveOllamaApiBase } from "../agents/ollama-models.js";
 export {
   buildSyntheticModelDefinition,
   SYNTHETIC_BASE_URL,
@@ -88,9 +87,6 @@ export {
   DOUBAO_MODEL_CATALOG,
   buildDoubaoModelDefinition,
 } from "../agents/doubao-models.js";
-export { OLLAMA_DEFAULT_BASE_URL } from "../agents/ollama-defaults.js";
-export { VLLM_DEFAULT_BASE_URL } from "../agents/vllm-defaults.js";
-export { SGLANG_DEFAULT_BASE_URL } from "../agents/sglang-defaults.js";
 export {
   KILOCODE_BASE_URL,
   KILOCODE_DEFAULT_CONTEXT_WINDOW,

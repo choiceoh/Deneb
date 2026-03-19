@@ -36,7 +36,8 @@ const resolveChannelLabel = (channel: string) => {
   }
   const normalized = normalizeChatChannelId(channel);
   if (normalized) {
-    return getChatChannelMeta(normalized).label;
+    const meta = getChatChannelMeta(normalized);
+    return meta?.label ?? channel;
   }
   return channel;
 };

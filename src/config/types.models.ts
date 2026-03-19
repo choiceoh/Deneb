@@ -9,7 +9,6 @@ export const MODEL_APIS = [
   "google-generative-ai",
   "github-copilot",
   "bedrock-converse-stream",
-  "ollama",
 ] as const;
 
 export type ModelApi = (typeof MODEL_APIS)[number];

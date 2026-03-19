@@ -25,7 +25,7 @@ import { resolveControlUiLinks } from "./onboard-helpers.js";
 import { statusAllCommand } from "./status-all.js";
 import { groupChannelIssuesByChannel } from "./status-all/channel-issues.js";
 import { formatGatewayAuthUsed } from "./status-all/format.js";
-import { getDaemonStatusSummary, getNodeDaemonStatusSummary } from "./status.daemon.js";
+import { getDaemonStatusSummary } from "./status.daemon.js";
 import {
   formatDuration,
   formatKTokens,
@@ -192,9 +192,8 @@ export async function statusCommand(
   });
 
   if (opts.json) {
-    const [daemon, nodeDaemon] = await Promise.all([
+    const [daemon] = await Promise.all([
       getDaemonStatusSummary(),
-      getNodeDaemonStatusSummary(),
     ]);
     runtime.log(
       JSON.stringify(
@@ -218,7 +217,6 @@ export async function statusCommand(
             authWarning: gatewayProbeAuthWarning ?? null,
           },
           gatewayService: daemon,
-          nodeService: nodeDaemon,
           agents: agentStatus,
           securityAudit,
           secretDiagnostics,
@@ -316,9 +314,8 @@ export async function statusCommand(
     return `${agentStatus.agents.length} · ${pending} · sessions ${agentStatus.totalSessions}${defSuffix}`;
   })();
 
-  const [daemon, nodeDaemon] = await Promise.all([
+  const [daemon] = await Promise.all([
     getDaemonStatusSummary(),
-    getNodeDaemonStatusSummary(),
   ]);
   const daemonValue = (() => {
     if (daemon.installed === false) {
@@ -326,13 +323,6 @@ export async function statusCommand(
     }
     const installedPrefix = daemon.managedByOpenClaw ? "installed · " : "";
     return `${daemon.label} ${installedPrefix}${daemon.loadedText}${daemon.runtimeShort ? ` · ${daemon.runtimeShort}` : ""}`;
-  })();
-  const nodeDaemonValue = (() => {
-    if (nodeDaemon.installed === false) {
-      return `${nodeDaemon.label} not installed`;
-    }
-    const installedPrefix = nodeDaemon.managedByOpenClaw ? "installed · " : "";
-    return `${nodeDaemon.label} ${installedPrefix}${nodeDaemon.loadedText}${nodeDaemon.runtimeShort ? ` · ${nodeDaemon.runtimeShort}` : ""}`;
   })();
 
   const defaults = summary.sessions.defaults;
@@ -456,7 +446,6 @@ export async function statusCommand(
       ? [{ Item: "Gateway auth warning", Value: warn(gatewayProbeAuthWarning) }]
       : []),
     { Item: "Gateway service", Value: daemonValue },
-    { Item: "Node service", Value: nodeDaemonValue },
     { Item: "Agents", Value: agentsValue },
     { Item: "Memory", Value: memoryValue },
     { Item: "Plugin compatibility", Value: pluginCompatibilityValue },

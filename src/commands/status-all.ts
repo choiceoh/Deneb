@@ -9,7 +9,6 @@ import {
   resolveGatewayPort,
 } from "../config/config.js";
 import { readLastGatewayErrorLine } from "../daemon/diagnostics.js";
-import { resolveNodeService } from "../daemon/node-service.js";
 import type { GatewayService } from "../daemon/service.js";
 import { resolveGatewayService } from "../daemon/service.js";
 import { buildGatewayConnectionDetails, callGateway } from "../gateway/call.js";
@@ -156,7 +155,6 @@ export async function statusAllCommand(
       }
     };
     const daemon = await readServiceSummary(resolveGatewayService());
-    const nodeService = await readServiceSummary(resolveNodeService());
     progress.tick();
 
     progress.setLabel("Scanning agents…");
@@ -319,14 +317,6 @@ export async function statusAllCommand(
               : `${daemon.label} ${daemon.managedByOpenClaw ? "installed · " : ""}${daemon.loadedText}${daemon.runtime?.status ? ` · ${daemon.runtime.status}` : ""}${daemon.runtime?.pid ? ` (pid ${daemon.runtime.pid})` : ""}`,
           }
         : { Item: "Gateway service", Value: "unknown" },
-      nodeService
-        ? {
-            Item: "Node service",
-            Value: !nodeService.installed
-              ? `${nodeService.label} not installed`
-              : `${nodeService.label} ${nodeService.managedByOpenClaw ? "installed · " : ""}${nodeService.loadedText}${nodeService.runtime?.status ? ` · ${nodeService.runtime.status}` : ""}${nodeService.runtime?.pid ? ` (pid ${nodeService.runtime.pid})` : ""}`,
-          }
-        : { Item: "Node service", Value: "unknown" },
       {
         Item: "Agents",
         Value: `${agentStatus.agents.length} total · ${agentStatus.bootstrapPendingCount} bootstrapping · ${aliveAgents} active · ${agentStatus.totalSessions} sessions`,

@@ -16,10 +16,6 @@ import {
 import { isKnownCoreToolId } from "../agents/tool-catalog.js";
 import { ensureOpenClawCliOnPath } from "../infra/path-env.js";
 import {
-  materializeWindowsSpawnProgram,
-  resolveWindowsSpawnProgram,
-} from "../plugin-sdk/windows-spawn.js";
-import {
   listKnownProviderAuthEnvVarNames,
   omitEnvKeysCaseInsensitive,
 } from "../secrets/provider-env-vars.js";
@@ -431,20 +427,9 @@ export function resolveAcpClientSpawnInvocation(
   params: { serverCommand: string; serverArgs: string[] },
   runtime: AcpSpawnRuntime = DEFAULT_ACP_SPAWN_RUNTIME,
 ): { command: string; args: string[]; shell?: boolean; windowsHide?: boolean } {
-  const program = resolveWindowsSpawnProgram({
-    command: params.serverCommand,
-    platform: runtime.platform,
-    env: runtime.env,
-    execPath: runtime.execPath,
-    packageName: "openclaw",
-    allowShellFallback: true,
-  });
-  const resolved = materializeWindowsSpawnProgram(program, params.serverArgs);
   return {
-    command: resolved.command,
-    args: resolved.argv,
-    shell: resolved.shell,
-    windowsHide: resolved.windowsHide,
+    command: params.serverCommand,
+    args: params.serverArgs,
   };
 }
 

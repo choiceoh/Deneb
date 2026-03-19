@@ -3,15 +3,12 @@ import path from "node:path";
 import {
   GATEWAY_SERVICE_KIND,
   GATEWAY_SERVICE_MARKER,
-  resolveGatewayLaunchAgentLabel,
   resolveGatewaySystemdServiceName,
-  resolveGatewayWindowsTaskName,
 } from "./constants.js";
 import { resolveHomeDir } from "./paths.js";
-import { execSchtasks } from "./schtasks-exec.js";
 
 export type ExtraGatewayService = {
-  platform: "darwin" | "linux" | "win32";
+  platform: "linux";
   label: string;
   detail: string;
   scope: "user" | "system";
@@ -29,25 +26,11 @@ export function renderGatewayServiceCleanupHints(
   env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
 ): string[] {
   const profile = env.OPENCLAW_PROFILE;
-  switch (process.platform) {
-    case "darwin": {
-      const label = resolveGatewayLaunchAgentLabel(profile);
-      return [`launchctl bootout gui/$UID/${label}`, `rm ~/Library/LaunchAgents/${label}.plist`];
-    }
-    case "linux": {
-      const unit = resolveGatewaySystemdServiceName(profile);
-      return [
-        `systemctl --user disable --now ${unit}.service`,
-        `rm ~/.config/systemd/user/${unit}.service`,
-      ];
-    }
-    case "win32": {
-      const task = resolveGatewayWindowsTaskName(profile);
-      return [`schtasks /Delete /TN "${task}" /F`];
-    }
-    default:
-      return [];
-  }
+  const unit = resolveGatewaySystemdServiceName(profile);
+  return [
+    `systemctl --user disable --now ${unit}.service`,
+    `rm ~/.config/systemd/user/${unit}.service`,
+  ];
 }
 
 type Marker = (typeof EXTRA_MARKERS)[number];

@@ -22,16 +22,6 @@ export type {
   OpenClawPluginServiceContext,
   PluginLogger,
 } from "../plugins/types.js";
-export type {
-  WindowsSpawnProgram,
-  WindowsSpawnProgramCandidate,
-  WindowsSpawnResolution,
-} from "./windows-spawn.js";
-export {
-  applyWindowsSpawnProgramPolicy,
-  materializeWindowsSpawnProgram,
-  resolveWindowsSpawnProgramCandidate,
-} from "./windows-spawn.js";
 export {
   listKnownProviderAuthEnvVarNames,
   omitEnvKeysCaseInsensitive,

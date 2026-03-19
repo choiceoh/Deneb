@@ -4,6 +4,7 @@ import {
   logSessionStateChange,
 } from "../../logging/diagnostic.js";
 import { resolveGlobalSingleton } from "../../shared/global-singleton.js";
+import { sleep } from "../../utils.js";
 
 type EmbeddedPiQueueHandle = {
   queueMessage: (text: string) => Promise<void>;
@@ -175,7 +176,7 @@ export async function waitForActiveEmbeddedRuns(
       );
       return { drained: false };
     }
-    await new Promise<void>((resolve) => setTimeout(resolve, pollMs));
+    await sleep(pollMs);
   }
 }
 

@@ -20,6 +20,7 @@ import {
   uploadBatchJsonlFile,
   withRemoteHttpResponse,
 } from "./batch-embedding-common.js";
+import { sleep } from "../utils.js";
 import type { VoyageEmbeddingClient } from "./embeddings-voyage.js";
 
 /**
@@ -184,7 +185,7 @@ async function waitForVoyageBatch(params: {
       throw new Error(`voyage batch ${params.batchId} timed out after ${params.timeoutMs}ms`);
     }
     params.debug?.(`voyage batch ${params.batchId} ${state}; waiting ${params.pollIntervalMs}ms`);
-    await new Promise((resolve) => setTimeout(resolve, params.pollIntervalMs));
+    await sleep(params.pollIntervalMs);
     current = undefined;
   }
 }

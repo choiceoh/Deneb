@@ -34,7 +34,6 @@ const CORE_TOOL_SECTION_ORDER: Array<{ id: string; label: string }> = [
   { id: "messaging", label: "Messaging" },
   { id: "automation", label: "Automation" },
   { id: "nodes", label: "Nodes" },
-  { id: "agents", label: "Agents" },
   { id: "media", label: "Media" },
 ];
 
@@ -178,14 +177,6 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     includeInOpenClawGroup: true,
   },
   {
-    id: "canvas",
-    label: "canvas",
-    description: "Control canvases",
-    sectionId: "ui",
-    profiles: [],
-    includeInOpenClawGroup: true,
-  },
-  {
     id: "message",
     label: "message",
     description: "Send messages",
@@ -218,35 +209,11 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     includeInOpenClawGroup: true,
   },
   {
-    id: "agents_list",
-    label: "agents_list",
-    description: "List agents",
-    sectionId: "agents",
-    profiles: [],
-    includeInOpenClawGroup: true,
-  },
-  {
     id: "image",
     label: "image",
     description: "Image understanding",
     sectionId: "media",
     profiles: ["coding"],
-    includeInOpenClawGroup: true,
-  },
-  {
-    id: "image_generate",
-    label: "image_generate",
-    description: "Image generation",
-    sectionId: "media",
-    profiles: ["coding"],
-    includeInOpenClawGroup: true,
-  },
-  {
-    id: "tts",
-    label: "tts",
-    description: "Text-to-speech conversion",
-    sectionId: "media",
-    profiles: [],
     includeInOpenClawGroup: true,
   },
 ];

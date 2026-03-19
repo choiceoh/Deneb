@@ -15,6 +15,7 @@ import {
   getChatChannelMeta,
   listChatChannelAliases,
   onChannelRegistered,
+  getChatChannelOrder,
 } from "./dynamic-registry.js";
 
 // Bootstrap: 채널 등록 (import side-effect)
@@ -80,3 +81,13 @@ export function formatChannelSelectionLine(
 }
 
 export { getChatChannelOrder } from "./dynamic-registry.js";
+
+// ── Legacy aliases (Phase 1~3 channel removal compatibility) ──
+export type { ChatChannelId } from "./ids.js";
+export { CHANNEL_IDS } from "./ids.js";
+
+/** @deprecated Use normalizeChannelId instead. */
+export const normalizeChatChannelId = normalizeChannelId;
+
+/** @deprecated Use getChatChannelOrder() instead. */
+export const CHAT_CHANNEL_ORDER = getChatChannelOrder();

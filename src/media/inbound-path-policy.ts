@@ -129,8 +129,8 @@ export function resolveIMessageAttachmentRoots(params: {
 }): string[] {
   const accountConfig = resolveIMessageAccountConfig(params);
   return mergeInboundPathRoots(
-    accountConfig?.attachmentRoots,
-    params.cfg.channels?.imessage?.attachmentRoots,
+    accountConfig?.attachmentRoots as string[] | undefined,
+    params.cfg.channels?.imessage?.attachmentRoots as string[] | undefined,
     DEFAULT_IMESSAGE_ATTACHMENT_ROOTS,
   );
 }
@@ -141,10 +141,10 @@ export function resolveIMessageRemoteAttachmentRoots(params: {
 }): string[] {
   const accountConfig = resolveIMessageAccountConfig(params);
   return mergeInboundPathRoots(
-    accountConfig?.remoteAttachmentRoots,
-    params.cfg.channels?.imessage?.remoteAttachmentRoots,
-    accountConfig?.attachmentRoots,
-    params.cfg.channels?.imessage?.attachmentRoots,
+    accountConfig?.remoteAttachmentRoots as string[] | undefined,
+    params.cfg.channels?.imessage?.remoteAttachmentRoots as string[] | undefined,
+    accountConfig?.attachmentRoots as string[] | undefined,
+    params.cfg.channels?.imessage?.attachmentRoots as string[] | undefined,
     DEFAULT_IMESSAGE_ATTACHMENT_ROOTS,
   );
 }

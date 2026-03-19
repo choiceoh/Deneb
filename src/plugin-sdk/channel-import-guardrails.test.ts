@@ -20,27 +20,10 @@ const ALLOWED_EXTENSION_PUBLIC_SURFACES = new Set([
   "setup-entry.js",
 ]);
 const GUARDED_CHANNEL_EXTENSIONS = new Set([
-  "bluebubbles",
-  "discord",
-  "feishu",
-  "googlechat",
-  "imessage",
-  "irc",
-  "line",
   "matrix",
   "mattermost",
   "msteams",
-  "nostr",
-  "nextcloud-talk",
-  "signal",
-  "slack",
-  "synology-chat",
   "telegram",
-  "tlon",
-  "twitch",
-  "whatsapp",
-  "zalo",
-  "zalouser",
 ]);
 
 type GuardedSource = {
@@ -50,114 +33,40 @@ type GuardedSource = {
 
 const SAME_CHANNEL_SDK_GUARDS: GuardedSource[] = [
   {
-    path: "extensions/discord/src/shared.ts",
-    forbiddenPatterns: [/["']openclaw\/plugin-sdk\/discord["']/, /plugin-sdk-internal\/discord/],
-  },
-  {
-    path: "extensions/slack/src/shared.ts",
-    forbiddenPatterns: [/["']openclaw\/plugin-sdk\/slack["']/, /plugin-sdk-internal\/slack/],
-  },
-  {
     path: "extensions/telegram/src/shared.ts",
     forbiddenPatterns: [/["']openclaw\/plugin-sdk\/telegram["']/, /plugin-sdk-internal\/telegram/],
-  },
-  {
-    path: "extensions/imessage/src/shared.ts",
-    forbiddenPatterns: [/["']openclaw\/plugin-sdk\/imessage["']/, /plugin-sdk-internal\/imessage/],
-  },
-  {
-    path: "extensions/whatsapp/src/shared.ts",
-    forbiddenPatterns: [/["']openclaw\/plugin-sdk\/whatsapp["']/, /plugin-sdk-internal\/whatsapp/],
-  },
-  {
-    path: "extensions/signal/src/shared.ts",
-    forbiddenPatterns: [/["']openclaw\/plugin-sdk\/signal["']/, /plugin-sdk-internal\/signal/],
   },
 ];
 
 const SETUP_BARREL_GUARDS: GuardedSource[] = [
   {
-    path: "extensions/signal/src/setup-core.ts",
-    forbiddenPatterns: [/\bformatCliCommand\b/, /\bformatDocsLink\b/],
-  },
-  {
-    path: "extensions/signal/src/setup-surface.ts",
-    forbiddenPatterns: [
-      /\bdetectBinary\b/,
-      /\binstallSignalCli\b/,
-      /\bformatCliCommand\b/,
-      /\bformatDocsLink\b/,
-    ],
-  },
-  {
-    path: "extensions/slack/src/setup-core.ts",
-    forbiddenPatterns: [/\bformatDocsLink\b/],
-  },
-  {
-    path: "extensions/slack/src/setup-surface.ts",
-    forbiddenPatterns: [/\bformatDocsLink\b/],
-  },
-  {
-    path: "extensions/discord/src/setup-core.ts",
-    forbiddenPatterns: [/\bformatDocsLink\b/],
-  },
-  {
-    path: "extensions/discord/src/setup-surface.ts",
-    forbiddenPatterns: [/\bformatDocsLink\b/],
-  },
-  {
-    path: "extensions/imessage/src/setup-core.ts",
-    forbiddenPatterns: [/\bformatDocsLink\b/],
-  },
-  {
-    path: "extensions/imessage/src/setup-surface.ts",
-    forbiddenPatterns: [/\bdetectBinary\b/, /\bformatDocsLink\b/],
-  },
-  {
     path: "extensions/telegram/src/setup-core.ts",
-    forbiddenPatterns: [/\bformatCliCommand\b/, /\bformatDocsLink\b/],
-  },
-  {
-    path: "extensions/whatsapp/src/setup-surface.ts",
     forbiddenPatterns: [/\bformatCliCommand\b/, /\bformatDocsLink\b/],
   },
 ];
 
 const LOCAL_EXTENSION_API_BARREL_GUARDS = [
   "acpx",
-  "bluebubbles",
   "device-pair",
   "diagnostics-otel",
-  "discord",
   "diffs",
-  "feishu",
   "google",
-  "irc",
   "llm-task",
-  "line",
   "lobster",
   "matrix",
   "mattermost",
   "memory-lancedb",
   "msteams",
-  "nextcloud-talk",
-  "nostr",
   "open-prose",
   "phone-control",
   "copilot-proxy",
   "zai",
   "qwen-portal-auth",
-  "signal",
   "synology-chat",
   "talk-voice",
   "telegram",
   "thread-ownership",
-  "tlon",
   "voice-call",
-  "whatsapp",
-  "twitch",
-  "zalo",
-  "zalouser",
 ] as const;
 
 const LOCAL_EXTENSION_API_BARREL_EXCEPTIONS = [

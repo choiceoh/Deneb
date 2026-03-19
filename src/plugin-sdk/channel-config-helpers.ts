@@ -10,12 +10,16 @@ import {
   collectOpenProviderGroupPolicyWarnings,
 } from "../channels/plugins/group-policy-warnings.js";
 import { buildAccountScopedDmSecurityPolicy } from "../channels/plugins/helpers.js";
-import { normalizeWhatsAppAllowFromEntries } from "../channels/plugins/normalize/whatsapp.js";
 import { getChannelPlugin } from "../channels/plugins/registry.js";
 import type { ChannelConfigAdapter } from "../channels/plugins/types.adapters.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
 import { normalizeStringEntries } from "../shared/string-normalization.js";
+
+/** Normalize WhatsApp allowlist entries to strings (fallback — original normalize/whatsapp module removed). */
+function normalizeWhatsAppAllowFromEntries(allowFrom: Array<string | number>): string[] {
+  return normalizeStringEntries(allowFrom);
+}
 
 /** Coerce mixed allowlist config values into plain strings without trimming or deduping. */
 export function mapAllowFromEntries(

@@ -128,15 +128,6 @@ const entries: SubCliEntry[] = [
     },
   },
   {
-    name: "node",
-    description: "Run and manage the headless node host service",
-    hasSubcommands: true,
-    register: async (program) => {
-      const mod = await import("../node-cli.js");
-      mod.registerNodeCli(program);
-    },
-  },
-  {
     name: "sandbox",
     description: "Manage sandbox containers for agent isolation",
     hasSubcommands: true,

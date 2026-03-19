@@ -23,7 +23,6 @@ import { createInternalHookEvent, triggerInternalHook } from "../../hooks/intern
 import { getMachineDisplayName } from "../../infra/machine-name.js";
 import { generateSecureToken } from "../../infra/secure-random.js";
 import { getMemorySearchManager } from "../../memory/index.js";
-import { resolveSignalReactionLevel } from "../../plugin-sdk/signal.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { prepareProviderRuntimeAuth } from "../../plugins/provider-runtime.js";
 import { type enqueueCommand, enqueueCommandInLane } from "../../process/command-queue.js";
@@ -51,7 +50,6 @@ import {
 } from "../model-auth.js";
 import { supportsModelTools } from "../model-tool-support.js";
 import { ensureOpenClawModelsJson } from "../models-config.js";
-import { createConfiguredOllamaStreamFn } from "../ollama-stream.js";
 import { resolveOwnerDisplaySetting } from "../owner-display.js";
 import { createBundleLspToolRuntime } from "../pi-bundle-lsp-runtime.js";
 import { createBundleMcpToolRuntime } from "../pi-bundle-mcp-tools.js";
@@ -657,14 +655,6 @@ export async function compactEmbeddedPiSessionDirect(
               const level = resolved.agentReactionGuidance;
               return level ? { level, channel: "Telegram" } : undefined;
             }
-            if (runtimeChannel === "signal") {
-              const resolved = resolveSignalReactionLevel({
-                cfg: params.config,
-                accountId: params.agentAccountId ?? undefined,
-              });
-              const level = resolved.agentReactionGuidance;
-              return level ? { level, channel: "Signal" } : undefined;
-            }
             return undefined;
           })()
         : undefined;
@@ -828,20 +818,6 @@ export async function compactEmbeddedPiSessionDirect(
         resourceLoader,
       });
       applySystemPromptOverrideToSession(session, systemPromptOverride());
-      if (model.api === "ollama") {
-        const providerBaseUrl =
-          typeof params.config?.models?.providers?.[model.provider]?.baseUrl === "string"
-            ? params.config.models.providers[model.provider]?.baseUrl
-            : undefined;
-        ensureCustomApiRegistered(
-          model.api,
-          createConfiguredOllamaStreamFn({
-            model,
-            providerBaseUrl,
-          }),
-        );
-      }
-
       try {
         const prior = await sanitizeSessionHistory({
           messages: session.messages,

@@ -7,7 +7,6 @@ import {
   clearPluginManifestRegistryCache,
   type PluginManifestRegistry,
 } from "../plugins/manifest-registry.js";
-import { validateConfigObject } from "./config.js";
 import { applyPluginAutoEnable } from "./plugin-auto-enable.js";
 
 const tempDirs: string[] = [];
@@ -76,23 +75,6 @@ function makeApnChannelConfig() {
   return { channels: { apn: { someKey: "value" } } };
 }
 
-function makeBluebubblesAndImessageChannels() {
-  return {
-    bluebubbles: { serverUrl: "http://localhost:1234", password: "x" },
-    imessage: { cliPath: "/usr/local/bin/imsg" },
-  };
-}
-
-function applyWithSlackConfig(extra?: { plugins?: { allow?: string[] } }) {
-  return applyPluginAutoEnable({
-    config: {
-      channels: { slack: { botToken: "x" } },
-      ...(extra?.plugins ? { plugins: extra.plugins } : {}),
-    },
-    env: {},
-  });
-}
-
 function applyWithApnChannelConfig(extra?: {
   plugins?: { entries?: Record<string, { enabled: boolean }> };
 }) {
@@ -106,18 +88,6 @@ function applyWithApnChannelConfig(extra?: {
   });
 }
 
-function applyWithBluebubblesImessageConfig(extra?: {
-  plugins?: { entries?: Record<string, { enabled: boolean }>; deny?: string[] };
-}) {
-  return applyPluginAutoEnable({
-    config: {
-      channels: makeBluebubblesAndImessageChannels(),
-      ...(extra?.plugins ? { plugins: extra.plugins } : {}),
-    },
-    env: {},
-  });
-}
-
 afterEach(() => {
   clearPluginDiscoveryCache();
   clearPluginManifestRegistryCache();
@@ -128,18 +98,28 @@ afterEach(() => {
 
 describe("applyPluginAutoEnable", () => {
   it("auto-enables built-in channels and appends to existing allowlist", () => {
-    const result = applyWithSlackConfig({ plugins: { allow: ["telegram"] } });
+    const result = applyPluginAutoEnable({
+      config: {
+        channels: { telegram: { botToken: "x" } },
+        plugins: { allow: ["matrix"] },
+      },
+      env: {},
+    });
 
-    expect(result.config.channels?.slack?.enabled).toBe(true);
-    expect(result.config.plugins?.entries?.slack).toBeUndefined();
-    expect(result.config.plugins?.allow).toEqual(["telegram", "slack"]);
-    expect(result.changes.join("\n")).toContain("Slack configured, enabled automatically.");
+    expect(result.config.channels?.telegram?.enabled).toBe(true);
+    expect(result.config.plugins?.entries?.telegram).toBeUndefined();
+    expect(result.config.plugins?.allow).toEqual(["matrix", "telegram"]);
   });
 
   it("does not create plugins.allow when allowlist is unset", () => {
-    const result = applyWithSlackConfig();
+    const result = applyPluginAutoEnable({
+      config: {
+        channels: { telegram: { botToken: "x" } },
+      },
+      env: {},
+    });
 
-    expect(result.config.channels?.slack?.enabled).toBe(true);
+    expect(result.config.channels?.telegram?.enabled).toBe(true);
     expect(result.config.plugins?.allow).toBeUndefined();
   });
 
@@ -149,7 +129,7 @@ describe("applyPluginAutoEnable", () => {
         channels: {
           modelByChannel: {
             openai: {
-              whatsapp: "openai/gpt-5.2",
+              telegram: "openai/gpt-5.2",
             },
           },
         },
@@ -162,46 +142,29 @@ describe("applyPluginAutoEnable", () => {
     expect(result.changes).toEqual([]);
   });
 
-  it("keeps auto-enabled WhatsApp config schema-valid", () => {
-    const result = applyPluginAutoEnable({
-      config: {
-        channels: {
-          whatsapp: {
-            allowFrom: ["+15555550123"],
-          },
-        },
-      },
-      env: {},
-    });
-
-    expect(result.config.channels?.whatsapp?.enabled).toBe(true);
-    const validated = validateConfigObject(result.config);
-    expect(validated.ok).toBe(true);
-  });
-
   it("respects explicit disable", () => {
     const result = applyPluginAutoEnable({
       config: {
-        channels: { slack: { botToken: "x" } },
-        plugins: { entries: { slack: { enabled: false } } },
+        channels: { telegram: { botToken: "x" } },
+        plugins: { entries: { telegram: { enabled: false } } },
       },
       env: {},
     });
 
-    expect(result.config.plugins?.entries?.slack?.enabled).toBe(false);
+    expect(result.config.plugins?.entries?.telegram?.enabled).toBe(false);
     expect(result.changes).toEqual([]);
   });
 
   it("respects built-in channel explicit disable via channels.<id>.enabled", () => {
     const result = applyPluginAutoEnable({
       config: {
-        channels: { slack: { botToken: "x", enabled: false } },
+        channels: { telegram: { botToken: "x", enabled: false } },
       },
       env: {},
     });
 
-    expect(result.config.channels?.slack?.enabled).toBe(false);
-    expect(result.config.plugins?.entries?.slack).toBeUndefined();
+    expect(result.config.channels?.telegram?.enabled).toBe(false);
+    expect(result.config.plugins?.entries?.telegram).toBeUndefined();
     expect(result.changes).toEqual([]);
   });
 
@@ -216,19 +179,6 @@ describe("applyPluginAutoEnable", () => {
 
     expect(result.config.plugins?.entries?.matrix).toBeUndefined();
     expect(result.changes).toEqual([]);
-  });
-
-  it("auto-enables irc when configured via env", () => {
-    const result = applyPluginAutoEnable({
-      config: {},
-      env: {
-        IRC_HOST: "irc.libera.chat",
-        IRC_NICK: "openclaw-bot",
-      },
-    });
-
-    expect(result.config.channels?.irc?.enabled).toBe(true);
-    expect(result.changes.join("\n")).toContain("IRC configured, enabled automatically.");
   });
 
   it("uses the provided env when loading plugin manifests automatically", () => {
@@ -370,19 +320,6 @@ describe("applyPluginAutoEnable", () => {
     expect(result.config.plugins?.entries?.acpx?.enabled).toBeUndefined();
   });
 
-  it("skips when plugins are globally disabled", () => {
-    const result = applyPluginAutoEnable({
-      config: {
-        channels: { slack: { botToken: "x" } },
-        plugins: { enabled: false },
-      },
-      env: {},
-    });
-
-    expect(result.config.plugins?.entries?.slack?.enabled).toBeUndefined();
-    expect(result.changes).toEqual([]);
-  });
-
   describe("third-party channel plugins (pluginId ≠ channelId)", () => {
     it("uses the plugin manifest id, not the channel id, for plugins.entries", () => {
       // Reproduces: https://github.com/openclaw/openclaw/issues/25261
@@ -423,83 +360,6 @@ describe("applyPluginAutoEnable", () => {
       });
 
       expect(result.config.plugins?.entries?.["unknown-chan"]?.enabled).toBe(true);
-    });
-  });
-
-  describe("preferOver channel prioritization", () => {
-    it("prefers bluebubbles: skips imessage auto-configure when both are configured", () => {
-      const result = applyWithBluebubblesImessageConfig();
-
-      expect(result.config.plugins?.entries?.bluebubbles?.enabled).toBe(true);
-      expect(result.config.plugins?.entries?.imessage?.enabled).toBeUndefined();
-      expect(result.changes.join("\n")).toContain("bluebubbles configured, enabled automatically.");
-      expect(result.changes.join("\n")).not.toContain(
-        "iMessage configured, enabled automatically.",
-      );
-    });
-
-    it("keeps imessage enabled if already explicitly enabled (non-destructive)", () => {
-      const result = applyWithBluebubblesImessageConfig({
-        plugins: { entries: { imessage: { enabled: true } } },
-      });
-
-      expect(result.config.plugins?.entries?.bluebubbles?.enabled).toBe(true);
-      expect(result.config.plugins?.entries?.imessage?.enabled).toBe(true);
-    });
-
-    it("allows imessage auto-configure when bluebubbles is explicitly disabled", () => {
-      const result = applyWithBluebubblesImessageConfig({
-        plugins: { entries: { bluebubbles: { enabled: false } } },
-      });
-
-      expect(result.config.plugins?.entries?.bluebubbles?.enabled).toBe(false);
-      expect(result.config.channels?.imessage?.enabled).toBe(true);
-      expect(result.changes.join("\n")).toContain("iMessage configured, enabled automatically.");
-    });
-
-    it("allows imessage auto-configure when bluebubbles is in deny list", () => {
-      const result = applyWithBluebubblesImessageConfig({
-        plugins: { deny: ["bluebubbles"] },
-      });
-
-      expect(result.config.plugins?.entries?.bluebubbles?.enabled).toBeUndefined();
-      expect(result.config.channels?.imessage?.enabled).toBe(true);
-    });
-
-    it("auto-enables imessage when only imessage is configured", () => {
-      const result = applyPluginAutoEnable({
-        config: {
-          channels: { imessage: { cliPath: "/usr/local/bin/imsg" } },
-        },
-        env: {},
-      });
-
-      expect(result.config.channels?.imessage?.enabled).toBe(true);
-      expect(result.changes.join("\n")).toContain("iMessage configured, enabled automatically.");
-    });
-
-    it("uses the provided env when loading installed plugin manifests", () => {
-      const stateDir = makeTempDir();
-      const pluginDir = path.join(stateDir, "extensions", "apn-channel");
-      writePluginManifestFixture({
-        rootDir: pluginDir,
-        id: "apn-channel",
-        channels: ["apn"],
-      });
-
-      const result = applyPluginAutoEnable({
-        config: makeApnChannelConfig(),
-        env: {
-          ...process.env,
-          OPENCLAW_HOME: undefined,
-          OPENCLAW_STATE_DIR: stateDir,
-          CLAWDBOT_STATE_DIR: undefined,
-          OPENCLAW_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
-        },
-      });
-
-      expect(result.config.plugins?.entries?.["apn-channel"]?.enabled).toBe(true);
-      expect(result.config.plugins?.entries?.apn).toBeUndefined();
     });
   });
 });

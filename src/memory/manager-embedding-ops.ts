@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { sleep } from "../utils.js";
 import { runGeminiEmbeddingBatches, type GeminiBatchRequest } from "./batch-gemini.js";
 import {
   OPENAI_BATCH_ENDPOINT,
@@ -595,7 +596,7 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
       Math.round(delayMs * (1 + Math.random() * 0.2)),
     );
     log.warn(`memory embeddings rate limited; ${action} in ${waitMs}ms`);
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    await sleep(waitMs);
   }
 
   private isRetryableEmbeddingError(message: string): boolean {

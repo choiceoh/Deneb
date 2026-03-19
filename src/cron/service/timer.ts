@@ -1,3 +1,4 @@
+import { sleep } from "../../utils.js";
 import { resolveFailoverReasonFromError } from "../../agents/failover-error.js";
 import type { CronConfig, CronRetryOn } from "../../config/types.cron.js";
 import type { HeartbeatRunResult } from "../../infra/heartbeat-wake.js";
@@ -1015,7 +1016,7 @@ export async function executeJobCore(
   });
   const waitWithAbort = async (ms: number) => {
     if (!abortSignal) {
-      await new Promise<void>((resolve) => setTimeout(resolve, ms));
+      await sleep(ms);
       return;
     }
     if (abortSignal.aborted) {

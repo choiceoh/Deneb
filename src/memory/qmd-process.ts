@@ -1,8 +1,4 @@
 import { spawn } from "node:child_process";
-import {
-  materializeWindowsSpawnProgram,
-  resolveWindowsSpawnProgram,
-} from "../plugin-sdk/windows-spawn.js";
 
 export type CliSpawnInvocation = {
   command: string;
@@ -14,18 +10,11 @@ export type CliSpawnInvocation = {
 export function resolveCliSpawnInvocation(params: {
   command: string;
   args: string[];
-  env: NodeJS.ProcessEnv;
-  packageName: string;
 }): CliSpawnInvocation {
-  const program = resolveWindowsSpawnProgram({
+  return {
     command: params.command,
-    platform: process.platform,
-    env: params.env,
-    execPath: process.execPath,
-    packageName: params.packageName,
-    allowShellFallback: false,
-  });
-  return materializeWindowsSpawnProgram(program, params.args);
+    argv: params.args,
+  };
 }
 
 export async function runCliCommand(params: {

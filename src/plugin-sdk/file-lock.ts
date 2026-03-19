@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { sleep } from "../utils.js";
 import { isPidAlive } from "../shared/pid-alive.js";
 import { resolveProcessScopedMap } from "../shared/process-scoped-map.js";
 
@@ -141,7 +142,7 @@ export async function acquireFileLock(
       if (attempt >= attempts - 1) {
         break;
       }
-      await new Promise((resolve) => setTimeout(resolve, computeDelayMs(options.retries, attempt)));
+      await sleep(computeDelayMs(options.retries, attempt));
     }
   }
 

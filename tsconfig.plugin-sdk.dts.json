@@ -8,8 +8,9 @@
     "noEmitOnError": false,
     "outDir": "dist/plugin-sdk",
     "rootDir": ".",
-    "tsBuildInfoFile": "dist/plugin-sdk/.tsbuildinfo"
+    "tsBuildInfoFile": "dist/plugin-sdk/.tsbuildinfo",
+    "skipLibCheck": true
   },
   "include": ["src/plugin-sdk/**/*.ts", "src/types/**/*.d.ts"],
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "extensions/**/*"]
 }

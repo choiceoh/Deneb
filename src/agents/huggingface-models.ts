@@ -1,8 +1,11 @@
 import type { ModelDefinitionConfig } from "../config/types.models.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { isReasoningModelHeuristic } from "./ollama-models.js";
 
 const log = createSubsystemLogger("huggingface-models");
+
+function isReasoningModelHeuristic(modelId: string): boolean {
+  return /r1|reasoning|think|reason/i.test(modelId);
+}
 
 /** Hugging Face Inference Providers (router) — OpenAI-compatible chat completions. */
 export const HUGGINGFACE_BASE_URL = "https://router.huggingface.co/v1";

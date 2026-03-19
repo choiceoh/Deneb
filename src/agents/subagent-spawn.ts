@@ -306,7 +306,7 @@ export async function spawnSubagentDirect(
   if (requestedAgentId && !isValidAgentId(requestedAgentId)) {
     return {
       status: "error",
-      error: `Invalid agentId "${requestedAgentId}". Agent IDs must match [a-z0-9][a-z0-9_-]{0,63}. Use agents_list to discover valid targets.`,
+      error: `Invalid agentId "${requestedAgentId}". Agent IDs must match [a-z0-9][a-z0-9_-]{0,63}.`,
     };
   }
   const modelOverride = params.model;

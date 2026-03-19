@@ -50,6 +50,7 @@ import {
   uniqueSortedStrings,
 } from "./nodes.helpers.js";
 import type { GatewayRequestHandlers } from "./types.js";
+import { sleep } from "../../utils.js";
 
 export const NODE_WAKE_RECONNECT_WAIT_MS = 3_000;
 export const NODE_WAKE_RECONNECT_RETRY_WAIT_MS = 12_000;
@@ -140,7 +141,7 @@ function isNodeEntry(entry: { role?: string; roles?: string[] }) {
 }
 
 async function delayMs(ms: number): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, ms));
+  await sleep(ms);
 }
 
 function isForegroundRestrictedIosCommand(command: string): boolean {

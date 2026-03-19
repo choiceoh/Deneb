@@ -9,7 +9,6 @@ import {
   resolveModelRefFromString,
   type ModelRef,
 } from "../agents/model-selection.js";
-import { createConfiguredOllamaStreamFn } from "../agents/ollama-stream.js";
 import { resolveModelAsync } from "../agents/pi-embedded-runner/model.js";
 import type { OpenClawConfig } from "../config/config.js";
 import type {
@@ -474,17 +473,8 @@ export async function summarizeText(params: {
 
     try {
       if (resolved.model.api === "ollama") {
-        const providerBaseUrl =
-          typeof cfg.models?.providers?.[resolved.model.provider]?.baseUrl === "string"
-            ? cfg.models.providers[resolved.model.provider]?.baseUrl
-            : undefined;
-        ensureCustomApiRegistered(
-          resolved.model.api,
-          createConfiguredOllamaStreamFn({
-            model: resolved.model,
-            providerBaseUrl,
-          }),
-        );
+        // Ollama TTS integration removed — skip custom API registration
+        // TODO: restore if ollama provider is re-added
       }
       const res = await completeSimple(
         resolved.model,

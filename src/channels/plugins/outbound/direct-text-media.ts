@@ -143,9 +143,10 @@ export function createScopedChannelMediaMaxBytesResolver(channel: "imessage" | "
     resolveScopedChannelMediaMaxBytes({
       cfg: params.cfg,
       accountId: params.accountId,
-      resolveChannelLimitMb: ({ cfg, accountId }) =>
-        cfg.channels?.[channel]?.accounts?.[accountId]?.mediaMaxMb ??
-        cfg.channels?.[channel]?.mediaMaxMb,
+      resolveChannelLimitMb: ({ cfg, accountId }) => {
+        const ch = (cfg.channels as Record<string, any> | undefined)?.[channel];
+        return (ch?.accounts?.[accountId]?.mediaMaxMb ?? ch?.mediaMaxMb) as number | undefined;
+      },
     });
 }
 

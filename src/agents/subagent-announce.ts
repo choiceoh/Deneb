@@ -1,4 +1,6 @@
-import { resolveQueueSettings } from "../auto-reply/reply/queue.js";
+import { sleep } from "../utils.js";
+import {
+  resolveQueueSettings } from "../auto-reply/reply/queue.js";
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
 import { loadConfig } from "../config/config.js";
@@ -146,7 +148,7 @@ async function waitForAnnounceRetryDelay(ms: number, signal?: AbortSignal): Prom
     return;
   }
   if (!signal) {
-    await new Promise<void>((resolve) => setTimeout(resolve, ms));
+    await sleep(ms);
     return;
   }
   if (signal.aborted) {
@@ -326,7 +328,7 @@ async function readLatestSubagentOutputWithRetry(params: {
     if (result?.trim()) {
       return result;
     }
-    await new Promise((resolve) => setTimeout(resolve, RETRY_INTERVAL_MS));
+    await sleep(RETRY_INTERVAL_MS);
   }
   return result;
 }
@@ -461,7 +463,7 @@ async function buildCompactAnnounceStatsLine(params: {
       break;
     }
     if (!FAST_TEST_MODE) {
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      await sleep(150);
     }
     entry = loadSessionStore(storePath)[params.sessionKey];
   }
@@ -991,7 +993,7 @@ export function buildSubagentSystemPrompt(params: {
       ...(acpEnabled
         ? [
             'For ACP harness sessions (codex/claudecode/gemini), use `sessions_spawn` with `runtime: "acp"` (set `agentId` unless `acp.defaultAgent` is configured).',
-            '`agents_list` and `subagents` apply to OpenClaw sub-agents (`runtime: "subagent"`); ACP harness ids are controlled by `acp.allowedAgents`.',
+            '`subagents` applies to OpenClaw sub-agents (`runtime: "subagent"`); ACP harness ids are controlled by `acp.allowedAgents`.',
             "Do not ask users to run slash commands or CLI when `sessions_spawn` can do it directly.",
             "Do not use `exec` (`openclaw ...`, `acpx ...`) to spawn ACP sessions.",
             'Use `subagents` only for OpenClaw subagents (`runtime: "subagent"`).',

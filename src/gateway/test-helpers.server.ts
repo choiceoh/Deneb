@@ -33,6 +33,7 @@ import {
   testState,
   testTailnetIPv4,
 } from "./test-helpers.mocks.js";
+import { sleep } from "../utils.js";
 
 // Import lazily after test env/home setup so config/session paths resolve to test dirs.
 // Keep one cached module per worker for speed.
@@ -739,7 +740,7 @@ export async function waitForSystemEvent(timeoutMs = 2000) {
     if (events.length > 0) {
       return events;
     }
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
   }
   throw new Error("timeout waiting for system event");
 }

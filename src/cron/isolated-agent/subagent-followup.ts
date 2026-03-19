@@ -2,6 +2,7 @@ import { listDescendantRunsForRequester } from "../../agents/subagent-registry.j
 import { readLatestAssistantReply } from "../../agents/tools/agent-step.js";
 import { SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
 import { callGateway } from "../../gateway/call.js";
+import { sleep } from "../../utils.js";
 
 function resolveCronSubagentTimings() {
   const fastTestMode = process.env.OPENCLAW_TEST_FAST === "1";
@@ -190,7 +191,7 @@ export async function waitForDescendantSubagentSummary(params: {
     if (latest) {
       return latest;
     }
-    await new Promise<void>((resolve) => setTimeout(resolve, timings.gracePollMs));
+    await sleep(timings.gracePollMs);
   }
 
   // Final read after grace period expires.

@@ -1,8 +1,4 @@
 import { expect, vi } from "vitest";
-import {
-  __testing as discordThreadBindingTesting,
-  createThreadBindingManager as createDiscordThreadBindingManager,
-} from "../../../../extensions/discord/runtime-api.js";
 import { createFeishuThreadBindingManager } from "../../../../extensions/feishu/api.js";
 import { createTelegramThreadBindingManager } from "../../../../extensions/telegram/runtime-api.js";
 import type { OpenClawConfig } from "../../../config/config.js";
@@ -11,11 +7,7 @@ import {
   type SessionBindingCapabilities,
   type SessionBindingRecord,
 } from "../../../infra/outbound/session-binding-service.js";
-import {
-  resolveDefaultLineAccountId,
-  resolveLineAccount,
-  listLineAccountIds,
-} from "../../../line/accounts.js";
+
 import {
   bundledChannelPlugins,
   bundledChannelRuntimeSetters,
@@ -174,7 +166,6 @@ function expectClearedSessionBinding(params: {
 }
 
 const telegramDescribeMessageToolMock = vi.fn();
-const discordDescribeMessageToolMock = vi.fn();
 
 bundledChannelRuntimeSetters.setTelegramRuntime({
   channel: {
@@ -186,26 +177,7 @@ bundledChannelRuntimeSetters.setTelegramRuntime({
   },
 } as never);
 
-bundledChannelRuntimeSetters.setDiscordRuntime({
-  channel: {
-    discord: {
-      messageActions: {
-        describeMessageTool: discordDescribeMessageToolMock,
-      },
-    },
-  },
-} as never);
 
-bundledChannelRuntimeSetters.setLineRuntime({
-  channel: {
-    line: {
-      listLineAccountIds,
-      resolveDefaultLineAccountId,
-      resolveLineAccount: ({ cfg, accountId }: { cfg: OpenClawConfig; accountId?: string }) =>
-        resolveLineAccount({ cfg, accountId }),
-    },
-  },
-} as never);
 
 export const pluginContractRegistry: PluginContractEntry[] = bundledChannelPlugins.map(
   (plugin) => ({
@@ -215,80 +187,6 @@ export const pluginContractRegistry: PluginContractEntry[] = bundledChannelPlugi
 );
 
 export const actionContractRegistry: ActionsContractEntry[] = [
-  {
-    id: "slack",
-    plugin: requireBundledChannelPlugin("slack"),
-    unsupportedAction: "poll",
-    cases: [
-      {
-        name: "configured account exposes default Slack actions",
-        cfg: {
-          channels: {
-            slack: {
-              botToken: "xoxb-test",
-              appToken: "xapp-test",
-            },
-          },
-        } as OpenClawConfig,
-        expectedActions: [
-          "send",
-          "react",
-          "reactions",
-          "read",
-          "edit",
-          "delete",
-          "download-file",
-          "pin",
-          "unpin",
-          "list-pins",
-          "member-info",
-          "emoji-list",
-        ],
-        expectedCapabilities: ["blocks"],
-      },
-      {
-        name: "interactive replies add the shared interactive capability",
-        cfg: {
-          channels: {
-            slack: {
-              botToken: "xoxb-test",
-              appToken: "xapp-test",
-              capabilities: {
-                interactiveReplies: true,
-              },
-            },
-          },
-        } as OpenClawConfig,
-        expectedActions: [
-          "send",
-          "react",
-          "reactions",
-          "read",
-          "edit",
-          "delete",
-          "download-file",
-          "pin",
-          "unpin",
-          "list-pins",
-          "member-info",
-          "emoji-list",
-        ],
-        expectedCapabilities: ["blocks", "interactive"],
-      },
-      {
-        name: "missing tokens disables the actions surface",
-        cfg: {
-          channels: {
-            slack: {
-              enabled: true,
-            },
-          },
-        } as OpenClawConfig,
-        expectedActions: [],
-        expectedCapabilities: [],
-      },
-    ],
-  },
   {
     id: "mattermost",
     plugin: requireBundledChannelPlugin("mattermost"),
@@ -356,58 +254,9 @@ export const actionContractRegistry: ActionsContractEntry[] = [
       },
     ],
   },
-  {
-    id: "discord",
-    plugin: requireBundledChannelPlugin("discord"),
-    cases: [
-      {
-        name: "forwards runtime-backed Discord actions and capabilities",
-        cfg: {} as OpenClawConfig,
-        expectedActions: ["send", "react", "poll"],
-        expectedCapabilities: ["interactive", "components"],
-        beforeTest: () => {
-          discordDescribeMessageToolMock.mockReset();
-          discordDescribeMessageToolMock.mockReturnValue({
-            actions: ["send", "react", "poll"],
-            capabilities: ["interactive", "components"],
-          });
-        },
-      },
-    ],
-  },
 ];
 
 export const setupContractRegistry: SetupContractEntry[] = [
-  {
-    id: "slack",
-    plugin: requireBundledChannelPlugin("slack"),
-    cases: [
-      {
-        name: "default account stores tokens and enables the channel",
-        cfg: {} as OpenClawConfig,
-        input: {
-          botToken: "xoxb-test",
-          appToken: "xapp-test",
-        },
-        expectedAccountId: "default",
-        assertPatchedConfig: (cfg) => {
-          expect(cfg.channels?.slack?.enabled).toBe(true);
-          expect(cfg.channels?.slack?.botToken).toBe("xoxb-test");
-          expect(cfg.channels?.slack?.appToken).toBe("xapp-test");
-        },
-      },
-      {
-        name: "non-default env setup is rejected",
-        cfg: {} as OpenClawConfig,
-        accountId: "ops",
-        input: {
-          useEnv: true,
-        },
-        expectedAccountId: "ops",
-        expectedValidation: "Slack env tokens can only be used for the default account.",
-      },
-    ],
-  },
   {
     id: "mattermost",
     plugin: requireBundledChannelPlugin("mattermost"),
@@ -436,68 +285,9 @@ export const setupContractRegistry: SetupContractEntry[] = [
         expectedValidation: "Mattermost requires --bot-token and --http-url (or --use-env).",
       },
     ],
-  },
-  {
-    id: "line",
-    plugin: requireBundledChannelPlugin("line"),
-    cases: [
-      {
-        name: "default account stores token and secret",
-        cfg: {} as OpenClawConfig,
-        input: {
-          channelAccessToken: "line-token",
-          channelSecret: "line-secret",
-        },
-        expectedAccountId: "default",
-        assertPatchedConfig: (cfg) => {
-          expect(cfg.channels?.line?.enabled).toBe(true);
-          expect(cfg.channels?.line?.channelAccessToken).toBe("line-token");
-          expect(cfg.channels?.line?.channelSecret).toBe("line-secret");
-        },
-      },
-      {
-        name: "non-default env setup is rejected",
-        cfg: {} as OpenClawConfig,
-        accountId: "ops",
-        input: {
-          useEnv: true,
-        },
-        expectedAccountId: "ops",
-        expectedValidation: "LINE_CHANNEL_ACCESS_TOKEN can only be used for the default account.",
-      },
-    ],
-  },
 ];
 
 export const statusContractRegistry: StatusContractEntry[] = [
-  {
-    id: "slack",
-    plugin: requireBundledChannelPlugin("slack"),
-    cases: [
-      {
-        name: "configured account produces a configured status snapshot",
-        cfg: {
-          channels: {
-            slack: {
-              botToken: "xoxb-test",
-              appToken: "xapp-test",
-            },
-          },
-        } as OpenClawConfig,
-        runtime: {
-          accountId: "default",
-          connected: true,
-          running: true,
-        },
-        probe: { ok: true },
-        assertSnapshot: (snapshot) => {
-          expect(snapshot.accountId).toBe("default");
-          expect(snapshot.enabled).toBe(true);
-          expect(snapshot.configured).toBe(true);
-        },
-      },
-    ],
-  },
   {
     id: "mattermost",
     plugin: requireBundledChannelPlugin("mattermost"),
@@ -528,36 +318,6 @@ export const statusContractRegistry: StatusContractEntry[] = [
         },
       },
     ],
-  },
-  {
-    id: "line",
-    plugin: requireBundledChannelPlugin("line"),
-    cases: [
-      {
-        name: "configured account produces a webhook status snapshot",
-        cfg: {
-          channels: {
-            line: {
-              enabled: true,
-              channelAccessToken: "line-token",
-              channelSecret: "line-secret",
-            },
-          },
-        } as OpenClawConfig,
-        runtime: {
-          accountId: "default",
-          running: true,
-        },
-        probe: { ok: true },
-        assertSnapshot: (snapshot) => {
-          expect(snapshot.accountId).toBe("default");
-          expect(snapshot.enabled).toBe(true);
-          expect(snapshot.configured).toBe(true);
-          expect(snapshot.mode).toBe("webhook");
-        },
-      },
-    ],
-  },
 ];
 
 export const surfaceContractRegistry: SurfaceContractEntry[] = bundledChannelPlugins.map(
@@ -590,69 +350,6 @@ const baseSessionBindingCfg = {
 } satisfies OpenClawConfig;
 
 export const sessionBindingContractRegistry: SessionBindingContractEntry[] = [
-  {
-    id: "discord",
-    expectedCapabilities: {
-      adapterAvailable: true,
-      bindSupported: true,
-      unbindSupported: true,
-      placements: ["current", "child"],
-    },
-    getCapabilities: () => {
-      createDiscordThreadBindingManager({
-        accountId: "default",
-        persist: false,
-        enableSweeper: false,
-      });
-      return getSessionBindingService().getCapabilities({
-        channel: "discord",
-        accountId: "default",
-      });
-    },
-    bindAndResolve: async () => {
-      createDiscordThreadBindingManager({
-        accountId: "default",
-        persist: false,
-        enableSweeper: false,
-      });
-      const service = getSessionBindingService();
-      const binding = await service.bind({
-        targetSessionKey: "agent:discord:child:thread-1",
-        targetKind: "subagent",
-        conversation: {
-          channel: "discord",
-          accountId: "default",
-          conversationId: "channel:123456789012345678",
-        },
-        placement: "current",
-        metadata: {
-          label: "codex-discord",
-        },
-      });
-      expectResolvedSessionBinding({
-        channel: "discord",
-        accountId: "default",
-        conversationId: "channel:123456789012345678",
-        targetSessionKey: "agent:discord:child:thread-1",
-      });
-      return binding;
-    },
-    unbindAndVerify: unbindAndExpectClearedSessionBinding,
-    cleanup: async () => {
-      const manager = createDiscordThreadBindingManager({
-        accountId: "default",
-        persist: false,
-        enableSweeper: false,
-      });
-      manager.stop();
-      discordThreadBindingTesting.resetThreadBindingsForTests();
-      expectClearedSessionBinding({
-        channel: "discord",
-        accountId: "default",
-        conversationId: "channel:123456789012345678",
-      });
-    },
-  },
   {
     id: "feishu",
     expectedCapabilities: {
