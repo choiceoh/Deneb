@@ -1,5 +1,5 @@
-import type { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
+import type { DatabaseSync } from "node:sqlite";
 import { sanitizeFts5Query } from "./fts5-sanitize.js";
 import { buildLikeSearchPlan, createFallbackSnippet } from "./full-text-fallback.js";
 

@@ -5,15 +5,36 @@ import { resolveStateDir } from "../config/paths.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
 
 /** Stubs for removed matrix extension */
-function findMatrixAccountEntry(_cfg: OpenClawConfig, _accountId: string): Record<string, unknown> | null { return null; }
-function getMatrixScopedEnvVarNames(_accountId: string) { return { homeserver: "", userId: "", accessToken: "" }; }
-function requiresExplicitMatrixDefaultAccount(_cfg: OpenClawConfig) { return false; }
-function resolveMatrixAccountStringValues(_params: any) { return { homeserver: "", userId: "", accessToken: "" }; }
-function resolveConfiguredMatrixAccountIds(_cfg: OpenClawConfig) { return []; }
-function resolveMatrixAccountStorageRoot(_params: any) { return { rootDir: "" }; }
-function resolveMatrixChannelConfig(_cfg: OpenClawConfig) { return null; }
-function resolveMatrixCredentialsPath(_params: any) { return ""; }
-function resolveMatrixDefaultOrOnlyAccountId(_cfg: OpenClawConfig) { return DEFAULT_ACCOUNT_ID; }
+function findMatrixAccountEntry(
+  _cfg: OpenClawConfig,
+  _accountId: string,
+): Record<string, unknown> | null {
+  return null;
+}
+function getMatrixScopedEnvVarNames(_accountId: string) {
+  return { homeserver: "", userId: "", accessToken: "" };
+}
+function requiresExplicitMatrixDefaultAccount(_cfg: OpenClawConfig) {
+  return false;
+}
+function resolveMatrixAccountStringValues(_params: Record<string, unknown>) {
+  return { homeserver: "", userId: "", accessToken: "" };
+}
+function resolveConfiguredMatrixAccountIds(_cfg: OpenClawConfig) {
+  return [];
+}
+function resolveMatrixAccountStorageRoot(_params: Record<string, unknown>) {
+  return { rootDir: "" };
+}
+function resolveMatrixChannelConfig(_cfg: OpenClawConfig): Record<string, unknown> | null {
+  return null;
+}
+function resolveMatrixCredentialsPath(_params: Record<string, unknown>) {
+  return "";
+}
+function resolveMatrixDefaultOrOnlyAccountId(_cfg: OpenClawConfig) {
+  return DEFAULT_ACCOUNT_ID;
+}
 
 export type MatrixStoredCredentials = {
   homeserver: string;

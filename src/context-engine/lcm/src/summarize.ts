@@ -43,10 +43,7 @@ function normalizeProviderId(provider: string): string {
  * When model ids are custom/forward-compat, this hint allows deps.complete to
  * construct a valid pi-ai Model object even if getModel(provider, model) misses.
  */
-function resolveProviderApiFromLegacyConfig(
-  config: unknown,
-  provider: string,
-): string | undefined {
+function resolveProviderApiFromLegacyConfig(config: unknown, provider: string): string | undefined {
   if (!config || typeof config !== "object") {
     return undefined;
   }
@@ -264,11 +261,11 @@ function formatDiagnosticPayload(value: unknown): string {
   try {
     const json = JSON.stringify(sanitizeForDiagnostics(value));
     if (!json) {
-      return "\"\"";
+      return '""';
     }
     return truncateDiagnosticText(json);
   } catch {
-    return "\"[unserializable]\"";
+    return '"[unserializable]"';
   }
 }
 
@@ -376,9 +373,9 @@ function extractResponseDiagnostics(result: unknown): string {
       ? result.finish_reason
       : typeof result.stopReason === "string"
         ? result.stopReason
-      : typeof result.stop_reason === "string"
-        ? result.stop_reason
-        : undefined;
+        : typeof result.stop_reason === "string"
+          ? result.stop_reason
+          : undefined;
   if (finishReason) {
     parts.push(`finish=${finishReason}`);
   }
@@ -676,7 +673,10 @@ export async function createLcmSummarizeFromLegacyParams(params: {
     {
       levelName: "plugin config (lossless-claw)",
       model: readModelRef(nestedPluginConfig?.summaryModel),
-      provider: typeof nestedPluginConfig?.summaryProvider === "string" ? nestedPluginConfig.summaryProvider.trim() : "",
+      provider:
+        typeof nestedPluginConfig?.summaryProvider === "string"
+          ? nestedPluginConfig.summaryProvider.trim()
+          : "",
     },
     {
       levelName: "environment variables",
@@ -692,7 +692,9 @@ export async function createLcmSummarizeFromLegacyParams(params: {
 
   let resolvedSummary: { model: string; provider: string | undefined } | undefined;
   for (const level of summaryLevels) {
-    if (!level.model) {continue;}
+    if (!level.model) {
+      continue;
+    }
     if (level.model.includes("/")) {
       resolvedSummary = { model: level.model, provider: undefined };
       break;
@@ -702,7 +704,7 @@ export async function createLcmSummarizeFromLegacyParams(params: {
       break;
     }
     params.deps.log.warn(
-      `[lcm] summaryModel "${level.model}" at "${level.levelName}" has no summaryProvider or provider prefix. Will attempt resolution without provider.`
+      `[lcm] summaryModel "${level.model}" at "${level.levelName}" has no summaryProvider or provider prefix. Will attempt resolution without provider.`,
     );
     resolvedSummary = { model: level.model, provider: undefined };
     break;
@@ -716,17 +718,18 @@ export async function createLcmSummarizeFromLegacyParams(params: {
 
   const resolveProviderHint =
     resolvedSummary !== undefined
-      ? (
-          resolvedSummary.provider ||
-          (!resolvedSummary.model.includes("/") ? (providerHint || undefined) : undefined)
-        )
-      : (providerHint || undefined);
+      ? resolvedSummary.provider ||
+        (!resolvedSummary.model.includes("/") ? providerHint || undefined : undefined)
+      : providerHint || undefined;
 
   let resolved: { provider: string; model: string };
   try {
     resolved = params.deps.resolveModel(modelRef, resolveProviderHint);
   } catch (err) {
-    console.error(`[lcm] createLcmSummarize: resolveModel FAILED:`, err instanceof Error ? err.message : err);
+    console.error(
+      `[lcm] createLcmSummarize: resolveModel FAILED:`,
+      err instanceof Error ? err.message : err,
+    );
     return undefined;
   }
 

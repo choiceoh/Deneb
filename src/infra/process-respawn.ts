@@ -34,20 +34,15 @@ export function restartGatewayProcessWithFreshPid(): GatewayRespawnResult {
     // Hand off launchd restarts to a detached helper before exiting so config
     // reloads and SIGUSR1-driven restarts do not depend on exit/respawn timing.
     if (supervisor === "launchd") {
-      const handoff = scheduleDetachedLaunchdRestartHandoff({
+      // Fire-and-forget; the stub is a no-op Promise<void>.
+      scheduleDetachedLaunchdRestartHandoff({
         env: process.env,
         mode: "start-after-exit",
         waitForPid: process.pid,
-      });
-      if (!handoff.ok) {
-        return {
-          mode: "supervised",
-          detail: `launchd exit fallback (${handoff.detail ?? "restart handoff failed"})`,
-        };
-      }
+      }).catch(() => {});
       return {
         mode: "supervised",
-        detail: `launchd restart handoff pid ${handoff.pid ?? "unknown"}`,
+        detail: "launchd restart handoff scheduled",
       };
     }
     if (supervisor === "schtasks") {

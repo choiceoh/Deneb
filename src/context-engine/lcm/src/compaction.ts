@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
+import { extractFileIdsFromContent } from "./large-files.js";
 import type { ConversationStore, CreateMessagePartInput } from "./store/conversation-store.js";
 import type { SummaryStore, SummaryRecord, ContextItemRecord } from "./store/summary-store.js";
-import { extractFileIdsFromContent } from "./large-files.js";
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -97,9 +97,7 @@ export function formatTimestamp(value: Date, timezone: string = "UTC"): string {
       minute: "2-digit",
       hour12: false,
     });
-    const parts = Object.fromEntries(
-      fmt.formatToParts(value).map((p) => [p.type, p.value]),
-    );
+    const parts = Object.fromEntries(fmt.formatToParts(value).map((p) => [p.type, p.value]));
     const tzAbbr = timezone === "UTC" ? "UTC" : shortTzAbbr(value, timezone);
     return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} ${tzAbbr}`;
   } catch {
@@ -797,8 +795,12 @@ export class CompactionEngine {
       typeof this.config.incrementalMaxDepth === "number" &&
       Number.isFinite(this.config.incrementalMaxDepth)
     ) {
-      if (this.config.incrementalMaxDepth < 0) {return Infinity;}
-      if (this.config.incrementalMaxDepth > 0) {return Math.floor(this.config.incrementalMaxDepth);}
+      if (this.config.incrementalMaxDepth < 0) {
+        return Infinity;
+      }
+      if (this.config.incrementalMaxDepth > 0) {
+        return Math.floor(this.config.incrementalMaxDepth);
+      }
     }
     return 0;
   }
@@ -1006,8 +1008,12 @@ export class CompactionEngine {
     previousSummaryContent?: string,
   ): Promise<{ summaryId: string; level: CompactionLevel; content: string }> {
     // Fetch full message content for each context item
-    const messageContents: { messageId: number; content: string; createdAt: Date; tokenCount: number }[] =
-      [];
+    const messageContents: {
+      messageId: number;
+      content: string;
+      createdAt: Date;
+      tokenCount: number;
+    }[] = [];
     for (const item of messageItems) {
       if (item.messageId == null) {
         continue;
@@ -1024,7 +1030,10 @@ export class CompactionEngine {
     }
 
     const concatenated = messageContents
-      .map((message) => `[${formatTimestamp(message.createdAt, this.config.timezone)}]\n${message.content}`)
+      .map(
+        (message) =>
+          `[${formatTimestamp(message.createdAt, this.config.timezone)}]\n${message.content}`,
+      )
       .join("\n\n");
     const fileIds = dedupeOrderedIds(
       messageContents.flatMap((message) => extractFileIdsFromContent(message.content)),
@@ -1163,7 +1172,9 @@ export class CompactionEngine {
         summaryRecords.length > 0
           ? new Date(
               Math.max(
-                ...summaryRecords.map((summary) => (summary.latestAt ?? summary.createdAt).getTime()),
+                ...summaryRecords.map((summary) =>
+                  (summary.latestAt ?? summary.createdAt).getTime(),
+                ),
               ),
             )
           : undefined,

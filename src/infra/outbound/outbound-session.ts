@@ -105,7 +105,7 @@ function buildBaseSessionKey(params: {
   });
 }
 
-function resolveTelegramSession(
+function _resolveTelegramSession(
   params: ResolveOutboundSessionRouteParams,
 ): OutboundSessionRoute | null {
   const parsed = parseTelegramTarget(params.target);

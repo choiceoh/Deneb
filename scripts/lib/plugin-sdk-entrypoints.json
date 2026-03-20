@@ -78,5 +78,9 @@
   "speech",
   "state-paths",
   "tool-send",
-  "zai"
+  "zai",
+  "device-pair",
+  "web-media",
+  "self-hosted-provider-setup",
+  "discord"
 ]

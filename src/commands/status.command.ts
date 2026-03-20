@@ -192,9 +192,7 @@ export async function statusCommand(
   });
 
   if (opts.json) {
-    const [daemon] = await Promise.all([
-      getDaemonStatusSummary(),
-    ]);
+    const daemon = await getDaemonStatusSummary();
     runtime.log(
       JSON.stringify(
         {
@@ -314,9 +312,7 @@ export async function statusCommand(
     return `${agentStatus.agents.length} · ${pending} · sessions ${agentStatus.totalSessions}${defSuffix}`;
   })();
 
-  const [daemon] = await Promise.all([
-    getDaemonStatusSummary(),
-  ]);
+  const daemon = await getDaemonStatusSummary();
   const daemonValue = (() => {
     if (daemon.installed === false) {
       return `${daemon.label} not installed`;

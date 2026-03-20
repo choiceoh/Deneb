@@ -1,5 +1,5 @@
-import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "fs";
+import { DatabaseSync } from "node:sqlite";
 import { dirname } from "path";
 
 type ConnectionEntry = {

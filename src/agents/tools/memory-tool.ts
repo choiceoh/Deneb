@@ -113,7 +113,10 @@ export function createMemorySearchTool(options: {
           const resolved = resolveMemoryBackendConfig({ cfg, agentId });
           const results =
             status.backend === "qmd" || status.backend === "vega"
-              ? clampResultsByInjectedChars(decorated, resolved.qmd?.limits.maxInjectedChars ?? resolved.vega?.limits.maxInjectedChars)
+              ? clampResultsByInjectedChars(
+                  decorated,
+                  resolved.qmd?.limits.maxInjectedChars ?? resolved.vega?.limits.maxInjectedChars,
+                )
               : decorated;
           const searchMode = (status.custom as { searchMode?: string } | undefined)?.searchMode;
           return jsonResult({

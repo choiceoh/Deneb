@@ -27,9 +27,12 @@ function createAbortError(): Error {
   return err;
 }
 
-export function resolveDockerSpawnInvocation(
-  args: string[],
-): { command: string; args: string[]; shell?: boolean; windowsHide?: boolean } {
+export function resolveDockerSpawnInvocation(args: string[]): {
+  command: string;
+  args: string[];
+  shell?: boolean;
+  windowsHide?: boolean;
+} {
   return {
     command: "docker",
     args,

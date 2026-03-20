@@ -10,8 +10,9 @@ function loadTelegramInspectModule() {
   return telegramInspectModulePromise;
 }
 
-export type ReadOnlyInspectedAccount =
-  | Awaited<ReturnType<TelegramInspectModule["inspectTelegramAccount"]>>;
+export type ReadOnlyInspectedAccount = Awaited<
+  ReturnType<TelegramInspectModule["inspectTelegramAccount"]>
+>;
 
 export async function inspectReadOnlyChannelAccount(params: {
   channelId: ChannelId;

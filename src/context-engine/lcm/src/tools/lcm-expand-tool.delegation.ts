@@ -431,7 +431,8 @@ export async function runDelegatedExpansionLoop(params: {
   query?: string;
   requestId?: string;
 }): Promise<DelegatedExpansionLoopResult> {
-  const requestId = params.requestId?.trim() || resolveExpansionRequestId(params.requesterSessionKey);
+  const requestId =
+    params.requestId?.trim() || resolveExpansionRequestId(params.requesterSessionKey);
   const recursionCheck = evaluateExpansionRecursionGuard({
     sessionKey: params.requesterSessionKey,
     requestId,

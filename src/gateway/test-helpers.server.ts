@@ -17,6 +17,7 @@ import { resetLogger, setLoggerOverride } from "../logging.js";
 import { DEFAULT_AGENT_ID, toAgentStoreSessionKey } from "../routing/session-key.js";
 import { captureEnv } from "../test-utils/env.js";
 import { getDeterministicFreePortBlock } from "../test-utils/ports.js";
+import { sleep } from "../utils.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
 import { buildDeviceAuthPayloadV3 } from "./device-auth.js";
 import { PROTOCOL_VERSION } from "./protocol/index.js";
@@ -33,7 +34,6 @@ import {
   testState,
   testTailnetIPv4,
 } from "./test-helpers.mocks.js";
-import { sleep } from "../utils.js";
 
 // Import lazily after test env/home setup so config/session paths resolve to test dirs.
 // Keep one cached module per worker for speed.

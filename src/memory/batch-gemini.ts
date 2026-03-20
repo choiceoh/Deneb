@@ -1,3 +1,4 @@
+import { sleep } from "../utils.js";
 import {
   buildEmbeddingBatchGroupOptions,
   runEmbeddingBatchGroups,
@@ -9,7 +10,6 @@ import { debugEmbeddingsLog } from "./embeddings-debug.js";
 import type { GeminiEmbeddingClient, GeminiTextEmbeddingRequest } from "./embeddings-gemini.js";
 import { hashText } from "./internal.js";
 import { withRemoteHttpResponse } from "./remote-http.js";
-import { sleep } from "../utils.js";
 
 export type GeminiBatchRequest = {
   custom_id: string;

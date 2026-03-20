@@ -10,10 +10,10 @@
 import { registerContextEngineForOwner } from "../registry.js";
 import { createNativeLcmDependencies } from "./native-bridge.js";
 import { LcmContextEngine } from "./src/engine.js";
-import { createLcmGrepTool } from "./src/tools/lcm-grep-tool.js";
 import { createLcmDescribeTool } from "./src/tools/lcm-describe-tool.js";
-import { createLcmExpandTool } from "./src/tools/lcm-expand-tool.js";
 import { createLcmExpandQueryTool } from "./src/tools/lcm-expand-query-tool.js";
+import { createLcmExpandTool } from "./src/tools/lcm-expand-tool.js";
+import { createLcmGrepTool } from "./src/tools/lcm-grep-tool.js";
 
 let registered = false;
 
@@ -22,19 +22,18 @@ let registered = false;
  * Safe to call multiple times — subsequent calls are no-ops.
  */
 export function registerLcmContextEngine(): void {
-  if (registered) {return;}
+  if (registered) {
+    return;
+  }
   registered = true;
 
   const deps = createNativeLcmDependencies();
   const lcm = new LcmContextEngine(deps);
 
   // Register as core-owned engine with id "lcm"
-  const result = registerContextEngineForOwner(
-    "lcm",
-    () => lcm,
-    "core",
-    { allowSameOwnerRefresh: true },
-  );
+  const result = registerContextEngineForOwner("lcm", () => lcm, "core", {
+    allowSameOwnerRefresh: true,
+  });
 
   if (!result.ok) {
     deps.log.warn(

@@ -1,15 +1,29 @@
 import { beforeEach } from "vitest";
-import { slackPlugin, setSlackRuntime } from "../../extensions/slack/index.js";
 import { telegramPlugin, setTelegramRuntime } from "../../extensions/telegram/index.js";
-import { whatsappPlugin, setWhatsAppRuntime } from "../../extensions/whatsapp/index.js";
 import type { ChannelPlugin } from "../channels/plugins/types.plugin.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
 import { createPluginRuntime } from "../plugins/runtime/index.js";
 import { createTestRegistry } from "../test-utils/channel-plugins.js";
 
-const slackChannelPlugin = slackPlugin as unknown as ChannelPlugin;
+// Removed extensions (slack, whatsapp) — provide minimal stubs.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const slackChannelPlugin = {
+  id: "slack",
+  meta: { id: "slack", label: "Slack" },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+} as any as ChannelPlugin;
 const telegramChannelPlugin = telegramPlugin as unknown as ChannelPlugin;
-const whatsappChannelPlugin = whatsappPlugin as unknown as ChannelPlugin;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const whatsappChannelPlugin = {
+  id: "whatsapp",
+  meta: { id: "whatsapp", label: "WhatsApp" },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+} as any as ChannelPlugin;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function setSlackRuntime(_runtime: any) {}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function setWhatsAppRuntime(_runtime: any) {}
 
 export function installHeartbeatRunnerTestRuntime(params?: { includeSlack?: boolean }): void {
   beforeEach(() => {

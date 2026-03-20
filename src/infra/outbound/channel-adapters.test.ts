@@ -31,7 +31,7 @@ describe("getChannelMessageAdapter", () => {
       cfg: {} as never,
       accountId: "primary",
     });
-    const container = components?.[0] as DiscordUiContainer | undefined;
+    const container = components?.[0] as DiscordUiContainer;
 
     expect(components).toHaveLength(1);
     expect(container).toBeInstanceOf(DiscordUiContainer);
@@ -49,7 +49,7 @@ describe("getChannelMessageAdapter", () => {
       message: "   ",
       cfg: {} as never,
     });
-    const container = components?.[0] as DiscordUiContainer | undefined;
+    const container = components?.[0] as DiscordUiContainer;
 
     expect(components).toHaveLength(1);
     expect(container?.components).toEqual([expect.any(TextDisplay)]);

@@ -1,2 +1,5 @@
 // cloudflare-ai-gateway and vercel-ai-gateway extensions removed
-export {};
+// Stub: gateway config onboarding now handled by plugin runtime.
+export function isConfigGatewayOnboardingAvailable(): boolean {
+  return false;
+}

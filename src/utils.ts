@@ -232,18 +232,24 @@ export function sleep(ms: number) {
 export async function waitFor<T>(
   fn: () => T | Promise<T>,
   options: {
-    timeoutMs?: number;      // 기본 30_000
-    intervalMs?: number;     // 기본 500
+    timeoutMs?: number; // 기본 30_000
+    intervalMs?: number; // 기본 500
     signal?: AbortSignal;
-  } = {}
+  } = {},
 ): Promise<T> {
   const { timeoutMs = 30_000, intervalMs = 500, signal } = options;
   const start = Date.now();
   while (true) {
-    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    if (signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
     const result = await fn();
-    if (result) return result;
-    if (Date.now() - start > timeoutMs) throw new Error(`waitFor timed out after ${timeoutMs}ms`);
+    if (result) {
+      return result;
+    }
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(`waitFor timed out after ${timeoutMs}ms`);
+    }
     await sleep(intervalMs);
   }
 }
@@ -251,13 +257,19 @@ export async function waitFor<T>(
 /**
  * EventEmitter의 단일 이벤트 대기
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function waitForEvent<T = any>(
-  emitter: { once: (event: string, fn: (...args: any[]) => void) => void; off: (event: string, fn: (...args: any[]) => void) => void },
+  emitter: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    once: (event: string, fn: (...args: any[]) => void) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    off: (event: string, fn: (...args: any[]) => void) => void;
+  },
   event: string,
   options: {
-    timeoutMs?: number;  // 기본 30_000
+    timeoutMs?: number; // 기본 30_000
     signal?: AbortSignal;
-  } = {}
+  } = {},
 ): Promise<T> {
   const { timeoutMs = 30_000, signal } = options;
   return new Promise((resolve, reject) => {
@@ -265,8 +277,14 @@ export function waitForEvent<T = any>(
       cleanup();
       reject(new Error(`waitForEvent("${event}") timed out after ${timeoutMs}ms`));
     }, timeoutMs);
-    const onEvent = (val: T) => { cleanup(); resolve(val); };
-    const onAbort = () => { cleanup(); reject(new DOMException("Aborted", "AbortError")); };
+    const onEvent = (val: T) => {
+      cleanup();
+      resolve(val);
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
     const cleanup = () => {
       clearTimeout(timer);
       emitter.off(event, onEvent);

@@ -26,3 +26,13 @@ export {
   listKnownProviderAuthEnvVarNames,
   omitEnvKeysCaseInsensitive,
 } from "../secrets/provider-env-vars.js";
+export type {
+  WindowsSpawnProgram,
+  WindowsSpawnProgramCandidate,
+  WindowsSpawnResolution,
+} from "./windows-spawn.js";
+export {
+  applyWindowsSpawnProgramPolicy,
+  materializeWindowsSpawnProgram,
+  resolveWindowsSpawnProgramCandidate,
+} from "./windows-spawn.js";

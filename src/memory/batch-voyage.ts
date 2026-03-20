@@ -1,5 +1,6 @@
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
+import { sleep } from "../utils.js";
 import {
   applyEmbeddingBatchOutputLine,
   buildBatchHeaders,
@@ -20,7 +21,6 @@ import {
   uploadBatchJsonlFile,
   withRemoteHttpResponse,
 } from "./batch-embedding-common.js";
-import { sleep } from "../utils.js";
 import type { VoyageEmbeddingClient } from "./embeddings-voyage.js";
 
 /**

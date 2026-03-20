@@ -9,10 +9,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import type { ResolvedVegaConfig } from "./backend-config.js";
 import { isFileMissingError, statRegularFile } from "./fs-utils.js";
 import { resolveCliSpawnInvocation, runCliCommand } from "./qmd-process.js";
 import { deriveQmdScopeChannel, deriveQmdScopeChatType, isQmdScopeAllowed } from "./qmd-scope.js";
-import type { ResolvedVegaConfig } from "./backend-config.js";
 import type {
   MemoryEmbeddingProbeResult,
   MemoryProviderStatus,
@@ -44,7 +44,7 @@ export class VegaMemoryManager implements MemorySearchManager {
   private readonly agentId: string;
   private readonly vega: ResolvedVegaConfig;
   private readonly env: NodeJS.ProcessEnv;
-  private updateTimer: NodeJS.Timer | null = null;
+  private updateTimer: ReturnType<typeof setInterval> | null = null;
   private lastUpdateAt: number | null = null;
   private lastEmbedAt: number | null = null;
   private closed = false;
@@ -88,7 +88,9 @@ export class VegaMemoryManager implements MemorySearchManager {
     }
 
     const trimmed = query.trim();
-    if (!trimmed) {return [];}
+    if (!trimmed) {
+      return [];
+    }
 
     const limit = Math.min(
       this.vega.limits.maxResults,
@@ -118,17 +120,25 @@ export class VegaMemoryManager implements MemorySearchManager {
     lines?: number;
   }): Promise<{ text: string; path: string }> {
     const relPath = params.relPath?.trim();
-    if (!relPath) {throw new Error("path required");}
+    if (!relPath) {
+      throw new Error("path required");
+    }
 
     const absPath = this.resolveReadPath(relPath);
-    if (!absPath.endsWith(".md")) {throw new Error("path must be .md");}
+    if (!absPath.endsWith(".md")) {
+      throw new Error("path must be .md");
+    }
 
     const statResult = await statRegularFile(absPath);
-    if (statResult.missing) {return { text: "", path: relPath };}
+    if (statResult.missing) {
+      return { text: "", path: relPath };
+    }
 
     if (params.from !== undefined || params.lines !== undefined) {
       const partial = await this.readPartialText(absPath, params.from, params.lines);
-      if (partial.missing) {return { text: "", path: relPath };}
+      if (partial.missing) {
+        return { text: "", path: relPath };
+      }
       return { text: partial.text ?? "", path: relPath };
     }
 
@@ -136,7 +146,9 @@ export class VegaMemoryManager implements MemorySearchManager {
       const text = await fs.readFile(absPath, "utf-8");
       return { text, path: relPath };
     } catch (err) {
-      if (isFileMissingError(err)) {return { text: "", path: relPath };}
+      if (isFileMissingError(err)) {
+        return { text: "", path: relPath };
+      }
       throw err;
     }
   }
@@ -144,7 +156,9 @@ export class VegaMemoryManager implements MemorySearchManager {
   private cachedStatus: MemoryProviderStatus | null = null;
 
   private ensureStatus(): MemoryProviderStatus {
-    if (this.cachedStatus) {return this.cachedStatus;}
+    if (this.cachedStatus) {
+      return this.cachedStatus;
+    }
     // Return static status while first async refresh is pending
     const base: MemoryProviderStatus = {
       backend: "vega",
@@ -170,10 +184,7 @@ export class VegaMemoryManager implements MemorySearchManager {
 
   private async refreshStatus(): Promise<void> {
     try {
-      const result = await this.runVega(
-        ["memory-status", "--json"],
-        { timeoutMs: 10_000 },
-      );
+      const result = await this.runVega(["memory-status", "--json"], { timeoutMs: 10_000 });
       const parsed = this.parseStatusResponse(result.stdout);
       this.cachedStatus = {
         backend: "vega",
@@ -226,7 +237,9 @@ export class VegaMemoryManager implements MemorySearchManager {
   }
 
   async close(): Promise<void> {
-    if (this.closed) {return;}
+    if (this.closed) {
+      return;
+    }
     this.closed = true;
     if (this.updateTimer) {
       clearInterval(this.updateTimer);
@@ -255,18 +268,21 @@ export class VegaMemoryManager implements MemorySearchManager {
   }
 
   private async runUpdate(reason: string, force?: boolean): Promise<void> {
-    if (this.closed) {return;}
+    if (this.closed) {
+      return;
+    }
     if (!force && this.lastUpdateAt) {
       const elapsed = Date.now() - this.lastUpdateAt;
       // Debounce: skip if updated within last 15 seconds
-      if (elapsed < 15_000) {return;}
+      if (elapsed < 15_000) {
+        return;
+      }
     }
 
     try {
-      await this.runVega(
-        force ? ["memory-update", "--force"] : ["memory-update"],
-        { timeoutMs: this.vega.update.commandTimeoutMs },
-      );
+      await this.runVega(force ? ["memory-update", "--force"] : ["memory-update"], {
+        timeoutMs: this.vega.update.commandTimeoutMs,
+      });
       this.lastUpdateAt = Date.now();
     } catch (err) {
       log.warn(`vega update failed (${reason}): ${String(err)}`);
@@ -276,10 +292,9 @@ export class VegaMemoryManager implements MemorySearchManager {
     // Embed after update if needed
     if (this.shouldRunEmbed(force)) {
       try {
-        await this.runVega(
-          force ? ["memory-embed", "--force"] : ["memory-embed"],
-          { timeoutMs: this.vega.update.commandTimeoutMs },
-        );
+        await this.runVega(force ? ["memory-embed", "--force"] : ["memory-embed"], {
+          timeoutMs: this.vega.update.commandTimeoutMs,
+        });
         this.lastEmbedAt = Date.now();
       } catch (err) {
         log.warn(`vega embed failed (${reason}): ${String(err)}`);
@@ -288,26 +303,40 @@ export class VegaMemoryManager implements MemorySearchManager {
   }
 
   private shouldRunEmbed(force?: boolean): boolean {
-    if (force) {return true;}
-    if (this.lastEmbedAt === null) {return true;}
+    if (force) {
+      return true;
+    }
+    if (this.lastEmbedAt === null) {
+      return true;
+    }
     const interval = this.vega.update.embedIntervalMs;
-    if (interval <= 0) {return false;}
+    if (interval <= 0) {
+      return false;
+    }
     return Date.now() - this.lastEmbedAt > interval;
   }
 
   private parseSearchResults(stdout: string): MemorySearchResult[] {
     const trimmed = stdout.trim();
-    if (!trimmed || trimmed === "[]") {return [];}
+    if (!trimmed || trimmed === "[]") {
+      return [];
+    }
 
     try {
       const parsed = JSON.parse(trimmed);
-      if (!Array.isArray(parsed)) {return [];}
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
 
       const results: MemorySearchResult[] = [];
       for (const item of parsed) {
-        if (!item || typeof item !== "object") {continue;}
+        if (!item || typeof item !== "object") {
+          continue;
+        }
         const path = typeof item.path === "string" ? item.path.trim() : "";
-        if (!path) {continue;}
+        if (!path) {
+          continue;
+        }
         results.push({
           path,
           startLine: typeof item.startLine === "number" ? item.startLine : 1,
@@ -324,17 +353,18 @@ export class VegaMemoryManager implements MemorySearchManager {
     }
   }
 
-  private clampByInjectedChars(
-    results: MemorySearchResult[],
-    limit: number,
-  ): MemorySearchResult[] {
+  private clampByInjectedChars(results: MemorySearchResult[], limit: number): MemorySearchResult[] {
     const budget = this.vega.limits.maxInjectedChars;
-    if (!budget || budget <= 0) {return results.slice(0, limit);}
+    if (!budget || budget <= 0) {
+      return results.slice(0, limit);
+    }
 
     let remaining = budget;
     const clamped: MemorySearchResult[] = [];
     for (const entry of results) {
-      if (remaining <= 0 || clamped.length >= limit) {break;}
+      if (remaining <= 0 || clamped.length >= limit) {
+        break;
+      }
       const snippet = entry.snippet ?? "";
       if (snippet.length <= remaining) {
         clamped.push(entry);
@@ -355,10 +385,14 @@ export class VegaMemoryManager implements MemorySearchManager {
     dbPath?: string;
   } {
     const trimmed = stdout.trim();
-    if (!trimmed) {return {};}
+    if (!trimmed) {
+      return {};
+    }
     try {
       const parsed = JSON.parse(trimmed);
-      if (!parsed || typeof parsed !== "object") {return {};}
+      if (!parsed || typeof parsed !== "object") {
+        return {};
+      }
       return {
         files: typeof parsed.files === "number" ? parsed.files : undefined,
         chunks: typeof parsed.chunks === "number" ? parsed.chunks : undefined,
@@ -400,7 +434,9 @@ export class VegaMemoryManager implements MemorySearchManager {
       const slice = fileLines.slice(start - 1, start - 1 + count);
       return { missing: false, text: slice.join("\n") };
     } catch (err) {
-      if (isFileMissingError(err)) {return { missing: true };}
+      if (isFileMissingError(err)) {
+        return { missing: true };
+      }
       throw err;
     }
   }

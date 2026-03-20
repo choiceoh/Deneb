@@ -17,7 +17,8 @@ export type { OpenClawPluginApi } from "../plugins/types.js";
 export { DEFAULT_ACCOUNT_ID } from "../routing/session-key.js";
 export type { FixedWindowRateLimiter } from "./webhook-memory-guards.js";
 export { createFixedWindowRateLimiter } from "./webhook-memory-guards.js";
-export {
-  synologyChatSetupAdapter,
-  synologyChatSetupWizard,
-} from "../../extensions/synology-chat/setup-api.js";
+// Synology Chat extension removed — stubs for compat callers.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const synologyChatSetupAdapter: any = undefined;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const synologyChatSetupWizard: any = undefined;

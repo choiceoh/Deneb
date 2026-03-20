@@ -1,4 +1,3 @@
-
 import { createTelegramThreadBindingManager } from "../../../../extensions/telegram/runtime-api.js";
 import type { OpenClawConfig } from "../../../config/config.js";
 import {
@@ -6,7 +5,6 @@ import {
   type SessionBindingCapabilities,
   type SessionBindingRecord,
 } from "../../../infra/outbound/session-binding-service.js";
-
 import {
   bundledChannelPlugins,
   bundledChannelRuntimeSetters,
@@ -164,7 +162,7 @@ function expectClearedSessionBinding(params: {
   ).toBeNull();
 }
 
-const telegramDescribeMessageToolMock: any = null;
+const telegramDescribeMessageToolMock: unknown = null;
 
 bundledChannelRuntimeSetters.setTelegramRuntime({
   channel: {
@@ -175,8 +173,6 @@ bundledChannelRuntimeSetters.setTelegramRuntime({
     },
   },
 } as never);
-
-
 
 export const pluginContractRegistry: PluginContractEntry[] = bundledChannelPlugins.map(
   (plugin) => ({
@@ -284,6 +280,7 @@ export const setupContractRegistry: SetupContractEntry[] = [
         expectedValidation: "Mattermost requires --bot-token and --http-url (or --use-env).",
       },
     ],
+  },
 ];
 
 export const statusContractRegistry: StatusContractEntry[] = [
@@ -317,6 +314,7 @@ export const statusContractRegistry: StatusContractEntry[] = [
         },
       },
     ],
+  },
 ];
 
 export const surfaceContractRegistry: SurfaceContractEntry[] = bundledChannelPlugins.map(
@@ -344,7 +342,7 @@ export const directoryContractRegistry: DirectoryContractEntry[] = surfaceContra
     coverage: directoryPresenceOnlyIds.has(entry.id) ? "presence" : "lookups",
   }));
 
-const baseSessionBindingCfg = {
+const _baseSessionBindingCfg = {
   session: { mainKey: "main", scope: "per-sender" },
 } satisfies OpenClawConfig;
 

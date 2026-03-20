@@ -728,7 +728,7 @@ export async function healthCommand(
           byChannel[channelId] = accountIds;
         }
       }
-      for (const [channelId, fallbackIds] of Object.entries(channelAccountFallbacks) as [string, string[]][]) {
+      for (const [channelId, fallbackIds] of Object.entries(channelAccountFallbacks)) {
         if (!byChannel[channelId] || byChannel[channelId].length === 0) {
           byChannel[channelId] = fallbackIds;
         }

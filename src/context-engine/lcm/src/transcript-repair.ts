@@ -264,7 +264,7 @@ export function sanitizeToolUseResultPairing<T extends AgentMessageLike>(message
       if (next.role !== "toolResult") {
         remainder.push(next);
       } else {
-        droppedOrphanCount += 1;
+        _droppedOrphanCount += 1;
         changed = true;
       }
     }

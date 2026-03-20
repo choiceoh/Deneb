@@ -93,6 +93,8 @@ export type PluginRuntimeChannel = {
     shouldComputeCommandAuthorized: typeof import("../../auto-reply/command-detection.js").shouldComputeCommandAuthorized;
     shouldHandleTextCommands: typeof import("../../auto-reply/commands-registry.js").shouldHandleTextCommands;
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  whatsapp?: Record<string, (...args: any[]) => any>;
   telegram: {
     auditGroupMembership: typeof import("../../../extensions/telegram/runtime-api.js").auditTelegramGroupMembership;
     collectUnmentionedGroupIds: typeof import("../../../extensions/telegram/runtime-api.js").collectTelegramUnmentionedGroupIds;

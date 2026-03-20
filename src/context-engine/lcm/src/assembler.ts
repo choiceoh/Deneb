@@ -1,11 +1,11 @@
 import type { ContextEngine } from "../../types.js";
-import { sanitizeToolUseResultPairing } from "./transcript-repair.js";
 import type {
   ConversationStore,
   MessagePartRecord,
   MessageRole,
 } from "./store/conversation-store.js";
 import type { SummaryStore, ContextItemRecord, SummaryRecord } from "./store/summary-store.js";
+import { sanitizeToolUseResultPairing } from "./transcript-repair.js";
 
 type AgentMessage = Parameters<ContextEngine["ingest"]>[0]["message"];
 
@@ -73,11 +73,11 @@ function buildSystemPromptAddition(summarySignals: SummaryPromptSignal[]): strin
     "3. `lcm_expand_query` — deep recall: spawns bounded sub-agent, expands DAG, returns answer with cited summary IDs (~120s, don't ration it)",
     "",
     "**`lcm_expand_query` usage** — two patterns (always requires `prompt`):",
-    "- With IDs: `lcm_expand_query(summaryIds: [\"sum_xxx\"], prompt: \"What config changes were discussed?\")`",
-    "- With search: `lcm_expand_query(query: \"database migration\", prompt: \"What strategy was decided?\")`",
+    '- With IDs: `lcm_expand_query(summaryIds: ["sum_xxx"], prompt: "What config changes were discussed?")`',
+    '- With search: `lcm_expand_query(query: "database migration", prompt: "What strategy was decided?")`',
     "- Optional: `maxTokens` (default 2000), `conversationId`, `allConversations: true`",
     "",
-    "**Summaries include \"Expand for details about:\" footers** listing compressed specifics. Use `lcm_expand_query` with that summary's ID to retrieve them.",
+    '**Summaries include "Expand for details about:" footers** listing compressed specifics. Use `lcm_expand_query` with that summary\'s ID to retrieve them.',
   );
 
   // Precision/evidence rules — always present but stronger when heavily compacted
@@ -165,9 +165,7 @@ function getPartMetadata(part: MessagePartRecord): {
         ? record.originalRole
         : undefined,
     rawType:
-      typeof record.rawType === "string" && record.rawType.length > 0
-        ? record.rawType
-        : undefined,
+      typeof record.rawType === "string" && record.rawType.length > 0 ? record.rawType : undefined,
     raw: record.raw,
   };
 }
@@ -197,9 +195,13 @@ function reasoningBlockFromPart(part: MessagePartRecord, rawType?: string): unkn
  * When we reassemble for the OpenAI provider we need the original back.
  */
 function tryRestoreOpenAIReasoning(raw: Record<string, unknown>): Record<string, unknown> | null {
-  if (raw.type !== "thinking") {return null;}
+  if (raw.type !== "thinking") {
+    return null;
+  }
   const sig = raw.thinkingSignature;
-  if (typeof sig !== "string" || !sig.startsWith("{")) {return null;}
+  if (typeof sig !== "string" || !sig.startsWith("{")) {
+    return null;
+  }
   try {
     const parsed = JSON.parse(sig) as Record<string, unknown>;
     if (parsed.type === "reasoning" && typeof parsed.id === "string") {
@@ -341,7 +343,9 @@ export function blockFromPart(part: MessagePartRecord): unknown {
     // If this is an OpenClaw-normalised OpenAI reasoning block, restore the original
     // OpenAI format so the Responses API gets the {type:"reasoning", id:"rs_…"} it expects.
     const restored = tryRestoreOpenAIReasoning(metadata.raw as Record<string, unknown>);
-    if (restored) {return restored;}
+    if (restored) {
+      return restored;
+    }
 
     // Don't return raw for tool call/result blocks — they need to go through
     // toolCallBlockFromPart/toolResultBlockFromPart which properly normalize
@@ -535,9 +539,7 @@ function formatDateForAttribute(date: Date, timezone?: string): string {
       second: "2-digit",
       hour12: false,
     });
-    const p = Object.fromEntries(
-      fmt.formatToParts(date).map((part) => [part.type, part.value]),
-    );
+    const p = Object.fromEntries(fmt.formatToParts(date).map((part) => [part.type, part.value]));
     return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
   } catch {
     return date.toISOString();
@@ -566,7 +568,7 @@ async function formatSummaryContent(
   }
 
   const lines: string[] = [];
-  lines.push(`<summary ${attributes.join(" ")}>`); 
+  lines.push(`<summary ${attributes.join(" ")}>`);
 
   // For condensed summaries, include parent references.
   if (summary.kind === "condensed") {
@@ -827,7 +829,9 @@ export class ContextAssembler {
               content,
               ...(toolCallId ? { toolCallId } : {}),
               ...(toolName ? { toolName } : {}),
-              ...(role === "toolResult" && toolIsError !== undefined ? { isError: toolIsError } : {}),
+              ...(role === "toolResult" && toolIsError !== undefined
+                ? { isError: toolIsError }
+                : {}),
             } as AgentMessage),
       tokens: tokenCount,
       isMessage: true,

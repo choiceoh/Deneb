@@ -223,7 +223,7 @@ describe("launchd runtime parsing", () => {
 describe("launchctl list detection", () => {
   it("detects the resolved label in launchctl list", async () => {
     state.listOutput = "123 0 ai.openclaw.gateway\n";
-    const listed = await isLaunchAgentListed({
+    const listed = isLaunchAgentListed({
       env: { HOME: "/Users/test", OPENCLAW_PROFILE: "default" },
     });
     expect(listed).toBe(true);
@@ -231,7 +231,7 @@ describe("launchctl list detection", () => {
 
   it("returns false when the label is missing", async () => {
     state.listOutput = "123 0 com.other.service\n";
-    const listed = await isLaunchAgentListed({
+    const listed = isLaunchAgentListed({
       env: { HOME: "/Users/test", OPENCLAW_PROFILE: "default" },
     });
     expect(listed).toBe(false);

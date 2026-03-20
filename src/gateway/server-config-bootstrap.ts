@@ -1,3 +1,4 @@
+import { formatCliCommand } from "../cli/command-format.js";
 /**
  * Gateway startup helpers: config validation, auth bootstrapping, and rate limiting.
  *
@@ -11,7 +12,6 @@ import {
   type OpenClawConfig,
 } from "../config/config.js";
 import { formatConfigIssueLines } from "../config/issue-format.js";
-import { formatCliCommand } from "../cli/command-format.js";
 import {
   GATEWAY_AUTH_SURFACE_PATHS,
   evaluateGatewayAuthSurfaceStates,

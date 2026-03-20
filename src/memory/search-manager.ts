@@ -1,6 +1,6 @@
+import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import type { ResolvedQmdConfig, ResolvedVegaConfig } from "./backend-config.js";
 import { resolveMemoryBackendConfig } from "./backend-config.js";
 import type {
@@ -36,7 +36,9 @@ export async function getMemorySearchManager(params: {
     if (params.purpose !== "status") {
       cacheKey = buildVegaCacheKey(params.agentId, resolved.vega);
       const cached = QMD_MANAGER_CACHE.get(cacheKey);
-      if (cached) {return { manager: cached };}
+      if (cached) {
+        return { manager: cached };
+      }
     }
     try {
       const { VegaMemoryManager } = await import("./vega-manager.js");
@@ -47,7 +49,9 @@ export async function getMemorySearchManager(params: {
         resolved: resolved.vega,
       });
       if (primary) {
-        if (params.purpose === "status") {return { manager: primary };}
+        if (params.purpose === "status") {
+          return { manager: primary };
+        }
         const wrapper = new FallbackMemoryManager(
           {
             primary,
@@ -57,10 +61,14 @@ export async function getMemorySearchManager(params: {
             },
           },
           () => {
-            if (cacheKey) {QMD_MANAGER_CACHE.delete(cacheKey);}
+            if (cacheKey) {
+              QMD_MANAGER_CACHE.delete(cacheKey);
+            }
           },
         );
-        if (cacheKey) {QMD_MANAGER_CACHE.set(cacheKey, wrapper);}
+        if (cacheKey) {
+          QMD_MANAGER_CACHE.set(cacheKey, wrapper);
+        }
         return { manager: wrapper };
       }
     } catch (err) {

@@ -1,6 +1,4 @@
-import { sleep } from "../utils.js";
-import {
-  resolveQueueSettings } from "../auto-reply/reply/queue.js";
+import { resolveQueueSettings } from "../auto-reply/reply/queue.js";
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
 import { loadConfig } from "../config/config.js";
@@ -19,6 +17,7 @@ import { normalizeAccountId, normalizeMainKey } from "../routing/session-key.js"
 import { defaultRuntime } from "../runtime.js";
 import { isCronSessionKey } from "../sessions/session-key-utils.js";
 import { extractTextFromChatContent } from "../shared/chat-content.js";
+import { sleep } from "../utils.js";
 import {
   type DeliveryContext,
   deliveryContextFromSession,

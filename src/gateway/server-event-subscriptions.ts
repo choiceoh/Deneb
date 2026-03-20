@@ -7,7 +7,13 @@ import { clearAgentRunContext, onAgentEvent } from "../infra/agent-events.js";
 import { onHeartbeatEvent } from "../infra/heartbeat-events.js";
 import { onSessionLifecycleEvent } from "../sessions/session-lifecycle-events.js";
 import { onSessionTranscriptUpdate } from "../sessions/transcript-events.js";
-import { createAgentEventHandler } from "./server-chat.js";
+import {
+  createAgentEventHandler,
+  type ChatRunState,
+  type SessionEventSubscriberRegistry,
+  type SessionMessageSubscriberRegistry,
+  type ToolEventRecipientRegistry,
+} from "./server-chat.js";
 import { resolveSessionKeyForRun } from "./server-session-key.js";
 import { resolveSessionKeyForTranscriptFile } from "./session-transcript-key.js";
 import {
@@ -21,7 +27,7 @@ type Broadcast = (event: string, payload: unknown, opts?: { dropIfSlow?: boolean
 type BroadcastToConnIds = (
   event: string,
   payload: unknown,
-  connIds: Set<string>,
+  connIds: ReadonlySet<string>,
   opts?: { dropIfSlow?: boolean },
 ) => void;
 
@@ -31,19 +37,10 @@ export type GatewayEventSubscriptionParams = {
   broadcastToConnIds: BroadcastToConnIds;
   nodeSendToSession: (sessionKey: string, event: string, payload: unknown) => void;
   agentRunSeq: Map<string, number>;
-  chatRunState: { abortedRuns: Map<string, unknown>; buffers: Map<string, string>; deltaSentAt: Map<string, number> };
-  toolEventRecipients: { add: (runId: string, connId: string) => void };
-  sessionEventSubscribers: {
-    getAll: () => Set<string>;
-    subscribe: (connId: string) => void;
-    unsubscribe: (connId: string) => void;
-  };
-  sessionMessageSubscribers: {
-    get: (sessionKey: string) => Set<string>;
-    subscribe: (connId: string, sessionKey: string) => void;
-    unsubscribe: (connId: string, sessionKey: string) => void;
-    unsubscribeAll: (connId: string) => void;
-  };
+  chatRunState: ChatRunState;
+  toolEventRecipients: ToolEventRecipientRegistry;
+  sessionEventSubscribers: SessionEventSubscriberRegistry;
+  sessionMessageSubscribers: SessionMessageSubscriberRegistry;
 };
 
 export type GatewayEventSubscriptions = {

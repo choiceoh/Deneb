@@ -488,7 +488,7 @@ export async function setupChannels(
   const corePrimer = listChatChannels().map((meta) => ({
     id: meta.id,
     label: meta.label,
-    blurb: meta.blurb,
+    blurb: meta.blurb ?? "",
   }));
   const coreIds = new Set(corePrimer.map((entry) => entry.id));
   const primerChannels = [
@@ -498,21 +498,21 @@ export async function setupChannels(
       .map((plugin) => ({
         id: plugin.id,
         label: plugin.meta.label,
-        blurb: plugin.meta.blurb,
+        blurb: plugin.meta.blurb ?? "",
       })),
     ...installedCatalogEntries
       .filter((entry) => !coreIds.has(entry.id as ChannelChoice))
       .map((entry) => ({
         id: entry.id as ChannelChoice,
         label: entry.meta.label,
-        blurb: entry.meta.blurb,
+        blurb: entry.meta.blurb ?? "",
       })),
     ...catalogEntries
       .filter((entry) => !coreIds.has(entry.id as ChannelChoice))
       .map((entry) => ({
         id: entry.id as ChannelChoice,
         label: entry.meta.label,
-        blurb: entry.meta.blurb,
+        blurb: entry.meta.blurb ?? "",
       })),
   ];
   await noteChannelPrimer(prompter, primerChannels);
@@ -859,7 +859,7 @@ export async function setupChannels(
         },
       ],
       initialValue: quickstartDefault,
-    })) as ChannelChoice | "__skip__";
+    })) as ChannelChoice;
     if (choice !== "__skip__") {
       await handleChannelChoice(choice);
     }
@@ -879,7 +879,7 @@ export async function setupChannels(
           },
         ],
         initialValue,
-      })) as ChannelChoice | typeof doneValue;
+      })) as ChannelChoice;
       if (choice === doneValue) {
         break;
       }

@@ -16,7 +16,7 @@ import {
 } from "./runtime-whatsapp-boundary.js";
 import type { PluginRuntime } from "./types.js";
 
-export function createRuntimeWhatsApp(): PluginRuntime["channel"]["whatsapp"] {
+export function createRuntimeWhatsApp(): NonNullable<PluginRuntime["channel"]["whatsapp"]> {
   return {
     getActiveWebListener,
     getWebAuthAgeMs,

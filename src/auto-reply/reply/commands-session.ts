@@ -377,14 +377,13 @@ export const handleSessionCommand: CommandHandler = async (params, allowTextComm
   const telegramConversationId = resolveTelegramConversationId(params);
   const channelRuntime = getChannelRuntime();
 
-  const telegramBinding =
-    telegramConversationId
-      ? sessionBindingService.resolveByConversation({
-          channel: "telegram",
-          accountId,
-          conversationId: telegramConversationId,
-        })
-      : null;
+  const telegramBinding = telegramConversationId
+    ? sessionBindingService.resolveByConversation({
+        channel: "telegram",
+        accountId,
+        conversationId: telegramConversationId,
+      })
+    : null;
   if (!telegramBinding) {
     if (!telegramConversationId) {
       return {
@@ -400,14 +399,17 @@ export const handleSessionCommand: CommandHandler = async (params, allowTextComm
     };
   }
 
-  const idleTimeoutMs = resolveTelegramBindingDurationMs(telegramBinding!, "idleTimeoutMs", 24 * 60 * 60 * 1000);
-  const idleExpiresAt = idleTimeoutMs > 0
-      ? resolveTelegramBindingLastActivityAt(telegramBinding!) + idleTimeoutMs
+  const idleTimeoutMs = resolveTelegramBindingDurationMs(
+    telegramBinding,
+    "idleTimeoutMs",
+    24 * 60 * 60 * 1000,
+  );
+  const idleExpiresAt =
+    idleTimeoutMs > 0
+      ? resolveTelegramBindingLastActivityAt(telegramBinding) + idleTimeoutMs
       : undefined;
-  const maxAgeMs = resolveTelegramBindingDurationMs(telegramBinding!, "maxAgeMs", 0);
-  const maxAgeExpiresAt = maxAgeMs > 0
-      ? telegramBinding!.boundAt + maxAgeMs
-      : undefined;
+  const maxAgeMs = resolveTelegramBindingDurationMs(telegramBinding, "maxAgeMs", 0);
+  const maxAgeExpiresAt = maxAgeMs > 0 ? telegramBinding.boundAt + maxAgeMs : undefined;
 
   const durationArgRaw = tokens.slice(1).join("");
   if (!durationArgRaw) {
@@ -449,7 +451,7 @@ export const handleSessionCommand: CommandHandler = async (params, allowTextComm
   }
 
   const senderId = params.command.senderId?.trim() || "";
-  const boundBy = resolveTelegramBindingBoundBy(telegramBinding!);
+  const boundBy = resolveTelegramBindingBoundBy(telegramBinding);
   if (boundBy && boundBy !== "system" && senderId && senderId !== boundBy) {
     return {
       shouldContinue: false,
@@ -469,14 +471,15 @@ export const handleSessionCommand: CommandHandler = async (params, allowTextComm
     };
   }
 
-  const updatedBindings = action === SESSION_ACTION_IDLE
+  const updatedBindings =
+    action === SESSION_ACTION_IDLE
       ? channelRuntime.telegram.threadBindings.setIdleTimeoutBySessionKey({
-          targetSessionKey: telegramBinding!.targetSessionKey,
+          targetSessionKey: telegramBinding.targetSessionKey,
           accountId,
           idleTimeoutMs: durationMs,
         })
       : channelRuntime.telegram.threadBindings.setMaxAgeBySessionKey({
-          targetSessionKey: telegramBinding!.targetSessionKey,
+          targetSessionKey: telegramBinding.targetSessionKey,
           accountId,
           maxAgeMs: durationMs,
         });

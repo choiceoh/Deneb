@@ -1,7 +1,5 @@
 import type { ConversationStore } from "./store/conversation-store.js";
-import type {
-  SummaryStore,
-} from "./store/summary-store.js";
+import type { SummaryStore } from "./store/summary-store.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -92,11 +90,8 @@ export class IntegrityChecker {
 
   // ── Individual checks ───────────────────────────────────────────────────
 
-  private async checkConversationExists(
-    conversationId: number,
-  ): Promise<IntegrityCheck> {
-    const conversation =
-      await this.conversationStore.getConversation(conversationId);
+  private async checkConversationExists(conversationId: number): Promise<IntegrityCheck> {
+    const conversation = await this.conversationStore.getConversation(conversationId);
     if (conversation) {
       return {
         name: "conversation_exists",
@@ -111,9 +106,7 @@ export class IntegrityChecker {
     };
   }
 
-  private async checkContextItemsContiguous(
-    conversationId: number,
-  ): Promise<IntegrityCheck> {
+  private async checkContextItemsContiguous(conversationId: number): Promise<IntegrityCheck> {
     const items = await this.summaryStore.getContextItems(conversationId);
     if (items.length === 0) {
       return {
@@ -146,9 +139,7 @@ export class IntegrityChecker {
     };
   }
 
-  private async checkContextItemsValidRefs(
-    conversationId: number,
-  ): Promise<IntegrityCheck> {
+  private async checkContextItemsValidRefs(conversationId: number): Promise<IntegrityCheck> {
     const items = await this.summaryStore.getContextItems(conversationId);
     const danglingRefs: {
       ordinal: number;
@@ -194,20 +185,14 @@ export class IntegrityChecker {
     };
   }
 
-  private async checkSummariesHaveLineage(
-    conversationId: number,
-  ): Promise<IntegrityCheck> {
-    const summaries =
-      await this.summaryStore.getSummariesByConversation(conversationId);
-    const missingLineage: { summaryId: string; kind: string; issue: string }[] =
-      [];
+  private async checkSummariesHaveLineage(conversationId: number): Promise<IntegrityCheck> {
+    const summaries = await this.summaryStore.getSummariesByConversation(conversationId);
+    const missingLineage: { summaryId: string; kind: string; issue: string }[] = [];
 
     for (const summary of summaries) {
       if (summary.kind === "leaf") {
         // Leaf summaries must link to at least one message
-        const messageIds = await this.summaryStore.getSummaryMessages(
-          summary.summaryId,
-        );
+        const messageIds = await this.summaryStore.getSummaryMessages(summary.summaryId);
         if (messageIds.length === 0) {
           missingLineage.push({
             summaryId: summary.summaryId,
@@ -217,9 +202,7 @@ export class IntegrityChecker {
         }
       } else if (summary.kind === "condensed") {
         // Condensed summaries must link to at least one parent summary
-        const parents = await this.summaryStore.getSummaryParents(
-          summary.summaryId,
-        );
+        const parents = await this.summaryStore.getSummaryParents(summary.summaryId);
         if (parents.length === 0) {
           missingLineage.push({
             summaryId: summary.summaryId,
@@ -246,13 +229,9 @@ export class IntegrityChecker {
     };
   }
 
-  private async checkNoOrphanSummaries(
-    conversationId: number,
-  ): Promise<IntegrityCheck> {
-    const summaries =
-      await this.summaryStore.getSummariesByConversation(conversationId);
-    const contextItems =
-      await this.summaryStore.getContextItems(conversationId);
+  private async checkNoOrphanSummaries(conversationId: number): Promise<IntegrityCheck> {
+    const summaries = await this.summaryStore.getSummariesByConversation(conversationId);
+    const contextItems = await this.summaryStore.getContextItems(conversationId);
 
     // Build set of summary IDs that appear in context_items
     const contextSummaryIds = new Set(
@@ -264,9 +243,7 @@ export class IntegrityChecker {
     // Build set of summary IDs that are parents of other summaries
     const parentSummaryIds = new Set<string>();
     for (const summary of summaries) {
-      const children = await this.summaryStore.getSummaryChildren(
-        summary.summaryId,
-      );
+      const children = await this.summaryStore.getSummaryChildren(summary.summaryId);
       if (children.length > 0) {
         parentSummaryIds.add(summary.summaryId);
       }
@@ -275,10 +252,7 @@ export class IntegrityChecker {
     // Orphans are summaries in neither set
     const orphans: string[] = [];
     for (const summary of summaries) {
-      if (
-        !contextSummaryIds.has(summary.summaryId) &&
-        !parentSummaryIds.has(summary.summaryId)
-      ) {
+      if (!contextSummaryIds.has(summary.summaryId) && !parentSummaryIds.has(summary.summaryId)) {
         orphans.push(summary.summaryId);
       }
     }
@@ -299,11 +273,8 @@ export class IntegrityChecker {
     };
   }
 
-  private async checkContextTokenConsistency(
-    conversationId: number,
-  ): Promise<IntegrityCheck> {
-    const contextItems =
-      await this.summaryStore.getContextItems(conversationId);
+  private async checkContextTokenConsistency(conversationId: number): Promise<IntegrityCheck> {
+    const contextItems = await this.summaryStore.getContextItems(conversationId);
 
     // Manually sum token counts from referenced messages and summaries
     let manualSum = 0;
@@ -322,8 +293,7 @@ export class IntegrityChecker {
     }
 
     // Compare with the aggregate query
-    const aggregateTotal =
-      await this.summaryStore.getContextTokenCount(conversationId);
+    const aggregateTotal = await this.summaryStore.getContextTokenCount(conversationId);
 
     if (manualSum === aggregateTotal) {
       return {
@@ -341,9 +311,7 @@ export class IntegrityChecker {
     };
   }
 
-  private async checkMessageSeqContiguous(
-    conversationId: number,
-  ): Promise<IntegrityCheck> {
+  private async checkMessageSeqContiguous(conversationId: number): Promise<IntegrityCheck> {
     const messages = await this.conversationStore.getMessages(conversationId);
     if (messages.length === 0) {
       return {
@@ -376,9 +344,7 @@ export class IntegrityChecker {
     };
   }
 
-  private async checkNoDuplicateContextRefs(
-    conversationId: number,
-  ): Promise<IntegrityCheck> {
+  private async checkNoDuplicateContextRefs(conversationId: number): Promise<IntegrityCheck> {
     const items = await this.summaryStore.getContextItems(conversationId);
 
     const seenMessageIds = new Map<number, number[]>();
@@ -439,7 +405,9 @@ export function repairPlan(report: IntegrityReport): string[] {
   const suggestions: string[] = [];
 
   for (const check of report.checks) {
-    if (check.status === "pass") {continue;}
+    if (check.status === "pass") {
+      continue;
+    }
 
     switch (check.name) {
       case "conversation_exists":
@@ -449,15 +417,15 @@ export function repairPlan(report: IntegrityReport): string[] {
         break;
 
       case "context_items_contiguous":
-        suggestions.push(
-          "Resequence context items to fix ordinal gaps",
-        );
+        suggestions.push("Resequence context items to fix ordinal gaps");
         break;
 
       case "context_items_valid_refs": {
-        const details = check.details as {
-          danglingRefs: { ordinal: number; itemType: string; refId: number | string }[];
-        } | undefined;
+        const details = check.details as
+          | {
+              danglingRefs: { ordinal: number; itemType: string; refId: number | string }[];
+            }
+          | undefined;
         if (details?.danglingRefs) {
           for (const ref of details.danglingRefs) {
             suggestions.push(
@@ -465,17 +433,17 @@ export function repairPlan(report: IntegrityReport): string[] {
             );
           }
         } else {
-          suggestions.push(
-            "Remove context items with dangling references",
-          );
+          suggestions.push("Remove context items with dangling references");
         }
         break;
       }
 
       case "summaries_have_lineage": {
-        const details = check.details as {
-          missingLineage: { summaryId: string; kind: string; issue: string }[];
-        } | undefined;
+        const details = check.details as
+          | {
+              missingLineage: { summaryId: string; kind: string; issue: string }[];
+            }
+          | undefined;
         if (details?.missingLineage) {
           for (const entry of details.missingLineage) {
             if (entry.kind === "leaf") {
@@ -489,27 +457,23 @@ export function repairPlan(report: IntegrityReport): string[] {
             }
           }
         } else {
-          suggestions.push(
-            "Add missing lineage links for summaries",
-          );
+          suggestions.push("Add missing lineage links for summaries");
         }
         break;
       }
 
       case "no_orphan_summaries": {
-        const details = check.details as {
-          orphanedSummaryIds: string[];
-        } | undefined;
+        const details = check.details as
+          | {
+              orphanedSummaryIds: string[];
+            }
+          | undefined;
         if (details?.orphanedSummaryIds) {
           for (const id of details.orphanedSummaryIds) {
-            suggestions.push(
-              `Remove orphaned summary ${id} from summaries table`,
-            );
+            suggestions.push(`Remove orphaned summary ${id} from summaries table`);
           }
         } else {
-          suggestions.push(
-            "Remove orphaned summaries disconnected from the DAG",
-          );
+          suggestions.push("Remove orphaned summaries disconnected from the DAG");
         }
         break;
       }
@@ -527,9 +491,11 @@ export function repairPlan(report: IntegrityReport): string[] {
         break;
 
       case "no_duplicate_context_refs": {
-        const details = check.details as {
-          duplicates: { refType: string; refId: number | string; ordinals: number[] }[];
-        } | undefined;
+        const details = check.details as
+          | {
+              duplicates: { refType: string; refId: number | string; ordinals: number[] }[];
+            }
+          | undefined;
         if (details?.duplicates) {
           for (const dup of details.duplicates) {
             const keepOrdinal = dup.ordinals[0];
@@ -565,13 +531,7 @@ export async function collectMetrics(
   conversationStore: ConversationStore,
   summaryStore: SummaryStore,
 ): Promise<LcmMetrics> {
-  const [
-    contextTokens,
-    messageCount,
-    summaries,
-    contextItems,
-    largeFiles,
-  ] = await Promise.all([
+  const [contextTokens, messageCount, summaries, contextItems, largeFiles] = await Promise.all([
     summaryStore.getContextTokenCount(conversationId),
     conversationStore.getMessageCount(conversationId),
     summaryStore.getSummariesByConversation(conversationId),
@@ -580,9 +540,7 @@ export async function collectMetrics(
   ]);
 
   const leafSummaryCount = summaries.filter((s) => s.kind === "leaf").length;
-  const condensedSummaryCount = summaries.filter(
-    (s) => s.kind === "condensed",
-  ).length;
+  const condensedSummaryCount = summaries.filter((s) => s.kind === "condensed").length;
 
   return {
     conversationId,

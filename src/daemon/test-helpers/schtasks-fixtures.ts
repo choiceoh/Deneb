@@ -5,7 +5,11 @@ import { vi } from "vitest";
 import type { PortUsage } from "../../infra/ports-types.js";
 import type { killProcessTree as killProcessTreeImpl } from "../../process/kill-tree.js";
 import type { MockFn } from "../../test-utils/vitest-mock-fn.js";
-import { resolveTaskScriptPath } from "../schtasks.js";
+// schtasks module removed — inline resolveTaskScriptPath stub for tests.
+function resolveTaskScriptPath(env: Record<string, string>): string {
+  const appData = env.APPDATA ?? "";
+  return path.join(appData, "openclaw", "gateway.cmd");
+}
 
 export const schtasksResponses: Array<{ code: number; stdout: string; stderr: string }> = [];
 export const schtasksCalls: string[][] = [];

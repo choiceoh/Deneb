@@ -1,9 +1,14 @@
-import { slackPlugin, setSlackRuntime } from "../../../extensions/slack/index.js";
 import { telegramPlugin, setTelegramRuntime } from "../../../extensions/telegram/index.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import { createPluginRuntime } from "../../plugins/runtime/index.js";
 import { createTestRegistry } from "../../test-utils/channel-plugins.js";
+
+// Slack extension removed — provide minimal stub.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const slackPlugin = { id: "slack", meta: { id: "slack", label: "Slack" } } as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function setSlackRuntime(_runtime: any) {}
 
 export const slackConfig = {
   channels: {

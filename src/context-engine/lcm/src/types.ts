@@ -50,7 +50,10 @@ export type CallGatewayFn = (params: {
  * Model resolution function — resolves model aliases and defaults.
  * When providerHint is supplied, it takes precedence over env/defaults.
  */
-export type ResolveModelFn = (modelRef?: string, providerHint?: string) => {
+export type ResolveModelFn = (
+  modelRef?: string,
+  providerHint?: string,
+) => {
   provider: string;
   model: string;
 };

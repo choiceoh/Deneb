@@ -18,6 +18,7 @@ import {
   resolveApnsAuthConfigFromEnv,
   resolveApnsRelayConfigFromEnv,
 } from "../../infra/push-apns.js";
+import { sleep } from "../../utils.js";
 import {
   buildCanvasScopedHostUrl,
   CANVAS_CAPABILITY_TTL_MS,
@@ -50,7 +51,6 @@ import {
   uniqueSortedStrings,
 } from "./nodes.helpers.js";
 import type { GatewayRequestHandlers } from "./types.js";
-import { sleep } from "../../utils.js";
 
 export const NODE_WAKE_RECONNECT_WAIT_MS = 3_000;
 export const NODE_WAKE_RECONNECT_RETRY_WAIT_MS = 12_000;

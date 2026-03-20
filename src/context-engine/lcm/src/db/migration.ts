@@ -39,7 +39,9 @@ function ensureSummaryMetadataColumns(db: DatabaseSync): void {
   const hasEarliestAt = summaryColumns.some((col) => col.name === "earliest_at");
   const hasLatestAt = summaryColumns.some((col) => col.name === "latest_at");
   const hasDescendantCount = summaryColumns.some((col) => col.name === "descendant_count");
-  const hasDescendantTokenCount = summaryColumns.some((col) => col.name === "descendant_token_count");
+  const hasDescendantTokenCount = summaryColumns.some(
+    (col) => col.name === "descendant_token_count",
+  );
   const hasSourceMessageTokenCount = summaryColumns.some(
     (col) => col.name === "source_message_token_count",
   );
@@ -57,7 +59,9 @@ function ensureSummaryMetadataColumns(db: DatabaseSync): void {
     db.exec(`ALTER TABLE summaries ADD COLUMN descendant_token_count INTEGER NOT NULL DEFAULT 0`);
   }
   if (!hasSourceMessageTokenCount) {
-    db.exec(`ALTER TABLE summaries ADD COLUMN source_message_token_count INTEGER NOT NULL DEFAULT 0`);
+    db.exec(
+      `ALTER TABLE summaries ADD COLUMN source_message_token_count INTEGER NOT NULL DEFAULT 0`,
+    );
   }
 }
 
@@ -264,7 +268,10 @@ function backfillSummaryMetadata(db: DatabaseSync): void {
       }
     >();
     const tokenCountBySummaryId = new Map(
-      summaries.map((summary) => [summary.summary_id, Math.max(0, Math.floor(summary.token_count ?? 0))]),
+      summaries.map((summary) => [
+        summary.summary_id,
+        Math.max(0, Math.floor(summary.token_count ?? 0)),
+      ]),
     );
 
     for (const summary of summaries) {
@@ -279,10 +286,7 @@ function backfillSummaryMetadata(db: DatabaseSync): void {
           latestAt,
           descendantCount: 0,
           descendantTokenCount: 0,
-          sourceMessageTokenCount: Math.max(
-            0,
-            Math.floor(range?.sourceMessageTokenCount ?? 0),
-          ),
+          sourceMessageTokenCount: Math.max(0, Math.floor(range?.sourceMessageTokenCount ?? 0)),
         });
         continue;
       }
@@ -355,10 +359,7 @@ function backfillSummaryMetadata(db: DatabaseSync): void {
   }
 }
 
-export function runLcmMigrations(
-  db: DatabaseSync,
-  options?: { fts5Available?: boolean },
-): void {
+export function runLcmMigrations(db: DatabaseSync, options?: { fts5Available?: boolean }): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS conversations (
       conversation_id INTEGER PRIMARY KEY AUTOINCREMENT,

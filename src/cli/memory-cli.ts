@@ -281,7 +281,9 @@ async function scanMemoryFiles(
 
 async function summarizeIndexArtifact(manager: MemoryManager): Promise<string | null> {
   const status = manager.status?.();
-  if (!status) {return null;}
+  if (!status) {
+    return null;
+  }
 
   // Vega backend
   if (status.backend === "vega") {

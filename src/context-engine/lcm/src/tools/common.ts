@@ -1,11 +1,11 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 
-export type AnyAgentTool = AgentTool<unknown, unknown>;
+export type AnyAgentTool = AgentTool;
 
 /** Render structured payloads as deterministic text tool results. */
 export function jsonResult(payload: unknown): {
   content: Array<{ type: "text"; text: string }>;
-  details: payload;
+  details: typeof payload;
 } {
   return {
     content: [

@@ -123,7 +123,7 @@ function normalizeUnknownBlock(value: unknown): {
     text:
       safeString(record.text) ??
       safeString(record.thinking) ??
-      ((rawType === "reasoning" || rawType === "thinking")
+      (rawType === "reasoning" || rawType === "thinking"
         ? extractReasoningText(record)
         : undefined),
     metadata: { raw: record },
@@ -327,12 +327,8 @@ function buildMessageParts(params: {
     safeString(topLevel.tool_use_id) ??
     safeString(topLevel.call_id) ??
     safeString(topLevel.id);
-  const topLevelToolName =
-    safeString(topLevel.toolName) ??
-    safeString(topLevel.tool_name);
-  const topLevelIsError =
-    safeBoolean(topLevel.isError) ??
-    safeBoolean(topLevel.is_error);
+  const topLevelToolName = safeString(topLevel.toolName) ?? safeString(topLevel.tool_name);
+  const topLevelIsError = safeBoolean(topLevel.isError) ?? safeBoolean(topLevel.is_error);
 
   // BashExecutionMessage: preserve a synthetic text part so output is round-trippable.
   if (!("content" in message) && "command" in message && "output" in message) {
@@ -430,9 +426,9 @@ function buildMessageParts(params: {
           ? toJson(metadataRecord.input)
           : metadataRecord?.arguments !== undefined
             ? toJson(metadataRecord.arguments)
-          : metadataRecord?.toolInput !== undefined
-            ? toJson(metadataRecord.toolInput)
-            : (safeString(metadataRecord?.tool_input) ?? null),
+            : metadataRecord?.toolInput !== undefined
+              ? toJson(metadataRecord.toolInput)
+              : (safeString(metadataRecord?.tool_input) ?? null),
       toolOutput:
         metadataRecord?.output !== undefined
           ? toJson(metadataRecord.output)
@@ -813,9 +809,14 @@ export class LcmContextEngine implements ContextEngine {
       if (runtimeSummarizer) {
         return runtimeSummarizer;
       }
-      console.error(`[lcm] resolveSummarize: createLcmSummarizeFromLegacyParams returned undefined`);
+      console.error(
+        `[lcm] resolveSummarize: createLcmSummarizeFromLegacyParams returned undefined`,
+      );
     } catch (err) {
-      console.error(`[lcm] resolveSummarize failed, using emergency fallback:`, err instanceof Error ? err.message : err);
+      console.error(
+        `[lcm] resolveSummarize failed, using emergency fallback:`,
+        err instanceof Error ? err.message : err,
+      );
     }
     console.error(`[lcm] resolveSummarize: FALLING BACK TO EMERGENCY TRUNCATION`);
     return createEmergencyFallbackSummarize();
@@ -1167,7 +1168,7 @@ export class LcmContextEngine implements ContextEngine {
 
     // Post-bootstrap pruning: clean HEARTBEAT_OK turns that were already
     // in the DB from prior bootstrap cycles (before pruning was enabled).
-    if (this.config.pruneHeartbeatOk && ! result.bootstrapped) {
+    if (this.config.pruneHeartbeatOk && !result.bootstrapped) {
       try {
         const conversation = await this.conversationStore.getConversationBySessionId(
           params.sessionId,

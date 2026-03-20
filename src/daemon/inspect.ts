@@ -3,12 +3,21 @@ import path from "node:path";
 import {
   GATEWAY_SERVICE_KIND,
   GATEWAY_SERVICE_MARKER,
+  resolveGatewayLaunchAgentLabel,
   resolveGatewaySystemdServiceName,
+  resolveGatewayWindowsTaskName,
 } from "./constants.js";
 import { resolveHomeDir } from "./paths.js";
 
+/** Stub for removed schtasks module. */
+async function execSchtasks(
+  _argv: string[],
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return { code: 1, stdout: "", stderr: "schtasks module removed" };
+}
+
 export type ExtraGatewayService = {
-  platform: "linux";
+  platform: "linux" | "darwin" | "win32";
   label: string;
   detail: string;
   scope: "user" | "system";

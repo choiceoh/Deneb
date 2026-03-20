@@ -1,18 +1,14 @@
 import { Type } from "@sinclair/typebox";
 import type { LcmContextEngine } from "../engine.js";
-import type { LcmDependencies } from "../types.js";
-import type { AnyAgentTool } from "./common.js";
 import {
   getRuntimeExpansionAuthManager,
   resolveDelegatedExpansionGrantId,
   wrapWithAuth,
 } from "../expansion-auth.js";
 import { decideLcmExpansionRouting } from "../expansion-policy.js";
-import {
-  ExpansionOrchestrator,
-  distillForSubagent,
-  type ExpansionResult,
-} from "../expansion.js";
+import { ExpansionOrchestrator, distillForSubagent, type ExpansionResult } from "../expansion.js";
+import type { LcmDependencies } from "../types.js";
+import type { AnyAgentTool } from "./common.js";
 import { jsonResult } from "./common.js";
 import { resolveLcmConversationScope } from "./lcm-conversation-scope.js";
 import {

@@ -1,7 +1,11 @@
-import { normalizeIMessageHandle } from "../../extensions/imessage/api.js";
 import { imessageOutbound } from "../../test/channel-outbounds.js";
 import type { ChannelOutboundAdapter, ChannelPlugin } from "../channels/plugins/types.js";
 import { collectStatusIssuesFromLastError } from "../plugin-sdk/status-helpers.js";
+
+// iMessage extension removed — normalizeIMessageHandle stub.
+function normalizeIMessageHandle(raw: string): string {
+  return raw.trim();
+}
 
 export const createIMessageTestPlugin = (params?: {
   outbound?: ChannelOutboundAdapter;

@@ -1,3 +1,4 @@
+import type { ChannelId } from "../channels/plugins/index.js";
 /**
  * Gateway request context assembly.
  *
@@ -6,18 +7,16 @@
  */
 import type { createDefaultDeps } from "../cli/deps.js";
 import type { CronService } from "../cron/service.js";
-import type { ChannelId } from "../channels/plugins/index.js";
 import type { createSubsystemLogger } from "../logging/subsystem.js";
+import type { WizardSession } from "../wizard/session.js";
+import type { ChatAbortControllerEntry } from "./chat-abort.js";
 import type { ExecApprovalManager } from "./exec-approval-manager.js";
 import type { NodeRegistry } from "./node-registry.js";
 import type { GatewayBroadcastFn, GatewayBroadcastToConnIdsFn } from "./server-broadcast.js";
 import type { ChannelRuntimeSnapshot } from "./server-channels.js";
-import type { DedupeEntry } from "./server-shared.js";
-import type { loadGatewayModelCatalog as LoadGatewayModelCatalogFn } from "./server-model-catalog.js";
 import type { GatewayRequestContext, GatewayClient } from "./server-methods/types.js";
-import type { WizardSession } from "../wizard/session.js";
-import type { ConnectParams } from "./protocol/index.js";
-import type { ChatAbortControllerEntry } from "./chat-abort.js";
+import type { loadGatewayModelCatalog as LoadGatewayModelCatalogFn } from "./server-model-catalog.js";
+import type { DedupeEntry } from "./server-shared.js";
 
 export type BuildGatewayRequestContextParams = {
   deps: ReturnType<typeof createDefaultDeps>;
@@ -26,7 +25,9 @@ export type BuildGatewayRequestContextParams = {
   execApprovalManager: ExecApprovalManager;
   loadGatewayModelCatalog: typeof LoadGatewayModelCatalogFn;
   getHealthCache: () => import("../commands/health.js").HealthSummary | null;
-  refreshHealthSnapshot: (opts?: { probe?: boolean }) => Promise<import("../commands/health.js").HealthSummary>;
+  refreshHealthSnapshot: (opts?: {
+    probe?: boolean;
+  }) => Promise<import("../commands/health.js").HealthSummary>;
   logHealth: { error: (msg: string) => void };
   logGateway: ReturnType<typeof createSubsystemLogger>;
   incrementPresenceVersion: () => number;
@@ -57,7 +58,7 @@ export type BuildGatewayRequestContextParams = {
   sessionEventSubscribers: {
     subscribe: (connId: string) => void;
     unsubscribe: (connId: string) => void;
-    getAll: () => Set<string>;
+    getAll: () => ReadonlySet<string>;
   };
   sessionMessageSubscribers: {
     subscribe: (connId: string, sessionKey: string) => void;
