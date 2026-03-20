@@ -1321,8 +1321,12 @@ export class LcmContextEngine implements ContextEngine {
         messages: ingestBatch,
         isHeartbeat: params.isHeartbeat === true,
       });
-    } catch {
-      // Continue with proactive compaction even if ingest fails.
+    } catch (err) {
+      // Continue with proactive compaction even if ingest fails,
+      // but log the error so LCM state divergence is observable.
+      this.deps.log.warn(
+        `[lcm] afterTurn ingestBatch failed for session=${params.sessionId}: ${String(err)}`,
+      );
     }
 
     const tokenBudget =
@@ -1348,8 +1352,11 @@ export class LcmContextEngine implements ContextEngine {
           tokenBudget,
           currentTokenCount: liveContextTokens,
           legacyParams,
-        }).catch(() => {
+        }).catch((err) => {
           // Leaf compaction is best-effort and should not fail the caller.
+          this.deps.log.warn(
+            `[lcm] compactLeafAsync failed for session=${params.sessionId}: ${String(err)}`,
+          );
         });
       }
     } catch {

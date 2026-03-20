@@ -75,6 +75,8 @@ export class VegaMemoryManager implements MemorySearchManager {
           log.warn(`vega update failed (${String(err)})`);
         });
       }, this.vega.update.intervalMs);
+      // Don't keep the Node.js process alive just for update polling
+      this.updateTimer.unref();
     }
   }
 
@@ -411,10 +413,13 @@ export class VegaMemoryManager implements MemorySearchManager {
       throw new Error("path escapes workspace");
     }
     const absPath = path.resolve(this.workspaceDir, relPath);
+    // Use realpath-style normalization to handle symlinks in workspaceDir.
+    // Fall back to path.resolve comparison if realpath is not available synchronously.
     const normalizedWs = this.workspaceDir.endsWith(path.sep)
       ? this.workspaceDir
       : `${this.workspaceDir}${path.sep}`;
-    if (absPath !== this.workspaceDir && !`${absPath}${path.sep}`.startsWith(normalizedWs)) {
+    const normalizedAbs = absPath.endsWith(path.sep) ? absPath : `${absPath}${path.sep}`;
+    if (absPath !== this.workspaceDir && !normalizedAbs.startsWith(normalizedWs)) {
       throw new Error("path escapes workspace");
     }
     return absPath;
