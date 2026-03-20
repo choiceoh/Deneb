@@ -4,9 +4,11 @@ import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import { createTestRegistry } from "../../test-utils/channel-plugins.js";
 import { resolveOutboundTarget } from "./targets.js";
 
-// WhatsApp extension removed — provide minimal stub plugin.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const whatsappPlugin = { id: "whatsapp", meta: { id: "whatsapp", label: "WhatsApp" } } as any;
+// WhatsApp extension removed — provide minimal stub plugin for test registry.
+const whatsappPlugin = {
+  id: "whatsapp",
+  meta: { id: "whatsapp", label: "WhatsApp" },
+} as unknown as typeof telegramPlugin;
 
 export function installResolveOutboundTargetPluginRegistryHooks(): void {
   beforeEach(() => {

@@ -15,7 +15,6 @@ import {
 import { logVerbose } from "../globals.js";
 import { createInternalHookEvent, triggerInternalHook } from "../hooks/internal-hooks.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
-import { createPluginRuntime } from "../plugins/runtime/index.js";
 import {
   isSubagentSessionKey,
   normalizeAgentId,
@@ -31,12 +30,6 @@ import {
 } from "./session-utils.js";
 
 const ACP_RUNTIME_CLEANUP_TIMEOUT_MS = 15_000;
-let cachedChannelRuntime: ReturnType<typeof createPluginRuntime>["channel"] | undefined;
-
-function getChannelRuntime() {
-  cachedChannelRuntime ??= createPluginRuntime().channel;
-  return cachedChannelRuntime;
-}
 
 function stripRuntimeModelState(entry?: SessionEntry): SessionEntry | undefined {
   if (!entry) {
@@ -76,15 +69,9 @@ export async function emitSessionUnboundLifecycleEvent(params: {
   emitHooks?: boolean;
 }) {
   const targetKind = isSubagentSessionKey(params.targetSessionKey) ? "subagent" : "acp";
-  const channelRuntime = getChannelRuntime();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const discordRuntime = (channelRuntime as any).discord;
-  discordRuntime?.threadBindings?.unbindBySessionKey?.({
-    targetSessionKey: params.targetSessionKey,
-    targetKind,
-    reason: params.reason,
-    sendFarewell: true,
-  });
+  // Discord thread-binding cleanup was here; removed with the Discord adapter
+  // in v3.150. If a channel plugin needs unbind-on-reset, wire it through the
+  // plugin hook system instead.
 
   if (params.emitHooks === false) {
     return;
