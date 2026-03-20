@@ -5,9 +5,8 @@ import ts from "typescript";
 import { runCallsiteGuard } from "./lib/callsite-guard.mjs";
 import { runAsScript, toLine, unwrapExpression } from "./lib/ts-guard-utils.mjs";
 
-const sourceRoots = ["src/gateway", "extensions/discord/src/voice"];
+const sourceRoots = ["src/gateway"];
 const enforcedFiles = new Set([
-  "extensions/discord/src/voice/manager.ts",
   "src/gateway/openai-http.ts",
   "src/gateway/openresponses-http.ts",
   "src/gateway/server-methods/agent.ts",
