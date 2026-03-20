@@ -1,6 +1,6 @@
 import type { SessionSendPolicyConfig } from "./types.base.js";
 
-export type MemoryBackend = "builtin" | "qmd";
+export type MemoryBackend = "builtin" | "qmd" | "vega";
 export type MemoryCitationsMode = "auto" | "on" | "off";
 export type MemoryQmdSearchMode = "query" | "search" | "vsearch";
 
@@ -8,6 +8,36 @@ export type MemoryConfig = {
   backend?: MemoryBackend;
   citations?: MemoryCitationsMode;
   qmd?: MemoryQmdConfig;
+  vega?: MemoryVegaConfig;
+};
+
+export type MemoryVegaConfig = {
+  /** Path to the vega binary (default: "vega") */
+  command?: string;
+  /** Additional directories to index (beyond defaults) */
+  paths?: MemoryVegaIndexPath[];
+  update?: MemoryVegaUpdateConfig;
+  limits?: MemoryVegaLimitsConfig;
+  scope?: SessionSendPolicyConfig;
+};
+
+export type MemoryVegaIndexPath = {
+  path: string;
+  name?: string;
+};
+
+export type MemoryVegaUpdateConfig = {
+  interval?: string;
+  onBoot?: boolean;
+  commandTimeoutMs?: number;
+  embedInterval?: string;
+};
+
+export type MemoryVegaLimitsConfig = {
+  maxResults?: number;
+  maxSnippetChars?: number;
+  maxInjectedChars?: number;
+  timeoutMs?: number;
 };
 
 export type MemoryQmdConfig = {

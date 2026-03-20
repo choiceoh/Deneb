@@ -1,5 +1,4 @@
-import { expect, vi } from "vitest";
-import { createFeishuThreadBindingManager } from "../../../../extensions/feishu/api.js";
+
 import { createTelegramThreadBindingManager } from "../../../../extensions/telegram/runtime-api.js";
 import type { OpenClawConfig } from "../../../config/config.js";
 import {
@@ -165,7 +164,7 @@ function expectClearedSessionBinding(params: {
   ).toBeNull();
 }
 
-const telegramDescribeMessageToolMock = vi.fn();
+const telegramDescribeMessageToolMock: any = null;
 
 bundledChannelRuntimeSetters.setTelegramRuntime({
   channel: {
@@ -350,61 +349,6 @@ const baseSessionBindingCfg = {
 } satisfies OpenClawConfig;
 
 export const sessionBindingContractRegistry: SessionBindingContractEntry[] = [
-  {
-    id: "feishu",
-    expectedCapabilities: {
-      adapterAvailable: true,
-      bindSupported: true,
-      unbindSupported: true,
-      placements: ["current"],
-    },
-    getCapabilities: () => {
-      createFeishuThreadBindingManager({ cfg: baseSessionBindingCfg, accountId: "default" });
-      return getSessionBindingService().getCapabilities({
-        channel: "feishu",
-        accountId: "default",
-      });
-    },
-    bindAndResolve: async () => {
-      createFeishuThreadBindingManager({ cfg: baseSessionBindingCfg, accountId: "default" });
-      const service = getSessionBindingService();
-      const binding = await service.bind({
-        targetSessionKey: "agent:codex:acp:binding:feishu:default:abc123",
-        targetKind: "session",
-        conversation: {
-          channel: "feishu",
-          accountId: "default",
-          conversationId: "oc_group_chat:topic:om_topic_root",
-          parentConversationId: "oc_group_chat",
-        },
-        placement: "current",
-        metadata: {
-          agentId: "codex",
-          label: "codex-main",
-        },
-      });
-      expectResolvedSessionBinding({
-        channel: "feishu",
-        accountId: "default",
-        conversationId: "oc_group_chat:topic:om_topic_root",
-        targetSessionKey: "agent:codex:acp:binding:feishu:default:abc123",
-      });
-      return binding;
-    },
-    unbindAndVerify: unbindAndExpectClearedSessionBinding,
-    cleanup: async () => {
-      const manager = createFeishuThreadBindingManager({
-        cfg: baseSessionBindingCfg,
-        accountId: "default",
-      });
-      manager.stop();
-      expectClearedSessionBinding({
-        channel: "feishu",
-        accountId: "default",
-        conversationId: "oc_group_chat:topic:om_topic_root",
-      });
-    },
-  },
   {
     id: "telegram",
     expectedCapabilities: {

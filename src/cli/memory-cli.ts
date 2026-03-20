@@ -279,9 +279,30 @@ async function scanMemoryFiles(
   return { source: "memory", totalFiles, issues };
 }
 
-async function summarizeQmdIndexArtifact(manager: MemoryManager): Promise<string | null> {
+async function summarizeIndexArtifact(manager: MemoryManager): Promise<string | null> {
   const status = manager.status?.();
-  if (!status || status.backend !== "qmd") {
+  if (!status) {return null;}
+
+  // Vega backend
+  if (status.backend === "vega") {
+    const vegaInfo = status.custom?.vega as { dbPath?: string; lastUpdateAt?: number } | undefined;
+    const dbPath = vegaInfo?.dbPath?.trim();
+    if (dbPath) {
+      try {
+        const stat = await fs.stat(dbPath);
+        return `Vega index: ${shortenHomePath(dbPath)} (${stat.size} bytes)`;
+      } catch {
+        // ignore
+      }
+    }
+    if (vegaInfo?.lastUpdateAt) {
+      return `Vega index: last update ${new Date(vegaInfo.lastUpdateAt).toISOString()}`;
+    }
+    return null;
+  }
+
+  // QMD backend
+  if (status.backend !== "qmd") {
     return null;
   }
   const dbPath = status.dbPath?.trim();
@@ -728,7 +749,7 @@ export function registerMemoryCli(program: Command) {
                   }
                 },
               );
-              const qmdIndexSummary = await summarizeQmdIndexArtifact(manager);
+              const qmdIndexSummary = await summarizeIndexArtifact(manager);
               if (qmdIndexSummary) {
                 defaultRuntime.log(qmdIndexSummary);
               }

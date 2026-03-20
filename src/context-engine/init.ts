@@ -1,4 +1,5 @@
 import { registerLegacyContextEngine } from "./legacy.js";
+import { registerLcmContextEngine } from "./lcm/index.js";
 
 /**
  * Ensures all built-in context engines are registered exactly once.
@@ -7,8 +8,8 @@ import { registerLegacyContextEngine } from "./legacy.js";
  * `resolveContextEngine()` can resolve the default "legacy" slot without
  * callers needing to remember manual registration.
  *
- * Additional engines are registered by their own plugins via
- * `api.registerContextEngine()` during plugin load.
+ * The LCM (Lossless Context Management) engine is registered as a native
+ * core engine, replacing the former lossless-claw plugin.
  */
 let initialized = false;
 
@@ -20,4 +21,7 @@ export function ensureContextEnginesInitialized(): void {
 
   // Always available – safe fallback for the "legacy" slot default.
   registerLegacyContextEngine();
+
+  // Native LCM engine (DAG-based summarization, FTS, sub-agent expansion).
+  registerLcmContextEngine();
 }

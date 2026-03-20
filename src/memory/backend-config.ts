@@ -10,6 +10,7 @@ import type {
   MemoryQmdIndexPath,
   MemoryQmdMcporterConfig,
   MemoryQmdSearchMode,
+  MemoryVegaConfig,
 } from "../config/types.memory.js";
 import { resolveUserPath } from "../utils.js";
 import { splitShellArgs } from "../utils/shell-argv.js";
@@ -18,6 +19,7 @@ export type ResolvedMemoryBackendConfig = {
   backend: MemoryBackend;
   citations: MemoryCitationsMode;
   qmd?: ResolvedQmdConfig;
+  vega?: ResolvedVegaConfig;
 };
 
 export type ResolvedQmdCollection = {
@@ -294,12 +296,81 @@ function resolveDefaultCollections(
   }));
 }
 
+// ── Vega defaults ──
+
+export type ResolvedVegaConfig = {
+  command: string;
+  paths: string[];
+  update: ResolvedVegaUpdateConfig;
+  limits: ResolvedVegaLimitsConfig;
+  scope?: SessionSendPolicyConfig;
+};
+
+export type ResolvedVegaUpdateConfig = {
+  intervalMs: number;
+  embedIntervalMs: number;
+  onBoot: boolean;
+  commandTimeoutMs: number;
+};
+
+export type ResolvedVegaLimitsConfig = {
+  maxResults: number;
+  maxSnippetChars: number;
+  maxInjectedChars: number;
+  timeoutMs: number;
+};
+
+const DEFAULT_VEGA_TIMEOUT_MS = 60_000;
+const DEFAULT_VEGA_MAX_RESULTS = 10;
+const DEFAULT_VEGA_MAX_SNIPPET_CHARS = 2_000;
+const DEFAULT_VEGA_MAX_INJECTED_CHARS = 8_000;
+const DEFAULT_VEGA_UPDATE_INTERVAL_MS = 300_000;
+const DEFAULT_VEGA_EMBED_INTERVAL_MS = 1_800_000;
+const DEFAULT_VEGA_COMMAND_TIMEOUT_MS = 120_000;
+
+export function resolveVegaConfig(
+  cfg: MemoryVegaConfig | undefined,
+  workspaceDir: string,
+): ResolvedVegaConfig {
+  const command = cfg?.command?.trim() || "vega";
+  const paths = (cfg?.paths ?? []).map((p) =>
+    path.isAbsolute(p.path) ? p.path : path.resolve(workspaceDir, p.path),
+  );
+  return {
+    command,
+    paths,
+    update: {
+      intervalMs: resolveIntervalMs(cfg?.update?.interval) || DEFAULT_VEGA_UPDATE_INTERVAL_MS,
+      embedIntervalMs: resolveIntervalMs(cfg?.update?.embedInterval) || DEFAULT_VEGA_EMBED_INTERVAL_MS,
+      onBoot: cfg?.update?.onBoot ?? true,
+      commandTimeoutMs: resolveTimeoutMs(cfg?.update?.commandTimeoutMs, DEFAULT_VEGA_COMMAND_TIMEOUT_MS),
+    },
+    limits: {
+      maxResults: cfg?.limits?.maxResults ?? DEFAULT_VEGA_MAX_RESULTS,
+      maxSnippetChars: cfg?.limits?.maxSnippetChars ?? DEFAULT_VEGA_MAX_SNIPPET_CHARS,
+      maxInjectedChars: cfg?.limits?.maxInjectedChars ?? DEFAULT_VEGA_MAX_INJECTED_CHARS,
+      timeoutMs: resolveTimeoutMs(cfg?.limits?.timeoutMs, DEFAULT_VEGA_TIMEOUT_MS),
+    },
+    scope: cfg?.scope,
+  };
+}
+
 export function resolveMemoryBackendConfig(params: {
   cfg: OpenClawConfig;
   agentId: string;
 }): ResolvedMemoryBackendConfig {
   const backend = params.cfg.memory?.backend ?? DEFAULT_BACKEND;
   const citations = params.cfg.memory?.citations ?? DEFAULT_CITATIONS;
+
+  if (backend === "vega") {
+    const workspaceDir = resolveAgentWorkspaceDir(params.cfg, params.agentId);
+    return {
+      backend: "vega",
+      citations,
+      vega: resolveVegaConfig(params.cfg.memory?.vega, workspaceDir),
+    };
+  }
+
   if (backend !== "qmd") {
     return { backend: "builtin", citations };
   }

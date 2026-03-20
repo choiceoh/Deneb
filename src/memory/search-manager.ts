@@ -1,6 +1,7 @@
 import type { OpenClawConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import type { ResolvedQmdConfig } from "./backend-config.js";
+import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
+import type { ResolvedQmdConfig, ResolvedVegaConfig } from "./backend-config.js";
 import { resolveMemoryBackendConfig } from "./backend-config.js";
 import type {
   MemoryEmbeddingProbeResult,
@@ -28,6 +29,46 @@ export async function getMemorySearchManager(params: {
   purpose?: "default" | "status";
 }): Promise<MemorySearchManagerResult> {
   const resolved = resolveMemoryBackendConfig(params);
+
+  // ── Vega backend ──
+  if (resolved.backend === "vega" && resolved.vega) {
+    let cacheKey: string | undefined;
+    if (params.purpose !== "status") {
+      cacheKey = buildVegaCacheKey(params.agentId, resolved.vega);
+      const cached = QMD_MANAGER_CACHE.get(cacheKey);
+      if (cached) {return { manager: cached };}
+    }
+    try {
+      const { VegaMemoryManager } = await import("./vega-manager.js");
+      const workspaceDir = resolveAgentWorkspaceDir(params.cfg, params.agentId);
+      const primary = await VegaMemoryManager.create({
+        cfg: { workspaceDir },
+        agentId: params.agentId,
+        resolved: resolved.vega,
+      });
+      if (primary) {
+        if (params.purpose === "status") {return { manager: primary };}
+        const wrapper = new FallbackMemoryManager(
+          {
+            primary,
+            fallbackFactory: async () => {
+              const { MemoryIndexManager } = await loadManagerRuntime();
+              return await MemoryIndexManager.get(params);
+            },
+          },
+          () => {
+            if (cacheKey) {QMD_MANAGER_CACHE.delete(cacheKey);}
+          },
+        );
+        if (cacheKey) {QMD_MANAGER_CACHE.set(cacheKey, wrapper);}
+        return { manager: wrapper };
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log.warn(`vega memory unavailable; falling back to builtin: ${message}`);
+    }
+  }
+
   if (resolved.backend === "qmd" && resolved.qmd) {
     const statusOnly = params.purpose === "status";
     let cacheKey: string | undefined;
@@ -247,7 +288,9 @@ class FallbackMemoryManager implements MemorySearchManager {
 }
 
 function buildQmdCacheKey(agentId: string, config: ResolvedQmdConfig): string {
-  // ResolvedQmdConfig is assembled in a stable field order in resolveMemoryBackendConfig.
-  // Fast stringify avoids deep key-sorting overhead on this hot path.
   return `${agentId}:${JSON.stringify(config)}`;
+}
+
+function buildVegaCacheKey(agentId: string, config: ResolvedVegaConfig): string {
+  return `vega:${agentId}:${JSON.stringify(config)}`;
 }

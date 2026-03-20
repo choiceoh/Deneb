@@ -111,11 +111,47 @@ const MemoryQmdSchema = z
   })
   .strict();
 
+const MemoryVegaPathSchema = z
+  .object({
+    path: z.string(),
+    name: z.string().optional(),
+  })
+  .strict();
+
+const MemoryVegaUpdateSchema = z
+  .object({
+    interval: z.string().optional(),
+    onBoot: z.boolean().optional(),
+    commandTimeoutMs: z.number().int().positive().optional(),
+    embedInterval: z.string().optional(),
+  })
+  .strict();
+
+const MemoryVegaLimitsSchema = z
+  .object({
+    maxResults: z.number().int().positive().optional(),
+    maxSnippetChars: z.number().int().positive().optional(),
+    maxInjectedChars: z.number().int().positive().optional(),
+    timeoutMs: z.number().int().positive().optional(),
+  })
+  .strict();
+
+const MemoryVegaSchema = z
+  .object({
+    command: z.string().optional(),
+    paths: z.array(MemoryVegaPathSchema).optional(),
+    update: MemoryVegaUpdateSchema.optional(),
+    limits: MemoryVegaLimitsSchema.optional(),
+    scope: SessionSendPolicySchema.optional(),
+  })
+  .strict();
+
 const MemorySchema = z
   .object({
-    backend: z.union([z.literal("builtin"), z.literal("qmd")]).optional(),
+    backend: z.union([z.literal("builtin"), z.literal("qmd"), z.literal("vega")]).optional(),
     citations: z.union([z.literal("auto"), z.literal("on"), z.literal("off")]).optional(),
     qmd: MemoryQmdSchema.optional(),
+    vega: MemoryVegaSchema.optional(),
   })
   .strict()
   .optional();

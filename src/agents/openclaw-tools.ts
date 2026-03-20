@@ -23,6 +23,7 @@ import { createSessionsYieldTool } from "./tools/sessions-yield-tool.js";
 import { createSubagentsTool } from "./tools/subagents-tool.js";
 import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
 import { resolveWorkspaceRoot } from "./workspace-dir.js";
+import { resolveLcmTools } from "./tools/lcm-tools.js";
 
 export function createOpenClawTools(
   options?: {
@@ -205,6 +206,7 @@ export function createOpenClawTools(
     ...(webFetchTool ? [webFetchTool] : []),
     ...(imageTool ? [imageTool] : []),
     ...(pdfTool ? [pdfTool] : []),
+    ...resolveLcmTools({ sessionKey: options?.agentSessionKey, config: options?.config }),
   ];
 
   const pluginTools = resolvePluginTools({

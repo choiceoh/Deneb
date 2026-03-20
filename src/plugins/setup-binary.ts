@@ -26,7 +26,7 @@ export async function detectBinary(name: string): Promise<boolean> {
     }
   }
 
-  const command = process.platform === "win32" ? ["where", name] : ["/usr/bin/env", "which", name];
+  const command = ["/usr/bin/env", "which", name];
   try {
     const result = await runCommandWithTimeout(command, { timeoutMs: 2000 });
     return result.code === 0 && result.stdout.trim().length > 0;
