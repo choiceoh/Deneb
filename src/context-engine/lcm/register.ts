@@ -16,6 +16,17 @@ import { createLcmExpandTool } from "./src/tools/lcm-expand-tool.js";
 import { createLcmGrepTool } from "./src/tools/lcm-grep-tool.js";
 
 let registered = false;
+let sharedDeps: ReturnType<typeof createNativeLcmDependencies> | null = null;
+let sharedLcm: LcmContextEngine | null = null;
+
+/** Lazily create or return the singleton LCM engine + deps. */
+function getOrCreateLcmSingleton() {
+  if (!sharedDeps || !sharedLcm) {
+    sharedDeps = createNativeLcmDependencies();
+    sharedLcm = new LcmContextEngine(sharedDeps);
+  }
+  return { deps: sharedDeps, lcm: sharedLcm };
+}
 
 /**
  * Register the LCM context engine with the core registry.
@@ -27,8 +38,7 @@ export function registerLcmContextEngine(): void {
   }
   registered = true;
 
-  const deps = createNativeLcmDependencies();
-  const lcm = new LcmContextEngine(deps);
+  const { deps, lcm } = getOrCreateLcmSingleton();
 
   // Register as core-owned engine with id "lcm"
   const result = registerContextEngineForOwner("lcm", () => lcm, "core", {
@@ -56,10 +66,12 @@ export function registerLcmContextEngine(): void {
  *
  * Each factory returns an AnyAgentTool-compatible object.
  * The sessionKey is provided per-invocation by the tool runtime.
+ *
+ * Uses the same singleton LcmContextEngine as registerLcmContextEngine() to
+ * ensure a single per-session operation queue protects the shared SQLite DB.
  */
 export function createLcmToolFactories() {
-  const deps = createNativeLcmDependencies();
-  const lcm = new LcmContextEngine(deps);
+  const { deps, lcm } = getOrCreateLcmSingleton();
 
   return [
     {

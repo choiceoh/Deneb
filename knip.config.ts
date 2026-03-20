@@ -66,10 +66,6 @@ const config = {
     "src/shared/text/assistant-visible-text.ts",
     "extensions/telegram/src/bot/reply-threading.ts",
     "extensions/telegram/src/draft-chunking.ts",
-    "extensions/msteams/src/conversation-store-memory.ts",
-    "extensions/msteams/src/polls-store-memory.ts",
-    "extensions/voice-call/src/providers/index.ts",
-    "extensions/voice-call/src/providers/tts-openai.ts",
   ],
   workspaces: {
     ".": {

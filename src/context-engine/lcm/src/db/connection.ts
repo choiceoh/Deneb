@@ -33,6 +33,9 @@ export function getLcmConnection(dbPath: string): DatabaseSync {
       existing.refs += 1;
       return existing.db;
     }
+    // Reset refs before force-close so stale callers decrementing later
+    // won't accidentally close the replacement connection.
+    existing.refs = 0;
     forceCloseConnection(existing);
     _connections.delete(dbPath);
   }
@@ -51,20 +54,25 @@ export function getLcmConnection(dbPath: string): DatabaseSync {
   return db;
 }
 
-export function closeLcmConnection(dbPath?: string): void {
-  if (typeof dbPath === "string" && dbPath.trim()) {
-    const entry = _connections.get(dbPath);
-    if (!entry) {
-      return;
-    }
-    entry.refs = Math.max(0, entry.refs - 1);
-    if (entry.refs === 0) {
-      forceCloseConnection(entry);
-      _connections.delete(dbPath);
-    }
+/**
+ * Decrement the ref-count for the given dbPath and close if it drops to zero.
+ */
+export function closeLcmConnection(dbPath: string): void {
+  const entry = _connections.get(dbPath);
+  if (!entry) {
     return;
   }
+  entry.refs = Math.max(0, entry.refs - 1);
+  if (entry.refs === 0) {
+    forceCloseConnection(entry);
+    _connections.delete(dbPath);
+  }
+}
 
+/**
+ * Force-close ALL open LCM connections. Only for process shutdown / cleanup.
+ */
+export function closeAllLcmConnections(): void {
   for (const entry of _connections.values()) {
     forceCloseConnection(entry);
   }
