@@ -93,9 +93,6 @@ export type PluginRuntimeChannel = {
     shouldComputeCommandAuthorized: typeof import("../../auto-reply/command-detection.js").shouldComputeCommandAuthorized;
     shouldHandleTextCommands: typeof import("../../auto-reply/commands-registry.js").shouldHandleTextCommands;
   };
-  signal: {
-    // signal types removed — extension runtime-api unavailable
-  };
   telegram: {
     auditGroupMembership: typeof import("../../../extensions/telegram/runtime-api.js").auditTelegramGroupMembership;
     collectUnmentionedGroupIds: typeof import("../../../extensions/telegram/runtime-api.js").collectTelegramUnmentionedGroupIds;
@@ -143,24 +140,4 @@ export type PluginRuntimeChannel = {
       unpinMessage: typeof import("../../../extensions/telegram/runtime-api.js").unpinMessageTelegram;
     };
   };
-  signal: {
-    // signal types removed — extension runtime-api unavailable
-  };
-  whatsapp: {
-    getActiveWebListener: typeof import("./runtime-whatsapp-boundary.js").getActiveWebListener;
-    getWebAuthAgeMs: typeof import("./runtime-whatsapp-boundary.js").getWebAuthAgeMs;
-    logoutWeb: typeof import("./runtime-whatsapp-boundary.js").logoutWeb;
-    logWebSelfId: typeof import("./runtime-whatsapp-boundary.js").logWebSelfId;
-    readWebSelfId: typeof import("./runtime-whatsapp-boundary.js").readWebSelfId;
-    webAuthExists: typeof import("./runtime-whatsapp-boundary.js").webAuthExists;
-    sendMessageWhatsApp: typeof import("./runtime-whatsapp-boundary.js").sendMessageWhatsApp;
-    sendPollWhatsApp: typeof import("./runtime-whatsapp-boundary.js").sendPollWhatsApp;
-    loginWeb: typeof import("./runtime-whatsapp-boundary.js").loginWeb;
-    startWebLoginWithQr: typeof import("./runtime-whatsapp-boundary.js").startWebLoginWithQr;
-    waitForWebLogin: typeof import("./runtime-whatsapp-boundary.js").waitForWebLogin;
-    monitorWebChannel: typeof import("./runtime-whatsapp-boundary.js").monitorWebChannel;
-    handleWhatsAppAction: typeof import("./runtime-whatsapp-boundary.js").handleWhatsAppAction;
-    createLoginTool: typeof import("./runtime-whatsapp-login-tool.js").createRuntimeWhatsAppLoginTool;
-  };
-
 };

@@ -59,7 +59,6 @@ import {
 } from "../../pairing/pairing-store.js";
 import { buildAgentSessionKey, resolveAgentRoute } from "../../routing/resolve-route.js";
 import { createRuntimeTelegram } from "./runtime-telegram.js";
-import { createRuntimeWhatsApp } from "./runtime-whatsapp.js";
 import type { PluginRuntime } from "./types.js";
 
 function defineCachedValue<T extends object, K extends PropertyKey>(
@@ -165,19 +164,10 @@ export function createRuntimeChannel(): PluginRuntime["channel"] {
       shouldComputeCommandAuthorized,
       shouldHandleTextCommands,
     },
-  } satisfies Omit<
-    PluginRuntime["channel"],
-    "telegram" | "whatsapp" | "slack" | "signal" | "discord" | "imessage" | "line"
-  > &
-    Partial<
-      Pick<
-        PluginRuntime["channel"],
-        "telegram" | "whatsapp"
-      >
-    >;
+  } satisfies Omit<PluginRuntime["channel"], "telegram"> &
+    Partial<Pick<PluginRuntime["channel"], "telegram">>;
 
   defineCachedValue(channelRuntime, "telegram", createRuntimeTelegram);
-  defineCachedValue(channelRuntime, "whatsapp", createRuntimeWhatsApp);
 
   return channelRuntime as PluginRuntime["channel"];
 }
