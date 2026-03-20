@@ -13,8 +13,25 @@ const EXPLICIT_ELEVATED_ALLOW_FIELDS = new Set<ExplicitElevatedAllowField>([
   "tag",
 ]);
 
+// Include well-known channel prefixes that may appear in stored allowlist
+// configs, even if those channels are not currently registered at runtime.
+const WELL_KNOWN_CHANNEL_PREFIXES = [
+  "discord",
+  "imessage",
+  "signal",
+  "slack",
+  "telegram",
+  "whatsapp",
+  "matrix",
+  "msteams",
+  "bluebubbles",
+  "line",
+  "nostr",
+  "zalo",
+];
+
 const SENDER_PREFIXES = [
-  ...CHAT_CHANNEL_ORDER,
+  ...new Set([...CHAT_CHANNEL_ORDER, ...WELL_KNOWN_CHANNEL_PREFIXES]),
   INTERNAL_ALLOWLIST_CHANNEL,
   "user",
   "group",

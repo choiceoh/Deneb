@@ -8,6 +8,7 @@ import {
 import {
   bundledChannelPlugins,
   bundledChannelRuntimeSetters,
+  getBundledChannelPlugin,
   requireBundledChannelPlugin,
 } from "../bundled.js";
 import type { ChannelPlugin } from "../types.js";
@@ -184,7 +185,7 @@ export const pluginContractRegistry: PluginContractEntry[] = bundledChannelPlugi
 export const actionContractRegistry: ActionsContractEntry[] = [
   {
     id: "mattermost",
-    plugin: requireBundledChannelPlugin("mattermost"),
+    plugin: getBundledChannelPlugin("mattermost")!,
     unsupportedAction: "poll",
     cases: [
       {
@@ -254,7 +255,7 @@ export const actionContractRegistry: ActionsContractEntry[] = [
 export const setupContractRegistry: SetupContractEntry[] = [
   {
     id: "mattermost",
-    plugin: requireBundledChannelPlugin("mattermost"),
+    plugin: getBundledChannelPlugin("mattermost")!,
     cases: [
       {
         name: "default account stores token and normalized base URL",
@@ -286,7 +287,7 @@ export const setupContractRegistry: SetupContractEntry[] = [
 export const statusContractRegistry: StatusContractEntry[] = [
   {
     id: "mattermost",
-    plugin: requireBundledChannelPlugin("mattermost"),
+    plugin: getBundledChannelPlugin("mattermost")!,
     cases: [
       {
         name: "configured account preserves connectivity details in the snapshot",
