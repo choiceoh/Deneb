@@ -425,7 +425,7 @@ const DEFAULT_ACP_SPAWN_RUNTIME: AcpSpawnRuntime = {
 
 export function resolveAcpClientSpawnInvocation(
   params: { serverCommand: string; serverArgs: string[] },
-  runtime: AcpSpawnRuntime = DEFAULT_ACP_SPAWN_RUNTIME,
+  _runtime: AcpSpawnRuntime = DEFAULT_ACP_SPAWN_RUNTIME,
 ): { command: string; args: string[]; shell?: boolean; windowsHide?: boolean } {
   return {
     command: params.serverCommand,

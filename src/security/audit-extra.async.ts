@@ -20,6 +20,7 @@ import { resolveNativeSkillsEnabled } from "../config/commands.js";
 import type { OpenClawConfig, ConfigFileSnapshot } from "../config/config.js";
 import { collectIncludePathsRecursive } from "../config/includes-scan.js";
 import { resolveOAuthDir } from "../config/paths.js";
+import type { NativeCommandsSetting } from "../config/types.js";
 import { hasConfiguredSecretInput } from "../config/types.secrets.js";
 import type { AgentToolsConfig } from "../config/types.tools.js";
 import { normalizePluginsConfig } from "../plugins/config-state.js";
@@ -597,20 +598,29 @@ export async function collectPluginsTrustFindings(params: {
         (discordConfigured &&
           resolveNativeSkillsEnabled({
             providerId: "discord",
-            providerSetting: params.cfg.channels?.discord?.commands?.nativeSkills,
-            globalSetting: params.cfg.commands?.nativeSkills,
+            providerSetting: (
+              params.cfg.channels?.discord?.commands as Record<string, unknown> | undefined
+            )?.nativeSkills as NativeCommandsSetting | undefined,
+            globalSetting: (params.cfg.commands as Record<string, unknown> | undefined)
+              ?.nativeSkills as NativeCommandsSetting | undefined,
           })) ||
         (telegramConfigured &&
           resolveNativeSkillsEnabled({
             providerId: "telegram",
-            providerSetting: params.cfg.channels?.telegram?.commands?.nativeSkills,
-            globalSetting: params.cfg.commands?.nativeSkills,
+            providerSetting: (
+              params.cfg.channels?.telegram?.commands as Record<string, unknown> | undefined
+            )?.nativeSkills as NativeCommandsSetting | undefined,
+            globalSetting: (params.cfg.commands as Record<string, unknown> | undefined)
+              ?.nativeSkills as NativeCommandsSetting | undefined,
           })) ||
         (slackConfigured &&
           resolveNativeSkillsEnabled({
             providerId: "slack",
-            providerSetting: params.cfg.channels?.slack?.commands?.nativeSkills,
-            globalSetting: params.cfg.commands?.nativeSkills,
+            providerSetting: (
+              params.cfg.channels?.slack?.commands as Record<string, unknown> | undefined
+            )?.nativeSkills as NativeCommandsSetting | undefined,
+            globalSetting: (params.cfg.commands as Record<string, unknown> | undefined)
+              ?.nativeSkills as NativeCommandsSetting | undefined,
           }));
 
       findings.push({

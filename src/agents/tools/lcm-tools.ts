@@ -5,17 +5,18 @@
  * instantiation using the native LCM engine.
  */
 
+import type { OpenClawConfig } from "../../config/config.js";
 import { createNativeLcmDependencies } from "../../context-engine/lcm/native-bridge.js";
 import { LcmContextEngine } from "../../context-engine/lcm/src/engine.js";
-import { createLcmGrepTool } from "../../context-engine/lcm/src/tools/lcm-grep-tool.js";
-import { createLcmDescribeTool } from "../../context-engine/lcm/src/tools/lcm-describe-tool.js";
-import { createLcmExpandTool } from "../../context-engine/lcm/src/tools/lcm-expand-tool.js";
-import { createLcmExpandQueryTool } from "../../context-engine/lcm/src/tools/lcm-expand-query-tool.js";
 import type { AnyAgentTool } from "../../context-engine/lcm/src/tools/common.js";
-import type { OpenClawConfig } from "../../config/io.js";
-
+import { createLcmDescribeTool } from "../../context-engine/lcm/src/tools/lcm-describe-tool.js";
+import { createLcmExpandQueryTool } from "../../context-engine/lcm/src/tools/lcm-expand-query-tool.js";
+import { createLcmExpandTool } from "../../context-engine/lcm/src/tools/lcm-expand-tool.js";
+import { createLcmGrepTool } from "../../context-engine/lcm/src/tools/lcm-grep-tool.js";
 /** Lazy singleton — engine is expensive to create, share across tool invocations. */
-let _sharedEngine: { deps: unknown; lcm: LcmContextEngine } | undefined;
+import type { LcmDependencies } from "../../context-engine/lcm/src/types.js";
+
+let _sharedEngine: { deps: LcmDependencies; lcm: LcmContextEngine } | undefined;
 
 function getSharedEngine(_config?: OpenClawConfig) {
   if (!_sharedEngine) {

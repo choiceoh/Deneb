@@ -1,16 +1,15 @@
 import type { OpenClawConfig } from "../config/config.js";
 import { coerceSecretRef, resolveSecretInputRef } from "../config/types.secrets.js";
-import { isRecord } from "../utils.js";
-import { normalizeOptionalSecretInput } from "../utils/normalize-secret-input.js";
-import { ensureAuthProfileStore, listProfilesForProvider } from "./auth-profiles.js";
-import { discoverBedrockModels } from "./bedrock-discovery.js";
-import { normalizeGoogleModelId } from "./model-id-normalization.js";
 import {
   groupPluginDiscoveryProvidersByOrder,
   normalizePluginDiscoveryResult,
   resolvePluginDiscoveryProviders,
   runProviderCatalog,
 } from "../plugins/provider-discovery.js";
+import { isRecord } from "../utils.js";
+import { normalizeOptionalSecretInput } from "../utils/normalize-secret-input.js";
+import { ensureAuthProfileStore, listProfilesForProvider } from "./auth-profiles.js";
+import { discoverBedrockModels } from "./bedrock-discovery.js";
 import {
   isNonSecretApiKeyMarker,
   resolveNonEnvSecretRefApiKeyMarker,
@@ -18,6 +17,7 @@ import {
   resolveEnvSecretRefHeaderValueMarker,
 } from "./model-auth-markers.js";
 import { resolveAwsSdkEnvVarName, resolveEnvApiKey } from "./model-auth.js";
+import { normalizeGoogleModelId } from "./model-id-normalization.js";
 export { normalizeGoogleModelId };
 
 type ModelsConfig = NonNullable<OpenClawConfig["models"]>;

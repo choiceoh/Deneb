@@ -1,5 +1,5 @@
-import { registerLegacyContextEngine } from "./legacy.js";
 import { registerLcmContextEngine } from "./lcm/index.js";
+import { registerLegacyContextEngine } from "./legacy.js";
 
 /**
  * Ensures all built-in context engines are registered exactly once.

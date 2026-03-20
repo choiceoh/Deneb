@@ -1,8 +1,15 @@
 import { resolveOutboundSendDep } from "../../infra/outbound/send-deps.js";
 import { createAttachedChannelResultAdapter } from "../../plugin-sdk/channel-send-result.js";
-import type { PluginRuntimeChannel } from "../../plugins/runtime/types-channel.js";
 import { escapeRegExp } from "../../utils.js";
-import { resolveWhatsAppOutboundTarget } from "../../whatsapp/resolve-outbound-target.js";
+// resolveWhatsAppOutboundTarget was removed with the whatsapp extension.
+// Provide a stub for any remaining callers until full cleanup.
+function resolveWhatsAppOutboundTarget(params: {
+  to?: string;
+  allowFrom?: string[];
+  mode?: string;
+}): { ok: true; to: string } | { ok: false; error: Error } {
+  return { ok: true, to: params.to ?? "" };
+}
 import type { ChannelOutboundAdapter } from "./types.js";
 
 export const WHATSAPP_GROUP_INTRO_HINT =
@@ -22,8 +29,10 @@ export function resolveWhatsAppMentionStripRegexes(ctx: { To?: string | null }):
 }
 
 type WhatsAppChunker = NonNullable<ChannelOutboundAdapter["chunker"]>;
-type WhatsAppSendMessage = PluginRuntimeChannel["whatsapp"]["sendMessageWhatsApp"];
-type WhatsAppSendPoll = PluginRuntimeChannel["whatsapp"]["sendPollWhatsApp"];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type WhatsAppSendMessage = (...args: any[]) => Promise<{ messageId: string }>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type WhatsAppSendPoll = (...args: any[]) => Promise<{ messageId: string }>;
 
 type CreateWhatsAppOutboundBaseParams = {
   chunker: WhatsAppChunker;

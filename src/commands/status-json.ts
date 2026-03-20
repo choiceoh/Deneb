@@ -70,9 +70,7 @@ export async function statusJsonCommand(
         }).catch(() => null)
       : null;
 
-  const [daemon] = await Promise.all([
-    getDaemonStatusSummary(),
-  ]);
+  const daemon = await getDaemonStatusSummary();
   const channelInfo = resolveUpdateChannelDisplay({
     configChannel: normalizeUpdateChannel(scan.cfg.update?.channel),
     installKind: scan.update.installKind,

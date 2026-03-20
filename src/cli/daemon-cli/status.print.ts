@@ -4,8 +4,8 @@ import {
   resolveGatewayLaunchAgentLabel,
   resolveGatewaySystemdServiceName,
 } from "../../daemon/constants.js";
-import { renderGatewayServiceCleanupHints } from "../../daemon/inspect.js";
 import { resolveGatewayLogPaths } from "../../daemon/diagnostics.js";
+import { renderGatewayServiceCleanupHints } from "../../daemon/inspect.js";
 import {
   isSystemdUnavailableDetail,
   renderSystemdUnavailableHints,

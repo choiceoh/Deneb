@@ -5,7 +5,7 @@ import {
 import type { PluginRuntime } from "./types.js";
 
 type RuntimeWhatsAppOutbound = Pick<
-  PluginRuntime["channel"]["whatsapp"],
+  NonNullable<PluginRuntime["channel"]["whatsapp"]>,
   "sendMessageWhatsApp" | "sendPollWhatsApp"
 >;
 

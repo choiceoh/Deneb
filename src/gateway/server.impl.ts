@@ -10,7 +10,6 @@ import { formatCliCommand } from "../cli/command-format.js";
 import { createDefaultDeps } from "../cli/deps.js";
 import { isRestartEnabled } from "../config/commands.js";
 import {
-  type ConfigFileSnapshot,
   type OpenClawConfig,
   applyConfigOverrides,
   isNixMode,
@@ -87,10 +86,9 @@ import {
   prepareGatewayStartupConfig,
   resolveMediaCleanupTtlMs,
 } from "./server-config-bootstrap.js";
-import { createGatewayEventSubscriptions } from "./server-event-subscriptions.js";
-import { buildGatewayRequestContext } from "./server-request-context.js";
 import { buildGatewayCronService } from "./server-cron.js";
 import { startGatewayDiscovery } from "./server-discovery-runtime.js";
+import { createGatewayEventSubscriptions } from "./server-event-subscriptions.js";
 import { applyGatewayLaneConcurrency } from "./server-lanes.js";
 import { startGatewayMaintenanceTimers } from "./server-maintenance.js";
 import { GATEWAY_EVENTS, listGatewayMethods } from "./server-methods-list.js";
@@ -103,6 +101,7 @@ import { loadGatewayModelCatalog } from "./server-model-catalog.js";
 import { createNodeSubscriptionManager } from "./server-node-subscriptions.js";
 import { loadGatewayPlugins, setFallbackGatewayContext } from "./server-plugins.js";
 import { createGatewayReloadHandlers } from "./server-reload-handlers.js";
+import { buildGatewayRequestContext } from "./server-request-context.js";
 import { resolveGatewayRuntimeConfig } from "./server-runtime-config.js";
 import { createGatewayRuntimeState } from "./server-runtime-state.js";
 import { logGatewayStartup } from "./server-startup-log.js";

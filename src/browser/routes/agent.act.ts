@@ -567,7 +567,7 @@ export function registerBrowserAgentActRoutes(
               }
               await waitForExistingSessionCondition({
                 profileName,
-                userDataDir: profileCtx.profile.userDataDir,
+                userDataDir: profileCtx.profile.userDataDir ?? "",
                 targetId: tab.targetId,
                 timeMs,
                 text,

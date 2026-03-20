@@ -22,9 +22,9 @@ import {
 } from "./channel-resolution.js";
 import { missingTargetError } from "./target-errors.js";
 
-export type OutboundChannel = DeliverableMessageChannel | "none";
+export type OutboundChannel = DeliverableMessageChannel;
 
-export type HeartbeatTarget = OutboundChannel | "last";
+export type HeartbeatTarget = OutboundChannel;
 
 export type OutboundTarget = {
   channel: OutboundChannel;
@@ -80,7 +80,7 @@ function parseExplicitTargetWithPlugin(params: {
 
 export function resolveSessionDeliveryTarget(params: {
   entry?: SessionEntry;
-  requestedChannel?: GatewayMessageChannel | "last";
+  requestedChannel?: GatewayMessageChannel;
   explicitTo?: string;
   explicitThreadId?: string | number;
   fallbackChannel?: DeliverableMessageChannel;

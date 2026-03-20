@@ -42,17 +42,17 @@ async function maybeRepairLaunchAgentBootstrap(params: {
     return false;
   }
 
-  const listed = await isLaunchAgentListed({ env: params.env });
+  const listed = isLaunchAgentListed();
   if (!listed) {
     return false;
   }
 
-  const loaded = await isLaunchAgentLoaded({ env: params.env });
+  const loaded = isLaunchAgentLoaded();
   if (loaded) {
     return false;
   }
 
-  const plistExists = await launchAgentPlistExists(params.env);
+  const plistExists = launchAgentPlistExists();
   if (!plistExists) {
     return false;
   }
@@ -68,15 +68,16 @@ async function maybeRepairLaunchAgentBootstrap(params: {
   }
 
   params.runtime.log(`Bootstrapping ${params.title} LaunchAgent...`);
-  const repair = await repairLaunchAgentBootstrap({ env: params.env });
-  if (!repair.ok) {
+  try {
+    await repairLaunchAgentBootstrap();
+  } catch (err) {
     params.runtime.error(
-      `${params.title} LaunchAgent bootstrap failed: ${repair.detail ?? "unknown error"}`,
+      `${params.title} LaunchAgent bootstrap failed: ${err instanceof Error ? err.message : "unknown error"}`,
     );
     return false;
   }
 
-  const verified = await isLaunchAgentLoaded({ env: params.env });
+  const verified = isLaunchAgentLoaded();
   if (!verified) {
     params.runtime.error(`${params.title} LaunchAgent still not loaded after repair.`);
     return false;

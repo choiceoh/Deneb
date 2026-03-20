@@ -1,15 +1,12 @@
 /**
  * Deneb: channels/registry.ts — 동적 레지스트리 위임
- * 
+ *
  * 기존: CHAT_CHANNEL_META 정적 객체, CHAT_CHANNEL_ORDER 고정 배열
  * 변경: dynamic-registry에서 런타임에 조회
  */
 
 import {
-  registerChannel,
-  registerChannelAlias,
   listChannels,
-  getChannelMeta,
   normalizeChannelId,
   listChatChannels,
   getChatChannelMeta,
@@ -17,11 +14,9 @@ import {
   onChannelRegistered,
   getChatChannelOrder,
 } from "./dynamic-registry.js";
-
 // Bootstrap: 채널 등록 (import side-effect)
 // 데네브는 channel-bootstrap만 등록. 업스트림 호환이 필요하면 추가.
 import "./channel-bootstrap.js";
-
 // Bootstrap 시 CHANNEL_IDS를 populate
 import { CHANNEL_IDS } from "./ids.js";
 {
@@ -48,10 +43,12 @@ export const CHAT_CHANNEL_ALIASES: Record<string, string> = {
 };
 
 // ── Helpers (기존 API 호환) ──
-const WEBSITE_URL = "https://deneb.dev";
+const _WEBSITE_URL = "https://deneb.dev";
 
-export function listRegisteredChannelPluginEntries(): { plugin: { id?: string; meta?: { aliases?: string[] } } }[] {
-  return listChannels().map(ch => ({
+export function listRegisteredChannelPluginEntries(): {
+  plugin: { id?: string; meta?: { aliases?: string[] } };
+}[] {
+  return listChannels().map((ch) => ({
     plugin: {
       id: ch.id,
       meta: { aliases: [] },

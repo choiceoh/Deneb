@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { ProgressReporter } from "../../cli/progress.js";
 import { formatConfigIssueLine } from "../../config/issue-format.js";
 import { resolveGatewayLogPaths } from "../../daemon/diagnostics.js";
@@ -209,7 +210,7 @@ export async function appendStatusAllDiagnosis(params: {
     ]);
     if (stderrTail.length > 0 || stdoutTail.length > 0) {
       lines.push("");
-      lines.push(muted(`Gateway logs (tail, summarized): ${logPaths.logDir}`));
+      lines.push(muted(`Gateway logs (tail, summarized): ${path.dirname(logPaths.stderrPath)}`));
       lines.push(`  ${muted(`# stderr: ${logPaths.stderrPath}`)}`);
       for (const line of summarizeLogTail(stderrTail, { maxLines: 22 }).map(redactSecrets)) {
         lines.push(`  ${muted(line)}`);

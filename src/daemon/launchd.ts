@@ -18,6 +18,8 @@ export function launchAgentPlistExists(_label?: string): boolean {
   return false;
 }
 
-export async function repairLaunchAgentBootstrap(_options?: Record<string, unknown>): Promise<void> {
+export async function repairLaunchAgentBootstrap(
+  _options?: Record<string, unknown>,
+): Promise<void> {
   // no-op stub
 }

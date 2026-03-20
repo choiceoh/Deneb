@@ -179,7 +179,7 @@ function resolveSyntheticLocalProviderAuth(params: {
     return null;
   }
 
-  const normalizedProvider = normalizeProviderId(params.provider);
+  const _normalizedProvider = normalizeProviderId(params.provider);
 
   const authOverride = resolveProviderAuthOverride(params.cfg, params.provider);
   if (authOverride && authOverride !== "api-key") {

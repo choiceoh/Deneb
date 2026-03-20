@@ -5,22 +5,19 @@
  * this module imports core modules directly, eliminating ~450 lines of glue code.
  */
 
-import { completeSimple, getEnvApiKey, getModel, type Api } from "@mariozechner/pi-ai";
 import { readFileSync } from "node:fs";
-import { createSubsystemLogger } from "../../logging/subsystem.js";
-import { loadConfig, type OpenClawConfig } from "../../config/io.js";
-import { resolveDefaultSessionStorePath, resolveStorePath } from "../../config/sessions/paths.js";
-import { parseAgentSessionKey } from "../../sessions/session-key-utils.js";
-import { normalizeAgentId } from "../../routing/session-key.js";
-import {
-  resolveApiKeyForProvider,
-  getCustomProviderApiKey,
-} from "../../agents/model-auth.js";
+import { completeSimple, getEnvApiKey, getModel, type Api } from "@mariozechner/pi-ai";
+import { resolveApiKeyForProvider, getCustomProviderApiKey } from "../../agents/model-auth.js";
 import { parseModelRef } from "../../agents/model-selection.js";
+import type { OpenClawConfig } from "../../config/config.js";
+import { loadConfig } from "../../config/io.js";
+import { resolveDefaultSessionStorePath, resolveStorePath } from "../../config/sessions/paths.js";
 import { callGateway } from "../../gateway/call.js";
-
-import type { LcmDependencies } from "./src/types.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
+import { parseAgentSessionKey } from "../../sessions/session-key-utils.js";
 import { resolveLcmConfig } from "./src/db/config.js";
+import type { LcmDependencies } from "./src/types.js";
 
 const log = createSubsystemLogger("lcm");
 
@@ -42,11 +39,10 @@ function inferApiFromProvider(provider: string): string {
 }
 
 /** Find provider-level config (baseUrl, headers, apiKey) from runtime config. */
-function findProviderConfig(
-  cfg: OpenClawConfig,
-  provider: string,
-): Record<string, unknown> {
-  if (!cfg?.models?.providers) {return {};}
+function findProviderConfig(cfg: OpenClawConfig, provider: string): Record<string, unknown> {
+  if (!cfg?.models?.providers) {
+    return {};
+  }
   const entry = (cfg.models.providers as Record<string, Record<string, unknown>>)[provider];
   return entry && typeof entry === "object" ? entry : {};
 }
@@ -55,19 +51,31 @@ function findProviderConfig(
 // Model resolution
 // ---------------------------------------------------------------------------
 
-function nativeResolveModel(modelRef?: string, providerHint?: string): { provider: string; model: string } {
+function nativeResolveModel(
+  modelRef?: string,
+  providerHint?: string,
+): { provider: string; model: string } {
   const cfg = loadConfig();
-  const raw = (modelRef?.trim() || cfg.models?.default)?.trim();
-  if (!raw) {throw new Error("No model configured for LCM summarization.");}
+  const raw = (
+    modelRef?.trim() ||
+    ((cfg.models as Record<string, unknown> | undefined)?.default as string | undefined)
+  )?.trim();
+  if (!raw) {
+    throw new Error("No model configured for LCM summarization.");
+  }
 
   const parsed = parseModelRef(raw, providerHint?.trim() || "openai");
-  if (parsed) {return { provider: parsed.provider, model: parsed.model };}
+  if (parsed) {
+    return { provider: parsed.provider, model: parsed.model };
+  }
 
   // Fallback: provider/model format
   if (raw.includes("/")) {
     const [provider, ...rest] = raw.split("/");
     const model = rest.join("/").trim();
-    if (provider && model) {return { provider: provider.trim(), model };}
+    if (provider && model) {
+      return { provider: provider.trim(), model };
+    }
   }
 
   return { provider: providerHint?.trim() || "openai", model: raw };
@@ -86,15 +94,21 @@ async function nativeGetApiKey(
 
   // 1. Core model auth (auth profiles, env vars, custom providers)
   const auth = await resolveApiKeyForProvider({ provider, cfg });
-  if (auth?.apiKey) {return auth.apiKey;}
+  if (auth?.apiKey) {
+    return auth.apiKey;
+  }
 
   // 2. Custom provider apiKey from config
   const customKey = getCustomProviderApiKey(cfg, provider);
-  if (customKey) {return customKey;}
+  if (customKey) {
+    return customKey;
+  }
 
   // 3. pi-ai env-based lookup
   const envKey = getEnvApiKey(provider as Api);
-  if (envKey) {return envKey;}
+  if (envKey) {
+    return envKey;
+  }
 
   return undefined;
 }
@@ -105,7 +119,9 @@ async function nativeRequireApiKey(
   options?: { profileId?: string; agentDir?: string },
 ): Promise<string> {
   const key = await nativeGetApiKey(provider, model, options);
-  if (!key) {throw new Error(`Missing API key for provider '${provider}' (model '${model}').`);}
+  if (!key) {
+    throw new Error(`Missing API key for provider '${provider}' (model '${model}').`);
+  }
   return key;
 }
 
@@ -126,22 +142,36 @@ async function nativeComplete(params: {
   maxTokens: number;
   temperature?: number;
   reasoning?: string;
-}): Promise<{ content: Array<{ type: string; text?: string; [key: string]: unknown }>; [key: string]: unknown }> {
+}): Promise<{
+  content: Array<{ type: string; text?: string; [key: string]: unknown }>;
+  [key: string]: unknown;
+}> {
   try {
     const providerId = (params.provider ?? "").trim();
     const modelId = params.model.trim();
-    if (!providerId || !modelId) {return { content: [] };}
+    if (!providerId || !modelId) {
+      return { content: [] };
+    }
 
-    const cfg = loadConfig() as OpenClawConfig;
+    const cfg = loadConfig();
     const providerCfg = findProviderConfig(cfg, providerId);
 
-    const knownModel = getModel(providerId as Api, modelId);
+    let knownModel: Record<string, unknown> | undefined;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      knownModel = getModel(providerId as any, modelId as any) as unknown as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      knownModel = undefined;
+    }
     const fallbackApi = params.providerApi?.trim() || inferApiFromProvider(providerId);
 
     const resolvedModel: Record<string, unknown> = knownModel
       ? {
           ...knownModel,
-          baseUrl: (knownModel as Record<string,unknown>).baseUrl || (providerCfg.baseUrl as string) || "",
+          baseUrl: (knownModel.baseUrl as string) || (providerCfg.baseUrl as string) || "",
           ...(providerCfg.headers ? { headers: providerCfg.headers } : {}),
         }
       : {
@@ -167,28 +197,36 @@ async function nativeComplete(params: {
     }
 
     const result = await completeSimple(
-      resolvedModel as Parameters<typeof completeSimple>[0],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      resolvedModel as any,
       {
         ...(params.system?.trim() ? { systemPrompt: params.system.trim() } : {}),
         messages: params.messages.map((m) => ({
           role: m.role,
           content: m.content,
           timestamp: Date.now(),
-        })),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        })) as any,
       },
       {
-        api: resolvedModel.api as string,
         apiKey: resolvedApiKey,
         maxTokens: params.maxTokens,
         temperature: params.temperature,
-        reasoning: params.reasoning,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        reasoning: params.reasoning as any,
       },
     );
 
-    if (!result || typeof result !== "object") {return { content: [] };}
+    if (!result || typeof result !== "object") {
+      return { content: [] };
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const resultRecord = result as any;
     return {
-      ...result,
-      content: Array.isArray((result as Record<string,unknown>).content) ? (result as Record<string,unknown>).content as unknown[] : [],
+      ...resultRecord,
+      content: Array.isArray(resultRecord.content)
+        ? (resultRecord.content as Array<{ type: string; text?: string; [key: string]: unknown }>)
+        : [],
     };
   } catch (err) {
     log.error(`completeSimple error: ${err instanceof Error ? err.message : String(err)}`);
@@ -237,14 +275,23 @@ async function nativeCallGateway(params: {
 // Session key utilities
 // ---------------------------------------------------------------------------
 
-function nativeIsSubagentSessionKey(sessionKey: string): boolean {
+function adaptParsedSessionKey(sessionKey: string): { agentId: string; suffix: string } | null {
   const parsed = parseAgentSessionKey(sessionKey);
+  return parsed ? { agentId: parsed.agentId, suffix: parsed.rest } : null;
+}
+
+function nativeIsSubagentSessionKey(sessionKey: string): boolean {
+  const parsed = adaptParsedSessionKey(sessionKey);
   return !!parsed && parsed.suffix.startsWith("subagent:");
 }
 
-async function nativeResolveSessionIdFromSessionKey(sessionKey: string): Promise<string | undefined> {
+async function nativeResolveSessionIdFromSessionKey(
+  sessionKey: string,
+): Promise<string | undefined> {
   const key = sessionKey.trim();
-  if (!key) {return undefined;}
+  if (!key) {
+    return undefined;
+  }
 
   try {
     const cfg = loadConfig();
@@ -266,16 +313,18 @@ async function nativeResolveSessionIdFromSessionKey(sessionKey: string): Promise
 
 export function createNativeLcmDependencies(): LcmDependencies {
   const cfg = loadConfig();
-  const pluginConfig = cfg.plugins?.entries?.["lossless-claw"] as Record<string, unknown> | undefined;
+  const pluginConfig = cfg.plugins?.entries?.["lossless-claw"] as
+    | Record<string, unknown>
+    | undefined;
   const config = resolveLcmConfig(process.env, pluginConfig ?? {});
 
   // Apply model overrides from plugin config
   if (pluginConfig) {
     if (typeof pluginConfig.summaryModel === "string") {
-      (config as Record<string,unknown>).summaryModel = pluginConfig.summaryModel.trim();
+      (config as Record<string, unknown>).summaryModel = pluginConfig.summaryModel.trim();
     }
     if (typeof pluginConfig.summaryProvider === "string") {
-      (config as Record<string,unknown>).summaryProvider = pluginConfig.summaryProvider.trim();
+      (config as Record<string, unknown>).summaryProvider = pluginConfig.summaryProvider.trim();
     }
   }
 
@@ -286,20 +335,30 @@ export function createNativeLcmDependencies(): LcmDependencies {
     resolveModel: nativeResolveModel,
     getApiKey: nativeGetApiKey,
     requireApiKey: nativeRequireApiKey,
-    parseAgentSessionKey,
+    parseAgentSessionKey: adaptParsedSessionKey,
     isSubagentSessionKey: nativeIsSubagentSessionKey,
     normalizeAgentId,
     // buildSubagentSystemPrompt — not critical, provide stub
-    buildSubagentSystemPrompt: (params: { depth: number; maxDepth: number; taskSummary?: string }) => {
+    buildSubagentSystemPrompt: (params: {
+      depth: number;
+      maxDepth: number;
+      taskSummary?: string;
+    }) => {
       const parts = ["You are a sub-agent performing a focused research task."];
-      if (params.depth > 0) {parts.push(`Depth: ${params.depth}/${params.maxDepth}`);}
-      if (params.taskSummary) {parts.push(`Task: ${params.taskSummary}`);}
+      if (params.depth > 0) {
+        parts.push(`Depth: ${params.depth}/${params.maxDepth}`);
+      }
+      if (params.taskSummary) {
+        parts.push(`Task: ${params.taskSummary}`);
+      }
       return parts.join("\n");
     },
     readLatestAssistantReply: (messages: unknown[]) => {
-      if (!Array.isArray(messages)) {return undefined;}
+      if (!Array.isArray(messages)) {
+        return undefined;
+      }
       for (let i = messages.length - 1; i >= 0; i--) {
-        const msg = messages[i] as Record<string,unknown>;
+        const msg = messages[i] as Record<string, unknown>;
         if (msg?.role === "assistant" && typeof msg?.content === "string" && msg.content.trim()) {
           return msg.content;
         }

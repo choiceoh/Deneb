@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { telegramPlugin } from "../../../extensions/telegram/index.js";
-import { whatsappPlugin } from "../../../extensions/whatsapp/index.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import { createTestRegistry } from "../../test-utils/channel-plugins.js";
 import { resolveOutboundTarget } from "./targets.js";
+
+// WhatsApp extension removed — provide minimal stub plugin.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const whatsappPlugin = { id: "whatsapp", meta: { id: "whatsapp", label: "WhatsApp" } } as any;
 
 export function installResolveOutboundTargetPluginRegistryHooks(): void {
   beforeEach(() => {

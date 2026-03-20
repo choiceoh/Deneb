@@ -13,7 +13,7 @@ import {
   resolveSessionDeliveryTarget,
 } from "../../infra/outbound/targets.js";
 import { buildChannelAccountBindings } from "../../routing/bindings.js";
-import { normalizeAccountId, normalizeAgentId } from "../../routing/session-key.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
 
 export type DeliveryTargetResolution =
   | {
@@ -38,7 +38,7 @@ export async function resolveDeliveryTarget(
   cfg: OpenClawConfig,
   agentId: string,
   jobPayload: {
-    channel?: "last" | ChannelId;
+    channel?: ChannelId;
     to?: string;
     /** Explicit accountId from job.delivery — overrides session-derived and binding-derived values. */
     accountId?: string;

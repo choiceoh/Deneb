@@ -3,7 +3,9 @@
  * All builders return empty objects since LINE channel is no longer supported.
  */
 
-export function createMediaPlayerCard(_options: Record<string, unknown> = {}): Record<string, unknown> {
+export function createMediaPlayerCard(
+  _options: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {};
 }
 
@@ -15,10 +17,14 @@ export function createAgendaCard(_options: Record<string, unknown> = {}): Record
   return {};
 }
 
-export function createDeviceControlCard(_options: Record<string, unknown> = {}): Record<string, unknown> {
+export function createDeviceControlCard(
+  _options: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {};
 }
 
-export function createAppleTvRemoteCard(_options: Record<string, unknown> = {}): Record<string, unknown> {
+export function createAppleTvRemoteCard(
+  _options: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {};
 }

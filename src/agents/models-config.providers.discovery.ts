@@ -6,13 +6,11 @@ import {
   SELF_HOSTED_DEFAULT_COST,
   SELF_HOSTED_DEFAULT_MAX_TOKENS,
 } from "./self-hosted-provider-defaults.js";
-export { buildHuggingfaceProvider } from "../../extensions/huggingface/provider-catalog.js";
-export { buildKilocodeProviderWithDiscovery } from "../../extensions/kilocode/provider-catalog.js";
-export { buildVeniceProvider } from "../../extensions/venice/provider-catalog.js";
-export { buildVercelAiGatewayProvider } from "../../extensions/vercel-ai-gateway/provider-catalog.js";
+
+// Provider catalog re-exports removed — extensions no longer bundled in-tree.
 
 type ModelsConfig = NonNullable<OpenClawConfig["models"]>;
-type ProviderConfig = NonNullable<ModelsConfig["providers"]>[string];
+type _ProviderConfig = NonNullable<ModelsConfig["providers"]>[string];
 
 const log = createSubsystemLogger("agents/model-providers");
 
@@ -26,7 +24,7 @@ function isReasoningModelHeuristic(modelId: string): boolean {
   return /r1|reasoning|think|reason/i.test(modelId);
 }
 
-async function discoverOpenAICompatibleLocalModels(params: {
+export async function discoverOpenAICompatibleLocalModels(params: {
   baseUrl: string;
   apiKey?: string;
   label: string;

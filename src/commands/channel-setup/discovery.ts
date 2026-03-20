@@ -9,9 +9,10 @@ import type { OpenClawConfig } from "../../config/config.js";
 import { loadPluginManifestRegistry } from "../../plugins/manifest-registry.js";
 import type { ChannelChoice } from "../onboard-types.js";
 
+type ChannelCatalogEntryMeta = Partial<ChannelMeta> & { id: string; label: string };
 type ChannelCatalogEntry = {
   id: ChannelChoice;
-  meta: ChannelMeta;
+  meta: ChannelCatalogEntryMeta;
 };
 
 export type ResolvedChannelSetupEntries = {
@@ -73,9 +74,14 @@ export function resolveChannelSetupEntries(params: {
       !installedPluginIds.has(entry.id) && !manifestInstalledIds.has(entry.id as ChannelChoice),
   );
 
-  const metaById = new Map<string, ChannelMeta>();
+  const metaById = new Map<string, ChannelCatalogEntryMeta>();
   for (const meta of listChatChannels()) {
-    metaById.set(meta.id, meta);
+    metaById.set(meta.id, {
+      ...meta,
+      docsPath: meta.docsPath ?? undefined,
+      blurb: meta.blurb ?? undefined,
+      systemImage: meta.systemImage ?? undefined,
+    });
   }
   for (const plugin of params.installedPlugins) {
     metaById.set(plugin.id, plugin.meta);

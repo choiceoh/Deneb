@@ -341,9 +341,13 @@ export function resolveVegaConfig(
     paths,
     update: {
       intervalMs: resolveIntervalMs(cfg?.update?.interval) || DEFAULT_VEGA_UPDATE_INTERVAL_MS,
-      embedIntervalMs: resolveIntervalMs(cfg?.update?.embedInterval) || DEFAULT_VEGA_EMBED_INTERVAL_MS,
+      embedIntervalMs:
+        resolveIntervalMs(cfg?.update?.embedInterval) || DEFAULT_VEGA_EMBED_INTERVAL_MS,
       onBoot: cfg?.update?.onBoot ?? true,
-      commandTimeoutMs: resolveTimeoutMs(cfg?.update?.commandTimeoutMs, DEFAULT_VEGA_COMMAND_TIMEOUT_MS),
+      commandTimeoutMs: resolveTimeoutMs(
+        cfg?.update?.commandTimeoutMs,
+        DEFAULT_VEGA_COMMAND_TIMEOUT_MS,
+      ),
     },
     limits: {
       maxResults: cfg?.limits?.maxResults ?? DEFAULT_VEGA_MAX_RESULTS,

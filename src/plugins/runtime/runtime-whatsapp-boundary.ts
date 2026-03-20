@@ -154,7 +154,7 @@ function getLightExport<K extends keyof WhatsAppLightModule>(
   if (value == null) {
     throw new Error(`WhatsApp plugin runtime is missing export '${String(exportName)}'`);
   }
-  return value as NonNullable<WhatsAppLightModule[K]>;
+  return value;
 }
 
 async function getHeavyExport<K extends keyof WhatsAppHeavyModule>(
@@ -165,7 +165,7 @@ async function getHeavyExport<K extends keyof WhatsAppHeavyModule>(
   if (value == null) {
     throw new Error(`WhatsApp plugin runtime is missing export '${String(exportName)}'`);
   }
-  return value as NonNullable<WhatsAppHeavyModule[K]>;
+  return value;
 }
 
 export function getActiveWebListener(
@@ -264,7 +264,8 @@ export function resolveWaWebAuthDir(): WhatsAppLightModule["WA_WEB_AUTH_DIR"] {
 
 export async function handleWhatsAppAction(
   ...args: Parameters<WhatsAppHeavyModule["handleWhatsAppAction"]>
-): ReturnType<WhatsAppHeavyModule["handleWhatsAppAction"]> {
+): // eslint-disable-next-line @typescript-eslint/no-explicit-any
+Promise<any> {
   return (await getHeavyExport("handleWhatsAppAction"))(...args);
 }
 
@@ -288,7 +289,8 @@ export function monitorWebChannel(
 
 export async function monitorWebInbox(
   ...args: Parameters<WhatsAppHeavyModule["monitorWebInbox"]>
-): ReturnType<WhatsAppHeavyModule["monitorWebInbox"]> {
+): // eslint-disable-next-line @typescript-eslint/no-explicit-any
+Promise<any> {
   return (await getHeavyExport("monitorWebInbox"))(...args);
 }
 
@@ -300,25 +302,29 @@ export async function optimizeImageToJpeg(
 
 export async function runWebHeartbeatOnce(
   ...args: Parameters<WhatsAppHeavyModule["runWebHeartbeatOnce"]>
-): ReturnType<WhatsAppHeavyModule["runWebHeartbeatOnce"]> {
+): // eslint-disable-next-line @typescript-eslint/no-explicit-any
+Promise<any> {
   return (await getHeavyExport("runWebHeartbeatOnce"))(...args);
 }
 
 export async function startWebLoginWithQr(
   ...args: Parameters<WhatsAppHeavyModule["startWebLoginWithQr"]>
-): ReturnType<WhatsAppHeavyModule["startWebLoginWithQr"]> {
+): // eslint-disable-next-line @typescript-eslint/no-explicit-any
+Promise<any> {
   return (await getHeavyExport("startWebLoginWithQr"))(...args);
 }
 
 export async function waitForWaConnection(
   ...args: Parameters<WhatsAppHeavyModule["waitForWaConnection"]>
-): ReturnType<WhatsAppHeavyModule["waitForWaConnection"]> {
+): // eslint-disable-next-line @typescript-eslint/no-explicit-any
+Promise<any> {
   return (await getHeavyExport("waitForWaConnection"))(...args);
 }
 
 export async function waitForWebLogin(
   ...args: Parameters<WhatsAppHeavyModule["waitForWebLogin"]>
-): ReturnType<WhatsAppHeavyModule["waitForWebLogin"]> {
+): // eslint-disable-next-line @typescript-eslint/no-explicit-any
+Promise<any> {
   return (await getHeavyExport("waitForWebLogin"))(...args);
 }
 

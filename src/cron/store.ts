@@ -4,7 +4,7 @@ import path from "node:path";
 import JSON5 from "json5";
 import { expandHomePrefix } from "../infra/home-dir.js";
 import { retryAsync } from "../infra/retry.js";
-import { CONFIG_DIR, sleep } from "../utils.js";
+import { CONFIG_DIR } from "../utils.js";
 import type { CronStoreFile } from "./types.js";
 
 export const DEFAULT_CRON_DIR = path.join(CONFIG_DIR, "cron");
@@ -108,14 +108,11 @@ export async function saveCronStore(
 
 async function renameWithRetry(src: string, dest: string): Promise<void> {
   try {
-    await retryAsync(
-      () => fs.promises.rename(src, dest),
-      {
-        attempts: 4,
-        minDelayMs: 50,
-        shouldRetry: (e) => (e as { code?: string }).code === "EBUSY",
-      },
-    );
+    await retryAsync(() => fs.promises.rename(src, dest), {
+      attempts: 4,
+      minDelayMs: 50,
+      shouldRetry: (e) => (e as { code?: string }).code === "EBUSY",
+    });
   } catch (err) {
     // Windows doesn't reliably support atomic replace via rename when dest exists.
     const code = (err as { code?: string }).code;

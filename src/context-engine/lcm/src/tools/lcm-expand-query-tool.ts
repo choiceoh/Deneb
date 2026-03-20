@@ -1,5 +1,5 @@
-import { Type } from "@sinclair/typebox";
 import crypto from "node:crypto";
+import { Type } from "@sinclair/typebox";
 import type { LcmContextEngine } from "../engine.js";
 import {
   createDelegatedExpansionGrant,
@@ -382,11 +382,7 @@ export function createLcmExpandQueryTool(input: {
         params: p,
       });
       let scopedConversationId = conversationScope.conversationId;
-      if (
-        !conversationScope.allConversations &&
-        scopedConversationId == null &&
-        callerSessionKey
-      ) {
+      if (!conversationScope.allConversations && scopedConversationId == null && callerSessionKey) {
         scopedConversationId = await resolveRequesterConversationScopeId({
           deps: input.deps,
           requesterSessionKey: callerSessionKey,

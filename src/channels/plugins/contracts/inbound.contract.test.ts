@@ -228,7 +228,7 @@ describe("channel inbound contract", () => {
 
     const payload = context?.ctxPayload;
     expect(payload).toBeTruthy();
-    expectChannelInboundContextContract(payload!);
+    expectChannelInboundContextContract(payload);
   });
 
   it("keeps WhatsApp inbound context finalized", async () => {

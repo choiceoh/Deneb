@@ -60,7 +60,7 @@ export function shouldApplyMoonshotPayloadCompat(params: {
   modelId: string;
 }): boolean {
   const normalizedProvider = params.provider.trim().toLowerCase();
-  const normalizedModelId = params.modelId.trim().toLowerCase();
+  const _normalizedModelId = params.modelId.trim().toLowerCase();
 
   if (normalizedProvider === "moonshot") {
     return true;

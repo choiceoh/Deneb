@@ -1,4 +1,5 @@
 import { Type } from "@sinclair/typebox";
+import { formatTimestamp } from "../compaction.js";
 import type { LcmContextEngine } from "../engine.js";
 import {
   getRuntimeExpansionAuthManager,
@@ -8,7 +9,6 @@ import type { LcmDependencies } from "../types.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult } from "./common.js";
 import { resolveLcmConversationScope } from "./lcm-conversation-scope.js";
-import { formatTimestamp } from "../compaction.js";
 
 const LcmDescribeSchema = Type.Object({
   id: Type.String({
@@ -42,7 +42,9 @@ function normalizeRequestedTokenCap(value: unknown): number | undefined {
 }
 
 function formatIso(value: Date | null | undefined, timezone?: string): string {
-  if (!(value instanceof Date)) {return "-";}
+  if (!(value instanceof Date)) {
+    return "-";
+  }
   if (timezone) {
     return formatTimestamp(value, timezone);
   }
@@ -104,7 +106,9 @@ export function createLcmDescribeTool(input: {
 
       if (result.type === "summary" && result.summary) {
         const s = result.summary;
-        const requestedTokenCap = normalizeRequestedTokenCap((params as Record<string, unknown>).tokenCap);
+        const requestedTokenCap = normalizeRequestedTokenCap(
+          (params as Record<string, unknown>).tokenCap,
+        );
         const sessionKey =
           (typeof input.sessionKey === "string" ? input.sessionKey : input.sessionId)?.trim() ?? "";
         const delegatedGrantId = input.deps.isSubagentSessionKey(sessionKey)
@@ -118,7 +122,9 @@ export function createLcmDescribeTool(input: {
         const resolvedTokenCap = (() => {
           const base =
             requestedTokenCap ??
-            (typeof delegatedRemainingBudget === "number" ? delegatedRemainingBudget : defaultTokenCap);
+            (typeof delegatedRemainingBudget === "number"
+              ? delegatedRemainingBudget
+              : defaultTokenCap);
           if (typeof delegatedRemainingBudget === "number") {
             return Math.max(0, Math.min(base, delegatedRemainingBudget));
           }

@@ -1,7 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-export function resolveGatewayLogPaths(_env: NodeJS.ProcessEnv): { stdoutPath: string; stderrPath: string } {
+export function resolveGatewayLogPaths(_env: NodeJS.ProcessEnv): {
+  stdoutPath: string;
+  stderrPath: string;
+} {
   // Linux systemd journald - logs go to journal, not files
   // Return placeholder paths for diagnostics compatibility
   const stateDir = process.env.OPENCLAW_STATE_DIR || "/var/lib/openclaw";

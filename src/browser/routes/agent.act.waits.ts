@@ -69,7 +69,14 @@ export async function waitForExistingSessionCondition(params: {
 
   if (params.timeMs) {
     await sleep(params.timeMs);
-    if (!params.text && !params.textGone && !params.selector && !params.url && !params.loadState && !params.fn) {
+    if (
+      !params.text &&
+      !params.textGone &&
+      !params.selector &&
+      !params.url &&
+      !params.loadState &&
+      !params.fn
+    ) {
       return;
     }
   }
@@ -85,21 +92,21 @@ export async function waitForExistingSessionCondition(params: {
   while (Date.now() < deadline) {
     let predicateResult = true;
     if (predicate) {
-      const evalResult = await evaluateChromeMcpScript({
+      const evalResult = (await evaluateChromeMcpScript({
         profileName,
         userDataDir,
         targetId,
-        script: `(async () => { return ${predicate}; })()`,
-      });
+        fn: `(async () => { return ${predicate}; })()`,
+      })) as { result?: unknown };
       predicateResult = evalResult.result === true || evalResult.result === "true";
     }
     if (params.url) {
-      const urlResult = await evaluateChromeMcpScript({
+      const urlResult = (await evaluateChromeMcpScript({
         profileName,
         userDataDir,
         targetId,
-        script: "window.location.href",
-      });
+        fn: "window.location.href",
+      })) as { result?: unknown };
       const currentUrl = typeof urlResult.result === "string" ? urlResult.result : "";
       if (!matchBrowserUrlPattern(currentUrl, params.url)) {
         predicateResult = false;

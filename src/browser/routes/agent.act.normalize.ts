@@ -53,7 +53,10 @@ export function countBatchActions(actions: BrowserActRequest[]): number {
   return count;
 }
 
-export function validateBatchTargetIds(actions: BrowserActRequest[], targetId: string): string | null {
+export function validateBatchTargetIds(
+  actions: BrowserActRequest[],
+  targetId: string,
+): string | null {
   for (const action of actions) {
     if (action.targetId && action.targetId !== targetId) {
       return "batched action targetId must match request targetId";
