@@ -3,8 +3,7 @@
 
 import type { ChannelOutboundAdapter } from "../src/channels/plugins/types.js";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const stubOutbound: ChannelOutboundAdapter = {} as any;
+const stubOutbound = {} as unknown as ChannelOutboundAdapter;
 
 export const discordOutbound: ChannelOutboundAdapter = stubOutbound;
 export const imessageOutbound: ChannelOutboundAdapter = stubOutbound;

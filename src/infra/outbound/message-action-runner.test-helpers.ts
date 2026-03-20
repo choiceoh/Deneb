@@ -4,11 +4,12 @@ import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import { createPluginRuntime } from "../../plugins/runtime/index.js";
 import { createTestRegistry } from "../../test-utils/channel-plugins.js";
 
-// Slack extension removed — provide minimal stub.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const slackPlugin = { id: "slack", meta: { id: "slack", label: "Slack" } } as any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function setSlackRuntime(_runtime: any) {}
+// Slack extension removed — provide minimal stub for test registry.
+const slackPlugin = {
+  id: "slack",
+  meta: { id: "slack", label: "Slack" },
+} as unknown as typeof telegramPlugin;
+function setSlackRuntime(_runtime: unknown) {}
 
 export const slackConfig = {
   channels: {

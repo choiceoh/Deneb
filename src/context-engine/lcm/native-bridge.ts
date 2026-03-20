@@ -6,7 +6,17 @@
  */
 
 import { readFileSync } from "node:fs";
-import { completeSimple, getEnvApiKey, getModel, type Api } from "@mariozechner/pi-ai";
+import {
+  completeSimple,
+  getEnvApiKey,
+  getModel,
+  type Api,
+  type AssistantMessage,
+  type KnownProvider,
+  type Message,
+  type Model,
+  type ThinkingLevel,
+} from "@mariozechner/pi-ai";
 import { resolveApiKeyForProvider, getCustomProviderApiKey } from "../../agents/model-auth.js";
 import { parseModelRef } from "../../agents/model-selection.js";
 import type { OpenClawConfig } from "../../config/config.js";
@@ -156,36 +166,38 @@ async function nativeComplete(params: {
     const cfg = loadConfig();
     const providerCfg = findProviderConfig(cfg, providerId);
 
-    let knownModel: Record<string, unknown> | undefined;
+    // getModel expects compile-time literal types; cast through KnownProvider
+    // since providerId/modelId are runtime strings that may match a known entry.
+    let knownModel: Model<Api> | undefined;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      knownModel = getModel(providerId as any, modelId as any) as unknown as Record<
-        string,
-        unknown
-      >;
+      knownModel = getModel(providerId as KnownProvider, modelId as never);
     } catch {
       knownModel = undefined;
     }
     const fallbackApi = params.providerApi?.trim() || inferApiFromProvider(providerId);
 
-    const resolvedModel: Record<string, unknown> = knownModel
+    const resolvedModel: Model<Api> = knownModel
       ? {
           ...knownModel,
-          baseUrl: (knownModel.baseUrl as string) || (providerCfg.baseUrl as string) || "",
-          ...(providerCfg.headers ? { headers: providerCfg.headers } : {}),
+          baseUrl: knownModel.baseUrl || (providerCfg.baseUrl as string) || "",
+          ...(providerCfg.headers
+            ? { headers: providerCfg.headers as Record<string, string> }
+            : {}),
         }
       : {
           id: modelId,
           name: modelId,
           provider: providerId,
-          api: fallbackApi,
+          api: fallbackApi as Api,
           reasoning: false,
-          input: ["text"],
+          input: ["text"] as const,
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
           contextWindow: 200_000,
           maxTokens: 8_000,
           baseUrl: (providerCfg.baseUrl as string) || "",
-          ...(providerCfg.headers ? { headers: providerCfg.headers } : {}),
+          ...(providerCfg.headers
+            ? { headers: providerCfg.headers as Record<string, string> }
+            : {}),
         };
 
     let resolvedApiKey = params.apiKey?.trim();
@@ -196,36 +208,31 @@ async function nativeComplete(params: {
       });
     }
 
-    const result = await completeSimple(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      resolvedModel as any,
+    const result: AssistantMessage = await completeSimple(
+      resolvedModel,
       {
         ...(params.system?.trim() ? { systemPrompt: params.system.trim() } : {}),
         messages: params.messages.map((m) => ({
-          role: m.role,
+          role: m.role as Message["role"],
           content: m.content,
           timestamp: Date.now(),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        })) as any,
+        })) as Message[],
       },
       {
         apiKey: resolvedApiKey,
         maxTokens: params.maxTokens,
         temperature: params.temperature,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        reasoning: params.reasoning as any,
+        reasoning: params.reasoning as ThinkingLevel | undefined,
       },
     );
 
     if (!result || typeof result !== "object") {
       return { content: [] };
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const resultRecord = result as any;
     return {
-      ...resultRecord,
-      content: Array.isArray(resultRecord.content)
-        ? (resultRecord.content as Array<{ type: string; text?: string; [key: string]: unknown }>)
+      ...result,
+      content: Array.isArray(result.content)
+        ? (result.content as Array<{ type: string; text?: string; [key: string]: unknown }>)
         : [],
     };
   } catch (err) {
