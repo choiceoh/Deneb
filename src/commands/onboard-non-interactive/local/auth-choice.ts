@@ -7,7 +7,6 @@ import type { RuntimeEnv } from "../../../runtime.js";
 import { resolveDefaultSecretProviderAlias } from "../../../secrets/ref-contract.js";
 import { normalizeSecretInputModeInput } from "../../auth-choice.apply-helpers.js";
 import { normalizeApiKeyTokenProviderAuthChoice } from "../../auth-choice.apply.api-providers.js";
-import { applyCloudflareAiGatewayConfig } from "../../onboard-auth.config-gateways.js";
 import {
   applyCustomApiConfig,
   CustomApiError,
@@ -229,10 +228,7 @@ export async function applyNonInteractiveAuthChoice(params: {
       provider: "cloudflare-ai-gateway",
       mode: "api_key",
     });
-    return applyCloudflareAiGatewayConfig(nextConfig, {
-      accountId,
-      gatewayId,
-    });
+    return nextConfig;
   }
 
   // Legacy aliases: these choice values were removed; fail with an actionable message so

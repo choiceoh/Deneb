@@ -1,10 +1,14 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resolveMatrixLegacyFlatStoragePaths } from "../../extensions/matrix/runtime-api.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import { resolveLegacyMatrixFlatStoreTarget } from "./matrix-migration-config.js";
+
+/** Stubs for removed matrix extension */
+function resolveMatrixLegacyFlatStoragePaths(_stateDir: string) {
+  return { rootDir: "", storagePath: "", cryptoPath: "" };
+}
 
 export type MatrixLegacyStateMigrationResult = {
   migrated: boolean;

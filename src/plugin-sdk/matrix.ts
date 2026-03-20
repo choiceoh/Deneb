@@ -151,17 +151,6 @@ export {
   buildProbeChannelStatusSummary,
   collectStatusIssuesFromLastError,
 } from "./status-helpers.js";
-export {
-  resolveMatrixAccountStorageRoot,
-  resolveMatrixCredentialsDir,
-  resolveMatrixCredentialsPath,
-  resolveMatrixLegacyFlatStoragePaths,
-} from "../../extensions/matrix/helper-api.js";
-export { getMatrixScopedEnvVarNames } from "../../extensions/matrix/helper-api.js";
-export {
-  requiresExplicitMatrixDefaultAccount,
-  resolveMatrixDefaultOrOnlyAccountId,
-} from "../../extensions/matrix/helper-api.js";
 
 const matrixSetup = createOptionalChannelSetupSurface({
   channel: "matrix",
