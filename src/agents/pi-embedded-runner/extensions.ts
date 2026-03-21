@@ -79,8 +79,15 @@ export function buildEmbeddedExtensionFactories(params: {
       modelContextWindow: params.model?.contextWindow,
       defaultTokens: DEFAULT_CONTEXT_TOKENS,
     });
+    // Clamp maxHistoryShare to stable bounds so extreme config values cannot
+    // degrade compaction performance (zero-budget pruning or summarizer overload).
+    const rawMaxHistoryShare = compactionCfg?.maxHistoryShare;
+    const clampedMaxHistoryShare =
+      typeof rawMaxHistoryShare === "number"
+        ? Math.min(0.9, Math.max(0.1, rawMaxHistoryShare))
+        : undefined;
     setCompactionSafeguardRuntime(params.sessionManager, {
-      maxHistoryShare: compactionCfg?.maxHistoryShare,
+      maxHistoryShare: clampedMaxHistoryShare,
       contextWindowTokens: contextWindowInfo.tokens,
       identifierPolicy: compactionCfg?.identifierPolicy,
       identifierInstructions: compactionCfg?.identifierInstructions,
