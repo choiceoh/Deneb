@@ -5,18 +5,18 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   contentId,
   formatEntry,
-  MemoryMdManager,
+  AuroraMdManager,
   parseEntryLine,
   parseSections,
-  type MemoryEntry,
-} from "./memory-md-manager.js";
+  type AuroraEntry,
+} from "./aurora-md-manager.js";
 
 let tmpDir: string;
-let mgr: MemoryMdManager;
+let mgr: AuroraMdManager;
 
 beforeEach(async () => {
-  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "memory-md-mgr-"));
-  mgr = new MemoryMdManager(tmpDir, "UTC");
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "aurora-md-mgr-"));
+  mgr = new AuroraMdManager(tmpDir, "UTC");
 });
 
 afterEach(async () => {
@@ -29,7 +29,7 @@ afterEach(async () => {
 
 describe("formatEntry / parseEntryLine", () => {
   it("round-trips a basic entry", () => {
-    const entry: MemoryEntry = {
+    const entry: AuroraEntry = {
       id: "abcd1234",
       timestamp: "2026-03-21T10:00:00.000Z",
       content: "Use TypeScript for the project",
@@ -45,7 +45,7 @@ describe("formatEntry / parseEntryLine", () => {
   });
 
   it("round-trips entry with tags and importance", () => {
-    const entry: MemoryEntry = {
+    const entry: AuroraEntry = {
       id: "ef567890",
       timestamp: "2026-03-21T10:00:00.000Z",
       content: "Deploy to production daily",
@@ -285,7 +285,7 @@ describe("recallAll", () => {
   });
 
   it("returns empty when no memory/ directory", async () => {
-    const emptyMgr = new MemoryMdManager(await fs.mkdtemp(path.join(os.tmpdir(), "empty-")));
+    const emptyMgr = new AuroraMdManager(await fs.mkdtemp(path.join(os.tmpdir(), "empty-")));
     const result = await emptyMgr.recallAll();
     expect(result.entries).toEqual([]);
   });
@@ -465,7 +465,7 @@ describe("dailyFilePath", () => {
 
   it("respects timezone", () => {
     // 2026-03-22T01:00:00Z is still March 21 in US Pacific
-    const pacific = new MemoryMdManager(tmpDir, "America/Los_Angeles");
+    const pacific = new AuroraMdManager(tmpDir, "America/Los_Angeles");
     const p = pacific.dailyFilePath(new Date("2026-03-22T06:00:00Z").getTime());
     expect(p).toBe("memory/2026-03-21.md");
   });
@@ -490,7 +490,7 @@ describe("read-only guard", () => {
 
 describe("content with backticks", () => {
   it("preserves backticks in content when no trailing tags", () => {
-    const entry: MemoryEntry = {
+    const entry: AuroraEntry = {
       id: "aabb1122",
       timestamp: "2026-03-21T10:00:00Z",
       content: "Use `pnpm` for builds",
@@ -504,7 +504,7 @@ describe("content with backticks", () => {
   });
 
   it("distinguishes inline backticks from trailing tags", () => {
-    const entry: MemoryEntry = {
+    const entry: AuroraEntry = {
       id: "cc334455",
       timestamp: "2026-03-21T10:00:00Z",
       content: "Run `vitest` before pushing",
@@ -518,7 +518,7 @@ describe("content with backticks", () => {
   });
 
   it("round-trips content with multiple inline backtick words and trailing tags", () => {
-    const entry: MemoryEntry = {
+    const entry: AuroraEntry = {
       id: "dd556677",
       timestamp: "2026-03-21T10:00:00Z",
       content: "Use `pnpm` and `bun` for dev",
@@ -532,7 +532,7 @@ describe("content with backticks", () => {
   });
 
   it("handles content ending with a backtick word (no tags)", () => {
-    const entry: MemoryEntry = {
+    const entry: AuroraEntry = {
       id: "ee778899",
       timestamp: "2026-03-21T10:00:00Z",
       content: "Always use `pnpm`",
@@ -541,13 +541,12 @@ describe("content with backticks", () => {
     };
     const line = formatEntry(entry);
     const parsed = parseEntryLine(line);
-    // BUG: `pnpm` should be part of content, not parsed as a tag
     expect(parsed?.content).toBe("Always use `pnpm`");
     expect(parsed?.tags).toEqual([]);
   });
 
   it("handles content ending with backtick word alongside real tags", () => {
-    const entry: MemoryEntry = {
+    const entry: AuroraEntry = {
       id: "ff001122",
       timestamp: "2026-03-21T10:00:00Z",
       content: "Prefer `bun` over `node`",
@@ -556,7 +555,6 @@ describe("content with backticks", () => {
     };
     const line = formatEntry(entry);
     const parsed = parseEntryLine(line);
-    // `node` and `bun` are part of content, only `runtime` is a tag
     expect(parsed?.content).toBe("Prefer `bun` over `node`");
     expect(parsed?.tags).toEqual(["runtime"]);
   });

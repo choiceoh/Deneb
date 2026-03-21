@@ -7,19 +7,19 @@ import { isFileMissingError } from "./fs-utils.js";
 // Types
 // ---------------------------------------------------------------------------
 
-export type MemoryImportance = "low" | "normal" | "high" | "critical";
+export type AuroraImportance = "low" | "normal" | "high" | "critical";
 
-export type MemoryEntry = {
+export type AuroraEntry = {
   /** Short stable ID (first 8 chars of content hash) */
   id: string;
   /** ISO 8601 timestamp */
   timestamp: string;
-  /** The memory content */
+  /** The aurora content */
   content: string;
   /** Categorization tags */
   tags: string[];
   /** Importance level for recall prioritization */
-  importance: MemoryImportance;
+  importance: AuroraImportance;
 };
 
 export type SaveResult = {
@@ -28,7 +28,7 @@ export type SaveResult = {
   id: string;
   file: string;
   /** The entry that was written (or the existing duplicate) */
-  entry: MemoryEntry;
+  entry: AuroraEntry;
 };
 
 export type ForgetResult =
@@ -36,12 +36,12 @@ export type ForgetResult =
   | { ok: false; reason: string };
 
 export type RecallResult = {
-  entries: MemoryEntry[];
+  entries: AuroraEntry[];
   total: number;
   file: string;
 };
 
-export type MemorySection = {
+export type AuroraSection = {
   level: number;
   title: string;
   content: string;
@@ -59,7 +59,7 @@ const HEADING_RE = /^(#{1,6})\s+(.+)$/;
 const ENTRY_RE =
   /^- \[id:([a-f0-9]+)\] \*\*(\d{4}-\d{2}-\d{2}T[\d:.Z+-]+)\*\*(?:\s+\{(\w+)\})?\s+(.+)$/;
 
-const IMPORTANCE_ORDER: Record<MemoryImportance, number> = {
+const IMPORTANCE_ORDER: Record<AuroraImportance, number> = {
   low: 0,
   normal: 1,
   high: 2,
@@ -69,10 +69,10 @@ const IMPORTANCE_ORDER: Record<MemoryImportance, number> = {
 const READ_ONLY_FILES = new Set(["memory.md", "soul.md", "tools.md", "agents.md"]);
 
 // ---------------------------------------------------------------------------
-// MemoryMdManager — AI-agent-first memory file manager
+// AuroraMdManager — AI-agent-first memory file manager
 // ---------------------------------------------------------------------------
 
-export class MemoryMdManager {
+export class AuroraMdManager {
   private readonly workspaceDir: string;
   private readonly timezone: string;
 
@@ -92,7 +92,7 @@ export class MemoryMdManager {
     content: string,
     options: {
       tags?: string[];
-      importance?: MemoryImportance;
+      importance?: AuroraImportance;
       /** Explicit target file (relative to workspace); defaults to today's daily file */
       file?: string;
       /** Timestamp override */
@@ -131,7 +131,7 @@ export class MemoryMdManager {
     // Fuzzy duplicate: if >80% token overlap, update the existing entry
     const similar = findSimilarEntry(entries, trimmed);
     if (similar) {
-      const updated: MemoryEntry = {
+      const updated: AuroraEntry = {
         ...similar,
         id,
         timestamp,
@@ -145,7 +145,7 @@ export class MemoryMdManager {
     }
 
     // New entry — append
-    const entry: MemoryEntry = { id, timestamp, content: trimmed, tags, importance };
+    const entry: AuroraEntry = { id, timestamp, content: trimmed, tags, importance };
     const appended = appendEntry(existing, formatEntry(entry));
     await writeFile(absPath, appended);
     return { ok: true, action: "created", id, file: relPath, entry };
@@ -161,7 +161,7 @@ export class MemoryMdManager {
     filter: {
       file?: string;
       tags?: string[];
-      minImportance?: MemoryImportance;
+      minImportance?: AuroraImportance;
       contains?: string;
       limit?: number;
     } = {},
@@ -203,11 +203,11 @@ export class MemoryMdManager {
   async recallAll(
     filter: {
       tags?: string[];
-      minImportance?: MemoryImportance;
+      minImportance?: AuroraImportance;
       contains?: string;
       limit?: number;
     } = {},
-  ): Promise<{ entries: Array<MemoryEntry & { file: string }>; total: number }> {
+  ): Promise<{ entries: Array<AuroraEntry & { file: string }>; total: number }> {
     const memoryDir = path.join(this.workspaceDir, "memory");
     let files: string[];
     try {
@@ -219,7 +219,7 @@ export class MemoryMdManager {
       return { entries: [], total: 0 };
     }
 
-    const allEntries: Array<MemoryEntry & { file: string }> = [];
+    const allEntries: Array<AuroraEntry & { file: string }> = [];
     for (const file of files) {
       const relPath = `memory/${file}`;
       const result = await this.recall({ ...filter, file: relPath, limit: undefined });
@@ -305,7 +305,7 @@ export class MemoryMdManager {
     /** Only consolidate files older than this date (YYYY-MM-DD). Defaults to 7 days ago. */
     before?: string;
     /** Minimum importance to keep. Defaults to "normal". */
-    minImportance?: MemoryImportance;
+    minImportance?: AuroraImportance;
     /** Target file. Defaults to memory/archive.md */
     targetFile?: string;
   }): Promise<{ merged: number; kept: number; removedFiles: string[] }> {
@@ -334,7 +334,7 @@ export class MemoryMdManager {
       return { merged: 0, kept: 0, removedFiles: [] };
     }
 
-    const keptEntries: MemoryEntry[] = [];
+    const keptEntries: AuroraEntry[] = [];
     const removedFiles: string[] = [];
 
     for (const file of toConsolidate) {
@@ -368,7 +368,7 @@ export class MemoryMdManager {
   // ---- Section helpers (for MEMORY.md reference reads) -------------------
 
   /** Parse all sections from a memory file. */
-  async sections(file?: string): Promise<MemorySection[]> {
+  async sections(file?: string): Promise<AuroraSection[]> {
     const relPath = file ?? "MEMORY.md";
     const absPath = path.join(this.workspaceDir, relPath);
     const content = await readFile(absPath);
@@ -403,13 +403,13 @@ export class MemoryMdManager {
 // Entry formatting / parsing
 // ---------------------------------------------------------------------------
 
-export function formatEntry(entry: MemoryEntry): string {
+export function formatEntry(entry: AuroraEntry): string {
   const importancePart = entry.importance !== "normal" ? ` {${entry.importance}}` : "";
   const tagsPart = entry.tags.length > 0 ? ` ${entry.tags.map((t) => `#${t}`).join(" ")}` : "";
   return `- [id:${entry.id}] **${entry.timestamp}**${importancePart} ${entry.content}${tagsPart}`;
 }
 
-export function parseEntryLine(line: string): MemoryEntry | null {
+export function parseEntryLine(line: string): AuroraEntry | null {
   const m = line.match(ENTRY_RE);
   if (!m) {
     return null;
@@ -417,7 +417,7 @@ export function parseEntryLine(line: string): MemoryEntry | null {
 
   const id = m[1];
   const timestamp = m[2];
-  const importance = (m[3] as MemoryImportance | undefined) ?? "normal";
+  const importance = (m[3] as AuroraImportance | undefined) ?? "normal";
   const rest = m[4];
 
   // Extract trailing #hashtag tokens (e.g. "#ci #deploy")
@@ -438,10 +438,10 @@ export function parseEntryLine(line: string): MemoryEntry | null {
   return { id, timestamp, content, tags, importance };
 }
 
-export function parseSections(content: string): MemorySection[] {
+export function parseSections(content: string): AuroraSection[] {
   const lines = content.split("\n");
-  const sections: MemorySection[] = [];
-  let current: MemorySection | null = null;
+  const sections: AuroraSection[] = [];
+  let current: AuroraSection | null = null;
 
   for (let i = 0; i < lines.length; i++) {
     const match = lines[i].match(HEADING_RE);
@@ -489,7 +489,7 @@ function mergeTags(a: string[], b: string[]): string[] {
   return [...new Set([...a, ...b])];
 }
 
-function maxImportance(a: MemoryImportance, b: MemoryImportance): MemoryImportance {
+function maxImportance(a: AuroraImportance, b: AuroraImportance): AuroraImportance {
   return IMPORTANCE_ORDER[a] >= IMPORTANCE_ORDER[b] ? a : b;
 }
 
@@ -497,13 +497,13 @@ function maxImportance(a: MemoryImportance, b: MemoryImportance): MemoryImportan
  * Simple token-overlap similarity check.
  * Returns the entry with >80% bigram overlap, or null.
  */
-function findSimilarEntry(entries: MemoryEntry[], newContent: string): MemoryEntry | null {
+function findSimilarEntry(entries: AuroraEntry[], newContent: string): AuroraEntry | null {
   const newBigrams = toBigrams(newContent);
   if (newBigrams.size === 0) {
     return null;
   }
 
-  let bestMatch: MemoryEntry | null = null;
+  let bestMatch: AuroraEntry | null = null;
   let bestScore = 0;
 
   for (const entry of entries) {
@@ -542,11 +542,11 @@ function toBigrams(text: string): Set<string> {
   return bigrams;
 }
 
-function parseAllEntries(content: string): MemoryEntry[] {
+function parseAllEntries(content: string): AuroraEntry[] {
   if (!content.trim()) {
     return [];
   }
-  const entries: MemoryEntry[] = [];
+  const entries: AuroraEntry[] = [];
   for (const line of content.split("\n")) {
     const entry = parseEntryLine(line);
     if (entry) {
