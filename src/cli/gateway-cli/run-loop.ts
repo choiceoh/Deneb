@@ -1,6 +1,7 @@
 import {
   abortEmbeddedPiRun,
   getActiveEmbeddedRunCount,
+  resetActiveEmbeddedRunState,
   waitForActiveEmbeddedRuns,
 } from "../../agents/pi-embedded-runner/runs.js";
 import type { startGatewayServer } from "../../gateway/server.js";
@@ -218,6 +219,7 @@ export async function runGatewayLoop(params: {
       // coordinator level — rather than inside individual subsystem init
       // functions, to avoid surprising cross-cutting side effects.
       resetAllLanes();
+      resetActiveEmbeddedRunState();
     });
 
     // Keep process alive; SIGUSR1 triggers an in-process restart (no supervisor required).
