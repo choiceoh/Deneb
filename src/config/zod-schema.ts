@@ -143,6 +143,10 @@ const MemoryVegaSchema = z
     update: MemoryVegaUpdateSchema.optional(),
     limits: MemoryVegaLimitsSchema.optional(),
     scope: SessionSendPolicySchema.optional(),
+    searchMode: z
+      .union([z.literal("query"), z.literal("search"), z.literal("vsearch")])
+      .optional(),
+    env: z.record(z.string(), z.string()).optional(),
   })
   .strict();
 

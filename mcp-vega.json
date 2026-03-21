@@ -82,6 +82,14 @@
             },
             "required": ["project", "text"]
           }
+        },
+        {
+          "name": "version",
+          "description": "【시스템】 Vega 버전, 프로토콜 버전, 지원 기능(시맨틱 검색, 리랭킹, 검색 모드) 조회. Deneb 호환성 확인용.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
         }
       ]
     }
