@@ -99,6 +99,8 @@ describe("CompressionObserver", () => {
       enabled: true,
       messageInterval: 3,
       maxStalenessMs: 60_000,
+      // Use a small tail for tests so we don't need 40+ messages.
+      freshTailCount: 8,
     };
   });
 

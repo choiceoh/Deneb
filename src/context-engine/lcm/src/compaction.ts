@@ -571,14 +571,8 @@ export class CompactionEngine {
   /**
    * Attempt to use the pre-computed observer summary for a fast compaction.
    *
-   * If a fresh cached summary is available from the CompressionObserver,
-   * insert it as a leaf summary covering compactable raw messages outside
-   * the protected fresh tail, bypassing the expensive LLM summarization call.
-   *
-   * Safety: only activates when the context is purely raw messages (no
-   * existing summary items mixed in). If summaries already exist in the
-   * context, falls back to the normal compaction path to avoid information
-   * loss from blindly replacing an ordinal range.
+   * Returns null (fall back to normal compaction) on ANY inconsistency.
+   * The fast path must never corrupt DB state or lose information.
    */
   private async tryObserverFastPath(
     conversationId: number,
@@ -587,141 +581,141 @@ export class CompactionEngine {
     if (!this.observer) {
       return null;
     }
-
     if (!this.observer.isSummaryFresh(conversationId, tokensBefore)) {
       return null;
     }
-
     const cached = this.observer.getCachedSummary(conversationId);
     if (!cached) {
       return null;
     }
 
-    // Collect all raw message items outside the fresh tail to replace.
-    // Also detect any non-message items (existing summaries) in the range.
+    // ── Collect replaceable messages and validate consistency ────────────
     const contextItems = await this.summaryStore.getContextItems(conversationId);
     const freshTailOrdinal = this.resolveFreshTailOrdinal(contextItems);
     const rawMessageItems: ContextItemRecord[] = [];
     const messageContents: { messageId: number; createdAt: Date; content: string }[] = [];
-    let hasSummaryItemsInRange = false;
 
     for (const item of contextItems) {
       if (item.ordinal >= freshTailOrdinal) {
         break;
       }
-      if (item.itemType === "summary") {
-        hasSummaryItemsInRange = true;
-        continue;
-      }
+      // Any non-raw-message item in the range → bail entirely.
       if (item.itemType !== "message" || item.messageId == null) {
-        continue;
+        this.observer.invalidate(conversationId);
+        return null;
       }
       rawMessageItems.push(item);
       const msg = await this.conversationStore.getMessageById(item.messageId);
-      if (msg) {
-        messageContents.push({
-          messageId: msg.messageId,
-          createdAt: msg.createdAt,
-          content: msg.content,
-        });
+      if (!msg) {
+        // Missing message in DB → context is inconsistent, bail.
+        this.observer.invalidate(conversationId);
+        return null;
       }
+      messageContents.push({
+        messageId: msg.messageId,
+        createdAt: msg.createdAt,
+        content: msg.content,
+      });
     }
 
     if (rawMessageItems.length === 0) {
       return null;
     }
 
-    // If there are existing summary items in the compactable range, the
-    // observer summary doesn't cover them. Replacing the ordinal range
-    // would destroy those summaries and lose information. Fall back.
-    if (hasSummaryItemsInRange) {
+    // Every raw item must have a resolved message (no gaps).
+    if (rawMessageItems.length !== messageContents.length) {
       this.observer.invalidate(conversationId);
       return null;
     }
 
-    // Insert the pre-computed summary as a leaf summary.
-    const summaryId = generateSummaryId(cached.summary);
-    const fileIds = dedupeOrderedIds(
-      messageContents.flatMap((m) => extractFileIdsFromContent(m.content)),
-    );
-
-    await this.summaryStore.insertSummary({
-      summaryId,
-      conversationId,
-      kind: "leaf",
-      depth: 0,
-      content: cached.summary,
-      tokenCount: cached.tokenCount,
-      fileIds,
-      earliestAt:
-        messageContents.length > 0
-          ? new Date(Math.min(...messageContents.map((m) => m.createdAt.getTime())))
-          : undefined,
-      latestAt:
-        messageContents.length > 0
-          ? new Date(Math.max(...messageContents.map((m) => m.createdAt.getTime())))
-          : undefined,
-      descendantCount: 0,
-      descendantTokenCount: 0,
-      sourceMessageTokenCount: cached.sourceTokenCount,
-    });
-
-    // Link to source messages.
-    const messageIds = messageContents.map((m) => m.messageId);
-    await this.summaryStore.linkSummaryToMessages(summaryId, messageIds);
-
-    // Replace only the contiguous raw-message range (no summaries in between,
-    // guaranteed by the hasSummaryItemsInRange check above).
-    const ordinals = rawMessageItems.map((ci) => ci.ordinal);
-    const startOrdinal = Math.min(...ordinals);
-    const endOrdinal = Math.max(...ordinals);
-    await this.summaryStore.replaceContextRangeWithSummary({
-      conversationId,
-      startOrdinal,
-      endOrdinal,
-      summaryId,
-    });
-
-    const tokensAfter = await this.summaryStore.getContextTokenCount(conversationId);
-
-    // Persist compaction event for diagnostic history.
-    await this.persistCompactionEvents({
-      conversationId,
-      tokensBefore,
-      tokensAfterLeaf: tokensAfter,
-      tokensAfterFinal: tokensAfter,
-      leafResult: { summaryId, level: "normal" },
-      condenseResult: null,
-    });
-
-    // Sanity check: if tokens didn't decrease, warn but still report success.
-    // The DB write already happened; the summary is persisted.
-    if (tokensAfter >= tokensBefore) {
-      console.error(
-        `[lcm:compaction] observer fast path did not reduce tokens for conversation=${conversationId}: ` +
-          `before=${tokensBefore} after=${tokensAfter}`,
-      );
-    } else {
-      console.error(
-        `[lcm:compaction] observer fast path for conversation=${conversationId}: ` +
-          `before=${tokensBefore} after=${tokensAfter} messages=${rawMessageItems.length} ` +
-          `age=${Date.now() - cached.updatedAt}ms`,
-      );
+    // The observer must have covered the same number of messages.
+    // If they diverge, the summary doesn't match the replacement target.
+    if (cached.messagesCovered !== rawMessageItems.length) {
+      this.observer.invalidate(conversationId);
+      return null;
     }
 
-    // Invalidate cache. Don't trigger an immediate update — let the natural
-    // message-interval accumulation create a meaningful next summary once
-    // enough new messages have been ingested.
-    this.observer.invalidate(conversationId);
+    // ── Apply the pre-computed summary ──────────────────────────────────
+    try {
+      const summaryId = generateSummaryId(cached.summary);
+      const fileIds = dedupeOrderedIds(
+        messageContents.flatMap((m) => extractFileIdsFromContent(m.content)),
+      );
 
-    return {
-      actionTaken: true,
-      tokensBefore,
-      tokensAfter,
-      createdSummaryId: summaryId,
-      condensed: false,
-      level: "normal",
-    };
+      await this.summaryStore.insertSummary({
+        summaryId,
+        conversationId,
+        kind: "leaf",
+        depth: 0,
+        content: cached.summary,
+        tokenCount: cached.tokenCount,
+        fileIds,
+        earliestAt: new Date(Math.min(...messageContents.map((m) => m.createdAt.getTime()))),
+        latestAt: new Date(Math.max(...messageContents.map((m) => m.createdAt.getTime()))),
+        descendantCount: 0,
+        descendantTokenCount: 0,
+        sourceMessageTokenCount: cached.sourceTokenCount,
+      });
+
+      await this.summaryStore.linkSummaryToMessages(
+        summaryId,
+        messageContents.map((m) => m.messageId),
+      );
+
+      const ordinals = rawMessageItems.map((ci) => ci.ordinal);
+      await this.summaryStore.replaceContextRangeWithSummary({
+        conversationId,
+        startOrdinal: Math.min(...ordinals),
+        endOrdinal: Math.max(...ordinals),
+        summaryId,
+      });
+
+      const tokensAfter = await this.summaryStore.getContextTokenCount(conversationId);
+
+      await this.persistCompactionEvents({
+        conversationId,
+        tokensBefore,
+        tokensAfterLeaf: tokensAfter,
+        tokensAfterFinal: tokensAfter,
+        leafResult: { summaryId, level: "normal" },
+        condenseResult: null,
+      });
+
+      if (tokensAfter >= tokensBefore) {
+        console.error(
+          `[lcm:compaction] observer fast path did not reduce tokens for conversation=${conversationId}: ` +
+            `before=${tokensBefore} after=${tokensAfter}`,
+        );
+      } else {
+        console.error(
+          `[lcm:compaction] observer fast path OK conversation=${conversationId}: ` +
+            `before=${tokensBefore} after=${tokensAfter} messages=${rawMessageItems.length} ` +
+            `age=${Date.now() - cached.updatedAt}ms`,
+        );
+      }
+
+      this.observer.invalidate(conversationId);
+
+      return {
+        actionTaken: true,
+        tokensBefore,
+        tokensAfter,
+        createdSummaryId: summaryId,
+        condensed: false,
+        level: "normal",
+      };
+    } catch (err) {
+      // DB operation failed mid-way. Invalidate cache and fall back to
+      // normal compaction which will see the (possibly partial) state
+      // and handle it correctly via its own leaf/condensed passes.
+      console.error(
+        `[lcm:compaction] observer fast path DB error, falling back: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      this.observer.invalidate(conversationId);
+      return null;
+    }
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────

@@ -466,6 +466,8 @@ export class LcmContextEngine implements ContextEngine {
     }
 
     // Step 3: Create and attach the observer with the validated summarizer.
+    // Pass the same freshTailCount as the compaction engine uses, so the
+    // observer summarizes exactly the messages that the fast path will replace.
     this.compressionObserver = new CompressionObserver(
       {
         ...DEFAULT_OBSERVER_CONFIG,
@@ -475,6 +477,7 @@ export class LcmContextEngine implements ContextEngine {
         model: model,
         provider: provider,
         maxStalenessMs: observerCfg.maxStalenessMs,
+        freshTailCount: this.config.freshTailCount,
       },
       this.conversationStore,
       this.summaryStore,

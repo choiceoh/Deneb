@@ -21,6 +21,13 @@ export interface CompressionObserverConfig {
   provider?: string;
   /** Max staleness in ms before a cached summary is considered expired (default 60000). */
   maxStalenessMs: number;
+  /**
+   * Number of recent raw messages to exclude from summarization.
+   * Must match the compaction engine's freshTailCount so the observer
+   * summarizes exactly the same messages that the fast path will replace.
+   * Passed from CompactionConfig at construction time.
+   */
+  freshTailCount: number;
 }
 
 export interface CachedSummary {
@@ -47,18 +54,11 @@ export const DEFAULT_OBSERVER_CONFIG: CompressionObserverConfig = {
   targetRatio: 0.2,
   messageInterval: 5,
   maxStalenessMs: 60_000,
+  freshTailCount: 32,
 };
 
 /** Token drift factor — if current tokens exceed source by this factor, summary is stale. */
 const TOKEN_DRIFT_FACTOR = 1.3;
-
-/**
- * Number of recent raw messages to exclude from observer summarization,
- * matching the concept of the "fresh tail" in CompactionEngine. The fast
- * path only replaces messages outside this tail, so the observer should
- * only summarize what the fast path would replace.
- */
-const OBSERVER_FRESH_TAIL_COUNT = 8;
 
 /** Retry delay for transient LLM call failures (ms). */
 const RETRY_DELAY_MS = 2_000;
@@ -81,35 +81,21 @@ export class CompressionObserver {
   private cache = new Map<number, CachedSummary>();
   private messageCounters = new Map<number, number>();
   private pendingUpdates = new Map<number, Promise<void>>();
-  /** Per-conversation flag: true when a re-trigger was requested while an update was in flight. */
   private retriggerNeeded = new Set<number>();
   private disposed = false;
 
-  /** Consecutive update failure count (reset on success). */
   private consecutiveFailures = 0;
-  /** Timestamp when cooldown ends (0 = not in cooldown). */
   private cooldownUntil = 0;
 
   constructor(
     private config: CompressionObserverConfig,
     private conversationStore: ConversationStore,
     private summaryStore: SummaryStore,
-    /** Ready-to-use summarizer. Resolved and validated before construction. */
     private summarize: CompactionSummarizeFn,
   ) {}
 
-  /**
-   * Called after a new message is ingested into a conversation.
-   * Increments the per-conversation counter and enqueues a background
-   * compression update when the interval threshold is reached.
-   */
   onMessage(conversationId: number): void {
-    if (this.disposed || !this.config.enabled) {
-      return;
-    }
-
-    // Skip if in failure cooldown.
-    if (this.isInCooldown()) {
+    if (this.disposed || !this.config.enabled || this.isInCooldown()) {
       return;
     }
 
@@ -122,9 +108,6 @@ export class CompressionObserver {
     }
   }
 
-  /**
-   * Get the cached pre-computed summary for a conversation, if available.
-   */
   getCachedSummary(conversationId: number): CachedSummary | null {
     if (!this.config.enabled) {
       return null;
@@ -132,37 +115,23 @@ export class CompressionObserver {
     return this.cache.get(conversationId) ?? null;
   }
 
-  /**
-   * Check whether the cached summary is fresh enough to use in place of
-   * a full compaction pass.
-   */
   isSummaryFresh(conversationId: number, currentTokens: number): boolean {
     if (!this.config.enabled) {
       return false;
     }
-
     const cached = this.cache.get(conversationId);
-    if (!cached) {
+    if (!cached || cached.hasMixedContext) {
       return false;
     }
-
-    if (cached.hasMixedContext) {
+    if (Date.now() - cached.updatedAt > this.config.maxStalenessMs) {
       return false;
     }
-
-    const age = Date.now() - cached.updatedAt;
-    if (age > this.config.maxStalenessMs) {
-      return false;
-    }
-
     if (currentTokens > cached.sourceTokenCount * TOKEN_DRIFT_FACTOR) {
       return false;
     }
-
     return true;
   }
 
-  /** Force an immediate background update for a conversation. */
   triggerUpdate(conversationId: number): void {
     if (this.disposed || !this.config.enabled || this.isInCooldown()) {
       return;
@@ -171,13 +140,12 @@ export class CompressionObserver {
     this.enqueueUpdate(conversationId);
   }
 
-  /** Invalidate the cached summary for a conversation. */
   invalidate(conversationId: number): void {
     this.cache.delete(conversationId);
     this.messageCounters.set(conversationId, 0);
+    this.retriggerNeeded.delete(conversationId);
   }
 
-  /** Clean up all resources and cancel pending updates. */
   dispose(): void {
     this.disposed = true;
     this.cache.clear();
@@ -193,7 +161,6 @@ export class CompressionObserver {
       return false;
     }
     if (Date.now() >= this.cooldownUntil) {
-      // Cooldown expired — reset.
       this.cooldownUntil = 0;
       this.consecutiveFailures = 0;
       log.info(`[compression-observer] cooldown expired, resuming`);
@@ -210,7 +177,6 @@ export class CompressionObserver {
 
     const updatePromise = this.runUpdate(conversationId).finally(() => {
       this.pendingUpdates.delete(conversationId);
-
       if (this.retriggerNeeded.has(conversationId)) {
         this.retriggerNeeded.delete(conversationId);
         if (!this.disposed && !this.isInCooldown()) {
@@ -222,10 +188,6 @@ export class CompressionObserver {
     this.pendingUpdates.set(conversationId, updatePromise);
   }
 
-  /**
-   * Call the summarizer with retry for transient failures.
-   * Local models (ollama) may need a moment to load or recover.
-   */
   private async summarizeWithRetry(text: string, aggressive: boolean): Promise<string> {
     let lastErr: unknown;
     for (let attempt = 0; attempt <= MAX_CALL_RETRIES; attempt++) {
@@ -262,7 +224,6 @@ export class CompressionObserver {
       }
 
       let hasMixedContext = false;
-
       const allRawItems: Array<{
         messageId: number;
         content: string;
@@ -288,8 +249,9 @@ export class CompressionObserver {
         });
       }
 
-      // Exclude the fresh tail — only summarize what the fast path will replace.
-      const tailStart = Math.max(0, allRawItems.length - OBSERVER_FRESH_TAIL_COUNT);
+      // Exclude the fresh tail using the same count as the compaction engine.
+      const freshTailCount = Math.max(0, this.config.freshTailCount);
+      const tailStart = Math.max(0, allRawItems.length - freshTailCount);
       const compactableItems = allRawItems.slice(0, tailStart);
 
       if (compactableItems.length === 0) {
@@ -326,7 +288,6 @@ export class CompressionObserver {
         return;
       }
 
-      // Success — reset failure counter.
       this.consecutiveFailures = 0;
 
       this.cache.set(conversationId, {
@@ -342,12 +303,11 @@ export class CompressionObserver {
         `[compression-observer] updated cache for conversation=${conversationId} ` +
           `sourceTokens=${totalSourceTokens} summaryTokens=${summaryTokens} ` +
           `ratio=${(summaryTokens / totalSourceTokens).toFixed(3)} ` +
-          `messages=${compactableItems.length} tailExcluded=${allRawItems.length - compactableItems.length} ` +
+          `messages=${compactableItems.length} freshTailCount=${freshTailCount} ` +
           `hasMixedContext=${hasMixedContext}`,
       );
     } catch (err) {
       this.consecutiveFailures++;
-
       if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
         this.cooldownUntil = Date.now() + FAILURE_COOLDOWN_MS;
         log.warn(
