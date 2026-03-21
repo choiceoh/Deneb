@@ -12,7 +12,14 @@ import type { DenebConfig } from "../../config/config.js";
 import { recordSessionMetaFromInbound, resolveStorePath } from "../../config/sessions.js";
 import { buildAgentSessionKey, type RoutePeer } from "../../routing/resolve-route.js";
 import { resolveThreadSessionKeys } from "../../routing/session-key.js";
-import { isWhatsAppGroupJid, normalizeWhatsAppTarget } from "../../whatsapp/normalize.js";
+// WhatsApp stub (module removed)
+function normalizeWhatsAppTarget(target: string): string {
+  return target;
+}
+function isWhatsAppGroupJid(_jid: string): boolean {
+  return false;
+}
+
 import type { ResolvedMessagingTarget } from "./target-resolver.js";
 
 export type OutboundSessionRoute = {

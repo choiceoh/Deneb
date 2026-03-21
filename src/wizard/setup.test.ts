@@ -37,7 +37,7 @@ const finalizeSetupWizard = vi.hoisted(() =>
     }
 
     if (options.opts.skipUi) {
-      return { launchedTui: false };
+      // TUI removed — no return value
     }
 
     const hatch = await options.prompter.select({
@@ -45,7 +45,7 @@ const finalizeSetupWizard = vi.hoisted(() =>
       options: [],
     });
     if (hatch !== "tui") {
-      return { launchedTui: false };
+      // TUI removed — no return value
     }
 
     let message: string | undefined;
@@ -57,7 +57,7 @@ const finalizeSetupWizard = vi.hoisted(() =>
     }
 
     await runTui({ deliver: false, message });
-    return { launchedTui: true };
+    // TUI removed — no return value
   }),
 );
 const listChannelPlugins = vi.hoisted(() => vi.fn(() => []));

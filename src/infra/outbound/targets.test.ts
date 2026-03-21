@@ -6,7 +6,13 @@ import type { DenebConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import { createOutboundTestPlugin, createTestRegistry } from "../../test-utils/channel-plugins.js";
-import { isWhatsAppGroupJid, normalizeWhatsAppTarget } from "../../whatsapp/normalize.js";
+// WhatsApp stub (module removed)
+function normalizeWhatsAppTarget(target: string): string {
+  return target;
+}
+function isWhatsAppGroupJid(_jid: string): boolean {
+  return false;
+}
 import {
   resolveHeartbeatDeliveryTarget,
   resolveOutboundTarget,

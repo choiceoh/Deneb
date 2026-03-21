@@ -582,7 +582,7 @@ export async function runSetupWizard(
   await writeConfigFile(nextConfig);
 
   const { finalizeSetupWizard } = await import("./setup.finalize.js");
-  const { launchedTui } = await finalizeSetupWizard({
+  await finalizeSetupWizard({
     flow,
     opts,
     baseConfig,
@@ -592,7 +592,5 @@ export async function runSetupWizard(
     prompter,
     runtime,
   });
-  if (launchedTui) {
-    return;
-  }
+  // TUI removed — always continue to post-onboard
 }
