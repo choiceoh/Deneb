@@ -1,180 +1,436 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isFileMissingError } from "./fs-utils.js";
 
-/**
- * Parsed section from a memory.md file.
- * Each section starts with a markdown heading (## or ###).
- */
-export type MemorySection = {
-  /** Heading level (2 for ##, 3 for ###, etc.) */
-  level: number;
-  /** Heading text without the # prefix */
-  title: string;
-  /** Full content of the section including the heading line */
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type MemoryImportance = "low" | "normal" | "high" | "critical";
+
+export type MemoryEntry = {
+  /** Short stable ID (first 8 chars of content hash) */
+  id: string;
+  /** ISO 8601 timestamp */
+  timestamp: string;
+  /** The memory content */
   content: string;
-  /** Zero-based line offset in the original file */
+  /** Categorization tags */
+  tags: string[];
+  /** Importance level for recall prioritization */
+  importance: MemoryImportance;
+};
+
+export type SaveResult = {
+  ok: true;
+  action: "created" | "updated" | "duplicate";
+  id: string;
+  file: string;
+  /** The entry that was written (or the existing duplicate) */
+  entry: MemoryEntry;
+};
+
+export type ForgetResult =
+  | { ok: true; removed: number; ids: string[] }
+  | { ok: false; reason: string };
+
+export type RecallResult = {
+  entries: MemoryEntry[];
+  total: number;
+  file: string;
+};
+
+export type MemorySection = {
+  level: number;
+  title: string;
+  content: string;
   startLine: number;
-  /** Zero-based line offset of the last line */
   endLine: number;
 };
 
-export type MemoryEntry = {
-  /** Timestamp when the entry was added (ISO 8601) */
-  timestamp: string;
-  /** The text content of the entry */
-  text: string;
-  /** Optional tags for categorization */
-  tags?: string[];
-};
-
-export type AddEntryOptions = {
-  /** Section title to add the entry under (created if missing) */
-  section?: string;
-  /** Optional tags for the entry */
-  tags?: string[];
-  /** Timestamp override (defaults to now) */
-  timestamp?: string;
-};
-
-export type UpdateSectionOptions = {
-  /** New content to replace the section body (heading preserved) */
-  content: string;
-  /** If true, append instead of replace */
-  append?: boolean;
-};
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
 const HEADING_RE = /^(#{1,6})\s+(.+)$/;
-const ENTRY_TIMESTAMP_RE = /^- \*\*(\d{4}-\d{2}-\d{2}T[\d:.Z+-]+)\*\*/;
 
-/**
- * Resolves the default memory.md file path for a workspace.
- * Prefers MEMORY.md if it exists, falls back to memory.md.
- */
-export async function resolveMemoryMdPath(workspaceDir: string): Promise<string> {
-  const upper = path.join(workspaceDir, "MEMORY.md");
-  try {
-    await fs.access(upper);
-    return upper;
-  } catch {
-    return path.join(workspaceDir, "memory.md");
+// Entry format: - [id:abcd1234] **2026-03-21T10:00:00Z** {high} content `tag1` `tag2`
+const ENTRY_RE =
+  /^- \[id:([a-f0-9]+)\] \*\*(\d{4}-\d{2}-\d{2}T[\d:.Z+-]+)\*\*(?:\s+\{(\w+)\})?\s+(.+)$/;
+
+const IMPORTANCE_ORDER: Record<MemoryImportance, number> = {
+  low: 0,
+  normal: 1,
+  high: 2,
+  critical: 3,
+};
+
+const READ_ONLY_FILES = new Set(["memory.md", "soul.md", "tools.md", "agents.md"]);
+
+// ---------------------------------------------------------------------------
+// MemoryMdManager — AI-agent-first memory file manager
+// ---------------------------------------------------------------------------
+
+export class MemoryMdManager {
+  private readonly workspaceDir: string;
+  private readonly timezone: string;
+
+  constructor(workspaceDir: string, timezone = "UTC") {
+    this.workspaceDir = workspaceDir;
+    this.timezone = timezone;
   }
-}
 
-/**
- * Reads the memory.md file content. Returns empty string if the file does not exist.
- */
-export async function readMemoryMd(filePath: string): Promise<string> {
-  try {
-    return await fs.readFile(filePath, "utf-8");
-  } catch (err) {
-    if (isFileMissingError(err)) {
-      return "";
-    }
-    throw err;
-  }
-}
+  // ---- Save (create or upsert) -------------------------------------------
 
-/**
- * Writes content to a memory.md file, creating parent directories if needed.
- */
-export async function writeMemoryMd(filePath: string, content: string): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, content, "utf-8");
-}
-
-/**
- * Parses a memory.md file into sections based on markdown headings.
- */
-export function parseSections(content: string): MemorySection[] {
-  const lines = content.split("\n");
-  const sections: MemorySection[] = [];
-  let currentSection: MemorySection | null = null;
-
-  for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(HEADING_RE);
-    if (match) {
-      if (currentSection) {
-        currentSection.endLine = i - 1;
-        // Trim trailing blank lines from section content
-        currentSection.content = buildSectionContent(lines, currentSection.startLine, i - 1);
-        sections.push(currentSection);
-      }
-      currentSection = {
-        level: match[1].length,
-        title: match[2].trim(),
-        content: "",
-        startLine: i,
-        endLine: i,
+  /**
+   * Save a memory. Deduplicates by content similarity within the target file.
+   * If a similar entry exists, it is updated (upsert). Returns structured result
+   * so the AI agent knows exactly what happened.
+   */
+  async save(
+    content: string,
+    options: {
+      tags?: string[];
+      importance?: MemoryImportance;
+      /** Explicit target file (relative to workspace); defaults to today's daily file */
+      file?: string;
+      /** Timestamp override */
+      timestamp?: string;
+    } = {},
+  ): Promise<SaveResult> {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      return {
+        ok: true,
+        action: "duplicate",
+        id: "",
+        file: "",
+        entry: { id: "", timestamp: "", content: "", tags: [], importance: "normal" },
       };
     }
+
+    const timestamp = options.timestamp ?? new Date().toISOString();
+    const tags = normalizeTags(options.tags);
+    const importance = options.importance ?? "normal";
+    const id = contentId(trimmed);
+
+    const relPath = options.file ?? this.dailyFilePath();
+    this.assertWritable(relPath);
+    const absPath = path.join(this.workspaceDir, relPath);
+
+    const existing = await readFile(absPath);
+    const entries = parseAllEntries(existing);
+
+    // Exact duplicate check
+    const exactDup = entries.find((e) => e.id === id);
+    if (exactDup) {
+      return { ok: true, action: "duplicate", id, file: relPath, entry: exactDup };
+    }
+
+    // Fuzzy duplicate: if >80% token overlap, update the existing entry
+    const similar = findSimilarEntry(entries, trimmed);
+    if (similar) {
+      const updated: MemoryEntry = {
+        ...similar,
+        id,
+        timestamp,
+        content: trimmed,
+        tags: mergeTags(similar.tags, tags),
+        importance: maxImportance(similar.importance, importance),
+      };
+      const newContent = replaceEntryInContent(existing, similar.id, formatEntry(updated));
+      await writeFile(absPath, newContent);
+      return { ok: true, action: "updated", id, file: relPath, entry: updated };
+    }
+
+    // New entry — append
+    const entry: MemoryEntry = { id, timestamp, content: trimmed, tags, importance };
+    const appended = appendEntry(existing, formatEntry(entry));
+    await writeFile(absPath, appended);
+    return { ok: true, action: "created", id, file: relPath, entry };
   }
 
-  if (currentSection) {
-    currentSection.endLine = lines.length - 1;
-    currentSection.content = buildSectionContent(lines, currentSection.startLine, lines.length - 1);
-    sections.push(currentSection);
+  // ---- Recall (filtered list) --------------------------------------------
+
+  /**
+   * Recall memories from a specific file or today's daily file.
+   * Supports filtering by tags, importance, and text substring.
+   */
+  async recall(
+    filter: {
+      file?: string;
+      tags?: string[];
+      minImportance?: MemoryImportance;
+      contains?: string;
+      limit?: number;
+    } = {},
+  ): Promise<RecallResult> {
+    const relPath = filter.file ?? this.dailyFilePath();
+    const absPath = path.join(this.workspaceDir, relPath);
+    const content = await readFile(absPath);
+    let entries = parseAllEntries(content);
+
+    if (filter.tags?.length) {
+      const wanted = new Set(filter.tags.map((t) => t.toLowerCase()));
+      entries = entries.filter((e) => e.tags.some((t) => wanted.has(t.toLowerCase())));
+    }
+
+    if (filter.minImportance) {
+      const threshold = IMPORTANCE_ORDER[filter.minImportance];
+      entries = entries.filter((e) => IMPORTANCE_ORDER[e.importance] >= threshold);
+    }
+
+    if (filter.contains) {
+      const needle = filter.contains.toLowerCase();
+      entries = entries.filter((e) => e.content.toLowerCase().includes(needle));
+    }
+
+    const total = entries.length;
+    if (filter.limit && filter.limit > 0) {
+      entries = entries.slice(0, filter.limit);
+    }
+
+    return { entries, total, file: relPath };
   }
 
-  return sections;
-}
+  // ---- Recall All (across multiple daily files) --------------------------
 
-function buildSectionContent(lines: string[], start: number, end: number): string {
-  // Trim trailing blank lines
-  let trimmedEnd = end;
-  while (trimmedEnd > start && lines[trimmedEnd].trim() === "") {
-    trimmedEnd--;
+  /**
+   * Recall memories across all daily files in memory/.
+   * Scans all .md files under memory/ and merges results, sorted by timestamp descending.
+   */
+  async recallAll(
+    filter: {
+      tags?: string[];
+      minImportance?: MemoryImportance;
+      contains?: string;
+      limit?: number;
+    } = {},
+  ): Promise<{ entries: Array<MemoryEntry & { file: string }>; total: number }> {
+    const memoryDir = path.join(this.workspaceDir, "memory");
+    let files: string[];
+    try {
+      files = (await fs.readdir(memoryDir))
+        .filter((f) => f.endsWith(".md"))
+        .toSorted()
+        .toReversed();
+    } catch {
+      return { entries: [], total: 0 };
+    }
+
+    const allEntries: Array<MemoryEntry & { file: string }> = [];
+    for (const file of files) {
+      const relPath = `memory/${file}`;
+      const result = await this.recall({ ...filter, file: relPath, limit: undefined });
+      for (const entry of result.entries) {
+        allEntries.push({ ...entry, file: relPath });
+      }
+    }
+
+    // Sort by timestamp descending (newest first)
+    allEntries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+    const total = allEntries.length;
+    const limited =
+      filter.limit && filter.limit > 0 ? allEntries.slice(0, filter.limit) : allEntries;
+    return { entries: limited, total };
   }
-  return lines.slice(start, trimmedEnd + 1).join("\n");
+
+  // ---- Forget (remove entries) -------------------------------------------
+
+  /**
+   * Remove memories by ID, tag, or content match.
+   * At least one filter must be provided to prevent accidental mass deletion.
+   */
+  async forget(filter: {
+    ids?: string[];
+    tags?: string[];
+    contains?: string;
+    file?: string;
+  }): Promise<ForgetResult> {
+    if (!filter.ids?.length && !filter.tags?.length && !filter.contains) {
+      return { ok: false, reason: "At least one filter (ids, tags, or contains) is required." };
+    }
+
+    const relPath = filter.file ?? this.dailyFilePath();
+    this.assertWritable(relPath);
+    const absPath = path.join(this.workspaceDir, relPath);
+    const content = await readFile(absPath);
+    const entries = parseAllEntries(content);
+
+    const idsToRemove = new Set<string>();
+    for (const entry of entries) {
+      if (filter.ids?.includes(entry.id)) {
+        idsToRemove.add(entry.id);
+        continue;
+      }
+      if (filter.tags?.length) {
+        const entryTags = new Set(entry.tags.map((t) => t.toLowerCase()));
+        if (filter.tags.some((t) => entryTags.has(t.toLowerCase()))) {
+          idsToRemove.add(entry.id);
+          continue;
+        }
+      }
+      if (filter.contains && entry.content.toLowerCase().includes(filter.contains.toLowerCase())) {
+        idsToRemove.add(entry.id);
+      }
+    }
+
+    if (idsToRemove.size === 0) {
+      return { ok: true, removed: 0, ids: [] };
+    }
+
+    const lines = content.split("\n");
+    const filtered = lines.filter((line) => {
+      const parsed = parseEntryLine(line);
+      return !parsed || !idsToRemove.has(parsed.id);
+    });
+
+    const result = filtered
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trimEnd();
+    await writeFile(absPath, result ? `${result}\n` : "");
+    return { ok: true, removed: idsToRemove.size, ids: [...idsToRemove] };
+  }
+
+  // ---- Consolidate (merge old daily files) -------------------------------
+
+  /**
+   * Consolidate multiple daily files into a single summary file.
+   * Keeps only entries at or above the given importance threshold.
+   * Removes consolidated source files after merging.
+   */
+  async consolidate(options: {
+    /** Only consolidate files older than this date (YYYY-MM-DD). Defaults to 7 days ago. */
+    before?: string;
+    /** Minimum importance to keep. Defaults to "normal". */
+    minImportance?: MemoryImportance;
+    /** Target file. Defaults to memory/archive.md */
+    targetFile?: string;
+  }): Promise<{ merged: number; kept: number; removedFiles: string[] }> {
+    const before = options.before ?? daysAgo(7);
+    const minImportance = options.minImportance ?? "normal";
+    const threshold = IMPORTANCE_ORDER[minImportance];
+    const targetRel = options.targetFile ?? "memory/archive.md";
+    this.assertWritable(targetRel);
+
+    const memoryDir = path.join(this.workspaceDir, "memory");
+    let files: string[];
+    try {
+      files = (await fs.readdir(memoryDir)).filter((f) => f.endsWith(".md")).toSorted();
+    } catch {
+      return { merged: 0, kept: 0, removedFiles: [] };
+    }
+
+    // Filter to daily files before the cutoff (YYYY-MM-DD.md pattern)
+    const dailyFileRe = /^(\d{4}-\d{2}-\d{2})\.md$/;
+    const toConsolidate = files.filter((f) => {
+      const m = f.match(dailyFileRe);
+      return m && m[1] < before;
+    });
+
+    if (toConsolidate.length === 0) {
+      return { merged: 0, kept: 0, removedFiles: [] };
+    }
+
+    const keptEntries: MemoryEntry[] = [];
+    const removedFiles: string[] = [];
+
+    for (const file of toConsolidate) {
+      const absPath = path.join(memoryDir, file);
+      const content = await readFile(absPath);
+      const entries = parseAllEntries(content);
+
+      for (const entry of entries) {
+        if (IMPORTANCE_ORDER[entry.importance] >= threshold) {
+          keptEntries.push(entry);
+        }
+      }
+
+      await fs.unlink(absPath);
+      removedFiles.push(`memory/${file}`);
+    }
+
+    // Append kept entries to the target archive file
+    if (keptEntries.length > 0) {
+      const targetAbs = path.join(this.workspaceDir, targetRel);
+      let existing = await readFile(targetAbs);
+      for (const entry of keptEntries) {
+        existing = appendEntry(existing, formatEntry(entry));
+      }
+      await writeFile(targetAbs, existing);
+    }
+
+    return { merged: toConsolidate.length, kept: keptEntries.length, removedFiles };
+  }
+
+  // ---- Section helpers (for MEMORY.md reference reads) -------------------
+
+  /** Parse all sections from a memory file. */
+  async sections(file?: string): Promise<MemorySection[]> {
+    const relPath = file ?? "MEMORY.md";
+    const absPath = path.join(this.workspaceDir, relPath);
+    const content = await readFile(absPath);
+    return parseSections(content);
+  }
+
+  /** List section titles from a file. */
+  async listSections(file?: string): Promise<Array<{ level: number; title: string }>> {
+    const sections = await this.sections(file);
+    return sections.map((s) => ({ level: s.level, title: s.title }));
+  }
+
+  // ---- Helpers -----------------------------------------------------------
+
+  /** Resolve the daily file path for today in the configured timezone. */
+  dailyFilePath(nowMs?: number): string {
+    const dateStr = formatDateInTimezone(nowMs ?? Date.now(), this.timezone);
+    return `memory/${dateStr}.md`;
+  }
+
+  private assertWritable(relPath: string): void {
+    const basename = path.basename(relPath).toLowerCase();
+    if (READ_ONLY_FILES.has(basename)) {
+      throw new Error(
+        `${relPath} is read-only. Write to daily files (memory/YYYY-MM-DD.md) instead.`,
+      );
+    }
+  }
 }
 
-/**
- * Finds a section by title (case-insensitive).
- */
-export function findSection(sections: MemorySection[], title: string): MemorySection | undefined {
-  const normalized = title.toLowerCase().trim();
-  return sections.find((s) => s.title.toLowerCase().trim() === normalized);
-}
+// ---------------------------------------------------------------------------
+// Entry formatting / parsing
+// ---------------------------------------------------------------------------
 
-/**
- * Lists all section titles and their heading levels.
- */
-export function listSections(content: string): Array<{ level: number; title: string }> {
-  return parseSections(content).map((s) => ({ level: s.level, title: s.title }));
-}
-
-/**
- * Formats a memory entry as a markdown list item.
- */
 export function formatEntry(entry: MemoryEntry): string {
-  const tagSuffix = entry.tags?.length ? ` \`${entry.tags.join("` `")}\`` : "";
-  return `- **${entry.timestamp}** ${entry.text}${tagSuffix}`;
+  const importancePart = entry.importance !== "normal" ? ` {${entry.importance}}` : "";
+  const tagsPart = entry.tags.length > 0 ? ` ${entry.tags.map((t) => `\`${t}\``).join(" ")}` : "";
+  return `- [id:${entry.id}] **${entry.timestamp}**${importancePart} ${entry.content}${tagsPart}`;
 }
 
-/**
- * Parses a markdown list item back into a MemoryEntry (if it matches the entry format).
- */
-export function parseEntry(line: string): MemoryEntry | null {
-  const match = line.match(ENTRY_TIMESTAMP_RE);
-  if (!match) {
+export function parseEntryLine(line: string): MemoryEntry | null {
+  const m = line.match(ENTRY_RE);
+  if (!m) {
     return null;
   }
-  const timestamp = match[1];
-  const rest = line.slice(match[0].length).trim();
 
-  // Extract inline code tags from the end
+  const id = m[1];
+  const timestamp = m[2];
+  const importance = (m[3] as MemoryImportance | undefined) ?? "normal";
+  const rest = m[4];
+
+  // Extract trailing tags
   const tags: string[] = [];
   const tagRe = /`([^`]+)`/g;
-  let tagMatch: RegExpExecArray | null;
-  let textEnd = rest.length;
-
-  // Find tags at the end of the line
   const allTags: Array<{ tag: string; index: number; length: number }> = [];
+  let tagMatch: RegExpExecArray | null;
   while ((tagMatch = tagRe.exec(rest)) !== null) {
     allTags.push({ tag: tagMatch[1], index: tagMatch.index, length: tagMatch[0].length });
   }
 
-  // Only treat consecutive trailing backtick-tags as tags
+  let textEnd = rest.length;
   for (let i = allTags.length - 1; i >= 0; i--) {
     const t = allTags[i];
     const afterTag = t.index + t.length;
@@ -186,222 +442,184 @@ export function parseEntry(line: string): MemoryEntry | null {
     }
   }
 
-  const text = rest.slice(0, textEnd).trim();
-  return { timestamp, text, tags: tags.length > 0 ? tags : undefined };
+  const content = rest.slice(0, textEnd).trim();
+  return { id, timestamp, content, tags, importance };
 }
 
-/**
- * Adds an entry to a memory.md file under a specific section.
- * Creates the file and/or section if they don't exist.
- */
-export async function addEntry(
-  filePath: string,
-  text: string,
-  options: AddEntryOptions = {},
-): Promise<void> {
-  const content = await readMemoryMd(filePath);
-  const timestamp = options.timestamp ?? new Date().toISOString();
-  const entry = formatEntry({ timestamp, text, tags: options.tags });
-
-  const updated = insertEntryIntoContent(content, entry, options.section);
-  await writeMemoryMd(filePath, updated);
-}
-
-function insertEntryIntoContent(
-  content: string,
-  entry: string,
-  sectionTitle: string | undefined,
-): string {
-  if (!sectionTitle) {
-    // Append to end of file
-    const trimmed = content.trimEnd();
-    return trimmed ? `${trimmed}\n\n${entry}\n` : `${entry}\n`;
-  }
-
-  const sections = parseSections(content);
-  const existing = findSection(sections, sectionTitle);
-
-  if (existing) {
-    // Append entry to end of existing section
-    const lines = content.split("\n");
-    const insertAt = existing.endLine + 1;
-    lines.splice(insertAt, 0, entry);
-    return lines.join("\n");
-  }
-
-  // Create new section at end
-  const trimmed = content.trimEnd();
-  const newSection = `## ${sectionTitle}\n\n${entry}`;
-  return trimmed ? `${trimmed}\n\n${newSection}\n` : `${newSection}\n`;
-}
-
-/**
- * Updates an existing section's content.
- * If append is true, the new content is appended to the section body.
- * Otherwise, the section body is replaced (heading preserved).
- */
-export async function updateSection(
-  filePath: string,
-  sectionTitle: string,
-  options: UpdateSectionOptions,
-): Promise<boolean> {
-  const content = await readMemoryMd(filePath);
-  const sections = parseSections(content);
-  const section = findSection(sections, sectionTitle);
-
-  if (!section) {
-    return false;
-  }
-
+export function parseSections(content: string): MemorySection[] {
   const lines = content.split("\n");
+  const sections: MemorySection[] = [];
+  let current: MemorySection | null = null;
 
-  if (options.append) {
-    const insertAt = section.endLine + 1;
-    const newLines = options.content.split("\n");
-    lines.splice(insertAt, 0, ...newLines);
-  } else {
-    const bodyStart = section.startLine + 1;
-    const bodyLength = section.endLine - section.startLine;
-    const newBody = options.content.trimStart();
-    lines.splice(bodyStart, bodyLength, "", newBody);
-  }
-
-  await writeMemoryMd(filePath, lines.join("\n"));
-  return true;
-}
-
-/**
- * Removes a section by title from the memory.md file.
- * Returns true if the section was found and removed.
- */
-export async function removeSection(filePath: string, sectionTitle: string): Promise<boolean> {
-  const content = await readMemoryMd(filePath);
-  const sections = parseSections(content);
-  const section = findSection(sections, sectionTitle);
-
-  if (!section) {
-    return false;
-  }
-
-  const lines = content.split("\n");
-
-  // Find the end: either start of next same-or-higher-level section, or end of file
-  let removeEnd = lines.length;
-  for (const other of sections) {
-    if (other.startLine > section.startLine && other.level <= section.level) {
-      removeEnd = other.startLine;
-      break;
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(HEADING_RE);
+    if (match) {
+      if (current) {
+        current.endLine = i - 1;
+        current.content = trimmedSlice(lines, current.startLine, i - 1);
+        sections.push(current);
+      }
+      current = {
+        level: match[1].length,
+        title: match[2].trim(),
+        content: "",
+        startLine: i,
+        endLine: i,
+      };
     }
   }
 
-  // Remove trailing blank lines before the next section
-  while (removeEnd > section.startLine && lines[removeEnd - 1]?.trim() === "") {
-    removeEnd--;
+  if (current) {
+    current.endLine = lines.length - 1;
+    current.content = trimmedSlice(lines, current.startLine, lines.length - 1);
+    sections.push(current);
   }
 
-  lines.splice(section.startLine, removeEnd - section.startLine);
+  return sections;
+}
 
-  // Clean up double blank lines at splice point
-  const result = lines
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trimEnd();
-  await writeMemoryMd(filePath, result ? `${result}\n` : "");
-  return true;
+// ---------------------------------------------------------------------------
+// Pure helpers
+// ---------------------------------------------------------------------------
+
+export function contentId(text: string): string {
+  return crypto.createHash("sha256").update(text.trim().toLowerCase()).digest("hex").slice(0, 8);
+}
+
+function normalizeTags(tags?: string[]): string[] {
+  if (!tags?.length) {
+    return [];
+  }
+  return [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))];
+}
+
+function mergeTags(a: string[], b: string[]): string[] {
+  return [...new Set([...a, ...b])];
+}
+
+function maxImportance(a: MemoryImportance, b: MemoryImportance): MemoryImportance {
+  return IMPORTANCE_ORDER[a] >= IMPORTANCE_ORDER[b] ? a : b;
 }
 
 /**
- * Removes a specific entry by timestamp from the memory.md file.
- * Returns true if the entry was found and removed.
+ * Simple token-overlap similarity check.
+ * Returns the entry with >80% bigram overlap, or null.
  */
-export async function removeEntry(filePath: string, timestamp: string): Promise<boolean> {
-  const content = await readMemoryMd(filePath);
-  const lines = content.split("\n");
-  let found = false;
+function findSimilarEntry(entries: MemoryEntry[], newContent: string): MemoryEntry | null {
+  const newBigrams = toBigrams(newContent);
+  if (newBigrams.size === 0) {
+    return null;
+  }
 
-  const filtered = lines.filter((line) => {
-    const match = line.match(ENTRY_TIMESTAMP_RE);
-    if (match && match[1] === timestamp) {
-      found = true;
-      return false;
+  let bestMatch: MemoryEntry | null = null;
+  let bestScore = 0;
+
+  for (const entry of entries) {
+    const existingBigrams = toBigrams(entry.content);
+    if (existingBigrams.size === 0) {
+      continue;
     }
-    return true;
-  });
-
-  if (!found) {
-    return false;
+    let overlap = 0;
+    for (const bg of newBigrams) {
+      if (existingBigrams.has(bg)) {
+        overlap++;
+      }
+    }
+    const score = (2 * overlap) / (newBigrams.size + existingBigrams.size);
+    if (score > 0.8 && score > bestScore) {
+      bestScore = score;
+      bestMatch = entry;
+    }
   }
 
-  const result = filtered
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trimEnd();
-  await writeMemoryMd(filePath, result ? `${result}\n` : "");
-  return true;
+  return bestMatch;
 }
 
-/**
- * Lists all entries from a memory.md file, optionally filtered by section and/or tags.
- */
-export async function listEntries(
-  filePath: string,
-  filter?: { section?: string; tags?: string[] },
-): Promise<MemoryEntry[]> {
-  const content = await readMemoryMd(filePath);
+function toBigrams(text: string): Set<string> {
+  const tokens = text.toLowerCase().split(/\s+/).filter(Boolean);
+  const bigrams = new Set<string>();
+  for (let i = 0; i < tokens.length - 1; i++) {
+    bigrams.add(`${tokens[i]} ${tokens[i + 1]}`);
+  }
+  // Also add single tokens for short texts
+  if (tokens.length <= 3) {
+    for (const t of tokens) {
+      bigrams.add(t);
+    }
+  }
+  return bigrams;
+}
+
+function parseAllEntries(content: string): MemoryEntry[] {
   if (!content.trim()) {
     return [];
   }
-
-  let linesToScan: string[];
-
-  if (filter?.section) {
-    const sections = parseSections(content);
-    const section = findSection(sections, filter.section);
-    if (!section) {
-      return [];
-    }
-    linesToScan = section.content.split("\n");
-  } else {
-    linesToScan = content.split("\n");
-  }
-
   const entries: MemoryEntry[] = [];
-  for (const line of linesToScan) {
-    const entry = parseEntry(line);
+  for (const line of content.split("\n")) {
+    const entry = parseEntryLine(line);
     if (entry) {
-      if (filter?.tags?.length) {
-        const entryTags = new Set(entry.tags ?? []);
-        if (!filter.tags.some((t) => entryTags.has(t))) {
-          continue;
-        }
-      }
       entries.push(entry);
     }
   }
-
   return entries;
 }
 
-/**
- * Initializes a new memory.md file with a basic template.
- * Returns false if the file already exists (does not overwrite).
- */
-export async function initMemoryMd(
-  workspaceDir: string,
-  options?: { filename?: string; title?: string },
-): Promise<{ created: boolean; filePath: string }> {
-  const filename = options?.filename ?? "MEMORY.md";
-  const filePath = path.join(workspaceDir, filename);
-  const title = options?.title ?? "Memory";
+function replaceEntryInContent(content: string, oldId: string, newLine: string): string {
+  const lines = content.split("\n");
+  const result = lines.map((line) => {
+    const entry = parseEntryLine(line);
+    if (entry?.id === oldId) {
+      return newLine;
+    }
+    return line;
+  });
+  return result.join("\n");
+}
 
-  try {
-    await fs.access(filePath);
-    return { created: false, filePath };
-  } catch {
-    // File doesn't exist, create it
+function appendEntry(content: string, entryLine: string): string {
+  const trimmed = content.trimEnd();
+  return trimmed ? `${trimmed}\n${entryLine}\n` : `${entryLine}\n`;
+}
+
+function trimmedSlice(lines: string[], start: number, end: number): string {
+  let trimmedEnd = end;
+  while (trimmedEnd > start && lines[trimmedEnd].trim() === "") {
+    trimmedEnd--;
   }
+  return lines.slice(start, trimmedEnd + 1).join("\n");
+}
 
-  const template = `# ${title}\n\n## Notes\n\n## Decisions\n\n## Tasks\n`;
-  await writeMemoryMd(filePath, template);
-  return { created: true, filePath };
+function formatDateInTimezone(nowMs: number, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(nowMs));
+  const y = parts.find((p) => p.type === "year")?.value;
+  const m = parts.find((p) => p.type === "month")?.value;
+  const d = parts.find((p) => p.type === "day")?.value;
+  return y && m && d ? `${y}-${m}-${d}` : new Date(nowMs).toISOString().slice(0, 10);
+}
+
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+async function readFile(absPath: string): Promise<string> {
+  try {
+    return await fs.readFile(absPath, "utf-8");
+  } catch (err) {
+    if (isFileMissingError(err)) {
+      return "";
+    }
+    throw err;
+  }
+}
+
+async function writeFile(absPath: string, content: string): Promise<void> {
+  await fs.mkdir(path.dirname(absPath), { recursive: true });
+  await fs.writeFile(absPath, content, "utf-8");
 }
