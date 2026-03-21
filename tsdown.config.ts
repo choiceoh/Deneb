@@ -193,7 +193,6 @@ export default defineConfig([
   nodeBuildConfig({
     // Build core entrypoints, plugin-sdk subpaths, bundled plugin entrypoints,
     // and bundled hooks in one graph so runtime singletons are emitted once.
-    clean: true,
     entry: buildUnifiedDistEntries(),
     deps: {
       neverBundle: ["@lancedb/lancedb"],

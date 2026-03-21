@@ -42,6 +42,13 @@ function pruneStaleRuntimeSymlinks() {
 
 pruneStaleRuntimeSymlinks();
 
+// Remove stale dist/ output before rebuilding so the bundler never resolves
+// previously-emitted chunk references (e.g. paths-*.js) instead of .ts sources.
+const distDir = path.join(process.cwd(), "dist");
+if (fs.existsSync(distDir)) {
+  fs.rmSync(distDir, { recursive: true, force: true });
+}
+
 function findFatalUnresolvedImport(lines) {
   for (const line of lines) {
     if (!UNRESOLVED_IMPORT_RE.test(line)) {
