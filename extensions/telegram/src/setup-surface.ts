@@ -9,8 +9,13 @@ import {
   splitSetupEntries,
 } from "deneb/plugin-sdk/setup";
 import type { ChannelSetupDmPolicy, ChannelSetupWizard } from "deneb/plugin-sdk/setup";
+import { formatCliCommand, formatDocsLink } from "deneb/plugin-sdk/setup-tools";
 import { inspectTelegramAccount } from "./account-inspect.js";
-import { listTelegramAccountIds, resolveTelegramAccount } from "./accounts.js";
+import {
+  listTelegramAccountIds,
+  mergeTelegramAccountConfig,
+  resolveTelegramAccount,
+} from "./accounts.js";
 import {
   parseTelegramAllowFromId,
   promptTelegramAllowFromForAccount,
@@ -21,6 +26,29 @@ import {
 } from "./setup-core.js";
 
 const channel = "telegram" as const;
+
+function shouldShowTelegramDmAccessWarning(cfg: DenebConfig, accountId: string): boolean {
+  const merged = mergeTelegramAccountConfig(cfg, accountId);
+  const policy = merged.dmPolicy ?? "pairing";
+  const hasAllowFrom =
+    Array.isArray(merged.allowFrom) && merged.allowFrom.some((e) => String(e).trim());
+  return policy === "pairing" && !hasAllowFrom;
+}
+
+function buildTelegramDmAccessWarningLines(accountId: string): string[] {
+  const configBase =
+    accountId === DEFAULT_ACCOUNT_ID
+      ? "channels.telegram"
+      : `channels.telegram.accounts.${accountId}`;
+  return [
+    "Your bot is using DM policy: pairing.",
+    "Any Telegram user who discovers the bot can send pairing requests.",
+    "For private use, configure an allowlist with your Telegram user id:",
+    "  " + formatCliCommand(`deneb config set ${configBase}.dmPolicy "allowlist"`),
+    "  " + formatCliCommand(`deneb config set ${configBase}.allowFrom '["YOUR_USER_ID"]'`),
+    `Docs: ${formatDocsLink("/channels/pairing", "channels/pairing")}`,
+  ];
+}
 
 const dmPolicy: ChannelSetupDmPolicy = {
   label: "Telegram",
@@ -105,6 +133,15 @@ export const telegramSetupWizard: ChannelSetupWizard = {
       }),
   }),
   dmPolicy,
+  finalize: async ({ cfg, accountId, prompter }) => {
+    if (!shouldShowTelegramDmAccessWarning(cfg, accountId)) {
+      return;
+    }
+    await prompter.note(
+      buildTelegramDmAccessWarningLines(accountId).join("\n"),
+      "Telegram DM access warning",
+    );
+  },
   disable: (cfg) => setSetupChannelEnabled(cfg, channel, false),
 };
 

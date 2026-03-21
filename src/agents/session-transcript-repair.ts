@@ -195,6 +195,10 @@ export type ToolCallInputRepairOptions = {
   allowedToolNames?: Iterable<string>;
 };
 
+export type ToolUseResultPairingOptions = {
+  preserveErroredAssistantResults?: boolean;
+};
+
 export function stripToolResultDetails(messages: AgentMessage[]): AgentMessage[] {
   let touched = false;
   const out: AgentMessage[] = [];
@@ -333,8 +337,11 @@ export function sanitizeToolCallInputs(
   return repairToolCallInputs(messages, options).messages;
 }
 
-export function sanitizeToolUseResultPairing(messages: AgentMessage[]): AgentMessage[] {
-  return repairToolUseResultPairing(messages).messages;
+export function sanitizeToolUseResultPairing(
+  messages: AgentMessage[],
+  options?: ToolUseResultPairingOptions,
+): AgentMessage[] {
+  return repairToolUseResultPairing(messages, options).messages;
 }
 
 export type ToolUseRepairReport = {
@@ -345,7 +352,10 @@ export type ToolUseRepairReport = {
   moved: boolean;
 };
 
-export function repairToolUseResultPairing(messages: AgentMessage[]): ToolUseRepairReport {
+export function repairToolUseResultPairing(
+  messages: AgentMessage[],
+  _options?: ToolUseResultPairingOptions,
+): ToolUseRepairReport {
   try {
     // Anthropic (and Cloud Code Assist) reject transcripts where assistant tool calls are not
     // immediately followed by matching tool results. Session files can end up with results
@@ -396,18 +406,6 @@ export function repairToolUseResultPairing(messages: AgentMessage[]): ToolUseRep
       }
 
       const assistant = msg as Extract<AgentMessage, { role: "assistant" }>;
-
-      // Skip tool call extraction for aborted or errored assistant messages.
-      // When stopReason is "error" or "aborted", the tool_use blocks may be incomplete
-      // (e.g., partialJson: true) and should not have synthetic tool_results created.
-      // Creating synthetic results for incomplete tool calls causes API 400 errors:
-      // "unexpected tool_use_id found in tool_result blocks"
-      // See: https://github.com/deneb/deneb/issues/4597
-      const stopReason = (assistant as { stopReason?: string }).stopReason;
-      if (stopReason === "error" || stopReason === "aborted") {
-        out.push(msg);
-        continue;
-      }
 
       const toolCalls = extractToolCallsFromAssistant(assistant);
       if (toolCalls.length === 0) {
