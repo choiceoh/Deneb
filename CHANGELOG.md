@@ -1,5 +1,14 @@
 # Deneb Changelog
 
+## v3.2 — 2026-03-21
+
+ACP (Claude Code) 연동 활성화, 코드 구조 리팩토링.
+
+### 변경 사항
+
+- **ACP/Claude Code 연동** — acpx 플러그인 활성화, `acp.allowedAgents` 설정
+- **코드 리팩토링** — 대형 파일에서 9개 전용 모듈 추출 (PR #22)
+
 ## v3.160 — 2026-03-21
 
 Deneb 독립 포크. upstream 동기화 종료.
