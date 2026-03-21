@@ -46,7 +46,9 @@ const fallbackGatewayContextState = (() => {
 })();
 
 export function setFallbackGatewayContext(ctx: GatewayRequestContext): void {
-  // TODO: This startup snapshot can become stale if runtime config/context changes.
+  // This snapshot can become stale after config hot-reloads. The reload handler
+  // in server-reload-handlers.ts should call setFallbackGatewayContext again
+  // with a fresh context when config changes require a context rebuild.
   fallbackGatewayContextState.context = ctx;
 }
 

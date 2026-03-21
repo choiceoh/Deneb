@@ -7,11 +7,13 @@ Codebase analysis and prioritized improvement directions for OpenClaw.
 **Current state:** 112 `as any` casts across the codebase, with gateway files being top offenders.
 
 **Key files to address:**
+
 - `src/gateway/tools-invoke-http.ts` (4 casts)
 - `src/gateway/server.auth.shared.ts` (2 casts)
 - Various gateway test files
 
 **Recommendation:**
+
 - Replace `as any` with proper type assertions or generic parameters
 - Re-enable `typescript/no-unsafe-type-assertion` in `.oxlintrc.json` to prevent new occurrences
 - Start with production code paths (gateway, agents), then tackle test files
@@ -20,12 +22,12 @@ Codebase analysis and prioritized improvement directions for OpenClaw.
 
 Several files exceed the 500-700 LOC guideline significantly:
 
-| File | LOC | Suggested Action |
-|------|-----|-----------------|
+| File                                           | LOC   | Suggested Action                                                  |
+| ---------------------------------------------- | ----- | ----------------------------------------------------------------- |
 | `src/agents/pi-embedded-runner/run/attempt.ts` | 2,796 | Split into execution phases (setup, run, cleanup, error handling) |
-| `src/commands/doctor-config-flow.ts` | 2,114 | Extract per-provider config flows into separate modules |
-| `src/memory/qmd-manager.ts` | 2,066 | Extract indexing, querying, and lifecycle into sub-modules |
-| `src/context-engine/lcm/src/engine.ts` | 1,919 | Split context resolution from engine lifecycle |
+| `src/commands/doctor-config-flow.ts`           | 2,114 | Extract per-provider config flows into separate modules           |
+| `src/memory/qmd-manager.ts`                    | 2,066 | Extract indexing, querying, and lifecycle into sub-modules        |
+| `src/context-engine/lcm/src/engine.ts`         | 1,919 | Split context resolution from engine lifecycle                    |
 
 **Priority:** `attempt.ts` is the largest source file and a core execution path. Splitting it would improve testability and readability.
 
@@ -41,11 +43,13 @@ Active code TODOs that should be triaged:
 ## 4. Test Coverage Gaps (Medium Priority)
 
 **Skipped tests to re-evaluate:**
+
 - `src/memory/index.test.ts` — 3 skipped tests for embedding/hybrid search. These may represent untested production features.
 - `src/agents/pi-embedded-runner.bundle-mcp.e2e.test.ts` — Skipped MCP integration tests.
 - `src/secrets/resolve.test.ts` — Conditional skips that may hide regressions.
 
 **Large test files to split:**
+
 - `src/plugins/loader.test.ts` (3,725 LOC) — Split by plugin lifecycle phase
 - `src/security/audit.test.ts` (3,628 LOC) — Split by audit category
 
