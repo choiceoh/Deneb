@@ -49,6 +49,42 @@ if (fs.existsSync(distDir)) {
   fs.rmSync(distDir, { recursive: true, force: true });
 }
 
+// Remove stale compiled .js files from extensions/ source directories.
+// A previous build (or tsc run) may have emitted .js next to .ts sources;
+// rolldown prefers the literal .js when resolving `import "…/index.js"`,
+// which causes UNRESOLVED_IMPORT errors for chunk references that no longer exist.
+function removeStaleExtensionJsFiles() {
+  const extensionsDir = path.join(process.cwd(), "extensions");
+  if (!fs.existsSync(extensionsDir)) {
+    return;
+  }
+
+  function walk(dir) {
+    for (const dirent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, dirent.name);
+      if (dirent.isDirectory()) {
+        if (dirent.name === "node_modules") {
+          continue;
+        }
+        walk(fullPath);
+        continue;
+      }
+      if (!dirent.name.endsWith(".js")) {
+        continue;
+      }
+      // Only remove .js files that shadow a .ts source file.
+      const tsCounterpart = fullPath.replace(/\.js$/, ".ts");
+      if (fs.existsSync(tsCounterpart)) {
+        fs.rmSync(fullPath, { force: true });
+      }
+    }
+  }
+
+  walk(extensionsDir);
+}
+
+removeStaleExtensionJsFiles();
+
 function findFatalUnresolvedImport(lines) {
   for (const line of lines) {
     if (!UNRESOLVED_IMPORT_RE.test(line)) {
