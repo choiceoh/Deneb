@@ -136,6 +136,15 @@ const entries: SubCliEntry[] = [
     },
   },
   {
+    name: "autonomous",
+    description: "Manage the autonomous agent loop",
+    hasSubcommands: true,
+    register: async (program) => {
+      const mod = await import("../autonomous-cli.js");
+      mod.registerAutonomousCli(program);
+    },
+  },
+  {
     name: "cron",
     description: "Manage cron jobs via the Gateway scheduler",
     hasSubcommands: true,
