@@ -455,6 +455,29 @@ describe("discoverDenebPlugins", () => {
     expectEscapesPackageDiagnostic(diagnostics);
   });
 
+  it("reports missing extension entry with accurate diagnostic", async () => {
+    const stateDir = makeTempDir();
+    const globalExt = path.join(stateDir, "extensions", "missing-entry");
+    mkdirSafe(globalExt);
+
+    writePluginPackageManifest({
+      packageDir: globalExt,
+      packageName: "@deneb/missing-entry",
+      extensions: ["./index.js"],
+    });
+    // Do NOT create the ./index.js file
+
+    const result = await discoverWithStateDir(stateDir, {});
+
+    expect(result.candidates).toHaveLength(0);
+    expect(
+      result.diagnostics.some((entry) => entry.message.includes("extension entry not found")),
+    ).toBe(true);
+    expect(
+      result.diagnostics.some((entry) => entry.message.includes("escapes package directory")),
+    ).toBe(false);
+  });
+
   it("ignores package manifests that are hardlinked aliases", async () => {
     if (process.platform === "win32") {
       return;

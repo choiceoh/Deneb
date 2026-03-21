@@ -462,9 +462,13 @@ function resolvePackageEntrySource(params: {
     rejectHardlinks: params.rejectHardlinks ?? true,
   });
   if (!opened.ok) {
+    const message =
+      opened.reason === "path"
+        ? `extension entry not found: ${params.entryPath}`
+        : `extension entry escapes package directory: ${params.entryPath}`;
     params.diagnostics.push({
       level: "error",
-      message: `extension entry escapes package directory: ${params.entryPath}`,
+      message,
       source: params.sourceLabel,
     });
     return null;
