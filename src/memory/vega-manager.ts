@@ -25,6 +25,23 @@ const log = createSubsystemLogger("memory");
 
 const MAX_VEGA_OUTPUT_CHARS = 200_000;
 
+/** Vega capabilities reported by memory-version / memory-status (v1.48+). */
+export type VegaCapabilities = {
+  semanticSearch: boolean;
+  reranking: boolean;
+  rerankMode?: string;
+  inferenceBackend?: string;
+  searchModes: string[];
+  schemaVersion?: number;
+};
+
+/** Version info from a Vega v1.48+ instance. */
+export type VegaVersionInfo = {
+  version: string;
+  protocolVersion: number;
+  capabilities: VegaCapabilities;
+};
+
 export class VegaMemoryManager implements MemorySearchManager {
   static async create(params: {
     cfg: { workspaceDir: string };
@@ -49,6 +66,9 @@ export class VegaMemoryManager implements MemorySearchManager {
   private lastEmbedAt: number | null = null;
   private closed = false;
 
+  /** Cached Vega version info (populated on first status refresh). */
+  private vegaVersion: VegaVersionInfo | null = null;
+
   private constructor(params: {
     workspaceDir: string;
     agentId: string;
@@ -60,10 +80,17 @@ export class VegaMemoryManager implements MemorySearchManager {
     this.env = {
       ...process.env,
       NO_COLOR: "1",
+      // Pass through user-configured env vars for Vega subprocess
+      ...params.resolved.env,
     };
   }
 
   private async initialize(): Promise<void> {
+    // Probe Vega version in background (non-blocking)
+    void this.probeVersion().catch((err) => {
+      log.warn(`vega version probe failed: ${String(err)}`);
+    });
+
     if (this.vega.update.onBoot) {
       void this.runUpdate("boot").catch((err) => {
         log.warn(`vega boot update failed: ${String(err)}`);
@@ -100,10 +127,14 @@ export class VegaMemoryManager implements MemorySearchManager {
     );
 
     try {
-      const result = await this.runVega(
-        ["memory-search", trimmed, "--json", "--limit", String(limit)],
-        { timeoutMs: this.vega.limits.timeoutMs },
-      );
+      const args = ["memory-search", trimmed, "--json", "--limit", String(limit)];
+
+      // Pass searchMode if Vega supports it (v1.48+ or always — older Vega ignores unknown flags)
+      if (this.vega.searchMode) {
+        args.push("--mode", this.vega.searchMode);
+      }
+
+      const result = await this.runVega(args, { timeoutMs: this.vega.limits.timeoutMs });
 
       const parsed = this.parseSearchResults(result.stdout);
       const minScore = opts?.minScore ?? 0;
@@ -188,6 +219,23 @@ export class VegaMemoryManager implements MemorySearchManager {
     try {
       const result = await this.runVega(["memory-status", "--json"], { timeoutMs: 10_000 });
       const parsed = this.parseStatusResponse(result.stdout);
+
+      // Extract version info if present (v1.48+)
+      if (parsed.version) {
+        this.vegaVersion = {
+          version: parsed.version,
+          protocolVersion: parsed.protocolVersion ?? 0,
+          capabilities: parsed.capabilities ?? {
+            semanticSearch: false,
+            reranking: false,
+            searchModes: ["search"],
+          },
+        };
+      }
+
+      const semanticAvailable =
+        this.vegaVersion?.capabilities.semanticSearch ?? parsed.embedded !== undefined;
+
       this.cachedStatus = {
         backend: "vega",
         provider: "vega",
@@ -195,7 +243,7 @@ export class VegaMemoryManager implements MemorySearchManager {
         files: parsed.files ?? 0,
         chunks: parsed.chunks ?? 0,
         workspaceDir: this.workspaceDir,
-        vector: { enabled: true, available: true },
+        vector: { enabled: true, available: semanticAvailable },
         sources: ["memory"],
         dirty: false,
         custom: {
@@ -203,6 +251,12 @@ export class VegaMemoryManager implements MemorySearchManager {
             lastUpdateAt: this.lastUpdateAt,
             dbPath: parsed.dbPath,
             embedded: parsed.embedded,
+            // v1.48+: extended info
+            version: this.vegaVersion?.version,
+            protocolVersion: this.vegaVersion?.protocolVersion,
+            capabilities: this.vegaVersion?.capabilities,
+            models: parsed.models,
+            counts: parsed.counts,
           },
         },
       };
@@ -213,6 +267,11 @@ export class VegaMemoryManager implements MemorySearchManager {
 
   status(): MemoryProviderStatus {
     return this.ensureStatus();
+  }
+
+  /** Return cached Vega version info, or null if not yet probed. */
+  getVegaVersion(): VegaVersionInfo | null {
+    return this.vegaVersion;
   }
 
   async sync(params?: {
@@ -231,10 +290,17 @@ export class VegaMemoryManager implements MemorySearchManager {
   }
 
   async probeEmbeddingAvailability(): Promise<MemoryEmbeddingProbeResult> {
+    // Use cached capabilities if available
+    if (this.vegaVersion?.capabilities.semanticSearch !== undefined) {
+      return { ok: this.vegaVersion.capabilities.semanticSearch };
+    }
     return { ok: true };
   }
 
   async probeVectorAvailability(): Promise<boolean> {
+    if (this.vegaVersion?.capabilities.semanticSearch !== undefined) {
+      return this.vegaVersion.capabilities.semanticSearch;
+    }
     return true;
   }
 
@@ -250,6 +316,46 @@ export class VegaMemoryManager implements MemorySearchManager {
   }
 
   // ── Private helpers ──
+
+  /**
+   * Probe Vega version via the lightweight memory-version command.
+   * Falls back to memory-status if memory-version is not available (pre-v1.48).
+   */
+  private async probeVersion(): Promise<void> {
+    try {
+      const result = await this.runVega(["memory-version", "--json"], { timeoutMs: 5_000 });
+      const parsed = this.parseVersionResponse(result.stdout);
+      if (parsed) {
+        this.vegaVersion = parsed;
+        log.info(
+          `vega version: ${parsed.version} (protocol=${parsed.protocolVersion}, semantic=${String(parsed.capabilities.semanticSearch)})`,
+        );
+        return;
+      }
+    } catch {
+      // memory-version not available — fall through
+    }
+
+    // Fallback: extract version from memory-status (v1.48+)
+    try {
+      const result = await this.runVega(["memory-status", "--json"], { timeoutMs: 10_000 });
+      const parsed = this.parseStatusResponse(result.stdout);
+      if (parsed.version) {
+        this.vegaVersion = {
+          version: parsed.version,
+          protocolVersion: parsed.protocolVersion ?? 0,
+          capabilities: parsed.capabilities ?? {
+            semanticSearch: false,
+            reranking: false,
+            searchModes: ["search"],
+          },
+        };
+        log.info(`vega version (via status): ${parsed.version}`);
+      }
+    } catch {
+      log.warn("vega version probe failed (both memory-version and memory-status)");
+    }
+  }
 
   private async runVega(
     args: string[],
@@ -379,12 +485,61 @@ export class VegaMemoryManager implements MemorySearchManager {
     return clamped;
   }
 
+  private parseVersionResponse(stdout: string): VegaVersionInfo | null {
+    const trimmed = stdout.trim();
+    if (!trimmed) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!parsed || typeof parsed !== "object" || typeof parsed.version !== "string") {
+        return null;
+      }
+      return {
+        version: parsed.version,
+        protocolVersion: typeof parsed.protocolVersion === "number" ? parsed.protocolVersion : 0,
+        capabilities: this.parseCapabilities(parsed.capabilities),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private parseCapabilities(raw: unknown): VegaCapabilities {
+    const defaults: VegaCapabilities = {
+      semanticSearch: false,
+      reranking: false,
+      searchModes: ["search"],
+    };
+    if (!raw || typeof raw !== "object") {
+      return defaults;
+    }
+    const obj = raw as Record<string, unknown>;
+    return {
+      semanticSearch: typeof obj.semanticSearch === "boolean" ? obj.semanticSearch : false,
+      reranking: typeof obj.reranking === "boolean" ? obj.reranking : false,
+      rerankMode: typeof obj.rerankMode === "string" ? obj.rerankMode : undefined,
+      inferenceBackend:
+        typeof obj.inferenceBackend === "string" ? obj.inferenceBackend : undefined,
+      searchModes: Array.isArray(obj.searchModes)
+        ? obj.searchModes.filter((s): s is string => typeof s === "string")
+        : ["search"],
+      schemaVersion: typeof obj.schemaVersion === "number" ? obj.schemaVersion : undefined,
+    };
+  }
+
   private parseStatusResponse(stdout: string): {
     files?: number;
     chunks?: number;
     embedded?: number;
     model?: string;
     dbPath?: string;
+    // v1.48+ fields
+    version?: string;
+    protocolVersion?: number;
+    capabilities?: VegaCapabilities;
+    models?: Record<string, string | null>;
+    counts?: Record<string, number>;
   } {
     const trimmed = stdout.trim();
     if (!trimmed) {
@@ -401,6 +556,22 @@ export class VegaMemoryManager implements MemorySearchManager {
         embedded: typeof parsed.embedded === "number" ? parsed.embedded : undefined,
         model: typeof parsed.model === "string" ? parsed.model : undefined,
         dbPath: typeof parsed.dbPath === "string" ? parsed.dbPath : undefined,
+        // v1.48+ extended fields
+        version: typeof parsed.version === "string" ? parsed.version : undefined,
+        protocolVersion:
+          typeof parsed.protocolVersion === "number" ? parsed.protocolVersion : undefined,
+        capabilities:
+          parsed.capabilities && typeof parsed.capabilities === "object"
+            ? this.parseCapabilities(parsed.capabilities)
+            : undefined,
+        models:
+          parsed.models && typeof parsed.models === "object"
+            ? (parsed.models as Record<string, string | null>)
+            : undefined,
+        counts:
+          parsed.counts && typeof parsed.counts === "object"
+            ? (parsed.counts as Record<string, number>)
+            : undefined,
       };
     } catch {
       log.warn("vega status returned invalid JSON");

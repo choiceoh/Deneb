@@ -11,6 +11,8 @@ export type MemoryConfig = {
   vega?: MemoryVegaConfig;
 };
 
+export type MemoryVegaSearchMode = "query" | "search" | "vsearch";
+
 export type MemoryVegaConfig = {
   /** Path to the vega binary (default: "vega") */
   command?: string;
@@ -19,6 +21,10 @@ export type MemoryVegaConfig = {
   update?: MemoryVegaUpdateConfig;
   limits?: MemoryVegaLimitsConfig;
   scope?: SessionSendPolicyConfig;
+  /** Search mode: "search" (fast FTS), "vsearch" (vector only), "query" (hybrid+rerank, default) */
+  searchMode?: MemoryVegaSearchMode;
+  /** Extra environment variables passed to the Vega subprocess */
+  env?: Record<string, string>;
 };
 
 export type MemoryVegaIndexPath = {
