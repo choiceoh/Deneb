@@ -81,16 +81,13 @@ export async function noteMacLaunchctlGatewayEnvOverrides(
     const lines = [
       "- Deprecated launchctl environment variables detected (ignored).",
       ...deprecatedLaunchctlEntries.map(
-        ([key]) =>
-          `- \`${key}\` is set; use \`DENEB_${key.slice(key.indexOf("_") + 1)}\` instead.`,
+        ([key]) => `- \`${key}\` is set; use \`DENEB_${key.slice(key.indexOf("_") + 1)}\` instead.`,
       ),
     ];
     (deps?.noteFn ?? note)(lines.join("\n"), "Gateway (macOS)");
   }
 
-  const tokenEntries = [
-    ["DENEB_GATEWAY_TOKEN", await getenv("DENEB_GATEWAY_TOKEN")],
-  ] as const;
+  const tokenEntries = [["DENEB_GATEWAY_TOKEN", await getenv("DENEB_GATEWAY_TOKEN")]] as const;
   const passwordEntries = [
     ["DENEB_GATEWAY_PASSWORD", await getenv("DENEB_GATEWAY_PASSWORD")],
   ] as const;

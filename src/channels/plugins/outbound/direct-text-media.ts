@@ -157,10 +157,7 @@ export function createDirectTextMediaOutbound<
 >(params: {
   channel: "imessage" | "signal";
   resolveSender: (deps: OutboundSendDeps | undefined) => DirectSendFn<TOpts, TResult>;
-  resolveMaxBytes: (params: {
-    cfg: DenebConfig;
-    accountId?: string | null;
-  }) => number | undefined;
+  resolveMaxBytes: (params: { cfg: DenebConfig; accountId?: string | null }) => number | undefined;
   buildTextOptions: (params: DirectSendOptions) => TOpts;
   buildMediaOptions: (params: DirectSendOptions) => TOpts;
 }): ChannelOutboundAdapter {

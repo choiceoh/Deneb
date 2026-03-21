@@ -29,9 +29,7 @@ describe("bonjour-discovery", () => {
         }
         if (domain === WIDE_AREA_DOMAIN) {
           return {
-            stdout: [`Add 2 3 ${WIDE_AREA_DOMAIN} _deneb-gw._tcp. Tailnet Gateway`, ""].join(
-              "\n",
-            ),
+            stdout: [`Add 2 3 ${WIDE_AREA_DOMAIN} _deneb-gw._tcp. Tailnet Gateway`, ""].join("\n"),
             stderr: "",
             code: 0,
             signal: null,

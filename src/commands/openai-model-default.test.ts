@@ -37,10 +37,7 @@ function expectPrimaryModelChanged(
   expect(applied.next.agents?.defaults?.model).toEqual({ primary });
 }
 
-function expectConfigUnchanged(
-  applied: { changed: boolean; next: DenebConfig },
-  cfg: DenebConfig,
-) {
+function expectConfigUnchanged(applied: { changed: boolean; next: DenebConfig }, cfg: DenebConfig) {
   expect(applied.changed).toBe(false);
   expect(applied.next).toEqual(cfg);
 }

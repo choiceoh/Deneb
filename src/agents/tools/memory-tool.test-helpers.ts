@@ -24,9 +24,7 @@ export function createMemorySearchToolOrThrow(params?: {
   return tool;
 }
 
-export function createMemoryGetToolOrThrow(
-  config: DenebConfig = createDefaultMemoryToolConfig(),
-) {
+export function createMemoryGetToolOrThrow(config: DenebConfig = createDefaultMemoryToolConfig()) {
   const tool = createMemoryGetTool({ config });
   if (!tool) {
     throw new Error("tool missing");

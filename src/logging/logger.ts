@@ -3,10 +3,7 @@ import path from "node:path";
 import { Logger as TsLogger } from "tslog";
 import { getCommandPathWithRootOptions } from "../cli/argv.js";
 import type { DenebConfig } from "../config/types.js";
-import {
-  POSIX_DENEB_TMP_DIR,
-  resolvePreferredDenebTmpDir,
-} from "../infra/tmp-deneb-dir.js";
+import { POSIX_DENEB_TMP_DIR, resolvePreferredDenebTmpDir } from "../infra/tmp-deneb-dir.js";
 import { readLoggingConfig } from "./config.js";
 import type { ConsoleStyle } from "./console.js";
 import { resolveEnvLogLevelOverride } from "./env-log-level.js";

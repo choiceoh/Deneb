@@ -81,9 +81,7 @@ export async function runGatewayLoop(params: {
         `full process restart failed (${respawn.detail ?? "unknown error"}); falling back to in-process restart`,
       );
     } else {
-      gatewayLog.info(
-        `restart mode: in-process restart (${respawn.detail ?? "DENEB_NO_RESPAWN"})`,
-      );
+      gatewayLog.info(`restart mode: in-process restart (${respawn.detail ?? "DENEB_NO_RESPAWN"})`);
     }
     if (hadLock && !(await reacquireLockForInProcessRestart())) {
       return;

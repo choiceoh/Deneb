@@ -315,9 +315,7 @@ describeLive("live models (profile keys)", () => {
       const cfg = loadConfig();
       await ensureDenebModelsJson(cfg);
       if (!DIRECT_ENABLED) {
-        logProgress(
-          "[live-models] skipping (set DENEB_LIVE_MODELS=modern|all|<list>; all=modern)",
-        );
+        logProgress("[live-models] skipping (set DENEB_LIVE_MODELS=modern|all|<list>; all=modern)");
         return;
       }
       const anthropicKeys = collectAnthropicApiKeys();

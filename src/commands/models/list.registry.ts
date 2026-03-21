@@ -19,11 +19,7 @@ import {
 import type { ModelRow } from "./list.types.js";
 import { isLocalBaseUrl, modelKey } from "./shared.js";
 
-const hasAuthForProvider = (
-  provider: string,
-  cfg?: DenebConfig,
-  authStore?: AuthProfileStore,
-) => {
+const hasAuthForProvider = (provider: string, cfg?: DenebConfig, authStore?: AuthProfileStore) => {
   if (!cfg || !authStore) {
     return false;
   }
@@ -96,10 +92,7 @@ function loadAvailableModels(registry: ModelRegistry): Model<Api>[] {
   }
 }
 
-export async function loadModelRegistry(
-  _cfg: DenebConfig,
-  _opts?: { sourceConfig?: DenebConfig },
-) {
+export async function loadModelRegistry(_cfg: DenebConfig, _opts?: { sourceConfig?: DenebConfig }) {
   const agentDir = resolveDenebAgentDir();
   const authStorage = discoverAuthStorage(agentDir);
   const registry = discoverModels(authStorage, agentDir);

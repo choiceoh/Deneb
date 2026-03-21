@@ -48,10 +48,7 @@ function createPerplexityConfig(apiKey: string, enabled?: boolean): DenebConfig 
   };
 }
 
-async function runBlankPerplexityKeyEntry(
-  apiKey: string,
-  enabled?: boolean,
-): Promise<DenebConfig> {
+async function runBlankPerplexityKeyEntry(apiKey: string, enabled?: boolean): Promise<DenebConfig> {
   const cfg = createPerplexityConfig(apiKey, enabled);
   const { prompter } = createPrompter({
     selectValue: "perplexity",

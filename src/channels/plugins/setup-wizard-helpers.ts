@@ -1125,10 +1125,7 @@ export async function promptParsedAllowFromForScopedChannel(params: {
   message: string;
   placeholder: string;
   parseEntries: (raw: string) => ParsedAllowFromResult;
-  getExistingAllowFrom: (params: {
-    cfg: DenebConfig;
-    accountId: string;
-  }) => Array<string | number>;
+  getExistingAllowFrom: (params: { cfg: DenebConfig; accountId: string }) => Array<string | number>;
 }): Promise<DenebConfig> {
   return await promptParsedAllowFromForAccount({
     cfg: params.cfg,

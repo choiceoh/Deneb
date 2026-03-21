@@ -144,10 +144,7 @@ export function resolveAgentConfig(
   };
 }
 
-export function resolveAgentSkillsFilter(
-  cfg: DenebConfig,
-  agentId: string,
-): string[] | undefined {
+export function resolveAgentSkillsFilter(cfg: DenebConfig, agentId: string): string[] | undefined {
   return normalizeSkillFilter(resolveAgentConfig(cfg, agentId)?.skills);
 }
 
@@ -292,10 +289,7 @@ function isPathWithinRoot(candidatePath: string, rootPath: string): boolean {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-export function resolveAgentIdsByWorkspacePath(
-  cfg: DenebConfig,
-  workspacePath: string,
-): string[] {
+export function resolveAgentIdsByWorkspacePath(cfg: DenebConfig, workspacePath: string): string[] {
   const normalizedWorkspacePath = normalizePathForComparison(workspacePath);
   const ids = listAgentIds(cfg);
   const matches: Array<{ id: string; workspaceDir: string; order: number }> = [];

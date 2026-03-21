@@ -847,20 +847,17 @@ describe("onboard (non-interactive): provider auth", () => {
   });
 
   it("fails custom provider auth when compatibility is invalid", async () => {
-    await withOnboardEnv(
-      "deneb-onboard-custom-provider-invalid-compat-",
-      async ({ runtime }) => {
-        await expect(
-          runNonInteractiveSetupWithDefaults(runtime, {
-            authChoice: "custom-api-key",
-            customBaseUrl: "https://models.custom.local/v1",
-            customModelId: "local-large",
-            customCompatibility: "xmlrpc",
-            skipSkills: true,
-          }),
-        ).rejects.toThrow('Invalid --custom-compatibility (use "openai" or "anthropic").');
-      },
-    );
+    await withOnboardEnv("deneb-onboard-custom-provider-invalid-compat-", async ({ runtime }) => {
+      await expect(
+        runNonInteractiveSetupWithDefaults(runtime, {
+          authChoice: "custom-api-key",
+          customBaseUrl: "https://models.custom.local/v1",
+          customModelId: "local-large",
+          customCompatibility: "xmlrpc",
+          skipSkills: true,
+        }),
+      ).rejects.toThrow('Invalid --custom-compatibility (use "openai" or "anthropic").');
+    });
   });
 
   it("fails custom provider auth when explicit provider id is invalid", async () => {
@@ -880,16 +877,13 @@ describe("onboard (non-interactive): provider auth", () => {
   });
 
   it("fails inferred custom auth when required flags are incomplete", async () => {
-    await withOnboardEnv(
-      "deneb-onboard-custom-provider-missing-required-",
-      async ({ runtime }) => {
-        await expect(
-          runNonInteractiveSetupWithDefaults(runtime, {
-            customApiKey: "custom-test-key", // pragma: allowlist secret
-            skipSkills: true,
-          }),
-        ).rejects.toThrow('Auth choice "custom-api-key" requires a base URL and model ID.');
-      },
-    );
+    await withOnboardEnv("deneb-onboard-custom-provider-missing-required-", async ({ runtime }) => {
+      await expect(
+        runNonInteractiveSetupWithDefaults(runtime, {
+          customApiKey: "custom-test-key", // pragma: allowlist secret
+          skipSkills: true,
+        }),
+      ).rejects.toThrow('Auth choice "custom-api-key" requires a base URL and model ID.');
+    });
   });
 });

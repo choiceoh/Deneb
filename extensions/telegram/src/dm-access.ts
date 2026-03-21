@@ -1,9 +1,9 @@
 import type { Message } from "@grammyjs/types";
-import type { Bot } from "grammy";
 import { createChannelPairingChallengeIssuer } from "deneb/plugin-sdk/channel-pairing";
 import type { DmPolicy } from "deneb/plugin-sdk/config-runtime";
 import { upsertChannelPairingRequest } from "deneb/plugin-sdk/conversation-runtime";
 import { logVerbose } from "deneb/plugin-sdk/runtime-env";
+import type { Bot } from "grammy";
 import { withTelegramApiErrorLogging } from "./api-logging.js";
 import { resolveSenderAllowMatch, type NormalizedAllowFrom } from "./bot-access.js";
 

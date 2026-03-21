@@ -130,8 +130,7 @@ if (shardIndexOverride !== null && shardIndexOverride > shardCount) {
   process.exit(2);
 }
 const windowsCiArgs = isWindowsCi ? ["--dangerouslyIgnoreUnhandledErrors"] : [];
-const silentArgs =
-  process.env.DENEB_TEST_SHOW_PASSED_LOGS === "1" ? [] : ["--silent=passed-only"];
+const silentArgs = process.env.DENEB_TEST_SHOW_PASSED_LOGS === "1" ? [] : ["--silent=passed-only"];
 const rawPassthroughArgs = process.argv.slice(2);
 const passthroughArgs =
   rawPassthroughArgs[0] === "--" ? rawPassthroughArgs.slice(1) : rawPassthroughArgs;
@@ -249,10 +248,7 @@ const heavyUnitFileLimit = parseEnvNumber(
   "DENEB_TEST_HEAVY_UNIT_FILE_LIMIT",
   defaultHeavyUnitFileLimit,
 );
-const heavyUnitLaneCount = parseEnvNumber(
-  "DENEB_TEST_HEAVY_UNIT_LANES",
-  defaultHeavyUnitLaneCount,
-);
+const heavyUnitLaneCount = parseEnvNumber("DENEB_TEST_HEAVY_UNIT_LANES", defaultHeavyUnitLaneCount);
 const heavyUnitMinDurationMs = parseEnvNumber("DENEB_TEST_HEAVY_UNIT_MIN_MS", 1200);
 const timedHeavyUnitFiles =
   shouldSplitUnitRuns && heavyUnitFileLimit > 0

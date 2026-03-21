@@ -576,15 +576,7 @@ describe("setupChannels", () => {
   it("uses scoped plugin accounts when disabling a configured external channel", async () => {
     setActivePluginRegistry(createEmptyPluginRegistry());
     const setAccountEnabled = vi.fn(
-      ({
-        cfg,
-        accountId,
-        enabled,
-      }: {
-        cfg: DenebConfig;
-        accountId: string;
-        enabled: boolean;
-      }) => ({
+      ({ cfg, accountId, enabled }: { cfg: DenebConfig; accountId: string; enabled: boolean }) => ({
         ...cfg,
         channels: {
           ...cfg.channels,

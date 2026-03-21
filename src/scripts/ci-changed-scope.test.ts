@@ -75,15 +75,13 @@ describe("detectChangedScope", () => {
   });
 
   it("does not force macOS for generated protocol model-only changes", () => {
-    expect(detectChangedScope(["apps/macos/Sources/DenebProtocol/GatewayModels.swift"])).toEqual(
-      {
-        runNode: false,
-        runMacos: false,
-        runAndroid: false,
-        runWindows: false,
-        runSkillsPython: false,
-      },
-    );
+    expect(detectChangedScope(["apps/macos/Sources/DenebProtocol/GatewayModels.swift"])).toEqual({
+      runNode: false,
+      runMacos: false,
+      runAndroid: false,
+      runWindows: false,
+      runSkillsPython: false,
+    });
   });
 
   it("enables node lane for non-native non-doc files by fallback", () => {

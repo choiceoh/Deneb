@@ -127,9 +127,7 @@ async function isPluginConfigured(plugin: ChannelPlugin, cfg: DenebConfig): Prom
   return false;
 }
 
-export async function listConfiguredMessageChannels(
-  cfg: DenebConfig,
-): Promise<MessageChannelId[]> {
+export async function listConfiguredMessageChannels(cfg: DenebConfig): Promise<MessageChannelId[]> {
   const channels: MessageChannelId[] = [];
   for (const plugin of listChannelPlugins()) {
     if (!isKnownChannel(plugin.id)) {

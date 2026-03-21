@@ -211,9 +211,7 @@ export async function handleToolsInvokeHttpRequest(
     !rawSessionKey || rawSessionKey === "main" ? resolveMainSessionKey(cfg) : rawSessionKey;
 
   // Resolve message channel/account hints (optional headers) for policy inheritance.
-  const messageChannel = normalizeMessageChannel(
-    getHeader(req, "x-deneb-message-channel") ?? "",
-  );
+  const messageChannel = normalizeMessageChannel(getHeader(req, "x-deneb-message-channel") ?? "");
   const accountId = getHeader(req, "x-deneb-account-id")?.trim() || undefined;
   const agentTo = getHeader(req, "x-deneb-message-to")?.trim() || undefined;
   const agentThreadId = getHeader(req, "x-deneb-thread-id")?.trim() || undefined;

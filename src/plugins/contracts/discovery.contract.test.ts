@@ -149,9 +149,7 @@ describe("provider discovery contract", () => {
       };
     });
     vi.doMock("deneb/plugin-sdk/self-hosted-provider-setup", async () => {
-      const actual = await vi.importActual<object>(
-        "deneb/plugin-sdk/self-hosted-provider-setup",
-      );
+      const actual = await vi.importActual<object>("deneb/plugin-sdk/self-hosted-provider-setup");
       return {
         ...actual,
         buildVllmProvider: (...args: unknown[]) => buildVllmProviderMock(...args),

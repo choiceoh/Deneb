@@ -59,11 +59,7 @@ async function resolveChannelPluginForMode(
   };
 }
 
-function resolveAccountContext(
-  plugin: ChannelPlugin,
-  opts: ChannelAuthOptions,
-  cfg: DenebConfig,
-) {
+function resolveAccountContext(plugin: ChannelPlugin, opts: ChannelAuthOptions, cfg: DenebConfig) {
   const accountId = opts.account?.trim() || resolveChannelDefaultAccountId({ plugin, cfg });
   return { accountId };
 }

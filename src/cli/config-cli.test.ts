@@ -42,10 +42,7 @@ vi.mock("../runtime.js", () => ({
   },
 }));
 
-function buildSnapshot(params: {
-  resolved: DenebConfig;
-  config: DenebConfig;
-}): ConfigFileSnapshot {
+function buildSnapshot(params: { resolved: DenebConfig; config: DenebConfig }): ConfigFileSnapshot {
   return {
     path: "/tmp/deneb.json",
     exists: true,
@@ -392,9 +389,7 @@ describe("config cli", () => {
         "deneb config set channels.discord.token --ref-provider default --ref-source",
       );
       expect(helpText).toContain("--ref-id DISCORD_BOT_TOKEN");
-      expect(helpText).toContain(
-        "deneb config set --batch-file ./config-set.batch.json --dry-run",
-      );
+      expect(helpText).toContain("deneb config set --batch-file ./config-set.batch.json --dry-run");
     });
   });
 

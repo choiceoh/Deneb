@@ -159,9 +159,7 @@ export function collectPublishablePluginPackageErrors(
   const extensions = packageJson.deneb?.extensions ?? [];
 
   if (!packageName.startsWith("@deneb/")) {
-    errors.push(
-      `package name must start with "@deneb/"; found "${packageName || "<missing>"}".`,
-    );
+    errors.push(`package name must start with "@deneb/"; found "${packageName || "<missing>"}".`);
   }
   if (packageJson.private === true) {
     errors.push("package.json private must not be true.");

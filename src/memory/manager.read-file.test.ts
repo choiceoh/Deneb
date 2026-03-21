@@ -7,10 +7,7 @@ import { resetEmbeddingMocks } from "./embedding.test-mocks.js";
 import type { MemoryIndexManager } from "./index.js";
 import { getRequiredMemoryIndexManager } from "./test-manager-helpers.js";
 
-function createMemorySearchCfg(options: {
-  workspaceDir: string;
-  indexPath: string;
-}): DenebConfig {
+function createMemorySearchCfg(options: { workspaceDir: string; indexPath: string }): DenebConfig {
   return {
     agents: {
       defaults: {

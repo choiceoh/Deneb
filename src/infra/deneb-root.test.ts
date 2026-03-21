@@ -95,8 +95,7 @@ describe("resolveDenebPackageRoot", () => {
 
   beforeEach(async () => {
     vi.resetModules();
-    ({ resolveDenebPackageRoot, resolveDenebPackageRootSync } =
-      await import("./deneb-root.js"));
+    ({ resolveDenebPackageRoot, resolveDenebPackageRootSync } = await import("./deneb-root.js"));
     state.entries.clear();
     state.realpaths.clear();
     state.realpathErrors.clear();
@@ -147,9 +146,7 @@ describe("resolveDenebPackageRoot", () => {
     const moduleUrl = pathToFileURL(path.join(wrongPkgRoot, "dist", "index.js")).toString();
 
     expect(resolveDenebPackageRootSync({ moduleUrl, cwd: cwdPkgRoot })).toBe(cwdPkgRoot);
-    await expect(resolveDenebPackageRoot({ moduleUrl, cwd: cwdPkgRoot })).resolves.toBe(
-      cwdPkgRoot,
-    );
+    await expect(resolveDenebPackageRoot({ moduleUrl, cwd: cwdPkgRoot })).resolves.toBe(cwdPkgRoot);
   });
 
   it("ignores invalid moduleUrl values and falls back to cwd", async () => {

@@ -105,11 +105,7 @@ const buildAccountDetails = (params: {
   return details;
 };
 
-async function inspectChannelAccount(
-  plugin: ChannelPlugin,
-  cfg: DenebConfig,
-  accountId: string,
-) {
+async function inspectChannelAccount(plugin: ChannelPlugin, cfg: DenebConfig, accountId: string) {
   return (
     plugin.config.inspectAccount?.(cfg, accountId) ??
     (await inspectReadOnlyChannelAccount({

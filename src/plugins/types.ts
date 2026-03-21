@@ -233,9 +233,7 @@ export type ProviderAuthMethod = {
    */
   wizard?: ProviderPluginWizardSetup;
   run: (ctx: ProviderAuthContext) => Promise<ProviderAuthResult>;
-  runNonInteractive?: (
-    ctx: ProviderAuthMethodNonInteractiveContext,
-  ) => Promise<DenebConfig | null>;
+  runNonInteractive?: (ctx: ProviderAuthMethodNonInteractiveContext) => Promise<DenebConfig | null>;
 };
 
 export type ProviderCatalogOrder = "simple" | "profile" | "paired" | "late";

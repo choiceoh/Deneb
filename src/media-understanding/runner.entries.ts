@@ -616,9 +616,7 @@ export async function runCliEntry(params: {
     const stat = await fs.stat(pathResult.path);
     assertMinAudioSize({ size: stat.size, attachmentIndex: params.attachmentIndex });
   }
-  const outputDir = await fs.mkdtemp(
-    path.join(resolvePreferredDenebTmpDir(), "deneb-media-cli-"),
-  );
+  const outputDir = await fs.mkdtemp(path.join(resolvePreferredDenebTmpDir(), "deneb-media-cli-"));
   const mediaPath = pathResult.path;
   const outputBase = path.join(outputDir, path.parse(mediaPath).name);
 

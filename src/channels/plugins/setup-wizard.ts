@@ -64,10 +64,7 @@ export type ChannelSetupWizardEnvShortcut = {
   prompt: string;
   preferredEnvVar?: string;
   isAvailable: (params: { cfg: DenebConfig; accountId: string }) => boolean;
-  apply: (params: {
-    cfg: DenebConfig;
-    accountId: string;
-  }) => DenebConfig | Promise<DenebConfig>;
+  apply: (params: { cfg: DenebConfig; accountId: string }) => DenebConfig | Promise<DenebConfig>;
 };
 
 export type ChannelSetupWizardCredential = {
@@ -81,10 +78,7 @@ export type ChannelSetupWizardCredential = {
   keepPrompt: string;
   inputPrompt: string;
   allowEnv?: (params: { cfg: DenebConfig; accountId: string }) => boolean;
-  inspect: (params: {
-    cfg: DenebConfig;
-    accountId: string;
-  }) => ChannelSetupWizardCredentialState;
+  inspect: (params: { cfg: DenebConfig; accountId: string }) => ChannelSetupWizardCredentialState;
   shouldPrompt?: (params: {
     cfg: DenebConfig;
     accountId: string;

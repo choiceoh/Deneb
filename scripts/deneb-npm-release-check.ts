@@ -190,9 +190,7 @@ export function collectReleasePackageMetadataErrors(pkg: PackageJson): string[] 
     );
   }
   if (pkg.bin?.deneb !== "deneb.mjs") {
-    errors.push(
-      `package.json bin.deneb must be "deneb.mjs"; found "${pkg.bin?.deneb ?? ""}".`,
-    );
+    errors.push(`package.json bin.deneb must be "deneb.mjs"; found "${pkg.bin?.deneb ?? ""}".`);
   }
   if (pkg.peerDependencies?.["node-llama-cpp"] !== "3.16.2") {
     errors.push(

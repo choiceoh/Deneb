@@ -92,8 +92,7 @@ export function resolveGlobalInstallSpec(params: {
   env?: NodeJS.ProcessEnv;
 }): string {
   const override =
-    params.env?.DENEB_UPDATE_PACKAGE_SPEC?.trim() ||
-    process.env.DENEB_UPDATE_PACKAGE_SPEC?.trim();
+    params.env?.DENEB_UPDATE_PACKAGE_SPEC?.trim() || process.env.DENEB_UPDATE_PACKAGE_SPEC?.trim();
   if (override) {
     return override;
   }

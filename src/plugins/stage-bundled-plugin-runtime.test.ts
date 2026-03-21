@@ -190,11 +190,7 @@ describe("stageBundledPluginRuntime", () => {
     fs.mkdirSync(path.join(distPluginDir, "assets"), { recursive: true });
     fs.writeFileSync(
       path.join(distPluginDir, "package.json"),
-      JSON.stringify(
-        { name: "@deneb/diffs", deneb: { extensions: ["./index.js"] } },
-        null,
-        2,
-      ),
+      JSON.stringify({ name: "@deneb/diffs", deneb: { extensions: ["./index.js"] } }, null, 2),
       "utf8",
     );
     fs.writeFileSync(path.join(distPluginDir, "deneb.plugin.json"), "{}\n", "utf8");

@@ -132,9 +132,7 @@ function main() {
       }
     }
     if (legacyCompatOffenders.length > 0) {
-      console.error(
-        "Bundled plugin source files must not import legacy deneb/plugin-sdk/compat.",
-      );
+      console.error("Bundled plugin source files must not import legacy deneb/plugin-sdk/compat.");
       for (const file of legacyCompatOffenders.toSorted()) {
         const relative = path.relative(process.cwd(), file) || file;
         console.error(`- ${relative}`);

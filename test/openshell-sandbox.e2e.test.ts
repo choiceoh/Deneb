@@ -10,8 +10,7 @@ import { createSandboxTestContext } from "../src/agents/sandbox/test-fixtures.js
 
 const DENEB_OPENSHELL_E2E = process.env.DENEB_E2E_OPENSHELL === "1";
 const DENEB_OPENSHELL_E2E_TIMEOUT_MS = 12 * 60_000;
-const DENEB_OPENSHELL_COMMAND =
-  process.env.DENEB_E2E_OPENSHELL_COMMAND?.trim() || "openshell";
+const DENEB_OPENSHELL_COMMAND = process.env.DENEB_E2E_OPENSHELL_COMMAND?.trim() || "openshell";
 
 const CUSTOM_IMAGE_DOCKERFILE = `FROM python:3.13-slim
 

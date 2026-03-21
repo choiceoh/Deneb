@@ -11,9 +11,7 @@ function normalizeImageGenerationProviderId(id: string | undefined): string | un
   return normalized || undefined;
 }
 
-function resolvePluginImageGenerationProviders(
-  cfg?: DenebConfig,
-): ImageGenerationProviderPlugin[] {
+function resolvePluginImageGenerationProviders(cfg?: DenebConfig): ImageGenerationProviderPlugin[] {
   const active = getActivePluginRegistry();
   const registry =
     (active?.imageGenerationProviders?.length ?? 0) > 0 || !cfg
@@ -53,9 +51,7 @@ function buildProviderMaps(cfg?: DenebConfig): {
   return { canonical, aliases };
 }
 
-export function listImageGenerationProviders(
-  cfg?: DenebConfig,
-): ImageGenerationProviderPlugin[] {
+export function listImageGenerationProviders(cfg?: DenebConfig): ImageGenerationProviderPlugin[] {
   return [...buildProviderMaps(cfg).canonical.values()];
 }
 

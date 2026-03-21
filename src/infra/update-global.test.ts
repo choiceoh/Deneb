@@ -147,12 +147,7 @@ describe("update global helpers", () => {
       "-g",
       "deneb@latest",
     ]);
-    expect(globalInstallArgs("bun", "deneb@latest")).toEqual([
-      "bun",
-      "add",
-      "-g",
-      "deneb@latest",
-    ]);
+    expect(globalInstallArgs("bun", "deneb@latest")).toEqual(["bun", "add", "-g", "deneb@latest"]);
 
     expect(globalInstallFallbackArgs("npm", "deneb@latest")).toEqual([
       "npm",

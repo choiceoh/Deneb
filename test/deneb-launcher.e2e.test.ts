@@ -7,10 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 async function makeLauncherFixture(fixtureRoots: string[]): Promise<string> {
   const fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-launcher-"));
   fixtureRoots.push(fixtureRoot);
-  await fs.copyFile(
-    path.resolve(process.cwd(), "deneb.mjs"),
-    path.join(fixtureRoot, "deneb.mjs"),
-  );
+  await fs.copyFile(path.resolve(process.cwd(), "deneb.mjs"), path.join(fixtureRoot, "deneb.mjs"));
   await fs.mkdir(path.join(fixtureRoot, "dist"), { recursive: true });
   return fixtureRoot;
 }

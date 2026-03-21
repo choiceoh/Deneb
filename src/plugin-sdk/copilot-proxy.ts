@@ -2,8 +2,4 @@
 // Keep this list additive and scoped to symbols used under extensions/copilot-proxy.
 
 export { definePluginEntry } from "./core.js";
-export type {
-  DenebPluginApi,
-  ProviderAuthContext,
-  ProviderAuthResult,
-} from "../plugins/types.js";
+export type { DenebPluginApi, ProviderAuthContext, ProviderAuthResult } from "../plugins/types.js";

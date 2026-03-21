@@ -13,10 +13,7 @@ export function buildNpmResolutionInstallFields(
   return buildNpmResolutionFields(resolution);
 }
 
-export function recordPluginInstall(
-  cfg: DenebConfig,
-  update: PluginInstallUpdate,
-): DenebConfig {
+export function recordPluginInstall(cfg: DenebConfig, update: PluginInstallUpdate): DenebConfig {
   const { pluginId, ...record } = update;
   const installs = {
     ...cfg.plugins?.installs,

@@ -118,9 +118,7 @@ describe("doctor command", () => {
     expect(gatewayAuthNote).toBeTruthy();
     expect(String(gatewayAuthNote?.[0])).toContain("gateway.auth.mode is unset");
     expect(String(gatewayAuthNote?.[0])).toContain("deneb config set gateway.auth.mode token");
-    expect(String(gatewayAuthNote?.[0])).toContain(
-      "deneb config set gateway.auth.mode password",
-    );
+    expect(String(gatewayAuthNote?.[0])).toContain("deneb config set gateway.auth.mode password");
   });
 
   it("keeps doctor read-only when gateway token is SecretRef-managed but unresolved", async () => {

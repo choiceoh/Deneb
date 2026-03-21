@@ -1,10 +1,7 @@
 import type { Message } from "@grammyjs/types";
 import { shouldDebounceTextInbound } from "deneb/plugin-sdk/channel-runtime";
 import type { DenebConfig } from "deneb/plugin-sdk/config-runtime";
-import {
-  createInboundDebouncer,
-  resolveInboundDebounceMs,
-} from "deneb/plugin-sdk/reply-runtime";
+import { createInboundDebouncer, resolveInboundDebounceMs } from "deneb/plugin-sdk/reply-runtime";
 import { danger, logVerbose, warn } from "deneb/plugin-sdk/runtime-env";
 import {
   hasInboundMedia,

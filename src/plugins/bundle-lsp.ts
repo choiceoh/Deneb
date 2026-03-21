@@ -171,10 +171,10 @@ export function inspectBundleLspRuntimeSupport(params: {
   };
 }
 
-export function loadEnabledBundleLspConfig(params: {
-  workspaceDir: string;
-  cfg?: DenebConfig;
-}): { config: BundleLspConfig; diagnostics: Array<{ pluginId: string; message: string }> } {
+export function loadEnabledBundleLspConfig(params: { workspaceDir: string; cfg?: DenebConfig }): {
+  config: BundleLspConfig;
+  diagnostics: Array<{ pluginId: string; message: string }>;
+} {
   const registry = loadPluginManifestRegistry({
     workspaceDir: params.workspaceDir,
     config: params.cfg,

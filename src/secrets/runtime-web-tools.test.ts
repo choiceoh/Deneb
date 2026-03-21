@@ -121,10 +121,7 @@ async function runRuntimeWebTools(params: { config: DenebConfig; env?: NodeJS.Pr
   return { metadata, resolvedConfig, context };
 }
 
-function createProviderSecretRefConfig(
-  provider: ProviderUnderTest,
-  envRefId: string,
-): DenebConfig {
+function createProviderSecretRefConfig(provider: ProviderUnderTest, envRefId: string): DenebConfig {
   return asConfig({
     tools: {
       web: {

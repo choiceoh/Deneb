@@ -73,12 +73,8 @@ describe("browser server-context existing-session profile", () => {
       .mockResolvedValueOnce([
         { targetId: "7", title: "", url: "https://example.com", type: "page" },
       ])
-      .mockResolvedValueOnce([
-        { targetId: "8", title: "", url: "https://deneb.ai", type: "page" },
-      ])
-      .mockResolvedValueOnce([
-        { targetId: "8", title: "", url: "https://deneb.ai", type: "page" },
-      ])
+      .mockResolvedValueOnce([{ targetId: "8", title: "", url: "https://deneb.ai", type: "page" }])
+      .mockResolvedValueOnce([{ targetId: "8", title: "", url: "https://deneb.ai", type: "page" }])
       .mockResolvedValueOnce([
         { targetId: "7", title: "", url: "https://example.com", type: "page" },
       ]);

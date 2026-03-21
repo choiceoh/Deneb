@@ -1,6 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
-import { InputFile, webhookCallback } from "grammy";
 import type { DenebConfig } from "deneb/plugin-sdk/config-runtime";
 import { isDiagnosticsEnabled } from "deneb/plugin-sdk/infra-runtime";
 import { formatErrorMessage } from "deneb/plugin-sdk/infra-runtime";
@@ -14,6 +13,7 @@ import {
   startDiagnosticHeartbeat,
   stopDiagnosticHeartbeat,
 } from "deneb/plugin-sdk/text-runtime";
+import { InputFile, webhookCallback } from "grammy";
 import { resolveTelegramAllowedUpdates } from "./allowed-updates.js";
 import { withTelegramApiErrorLogging } from "./api-logging.js";
 import { createTelegramBot } from "./bot.js";

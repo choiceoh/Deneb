@@ -4,7 +4,6 @@ import type {
   ReactionType,
   ReactionTypeEmoji,
 } from "@grammyjs/types";
-import { type ApiClientOptions, Bot, HttpError, InputFile } from "grammy";
 import { loadConfig } from "deneb/plugin-sdk/config-runtime";
 import { resolveMarkdownTableMode } from "deneb/plugin-sdk/config-runtime";
 import { recordChannelActivity } from "deneb/plugin-sdk/infra-runtime";
@@ -20,6 +19,7 @@ import { logVerbose } from "deneb/plugin-sdk/runtime-env";
 import { createSubsystemLogger } from "deneb/plugin-sdk/runtime-env";
 import { redactSensitiveText } from "deneb/plugin-sdk/text-runtime";
 import { loadWebMedia } from "deneb/plugin-sdk/web-media";
+import { type ApiClientOptions, Bot, HttpError, InputFile } from "grammy";
 import { type ResolvedTelegramAccount, resolveTelegramAccount } from "./accounts.js";
 import { withTelegramApiErrorLogging } from "./api-logging.js";
 import { buildTelegramThreadParams, buildTypingThreadParams } from "./bot/helpers.js";

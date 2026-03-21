@@ -10,10 +10,7 @@ import {
   type DenebConfig,
 } from "deneb/plugin-sdk/account-resolution";
 import { isTruthyEnvValue } from "deneb/plugin-sdk/infra-runtime";
-import {
-  listBoundAccountIds,
-  resolveDefaultAgentBoundAccountId,
-} from "deneb/plugin-sdk/routing";
+import { listBoundAccountIds, resolveDefaultAgentBoundAccountId } from "deneb/plugin-sdk/routing";
 import { formatSetExplicitDefaultInstruction } from "deneb/plugin-sdk/routing";
 import { createSubsystemLogger } from "deneb/plugin-sdk/runtime-env";
 import type { TelegramAccountConfig, TelegramActionConfig } from "../runtime-api.js";

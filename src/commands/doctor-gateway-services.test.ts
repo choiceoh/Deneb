@@ -295,13 +295,7 @@ describe("maybeRepairGatewayServiceConfig", () => {
       issues: [],
     });
     mocks.buildGatewayInstallPlan.mockResolvedValue({
-      programArguments: [
-        "/usr/bin/node",
-        "/opt/deneb/dist/index.js",
-        "gateway",
-        "--port",
-        "18789",
-      ],
+      programArguments: ["/usr/bin/node", "/opt/deneb/dist/index.js", "gateway", "--port", "18789"],
       environment: {},
     });
     fsMocks.realpath.mockRejectedValue(new Error("no realpath"));

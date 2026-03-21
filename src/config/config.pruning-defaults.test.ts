@@ -8,11 +8,7 @@ import { withTempHome } from "./test-helpers.js";
 async function writeConfigForTest(home: string, config: unknown): Promise<void> {
   const configDir = path.join(home, ".deneb");
   await fs.mkdir(configDir, { recursive: true });
-  await fs.writeFile(
-    path.join(configDir, "deneb.json"),
-    JSON.stringify(config, null, 2),
-    "utf-8",
-  );
+  await fs.writeFile(path.join(configDir, "deneb.json"), JSON.stringify(config, null, 2), "utf-8");
 }
 
 async function loadConfigForHome(config: unknown) {

@@ -11,10 +11,10 @@ title: "Installer Internals"
 
 Deneb ships three installer scripts, served from `deneb.ai`.
 
-| Script                             | Platform             | What it does                                                                                 |
-| ---------------------------------- | -------------------- | -------------------------------------------------------------------------------------------- |
+| Script                             | Platform             | What it does                                                                              |
+| ---------------------------------- | -------------------- | ----------------------------------------------------------------------------------------- |
 | [`install.sh`](#installsh)         | macOS / Linux / WSL  | Installs Node if needed, installs Deneb via npm (default) or git, and can run onboarding. |
-| [`install-cli.sh`](#install-clish) | macOS / Linux / WSL  | Installs Node + Deneb into a local prefix (`~/.deneb`). No root required.              |
+| [`install-cli.sh`](#install-clish) | macOS / Linux / WSL  | Installs Node + Deneb into a local prefix (`~/.deneb`). No root required.                 |
 | [`install.ps1`](#installps1)       | Windows (PowerShell) | Installs Node if needed, installs Deneb via npm (default) or git, and can run onboarding. |
 
 ## Quick commands
@@ -138,7 +138,7 @@ The script exits with code `2` for invalid method selection or invalid `--instal
 | `--git`                               | Shortcut for git method. Alias: `--github`                 |
 | `--version <version\|dist-tag\|spec>` | npm version, dist-tag, or package spec (default: `latest`) |
 | `--beta`                              | Use beta dist-tag if available, else fallback to `latest`  |
-| `--git-dir <path>`                    | Checkout directory (default: `~/deneb`). Alias: `--dir` |
+| `--git-dir <path>`                    | Checkout directory (default: `~/deneb`). Alias: `--dir`    |
 | `--no-git-update`                     | Skip `git pull` for existing checkout                      |
 | `--no-prompt`                         | Disable prompts                                            |
 | `--no-onboard`                        | Skip onboarding                                            |
@@ -151,8 +151,8 @@ The script exits with code `2` for invalid method selection or invalid `--instal
 
   <Accordion title="Environment variables reference">
 
-| Variable                                                | Description                                   |
-| ------------------------------------------------------- | --------------------------------------------- |
+| Variable                                             | Description                                   |
+| ---------------------------------------------------- | --------------------------------------------- |
 | `DENEB_INSTALL_METHOD=git\|npm`                      | Install method                                |
 | `DENEB_VERSION=latest\|next\|main\|<semver>\|<spec>` | npm version, dist-tag, or package spec        |
 | `DENEB_BETA=0\|1`                                    | Use beta if available                         |
@@ -163,7 +163,7 @@ The script exits with code `2` for invalid method selection or invalid `--instal
 | `DENEB_DRY_RUN=1`                                    | Dry run mode                                  |
 | `DENEB_VERBOSE=1`                                    | Debug mode                                    |
 | `DENEB_NPM_LOGLEVEL=error\|warn\|notice`             | npm log level                                 |
-| `SHARP_IGNORE_GLOBAL_LIBVIPS=0\|1`                      | Control sharp/libvips behavior (default: `1`) |
+| `SHARP_IGNORE_GLOBAL_LIBVIPS=0\|1`                   | Control sharp/libvips behavior (default: `1`) |
 
   </Accordion>
 </AccordionGroup>
@@ -220,11 +220,11 @@ Designed for environments where you want everything under a local prefix (defaul
 
 | Flag                   | Description                                                                     |
 | ---------------------- | ------------------------------------------------------------------------------- |
-| `--prefix <path>`      | Install prefix (default: `~/.deneb`)                                         |
-| `--version <ver>`      | Deneb version or dist-tag (default: `latest`)                                |
+| `--prefix <path>`      | Install prefix (default: `~/.deneb`)                                            |
+| `--version <ver>`      | Deneb version or dist-tag (default: `latest`)                                   |
 | `--node-version <ver>` | Node version (default: `22.22.0`)                                               |
 | `--json`               | Emit NDJSON events                                                              |
-| `--onboard`            | Run `deneb onboard` after install                                            |
+| `--onboard`            | Run `deneb onboard` after install                                               |
 | `--no-onboard`         | Skip onboarding (default)                                                       |
 | `--set-npm-prefix`     | On Linux, force npm prefix to `~/.npm-global` if current prefix is not writable |
 | `--help`               | Show usage (`-h`)                                                               |
@@ -233,15 +233,15 @@ Designed for environments where you want everything under a local prefix (defaul
 
   <Accordion title="Environment variables reference">
 
-| Variable                                    | Description                                                                       |
-| ------------------------------------------- | --------------------------------------------------------------------------------- |
+| Variable                                 | Description                                                                       |
+| ---------------------------------------- | --------------------------------------------------------------------------------- |
 | `DENEB_PREFIX=<path>`                    | Install prefix                                                                    |
-| `DENEB_VERSION=<ver>`                    | Deneb version or dist-tag                                                      |
+| `DENEB_VERSION=<ver>`                    | Deneb version or dist-tag                                                         |
 | `DENEB_NODE_VERSION=<ver>`               | Node version                                                                      |
 | `DENEB_NO_ONBOARD=1`                     | Skip onboarding                                                                   |
 | `DENEB_NPM_LOGLEVEL=error\|warn\|notice` | npm log level                                                                     |
 | `DENEB_GIT_DIR=<path>`                   | Legacy cleanup lookup path (used when removing old `Peekaboo` submodule checkout) |
-| `SHARP_IGNORE_GLOBAL_LIBVIPS=0\|1`          | Control sharp/libvips behavior (default: `1`)                                     |
+| `SHARP_IGNORE_GLOBAL_LIBVIPS=0\|1`       | Control sharp/libvips behavior (default: `1`)                                     |
 
   </Accordion>
 </AccordionGroup>
@@ -313,7 +313,7 @@ Designed for environments where you want everything under a local prefix (defaul
 | --------------------------- | ---------------------------------------------------------- |
 | `-InstallMethod npm\|git`   | Install method (default: `npm`)                            |
 | `-Tag <tag\|version\|spec>` | npm dist-tag, version, or package spec (default: `latest`) |
-| `-GitDir <path>`            | Checkout directory (default: `%USERPROFILE%\deneb`)     |
+| `-GitDir <path>`            | Checkout directory (default: `%USERPROFILE%\deneb`)        |
 | `-NoOnboard`                | Skip onboarding                                            |
 | `-NoGitUpdate`              | Skip `git pull`                                            |
 | `-DryRun`                   | Print actions only                                         |
@@ -322,8 +322,8 @@ Designed for environments where you want everything under a local prefix (defaul
 
   <Accordion title="Environment variables reference">
 
-| Variable                           | Description        |
-| ---------------------------------- | ------------------ |
+| Variable                        | Description        |
+| ------------------------------- | ------------------ |
 | `DENEB_INSTALL_METHOD=git\|npm` | Install method     |
 | `DENEB_GIT_DIR=<path>`          | Checkout directory |
 | `DENEB_NO_ONBOARD=1`            | Skip onboarding    |

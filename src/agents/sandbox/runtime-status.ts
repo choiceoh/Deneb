@@ -17,10 +17,7 @@ function shouldSandboxSession(cfg: SandboxConfig, sessionKey: string, mainSessio
   return sessionKey.trim() !== mainSessionKey.trim();
 }
 
-function resolveMainSessionKeyForSandbox(params: {
-  cfg?: DenebConfig;
-  agentId: string;
-}): string {
+function resolveMainSessionKeyForSandbox(params: { cfg?: DenebConfig; agentId: string }): string {
   if (params.cfg?.session?.scope === "global") {
     return "global";
   }
@@ -42,10 +39,7 @@ function resolveComparableSessionKeyForSandbox(params: {
   });
 }
 
-export function resolveSandboxRuntimeStatus(params: {
-  cfg?: DenebConfig;
-  sessionKey?: string;
-}): {
+export function resolveSandboxRuntimeStatus(params: { cfg?: DenebConfig; sessionKey?: string }): {
   agentId: string;
   sessionKey: string;
   mainSessionKey: string;
@@ -130,9 +124,7 @@ export function formatSandboxToolPolicyBlockedMessage(params: {
   if (runtime.mode === "non-main") {
     lines.push(`- Use main session key (direct): ${runtime.mainSessionKey}`);
   }
-  lines.push(
-    `- See: ${formatCliCommand(`deneb sandbox explain --session ${runtime.sessionKey}`)}`,
-  );
+  lines.push(`- See: ${formatCliCommand(`deneb sandbox explain --session ${runtime.sessionKey}`)}`);
 
   return lines.join("\n");
 }
