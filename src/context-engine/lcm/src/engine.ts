@@ -15,6 +15,7 @@ import type {
 } from "../../types.js";
 import { ContextAssembler } from "./assembler.js";
 import { CompactionEngine, type CompactionConfig } from "./compaction.js";
+import { CompressionObserver, DEFAULT_OBSERVER_CONFIG } from "./compression-observer.js";
 import type { LcmConfig } from "./db/config.js";
 import { getLcmConnection } from "./db/connection.js";
 import { getLcmDbFeatures } from "./db/features.js";
@@ -73,6 +74,7 @@ export class LcmContextEngine implements ContextEngine {
   private sessionOperationQueues = new Map<string, Promise<void>>();
   private largeFileTextSummarizerResolved = false;
   private largeFileTextSummarizer?: (prompt: string) => Promise<string | null>;
+  private compressionObserver?: CompressionObserver;
   private deps: LcmDependencies;
 
   constructor(deps: LcmDependencies) {
@@ -115,6 +117,26 @@ export class LcmContextEngine implements ContextEngine {
       this.summaryStore,
       compactionConfig,
     );
+
+    // Initialize compression observer if enabled.
+    const observerCfg = deps.config.observer;
+    if (observerCfg.enabled) {
+      this.compressionObserver = new CompressionObserver(
+        {
+          ...DEFAULT_OBSERVER_CONFIG,
+          enabled: observerCfg.enabled,
+          targetRatio: observerCfg.targetRatio,
+          messageInterval: observerCfg.messageInterval,
+          model: observerCfg.model || undefined,
+          provider: observerCfg.provider || undefined,
+          maxStalenessMs: observerCfg.maxStalenessMs,
+        },
+        this.conversationStore,
+        this.summaryStore,
+        () => this.resolveObserverSummarize(),
+      );
+      this.compaction.attachObserver(this.compressionObserver);
+    }
 
     this.retrieval = new RetrievalEngine(this.conversationStore, this.summaryStore);
   }
@@ -372,6 +394,43 @@ export class LcmContextEngine implements ContextEngine {
       rewrittenContent: rewrittenSegments.join(""),
       fileIds,
     };
+  }
+
+  /**
+   * Resolve a summarizer for the compression observer.
+   *
+   * When observer-specific model/provider are configured, use those;
+   * otherwise fall back to the default LCM summarizer.
+   */
+  private async resolveObserverSummarize(): Promise<
+    (text: string, aggressive?: boolean) => Promise<string>
+  > {
+    const observerCfg = this.deps.config.observer;
+    const model = observerCfg.model || undefined;
+    const provider = observerCfg.provider || undefined;
+
+    if (model || provider) {
+      try {
+        const runtimeSummarizer = await createLcmSummarizeFromLegacyParams({
+          deps: this.deps,
+          legacyParams: {
+            ...(provider ? { provider } : {}),
+            ...(model ? { model } : {}),
+          },
+        });
+        if (runtimeSummarizer) {
+          return runtimeSummarizer;
+        }
+      } catch (err) {
+        console.error(
+          `[lcm] resolveObserverSummarize failed, falling back to default:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+
+    // Fall back to default summarizer.
+    return this.resolveSummarize({});
   }
 
   // ── ContextEngine interface ─────────────────────────────────────────────
@@ -663,6 +722,11 @@ export class LcmContextEngine implements ContextEngine {
 
     // Append to context items so assembler can see it
     await this.summaryStore.appendContextMessage(conversationId, msgRecord.messageId);
+
+    // Notify the compression observer of the new message.
+    if (this.compressionObserver) {
+      this.compressionObserver.onMessage(conversationId);
+    }
 
     return { ingested: true };
   }
@@ -1192,6 +1256,9 @@ export class LcmContextEngine implements ContextEngine {
     // registers a single engine instance reused by the factory. Closing
     // the DB here would break subsequent runs with "database is not open".
     // The connection is cleaned up on process exit via closeLcmConnection().
+    // Note: compression observer is NOT disposed here because the engine
+    // instance is a singleton reused across runs. Observer cleanup happens
+    // only on process exit.
   }
 
   // ── Public accessors for retrieval (used by subagent expansion) ─────────
@@ -1206,6 +1273,27 @@ export class LcmContextEngine implements ContextEngine {
 
   getSummaryStore(): SummaryStore {
     return this.summaryStore;
+  }
+
+  /** Get observer status for diagnostics. Returns null if observer is not enabled. */
+  getObserverStatus(conversationId: number): {
+    enabled: boolean;
+    hasCachedSummary: boolean;
+    cachedSummaryAge?: number;
+    cachedSummaryTokens?: number;
+    cachedSourceTokens?: number;
+  } | null {
+    if (!this.compressionObserver) {
+      return null;
+    }
+    const cached = this.compressionObserver.getCachedSummary(conversationId);
+    return {
+      enabled: true,
+      hasCachedSummary: cached !== null,
+      cachedSummaryAge: cached ? Date.now() - cached.updatedAt : undefined,
+      cachedSummaryTokens: cached?.tokenCount,
+      cachedSourceTokens: cached?.sourceTokenCount,
+    };
   }
 
   // ── Heartbeat pruning ──────────────────────────────────────────────────
