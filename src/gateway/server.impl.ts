@@ -4,6 +4,7 @@ import { getActiveEmbeddedRunCount } from "../agents/pi-embedded-runner/runs.js"
 import { registerSkillsChangeListener } from "../agents/skills/refresh.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
 import { getTotalPendingReplies } from "../auto-reply/reply/dispatcher-registry.js";
+import { type AutonomousServiceHandle, startAutonomousService } from "../autonomous/service.js";
 import type { CanvasHostServer } from "../canvas-host/server.js";
 import { type ChannelId, listChannelPlugins } from "../channels/plugins/index.js";
 import { formatCliCommand } from "../cli/command-format.js";
@@ -883,6 +884,12 @@ export async function startGatewayServer(
     }));
   }
 
+  // Start autonomous loop service if enabled.
+  let autonomousHandle: AutonomousServiceHandle | null = null;
+  if (!minimalTestGateway) {
+    autonomousHandle = await startAutonomousService({ cfg: cfgAtStart, deps });
+  }
+
   // Run gateway_start plugin hook (fire-and-forget)
   if (!minimalTestGateway) {
     const hookRunner = getGlobalHookRunner();
@@ -1024,6 +1031,7 @@ export async function startGatewayServer(
       browserAuthRateLimiter.dispose();
       stopModelPricingRefresh();
       channelHealthMonitor?.stop();
+      autonomousHandle?.stop();
       clearSecretsRuntimeSnapshot();
       await close(opts);
     },

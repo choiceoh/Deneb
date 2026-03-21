@@ -6,6 +6,7 @@ import { resolveSessionAgentId } from "./agent-scope.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import type { SpawnedToolContext } from "./spawned-context.js";
 import type { ToolFsPolicy } from "./tool-fs-policy.js";
+import { createAutonomousTool } from "./tools/autonomous-tool.js";
 import { createBrowserTool } from "./tools/browser-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";
@@ -156,6 +157,7 @@ export function createDenebTools(
     createCronTool({
       agentSessionKey: options?.agentSessionKey,
     }),
+    createAutonomousTool(),
     ...(messageTool ? [messageTool] : []),
     createGatewayTool({
       agentSessionKey: options?.agentSessionKey,

@@ -54,6 +54,11 @@ export const SUB_CLI_DESCRIPTORS = [
     hasSubcommands: false,
   },
   {
+    name: "autonomous",
+    description: "Manage the autonomous agent loop",
+    hasSubcommands: true,
+  },
+  {
     name: "cron",
     description: "Manage cron jobs via the Gateway scheduler",
     hasSubcommands: true,
