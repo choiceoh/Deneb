@@ -4,6 +4,7 @@ import {
   resetActiveEmbeddedRunState,
   waitForActiveEmbeddedRuns,
 } from "../../agents/pi-embedded-runner/runs.js";
+import { resetFollowupQueueDrainState } from "../../auto-reply/reply/queue/drain.js";
 import type { startGatewayServer } from "../../gateway/server.js";
 import { acquireGatewayLock } from "../../infra/gateway-lock.js";
 import { restartGatewayProcessWithFreshPid } from "../../infra/process-respawn.js";
@@ -220,6 +221,7 @@ export async function runGatewayLoop(params: {
       // functions, to avoid surprising cross-cutting side effects.
       resetAllLanes();
       resetActiveEmbeddedRunState();
+      resetFollowupQueueDrainState();
     });
 
     // Keep process alive; SIGUSR1 triggers an in-process restart (no supervisor required).
