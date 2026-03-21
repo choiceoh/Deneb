@@ -224,8 +224,8 @@ export async function acquireGatewayLock(
       const ownerPid = lastPayload?.pid;
       const ownerStatus = ownerPid
         ? await resolveGatewayOwnerStatus(ownerPid, lastPayload, platform, port)
-        : "unknown";
-      if (ownerStatus === "dead" && ownerPid) {
+        : "dead";
+      if (ownerStatus === "dead") {
         await fs.rm(lockPath, { force: true });
         continue;
       }
