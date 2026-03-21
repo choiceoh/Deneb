@@ -352,8 +352,7 @@ function resolvePreferredOverIds(pluginId: string, env: NodeJS.ProcessEnv): stri
   const normalized = normalizeChatChannelId(pluginId);
   if (normalized) {
     const meta = getChatChannelMeta(normalized);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (meta as any)?.preferOver ?? [];
+    return meta?.preferOver ?? [];
   }
   const catalogEntry = getChannelPluginCatalogEntry(pluginId, { env });
   return catalogEntry?.meta.preferOver ?? [];
