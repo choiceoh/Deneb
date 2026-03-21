@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Service Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --muted: #71717a;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+  }
+  .header h1 { font-size: 1.5rem; font-weight: 600; }
+  .header .timestamp { color: var(--muted); font-size: 0.85rem; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+  .card-title {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .status-dot.green { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .status-dot.yellow { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+  .status-dot.red { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .big-number {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+  .sub-text { color: var(--muted); font-size: 0.8rem; }
+  .service-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .service-row:last-child { border-bottom: none; }
+  .service-name {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: 500;
+  }
+  .service-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+  .badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-weight: 600;
+  }
+  .badge.green { background: #22c55e22; color: var(--green); }
+  .badge.yellow { background: #eab30822; color: var(--yellow); }
+  .badge.red { background: #ef444422; color: var(--red); }
+  .progress-bar {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+  }
+  .activity-item {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-time { color: var(--muted); white-space: nowrap; min-width: 50px; }
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+    font-size: 0.85rem;
+  }
+  .metric-label { color: var(--muted); }
+  .refresh-btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.4rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .refresh-btn:hover { border-color: var(--blue); }
+  @media (max-width: 640px) {
+    body { padding: 1rem; }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Service Dashboard</h1>
+  <div style="display:flex;align-items:center;gap:1rem;">
+    <span class="timestamp" id="clock"></span>
+    <button class="refresh-btn" onclick="refreshAll()">Refresh</button>
+  </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="grid">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Total Services</span>
+      <span class="status-dot green"></span>
+    </div>
+    <div class="big-number" id="total-services">5</div>
+    <div class="sub-text">All operational</div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Uptime</span>
+    </div>
+    <div class="big-number" id="uptime">99.9%</div>
+    <div class="sub-text">Last 30 days</div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Requests / min</span>
+    </div>
+    <div class="big-number" id="rpm">1,247</div>
+    <div class="sub-text" id="rpm-trend" style="color:var(--green);">+12% from yesterday</div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Avg Response</span>
+    </div>
+    <div class="big-number" id="avg-resp">48ms</div>
+    <div class="sub-text">p99: 210ms</div>
+  </div>
+</div>
+
+<!-- Services + System -->
+<div class="grid" style="grid-template-columns: 1fr 1fr;">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Services</span>
+    </div>
+    <div id="services-list">
+      <!-- populated by JS -->
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">System Resources</span>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <div class="metric-row">
+        <span class="metric-label">CPU</span>
+        <span id="cpu-val">23%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="cpu-bar" style="width:23%;background:var(--green);"></div>
+      </div>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <div class="metric-row">
+        <span class="metric-label">Memory</span>
+        <span id="mem-val">61%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="mem-bar" style="width:61%;background:var(--blue);"></div>
+      </div>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <div class="metric-row">
+        <span class="metric-label">Disk</span>
+        <span id="disk-val">45%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="disk-bar" style="width:45%;background:var(--purple);"></div>
+      </div>
+    </div>
+    <div>
+      <div class="metric-row">
+        <span class="metric-label">Network I/O</span>
+        <span id="net-val">128 MB/s</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="net-bar" style="width:32%;background:var(--yellow);"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Activity -->
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Recent Activity</span>
+  </div>
+  <div id="activity-list">
+    <!-- populated by JS -->
+  </div>
+</div>
+
+<script>
+const SERVICES = [
+  { name: 'Deneb Gateway',  icon: 'D', color: '#3b82f6', status: 'green', label: 'Healthy',  latency: '32ms' },
+  { name: 'Vega Engine',    icon: 'V', color: '#a855f7', status: 'green', label: 'Healthy',  latency: '18ms' },
+  { name: 'Auth Service',   icon: 'A', color: '#22c55e', status: 'green', label: 'Healthy',  latency: '45ms' },
+  { name: 'Message Queue',  icon: 'Q', color: '#eab308', status: 'green', label: 'Healthy',  latency: '5ms'  },
+  { name: 'Database',       icon: 'DB',color: '#ef4444', status: 'green', label: 'Healthy',  latency: '12ms' },
+];
+
+const ACTIVITY = [
+  { time: '1m',  text: 'Deneb Gateway processed 342 messages' },
+  { time: '3m',  text: 'Vega Engine completed DB sync (45 files)' },
+  { time: '8m',  text: 'Auth Service rotated JWT signing keys' },
+  { time: '15m', text: 'Auto-scaling adjusted: 3 → 4 instances' },
+  { time: '22m', text: 'Message Queue cleared 1,204 stale entries' },
+  { time: '30m', text: 'Database backup completed (2.3 GB)' },
+  { time: '45m', text: 'SSL certificate renewed for *.deneb.ai' },
+];
+
+function renderServices() {
+  const el = document.getElementById('services-list');
+  el.innerHTML = SERVICES.map(s => `
+    <div class="service-row">
+      <div class="service-name">
+        <div class="service-icon" style="background:${s.color}22;color:${s.color}">${s.icon}</div>
+        <div>
+          <div>${s.name}</div>
+          <div class="sub-text">${s.latency} latency</div>
+        </div>
+      </div>
+      <span class="badge ${s.status}">${s.label}</span>
+    </div>
+  `).join('');
+}
+
+function renderActivity() {
+  const el = document.getElementById('activity-list');
+  el.innerHTML = ACTIVITY.map(a => `
+    <div class="activity-item">
+      <span class="activity-time">${a.time} ago</span>
+      <span>${a.text}</span>
+    </div>
+  `).join('');
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'medium' });
+}
+
+function jitter(base, pct) {
+  return Math.round(base * (1 + (Math.random() - 0.5) * pct));
+}
+
+function refreshAll() {
+  // simulate metric fluctuation
+  const cpu = jitter(23, 0.4);
+  const mem = jitter(61, 0.15);
+  const disk = jitter(45, 0.05);
+  const net = jitter(128, 0.3);
+  const rpm = jitter(1247, 0.2);
+  const resp = jitter(48, 0.25);
+
+  document.getElementById('cpu-val').textContent = cpu + '%';
+  document.getElementById('cpu-bar').style.width = cpu + '%';
+  document.getElementById('cpu-bar').style.background =
+    cpu > 80 ? 'var(--red)' : cpu > 60 ? 'var(--yellow)' : 'var(--green)';
+
+  document.getElementById('mem-val').textContent = mem + '%';
+  document.getElementById('mem-bar').style.width = mem + '%';
+
+  document.getElementById('disk-val').textContent = disk + '%';
+  document.getElementById('disk-bar').style.width = disk + '%';
+
+  document.getElementById('net-val').textContent = net + ' MB/s';
+  document.getElementById('net-bar').style.width = Math.min(net / 4, 100) + '%';
+
+  document.getElementById('rpm').textContent = rpm.toLocaleString();
+  document.getElementById('avg-resp').textContent = resp + 'ms';
+
+  updateClock();
+}
+
+renderServices();
+renderActivity();
+updateClock();
+setInterval(updateClock, 1000);
+setInterval(refreshAll, 5000);
+</script>
+</body>
+</html>
