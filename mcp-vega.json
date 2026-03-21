@@ -84,6 +84,19 @@
           }
         },
         {
+          "name": "interrupt",
+          "description": "【시스템】 AI의 현재 작업을 즉시 중단하고 유저의 새 입력에 집중하게 함. '멈춰', '잠깐', '그만' 등 유저가 진행 중인 AI 작업을 중단하고 싶을 때 사용. 중단과 동시에 새 요청을 전달할 수도 있음.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "중단 후 처리할 새 요청 (선택사항, 없으면 단순 중단)"
+              }
+            }
+          }
+        },
+        {
           "name": "version",
           "description": "【시스템】 Vega 버전, 프로토콜 버전, 지원 기능(시맨틱 검색, 리랭킹, 검색 모드) 조회. Deneb 호환성 확인용.",
           "inputSchema": {
