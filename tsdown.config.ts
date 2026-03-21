@@ -64,6 +64,34 @@ function buildInputOptions(options: InputOptionsArg): InputOptionsReturn {
   };
 }
 
+// Rolldown plugin: when resolving a .js import under extensions/, prefer the
+// .ts source file if it exists.  This prevents stale compiled .js artifacts
+// (left by a previous build or tsc) from shadowing the real TypeScript source.
+function preferTsInExtensions(): import("rolldown").Plugin {
+  return {
+    name: "prefer-ts-in-extensions",
+    resolveId: {
+      filter: { id: /extensions\/.*\.js$/ },
+      async handler(source, importer, options) {
+        if (!importer) {
+          return null;
+        }
+        const resolved = path.resolve(path.dirname(importer), source);
+        if (!resolved.includes(`${path.sep}extensions${path.sep}`)) {
+          return null;
+        }
+        const tsPath = resolved.replace(/\.js$/, ".ts");
+        if (fs.existsSync(tsPath)) {
+          // Delegate back to rolldown with the .ts path so it goes through
+          // normal TypeScript handling.
+          return this.resolve(tsPath, importer, { ...options, skipSelf: true });
+        }
+        return null;
+      },
+    },
+  };
+}
+
 function nodeBuildConfig(config: UserConfig): UserConfig {
   return {
     ...config,
@@ -71,6 +99,7 @@ function nodeBuildConfig(config: UserConfig): UserConfig {
     fixedExtension: false,
     platform: "node",
     inputOptions: buildInputOptions,
+    plugins: [...(Array.isArray(config.plugins) ? config.plugins : []), preferTsInExtensions()],
   };
 }
 
