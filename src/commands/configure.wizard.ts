@@ -89,9 +89,13 @@ async function runGatewayHealthCheck(params: {
     path: "gateway.auth.password",
   });
   const token =
-    process.env.DENEB_GATEWAY_TOKEN ?? process.env.CLAWDBOT_GATEWAY_TOKEN ?? configuredToken;
+    process.env.DENEB_GATEWAY_TOKEN ??
+    process.env.OPENCLAW_GATEWAY_TOKEN ??
+    process.env.CLAWDBOT_GATEWAY_TOKEN ??
+    configuredToken;
   const password =
     process.env.DENEB_GATEWAY_PASSWORD ??
+    process.env.OPENCLAW_GATEWAY_PASSWORD ??
     process.env.CLAWDBOT_GATEWAY_PASSWORD ??
     configuredPassword;
 
@@ -355,10 +359,12 @@ export async function runConfigureWizard(
       url: localUrl,
       token:
         process.env.DENEB_GATEWAY_TOKEN ??
+        process.env.OPENCLAW_GATEWAY_TOKEN ??
         process.env.CLAWDBOT_GATEWAY_TOKEN ??
         baseLocalProbeToken,
       password:
         process.env.DENEB_GATEWAY_PASSWORD ??
+        process.env.OPENCLAW_GATEWAY_PASSWORD ??
         process.env.CLAWDBOT_GATEWAY_PASSWORD ??
         baseLocalProbePassword,
     });
@@ -647,6 +653,7 @@ export async function runConfigureWizard(
     // Try both new and old passwords since gateway may still have old config.
     const newPassword =
       process.env.DENEB_GATEWAY_PASSWORD ??
+      process.env.OPENCLAW_GATEWAY_PASSWORD ??
       process.env.CLAWDBOT_GATEWAY_PASSWORD ??
       (await resolveGatewaySecretInputForWizard({
         cfg: nextConfig,
@@ -655,6 +662,7 @@ export async function runConfigureWizard(
       }));
     const oldPassword =
       process.env.DENEB_GATEWAY_PASSWORD ??
+      process.env.OPENCLAW_GATEWAY_PASSWORD ??
       process.env.CLAWDBOT_GATEWAY_PASSWORD ??
       (await resolveGatewaySecretInputForWizard({
         cfg: baseConfig,
@@ -663,6 +671,7 @@ export async function runConfigureWizard(
       }));
     const token =
       process.env.DENEB_GATEWAY_TOKEN ??
+      process.env.OPENCLAW_GATEWAY_TOKEN ??
       process.env.CLAWDBOT_GATEWAY_TOKEN ??
       (await resolveGatewaySecretInputForWizard({
         cfg: nextConfig,
