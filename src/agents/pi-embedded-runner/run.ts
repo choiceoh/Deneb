@@ -63,6 +63,7 @@ import {
 import { ensureRuntimePluginsLoaded } from "../runtime-plugins.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js";
+import { buildCompactionHookContext, fireCompactionHooks } from "./compaction-hooks.js";
 import { buildEmbeddedCompactionRuntimeContext } from "./compaction-runtime-context.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
 import { log } from "./logger.js";
@@ -648,14 +649,27 @@ export async function runEmbeddedPiAgent(
 
       const MAX_OVERFLOW_COMPACTION_ATTEMPTS = 3;
       const MAX_RUN_LOOP_ITERATIONS = resolveMaxRunRetryIterations(profileCandidates.length);
-      let overflowCompactionAttempts = 0;
+      const compactionTracker = {
+        /** Total overflow-recovery compaction attempts (capped at MAX_OVERFLOW_COMPACTION_ATTEMPTS) */
+        overflowAttempts: 0,
+        /** Total successful compactions (in-attempt SDK auto-compaction + overflow recovery) */
+        successCount: 0,
+        recordOverflowAttempt() {
+          this.overflowAttempts++;
+        },
+        recordSuccess(count = 1) {
+          this.successCount += count;
+        },
+        canRetryOverflow() {
+          return this.overflowAttempts < MAX_OVERFLOW_COMPACTION_ATTEMPTS;
+        },
+      };
       let toolResultTruncationAttempted = false;
       let bootstrapPromptWarningSignaturesSeen =
         params.bootstrapPromptWarningSignaturesSeen ??
         (params.bootstrapPromptWarningSignature ? [params.bootstrapPromptWarningSignature] : []);
       const usageAccumulator = createUsageAccumulator();
       let lastRunPromptUsage: ReturnType<typeof normalizeUsage> | undefined;
-      let autoCompactionCount = 0;
       let runLoopIterations = 0;
       let overloadFailoverAttempts = 0;
       const maybeMarkAuthProfileFailure = async (failure: {
@@ -859,7 +873,7 @@ export async function runEmbeddedPiAgent(
           lastRunPromptUsage = lastAssistantUsage ?? attemptUsage;
           lastTurnTotal = lastAssistantUsage?.total ?? attemptUsage?.total;
           const attemptCompactionCount = Math.max(0, attempt.compactionCount ?? 0);
-          autoCompactionCount += attemptCompactionCount;
+          compactionTracker.recordSuccess(attemptCompactionCount);
           const activeErrorContext = resolveActiveErrorContext({
             lastAssistant,
             provider,
@@ -905,7 +919,7 @@ export async function runEmbeddedPiAgent(
               `[context-overflow-diag] sessionKey=${params.sessionKey ?? params.sessionId} ` +
                 `provider=${provider}/${modelId} source=${contextOverflowError.source} ` +
                 `messages=${msgCount} sessionFile=${params.sessionFile} ` +
-                `diagId=${overflowDiagId} compactionAttempts=${overflowCompactionAttempts} ` +
+                `diagId=${overflowDiagId} compactionAttempts=${compactionTracker.overflowAttempts} ` +
                 `observedTokens=${observedOverflowTokens ?? "unknown"} ` +
                 `error=${errorText.slice(0, 200)}`,
             );
@@ -916,11 +930,11 @@ export async function runEmbeddedPiAgent(
             if (
               !isCompactionFailure &&
               hadAttemptLevelCompaction &&
-              overflowCompactionAttempts < MAX_OVERFLOW_COMPACTION_ATTEMPTS
+              compactionTracker.canRetryOverflow()
             ) {
-              overflowCompactionAttempts++;
+              compactionTracker.recordOverflowAttempt();
               log.warn(
-                `context overflow persisted after in-attempt compaction (attempt ${overflowCompactionAttempts}/${MAX_OVERFLOW_COMPACTION_ATTEMPTS}); retrying prompt without additional compaction for ${provider}/${modelId}`,
+                `context overflow persisted after in-attempt compaction (attempt ${compactionTracker.overflowAttempts}/${MAX_OVERFLOW_COMPACTION_ATTEMPTS}); retrying prompt without additional compaction for ${provider}/${modelId}`,
               );
               continue;
             }
@@ -929,38 +943,29 @@ export async function runEmbeddedPiAgent(
             if (
               !isCompactionFailure &&
               !hadAttemptLevelCompaction &&
-              overflowCompactionAttempts < MAX_OVERFLOW_COMPACTION_ATTEMPTS
+              compactionTracker.canRetryOverflow()
             ) {
               if (log.isEnabled("debug")) {
                 log.debug(
                   `[compaction-diag] decision diagId=${overflowDiagId} branch=compact ` +
                     `isCompactionFailure=${isCompactionFailure} hasOversizedToolResults=unknown ` +
-                    `attempt=${overflowCompactionAttempts + 1} maxAttempts=${MAX_OVERFLOW_COMPACTION_ATTEMPTS}`,
+                    `attempt=${compactionTracker.overflowAttempts + 1} maxAttempts=${MAX_OVERFLOW_COMPACTION_ATTEMPTS}`,
                 );
               }
-              overflowCompactionAttempts++;
+              compactionTracker.recordOverflowAttempt();
               log.warn(
-                `context overflow detected (attempt ${overflowCompactionAttempts}/${MAX_OVERFLOW_COMPACTION_ATTEMPTS}); attempting auto-compaction for ${provider}/${modelId}`,
+                `context overflow detected (attempt ${compactionTracker.overflowAttempts}/${MAX_OVERFLOW_COMPACTION_ATTEMPTS}); attempting auto-compaction for ${provider}/${modelId}`,
               );
               let compactResult: Awaited<ReturnType<typeof contextEngine.compact>>;
-              // When the engine owns compaction, hooks are not fired inside
-              // compactEmbeddedPiSessionDirect (which is bypassed).  Fire them
-              // here so subscribers (memory extensions, usage trackers) are
-              // notified even on overflow-recovery compactions.
-              const overflowEngineOwnsCompaction = contextEngine.info.ownsCompaction === true;
-              const overflowHookRunner = overflowEngineOwnsCompaction ? hookRunner : null;
-              if (overflowHookRunner?.hasHooks("before_compaction")) {
-                try {
-                  await overflowHookRunner.runBeforeCompaction(
-                    { messageCount: -1, sessionFile: params.sessionFile },
-                    hookCtx,
-                  );
-                } catch (hookErr) {
-                  log.warn(
-                    `before_compaction hook failed during overflow recovery: ${String(hookErr)}`,
-                  );
-                }
-              }
+              const overflowHookCtx = buildCompactionHookContext({
+                sessionId: params.sessionId,
+                sessionKey: params.sessionKey,
+                agentId: hookCtx.agentId,
+                workspaceDir: resolvedWorkspace,
+                messageProvider: params.messageProvider,
+                sessionFile: params.sessionFile,
+              });
+              await fireCompactionHooks({ phase: "before" }, overflowHookCtx);
               try {
                 compactResult = await contextEngine.compact({
                   sessionId: params.sessionId,
@@ -1002,7 +1007,7 @@ export async function runEmbeddedPiAgent(
                       ? { currentTokenCount: observedOverflowTokens }
                       : {}),
                     diagId: overflowDiagId,
-                    attempt: overflowCompactionAttempts,
+                    attempt: compactionTracker.overflowAttempts,
                     maxAttempts: MAX_OVERFLOW_COMPACTION_ATTEMPTS,
                   },
                 });
@@ -1012,29 +1017,19 @@ export async function runEmbeddedPiAgent(
                 );
                 compactResult = { ok: false, compacted: false, reason: String(compactErr) };
               }
-              if (
-                compactResult.ok &&
-                compactResult.compacted &&
-                overflowHookRunner?.hasHooks("after_compaction")
-              ) {
-                try {
-                  await overflowHookRunner.runAfterCompaction(
-                    {
-                      messageCount: -1,
-                      compactedCount: -1,
-                      tokenCount: compactResult.result?.tokensAfter,
-                      sessionFile: params.sessionFile,
-                    },
-                    hookCtx,
-                  );
-                } catch (hookErr) {
-                  log.warn(
-                    `after_compaction hook failed during overflow recovery: ${String(hookErr)}`,
-                  );
-                }
+              if (compactResult.ok && compactResult.compacted) {
+                await fireCompactionHooks(
+                  {
+                    phase: "after",
+                    tokenCount: compactResult.result?.tokensAfter,
+                    tokensBefore: compactResult.result?.tokensBefore,
+                    tokensAfter: compactResult.result?.tokensAfter,
+                  },
+                  overflowHookCtx,
+                );
               }
               if (compactResult.compacted) {
-                autoCompactionCount += 1;
+                compactionTracker.recordSuccess();
                 log.info(`auto-compaction succeeded for ${provider}/${modelId}; retrying prompt`);
                 continue;
               }
@@ -1059,7 +1054,7 @@ export async function runEmbeddedPiAgent(
                   log.debug(
                     `[compaction-diag] decision diagId=${overflowDiagId} branch=truncate_tool_results ` +
                       `isCompactionFailure=${isCompactionFailure} hasOversizedToolResults=${hasOversized} ` +
-                      `attempt=${overflowCompactionAttempts} maxAttempts=${MAX_OVERFLOW_COMPACTION_ATTEMPTS}`,
+                      `attempt=${compactionTracker.overflowAttempts} maxAttempts=${MAX_OVERFLOW_COMPACTION_ATTEMPTS}`,
                   );
                 }
                 toolResultTruncationAttempted = true;
@@ -1077,7 +1072,7 @@ export async function runEmbeddedPiAgent(
                   log.info(
                     `[context-overflow-recovery] Truncated ${truncResult.truncatedCount} tool result(s); retrying prompt`,
                   );
-                  // Do NOT reset overflowCompactionAttempts here — the global cap must remain
+                  // Do NOT reset compactionTracker.overflowAttempts here — the global cap must remain
                   // enforced across all iterations to prevent unbounded compaction cycles (OC-65).
                   continue;
                 }
@@ -1088,20 +1083,20 @@ export async function runEmbeddedPiAgent(
                 log.debug(
                   `[compaction-diag] decision diagId=${overflowDiagId} branch=give_up ` +
                     `isCompactionFailure=${isCompactionFailure} hasOversizedToolResults=${hasOversized} ` +
-                    `attempt=${overflowCompactionAttempts} maxAttempts=${MAX_OVERFLOW_COMPACTION_ATTEMPTS}`,
+                    `attempt=${compactionTracker.overflowAttempts} maxAttempts=${MAX_OVERFLOW_COMPACTION_ATTEMPTS}`,
                 );
               }
             }
             if (
               (isCompactionFailure ||
-                overflowCompactionAttempts >= MAX_OVERFLOW_COMPACTION_ATTEMPTS ||
+                !compactionTracker.canRetryOverflow() ||
                 toolResultTruncationAttempted) &&
               log.isEnabled("debug")
             ) {
               log.debug(
                 `[compaction-diag] decision diagId=${overflowDiagId} branch=give_up ` +
                   `isCompactionFailure=${isCompactionFailure} hasOversizedToolResults=unknown ` +
-                  `attempt=${overflowCompactionAttempts} maxAttempts=${MAX_OVERFLOW_COMPACTION_ATTEMPTS}`,
+                  `attempt=${compactionTracker.overflowAttempts} maxAttempts=${MAX_OVERFLOW_COMPACTION_ATTEMPTS}`,
               );
             }
             const kind = isCompactionFailure ? "compaction_failure" : "context_overflow";
@@ -1430,7 +1425,8 @@ export async function runEmbeddedPiAgent(
             usage,
             lastCallUsage: lastCallUsage ?? undefined,
             promptTokens,
-            compactionCount: autoCompactionCount > 0 ? autoCompactionCount : undefined,
+            compactionCount:
+              compactionTracker.successCount > 0 ? compactionTracker.successCount : undefined,
           };
 
           const payloads = buildEmbeddedRunPayloads({

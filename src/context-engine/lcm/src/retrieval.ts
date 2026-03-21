@@ -1,3 +1,4 @@
+import { estimateTokens } from "./engine-helpers.js";
 import type { ConversationStore, MessageSearchResult } from "./store/conversation-store.js";
 import type { SummaryStore, SummarySearchResult } from "./store/summary-store.js";
 
@@ -96,13 +97,6 @@ export interface ExpandResult {
   estimatedTokens: number;
   /** Whether result was truncated due to tokenCap */
   truncated: boolean;
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Rough token estimate: ~4 chars per token. */
-function estimateTokens(content: string): number {
-  return Math.ceil(content.length / 4);
 }
 
 // ── RetrievalEngine ──────────────────────────────────────────────────────────

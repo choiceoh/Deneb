@@ -1,3 +1,4 @@
+import { estimateTokens } from "./engine-helpers.js";
 import type { LcmDependencies } from "./types.js";
 
 export type LcmSummarizeOptions = {
@@ -75,11 +76,6 @@ function resolveProviderApiFromLegacyConfig(config: unknown, provider: string): 
     }
   }
   return undefined;
-}
-
-/** Approximate token estimate used for target-sizing prompts. */
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
 }
 
 /** Narrow unknown values to plain object records. */
