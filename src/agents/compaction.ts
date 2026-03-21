@@ -13,21 +13,7 @@ export const BASE_CHUNK_RATIO = 0.4;
 export const MIN_CHUNK_RATIO = 0.15;
 export const SAFETY_MARGIN = 1.2; // 20% buffer for estimateTokens() inaccuracy
 const DEFAULT_SUMMARY_FALLBACK = "No prior history.";
-const DEFAULT_PARTS = 2;
-const MERGE_SUMMARIES_INSTRUCTIONS = [
-  "Merge these partial summaries into a single cohesive summary.",
-  "",
-  "MUST PRESERVE:",
-  "- Active tasks and their current status (in-progress, blocked, pending)",
-  "- Batch operation progress (e.g., '5/17 items completed')",
-  "- The last thing the user requested and what was being done about it",
-  "- Decisions made and their rationale",
-  "- TODOs, open questions, and constraints",
-  "- Any commitments or follow-ups promised",
-  "",
-  "PRIORITIZE recent context over older history. The agent needs to know",
-  "what it was doing, not just what was discussed.",
-].join("\n");
+
 const IDENTIFIER_PRESERVATION_INSTRUCTIONS =
   "Preserve all opaque identifiers exactly as written (no shortening or reconstruction), " +
   "including UUIDs, hashes, IDs, tokens, API keys, hostnames, IPs, ports, URLs, and file names.";
@@ -79,54 +65,6 @@ function estimateCompactionMessageTokens(message: AgentMessage): number {
   return estimateMessagesTokens([message]);
 }
 
-function normalizeParts(parts: number, messageCount: number): number {
-  if (!Number.isFinite(parts) || parts <= 1) {
-    return 1;
-  }
-  return Math.min(Math.max(1, Math.floor(parts)), Math.max(1, messageCount));
-}
-
-export function splitMessagesByTokenShare(
-  messages: AgentMessage[],
-  parts = DEFAULT_PARTS,
-): AgentMessage[][] {
-  if (messages.length === 0) {
-    return [];
-  }
-  const normalizedParts = normalizeParts(parts, messages.length);
-  if (normalizedParts <= 1) {
-    return [messages];
-  }
-
-  const totalTokens = estimateMessagesTokens(messages);
-  const targetTokens = totalTokens / normalizedParts;
-  const chunks: AgentMessage[][] = [];
-  let current: AgentMessage[] = [];
-  let currentTokens = 0;
-
-  for (const message of messages) {
-    const messageTokens = estimateCompactionMessageTokens(message);
-    if (
-      chunks.length < normalizedParts - 1 &&
-      current.length > 0 &&
-      currentTokens + messageTokens > targetTokens
-    ) {
-      chunks.push(current);
-      current = [];
-      currentTokens = 0;
-    }
-
-    current.push(message);
-    currentTokens += messageTokens;
-  }
-
-  if (current.length > 0) {
-    chunks.push(current);
-  }
-
-  return chunks;
-}
-
 // Overhead reserved for summarization prompt, system prompt, previous summary,
 // and serialization wrappers (<conversation> tags, instructions, etc.).
 // generateSummary uses reasoning: "high" which also consumes context budget.
@@ -141,7 +79,6 @@ export function chunkMessagesByMaxTokens(
   }
 
   // Apply safety margin to compensate for estimateTokens() underestimation
-  // (chars/4 heuristic misses multi-byte chars, special tokens, code tokens, etc.)
   const effectiveMax = Math.max(1, Math.floor(maxTokens / SAFETY_MARGIN));
 
   const chunks: AgentMessage[][] = [];
@@ -185,12 +122,9 @@ export function computeAdaptiveChunkRatio(messages: AgentMessage[], contextWindo
 
   const totalTokens = estimateMessagesTokens(messages);
   const avgTokens = totalTokens / messages.length;
-
-  // Apply safety margin to account for estimation inaccuracy
   const safeAvgTokens = avgTokens * SAFETY_MARGIN;
   const avgRatio = safeAvgTokens / contextWindow;
 
-  // If average message is > 10% of context, reduce chunk ratio
   if (avgRatio > 0.1) {
     const reduction = Math.min(avgRatio * 2, BASE_CHUNK_RATIO - MIN_CHUNK_RATIO);
     return Math.max(MIN_CHUNK_RATIO, BASE_CHUNK_RATIO - reduction);
@@ -208,58 +142,10 @@ export function isOversizedForSummary(msg: AgentMessage, contextWindow: number):
   return tokens > contextWindow * 0.5;
 }
 
-async function summarizeChunks(params: {
-  messages: AgentMessage[];
-  model: NonNullable<ExtensionContext["model"]>;
-  apiKey: string;
-  signal: AbortSignal;
-  reserveTokens: number;
-  maxChunkTokens: number;
-  customInstructions?: string;
-  summarizationInstructions?: CompactionSummarizationInstructions;
-  previousSummary?: string;
-}): Promise<string> {
-  if (params.messages.length === 0) {
-    return params.previousSummary ?? DEFAULT_SUMMARY_FALLBACK;
-  }
-
-  // SECURITY: never feed toolResult.details into summarization prompts.
-  const safeMessages = stripToolResultDetails(params.messages);
-  const chunks = chunkMessagesByMaxTokens(safeMessages, params.maxChunkTokens);
-  let summary = params.previousSummary;
-  const effectiveInstructions = buildCompactionSummarizationInstructions(
-    params.customInstructions,
-    params.summarizationInstructions,
-  );
-  for (const chunk of chunks) {
-    summary = await retryAsync(
-      () =>
-        generateSummary(
-          chunk,
-          params.model,
-          params.reserveTokens,
-          params.apiKey,
-          params.signal,
-          effectiveInstructions,
-          summary,
-        ),
-      {
-        attempts: 3,
-        minDelayMs: 500,
-        maxDelayMs: 5000,
-        jitter: 0.2,
-        label: "compaction/generateSummary",
-        shouldRetry: (err) => !(err instanceof Error && err.name === "AbortError"),
-      },
-    );
-  }
-
-  return summary ?? DEFAULT_SUMMARY_FALLBACK;
-}
-
 /**
- * Summarize with progressive fallback for handling oversized messages.
- * If full summarization fails, tries partial summarization excluding oversized messages.
+ * Summarize messages by chunking and sequentially chaining summaries.
+ * Each chunk's summary becomes the previousSummary for the next chunk,
+ * building up a complete summary across all messages.
  */
 export async function summarizeWithFallback(params: {
   messages: AgentMessage[];
@@ -279,9 +165,40 @@ export async function summarizeWithFallback(params: {
     return params.previousSummary ?? DEFAULT_SUMMARY_FALLBACK;
   }
 
-  // Try full summarization first
+  // SECURITY: never feed toolResult.details into summarization prompts.
+  const safeMessages = stripToolResultDetails(messages);
+  const effectiveInstructions = buildCompactionSummarizationInstructions(
+    params.customInstructions,
+    params.summarizationInstructions,
+  );
+
+  // Try full sequential summarization first
   try {
-    return await summarizeChunks(params);
+    const chunks = chunkMessagesByMaxTokens(safeMessages, params.maxChunkTokens);
+    let summary = params.previousSummary;
+    for (const chunk of chunks) {
+      summary = await retryAsync(
+        () =>
+          generateSummary(
+            chunk,
+            params.model,
+            params.reserveTokens,
+            params.apiKey,
+            params.signal,
+            effectiveInstructions,
+            summary,
+          ),
+        {
+          attempts: 3,
+          minDelayMs: 500,
+          maxDelayMs: 5000,
+          jitter: 0.2,
+          label: "compaction/generateSummary",
+          shouldRetry: (err) => !(err instanceof Error && err.name === "AbortError"),
+        },
+      );
+    }
+    return summary ?? DEFAULT_SUMMARY_FALLBACK;
   } catch (fullError) {
     log.warn(
       `Full summarization failed, trying partial: ${
@@ -290,7 +207,7 @@ export async function summarizeWithFallback(params: {
     );
   }
 
-  // Fallback 1: Summarize only small messages, note oversized ones
+  // Fallback: summarize only small messages, note oversized ones
   const smallMessages: AgentMessage[] = [];
   const oversizedNotes: string[] = [];
 
@@ -308,10 +225,32 @@ export async function summarizeWithFallback(params: {
 
   if (smallMessages.length > 0) {
     try {
-      const partialSummary = await summarizeChunks({
-        ...params,
-        messages: smallMessages,
-      });
+      const safeParts = stripToolResultDetails(smallMessages);
+      const chunks = chunkMessagesByMaxTokens(safeParts, params.maxChunkTokens);
+      let summary = params.previousSummary;
+      for (const chunk of chunks) {
+        summary = await retryAsync(
+          () =>
+            generateSummary(
+              chunk,
+              params.model,
+              params.reserveTokens,
+              params.apiKey,
+              params.signal,
+              effectiveInstructions,
+              summary,
+            ),
+          {
+            attempts: 3,
+            minDelayMs: 500,
+            maxDelayMs: 5000,
+            jitter: 0.2,
+            label: "compaction/generateSummary",
+            shouldRetry: (err) => !(err instanceof Error && err.name === "AbortError"),
+          },
+        );
+      }
+      const partialSummary = summary ?? DEFAULT_SUMMARY_FALLBACK;
       const notes = oversizedNotes.length > 0 ? `\n\n${oversizedNotes.join("\n")}` : "";
       return partialSummary + notes;
     } catch (partialError) {
@@ -323,83 +262,22 @@ export async function summarizeWithFallback(params: {
     }
   }
 
-  // Final fallback: Just note what was there
+  // Final fallback: just note what was there
   return (
     `Context contained ${messages.length} messages (${oversizedNotes.length} oversized). ` +
     `Summary unavailable due to size limits.`
   );
 }
 
-export async function summarizeInStages(params: {
-  messages: AgentMessage[];
-  model: NonNullable<ExtensionContext["model"]>;
-  apiKey: string;
-  signal: AbortSignal;
-  reserveTokens: number;
-  maxChunkTokens: number;
-  contextWindow: number;
-  customInstructions?: string;
-  summarizationInstructions?: CompactionSummarizationInstructions;
-  previousSummary?: string;
-  parts?: number;
-  minMessagesForSplit?: number;
-}): Promise<string> {
-  const { messages } = params;
-  if (messages.length === 0) {
-    return params.previousSummary ?? DEFAULT_SUMMARY_FALLBACK;
-  }
-
-  const minMessagesForSplit = Math.max(2, params.minMessagesForSplit ?? 4);
-  const parts = normalizeParts(params.parts ?? DEFAULT_PARTS, messages.length);
-  const totalTokens = estimateMessagesTokens(messages);
-
-  if (parts <= 1 || messages.length < minMessagesForSplit || totalTokens <= params.maxChunkTokens) {
-    return summarizeWithFallback(params);
-  }
-
-  const splits = splitMessagesByTokenShare(messages, parts).filter((chunk) => chunk.length > 0);
-  if (splits.length <= 1) {
-    return summarizeWithFallback(params);
-  }
-
-  const partialSummaries: string[] = [];
-  for (const chunk of splits) {
-    partialSummaries.push(
-      await summarizeWithFallback({
-        ...params,
-        messages: chunk,
-        previousSummary: undefined,
-      }),
-    );
-  }
-
-  if (partialSummaries.length === 1) {
-    return partialSummaries[0];
-  }
-
-  const summaryMessages: AgentMessage[] = partialSummaries.map((summary) => ({
-    role: "user",
-    content: summary,
-    timestamp: Date.now(),
-  }));
-
-  const custom = params.customInstructions?.trim();
-  const mergeInstructions = custom
-    ? `${MERGE_SUMMARIES_INSTRUCTIONS}\n\n${custom}`
-    : MERGE_SUMMARIES_INSTRUCTIONS;
-
-  return summarizeWithFallback({
-    ...params,
-    messages: summaryMessages,
-    customInstructions: mergeInstructions,
-  });
-}
-
+/**
+ * Drop oldest messages until history fits within the token budget.
+ * Repairs tool_use/tool_result pairing after dropping to prevent
+ * "unexpected tool_use_id" errors from API providers.
+ */
 export function pruneHistoryForContextShare(params: {
   messages: AgentMessage[];
   maxContextTokens: number;
   maxHistoryShare?: number;
-  parts?: number;
 }): {
   messages: AgentMessage[];
   droppedMessagesList: AgentMessage[];
@@ -414,46 +292,27 @@ export function pruneHistoryForContextShare(params: {
   let keptMessages = params.messages;
   const allDroppedMessages: AgentMessage[] = [];
   let droppedChunks = 0;
-  let droppedMessages = 0;
-  let droppedTokens = 0;
 
-  const parts = normalizeParts(params.parts ?? DEFAULT_PARTS, keptMessages.length);
-
-  while (keptMessages.length > 0 && estimateMessagesTokens(keptMessages) > budgetTokens) {
-    const chunks = splitMessagesByTokenShare(keptMessages, parts);
-    if (chunks.length <= 1) {
-      break;
-    }
-    const [dropped, ...rest] = chunks;
-    const flatRest = rest.flat();
-
-    // After dropping a chunk, repair tool_use/tool_result pairing to handle
-    // orphaned tool_results (whose tool_use was in the dropped chunk).
-    // repairToolUseResultPairing drops orphaned tool_results, preventing
-    // "unexpected tool_use_id" errors from Anthropic's API.
-    const repairReport = repairToolUseResultPairing(flatRest);
-    const repairedKept = repairReport.messages;
-
-    // Track orphaned tool_results as dropped (they were in kept but their tool_use was dropped)
-    const orphanedCount = repairReport.droppedOrphanCount;
-
-    droppedChunks += 1;
-    droppedMessages += dropped.length + orphanedCount;
-    droppedTokens += estimateMessagesTokens(dropped);
-    // Note: We don't have the actual orphaned messages to add to droppedMessagesList
-    // since repairToolUseResultPairing doesn't return them. This is acceptable since
-    // the dropped messages are used for summarization, and orphaned tool_results
-    // without their tool_use context aren't useful for summarization anyway.
+  while (keptMessages.length > 1 && estimateMessagesTokens(keptMessages) > budgetTokens) {
+    // Drop ~25% of remaining messages from the front each iteration
+    const dropCount = Math.max(1, Math.floor(keptMessages.length * 0.25));
+    const dropped = keptMessages.slice(0, dropCount);
     allDroppedMessages.push(...dropped);
-    keptMessages = repairedKept;
+    keptMessages = keptMessages.slice(dropCount);
+    droppedChunks += 1;
   }
+
+  // Repair tool_use/tool_result pairing after dropping
+  const repairReport = repairToolUseResultPairing(keptMessages);
+  keptMessages = repairReport.messages;
+  const orphanedCount = repairReport.droppedOrphanCount;
 
   return {
     messages: keptMessages,
     droppedMessagesList: allDroppedMessages,
     droppedChunks,
-    droppedMessages,
-    droppedTokens,
+    droppedMessages: allDroppedMessages.length + orphanedCount,
+    droppedTokens: estimateMessagesTokens(allDroppedMessages),
     keptTokens: estimateMessagesTokens(keptMessages),
     budgetTokens,
   };

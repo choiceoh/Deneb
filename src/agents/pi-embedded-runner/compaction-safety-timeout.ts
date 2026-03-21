@@ -1,51 +1,8 @@
 import type { DenebConfig } from "../../config/config.js";
 
-async function withTimeout<T>(
-  work: (signal: AbortSignal | undefined) => Promise<T>,
-  timeoutMs?: number,
-  label?: string,
-): Promise<T> {
-  const resolved =
-    typeof timeoutMs === "number" && Number.isFinite(timeoutMs)
-      ? Math.max(1, Math.floor(timeoutMs))
-      : undefined;
-  if (!resolved) {
-    return await work(undefined);
-  }
-  const abortCtrl = new AbortController();
-  const timeoutError = new Error(`${label ?? "request"} timed out`);
-  const timer = setTimeout(() => abortCtrl.abort(timeoutError), resolved);
-  timer.unref?.();
-  let abortListener: (() => void) | undefined;
-  const abortPromise: Promise<never> = abortCtrl.signal.aborted
-    ? Promise.reject(abortCtrl.signal.reason ?? timeoutError)
-    : new Promise((_, reject) => {
-        abortListener = () => reject(abortCtrl.signal.reason ?? timeoutError);
-        abortCtrl.signal.addEventListener("abort", abortListener, { once: true });
-      });
-  try {
-    return await Promise.race([work(abortCtrl.signal), abortPromise]);
-  } finally {
-    clearTimeout(timer);
-    if (abortListener) {
-      abortCtrl.signal.removeEventListener("abort", abortListener);
-    }
-  }
-}
-
 export const EMBEDDED_COMPACTION_TIMEOUT_MS = 900_000;
 
 const MAX_SAFE_TIMEOUT_MS = 2_147_000_000;
-
-function createAbortError(signal: AbortSignal): Error {
-  const reason = "reason" in signal ? signal.reason : undefined;
-  if (reason instanceof Error) {
-    return reason;
-  }
-  const err = reason ? new Error("aborted", { cause: reason }) : new Error("aborted");
-  err.name = "AbortError";
-  return err;
-}
 
 export function resolveCompactionTimeoutMs(cfg?: DenebConfig): number {
   const raw = cfg?.agents?.defaults?.compaction?.timeoutSeconds;
@@ -63,63 +20,61 @@ export async function compactWithSafetyTimeout<T>(
     onCancel?: () => void;
   },
 ): Promise<T> {
-  let canceled = false;
-  const cancel = () => {
-    if (canceled) {
-      return;
-    }
-    canceled = true;
+  const resolvedTimeout =
+    typeof timeoutMs === "number" && Number.isFinite(timeoutMs)
+      ? Math.max(1, Math.floor(timeoutMs))
+      : EMBEDDED_COMPACTION_TIMEOUT_MS;
+
+  const abortCtrl = new AbortController();
+  const timer = setTimeout(
+    () => abortCtrl.abort(new Error("Compaction timed out")),
+    resolvedTimeout,
+  );
+  timer.unref?.();
+
+  // Forward external abort signal
+  const externalSignal = opts?.abortSignal;
+  const onExternalAbort = externalSignal
+    ? () => abortCtrl.abort(externalSignal.reason ?? new Error("aborted"))
+    : undefined;
+  if (externalSignal?.aborted) {
+    clearTimeout(timer);
+    opts?.onCancel?.();
+    const err = new Error("aborted");
+    err.name = "AbortError";
+    throw err;
+  }
+  if (onExternalAbort) {
+    externalSignal!.addEventListener("abort", onExternalAbort, { once: true });
+  }
+
+  const onAbort = () => {
     try {
       opts?.onCancel?.();
     } catch {
-      // Best-effort cancellation hook. Keep the timeout/abort path intact even
-      // if the underlying compaction cancel operation throws.
+      // Best-effort cancellation
     }
   };
+  abortCtrl.signal.addEventListener("abort", onAbort, { once: true });
 
-  return await withTimeout(
-    async (timeoutSignal) => {
-      let timeoutListener: (() => void) | undefined;
-      let externalAbortListener: (() => void) | undefined;
-      let externalAbortPromise: Promise<never> | undefined;
-      const abortSignal = opts?.abortSignal;
-
-      if (timeoutSignal) {
-        timeoutListener = () => {
-          cancel();
-        };
-        timeoutSignal.addEventListener("abort", timeoutListener, { once: true });
+  try {
+    const abortPromise = new Promise<never>((_, reject) => {
+      if (abortCtrl.signal.aborted) {
+        reject(abortCtrl.signal.reason);
+        return;
       }
-
-      if (abortSignal) {
-        if (abortSignal.aborted) {
-          cancel();
-          throw createAbortError(abortSignal);
-        }
-        externalAbortPromise = new Promise((_, reject) => {
-          externalAbortListener = () => {
-            cancel();
-            reject(createAbortError(abortSignal));
-          };
-          abortSignal.addEventListener("abort", externalAbortListener, { once: true });
-        });
-      }
-
-      try {
-        if (externalAbortPromise) {
-          return await Promise.race([compact(), externalAbortPromise]);
-        }
-        return await compact();
-      } finally {
-        if (timeoutListener) {
-          timeoutSignal?.removeEventListener("abort", timeoutListener);
-        }
-        if (externalAbortListener) {
-          abortSignal?.removeEventListener("abort", externalAbortListener);
-        }
-      }
-    },
-    timeoutMs,
-    "Compaction",
-  );
+      abortCtrl.signal.addEventListener(
+        "abort",
+        () => reject(abortCtrl.signal.reason ?? new Error("Compaction timed out")),
+        { once: true },
+      );
+    });
+    return await Promise.race([compact(), abortPromise]);
+  } finally {
+    clearTimeout(timer);
+    abortCtrl.signal.removeEventListener("abort", onAbort);
+    if (onExternalAbort) {
+      externalSignal!.removeEventListener("abort", onExternalAbort);
+    }
+  }
 }
