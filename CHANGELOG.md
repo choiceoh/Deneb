@@ -1,5 +1,64 @@
 # Vega 변경 이력 (Changelog)
 
+## vega v1.48 — Deneb(OpenClaw) 호환성 강화
+
+### 핵심: 상위 프로젝트 Deneb와의 연결성 및 호환성 강화. 버전 협상, 검색 모드 제어, 기능 프로빙 지원.
+
+### 신규 기능
+
+| #   | 항목                                                    | 파일                        |
+| --- | ------------------------------------------------------- | --------------------------- |
+| 1   | `memory-version` 명령 추가 — 경량 버전/기능 프로빙     | `commands/memory.py`        |
+| 2   | `memory-status` 확장 — 버전, capabilities, 모델 가용성  | `commands/memory.py`        |
+| 3   | `memory-search --mode` 지원 — search/vsearch/query 모드 | `commands/memory.py`        |
+| 4   | `config.VERSION`, `config.PROTOCOL_VERSION` 추가        | `config.py`                 |
+| 5   | MCP 스키마에 `version` 도구 추가                        | `mcp-vega.json`             |
+
+### memory-version 응답
+
+```json
+{
+  "version": "1.48",
+  "protocolVersion": 1,
+  "capabilities": {
+    "semanticSearch": true,
+    "reranking": true,
+    "searchModes": ["search", "vsearch", "query"],
+    "memoryCommands": ["memory-search", "memory-update", "memory-embed", "memory-status", "memory-version"]
+  }
+}
+```
+
+### memory-search --mode
+
+| 모드       | 동작                              | 속도   | 재현율 |
+| ---------- | --------------------------------- | ------ | ------ |
+| `search`   | FTS5만 사용                       | 빠름   | 낮음   |
+| `vsearch`  | 벡터 검색만 사용                  | 보통   | 보통   |
+| `query`    | FTS5 + 벡터 + 리랭킹 (기본)      | 느림   | 높음   |
+
+### Deneb(OpenClaw) 측 변경
+
+| #   | 항목                                                              | 파일                          |
+| --- | ----------------------------------------------------------------- | ----------------------------- |
+| 1   | `VegaMemoryManager` — 초기화 시 `memory-version` 프로빙          | `src/memory/vega-manager.ts`  |
+| 2   | `VegaMemoryManager.search()` — `--mode` 플래그 전달              | `src/memory/vega-manager.ts`  |
+| 3   | `VegaMemoryManager` — 사용자 env 변수 서브프로세스 전달          | `src/memory/vega-manager.ts`  |
+| 4   | `ResolvedVegaConfig` — `searchMode`, `env` 필드 추가             | `src/memory/backend-config.ts`|
+| 5   | `MemoryVegaConfig` 타입 — `searchMode`, `env` 필드 추가          | `src/config/types.memory.ts`  |
+| 6   | Zod 스키마 — `searchMode`, `env` 검증 추가                       | `src/config/zod-schema.ts`    |
+| 7   | `VegaCapabilities`, `VegaVersionInfo` 타입 export                | `src/memory/vega-manager.ts`  |
+| 8   | MCP 스키마에 `version` 도구 추가                                 | `mcp-vega.json`               |
+
+### 하위 호환성
+
+- `memory-version` 미지원 Vega(v1.47 이하)에 대해 `memory-status`로 폴백
+- `--mode` 플래그는 이전 버전에서 무시됨 (기존 동작 유지)
+- `memory-status` 응답에 추가된 필드는 선택적 — 기존 Deneb 코드도 정상 동작
+- SCHEMA_VERSION 변경 없음 (여전히 6)
+
+---
+
 ## vega v1.47 — QMD 외부 의존성 완전 제거
 
 ### 핵심: QMD(외부 Node.js 의미 검색 도구) 흔적 완전 제거, 로컬 모델(LocalAdapter) 전용 아키텍처로 전환

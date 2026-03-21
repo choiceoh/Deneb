@@ -266,6 +266,9 @@ def _exec_memory_search(params):
         return []
     limit = min(int(params.get('limit', 6)), 20)
     collection = params.get('collection')
+    # v1.48: Deneb에서 전달하는 searchMode 지원
+    # search = FTS only (빠름), vsearch = 벡터만, query = 하이브리드+리랭킹 (느림, 높은 재현율)
+    search_mode = params.get('mode') or params.get('searchMode') or 'query'
 
     workspace = _get_workspace()
     conn = get_db_connection(config.DB_PATH)
@@ -273,75 +276,78 @@ def _exec_memory_search(params):
     try:
         results_map = {}  # chunk_id → result dict
 
-        # ── FTS5 검색 ──
-        fts_query = _fts_escape(query)
-        try:
-            fts_rows = conn.execute("""
-                SELECT c.id, c.content, c.start_line, c.end_line, c.section_heading,
-                       p.source_file, rank
-                FROM chunks_fts f
-                JOIN chunks c ON c.rowid = f.rowid
-                JOIN projects p ON p.id = c.project_id
-                WHERE chunks_fts MATCH ? AND p.source_type = 'memory'
-                ORDER BY rank
-                LIMIT ?
-            """, (fts_query, limit * 3)).fetchall()
-        except Exception:
-            fts_rows = []
+        # ── FTS5 검색 (search, query 모드) ──
+        if search_mode in ('search', 'query'):
+            fts_query = _fts_escape(query)
+            try:
+                fts_rows = conn.execute("""
+                    SELECT c.id, c.content, c.start_line, c.end_line, c.section_heading,
+                           p.source_file, rank
+                    FROM chunks_fts f
+                    JOIN chunks c ON c.rowid = f.rowid
+                    JOIN projects p ON p.id = c.project_id
+                    WHERE chunks_fts MATCH ? AND p.source_type = 'memory'
+                    ORDER BY rank
+                    LIMIT ?
+                """, (fts_query, limit * 3)).fetchall()
+            except Exception:
+                fts_rows = []
 
-        for row in fts_rows:
-            cid, content, sl, el, heading, sf, rank = row
-            results_map[cid] = {
-                'chunk_id': cid, 'content': content or '',
-                'start_line': sl, 'end_line': el,
-                'heading': heading, 'source_file': sf,
-                'score': -rank if rank else 0.0,  # FTS rank는 음수 — 변환
-            }
+            for row in fts_rows:
+                cid, content, sl, el, heading, sf, rank = row
+                results_map[cid] = {
+                    'chunk_id': cid, 'content': content or '',
+                    'start_line': sl, 'end_line': el,
+                    'heading': heading, 'source_file': sf,
+                    'score': -rank if rank else 0.0,  # FTS rank는 음수 — 변환
+                }
 
-        # ── 벡터 검색 ──
-        try:
-            from models import LocalEmbedder, vector_search
-            embedder = LocalEmbedder()
-            query_vec = embedder.embed_single(query)
-            if query_vec is not None:
-                vec_results = vector_search(
-                    query_vec, db_path=config.DB_PATH,
-                    limit=limit * 2, source_type='memory'
-                )
-                for row in vec_results:
-                    cid = row[0]
-                    if cid not in results_map:
-                        score = row[1]
-                        content = row[4] if len(row) > 4 else ''
-                        sl = row[5] if len(row) > 5 else None
-                        el = row[6] if len(row) > 6 else None
-                        heading = row[7] if len(row) > 7 else ''
-                        sf = row[8] if len(row) > 8 else ''
-                        results_map[cid] = {
-                            'chunk_id': cid, 'content': content,
-                            'start_line': sl, 'end_line': el,
-                            'heading': heading, 'source_file': sf,
-                            'score': score,
-                        }
-        except Exception:
-            pass  # 벡터 검색 불가 시 FTS만으로 진행
+        # ── 벡터 검색 (vsearch, query 모드) ──
+        if search_mode in ('vsearch', 'query'):
+            try:
+                from models import LocalEmbedder, vector_search
+                embedder = LocalEmbedder()
+                query_vec = embedder.embed_single(query)
+                if query_vec is not None:
+                    vec_results = vector_search(
+                        query_vec, db_path=config.DB_PATH,
+                        limit=limit * 2, source_type='memory'
+                    )
+                    for row in vec_results:
+                        cid = row[0]
+                        if cid not in results_map:
+                            score = row[1]
+                            content = row[4] if len(row) > 4 else ''
+                            sl = row[5] if len(row) > 5 else None
+                            el = row[6] if len(row) > 6 else None
+                            heading = row[7] if len(row) > 7 else ''
+                            sf = row[8] if len(row) > 8 else ''
+                            results_map[cid] = {
+                                'chunk_id': cid, 'content': content,
+                                'start_line': sl, 'end_line': el,
+                                'heading': heading, 'source_file': sf,
+                                'score': score,
+                            }
+            except Exception:
+                pass  # 벡터 검색 불가 시 FTS만으로 진행
 
         if not results_map:
             return []
 
-        # ── 리랭킹 (가능하면) ──
+        # ── 리랭킹 (query 모드에서만, rerank 설정 활성 시) ──
         items = list(results_map.values())
-        try:
-            from models import LocalReranker
-            reranker = LocalReranker()
-            docs = [it['content'][:500] for it in items]
-            scores = reranker.rerank(query, docs)
-            if scores is not None:
-                for it, sc in zip(items, scores):
-                    it['score'] = sc
-        except Exception as e:
-            import logging as _logging
-            _logging.getLogger(__name__).debug("memory rerank 실패 (점수 없이 진행): %s", e)
+        if search_mode == 'query' and config.RERANK_MODE != 'none':
+            try:
+                from models import LocalReranker
+                reranker = LocalReranker()
+                docs = [it['content'][:500] for it in items]
+                scores = reranker.rerank(query, docs)
+                if scores is not None:
+                    for it, sc in zip(items, scores):
+                        it['score'] = sc
+            except Exception as e:
+                import logging as _logging
+                _logging.getLogger(__name__).debug("memory rerank 실패 (점수 없이 진행): %s", e)
 
         # 점수 내림차순 정렬
         items.sort(key=lambda x: x['score'], reverse=True)
@@ -390,12 +396,64 @@ def _exec_memory_status(params):
             WHERE p.source_type = 'memory'
         """).fetchone()
 
-        return {
+        # 프로젝트 소스 타입별 통계
+        project_row = conn.execute("""
+            SELECT
+                COUNT(DISTINCT CASE WHEN source_type = 'project' THEN id END) as projects,
+                COUNT(DISTINCT CASE WHEN source_type = 'memory' THEN id END) as memory_files
+            FROM projects
+        """).fetchone()
+
+        # 기본 상태
+        result = {
             'files': row[0],
             'chunks': row[1],
             'embedded': row[2],
             'model': os.path.basename(config.MODEL_EMBEDDER),
             'dbPath': config.DB_PATH,
+            # v1.48: Deneb 호환성 — 버전 및 기능 정보
+            'version': config.VERSION,
+            'protocolVersion': config.PROTOCOL_VERSION,
+            'capabilities': {
+                'semanticSearch': config.INFERENCE_BACKEND == 'local',
+                'reranking': config.RERANK_MODE in ('full', 'vega_only'),
+                'rerankMode': config.RERANK_MODE,
+                'inferenceBackend': config.INFERENCE_BACKEND,
+                'searchModes': ['search', 'vsearch', 'query'],
+                'schemaVersion': config.SCHEMA_VERSION,
+            },
+            'counts': {
+                'projects': project_row[0] if project_row else 0,
+                'memoryFiles': project_row[1] if project_row else 0,
+            },
         }
+
+        # 모델 가용성 (파일 존재 여부)
+        result['models'] = {
+            'embedder': os.path.basename(config.MODEL_EMBEDDER) if os.path.isfile(config.MODEL_EMBEDDER) else None,
+            'reranker': os.path.basename(config.MODEL_RERANKER) if os.path.isfile(config.MODEL_RERANKER) else None,
+            'expander': os.path.basename(config.MODEL_EXPANDER) if os.path.isfile(config.MODEL_EXPANDER) else None,
+        }
+
+        return result
     finally:
         conn.close()
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 7. memory-version (v1.48 — Deneb 호환성)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@register_command('memory-version', needs_db=False, read_only=True, category='system')
+def _exec_memory_version(params):
+    """Deneb가 Vega 버전과 기능을 빠르게 확인하는 경량 엔드포인트."""
+    return {
+        'version': config.VERSION,
+        'protocolVersion': config.PROTOCOL_VERSION,
+        'capabilities': {
+            'semanticSearch': config.INFERENCE_BACKEND == 'local',
+            'reranking': config.RERANK_MODE in ('full', 'vega_only'),
+            'searchModes': ['search', 'vsearch', 'query'],
+            'memoryCommands': ['memory-search', 'memory-update', 'memory-embed', 'memory-status', 'memory-version'],
+        },
+    }

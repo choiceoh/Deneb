@@ -2677,5 +2677,120 @@ class TestUpgrade(VegaTestCase):
         self.assertIn('embedded', emb)
 
 
+# ──────────────────────────────────────────────
+# v1.48: Deneb 호환성 테스트
+# ──────────────────────────────────────────────
+
+class TestMemoryVersion(VegaTestCase):
+    """memory-version 명령 검증 (v1.48)"""
+
+    def test_version_returns_version(self):
+        """memory-version이 버전 문자열 반환"""
+        data = self._assert_ok(self._exec('memory-version'))
+        self.assertIn('version', data)
+        self.assertEqual(data['version'], config.VERSION)
+
+    def test_version_has_protocol(self):
+        """protocolVersion 필드 존재"""
+        data = self._assert_ok(self._exec('memory-version'))
+        self.assertIn('protocolVersion', data)
+        self.assertEqual(data['protocolVersion'], config.PROTOCOL_VERSION)
+
+    def test_version_has_capabilities(self):
+        """capabilities 필드 구조 검증"""
+        data = self._assert_ok(self._exec('memory-version'))
+        caps = data.get('capabilities', {})
+        self.assertIn('semanticSearch', caps)
+        self.assertIn('reranking', caps)
+        self.assertIn('searchModes', caps)
+        self.assertIsInstance(caps['searchModes'], list)
+        self.assertIn('search', caps['searchModes'])
+        self.assertIn('vsearch', caps['searchModes'])
+        self.assertIn('query', caps['searchModes'])
+
+    def test_version_has_memory_commands(self):
+        """지원 명령 목록 포함"""
+        data = self._assert_ok(self._exec('memory-version'))
+        cmds = data.get('capabilities', {}).get('memoryCommands', [])
+        for expected in ['memory-search', 'memory-update', 'memory-embed', 'memory-status', 'memory-version']:
+            self.assertIn(expected, cmds)
+
+
+class TestMemoryStatusExtended(VegaTestCase):
+    """memory-status 확장 필드 검증 (v1.48)"""
+
+    def test_status_has_version(self):
+        """memory-status에 버전 정보 포함"""
+        data = self._assert_ok(self._exec('memory-status'))
+        self.assertIn('version', data)
+        self.assertEqual(data['version'], config.VERSION)
+
+    def test_status_has_capabilities(self):
+        """memory-status에 capabilities 포함"""
+        data = self._assert_ok(self._exec('memory-status'))
+        self.assertIn('capabilities', data)
+        caps = data['capabilities']
+        self.assertIn('searchModes', caps)
+        self.assertIn('schemaVersion', caps)
+        self.assertEqual(caps['schemaVersion'], config.SCHEMA_VERSION)
+
+    def test_status_has_models(self):
+        """memory-status에 models 필드 포함"""
+        data = self._assert_ok(self._exec('memory-status'))
+        self.assertIn('models', data)
+        models = data['models']
+        self.assertIn('embedder', models)
+        self.assertIn('reranker', models)
+        self.assertIn('expander', models)
+
+    def test_status_has_counts(self):
+        """memory-status에 counts 필드 포함"""
+        data = self._assert_ok(self._exec('memory-status'))
+        self.assertIn('counts', data)
+        counts = data['counts']
+        self.assertIn('projects', counts)
+        self.assertIn('memoryFiles', counts)
+
+
+class TestMemorySearchMode(VegaTestCase):
+    """memory-search --mode 검색 모드 검증 (v1.48)"""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        mem_dir = Path(self.tmpdir) / 'memory'
+        mem_dir.mkdir()
+        (mem_dir / 'note.md').write_text('# Test Note\nBudget discussion for Q2 planning\n', encoding='utf-8')
+        self._orig_workspace = config.MEMORY_WORKSPACE
+        self._orig_paths = config.MEMORY_PATHS
+        config.MEMORY_WORKSPACE = self.tmpdir
+        config.MEMORY_PATHS = ['memory']
+        self._exec('memory-update')
+
+    def tearDown(self):
+        config.MEMORY_WORKSPACE = self._orig_workspace
+        config.MEMORY_PATHS = self._orig_paths
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_search_mode_search(self):
+        """mode=search → FTS만 사용"""
+        data = self._assert_ok(self._exec('memory-search', {'query': 'budget', 'mode': 'search'}))
+        self.assertIsInstance(data, list)
+
+    def test_search_mode_query(self):
+        """mode=query → 하이브리드 (기본값)"""
+        data = self._assert_ok(self._exec('memory-search', {'query': 'budget', 'mode': 'query'}))
+        self.assertIsInstance(data, list)
+
+    def test_search_mode_vsearch(self):
+        """mode=vsearch → 벡터만 사용 (모델 없으면 빈 결과)"""
+        data = self._assert_ok(self._exec('memory-search', {'query': 'budget', 'mode': 'vsearch'}))
+        self.assertIsInstance(data, list)
+
+    def test_search_default_mode(self):
+        """mode 미지정 → query 모드 (기본)"""
+        data = self._assert_ok(self._exec('memory-search', {'query': 'budget'}))
+        self.assertIsInstance(data, list)
+
+
 if __name__ == '__main__':
     unittest.main()

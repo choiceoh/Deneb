@@ -1204,8 +1204,9 @@ def _run_memory_command():
         params['query'] = ' '.join(query_args)
         params['limit'] = _get_flag(args, '--limit') or '6'
         params['collection'] = _get_flag(args, '--collection')
+        params['mode'] = _get_flag(args, '--mode')  # v1.48: search/vsearch/query
     # memory-update, memory-embed: --force는 sub_args에서 처리
-    # memory-status: 파라미터 없음
+    # memory-status, memory-version: 파라미터 없음
 
     try:
         _ensure_db()

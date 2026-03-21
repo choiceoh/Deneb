@@ -134,6 +134,10 @@ MODEL_RERANKER = _find_model('VEGA_MODEL_RERANKER', MODELS_DIR, [
 MODEL_UNLOAD_TTL = int(os.environ.get('VEGA_MODEL_TTL', '300'))   # 초: 비활성 후 모델 해제
 INFERENCE_BACKEND = os.environ.get('VEGA_INFERENCE', 'local')      # 'local' | 'sqlite_only'
 
+# 버전 정보 (v1.48 — Deneb 호환성 강화)
+VERSION = '1.48'
+PROTOCOL_VERSION = 1  # Deneb↔Vega 프로토콜 버전 (향후 호환성 체크용)
+
 # Memory backend (v1.43)
 MEMORY_PATHS = [p.strip() for p in os.environ.get('VEGA_MEMORY_PATHS', 'MEMORY.md,memory,projects').split(',') if p.strip()]
 MEMORY_WORKSPACE = os.environ.get('VEGA_MEMORY_WORKSPACE', '')  # 빈 값 = MD_DIR 부모 자동
