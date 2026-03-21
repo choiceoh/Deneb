@@ -1,0 +1,63 @@
+# Blue-Green Nginx 프록시 설정 템플릿
+#
+# blue-green.sh 스크립트가 ACTIVE_UPSTREAM을 치환하여
+# nginx-bg.conf를 생성합니다.
+
+upstream blue {
+    server gateway-blue:18789;
+}
+
+upstream green {
+    server gateway-green:18789;
+}
+
+# /bg-status 엔드포인트 — 현재 활성 슬롯 확인용
+map $request_uri $bg_status_body {
+    default "";
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    # WebSocket 업그레이드 지원
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # 타임아웃 설정 (WebSocket 장시간 연결 대응)
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+
+    # 활성 슬롯 상태 확인 엔드포인트
+    location = /bg-status {
+        default_type application/json;
+        return 200 '{"active":"__ACTIVE_SLOT__","blue":"gateway-blue:18789","green":"gateway-green:18789"}';
+    }
+
+    # 메인 트래픽 → 활성 슬롯
+    location / {
+        proxy_pass http://__ACTIVE_SLOT__;
+    }
+}
+
+server {
+    listen 18790;
+    server_name _;
+
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+
+    location / {
+        proxy_pass http://__ACTIVE_SLOT__;
+    }
+}
