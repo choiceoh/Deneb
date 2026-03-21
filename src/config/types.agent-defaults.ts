@@ -348,6 +348,23 @@ export type AgentCompactionConfig = {
    * Default: false (existing behavior preserved).
    */
   truncateAfterCompaction?: boolean;
+  /** Background compression observer for proactive pre-computed summaries. */
+  observer?: AgentCompactionObserverConfig;
+};
+
+export type AgentCompactionObserverConfig = {
+  /** Enable the compression observer (default: false). */
+  enabled?: boolean;
+  /** Target compression ratio — summary tokens / source tokens (default: 0.2). */
+  targetRatio?: number;
+  /** Number of new messages before triggering re-compression (default: 5). */
+  messageInterval?: number;
+  /** Model identifier for background compression. */
+  model?: string;
+  /** Provider for the observer model. */
+  provider?: string;
+  /** Max staleness in ms before cached summary is expired (default: 60000). */
+  maxStalenessMs?: number;
 };
 
 export type AgentCompactionMemoryFlushConfig = {

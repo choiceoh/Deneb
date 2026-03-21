@@ -38,17 +38,17 @@ The plan is organized into 5 phases, from low-risk structural improvements to fu
 
 ### Key Metrics
 
-| Module | Files | Approx LOC | Imports From | Risk |
-|--------|-------|-----------|-------------|------|
-| `src/gateway/` | 266 | 67K | 9+ modules | HIGH |
-| `src/auto-reply/` | ~40 | ~12K | config, channels, agents, infra | MEDIUM |
-| `src/infra/outbound/` | ~70 | ~18K | gateway/call, channels, config | MEDIUM |
-| `src/plugins/` | ~30 | ~8K | config, media, tts, web-search | LOW |
-| `src/routing/` | ~20 | ~6K | config, agents, channels | MEDIUM |
-| `src/channels/` | ~25 | ~7K | (minimal) | LOW |
-| `src/agents/` | ~35 | ~10K | config, routing | MEDIUM |
-| `src/media/` | ~44 | ~10K | (minimal) | LOW |
-| `src/config/` | ~20 | ~5K | (minimal) | LOW |
+| Module                | Files | Approx LOC | Imports From                    | Risk   |
+| --------------------- | ----- | ---------- | ------------------------------- | ------ |
+| `src/gateway/`        | 266   | 67K        | 9+ modules                      | HIGH   |
+| `src/auto-reply/`     | ~40   | ~12K       | config, channels, agents, infra | MEDIUM |
+| `src/infra/outbound/` | ~70   | ~18K       | gateway/call, channels, config  | MEDIUM |
+| `src/plugins/`        | ~30   | ~8K        | config, media, tts, web-search  | LOW    |
+| `src/routing/`        | ~20   | ~6K        | config, agents, channels        | MEDIUM |
+| `src/channels/`       | ~25   | ~7K        | (minimal)                       | LOW    |
+| `src/agents/`         | ~35   | ~10K       | config, routing                 | MEDIUM |
+| `src/media/`          | ~44   | ~10K       | (minimal)                       | LOW    |
+| `src/config/`         | ~20   | ~5K        | (minimal)                       | LOW    |
 
 ---
 
@@ -61,6 +61,7 @@ The plan is organized into 5 phases, from low-risk structural improvements to fu
 Each top-level `src/*` directory gets an `index.ts` that re-exports only its public API. Internal files are not re-exported.
 
 **Modules to add barrels:**
+
 - `src/channels/index.ts` — `registerChannel`, `resolveChannel`, channel types
 - `src/routing/index.ts` — `resolveRoute`, `SessionKey`, binding utilities
 - `src/config/index.ts` — `loadConfig`, `ConfigSchema`, path utilities
@@ -71,6 +72,7 @@ Each top-level `src/*` directory gets an `index.ts` that re-exports only its pub
 - `src/infra/index.ts` — outbound send, archive, backup interfaces
 
 **Rules:**
+
 - Consumers import from `src/<module>/index.ts`, not deep paths
 - ESLint `no-restricted-imports` rule enforces boundary (phase 2)
 - Existing deep imports continue working during migration
@@ -128,16 +130,16 @@ Forbidden:
 
 Based on file analysis, `src/gateway/` contains these distinct concerns:
 
-| Subdomain | Files | Description |
-|-----------|-------|-------------|
-| **auth** | auth.ts, auth-*.ts, rate-limit | Authentication, API keys, rate limiting |
-| **chat** | chat-*.ts, server-methods/chat.ts | Chat session handling, abort, sanitize |
-| **channels** | channel-*.ts, server-methods/channels.ts | Channel health, status, registration |
-| **agents** | agent-*.ts, server-methods/agent*.ts | Agent lifecycle, tools, events |
-| **models** | model-*.ts, server-methods/models.ts | Model provider routing, fallback |
-| **sessions** | session-*.ts, server-methods/sessions.ts | Session management, reset, history |
-| **server-core** | server.impl.ts, boot.ts, call.ts, ws-log.ts | HTTP server, WebSocket, boot sequence |
-| **config-api** | server-methods/config.ts, connect.ts | Config read/write API endpoints |
+| Subdomain       | Files                                       | Description                             |
+| --------------- | ------------------------------------------- | --------------------------------------- |
+| **auth**        | auth.ts, auth-\*.ts, rate-limit             | Authentication, API keys, rate limiting |
+| **chat**        | chat-\*.ts, server-methods/chat.ts          | Chat session handling, abort, sanitize  |
+| **channels**    | channel-\*.ts, server-methods/channels.ts   | Channel health, status, registration    |
+| **agents**      | agent-_.ts, server-methods/agent_.ts        | Agent lifecycle, tools, events          |
+| **models**      | model-\*.ts, server-methods/models.ts       | Model provider routing, fallback        |
+| **sessions**    | session-\*.ts, server-methods/sessions.ts   | Session management, reset, history      |
+| **server-core** | server.impl.ts, boot.ts, call.ts, ws-log.ts | HTTP server, WebSocket, boot sequence   |
+| **config-api**  | server-methods/config.ts, connect.ts        | Config read/write API endpoints         |
 
 ### 2.2 Extract subdomains into subdirectories
 
@@ -154,6 +156,7 @@ src/gateway/
 ```
 
 Each subdomain:
+
 - Has its own `index.ts` barrel
 - Declares handler registration functions (e.g., `registerChatHandlers(server)`)
 - Receives dependencies via function parameters, not global imports
@@ -203,11 +206,11 @@ export interface GatewayDeps {
 
 ### 3.2 Eliminate process-global state
 
-| Current Global | Replacement |
-|---------------|-------------|
+| Current Global                            | Replacement                            |
+| ----------------------------------------- | -------------------------------------- |
 | `GATEWAY_SUBAGENT_SYMBOL` on `globalThis` | Pass `PluginRuntime` via `GatewayDeps` |
-| `registerChannel()` global map | `ChannelRegistry` instance on deps |
-| Config singleton | `ConfigReader` instance on deps |
+| `registerChannel()` global map            | `ChannelRegistry` instance on deps     |
+| Config singleton                          | `ConfigReader` instance on deps        |
 
 ### 3.3 Test isolation
 
@@ -277,13 +280,13 @@ Add a build-time check that verifies extensions import only from `deneb/plugin-s
 
 ### 5.1 Candidate packages
 
-| Package | Source | Rationale |
-|---------|--------|-----------|
-| `@deneb/config` | `src/config/` | Pure data, no side effects, many consumers |
-| `@deneb/media` | `src/media/` | Self-contained pipeline, clear interface |
-| `@deneb/routing` | `src/routing/` | Core domain logic, testable in isolation |
-| `@deneb/channels` | `src/channels/` | Registry + types, minimal deps |
-| `@deneb/shared` | `src/shared/`, `src/types/`, `src/utils/` | Foundation utilities |
+| Package           | Source                                    | Rationale                                  |
+| ----------------- | ----------------------------------------- | ------------------------------------------ |
+| `@deneb/config`   | `src/config/`                             | Pure data, no side effects, many consumers |
+| `@deneb/media`    | `src/media/`                              | Self-contained pipeline, clear interface   |
+| `@deneb/routing`  | `src/routing/`                            | Core domain logic, testable in isolation   |
+| `@deneb/channels` | `src/channels/`                           | Registry + types, minimal deps             |
+| `@deneb/shared`   | `src/shared/`, `src/types/`, `src/utils/` | Foundation utilities                       |
 
 ### 5.2 Package structure
 
@@ -319,13 +322,13 @@ packages/
 
 ## Implementation Priority & Effort
 
-| Phase | Effort | Risk | Value | Priority |
-|-------|--------|------|-------|----------|
-| 1. Module Boundaries | Small (1-2 weeks) | Low | High | **P0** |
-| 2. Gateway Decomposition | Medium (3-4 weeks) | Medium | High | **P0** |
-| 3. Dependency Injection | Medium (2-3 weeks) | Medium | Medium | **P1** |
-| 4. Plugin SDK Stabilization | Small (1-2 weeks) | Medium | Medium | **P1** |
-| 5. Workspace Extraction | Large (4-6 weeks) | High | Low-Med | **P2** |
+| Phase                       | Effort             | Risk   | Value   | Priority |
+| --------------------------- | ------------------ | ------ | ------- | -------- |
+| 1. Module Boundaries        | Small (1-2 weeks)  | Low    | High    | **P0**   |
+| 2. Gateway Decomposition    | Medium (3-4 weeks) | Medium | High    | **P0**   |
+| 3. Dependency Injection     | Medium (2-3 weeks) | Medium | Medium  | **P1**   |
+| 4. Plugin SDK Stabilization | Small (1-2 weeks)  | Medium | Medium  | **P1**   |
+| 5. Workspace Extraction     | Large (4-6 weeks)  | High   | Low-Med | **P2**   |
 
 ---
 
@@ -344,13 +347,13 @@ packages/
 
 ## Risks & Mitigations
 
-| Risk | Impact | Mitigation |
-|------|--------|-----------|
-| Import path changes break extensions | HIGH | Phase 1 keeps old paths working; lint rule added gradually |
-| Gateway decomposition causes regressions | MEDIUM | Move files without logic changes; test before/after each move |
-| DI overhead slows hot paths | LOW | Profile before/after; keep DI at initialization, not per-request |
-| Plugin SDK consolidation breaks extensions | HIGH | Provide deprecated re-export shims for 2 minor versions |
-| Multi-agent conflicts during refactor | MEDIUM | Scope PRs to single subdomain; coordinate via branch naming |
+| Risk                                       | Impact | Mitigation                                                       |
+| ------------------------------------------ | ------ | ---------------------------------------------------------------- |
+| Import path changes break extensions       | HIGH   | Phase 1 keeps old paths working; lint rule added gradually       |
+| Gateway decomposition causes regressions   | MEDIUM | Move files without logic changes; test before/after each move    |
+| DI overhead slows hot paths                | LOW    | Profile before/after; keep DI at initialization, not per-request |
+| Plugin SDK consolidation breaks extensions | HIGH   | Provide deprecated re-export shims for 2 minor versions          |
+| Multi-agent conflicts during refactor      | MEDIUM | Scope PRs to single subdomain; coordinate via branch naming      |
 
 ---
 

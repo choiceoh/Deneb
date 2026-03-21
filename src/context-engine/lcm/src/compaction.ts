@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { CompressionObserver } from "./compression-observer.js";
 import { estimateTokens } from "./engine-helpers.js";
 import { extractFileIdsFromContent } from "./large-files.js";
 import type { ConversationStore, CreateMessagePartInput } from "./store/conversation-store.js";
@@ -61,7 +62,7 @@ type CompactionSummarizeOptions = {
   isCondensed?: boolean;
   depth?: number;
 };
-type CompactionSummarizeFn = (
+export type CompactionSummarizeFn = (
   text: string,
   aggressive?: boolean,
   options?: CompactionSummarizeOptions,
@@ -155,11 +156,18 @@ function dedupeOrderedIds(ids: Iterable<string>): string[] {
 // ── CompactionEngine ─────────────────────────────────────────────────────────
 
 export class CompactionEngine {
+  private observer?: CompressionObserver;
+
   constructor(
     private conversationStore: ConversationStore,
     private summaryStore: SummaryStore,
     private config: CompactionConfig,
   ) {}
+
+  /** Attach a compression observer for pre-computed summary acceleration. */
+  attachObserver(observer: CompressionObserver): void {
+    this.observer = observer;
+  }
 
   // ── evaluate ─────────────────────────────────────────────────────────────
 
@@ -388,6 +396,12 @@ export class CompactionEngine {
     let previousSummaryContent: string | undefined;
     let previousTokens = tokensBefore;
 
+    // Fast path: use pre-computed observer summary if available and fresh.
+    const observerResult = await this.tryObserverFastPath(conversationId, tokensBefore);
+    if (observerResult) {
+      return observerResult;
+    }
+
     // Phase 1: leaf passes over oldest raw chunks outside the protected tail.
     const maxSweepIter = this.config.maxSweepIterations ?? 50;
     for (let leafIter = 0; leafIter < maxSweepIter; leafIter++) {
@@ -463,6 +477,13 @@ export class CompactionEngine {
     }
 
     const tokensAfter = await this.summaryStore.getContextTokenCount(conversationId);
+
+    // After successful compaction, invalidate observer cache. Don't trigger
+    // an immediate update — let the natural message-interval accumulation
+    // create a meaningful next summary once enough new messages arrive.
+    if (actionTaken && this.observer) {
+      this.observer.invalidate(conversationId);
+    }
 
     return {
       actionTaken,
@@ -543,6 +564,158 @@ export class CompactionEngine {
       rounds: this.config.maxRounds,
       finalTokens,
     };
+  }
+
+  // ── Observer fast path ──────────────────────────────────────────────────
+
+  /**
+   * Attempt to use the pre-computed observer summary for a fast compaction.
+   *
+   * Returns null (fall back to normal compaction) on ANY inconsistency.
+   * The fast path must never corrupt DB state or lose information.
+   */
+  private async tryObserverFastPath(
+    conversationId: number,
+    tokensBefore: number,
+  ): Promise<CompactionResult | null> {
+    if (!this.observer) {
+      return null;
+    }
+    if (!this.observer.isSummaryFresh(conversationId, tokensBefore)) {
+      return null;
+    }
+    const cached = this.observer.getCachedSummary(conversationId);
+    if (!cached) {
+      return null;
+    }
+
+    // ── Collect replaceable messages and validate consistency ────────────
+    const contextItems = await this.summaryStore.getContextItems(conversationId);
+    const freshTailOrdinal = this.resolveFreshTailOrdinal(contextItems);
+    const rawMessageItems: ContextItemRecord[] = [];
+    const messageContents: { messageId: number; createdAt: Date; content: string }[] = [];
+
+    for (const item of contextItems) {
+      if (item.ordinal >= freshTailOrdinal) {
+        break;
+      }
+      // Any non-raw-message item in the range → bail entirely.
+      if (item.itemType !== "message" || item.messageId == null) {
+        this.observer.invalidate(conversationId);
+        return null;
+      }
+      rawMessageItems.push(item);
+      const msg = await this.conversationStore.getMessageById(item.messageId);
+      if (!msg) {
+        // Missing message in DB → context is inconsistent, bail.
+        this.observer.invalidate(conversationId);
+        return null;
+      }
+      messageContents.push({
+        messageId: msg.messageId,
+        createdAt: msg.createdAt,
+        content: msg.content,
+      });
+    }
+
+    if (rawMessageItems.length === 0) {
+      return null;
+    }
+
+    // Every raw item must have a resolved message (no gaps).
+    if (rawMessageItems.length !== messageContents.length) {
+      this.observer.invalidate(conversationId);
+      return null;
+    }
+
+    // The observer must have covered the same number of messages.
+    // If they diverge, the summary doesn't match the replacement target.
+    if (cached.messagesCovered !== rawMessageItems.length) {
+      this.observer.invalidate(conversationId);
+      return null;
+    }
+
+    // ── Apply the pre-computed summary ──────────────────────────────────
+    try {
+      const summaryId = generateSummaryId(cached.summary);
+      const fileIds = dedupeOrderedIds(
+        messageContents.flatMap((m) => extractFileIdsFromContent(m.content)),
+      );
+
+      await this.summaryStore.insertSummary({
+        summaryId,
+        conversationId,
+        kind: "leaf",
+        depth: 0,
+        content: cached.summary,
+        tokenCount: cached.tokenCount,
+        fileIds,
+        earliestAt: new Date(Math.min(...messageContents.map((m) => m.createdAt.getTime()))),
+        latestAt: new Date(Math.max(...messageContents.map((m) => m.createdAt.getTime()))),
+        descendantCount: 0,
+        descendantTokenCount: 0,
+        sourceMessageTokenCount: cached.sourceTokenCount,
+      });
+
+      await this.summaryStore.linkSummaryToMessages(
+        summaryId,
+        messageContents.map((m) => m.messageId),
+      );
+
+      const ordinals = rawMessageItems.map((ci) => ci.ordinal);
+      await this.summaryStore.replaceContextRangeWithSummary({
+        conversationId,
+        startOrdinal: Math.min(...ordinals),
+        endOrdinal: Math.max(...ordinals),
+        summaryId,
+      });
+
+      const tokensAfter = await this.summaryStore.getContextTokenCount(conversationId);
+
+      await this.persistCompactionEvents({
+        conversationId,
+        tokensBefore,
+        tokensAfterLeaf: tokensAfter,
+        tokensAfterFinal: tokensAfter,
+        leafResult: { summaryId, level: "normal" },
+        condenseResult: null,
+      });
+
+      if (tokensAfter >= tokensBefore) {
+        console.error(
+          `[lcm:compaction] observer fast path did not reduce tokens for conversation=${conversationId}: ` +
+            `before=${tokensBefore} after=${tokensAfter}`,
+        );
+      } else {
+        console.error(
+          `[lcm:compaction] observer fast path OK conversation=${conversationId}: ` +
+            `before=${tokensBefore} after=${tokensAfter} messages=${rawMessageItems.length} ` +
+            `age=${Date.now() - cached.updatedAt}ms`,
+        );
+      }
+
+      this.observer.invalidate(conversationId);
+
+      return {
+        actionTaken: true,
+        tokensBefore,
+        tokensAfter,
+        createdSummaryId: summaryId,
+        condensed: false,
+        level: "normal",
+      };
+    } catch (err) {
+      // DB operation failed mid-way. Invalidate cache and fall back to
+      // normal compaction which will see the (possibly partial) state
+      // and handle it correctly via its own leaf/condensed passes.
+      console.error(
+        `[lcm:compaction] observer fast path DB error, falling back: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      this.observer.invalidate(conversationId);
+      return null;
+    }
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────

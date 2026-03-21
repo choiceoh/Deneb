@@ -15,6 +15,7 @@ import type {
 } from "../../types.js";
 import { ContextAssembler } from "./assembler.js";
 import { CompactionEngine, type CompactionConfig } from "./compaction.js";
+import { CompressionObserver, DEFAULT_OBSERVER_CONFIG } from "./compression-observer.js";
 import type { LcmConfig } from "./db/config.js";
 import { getLcmConnection } from "./db/connection.js";
 import { getLcmDbFeatures } from "./db/features.js";
@@ -73,6 +74,7 @@ export class LcmContextEngine implements ContextEngine {
   private sessionOperationQueues = new Map<string, Promise<void>>();
   private largeFileTextSummarizerResolved = false;
   private largeFileTextSummarizer?: (prompt: string) => Promise<string | null>;
+  private compressionObserver?: CompressionObserver;
   private deps: LcmDependencies;
 
   constructor(deps: LcmDependencies) {
@@ -115,6 +117,18 @@ export class LcmContextEngine implements ContextEngine {
       this.summaryStore,
       compactionConfig,
     );
+
+    // Initialize compression observer if enabled.
+    // Summarizer resolution and warmup happen asynchronously after construction.
+    const observerCfg = deps.config.observer;
+    if (observerCfg.enabled) {
+      this.initObserverAsync().catch((err) => {
+        console.error(
+          `[lcm] compression observer initialization failed:`,
+          err instanceof Error ? err.message : err,
+        );
+      });
+    }
 
     this.retrieval = new RetrievalEngine(this.conversationStore, this.summaryStore);
   }
@@ -372,6 +386,104 @@ export class LcmContextEngine implements ContextEngine {
       rewrittenContent: rewrittenSegments.join(""),
       fileIds,
     };
+  }
+
+  /**
+   * Eagerly initialize the compression observer: resolve the summarizer,
+   * validate it with a warmup call, then create and attach the observer.
+   *
+   * If resolution or warmup fails, the observer is simply not created —
+   * no silent fallbacks, no lazy failures minutes later.
+   */
+  private async initObserverAsync(): Promise<void> {
+    const observerCfg = this.deps.config.observer;
+    const model = observerCfg.model || undefined;
+    const provider = observerCfg.provider || undefined;
+
+    // Step 1: Resolve the summarizer function.
+    let summarize: ((text: string, aggressive?: boolean) => Promise<string>) | undefined;
+
+    if (model || provider) {
+      try {
+        summarize =
+          (await createLcmSummarizeFromLegacyParams({
+            deps: this.deps,
+            legacyParams: {
+              ...(provider ? { provider } : {}),
+              ...(model ? { model } : {}),
+            },
+          })) ?? undefined;
+      } catch (err) {
+        console.error(
+          `[lcm] observer model resolution failed: model="${model ?? ""}" provider="${provider ?? ""}":`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+
+    if (!summarize) {
+      // No observer-specific model or it failed — try default LCM summarizer.
+      try {
+        const defaultFn = await this.resolveSummarize({});
+        summarize = defaultFn;
+      } catch (err) {
+        console.error(
+          `[lcm] observer default summarizer resolution also failed:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+
+    if (!summarize) {
+      console.error(
+        `[lcm] compression observer NOT initialized — no summarizer available. ` +
+          `Check observer.model/observer.provider or default LCM summary model config.`,
+      );
+      return;
+    }
+
+    // Step 2: Warmup — validate the model is reachable with a tiny test call.
+    try {
+      const warmupResult = await summarize("Hello world. This is a test.", false);
+      if (!warmupResult || warmupResult.trim().length === 0) {
+        console.error(
+          `[lcm] observer warmup returned empty response — model may not support summarization. ` +
+            `model="${model ?? "(default)"}" provider="${provider ?? "(default)"}"`,
+        );
+        return;
+      }
+      console.error(
+        `[lcm] compression observer warmup OK: model="${model ?? "(default)"}" provider="${provider ?? "(default)"}"`,
+      );
+    } catch (err) {
+      console.error(
+        `[lcm] observer warmup call failed — model is not reachable. Observer NOT started. ` +
+          `model="${model ?? "(default)"}" provider="${provider ?? "(default)"}": ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+      );
+      return;
+    }
+
+    // Step 3: Create and attach the observer with the validated summarizer.
+    // Pass the same freshTailCount as the compaction engine uses, so the
+    // observer summarizes exactly the messages that the fast path will replace.
+    this.compressionObserver = new CompressionObserver(
+      {
+        ...DEFAULT_OBSERVER_CONFIG,
+        enabled: observerCfg.enabled,
+        targetRatio: observerCfg.targetRatio,
+        messageInterval: observerCfg.messageInterval,
+        model: model,
+        provider: provider,
+        maxStalenessMs: observerCfg.maxStalenessMs,
+        freshTailCount: this.config.freshTailCount,
+      },
+      this.conversationStore,
+      this.summaryStore,
+      summarize,
+    );
+    this.compaction.attachObserver(this.compressionObserver);
   }
 
   // ── ContextEngine interface ─────────────────────────────────────────────
@@ -663,6 +775,11 @@ export class LcmContextEngine implements ContextEngine {
 
     // Append to context items so assembler can see it
     await this.summaryStore.appendContextMessage(conversationId, msgRecord.messageId);
+
+    // Notify the compression observer of the new message.
+    if (this.compressionObserver) {
+      this.compressionObserver.onMessage(conversationId);
+    }
 
     return { ingested: true };
   }
@@ -1192,6 +1309,9 @@ export class LcmContextEngine implements ContextEngine {
     // registers a single engine instance reused by the factory. Closing
     // the DB here would break subsequent runs with "database is not open".
     // The connection is cleaned up on process exit via closeLcmConnection().
+    // Note: compression observer is NOT disposed here because the engine
+    // instance is a singleton reused across runs. Observer cleanup happens
+    // only on process exit.
   }
 
   // ── Public accessors for retrieval (used by subagent expansion) ─────────
@@ -1206,6 +1326,27 @@ export class LcmContextEngine implements ContextEngine {
 
   getSummaryStore(): SummaryStore {
     return this.summaryStore;
+  }
+
+  /** Get observer status for diagnostics. Returns null if observer is not enabled. */
+  getObserverStatus(conversationId: number): {
+    enabled: boolean;
+    hasCachedSummary: boolean;
+    cachedSummaryAge?: number;
+    cachedSummaryTokens?: number;
+    cachedSourceTokens?: number;
+  } | null {
+    if (!this.compressionObserver) {
+      return null;
+    }
+    const cached = this.compressionObserver.getCachedSummary(conversationId);
+    return {
+      enabled: true,
+      hasCachedSummary: cached !== null,
+      cachedSummaryAge: cached ? Date.now() - cached.updatedAt : undefined,
+      cachedSummaryTokens: cached?.tokenCount,
+      cachedSourceTokens: cached?.sourceTokenCount,
+    };
   }
 
   // ── Heartbeat pruning ──────────────────────────────────────────────────

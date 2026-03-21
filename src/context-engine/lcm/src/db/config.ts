@@ -28,6 +28,15 @@ export type LcmConfig = {
   timezone: string;
   /** When true, retroactively delete HEARTBEAT_OK turn cycles from LCM storage. */
   pruneHeartbeatOk: boolean;
+  /** Compression observer configuration for proactive background summarization. */
+  observer: {
+    enabled: boolean;
+    targetRatio: number;
+    messageInterval: number;
+    model: string;
+    provider: string;
+    maxStalenessMs: number;
+  };
 };
 
 /** Safely coerce an unknown value to a finite number, or return undefined. */
@@ -167,5 +176,37 @@ export function resolveLcmConfig(
       env.LCM_PRUNE_HEARTBEAT_OK !== undefined
         ? env.LCM_PRUNE_HEARTBEAT_OK === "true"
         : (toBool(pc.pruneHeartbeatOk) ?? false),
+    observer: {
+      enabled:
+        env.LCM_OBSERVER_ENABLED !== undefined
+          ? env.LCM_OBSERVER_ENABLED === "true"
+          : (toBool((pc.observer as Record<string, unknown> | undefined)?.enabled) ?? false),
+      targetRatio:
+        (env.LCM_OBSERVER_TARGET_RATIO !== undefined
+          ? parseFloat(env.LCM_OBSERVER_TARGET_RATIO)
+          : undefined) ??
+        toNumber((pc.observer as Record<string, unknown> | undefined)?.targetRatio) ??
+        0.2,
+      messageInterval:
+        (env.LCM_OBSERVER_MESSAGE_INTERVAL !== undefined
+          ? parseInt(env.LCM_OBSERVER_MESSAGE_INTERVAL, 10)
+          : undefined) ??
+        toNumber((pc.observer as Record<string, unknown> | undefined)?.messageInterval) ??
+        5,
+      model:
+        env.LCM_OBSERVER_MODEL?.trim() ??
+        toStr((pc.observer as Record<string, unknown> | undefined)?.model) ??
+        "",
+      provider:
+        env.LCM_OBSERVER_PROVIDER?.trim() ??
+        toStr((pc.observer as Record<string, unknown> | undefined)?.provider) ??
+        "",
+      maxStalenessMs:
+        (env.LCM_OBSERVER_MAX_STALENESS_MS !== undefined
+          ? parseInt(env.LCM_OBSERVER_MAX_STALENESS_MS, 10)
+          : undefined) ??
+        toNumber((pc.observer as Record<string, unknown> | undefined)?.maxStalenessMs) ??
+        60_000,
+    },
   };
 }
