@@ -25,14 +25,6 @@ const buildSessionLookup = (
 });
 
 const ingressAgentCommandMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const registerApnsRegistrationMock = vi.hoisted(() => vi.fn());
-const loadOrCreateDeviceIdentityMock = vi.hoisted(() =>
-  vi.fn(() => ({
-    deviceId: "gateway-device-1",
-    publicKeyPem: "public",
-    privateKeyPem: "private",
-  })),
-);
 
 vi.mock("../infra/system-events.js", () => ({
   enqueueSystemEvent: vi.fn(),
@@ -50,12 +42,6 @@ vi.mock("../config/config.js", () => ({
 }));
 vi.mock("../config/sessions.js", () => ({
   updateSessionStore: vi.fn(),
-}));
-vi.mock("../infra/push-apns.js", () => ({
-  registerApnsRegistration: registerApnsRegistrationMock,
-}));
-vi.mock("../infra/device-identity.js", () => ({
-  loadOrCreateDeviceIdentity: loadOrCreateDeviceIdentityMock,
 }));
 vi.mock("./session-utils.js", () => ({
   loadSessionEntry: vi.fn((sessionKey: string) => buildSessionLookup(sessionKey)),
@@ -79,7 +65,6 @@ import type { HealthSummary } from "../commands/health.js";
 import { loadConfig } from "../config/config.js";
 import { updateSessionStore } from "../config/sessions.js";
 import { requestHeartbeatNow } from "../infra/heartbeat-wake.js";
-import { registerApnsRegistration } from "../infra/push-apns.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
 import type { NodeEventContext } from "./server-node-events-types.js";
 import { handleNodeEvent } from "./server-node-events.js";
@@ -91,7 +76,6 @@ const loadConfigMock = vi.mocked(loadConfig);
 const agentCommandMock = vi.mocked(agentCommand);
 const updateSessionStoreMock = vi.mocked(updateSessionStore);
 const loadSessionEntryMock = vi.mocked(loadSessionEntry);
-const registerApnsRegistrationVi = vi.mocked(registerApnsRegistration);
 
 function buildCtx(): NodeEventContext {
   return {
@@ -120,8 +104,6 @@ describe("node exec events", () => {
   beforeEach(() => {
     enqueueSystemEventMock.mockClear();
     requestHeartbeatNowMock.mockClear();
-    registerApnsRegistrationVi.mockClear();
-    loadOrCreateDeviceIdentityMock.mockClear();
   });
 
   it("enqueues exec.started events", async () => {
@@ -279,75 +261,6 @@ describe("node exec events", () => {
 
     expect(enqueueSystemEventMock).not.toHaveBeenCalled();
     expect(requestHeartbeatNowMock).not.toHaveBeenCalled();
-  });
-
-  it("stores direct APNs registrations from node events", async () => {
-    const ctx = buildCtx();
-    await handleNodeEvent(ctx, "node-direct", {
-      event: "push.apns.register",
-      payloadJSON: JSON.stringify({
-        token: "abcd1234abcd1234abcd1234abcd1234",
-        topic: "ai.openclaw.ios",
-        environment: "sandbox",
-      }),
-    });
-
-    expect(registerApnsRegistrationVi).toHaveBeenCalledWith({
-      nodeId: "node-direct",
-      transport: "direct",
-      token: "abcd1234abcd1234abcd1234abcd1234",
-      topic: "ai.openclaw.ios",
-      environment: "sandbox",
-    });
-  });
-
-  it("stores relay APNs registrations from node events", async () => {
-    const ctx = buildCtx();
-    await handleNodeEvent(ctx, "node-relay", {
-      event: "push.apns.register",
-      payloadJSON: JSON.stringify({
-        transport: "relay",
-        relayHandle: "relay-handle-123",
-        sendGrant: "send-grant-123",
-        gatewayDeviceId: "gateway-device-1",
-        installationId: "install-123",
-        topic: "ai.openclaw.ios",
-        environment: "production",
-        distribution: "official",
-        tokenDebugSuffix: "abcd1234",
-      }),
-    });
-
-    expect(registerApnsRegistrationVi).toHaveBeenCalledWith({
-      nodeId: "node-relay",
-      transport: "relay",
-      relayHandle: "relay-handle-123",
-      sendGrant: "send-grant-123",
-      installationId: "install-123",
-      topic: "ai.openclaw.ios",
-      environment: "production",
-      distribution: "official",
-      tokenDebugSuffix: "abcd1234",
-    });
-  });
-
-  it("rejects relay registrations bound to a different gateway identity", async () => {
-    const ctx = buildCtx();
-    await handleNodeEvent(ctx, "node-relay", {
-      event: "push.apns.register",
-      payloadJSON: JSON.stringify({
-        transport: "relay",
-        relayHandle: "relay-handle-123",
-        sendGrant: "send-grant-123",
-        gatewayDeviceId: "gateway-device-other",
-        installationId: "install-123",
-        topic: "ai.openclaw.ios",
-        environment: "production",
-        distribution: "official",
-      }),
-    });
-
-    expect(registerApnsRegistrationVi).not.toHaveBeenCalled();
   });
 });
 

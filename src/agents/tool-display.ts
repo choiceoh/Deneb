@@ -1,4 +1,3 @@
-import SHARED_TOOL_DISPLAY_JSON from "../../apps/shared/OpenClawKit/Sources/OpenClawKit/Resources/tool-display.json" with { type: "json" };
 import { redactToolDetail } from "../logging/redact.js";
 import { shortenHomeInString } from "../utils.js";
 import {
@@ -10,6 +9,7 @@ import {
   type ToolDisplaySpec as ToolDisplaySpecBase,
 } from "./tool-display-common.js";
 import TOOL_DISPLAY_OVERRIDES_JSON from "./tool-display-overrides.json" with { type: "json" };
+import SHARED_TOOL_DISPLAY_JSON from "./tool-display-shared.json" with { type: "json" };
 
 type ToolDisplaySpec = ToolDisplaySpecBase & {
   emoji?: string;
