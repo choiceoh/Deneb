@@ -42,14 +42,3 @@ export * from "./channel-policy.js";
 export * from "./reply-history.js";
 export * from "./directory-runtime.js";
 export { mapAllowlistResolutionInputs } from "./allowlist-resolution.js";
-
-// BlueBubbles extension removed — stubs for compat callers.
-export function resolveBlueBubblesGroupRequireMention(): boolean {
-  return false;
-}
-export function resolveBlueBubblesGroupToolPolicy(): string {
-  return "auto";
-}
-export function collectBlueBubblesStatusIssues(): unknown[] {
-  return [];
-}

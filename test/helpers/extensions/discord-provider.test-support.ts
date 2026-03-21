@@ -1,7 +1,7 @@
-import type { OpenClawConfig } from "openclaw/plugin-sdk/discord";
 import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
 import type { Mock } from "vitest";
 import { expect, vi } from "vitest";
+import type { OpenClawConfig } from "../../../src/config/config.js";
 
 export type NativeCommandSpecMock = {
   name: string;

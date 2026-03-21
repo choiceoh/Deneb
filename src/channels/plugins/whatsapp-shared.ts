@@ -1,15 +1,6 @@
 import { resolveOutboundSendDep } from "../../infra/outbound/send-deps.js";
 import { createAttachedChannelResultAdapter } from "../../plugin-sdk/channel-send-result.js";
 import { escapeRegExp } from "../../utils.js";
-// resolveWhatsAppOutboundTarget was removed with the whatsapp extension.
-// Provide a stub for any remaining callers until full cleanup.
-function resolveWhatsAppOutboundTarget(params: {
-  to?: string;
-  allowFrom?: string[];
-  mode?: string;
-}): { ok: true; to: string } | { ok: false; error: Error } {
-  return { ok: true, to: params.to ?? "" };
-}
 import type { ChannelOutboundAdapter } from "./types.js";
 
 export const WHATSAPP_GROUP_INTRO_HINT =
@@ -49,8 +40,7 @@ export function createWhatsAppOutboundBase({
   sendMessageWhatsApp,
   sendPollWhatsApp,
   shouldLogVerbose,
-  resolveTarget = ({ to, allowFrom, mode }) =>
-    resolveWhatsAppOutboundTarget({ to, allowFrom, mode }),
+  resolveTarget = ({ to }) => ({ ok: true as const, to: to ?? "" }),
   normalizeText = (text) => text ?? "",
   skipEmptyText = false,
 }: CreateWhatsAppOutboundBaseParams): Pick<
