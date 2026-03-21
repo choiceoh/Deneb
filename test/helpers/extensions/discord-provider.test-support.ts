@@ -1,4 +1,4 @@
-import type { DenebConfig } from "deneb/plugin-sdk/discord";
+import type { DenebConfig } from "deneb/plugin-sdk/core";
 import type { RuntimeEnv } from "deneb/plugin-sdk/runtime-env";
 import type { Mock } from "vitest";
 import { expect, vi } from "vitest";

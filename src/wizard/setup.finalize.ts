@@ -22,7 +22,7 @@ import {
   resolveControlUiLinks,
 } from "../commands/onboard-helpers.js";
 import type { OnboardOptions } from "../commands/onboard-types.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { describeGatewayServiceRestart, resolveGatewayService } from "../daemon/service.js";
 import { isSystemdUserServiceAvailable } from "../daemon/systemd.js";
 import { ensureControlUiAssetsBuilt } from "../infra/control-ui-assets.js";
@@ -37,8 +37,8 @@ import type { GatewayWizardSettings, WizardFlow } from "./setup.types.js";
 type FinalizeOnboardingOptions = {
   flow: WizardFlow;
   opts: OnboardOptions;
-  baseConfig: OpenClawConfig;
-  nextConfig: OpenClawConfig;
+  baseConfig: DenebConfig;
+  nextConfig: DenebConfig;
   workspaceDir: string;
   settings: GatewayWizardSettings;
   prompter: WizardPrompter;
@@ -385,8 +385,8 @@ export async function finalizeSetupWizard(options: FinalizeOnboardingOptions): P
       [
         `Dashboard link (with token): ${authedUrl}`,
         controlUiOpened
-          ? "Opened in your browser. Keep that tab to control OpenClaw."
-          : "Copy/paste this URL in a browser on this machine to control OpenClaw.",
+          ? "Opened in your browser. Keep that tab to control Deneb."
+          : "Copy/paste this URL in a browser on this machine to control Deneb.",
         controlUiOpenHint,
       ]
         .filter(Boolean)
@@ -437,8 +437,8 @@ export async function finalizeSetupWizard(options: FinalizeOnboardingOptions): P
       [
         `Dashboard link (with token): ${authedUrl}`,
         controlUiOpened
-          ? "Opened in your browser. Keep that tab to control OpenClaw."
-          : "Copy/paste this URL in a browser on this machine to control OpenClaw.",
+          ? "Opened in your browser. Keep that tab to control Deneb."
+          : "Copy/paste this URL in a browser on this machine to control Deneb.",
         controlUiOpenHint,
       ]
         .filter(Boolean)
@@ -535,10 +535,10 @@ export async function finalizeSetupWizard(options: FinalizeOnboardingOptions): P
 
   await prompter.outro(
     controlUiOpened
-      ? "Onboarding complete. Dashboard opened; keep that tab to control OpenClaw."
+      ? "Onboarding complete. Dashboard opened; keep that tab to control Deneb."
       : seededInBackground
         ? "Onboarding complete. Web UI seeded in the background; open it anytime with the dashboard link above."
-        : "Onboarding complete. Use the dashboard link above to control OpenClaw.",
+        : "Onboarding complete. Use the dashboard link above to control Deneb.",
   );
 
   // TUI removed — no return value
