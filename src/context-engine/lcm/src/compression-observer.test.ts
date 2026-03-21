@@ -59,8 +59,10 @@ function createMockSummaryStore(
 
 function createMockSummarize(): CompactionSummarizeFn {
   return vi.fn(async (text: string) => {
-    // Simple mock: return first 50 chars as "summary"
-    return `Summary: ${text.slice(0, 50)}...`;
+    // Simple mock: return a short summary that is always shorter than input.
+    // Uses ~10% of source to ensure the sanity check (summary < source) passes.
+    const targetLen = Math.max(4, Math.floor(text.length * 0.1));
+    return text.slice(0, targetLen);
   });
 }
 
@@ -131,15 +133,16 @@ describe("CompressionObserver", () => {
 
       const cached = observer.getCachedSummary(conversationId);
       expect(cached).toBeDefined();
-      expect(cached!.summary).toContain("Summary:");
+      expect(cached!.summary.length).toBeGreaterThan(0);
       expect(cached!.messagesCovered).toBe(3);
       expect(cached!.tokenCount).toBeGreaterThan(0);
       expect(cached!.sourceTokenCount).toBeGreaterThan(0);
+      expect(cached!.hasMixedContext).toBe(false);
     });
 
     it("should reset counter after triggering", async () => {
       const conversationId = 1;
-      const msgId = conversationStore.addMessage("Test message");
+      const msgId = conversationStore.addMessage("A".repeat(200));
       summaryStore.addContextMessage(conversationId, msgId);
 
       const observer = createObserver();
@@ -221,7 +224,7 @@ describe("CompressionObserver", () => {
   describe("invalidation", () => {
     it("should clear cached summary on invalidate", async () => {
       const conversationId = 1;
-      const msgId = conversationStore.addMessage("Test content");
+      const msgId = conversationStore.addMessage("A".repeat(200));
       summaryStore.addContextMessage(conversationId, msgId);
 
       const observer = createObserver();
@@ -247,8 +250,8 @@ describe("CompressionObserver", () => {
       const conv1 = 1;
       const conv2 = 2;
 
-      const msgId1 = conversationStore.addMessage("Conversation 1 content");
-      const msgId2 = conversationStore.addMessage("Conversation 2 content");
+      const msgId1 = conversationStore.addMessage("A".repeat(200) + " conversation 1");
+      const msgId2 = conversationStore.addMessage("B".repeat(200) + " conversation 2");
       summaryStore.addContextMessage(conv1, msgId1);
       summaryStore.addContextMessage(conv2, msgId2);
 
@@ -293,7 +296,7 @@ describe("CompressionObserver", () => {
   describe("dispose", () => {
     it("should clear all state on dispose", async () => {
       const conversationId = 1;
-      const msgId = conversationStore.addMessage("Test");
+      const msgId = conversationStore.addMessage("A".repeat(200));
       summaryStore.addContextMessage(conversationId, msgId);
 
       const observer = createObserver();
@@ -323,7 +326,7 @@ describe("CompressionObserver", () => {
   describe("triggerUpdate", () => {
     it("should force an immediate background update", async () => {
       const conversationId = 1;
-      const msgId = conversationStore.addMessage("Content for trigger update");
+      const msgId = conversationStore.addMessage("A".repeat(200) + " trigger update content");
       summaryStore.addContextMessage(conversationId, msgId);
 
       const observer = createObserver();
@@ -345,7 +348,7 @@ describe("CompressionObserver", () => {
   describe("error handling", () => {
     it("should handle summarization failure gracefully", async () => {
       const conversationId = 1;
-      const msgId = conversationStore.addMessage("Test message");
+      const msgId = conversationStore.addMessage("A".repeat(200));
       summaryStore.addContextMessage(conversationId, msgId);
 
       const failingSummarize = vi.fn(async () => {
@@ -380,6 +383,103 @@ describe("CompressionObserver", () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       expect(observer.getCachedSummary(999)).toBeNull();
+    });
+
+    it("should reject summary when it's larger than source", async () => {
+      const conversationId = 1;
+      // Add a tiny message (few tokens)
+      const msgId = conversationStore.addMessage("Hi");
+      summaryStore.addContextMessage(conversationId, msgId);
+
+      // Mock summarizer that produces verbose output
+      const verboseSummarize = vi.fn(async () => {
+        return "A".repeat(10_000); // Much larger than source
+      }) as unknown as CompactionSummarizeFn;
+
+      const observer = new CompressionObserver(
+        config,
+        conversationStore as never,
+        summaryStore as never,
+        async () => verboseSummarize,
+      );
+
+      observer.onMessage(conversationId);
+      observer.onMessage(conversationId);
+      observer.onMessage(conversationId);
+
+      // Wait for the background update to attempt
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Should reject the summary because it's larger than source
+      expect(observer.getCachedSummary(conversationId)).toBeNull();
+    });
+  });
+
+  describe("mixed context handling", () => {
+    it("should flag hasMixedContext when summaries exist in context", async () => {
+      const conversationId = 1;
+      const msgId = conversationStore.addMessage("A".repeat(200) + " message content");
+      summaryStore.addContextMessage(conversationId, msgId);
+
+      // Add a summary item to the context (simulating prior compaction)
+      summaryStore._contextItems.push({
+        conversationId,
+        ordinal: 100,
+        itemType: "summary",
+        messageId: null,
+        summaryId: "sum_existing",
+        createdAt: new Date(),
+      });
+
+      // Add another raw message after the summary
+      const msgId2 = conversationStore.addMessage("B".repeat(200) + " another message");
+      summaryStore.addContextMessage(conversationId, msgId2);
+
+      const observer = createObserver();
+      observer.triggerUpdate(conversationId);
+
+      await vi.waitFor(
+        () => {
+          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
+        },
+        { timeout: 2000 },
+      );
+
+      const cached = observer.getCachedSummary(conversationId)!;
+      expect(cached.hasMixedContext).toBe(true);
+      // messagesCovered should only count raw messages, not summaries
+      expect(cached.messagesCovered).toBe(2);
+    });
+
+    it("isSummaryFresh should return false for mixed context summaries", async () => {
+      const conversationId = 1;
+      const msgId = conversationStore.addMessage("A".repeat(200) + " some content");
+      summaryStore.addContextMessage(conversationId, msgId);
+
+      // Add a summary item
+      summaryStore._contextItems.push({
+        conversationId,
+        ordinal: 50,
+        itemType: "summary",
+        messageId: null,
+        summaryId: "sum_prior",
+        createdAt: new Date(),
+      });
+
+      const observer = createObserver();
+      observer.triggerUpdate(conversationId);
+
+      await vi.waitFor(
+        () => {
+          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
+        },
+        { timeout: 2000 },
+      );
+
+      const cached = observer.getCachedSummary(conversationId)!;
+      // Even though the summary is fresh in time and tokens, it should
+      // be rejected because the context has mixed content.
+      expect(observer.isSummaryFresh(conversationId, cached.sourceTokenCount)).toBe(false);
     });
   });
 });

@@ -28,12 +28,18 @@ export interface CachedSummary {
   summary: string;
   /** Estimated token count of the summary. */
   tokenCount: number;
-  /** Total source tokens that were compressed to produce this summary. */
+  /** Total source tokens of raw messages that were compressed. */
   sourceTokenCount: number;
-  /** Number of messages that were compressed. */
+  /** Number of raw messages that were compressed. */
   messagesCovered: number;
   /** Timestamp of when this summary was last updated. */
   updatedAt: number;
+  /**
+   * Whether the source context contained existing summary items (from prior
+   * compactions) that are NOT covered by this cached summary. When true, the
+   * fast path must not replace the full ordinal range blindly.
+   */
+  hasMixedContext: boolean;
 }
 
 export const DEFAULT_OBSERVER_CONFIG: CompressionObserverConfig = {
@@ -81,18 +87,13 @@ export class CompressionObserver {
   }
 
   /**
-   * Get the cached pre-computed summary for a conversation, if available
-   * and fresh enough to use for compaction.
+   * Get the cached pre-computed summary for a conversation, if available.
    */
   getCachedSummary(conversationId: number): CachedSummary | null {
     if (!this.config.enabled) {
       return null;
     }
-    const cached = this.cache.get(conversationId);
-    if (!cached) {
-      return null;
-    }
-    return cached;
+    return this.cache.get(conversationId) ?? null;
   }
 
   /**
@@ -100,13 +101,25 @@ export class CompressionObserver {
    * a full compaction pass.
    *
    * A summary is considered fresh when:
-   * 1. It exists
+   * 1. It exists and is enabled
    * 2. It's not older than maxStalenessMs
    * 3. The current token count hasn't drifted too far from the source
+   * 4. The source context was pure raw messages (no mixed summary items)
    */
   isSummaryFresh(conversationId: number, currentTokens: number): boolean {
+    if (!this.config.enabled) {
+      return false;
+    }
+
     const cached = this.cache.get(conversationId);
     if (!cached) {
+      return false;
+    }
+
+    // If the context had mixed summary+message items, the observer summary
+    // only covers the raw messages. Using it as a fast path replacement would
+    // risk destroying existing summary items. Fall back to normal compaction.
+    if (cached.hasMixedContext) {
       return false;
     }
 
@@ -126,7 +139,6 @@ export class CompressionObserver {
 
   /**
    * Force an immediate background update for a conversation.
-   * Used after a compaction completes to start pre-computing the next summary.
    */
   triggerUpdate(conversationId: number): void {
     if (this.disposed || !this.config.enabled) {
@@ -161,6 +173,8 @@ export class CompressionObserver {
     const updatePromise = this.runUpdate(conversationId).finally(() => {
       this.pendingUpdates.delete(conversationId);
     });
+    // Prevent unhandled promise rejection warnings.
+    updatePromise.catch(() => {});
     this.pendingUpdates.set(conversationId, updatePromise);
   }
 
@@ -175,12 +189,23 @@ export class CompressionObserver {
         return;
       }
 
-      // Collect all raw message content for compression.
+      // Detect whether the context has mixed content (existing summaries
+      // interspersed with raw messages). When mixed, the observer summary
+      // cannot safely replace the full raw-message range without risking
+      // loss of prior summary information.
+      let hasMixedContext = false;
+
+      // Only summarize raw messages — skip existing summary items.
+      // This matches what the compaction leafPass operates on.
       const messageTexts: string[] = [];
       let totalSourceTokens = 0;
       let messageCount = 0;
 
       for (const item of contextItems) {
+        if (item.itemType === "summary") {
+          hasMixedContext = true;
+          continue;
+        }
         if (item.itemType !== "message" || item.messageId == null) {
           continue;
         }
@@ -212,18 +237,30 @@ export class CompressionObserver {
 
       const summaryTokens = estimateTokens(summary);
 
+      // Sanity check: reject summaries that are larger than the source.
+      // This can happen with poor models that "expand" rather than compress.
+      if (summaryTokens >= totalSourceTokens) {
+        log.warn(
+          `[compression-observer] rejecting summary for conversation=${conversationId}: ` +
+            `summaryTokens=${summaryTokens} >= sourceTokens=${totalSourceTokens}`,
+        );
+        return;
+      }
+
       this.cache.set(conversationId, {
         summary,
         tokenCount: summaryTokens,
         sourceTokenCount: totalSourceTokens,
         messagesCovered: messageCount,
         updatedAt: Date.now(),
+        hasMixedContext,
       });
 
       log.info(
         `[compression-observer] updated cache for conversation=${conversationId} ` +
           `sourceTokens=${totalSourceTokens} summaryTokens=${summaryTokens} ` +
-          `ratio=${(summaryTokens / totalSourceTokens).toFixed(3)} messages=${messageCount}`,
+          `ratio=${(summaryTokens / totalSourceTokens).toFixed(3)} messages=${messageCount} ` +
+          `hasMixedContext=${hasMixedContext}`,
       );
     } catch (err) {
       log.warn(
