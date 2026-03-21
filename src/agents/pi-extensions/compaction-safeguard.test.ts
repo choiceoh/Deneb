@@ -1176,3 +1176,69 @@ describe("readWorkspaceContextForSummary", () => {
     },
   );
 });
+
+// ── Performance stability clamping tests ──────────────────────────────────────
+
+const { clampMaxHistoryShare, clampContextWindowTokens, clampMaxChunkTokens, clampReserveTokens } =
+  __testing;
+
+describe("clampMaxHistoryShare", () => {
+  it("defaults to 0.5 when undefined", () => {
+    expect(clampMaxHistoryShare(undefined)).toBe(0.5);
+  });
+  it("clamps value below 0.1 to 0.1", () => {
+    expect(clampMaxHistoryShare(0)).toBe(0.1);
+    expect(clampMaxHistoryShare(-1)).toBe(0.1);
+    expect(clampMaxHistoryShare(0.05)).toBe(0.1);
+  });
+  it("clamps value above 0.9 to 0.9", () => {
+    expect(clampMaxHistoryShare(1)).toBe(0.9);
+    expect(clampMaxHistoryShare(5)).toBe(0.9);
+    expect(clampMaxHistoryShare(0.95)).toBe(0.9);
+  });
+  it("passes through values in range", () => {
+    expect(clampMaxHistoryShare(0.3)).toBe(0.3);
+    expect(clampMaxHistoryShare(0.7)).toBe(0.7);
+  });
+});
+
+describe("clampContextWindowTokens", () => {
+  it("uses model context window when undefined", () => {
+    expect(clampContextWindowTokens(undefined, 128_000)).toBe(128_000);
+  });
+  it("enforces minimum floor", () => {
+    expect(clampContextWindowTokens(100, 128_000)).toBe(4096);
+    expect(clampContextWindowTokens(0, 128_000)).toBe(4096);
+    expect(clampContextWindowTokens(-1, 128_000)).toBe(4096);
+  });
+  it("passes through values above floor", () => {
+    expect(clampContextWindowTokens(200_000, 128_000)).toBe(200_000);
+  });
+  it("enforces floor even on model fallback", () => {
+    expect(clampContextWindowTokens(undefined, 100)).toBe(4096);
+  });
+});
+
+describe("clampMaxChunkTokens", () => {
+  it("enforces minimum floor", () => {
+    expect(clampMaxChunkTokens(1)).toBe(1024);
+    expect(clampMaxChunkTokens(0)).toBe(1024);
+    expect(clampMaxChunkTokens(500)).toBe(1024);
+  });
+  it("passes through values above floor", () => {
+    expect(clampMaxChunkTokens(8192)).toBe(8192);
+  });
+});
+
+describe("clampReserveTokens", () => {
+  it("caps at 80% of context window", () => {
+    expect(clampReserveTokens(100_000, 100_000)).toBe(80_000);
+  });
+  it("enforces minimum of 1", () => {
+    expect(clampReserveTokens(0, 100_000)).toBe(1);
+    expect(clampReserveTokens(-5, 100_000)).toBe(1);
+  });
+  it("passes through reasonable values", () => {
+    expect(clampReserveTokens(20_000, 128_000)).toBe(20_000);
+  });
+});

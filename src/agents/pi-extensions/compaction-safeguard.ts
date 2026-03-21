@@ -94,6 +94,20 @@ const DEFAULT_RECENT_TURNS_PRESERVE = 3;
 const MAX_RECENT_TURNS_PRESERVE = 12;
 const MAX_RECENT_TURN_TEXT_CHARS = 600;
 const MAX_UNTRUSTED_INSTRUCTION_CHARS = 4000;
+
+// ── Performance stability bounds ─────────────────────────────────────────────
+// These ensure compaction runs predictably regardless of config values.
+
+/** Minimum maxHistoryShare to prevent zero-budget pruning loops. */
+const MIN_MAX_HISTORY_SHARE = 0.1;
+/** Maximum maxHistoryShare to prevent the summarizer from being overwhelmed. */
+const MAX_MAX_HISTORY_SHARE = 0.9;
+/** Floor for context window tokens to avoid degenerate chunk calculations. */
+const MIN_CONTEXT_WINDOW_TOKENS = 4096;
+/** Floor for maxChunkTokens to prevent excessive micro-chunking. */
+const MIN_MAX_CHUNK_TOKENS = 1024;
+/** Reserve tokens must not exceed this share of context window. */
+const MAX_RESERVE_TOKEN_SHARE = 0.8;
 const REQUIRED_SUMMARY_SECTIONS = [
   "## Decisions",
   "## Open TODOs",
@@ -105,6 +119,27 @@ const STRICT_EXACT_IDENTIFIERS_INSTRUCTION =
   "For ## Exact identifiers, preserve literal values exactly as seen (IDs, URLs, file paths, ports, hashes, dates, times).";
 const POLICY_OFF_EXACT_IDENTIFIERS_INSTRUCTION =
   "For ## Exact identifiers, include identifiers only when needed for continuity; do not enforce literal-preservation rules.";
+
+// ── Performance stability helpers ─────────────────────────────────────────────
+
+function clampMaxHistoryShare(value: number | undefined): number {
+  const raw = value ?? 0.5;
+  return Math.min(MAX_MAX_HISTORY_SHARE, Math.max(MIN_MAX_HISTORY_SHARE, raw));
+}
+
+function clampContextWindowTokens(value: number | undefined, modelContextWindow: number): number {
+  const raw = value ?? modelContextWindow;
+  return Math.max(MIN_CONTEXT_WINDOW_TOKENS, raw);
+}
+
+function clampMaxChunkTokens(value: number): number {
+  return Math.max(MIN_MAX_CHUNK_TOKENS, value);
+}
+
+function clampReserveTokens(value: number, contextWindowTokens: number): number {
+  const maxReserve = Math.floor(contextWindowTokens * MAX_RESERVE_TOKEN_SHARE);
+  return Math.max(1, Math.min(value, maxReserve));
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -642,7 +677,10 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
 
     try {
       const modelContextWindow = resolveContextWindowTokens(model);
-      const contextWindowTokens = runtime?.contextWindowTokens ?? modelContextWindow;
+      const contextWindowTokens = clampContextWindowTokens(
+        runtime?.contextWindowTokens,
+        modelContextWindow,
+      );
       const turnPrefixMessages = preparation.turnPrefixMessages ?? [];
       let messagesToSummarize = preparation.messagesToSummarize;
       const recentTurnsPreserve = resolveRecentTurnsPreserve(runtime?.recentTurnsPreserve);
@@ -651,7 +689,7 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
         summarizationInstructions,
       );
 
-      const maxHistoryShare = runtime?.maxHistoryShare ?? 0.5;
+      const maxHistoryShare = clampMaxHistoryShare(runtime?.maxHistoryShare);
 
       const tokensBefore =
         typeof preparation.tokensBefore === "number" && Number.isFinite(preparation.tokensBefore)
@@ -685,17 +723,23 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
                   pruned.droppedMessagesList,
                   contextWindowTokens,
                 );
-                const droppedMaxChunkTokens = Math.max(
-                  1,
-                  Math.floor(contextWindowTokens * droppedChunkRatio) -
-                    SUMMARIZATION_OVERHEAD_TOKENS,
+                const droppedMaxChunkTokens = clampMaxChunkTokens(
+                  Math.max(
+                    1,
+                    Math.floor(contextWindowTokens * droppedChunkRatio) -
+                      SUMMARIZATION_OVERHEAD_TOKENS,
+                  ),
+                );
+                const droppedReserveTokens = clampReserveTokens(
+                  Math.max(1, Math.floor(preparation.settings.reserveTokens)),
+                  contextWindowTokens,
                 );
                 droppedSummary = await summarizeWithFallback({
                   messages: pruned.droppedMessagesList,
                   model,
                   apiKey,
                   signal,
-                  reserveTokens: Math.max(1, Math.floor(preparation.settings.reserveTokens)),
+                  reserveTokens: droppedReserveTokens,
                   maxChunkTokens: droppedMaxChunkTokens,
                   contextWindow: contextWindowTokens,
                   customInstructions: structuredInstructions,
@@ -726,11 +770,16 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
 
       const allMessages = [...messagesToSummarize, ...turnPrefixMessages];
       const adaptiveRatio = computeAdaptiveChunkRatio(allMessages, contextWindowTokens);
-      const maxChunkTokens = Math.max(
-        1,
-        Math.floor(contextWindowTokens * adaptiveRatio) - SUMMARIZATION_OVERHEAD_TOKENS,
+      const maxChunkTokens = clampMaxChunkTokens(
+        Math.max(
+          1,
+          Math.floor(contextWindowTokens * adaptiveRatio) - SUMMARIZATION_OVERHEAD_TOKENS,
+        ),
       );
-      const reserveTokens = Math.max(1, Math.floor(preparation.settings.reserveTokens));
+      const reserveTokens = clampReserveTokens(
+        Math.max(1, Math.floor(preparation.settings.reserveTokens)),
+        contextWindowTokens,
+      );
       const effectivePreviousSummary = droppedSummary ?? preparation.previousSummary;
 
       const baseSummarizeOpts = {
@@ -803,4 +852,8 @@ export const __testing = {
   readWorkspaceContextForSummary,
   resolveCompactionInstructions,
   composeSplitTurnInstructions,
+  clampMaxHistoryShare,
+  clampContextWindowTokens,
+  clampMaxChunkTokens,
+  clampReserveTokens,
 } as const;
