@@ -55,7 +55,7 @@ export type MemorySection = {
 
 const HEADING_RE = /^(#{1,6})\s+(.+)$/;
 
-// Entry format: - [id:abcd1234] **2026-03-21T10:00:00Z** {high} content `tag1` `tag2`
+// Entry format: - [id:abcd1234] **2026-03-21T10:00:00Z** {high} content #tag1 #tag2
 const ENTRY_RE =
   /^- \[id:([a-f0-9]+)\] \*\*(\d{4}-\d{2}-\d{2}T[\d:.Z+-]+)\*\*(?:\s+\{(\w+)\})?\s+(.+)$/;
 
@@ -229,11 +229,10 @@ export class MemoryMdManager {
     }
 
     // Sort by timestamp descending (newest first)
-    allEntries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    const sorted = allEntries.toSorted((a, b) => b.timestamp.localeCompare(a.timestamp));
 
-    const total = allEntries.length;
-    const limited =
-      filter.limit && filter.limit > 0 ? allEntries.slice(0, filter.limit) : allEntries;
+    const total = sorted.length;
+    const limited = filter.limit && filter.limit > 0 ? sorted.slice(0, filter.limit) : sorted;
     return { entries: limited, total };
   }
 
@@ -406,7 +405,7 @@ export class MemoryMdManager {
 
 export function formatEntry(entry: MemoryEntry): string {
   const importancePart = entry.importance !== "normal" ? ` {${entry.importance}}` : "";
-  const tagsPart = entry.tags.length > 0 ? ` ${entry.tags.map((t) => `\`${t}\``).join(" ")}` : "";
+  const tagsPart = entry.tags.length > 0 ? ` ${entry.tags.map((t) => `#${t}`).join(" ")}` : "";
   return `- [id:${entry.id}] **${entry.timestamp}**${importancePart} ${entry.content}${tagsPart}`;
 }
 
@@ -421,28 +420,21 @@ export function parseEntryLine(line: string): MemoryEntry | null {
   const importance = (m[3] as MemoryImportance | undefined) ?? "normal";
   const rest = m[4];
 
-  // Extract trailing tags
+  // Extract trailing #hashtag tokens (e.g. "#ci #deploy")
+  // Tags are always at the end; walk backwards from the end of the string.
   const tags: string[] = [];
-  const tagRe = /`([^`]+)`/g;
-  const allTags: Array<{ tag: string; index: number; length: number }> = [];
-  let tagMatch: RegExpExecArray | null;
-  while ((tagMatch = tagRe.exec(rest)) !== null) {
-    allTags.push({ tag: tagMatch[1], index: tagMatch.index, length: tagMatch[0].length });
-  }
-
-  let textEnd = rest.length;
-  for (let i = allTags.length - 1; i >= 0; i--) {
-    const t = allTags[i];
-    const afterTag = t.index + t.length;
-    if (afterTag === textEnd || rest.slice(afterTag, textEnd).trim() === "") {
-      tags.unshift(t.tag);
-      textEnd = t.index;
-    } else {
+  const trailingTagRe = /(?:^|\s)(#[a-z0-9_-]+)$/i;
+  let remaining = rest;
+  for (;;) {
+    const tagMatch = remaining.match(trailingTagRe);
+    if (!tagMatch) {
       break;
     }
+    tags.unshift(tagMatch[1].slice(1)); // strip leading #
+    remaining = remaining.slice(0, tagMatch.index).trimEnd();
   }
 
-  const content = rest.slice(0, textEnd).trim();
+  const content = remaining.trim();
   return { id, timestamp, content, tags, importance };
 }
 

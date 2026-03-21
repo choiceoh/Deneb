@@ -54,7 +54,7 @@ describe("formatEntry / parseEntryLine", () => {
     };
     const line = formatEntry(entry);
     expect(line).toContain("{high}");
-    expect(line).toContain("`ops` `deploy`");
+    expect(line).toContain("#ops #deploy");
 
     const parsed = parseEntryLine(line);
     expect(parsed?.importance).toBe("high");
@@ -482,4 +482,242 @@ describe("read-only guard", () => {
       await expect(mgr.save("nope", { file })).rejects.toThrow("read-only");
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// Bug: content with backticks should not be confused with tags
+// ---------------------------------------------------------------------------
+
+describe("content with backticks", () => {
+  it("preserves backticks in content when no trailing tags", () => {
+    const entry: MemoryEntry = {
+      id: "aabb1122",
+      timestamp: "2026-03-21T10:00:00Z",
+      content: "Use `pnpm` for builds",
+      tags: [],
+      importance: "normal",
+    };
+    const line = formatEntry(entry);
+    const parsed = parseEntryLine(line);
+    expect(parsed?.content).toBe("Use `pnpm` for builds");
+    expect(parsed?.tags).toEqual([]);
+  });
+
+  it("distinguishes inline backticks from trailing tags", () => {
+    const entry: MemoryEntry = {
+      id: "cc334455",
+      timestamp: "2026-03-21T10:00:00Z",
+      content: "Run `vitest` before pushing",
+      tags: ["ci"],
+      importance: "normal",
+    };
+    const line = formatEntry(entry);
+    const parsed = parseEntryLine(line);
+    expect(parsed?.content).toBe("Run `vitest` before pushing");
+    expect(parsed?.tags).toEqual(["ci"]);
+  });
+
+  it("round-trips content with multiple inline backtick words and trailing tags", () => {
+    const entry: MemoryEntry = {
+      id: "dd556677",
+      timestamp: "2026-03-21T10:00:00Z",
+      content: "Use `pnpm` and `bun` for dev",
+      tags: ["tooling", "dev"],
+      importance: "high",
+    };
+    const line = formatEntry(entry);
+    const parsed = parseEntryLine(line);
+    expect(parsed?.content).toBe("Use `pnpm` and `bun` for dev");
+    expect(parsed?.tags).toEqual(["tooling", "dev"]);
+  });
+
+  it("handles content ending with a backtick word (no tags)", () => {
+    const entry: MemoryEntry = {
+      id: "ee778899",
+      timestamp: "2026-03-21T10:00:00Z",
+      content: "Always use `pnpm`",
+      tags: [],
+      importance: "normal",
+    };
+    const line = formatEntry(entry);
+    const parsed = parseEntryLine(line);
+    // BUG: `pnpm` should be part of content, not parsed as a tag
+    expect(parsed?.content).toBe("Always use `pnpm`");
+    expect(parsed?.tags).toEqual([]);
+  });
+
+  it("handles content ending with backtick word alongside real tags", () => {
+    const entry: MemoryEntry = {
+      id: "ff001122",
+      timestamp: "2026-03-21T10:00:00Z",
+      content: "Prefer `bun` over `node`",
+      tags: ["runtime"],
+      importance: "normal",
+    };
+    const line = formatEntry(entry);
+    const parsed = parseEntryLine(line);
+    // `node` and `bun` are part of content, only `runtime` is a tag
+    expect(parsed?.content).toBe("Prefer `bun` over `node`");
+    expect(parsed?.tags).toEqual(["runtime"]);
+  });
+
+  it("save and recall preserves backtick content", async () => {
+    const result = await mgr.save("Prefer `bun` over `node` for scripts", {
+      tags: ["tooling"],
+      timestamp: "2026-03-21T10:00:00Z",
+    });
+    expect(result.entry.content).toBe("Prefer `bun` over `node` for scripts");
+
+    const recalled = await mgr.recall({ file: result.file });
+    expect(recalled.entries[0].content).toBe("Prefer `bun` over `node` for scripts");
+    expect(recalled.entries[0].tags).toEqual(["tooling"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug: consolidate should not delete the target file
+// ---------------------------------------------------------------------------
+
+describe("consolidate edge cases", () => {
+  it("does not delete target file if it matches a daily file pattern", async () => {
+    await mgr.save("Target entry", {
+      file: "memory/2026-01-01.md",
+      importance: "high",
+      timestamp: "2026-01-01T10:00:00Z",
+    });
+    await mgr.save("Source entry", {
+      file: "memory/2026-01-02.md",
+      importance: "high",
+      timestamp: "2026-01-02T10:00:00Z",
+    });
+
+    // Consolidate into an existing daily file as target
+    await mgr.consolidate({
+      before: "2026-03-01",
+      targetFile: "memory/2026-01-01.md",
+    });
+
+    // The target file should still exist and contain both entries
+    const content = await fs.readFile(path.join(tmpDir, "memory/2026-01-01.md"), "utf-8");
+    expect(content).toContain("Target entry");
+    expect(content).toContain("Source entry");
+  });
+
+  it("does not lose data when target is also a source file", async () => {
+    // Both files are old enough to be consolidated
+    await mgr.save("Entry in target", {
+      file: "memory/2026-01-01.md",
+      importance: "high",
+      timestamp: "2026-01-01T10:00:00Z",
+    });
+    await mgr.save("Entry in source", {
+      file: "memory/2026-01-02.md",
+      importance: "high",
+      timestamp: "2026-01-02T10:00:00Z",
+    });
+
+    // Target IS one of the old files that would be consolidated
+    const consolidated = await mgr.consolidate({
+      before: "2026-03-01",
+      targetFile: "memory/2026-01-01.md",
+    });
+
+    expect(consolidated.merged).toBe(2); // both files consolidated
+    expect(consolidated.kept).toBe(2);
+
+    // Target should contain both entries
+    const content = await fs.readFile(path.join(tmpDir, "memory/2026-01-01.md"), "utf-8");
+    expect(content).toContain("Entry in target");
+    expect(content).toContain("Entry in source");
+  });
+
+  it("consolidate with all low-importance entries keeps zero and still removes files", async () => {
+    await mgr.save("Low entry", {
+      file: "memory/2026-01-05.md",
+      importance: "low",
+      timestamp: "2026-01-05T10:00:00Z",
+    });
+
+    const result = await mgr.consolidate({ before: "2026-03-01", minImportance: "normal" });
+    expect(result.merged).toBe(1);
+    expect(result.kept).toBe(0);
+    expect(result.removedFiles).toEqual(["memory/2026-01-05.md"]);
+
+    // archive.md should NOT be created if nothing to keep
+    await expect(fs.access(path.join(tmpDir, "memory/archive.md"))).rejects.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug: forget on missing file should not create empty file
+// ---------------------------------------------------------------------------
+
+describe("forget edge cases", () => {
+  it("does not create file when forgetting from nonexistent file", async () => {
+    const file = "memory/2026-01-01.md";
+    const result = await mgr.forget({ ids: ["abc12345"], file });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.removed).toBe(0);
+    }
+    // File should NOT be created
+    await expect(fs.access(path.join(tmpDir, file))).rejects.toThrow();
+  });
+
+  it("does not write file when nothing was removed", async () => {
+    const file = mgr.dailyFilePath();
+    await mgr.save("Keep me", { file, timestamp: "2026-03-21T10:00:00Z" });
+
+    const absPath = path.join(tmpDir, file);
+    const contentBefore = await fs.readFile(absPath, "utf-8");
+
+    const result = await mgr.forget({ ids: ["nonexistent"], file });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.removed).toBe(0);
+    }
+
+    // File content should be unchanged
+    const contentAfter = await fs.readFile(absPath, "utf-8");
+    expect(contentAfter).toBe(contentBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge: multiple saves to same file preserve ordering
+// ---------------------------------------------------------------------------
+
+describe("ordering", () => {
+  it("preserves insertion order in single file", async () => {
+    const file = "memory/2026-03-21.md";
+    await mgr.save("First", { file, timestamp: "2026-03-21T08:00:00Z" });
+    await mgr.save("Second", { file, timestamp: "2026-03-21T09:00:00Z" });
+    await mgr.save("Third", { file, timestamp: "2026-03-21T10:00:00Z" });
+
+    const result = await mgr.recall({ file });
+    expect(result.entries.map((e) => e.content)).toEqual(["First", "Second", "Third"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge: special characters in content
+// ---------------------------------------------------------------------------
+
+describe("special characters", () => {
+  it("handles content with markdown special chars", async () => {
+    const result = await mgr.save("Use **bold** and [links](url) in messages", {
+      timestamp: "2026-03-21T10:00:00Z",
+    });
+    const recalled = await mgr.recall({ file: result.file });
+    expect(recalled.entries[0].content).toBe("Use **bold** and [links](url) in messages");
+  });
+
+  it("handles content with curly braces that look like importance", async () => {
+    const result = await mgr.save("Template: {name} and {value} placeholders", {
+      timestamp: "2026-03-21T10:00:00Z",
+    });
+    const recalled = await mgr.recall({ file: result.file });
+    expect(recalled.entries[0].content).toBe("Template: {name} and {value} placeholders");
+    expect(recalled.entries[0].importance).toBe("normal");
+  });
 });
