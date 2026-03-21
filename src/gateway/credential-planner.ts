@@ -86,7 +86,7 @@ export function readGatewayTokenEnv(
 ): string | undefined {
   return readGatewayEnv(
     env,
-    ["DENEB_GATEWAY_TOKEN", "CLAWDBOT_GATEWAY_TOKEN"],
+    ["DENEB_GATEWAY_TOKEN", "OPENCLAW_GATEWAY_TOKEN", "CLAWDBOT_GATEWAY_TOKEN"],
     includeLegacyEnv,
   );
 }
@@ -97,7 +97,7 @@ export function readGatewayPasswordEnv(
 ): string | undefined {
   return readGatewayEnv(
     env,
-    ["DENEB_GATEWAY_PASSWORD", "CLAWDBOT_GATEWAY_PASSWORD"],
+    ["DENEB_GATEWAY_PASSWORD", "OPENCLAW_GATEWAY_PASSWORD", "CLAWDBOT_GATEWAY_PASSWORD"],
     includeLegacyEnv,
   );
 }
