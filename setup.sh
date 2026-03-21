@@ -53,14 +53,14 @@ ok "Python: $PYTHON ($PYTHON_VER)"
 MD_DIR="${1:-}"
 
 if [[ -z "$MD_DIR" ]]; then
-    # 기본 위치 후보 (OpenClaw 버전 무관 glob 포함)
+    # 기본 위치 후보 (Deneb 버전 무관 glob 포함)
     CANDIDATES=(
         "$SELF_DIR/projects"
-        "$HOME/.openclaw/agents/main/knowledge/projects"
+        "$HOME/.deneb/agents/main/knowledge/projects"
         "$HOME/projects"
     )
-    # OpenClaw 버전별 경로 glob
-    for d in "$HOME"/.openclaw/*/agents/main/knowledge/projects; do
+    # Deneb 버전별 경로 glob
+    for d in "$HOME"/.deneb/*/agents/main/knowledge/projects; do
         [[ -d "$d" ]] && CANDIDATES+=("$d")
     done
 
@@ -211,7 +211,7 @@ cat <<'GUIDE'
  ├──────────────────────────────────────────────────┤
  │                                                  │
  │  mcp-vega.json을 MCP config에 복사:              │
- │    cp mcp-vega.json ~/.openclaw/mcp/             │
+ │    cp mcp-vega.json ~/.deneb/mcp/             │
  │                                                  │
  │  또는 claude_desktop_config.json에 추가:          │
  │    "vega": {                                     │

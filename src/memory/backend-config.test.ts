@@ -57,7 +57,7 @@ describe("resolveMemoryBackendConfig", () => {
       memory: {
         backend: "qmd",
         qmd: {
-          command: "/home/user/.openclaw/.bun/bin/qmd-wrapper.sh",
+          command: "/home/user/.deneb/.bun/bin/qmd-wrapper.sh",
         },
       },
     } as DenebConfig;

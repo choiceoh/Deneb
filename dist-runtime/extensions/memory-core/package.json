@@ -1,18 +1,18 @@
 {
-  "name": "@openclaw/memory-core",
+  "name": "@deneb/memory-core",
   "version": "2026.3.14",
   "private": true,
-  "description": "OpenClaw core memory search plugin",
+  "description": "Deneb core memory search plugin",
   "type": "module",
   "peerDependencies": {
-    "openclaw": ">=2026.3.11"
+    "deneb": ">=2026.3.11"
   },
   "peerDependenciesMeta": {
-    "openclaw": {
+    "deneb": {
       "optional": true
     }
   },
-  "openclaw": {
+  "deneb": {
     "extensions": [
       "./index.js"
     ]

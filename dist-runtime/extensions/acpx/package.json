@@ -1,12 +1,12 @@
 {
-  "name": "@openclaw/acpx",
+  "name": "@deneb/acpx",
   "version": "2026.3.14",
-  "description": "OpenClaw ACP runtime backend via acpx",
+  "description": "Deneb ACP runtime backend via acpx",
   "type": "module",
   "dependencies": {
     "acpx": "0.3.0"
   },
-  "openclaw": {
+  "deneb": {
     "extensions": [
       "./index.js"
     ]

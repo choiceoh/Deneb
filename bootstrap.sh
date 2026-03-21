@@ -38,7 +38,7 @@ err() {
 # ── 1. MD 디렉토리 확인 ──
 if [[ ! -d "$MD_DIR" ]]; then
     # 대안 경로 시도
-    ALT="$HOME/.openclaw/agents/main/knowledge/projects"
+    ALT="$HOME/.deneb/agents/main/knowledge/projects"
     if [[ -d "$ALT" ]]; then
         MD_DIR="$ALT"
         log "MD 디렉토리 대안 경로 사용: $MD_DIR"
