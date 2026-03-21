@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_COMPACTION_INSTRUCTIONS,
+  __testing,
   resolveCompactionInstructions,
   composeSplitTurnInstructions,
-} from "./compaction-instructions.js";
+} from "./compaction-safeguard.js";
+
+// DEFAULT_COMPACTION_INSTRUCTIONS is no longer exported directly; test via resolveCompactionInstructions
+const DEFAULT_COMPACTION_INSTRUCTIONS = resolveCompactionInstructions(undefined, undefined);
 
 describe("DEFAULT_COMPACTION_INSTRUCTIONS", () => {
   it("is a non-empty string", () => {

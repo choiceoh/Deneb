@@ -3,8 +3,9 @@ import type { ExtensionFactory, SessionManager } from "@mariozechner/pi-coding-a
 import type { DenebConfig } from "../../config/config.js";
 import { resolveContextWindowInfo } from "../context-window-guard.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../defaults.js";
-import { setCompactionSafeguardRuntime } from "../pi-extensions/compaction-safeguard-runtime.js";
-import compactionSafeguardExtension from "../pi-extensions/compaction-safeguard.js";
+import compactionSafeguardExtension, {
+  setCompactionSafeguardRuntime,
+} from "../pi-extensions/compaction-safeguard.js";
 import contextPruningExtension from "../pi-extensions/context-pruning.js";
 import { setContextPruningRuntime } from "../pi-extensions/context-pruning/runtime.js";
 import { computeEffectiveSettings } from "../pi-extensions/context-pruning/settings.js";
@@ -71,7 +72,6 @@ export function buildEmbeddedExtensionFactories(params: {
   const factories: ExtensionFactory[] = [];
   if (resolveCompactionMode(params.cfg) === "safeguard") {
     const compactionCfg = params.cfg?.agents?.defaults?.compaction;
-    const qualityGuardCfg = compactionCfg?.qualityGuard;
     const contextWindowInfo = resolveContextWindowInfo({
       cfg: params.cfg,
       provider: params.provider,
@@ -85,8 +85,6 @@ export function buildEmbeddedExtensionFactories(params: {
       identifierPolicy: compactionCfg?.identifierPolicy,
       identifierInstructions: compactionCfg?.identifierInstructions,
       customInstructions: compactionCfg?.customInstructions,
-      qualityGuardEnabled: qualityGuardCfg?.enabled ?? false,
-      qualityGuardMaxRetries: qualityGuardCfg?.maxRetries,
       model: params.model,
       recentTurnsPreserve: compactionCfg?.recentTurnsPreserve,
     });
