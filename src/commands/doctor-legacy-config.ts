@@ -637,5 +637,71 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
     }
   }
 
+  // Migrate lossless-claw plugin entry keys into config sub-object.
+  // After nativization (v3.150), these keys must live under
+  // plugins.entries.lossless-claw.config to pass PluginEntrySchema (.strict()).
+  const LCM_CONFIG_KEYS = new Set([
+    "leafTargetTokens",
+    "condensedTargetTokens",
+    "incrementalMaxDepth",
+    "leafChunkTokens",
+    "leafMinFanout",
+    "condensedMinFanout",
+    "condensedMinFanoutHard",
+    "maxExpandTokens",
+    "contextThreshold",
+    "freshTailCount",
+    "dbPath",
+    "databasePath",
+    "largeFileThresholdTokens",
+    "largeFileTokenThreshold",
+    "largeFileSummaryProvider",
+    "largeFileSummaryModel",
+    "summaryModel",
+    "summaryProvider",
+    "autocompactDisabled",
+    "timezone",
+    "pruneHeartbeatOk",
+  ]);
+  const lcmEntry = (next.plugins as Record<string, unknown> | undefined)?.entries as
+    | Record<string, Record<string, unknown>>
+    | undefined;
+  const lcmRaw = lcmEntry?.["lossless-claw"];
+  if (isRecord(lcmRaw)) {
+    const movedKeys: string[] = [];
+    const existingConfig = isRecord(lcmRaw.config) ? { ...lcmRaw.config } : {};
+    for (const key of Object.keys(lcmRaw)) {
+      if (!LCM_CONFIG_KEYS.has(key)) {
+        continue;
+      }
+      if (!(key in existingConfig)) {
+        existingConfig[key] = lcmRaw[key];
+      }
+      movedKeys.push(key);
+    }
+    if (movedKeys.length > 0) {
+      const cleaned: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(lcmRaw)) {
+        if (!LCM_CONFIG_KEYS.has(k)) {
+          cleaned[k] = v;
+        }
+      }
+      cleaned.config = existingConfig;
+      next = {
+        ...next,
+        plugins: {
+          ...(next.plugins as Record<string, unknown>),
+          entries: {
+            ...lcmEntry,
+            "lossless-claw": cleaned,
+          },
+        },
+      };
+      changes.push(
+        `Moved lossless-claw keys into plugins.entries.lossless-claw.config: ${movedKeys.join(", ")}.`,
+      );
+    }
+  }
+
   return { config: next, changes };
 }

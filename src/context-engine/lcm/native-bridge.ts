@@ -325,10 +325,9 @@ async function nativeResolveSessionIdFromSessionKey(
 
 export function createNativeLcmDependencies(): LcmDependencies {
   const cfg = loadConfig();
-  const pluginConfig = cfg.plugins?.entries?.["lossless-claw"] as
-    | Record<string, unknown>
-    | undefined;
-  const config = resolveLcmConfig(process.env, pluginConfig ?? {});
+  const lcmEntry = cfg.plugins?.entries?.["lossless-claw"] as Record<string, unknown> | undefined;
+  const pluginConfig = (lcmEntry?.config as Record<string, unknown> | undefined) ?? {};
+  const config = resolveLcmConfig(process.env, pluginConfig);
 
   // Apply model overrides from plugin config
   if (pluginConfig) {
