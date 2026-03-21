@@ -21,46 +21,51 @@ import type {
 
 export function createEmbeddedPiSessionEventHandler(ctx: EmbeddedPiSubscribeContext) {
   return (evt: EmbeddedPiSubscribeEvent) => {
-    switch (evt.type) {
-      case "message_start":
-        handleMessageStart(ctx, evt as never);
-        return;
-      case "message_update":
-        handleMessageUpdate(ctx, evt as never);
-        return;
-      case "message_end":
-        handleMessageEnd(ctx, evt as never);
-        return;
-      case "tool_execution_start":
-        // Async handler - best-effort typing indicator, avoids blocking tool summaries.
-        // Catch rejections to avoid unhandled promise rejection crashes.
-        handleToolExecutionStart(ctx, evt as never).catch((err) => {
-          ctx.log.debug(`tool_execution_start handler failed: ${String(err)}`);
-        });
-        return;
-      case "tool_execution_update":
-        handleToolExecutionUpdate(ctx, evt as never);
-        return;
-      case "tool_execution_end":
-        // Async handler - best-effort, non-blocking
-        handleToolExecutionEnd(ctx, evt as never).catch((err) => {
-          ctx.log.debug(`tool_execution_end handler failed: ${String(err)}`);
-        });
-        return;
-      case "agent_start":
-        handleAgentStart(ctx);
-        return;
-      case "auto_compaction_start":
-        handleAutoCompactionStart(ctx);
-        return;
-      case "auto_compaction_end":
-        handleAutoCompactionEnd(ctx, evt as never);
-        return;
-      case "agent_end":
-        handleAgentEnd(ctx);
-        return;
-      default:
-        return;
+    try {
+      switch (evt.type) {
+        case "message_start":
+          handleMessageStart(ctx, evt as never);
+          return;
+        case "message_update":
+          handleMessageUpdate(ctx, evt as never);
+          return;
+        case "message_end":
+          handleMessageEnd(ctx, evt as never);
+          return;
+        case "tool_execution_start":
+          // Async handler - best-effort typing indicator, avoids blocking tool summaries.
+          // Catch rejections to avoid unhandled promise rejection crashes.
+          handleToolExecutionStart(ctx, evt as never).catch((err) => {
+            ctx.log.debug(`tool_execution_start handler failed: ${String(err)}`);
+          });
+          return;
+        case "tool_execution_update":
+          handleToolExecutionUpdate(ctx, evt as never);
+          return;
+        case "tool_execution_end":
+          // Async handler - best-effort, non-blocking
+          handleToolExecutionEnd(ctx, evt as never).catch((err) => {
+            ctx.log.debug(`tool_execution_end handler failed: ${String(err)}`);
+          });
+          return;
+        case "agent_start":
+          handleAgentStart(ctx);
+          return;
+        case "auto_compaction_start":
+          handleAutoCompactionStart(ctx);
+          return;
+        case "auto_compaction_end":
+          handleAutoCompactionEnd(ctx, evt as never);
+          return;
+        case "agent_end":
+          handleAgentEnd(ctx);
+          return;
+        default:
+          return;
+      }
+    } catch (err) {
+      // Defensive: never let a malformed AI event crash the session event loop.
+      ctx.log.warn(`session event handler failed: type=${String(evt?.type)} error=${String(err)}`);
     }
   };
 }

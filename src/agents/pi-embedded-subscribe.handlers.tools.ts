@@ -305,9 +305,9 @@ export async function handleToolExecutionStart(
     await ctx.params.onBlockReplyFlush();
   }
 
-  const rawToolName = String(evt.toolName);
+  const rawToolName = String(evt.toolName ?? "");
   const toolName = normalizeToolName(rawToolName);
-  const toolCallId = String(evt.toolCallId);
+  const toolCallId = String(evt.toolCallId ?? "");
   const args = evt.args;
   const runId = ctx.params.runId;
 
@@ -338,16 +338,20 @@ export async function handleToolExecutionStart(
   );
 
   const shouldEmitToolEvents = ctx.shouldEmitToolResult();
-  emitAgentEvent({
-    runId: ctx.params.runId,
-    stream: "tool",
-    data: {
-      phase: "start",
-      name: toolName,
-      toolCallId,
-      args: args as Record<string, unknown>,
-    },
-  });
+  try {
+    emitAgentEvent({
+      runId: ctx.params.runId,
+      stream: "tool",
+      data: {
+        phase: "start",
+        name: toolName,
+        toolCallId,
+        args: args as Record<string, unknown>,
+      },
+    });
+  } catch {
+    // Defensive: event emission should never crash tool execution.
+  }
   // Best-effort typing signal; do not block tool summaries on slow emitters.
   void ctx.params.onAgentEvent?.({
     stream: "tool",
@@ -364,26 +368,31 @@ export async function handleToolExecutionStart(
   }
 
   // Track messaging tool sends (pending until confirmed in tool_execution_end).
-  if (isMessagingTool(toolName)) {
-    const argsRecord = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
-    const isMessagingSend = isMessagingToolSendAction(toolName, argsRecord);
-    if (isMessagingSend) {
-      const sendTarget = extractMessagingToolSend(toolName, argsRecord);
-      if (sendTarget) {
-        ctx.state.pendingMessagingTargets.set(toolCallId, sendTarget);
-      }
-      // Field names vary by tool: Discord/Slack use "content", sessions_send uses "message"
-      const text = (argsRecord.content as string) ?? (argsRecord.message as string);
-      if (text && typeof text === "string") {
-        ctx.state.pendingMessagingTexts.set(toolCallId, text);
-        ctx.log.debug(`Tracking pending messaging text: tool=${toolName} len=${text.length}`);
-      }
-      // Track media URLs from messaging tool args (pending until tool_execution_end).
-      const mediaUrls = collectMessagingMediaUrlsFromRecord(argsRecord);
-      if (mediaUrls.length > 0) {
-        ctx.state.pendingMessagingMediaUrls.set(toolCallId, mediaUrls);
+  try {
+    if (isMessagingTool(toolName)) {
+      const argsRecord = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      const isMessagingSend = isMessagingToolSendAction(toolName, argsRecord);
+      if (isMessagingSend) {
+        const sendTarget = extractMessagingToolSend(toolName, argsRecord);
+        if (sendTarget) {
+          ctx.state.pendingMessagingTargets.set(toolCallId, sendTarget);
+        }
+        // Field names vary by tool: Discord/Slack use "content", sessions_send uses "message"
+        const text = (argsRecord.content as string) ?? (argsRecord.message as string);
+        if (text && typeof text === "string") {
+          ctx.state.pendingMessagingTexts.set(toolCallId, text);
+          ctx.log.debug(`Tracking pending messaging text: tool=${toolName} len=${text.length}`);
+        }
+        // Track media URLs from messaging tool args (pending until tool_execution_end).
+        const mediaUrls = collectMessagingMediaUrlsFromRecord(argsRecord);
+        if (mediaUrls.length > 0) {
+          ctx.state.pendingMessagingMediaUrls.set(toolCallId, mediaUrls);
+        }
       }
     }
+  } catch (err) {
+    // Defensive: messaging tracking is non-critical; don't crash the tool start handler.
+    ctx.log.debug(`messaging tracking failed in tool_execution_start: ${String(err)}`);
   }
 }
 
@@ -428,13 +437,19 @@ export async function handleToolExecutionEnd(
     result?: unknown;
   },
 ) {
-  const toolName = normalizeToolName(String(evt.toolName));
-  const toolCallId = String(evt.toolCallId);
+  const toolName = normalizeToolName(String(evt.toolName ?? ""));
+  const toolCallId = String(evt.toolCallId ?? "");
   const runId = ctx.params.runId;
   const isError = Boolean(evt.isError);
   const result = evt.result;
   const isToolError = isError || isToolResultError(result);
-  const sanitizedResult = sanitizeToolResult(result);
+  let sanitizedResult: unknown;
+  try {
+    sanitizedResult = sanitizeToolResult(result);
+  } catch {
+    // Defensive: if sanitization throws on unexpected result shape, use raw result.
+    sanitizedResult = result;
+  }
   const toolStartKey = buildToolStartKey(runId, toolCallId);
   const startData = toolStartData.get(toolStartKey);
   toolStartData.delete(toolStartKey);
@@ -469,27 +484,7 @@ export async function handleToolExecutionEnd(
     }
   }
 
-  // Commit messaging tool text on success, discard on error.
-  const pendingText = ctx.state.pendingMessagingTexts.get(toolCallId);
-  const pendingTarget = ctx.state.pendingMessagingTargets.get(toolCallId);
-  if (pendingText) {
-    ctx.state.pendingMessagingTexts.delete(toolCallId);
-    if (!isToolError) {
-      ctx.state.messagingToolSentTexts.push(pendingText);
-      ctx.state.messagingToolSentTextsNormalized.push(normalizeTextForComparison(pendingText));
-      ctx.log.debug(`Committed messaging text: tool=${toolName} len=${pendingText.length}`);
-      ctx.trimMessagingToolSent();
-    }
-  }
-  if (pendingTarget) {
-    ctx.state.pendingMessagingTargets.delete(toolCallId);
-    if (!isToolError) {
-      ctx.state.messagingToolSentTargets.push(pendingTarget);
-      ctx.trimMessagingToolSent();
-    }
-  }
-  const pendingMediaUrls = ctx.state.pendingMessagingMediaUrls.get(toolCallId) ?? [];
-  ctx.state.pendingMessagingMediaUrls.delete(toolCallId);
+  // Resolve tool call args once (consumeAdjustedParamsForToolCall is destructive).
   const startArgs =
     startData?.args && typeof startData.args === "object"
       ? (startData.args as Record<string, unknown>)
@@ -499,37 +494,68 @@ export async function handleToolExecutionEnd(
     adjustedArgs && typeof adjustedArgs === "object"
       ? (adjustedArgs as Record<string, unknown>)
       : startArgs;
-  const isMessagingSend =
-    pendingMediaUrls.length > 0 ||
-    (isMessagingTool(toolName) && isMessagingToolSendAction(toolName, startArgs));
-  if (!isToolError && isMessagingSend) {
-    const committedMediaUrls = [
-      ...pendingMediaUrls,
-      ...collectMessagingMediaUrlsFromToolResult(result),
-    ];
-    if (committedMediaUrls.length > 0) {
-      ctx.state.messagingToolSentMediaUrls.push(...committedMediaUrls);
-      ctx.trimMessagingToolSent();
+
+  // Commit messaging tool text on success, discard on error.
+  try {
+    const pendingText = ctx.state.pendingMessagingTexts.get(toolCallId);
+    const pendingTarget = ctx.state.pendingMessagingTargets.get(toolCallId);
+    if (pendingText) {
+      ctx.state.pendingMessagingTexts.delete(toolCallId);
+      if (!isToolError) {
+        ctx.state.messagingToolSentTexts.push(pendingText);
+        ctx.state.messagingToolSentTextsNormalized.push(normalizeTextForComparison(pendingText));
+        ctx.log.debug(`Committed messaging text: tool=${toolName} len=${pendingText.length}`);
+        ctx.trimMessagingToolSent();
+      }
     }
+    if (pendingTarget) {
+      ctx.state.pendingMessagingTargets.delete(toolCallId);
+      if (!isToolError) {
+        ctx.state.messagingToolSentTargets.push(pendingTarget);
+        ctx.trimMessagingToolSent();
+      }
+    }
+    const pendingMediaUrls = ctx.state.pendingMessagingMediaUrls.get(toolCallId) ?? [];
+    ctx.state.pendingMessagingMediaUrls.delete(toolCallId);
+    const isMessagingSend =
+      pendingMediaUrls.length > 0 ||
+      (isMessagingTool(toolName) && isMessagingToolSendAction(toolName, startArgs));
+    if (!isToolError && isMessagingSend) {
+      const committedMediaUrls = [
+        ...pendingMediaUrls,
+        ...collectMessagingMediaUrlsFromToolResult(result),
+      ];
+      if (committedMediaUrls.length > 0) {
+        ctx.state.messagingToolSentMediaUrls.push(...committedMediaUrls);
+        ctx.trimMessagingToolSent();
+      }
+    }
+
+    // Track committed reminders only when cron.add completed successfully.
+    if (!isToolError && toolName === "cron" && isCronAddAction(startData?.args)) {
+      ctx.state.successfulCronAdds += 1;
+    }
+  } catch (err) {
+    // Defensive: messaging/cron tracking is non-critical; don't crash the tool end handler.
+    ctx.log.debug(`messaging/cron tracking failed in tool_execution_end: ${String(err)}`);
   }
 
-  // Track committed reminders only when cron.add completed successfully.
-  if (!isToolError && toolName === "cron" && isCronAddAction(startData?.args)) {
-    ctx.state.successfulCronAdds += 1;
+  try {
+    emitAgentEvent({
+      runId: ctx.params.runId,
+      stream: "tool",
+      data: {
+        phase: "result",
+        name: toolName,
+        toolCallId,
+        meta,
+        isError: isToolError,
+        result: sanitizedResult,
+      },
+    });
+  } catch {
+    // Defensive: event emission should never crash tool execution.
   }
-
-  emitAgentEvent({
-    runId: ctx.params.runId,
-    stream: "tool",
-    data: {
-      phase: "result",
-      name: toolName,
-      toolCallId,
-      meta,
-      isError: isToolError,
-      result: sanitizedResult,
-    },
-  });
   void ctx.params.onAgentEvent?.({
     stream: "tool",
     data: {

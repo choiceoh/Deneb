@@ -172,94 +172,104 @@ export function installSessionToolResultGuard(
   };
 
   const guardedAppend = (message: AgentMessage) => {
-    let nextMessage = message;
-    const role = (message as { role?: unknown }).role;
-    if (role === "assistant") {
-      const sanitized = sanitizeToolCallInputs([message], {
-        allowedToolNames: opts?.allowedToolNames,
-      });
-      if (sanitized.length === 0) {
-        if (pendingState.shouldFlushForSanitizedDrop()) {
-          flushPendingToolResults();
+    try {
+      let nextMessage = message;
+      const role = (message as { role?: unknown }).role;
+      if (role === "assistant") {
+        const sanitized = sanitizeToolCallInputs([message], {
+          allowedToolNames: opts?.allowedToolNames,
+        });
+        if (sanitized.length === 0) {
+          if (pendingState.shouldFlushForSanitizedDrop()) {
+            flushPendingToolResults();
+          }
+          return undefined;
         }
+        nextMessage = sanitized[0];
+      }
+      const nextRole = (nextMessage as { role?: unknown }).role;
+
+      if (nextRole === "toolResult") {
+        const id = extractToolResultId(
+          nextMessage as Extract<AgentMessage, { role: "toolResult" }>,
+        );
+        const toolName = id ? pendingState.getToolName(id) : undefined;
+        if (id) {
+          pendingState.delete(id);
+        }
+        const normalizedToolResult = normalizePersistedToolResultName(nextMessage, toolName);
+        // Apply hard size cap before persistence to prevent oversized tool results
+        // from consuming the entire context window on subsequent LLM calls.
+        const capped = capToolResultSize(persistMessage(normalizedToolResult));
+        const persisted = applyBeforeWriteHook(
+          persistToolResult(capped, {
+            toolCallId: id ?? undefined,
+            toolName,
+            isSynthetic: false,
+          }),
+        );
+        if (!persisted) {
+          return undefined;
+        }
+        return originalAppend(persisted as never);
+      }
+
+      // Skip tool call extraction for aborted/errored assistant messages.
+      // When stopReason is "error" or "aborted", the tool_use blocks may be incomplete
+      // and should not have synthetic tool_results created. Creating synthetic results
+      // for incomplete tool calls causes API 400 errors:
+      // "unexpected tool_use_id found in tool_result blocks"
+      // This matches the behavior in repairToolUseResultPairing (session-transcript-repair.ts)
+      const stopReason = (nextMessage as { stopReason?: string }).stopReason;
+      const toolCalls =
+        nextRole === "assistant" && stopReason !== "aborted" && stopReason !== "error"
+          ? extractToolCallsFromAssistant(
+              nextMessage as Extract<AgentMessage, { role: "assistant" }>,
+            )
+          : [];
+
+      // Always clear pending tool call state before appending non-tool-result messages.
+      // flushPendingToolResults() only inserts synthetic results when allowSyntheticToolResults
+      // is true; it always clears the pending map. Without this, providers that disable
+      // synthetic results (e.g. OpenAI) accumulate stale pending state when a user message
+      // interrupts in-flight tool calls, leaving orphaned tool_use blocks in the transcript
+      // that cause API 400 errors on subsequent requests.
+      if (pendingState.shouldFlushBeforeNonToolResult(nextRole, toolCalls.length)) {
+        flushPendingToolResults();
+      }
+      // If new tool calls arrive while older ones are pending, flush the old ones first.
+      if (pendingState.shouldFlushBeforeNewToolCalls(toolCalls.length)) {
+        flushPendingToolResults();
+      }
+
+      const finalMessage = applyBeforeWriteHook(persistMessage(nextMessage));
+      if (!finalMessage) {
         return undefined;
       }
-      nextMessage = sanitized[0];
-    }
-    const nextRole = (nextMessage as { role?: unknown }).role;
+      const result = originalAppend(finalMessage as never);
 
-    if (nextRole === "toolResult") {
-      const id = extractToolResultId(nextMessage as Extract<AgentMessage, { role: "toolResult" }>);
-      const toolName = id ? pendingState.getToolName(id) : undefined;
-      if (id) {
-        pendingState.delete(id);
+      const sessionFile = (
+        sessionManager as { getSessionFile?: () => string | null }
+      ).getSessionFile?.();
+      if (sessionFile) {
+        emitSessionTranscriptUpdate({
+          sessionFile,
+          sessionKey: opts?.sessionKey,
+          message: finalMessage,
+          messageId: typeof result === "string" ? result : undefined,
+        });
       }
-      const normalizedToolResult = normalizePersistedToolResultName(nextMessage, toolName);
-      // Apply hard size cap before persistence to prevent oversized tool results
-      // from consuming the entire context window on subsequent LLM calls.
-      const capped = capToolResultSize(persistMessage(normalizedToolResult));
-      const persisted = applyBeforeWriteHook(
-        persistToolResult(capped, {
-          toolCallId: id ?? undefined,
-          toolName,
-          isSynthetic: false,
-        }),
-      );
-      if (!persisted) {
-        return undefined;
+
+      if (toolCalls.length > 0) {
+        pendingState.trackToolCalls(toolCalls);
       }
-      return originalAppend(persisted as never);
-    }
 
-    // Skip tool call extraction for aborted/errored assistant messages.
-    // When stopReason is "error" or "aborted", the tool_use blocks may be incomplete
-    // and should not have synthetic tool_results created. Creating synthetic results
-    // for incomplete tool calls causes API 400 errors:
-    // "unexpected tool_use_id found in tool_result blocks"
-    // This matches the behavior in repairToolUseResultPairing (session-transcript-repair.ts)
-    const stopReason = (nextMessage as { stopReason?: string }).stopReason;
-    const toolCalls =
-      nextRole === "assistant" && stopReason !== "aborted" && stopReason !== "error"
-        ? extractToolCallsFromAssistant(nextMessage as Extract<AgentMessage, { role: "assistant" }>)
-        : [];
-
-    // Always clear pending tool call state before appending non-tool-result messages.
-    // flushPendingToolResults() only inserts synthetic results when allowSyntheticToolResults
-    // is true; it always clears the pending map. Without this, providers that disable
-    // synthetic results (e.g. OpenAI) accumulate stale pending state when a user message
-    // interrupts in-flight tool calls, leaving orphaned tool_use blocks in the transcript
-    // that cause API 400 errors on subsequent requests.
-    if (pendingState.shouldFlushBeforeNonToolResult(nextRole, toolCalls.length)) {
-      flushPendingToolResults();
+      return result;
+    } catch {
+      // Defensive: never let a malformed AI message crash session persistence.
+      // Fall through to the original append so the message is still persisted.
+      return originalAppend(message as never);
     }
-    // If new tool calls arrive while older ones are pending, flush the old ones first.
-    if (pendingState.shouldFlushBeforeNewToolCalls(toolCalls.length)) {
-      flushPendingToolResults();
-    }
-
-    const finalMessage = applyBeforeWriteHook(persistMessage(nextMessage));
-    if (!finalMessage) {
-      return undefined;
-    }
-    const result = originalAppend(finalMessage as never);
-
-    const sessionFile = (
-      sessionManager as { getSessionFile?: () => string | null }
-    ).getSessionFile?.();
-    if (sessionFile) {
-      emitSessionTranscriptUpdate({
-        sessionFile,
-        sessionKey: opts?.sessionKey,
-        message: finalMessage,
-        messageId: typeof result === "string" ? result : undefined,
-      });
-    }
-
-    if (toolCalls.length > 0) {
-      pendingState.trackToolCalls(toolCalls);
-    }
-
-    return result;
   };
 
   // Monkey-patch appendMessage with our guarded version.
