@@ -9,7 +9,7 @@ import {
   type ConfigFileSnapshot,
   type GatewayAuthConfig,
   type GatewayTailscaleConfig,
-  type OpenClawConfig,
+  type DenebConfig,
 } from "../config/config.js";
 import { formatConfigIssueLines } from "../config/issue-format.js";
 import {
@@ -57,7 +57,7 @@ export function createGatewayAuthRateLimiters(rateLimitConfig: AuthRateLimitConf
 
 export function logGatewayAuthSurfaceDiagnostics(
   prepared: {
-    sourceConfig: OpenClawConfig;
+    sourceConfig: DenebConfig;
     warnings: Array<{ code: string; path: string; message: string }>;
   },
   logSecrets: { info: (msg: string) => void },
@@ -90,9 +90,9 @@ export function logGatewayAuthSurfaceDiagnostics(
 // ── Auth override helper ────────────────────────────────────────────
 
 export function applyGatewayAuthOverridesForStartupPreflight(
-  config: OpenClawConfig,
+  config: DenebConfig,
   overrides: { auth?: GatewayAuthConfig; tailscale?: GatewayTailscaleConfig },
-): OpenClawConfig {
+): DenebConfig {
   if (!overrides.auth && !overrides.tailscale) {
     return config;
   }
@@ -120,7 +120,7 @@ export function assertValidGatewayStartupConfigSnapshot(
       ? formatConfigIssueLines(snapshot.issues, "", { normalizeRoot: true }).join("\n")
       : "Unknown validation issue.";
   const doctorHint = options.includeDoctorHint
-    ? `\nRun "${formatCliCommand("openclaw doctor")}" to repair, then retry.`
+    ? `\nRun "${formatCliCommand("deneb doctor")}" to repair, then retry.`
     : "";
   throw new Error(`Invalid config at ${snapshot.path}.\n${issues}${doctorHint}`);
 }
@@ -131,13 +131,13 @@ export async function prepareGatewayStartupConfig(params: {
   configSnapshot: ConfigFileSnapshot;
   // Keep startup auth/runtime behavior aligned with loadConfig(), which applies
   // runtime overrides beyond the raw on-disk snapshot.
-  runtimeConfig: OpenClawConfig;
+  runtimeConfig: DenebConfig;
   authOverride?: GatewayAuthConfig;
   tailscaleOverride?: GatewayTailscaleConfig;
   activateRuntimeSecrets: (
-    config: OpenClawConfig,
+    config: DenebConfig,
     options: { reason: "startup"; activate: boolean },
-  ) => Promise<{ config: OpenClawConfig }>;
+  ) => Promise<{ config: DenebConfig }>;
 }): Promise<Awaited<ReturnType<typeof ensureGatewayStartupAuth>>> {
   assertValidGatewayStartupConfigSnapshot(params.configSnapshot);
 

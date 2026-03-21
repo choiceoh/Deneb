@@ -28,7 +28,7 @@ describe("watch-node script", () => {
 
     const runPromise = runWatchMain({
       args: ["gateway", "--force"],
-      cwd: "/tmp/openclaw",
+      cwd: "/tmp/deneb",
       createWatcher,
       env: { PATH: "/usr/bin" },
       now: () => 1700000000000,
@@ -51,7 +51,7 @@ describe("watch-node script", () => {
     expect(watchOptions.ignored("src/infra/watch-node.test.tsx")).toBe(true);
     expect(watchOptions.ignored("src/infra/watch-node-test-helpers.ts")).toBe(true);
     expect(watchOptions.ignored("extensions/voice-call/README.md")).toBe(true);
-    expect(watchOptions.ignored("extensions/voice-call/openclaw.plugin.json")).toBe(false);
+    expect(watchOptions.ignored("extensions/voice-call/deneb.plugin.json")).toBe(false);
     expect(watchOptions.ignored("extensions/voice-call/package.json")).toBe(false);
     expect(watchOptions.ignored("extensions/voice-call/index.ts")).toBe(false);
     expect(watchOptions.ignored("extensions/voice-call/src/runtime.ts")).toBe(false);
@@ -63,13 +63,13 @@ describe("watch-node script", () => {
       "/usr/local/bin/node",
       ["scripts/run-node.mjs", "gateway", "--force"],
       expect.objectContaining({
-        cwd: "/tmp/openclaw",
+        cwd: "/tmp/deneb",
         stdio: "inherit",
         env: expect.objectContaining({
           PATH: "/usr/bin",
-          OPENCLAW_WATCH_MODE: "1",
-          OPENCLAW_WATCH_SESSION: "1700000000000-4242",
-          OPENCLAW_WATCH_COMMAND: "gateway --force",
+          DENEB_WATCH_MODE: "1",
+          DENEB_WATCH_SESSION: "1700000000000-4242",
+          DENEB_WATCH_COMMAND: "gateway --force",
         }),
       }),
     );
@@ -178,7 +178,7 @@ describe("watch-node script", () => {
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(childA.kill).not.toHaveBeenCalled();
 
-    watcher.emit("change", "extensions/voice-call/openclaw.plugin.json");
+    watcher.emit("change", "extensions/voice-call/deneb.plugin.json");
     await new Promise((resolve) => setImmediate(resolve));
     expect(childA.kill).toHaveBeenCalledWith("SIGTERM");
     expect(spawn).toHaveBeenCalledTimes(2);

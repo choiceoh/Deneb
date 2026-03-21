@@ -1,11 +1,11 @@
 import { Command } from "commander";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { createCliRuntimeCapture } from "./test-runtime-capture.js";
 
-const loadConfig = vi.fn<() => OpenClawConfig>(() => ({}) as OpenClawConfig);
-const writeConfigFile = vi.fn<(config: OpenClawConfig) => Promise<void>>(async () => undefined);
-const resolveStateDir = vi.fn(() => "/tmp/openclaw-state");
+const loadConfig = vi.fn<() => DenebConfig>(() => ({}) as DenebConfig);
+const writeConfigFile = vi.fn<(config: DenebConfig) => Promise<void>>(async () => undefined);
+const resolveStateDir = vi.fn(() => "/tmp/deneb-state");
 const installPluginFromMarketplace = vi.fn();
 const listMarketplacePlugins = vi.fn();
 const resolveMarketplaceInstallShortcut = vi.fn();
@@ -32,7 +32,7 @@ vi.mock("../config/config.js", async (importOriginal) => {
   return {
     ...actual,
     loadConfig: () => loadConfig(),
-    writeConfigFile: (config: OpenClawConfig) => writeConfigFile(config),
+    writeConfigFile: (config: DenebConfig) => writeConfigFile(config),
   };
 });
 
@@ -127,27 +127,27 @@ describe("plugins cli", () => {
     installPluginFromNpmSpec.mockReset();
     installPluginFromPath.mockReset();
 
-    loadConfig.mockReturnValue({} as OpenClawConfig);
+    loadConfig.mockReturnValue({} as DenebConfig);
     writeConfigFile.mockResolvedValue(undefined);
-    resolveStateDir.mockReturnValue("/tmp/openclaw-state");
+    resolveStateDir.mockReturnValue("/tmp/deneb-state");
     resolveMarketplaceInstallShortcut.mockResolvedValue(null);
     installPluginFromMarketplace.mockResolvedValue({
       ok: false,
       error: "marketplace install failed",
     });
-    enablePluginInConfig.mockImplementation((cfg: OpenClawConfig) => ({ config: cfg }));
-    recordPluginInstall.mockImplementation((cfg: OpenClawConfig) => cfg);
+    enablePluginInConfig.mockImplementation((cfg: DenebConfig) => ({ config: cfg }));
+    recordPluginInstall.mockImplementation((cfg: DenebConfig) => cfg);
     buildPluginStatusReport.mockReturnValue({
       plugins: [],
       diagnostics: [],
     });
-    applyExclusiveSlotSelection.mockImplementation(({ config }: { config: OpenClawConfig }) => ({
+    applyExclusiveSlotSelection.mockImplementation(({ config }: { config: DenebConfig }) => ({
       config,
       warnings: [],
     }));
     uninstallPlugin.mockResolvedValue({
       ok: true,
-      config: {} as OpenClawConfig,
+      config: {} as DenebConfig,
       warnings: [],
       actions: {
         entry: false,
@@ -161,7 +161,7 @@ describe("plugins cli", () => {
     updateNpmInstalledPlugins.mockResolvedValue({
       outcomes: [],
       changed: false,
-      config: {} as OpenClawConfig,
+      config: {} as DenebConfig,
     });
     promptYesNo.mockResolvedValue(true);
     installPluginFromPath.mockResolvedValue({ ok: false, error: "path install disabled in test" });
@@ -199,7 +199,7 @@ describe("plugins cli", () => {
       plugins: {
         entries: {},
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const enabledCfg = {
       plugins: {
         entries: {
@@ -208,7 +208,7 @@ describe("plugins cli", () => {
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const installedCfg = {
       ...enabledCfg,
       plugins: {
@@ -216,17 +216,17 @@ describe("plugins cli", () => {
         installs: {
           alpha: {
             source: "marketplace",
-            installPath: "/tmp/openclaw-state/extensions/alpha",
+            installPath: "/tmp/deneb-state/extensions/alpha",
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     loadConfig.mockReturnValue(cfg);
     installPluginFromMarketplace.mockResolvedValue({
       ok: true,
       pluginId: "alpha",
-      targetDir: "/tmp/openclaw-state/extensions/alpha",
+      targetDir: "/tmp/deneb-state/extensions/alpha",
       version: "1.2.3",
       marketplaceName: "Claude",
       marketplaceSource: "local/repo",
@@ -262,12 +262,12 @@ describe("plugins cli", () => {
         installs: {
           alpha: {
             source: "path",
-            sourcePath: "/tmp/openclaw-state/extensions/alpha",
-            installPath: "/tmp/openclaw-state/extensions/alpha",
+            sourcePath: "/tmp/deneb-state/extensions/alpha",
+            installPath: "/tmp/deneb-state/extensions/alpha",
           },
         },
       },
-    } as OpenClawConfig);
+    } as DenebConfig);
     buildPluginStatusReport.mockReturnValue({
       plugins: [{ id: "alpha", name: "alpha" }],
       diagnostics: [],
@@ -289,18 +289,18 @@ describe("plugins cli", () => {
         installs: {
           alpha: {
             source: "path",
-            sourcePath: "/tmp/openclaw-state/extensions/alpha",
-            installPath: "/tmp/openclaw-state/extensions/alpha",
+            sourcePath: "/tmp/deneb-state/extensions/alpha",
+            installPath: "/tmp/deneb-state/extensions/alpha",
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const nextConfig = {
       plugins: {
         entries: {},
         installs: {},
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     loadConfig.mockReturnValue(baseConfig);
     buildPluginStatusReport.mockReturnValue({
@@ -339,7 +339,7 @@ describe("plugins cli", () => {
         entries: {},
         installs: {},
       },
-    } as OpenClawConfig);
+    } as DenebConfig);
     buildPluginStatusReport.mockReturnValue({
       plugins: [{ id: "alpha", name: "alpha" }],
       diagnostics: [],
@@ -358,7 +358,7 @@ describe("plugins cli", () => {
       plugins: {
         installs: {},
       },
-    } as OpenClawConfig);
+    } as DenebConfig);
 
     await expect(runCommand(["plugins", "update"])).rejects.toThrow("__exit__:1");
 
@@ -371,7 +371,7 @@ describe("plugins cli", () => {
       plugins: {
         installs: {},
       },
-    } as OpenClawConfig);
+    } as DenebConfig);
 
     await runCommand(["plugins", "update", "--all"]);
 
@@ -385,21 +385,21 @@ describe("plugins cli", () => {
         installs: {
           alpha: {
             source: "npm",
-            spec: "@openclaw/alpha@1.0.0",
+            spec: "@deneb/alpha@1.0.0",
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const nextConfig = {
       plugins: {
         installs: {
           alpha: {
             source: "npm",
-            spec: "@openclaw/alpha@1.1.0",
+            spec: "@deneb/alpha@1.1.0",
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     loadConfig.mockReturnValue(cfg);
     updateNpmInstalledPlugins.mockResolvedValue({
       outcomes: [{ status: "ok", message: "Updated alpha -> 1.1.0" }],

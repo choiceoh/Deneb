@@ -59,8 +59,8 @@ vi.mock("./send.js", () => ({
   sendStickerTelegram,
 }));
 
-vi.mock("openclaw/plugin-sdk/config-runtime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/config-runtime")>();
+vi.mock("deneb/plugin-sdk/config-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("deneb/plugin-sdk/config-runtime")>();
   return {
     ...actual,
     loadConfig,

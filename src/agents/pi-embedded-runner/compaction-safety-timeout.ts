@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 
 async function withTimeout<T>(
   work: (signal: AbortSignal | undefined) => Promise<T>,
@@ -47,7 +47,7 @@ function createAbortError(signal: AbortSignal): Error {
   return err;
 }
 
-export function resolveCompactionTimeoutMs(cfg?: OpenClawConfig): number {
+export function resolveCompactionTimeoutMs(cfg?: DenebConfig): number {
   const raw = cfg?.agents?.defaults?.compaction?.timeoutSeconds;
   if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
     return Math.min(Math.floor(raw) * 1000, MAX_SAFE_TIMEOUT_MS);

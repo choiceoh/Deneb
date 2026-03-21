@@ -52,7 +52,7 @@ describe("readFirstUserMessageFromTranscript", () => {
   let tmpDir: string;
   let storePath: string;
 
-  registerTempSessionStore("openclaw-session-fs-test-", (nextTmpDir, nextStorePath) => {
+  registerTempSessionStore("deneb-session-fs-test-", (nextTmpDir, nextStorePath) => {
     tmpDir = nextTmpDir;
     storePath = nextStorePath;
   });
@@ -184,7 +184,7 @@ describe("readLastMessagePreviewFromTranscript", () => {
   let tmpDir: string;
   let storePath: string;
 
-  registerTempSessionStore("openclaw-session-fs-test-", (nextTmpDir, nextStorePath) => {
+  registerTempSessionStore("deneb-session-fs-test-", (nextTmpDir, nextStorePath) => {
     tmpDir = nextTmpDir;
     storePath = nextStorePath;
   });
@@ -355,7 +355,7 @@ describe("shared transcript read behaviors", () => {
   let tmpDir: string;
   let storePath: string;
 
-  registerTempSessionStore("openclaw-session-fs-test-", (nextTmpDir, nextStorePath) => {
+  registerTempSessionStore("deneb-session-fs-test-", (nextTmpDir, nextStorePath) => {
     tmpDir = nextTmpDir;
     storePath = nextStorePath;
   });
@@ -416,7 +416,7 @@ describe("readSessionTitleFieldsFromTranscript cache", () => {
   let tmpDir: string;
   let storePath: string;
 
-  registerTempSessionStore("openclaw-session-fs-test-", (nextTmpDir, nextStorePath) => {
+  registerTempSessionStore("deneb-session-fs-test-", (nextTmpDir, nextStorePath) => {
     tmpDir = nextTmpDir;
     storePath = nextStorePath;
   });
@@ -468,7 +468,7 @@ describe("readSessionMessages", () => {
   let tmpDir: string;
   let storePath: string;
 
-  registerTempSessionStore("openclaw-session-fs-test-", (nextTmpDir, nextStorePath) => {
+  registerTempSessionStore("deneb-session-fs-test-", (nextTmpDir, nextStorePath) => {
     tmpDir = nextTmpDir;
     storePath = nextStorePath;
   });
@@ -496,13 +496,13 @@ describe("readSessionMessages", () => {
     const marker = out[1] as {
       role: string;
       content?: Array<{ text?: string }>;
-      __openclaw?: { kind?: string; id?: string };
+      __deneb?: { kind?: string; id?: string };
       timestamp?: number;
     };
     expect(marker.role).toBe("system");
     expect(marker.content?.[0]?.text).toBe("Compaction");
-    expect(marker.__openclaw?.kind).toBe("compaction");
-    expect(marker.__openclaw?.id).toBe("comp-1");
+    expect(marker.__deneb?.kind).toBe("compaction");
+    expect(marker.__deneb?.id).toBe("comp-1");
     expect(typeof marker.timestamp).toBe("number");
   });
 
@@ -553,7 +553,7 @@ describe("readSessionMessages", () => {
       );
       expect(out).toHaveLength(1);
       expect(out[0]).toMatchObject(testCase.message);
-      expect((out[0] as { __openclaw?: { seq?: number } }).__openclaw?.seq).toBe(1);
+      expect((out[0] as { __deneb?: { seq?: number } }).__deneb?.seq).toBe(1);
     }
   });
 });
@@ -562,7 +562,7 @@ describe("readSessionPreviewItemsFromTranscript", () => {
   let tmpDir: string;
   let storePath: string;
 
-  registerTempSessionStore("openclaw-session-preview-test-", (nextTmpDir, nextStorePath) => {
+  registerTempSessionStore("deneb-session-preview-test-", (nextTmpDir, nextStorePath) => {
     tmpDir = nextTmpDir;
     storePath = nextStorePath;
   });
@@ -655,7 +655,7 @@ describe("readLatestSessionUsageFromTranscript", () => {
   let tmpDir: string;
   let storePath: string;
 
-  registerTempSessionStore("openclaw-session-usage-test-", (nextTmpDir, nextStorePath) => {
+  registerTempSessionStore("deneb-session-usage-test-", (nextTmpDir, nextStorePath) => {
     tmpDir = nextTmpDir;
     storePath = nextStorePath;
   });
@@ -680,7 +680,7 @@ describe("readLatestSessionUsageFromTranscript", () => {
       {
         message: {
           role: "assistant",
-          provider: "openclaw",
+          provider: "deneb",
           model: "delivery-mirror",
           usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         },
@@ -806,14 +806,14 @@ describe("resolveSessionTranscriptCandidates", () => {
     vi.unstubAllEnvs();
   });
 
-  test("fallback candidate uses OPENCLAW_HOME instead of os.homedir()", () => {
-    vi.stubEnv("OPENCLAW_HOME", "/srv/openclaw-home");
+  test("fallback candidate uses DENEB_HOME instead of os.homedir()", () => {
+    vi.stubEnv("DENEB_HOME", "/srv/deneb-home");
     vi.stubEnv("HOME", "/home/other");
 
     const candidates = resolveSessionTranscriptCandidates("sess-1", undefined);
     const fallback = candidates[candidates.length - 1];
     expect(fallback).toBe(
-      path.join(path.resolve("/srv/openclaw-home"), ".openclaw", "sessions", "sess-1.jsonl"),
+      path.join(path.resolve("/srv/deneb-home"), ".deneb", "sessions", "sess-1.jsonl"),
     );
   });
 });
@@ -822,8 +822,8 @@ describe("resolveSessionTranscriptCandidates safety", () => {
   test("keeps cross-agent absolute sessionFile for standard and custom store roots", () => {
     const cases = [
       {
-        storePath: "/tmp/openclaw/agents/main/sessions/sessions.json",
-        sessionFile: "/tmp/openclaw/agents/ops/sessions/sess-safe.jsonl",
+        storePath: "/tmp/deneb/agents/main/sessions/sessions.json",
+        sessionFile: "/tmp/deneb/agents/ops/sessions/sess-safe.jsonl",
       },
       {
         storePath: "/srv/custom/agents/main/sessions/sessions.json",
@@ -846,14 +846,14 @@ describe("resolveSessionTranscriptCandidates safety", () => {
   test("drops unsafe session IDs instead of producing traversal paths", () => {
     const candidates = resolveSessionTranscriptCandidates(
       "../etc/passwd",
-      "/tmp/openclaw/agents/main/sessions/sessions.json",
+      "/tmp/deneb/agents/main/sessions/sessions.json",
     );
 
     expect(candidates).toEqual([]);
   });
 
   test("drops unsafe sessionFile candidates and keeps safe fallbacks", () => {
-    const storePath = "/tmp/openclaw/agents/main/sessions/sessions.json";
+    const storePath = "/tmp/deneb/agents/main/sessions/sessions.json";
     const candidates = resolveSessionTranscriptCandidates(
       "sess-safe",
       storePath,
@@ -871,13 +871,13 @@ describe("archiveSessionTranscripts", () => {
   let tmpDir: string;
   let storePath: string;
 
-  registerTempSessionStore("openclaw-archive-test-", (nextTmpDir, nextStorePath) => {
+  registerTempSessionStore("deneb-archive-test-", (nextTmpDir, nextStorePath) => {
     tmpDir = nextTmpDir;
     storePath = nextStorePath;
   });
 
   beforeAll(() => {
-    vi.stubEnv("OPENCLAW_HOME", tmpDir);
+    vi.stubEnv("DENEB_HOME", tmpDir);
   });
 
   afterAll(() => {

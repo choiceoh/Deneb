@@ -6,7 +6,7 @@ const buildSessionContextMock = vi.fn();
 const getLeafEntryMock = vi.fn();
 const branchMock = vi.fn();
 const resetLeafMock = vi.fn();
-const ensureOpenClawModelsJsonMock = vi.fn();
+const ensureDenebModelsJsonMock = vi.fn();
 const discoverAuthStorageMock = vi.fn();
 const discoverModelsMock = vi.fn();
 const resolveModelWithRegistryMock = vi.fn();
@@ -32,7 +32,7 @@ vi.mock("@mariozechner/pi-coding-agent", () => ({
 }));
 
 vi.mock("./models-config.js", () => ({
-  ensureOpenClawModelsJson: (...args: unknown[]) => ensureOpenClawModelsJsonMock(...args),
+  ensureDenebModelsJson: (...args: unknown[]) => ensureDenebModelsJsonMock(...args),
 }));
 
 vi.mock("./pi-model-discovery.js", () => ({
@@ -92,7 +92,7 @@ describe("runBtwSideQuestion", () => {
     getLeafEntryMock.mockReset();
     branchMock.mockReset();
     resetLeafMock.mockReset();
-    ensureOpenClawModelsJsonMock.mockReset();
+    ensureDenebModelsJsonMock.mockReset();
     discoverAuthStorageMock.mockReset();
     discoverModelsMock.mockReset();
     resolveModelWithRegistryMock.mockReset();

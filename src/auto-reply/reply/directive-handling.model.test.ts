@@ -4,7 +4,7 @@ import {
   replaceRuntimeAuthProfileStoreSnapshots,
 } from "../../agents/auth-profiles.js";
 import type { ModelAliasIndex } from "../../agents/model-selection.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { handleDirectiveOnly } from "./directive-handling.impl.js";
 import { parseInlineDirectives } from "./directive-handling.js";
@@ -39,11 +39,11 @@ function baseAliasIndex(): ModelAliasIndex {
   return { byAlias: new Map(), byKey: new Map() };
 }
 
-function baseConfig(): OpenClawConfig {
+function baseConfig(): DenebConfig {
   return {
     commands: { text: true },
     agents: { defaults: {} },
-  } as unknown as OpenClawConfig;
+  } as unknown as DenebConfig;
 }
 
 beforeEach(() => {
@@ -78,7 +78,7 @@ function resolveModelSelectionForCommand(params: {
 }) {
   return resolveModelSelectionFromDirective({
     directives: parseInlineDirectives(params.command),
-    cfg: { commands: { text: true } } as unknown as OpenClawConfig,
+    cfg: { commands: { text: true } } as unknown as DenebConfig,
     agentDir: TEST_AGENT_DIR,
     defaultProvider: "anthropic",
     defaultModel: "claude-opus-4-5",
@@ -135,7 +135,7 @@ describe("/model chat UX", () => {
 
   it("auto-applies closest match for typos", () => {
     const directives = parseInlineDirectives("/model anthropic/claud-opus-4-5");
-    const cfg = { commands: { text: true } } as unknown as OpenClawConfig;
+    const cfg = { commands: { text: true } } as unknown as DenebConfig;
 
     const resolved = resolveModelSelectionFromDirective({
       directives,
@@ -254,7 +254,7 @@ describe("/model chat UX", () => {
 
     const resolved = resolveModelSelectionFromDirective({
       directives: parseInlineDirectives("/model gpt@20251001"),
-      cfg: { commands: { text: true } } as unknown as OpenClawConfig,
+      cfg: { commands: { text: true } } as unknown as DenebConfig,
       agentDir: "/tmp/agent",
       defaultProvider: "anthropic",
       defaultModel: "claude-opus-4-5",

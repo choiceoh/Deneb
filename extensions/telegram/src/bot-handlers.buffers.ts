@@ -1,11 +1,11 @@
 import type { Message } from "@grammyjs/types";
-import { shouldDebounceTextInbound } from "openclaw/plugin-sdk/channel-runtime";
-import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
+import { shouldDebounceTextInbound } from "deneb/plugin-sdk/channel-runtime";
+import type { DenebConfig } from "deneb/plugin-sdk/config-runtime";
 import {
   createInboundDebouncer,
   resolveInboundDebounceMs,
-} from "openclaw/plugin-sdk/reply-runtime";
-import { danger, logVerbose, warn } from "openclaw/plugin-sdk/runtime-env";
+} from "deneb/plugin-sdk/reply-runtime";
+import { danger, logVerbose, warn } from "deneb/plugin-sdk/runtime-env";
 import {
   hasInboundMedia,
   isRecoverableMediaGroupError,
@@ -49,7 +49,7 @@ type TelegramBotApi = {
 export function createTelegramInboundBufferRuntime(params: {
   accountId?: string | null;
   bot: { api: TelegramBotApi };
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   logger: { warn: (...args: unknown[]) => void };
   mediaMaxBytes: number;
   opts: {

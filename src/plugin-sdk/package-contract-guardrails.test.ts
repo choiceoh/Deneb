@@ -10,7 +10,7 @@ const PUBLIC_CONTRACT_REFERENCE_FILES = [
   "docs/plugins/architecture.md",
   "src/plugin-sdk/subpaths.test.ts",
 ] as const;
-const PLUGIN_SDK_SUBPATH_PATTERN = /openclaw\/plugin-sdk\/([a-z0-9][a-z0-9-]*)\b/g;
+const PLUGIN_SDK_SUBPATH_PATTERN = /deneb\/plugin-sdk\/([a-z0-9][a-z0-9-]*)\b/g;
 
 function collectPluginSdkPackageExports(): string[] {
   const packageJson = JSON.parse(readFileSync(resolve(REPO_ROOT, "package.json"), "utf8")) as {
@@ -68,7 +68,7 @@ describe("plugin-sdk package contract guardrails", () => {
         continue;
       }
       failures.push(
-        `${reference.file} references openclaw/plugin-sdk/${reference.subpath}, but ${reference.subpath} is missing from ${missingFrom.join(" and ")}`,
+        `${reference.file} references deneb/plugin-sdk/${reference.subpath}, but ${reference.subpath} is missing from ${missingFrom.join(" and ")}`,
       );
     }
 

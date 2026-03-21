@@ -1,7 +1,7 @@
-import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
+import type { RuntimeEnv } from "deneb/plugin-sdk/runtime-env";
 import { expect, vi } from "vitest";
 import type { SkillCommandSpec } from "../../../src/agents/skills.js";
-import type { OpenClawConfig } from "../runtime-api.js";
+import type { DenebConfig } from "../runtime-api.js";
 import type { TelegramBotDeps } from "./bot-deps.js";
 import {
   createNativeCommandTestParams as createBaseNativeCommandTestParams,
@@ -23,7 +23,7 @@ type CreateCommandBotResult = {
 
 const skillCommandMocks = vi.hoisted(() => ({
   listSkillCommandsForAgents: vi.fn<
-    (params: { cfg: OpenClawConfig; agentIds?: string[] }) => SkillCommandSpec[]
+    (params: { cfg: DenebConfig; agentIds?: string[] }) => SkillCommandSpec[]
   >(() => []),
 }));
 
@@ -34,8 +34,8 @@ const deliveryMocks = vi.hoisted(() => ({
 export const listSkillCommandsForAgents = skillCommandMocks.listSkillCommandsForAgents;
 export const deliverReplies = deliveryMocks.deliverReplies;
 
-vi.mock("openclaw/plugin-sdk/reply-runtime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/reply-runtime")>();
+vi.mock("deneb/plugin-sdk/reply-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("deneb/plugin-sdk/reply-runtime")>();
   return {
     ...actual,
     listSkillCommandsForAgents,
@@ -79,7 +79,7 @@ export function createCommandBot(): CreateCommandBotResult {
 }
 
 export function createNativeCommandTestParams(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   params: Partial<RegisterTelegramNativeCommandsParams> = {},
 ): RegisterTelegramNativeCommandsParams {
   const dispatchResult: Awaited<
@@ -89,7 +89,7 @@ export function createNativeCommandTestParams(
     counts: { block: 0, final: 0, tool: 0 },
   };
   const telegramDeps: TelegramBotDeps = {
-    loadConfig: vi.fn(() => ({}) as OpenClawConfig) as TelegramBotDeps["loadConfig"],
+    loadConfig: vi.fn(() => ({}) as DenebConfig) as TelegramBotDeps["loadConfig"],
     resolveStorePath: vi.fn(
       (storePath?: string) => storePath ?? "/tmp/sessions.json",
     ) as TelegramBotDeps["resolveStorePath"],

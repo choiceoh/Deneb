@@ -1,5 +1,5 @@
 import type { ChannelId } from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import {
   loadSessionStore,
   resolveAgentMainSessionKey,
@@ -35,7 +35,7 @@ export type DeliveryTargetResolution =
     };
 
 export async function resolveDeliveryTarget(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   agentId: string,
   jobPayload: {
     channel?: ChannelId;

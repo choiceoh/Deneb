@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { resolveManifestProviderAuthChoice } from "./provider-auth-choices.js";
 
 const PREFERRED_PROVIDER_BY_AUTH_CHOICE: Partial<Record<string, string>> = {
@@ -22,7 +22,7 @@ function normalizeLegacyAuthChoice(choice: string): string {
 
 export async function resolvePreferredProviderForAuthChoice(params: {
   choice: string;
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
 }): Promise<string | undefined> {

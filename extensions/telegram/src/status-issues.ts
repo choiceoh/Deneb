@@ -3,11 +3,11 @@ import {
   asString,
   isRecord,
   resolveEnabledConfiguredAccountId,
-} from "openclaw/plugin-sdk/channel-runtime";
+} from "deneb/plugin-sdk/channel-runtime";
 import type {
   ChannelAccountSnapshot,
   ChannelStatusIssue,
-} from "openclaw/plugin-sdk/channel-runtime";
+} from "deneb/plugin-sdk/channel-runtime";
 
 type TelegramAccountStatus = {
   accountId?: unknown;

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { createEmptyPluginRegistry } from "../plugins/registry.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
 import { describeImageFile, runMediaUnderstandingFile } from "./runtime.js";
@@ -13,7 +13,7 @@ describe("media-understanding runtime helpers", () => {
   });
 
   it("describes images through the active media-understanding registry", async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-media-runtime-"));
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-media-runtime-"));
     const imagePath = path.join(tempDir, "sample.jpg");
     await fs.writeFile(imagePath, Buffer.from("image-bytes"));
 
@@ -38,7 +38,7 @@ describe("media-understanding runtime helpers", () => {
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     const result = await describeImageFile({
       filePath: imagePath,
@@ -62,7 +62,7 @@ describe("media-understanding runtime helpers", () => {
   });
 
   it("returns undefined when no media output is produced", async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-media-runtime-"));
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-media-runtime-"));
     const imagePath = path.join(tempDir, "sample.jpg");
     await fs.writeFile(imagePath, Buffer.from("image-bytes"));
 
@@ -78,7 +78,7 @@ describe("media-understanding runtime helpers", () => {
             },
           },
         },
-      } as OpenClawConfig,
+      } as DenebConfig,
       agentDir: "/tmp/agent",
     });
 

@@ -2,7 +2,7 @@
 title: "Model Studio"
 summary: "Alibaba Cloud Model Studio setup (Coding Plan, dual region endpoints)"
 read_when:
-  - You want to use Alibaba Cloud Model Studio with OpenClaw
+  - You want to use Alibaba Cloud Model Studio with Deneb
   - You need the API key env var for Model Studio
 ---
 
@@ -20,7 +20,7 @@ including Qwen and third-party models hosted on the platform.
 1. Set the API key:
 
 ```bash
-openclaw onboard --auth-choice modelstudio-api-key
+deneb onboard --auth-choice modelstudio-api-key
 ```
 
 2. Set a default model:
@@ -63,4 +63,4 @@ Most models support image input. Context windows range from 200K to 1M tokens.
 
 If the Gateway runs as a daemon (launchd/systemd), make sure
 `MODELSTUDIO_API_KEY` is available to that process (for example, in
-`~/.openclaw/.env` or via `env.shellEnv`).
+`~/.deneb/.env` or via `env.shellEnv`).

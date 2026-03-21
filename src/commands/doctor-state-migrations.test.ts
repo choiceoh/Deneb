@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import {
   autoMigrateLegacyStateDir,
   autoMigrateLegacyState,
@@ -15,14 +15,14 @@ import {
 let tempRoot: string | null = null;
 
 async function makeTempRoot() {
-  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "openclaw-doctor-"));
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "deneb-doctor-"));
   tempRoot = root;
   return root;
 }
 
 async function makeRootWithEmptyCfg() {
   const root = await makeTempRoot();
-  const cfg: OpenClawConfig = {};
+  const cfg: DenebConfig = {};
   return { root, cfg };
 }
 
@@ -41,12 +41,12 @@ function writeLegacyTelegramAllowFromStore(oauthDir: string) {
   );
 }
 
-async function runTelegramAllowFromMigration(params: { root: string; cfg: OpenClawConfig }) {
+async function runTelegramAllowFromMigration(params: { root: string; cfg: DenebConfig }) {
   const oauthDir = ensureCredentialsDir(params.root);
   writeLegacyTelegramAllowFromStore(oauthDir);
   const detected = await detectLegacyStateMigrations({
     cfg: params.cfg,
-    env: { OPENCLAW_STATE_DIR: params.root } as NodeJS.ProcessEnv,
+    env: { DENEB_STATE_DIR: params.root } as NodeJS.ProcessEnv,
   });
   const result = await runLegacyStateMigrations({ detected, now: () => 123 });
   return { oauthDir, detected, result };
@@ -83,12 +83,12 @@ function writeLegacySessionsFixture(params: {
 
 async function detectAndRunMigrations(params: {
   root: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   now?: () => number;
 }) {
   const detected = await detectLegacyStateMigrations({
     cfg: params.cfg,
-    env: { OPENCLAW_STATE_DIR: params.root } as NodeJS.ProcessEnv,
+    env: { DENEB_STATE_DIR: params.root } as NodeJS.ProcessEnv,
   });
   await runLegacyStateMigrations({ detected, now: params.now });
 }
@@ -102,7 +102,7 @@ function readSessionsStore(targetDir: string) {
 
 async function runAndReadSessionsStore(params: {
   root: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   targetDir: string;
   now?: () => number;
 }) {
@@ -120,7 +120,7 @@ const DIR_LINK_TYPE = process.platform === "win32" ? "junction" : "dir";
 
 function getStateDirMigrationPaths(root: string) {
   return {
-    targetDir: path.join(root, ".openclaw"),
+    targetDir: path.join(root, ".deneb"),
     legacyDir: path.join(root, ".clawdbot"),
   };
 }
@@ -141,13 +141,13 @@ async function runStateDirMigration(root: string, env = {} as NodeJS.ProcessEnv)
 
 async function runAutoMigrateLegacyStateWithLog(params: {
   root: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   now?: () => number;
 }) {
   const log = { info: vi.fn(), warn: vi.fn() };
   const result = await autoMigrateLegacyState({
     cfg: params.cfg,
-    env: { OPENCLAW_STATE_DIR: params.root } as NodeJS.ProcessEnv,
+    env: { DENEB_STATE_DIR: params.root } as NodeJS.ProcessEnv,
     log,
     now: params.now,
   });
@@ -184,7 +184,7 @@ function ensureCredentialsDir(root: string) {
 describe("doctor legacy state migrations", () => {
   it("migrates legacy sessions into agents/<id>/sessions", async () => {
     const root = await makeTempRoot();
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     const legacySessionsDir = writeLegacySessionsFixture({
       root,
       sessions: {
@@ -202,7 +202,7 @@ describe("doctor legacy state migrations", () => {
 
     const detected = await detectLegacyStateMigrations({
       cfg,
-      env: { OPENCLAW_STATE_DIR: root } as NodeJS.ProcessEnv,
+      env: { DENEB_STATE_DIR: root } as NodeJS.ProcessEnv,
     });
     const result = await runLegacyStateMigrations({
       detected,
@@ -320,7 +320,7 @@ describe("doctor legacy state migrations", () => {
 
   it("fans out legacy Telegram pairing allowFrom store to configured named accounts", async () => {
     const root = await makeTempRoot();
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       channels: {
         telegram: {
           accounts: {
@@ -354,10 +354,10 @@ describe("doctor legacy state migrations", () => {
 
   it("no-ops when nothing detected", async () => {
     const root = await makeTempRoot();
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     const detected = await detectLegacyStateMigrations({
       cfg,
-      env: { OPENCLAW_STATE_DIR: root } as NodeJS.ProcessEnv,
+      env: { DENEB_STATE_DIR: root } as NodeJS.ProcessEnv,
     });
     const result = await runLegacyStateMigrations({ detected });
     expect(result.changes).toEqual([]);
@@ -365,7 +365,7 @@ describe("doctor legacy state migrations", () => {
 
   it("routes legacy state to the default agent entry", async () => {
     const root = await makeTempRoot();
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       agents: { list: [{ id: "alpha", default: true }] },
     };
     writeLegacySessionsFixture({
@@ -387,7 +387,7 @@ describe("doctor legacy state migrations", () => {
 
   it("honors session.mainKey when seeding the direct-chat bucket", async () => {
     const root = await makeTempRoot();
-    const cfg: OpenClawConfig = { session: { mainKey: "work" } };
+    const cfg: DenebConfig = { session: { mainKey: "work" } };
     writeLegacySessionsFixture({
       root,
       sessions: {
@@ -427,7 +427,7 @@ describe("doctor legacy state migrations", () => {
 
   it("prefers the newest entry when collapsing main aliases", async () => {
     const root = await makeTempRoot();
-    const cfg: OpenClawConfig = { session: { mainKey: "work" } };
+    const cfg: DenebConfig = { session: { mainKey: "work" } };
     const targetDir = path.join(root, "agents", "main", "sessions");
     writeJson5(path.join(targetDir, "sessions.json"), {
       "agent:main:main": { sessionId: "legacy", updatedAt: 50 },
@@ -446,7 +446,7 @@ describe("doctor legacy state migrations", () => {
 
   it("lowercases agent session keys during canonicalization", async () => {
     const root = await makeTempRoot();
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     const targetDir = path.join(root, "agents", "main", "sessions");
     writeJson5(path.join(targetDir, "sessions.json"), {
       "agent:main:slack:channel:C123": { sessionId: "legacy", updatedAt: 10 },
@@ -495,7 +495,7 @@ describe("doctor legacy state migrations", () => {
     fs.mkdirSync(legacyDir, { recursive: true });
 
     const result = await runStateDirMigration(root, {
-      OPENCLAW_STATE_DIR: "/custom/state",
+      DENEB_STATE_DIR: "/custom/state",
     } as NodeJS.ProcessEnv);
 
     expect(result.skipped).toBe(true);

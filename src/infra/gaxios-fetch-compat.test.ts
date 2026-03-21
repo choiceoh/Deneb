@@ -1,7 +1,7 @@
 import { ProxyAgent } from "undici";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const TEST_GAXIOS_CONSTRUCTOR_OVERRIDE = "__OPENCLAW_TEST_GAXIOS_CONSTRUCTOR__";
+const TEST_GAXIOS_CONSTRUCTOR_OVERRIDE = "__DENEB_TEST_GAXIOS_CONSTRUCTOR__";
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 describe("gaxios fetch compat", () => {

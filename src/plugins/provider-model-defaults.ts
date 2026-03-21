@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { ensureModelAllowlistEntry } from "./provider-model-allowlist.js";
 import { applyAgentDefaultPrimaryModel } from "./provider-model-primary.js";
 
@@ -12,14 +12,14 @@ const LEGACY_OPENCODE_ZEN_DEFAULT_MODELS = new Set([
   "opencode-zen/claude-opus-4-5",
 ]);
 
-export function applyGoogleGeminiModelDefault(cfg: OpenClawConfig): {
-  next: OpenClawConfig;
+export function applyGoogleGeminiModelDefault(cfg: DenebConfig): {
+  next: DenebConfig;
   changed: boolean;
 } {
   return applyAgentDefaultPrimaryModel({ cfg, model: GOOGLE_GEMINI_DEFAULT_MODEL });
 }
 
-export function applyOpenAIProviderConfig(cfg: OpenClawConfig): OpenClawConfig {
+export function applyOpenAIProviderConfig(cfg: DenebConfig): DenebConfig {
   const next = ensureModelAllowlistEntry({
     cfg,
     modelRef: OPENAI_DEFAULT_MODEL,
@@ -42,7 +42,7 @@ export function applyOpenAIProviderConfig(cfg: OpenClawConfig): OpenClawConfig {
   };
 }
 
-export function applyOpenAIConfig(cfg: OpenClawConfig): OpenClawConfig {
+export function applyOpenAIConfig(cfg: DenebConfig): DenebConfig {
   const next = applyOpenAIProviderConfig(cfg);
   return {
     ...next,
@@ -62,15 +62,15 @@ export function applyOpenAIConfig(cfg: OpenClawConfig): OpenClawConfig {
   };
 }
 
-export function applyOpencodeGoModelDefault(cfg: OpenClawConfig): {
-  next: OpenClawConfig;
+export function applyOpencodeGoModelDefault(cfg: DenebConfig): {
+  next: DenebConfig;
   changed: boolean;
 } {
   return applyAgentDefaultPrimaryModel({ cfg, model: OPENCODE_GO_DEFAULT_MODEL_REF });
 }
 
-export function applyOpencodeZenModelDefault(cfg: OpenClawConfig): {
-  next: OpenClawConfig;
+export function applyOpencodeZenModelDefault(cfg: DenebConfig): {
+  next: DenebConfig;
   changed: boolean;
 } {
   return applyAgentDefaultPrimaryModel({

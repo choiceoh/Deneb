@@ -355,11 +355,11 @@ export function resolveConfigDir(
   env: NodeJS.ProcessEnv = process.env,
   homedir: () => string = os.homedir,
 ): string {
-  const override = env.OPENCLAW_STATE_DIR?.trim() || env.CLAWDBOT_STATE_DIR?.trim();
+  const override = env.DENEB_STATE_DIR?.trim() || env.CLAWDBOT_STATE_DIR?.trim();
   if (override) {
     return resolveUserPath(override, env, homedir);
   }
-  const newDir = path.join(resolveRequiredHomeDir(env, homedir), ".openclaw");
+  const newDir = path.join(resolveRequiredHomeDir(env, homedir), ".deneb");
   try {
     const hasNew = fs.existsSync(newDir);
     if (hasNew) {
@@ -380,9 +380,9 @@ function resolveHomeDisplayPrefix(): { home: string; prefix: string } | undefine
   if (!home) {
     return undefined;
   }
-  const explicitHome = process.env.OPENCLAW_HOME?.trim();
+  const explicitHome = process.env.DENEB_HOME?.trim();
   if (explicitHome) {
-    return { home, prefix: "$OPENCLAW_HOME" };
+    return { home, prefix: "$DENEB_HOME" };
   }
   return { home, prefix: "~" };
 }
@@ -440,5 +440,5 @@ export function formatTerminalLink(
   return `\u001b]8;;${safeUrl}\u0007${safeLabel}\u001b]8;;\u0007`;
 }
 
-// Configuration root; can be overridden via OPENCLAW_STATE_DIR.
+// Configuration root; can be overridden via DENEB_STATE_DIR.
 export const CONFIG_DIR = resolveConfigDir();

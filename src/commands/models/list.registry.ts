@@ -1,6 +1,6 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
-import { resolveOpenClawAgentDir } from "../../agents/agent-paths.js";
+import { resolveDenebAgentDir } from "../../agents/agent-paths.js";
 import type { AuthProfileStore } from "../../agents/auth-profiles.js";
 import { listProfilesForProvider } from "../../agents/auth-profiles.js";
 import {
@@ -10,7 +10,7 @@ import {
 } from "../../agents/model-auth.js";
 import { shouldSuppressBuiltInModel } from "../../agents/model-suppression.js";
 import { discoverAuthStorage, discoverModels } from "../../agents/pi-model-discovery.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import {
   formatErrorWithStack,
   MODEL_AVAILABILITY_UNAVAILABLE_CODE,
@@ -21,7 +21,7 @@ import { isLocalBaseUrl, modelKey } from "./shared.js";
 
 const hasAuthForProvider = (
   provider: string,
-  cfg?: OpenClawConfig,
+  cfg?: DenebConfig,
   authStore?: AuthProfileStore,
 ) => {
   if (!cfg || !authStore) {
@@ -97,10 +97,10 @@ function loadAvailableModels(registry: ModelRegistry): Model<Api>[] {
 }
 
 export async function loadModelRegistry(
-  _cfg: OpenClawConfig,
-  _opts?: { sourceConfig?: OpenClawConfig },
+  _cfg: DenebConfig,
+  _opts?: { sourceConfig?: DenebConfig },
 ) {
-  const agentDir = resolveOpenClawAgentDir();
+  const agentDir = resolveDenebAgentDir();
   const authStorage = discoverAuthStorage(agentDir);
   const registry = discoverModels(authStorage, agentDir);
   const models = registry
@@ -133,7 +133,7 @@ export function toModelRow(params: {
   tags: string[];
   aliases?: string[];
   availableKeys?: Set<string>;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   authStore?: AuthProfileStore;
   allowProviderAvailabilityFallback?: boolean;
 }): ModelRow {

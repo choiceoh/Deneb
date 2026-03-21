@@ -2,13 +2,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { clearPluginManifestRegistryCache } from "../../plugins/manifest-registry.js";
 import { writePluginWithSkill } from "../test-helpers/skill-plugin-fixtures.js";
 import { resolveEmbeddedRunSkillEntries } from "./skills-runtime.js";
 
 const tempDirs: string[] = [];
-const originalBundledDir = process.env.OPENCLAW_BUNDLED_PLUGINS_DIR;
+const originalBundledDir = process.env.DENEB_BUNDLED_PLUGINS_DIR;
 
 async function createTempDir(prefix: string) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -17,8 +17,8 @@ async function createTempDir(prefix: string) {
 }
 
 async function setupBundledDiffsPlugin() {
-  const bundledPluginsDir = await createTempDir("openclaw-bundled-");
-  const workspaceDir = await createTempDir("openclaw-workspace-");
+  const bundledPluginsDir = await createTempDir("deneb-bundled-");
+  const workspaceDir = await createTempDir("deneb-workspace-");
   const pluginRoot = path.join(bundledPluginsDir, "diffs");
 
   await writePluginWithSkill({
@@ -31,16 +31,16 @@ async function setupBundledDiffsPlugin() {
   return { bundledPluginsDir, workspaceDir };
 }
 
-async function resolveBundledDiffsSkillEntries(config?: OpenClawConfig) {
+async function resolveBundledDiffsSkillEntries(config?: DenebConfig) {
   const { bundledPluginsDir, workspaceDir } = await setupBundledDiffsPlugin();
-  process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = bundledPluginsDir;
+  process.env.DENEB_BUNDLED_PLUGINS_DIR = bundledPluginsDir;
   clearPluginManifestRegistryCache();
 
   return resolveEmbeddedRunSkillEntries({ workspaceDir, ...(config ? { config } : {}) });
 }
 
 afterEach(async () => {
-  process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = originalBundledDir;
+  process.env.DENEB_BUNDLED_PLUGINS_DIR = originalBundledDir;
   clearPluginManifestRegistryCache();
   await Promise.all(
     tempDirs.splice(0, tempDirs.length).map((dir) => fs.rm(dir, { recursive: true, force: true })),
@@ -49,7 +49,7 @@ afterEach(async () => {
 
 describe("resolveEmbeddedRunSkillEntries (integration)", () => {
   it("loads bundled diffs skill when explicitly enabled in config", async () => {
-    const config: OpenClawConfig = {
+    const config: DenebConfig = {
       plugins: {
         entries: {
           diffs: { enabled: true },

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import {
   applyModelAllowlist,
   applyModelFallbacksFromSelection,
@@ -120,7 +120,7 @@ describe("promptDefaultModel", () => {
       return (vllm?.value ?? "") as never;
     });
     const prompter = makePrompter({ select });
-    const config = { agents: { defaults: {} } } as OpenClawConfig;
+    const config = { agents: { defaults: {} } } as DenebConfig;
 
     const result = await promptDefaultModel({
       config,
@@ -129,7 +129,7 @@ describe("promptDefaultModel", () => {
       includeManual: false,
       includeProviderPluginSetups: true,
       ignoreAllowlist: true,
-      agentDir: "/tmp/openclaw-agent",
+      agentDir: "/tmp/deneb-agent",
       runtime: {} as never,
     });
 
@@ -168,7 +168,7 @@ describe("promptModelAllowlist", () => {
 
     const multiselect = createSelectAllMultiselect();
     const prompter = makePrompter({ multiselect });
-    const config = { agents: { defaults: {} } } as OpenClawConfig;
+    const config = { agents: { defaults: {} } } as DenebConfig;
 
     await promptModelAllowlist({
       config,
@@ -194,7 +194,7 @@ describe("router model filtering", () => {
     const multiselect = createSelectAllMultiselect();
     const defaultPrompter = makePrompter({ select });
     const allowlistPrompter = makePrompter({ multiselect });
-    const config = { agents: { defaults: {} } } as OpenClawConfig;
+    const config = { agents: { defaults: {} } } as DenebConfig;
 
     await promptDefaultModel({
       config,
@@ -226,7 +226,7 @@ describe("applyModelAllowlist", () => {
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     const next = applyModelAllowlist(config, ["openai/gpt-5.2"]);
     expect(next.agents?.defaults?.models).toEqual({
@@ -243,7 +243,7 @@ describe("applyModelAllowlist", () => {
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     const next = applyModelAllowlist(config, []);
     expect(next.agents?.defaults?.models).toBeUndefined();
@@ -258,7 +258,7 @@ describe("applyModelFallbacksFromSelection", () => {
           model: { primary: "anthropic/claude-opus-4-5" },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     const next = applyModelFallbacksFromSelection(config, [
       "anthropic/claude-opus-4-5",
@@ -277,7 +277,7 @@ describe("applyModelFallbacksFromSelection", () => {
           model: { primary: "anthropic/claude-opus-4-5", fallbacks: ["openai/gpt-5.2"] },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     const next = applyModelFallbacksFromSelection(config, ["openai/gpt-5.2"]);
     expect(next.agents?.defaults?.model).toEqual({

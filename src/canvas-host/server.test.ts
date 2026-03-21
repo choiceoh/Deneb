@@ -90,7 +90,7 @@ describe("canvas host", () => {
   };
 
   beforeAll(async () => {
-    fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-canvas-fixtures-"));
+    fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-canvas-fixtures-"));
   });
 
   afterAll(async () => {
@@ -101,8 +101,8 @@ describe("canvas host", () => {
     const out = injectCanvasLiveReload("<html><body>Hello</body></html>");
     expect(out).toContain(CANVAS_WS_PATH);
     expect(out).toContain("location.reload");
-    expect(out).toContain("openclawCanvasA2UIAction");
-    expect(out).toContain("openclawSendUserAction");
+    expect(out).toContain("denebCanvasA2UIAction");
+    expect(out).toContain("denebSendUserAction");
   });
 
   it("creates a default index.html when missing", async () => {
@@ -121,7 +121,7 @@ describe("canvas host", () => {
       const { res, html } = await fetchCanvasHtml(server.port);
       expect(res.status).toBe(200);
       expect(html).toContain("Interactive test page");
-      expect(html).toContain("openclawSendUserAction");
+      expect(html).toContain("denebSendUserAction");
       expect(html).toContain(CANVAS_WS_PATH);
     } finally {
       await server.close();
@@ -318,7 +318,7 @@ describe("canvas host", () => {
     try {
       await fs.stat(bundlePath);
     } catch {
-      await fs.writeFile(bundlePath, "window.openclawA2UI = {};", "utf8");
+      await fs.writeFile(bundlePath, "window.denebA2UI = {};", "utf8");
       createdBundle = true;
     }
 
@@ -335,18 +335,18 @@ describe("canvas host", () => {
         throw error;
       }
 
-      const res = await fetch(`http://127.0.0.1:${server.port}/__openclaw__/a2ui/`);
+      const res = await fetch(`http://127.0.0.1:${server.port}/__deneb__/a2ui/`);
       const html = await res.text();
       expect(res.status).toBe(200);
-      expect(html).toContain("openclaw-a2ui-host");
-      expect(html).toContain("openclawCanvasA2UIAction");
+      expect(html).toContain("deneb-a2ui-host");
+      expect(html).toContain("denebCanvasA2UIAction");
 
       const bundleRes = await fetch(
-        `http://127.0.0.1:${server.port}/__openclaw__/a2ui/a2ui.bundle.js`,
+        `http://127.0.0.1:${server.port}/__deneb__/a2ui/a2ui.bundle.js`,
       );
       const js = await bundleRes.text();
       expect(bundleRes.status).toBe(200);
-      expect(js).toContain("openclawA2UI");
+      expect(js).toContain("denebA2UI");
       const traversalRes = await fetch(
         `http://127.0.0.1:${server.port}${A2UI_PATH}/%2e%2e%2fpackage.json`,
       );

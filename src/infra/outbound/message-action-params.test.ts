@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { slackPlugin } from "../../../extensions/slack/src/channel.js";
 import { telegramPlugin } from "../../../extensions/telegram/src/channel.js";
 import type { ChannelThreadingToolContext } from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import {
   hydrateAttachmentParamsForAction,
   normalizeSandboxMediaList,
@@ -13,7 +13,7 @@ import {
   resolveAttachmentMediaPolicy,
 } from "./message-action-params.js";
 
-const cfg = {} as OpenClawConfig;
+const cfg = {} as DenebConfig;
 const maybeIt = process.platform === "win32" ? it.skip : it;
 
 function createToolContext(

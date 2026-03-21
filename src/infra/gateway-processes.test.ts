@@ -133,10 +133,10 @@ describe("gateway-processes", () => {
   it("dedupes and filters verified gateway listener pids on unix and windows", () => {
     setPlatform("linux");
     findGatewayPidsOnPortSyncMock.mockReturnValue([process.pid, 200, 200, 300, -1]);
-    readFileSyncMock.mockReturnValueOnce("openclaw-gateway\0gateway\0");
+    readFileSyncMock.mockReturnValueOnce("deneb-gateway\0gateway\0");
     readFileSyncMock.mockReturnValueOnce("python\0-m\0http.server\0");
     parseProcCmdlineMock
-      .mockReturnValueOnce(["openclaw-gateway", "gateway"])
+      .mockReturnValueOnce(["deneb-gateway", "gateway"])
       .mockReturnValueOnce(["python", "-m", "http.server"]);
     isGatewayArgvMock.mockReturnValueOnce(true).mockReturnValueOnce(false);
 

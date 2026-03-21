@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, expect, vi, type Mock } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { MemoryIndexManager, MemorySearchManager } from "./index.js";
 
 type EmbeddingTestMocksModule = typeof import("./embedding.test-mocks.js");
@@ -16,7 +16,7 @@ export function installEmbeddingManagerFixture(opts: {
     workspaceDir: string;
     indexPath: string;
     tokens: number;
-  }) => OpenClawConfig;
+  }) => DenebConfig;
   resetIndexEachTest?: boolean;
 }) {
   const resetIndexEachTest = opts.resetIndexEachTest ?? true;

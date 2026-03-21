@@ -159,7 +159,7 @@ describe("resolveProviderCapabilities", () => {
 
   it("forwards config and workspace context to plugin capability lookup", () => {
     const config = { plugins: { enabled: true } };
-    const env = { OPENCLAW_HOME: "/tmp/openclaw-home" } as NodeJS.ProcessEnv;
+    const env = { DENEB_HOME: "/tmp/deneb-home" } as NodeJS.ProcessEnv;
 
     resolveProviderCapabilities("anthropic", {
       config,

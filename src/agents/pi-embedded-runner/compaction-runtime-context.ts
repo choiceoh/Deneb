@@ -1,5 +1,5 @@
 import type { ReasoningLevel, ThinkLevel } from "../../auto-reply/thinking.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import type { ExecElevatedDefaults } from "../bash-tools.js";
 import type { SkillSnapshot } from "../skills.js";
 
@@ -14,7 +14,7 @@ export type EmbeddedCompactionRuntimeContext = {
   authProfileId?: string;
   workspaceDir: string;
   agentDir: string;
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   skillsSnapshot?: SkillSnapshot;
   senderIsOwner?: boolean;
   senderId?: string;
@@ -38,7 +38,7 @@ export function buildEmbeddedCompactionRuntimeContext(params: {
   authProfileId?: string | null;
   workspaceDir: string;
   agentDir: string;
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   skillsSnapshot?: SkillSnapshot;
   senderIsOwner?: boolean;
   senderId?: string | null;

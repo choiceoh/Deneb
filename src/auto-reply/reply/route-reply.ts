@@ -10,7 +10,7 @@
 import { resolveSessionAgentId } from "../../agents/agent-scope.js";
 import { resolveEffectiveMessagesConfig } from "../../agents/identity.js";
 import { getChannelPlugin, normalizeChannelId } from "../../channels/plugins/index.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { buildOutboundSessionContext } from "../../infra/outbound/session-context.js";
 import { hasReplyPayloadContent } from "../../interactive/payload.js";
 import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../../utils/message-channel.js";
@@ -45,7 +45,7 @@ export type RouteReplyParams = {
   /** Thread id for replies (Telegram topic id or Matrix thread event id). */
   threadId?: string | number;
   /** Config for provider-specific settings. */
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   /** Optional abort signal for cooperative cancellation. */
   abortSignal?: AbortSignal;
   /** Mirror reply into session transcript (default: true when sessionKey is set). */

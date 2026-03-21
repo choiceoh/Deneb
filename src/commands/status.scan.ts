@@ -3,7 +3,7 @@ import { hasPotentialConfiguredChannels } from "../channels/config-presence.js";
 import { resolveCommandSecretRefsViaGateway } from "../cli/command-secret-gateway.js";
 import { getStatusCommandSecretTargetIds } from "../cli/command-secret-targets.js";
 import { withProgress } from "../cli/progress.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { readBestEffortConfig } from "../config/config.js";
 import { callGateway } from "../gateway/call.js";
 import type { collectChannelStatusIssues as collectChannelStatusIssuesFn } from "../infra/channels-status-issues.js";
@@ -67,7 +67,7 @@ function unwrapDeferredResult<T>(result: DeferredResult<T>): T {
 }
 
 async function resolveChannelsStatus(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   gatewayReachable: boolean;
   opts: { timeoutMs?: number; all?: boolean };
 }) {
@@ -86,8 +86,8 @@ async function resolveChannelsStatus(params: {
 }
 
 export type StatusScanResult = {
-  cfg: OpenClawConfig;
-  sourceConfig: OpenClawConfig;
+  cfg: DenebConfig;
+  sourceConfig: DenebConfig;
   secretDiagnostics: string[];
   osSummary: ReturnType<typeof resolveOsSummary>;
   tailscaleMode: string;
@@ -115,7 +115,7 @@ export type StatusScanResult = {
 };
 
 async function resolveMemoryStatusSnapshot(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentStatus: Awaited<ReturnType<typeof getAgentLocalStatuses>>;
   memoryPlugin: MemoryPluginStatus;
 }): Promise<MemoryStatusSnapshot | null> {

@@ -5,7 +5,7 @@ VM_NAME="Ubuntu 24.04.3 ARM64"
 SNAPSHOT_HINT="fresh"
 MODE="both"
 OPENAI_API_KEY_ENV="OPENAI_API_KEY"
-INSTALL_URL="https://openclaw.ai/install.sh"
+INSTALL_URL="https://deneb.ai/install.sh"
 HOST_PORT="18427"
 HOST_PORT_EXPLICIT=0
 HOST_IP=""
@@ -21,8 +21,8 @@ SNAPSHOT_NAME=""
 MAIN_TGZ_DIR="$(mktemp -d)"
 MAIN_TGZ_PATH=""
 SERVER_PID=""
-RUN_DIR="$(mktemp -d /tmp/openclaw-parallels-linux.XXXXXX)"
-BUILD_LOCK_DIR="${TMPDIR:-/tmp}/openclaw-parallels-build.lock"
+RUN_DIR="$(mktemp -d /tmp/deneb-parallels-linux.XXXXXX)"
+BUILD_LOCK_DIR="${TMPDIR:-/tmp}/deneb-parallels-build.lock"
 
 TIMEOUT_SNAPSHOT_S=180
 TIMEOUT_BOOTSTRAP_S=600
@@ -81,14 +81,14 @@ Options:
   --snapshot-hint <name>     Snapshot name substring/fuzzy match. Default: "fresh"
   --mode <fresh|upgrade|both>
   --openai-api-key-env <var> Host env var name for OpenAI API key. Default: OPENAI_API_KEY
-  --install-url <url>        Installer URL for latest release. Default: https://openclaw.ai/install.sh
+  --install-url <url>        Installer URL for latest release. Default: https://deneb.ai/install.sh
   --host-port <port>         Host HTTP port for current-main tgz. Default: 18427
   --host-ip <ip>             Override Parallels host IP.
   --latest-version <ver>     Override npm latest version lookup.
   --install-version <ver>    Pin site-installer version/dist-tag for the baseline lane.
   --target-package-spec <npm-spec>
                              Install this npm package tarball instead of packing current main.
-                             Example: openclaw@2026.3.13-beta.1
+                             Example: deneb@2026.3.13-beta.1
   --keep-server              Leave temp host HTTP server running.
   --json                     Print machine-readable JSON summary.
   -h, --help                 Show help.
@@ -328,7 +328,7 @@ resolve_latest_version() {
     printf '%s\n' "$LATEST_VERSION"
     return
   fi
-  npm view openclaw version --userconfig "$(mktemp)"
+  npm view deneb version --userconfig "$(mktemp)"
 }
 
 current_build_commit() {
@@ -407,7 +407,7 @@ pack_main_tgz() {
     npm pack --ignore-scripts --json --pack-destination "$MAIN_TGZ_DIR" \
       | python3 -c 'import json, sys; data = json.load(sys.stdin); print(data[-1]["filename"])'
   )"
-  MAIN_TGZ_PATH="$MAIN_TGZ_DIR/openclaw-main-$short_head.tgz"
+  MAIN_TGZ_PATH="$MAIN_TGZ_DIR/deneb-main-$short_head.tgz"
   cp "$MAIN_TGZ_DIR/$pkg" "$MAIN_TGZ_PATH"
   say "Packed $MAIN_TGZ_PATH"
   tar -xOf "$MAIN_TGZ_PATH" package/dist/build-info.json
@@ -432,7 +432,7 @@ start_server() {
     (
       cd "$MAIN_TGZ_DIR"
       exec python3 -m http.server "$HOST_PORT" --bind 0.0.0.0
-    ) >/tmp/openclaw-parallels-linux-http.log 2>&1 &
+    ) >/tmp/deneb-parallels-linux-http.log 2>&1 &
     SERVER_PID=$!
     sleep 1
     probe_url="http://127.0.0.1:$HOST_PORT/$artifact"
@@ -455,9 +455,9 @@ install_latest_release() {
   if [[ -n "$INSTALL_VERSION" ]]; then
     version_args=(--version "$INSTALL_VERSION")
   fi
-  guest_exec curl -fsSL "$INSTALL_URL" -o /tmp/openclaw-install.sh
-  guest_exec /usr/bin/env OPENCLAW_NO_ONBOARD=1 bash /tmp/openclaw-install.sh "${version_args[@]}" --no-onboard
-  guest_exec openclaw --version
+  guest_exec curl -fsSL "$INSTALL_URL" -o /tmp/deneb-install.sh
+  guest_exec /usr/bin/env DENEB_NO_ONBOARD=1 bash /tmp/deneb-install.sh "${version_args[@]}" --no-onboard
+  guest_exec deneb --version
 }
 
 install_main_tgz() {
@@ -466,13 +466,13 @@ install_main_tgz() {
   local tgz_url="http://$host_ip:$HOST_PORT/$(basename "$MAIN_TGZ_PATH")"
   guest_exec curl -fsSL "$tgz_url" -o "/tmp/$temp_name"
   guest_exec npm install -g "/tmp/$temp_name" --no-fund --no-audit
-  guest_exec openclaw --version
+  guest_exec deneb --version
 }
 
 verify_version_contains() {
   local needle="$1"
   local version
-  version="$(guest_exec openclaw --version)"
+  version="$(guest_exec deneb --version)"
   printf '%s\n' "$version"
   case "$version" in
     *"$needle"*) ;;
@@ -484,7 +484,7 @@ verify_version_contains() {
 }
 
 run_ref_onboard() {
-  guest_exec /usr/bin/env "OPENAI_API_KEY=$OPENAI_API_KEY_VALUE" openclaw onboard \
+  guest_exec /usr/bin/env "OPENAI_API_KEY=$OPENAI_API_KEY_VALUE" deneb onboard \
     --non-interactive \
     --mode local \
     --auth-choice openai-api-key \
@@ -498,7 +498,7 @@ run_ref_onboard() {
 }
 
 verify_local_turn() {
-  guest_exec /usr/bin/env "OPENAI_API_KEY=$OPENAI_API_KEY_VALUE" openclaw agent \
+  guest_exec /usr/bin/env "OPENAI_API_KEY=$OPENAI_API_KEY_VALUE" deneb agent \
     --local \
     --agent main \
     --message ping \
@@ -517,7 +517,7 @@ import re
 import sys
 
 text = pathlib.Path(sys.argv[1]).read_text(errors="replace")
-matches = re.findall(r"OpenClaw [^\r\n]+ \([0-9a-f]{7,}\)", text)
+matches = re.findall(r"Deneb [^\r\n]+ \([0-9a-f]{7,}\)", text)
 print(matches[-1] if matches else "")
 PY
 }
@@ -620,7 +620,7 @@ run_fresh_main_lane() {
   phase_run "fresh.restore-snapshot" "$TIMEOUT_SNAPSHOT_S" restore_snapshot "$snapshot_id"
   phase_run "fresh.bootstrap-guest" "$TIMEOUT_BOOTSTRAP_S" bootstrap_guest
   phase_run "fresh.install-latest-bootstrap" "$TIMEOUT_INSTALL_S" install_latest_release
-  phase_run "fresh.install-main" "$TIMEOUT_INSTALL_S" install_main_tgz "$host_ip" "openclaw-main-fresh.tgz"
+  phase_run "fresh.install-main" "$TIMEOUT_INSTALL_S" install_main_tgz "$host_ip" "deneb-main-fresh.tgz"
   FRESH_MAIN_VERSION="$(extract_last_version "$(phase_log_path fresh.install-main)")"
   phase_run "fresh.verify-main-version" "$TIMEOUT_VERIFY_S" verify_target_version
   phase_run "fresh.onboard-ref" "$TIMEOUT_ONBOARD_S" run_ref_onboard
@@ -637,7 +637,7 @@ run_upgrade_lane() {
   phase_run "upgrade.install-latest" "$TIMEOUT_INSTALL_S" install_latest_release
   LATEST_INSTALLED_VERSION="$(extract_last_version "$(phase_log_path upgrade.install-latest)")"
   phase_run "upgrade.verify-latest-version" "$TIMEOUT_VERIFY_S" verify_version_contains "$LATEST_VERSION"
-  phase_run "upgrade.install-main" "$TIMEOUT_INSTALL_S" install_main_tgz "$host_ip" "openclaw-main-upgrade.tgz"
+  phase_run "upgrade.install-main" "$TIMEOUT_INSTALL_S" install_main_tgz "$host_ip" "deneb-main-upgrade.tgz"
   UPGRADE_MAIN_VERSION="$(extract_last_version "$(phase_log_path upgrade.install-main)")"
   phase_run "upgrade.verify-main-version" "$TIMEOUT_VERIFY_S" verify_target_version
   phase_run "upgrade.onboard-ref" "$TIMEOUT_ONBOARD_S" run_ref_onboard

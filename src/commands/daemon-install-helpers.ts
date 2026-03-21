@@ -4,7 +4,7 @@ import {
 } from "../agents/auth-profiles.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import { collectConfigServiceEnvVars } from "../config/env-vars.js";
-import type { OpenClawConfig } from "../config/types.js";
+import type { DenebConfig } from "../config/types.js";
 import { resolveGatewayLaunchAgentLabel } from "../daemon/constants.js";
 import { resolveGatewayProgramArguments } from "../daemon/program-args.js";
 import { buildServiceEnvironment } from "../daemon/service-env.js";
@@ -59,7 +59,7 @@ export async function buildGatewayInstallPlan(params: {
   nodePath?: string;
   warn?: DaemonInstallWarnFn;
   /** Full config to extract env vars from (env vars + inline env keys). */
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   authStore?: AuthProfileStore;
 }): Promise<GatewayInstallPlan> {
   const { devMode, nodePath } = await resolveDaemonInstallRuntimeInputs({
@@ -86,7 +86,7 @@ export async function buildGatewayInstallPlan(params: {
     port: params.port,
     launchdLabel:
       process.platform === "darwin"
-        ? resolveGatewayLaunchAgentLabel(params.env.OPENCLAW_PROFILE)
+        ? resolveGatewayLaunchAgentLabel(params.env.DENEB_PROFILE)
         : undefined,
     // Keep npm/pnpm available to the service when the selected daemon node comes from
     // a version-manager bin directory that isn't covered by static PATH guesses.
@@ -110,5 +110,5 @@ export async function buildGatewayInstallPlan(params: {
 export function gatewayInstallErrorHint(platform = process.platform): string {
   return platform === "win32"
     ? "Tip: native Windows now falls back to a per-user Startup-folder login item when Scheduled Task creation is denied; if install still fails, rerun from an elevated PowerShell or skip service install."
-    : `Tip: rerun \`${formatCliCommand("openclaw gateway install")}\` after fixing the error.`;
+    : `Tip: rerun \`${formatCliCommand("deneb gateway install")}\` after fixing the error.`;
 }

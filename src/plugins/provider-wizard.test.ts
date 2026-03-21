@@ -183,7 +183,7 @@ describe("provider wizard boundaries", () => {
       }),
     ]);
 
-    const env = { OPENCLAW_HOME: "/tmp/openclaw-home" } as NodeJS.ProcessEnv;
+    const env = { DENEB_HOME: "/tmp/deneb-home" } as NodeJS.ProcessEnv;
     await runProviderModelSelectedHook({
       config: {},
       model: "vllm/qwen3-coder",

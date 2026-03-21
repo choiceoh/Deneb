@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ChannelPlugin } from "../channels/plugins/types.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { withEnvAsync } from "../test-utils/env.js";
 import {
   collectInstalledSkillsCodeSafetyFindings,
@@ -29,11 +29,11 @@ const execDockerRawUnavailable: NonNullable<SecurityAuditOptions["execDockerRawF
 function stubChannelPlugin(params: {
   id: "discord" | "slack" | "telegram" | "zalouser";
   label: string;
-  resolveAccount: (cfg: OpenClawConfig, accountId: string | null | undefined) => unknown;
-  inspectAccount?: (cfg: OpenClawConfig, accountId: string | null | undefined) => unknown;
-  listAccountIds?: (cfg: OpenClawConfig) => string[];
-  isConfigured?: (account: unknown, cfg: OpenClawConfig) => boolean;
-  isEnabled?: (account: unknown, cfg: OpenClawConfig) => boolean;
+  resolveAccount: (cfg: DenebConfig, accountId: string | null | undefined) => unknown;
+  inspectAccount?: (cfg: DenebConfig, accountId: string | null | undefined) => unknown;
+  listAccountIds?: (cfg: DenebConfig) => string[];
+  isConfigured?: (account: unknown, cfg: DenebConfig) => boolean;
+  isEnabled?: (account: unknown, cfg: DenebConfig) => boolean;
 }): ChannelPlugin {
   return {
     id: params.id,
@@ -146,7 +146,7 @@ function successfulProbeResult(url: string) {
 }
 
 async function audit(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   extra?: Omit<SecurityAuditOptions, "config">,
 ): Promise<SecurityAuditReport> {
   return runSecurityAudit({
@@ -175,7 +175,7 @@ async function expectSeverityByExposureCases(params: {
   checkId: string;
   cases: Array<{
     name: string;
-    cfg: OpenClawConfig;
+    cfg: DenebConfig;
     expectedSeverity: "warn" | "critical";
   }>;
 }) {
@@ -188,7 +188,7 @@ async function expectSeverityByExposureCases(params: {
 }
 
 async function runChannelSecurityAudit(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   plugins: ChannelPlugin[],
 ): Promise<SecurityAuditReport> {
   return runSecurityAudit({
@@ -200,7 +200,7 @@ async function runChannelSecurityAudit(
 }
 
 async function runInstallMetadataAudit(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   stateDir: string,
 ): Promise<SecurityAuditReport> {
   return runSecurityAudit({
@@ -208,7 +208,7 @@ async function runInstallMetadataAudit(
     includeFilesystem: true,
     includeChannelSecurity: false,
     stateDir,
-    configPath: path.join(stateDir, "openclaw.json"),
+    configPath: path.join(stateDir, "deneb.json"),
     execDockerRawFn: execDockerRawUnavailable,
   });
 }
@@ -233,7 +233,7 @@ describe("security audit", () => {
     const tmp = await makeTmpDir(label);
     const stateDir = path.join(tmp, "state");
     await fs.mkdir(stateDir, { recursive: true, mode: 0o700 });
-    const configPath = path.join(stateDir, "openclaw.json");
+    const configPath = path.join(stateDir, "deneb.json");
     await fs.writeFile(configPath, "{}\n", "utf-8");
     if (!isWindows) {
       await fs.chmod(configPath, 0o600);
@@ -245,18 +245,18 @@ describe("security audit", () => {
     const credentialsDir = path.join(sharedChannelSecurityStateDir, "credentials");
     await fs.rm(credentialsDir, { recursive: true, force: true }).catch(() => undefined);
     await fs.mkdir(credentialsDir, { recursive: true, mode: 0o700 });
-    await withEnvAsync({ OPENCLAW_STATE_DIR: sharedChannelSecurityStateDir }, () =>
+    await withEnvAsync({ DENEB_STATE_DIR: sharedChannelSecurityStateDir }, () =>
       fn(sharedChannelSecurityStateDir),
     );
   };
 
-  const runSharedExtensionsAudit = async (config: OpenClawConfig) => {
+  const runSharedExtensionsAudit = async (config: DenebConfig) => {
     return runSecurityAudit({
       config,
       includeFilesystem: true,
       includeChannelSecurity: false,
       stateDir: sharedExtensionsStateDir,
-      configPath: path.join(sharedExtensionsStateDir, "openclaw.json"),
+      configPath: path.join(sharedExtensionsStateDir, "deneb.json"),
       execDockerRawFn: execDockerRawUnavailable,
     });
   };
@@ -272,7 +272,7 @@ describe("security audit", () => {
       path.join(pluginDir, "package.json"),
       JSON.stringify({
         name: "evil-plugin",
-        openclaw: { extensions: [".hidden/index.js"] },
+        deneb: { extensions: [".hidden/index.js"] },
       }),
     );
     await fs.writeFile(
@@ -302,7 +302,7 @@ description: test skill
   };
 
   beforeAll(async () => {
-    fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-security-audit-"));
+    fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-security-audit-"));
     channelSecurityRoot = path.join(fixtureRoot, "channel-security");
     await fs.mkdir(channelSecurityRoot, { recursive: true, mode: 0o700 });
     sharedChannelSecurityStateDir = path.join(channelSecurityRoot, "state-shared");
@@ -330,7 +330,7 @@ description: test skill
   });
 
   it("includes an attack surface summary (info)", async () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       channels: { whatsapp: { groupPolicy: "open" }, telegram: { groupPolicy: "allowlist" } },
       tools: { elevated: { enabled: true, allowFrom: { whatsapp: ["+1"] } } },
       hooks: { enabled: true },
@@ -355,8 +355,8 @@ description: test skill
         run: async () =>
           withEnvAsync(
             {
-              OPENCLAW_GATEWAY_TOKEN: undefined,
-              OPENCLAW_GATEWAY_PASSWORD: undefined,
+              DENEB_GATEWAY_TOKEN: undefined,
+              DENEB_GATEWAY_PASSWORD: undefined,
             },
             async () =>
               audit({
@@ -381,7 +381,7 @@ description: test skill
                   password: {
                     source: "env",
                     provider: "default",
-                    id: "OPENCLAW_GATEWAY_PASSWORD",
+                    id: "DENEB_GATEWAY_PASSWORD",
                   },
                 },
               },
@@ -395,14 +395,14 @@ description: test skill
       {
         name: "does not flag missing gateway auth when read-only scrubbed config omits unavailable auth SecretRefs",
         run: async () => {
-          const sourceConfig: OpenClawConfig = {
+          const sourceConfig: DenebConfig = {
             gateway: {
               bind: "lan",
               auth: {
                 token: {
                   source: "env",
                   provider: "default",
-                  id: "OPENCLAW_GATEWAY_TOKEN",
+                  id: "DENEB_GATEWAY_TOKEN",
                 },
               },
             },
@@ -412,7 +412,7 @@ description: test skill
               },
             },
           };
-          const resolvedConfig: OpenClawConfig = {
+          const resolvedConfig: DenebConfig = {
             gateway: {
               bind: "lan",
               auth: {},
@@ -478,7 +478,7 @@ description: test skill
   it("scores dangerous gateway.tools.allow over HTTP by exposure", async () => {
     const cases: Array<{
       name: string;
-      cfg: OpenClawConfig;
+      cfg: DenebConfig;
       expectedSeverity: "warn" | "critical";
     }> = [
       {
@@ -518,7 +518,7 @@ description: test skill
   it("warns when sandbox exec host is selected while sandbox mode is off", async () => {
     const cases: Array<{
       name: string;
-      cfg: OpenClawConfig;
+      cfg: DenebConfig;
       checkId:
         | "tools.exec.host_sandbox_no_sandbox_defaults"
         | "tools.exec.host_sandbox_no_sandbox_agents";
@@ -581,7 +581,7 @@ description: test skill
   it("warns for interpreter safeBins only when explicit profiles are missing", async () => {
     const cases: Array<{
       name: string;
-      cfg: OpenClawConfig;
+      cfg: DenebConfig;
       expected: boolean;
     }> = [
       {
@@ -656,7 +656,7 @@ description: test skill
     const riskyGlobalTrustedDirs =
       process.platform === "win32"
         ? [String.raw`C:\Users\ci-user\bin`, String.raw`C:\Users\ci-user\.local\bin`]
-        : ["/usr/local/bin", "/tmp/openclaw-safe-bins"];
+        : ["/usr/local/bin", "/tmp/deneb-safe-bins"];
     const cases = [
       {
         name: "warns for risky global and relative trusted dirs",
@@ -678,7 +678,7 @@ description: test skill
               },
             ],
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           const finding = res.findings.find(
             (f) => f.checkId === "tools.exec.safe_bin_trusted_dirs_risky",
@@ -697,7 +697,7 @@ description: test skill
               safeBinTrustedDirs: ["/usr/libexec"],
             },
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           expectNoFinding(res, "tools.exec.safe_bin_trusted_dirs_risky");
         },
@@ -715,7 +715,7 @@ description: test skill
   it("evaluates loopback control UI and logging exposure findings", async () => {
     const cases: Array<{
       name: string;
-      cfg: OpenClawConfig;
+      cfg: DenebConfig;
       checkId:
         | "gateway.trusted_proxies_missing"
         | "gateway.loopback_no_auth"
@@ -821,7 +821,7 @@ description: test skill
         const tmp = await makeTmpDir(testCase.label);
         const stateDir = path.join(tmp, "state");
         await fs.mkdir(stateDir, { recursive: true });
-        const configPath = path.join(stateDir, "openclaw.json");
+        const configPath = path.join(stateDir, "deneb.json");
         await fs.writeFile(configPath, "{}\n", "utf-8");
 
         const res = await runSecurityAudit({
@@ -858,20 +858,20 @@ description: test skill
               if (args[0] === "ps") {
                 return {
                   stdout: Buffer.from(
-                    "openclaw-sbx-browser-old\nopenclaw-sbx-browser-missing-hash\n",
+                    "deneb-sbx-browser-old\ndeneb-sbx-browser-missing-hash\n",
                   ),
                   stderr: Buffer.alloc(0),
                   code: 0,
                 };
               }
-              if (args[0] === "inspect" && args.at(-1) === "openclaw-sbx-browser-old") {
+              if (args[0] === "inspect" && args.at(-1) === "deneb-sbx-browser-old") {
                 return {
                   stdout: Buffer.from("abc123\tepoch-v0\n"),
                   stderr: Buffer.alloc(0),
                   code: 0,
                 };
               }
-              if (args[0] === "inspect" && args.at(-1) === "openclaw-sbx-browser-missing-hash") {
+              if (args[0] === "inspect" && args.at(-1) === "deneb-sbx-browser-missing-hash") {
                 return {
                   stdout: Buffer.from("<no value>\t<no value>\n"),
                   stderr: Buffer.alloc(0),
@@ -894,7 +894,7 @@ description: test skill
           const staleEpoch = res.findings.find(
             (f) => f.checkId === "sandbox.browser_container.hash_epoch_stale",
           );
-          expect(staleEpoch?.detail).toContain("openclaw-sbx-browser-old");
+          expect(staleEpoch?.detail).toContain("deneb-sbx-browser-old");
         },
       },
       {
@@ -934,19 +934,19 @@ description: test skill
             execDockerRawFn: (async (args: string[]) => {
               if (args[0] === "ps") {
                 return {
-                  stdout: Buffer.from("openclaw-sbx-browser-exposed\n"),
+                  stdout: Buffer.from("deneb-sbx-browser-exposed\n"),
                   stderr: Buffer.alloc(0),
                   code: 0,
                 };
               }
-              if (args[0] === "inspect" && args.at(-1) === "openclaw-sbx-browser-exposed") {
+              if (args[0] === "inspect" && args.at(-1) === "deneb-sbx-browser-exposed") {
                 return {
                   stdout: Buffer.from("hash123\t2026-02-21-novnc-auth-default\n"),
                   stderr: Buffer.alloc(0),
                   code: 0,
                 };
               }
-              if (args[0] === "port" && args.at(-1) === "openclaw-sbx-browser-exposed") {
+              if (args[0] === "port" && args.at(-1) === "deneb-sbx-browser-exposed") {
                 return {
                   stdout: Buffer.from("6080/tcp -> 0.0.0.0:49101\n9222/tcp -> 127.0.0.1:49100\n"),
                   stderr: Buffer.alloc(0),
@@ -1024,11 +1024,11 @@ description: test skill
     const stateDir = path.join(tmp, "state");
     await fs.mkdir(stateDir, { recursive: true, mode: 0o700 });
 
-    const targetConfigPath = path.join(tmp, "managed-openclaw.json");
+    const targetConfigPath = path.join(tmp, "managed-deneb.json");
     await fs.writeFile(targetConfigPath, "{}\n", "utf-8");
     await fs.chmod(targetConfigPath, 0o444);
 
-    const configPath = path.join(stateDir, "openclaw.json");
+    const configPath = path.join(stateDir, "deneb.json");
     await fs.symlink(targetConfigPath, configPath);
 
     const res = await runSecurityAudit({
@@ -1106,7 +1106,7 @@ description: test skill
       }
 
       const fixture = await testCase.setup();
-      const configPath = path.join(fixture.stateDir, "openclaw.json");
+      const configPath = path.join(fixture.stateDir, "deneb.json");
       await fs.writeFile(configPath, "{}\n", "utf-8");
       if (!isWindows) {
         await fs.chmod(configPath, 0o600);
@@ -1128,7 +1128,7 @@ description: test skill
   it("scores small-model risk by tool/sandbox exposure", async () => {
     const cases: Array<{
       name: string;
-      cfg: OpenClawConfig;
+      cfg: DenebConfig;
       expectedSeverity: "info" | "critical";
       detailIncludes: string[];
     }> = [
@@ -1180,7 +1180,7 @@ description: test skill
               },
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         expectedFindings: [{ checkId: "sandbox.docker_config_mode_off" }],
       },
       {
@@ -1195,7 +1195,7 @@ description: test skill
             },
             list: [{ id: "ops", sandbox: { mode: "all" } }],
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         expectedFindings: [],
         expectedAbsent: ["sandbox.docker_config_mode_off"],
       },
@@ -1215,7 +1215,7 @@ description: test skill
               },
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         expectedFindings: [
           { checkId: "sandbox.dangerous_bind_mount", severity: "critical" },
           { checkId: "sandbox.dangerous_network_mode", severity: "critical" },
@@ -1236,7 +1236,7 @@ description: test skill
               },
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         expectedFindings: [
           {
             checkId: "sandbox.dangerous_network_mode",
@@ -1275,7 +1275,7 @@ description: test skill
               denyCommands: ["system.*", "system.runx"],
             },
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         detailIncludes: ["system.*", "system.runx", "did you mean", "system.run"],
       },
       {
@@ -1286,7 +1286,7 @@ description: test skill
               denyCommands: ["system.run.prep"],
             },
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         detailIncludes: ["system.run.prep", "did you mean", "system.run.prepare"],
       },
       {
@@ -1297,7 +1297,7 @@ description: test skill
               denyCommands: ["zzzzzzzzzzzzzz"],
             },
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         detailIncludes: ["zzzzzzzzzzzzzz"],
         detailExcludes: ["did you mean"],
       },
@@ -1330,7 +1330,7 @@ description: test skill
             bind: "loopback",
             nodes: { allowCommands: ["camera.snap", "screen.record"] },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         expectedSeverity: "warn" as const,
       },
       {
@@ -1340,7 +1340,7 @@ description: test skill
             bind: "lan",
             nodes: { allowCommands: ["camera.snap", "screen.record"] },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         expectedSeverity: "critical" as const,
       },
       {
@@ -1352,7 +1352,7 @@ description: test skill
               denyCommands: ["camera.snap", "screen.record"],
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         expectedAbsent: true,
       },
     ] as const;
@@ -1381,7 +1381,7 @@ description: test skill
   });
 
   it("flags agent profile overrides when global tools.profile is minimal", async () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       tools: {
         profile: "minimal",
       },
@@ -1401,7 +1401,7 @@ description: test skill
   });
 
   it("flags tools.elevated allowFrom wildcard as critical", async () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       tools: {
         elevated: {
           allowFrom: { whatsapp: ["*"] },
@@ -1425,7 +1425,7 @@ description: test skill
         browser: {
           enabled: true,
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedFinding: { checkId: "browser.control_no_auth", severity: "critical" },
     },
     {
@@ -1438,7 +1438,7 @@ description: test skill
         browser: {
           enabled: true,
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedNoFinding: "browser.control_no_auth",
     },
     {
@@ -1450,14 +1450,14 @@ description: test skill
             password: {
               source: "env",
               provider: "default",
-              id: "OPENCLAW_GATEWAY_PASSWORD",
+              id: "DENEB_GATEWAY_PASSWORD",
             },
           },
         },
         browser: {
           enabled: true,
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedNoFinding: "browser.control_no_auth",
     },
     {
@@ -1468,7 +1468,7 @@ description: test skill
             remote: { cdpUrl: "http://example.com:9222", color: "#0066CC" },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedFinding: { checkId: "browser.remote_cdp_http", severity: "warn" },
     },
     {
@@ -1483,7 +1483,7 @@ description: test skill
             },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedFinding: {
         checkId: "browser.remote_cdp_private_host",
         severity: "warn",
@@ -1511,7 +1511,7 @@ description: test skill
           gateway: {
             controlUi: { allowInsecureAuth: true },
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         expectedFinding: {
           checkId: "gateway.control_ui.insecure_auth",
           severity: "warn",
@@ -1524,7 +1524,7 @@ description: test skill
           gateway: {
             controlUi: { dangerouslyDisableDeviceAuth: true },
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         expectedFinding: {
           checkId: "gateway.control_ui.device_auth_disabled",
           severity: "critical",
@@ -1545,7 +1545,7 @@ description: test skill
               },
             },
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         expectedDangerousDetails: [
           "hooks.gmail.allowUnsafeExternalContent=true",
           "hooks.mappings[0].allowUnsafeExternalContent=true",
@@ -1578,7 +1578,7 @@ description: test skill
           bind: "lan",
           auth: { mode: "token", token: "very-long-browser-token-0123456789" },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedFinding: {
         checkId: "gateway.control_ui.allowed_origins_required",
         severity: "critical",
@@ -1591,7 +1591,7 @@ description: test skill
           bind: "loopback",
           controlUi: { allowedOrigins: ["*"] },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedFinding: {
         checkId: "gateway.control_ui.allowed_origins_wildcard",
         severity: "warn",
@@ -1605,7 +1605,7 @@ description: test skill
           auth: { mode: "token", token: "very-long-browser-token-0123456789" },
           controlUi: { allowedOrigins: ["*"] },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedFinding: {
         checkId: "gateway.control_ui.allowed_origins_wildcard",
         severity: "critical",
@@ -1623,7 +1623,7 @@ description: test skill
   });
 
   it("flags dangerous host-header origin fallback and suppresses missing allowed-origins finding", async () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       gateway: {
         bind: "lan",
         auth: { mode: "token", token: "very-long-browser-token-0123456789" },
@@ -1652,7 +1652,7 @@ description: test skill
             appSecret: "secret_test", // pragma: allowlist secret
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedFinding: "channels.feishu.doc_owner_open_id",
     },
     {
@@ -1668,7 +1668,7 @@ description: test skill
             },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedFinding: "channels.feishu.doc_owner_open_id",
     },
     {
@@ -1681,7 +1681,7 @@ description: test skill
             tools: { doc: false },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedNoFinding: "channels.feishu.doc_owner_open_id",
     },
   ])("$name", async (testCase) => {
@@ -1695,7 +1695,7 @@ description: test skill
   });
 
   it("scores X-Real-IP fallback risk by gateway exposure", async () => {
-    const trustedProxyCfg = (trustedProxies: string[]): OpenClawConfig => ({
+    const trustedProxyCfg = (trustedProxies: string[]): DenebConfig => ({
       gateway: {
         bind: "loopback",
         allowRealIpFallback: true,
@@ -1711,7 +1711,7 @@ description: test skill
 
     const cases: Array<{
       name: string;
-      cfg: OpenClawConfig;
+      cfg: DenebConfig;
       expectedSeverity: "warn" | "critical";
     }> = [
       {
@@ -1775,7 +1775,7 @@ description: test skill
   it("scores mDNS full mode risk by gateway bind mode", async () => {
     const cases: Array<{
       name: string;
-      cfg: OpenClawConfig;
+      cfg: DenebConfig;
       expectedSeverity: "warn" | "critical";
     }> = [
       {
@@ -1821,7 +1821,7 @@ description: test skill
   it("evaluates trusted-proxy auth guardrails", async () => {
     const cases: Array<{
       name: string;
-      cfg: OpenClawConfig;
+      cfg: DenebConfig;
       expectedCheckId: string;
       expectedSeverity: "warn" | "critical";
       suppressesGenericSharedSecretFindings?: boolean;
@@ -1908,7 +1908,7 @@ description: test skill
   });
 
   it("warns when multiple DM senders share the main session", async () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       session: { dmScope: "main" },
       channels: { whatsapp: { enabled: true } },
     };
@@ -1978,7 +1978,7 @@ description: test skill
               },
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         expectFinding: true,
       },
       {
@@ -1999,7 +1999,7 @@ description: test skill
               },
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         expectFinding: false,
       },
     ] as const;
@@ -2042,7 +2042,7 @@ description: test skill
               },
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         resolvedConfig: {
           channels: {
             discord: {
@@ -2057,7 +2057,7 @@ description: test skill
               },
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         plugin: () =>
           stubChannelPlugin({
             id: "discord",
@@ -2107,7 +2107,7 @@ description: test skill
               slashCommand: { enabled: true },
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         resolvedConfig: {
           channels: {
             slack: {
@@ -2117,8 +2117,8 @@ description: test skill
               slashCommand: { enabled: true },
             },
           },
-        } as OpenClawConfig,
-        plugin: (sourceConfig: OpenClawConfig) =>
+        } as DenebConfig,
+        plugin: (sourceConfig: DenebConfig) =>
           stubChannelPlugin({
             id: "slack",
             label: "Slack",
@@ -2165,7 +2165,7 @@ description: test skill
               slashCommand: { enabled: true },
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         resolvedConfig: {
           channels: {
             slack: {
@@ -2175,8 +2175,8 @@ description: test skill
               slashCommand: { enabled: true },
             },
           },
-        } as OpenClawConfig,
-        plugin: (sourceConfig: OpenClawConfig) =>
+        } as DenebConfig,
+        plugin: (sourceConfig: DenebConfig) =>
           stubChannelPlugin({
             id: "slack",
             label: "Slack",
@@ -2246,7 +2246,7 @@ description: test skill
       },
     });
 
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       channels: {
         zalouser: {
           enabled: true,
@@ -2297,14 +2297,14 @@ description: test skill
             },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       plugins: [discordPlugin],
       expectNameBasedSeverity: "warn",
       detailIncludes: [
         "channels.discord.allowFrom:Alice#1234",
         "channels.discord.guilds.123.users:trusted.operator",
         "channels.discord.guilds.123.channels.general.users:security-team",
-        "~/.openclaw/credentials/discord-allowFrom.json:team.owner",
+        "~/.deneb/credentials/discord-allowFrom.json:team.owner",
       ],
       detailExcludes: ["<@123456789012345678>"],
     },
@@ -2319,7 +2319,7 @@ description: test skill
             allowFrom: ["Alice#1234"],
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       plugins: [discordPlugin],
       expectNameBasedSeverity: "info",
       detailIncludes: ["out-of-scope"],
@@ -2344,7 +2344,7 @@ description: test skill
             },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       plugins: [discordPlugin],
       expectNoNameBasedFinding: true,
       expectFindingMatch: {
@@ -2372,7 +2372,7 @@ description: test skill
             },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       plugins: [discordPlugin],
       expectNameBasedSeverity: "warn",
       detailIncludes: ["channels.discord.accounts.beta.allowFrom:Alice#1234"],
@@ -2403,7 +2403,7 @@ description: test skill
             },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       plugins: [discordPlugin],
       expectNoNameBasedFinding: true,
     },
@@ -2444,7 +2444,7 @@ description: test skill
 
   it("does not treat prototype properties as explicit Discord account config paths", async () => {
     await withChannelSecurityStateDir(async () => {
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         channels: {
           discord: {
             enabled: true,
@@ -2500,7 +2500,7 @@ description: test skill
             },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedSeverity: "warn",
       detailIncludes: ["channels.zalouser.groups:Ops Room"],
       detailExcludes: ["group:g-123"],
@@ -2517,7 +2517,7 @@ description: test skill
             },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedSeverity: "info",
       detailIncludes: ["out-of-scope"],
       expectFindingMatch: {
@@ -2567,7 +2567,7 @@ description: test skill
             },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       plugins: [discordPlugin],
       expectedFinding: {
         checkId: "channels.discord.commands.native.unrestricted",
@@ -2586,7 +2586,7 @@ description: test skill
             slashCommand: { enabled: true },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       plugins: [slackPlugin],
       expectedFinding: {
         checkId: "channels.slack.commands.slash.no_allowlists",
@@ -2606,7 +2606,7 @@ description: test skill
             slashCommand: { enabled: true },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       plugins: [slackPlugin],
       expectedFinding: {
         checkId: "channels.slack.commands.slash.useAccessGroups_off",
@@ -2624,7 +2624,7 @@ description: test skill
             groups: { "-100123": {} },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       plugins: [telegramPlugin],
       expectedFinding: {
         checkId: "channels.telegram.groups.allowFrom.missing",
@@ -2643,7 +2643,7 @@ description: test skill
             groups: { "-100123": {} },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       plugins: [telegramPlugin],
       expectedFinding: {
         checkId: "channels.telegram.allowFrom.invalid_entries",
@@ -2661,7 +2661,7 @@ description: test skill
   });
 
   it("adds probe_failed warnings for deep probe failure modes", async () => {
-    const cfg: OpenClawConfig = { gateway: { mode: "local" } };
+    const cfg: DenebConfig = { gateway: { mode: "local" } };
     const cases: Array<{
       name: string;
       probeGatewayFn: NonNullable<SecurityAuditOptions["probeGatewayFn"]>;
@@ -2749,17 +2749,17 @@ description: test skill
       enabled: true,
       token: "shared-gateway-token-1234567890",
       defaultSessionKey: "hook:ingress",
-    } satisfies NonNullable<OpenClawConfig["hooks"]>;
+    } satisfies NonNullable<DenebConfig["hooks"]>;
     const requestSessionKeyHooks = {
       ...unrestrictedBaseHooks,
       allowRequestSessionKey: true,
-    } satisfies NonNullable<OpenClawConfig["hooks"]>;
+    } satisfies NonNullable<DenebConfig["hooks"]>;
     const cases = [
       {
         name: "warns when hooks token looks short",
         cfg: {
           hooks: { enabled: true, token: "short" },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         expectedFinding: "hooks.token_too_short",
         expectedSeverity: "warn" as const,
       },
@@ -2767,9 +2767,9 @@ description: test skill
         name: "flags hooks token reuse of the gateway env token as critical",
         cfg: {
           hooks: { enabled: true, token: "shared-gateway-token-1234567890" },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         env: {
-          OPENCLAW_GATEWAY_TOKEN: "shared-gateway-token-1234567890",
+          DENEB_GATEWAY_TOKEN: "shared-gateway-token-1234567890",
         },
         expectedFinding: "hooks.token_reuse_gateway_token",
         expectedSeverity: "critical" as const,
@@ -2778,7 +2778,7 @@ description: test skill
         name: "warns when hooks.defaultSessionKey is unset",
         cfg: {
           hooks: { enabled: true, token: "shared-gateway-token-1234567890" },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         expectedFinding: "hooks.default_session_key_unset",
         expectedSeverity: "warn" as const,
       },
@@ -2791,25 +2791,25 @@ description: test skill
             defaultSessionKey: "hook:ingress",
             allowedAgentIds: ["*"],
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         expectedFinding: "hooks.allowed_agent_ids_unrestricted",
         expectedSeverity: "warn" as const,
       },
       {
         name: "scores unrestricted hooks.allowedAgentIds by local exposure",
-        cfg: { hooks: unrestrictedBaseHooks } satisfies OpenClawConfig,
+        cfg: { hooks: unrestrictedBaseHooks } satisfies DenebConfig,
         expectedFinding: "hooks.allowed_agent_ids_unrestricted",
         expectedSeverity: "warn" as const,
       },
       {
         name: "scores unrestricted hooks.allowedAgentIds by remote exposure",
-        cfg: { gateway: { bind: "lan" }, hooks: unrestrictedBaseHooks } satisfies OpenClawConfig,
+        cfg: { gateway: { bind: "lan" }, hooks: unrestrictedBaseHooks } satisfies DenebConfig,
         expectedFinding: "hooks.allowed_agent_ids_unrestricted",
         expectedSeverity: "critical" as const,
       },
       {
         name: "scores hooks request sessionKey override by local exposure",
-        cfg: { hooks: requestSessionKeyHooks } satisfies OpenClawConfig,
+        cfg: { hooks: requestSessionKeyHooks } satisfies DenebConfig,
         expectedFinding: "hooks.request_session_key_enabled",
         expectedSeverity: "warn" as const,
         expectedExtraFinding: {
@@ -2822,7 +2822,7 @@ description: test skill
         cfg: {
           gateway: { bind: "lan" },
           hooks: requestSessionKeyHooks,
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         expectedFinding: "hooks.request_session_key_enabled",
         expectedSeverity: "critical" as const,
       },
@@ -2853,7 +2853,7 @@ description: test skill
           auth: { mode: "none" },
           http: { endpoints: { chatCompletions: { enabled: true } } },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedFinding: { checkId: "gateway.http.no_auth", severity: "warn" },
       detailIncludes: ["/tools/invoke", "/v1/chat/completions"],
       auditOptions: { env: {} },
@@ -2866,7 +2866,7 @@ description: test skill
           auth: { mode: "none" },
           http: { endpoints: { responses: { enabled: true } } },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedFinding: { checkId: "gateway.http.no_auth", severity: "critical" },
       auditOptions: { env: {} },
     },
@@ -2883,7 +2883,7 @@ description: test skill
             },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedNoFinding: "gateway.http.no_auth",
       auditOptions: { env: {} },
     },
@@ -2898,7 +2898,7 @@ description: test skill
             },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       expectedFinding: { checkId: "gateway.http.session_key_override_enabled", severity: "info" },
     },
   ])("$name", async (testCase) => {
@@ -2923,11 +2923,11 @@ description: test skill
   });
 
   it("warns when state/config look like a synced folder", async () => {
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
 
     const res = await audit(cfg, {
-      stateDir: "/Users/test/Dropbox/.openclaw",
-      configPath: "/Users/test/Dropbox/.openclaw/openclaw.json",
+      stateDir: "/Users/test/Dropbox/.deneb",
+      configPath: "/Users/test/Dropbox/.deneb/deneb.json",
     });
 
     expectFinding(res, "fs.synced_dir", "warn");
@@ -2948,11 +2948,11 @@ description: test skill
       await fs.chmod(includePath, 0o644);
     }
 
-    const configPath = path.join(stateDir, "openclaw.json");
+    const configPath = path.join(stateDir, "deneb.json");
     await fs.writeFile(configPath, `{ "$include": "./extra.json5" }\n`, "utf-8");
     await fs.chmod(configPath, 0o600);
 
-    const cfg: OpenClawConfig = { logging: { redactSensitive: "off" } };
+    const cfg: DenebConfig = { logging: { redactSensitive: "off" } };
     const user = "DESKTOP-TEST\\Tester";
     const execIcacls = isWindows
       ? async (_cmd: string, args: string[]) => {
@@ -3005,7 +3005,7 @@ description: test skill
                 installs: {
                   "voice-call": {
                     source: "npm",
-                    spec: "@openclaw/voice-call",
+                    spec: "@deneb/voice-call",
                   },
                 },
               },
@@ -3014,12 +3014,12 @@ description: test skill
                   installs: {
                     "test-hooks": {
                       source: "npm",
-                      spec: "@openclaw/test-hooks",
+                      spec: "@deneb/test-hooks",
                     },
                   },
                 },
               },
-            } satisfies OpenClawConfig,
+            } satisfies DenebConfig,
             sharedInstallMetadataStateDir,
           ),
         expectedPresent: [
@@ -3038,7 +3038,7 @@ description: test skill
                 installs: {
                   "voice-call": {
                     source: "npm",
-                    spec: "@openclaw/voice-call@1.2.3",
+                    spec: "@deneb/voice-call@1.2.3",
                     integrity: "sha512-plugin",
                   },
                 },
@@ -3048,13 +3048,13 @@ description: test skill
                   installs: {
                     "test-hooks": {
                       source: "npm",
-                      spec: "@openclaw/test-hooks@1.2.3",
+                      spec: "@deneb/test-hooks@1.2.3",
                       integrity: "sha512-hook",
                     },
                   },
                 },
               },
-            } satisfies OpenClawConfig,
+            } satisfies DenebConfig,
             sharedInstallMetadataStateDir,
           ),
         expectedAbsent: [
@@ -3075,12 +3075,12 @@ description: test skill
           await fs.mkdir(hookDir, { recursive: true });
           await fs.writeFile(
             path.join(pluginDir, "package.json"),
-            JSON.stringify({ name: "@openclaw/voice-call", version: "9.9.9" }),
+            JSON.stringify({ name: "@deneb/voice-call", version: "9.9.9" }),
             "utf-8",
           );
           await fs.writeFile(
             path.join(hookDir, "package.json"),
-            JSON.stringify({ name: "@openclaw/test-hooks", version: "8.8.8" }),
+            JSON.stringify({ name: "@deneb/test-hooks", version: "8.8.8" }),
             "utf-8",
           );
 
@@ -3090,7 +3090,7 @@ description: test skill
                 installs: {
                   "voice-call": {
                     source: "npm",
-                    spec: "@openclaw/voice-call@1.2.3",
+                    spec: "@deneb/voice-call@1.2.3",
                     integrity: "sha512-plugin",
                     resolvedVersion: "1.2.3",
                   },
@@ -3101,7 +3101,7 @@ description: test skill
                   installs: {
                     "test-hooks": {
                       source: "npm",
-                      spec: "@openclaw/test-hooks@1.2.3",
+                      spec: "@deneb/test-hooks@1.2.3",
                       integrity: "sha512-hook",
                       resolvedVersion: "1.2.3",
                     },
@@ -3133,7 +3133,7 @@ description: test skill
     const cases = [
       {
         name: "flags extensions without plugins.allow",
-        cfg: {} satisfies OpenClawConfig,
+        cfg: {} satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           expect(res.findings).toEqual(
             expect.arrayContaining([
@@ -3149,7 +3149,7 @@ description: test skill
         name: "flags enabled extensions when tool policy can expose plugin tools",
         cfg: {
           plugins: { allow: ["some-plugin"] },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           expect(res.findings).toEqual(
             expect.arrayContaining([
@@ -3166,7 +3166,7 @@ description: test skill
         cfg: {
           plugins: { allow: ["some-plugin"] },
           tools: { profile: "coding" },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           expect(
             res.findings.some((f) => f.checkId === "plugins.tools_reachable_permissive_policy"),
@@ -3179,7 +3179,7 @@ description: test skill
           channels: {
             discord: { enabled: true, token: "t" },
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           expect(res.findings).toEqual(
             expect.arrayContaining([
@@ -3204,7 +3204,7 @@ description: test skill
               } as unknown as string,
             },
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           expect(res.findings).toEqual(
             expect.arrayContaining([
@@ -3256,7 +3256,7 @@ description: test skill
       {
         name: "reports detailed code-safety issues for both plugins and skills",
         run: async () => {
-          const cfg: OpenClawConfig = {
+          const cfg: DenebConfig = {
             agents: { defaults: { workspace: sharedCodeSafetyWorkspaceDir } },
           };
           const [pluginFindings, skillFindings] = await Promise.all([
@@ -3300,7 +3300,7 @@ description: test skill
             path.join(pluginDir, "package.json"),
             JSON.stringify({
               name: "escape-plugin",
-              openclaw: { extensions: ["../outside.js"] },
+              deneb: { extensions: ["../outside.js"] },
             }),
           );
           await fs.writeFile(path.join(pluginDir, "index.js"), "export {};");
@@ -3324,7 +3324,7 @@ description: test skill
               path.join(pluginDir, "package.json"),
               JSON.stringify({
                 name: "scanfail-plugin",
-                openclaw: { extensions: ["index.js"] },
+                deneb: { extensions: ["index.js"] },
               }),
             );
             await fs.writeFile(path.join(pluginDir, "index.js"), "export {};");
@@ -3352,7 +3352,7 @@ description: test skill
         cfg: {
           tools: { elevated: { enabled: true, allowFrom: { whatsapp: ["+1"] } } },
           channels: { whatsapp: { groupPolicy: "open" } },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           expect(res.findings).toEqual(
             expect.arrayContaining([
@@ -3369,7 +3369,7 @@ description: test skill
         cfg: {
           channels: { whatsapp: { groupPolicy: "open" } },
           tools: { elevated: { enabled: false } },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           expect(res.findings).toEqual(
             expect.arrayContaining([
@@ -3394,7 +3394,7 @@ description: test skill
               sandbox: { mode: "all" },
             },
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           expect(
             res.findings.some(
@@ -3413,7 +3413,7 @@ description: test skill
             deny: ["group:runtime"],
             fs: { workspaceOnly: true },
           },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           expect(
             res.findings.some(
@@ -3438,7 +3438,7 @@ description: test skill
             },
           },
           tools: { elevated: { enabled: false } },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           const finding = res.findings.find(
             (f) => f.checkId === "security.trust_model.multi_user_heuristic",
@@ -3460,7 +3460,7 @@ description: test skill
             },
           },
           tools: { elevated: { enabled: false } },
-        } satisfies OpenClawConfig,
+        } satisfies DenebConfig,
         assert: (res: SecurityAuditReport) => {
           expectNoFinding(res, "security.trust_model.multi_user_heuristic");
         },
@@ -3493,10 +3493,10 @@ description: test skill
     const makeProbeEnv = (env?: { token?: string; password?: string }) => {
       const probeEnv: NodeJS.ProcessEnv = {};
       if (env?.token !== undefined) {
-        probeEnv.OPENCLAW_GATEWAY_TOKEN = env.token;
+        probeEnv.DENEB_GATEWAY_TOKEN = env.token;
       }
       if (env?.password !== undefined) {
-        probeEnv.OPENCLAW_GATEWAY_PASSWORD = env.password;
+        probeEnv.DENEB_GATEWAY_PASSWORD = env.password;
       }
       return probeEnv;
     };
@@ -3504,7 +3504,7 @@ description: test skill
     it("applies gateway auth precedence across local/remote modes", async () => {
       const cases: Array<{
         name: string;
-        cfg: OpenClawConfig;
+        cfg: DenebConfig;
         env?: { token?: string; password?: string };
         expectedAuth: { token?: string; password?: string };
       }> = [
@@ -3596,7 +3596,7 @@ description: test skill
     });
 
     it("adds warning finding when probe auth SecretRef is unavailable", async () => {
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         gateway: {
           mode: "local",
           auth: {

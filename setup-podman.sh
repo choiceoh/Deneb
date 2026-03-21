@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# One-time host setup for rootless OpenClaw in Podman: creates the openclaw
+# One-time host setup for rootless Deneb in Podman: creates the deneb
 # user, builds the image, loads it into that user's Podman store, and installs
 # the launch script. Run from repo root with sudo capability.
 #
 # Usage: ./setup-podman.sh [--quadlet|--container]
 #   --quadlet   Install systemd Quadlet so the container runs as a user service
 #   --container Only install user + image + launch script; you start the container manually (default)
-#   Or set OPENCLAW_PODMAN_QUADLET=1 (or 0) to choose without a flag.
+#   Or set DENEB_PODMAN_QUADLET=1 (or 0) to choose without a flag.
 #
 # After this, start the gateway manually:
-#   ./scripts/run-openclaw-podman.sh launch
-#   ./scripts/run-openclaw-podman.sh launch setup   # onboarding wizard
-# Or as the openclaw user: sudo -u openclaw /home/openclaw/run-openclaw-podman.sh
-# If you used --quadlet, you can also: sudo systemctl --machine openclaw@ --user start openclaw.service
+#   ./scripts/run-deneb-podman.sh launch
+#   ./scripts/run-deneb-podman.sh launch setup   # onboarding wizard
+# Or as the deneb user: sudo -u deneb /home/deneb/run-deneb-podman.sh
+# If you used --quadlet, you can also: sudo systemctl --machine deneb@ --user start deneb.service
 set -euo pipefail
 
-OPENCLAW_USER="${OPENCLAW_PODMAN_USER:-openclaw}"
-REPO_PATH="${OPENCLAW_REPO_PATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
-RUN_SCRIPT_SRC="$REPO_PATH/scripts/run-openclaw-podman.sh"
-QUADLET_TEMPLATE="$REPO_PATH/scripts/podman/openclaw.container.in"
+DENEB_USER="${DENEB_PODMAN_USER:-deneb}"
+REPO_PATH="${DENEB_REPO_PATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+RUN_SCRIPT_SRC="$REPO_PATH/scripts/run-deneb-podman.sh"
+QUADLET_TEMPLATE="$REPO_PATH/scripts/podman/deneb.container.in"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -97,10 +97,10 @@ run_as_user() {
   fi
 }
 
-run_as_openclaw() {
-  # Avoid root writes into $OPENCLAW_HOME (symlink/hardlink/TOCTOU footguns).
+run_as_deneb() {
+  # Avoid root writes into $DENEB_HOME (symlink/hardlink/TOCTOU footguns).
   # Anything under the target user's home should be created/modified as that user.
-  run_as_user "$OPENCLAW_USER" env HOME="$OPENCLAW_HOME" "$@"
+  run_as_user "$DENEB_USER" env HOME="$DENEB_HOME" "$@"
 }
 
 escape_sed_replacement_pipe_delim() {
@@ -108,7 +108,7 @@ escape_sed_replacement_pipe_delim() {
   printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'
 }
 
-# Quadlet: opt-in via --quadlet or OPENCLAW_PODMAN_QUADLET=1
+# Quadlet: opt-in via --quadlet or DENEB_PODMAN_QUADLET=1
 INSTALL_QUADLET=false
 for arg in "$@"; do
   case "$arg" in
@@ -116,8 +116,8 @@ for arg in "$@"; do
     --container) INSTALL_QUADLET=false ;;
   esac
 done
-if [[ -n "${OPENCLAW_PODMAN_QUADLET:-}" ]]; then
-  case "${OPENCLAW_PODMAN_QUADLET,,}" in
+if [[ -n "${DENEB_PODMAN_QUADLET:-}" ]]; then
+  case "${DENEB_PODMAN_QUADLET,,}" in
     1|yes|true)  INSTALL_QUADLET=true ;;
     0|no|false) INSTALL_QUADLET=false ;;
   esac
@@ -128,7 +128,7 @@ if ! is_root; then
   require_cmd sudo
 fi
 if [[ ! -f "$REPO_PATH/Dockerfile" ]]; then
-  echo "Dockerfile not found at $REPO_PATH. Set OPENCLAW_REPO_PATH to the repo root." >&2
+  echo "Dockerfile not found at $REPO_PATH. Set DENEB_REPO_PATH to the repo root." >&2
   exit 1
 fi
 if [[ ! -f "$RUN_SCRIPT_SRC" ]]; then
@@ -153,7 +153,7 @@ PY
     od -An -N32 -tx1 /dev/urandom | tr -d " \n"
     return 0
   fi
-  echo "Missing dependency: need openssl or python3 (or od) to generate OPENCLAW_GATEWAY_TOKEN." >&2
+  echo "Missing dependency: need openssl or python3 (or od) to generate DENEB_GATEWAY_TOKEN." >&2
   exit 1
 }
 
@@ -190,109 +190,109 @@ resolve_nologin_shell() {
   printf '%s' "/usr/sbin/nologin"
 }
 
-# Create openclaw user (non-login, with home) if missing
-if ! user_exists "$OPENCLAW_USER"; then
+# Create deneb user (non-login, with home) if missing
+if ! user_exists "$DENEB_USER"; then
   NOLOGIN_SHELL="$(resolve_nologin_shell)"
-  echo "Creating user $OPENCLAW_USER ($NOLOGIN_SHELL, with home)..."
+  echo "Creating user $DENEB_USER ($NOLOGIN_SHELL, with home)..."
   if command -v useradd >/dev/null 2>&1; then
-    run_root useradd -m -s "$NOLOGIN_SHELL" "$OPENCLAW_USER"
+    run_root useradd -m -s "$NOLOGIN_SHELL" "$DENEB_USER"
   elif command -v adduser >/dev/null 2>&1; then
     # Debian/Ubuntu: adduser supports --disabled-password/--gecos. Busybox adduser differs.
-    run_root adduser --disabled-password --gecos "" --shell "$NOLOGIN_SHELL" "$OPENCLAW_USER"
+    run_root adduser --disabled-password --gecos "" --shell "$NOLOGIN_SHELL" "$DENEB_USER"
   else
-    echo "Neither useradd nor adduser found, cannot create user $OPENCLAW_USER." >&2
+    echo "Neither useradd nor adduser found, cannot create user $DENEB_USER." >&2
     exit 1
   fi
 else
-  echo "User $OPENCLAW_USER already exists."
+  echo "User $DENEB_USER already exists."
 fi
 
-OPENCLAW_HOME="$(resolve_user_home "$OPENCLAW_USER")"
-OPENCLAW_UID="$(id -u "$OPENCLAW_USER" 2>/dev/null || true)"
-OPENCLAW_CONFIG="$OPENCLAW_HOME/.openclaw"
-LAUNCH_SCRIPT_DST="$OPENCLAW_HOME/run-openclaw-podman.sh"
+DENEB_HOME="$(resolve_user_home "$DENEB_USER")"
+DENEB_UID="$(id -u "$DENEB_USER" 2>/dev/null || true)"
+DENEB_CONFIG="$DENEB_HOME/.deneb"
+LAUNCH_SCRIPT_DST="$DENEB_HOME/run-deneb-podman.sh"
 
 # Prefer systemd user services (Quadlet) for production. Enable lingering early so rootless Podman can run
 # without an interactive login.
 if command -v loginctl &>/dev/null; then
-  run_root loginctl enable-linger "$OPENCLAW_USER" 2>/dev/null || true
+  run_root loginctl enable-linger "$DENEB_USER" 2>/dev/null || true
 fi
-if [[ -n "${OPENCLAW_UID:-}" && -d /run/user ]] && command -v systemctl &>/dev/null; then
-  run_root systemctl start "user@${OPENCLAW_UID}.service" 2>/dev/null || true
+if [[ -n "${DENEB_UID:-}" && -d /run/user ]] && command -v systemctl &>/dev/null; then
+  run_root systemctl start "user@${DENEB_UID}.service" 2>/dev/null || true
 fi
 
 # Rootless Podman needs subuid/subgid for the run user
-if ! grep -q "^${OPENCLAW_USER}:" /etc/subuid 2>/dev/null; then
-  echo "Warning: $OPENCLAW_USER has no subuid range. Rootless Podman may fail." >&2
-  echo "  Add a line to /etc/subuid and /etc/subgid, e.g.: $OPENCLAW_USER:100000:65536" >&2
+if ! grep -q "^${DENEB_USER}:" /etc/subuid 2>/dev/null; then
+  echo "Warning: $DENEB_USER has no subuid range. Rootless Podman may fail." >&2
+  echo "  Add a line to /etc/subuid and /etc/subgid, e.g.: $DENEB_USER:100000:65536" >&2
 fi
 
-echo "Creating $OPENCLAW_CONFIG and workspace..."
-run_as_openclaw mkdir -p "$OPENCLAW_CONFIG/workspace"
-run_as_openclaw chmod 700 "$OPENCLAW_CONFIG" "$OPENCLAW_CONFIG/workspace" 2>/dev/null || true
+echo "Creating $DENEB_CONFIG and workspace..."
+run_as_deneb mkdir -p "$DENEB_CONFIG/workspace"
+run_as_deneb chmod 700 "$DENEB_CONFIG" "$DENEB_CONFIG/workspace" 2>/dev/null || true
 
-ENV_FILE="$OPENCLAW_CONFIG/.env"
-if run_as_openclaw test -f "$ENV_FILE"; then
-  if ! run_as_openclaw grep -q '^OPENCLAW_GATEWAY_TOKEN=' "$ENV_FILE" 2>/dev/null; then
+ENV_FILE="$DENEB_CONFIG/.env"
+if run_as_deneb test -f "$ENV_FILE"; then
+  if ! run_as_deneb grep -q '^DENEB_GATEWAY_TOKEN=' "$ENV_FILE" 2>/dev/null; then
     TOKEN="$(generate_token_hex_32)"
-    printf 'OPENCLAW_GATEWAY_TOKEN=%s\n' "$TOKEN" | run_as_openclaw tee -a "$ENV_FILE" >/dev/null
-    echo "Added OPENCLAW_GATEWAY_TOKEN to $ENV_FILE."
+    printf 'DENEB_GATEWAY_TOKEN=%s\n' "$TOKEN" | run_as_deneb tee -a "$ENV_FILE" >/dev/null
+    echo "Added DENEB_GATEWAY_TOKEN to $ENV_FILE."
   fi
-  run_as_openclaw chmod 600 "$ENV_FILE" 2>/dev/null || true
+  run_as_deneb chmod 600 "$ENV_FILE" 2>/dev/null || true
 else
   TOKEN="$(generate_token_hex_32)"
-  printf 'OPENCLAW_GATEWAY_TOKEN=%s\n' "$TOKEN" | run_as_openclaw tee "$ENV_FILE" >/dev/null
-  run_as_openclaw chmod 600 "$ENV_FILE" 2>/dev/null || true
+  printf 'DENEB_GATEWAY_TOKEN=%s\n' "$TOKEN" | run_as_deneb tee "$ENV_FILE" >/dev/null
+  run_as_deneb chmod 600 "$ENV_FILE" 2>/dev/null || true
   echo "Created $ENV_FILE with new token."
 fi
 
 # The gateway refuses to start unless gateway.mode=local is set in config.
 # Make first-run non-interactive; users can run the wizard later to configure channels/providers.
-OPENCLAW_JSON="$OPENCLAW_CONFIG/openclaw.json"
-if ! run_as_openclaw test -f "$OPENCLAW_JSON"; then
-  printf '%s\n' '{ gateway: { mode: "local" } }' | run_as_openclaw tee "$OPENCLAW_JSON" >/dev/null
-  run_as_openclaw chmod 600 "$OPENCLAW_JSON" 2>/dev/null || true
-  echo "Created $OPENCLAW_JSON (minimal gateway.mode=local)."
+DENEB_JSON="$DENEB_CONFIG/deneb.json"
+if ! run_as_deneb test -f "$DENEB_JSON"; then
+  printf '%s\n' '{ gateway: { mode: "local" } }' | run_as_deneb tee "$DENEB_JSON" >/dev/null
+  run_as_deneb chmod 600 "$DENEB_JSON" 2>/dev/null || true
+  echo "Created $DENEB_JSON (minimal gateway.mode=local)."
 fi
 
 echo "Building image from $REPO_PATH..."
 BUILD_ARGS=()
-[[ -n "${OPENCLAW_DOCKER_APT_PACKAGES:-}" ]] && BUILD_ARGS+=(--build-arg "OPENCLAW_DOCKER_APT_PACKAGES=${OPENCLAW_DOCKER_APT_PACKAGES}")
-[[ -n "${OPENCLAW_EXTENSIONS:-}" ]] && BUILD_ARGS+=(--build-arg "OPENCLAW_EXTENSIONS=${OPENCLAW_EXTENSIONS}")
-podman build ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} -t openclaw:local -f "$REPO_PATH/Dockerfile" "$REPO_PATH"
+[[ -n "${DENEB_DOCKER_APT_PACKAGES:-}" ]] && BUILD_ARGS+=(--build-arg "DENEB_DOCKER_APT_PACKAGES=${DENEB_DOCKER_APT_PACKAGES}")
+[[ -n "${DENEB_EXTENSIONS:-}" ]] && BUILD_ARGS+=(--build-arg "DENEB_EXTENSIONS=${DENEB_EXTENSIONS}")
+podman build ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} -t deneb:local -f "$REPO_PATH/Dockerfile" "$REPO_PATH"
 
-echo "Loading image into $OPENCLAW_USER's Podman store..."
+echo "Loading image into $DENEB_USER's Podman store..."
 TMP_IMAGE_DIR="$(resolve_image_tmp_dir)"
 echo "Using temporary image dir: $TMP_IMAGE_DIR"
-TMP_STAGE_DIR="$(mktemp -d -p "$TMP_IMAGE_DIR" openclaw-image.XXXXXX)"
+TMP_STAGE_DIR="$(mktemp -d -p "$TMP_IMAGE_DIR" deneb-image.XXXXXX)"
 TMP_IMAGE="$TMP_STAGE_DIR/image.tar"
 chmod 700 "$TMP_STAGE_DIR"
 trap 'rm -rf "$TMP_STAGE_DIR"' EXIT
-podman save openclaw:local -o "$TMP_IMAGE"
+podman save deneb:local -o "$TMP_IMAGE"
 chmod 600 "$TMP_IMAGE"
 # Stream the image into the target user's podman load so private temp directories
-# do not need to be traversable by $OPENCLAW_USER.
-cat "$TMP_IMAGE" | run_as_user "$OPENCLAW_USER" env HOME="$OPENCLAW_HOME" podman load
+# do not need to be traversable by $DENEB_USER.
+cat "$TMP_IMAGE" | run_as_user "$DENEB_USER" env HOME="$DENEB_HOME" podman load
 rm -rf "$TMP_STAGE_DIR"
 trap - EXIT
 
 echo "Copying launch script to $LAUNCH_SCRIPT_DST..."
-run_root cat "$RUN_SCRIPT_SRC" | run_as_openclaw tee "$LAUNCH_SCRIPT_DST" >/dev/null
-run_as_openclaw chmod 755 "$LAUNCH_SCRIPT_DST"
+run_root cat "$RUN_SCRIPT_SRC" | run_as_deneb tee "$LAUNCH_SCRIPT_DST" >/dev/null
+run_as_deneb chmod 755 "$LAUNCH_SCRIPT_DST"
 
-# Optionally install systemd quadlet for openclaw user (rootless Podman + systemd)
-QUADLET_DIR="$OPENCLAW_HOME/.config/containers/systemd"
+# Optionally install systemd quadlet for deneb user (rootless Podman + systemd)
+QUADLET_DIR="$DENEB_HOME/.config/containers/systemd"
 if [[ "$INSTALL_QUADLET" == true && -f "$QUADLET_TEMPLATE" ]]; then
-  echo "Installing systemd quadlet for $OPENCLAW_USER..."
-  run_as_openclaw mkdir -p "$QUADLET_DIR"
-  OPENCLAW_HOME_SED="$(escape_sed_replacement_pipe_delim "$OPENCLAW_HOME")"
-  sed "s|{{OPENCLAW_HOME}}|$OPENCLAW_HOME_SED|g" "$QUADLET_TEMPLATE" | run_as_openclaw tee "$QUADLET_DIR/openclaw.container" >/dev/null
-  run_as_openclaw chmod 700 "$OPENCLAW_HOME/.config" "$OPENCLAW_HOME/.config/containers" "$QUADLET_DIR" 2>/dev/null || true
-  run_as_openclaw chmod 600 "$QUADLET_DIR/openclaw.container" 2>/dev/null || true
+  echo "Installing systemd quadlet for $DENEB_USER..."
+  run_as_deneb mkdir -p "$QUADLET_DIR"
+  DENEB_HOME_SED="$(escape_sed_replacement_pipe_delim "$DENEB_HOME")"
+  sed "s|{{DENEB_HOME}}|$DENEB_HOME_SED|g" "$QUADLET_TEMPLATE" | run_as_deneb tee "$QUADLET_DIR/deneb.container" >/dev/null
+  run_as_deneb chmod 700 "$DENEB_HOME/.config" "$DENEB_HOME/.config/containers" "$QUADLET_DIR" 2>/dev/null || true
+  run_as_deneb chmod 600 "$QUADLET_DIR/deneb.container" 2>/dev/null || true
   if command -v systemctl &>/dev/null; then
-    run_root systemctl --machine "${OPENCLAW_USER}@" --user daemon-reload 2>/dev/null || true
-    run_root systemctl --machine "${OPENCLAW_USER}@" --user enable openclaw.service 2>/dev/null || true
-    run_root systemctl --machine "${OPENCLAW_USER}@" --user start openclaw.service 2>/dev/null || true
+    run_root systemctl --machine "${DENEB_USER}@" --user daemon-reload 2>/dev/null || true
+    run_root systemctl --machine "${DENEB_USER}@" --user enable deneb.service 2>/dev/null || true
+    run_root systemctl --machine "${DENEB_USER}@" --user start deneb.service 2>/dev/null || true
   fi
 fi
 
@@ -300,13 +300,13 @@ echo ""
 echo "Setup complete. Start the gateway:"
 echo "  $RUN_SCRIPT_SRC launch"
 echo "  $RUN_SCRIPT_SRC launch setup   # onboarding wizard"
-echo "Or as $OPENCLAW_USER (e.g. from cron):"
-echo "  sudo -u $OPENCLAW_USER $LAUNCH_SCRIPT_DST"
-echo "  sudo -u $OPENCLAW_USER $LAUNCH_SCRIPT_DST setup"
+echo "Or as $DENEB_USER (e.g. from cron):"
+echo "  sudo -u $DENEB_USER $LAUNCH_SCRIPT_DST"
+echo "  sudo -u $DENEB_USER $LAUNCH_SCRIPT_DST setup"
 if [[ "$INSTALL_QUADLET" == true ]]; then
   echo "Or use systemd (quadlet):"
-  echo "  sudo systemctl --machine ${OPENCLAW_USER}@ --user start openclaw.service"
-  echo "  sudo systemctl --machine ${OPENCLAW_USER}@ --user status openclaw.service"
+  echo "  sudo systemctl --machine ${DENEB_USER}@ --user start deneb.service"
+  echo "  sudo systemctl --machine ${DENEB_USER}@ --user status deneb.service"
 else
   echo "To install systemd quadlet later: $0 --quadlet"
 fi

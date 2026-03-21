@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import type { SessionBindingRecord } from "../../infra/outbound/session-binding-service.js";
 import type { PluginTargetedInboundClaimOutcome } from "../../plugins/hooks.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
@@ -100,7 +100,7 @@ const ttsMocks = vi.hoisted(() => {
     normalizeTtsAutoMode: vi.fn((value: unknown) =>
       typeof value === "string" ? value : undefined,
     ),
-    resolveTtsConfig: vi.fn((_cfg: OpenClawConfig) => ({ mode: "final" })),
+    resolveTtsConfig: vi.fn((_cfg: DenebConfig) => ({ mode: "final" })),
   };
 });
 
@@ -190,11 +190,11 @@ vi.mock("../../infra/outbound/session-binding-service.js", async (importOriginal
 vi.mock("../../tts/tts.js", () => ({
   maybeApplyTtsToPayload: (params: unknown) => ttsMocks.maybeApplyTtsToPayload(params),
   normalizeTtsAutoMode: (value: unknown) => ttsMocks.normalizeTtsAutoMode(value),
-  resolveTtsConfig: (cfg: OpenClawConfig) => ttsMocks.resolveTtsConfig(cfg),
+  resolveTtsConfig: (cfg: DenebConfig) => ttsMocks.resolveTtsConfig(cfg),
 }));
 
 const noAbortResult = { handled: false, aborted: false } as const;
-const emptyConfig = {} as OpenClawConfig;
+const emptyConfig = {} as DenebConfig;
 let dispatchReplyFromConfig: typeof import("./dispatch-from-config.js").dispatchReplyFromConfig;
 let resetInboundDedupe: typeof import("./inbound-dedupe.js").resetInboundDedupe;
 let acpManagerTesting: typeof import("../../acp/control-plane/manager.js").__testing;
@@ -352,7 +352,7 @@ describe("dispatchReplyFromConfig", () => {
     const replyResolver = async (
       _ctx: MsgContext,
       _opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
+      _cfg?: DenebConfig,
     ) => ({ text: "hi" }) satisfies ReplyPayload;
     await dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyResolver });
 
@@ -377,7 +377,7 @@ describe("dispatchReplyFromConfig", () => {
     const replyResolver = async (
       _ctx: MsgContext,
       _opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
+      _cfg?: DenebConfig,
     ) => ({ text: "hi" }) satisfies ReplyPayload;
     await dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyResolver });
 
@@ -597,7 +597,7 @@ describe("dispatchReplyFromConfig", () => {
     const replyResolver = async (
       _ctx: MsgContext,
       _opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
+      _cfg?: DenebConfig,
     ) => ({ text: "hi" }) satisfies ReplyPayload;
     await dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyResolver });
 
@@ -621,7 +621,7 @@ describe("dispatchReplyFromConfig", () => {
     const replyResolver = async (
       _ctx: MsgContext,
       _opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
+      _cfg?: DenebConfig,
     ) => ({ text: "hi" }) satisfies ReplyPayload;
     await dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyResolver });
 
@@ -650,7 +650,7 @@ describe("dispatchReplyFromConfig", () => {
     const replyResolver = async (
       _ctx: MsgContext,
       opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
+      _cfg?: DenebConfig,
     ) => {
       expect(opts?.onToolResult).toBeDefined();
       await opts?.onToolResult?.({
@@ -683,7 +683,7 @@ describe("dispatchReplyFromConfig", () => {
     const replyResolver = async (
       _ctx: MsgContext,
       opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
+      _cfg?: DenebConfig,
     ) => {
       expect(opts?.onToolResult).toBeDefined();
       expect(typeof opts?.onToolResult).toBe("function");
@@ -706,7 +706,7 @@ describe("dispatchReplyFromConfig", () => {
     const replyResolver = async (
       _ctx: MsgContext,
       opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
+      _cfg?: DenebConfig,
     ) => {
       expect(opts?.onToolResult).toBeDefined();
       await opts?.onToolResult?.({ text: "🔧 exec: ls" });
@@ -738,7 +738,7 @@ describe("dispatchReplyFromConfig", () => {
     const replyResolver = async (
       _ctx: MsgContext,
       opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
+      _cfg?: DenebConfig,
     ) => {
       await opts?.onToolResult?.({
         text: "Approval required.\n\n```txt\n/approve 117ba06d allow-once\n```",
@@ -783,7 +783,7 @@ describe("dispatchReplyFromConfig", () => {
     const replyResolver = async (
       _ctx: MsgContext,
       opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
+      _cfg?: DenebConfig,
     ) => {
       // Simulate tool result emission
       await opts?.onToolResult?.({ text: "🔧 exec: ls" });
@@ -810,7 +810,7 @@ describe("dispatchReplyFromConfig", () => {
     const replyResolver = async (
       _ctx: MsgContext,
       opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
+      _cfg?: DenebConfig,
     ) => {
       expect(opts?.onToolResult).toBeDefined();
       await opts?.onToolResult?.({ text: "🔧 tools/sessions_send" });
@@ -841,7 +841,7 @@ describe("dispatchReplyFromConfig", () => {
     const replyResolver = async (
       _ctx: MsgContext,
       opts?: GetReplyOptions,
-      _cfg?: OpenClawConfig,
+      _cfg?: DenebConfig,
     ) => {
       await opts?.onToolResult?.({
         text: "Approval required.\n\n```txt\n/approve 117ba06d allow-once\n```",
@@ -952,7 +952,7 @@ describe("dispatchReplyFromConfig", () => {
         dispatch: { enabled: true },
         stream: { coalesceIdleMs: 0, maxChunkChars: 128 },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1027,7 +1027,7 @@ describe("dispatchReplyFromConfig", () => {
         enabled: true,
         dispatch: { enabled: true },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1109,7 +1109,7 @@ describe("dispatchReplyFromConfig", () => {
         enabled: true,
         dispatch: { enabled: true },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1166,7 +1166,7 @@ describe("dispatchReplyFromConfig", () => {
           default: "deny",
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1215,7 +1215,7 @@ describe("dispatchReplyFromConfig", () => {
           default: "deny",
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1272,7 +1272,7 @@ describe("dispatchReplyFromConfig", () => {
           default: "deny",
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1339,7 +1339,7 @@ describe("dispatchReplyFromConfig", () => {
           default: "allow",
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1392,7 +1392,7 @@ describe("dispatchReplyFromConfig", () => {
           default: "deny",
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1448,7 +1448,7 @@ describe("dispatchReplyFromConfig", () => {
           default: "deny",
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1507,7 +1507,7 @@ describe("dispatchReplyFromConfig", () => {
         dispatch: { enabled: true },
         stream: { coalesceIdleMs: 0, maxChunkChars: 256 },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1558,7 +1558,7 @@ describe("dispatchReplyFromConfig", () => {
         dispatch: { enabled: true },
         stream: { coalesceIdleMs: 0, maxChunkChars: 256 },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1608,7 +1608,7 @@ describe("dispatchReplyFromConfig", () => {
         dispatch: { enabled: true },
         stream: { coalesceIdleMs: 0, maxChunkChars: 128 },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1660,7 +1660,7 @@ describe("dispatchReplyFromConfig", () => {
         enabled: true,
         dispatch: { enabled: true },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1701,7 +1701,7 @@ describe("dispatchReplyFromConfig", () => {
         enabled: true,
         dispatch: { enabled: false },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1729,7 +1729,7 @@ describe("dispatchReplyFromConfig", () => {
         enabled: true,
         dispatch: { enabled: true },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1777,7 +1777,7 @@ describe("dispatchReplyFromConfig", () => {
         enabled: true,
         dispatch: { enabled: true },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -1828,7 +1828,7 @@ describe("dispatchReplyFromConfig", () => {
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "discord",
@@ -2061,7 +2061,7 @@ describe("dispatchReplyFromConfig", () => {
 
   it("emits diagnostics when enabled", async () => {
     setNoAbort();
-    const cfg = { diagnostics: { enabled: true } } as OpenClawConfig;
+    const cfg = { diagnostics: { enabled: true } } as DenebConfig;
     const dispatcher = createDispatcher();
     const ctx = buildTestCtx({
       Provider: "slack",
@@ -2095,7 +2095,7 @@ describe("dispatchReplyFromConfig", () => {
       ((hookName?: string) =>
         hookName === "inbound_claim" || hookName === "message_received") as () => boolean,
     );
-    hookMocks.registry.plugins = [{ id: "openclaw-codex-app-server", status: "loaded" }];
+    hookMocks.registry.plugins = [{ id: "deneb-codex-app-server", status: "loaded" }];
     hookMocks.runner.runInboundClaimForPluginOutcome.mockResolvedValue({
       status: "handled",
       result: { handled: true },
@@ -2113,8 +2113,8 @@ describe("dispatchReplyFromConfig", () => {
       boundAt: 1710000000000,
       metadata: {
         pluginBindingOwner: "plugin",
-        pluginId: "openclaw-codex-app-server",
-        pluginRoot: "/Users/huntharo/github/openclaw-app-server",
+        pluginId: "deneb-codex-app-server",
+        pluginRoot: "/Users/huntharo/github/deneb-app-server",
       },
     } satisfies SessionBindingRecord);
     const cfg = emptyConfig;
@@ -2143,7 +2143,7 @@ describe("dispatchReplyFromConfig", () => {
     expect(result).toEqual({ queuedFinal: false, counts: { tool: 0, block: 0, final: 0 } });
     expect(sessionBindingMocks.touch).toHaveBeenCalledWith("binding-1");
     expect(hookMocks.runner.runInboundClaimForPluginOutcome).toHaveBeenCalledWith(
-      "openclaw-codex-app-server",
+      "deneb-codex-app-server",
       expect.objectContaining({
         channel: "discord",
         accountId: "default",
@@ -2166,7 +2166,7 @@ describe("dispatchReplyFromConfig", () => {
       ((hookName?: string) =>
         hookName === "inbound_claim" || hookName === "message_received") as () => boolean,
     );
-    hookMocks.registry.plugins = [{ id: "openclaw-codex-app-server", status: "loaded" }];
+    hookMocks.registry.plugins = [{ id: "deneb-codex-app-server", status: "loaded" }];
     hookMocks.runner.runInboundClaimForPluginOutcome.mockResolvedValue({
       status: "handled",
       result: { handled: true },
@@ -2184,8 +2184,8 @@ describe("dispatchReplyFromConfig", () => {
       boundAt: 1710000000000,
       metadata: {
         pluginBindingOwner: "plugin",
-        pluginId: "openclaw-codex-app-server",
-        pluginRoot: "/Users/huntharo/github/openclaw-app-server",
+        pluginId: "deneb-codex-app-server",
+        pluginRoot: "/Users/huntharo/github/deneb-app-server",
       },
     } satisfies SessionBindingRecord);
     const cfg = emptyConfig;
@@ -2215,7 +2215,7 @@ describe("dispatchReplyFromConfig", () => {
     expect(result).toEqual({ queuedFinal: false, counts: { tool: 0, block: 0, final: 0 } });
     expect(sessionBindingMocks.touch).toHaveBeenCalledWith("binding-dm-1");
     expect(hookMocks.runner.runInboundClaimForPluginOutcome).toHaveBeenCalledWith(
-      "openclaw-codex-app-server",
+      "deneb-codex-app-server",
       expect.objectContaining({
         channel: "discord",
         accountId: "default",
@@ -2232,7 +2232,7 @@ describe("dispatchReplyFromConfig", () => {
     expect(replyResolver).not.toHaveBeenCalled();
   });
 
-  it("falls back to OpenClaw once per startup when a bound plugin is missing", async () => {
+  it("falls back to Deneb once per startup when a bound plugin is missing", async () => {
     setNoAbort();
     hookMocks.runner.hasHooks.mockImplementation(
       ((hookName?: string) =>
@@ -2254,14 +2254,14 @@ describe("dispatchReplyFromConfig", () => {
       boundAt: 1710000000000,
       metadata: {
         pluginBindingOwner: "plugin",
-        pluginId: "openclaw-codex-app-server",
+        pluginId: "deneb-codex-app-server",
         pluginName: "Codex App Server",
-        pluginRoot: "/Users/huntharo/github/openclaw-app-server",
+        pluginRoot: "/Users/huntharo/github/deneb-app-server",
         detachHint: "/codex_detach",
       },
     } satisfies SessionBindingRecord);
 
-    const replyResolver = vi.fn(async () => ({ text: "openclaw fallback" }) satisfies ReplyPayload);
+    const replyResolver = vi.fn(async () => ({ text: "deneb fallback" }) satisfies ReplyPayload);
 
     const firstDispatcher = createDispatcher();
     await dispatchReplyFromConfig({
@@ -2285,7 +2285,7 @@ describe("dispatchReplyFromConfig", () => {
 
     const firstNotice = (firstDispatcher.sendToolResult as ReturnType<typeof vi.fn>).mock
       .calls[0]?.[0] as ReplyPayload | undefined;
-    expect(firstNotice?.text).toContain("Routing this message to OpenClaw instead.");
+    expect(firstNotice?.text).toContain("Routing this message to Deneb instead.");
     expect(firstNotice?.text).toContain("/codex_detach");
     expect(replyResolver).toHaveBeenCalledTimes(1);
     expect(hookMocks.runner.runInboundClaim).not.toHaveBeenCalled();
@@ -2318,13 +2318,13 @@ describe("dispatchReplyFromConfig", () => {
     expect(hookMocks.runner.runInboundClaim).not.toHaveBeenCalled();
   });
 
-  it("falls back to OpenClaw when the bound plugin is loaded but has no inbound_claim handler", async () => {
+  it("falls back to Deneb when the bound plugin is loaded but has no inbound_claim handler", async () => {
     setNoAbort();
     hookMocks.runner.hasHooks.mockImplementation(
       ((hookName?: string) =>
         hookName === "inbound_claim" || hookName === "message_received") as () => boolean,
     );
-    hookMocks.registry.plugins = [{ id: "openclaw-codex-app-server", status: "loaded" }];
+    hookMocks.registry.plugins = [{ id: "deneb-codex-app-server", status: "loaded" }];
     hookMocks.runner.runInboundClaimForPluginOutcome.mockResolvedValue({
       status: "no_handler",
     });
@@ -2341,13 +2341,13 @@ describe("dispatchReplyFromConfig", () => {
       boundAt: 1710000000000,
       metadata: {
         pluginBindingOwner: "plugin",
-        pluginId: "openclaw-codex-app-server",
+        pluginId: "deneb-codex-app-server",
         pluginName: "Codex App Server",
-        pluginRoot: "/Users/huntharo/github/openclaw-app-server",
+        pluginRoot: "/Users/huntharo/github/deneb-app-server",
       },
     } satisfies SessionBindingRecord);
     const dispatcher = createDispatcher();
-    const replyResolver = vi.fn(async () => ({ text: "openclaw fallback" }) satisfies ReplyPayload);
+    const replyResolver = vi.fn(async () => ({ text: "deneb fallback" }) satisfies ReplyPayload);
 
     await dispatchReplyFromConfig({
       ctx: buildTestCtx({
@@ -2371,7 +2371,7 @@ describe("dispatchReplyFromConfig", () => {
     const notice = (dispatcher.sendToolResult as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as
       | ReplyPayload
       | undefined;
-    expect(notice?.text).toContain("Routing this message to OpenClaw instead.");
+    expect(notice?.text).toContain("Routing this message to Deneb instead.");
     expect(replyResolver).toHaveBeenCalledTimes(1);
     expect(hookMocks.runner.runInboundClaim).not.toHaveBeenCalled();
   });
@@ -2382,7 +2382,7 @@ describe("dispatchReplyFromConfig", () => {
       ((hookName?: string) =>
         hookName === "inbound_claim" || hookName === "message_received") as () => boolean,
     );
-    hookMocks.registry.plugins = [{ id: "openclaw-codex-app-server", status: "loaded" }];
+    hookMocks.registry.plugins = [{ id: "deneb-codex-app-server", status: "loaded" }];
     hookMocks.runner.runInboundClaimForPluginOutcome.mockResolvedValue({
       status: "declined",
     });
@@ -2399,9 +2399,9 @@ describe("dispatchReplyFromConfig", () => {
       boundAt: 1710000000000,
       metadata: {
         pluginBindingOwner: "plugin",
-        pluginId: "openclaw-codex-app-server",
+        pluginId: "deneb-codex-app-server",
         pluginName: "Codex App Server",
-        pluginRoot: "/Users/huntharo/github/openclaw-app-server",
+        pluginRoot: "/Users/huntharo/github/deneb-app-server",
         detachHint: "/codex_detach",
       },
     } satisfies SessionBindingRecord);
@@ -2441,7 +2441,7 @@ describe("dispatchReplyFromConfig", () => {
       ((hookName?: string) =>
         hookName === "inbound_claim" || hookName === "message_received") as () => boolean,
     );
-    hookMocks.registry.plugins = [{ id: "openclaw-codex-app-server", status: "loaded" }];
+    hookMocks.registry.plugins = [{ id: "deneb-codex-app-server", status: "loaded" }];
     hookMocks.runner.runInboundClaimForPluginOutcome.mockResolvedValue({
       status: "error",
       error: "boom",
@@ -2459,9 +2459,9 @@ describe("dispatchReplyFromConfig", () => {
       boundAt: 1710000000000,
       metadata: {
         pluginBindingOwner: "plugin",
-        pluginId: "openclaw-codex-app-server",
+        pluginId: "deneb-codex-app-server",
         pluginName: "Codex App Server",
-        pluginRoot: "/Users/huntharo/github/openclaw-app-server",
+        pluginRoot: "/Users/huntharo/github/deneb-app-server",
       },
     } satisfies SessionBindingRecord);
     const dispatcher = createDispatcher();
@@ -2496,7 +2496,7 @@ describe("dispatchReplyFromConfig", () => {
 
   it("marks diagnostics skipped for duplicate inbound messages", async () => {
     setNoAbort();
-    const cfg = { diagnostics: { enabled: true } } as OpenClawConfig;
+    const cfg = { diagnostics: { enabled: true } } as DenebConfig;
     const ctx = buildTestCtx({
       Provider: "whatsapp",
       OriginatingChannel: "whatsapp",

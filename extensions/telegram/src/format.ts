@@ -1,11 +1,11 @@
-import type { MarkdownTableMode } from "openclaw/plugin-sdk/config-runtime";
+import type { MarkdownTableMode } from "deneb/plugin-sdk/config-runtime";
 import {
   chunkMarkdownIR,
   markdownToIR,
   type MarkdownLinkSpan,
   type MarkdownIR,
-} from "openclaw/plugin-sdk/text-runtime";
-import { renderMarkdownWithMarkers } from "openclaw/plugin-sdk/text-runtime";
+} from "deneb/plugin-sdk/text-runtime";
+import { renderMarkdownWithMarkers } from "deneb/plugin-sdk/text-runtime";
 
 export type TelegramFormattedChunk = {
   html: string;

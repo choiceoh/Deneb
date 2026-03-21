@@ -17,7 +17,7 @@ type HookRunnerGlobalState = {
   registry: PluginRegistry | null;
 };
 
-const hookRunnerGlobalStateKey = Symbol.for("openclaw.plugins.hook-runner-global-state");
+const hookRunnerGlobalStateKey = Symbol.for("deneb.plugins.hook-runner-global-state");
 
 function getHookRunnerGlobalState(): HookRunnerGlobalState {
   const globalStore = globalThis as typeof globalThis & {

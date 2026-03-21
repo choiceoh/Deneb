@@ -5,7 +5,7 @@ import { readServiceStatusSummary } from "./status.service-summary.js";
 type DaemonStatusSummary = {
   label: string;
   installed: boolean | null;
-  managedByOpenClaw: boolean;
+  managedByDeneb: boolean;
   externallyManaged: boolean;
   loadedText: string;
   runtimeShort: string | null;
@@ -17,7 +17,7 @@ async function buildDaemonStatusSummary(_serviceLabel: "gateway"): Promise<Daemo
   return {
     label: summary.label,
     installed: summary.installed,
-    managedByOpenClaw: summary.managedByOpenClaw,
+    managedByDeneb: summary.managedByDeneb,
     externallyManaged: summary.externallyManaged,
     loadedText: summary.loadedText,
     runtimeShort: formatDaemonRuntimeShort(summary.runtime),

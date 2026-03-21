@@ -6,7 +6,7 @@ import {
   sortSubagentRuns,
   type SubagentTargetResolution,
 } from "../auto-reply/reply/subagents-utils.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { SessionEntry } from "../config/sessions.js";
 import { loadSessionStore, resolveStorePath, updateSessionStore } from "../config/sessions.js";
 import { callGateway } from "../gateway/call.js";
@@ -91,7 +91,7 @@ export type BuiltSubagentList = {
 };
 
 function resolveStorePathForKey(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   key: string,
   parsed?: ParsedAgentSessionKey | null,
 ) {
@@ -101,7 +101,7 @@ function resolveStorePathForKey(
 }
 
 export function resolveSessionEntryForKey(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   key: string;
   cache: Map<string, Record<string, SessionEntry>>;
 }): SessionEntryResolution {
@@ -119,7 +119,7 @@ export function resolveSessionEntryForKey(params: {
 }
 
 export function resolveSubagentController(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentSessionKey?: string;
 }): ResolvedSubagentController {
   const { mainKey, alias } = resolveMainSessionAlias(params.cfg);
@@ -255,7 +255,7 @@ function buildListText(params: {
 }
 
 export function buildSubagentList(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   runs: SubagentRunRecord[];
   recentMinutes: number;
   taskMaxChars?: number;
@@ -339,7 +339,7 @@ function ensureControllerOwnsRun(params: {
 }
 
 async function killSubagentRun(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   entry: SubagentRunRecord;
   cache: Map<string, Record<string, SessionEntry>>;
 }): Promise<{ killed: boolean; sessionId?: string }> {
@@ -381,7 +381,7 @@ async function killSubagentRun(params: {
 }
 
 async function cascadeKillChildren(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   parentChildSessionKey: string;
   cache: Map<string, Record<string, SessionEntry>>;
   seenChildSessionKeys?: Set<string>;
@@ -424,7 +424,7 @@ async function cascadeKillChildren(params: {
 }
 
 export async function killAllControlledSubagentRuns(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   controller: ResolvedSubagentController;
   runs: SubagentRunRecord[];
 }) {
@@ -468,7 +468,7 @@ export async function killAllControlledSubagentRuns(params: {
 }
 
 export async function killControlledSubagentRun(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   controller: ResolvedSubagentController;
   entry: SubagentRunRecord;
 }) {
@@ -533,7 +533,7 @@ export async function killControlledSubagentRun(params: {
   };
 }
 
-export async function killSubagentRunAdmin(params: { cfg: OpenClawConfig; sessionKey: string }) {
+export async function killSubagentRunAdmin(params: { cfg: DenebConfig; sessionKey: string }) {
   const targetSessionKey = params.sessionKey.trim();
   if (!targetSessionKey) {
     return { found: false as const, killed: false };
@@ -568,7 +568,7 @@ export async function killSubagentRunAdmin(params: { cfg: OpenClawConfig; sessio
 }
 
 export async function steerControlledSubagentRun(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   controller: ResolvedSubagentController;
   entry: SubagentRunRecord;
   message: string;
@@ -729,7 +729,7 @@ export async function steerControlledSubagentRun(params: {
 }
 
 export async function sendControlledSubagentMessage(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   controller: ResolvedSubagentController;
   entry: SubagentRunRecord;
   message: string;

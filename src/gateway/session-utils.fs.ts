@@ -72,7 +72,7 @@ function setCachedSessionTitleFields(cacheKey: string, stat: fs.Stats, value: Se
   }
 }
 
-export function attachOpenClawTranscriptMeta(
+export function attachDenebTranscriptMeta(
   message: unknown,
   meta: Record<string, unknown>,
 ): unknown {
@@ -81,12 +81,12 @@ export function attachOpenClawTranscriptMeta(
   }
   const record = message as Record<string, unknown>;
   const existing =
-    record.__openclaw && typeof record.__openclaw === "object" && !Array.isArray(record.__openclaw)
-      ? (record.__openclaw as Record<string, unknown>)
+    record.__deneb && typeof record.__deneb === "object" && !Array.isArray(record.__deneb)
+      ? (record.__deneb as Record<string, unknown>)
       : {};
   return {
     ...record,
-    __openclaw: {
+    __deneb: {
       ...existing,
       ...meta,
     },
@@ -117,7 +117,7 @@ export function readSessionMessages(
       if (parsed?.message) {
         messageSeq += 1;
         messages.push(
-          attachOpenClawTranscriptMeta(parsed.message, {
+          attachDenebTranscriptMeta(parsed.message, {
             ...(typeof parsed.id === "string" ? { id: parsed.id } : {}),
             seq: messageSeq,
           }),
@@ -135,7 +135,7 @@ export function readSessionMessages(
           role: "system",
           content: [{ type: "text", text: "Compaction" }],
           timestamp,
-          __openclaw: {
+          __deneb: {
             kind: "compaction",
             id: typeof parsed.id === "string" ? parsed.id : undefined,
             seq: messageSeq,
@@ -188,7 +188,7 @@ export function resolveSessionTranscriptCandidates(
   }
 
   const home = resolveRequiredHomeDir(process.env, os.homedir);
-  const legacyDir = path.join(home, ".openclaw", "sessions");
+  const legacyDir = path.join(home, ".deneb", "sessions");
   pushCandidate(() => resolveSessionTranscriptPathInDir(sessionId, legacyDir));
 
   return Array.from(new Set(candidates));
@@ -637,7 +637,7 @@ function extractLatestUsageFromTranscriptChunk(
           : typeof parsed.model === "string"
             ? parsed.model.trim()
             : undefined;
-      const isDeliveryMirror = modelProvider === "openclaw" && model === "delivery-mirror";
+      const isDeliveryMirror = modelProvider === "deneb" && model === "delivery-mirror";
       const hasMeaningfulUsage =
         hasNonzeroUsage(usage) ||
         typeof totalTokens === "number" ||

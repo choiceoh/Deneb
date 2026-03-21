@@ -25,7 +25,7 @@ afterEach(async () => {
 });
 
 async function createSessionStoreFile(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-session-message-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-session-message-"));
   cleanupDirs.push(dir);
   const storePath = path.join(dir, "sessions.json");
   testState.sessionStorePath = storePath;
@@ -163,9 +163,9 @@ describe("session.message websocket events", () => {
         expect(
           (
             event.payload as {
-              message?: { __openclaw?: { id?: string; seq?: number } };
+              message?: { __deneb?: { id?: string; seq?: number } };
             }
-          ).message?.__openclaw,
+          ).message?.__deneb,
         ).toMatchObject({
           id: appended.ok ? appended.messageId : undefined,
           seq: 1,

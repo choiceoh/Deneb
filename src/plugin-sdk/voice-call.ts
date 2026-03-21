@@ -17,5 +17,5 @@ export {
 } from "../infra/http-body.js";
 export { fetchWithSsrFGuard } from "../infra/net/fetch-guard.js";
 export type { SessionEntry } from "../config/sessions/types.js";
-export type { OpenClawPluginApi } from "../plugins/types.js";
+export type { DenebPluginApi } from "../plugins/types.js";
 export { sleep } from "../utils.js";

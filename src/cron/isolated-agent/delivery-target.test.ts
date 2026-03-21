@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 
 vi.mock("../../config/sessions.js", () => ({
   loadSessionStore: vi.fn().mockReturnValue({}),
@@ -32,15 +32,15 @@ import { maybeResolveIdLikeTarget } from "../../infra/outbound/target-resolver.j
 import { readChannelAllowFromStoreSync } from "../../pairing/pairing-store.js";
 import { resolveDeliveryTarget } from "./delivery-target.js";
 
-function makeCfg(overrides?: Partial<OpenClawConfig>): OpenClawConfig {
+function makeCfg(overrides?: Partial<DenebConfig>): DenebConfig {
   return {
     bindings: [],
     channels: {},
     ...overrides,
-  } as OpenClawConfig;
+  } as DenebConfig;
 }
 
-function makeTelegramBoundCfg(accountId = "account-b"): OpenClawConfig {
+function makeTelegramBoundCfg(accountId = "account-b"): DenebConfig {
   return makeCfg({
     bindings: [
       {
@@ -92,7 +92,7 @@ function setStoredWhatsAppAllowFrom(allowFrom: string[]) {
 }
 
 async function resolveForAgent(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   target?: { channel?: "last" | "telegram"; to?: string };
 }) {
   const channel = params.target ? params.target.channel : DEFAULT_TARGET.channel;
@@ -103,7 +103,7 @@ async function resolveForAgent(params: {
   });
 }
 
-async function resolveLastTarget(cfg: OpenClawConfig) {
+async function resolveLastTarget(cfg: DenebConfig) {
   return resolveForAgent({
     cfg,
     target: { channel: "last", to: undefined },

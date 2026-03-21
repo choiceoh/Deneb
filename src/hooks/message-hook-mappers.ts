@@ -1,5 +1,5 @@
 import type { FinalizedMsgContext } from "../auto-reply/templating.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type {
   PluginHookInboundClaimContext,
   PluginHookInboundClaimEvent,
@@ -343,8 +343,8 @@ export function toInternalMessageReceivedContext(
 
 export function toInternalMessageTranscribedContext(
   canonical: CanonicalInboundMessageHookContext,
-  cfg: OpenClawConfig,
-): MessageTranscribedHookContext & { cfg: OpenClawConfig } {
+  cfg: DenebConfig,
+): MessageTranscribedHookContext & { cfg: DenebConfig } {
   const shared = toInternalInboundMessageHookContextBase(canonical);
   return {
     ...shared,
@@ -355,8 +355,8 @@ export function toInternalMessageTranscribedContext(
 
 export function toInternalMessagePreprocessedContext(
   canonical: CanonicalInboundMessageHookContext,
-  cfg: OpenClawConfig,
-): MessagePreprocessedHookContext & { cfg: OpenClawConfig } {
+  cfg: DenebConfig,
+): MessagePreprocessedHookContext & { cfg: DenebConfig } {
   const shared = toInternalInboundMessageHookContextBase(canonical);
   return {
     ...shared,

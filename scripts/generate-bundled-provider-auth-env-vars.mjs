@@ -51,7 +51,7 @@ export function collectBundledProviderAuthEnvVars(params = {}) {
       continue;
     }
 
-    const manifestPath = path.join(extensionsRoot, dirent.name, "openclaw.plugin.json");
+    const manifestPath = path.join(extensionsRoot, dirent.name, "deneb.plugin.json");
     if (!fs.existsSync(manifestPath)) {
       continue;
     }

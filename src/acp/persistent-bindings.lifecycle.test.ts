@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { importFreshModule } from "../../test/helpers/import-fresh.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 
 const managerMocks = vi.hoisted(() => ({
   closeSession: vi.fn(),
@@ -41,7 +41,7 @@ const baseCfg = {
   agents: {
     list: [{ id: "codex" }, { id: "claude" }],
   },
-} satisfies OpenClawConfig;
+} satisfies DenebConfig;
 
 beforeEach(async () => {
   vi.resetModules();

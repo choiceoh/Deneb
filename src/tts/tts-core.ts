@@ -9,7 +9,7 @@ import {
   type ModelRef,
 } from "../agents/model-selection.js";
 import { resolveModelAsync } from "../agents/pi-embedded-runner/model.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type {
   ResolvedTtsConfig,
   ResolvedTtsModelOverrides,
@@ -418,7 +418,7 @@ type SummaryModelSelection = {
 };
 
 function resolveSummaryModelRef(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   config: ResolvedTtsConfig,
 ): SummaryModelSelection {
   const defaultRef = resolveDefaultModelForAgent({ cfg });
@@ -446,7 +446,7 @@ function isTextContentBlock(block: { type: string }): block is TextContent {
 export async function summarizeText(params: {
   text: string;
   targetLength: number;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   config: ResolvedTtsConfig;
   timeoutMs: number;
 }): Promise<SummarizeResult> {

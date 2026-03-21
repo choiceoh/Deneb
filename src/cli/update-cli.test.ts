@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig, ConfigFileSnapshot } from "../config/types.openclaw.js";
+import type { DenebConfig, ConfigFileSnapshot } from "../config/types.deneb.js";
 import type { UpdateRunResult } from "../infra/update-runner.js";
 import { withEnvAsync } from "../test-utils/env.js";
 
@@ -37,8 +37,8 @@ vi.mock("../infra/update-runner.js", () => ({
   runGatewayUpdate: vi.fn(),
 }));
 
-vi.mock("../infra/openclaw-root.js", () => ({
-  resolveOpenClawPackageRoot: vi.fn(),
+vi.mock("../infra/deneb-root.js", () => ({
+  resolveDenebPackageRoot: vi.fn(),
 }));
 
 vi.mock("../config/config.js", () => ({
@@ -137,7 +137,7 @@ vi.mock("../runtime.js", () => ({
 }));
 
 const { runGatewayUpdate } = await import("../infra/update-runner.js");
-const { resolveOpenClawPackageRoot } = await import("../infra/openclaw-root.js");
+const { resolveDenebPackageRoot } = await import("../infra/deneb-root.js");
 const { readConfigFileSnapshot, writeConfigFile } = await import("../config/config.js");
 const { checkUpdateStatus, fetchNpmTagVersion, resolveNpmChannelTag } =
   await import("../infra/update-check.js");
@@ -148,7 +148,7 @@ const { defaultRuntime } = await import("../runtime.js");
 const { updateCommand, updateStatusCommand, updateWizardCommand } = await import("./update-cli.js");
 
 describe("update-cli", () => {
-  const fixtureRoot = "/tmp/openclaw-update-tests";
+  const fixtureRoot = "/tmp/deneb-update-tests";
   let fixtureCount = 0;
 
   const createCaseDir = (prefix: string) => {
@@ -157,9 +157,9 @@ describe("update-cli", () => {
     return dir;
   };
 
-  const baseConfig = {} as OpenClawConfig;
+  const baseConfig = {} as DenebConfig;
   const baseSnapshot: ConfigFileSnapshot = {
-    path: "/tmp/openclaw-config.json",
+    path: "/tmp/deneb-config.json",
     exists: true,
     raw: "{}",
     parsed: {},
@@ -186,7 +186,7 @@ describe("update-cli", () => {
   };
 
   const mockPackageInstallStatus = (root: string) => {
-    vi.mocked(resolveOpenClawPackageRoot).mockResolvedValue(root);
+    vi.mocked(resolveDenebPackageRoot).mockResolvedValue(root);
     vi.mocked(checkUpdateStatus).mockResolvedValue({
       root,
       installKind: "package",
@@ -244,7 +244,7 @@ describe("update-cli", () => {
   };
 
   const setupNonInteractiveDowngrade = async () => {
-    const tempDir = createCaseDir("openclaw-update");
+    const tempDir = createCaseDir("deneb-update");
     setTty(false);
     readPackageVersion.mockResolvedValue("2.0.0");
 
@@ -268,7 +268,7 @@ describe("update-cli", () => {
   const setupUpdatedRootRefresh = (params?: {
     gatewayUpdateImpl?: () => Promise<UpdateRunResult>;
   }) => {
-    const root = createCaseDir("openclaw-updated-root");
+    const root = createCaseDir("deneb-updated-root");
     const entryPath = path.join(root, "dist", "entry.js");
     pathExists.mockImplementation(async (candidate: string) => candidate === entryPath);
     if (params?.gatewayUpdateImpl) {
@@ -288,7 +288,7 @@ describe("update-cli", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(resolveOpenClawPackageRoot).mockResolvedValue(process.cwd());
+    vi.mocked(resolveDenebPackageRoot).mockResolvedValue(process.cwd());
     vi.mocked(readConfigFileSnapshot).mockResolvedValue(baseSnapshot);
     vi.mocked(fetchNpmTagVersion).mockResolvedValue({
       tag: "latest",
@@ -331,7 +331,7 @@ describe("update-cli", () => {
       killed: false,
       termination: "exit",
     });
-    readPackageName.mockResolvedValue("openclaw");
+    readPackageName.mockResolvedValue("deneb");
     readPackageVersion.mockResolvedValue("1.0.0");
     resolveGlobalManager.mockResolvedValue("npm");
     serviceLoaded.mockResolvedValue(false);
@@ -340,12 +340,12 @@ describe("update-cli", () => {
       pid: 4242,
       state: "running",
     });
-    prepareRestartScript.mockResolvedValue("/tmp/openclaw-restart-test.sh");
+    prepareRestartScript.mockResolvedValue("/tmp/deneb-restart-test.sh");
     runRestartScript.mockResolvedValue(undefined);
     inspectPortUsage.mockResolvedValue({
       port: 18789,
       status: "busy",
-      listeners: [{ pid: 4242, command: "openclaw-gateway" }],
+      listeners: [{ pid: 4242, command: "deneb-gateway" }],
       hints: [],
     });
     classifyPortListener.mockReturnValue("gateway");
@@ -427,7 +427,7 @@ describe("update-cli", () => {
         options: { json: false },
         assert: () => {
           const logs = vi.mocked(defaultRuntime.log).mock.calls.map((call) => call[0]);
-          expect(logs.join("\n")).toContain("OpenClaw update status");
+          expect(logs.join("\n")).toContain("Deneb update status");
         },
       },
       {
@@ -462,7 +462,7 @@ describe("update-cli", () => {
       name: "defaults to stable channel for package installs when unset",
       options: { yes: true },
       prepare: async () => {
-        const tempDir = createCaseDir("openclaw-update");
+        const tempDir = createCaseDir("deneb-update");
         mockPackageInstallStatus(tempDir);
       },
       expectedChannel: undefined as "stable" | undefined,
@@ -475,7 +475,7 @@ describe("update-cli", () => {
       prepare: async () => {
         vi.mocked(readConfigFileSnapshot).mockResolvedValue({
           ...baseSnapshot,
-          config: { update: { channel: "beta" } } as OpenClawConfig,
+          config: { update: { channel: "beta" } } as DenebConfig,
         });
       },
       expectedChannel: "beta" as const,
@@ -508,7 +508,7 @@ describe("update-cli", () => {
       } else {
         expect(runGatewayUpdate).not.toHaveBeenCalled();
         expect(runCommandWithTimeout).toHaveBeenCalledWith(
-          ["npm", "i", "-g", "openclaw@latest", "--no-fund", "--no-audit", "--loglevel=error"],
+          ["npm", "i", "-g", "deneb@latest", "--no-fund", "--no-audit", "--loglevel=error"],
           expect.any(Object),
         );
       }
@@ -524,12 +524,12 @@ describe("update-cli", () => {
   );
 
   it("falls back to latest when beta tag is older than release", async () => {
-    const tempDir = createCaseDir("openclaw-update");
+    const tempDir = createCaseDir("deneb-update");
 
     mockPackageInstallStatus(tempDir);
     vi.mocked(readConfigFileSnapshot).mockResolvedValue({
       ...baseSnapshot,
-      config: { update: { channel: "beta" } } as OpenClawConfig,
+      config: { update: { channel: "beta" } } as DenebConfig,
     });
     vi.mocked(resolveNpmChannelTag).mockResolvedValue({
       tag: "latest",
@@ -539,7 +539,7 @@ describe("update-cli", () => {
 
     expect(runGatewayUpdate).not.toHaveBeenCalled();
     expect(runCommandWithTimeout).toHaveBeenCalledWith(
-      ["npm", "i", "-g", "openclaw@latest", "--no-fund", "--no-audit", "--loglevel=error"],
+      ["npm", "i", "-g", "deneb@latest", "--no-fund", "--no-audit", "--loglevel=error"],
       expect.any(Object),
     );
   });
@@ -549,46 +549,46 @@ describe("update-cli", () => {
       {
         name: "explicit dist-tag",
         run: async () => {
-          mockPackageInstallStatus(createCaseDir("openclaw-update"));
+          mockPackageInstallStatus(createCaseDir("deneb-update"));
           await updateCommand({ tag: "next" });
         },
-        expectedSpec: "openclaw@next",
+        expectedSpec: "deneb@next",
       },
       {
         name: "main shorthand",
         run: async () => {
-          mockPackageInstallStatus(createCaseDir("openclaw-update"));
+          mockPackageInstallStatus(createCaseDir("deneb-update"));
           await updateCommand({ yes: true, tag: "main" });
         },
-        expectedSpec: "github:openclaw/openclaw#main",
+        expectedSpec: "github:deneb/deneb#main",
       },
       {
         name: "explicit git package spec",
         run: async () => {
-          mockPackageInstallStatus(createCaseDir("openclaw-update"));
-          await updateCommand({ yes: true, tag: "github:openclaw/openclaw#main" });
+          mockPackageInstallStatus(createCaseDir("deneb-update"));
+          await updateCommand({ yes: true, tag: "github:deneb/deneb#main" });
         },
-        expectedSpec: "github:openclaw/openclaw#main",
+        expectedSpec: "github:deneb/deneb#main",
       },
       {
-        name: "OPENCLAW_UPDATE_PACKAGE_SPEC override",
+        name: "DENEB_UPDATE_PACKAGE_SPEC override",
         run: async () => {
-          mockPackageInstallStatus(createCaseDir("openclaw-update"));
+          mockPackageInstallStatus(createCaseDir("deneb-update"));
           await withEnvAsync(
-            { OPENCLAW_UPDATE_PACKAGE_SPEC: "http://10.211.55.2:8138/openclaw-next.tgz" },
+            { DENEB_UPDATE_PACKAGE_SPEC: "http://10.211.55.2:8138/deneb-next.tgz" },
             async () => {
               await updateCommand({ yes: true, tag: "latest" });
             },
           );
         },
-        expectedSpec: "http://10.211.55.2:8138/openclaw-next.tgz",
+        expectedSpec: "http://10.211.55.2:8138/deneb-next.tgz",
       },
     ]) {
       vi.clearAllMocks();
-      readPackageName.mockResolvedValue("openclaw");
+      readPackageName.mockResolvedValue("deneb");
       readPackageVersion.mockResolvedValue("1.0.0");
       resolveGlobalManager.mockResolvedValue("npm");
-      vi.mocked(resolveOpenClawPackageRoot).mockResolvedValue(process.cwd());
+      vi.mocked(resolveDenebPackageRoot).mockResolvedValue(process.cwd());
       await scenario.run();
       expectPackageInstallSpec(scenario.expectedSpec);
     }
@@ -596,11 +596,11 @@ describe("update-cli", () => {
 
   it("prepends portable Git PATH for package updates on Windows", async () => {
     const platformSpy = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
-    const tempDir = createCaseDir("openclaw-update");
-    const localAppData = createCaseDir("openclaw-localappdata");
+    const tempDir = createCaseDir("deneb-update");
+    const localAppData = createCaseDir("deneb-localappdata");
     const portableGitMingw = path.join(
       localAppData,
-      "OpenClaw",
+      "Deneb",
       "deps",
       "portable-git",
       "mingw64",
@@ -608,7 +608,7 @@ describe("update-cli", () => {
     );
     const portableGitUsr = path.join(
       localAppData,
-      "OpenClaw",
+      "Deneb",
       "deps",
       "portable-git",
       "usr",
@@ -803,8 +803,8 @@ describe("update-cli", () => {
       invoke: async () => {
         await withEnvAsync(
           {
-            OPENCLAW_STATE_DIR: "./state",
-            OPENCLAW_CONFIG_PATH: "./config/openclaw.json",
+            DENEB_STATE_DIR: "./state",
+            DENEB_CONFIG_PATH: "./config/deneb.json",
           },
           async () => {
             await updateCommand({});
@@ -815,8 +815,8 @@ describe("update-cli", () => {
         expect.objectContaining({
           cwd: root,
           env: expect.objectContaining({
-            OPENCLAW_STATE_DIR: path.resolve("./state"),
-            OPENCLAW_CONFIG_PATH: path.resolve("./config/openclaw.json"),
+            DENEB_STATE_DIR: path.resolve("./state"),
+            DENEB_CONFIG_PATH: path.resolve("./config/deneb.json"),
           }),
           timeoutMs: 60_000,
         }),
@@ -847,7 +847,7 @@ describe("update-cli", () => {
         try {
           await withEnvAsync(
             {
-              OPENCLAW_STATE_DIR: "./state",
+              DENEB_STATE_DIR: "./state",
             },
             async () => {
               await updateCommand({});
@@ -863,7 +863,7 @@ describe("update-cli", () => {
         expect.objectContaining({
           cwd: expect.any(String),
           env: expect.objectContaining({
-            OPENCLAW_STATE_DIR: path.resolve(context?.originalCwd ?? process.cwd(), "./state"),
+            DENEB_STATE_DIR: path.resolve(context?.originalCwd ?? process.cwd(), "./state"),
           }),
           timeoutMs: 60_000,
         }),
@@ -890,7 +890,7 @@ describe("update-cli", () => {
   it("updateCommand continues after doctor sub-step and clears update flag", async () => {
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0);
     try {
-      await withEnvAsync({ OPENCLAW_UPDATE_IN_PROGRESS: undefined }, async () => {
+      await withEnvAsync({ DENEB_UPDATE_IN_PROGRESS: undefined }, async () => {
         vi.mocked(runGatewayUpdate).mockResolvedValue(makeOkUpdateResult());
         vi.mocked(runDaemonRestart).mockResolvedValue(true);
         vi.mocked(doctorCommand).mockResolvedValue(undefined);
@@ -902,7 +902,7 @@ describe("update-cli", () => {
           defaultRuntime,
           expect.objectContaining({ nonInteractive: true }),
         );
-        expect(process.env.OPENCLAW_UPDATE_IN_PROGRESS).toBeUndefined();
+        expect(process.env.DENEB_UPDATE_IN_PROGRESS).toBeUndefined();
 
         const logLines = vi.mocked(defaultRuntime.log).mock.calls.map((call) => String(call[0]));
         expect(
@@ -991,8 +991,8 @@ describe("update-cli", () => {
   });
 
   it("updateWizardCommand offers dev checkout and forwards selections", async () => {
-    const tempDir = createCaseDir("openclaw-update-wizard");
-    await withEnvAsync({ OPENCLAW_GIT_DIR: tempDir }, async () => {
+    const tempDir = createCaseDir("deneb-update-wizard");
+    await withEnvAsync({ DENEB_GIT_DIR: tempDir }, async () => {
       setTty(true);
 
       vi.mocked(checkUpdateStatus).mockResolvedValue({

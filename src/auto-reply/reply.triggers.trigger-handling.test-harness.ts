@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, expect, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 
 // Avoid exporting vitest mock types (TS2742 under pnpm + d.ts emit).
 // oxlint-disable-next-line typescript/no-explicit-any
@@ -110,7 +110,7 @@ type TempHomeEnvSnapshot = {
   userProfile: string | undefined;
   homeDrive: string | undefined;
   homePath: string | undefined;
-  openclawHome: string | undefined;
+  denebHome: string | undefined;
   stateDir: string | undefined;
 };
 
@@ -123,8 +123,8 @@ function snapshotTempHomeEnv(): TempHomeEnvSnapshot {
     userProfile: process.env.USERPROFILE,
     homeDrive: process.env.HOMEDRIVE,
     homePath: process.env.HOMEPATH,
-    openclawHome: process.env.OPENCLAW_HOME,
-    stateDir: process.env.OPENCLAW_STATE_DIR,
+    denebHome: process.env.DENEB_HOME,
+    stateDir: process.env.DENEB_STATE_DIR,
   };
 }
 
@@ -141,15 +141,15 @@ function restoreTempHomeEnv(snapshot: TempHomeEnvSnapshot): void {
   restoreKey("USERPROFILE", snapshot.userProfile);
   restoreKey("HOMEDRIVE", snapshot.homeDrive);
   restoreKey("HOMEPATH", snapshot.homePath);
-  restoreKey("OPENCLAW_HOME", snapshot.openclawHome);
-  restoreKey("OPENCLAW_STATE_DIR", snapshot.stateDir);
+  restoreKey("DENEB_HOME", snapshot.denebHome);
+  restoreKey("DENEB_STATE_DIR", snapshot.stateDir);
 }
 
 function setTempHomeEnv(home: string): void {
   process.env.HOME = home;
   process.env.USERPROFILE = home;
-  delete process.env.OPENCLAW_HOME;
-  process.env.OPENCLAW_STATE_DIR = join(home, ".openclaw");
+  delete process.env.DENEB_HOME;
+  process.env.DENEB_STATE_DIR = join(home, ".deneb");
 
   if (process.platform !== "win32") {
     return;
@@ -163,7 +163,7 @@ function setTempHomeEnv(home: string): void {
 }
 
 beforeAll(async () => {
-  suiteTempHomeRoot = await fs.mkdtemp(join(os.tmpdir(), "openclaw-triggers-suite-"));
+  suiteTempHomeRoot = await fs.mkdtemp(join(os.tmpdir(), "deneb-triggers-suite-"));
 });
 
 afterAll(async () => {
@@ -178,7 +178,7 @@ afterAll(async () => {
 export async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
   const home = join(suiteTempHomeRoot, `case-${++suiteTempHomeId}`);
   const snapshot = snapshotTempHomeEnv();
-  await fs.mkdir(join(home, ".openclaw", "agents", "main", "sessions"), { recursive: true });
+  await fs.mkdir(join(home, ".deneb", "agents", "main", "sessions"), { recursive: true });
   setTempHomeEnv(home);
 
   try {
@@ -192,12 +192,12 @@ export async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise
   }
 }
 
-export function makeCfg(home: string): OpenClawConfig {
+export function makeCfg(home: string): DenebConfig {
   return {
     agents: {
       defaults: {
         model: { primary: "anthropic/claude-opus-4-5" },
-        workspace: join(home, "openclaw"),
+        workspace: join(home, "deneb"),
         // Test harness: avoid 1s coalescer idle sleeps that dominate trigger suites.
         blockStreamingCoalesce: { idleMs: 1 },
         // Trigger tests assert routing/authorization behavior, not delivery pacing.
@@ -215,7 +215,7 @@ export function makeCfg(home: string): OpenClawConfig {
       },
     },
     session: { store: join(home, "sessions.json") },
-  } as OpenClawConfig;
+  } as DenebConfig;
 }
 
 export async function loadGetReplyFromConfig() {
@@ -251,7 +251,7 @@ export async function readSessionStore(cfg: {
 export function makeWhatsAppElevatedCfg(
   home: string,
   opts?: { elevatedEnabled?: boolean; requireMentionInGroups?: boolean },
-): OpenClawConfig {
+): DenebConfig {
   const cfg = makeCfg(home);
   cfg.channels ??= {};
   cfg.channels.whatsapp = {
@@ -273,7 +273,7 @@ export function makeWhatsAppElevatedCfg(
 }
 
 export async function runDirectElevatedToggleAndLoadStore(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   getReplyFromConfig: typeof import("./reply.js").getReplyFromConfig;
   body?: string;
 }): Promise<{

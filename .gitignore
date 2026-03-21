@@ -34,7 +34,7 @@ test-results/
 playwright-report/
 blob-report/
 
-# OpenClaw runtime
+# Deneb runtime
 deneb-3142/
 .config-backups/
 

@@ -1,10 +1,10 @@
-import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
-import { resolveThreadSessionKeys } from "openclaw/plugin-sdk/routing";
+import type { DenebConfig } from "deneb/plugin-sdk/config-runtime";
+import { resolveThreadSessionKeys } from "deneb/plugin-sdk/routing";
 import { describe, expect, it } from "vitest";
 import { resolveTelegramConversationBaseSessionKey } from "./conversation-route.js";
 
 describe("resolveTelegramConversationBaseSessionKey", () => {
-  const cfg: OpenClawConfig = {};
+  const cfg: DenebConfig = {};
 
   it("keeps the routed session key for the default account", () => {
     expect(

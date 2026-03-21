@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseTelegramTarget } from "../../extensions/telegram/src/targets.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 
 // Mock session store so we can control what entries exist.
 const mockStore: Record<string, Record<string, unknown>> = {};
@@ -51,7 +51,7 @@ beforeEach(() => {
 });
 
 describe("resolveDeliveryTarget thread session lookup", () => {
-  const cfg: OpenClawConfig = {};
+  const cfg: DenebConfig = {};
 
   it("uses thread session entry when sessionKey is provided and entry exists", async () => {
     mockStore["/mock/store.json"] = {

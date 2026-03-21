@@ -30,15 +30,15 @@ describe("resetCommand", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resolveCleanupPlanFromDisk.mockReturnValue({
-      stateDir: "/tmp/.openclaw",
-      configPath: "/tmp/.openclaw/openclaw.json",
-      oauthDir: "/tmp/.openclaw/credentials",
+      stateDir: "/tmp/.deneb",
+      configPath: "/tmp/.deneb/deneb.json",
+      oauthDir: "/tmp/.deneb/credentials",
       configInsideState: true,
       oauthInsideState: true,
-      workspaceDirs: ["/tmp/.openclaw/workspace"],
+      workspaceDirs: ["/tmp/.deneb/workspace"],
     });
     removePath.mockResolvedValue({ ok: true });
-    listAgentSessionDirs.mockResolvedValue(["/tmp/.openclaw/agents/main/sessions"]);
+    listAgentSessionDirs.mockResolvedValue(["/tmp/.deneb/agents/main/sessions"]);
     removeStateAndLinkedPaths.mockResolvedValue(undefined);
     removeWorkspaceDirs.mockResolvedValue(undefined);
     vi.spyOn(runtime, "log").mockImplementation(() => {});
@@ -53,7 +53,7 @@ describe("resetCommand", () => {
       dryRun: true,
     });
 
-    expect(runtime.log).toHaveBeenCalledWith(expect.stringContaining("openclaw backup create"));
+    expect(runtime.log).toHaveBeenCalledWith(expect.stringContaining("deneb backup create"));
   });
 
   it("does not recommend backup for config-only reset", async () => {
@@ -64,6 +64,6 @@ describe("resetCommand", () => {
       dryRun: true,
     });
 
-    expect(runtime.log).not.toHaveBeenCalledWith(expect.stringContaining("openclaw backup create"));
+    expect(runtime.log).not.toHaveBeenCalledWith(expect.stringContaining("deneb backup create"));
   });
 });

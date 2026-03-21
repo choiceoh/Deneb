@@ -3,7 +3,7 @@ import { resolveCronStyleNow } from "../../agents/current-time.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
 import { DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR } from "../../agents/pi-settings.js";
 import { parseNonNegativeByteSize } from "../../config/byte-size.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { resolveFreshSessionTotalTokens, type SessionEntry } from "../../config/sessions.js";
 import { SILENT_REPLY_TOKEN } from "../tokens.js";
 
@@ -57,7 +57,7 @@ function formatDateStampInTimezone(nowMs: number, timezone: string): string {
 }
 
 export function resolveMemoryFlushRelativePathForRun(params: {
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   nowMs?: number;
 }): string {
   const nowMs = Number.isFinite(params.nowMs) ? (params.nowMs as number) : Date.now();
@@ -68,7 +68,7 @@ export function resolveMemoryFlushRelativePathForRun(params: {
 
 export function resolveMemoryFlushPromptForRun(params: {
   prompt: string;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   nowMs?: number;
 }): string {
   const nowMs = Number.isFinite(params.nowMs) ? (params.nowMs as number) : Date.now();
@@ -110,7 +110,7 @@ const normalizeNonNegativeInt = (value: unknown): number | null => {
   return int >= 0 ? int : null;
 };
 
-export function resolveMemoryFlushSettings(cfg?: OpenClawConfig): MemoryFlushSettings | null {
+export function resolveMemoryFlushSettings(cfg?: DenebConfig): MemoryFlushSettings | null {
   const defaults = cfg?.agents?.defaults?.compaction?.memoryFlush;
   const enabled = defaults?.enabled ?? true;
   if (!enabled) {

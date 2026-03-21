@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../../config/types.js";
+import type { DenebConfig } from "../../config/types.js";
 import type { DirectoryConfigParams } from "./directory-types.js";
 import type { ChannelDirectoryEntry } from "./types.js";
 
@@ -101,7 +101,7 @@ export function listInspectedDirectoryEntriesFromSources<InspectedAccount>(
   params: DirectoryConfigParams & {
     kind: "user" | "group";
     inspectAccount: (
-      cfg: OpenClawConfig,
+      cfg: DenebConfig,
       accountId?: string | null,
     ) => InspectedAccount | null | undefined;
     resolveSources: (account: InspectedAccount) => Iterable<unknown>[];
@@ -124,7 +124,7 @@ export function listInspectedDirectoryEntriesFromSources<InspectedAccount>(
 export function listResolvedDirectoryEntriesFromSources<ResolvedAccount>(
   params: DirectoryConfigParams & {
     kind: "user" | "group";
-    resolveAccount: (cfg: OpenClawConfig, accountId?: string | null) => ResolvedAccount;
+    resolveAccount: (cfg: DenebConfig, accountId?: string | null) => ResolvedAccount;
     resolveSources: (account: ResolvedAccount) => Iterable<unknown>[];
     normalizeId: (entry: string) => string | null | undefined;
   },
@@ -213,7 +213,7 @@ export function listDirectoryGroupEntriesFromMapKeysAndAllowFrom(params: {
 
 export function listResolvedDirectoryUserEntriesFromAllowFrom<ResolvedAccount>(
   params: DirectoryConfigParams & {
-    resolveAccount: (cfg: OpenClawConfig, accountId?: string | null) => ResolvedAccount;
+    resolveAccount: (cfg: DenebConfig, accountId?: string | null) => ResolvedAccount;
     resolveAllowFrom: (account: ResolvedAccount) => readonly unknown[] | undefined;
     normalizeId?: (entry: string) => string | null | undefined;
   },
@@ -229,7 +229,7 @@ export function listResolvedDirectoryUserEntriesFromAllowFrom<ResolvedAccount>(
 
 export function listResolvedDirectoryGroupEntriesFromMapKeys<ResolvedAccount>(
   params: DirectoryConfigParams & {
-    resolveAccount: (cfg: OpenClawConfig, accountId?: string | null) => ResolvedAccount;
+    resolveAccount: (cfg: DenebConfig, accountId?: string | null) => ResolvedAccount;
     resolveGroups: (account: ResolvedAccount) => Record<string, unknown> | undefined;
     normalizeId?: (entry: string) => string | null | undefined;
   },

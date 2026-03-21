@@ -10,7 +10,7 @@ import { formatCliCommand } from "../cli/command-format.js";
 import { createDefaultDeps } from "../cli/deps.js";
 import { isRestartEnabled } from "../config/commands.js";
 import {
-  type OpenClawConfig,
+  type DenebConfig,
   applyConfigOverrides,
   isNixMode,
   loadConfig,
@@ -31,7 +31,7 @@ import { logAcceptedEnvOption } from "../infra/env.js";
 import { createExecApprovalForwarder } from "../infra/exec-approval-forwarder.js";
 import { startHeartbeatRunner, type HeartbeatRunner } from "../infra/heartbeat-runner.js";
 import { getMachineDisplayName } from "../infra/machine-name.js";
-import { ensureOpenClawCliOnPath } from "../infra/path-env.js";
+import { ensureDenebCliOnPath } from "../infra/path-env.js";
 import {
   detectPluginInstallPathIssue,
   formatPluginInstallPathIssue,
@@ -123,7 +123,7 @@ import { maybeSeedControlUiAllowedOriginsAtStartup } from "./startup-control-ui-
 
 export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
 
-ensureOpenClawCliOnPath();
+ensureDenebCliOnPath();
 
 const log = createSubsystemLogger("gateway");
 const logCanvas = log.child("canvas");
@@ -208,16 +208,16 @@ export async function startGatewayServer(
   opts: GatewayServerOptions = {},
 ): Promise<GatewayServer> {
   const minimalTestGateway =
-    process.env.VITEST === "1" && process.env.OPENCLAW_TEST_MINIMAL_GATEWAY === "1";
+    process.env.VITEST === "1" && process.env.DENEB_TEST_MINIMAL_GATEWAY === "1";
 
   // Ensure all default port derivations (browser/canvas) see the actual runtime port.
-  process.env.OPENCLAW_GATEWAY_PORT = String(port);
+  process.env.DENEB_GATEWAY_PORT = String(port);
   logAcceptedEnvOption({
-    key: "OPENCLAW_RAW_STREAM",
+    key: "DENEB_RAW_STREAM",
     description: "raw stream logging enabled",
   });
   logAcceptedEnvOption({
-    key: "OPENCLAW_RAW_STREAM_PATH",
+    key: "DENEB_RAW_STREAM_PATH",
     description: "raw stream log path override",
   });
 
@@ -270,7 +270,7 @@ export async function startGatewayServer(
   const emitSecretsStateEvent = (
     code: "SECRETS_RELOADER_DEGRADED" | "SECRETS_RELOADER_RECOVERED",
     message: string,
-    cfg: OpenClawConfig,
+    cfg: DenebConfig,
   ) => {
     enqueueSystemEvent(`[${code}] ${message}`, {
       sessionKey: resolveMainSessionKey(cfg),
@@ -287,7 +287,7 @@ export async function startGatewayServer(
     return await run;
   };
   const activateRuntimeSecrets = async (
-    config: OpenClawConfig,
+    config: DenebConfig,
     params: { reason: "startup" | "reload" | "restart-check"; activate: boolean },
   ) =>
     await runWithSecretsActivationLock(async () => {
@@ -332,7 +332,7 @@ export async function startGatewayServer(
       }
     });
 
-  let cfgAtStart: OpenClawConfig;
+  let cfgAtStart: DenebConfig;
   const startupRuntimeConfig = applyConfigOverrides(configSnapshot.config);
   const authBootstrap = await prepareGatewayStartupConfig({
     configSnapshot,
@@ -349,7 +349,7 @@ export async function startGatewayServer(
       );
     } else {
       log.warn(
-        "Gateway auth token was missing. Generated a runtime token for this startup without changing config; restart will generate a different token. Persist one with `openclaw config set gateway.auth.mode token` and `openclaw config set gateway.auth.token <token>`.",
+        "Gateway auth token was missing. Generated a runtime token for this startup without changing config; restart will generate a different token. Persist one with `deneb config set gateway.auth.mode token` and `deneb config set gateway.auth.token <token>`.",
       );
     }
   }
@@ -381,8 +381,8 @@ export async function startGatewayServer(
     const lines = formatPluginInstallPathIssue({
       issue: matrixInstallPathIssue,
       pluginLabel: "Matrix",
-      defaultInstallCommand: "openclaw plugins install @openclaw/matrix",
-      repoInstallCommand: "openclaw plugins install ./extensions/matrix",
+      defaultInstallCommand: "deneb plugins install @deneb/matrix",
+      repoInstallCommand: "deneb plugins install ./extensions/matrix",
       formatCommand: formatCliCommand,
     });
     log.warn(

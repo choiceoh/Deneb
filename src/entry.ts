@@ -9,13 +9,13 @@ import { shouldSkipRespawnForArgv } from "./cli/respawn-policy.js";
 import { normalizeWindowsArgv } from "./cli/windows-argv.js";
 import { isTruthyEnvValue, normalizeEnv } from "./infra/env.js";
 import { isMainModule } from "./infra/is-main.js";
-import { ensureOpenClawExecMarkerOnProcess } from "./infra/openclaw-exec-env.js";
+import { ensureDenebExecMarkerOnProcess } from "./infra/deneb-exec-env.js";
 import { installProcessWarningFilter } from "./infra/warning-filter.js";
 import { attachChildProcessBridge } from "./process/child-process-bridge.js";
 
 const ENTRY_WRAPPER_PAIRS = [
-  { wrapperBasename: "openclaw.mjs", entryBasename: "entry.js" },
-  { wrapperBasename: "openclaw.js", entryBasename: "entry.js" },
+  { wrapperBasename: "deneb.mjs", entryBasename: "entry.js" },
+  { wrapperBasename: "deneb.js", entryBasename: "entry.js" },
 ] as const;
 
 function shouldForceReadOnlyAuthStore(argv: string[]): boolean {
@@ -44,8 +44,8 @@ if (
   const { installGaxiosFetchCompat } = await import("./infra/gaxios-fetch-compat.js");
 
   await installGaxiosFetchCompat();
-  process.title = "openclaw";
-  ensureOpenClawExecMarkerOnProcess();
+  process.title = "deneb";
+  ensureDenebExecMarkerOnProcess();
   installProcessWarningFilter();
   normalizeEnv();
   if (!isTruthyEnvValue(process.env.NODE_DISABLE_COMPILE_CACHE)) {
@@ -57,7 +57,7 @@ if (
   }
 
   if (shouldForceReadOnlyAuthStore(process.argv)) {
-    process.env.OPENCLAW_AUTH_STORE_READONLY = "1";
+    process.env.DENEB_AUTH_STORE_READONLY = "1";
   }
 
   if (process.argv.includes("--no-color")) {
@@ -84,10 +84,10 @@ if (
     if (shouldSkipRespawnForArgv(process.argv)) {
       return false;
     }
-    if (isTruthyEnvValue(process.env.OPENCLAW_NO_RESPAWN)) {
+    if (isTruthyEnvValue(process.env.DENEB_NO_RESPAWN)) {
       return false;
     }
-    if (isTruthyEnvValue(process.env.OPENCLAW_NODE_OPTIONS_READY)) {
+    if (isTruthyEnvValue(process.env.DENEB_NODE_OPTIONS_READY)) {
       return false;
     }
     if (hasExperimentalWarningSuppressed()) {
@@ -95,7 +95,7 @@ if (
     }
 
     // Respawn guard (and keep recursion bounded if something goes wrong).
-    process.env.OPENCLAW_NODE_OPTIONS_READY = "1";
+    process.env.DENEB_NODE_OPTIONS_READY = "1";
     // Pass flag as a Node CLI option, not via NODE_OPTIONS (--disable-warning is disallowed in NODE_OPTIONS).
     const child = spawn(
       process.execPath,
@@ -118,7 +118,7 @@ if (
 
     child.once("error", (error) => {
       console.error(
-        "[openclaw] Failed to respawn CLI:",
+        "[deneb] Failed to respawn CLI:",
         error instanceof Error ? (error.stack ?? error.message) : error,
       );
       process.exit(1);
@@ -135,12 +135,12 @@ if (
     Promise.all([import("./version.js"), import("./infra/git-commit.js")])
       .then(([{ VERSION }, { resolveCommitHash }]) => {
         const commit = resolveCommitHash({ moduleUrl: import.meta.url });
-        console.log(commit ? `OpenClaw ${VERSION} (${commit})` : `OpenClaw ${VERSION}`);
+        console.log(commit ? `Deneb ${VERSION} (${commit})` : `Deneb ${VERSION}`);
         process.exit(0);
       })
       .catch((error) => {
         console.error(
-          "[openclaw] Failed to resolve version:",
+          "[deneb] Failed to resolve version:",
           error instanceof Error ? (error.stack ?? error.message) : error,
         );
         process.exitCode = 1;
@@ -154,7 +154,7 @@ if (
     const parsed = parseCliProfileArgs(process.argv);
     if (!parsed.ok) {
       // Keep it simple; Commander will handle rich help/errors after we strip flags.
-      console.error(`[openclaw] ${parsed.error}`);
+      console.error(`[deneb] ${parsed.error}`);
       process.exit(2);
     }
 
@@ -184,7 +184,7 @@ export function tryHandleRootHelpFastPath(
     deps.onError ??
     ((error: unknown) => {
       console.error(
-        "[openclaw] Failed to display help:",
+        "[deneb] Failed to display help:",
         error instanceof Error ? (error.stack ?? error.message) : error,
       );
       process.exitCode = 1;
@@ -213,7 +213,7 @@ function runMainOrRootHelp(argv: string[]): void {
     .then(({ runCli }) => runCli(argv))
     .catch((error) => {
       console.error(
-        "[openclaw] Failed to start CLI:",
+        "[deneb] Failed to start CLI:",
         error instanceof Error ? (error.stack ?? error.message) : error,
       );
       process.exitCode = 1;

@@ -3,9 +3,9 @@ import {
   extractErrorCode,
   formatErrorMessage,
   readErrorName,
-} from "openclaw/plugin-sdk/infra-runtime";
+} from "deneb/plugin-sdk/infra-runtime";
 
-const TELEGRAM_NETWORK_ORIGIN = Symbol("openclaw.telegram.network-origin");
+const TELEGRAM_NETWORK_ORIGIN = Symbol("deneb.telegram.network-origin");
 
 const RECOVERABLE_ERROR_CODES = new Set([
   "ECONNRESET",

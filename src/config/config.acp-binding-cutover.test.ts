@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { OpenClawSchema } from "./zod-schema.js";
+import { DenebSchema } from "./zod-schema.js";
 
 describe("ACP binding cutover schema", () => {
   it("accepts top-level typed ACP bindings with per-agent runtime defaults", () => {
-    const parsed = OpenClawSchema.safeParse({
+    const parsed = DenebSchema.safeParse({
       agents: {
         list: [
           { id: "main", default: true, runtime: { type: "embedded" } },
@@ -15,7 +15,7 @@ describe("ACP binding cutover schema", () => {
                 agent: "codex",
                 backend: "acpx",
                 mode: "persistent",
-                cwd: "/workspace/openclaw",
+                cwd: "/workspace/deneb",
               },
             },
           },
@@ -47,7 +47,7 @@ describe("ACP binding cutover schema", () => {
   });
 
   it("rejects legacy Discord channel-local ACP binding fields", () => {
-    const parsed = OpenClawSchema.safeParse({
+    const parsed = DenebSchema.safeParse({
       channels: {
         discord: {
           guilds: {
@@ -72,7 +72,7 @@ describe("ACP binding cutover schema", () => {
   });
 
   it("rejects legacy Telegram topic-local ACP binding fields", () => {
-    const parsed = OpenClawSchema.safeParse({
+    const parsed = DenebSchema.safeParse({
       channels: {
         telegram: {
           groups: {
@@ -96,7 +96,7 @@ describe("ACP binding cutover schema", () => {
   });
 
   it("rejects ACP bindings without a peer conversation target", () => {
-    const parsed = OpenClawSchema.safeParse({
+    const parsed = DenebSchema.safeParse({
       bindings: [
         {
           type: "acp",
@@ -110,7 +110,7 @@ describe("ACP binding cutover schema", () => {
   });
 
   it("rejects ACP bindings on unsupported channels", () => {
-    const parsed = OpenClawSchema.safeParse({
+    const parsed = DenebSchema.safeParse({
       bindings: [
         {
           type: "acp",
@@ -128,7 +128,7 @@ describe("ACP binding cutover schema", () => {
   });
 
   it("rejects non-canonical Telegram ACP topic peer IDs", () => {
-    const parsed = OpenClawSchema.safeParse({
+    const parsed = DenebSchema.safeParse({
       bindings: [
         {
           type: "acp",
@@ -146,7 +146,7 @@ describe("ACP binding cutover schema", () => {
   });
 
   it("accepts canonical Feishu ACP DM and topic peer IDs", () => {
-    const parsed = OpenClawSchema.safeParse({
+    const parsed = DenebSchema.safeParse({
       bindings: [
         {
           type: "acp",
@@ -182,7 +182,7 @@ describe("ACP binding cutover schema", () => {
   });
 
   it("rejects non-canonical Feishu ACP peer IDs", () => {
-    const parsed = OpenClawSchema.safeParse({
+    const parsed = DenebSchema.safeParse({
       bindings: [
         {
           type: "acp",
@@ -200,7 +200,7 @@ describe("ACP binding cutover schema", () => {
   });
 
   it("rejects Feishu ACP DM peer IDs keyed by union id", () => {
-    const parsed = OpenClawSchema.safeParse({
+    const parsed = DenebSchema.safeParse({
       bindings: [
         {
           type: "acp",
@@ -218,7 +218,7 @@ describe("ACP binding cutover schema", () => {
   });
 
   it("rejects Feishu ACP topic peer IDs with non-canonical sender ids", () => {
-    const parsed = OpenClawSchema.safeParse({
+    const parsed = DenebSchema.safeParse({
       bindings: [
         {
           type: "acp",
@@ -236,7 +236,7 @@ describe("ACP binding cutover schema", () => {
   });
 
   it("rejects bare Feishu group chat ACP peer IDs", () => {
-    const parsed = OpenClawSchema.safeParse({
+    const parsed = DenebSchema.safeParse({
       bindings: [
         {
           type: "acp",

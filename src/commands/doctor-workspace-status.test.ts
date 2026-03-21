@@ -4,7 +4,7 @@ import * as noteModule from "../terminal/note.js";
 const resolveAgentWorkspaceDirMock = vi.fn();
 const resolveDefaultAgentIdMock = vi.fn();
 const buildWorkspaceSkillStatusMock = vi.fn();
-const loadOpenClawPluginsMock = vi.fn();
+const loadDenebPluginsMock = vi.fn();
 
 vi.mock("../agents/agent-scope.js", () => ({
   resolveAgentWorkspaceDir: (...args: unknown[]) => resolveAgentWorkspaceDirMock(...args),
@@ -16,7 +16,7 @@ vi.mock("../agents/skills-status.js", () => ({
 }));
 
 vi.mock("../plugins/loader.js", () => ({
-  loadOpenClawPlugins: (...args: unknown[]) => loadOpenClawPluginsMock(...args),
+  loadDenebPlugins: (...args: unknown[]) => loadDenebPluginsMock(...args),
 }));
 
 describe("noteWorkspaceStatus", () => {
@@ -26,7 +26,7 @@ describe("noteWorkspaceStatus", () => {
     buildWorkspaceSkillStatusMock.mockReturnValue({
       skills: [],
     });
-    loadOpenClawPluginsMock.mockReturnValue({
+    loadDenebPluginsMock.mockReturnValue({
       plugins: [
         {
           id: "legacy-plugin",
@@ -104,7 +104,7 @@ describe("noteWorkspaceStatus", () => {
     buildWorkspaceSkillStatusMock.mockReturnValue({
       skills: [],
     });
-    loadOpenClawPluginsMock.mockReturnValue({
+    loadDenebPluginsMock.mockReturnValue({
       plugins: [
         {
           id: "claude-bundle",
@@ -173,7 +173,7 @@ describe("noteWorkspaceStatus", () => {
     buildWorkspaceSkillStatusMock.mockReturnValue({
       skills: [],
     });
-    loadOpenClawPluginsMock.mockReturnValue({
+    loadDenebPluginsMock.mockReturnValue({
       plugins: [
         {
           id: "modern-plugin",

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureAuthProfileStore, type AuthProfileStore } from "../agents/auth-profiles.js";
-import { loadConfig, type OpenClawConfig, writeConfigFile } from "../config/config.js";
+import { loadConfig, type DenebConfig, writeConfigFile } from "../config/config.js";
 import { withTempHome } from "../config/home-env.test-harness.js";
 import type { PluginWebSearchProviderEntry } from "../plugins/types.js";
 import {
@@ -24,8 +24,8 @@ vi.mock("../plugins/web-search-providers.js", () => ({
   resolvePluginWebSearchProviders: resolvePluginWebSearchProvidersMock,
 }));
 
-function asConfig(value: unknown): OpenClawConfig {
-  return value as OpenClawConfig;
+function asConfig(value: unknown): DenebConfig {
+  return value as DenebConfig;
 }
 
 function createTestProvider(params: {
@@ -94,7 +94,7 @@ function buildTestWebSearchProviders(): PluginWebSearchProviderEntry[] {
 
 const OPENAI_ENV_KEY_REF = { source: "env", provider: "default", id: "OPENAI_API_KEY" } as const;
 
-function createOpenAiFileModelsConfig(): NonNullable<OpenClawConfig["models"]> {
+function createOpenAiFileModelsConfig(): NonNullable<DenebConfig["models"]> {
   return {
     providers: {
       openai: {
@@ -231,7 +231,7 @@ describe("secrets runtime snapshot", () => {
         SLACK_WORK_APP_TOKEN_REF: "slack-work-app-ref",
         WEB_SEARCH_API_KEY: "web-search-ref", // pragma: allowlist secret
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () =>
         loadAuthStoreWithProfiles({
           "openai:default": {
@@ -374,11 +374,11 @@ describe("secrets runtime snapshot", () => {
   });
 
   it("normalizes inline SecretRef object on token to tokenRef", async () => {
-    const config: OpenClawConfig = { models: {}, secrets: {} };
+    const config: DenebConfig = { models: {}, secrets: {} };
     const snapshot = await prepareSecretsRuntimeSnapshot({
       config,
       env: { MY_TOKEN: "resolved-token-value" },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () =>
         loadAuthStoreWithProfiles({
           "custom:inline-token": {
@@ -401,11 +401,11 @@ describe("secrets runtime snapshot", () => {
   });
 
   it("normalizes inline SecretRef object on key to keyRef", async () => {
-    const config: OpenClawConfig = { models: {}, secrets: {} };
+    const config: DenebConfig = { models: {}, secrets: {} };
     const snapshot = await prepareSecretsRuntimeSnapshot({
       config,
       env: { MY_KEY: "resolved-key-value" },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () =>
         loadAuthStoreWithProfiles({
           "custom:inline-key": {
@@ -428,14 +428,14 @@ describe("secrets runtime snapshot", () => {
   });
 
   it("keeps explicit keyRef when inline key SecretRef is also present", async () => {
-    const config: OpenClawConfig = { models: {}, secrets: {} };
+    const config: DenebConfig = { models: {}, secrets: {} };
     const snapshot = await prepareSecretsRuntimeSnapshot({
       config,
       env: {
         PRIMARY_KEY: "primary-key-value",
         SHADOW_KEY: "shadow-key-value",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () =>
         loadAuthStoreWithProfiles({
           "custom:explicit-keyref": {
@@ -475,7 +475,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         WEB_SEARCH_API_KEY: "web-search-ref", // pragma: allowlist secret
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -514,7 +514,7 @@ describe("secrets runtime snapshot", () => {
         WEB_SEARCH_API_KEY: "web-search-ref", // pragma: allowlist secret
         WEB_SEARCH_GEMINI_API_KEY: "web-search-gemini-ref", // pragma: allowlist secret
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -554,7 +554,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         WEB_SEARCH_GEMINI_API_KEY: "web-search-gemini-ref", // pragma: allowlist secret
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -585,7 +585,7 @@ describe("secrets runtime snapshot", () => {
           },
         }),
         env: {},
-        agentDirs: ["/tmp/openclaw-agent-main"],
+        agentDirs: ["/tmp/deneb-agent-main"],
         loadAuthStore: () => ({ version: 1, profiles: {} }),
       }),
     ).rejects.toThrow("[WEB_SEARCH_KEY_UNRESOLVED_NO_FALLBACK]");
@@ -608,7 +608,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         WEB_SEARCH_GEMINI_API_KEY: "web-search-gemini-ref", // pragma: allowlist secret
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -633,7 +633,7 @@ describe("secrets runtime snapshot", () => {
     if (process.platform === "win32") {
       return;
     }
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-secrets-file-provider-"));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-secrets-file-provider-"));
     const secretsPath = path.join(root, "secrets.json");
     try {
       await fs.writeFile(
@@ -679,7 +679,7 @@ describe("secrets runtime snapshot", () => {
 
       const snapshot = await prepareSecretsRuntimeSnapshot({
         config,
-        agentDirs: ["/tmp/openclaw-agent-main"],
+        agentDirs: ["/tmp/deneb-agent-main"],
         loadAuthStore: () => ({ version: 1, profiles: {} }),
       });
 
@@ -693,7 +693,7 @@ describe("secrets runtime snapshot", () => {
     if (process.platform === "win32") {
       return;
     }
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-secrets-file-provider-bad-"));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-secrets-file-provider-bad-"));
     const secretsPath = path.join(root, "secrets.json");
     try {
       await fs.writeFile(secretsPath, JSON.stringify(["not-an-object"]), "utf8");
@@ -715,7 +715,7 @@ describe("secrets runtime snapshot", () => {
               ...createOpenAiFileModelsConfig(),
             },
           }),
-          agentDirs: ["/tmp/openclaw-agent-main"],
+          agentDirs: ["/tmp/deneb-agent-main"],
           loadAuthStore: () => ({ version: 1, profiles: {} }),
         }),
       ).rejects.toThrow("payload is not a JSON object");
@@ -738,7 +738,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: { OPENAI_API_KEY: "sk-runtime" }, // pragma: allowlist secret
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () =>
         loadAuthStoreWithProfiles({
           "openai:default": {
@@ -752,7 +752,7 @@ describe("secrets runtime snapshot", () => {
     activateSecretsRuntimeSnapshot(prepared);
 
     expect(loadConfig().models?.providers?.openai?.apiKey).toBe("sk-runtime");
-    const store = ensureAuthProfileStore("/tmp/openclaw-agent-main");
+    const store = ensureAuthProfileStore("/tmp/deneb-agent-main");
     expect(store.profiles["openai:default"]).toMatchObject({
       type: "api_key",
       key: "sk-runtime",
@@ -763,8 +763,8 @@ describe("secrets runtime snapshot", () => {
     if (os.platform() === "win32") {
       return;
     }
-    await withTempHome("openclaw-secrets-runtime-write-", async (home) => {
-      const configDir = path.join(home, ".openclaw");
+    await withTempHome("deneb-secrets-runtime-write-", async (home) => {
+      const configDir = path.join(home, ".deneb");
       const secretFile = path.join(configDir, "secrets.json");
       const agentDir = path.join(configDir, "agents", "main", "agent");
       const authStorePath = path.join(agentDir, "auth-profiles.json");
@@ -847,8 +847,8 @@ describe("secrets runtime snapshot", () => {
     if (os.platform() === "win32") {
       return;
     }
-    await withTempHome("openclaw-secrets-runtime-refresh-fail-", async (home) => {
-      const configDir = path.join(home, ".openclaw");
+    await withTempHome("deneb-secrets-runtime-refresh-fail-", async (home) => {
+      const configDir = path.join(home, ".deneb");
       const secretFile = path.join(configDir, "secrets.json");
       const agentDir = path.join(configDir, "agents", "main", "agent");
       const authStorePath = path.join(agentDir, "auth-profiles.json");
@@ -951,7 +951,7 @@ describe("secrets runtime snapshot", () => {
   });
 
   it("keeps last-known-good web runtime snapshot when reload introduces unresolved active web refs", async () => {
-    await withTempHome("openclaw-secrets-runtime-web-reload-lkg-", async (home) => {
+    await withTempHome("deneb-secrets-runtime-web-reload-lkg-", async (home) => {
       const prepared = await prepareSecretsRuntimeSnapshot({
         config: asConfig({
           tools: {
@@ -968,7 +968,7 @@ describe("secrets runtime snapshot", () => {
         env: {
           WEB_SEARCH_GEMINI_API_KEY: "web-search-gemini-runtime-key", // pragma: allowlist secret
         },
-        agentDirs: ["/tmp/openclaw-agent-main"],
+        agentDirs: ["/tmp/deneb-agent-main"],
         loadAuthStore: () => ({ version: 1, profiles: {} }),
       });
 
@@ -1022,8 +1022,8 @@ describe("secrets runtime snapshot", () => {
       expect(getActiveRuntimeWebToolsMetadata()?.search.selectedProvider).toBe("gemini");
 
       const persistedConfig = JSON.parse(
-        await fs.readFile(path.join(home, ".openclaw", "openclaw.json"), "utf8"),
-      ) as OpenClawConfig;
+        await fs.readFile(path.join(home, ".deneb", "deneb.json"), "utf8"),
+      ) as DenebConfig;
       const persistedGoogleWebSearchConfig = persistedConfig.plugins?.entries?.google?.config as
         | { webSearch?: { apiKey?: unknown } }
         | undefined;
@@ -1036,9 +1036,9 @@ describe("secrets runtime snapshot", () => {
   });
 
   it("recomputes config-derived agent dirs when refreshing active secrets runtime snapshots", async () => {
-    await withTempHome("openclaw-secrets-runtime-agent-dirs-", async (home) => {
-      const mainAgentDir = path.join(home, ".openclaw", "agents", "main", "agent");
-      const opsAgentDir = path.join(home, ".openclaw", "agents", "ops", "agent");
+    await withTempHome("deneb-secrets-runtime-agent-dirs-", async (home) => {
+      const mainAgentDir = path.join(home, ".deneb", "agents", "main", "agent");
+      const opsAgentDir = path.join(home, ".deneb", "agents", "ops", "agent");
       await fs.mkdir(mainAgentDir, { recursive: true });
       await fs.mkdir(opsAgentDir, { recursive: true });
       await fs.writeFile(
@@ -1156,7 +1156,7 @@ describe("secrets runtime snapshot", () => {
     const snapshot = await prepareSecretsRuntimeSnapshot({
       config,
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1200,7 +1200,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1231,7 +1231,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         GATEWAY_PASSWORD_REF: "resolved-gateway-password", // pragma: allowlist secret
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1252,7 +1252,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         GATEWAY_TOKEN_REF: "resolved-gateway-token",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1274,7 +1274,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         GATEWAY_TOKEN_REF: "resolved-gateway-token",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1298,7 +1298,7 @@ describe("secrets runtime snapshot", () => {
           },
         }),
         env: {},
-        agentDirs: ["/tmp/openclaw-agent-main"],
+        agentDirs: ["/tmp/deneb-agent-main"],
         loadAuthStore: () => ({ version: 1, profiles: {} }),
       }),
     ).rejects.toThrow(/MISSING_GATEWAY_TOKEN_REF/i);
@@ -1321,7 +1321,7 @@ describe("secrets runtime snapshot", () => {
           },
         }),
         env: {},
-        agentDirs: ["/tmp/openclaw-agent-main"],
+        agentDirs: ["/tmp/deneb-agent-main"],
         loadAuthStore: () => ({ version: 1, profiles: {} }),
       }),
     ).rejects.toThrow(/must not include "\." or "\.\." path segments/i);
@@ -1340,7 +1340,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         GATEWAY_PASSWORD_REF: "resolved-gateway-password", // pragma: allowlist secret
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1368,7 +1368,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         REMOTE_GATEWAY_TOKEN: "remote-token",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1397,7 +1397,7 @@ describe("secrets runtime snapshot", () => {
           },
         }),
         env: {},
-        agentDirs: ["/tmp/openclaw-agent-main"],
+        agentDirs: ["/tmp/deneb-agent-main"],
         loadAuthStore: () => ({ version: 1, profiles: {} }),
       });
 
@@ -1434,7 +1434,7 @@ describe("secrets runtime snapshot", () => {
         REMOTE_TOKEN: "resolved-remote-token",
         REMOTE_PASSWORD: "resolved-remote-password", // pragma: allowlist secret
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1458,7 +1458,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         REMOTE_PASSWORD: "resolved-remote-password", // pragma: allowlist secret
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1481,7 +1481,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         ZALO_BOT_TOKEN: "resolved-zalo-token",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1508,7 +1508,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         ZALO_WORK_BOT_TOKEN: "resolved-zalo-work-token",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1537,7 +1537,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         ZALO_TOP_LEVEL_TOKEN: "resolved-zalo-top-level-token",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1564,7 +1564,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         ZALO_DEFAULT_TOKEN: "resolved-zalo-default-token",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1593,7 +1593,7 @@ describe("secrets runtime snapshot", () => {
         NEXTCLOUD_BOT_SECRET: "resolved-nextcloud-bot-secret", // pragma: allowlist secret
         NEXTCLOUD_API_PASSWORD: "resolved-nextcloud-api-password", // pragma: allowlist secret
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1635,7 +1635,7 @@ describe("secrets runtime snapshot", () => {
         NEXTCLOUD_WORK_BOT_SECRET: "resolved-nextcloud-work-bot-secret", // pragma: allowlist secret
         NEXTCLOUD_WORK_API_PASSWORD: "resolved-nextcloud-work-api-password", // pragma: allowlist secret
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1670,7 +1670,7 @@ describe("secrets runtime snapshot", () => {
         REMOTE_GATEWAY_TOKEN: "tailscale-remote-token",
         REMOTE_GATEWAY_PASSWORD: "tailscale-remote-password", // pragma: allowlist secret
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1708,7 +1708,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1742,7 +1742,7 @@ describe("secrets runtime snapshot", () => {
           },
         }),
         env: {},
-        agentDirs: ["/tmp/openclaw-agent-main"],
+        agentDirs: ["/tmp/deneb-agent-main"],
         loadAuthStore: () => ({ version: 1, profiles: {} }),
       }),
     ).rejects.toThrow('Environment variable "MISSING_ENABLED_TELEGRAM_TOKEN" is missing or empty.');
@@ -1768,7 +1768,7 @@ describe("secrets runtime snapshot", () => {
           },
         }),
         env: {},
-        agentDirs: ["/tmp/openclaw-agent-main"],
+        agentDirs: ["/tmp/deneb-agent-main"],
         loadAuthStore: () => ({ version: 1, profiles: {} }),
       }),
     ).rejects.toThrow('Environment variable "MISSING_ENABLED_TELEGRAM_TOKEN" is missing or empty.');
@@ -1803,7 +1803,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         TELEGRAM_WORK_TOKEN: "telegram-work-token",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1840,7 +1840,7 @@ describe("secrets runtime snapshot", () => {
           },
         }),
         env: {},
-        agentDirs: ["/tmp/openclaw-agent-main"],
+        agentDirs: ["/tmp/deneb-agent-main"],
         loadAuthStore: () => ({ version: 1, profiles: {} }),
       }),
     ).rejects.toThrow(
@@ -1867,7 +1867,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1896,7 +1896,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1930,7 +1930,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1966,7 +1966,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         TELEGRAM_BASE_TOKEN: "telegram-base-token",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -1999,7 +1999,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -2030,7 +2030,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -2065,7 +2065,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -2105,7 +2105,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -2150,7 +2150,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         GOOGLECHAT_WORK_SERVICE_ACCOUNT: "work-service-account-json",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -2187,7 +2187,7 @@ describe("secrets runtime snapshot", () => {
           },
         }),
         env: {},
-        agentDirs: ["/tmp/openclaw-agent-main"],
+        agentDirs: ["/tmp/deneb-agent-main"],
         loadAuthStore: () => ({ version: 1, profiles: {} }),
       }),
     ).rejects.toThrow('Environment variable "MISSING_DISCORD_BASE_TOKEN" is missing or empty.');
@@ -2213,7 +2213,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -2242,7 +2242,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -2294,7 +2294,7 @@ describe("secrets runtime snapshot", () => {
         },
       }),
       env: {},
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -2379,7 +2379,7 @@ describe("secrets runtime snapshot", () => {
         DISCORD_BASE_PK_TOKEN: "base-pk-token",
         DISCORD_ENABLED_OVERRIDE_TTS_OPENAI: "enabled-override-tts-openai",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -2451,7 +2451,7 @@ describe("secrets runtime snapshot", () => {
       env: {
         DISCORD_ENABLED_ONLY_TTS_OPENAI: "enabled-only-tts-openai",
       },
-      agentDirs: ["/tmp/openclaw-agent-main"],
+      agentDirs: ["/tmp/deneb-agent-main"],
       loadAuthStore: () => ({ version: 1, profiles: {} }),
     });
 
@@ -2503,7 +2503,7 @@ describe("secrets runtime snapshot", () => {
         env: {
           DISCORD_BASE_TTS_OK: "base-tts-openai",
         },
-        agentDirs: ["/tmp/openclaw-agent-main"],
+        agentDirs: ["/tmp/deneb-agent-main"],
         loadAuthStore: () => ({ version: 1, profiles: {} }),
       }),
     ).rejects.toThrow(
@@ -2512,11 +2512,11 @@ describe("secrets runtime snapshot", () => {
   });
 
   it("does not write inherited auth stores during runtime secret activation", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-secrets-runtime-"));
-    const stateDir = path.join(root, ".openclaw");
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-secrets-runtime-"));
+    const stateDir = path.join(root, ".deneb");
     const mainAgentDir = path.join(stateDir, "agents", "main", "agent");
     const workerStorePath = path.join(stateDir, "agents", "worker", "agent", "auth-profiles.json");
-    const prevStateDir = process.env.OPENCLAW_STATE_DIR;
+    const prevStateDir = process.env.DENEB_STATE_DIR;
 
     try {
       await fs.mkdir(mainAgentDir, { recursive: true });
@@ -2533,7 +2533,7 @@ describe("secrets runtime snapshot", () => {
         }),
         "utf8",
       );
-      process.env.OPENCLAW_STATE_DIR = stateDir;
+      process.env.DENEB_STATE_DIR = stateDir;
 
       await prepareSecretsRuntimeSnapshot({
         config: {
@@ -2547,9 +2547,9 @@ describe("secrets runtime snapshot", () => {
       await expect(fs.access(workerStorePath)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       if (prevStateDir === undefined) {
-        delete process.env.OPENCLAW_STATE_DIR;
+        delete process.env.DENEB_STATE_DIR;
       } else {
-        process.env.OPENCLAW_STATE_DIR = prevStateDir;
+        process.env.DENEB_STATE_DIR = prevStateDir;
       }
       await fs.rm(root, { recursive: true, force: true });
     }

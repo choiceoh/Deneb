@@ -5,7 +5,7 @@ import {
   getAcpRuntimeBackend,
   requireAcpRuntimeBackend,
 } from "../../../src/acp/runtime/registry.js";
-import type { AcpRuntime, OpenClawPluginServiceContext } from "../runtime-api.js";
+import type { AcpRuntime, DenebPluginServiceContext } from "../runtime-api.js";
 import { ACPX_BUNDLED_BIN, ACPX_PINNED_VERSION } from "./config.js";
 import { createAcpxRuntimeService } from "./service.js";
 
@@ -54,8 +54,8 @@ function createRuntimeStub(healthy: boolean): {
 }
 
 function createServiceContext(
-  overrides: Partial<OpenClawPluginServiceContext> = {},
-): OpenClawPluginServiceContext {
+  overrides: Partial<DenebPluginServiceContext> = {},
+): DenebPluginServiceContext {
   return {
     config: {},
     workspaceDir: "/tmp/workspace",

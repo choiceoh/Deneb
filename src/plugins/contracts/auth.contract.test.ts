@@ -9,20 +9,20 @@ import type {
   WizardProgress,
   WizardSelectParams,
 } from "../../wizard/prompts.js";
-import type { OpenClawPluginApi, ProviderPlugin } from "../types.js";
+import type { DenebPluginApi, ProviderPlugin } from "../types.js";
 
 type LoginOpenAICodexOAuth =
-  (typeof import("openclaw/plugin-sdk/provider-auth-login"))["loginOpenAICodexOAuth"];
+  (typeof import("deneb/plugin-sdk/provider-auth-login"))["loginOpenAICodexOAuth"];
 type LoginQwenPortalOAuth =
   (typeof import("../../../extensions/qwen-portal-auth/oauth.js"))["loginQwenPortalOAuth"];
 type GithubCopilotLoginCommand =
-  (typeof import("openclaw/plugin-sdk/provider-auth-login"))["githubCopilotLoginCommand"];
+  (typeof import("deneb/plugin-sdk/provider-auth-login"))["githubCopilotLoginCommand"];
 type CreateVpsAwareHandlers =
   (typeof import("../provider-oauth-flow.js"))["createVpsAwareOAuthHandlers"];
 type EnsureAuthProfileStore =
-  typeof import("openclaw/plugin-sdk/agent-runtime").ensureAuthProfileStore;
+  typeof import("deneb/plugin-sdk/agent-runtime").ensureAuthProfileStore;
 type ListProfilesForProvider =
-  typeof import("openclaw/plugin-sdk/agent-runtime").listProfilesForProvider;
+  typeof import("deneb/plugin-sdk/agent-runtime").listProfilesForProvider;
 
 const loginOpenAICodexOAuthMock = vi.hoisted(() => vi.fn<LoginOpenAICodexOAuth>());
 const loginQwenPortalOAuthMock = vi.hoisted(() => vi.fn<LoginQwenPortalOAuth>());
@@ -30,8 +30,8 @@ const githubCopilotLoginCommandMock = vi.hoisted(() => vi.fn<GithubCopilotLoginC
 const ensureAuthProfileStoreMock = vi.hoisted(() => vi.fn<EnsureAuthProfileStore>());
 const listProfilesForProviderMock = vi.hoisted(() => vi.fn<ListProfilesForProvider>());
 
-vi.mock("openclaw/plugin-sdk/provider-auth-login", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/provider-auth-login")>();
+vi.mock("deneb/plugin-sdk/provider-auth-login", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("deneb/plugin-sdk/provider-auth-login")>();
   return {
     ...actual,
     loginOpenAICodexOAuth: loginOpenAICodexOAuthMock,
@@ -39,8 +39,8 @@ vi.mock("openclaw/plugin-sdk/provider-auth-login", async (importOriginal) => {
   };
 });
 
-vi.mock("openclaw/plugin-sdk/agent-runtime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/agent-runtime")>();
+vi.mock("deneb/plugin-sdk/agent-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("deneb/plugin-sdk/agent-runtime")>();
   return {
     ...actual,
     ensureAuthProfileStore: ensureAuthProfileStoreMock,
@@ -56,7 +56,7 @@ import githubCopilotPlugin from "../../../extensions/github-copilot/index.js";
 import openAIPlugin from "../../../extensions/openai/index.js";
 import qwenPortalPlugin from "../../../extensions/qwen-portal-auth/index.js";
 
-function registerProviders(...plugins: Array<{ register(api: OpenClawPluginApi): void }>) {
+function registerProviders(...plugins: Array<{ register(api: DenebPluginApi): void }>) {
   const captured = createCapturedPluginRegistration();
   for (const plugin of plugins) {
     plugin.register(captured.api);

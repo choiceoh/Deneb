@@ -1,7 +1,7 @@
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { dispatchChannelMessageAction } from "../../channels/plugins/message-action-dispatch.js";
 import type { ChannelId, ChannelThreadingToolContext } from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { appendAssistantMessageToSessionTranscript } from "../../config/sessions.js";
 import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
 import type { GatewayClientMode, GatewayClientName } from "../../utils/message-channel.js";
@@ -22,7 +22,7 @@ export type OutboundGatewayContext = {
 };
 
 export type OutboundSendContext = {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   channel: ChannelId;
   params: Record<string, unknown>;
   /** Active agent id for per-agent outbound media root scoping. */

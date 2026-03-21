@@ -60,7 +60,7 @@ async function withOutsideHardlinkAlias(params: {
   aliasPath: string;
   run: (outsideFile: string) => Promise<void>;
 }): Promise<void> {
-  const outside = await tempDirs.make("openclaw-fs-safe-outside-");
+  const outside = await tempDirs.make("deneb-fs-safe-outside-");
   const outsideFile = path.join(outside, "outside.txt");
   await fs.writeFile(outsideFile, "outside");
   try {
@@ -85,9 +85,9 @@ async function setupSymlinkWriteRaceFixture(options?: { seedInsideTarget?: boole
   slot: string;
   outsideTarget: string;
 }> {
-  const root = await tempDirs.make("openclaw-fs-safe-root-");
+  const root = await tempDirs.make("deneb-fs-safe-root-");
   const inside = path.join(root, "inside");
-  const outside = await tempDirs.make("openclaw-fs-safe-outside-");
+  const outside = await tempDirs.make("deneb-fs-safe-outside-");
   await fs.mkdir(inside, { recursive: true });
   if (options?.seedInsideTarget) {
     await fs.writeFile(path.join(inside, "target.txt"), "inside");
@@ -104,7 +104,7 @@ async function setupSymlinkWriteRaceFixture(options?: { seedInsideTarget?: boole
 
 describe("fs-safe", () => {
   it("reads a local file safely", async () => {
-    const dir = await tempDirs.make("openclaw-fs-safe-");
+    const dir = await tempDirs.make("deneb-fs-safe-");
     const file = path.join(dir, "payload.txt");
     await fs.writeFile(file, "hello");
 
@@ -115,7 +115,7 @@ describe("fs-safe", () => {
   });
 
   it("rejects directories", async () => {
-    const dir = await tempDirs.make("openclaw-fs-safe-");
+    const dir = await tempDirs.make("deneb-fs-safe-");
     await expect(readLocalFileSafely({ filePath: dir })).rejects.toMatchObject({
       code: "not-file",
     });
@@ -125,7 +125,7 @@ describe("fs-safe", () => {
   });
 
   it("enforces maxBytes", async () => {
-    const dir = await tempDirs.make("openclaw-fs-safe-");
+    const dir = await tempDirs.make("deneb-fs-safe-");
     const file = path.join(dir, "big.bin");
     await fs.writeFile(file, Buffer.alloc(8));
 
@@ -135,7 +135,7 @@ describe("fs-safe", () => {
   });
 
   it.runIf(process.platform !== "win32")("rejects symlinks", async () => {
-    const dir = await tempDirs.make("openclaw-fs-safe-");
+    const dir = await tempDirs.make("deneb-fs-safe-");
     const target = path.join(dir, "target.txt");
     const link = path.join(dir, "link.txt");
     await fs.writeFile(target, "target");
@@ -147,8 +147,8 @@ describe("fs-safe", () => {
   });
 
   it("blocks traversal outside root", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
-    const outside = await tempDirs.make("openclaw-fs-safe-outside-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
+    const outside = await tempDirs.make("deneb-fs-safe-outside-");
     const file = path.join(outside, "outside.txt");
     await fs.writeFile(file, "outside");
 
@@ -161,7 +161,7 @@ describe("fs-safe", () => {
   });
 
   it("rejects directory path within root without leaking EISDIR (issue #31186)", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
     await fs.mkdir(path.join(root, "memory"), { recursive: true });
 
     await expect(
@@ -177,7 +177,7 @@ describe("fs-safe", () => {
   });
 
   it("reads a file within root", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
     await fs.writeFile(path.join(root, "inside.txt"), "inside");
     const result = await readFileWithinRoot({
       rootDir: root,
@@ -189,7 +189,7 @@ describe("fs-safe", () => {
   });
 
   it("reads an absolute path within root via readPathWithinRoot", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
     const insidePath = path.join(root, "absolute.txt");
     await fs.writeFile(insidePath, "absolute");
     const result = await readPathWithinRoot({
@@ -200,7 +200,7 @@ describe("fs-safe", () => {
   });
 
   it("creates a root-scoped read callback", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
     const insidePath = path.join(root, "scoped.txt");
     await fs.writeFile(insidePath, "scoped");
     const readScoped = createRootScopedReadFile({ rootDir: root });
@@ -208,8 +208,8 @@ describe("fs-safe", () => {
   });
 
   it.runIf(process.platform !== "win32")("blocks symlink escapes under root", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
-    const outside = await tempDirs.make("openclaw-fs-safe-outside-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
+    const outside = await tempDirs.make("deneb-fs-safe-outside-");
     const target = path.join(outside, "outside.txt");
     const link = path.join(root, "link.txt");
     await fs.writeFile(target, "outside");
@@ -224,7 +224,7 @@ describe("fs-safe", () => {
   });
 
   it.runIf(process.platform !== "win32")("blocks hardlink aliases under root", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
     const hardlinkPath = path.join(root, "link.txt");
     await withOutsideHardlinkAlias({
       aliasPath: hardlinkPath,
@@ -240,7 +240,7 @@ describe("fs-safe", () => {
   });
 
   it("writes a file within root safely", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
     await writeFileWithinRoot({
       rootDir: root,
       relativePath: "nested/out.txt",
@@ -250,7 +250,7 @@ describe("fs-safe", () => {
   });
 
   it("appends to a file within root safely", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
     const targetPath = path.join(root, "nested", "out.txt");
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     await fs.writeFile(targetPath, "seed");
@@ -266,8 +266,8 @@ describe("fs-safe", () => {
   });
 
   it("copies a file within root safely", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
-    const sourceDir = await tempDirs.make("openclaw-fs-safe-source-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
+    const sourceDir = await tempDirs.make("deneb-fs-safe-source-");
     const sourcePath = path.join(sourceDir, "in.txt");
     await fs.writeFile(sourcePath, "copy-ok");
 
@@ -283,8 +283,8 @@ describe("fs-safe", () => {
   });
 
   it("enforces maxBytes when copying into root", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
-    const sourceDir = await tempDirs.make("openclaw-fs-safe-source-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
+    const sourceDir = await tempDirs.make("deneb-fs-safe-source-");
     const sourcePath = path.join(sourceDir, "big.bin");
     await fs.writeFile(sourcePath, Buffer.alloc(8));
 
@@ -302,8 +302,8 @@ describe("fs-safe", () => {
   });
 
   it("writes a file within root from another local source path safely", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
-    const outside = await tempDirs.make("openclaw-fs-safe-src-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
+    const outside = await tempDirs.make("deneb-fs-safe-src-");
     const sourcePath = path.join(outside, "source.bin");
     await fs.writeFile(sourcePath, "hello-from-source");
     await writeFileFromPathWithinRoot({
@@ -316,7 +316,7 @@ describe("fs-safe", () => {
     );
   });
   it("rejects write traversal outside root", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
     await expect(
       writeFileWithinRoot({
         rootDir: root,
@@ -327,7 +327,7 @@ describe("fs-safe", () => {
   });
 
   it.runIf(process.platform !== "win32")("rejects writing through hardlink aliases", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
     const hardlinkPath = path.join(root, "alias.txt");
     await withOutsideHardlinkAlias({
       aliasPath: hardlinkPath,
@@ -345,7 +345,7 @@ describe("fs-safe", () => {
   });
 
   it.runIf(process.platform !== "win32")("rejects appending through hardlink aliases", async () => {
-    const root = await tempDirs.make("openclaw-fs-safe-root-");
+    const root = await tempDirs.make("deneb-fs-safe-root-");
     const hardlinkPath = path.join(root, "alias.txt");
     await withOutsideHardlinkAlias({
       aliasPath: hardlinkPath,
@@ -406,7 +406,7 @@ describe("fs-safe", () => {
 
   it("does not clobber out-of-root file when symlink retarget races write-from-path open", async () => {
     const { root, outside, slot, outsideTarget } = await setupSymlinkWriteRaceFixture();
-    const sourceDir = await tempDirs.make("openclaw-fs-safe-source-");
+    const sourceDir = await tempDirs.make("deneb-fs-safe-source-");
     const sourcePath = path.join(sourceDir, "source.txt");
     await fs.writeFile(sourcePath, "new-content");
 
@@ -426,7 +426,7 @@ describe("fs-safe", () => {
   });
 
   it("returns not-found for missing files", async () => {
-    const dir = await tempDirs.make("openclaw-fs-safe-");
+    const dir = await tempDirs.make("deneb-fs-safe-");
     const missing = path.join(dir, "missing.txt");
 
     await expect(readLocalFileSafely({ filePath: missing })).rejects.toBeInstanceOf(SafeOpenError);
@@ -451,7 +451,7 @@ describe("tilde expansion in file tools", () => {
   });
 
   it("reads a file via ~/path after HOME override", async () => {
-    const root = await tempDirs.make("openclaw-tilde-test-");
+    const root = await tempDirs.make("deneb-tilde-test-");
     const originalHome = process.env.HOME;
     process.env.HOME = root;
     try {
@@ -470,7 +470,7 @@ describe("tilde expansion in file tools", () => {
   });
 
   it("writes a file via ~/path after HOME override", async () => {
-    const root = await tempDirs.make("openclaw-tilde-test-");
+    const root = await tempDirs.make("deneb-tilde-test-");
     const originalHome = process.env.HOME;
     process.env.HOME = root;
     try {
@@ -487,7 +487,7 @@ describe("tilde expansion in file tools", () => {
   });
 
   it("rejects ~/path that resolves outside root", async () => {
-    const root = await tempDirs.make("openclaw-tilde-outside-");
+    const root = await tempDirs.make("deneb-tilde-outside-");
     // HOME points to real home, ~/file goes to /home/dev/file which is outside root
     await expect(
       openFileWithinRoot({

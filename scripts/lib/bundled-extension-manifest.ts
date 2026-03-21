@@ -3,7 +3,7 @@ export type ExtensionPackageJson = {
   version?: string;
   dependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
-  openclaw?: {
+  deneb?: {
     install?: {
       npmSpec?: string;
     };
@@ -16,13 +16,13 @@ export function collectBundledExtensionManifestErrors(extensions: BundledExtensi
   const errors: string[] = [];
 
   for (const extension of extensions) {
-    const install = extension.packageJson.openclaw?.install;
+    const install = extension.packageJson.deneb?.install;
     if (
       install &&
       (!install.npmSpec || typeof install.npmSpec !== "string" || !install.npmSpec.trim())
     ) {
       errors.push(
-        `bundled extension '${extension.id}' manifest invalid | openclaw.install.npmSpec must be a non-empty string`,
+        `bundled extension '${extension.id}' manifest invalid | deneb.install.npmSpec must be a non-empty string`,
       );
     }
   }

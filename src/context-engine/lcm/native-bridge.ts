@@ -19,7 +19,7 @@ import {
 } from "@mariozechner/pi-ai";
 import { resolveApiKeyForProvider, getCustomProviderApiKey } from "../../agents/model-auth.js";
 import { parseModelRef } from "../../agents/model-selection.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { loadConfig } from "../../config/io.js";
 import { resolveDefaultSessionStorePath, resolveStorePath } from "../../config/sessions/paths.js";
 import { callGateway } from "../../gateway/call.js";
@@ -49,7 +49,7 @@ function inferApiFromProvider(provider: string): string {
 }
 
 /** Find provider-level config (baseUrl, headers, apiKey) from runtime config. */
-function findProviderConfig(cfg: OpenClawConfig, provider: string): Record<string, unknown> {
+function findProviderConfig(cfg: DenebConfig, provider: string): Record<string, unknown> {
   if (!cfg?.models?.providers) {
     return {};
   }

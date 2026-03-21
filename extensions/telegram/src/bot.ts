@@ -1,27 +1,27 @@
-import { resolveDefaultAgentId } from "openclaw/plugin-sdk/agent-runtime";
+import { resolveDefaultAgentId } from "deneb/plugin-sdk/agent-runtime";
 import {
   resolveThreadBindingIdleTimeoutMsForChannel,
   resolveThreadBindingMaxAgeMsForChannel,
   resolveThreadBindingSpawnPolicy,
-} from "openclaw/plugin-sdk/channel-runtime";
+} from "deneb/plugin-sdk/channel-runtime";
 import {
   isNativeCommandsExplicitlyDisabled,
   resolveNativeCommandsEnabled,
   resolveNativeSkillsEnabled,
-} from "openclaw/plugin-sdk/config-runtime";
-import type { OpenClawConfig, ReplyToMode } from "openclaw/plugin-sdk/config-runtime";
+} from "deneb/plugin-sdk/config-runtime";
+import type { DenebConfig, ReplyToMode } from "deneb/plugin-sdk/config-runtime";
 import {
   resolveChannelGroupPolicy,
   resolveChannelGroupRequireMention,
-} from "openclaw/plugin-sdk/config-runtime";
-import { loadSessionStore, resolveStorePath } from "openclaw/plugin-sdk/config-runtime";
-import { formatUncaughtError } from "openclaw/plugin-sdk/infra-runtime";
-import { resolveTextChunkLimit } from "openclaw/plugin-sdk/reply-runtime";
-import { DEFAULT_GROUP_HISTORY_LIMIT, type HistoryEntry } from "openclaw/plugin-sdk/reply-runtime";
-import { danger, logVerbose, shouldLogVerbose } from "openclaw/plugin-sdk/runtime-env";
-import { getChildLogger } from "openclaw/plugin-sdk/runtime-env";
-import { createSubsystemLogger } from "openclaw/plugin-sdk/runtime-env";
-import { createNonExitingRuntime, type RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
+} from "deneb/plugin-sdk/config-runtime";
+import { loadSessionStore, resolveStorePath } from "deneb/plugin-sdk/config-runtime";
+import { formatUncaughtError } from "deneb/plugin-sdk/infra-runtime";
+import { resolveTextChunkLimit } from "deneb/plugin-sdk/reply-runtime";
+import { DEFAULT_GROUP_HISTORY_LIMIT, type HistoryEntry } from "deneb/plugin-sdk/reply-runtime";
+import { danger, logVerbose, shouldLogVerbose } from "deneb/plugin-sdk/runtime-env";
+import { getChildLogger } from "deneb/plugin-sdk/runtime-env";
+import { createSubsystemLogger } from "deneb/plugin-sdk/runtime-env";
+import { createNonExitingRuntime, type RuntimeEnv } from "deneb/plugin-sdk/runtime-env";
 import { resolveTelegramAccount } from "./accounts.js";
 import { defaultTelegramBotDeps, type TelegramBotDeps } from "./bot-deps.js";
 import { registerTelegramHandlers } from "./bot-handlers.js";
@@ -51,7 +51,7 @@ export type TelegramBotOptions = {
   mediaMaxMb?: number;
   replyToMode?: ReplyToMode;
   proxyFetch?: typeof fetch;
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   /** Signal to abort in-flight Telegram API fetch requests (e.g. getUpdates) on shutdown. */
   fetchAbortSignal?: AbortSignal;
   updateOffset?: {

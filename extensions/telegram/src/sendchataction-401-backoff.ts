@@ -2,7 +2,7 @@ import {
   computeBackoff,
   sleepWithAbort,
   type BackoffPolicy,
-} from "openclaw/plugin-sdk/infra-runtime";
+} from "deneb/plugin-sdk/infra-runtime";
 
 export type TelegramSendChatActionLogger = (message: string) => void;
 
@@ -116,7 +116,7 @@ export function createTelegramSendChatActionHandler({
           logger(
             `CRITICAL: sendChatAction suspended after ${consecutive401Failures} consecutive 401 errors. ` +
               `Bot token is likely invalid. Telegram may DELETE the bot if requests continue. ` +
-              `Replace the token and restart: openclaw channels restart telegram`,
+              `Replace the token and restart: deneb channels restart telegram`,
           );
         } else {
           logger(

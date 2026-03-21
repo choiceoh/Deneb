@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadConfigMock = vi.fn();
-const loadOpenClawPluginsMock = vi.fn();
+const loadDenebPluginsMock = vi.fn();
 let buildPluginStatusReport: typeof import("./status.js").buildPluginStatusReport;
 let buildPluginInspectReport: typeof import("./status.js").buildPluginInspectReport;
 let buildAllPluginInspectReports: typeof import("./status.js").buildAllPluginInspectReports;
@@ -15,7 +15,7 @@ vi.mock("../config/config.js", () => ({
 }));
 
 vi.mock("./loader.js", () => ({
-  loadOpenClawPlugins: (...args: unknown[]) => loadOpenClawPluginsMock(...args),
+  loadDenebPlugins: (...args: unknown[]) => loadDenebPluginsMock(...args),
 }));
 
 vi.mock("../agents/agent-scope.js", () => ({
@@ -31,9 +31,9 @@ describe("buildPluginStatusReport", () => {
   beforeEach(async () => {
     vi.resetModules();
     loadConfigMock.mockReset();
-    loadOpenClawPluginsMock.mockReset();
+    loadDenebPluginsMock.mockReset();
     loadConfigMock.mockReturnValue({});
-    loadOpenClawPluginsMock.mockReturnValue({
+    loadDenebPluginsMock.mockReturnValue({
       plugins: [],
       diagnostics: [],
       channels: [],
@@ -64,7 +64,7 @@ describe("buildPluginStatusReport", () => {
   });
 
   it("forwards an explicit env to plugin loading", () => {
-    const env = { HOME: "/tmp/openclaw-home" } as NodeJS.ProcessEnv;
+    const env = { HOME: "/tmp/deneb-home" } as NodeJS.ProcessEnv;
 
     buildPluginStatusReport({
       config: {},
@@ -72,7 +72,7 @@ describe("buildPluginStatusReport", () => {
       env,
     });
 
-    expect(loadOpenClawPluginsMock).toHaveBeenCalledWith(
+    expect(loadDenebPluginsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         config: {},
         workspaceDir: "/workspace",
@@ -95,7 +95,7 @@ describe("buildPluginStatusReport", () => {
         },
       },
     });
-    loadOpenClawPluginsMock.mockReturnValue({
+    loadDenebPluginsMock.mockReturnValue({
       plugins: [
         {
           id: "google",
@@ -180,7 +180,7 @@ describe("buildPluginStatusReport", () => {
   });
 
   it("builds inspect reports for every loaded plugin", () => {
-    loadOpenClawPluginsMock.mockReturnValue({
+    loadDenebPluginsMock.mockReturnValue({
       plugins: [
         {
           id: "lca",
@@ -279,7 +279,7 @@ describe("buildPluginStatusReport", () => {
   });
 
   it("builds compatibility warnings for legacy compatibility paths", () => {
-    loadOpenClawPluginsMock.mockReturnValue({
+    loadDenebPluginsMock.mockReturnValue({
       plugins: [
         {
           id: "lca",
@@ -338,7 +338,7 @@ describe("buildPluginStatusReport", () => {
   });
 
   it("builds structured compatibility notices with deterministic ordering", () => {
-    loadOpenClawPluginsMock.mockReturnValue({
+    loadDenebPluginsMock.mockReturnValue({
       plugins: [
         {
           id: "hook-only",
@@ -444,7 +444,7 @@ describe("buildPluginStatusReport", () => {
   });
 
   it("returns no compatibility warnings for modern capability plugins", () => {
-    loadOpenClawPluginsMock.mockReturnValue({
+    loadDenebPluginsMock.mockReturnValue({
       plugins: [
         {
           id: "modern",
@@ -494,7 +494,7 @@ describe("buildPluginStatusReport", () => {
   });
 
   it("populates bundleCapabilities from plugin record", () => {
-    loadOpenClawPluginsMock.mockReturnValue({
+    loadDenebPluginsMock.mockReturnValue({
       plugins: [
         {
           id: "claude-bundle",
@@ -552,7 +552,7 @@ describe("buildPluginStatusReport", () => {
   });
 
   it("returns empty bundleCapabilities and mcpServers for non-bundle plugins", () => {
-    loadOpenClawPluginsMock.mockReturnValue({
+    loadDenebPluginsMock.mockReturnValue({
       plugins: [
         {
           id: "plain-plugin",

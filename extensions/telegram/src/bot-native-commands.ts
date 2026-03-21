@@ -1,33 +1,33 @@
 import type { Bot, Context } from "grammy";
-import { createChannelReplyPipeline } from "openclaw/plugin-sdk/channel-reply-pipeline";
-import { resolveCommandAuthorizedFromAuthorizers } from "openclaw/plugin-sdk/channel-runtime";
-import { resolveNativeCommandSessionTargets } from "openclaw/plugin-sdk/channel-runtime";
-import { recordInboundSessionMetaSafe } from "openclaw/plugin-sdk/channel-runtime";
-import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
-import type { ChannelGroupPolicy } from "openclaw/plugin-sdk/config-runtime";
-import { resolveMarkdownTableMode } from "openclaw/plugin-sdk/config-runtime";
+import { createChannelReplyPipeline } from "deneb/plugin-sdk/channel-reply-pipeline";
+import { resolveCommandAuthorizedFromAuthorizers } from "deneb/plugin-sdk/channel-runtime";
+import { resolveNativeCommandSessionTargets } from "deneb/plugin-sdk/channel-runtime";
+import { recordInboundSessionMetaSafe } from "deneb/plugin-sdk/channel-runtime";
+import type { DenebConfig } from "deneb/plugin-sdk/config-runtime";
+import type { ChannelGroupPolicy } from "deneb/plugin-sdk/config-runtime";
+import { resolveMarkdownTableMode } from "deneb/plugin-sdk/config-runtime";
 import {
   normalizeTelegramCommandName,
   resolveTelegramCustomCommands,
   TELEGRAM_COMMAND_NAME_PATTERN,
-} from "openclaw/plugin-sdk/config-runtime";
+} from "deneb/plugin-sdk/config-runtime";
 import type {
   ReplyToMode,
   TelegramAccountConfig,
   TelegramDirectConfig,
   TelegramGroupConfig,
   TelegramTopicConfig,
-} from "openclaw/plugin-sdk/config-runtime";
-import { ensureConfiguredBindingRouteReady } from "openclaw/plugin-sdk/conversation-runtime";
-import { getAgentScopedMediaLocalRoots } from "openclaw/plugin-sdk/media-runtime";
+} from "deneb/plugin-sdk/config-runtime";
+import { ensureConfiguredBindingRouteReady } from "deneb/plugin-sdk/conversation-runtime";
+import { getAgentScopedMediaLocalRoots } from "deneb/plugin-sdk/media-runtime";
 import {
   executePluginCommand,
   getPluginCommandSpecs,
   matchPluginCommand,
-} from "openclaw/plugin-sdk/plugin-runtime";
-import { resolveChunkMode } from "openclaw/plugin-sdk/reply-runtime";
-import { resolveCommandAuthorization } from "openclaw/plugin-sdk/reply-runtime";
-import type { CommandArgs } from "openclaw/plugin-sdk/reply-runtime";
+} from "deneb/plugin-sdk/plugin-runtime";
+import { resolveChunkMode } from "deneb/plugin-sdk/reply-runtime";
+import { resolveCommandAuthorization } from "deneb/plugin-sdk/reply-runtime";
+import type { CommandArgs } from "deneb/plugin-sdk/reply-runtime";
 import {
   buildCommandTextFromArgs,
   findCommandByNativeName,
@@ -35,13 +35,13 @@ import {
   listNativeCommandSpecsForConfig,
   parseCommandArgs,
   resolveCommandArgMenu,
-} from "openclaw/plugin-sdk/reply-runtime";
-import { finalizeInboundContext } from "openclaw/plugin-sdk/reply-runtime";
-import { resolveAgentRoute } from "openclaw/plugin-sdk/routing";
-import { resolveThreadSessionKeys } from "openclaw/plugin-sdk/routing";
-import { danger, logVerbose } from "openclaw/plugin-sdk/runtime-env";
-import { getChildLogger } from "openclaw/plugin-sdk/runtime-env";
-import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
+} from "deneb/plugin-sdk/reply-runtime";
+import { finalizeInboundContext } from "deneb/plugin-sdk/reply-runtime";
+import { resolveAgentRoute } from "deneb/plugin-sdk/routing";
+import { resolveThreadSessionKeys } from "deneb/plugin-sdk/routing";
+import { danger, logVerbose } from "deneb/plugin-sdk/runtime-env";
+import { getChildLogger } from "deneb/plugin-sdk/runtime-env";
+import type { RuntimeEnv } from "deneb/plugin-sdk/runtime-env";
 import { resolveTelegramAccount } from "./accounts.js";
 import { withTelegramApiErrorLogging } from "./api-logging.js";
 import { isSenderAllowed, normalizeDmAllowFromWithStore } from "./bot-access.js";
@@ -93,7 +93,7 @@ type TelegramCommandAuthResult = {
 };
 
 export type RegisterTelegramHandlerParams = {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   accountId: string;
   bot: Bot;
   mediaMaxBytes: number;
@@ -125,7 +125,7 @@ export type RegisterTelegramHandlerParams = {
 
 export type RegisterTelegramNativeCommandsParams = {
   bot: Bot;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   runtime: RuntimeEnv;
   accountId: string;
   telegramCfg: TelegramAccountConfig;
@@ -150,7 +150,7 @@ export type RegisterTelegramNativeCommandsParams = {
 async function resolveTelegramCommandAuth(params: {
   msg: NonNullable<TelegramNativeCommandContext["message"]>;
   bot: Bot;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   accountId: string;
   telegramCfg: TelegramAccountConfig;
   readChannelAllowFromStore: TelegramBotDeps["readChannelAllowFromStore"];
@@ -422,8 +422,8 @@ export const registerTelegramNativeCommands = ({
   for (const issue of pluginCatalog.issues) {
     runtime.error?.(danger(issue));
   }
-  const loadFreshRuntimeConfig = (): OpenClawConfig => telegramDeps.loadConfig();
-  const resolveFreshTelegramConfig = (runtimeCfg: OpenClawConfig): TelegramAccountConfig => {
+  const loadFreshRuntimeConfig = (): DenebConfig => telegramDeps.loadConfig();
+  const resolveFreshTelegramConfig = (runtimeCfg: DenebConfig): TelegramAccountConfig => {
     try {
       return resolveTelegramAccount({
         cfg: runtimeCfg,
@@ -480,7 +480,7 @@ export const registerTelegramNativeCommands = ({
 
   const resolveCommandRuntimeContext = async (params: {
     msg: NonNullable<TelegramNativeCommandContext["message"]>;
-    runtimeCfg: OpenClawConfig;
+    runtimeCfg: DenebConfig;
     isGroup: boolean;
     isForum: boolean;
     resolvedThreadId?: number;

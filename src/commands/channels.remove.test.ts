@@ -72,7 +72,7 @@ describe("channelsRemoveCommand", () => {
     });
     const catalogEntry: ChannelPluginCatalogEntry = {
       id: "msteams",
-      pluginId: "@openclaw/msteams-plugin",
+      pluginId: "@deneb/msteams-plugin",
       meta: {
         id: "msteams",
         label: "Microsoft Teams",
@@ -81,7 +81,7 @@ describe("channelsRemoveCommand", () => {
         blurb: "teams channel",
       },
       install: {
-        npmSpec: "@openclaw/msteams",
+        npmSpec: "@deneb/msteams",
       },
     };
     catalogMocks.listChannelPluginCatalogEntries.mockReturnValue([catalogEntry]);
@@ -113,7 +113,7 @@ describe("channelsRemoveCommand", () => {
       .mockReturnValueOnce(
         createTestRegistry([
           {
-            pluginId: "@openclaw/msteams-plugin",
+            pluginId: "@deneb/msteams-plugin",
             plugin: scopedPlugin,
             source: "test",
           },
@@ -138,7 +138,7 @@ describe("channelsRemoveCommand", () => {
     expect(loadChannelSetupPluginRegistrySnapshotForChannel).toHaveBeenCalledWith(
       expect.objectContaining({
         channel: "msteams",
-        pluginId: "@openclaw/msteams-plugin",
+        pluginId: "@deneb/msteams-plugin",
       }),
     );
     expect(configMocks.writeConfigFile).toHaveBeenCalledWith(

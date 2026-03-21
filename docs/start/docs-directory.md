@@ -1,5 +1,5 @@
 ---
-summary: "Curated links to the most used OpenClaw docs."
+summary: "Curated links to the most used Deneb docs."
 read_when:
   - You want quick access to key docs pages
 title: "Docs directory"
@@ -23,7 +23,7 @@ For a complete map of the docs, see [Docs hubs](/start/hubs).
 - [Updating and rollback](/install/updating)
 - [Pairing (DM and nodes)](/channels/pairing)
 - [Nix mode](/install/nix)
-- [OpenClaw assistant setup](/start/openclaw)
+- [Deneb assistant setup](/start/deneb)
 - [Skills](/tools/skills)
 - [Skills config](/tools/skills-config)
 - [Workspace templates](/reference/templates/AGENTS)

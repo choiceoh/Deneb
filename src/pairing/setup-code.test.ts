@@ -75,11 +75,11 @@ describe("pairing setup code", () => {
 
   beforeEach(() => {
     vi.resetModules();
-    vi.stubEnv("OPENCLAW_GATEWAY_TOKEN", "");
+    vi.stubEnv("DENEB_GATEWAY_TOKEN", "");
     vi.stubEnv("CLAWDBOT_GATEWAY_TOKEN", "");
-    vi.stubEnv("OPENCLAW_GATEWAY_PASSWORD", "");
+    vi.stubEnv("DENEB_GATEWAY_PASSWORD", "");
     vi.stubEnv("CLAWDBOT_GATEWAY_PASSWORD", "");
-    vi.stubEnv("OPENCLAW_GATEWAY_PORT", "");
+    vi.stubEnv("DENEB_GATEWAY_PORT", "");
     vi.stubEnv("CLAWDBOT_GATEWAY_PORT", "");
   });
 
@@ -147,7 +147,7 @@ describe("pairing setup code", () => {
     expectResolvedSetupOk(resolved, { authLabel: "password", password: "resolved-password" });
   });
 
-  it("uses OPENCLAW_GATEWAY_PASSWORD without resolving configured password SecretRef", async () => {
+  it("uses DENEB_GATEWAY_PASSWORD without resolving configured password SecretRef", async () => {
     const resolved = await resolvePairingSetupFromConfig(
       {
         gateway: {
@@ -162,7 +162,7 @@ describe("pairing setup code", () => {
       },
       {
         env: {
-          OPENCLAW_GATEWAY_PASSWORD: "password-from-env", // pragma: allowlist secret
+          DENEB_GATEWAY_PASSWORD: "password-from-env", // pragma: allowlist secret
         },
       },
     );
@@ -248,7 +248,7 @@ describe("pairing setup code", () => {
       },
       {
         env: {
-          OPENCLAW_GATEWAY_PASSWORD: "password-from-env", // pragma: allowlist secret
+          DENEB_GATEWAY_PASSWORD: "password-from-env", // pragma: allowlist secret
         },
       },
     );
@@ -328,7 +328,7 @@ describe("pairing setup code", () => {
       },
       {
         env: {
-          OPENCLAW_GATEWAY_TOKEN: "new-token",
+          DENEB_GATEWAY_TOKEN: "new-token",
         },
       },
     );

@@ -2,8 +2,8 @@
 
 FROM ubuntu:24.04@sha256:cd1dba651b3080c3686ecf4e3c4220f026b521fb76978881737d24f200828b2b
 
-RUN --mount=type=cache,id=openclaw-install-sh-nonroot-apt-cache,target=/var/cache/apt,sharing=locked \
-  --mount=type=cache,id=openclaw-install-sh-nonroot-apt-lists,target=/var/lib/apt,sharing=locked \
+RUN --mount=type=cache,id=deneb-install-sh-nonroot-apt-cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,id=deneb-install-sh-nonroot-apt-lists,target=/var/lib/apt,sharing=locked \
   set -eux; \
   for attempt in 1 2 3; do \
     if apt-get update -o Acquire::Retries=3; then break; fi; \
@@ -32,6 +32,6 @@ ENV NPM_CONFIG_AUDIT=false
 
 COPY install-sh-common/cli-verify.sh /usr/local/install-sh-common/cli-verify.sh
 COPY install-sh-common/version-parse.sh /usr/local/install-sh-common/version-parse.sh
-COPY --chmod=755 install-sh-nonroot/run.sh /usr/local/bin/openclaw-install-nonroot
+COPY --chmod=755 install-sh-nonroot/run.sh /usr/local/bin/deneb-install-nonroot
 
-ENTRYPOINT ["/usr/local/bin/openclaw-install-nonroot"]
+ENTRYPOINT ["/usr/local/bin/deneb-install-nonroot"]

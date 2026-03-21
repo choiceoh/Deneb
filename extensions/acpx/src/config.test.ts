@@ -17,7 +17,7 @@ describe("acpx plugin config parsing", () => {
     try {
       fs.mkdirSync(path.join(pluginRoot, "src"), { recursive: true });
       fs.writeFileSync(path.join(pluginRoot, "package.json"), "{}\n", "utf8");
-      fs.writeFileSync(path.join(pluginRoot, "openclaw.plugin.json"), "{}\n", "utf8");
+      fs.writeFileSync(path.join(pluginRoot, "deneb.plugin.json"), "{}\n", "utf8");
 
       const moduleUrl = pathToFileURL(path.join(pluginRoot, "src", "config.ts")).href;
       expect(resolveAcpxPluginRoot(moduleUrl)).toBe(pluginRoot);
@@ -30,7 +30,7 @@ describe("acpx plugin config parsing", () => {
     const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "acpx-root-dist-"));
     try {
       fs.writeFileSync(path.join(pluginRoot, "package.json"), "{}\n", "utf8");
-      fs.writeFileSync(path.join(pluginRoot, "openclaw.plugin.json"), "{}\n", "utf8");
+      fs.writeFileSync(path.join(pluginRoot, "deneb.plugin.json"), "{}\n", "utf8");
 
       const moduleUrl = pathToFileURL(path.join(pluginRoot, "index.js")).href;
       expect(resolveAcpxPluginRoot(moduleUrl)).toBe(pluginRoot);
@@ -47,9 +47,9 @@ describe("acpx plugin config parsing", () => {
       fs.mkdirSync(workspacePluginRoot, { recursive: true });
       fs.mkdirSync(bundledPluginRoot, { recursive: true });
       fs.writeFileSync(path.join(workspacePluginRoot, "package.json"), "{}\n", "utf8");
-      fs.writeFileSync(path.join(workspacePluginRoot, "openclaw.plugin.json"), "{}\n", "utf8");
+      fs.writeFileSync(path.join(workspacePluginRoot, "deneb.plugin.json"), "{}\n", "utf8");
       fs.writeFileSync(path.join(bundledPluginRoot, "package.json"), "{}\n", "utf8");
-      fs.writeFileSync(path.join(bundledPluginRoot, "openclaw.plugin.json"), "{}\n", "utf8");
+      fs.writeFileSync(path.join(bundledPluginRoot, "deneb.plugin.json"), "{}\n", "utf8");
 
       const moduleUrl = pathToFileURL(path.join(bundledPluginRoot, "index.js")).href;
       expect(resolveAcpxPluginRoot(moduleUrl)).toBe(workspacePluginRoot);
@@ -94,10 +94,10 @@ describe("acpx plugin config parsing", () => {
       rawConfig: {
         command: "../acpx/dist/cli.js",
       },
-      workspaceDir: "/home/user/repos/openclaw",
+      workspaceDir: "/home/user/repos/deneb",
     });
 
-    expect(resolved.command).toBe(path.resolve("/home/user/repos/openclaw", "../acpx/dist/cli.js"));
+    expect(resolved.command).toBe(path.resolve("/home/user/repos/deneb", "../acpx/dist/cli.js"));
     expect(resolved.expectedVersion).toBeUndefined();
     expect(resolved.allowPluginLocalInstall).toBe(false);
     expect(resolved.stripProviderAuthEnvVars).toBe(false);

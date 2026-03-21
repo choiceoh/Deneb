@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { ResolvedTtsConfig, TtsDirectiveOverrides } from "./tts.js";
 
 export type SpeechProviderId = string;
@@ -6,13 +6,13 @@ export type SpeechProviderId = string;
 export type SpeechSynthesisTarget = "audio-file" | "voice-note";
 
 export type SpeechProviderConfiguredContext = {
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   config: ResolvedTtsConfig;
 };
 
 export type SpeechSynthesisRequest = {
   text: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   config: ResolvedTtsConfig;
   target: SpeechSynthesisTarget;
   overrides?: TtsDirectiveOverrides;
@@ -27,7 +27,7 @@ export type SpeechSynthesisResult = {
 
 export type SpeechTelephonySynthesisRequest = {
   text: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   config: ResolvedTtsConfig;
 };
 
@@ -48,7 +48,7 @@ export type SpeechVoiceOption = {
 };
 
 export type SpeechListVoicesRequest = {
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   config?: ResolvedTtsConfig;
   apiKey?: string;
   baseUrl?: string;

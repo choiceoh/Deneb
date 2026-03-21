@@ -1,19 +1,19 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resolveThreadBindingConversationIdFromBindingId } from "openclaw/plugin-sdk/channel-runtime";
-import { formatThreadBindingDurationLabel } from "openclaw/plugin-sdk/channel-runtime";
+import { resolveThreadBindingConversationIdFromBindingId } from "deneb/plugin-sdk/channel-runtime";
+import { formatThreadBindingDurationLabel } from "deneb/plugin-sdk/channel-runtime";
 import {
   registerSessionBindingAdapter,
   unregisterSessionBindingAdapter,
   type BindingTargetKind,
   type SessionBindingRecord,
-} from "openclaw/plugin-sdk/conversation-runtime";
-import { writeJsonAtomic } from "openclaw/plugin-sdk/infra-runtime";
-import { normalizeAccountId } from "openclaw/plugin-sdk/routing";
-import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
-import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
-import { resolveGlobalSingleton } from "openclaw/plugin-sdk/text-runtime";
+} from "deneb/plugin-sdk/conversation-runtime";
+import { writeJsonAtomic } from "deneb/plugin-sdk/infra-runtime";
+import { normalizeAccountId } from "deneb/plugin-sdk/routing";
+import { logVerbose } from "deneb/plugin-sdk/runtime-env";
+import { resolveStateDir } from "deneb/plugin-sdk/state-paths";
+import { resolveGlobalSingleton } from "deneb/plugin-sdk/text-runtime";
 
 const DEFAULT_THREAD_BINDING_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_THREAD_BINDING_MAX_AGE_MS = 0;
@@ -73,7 +73,7 @@ type TelegramThreadBindingsState = {
  * Keep Telegram thread binding state shared across bundled chunks so routing,
  * binding lookups, and binding mutations all observe the same live registry.
  */
-const TELEGRAM_THREAD_BINDINGS_STATE_KEY = Symbol.for("openclaw.telegramThreadBindingsState");
+const TELEGRAM_THREAD_BINDINGS_STATE_KEY = Symbol.for("deneb.telegramThreadBindingsState");
 
 const threadBindingsState = resolveGlobalSingleton<TelegramThreadBindingsState>(
   TELEGRAM_THREAD_BINDINGS_STATE_KEY,

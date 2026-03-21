@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import {
   filterToolsByPolicy,
   isToolAllowedByPolicyName,
@@ -38,21 +38,21 @@ describe("pi-tools.policy", () => {
 describe("resolveSubagentToolPolicy depth awareness", () => {
   const baseCfg = {
     agents: { defaults: { subagents: { maxSpawnDepth: 2 } } },
-  } as unknown as OpenClawConfig;
+  } as unknown as DenebConfig;
 
   const deepCfg = {
     agents: { defaults: { subagents: { maxSpawnDepth: 3 } } },
-  } as unknown as OpenClawConfig;
+  } as unknown as DenebConfig;
 
   const leafCfg = {
     agents: { defaults: { subagents: { maxSpawnDepth: 1 } } },
-  } as unknown as OpenClawConfig;
+  } as unknown as DenebConfig;
 
   it("applies subagent tools.alsoAllow to re-enable default-denied tools", () => {
     const cfg = {
       agents: { defaults: { subagents: { maxSpawnDepth: 2 } } },
       tools: { subagents: { tools: { alsoAllow: ["sessions_send"] } } },
-    } as unknown as OpenClawConfig;
+    } as unknown as DenebConfig;
     const policy = resolveSubagentToolPolicy(cfg, 1);
     expect(isToolAllowedByPolicyName("sessions_send", policy)).toBe(true);
     expect(isToolAllowedByPolicyName("cron", policy)).toBe(false);
@@ -62,7 +62,7 @@ describe("resolveSubagentToolPolicy depth awareness", () => {
     const cfg = {
       agents: { defaults: { subagents: { maxSpawnDepth: 2 } } },
       tools: { subagents: { tools: { allow: ["sessions_send"] } } },
-    } as unknown as OpenClawConfig;
+    } as unknown as DenebConfig;
     const policy = resolveSubagentToolPolicy(cfg, 1);
     expect(isToolAllowedByPolicyName("sessions_send", policy)).toBe(true);
   });
@@ -73,7 +73,7 @@ describe("resolveSubagentToolPolicy depth awareness", () => {
       tools: {
         subagents: { tools: { allow: ["sessions_spawn"], alsoAllow: ["sessions_send"] } },
       },
-    } as unknown as OpenClawConfig;
+    } as unknown as DenebConfig;
     const policy = resolveSubagentToolPolicy(cfg, 1);
     expect(policy.allow).toEqual(["sessions_spawn", "sessions_send"]);
   });
@@ -90,7 +90,7 @@ describe("resolveSubagentToolPolicy depth awareness", () => {
           },
         },
       },
-    } as unknown as OpenClawConfig;
+    } as unknown as DenebConfig;
     const policy = resolveSubagentToolPolicy(cfg, 1);
     expect(isToolAllowedByPolicyName("sessions_send", policy)).toBe(false);
   });
@@ -99,7 +99,7 @@ describe("resolveSubagentToolPolicy depth awareness", () => {
     const cfg = {
       agents: { defaults: { subagents: { maxSpawnDepth: 2 } } },
       tools: { subagents: { tools: { alsoAllow: ["sessions_send"] } } },
-    } as unknown as OpenClawConfig;
+    } as unknown as DenebConfig;
     const policy = resolveSubagentToolPolicy(cfg, 1);
     expect(policy.allow).toBeUndefined();
     expect(isToolAllowedByPolicyName("subagents", policy)).toBe(true);
@@ -172,7 +172,7 @@ describe("resolveSubagentToolPolicy depth awareness", () => {
   it("uses stored leaf role for flat depth-1 session keys", () => {
     const storePath = path.join(
       os.tmpdir(),
-      `openclaw-subagent-policy-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+      `deneb-subagent-policy-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
     );
     fs.mkdirSync(path.dirname(storePath), { recursive: true });
     fs.writeFileSync(
@@ -197,7 +197,7 @@ describe("resolveSubagentToolPolicy depth awareness", () => {
       session: {
         store: storePath,
       },
-    } as unknown as OpenClawConfig;
+    } as unknown as DenebConfig;
 
     const policy = resolveSubagentToolPolicyForSession(cfg, "agent:main:subagent:flat-leaf");
     expect(isToolAllowedByPolicyName("sessions_spawn", policy)).toBe(false);
@@ -224,7 +224,7 @@ describe("resolveEffectiveToolPolicy", () => {
         profile: "messaging",
         exec: { host: "sandbox" },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const result = resolveEffectiveToolPolicy({ config: cfg });
     expect(result.profileAlsoAllow).toEqual(["exec", "process"]);
   });
@@ -235,7 +235,7 @@ describe("resolveEffectiveToolPolicy", () => {
         profile: "messaging",
         fs: { workspaceOnly: false },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const result = resolveEffectiveToolPolicy({ config: cfg });
     expect(result.profileAlsoAllow).toEqual(["read", "write", "edit"]);
   });
@@ -247,7 +247,7 @@ describe("resolveEffectiveToolPolicy", () => {
         alsoAllow: ["web_search"],
         exec: { host: "sandbox" },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const result = resolveEffectiveToolPolicy({ config: cfg });
     expect(result.profileAlsoAllow).toEqual(["web_search", "exec", "process"]);
   });
@@ -267,7 +267,7 @@ describe("resolveEffectiveToolPolicy", () => {
           },
         ],
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const result = resolveEffectiveToolPolicy({ config: cfg, agentId: "coder" });
     expect(result.profileAlsoAllow).toEqual(["read", "write", "edit"]);
   });

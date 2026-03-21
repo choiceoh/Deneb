@@ -1,5 +1,5 @@
 ---
-summary: "Cookbook for adding a new shared capability to OpenClaw"
+summary: "Cookbook for adding a new shared capability to Deneb"
 read_when:
   - Adding a new core capability and plugin registration surface
   - Deciding whether code belongs in core, a vendor plugin, or a feature plugin
@@ -9,7 +9,7 @@ title: "Capability Cookbook"
 
 # Capability Cookbook
 
-Use this when OpenClaw needs a new domain such as image generation, video
+Use this when Deneb needs a new domain such as image generation, video
 generation, or some future vendor-backed feature area.
 
 The rule:

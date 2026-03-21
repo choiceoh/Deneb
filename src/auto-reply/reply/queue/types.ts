@@ -1,6 +1,6 @@
 import type { ExecToolDefaults } from "../../../agents/bash-tools.js";
 import type { SkillSnapshot } from "../../../agents/skills.js";
-import type { OpenClawConfig } from "../../../config/config.js";
+import type { DenebConfig } from "../../../config/config.js";
 import type { SessionEntry } from "../../../config/sessions.js";
 import type { InputProvenance } from "../../../sessions/input-provenance.js";
 import type { OriginatingChannelType } from "../../templating.js";
@@ -59,7 +59,7 @@ export type FollowupRun = {
     senderIsOwner?: boolean;
     sessionFile: string;
     workspaceDir: string;
-    config: OpenClawConfig;
+    config: DenebConfig;
     skillsSnapshot?: SkillSnapshot;
     provider: string;
     model: string;
@@ -85,7 +85,7 @@ export type FollowupRun = {
 };
 
 export type ResolveQueueSettingsParams = {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   channel?: string;
   sessionEntry?: SessionEntry;
   inlineMode?: QueueMode;

@@ -1,14 +1,14 @@
 ---
-summary: "Use xAI Grok models in OpenClaw"
+summary: "Use xAI Grok models in Deneb"
 read_when:
-  - You want to use Grok models in OpenClaw
+  - You want to use Grok models in Deneb
   - You are configuring xAI auth or model ids
 title: "xAI"
 ---
 
 # xAI
 
-OpenClaw ships a bundled `xai` provider plugin for Grok models.
+Deneb ships a bundled `xai` provider plugin for Grok models.
 
 ## Setup
 
@@ -16,7 +16,7 @@ OpenClaw ships a bundled `xai` provider plugin for Grok models.
 2. Set `XAI_API_KEY`, or run:
 
 ```bash
-openclaw onboard --auth-choice xai-api-key
+deneb onboard --auth-choice xai-api-key
 ```
 
 3. Pick a model such as:
@@ -29,7 +29,7 @@ openclaw onboard --auth-choice xai-api-key
 
 ## Current bundled model catalog
 
-OpenClaw now includes these xAI model families out of the box:
+Deneb now includes these xAI model families out of the box:
 
 - `grok-4`, `grok-4-0709`
 - `grok-4-fast-reasoning`, `grok-4-fast-non-reasoning`
@@ -46,16 +46,16 @@ they follow the same API shape.
 The bundled `grok` web-search provider uses `XAI_API_KEY` too:
 
 ```bash
-openclaw config set tools.web.search.provider grok
+deneb config set tools.web.search.provider grok
 ```
 
 ## Known limits
 
-- Auth is API-key only today. There is no xAI OAuth/device-code flow in OpenClaw yet.
-- `grok-4.20-multi-agent-experimental-beta-0304` is not supported on the normal xAI provider path because it requires a different upstream API surface than the standard OpenClaw xAI transport.
+- Auth is API-key only today. There is no xAI OAuth/device-code flow in Deneb yet.
+- `grok-4.20-multi-agent-experimental-beta-0304` is not supported on the normal xAI provider path because it requires a different upstream API surface than the standard Deneb xAI transport.
 - Native xAI server-side tools such as `x_search` and `code_execution` are not yet first-class model-provider features in the bundled plugin.
 
 ## Notes
 
-- OpenClaw applies xAI-specific tool-schema and tool-call compatibility fixes automatically on the shared runner path.
+- Deneb applies xAI-specific tool-schema and tool-call compatibility fixes automatically on the shared runner path.
 - For the broader provider overview, see [Model providers](/providers/index).

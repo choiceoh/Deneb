@@ -323,11 +323,11 @@ describe("gateway-status command", () => {
     expect(unresolvedWarning?.message).not.toContain("missing or empty");
   });
 
-  it("does not resolve local token SecretRef when OPENCLAW_GATEWAY_TOKEN is set", async () => {
+  it("does not resolve local token SecretRef when DENEB_GATEWAY_TOKEN is set", async () => {
     const { runtime, runtimeLogs, runtimeErrors } = createRuntimeCapture();
     await withEnvAsync(
       {
-        OPENCLAW_GATEWAY_TOKEN: "env-token",
+        DENEB_GATEWAY_TOKEN: "env-token",
         MISSING_GATEWAY_TOKEN: undefined,
       },
       async () => {
@@ -360,7 +360,7 @@ describe("gateway-status command", () => {
     const { runtime, runtimeLogs, runtimeErrors } = createRuntimeCapture();
     await withEnvAsync(
       {
-        OPENCLAW_GATEWAY_TOKEN: "env-token",
+        DENEB_GATEWAY_TOKEN: "env-token",
         MISSING_GATEWAY_PASSWORD: undefined,
       },
       async () => {
@@ -401,7 +401,7 @@ describe("gateway-status command", () => {
     await withEnvAsync(
       {
         CUSTOM_GATEWAY_TOKEN: "resolved-gateway-token",
-        OPENCLAW_GATEWAY_TOKEN: undefined,
+        DENEB_GATEWAY_TOKEN: undefined,
         CLAWDBOT_GATEWAY_TOKEN: undefined,
       },
       async () => {
@@ -484,8 +484,8 @@ describe("gateway-status command", () => {
             mode: "remote",
             auth: {
               mode: "token",
-              token: { source: "env", provider: "default", id: "OPENCLAW_GATEWAY_TOKEN" },
-              password: { source: "env", provider: "default", id: "OPENCLAW_GATEWAY_PASSWORD" },
+              token: { source: "env", provider: "default", id: "DENEB_GATEWAY_TOKEN" },
+              password: { source: "env", provider: "default", id: "DENEB_GATEWAY_PASSWORD" },
             },
             remote: {
               url: "wss://remote.example:18789",

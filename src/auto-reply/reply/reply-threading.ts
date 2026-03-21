@@ -1,11 +1,11 @@
 import { getChannelPlugin, normalizeChannelId } from "../../channels/plugins/index.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import type { ReplyToMode } from "../../config/types.js";
 import type { OriginatingChannelType } from "../templating.js";
 import type { ReplyPayload } from "../types.js";
 
 export function resolveReplyToMode(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   channel?: OriginatingChannelType,
   accountId?: string | null,
   chatType?: string | null,

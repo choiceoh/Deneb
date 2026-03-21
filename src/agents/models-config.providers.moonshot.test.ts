@@ -13,7 +13,7 @@ import { buildMoonshotProvider } from "./models-config.providers.static.js";
 
 describe("moonshot implicit provider (#33637)", () => {
   it("uses explicit CN baseUrl when provided", async () => {
-    const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
     const envSnapshot = captureEnv(["MOONSHOT_API_KEY"]);
     process.env.MOONSHOT_API_KEY = "sk-test-cn";
 
@@ -48,7 +48,7 @@ describe("moonshot implicit provider (#33637)", () => {
   });
 
   it("keeps streaming usage opt-in unset before the final compat pass", async () => {
-    const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
     const envSnapshot = captureEnv(["MOONSHOT_API_KEY"]);
     process.env.MOONSHOT_API_KEY = "sk-test-custom";
 
@@ -72,7 +72,7 @@ describe("moonshot implicit provider (#33637)", () => {
   });
 
   it("defaults to .ai baseUrl when no explicit provider", async () => {
-    const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
     const envSnapshot = captureEnv(["MOONSHOT_API_KEY"]);
     process.env.MOONSHOT_API_KEY = "sk-test";
 

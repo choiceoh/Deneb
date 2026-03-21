@@ -26,7 +26,7 @@ export async function modelsListCommand(
 ) {
   ensureFlagCompatibility(opts);
   const { ensureAuthProfileStore } = await import("../../agents/auth-profiles.runtime.js");
-  const { ensureOpenClawModelsJson } = await import("../../agents/models-config.js");
+  const { ensureDenebModelsJson } = await import("../../agents/models-config.js");
   const { sourceConfig, resolvedConfig: cfg } = await loadModelsConfigWithSource({
     commandName: "models list",
     runtime,
@@ -48,7 +48,7 @@ export async function modelsListCommand(
   try {
     // Keep command behavior explicit: sync models.json from the source config
     // before building the read-only model registry view.
-    await ensureOpenClawModelsJson(sourceConfig ?? cfg);
+    await ensureDenebModelsJson(sourceConfig ?? cfg);
     const loaded = await loadListModelRegistry(cfg, { sourceConfig });
     modelRegistry = loaded.registry;
     discoveredKeys = loaded.discoveredKeys;

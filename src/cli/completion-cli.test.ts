@@ -4,7 +4,7 @@ import { getCompletionScript } from "./completion-cli.js";
 
 function createCompletionProgram(): Command {
   const program = new Command();
-  program.name("openclaw");
+  program.name("deneb");
   program.description("CLI root");
   program.option("-v, --verbose", "Verbose output");
 
@@ -21,9 +21,9 @@ describe("completion-cli", () => {
   it("generates zsh functions for nested subcommands", () => {
     const script = getCompletionScript("zsh", createCompletionProgram());
 
-    expect(script).toContain("_openclaw_gateway()");
-    expect(script).toContain("(status) _openclaw_gateway_status ;;");
-    expect(script).toContain("(restart) _openclaw_gateway_restart ;;");
+    expect(script).toContain("_deneb_gateway()");
+    expect(script).toContain("(status) _deneb_gateway_status ;;");
+    expect(script).toContain("(restart) _deneb_gateway_restart ;;");
     expect(script).toContain("--force[Force the action]");
   });
 
@@ -32,7 +32,7 @@ describe("completion-cli", () => {
 
     expect(script).toContain("if ($commandPath -eq 'gateway') {");
     expect(script).toContain("if ($commandPath -eq 'gateway status') {");
-    expect(script).not.toContain("if ($commandPath -eq 'openclaw gateway') {");
+    expect(script).not.toContain("if ($commandPath -eq 'deneb gateway') {");
     expect(script).toContain("$completions = @('status','restart','--force')");
   });
 
@@ -40,13 +40,13 @@ describe("completion-cli", () => {
     const script = getCompletionScript("fish", createCompletionProgram());
 
     expect(script).toContain(
-      'complete -c openclaw -n "__fish_use_subcommand" -a "gateway" -d \'Gateway commands\'',
+      'complete -c deneb -n "__fish_use_subcommand" -a "gateway" -d \'Gateway commands\'',
     );
     expect(script).toContain(
-      'complete -c openclaw -n "__fish_seen_subcommand_from gateway" -a "status" -d \'Show gateway status\'',
+      'complete -c deneb -n "__fish_seen_subcommand_from gateway" -a "status" -d \'Show gateway status\'',
     );
     expect(script).toContain(
-      "complete -c openclaw -n \"__fish_seen_subcommand_from gateway\" -l force -d 'Force the action'",
+      "complete -c deneb -n \"__fish_seen_subcommand_from gateway\" -l force -d 'Force the action'",
     );
   });
 });

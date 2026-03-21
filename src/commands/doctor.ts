@@ -9,7 +9,7 @@ import {
   resolveHooksGmailModel,
 } from "../agents/model-selection.js";
 import { formatCliCommand } from "../cli/command-format.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { CONFIG_PATH, readConfigFileSnapshot, writeConfigFile } from "../config/config.js";
 import { logConfigUpdated } from "../config/logging.js";
 import { resolveSecretInputRef } from "../config/types.secrets.js";
@@ -18,7 +18,7 @@ import { hasAmbiguousGatewayAuthModeConfig } from "../gateway/auth-mode-policy.j
 import { resolveGatewayAuth } from "../gateway/auth.js";
 import { buildGatewayConnectionDetails } from "../gateway/call.js";
 import { runStartupMatrixMigration } from "../gateway/server-startup-matrix-migration.js";
-import { resolveOpenClawPackageRoot } from "../infra/openclaw-root.js";
+import { resolveDenebPackageRoot } from "../infra/deneb-root.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { defaultRuntime } from "../runtime.js";
 import { note } from "../terminal/note.js";
@@ -68,7 +68,7 @@ import { ensureSystemdUserLingerInteractive } from "./systemd-linger.js";
 const intro = (message: string) => clackIntro(stylePromptTitle(message) ?? message);
 const outro = (message: string) => clackOutro(stylePromptTitle(message) ?? message);
 
-function resolveMode(cfg: OpenClawConfig): "local" | "remote" {
+function resolveMode(cfg: DenebConfig): "local" | "remote" {
   return cfg.gateway?.mode === "remote" ? "remote" : "local";
 }
 
@@ -78,9 +78,9 @@ export async function doctorCommand(
 ) {
   const prompter = createDoctorPrompter({ runtime, options });
   printWizardHeader(runtime);
-  intro("OpenClaw doctor");
+  intro("Deneb doctor");
 
-  const root = await resolveOpenClawPackageRoot({
+  const root = await resolveDenebPackageRoot({
     moduleUrl: import.meta.url,
     argv1: process.argv[1],
     cwd: process.cwd(),
@@ -106,7 +106,7 @@ export async function doctorCommand(
     options,
     confirm: (p) => prompter.confirm(p),
   });
-  let cfg: OpenClawConfig = configResult.cfg;
+  let cfg: DenebConfig = configResult.cfg;
   const cfgForPersistence = structuredClone(cfg);
   const sourceConfigValid = configResult.sourceConfigValid ?? true;
 
@@ -114,11 +114,11 @@ export async function doctorCommand(
   if (!cfg.gateway?.mode) {
     const lines = [
       "gateway.mode is unset; gateway start will be blocked.",
-      `Fix: run ${formatCliCommand("openclaw configure")} and set Gateway mode (local/remote).`,
-      `Or set directly: ${formatCliCommand("openclaw config set gateway.mode local")}`,
+      `Fix: run ${formatCliCommand("deneb configure")} and set Gateway mode (local/remote).`,
+      `Or set directly: ${formatCliCommand("deneb config set gateway.mode local")}`,
     ];
     if (!fs.existsSync(configPath)) {
-      lines.push(`Missing config: run ${formatCliCommand("openclaw setup")} first.`);
+      lines.push(`Missing config: run ${formatCliCommand("deneb setup")} first.`);
     }
     note(lines.join("\n"), "Gateway");
   }
@@ -127,8 +127,8 @@ export async function doctorCommand(
       [
         "gateway.auth.token and gateway.auth.password are both configured while gateway.auth.mode is unset.",
         "Set an explicit mode to avoid ambiguous auth selection and startup/runtime failures.",
-        `Set token mode: ${formatCliCommand("openclaw config set gateway.auth.mode token")}`,
-        `Set password mode: ${formatCliCommand("openclaw config set gateway.auth.mode password")}`,
+        `Set token mode: ${formatCliCommand("deneb config set gateway.auth.mode token")}`,
+        `Set password mode: ${formatCliCommand("deneb config set gateway.auth.mode password")}`,
       ].join("\n"),
       "Gateway auth",
     );
@@ -361,7 +361,7 @@ export async function doctorCommand(
       runtime.log(`Backup: ${shortenHomePath(backupPath)}`);
     }
   } else if (!prompter.shouldRepair) {
-    runtime.log(`Run "${formatCliCommand("openclaw doctor --fix")}" to apply changes.`);
+    runtime.log(`Run "${formatCliCommand("deneb doctor --fix")}" to apply changes.`);
   }
 
   if (options.workspaceSuggestions !== false) {

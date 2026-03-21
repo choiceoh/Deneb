@@ -24,7 +24,7 @@ export function createBundleMcpTempHarness() {
 }
 
 export async function createBundleProbePlugin(homeDir: string) {
-  const pluginRoot = path.join(homeDir, ".openclaw", "extensions", "bundle-probe");
+  const pluginRoot = path.join(homeDir, ".deneb", "extensions", "bundle-probe");
   const serverPath = path.join(pluginRoot, "servers", "probe.mjs");
   await fs.mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
   await fs.mkdir(path.dirname(serverPath), { recursive: true });

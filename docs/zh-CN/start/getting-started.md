@@ -2,7 +2,7 @@
 read_when:
   - 从零开始进行首次设置
   - 你想用最快的路径开始可用聊天
-summary: 在几分钟内安装 OpenClaw 并开始你的第一次聊天。
+summary: 在几分钟内安装 Deneb 并开始你的第一次聊天。
 title: 入门指南
 x-i18n:
   generated_at: "2026-03-16T06:27:55Z"
@@ -18,9 +18,9 @@ x-i18n:
 目标：以最少的设置，从零开始到完成第一次可用聊天。
 
 <Info>
-最快的聊天方式：打开 Control UI（无需设置渠道）。运行 `openclaw dashboard`
+最快的聊天方式：打开 Control UI（无需设置渠道）。运行 `deneb dashboard`
 并在浏览器中聊天，或在
-<Tooltip headline="Gateway host" tip="运行 OpenClaw Gateway 网关服务的机器。">网关主机</Tooltip>
+<Tooltip headline="Gateway host" tip="运行 Deneb Gateway 网关服务的机器。">网关主机</Tooltip>
 上打开 `http://127.0.0.1:18789/`。
 文档：[Dashboard](/web/dashboard) 和 [Control UI](/web/control-ui)。
 </Info>
@@ -36,11 +36,11 @@ x-i18n:
 ## 快速设置（CLI）
 
 <Steps>
-  <Step title="安装 OpenClaw（推荐）">
+  <Step title="安装 Deneb（推荐）">
     <Tabs>
       <Tab title="macOS/Linux">
         ```bash
-        curl -fsSL https://openclaw.ai/install.sh | bash
+        curl -fsSL https://deneb.ai/install.sh | bash
         ```
         <img
   src="/assets/install-script.svg"
@@ -50,7 +50,7 @@ x-i18n:
       </Tab>
       <Tab title="Windows（PowerShell）">
         ```powershell
-        iwr -useb https://openclaw.ai/install.ps1 | iex
+        iwr -useb https://deneb.ai/install.ps1 | iex
         ```
       </Tab>
     </Tabs>
@@ -62,7 +62,7 @@ x-i18n:
   </Step>
   <Step title="运行新手引导">
     ```bash
-    openclaw onboard --install-daemon
+    deneb onboard --install-daemon
     ```
 
     新手引导会配置认证、Gateway 网关设置和可选渠道。
@@ -73,13 +73,13 @@ x-i18n:
     如果你已安装服务，它应该已经在运行：
 
     ```bash
-    openclaw gateway status
+    deneb gateway status
     ```
 
   </Step>
   <Step title="打开 Control UI">
     ```bash
-    openclaw dashboard
+    deneb dashboard
     ```
   </Step>
 </Steps>
@@ -95,7 +95,7 @@ x-i18n:
     适合快速测试或故障排除。
 
     ```bash
-    openclaw gateway --port 18789
+    deneb gateway --port 18789
     ```
 
   </Accordion>
@@ -103,7 +103,7 @@ x-i18n:
     需要已配置的渠道。
 
     ```bash
-    openclaw message send --target +15555550123 --message "Hello from OpenClaw"
+    deneb message send --target +15555550123 --message "Hello from Deneb"
     ```
 
   </Accordion>
@@ -111,11 +111,11 @@ x-i18n:
 
 ## 常用环境变量
 
-如果你将 OpenClaw 作为服务账户运行，或想使用自定义配置/状态位置：
+如果你将 Deneb 作为服务账户运行，或想使用自定义配置/状态位置：
 
-- `OPENCLAW_HOME` 设置用于内部路径解析的主目录。
-- `OPENCLAW_STATE_DIR` 覆盖状态目录。
-- `OPENCLAW_CONFIG_PATH` 覆盖配置文件路径。
+- `DENEB_HOME` 设置用于内部路径解析的主目录。
+- `DENEB_STATE_DIR` 覆盖状态目录。
+- `DENEB_CONFIG_PATH` 覆盖配置文件路径。
 
 完整的环境变量参考： [环境变量](/help/environment)。
 

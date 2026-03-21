@@ -51,7 +51,7 @@ export type {
 export type { ChannelDirectoryEntry } from "../channels/plugins/types.core.js";
 export type { ChannelPlugin } from "../channels/plugins/types.plugin.js";
 export { createChannelReplyPipeline } from "./channel-reply-pipeline.js";
-export type { OpenClawConfig } from "../config/config.js";
+export type { DenebConfig } from "../config/config.js";
 export { isDangerousNameMatchingEnabled } from "../config/dangerous-name-matching.js";
 export { loadSessionStore, resolveStorePath } from "../config/sessions.js";
 export {
@@ -74,7 +74,7 @@ export { isLoopbackHost, isTrustedProxyAddress, resolveClientIp } from "../gatew
 export { registerPluginHttpRoute } from "../plugins/http-registry.js";
 export { emptyPluginConfigSchema } from "../plugins/config-schema.js";
 export type { PluginRuntime } from "../plugins/runtime/types.js";
-export type { OpenClawPluginApi } from "../plugins/types.js";
+export type { DenebPluginApi } from "../plugins/types.js";
 export {
   DEFAULT_ACCOUNT_ID,
   normalizeAccountId,

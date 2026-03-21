@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { discordPlugin } from "../../../extensions/discord/src/channel.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import { createTestRegistry } from "../../test-utils/channel-plugins.js";
 import {
@@ -17,13 +17,13 @@ const slackConfig = {
       appToken: "xapp-test",
     },
   },
-} as OpenClawConfig;
+} as DenebConfig;
 
 const discordConfig = {
   channels: {
     discord: {},
   },
-} as OpenClawConfig;
+} as DenebConfig;
 
 describe("outbound policy helpers", () => {
   beforeEach(() => {
@@ -38,7 +38,7 @@ describe("outbound policy helpers", () => {
       tools: {
         message: { crossContext: { allowAcrossProviders: true } },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     expect(() =>
       enforceCrossContextPolicy({
@@ -69,7 +69,7 @@ describe("outbound policy helpers", () => {
       tools: {
         message: { crossContext: { allowWithinProvider: false } },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     expect(() =>
       enforceCrossContextPolicy({

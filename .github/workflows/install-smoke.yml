@@ -53,14 +53,14 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          tags: openclaw-dockerfile-smoke:local
+          tags: deneb-dockerfile-smoke:local
           load: true
           push: false
           provenance: false
 
       - name: Run root Dockerfile CLI smoke
         run: |
-          docker run --rm --entrypoint sh openclaw-dockerfile-smoke:local -lc 'which openclaw && openclaw --version'
+          docker run --rm --entrypoint sh deneb-dockerfile-smoke:local -lc 'which deneb && deneb --version'
 
       # This smoke validates that the build-arg path preinstalls selected
       # extension deps and that matrix plugin discovery stays healthy in the
@@ -71,24 +71,24 @@ jobs:
           context: .
           file: ./Dockerfile
           build-args: |
-            OPENCLAW_EXTENSIONS=matrix
-          tags: openclaw-ext-smoke:local
+            DENEB_EXTENSIONS=matrix
+          tags: deneb-ext-smoke:local
           load: true
           push: false
           provenance: false
 
       - name: Smoke test Dockerfile with matrix extension build arg
         run: |
-          docker run --rm --entrypoint sh openclaw-ext-smoke:local -lc '
-            which openclaw &&
-            openclaw --version &&
+          docker run --rm --entrypoint sh deneb-ext-smoke:local -lc '
+            which deneb &&
+            deneb --version &&
             node -e "
               const Module = require(\"node:module\");
               const requireFromMatrix = Module.createRequire(\"/app/extensions/matrix/package.json\");
               requireFromMatrix.resolve(\"@vector-im/matrix-bot-sdk/package.json\");
               requireFromMatrix.resolve(\"@matrix-org/matrix-sdk-crypto-nodejs/package.json\");
               const { spawnSync } = require(\"node:child_process\");
-              const run = spawnSync(\"openclaw\", [\"plugins\", \"list\", \"--json\"], { encoding: \"utf8\" });
+              const run = spawnSync(\"deneb\", [\"plugins\", \"list\", \"--json\"], { encoding: \"utf8\" });
               if (run.status !== 0) {
                 process.stderr.write(run.stderr || run.stdout || \"plugins list failed\\n\");
                 process.exit(run.status ?? 1);
@@ -119,7 +119,7 @@ jobs:
         with:
           context: ./scripts/docker
           file: ./scripts/docker/install-sh-smoke/Dockerfile
-          tags: openclaw-install-smoke:local
+          tags: deneb-install-smoke:local
           load: true
           push: false
           provenance: false
@@ -130,15 +130,15 @@ jobs:
         with:
           context: ./scripts/docker
           file: ./scripts/docker/install-sh-nonroot/Dockerfile
-          tags: openclaw-install-nonroot:local
+          tags: deneb-install-nonroot:local
           load: true
           push: false
           provenance: false
 
       - name: Run installer docker tests
         env:
-          CLAWDBOT_INSTALL_URL: https://openclaw.ai/install.sh
-          CLAWDBOT_INSTALL_CLI_URL: https://openclaw.ai/install-cli.sh
+          CLAWDBOT_INSTALL_URL: https://deneb.ai/install.sh
+          CLAWDBOT_INSTALL_CLI_URL: https://deneb.ai/install-cli.sh
           CLAWDBOT_NO_ONBOARD: "1"
           CLAWDBOT_INSTALL_SMOKE_SKIP_CLI: "1"
           CLAWDBOT_INSTALL_SMOKE_SKIP_IMAGE_BUILD: "1"

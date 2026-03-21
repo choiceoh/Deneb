@@ -94,7 +94,7 @@ function resolveProfileStateDir(
   homedir: () => string,
 ): string {
   const suffix = profile.toLowerCase() === "default" ? "" : `-${profile}`;
-  return path.join(resolveRequiredHomeDir(env as NodeJS.ProcessEnv, homedir), `.openclaw${suffix}`);
+  return path.join(resolveRequiredHomeDir(env as NodeJS.ProcessEnv, homedir), `.deneb${suffix}`);
 }
 
 export function applyCliProfileEnv(params: {
@@ -110,18 +110,18 @@ export function applyCliProfileEnv(params: {
   }
 
   // Convenience only: fill defaults, never override explicit env values.
-  env.OPENCLAW_PROFILE = profile;
+  env.DENEB_PROFILE = profile;
 
-  const stateDir = env.OPENCLAW_STATE_DIR?.trim() || resolveProfileStateDir(profile, env, homedir);
-  if (!env.OPENCLAW_STATE_DIR?.trim()) {
-    env.OPENCLAW_STATE_DIR = stateDir;
+  const stateDir = env.DENEB_STATE_DIR?.trim() || resolveProfileStateDir(profile, env, homedir);
+  if (!env.DENEB_STATE_DIR?.trim()) {
+    env.DENEB_STATE_DIR = stateDir;
   }
 
-  if (!env.OPENCLAW_CONFIG_PATH?.trim()) {
-    env.OPENCLAW_CONFIG_PATH = path.join(stateDir, "openclaw.json");
+  if (!env.DENEB_CONFIG_PATH?.trim()) {
+    env.DENEB_CONFIG_PATH = path.join(stateDir, "deneb.json");
   }
 
-  if (profile === "dev" && !env.OPENCLAW_GATEWAY_PORT?.trim()) {
-    env.OPENCLAW_GATEWAY_PORT = "19001";
+  if (profile === "dev" && !env.DENEB_GATEWAY_PORT?.trim()) {
+    env.DENEB_GATEWAY_PORT = "19001";
   }
 }

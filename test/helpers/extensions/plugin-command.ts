@@ -1,1 +1,1 @@
-export type { OpenClawPluginCommandDefinition } from "openclaw/plugin-sdk/core";
+export type { DenebPluginCommandDefinition } from "deneb/plugin-sdk/core";

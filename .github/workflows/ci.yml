@@ -239,11 +239,11 @@ jobs:
         run: |
           # `pnpm test` runs `scripts/test-parallel.mjs`, which spawns multiple Node processes.
           # Default heap limits have been too low on Linux CI (V8 OOM near 4GB).
-          echo "OPENCLAW_TEST_WORKERS=2" >> "$GITHUB_ENV"
-          echo "OPENCLAW_TEST_MAX_OLD_SPACE_SIZE_MB=6144" >> "$GITHUB_ENV"
+          echo "DENEB_TEST_WORKERS=2" >> "$GITHUB_ENV"
+          echo "DENEB_TEST_MAX_OLD_SPACE_SIZE_MB=6144" >> "$GITHUB_ENV"
           if [ -n "$SHARD_COUNT" ] && [ -n "$SHARD_INDEX" ]; then
-            echo "OPENCLAW_TEST_SHARDS=$SHARD_COUNT" >> "$GITHUB_ENV"
-            echo "OPENCLAW_TEST_SHARD_INDEX=$SHARD_INDEX" >> "$GITHUB_ENV"
+            echo "DENEB_TEST_SHARDS=$SHARD_COUNT" >> "$GITHUB_ENV"
+            echo "DENEB_TEST_SHARD_INDEX=$SHARD_INDEX" >> "$GITHUB_ENV"
           fi
 
       - name: Run ${{ matrix.task }} (${{ matrix.runtime }})
@@ -272,8 +272,8 @@ jobs:
 
       - name: Run changed extension tests
         env:
-          OPENCLAW_CHANGED_EXTENSION: ${{ matrix.extension }}
-        run: pnpm test:extension "$OPENCLAW_CHANGED_EXTENSION"
+          DENEB_CHANGED_EXTENSION: ${{ matrix.extension }}
+        run: pnpm test:extension "$DENEB_CHANGED_EXTENSION"
 
   # Types, lint, and format check.
   check:
@@ -403,10 +403,10 @@ jobs:
         run: pnpm build
 
       - name: Smoke test CLI launcher help
-        run: node openclaw.mjs --help
+        run: node deneb.mjs --help
 
       - name: Smoke test CLI launcher status json
-        run: node openclaw.mjs status --json --timeout 1
+        run: node deneb.mjs status --json --timeout 1
 
       - name: Smoke test built bundled plugin singleton
         run: pnpm test:build:singleton
@@ -484,8 +484,8 @@ jobs:
       - name: Configure Node 22 test resources
         run: |
           # Keep the compatibility lane aligned with the default Node test lane.
-          echo "OPENCLAW_TEST_WORKERS=2" >> "$GITHUB_ENV"
-          echo "OPENCLAW_TEST_MAX_OLD_SPACE_SIZE_MB=6144" >> "$GITHUB_ENV"
+          echo "DENEB_TEST_WORKERS=2" >> "$GITHUB_ENV"
+          echo "DENEB_TEST_MAX_OLD_SPACE_SIZE_MB=6144" >> "$GITHUB_ENV"
 
       - name: Build under Node 22
         run: pnpm build
@@ -607,7 +607,7 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=6144
       # Keep total concurrency predictable on the 32 vCPU runner.
       # Windows shard 2 has shown intermittent instability at 2 workers.
-      OPENCLAW_TEST_WORKERS: 1
+      DENEB_TEST_WORKERS: 1
     defaults:
       run:
         shell: bash
@@ -713,8 +713,8 @@ jobs:
       - name: Configure test shard (Windows)
         if: matrix.task == 'test'
         run: |
-          echo "OPENCLAW_TEST_SHARDS=${{ matrix.shard_count }}" >> "$GITHUB_ENV"
-          echo "OPENCLAW_TEST_SHARD_INDEX=${{ matrix.shard_index }}" >> "$GITHUB_ENV"
+          echo "DENEB_TEST_SHARDS=${{ matrix.shard_count }}" >> "$GITHUB_ENV"
+          echo "DENEB_TEST_SHARD_INDEX=${{ matrix.shard_index }}" >> "$GITHUB_ENV"
 
       - name: Build A2UI bundle (Windows)
         if: matrix.task == 'test'

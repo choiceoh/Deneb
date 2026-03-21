@@ -5,7 +5,7 @@ import { withTempHome as withTempHomeBase } from "../../test/helpers/temp-home.j
 import * as acpManagerModule from "../acp/control-plane/manager.js";
 import { AcpRuntimeError } from "../acp/runtime/errors.js";
 import * as embeddedModule from "../agents/pi-embedded.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import * as configModule from "../config/config.js";
 import { readSessionMessages } from "../gateway/session-utils.fs.js";
 import { onAgentEvent } from "../infra/agent-events.js";
@@ -25,10 +25,10 @@ const runtime: RuntimeEnv = {
 };
 
 async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
-  return withTempHomeBase(fn, { prefix: "openclaw-agent-acp-" });
+  return withTempHomeBase(fn, { prefix: "deneb-agent-acp-" });
 }
 
-function createAcpEnabledConfig(home: string, storePath: string): OpenClawConfig {
+function createAcpEnabledConfig(home: string, storePath: string): DenebConfig {
   return {
     acp: {
       enabled: true,
@@ -40,7 +40,7 @@ function createAcpEnabledConfig(home: string, storePath: string): OpenClawConfig
       defaults: {
         model: { primary: "openai/gpt-5.3-codex" },
         models: { "openai/gpt-5.3-codex": {} },
-        workspace: path.join(home, "openclaw"),
+        workspace: path.join(home, "deneb"),
       },
     },
     session: { store: storePath, mainKey: "main" },
@@ -54,7 +54,7 @@ function mockConfig(home: string, storePath: string) {
 function mockConfigWithAcpOverrides(
   home: string,
   storePath: string,
-  acpOverrides: Partial<NonNullable<OpenClawConfig["acp"]>>,
+  acpOverrides: Partial<NonNullable<DenebConfig["acp"]>>,
 ) {
   const cfg = createAcpEnabledConfig(home, storePath);
   cfg.acp = {
@@ -111,7 +111,7 @@ function resolveReadySession(
 function mockAcpManager(params: {
   runTurn: (params: unknown) => Promise<void>;
   resolveSession?: (params: {
-    cfg: OpenClawConfig;
+    cfg: DenebConfig;
     sessionKey: string;
   }) => ReturnType<ReturnType<typeof acpManagerModule.getAcpSessionManager>["resolveSession"]>;
 }) {
@@ -227,7 +227,7 @@ function expectPersistedAcpTranscript(params: {
 }
 
 async function runAcpSessionWithPolicyOverrides(params: {
-  acpOverrides: Partial<NonNullable<OpenClawConfig["acp"]>>;
+  acpOverrides: Partial<NonNullable<DenebConfig["acp"]>>;
   resolveSession?: Parameters<typeof mockAcpManager>[0]["resolveSession"];
 }) {
   await withTempHome(async (home) => {
@@ -412,13 +412,13 @@ describe("agentCommand ACP runtime routing", () => {
   it.each([
     {
       name: "blocks ACP turns when ACP is disabled by policy",
-      acpOverrides: { enabled: false } satisfies Partial<NonNullable<OpenClawConfig["acp"]>>,
+      acpOverrides: { enabled: false } satisfies Partial<NonNullable<DenebConfig["acp"]>>,
     },
     {
       name: "blocks ACP turns when ACP dispatch is disabled by policy",
       acpOverrides: {
         dispatch: { enabled: false },
-      } satisfies Partial<NonNullable<OpenClawConfig["acp"]>>,
+      } satisfies Partial<NonNullable<DenebConfig["acp"]>>,
     },
   ])("$name", async ({ acpOverrides }) => {
     await runAcpSessionWithPolicyOverrides({ acpOverrides });

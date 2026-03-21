@@ -11,7 +11,7 @@ import {
 describe("extractConfigSummary", () => {
   it("marks SecretRef-backed gateway auth credentials as configured", () => {
     const summary = extractConfigSummary({
-      path: "/tmp/openclaw.json",
+      path: "/tmp/deneb.json",
       exists: true,
       valid: true,
       issues: [],
@@ -25,8 +25,8 @@ describe("extractConfigSummary", () => {
         gateway: {
           auth: {
             mode: "token",
-            token: { source: "env", provider: "default", id: "OPENCLAW_GATEWAY_TOKEN" },
-            password: { source: "env", provider: "default", id: "OPENCLAW_GATEWAY_PASSWORD" },
+            token: { source: "env", provider: "default", id: "DENEB_GATEWAY_TOKEN" },
+            password: { source: "env", provider: "default", id: "DENEB_GATEWAY_PASSWORD" },
           },
           remote: {
             url: "wss://remote.example:18789",
@@ -45,7 +45,7 @@ describe("extractConfigSummary", () => {
 
   it("still treats empty plaintext auth values as not configured", () => {
     const summary = extractConfigSummary({
-      path: "/tmp/openclaw.json",
+      path: "/tmp/deneb.json",
       exists: true,
       valid: true,
       issues: [],
@@ -107,8 +107,8 @@ describe("resolveAuthForTarget", () => {
   it("resolves local auth token SecretRef before probing local targets", async () => {
     await withEnvAsync(
       {
-        OPENCLAW_GATEWAY_TOKEN: undefined,
-        OPENCLAW_GATEWAY_PASSWORD: undefined,
+        DENEB_GATEWAY_TOKEN: undefined,
+        DENEB_GATEWAY_PASSWORD: undefined,
         LOCAL_GATEWAY_TOKEN: "resolved-local-token",
       },
       async () => {

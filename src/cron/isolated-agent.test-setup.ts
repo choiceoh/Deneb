@@ -10,7 +10,7 @@ import { createOutboundTestPlugin, createTestRegistry } from "../test-utils/chan
 
 export function setupIsolatedAgentTurnMocks(params?: { fast?: boolean }): void {
   if (params?.fast) {
-    vi.stubEnv("OPENCLAW_TEST_FAST", "1");
+    vi.stubEnv("DENEB_TEST_FAST", "1");
   }
   vi.mocked(runEmbeddedPiAgent).mockReset();
   vi.mocked(loadModelCatalog).mockResolvedValue([]);

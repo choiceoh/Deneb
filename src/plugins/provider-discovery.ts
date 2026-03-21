@@ -1,5 +1,5 @@
 import { normalizeProviderId } from "../agents/model-selection.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { ModelProviderConfig } from "../config/types.js";
 import { resolvePluginProviders } from "./providers.js";
 import type { ProviderDiscoveryOrder, ProviderPlugin } from "./types.js";
@@ -11,7 +11,7 @@ function resolveProviderCatalogHook(provider: ProviderPlugin) {
 }
 
 export function resolvePluginDiscoveryProviders(params: {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
 }): ProviderPlugin[] {
@@ -73,7 +73,7 @@ export function normalizePluginDiscoveryResult(params: {
 
 export function runProviderCatalog(params: {
   provider: ProviderPlugin;
-  config: OpenClawConfig;
+  config: DenebConfig;
   agentDir?: string;
   workspaceDir?: string;
   env: NodeJS.ProcessEnv;

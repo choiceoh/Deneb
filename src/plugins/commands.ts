@@ -6,7 +6,7 @@
  */
 
 import { parseExplicitTargetForChannel } from "../channels/plugins/target-parsing.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { logVerbose } from "../globals.js";
 import {
   detachPluginConversationBinding,
@@ -14,12 +14,12 @@ import {
   requestPluginConversationBinding,
 } from "./conversation-binding.js";
 import type {
-  OpenClawPluginCommandDefinition,
+  DenebPluginCommandDefinition,
   PluginCommandContext,
   PluginCommandResult,
 } from "./types.js";
 
-type RegisteredPluginCommand = OpenClawPluginCommandDefinition & {
+type RegisteredPluginCommand = DenebPluginCommandDefinition & {
   pluginId: string;
   pluginName?: string;
   pluginRoot?: string;
@@ -114,7 +114,7 @@ export type CommandRegistrationResult = {
  * Shared by both the global registration path and snapshot (non-activating) loads.
  */
 export function validatePluginCommandDefinition(
-  command: OpenClawPluginCommandDefinition,
+  command: DenebPluginCommandDefinition,
 ): string | null {
   if (typeof command.handler !== "function") {
     return "Command handler must be a function";
@@ -144,7 +144,7 @@ export function validatePluginCommandDefinition(
   return null;
 }
 
-function listPluginInvocationKeys(command: OpenClawPluginCommandDefinition): string[] {
+function listPluginInvocationKeys(command: DenebPluginCommandDefinition): string[] {
   const keys = new Set<string>();
   const push = (value: string | undefined) => {
     const normalized = value?.trim().toLowerCase();
@@ -168,7 +168,7 @@ function listPluginInvocationKeys(command: OpenClawPluginCommandDefinition): str
  */
 export function registerPluginCommand(
   pluginId: string,
-  command: OpenClawPluginCommandDefinition,
+  command: DenebPluginCommandDefinition,
   opts?: { pluginName?: string; pluginRoot?: string },
 ): CommandRegistrationResult {
   // Prevent registration while commands are being processed
@@ -375,7 +375,7 @@ export async function executePluginCommand(params: {
   channelId?: PluginCommandContext["channelId"];
   isAuthorizedSender: boolean;
   commandBody: string;
-  config: OpenClawConfig;
+  config: DenebConfig;
   from?: PluginCommandContext["from"];
   to?: PluginCommandContext["to"];
   accountId?: PluginCommandContext["accountId"];
@@ -485,7 +485,7 @@ export function listPluginCommands(): Array<{
 }
 
 function resolvePluginNativeName(
-  command: OpenClawPluginCommandDefinition,
+  command: DenebPluginCommandDefinition,
   provider?: string,
 ): string {
   const providerName = provider?.trim().toLowerCase();
@@ -500,7 +500,7 @@ function resolvePluginNativeName(
   return command.name;
 }
 
-function listPluginInvocationNames(command: OpenClawPluginCommandDefinition): string[] {
+function listPluginInvocationNames(command: DenebPluginCommandDefinition): string[] {
   return listPluginInvocationKeys(command);
 }
 

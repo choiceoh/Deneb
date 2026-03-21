@@ -1,12 +1,12 @@
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { buildWorkspaceSkillStatus } from "../agents/skills-status.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { loadOpenClawPlugins } from "../plugins/loader.js";
+import type { DenebConfig } from "../config/config.js";
+import { loadDenebPlugins } from "../plugins/loader.js";
 import { buildPluginCompatibilityWarnings } from "../plugins/status.js";
 import { note } from "../terminal/note.js";
 import { detectLegacyWorkspaceDirs, formatLegacyWorkspaceWarning } from "./doctor-workspace.js";
 
-export function noteWorkspaceStatus(cfg: OpenClawConfig) {
+export function noteWorkspaceStatus(cfg: DenebConfig) {
   const workspaceDir = resolveAgentWorkspaceDir(cfg, resolveDefaultAgentId(cfg));
   const legacyWorkspace = detectLegacyWorkspaceDirs({ workspaceDir });
   if (legacyWorkspace.legacyDirs.length > 0) {
@@ -26,7 +26,7 @@ export function noteWorkspaceStatus(cfg: OpenClawConfig) {
     "Skills status",
   );
 
-  const pluginRegistry = loadOpenClawPlugins({
+  const pluginRegistry = loadDenebPlugins({
     config: cfg,
     workspaceDir,
     logger: {

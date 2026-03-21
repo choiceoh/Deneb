@@ -1,5 +1,5 @@
 import { formatCliCommand } from "../cli/command-format.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { readConfigFileSnapshot } from "../config/config.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { defaultRuntime } from "../runtime.js";
@@ -14,13 +14,13 @@ export async function runNonInteractiveSetup(
   const snapshot = await readConfigFileSnapshot();
   if (snapshot.exists && !snapshot.valid) {
     runtime.error(
-      `Config invalid. Run \`${formatCliCommand("openclaw doctor")}\` to repair it, then re-run setup.`,
+      `Config invalid. Run \`${formatCliCommand("deneb doctor")}\` to repair it, then re-run setup.`,
     );
     runtime.exit(1);
     return;
   }
 
-  const baseConfig: OpenClawConfig = snapshot.valid ? (snapshot.exists ? snapshot.config : {}) : {};
+  const baseConfig: DenebConfig = snapshot.valid ? (snapshot.exists ? snapshot.config : {}) : {};
   const mode = opts.mode ?? "local";
   if (mode !== "local" && mode !== "remote") {
     runtime.error(`Invalid --mode "${String(mode)}" (use local|remote).`);

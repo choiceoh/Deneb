@@ -1,6 +1,6 @@
 import fsSync from "node:fs";
 import path from "node:path";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
 import type { UpdateChannel } from "../infra/update-channels.js";
 import { resolveUserPath } from "../utils.js";
@@ -31,7 +31,7 @@ export type PluginUpdateOutcome = {
 };
 
 export type PluginUpdateSummary = {
-  config: OpenClawConfig;
+  config: DenebConfig;
   changed: boolean;
   outcomes: PluginUpdateOutcome[];
 };
@@ -54,7 +54,7 @@ export type PluginChannelSyncSummary = {
 };
 
 export type PluginChannelSyncResult = {
-  config: OpenClawConfig;
+  config: DenebConfig;
   changed: boolean;
   summary: PluginChannelSyncSummary;
 };
@@ -204,7 +204,7 @@ function replacePluginIdInList(
   return next;
 }
 
-function migratePluginConfigId(cfg: OpenClawConfig, fromId: string, toId: string): OpenClawConfig {
+function migratePluginConfigId(cfg: DenebConfig, fromId: string, toId: string): DenebConfig {
   if (fromId === toId) {
     return cfg;
   }
@@ -286,7 +286,7 @@ function createPluginUpdateIntegrityDriftHandler(params: {
 }
 
 export async function updateNpmInstalledPlugins(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   logger?: PluginUpdateLogger;
   pluginIds?: string[];
   skipIds?: Set<string>;
@@ -559,7 +559,7 @@ export async function updateNpmInstalledPlugins(params: {
 }
 
 export async function syncPluginsForUpdateChannel(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   channel: UpdateChannel;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;

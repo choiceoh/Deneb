@@ -1,15 +1,15 @@
 import {
   resolvePayloadMediaUrls,
   sendPayloadMediaSequenceOrFallback,
-} from "openclaw/plugin-sdk/channel-runtime";
-import type { ChannelOutboundAdapter } from "openclaw/plugin-sdk/channel-runtime";
-import { resolveOutboundSendDep, type OutboundSendDeps } from "openclaw/plugin-sdk/channel-runtime";
+} from "deneb/plugin-sdk/channel-runtime";
+import type { ChannelOutboundAdapter } from "deneb/plugin-sdk/channel-runtime";
+import { resolveOutboundSendDep, type OutboundSendDeps } from "deneb/plugin-sdk/channel-runtime";
 import {
   attachChannelToResult,
   createAttachedChannelResultAdapter,
-} from "openclaw/plugin-sdk/channel-send-result";
-import { resolveInteractiveTextFallback } from "openclaw/plugin-sdk/interactive-runtime";
-import type { ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
+} from "deneb/plugin-sdk/channel-send-result";
+import { resolveInteractiveTextFallback } from "deneb/plugin-sdk/interactive-runtime";
+import type { ReplyPayload } from "deneb/plugin-sdk/reply-runtime";
 import type { TelegramInlineButtons } from "./button-types.js";
 import { resolveTelegramInlineButtons } from "./button-types.js";
 import { markdownToTelegramHtmlChunks } from "./format.js";

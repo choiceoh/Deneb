@@ -1,6 +1,6 @@
 import os from "node:os";
 import { resolveGatewayPort } from "../config/paths.js";
-import type { OpenClawConfig } from "../config/types.js";
+import type { DenebConfig } from "../config/types.js";
 import {
   hasConfiguredSecretInput,
   normalizeSecretInputString,
@@ -102,7 +102,7 @@ function normalizeUrl(raw: string, schemeFallback: "ws" | "wss"): string | null 
 }
 
 function resolveScheme(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   opts?: {
     forceSecure?: boolean;
   },
@@ -161,17 +161,17 @@ function pickTailnetIPv4(
 }
 
 function resolveGatewayTokenFromEnv(env: NodeJS.ProcessEnv): string | undefined {
-  return env.OPENCLAW_GATEWAY_TOKEN?.trim() || env.CLAWDBOT_GATEWAY_TOKEN?.trim() || undefined;
+  return env.DENEB_GATEWAY_TOKEN?.trim() || env.CLAWDBOT_GATEWAY_TOKEN?.trim() || undefined;
 }
 
 function resolveGatewayPasswordFromEnv(env: NodeJS.ProcessEnv): string | undefined {
   return (
-    env.OPENCLAW_GATEWAY_PASSWORD?.trim() || env.CLAWDBOT_GATEWAY_PASSWORD?.trim() || undefined
+    env.DENEB_GATEWAY_PASSWORD?.trim() || env.CLAWDBOT_GATEWAY_PASSWORD?.trim() || undefined
   );
 }
 
 function resolvePairingSetupAuthLabel(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   env: NodeJS.ProcessEnv,
 ): ResolveAuthLabelResult {
   const mode = cfg.gateway?.auth?.mode;
@@ -214,7 +214,7 @@ function resolvePairingSetupAuthLabel(
 }
 
 function resolvePairingSetupSharedAuth(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   env: NodeJS.ProcessEnv,
 ): ResolveSharedAuthResult {
   const defaults = cfg.secrets?.defaults;
@@ -249,9 +249,9 @@ function resolvePairingSetupSharedAuth(
 }
 
 async function resolveGatewayTokenSecretRef(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   env: NodeJS.ProcessEnv,
-): Promise<OpenClawConfig> {
+): Promise<DenebConfig> {
   const hasTokenEnvCandidate = Boolean(resolveGatewayTokenFromEnv(env));
   if (hasTokenEnvCandidate) {
     return cfg;
@@ -262,7 +262,7 @@ async function resolveGatewayTokenSecretRef(
   }
   if (mode !== "token") {
     const hasPasswordEnvCandidate = Boolean(
-      env.OPENCLAW_GATEWAY_PASSWORD?.trim() || env.CLAWDBOT_GATEWAY_PASSWORD?.trim(),
+      env.DENEB_GATEWAY_PASSWORD?.trim() || env.CLAWDBOT_GATEWAY_PASSWORD?.trim(),
     );
     if (hasPasswordEnvCandidate) {
       return cfg;
@@ -290,9 +290,9 @@ async function resolveGatewayTokenSecretRef(
 }
 
 async function resolveGatewayPasswordSecretRef(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   env: NodeJS.ProcessEnv,
-): Promise<OpenClawConfig> {
+): Promise<DenebConfig> {
   const hasPasswordEnvCandidate = Boolean(resolveGatewayPasswordFromEnv(env));
   if (hasPasswordEnvCandidate) {
     return cfg;
@@ -331,15 +331,15 @@ async function resolveGatewayPasswordSecretRef(
 }
 
 async function materializePairingSetupAuthConfig(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   env: NodeJS.ProcessEnv,
-): Promise<OpenClawConfig> {
+): Promise<DenebConfig> {
   const cfgWithToken = await resolveGatewayTokenSecretRef(cfg, env);
   return await resolveGatewayPasswordSecretRef(cfgWithToken, env);
 }
 
 async function resolveGatewayUrl(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   opts: {
     env: NodeJS.ProcessEnv;
     publicUrl?: string;
@@ -407,7 +407,7 @@ export function encodePairingSetupCode(payload: PairingSetupPayload): string {
 }
 
 export async function resolvePairingSetupFromConfig(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   options: ResolvePairingSetupOptions = {},
 ): Promise<PairingSetupResolution> {
   assertExplicitGatewayAuthModeWhenBothConfigured(cfg);

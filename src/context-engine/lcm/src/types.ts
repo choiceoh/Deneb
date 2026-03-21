@@ -1,7 +1,7 @@
 /**
  * Core type definitions for the LCM plugin.
  *
- * These types define the contracts between LCM and OpenClaw core,
+ * These types define the contracts between LCM and Deneb core,
  * abstracting away direct imports from core internals.
  */
 
@@ -92,7 +92,7 @@ export type IsSubagentSessionKeyFn = (sessionKey: string) => boolean;
 
 /**
  * Dependencies injected into the LCM engine at registration time.
- * These replace all direct imports from OpenClaw core.
+ * These replace all direct imports from Deneb core.
  */
 export interface LcmDependencies {
   /** LCM configuration (from env vars + plugin config) */
@@ -135,7 +135,7 @@ export interface LcmDependencies {
   /** Sanitize tool use/result pairing in message arrays */
   // sanitizeToolUseResultPairing removed — now imported directly in assembler from transcript-repair.ts
 
-  /** Resolve the OpenClaw agent directory */
+  /** Resolve the Deneb agent directory */
   resolveAgentDir: () => string;
 
   /** Resolve runtime session id from an agent session key */

@@ -291,7 +291,7 @@ describe("applySettingsFromUrl", () => {
   it("hydrates query token params and strips them from the URL", () => {
     setTestWindowUrl("https://control.example/ui/overview?token=abc123");
     const host = createHost("overview");
-    host.settings.gatewayUrl = "wss://control.example/openclaw";
+    host.settings.gatewayUrl = "wss://control.example/deneb";
 
     applySettingsFromUrl(host);
 
@@ -301,15 +301,15 @@ describe("applySettingsFromUrl", () => {
 
   it("keeps query token params pending when a gatewayUrl confirmation is required", () => {
     setTestWindowUrl(
-      "https://control.example/ui/overview?gatewayUrl=wss://other-gateway.example/openclaw&token=abc123",
+      "https://control.example/ui/overview?gatewayUrl=wss://other-gateway.example/deneb&token=abc123",
     );
     const host = createHost("overview");
-    host.settings.gatewayUrl = "wss://control.example/openclaw";
+    host.settings.gatewayUrl = "wss://control.example/deneb";
 
     applySettingsFromUrl(host);
 
     expect(host.settings.token).toBe("");
-    expect(host.pendingGatewayUrl).toBe("wss://other-gateway.example/openclaw");
+    expect(host.pendingGatewayUrl).toBe("wss://other-gateway.example/deneb");
     expect(host.pendingGatewayToken).toBe("abc123");
     expect(window.location.search).toBe("");
   });
@@ -317,7 +317,7 @@ describe("applySettingsFromUrl", () => {
   it("prefers fragment tokens over legacy query tokens when both are present", () => {
     setTestWindowUrl("https://control.example/ui/overview?token=query-token#token=hash-token");
     const host = createHost("overview");
-    host.settings.gatewayUrl = "wss://control.example/openclaw";
+    host.settings.gatewayUrl = "wss://control.example/deneb";
 
     applySettingsFromUrl(host);
 

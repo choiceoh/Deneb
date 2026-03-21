@@ -192,7 +192,7 @@ describe("browser manage output", () => {
         ? {
             enabled: true,
             profile: "remote",
-            driver: "openclaw",
+            driver: "deneb",
             transport: "cdp",
             running: true,
             cdpReady: true,

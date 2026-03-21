@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { DmScope } from "../config/types.base.js";
 import type { ToolProfileId } from "../config/types.tools.js";
 
@@ -6,9 +6,9 @@ export const ONBOARDING_DEFAULT_DM_SCOPE: DmScope = "per-channel-peer";
 export const ONBOARDING_DEFAULT_TOOLS_PROFILE: ToolProfileId = "coding";
 
 export function applyLocalSetupWorkspaceConfig(
-  baseConfig: OpenClawConfig,
+  baseConfig: DenebConfig,
   workspaceDir: string,
-): OpenClawConfig {
+): DenebConfig {
   return {
     ...baseConfig,
     agents: {

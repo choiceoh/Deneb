@@ -11,7 +11,7 @@ import {
   resolveUsableCustomProviderApiKey,
 } from "../../agents/model-auth.js";
 import { findNormalizedProviderValue, normalizeProviderId } from "../../agents/model-selection.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { coerceSecretRef } from "../../config/types.secrets.js";
 import { shortenHomePath } from "../../utils.js";
 import { maskApiKey } from "../../utils/mask-api-key.js";
@@ -51,7 +51,7 @@ function formatFlagsSuffix(flags: string[]) {
 
 export const resolveAuthLabel = async (
   provider: string,
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   modelsPath: string,
   agentDir?: string,
   mode: ModelAuthDetailMode = "compact",
@@ -220,7 +220,7 @@ export const formatAuthLabel = (auth: { label: string; source: string }) => {
 export const resolveProfileOverride = (params: {
   rawProfile?: string;
   provider: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentDir?: string;
 }): { profileId?: string; error?: string } => {
   const raw = params.rawProfile?.trim();

@@ -1,5 +1,5 @@
 import { createTelegramThreadBindingManager } from "../../../../extensions/telegram/runtime-api.js";
-import type { OpenClawConfig } from "../../../config/config.js";
+import type { DenebConfig } from "../../../config/config.js";
 import {
   getSessionBindingService,
   type SessionBindingCapabilities,
@@ -24,7 +24,7 @@ type ActionsContractEntry = {
   unsupportedAction?: string;
   cases: Array<{
     name: string;
-    cfg: OpenClawConfig;
+    cfg: DenebConfig;
     expectedActions: string[];
     expectedCapabilities?: string[];
     beforeTest?: () => void;
@@ -36,14 +36,14 @@ type SetupContractEntry = {
   plugin: Pick<ChannelPlugin, "id" | "config" | "setup">;
   cases: Array<{
     name: string;
-    cfg: OpenClawConfig;
+    cfg: DenebConfig;
     accountId?: string;
     input: Record<string, unknown>;
     expectedAccountId?: string;
     expectedValidation?: string | null;
     beforeTest?: () => void;
-    assertPatchedConfig?: (cfg: OpenClawConfig) => void;
-    assertResolvedAccount?: (account: unknown, cfg: OpenClawConfig) => void;
+    assertPatchedConfig?: (cfg: DenebConfig) => void;
+    assertResolvedAccount?: (account: unknown, cfg: DenebConfig) => void;
   }>;
 };
 
@@ -52,7 +52,7 @@ type StatusContractEntry = {
   plugin: Pick<ChannelPlugin, "id" | "config" | "status">;
   cases: Array<{
     name: string;
-    cfg: OpenClawConfig;
+    cfg: DenebConfig;
     accountId?: string;
     runtime?: Record<string, unknown>;
     probe?: unknown;
@@ -109,7 +109,7 @@ type DirectoryContractEntry = {
   id: string;
   plugin: Pick<ChannelPlugin, "id" | "directory">;
   coverage: "lookups" | "presence";
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   accountId?: string;
 };
 
@@ -198,7 +198,7 @@ export const actionContractRegistry: ActionsContractEntry[] = [
               baseUrl: "https://chat.example.com",
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         expectedActions: ["send", "react"],
         expectedCapabilities: ["buttons"],
       },
@@ -213,7 +213,7 @@ export const actionContractRegistry: ActionsContractEntry[] = [
               actions: { reactions: false },
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         expectedActions: ["send"],
         expectedCapabilities: ["buttons"],
       },
@@ -225,7 +225,7 @@ export const actionContractRegistry: ActionsContractEntry[] = [
               enabled: true,
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         expectedActions: [],
         expectedCapabilities: [],
       },
@@ -237,7 +237,7 @@ export const actionContractRegistry: ActionsContractEntry[] = [
     cases: [
       {
         name: "forwards runtime-backed Telegram actions and capabilities",
-        cfg: {} as OpenClawConfig,
+        cfg: {} as DenebConfig,
         expectedActions: ["send", "poll", "react"],
         expectedCapabilities: ["interactive", "buttons"],
         beforeTest: () => {
@@ -259,7 +259,7 @@ export const setupContractRegistry: SetupContractEntry[] = [
     cases: [
       {
         name: "default account stores token and normalized base URL",
-        cfg: {} as OpenClawConfig,
+        cfg: {} as DenebConfig,
         input: {
           botToken: "test-token",
           httpUrl: "https://chat.example.com/",
@@ -273,7 +273,7 @@ export const setupContractRegistry: SetupContractEntry[] = [
       },
       {
         name: "missing credentials are rejected",
-        cfg: {} as OpenClawConfig,
+        cfg: {} as DenebConfig,
         input: {
           httpUrl: "",
         },
@@ -299,7 +299,7 @@ export const statusContractRegistry: StatusContractEntry[] = [
               baseUrl: "https://chat.example.com",
             },
           },
-        } as OpenClawConfig,
+        } as DenebConfig,
         runtime: {
           accountId: "default",
           connected: true,
@@ -345,7 +345,7 @@ export const directoryContractRegistry: DirectoryContractEntry[] = surfaceContra
 
 const _baseSessionBindingCfg = {
   session: { mainKey: "main", scope: "per-sender" },
-} satisfies OpenClawConfig;
+} satisfies DenebConfig;
 
 export const sessionBindingContractRegistry: SessionBindingContractEntry[] = [
   {

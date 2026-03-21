@@ -96,7 +96,7 @@ export type ImageDescriptionRequest = {
   profile?: string;
   preferredProfile?: string;
   agentDir: string;
-  cfg: import("../config/config.js").OpenClawConfig;
+  cfg: import("../config/config.js").DenebConfig;
   model: string;
   provider: string;
 };
@@ -117,7 +117,7 @@ export type ImagesDescriptionRequest = {
   profile?: string;
   preferredProfile?: string;
   agentDir: string;
-  cfg: import("../config/config.js").OpenClawConfig;
+  cfg: import("../config/config.js").DenebConfig;
 };
 
 export type ImageDescriptionResult = {

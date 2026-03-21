@@ -8,12 +8,12 @@ import * as installSource from "./install-source-utils.js";
 
 async function runExtractedArchiveFailureCase(configureArchive: () => void) {
   vi.spyOn(installSource, "withTempDir").mockImplementation(
-    async (_prefix, fn) => await fn("/tmp/openclaw-install-flow"),
+    async (_prefix, fn) => await fn("/tmp/deneb-install-flow"),
   );
   configureArchive();
   return await withExtractedArchiveRoot({
     archivePath: "/tmp/plugin.tgz",
-    tempDirPrefix: "openclaw-plugin-",
+    tempDirPrefix: "deneb-plugin-",
     timeoutMs: 1000,
     onExtracted: async () => ({ ok: true as const }),
   });
@@ -23,7 +23,7 @@ describe("resolveExistingInstallPath", () => {
   let fixtureRoot = "";
 
   beforeEach(async () => {
-    fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-install-flow-"));
+    fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-install-flow-"));
   });
 
   afterEach(async () => {
@@ -64,7 +64,7 @@ describe("withExtractedArchiveRoot", () => {
   });
 
   it("extracts archive and passes root directory to callback", async () => {
-    const tmpRoot = path.join(path.sep, "tmp", "openclaw-install-flow");
+    const tmpRoot = path.join(path.sep, "tmp", "deneb-install-flow");
     const archivePath = path.join(path.sep, "tmp", "plugin.tgz");
     const extractDir = path.join(tmpRoot, "extract");
     const packageRoot = path.join(extractDir, "package");
@@ -77,12 +77,12 @@ describe("withExtractedArchiveRoot", () => {
     const onExtracted = vi.fn(async (rootDir: string) => ({ ok: true as const, rootDir }));
     const result = await withExtractedArchiveRoot({
       archivePath,
-      tempDirPrefix: "openclaw-plugin-",
+      tempDirPrefix: "deneb-plugin-",
       timeoutMs: 1000,
       onExtracted,
     });
 
-    expect(withTempDirSpy).toHaveBeenCalledWith("openclaw-plugin-", expect.any(Function));
+    expect(withTempDirSpy).toHaveBeenCalledWith("deneb-plugin-", expect.any(Function));
     expect(extractSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         archivePath,

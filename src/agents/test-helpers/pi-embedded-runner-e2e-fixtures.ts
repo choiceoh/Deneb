@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 
 export type EmbeddedPiRunnerTestWorkspace = {
   tempRoot: string;
@@ -29,7 +29,7 @@ export async function cleanupEmbeddedPiRunnerTestWorkspace(
   await fs.rm(workspace.tempRoot, { recursive: true, force: true });
 }
 
-export function createEmbeddedPiRunnerOpenAiConfig(modelIds: string[]): OpenClawConfig {
+export function createEmbeddedPiRunnerOpenAiConfig(modelIds: string[]): DenebConfig {
   return {
     models: {
       providers: {

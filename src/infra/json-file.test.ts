@@ -6,7 +6,7 @@ import { loadJsonFile, saveJsonFile } from "./json-file.js";
 
 describe("json-file helpers", () => {
   it("returns undefined for missing and invalid JSON files", async () => {
-    await withTempDir({ prefix: "openclaw-json-file-" }, async (root) => {
+    await withTempDir({ prefix: "deneb-json-file-" }, async (root) => {
       const pathname = path.join(root, "config.json");
       expect(loadJsonFile(pathname)).toBeUndefined();
 
@@ -16,7 +16,7 @@ describe("json-file helpers", () => {
   });
 
   it("returns undefined when the target path is a directory", async () => {
-    await withTempDir({ prefix: "openclaw-json-file-" }, async (root) => {
+    await withTempDir({ prefix: "deneb-json-file-" }, async (root) => {
       const pathname = path.join(root, "config-dir");
       fs.mkdirSync(pathname);
 
@@ -25,7 +25,7 @@ describe("json-file helpers", () => {
   });
 
   it("creates parent dirs, writes a trailing newline, and loads the saved object", async () => {
-    await withTempDir({ prefix: "openclaw-json-file-" }, async (root) => {
+    await withTempDir({ prefix: "deneb-json-file-" }, async (root) => {
       const pathname = path.join(root, "nested", "config.json");
       saveJsonFile(pathname, { enabled: true, count: 2 });
 
@@ -45,7 +45,7 @@ describe("json-file helpers", () => {
   });
 
   it("overwrites existing JSON files with the latest payload", async () => {
-    await withTempDir({ prefix: "openclaw-json-file-" }, async (root) => {
+    await withTempDir({ prefix: "deneb-json-file-" }, async (root) => {
       const pathname = path.join(root, "config.json");
       fs.writeFileSync(pathname, '{"enabled":false}\n', "utf8");
 

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { MemorySearchConfig } from "../config/types.tools.js";
 import type { MemoryIndexManager } from "./index.js";
 
@@ -67,15 +67,15 @@ describe("memory watcher config", () => {
   });
 
   async function setupWatcherWorkspace(seedFile: { name: string; contents: string }) {
-    workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-memory-watch-"));
+    workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-memory-watch-"));
     extraDir = path.join(workspaceDir, "extra");
     await fs.mkdir(path.join(workspaceDir, "memory"), { recursive: true });
     await fs.mkdir(extraDir, { recursive: true });
     await fs.writeFile(path.join(extraDir, seedFile.name), seedFile.contents);
   }
 
-  function createWatcherConfig(overrides?: Partial<MemorySearchConfig>): OpenClawConfig {
-    const defaults: NonNullable<NonNullable<OpenClawConfig["agents"]>["defaults"]> = {
+  function createWatcherConfig(overrides?: Partial<MemorySearchConfig>): DenebConfig {
+    const defaults: NonNullable<NonNullable<DenebConfig["agents"]>["defaults"]> = {
       workspace: workspaceDir,
       memorySearch: {
         provider: "openai",
@@ -92,10 +92,10 @@ describe("memory watcher config", () => {
         defaults,
         list: [{ id: "main", default: true }],
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
   }
 
-  async function expectWatcherManager(cfg: OpenClawConfig) {
+  async function expectWatcherManager(cfg: DenebConfig) {
     const result = await getMemorySearchManager({ cfg, agentId: "main" });
     expect(result.manager).not.toBeNull();
     if (!result.manager) {

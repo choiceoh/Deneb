@@ -1,5 +1,5 @@
-import type { BaseProbeResult } from "openclaw/plugin-sdk/channel-runtime";
-import { fetchWithTimeout } from "openclaw/plugin-sdk/text-runtime";
+import type { BaseProbeResult } from "deneb/plugin-sdk/channel-runtime";
+import { fetchWithTimeout } from "deneb/plugin-sdk/text-runtime";
 import type { TelegramNetworkConfig } from "../runtime-api.js";
 import { resolveTelegramFetch } from "./fetch.js";
 import { makeProxyFetch } from "./proxy.js";

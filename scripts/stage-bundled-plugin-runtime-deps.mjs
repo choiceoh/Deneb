@@ -32,7 +32,7 @@ function hasRuntimeDeps(packageJson) {
 }
 
 function shouldStageRuntimeDeps(packageJson) {
-  return packageJson.openclaw?.bundle?.stageRuntimeDependencies === true;
+  return packageJson.deneb?.bundle?.stageRuntimeDependencies === true;
 }
 
 function installPluginRuntimeDeps(pluginDir, pluginId) {

@@ -1,6 +1,6 @@
 import type { Model, SimpleStreamOptions } from "@mariozechner/pi-ai";
 import { describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { runExtraParamsCase } from "./extra-params.test-support.js";
 
 // Mock streamSimple for testing
@@ -15,7 +15,7 @@ type ToolStreamCase = {
   applyProvider: string;
   applyModelId: string;
   model: Model<"openai-completions">;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   options?: SimpleStreamOptions;
 };
 

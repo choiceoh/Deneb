@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { projectSafeChannelAccountSnapshotFields } from "../account-snapshot-fields.js";
 import { inspectReadOnlyChannelAccount } from "../read-only-account-inspect.js";
 import type { ChannelAccountSnapshot, ChannelPlugin } from "./types.js";
@@ -6,7 +6,7 @@ import type { ChannelAccountSnapshot, ChannelPlugin } from "./types.js";
 // Channel docking: status snapshots flow through plugin.status hooks here.
 async function buildSnapshotFromAccount<ResolvedAccount>(params: {
   plugin: ChannelPlugin<ResolvedAccount>;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   accountId: string;
   account: ResolvedAccount;
   runtime?: ChannelAccountSnapshot;
@@ -43,7 +43,7 @@ async function buildSnapshotFromAccount<ResolvedAccount>(params: {
 
 async function inspectChannelAccount<ResolvedAccount>(params: {
   plugin: ChannelPlugin<ResolvedAccount>;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   accountId: string;
 }): Promise<ResolvedAccount | null> {
   return (params.plugin.config.inspectAccount?.(params.cfg, params.accountId) ??
@@ -56,7 +56,7 @@ async function inspectChannelAccount<ResolvedAccount>(params: {
 
 export async function buildReadOnlySourceChannelAccountSnapshot<ResolvedAccount>(params: {
   plugin: ChannelPlugin<ResolvedAccount>;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   accountId: string;
   runtime?: ChannelAccountSnapshot;
   probe?: unknown;
@@ -74,7 +74,7 @@ export async function buildReadOnlySourceChannelAccountSnapshot<ResolvedAccount>
 
 export async function buildChannelAccountSnapshot<ResolvedAccount>(params: {
   plugin: ChannelPlugin<ResolvedAccount>;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   accountId: string;
   runtime?: ChannelAccountSnapshot;
   probe?: unknown;

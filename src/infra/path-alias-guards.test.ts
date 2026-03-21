@@ -9,7 +9,7 @@ describe("assertNoPathAliasEscape", () => {
     "rejects broken final symlink targets outside root",
     async () => {
       await withTempDir(
-        { prefix: "openclaw-path-alias-", parentDir: process.cwd(), subdir: "root" },
+        { prefix: "deneb-path-alias-", parentDir: process.cwd(), subdir: "root" },
         async (root) => {
           const outside = path.join(path.dirname(root), "outside");
           await fs.mkdir(outside, { recursive: true });
@@ -32,7 +32,7 @@ describe("assertNoPathAliasEscape", () => {
     "allows broken final symlink targets that remain inside root",
     async () => {
       await withTempDir(
-        { prefix: "openclaw-path-alias-", parentDir: process.cwd(), subdir: "root" },
+        { prefix: "deneb-path-alias-", parentDir: process.cwd(), subdir: "root" },
         async (root) => {
           const linkPath = path.join(root, "jump");
           await fs.symlink(path.join(root, "missing", "owned.txt"), linkPath);
@@ -53,7 +53,7 @@ describe("assertNoPathAliasEscape", () => {
     "rejects broken targets that traverse via an in-root symlink alias",
     async () => {
       await withTempDir(
-        { prefix: "openclaw-path-alias-", parentDir: process.cwd(), subdir: "root" },
+        { prefix: "deneb-path-alias-", parentDir: process.cwd(), subdir: "root" },
         async (root) => {
           const outside = path.join(path.dirname(root), "outside");
           await fs.mkdir(outside, { recursive: true });

@@ -5,7 +5,7 @@ import { callGateway } from "../../gateway/call.js";
 import { sleep } from "../../utils.js";
 
 function resolveCronSubagentTimings() {
-  const fastTestMode = process.env.OPENCLAW_TEST_FAST === "1";
+  const fastTestMode = process.env.DENEB_TEST_FAST === "1";
   return {
     waitMinMs: fastTestMode ? 10 : 30_000,
     finalReplyGraceMs: fastTestMode ? 50 : 5_000,

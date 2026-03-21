@@ -7,7 +7,7 @@ import { assertNoHardlinkedFinalPath } from "./hardlink-guards.js";
 
 describe("assertNoHardlinkedFinalPath", () => {
   it("allows missing paths, directories, and explicit unlink opt-in", async () => {
-    await withTempDir({ prefix: "openclaw-hardlink-guards-" }, async (root) => {
+    await withTempDir({ prefix: "deneb-hardlink-guards-" }, async (root) => {
       const dirPath = path.join(root, "dir");
       await fs.mkdir(dirPath);
 
@@ -44,7 +44,7 @@ describe("assertNoHardlinkedFinalPath", () => {
   });
 
   it("rejects hardlinked files and shortens home-relative paths in the error", async () => {
-    await withTempDir({ prefix: "openclaw-hardlink-guards-" }, async (root) => {
+    await withTempDir({ prefix: "deneb-hardlink-guards-" }, async (root) => {
       const source = path.join(root, "source.txt");
       const linked = path.join(root, "linked.txt");
       await fs.writeFile(source, "hello", "utf8");

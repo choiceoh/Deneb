@@ -16,14 +16,14 @@ export type {
 } from "../channels/plugins/types.js";
 export type { ChannelPlugin } from "../channels/plugins/types.plugin.js";
 export { createChannelReplyPipeline } from "./channel-reply-pipeline.js";
-export type { OpenClawConfig } from "../config/config.js";
+export type { DenebConfig } from "../config/config.js";
 export { createDedupeCache } from "../infra/dedupe.js";
 export { fetchWithSsrFGuard } from "../infra/net/fetch-guard.js";
 export type { LookupFn, SsrFPolicy } from "../infra/net/ssrf.js";
 export { isBlockedHostnameOrIp, SsrFBlockedError } from "../infra/net/ssrf.js";
 export { emptyPluginConfigSchema } from "../plugins/config-schema.js";
 export type { PluginRuntime } from "../plugins/runtime/types.js";
-export type { OpenClawPluginApi } from "../plugins/types.js";
+export type { DenebPluginApi } from "../plugins/types.js";
 export { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
 export type { RuntimeEnv } from "../runtime.js";
 export { formatDocsLink } from "../terminal/links.js";
@@ -33,7 +33,7 @@ export { createLoggerBackedRuntime } from "./runtime.js";
 const tlonSetup = createOptionalChannelSetupSurface({
   channel: "tlon",
   label: "Tlon",
-  npmSpec: "@openclaw/tlon",
+  npmSpec: "@deneb/tlon",
   docsPath: "/channels/tlon",
 });
 

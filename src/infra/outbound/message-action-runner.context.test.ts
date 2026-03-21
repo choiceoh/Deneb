@@ -2,7 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { slackPlugin } from "../../../extensions/slack/src/channel.js";
 import { telegramPlugin } from "../../../extensions/telegram/src/channel.js";
 import { whatsappPlugin } from "../../../extensions/whatsapp/src/channel.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import { createTestRegistry } from "../../test-utils/channel-plugins.js";
 import { createIMessageTestPlugin } from "../../test-utils/imessage-test-plugin.js";
@@ -15,7 +15,7 @@ const slackConfig = {
       appToken: "xapp-test",
     },
   },
-} as OpenClawConfig;
+} as DenebConfig;
 
 const whatsappConfig = {
   channels: {
@@ -23,10 +23,10 @@ const whatsappConfig = {
       allowFrom: ["*"],
     },
   },
-} as OpenClawConfig;
+} as DenebConfig;
 
 const runDryAction = (params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   action: "send" | "thread-reply" | "broadcast";
   actionParams: Record<string, unknown>;
   toolContext?: Record<string, unknown>;
@@ -44,7 +44,7 @@ const runDryAction = (params: {
   });
 
 const runDrySend = (params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   actionParams: Record<string, unknown>;
   toolContext?: Record<string, unknown>;
   abortSignal?: AbortSignal;
@@ -194,7 +194,7 @@ describe("runMessageAction context isolation", () => {
             botToken: "telegram-test",
           },
         },
-      } as OpenClawConfig,
+      } as DenebConfig,
       actionParams: {
         channel: "telegram",
         target: "123456",
@@ -362,7 +362,7 @@ describe("runMessageAction context isolation", () => {
             token: "tg-test",
           },
         },
-      } as OpenClawConfig,
+      } as DenebConfig,
       action: "send" as const,
       actionParams: {
         message: "hi",
@@ -432,7 +432,7 @@ describe("runMessageAction context isolation", () => {
             },
           },
         },
-      } as OpenClawConfig,
+      } as DenebConfig,
       actionParams: {
         channel: "slack",
         target: "channel:C99999999",

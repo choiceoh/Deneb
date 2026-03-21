@@ -379,7 +379,7 @@ html.theme-transition::view-transition-new(theme) {
   }
 }
 
-openclaw-app {
+deneb-app {
   display: block;
   position: relative;
   z-index: 1;

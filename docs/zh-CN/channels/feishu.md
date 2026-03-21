@@ -15,18 +15,18 @@ x-i18n:
 
 # 飞书机器人
 
-飞书（Lark）是企业用于消息沟通与协作的团队聊天平台。此插件通过平台的 WebSocket 事件订阅将 OpenClaw 连接到飞书/Lark 机器人，因此无需暴露公共 webhook URL 即可接收消息。
+飞书（Lark）是企业用于消息沟通与协作的团队聊天平台。此插件通过平台的 WebSocket 事件订阅将 Deneb 连接到飞书/Lark 机器人，因此无需暴露公共 webhook URL 即可接收消息。
 
 ---
 
 ## 捆绑插件
 
-飞书随当前的 OpenClaw 版本一同捆绑提供，因此无需单独安装插件。
+飞书随当前的 Deneb 版本一同捆绑提供，因此无需单独安装插件。
 
 如果你使用的是较旧版本，或使用了不包含捆绑飞书的自定义安装，请手动安装：
 
 ```bash
-openclaw plugins install @openclaw/feishu
+deneb plugins install @deneb/feishu
 ```
 
 ---
@@ -37,38 +37,38 @@ openclaw plugins install @openclaw/feishu
 
 ### 方法 1：设置向导（推荐）
 
-如果你刚安装 OpenClaw，请运行设置向导：
+如果你刚安装 Deneb，请运行设置向导：
 
 ```bash
-openclaw onboard
+deneb onboard
 ```
 
 向导会引导你完成以下步骤：
 
 1. 创建飞书应用并收集凭证
-2. 在 OpenClaw 中配置应用凭证
+2. 在 Deneb 中配置应用凭证
 3. 启动 Gateway 网关
 
 ✅ **配置完成后**，检查 Gateway 网关状态：
 
-- `openclaw gateway status`
-- `openclaw logs --follow`
+- `deneb gateway status`
+- `deneb logs --follow`
 
 ### 方法 2：CLI 设置
 
 如果你已经完成初始安装，可通过 CLI 添加该渠道：
 
 ```bash
-openclaw channels add
+deneb channels add
 ```
 
 选择 **Feishu**，然后输入 App ID 和 App Secret。
 
 ✅ **配置完成后**，管理 Gateway 网关：
 
-- `openclaw gateway status`
-- `openclaw gateway restart`
-- `openclaw logs --follow`
+- `deneb gateway status`
+- `deneb gateway restart`
+- `deneb logs --follow`
 
 ---
 
@@ -146,8 +146,8 @@ Lark（国际版）租户应使用 [https://open.larksuite.com/app](https://open
 
 ⚠️ **重要：**在设置事件订阅前，请确保：
 
-1. 你已经为飞书运行过 `openclaw channels add`
-2. Gateway 网关正在运行（`openclaw gateway status`）
+1. 你已经为飞书运行过 `deneb channels add`
+2. Gateway 网关正在运行（`deneb gateway status`）
 
 在 **Event Subscription** 中：
 
@@ -166,19 +166,19 @@ Lark（国际版）租户应使用 [https://open.larksuite.com/app](https://open
 
 ---
 
-## 第 2 步：配置 OpenClaw
+## 第 2 步：配置 Deneb
 
 ### 使用向导配置（推荐）
 
 ```bash
-openclaw channels add
+deneb channels add
 ```
 
 选择 **Feishu**，然后粘贴你的 App ID 和 App Secret。
 
 ### 通过配置文件进行配置
 
-编辑 `~/.openclaw/openclaw.json`：
+编辑 `~/.deneb/deneb.json`：
 
 ```json5
 {
@@ -275,7 +275,7 @@ export FEISHU_APP_SECRET="xxx"
 ### 1. 启动 Gateway 网关
 
 ```bash
-openclaw gateway
+deneb gateway
 ```
 
 ### 2. 发送测试消息
@@ -287,7 +287,7 @@ openclaw gateway
 默认情况下，机器人会回复一个配对码。批准它：
 
 ```bash
-openclaw pairing approve feishu <CODE>
+deneb pairing approve feishu <CODE>
 ```
 
 批准后，你就可以正常聊天了。
@@ -311,8 +311,8 @@ openclaw pairing approve feishu <CODE>
 - **批准配对**：
 
   ```bash
-  openclaw pairing list feishu
-  openclaw pairing approve feishu <CODE>
+  deneb pairing list feishu
+  deneb pairing approve feishu <CODE>
   ```
 
 - **Allowlist 模式**：设置 `channels.feishu.allowFrom`，填入允许的 Open ID
@@ -407,7 +407,7 @@ openclaw pairing approve feishu <CODE>
 **方法 1（推荐）**
 
 1. 启动 Gateway 网关并在群里 @ 提及机器人
-2. 运行 `openclaw logs --follow` 并查找 `chat_id`
+2. 运行 `deneb logs --follow` 并查找 `chat_id`
 
 **方法 2**
 
@@ -420,14 +420,14 @@ openclaw pairing approve feishu <CODE>
 **方法 1（推荐）**
 
 1. 启动 Gateway 网关并向机器人发送私信
-2. 运行 `openclaw logs --follow` 并查找 `open_id`
+2. 运行 `deneb logs --follow` 并查找 `open_id`
 
 **方法 2**
 
 检查配对请求中的用户 Open ID：
 
 ```bash
-openclaw pairing list feishu
+deneb pairing list feishu
 ```
 
 ---
@@ -446,11 +446,11 @@ openclaw pairing list feishu
 
 | Command                    | Description                |
 | -------------------------- | -------------------------- |
-| `openclaw gateway status`  | 显示 Gateway 网关状态      |
-| `openclaw gateway install` | 安装/启动 Gateway 网关服务 |
-| `openclaw gateway stop`    | 停止 Gateway 网关服务      |
-| `openclaw gateway restart` | 重启 Gateway 网关服务      |
-| `openclaw logs --follow`   | 跟踪 Gateway 网关日志      |
+| `deneb gateway status`  | 显示 Gateway 网关状态      |
+| `deneb gateway install` | 安装/启动 Gateway 网关服务 |
+| `deneb gateway stop`    | 停止 Gateway 网关服务      |
+| `deneb gateway restart` | 重启 Gateway 网关服务      |
+| `deneb logs --follow`   | 跟踪 Gateway 网关日志      |
 
 ---
 
@@ -461,7 +461,7 @@ openclaw pairing list feishu
 1. 确保机器人已加入群组
 2. 确保你 @ 提及了机器人（默认行为）
 3. 检查 `groupPolicy` 未设置为 `"disabled"`
-4. 检查日志：`openclaw logs --follow`
+4. 检查日志：`deneb logs --follow`
 
 ### 机器人未接收到消息
 
@@ -469,8 +469,8 @@ openclaw pairing list feishu
 2. 确保事件订阅包含 `im.message.receive_v1`
 3. 确保已启用**长连接**
 4. 确保应用权限完整
-5. 确保 Gateway 网关正在运行：`openclaw gateway status`
-6. 检查日志：`openclaw logs --follow`
+5. 确保 Gateway 网关正在运行：`deneb gateway status`
+6. 检查日志：`deneb logs --follow`
 
 ### App Secret 泄露
 
@@ -562,7 +562,7 @@ openclaw pairing list feishu
             agent: "codex",
             backend: "acpx",
             mode: "persistent",
-            cwd: "/workspace/openclaw",
+            cwd: "/workspace/deneb",
           },
         },
       },
@@ -618,12 +618,12 @@ openclaw pairing list feishu
       {
         id: "clawd-fan",
         workspace: "/home/user/clawd-fan",
-        agentDir: "/home/user/.openclaw/agents/clawd-fan/agent",
+        agentDir: "/home/user/.deneb/agents/clawd-fan/agent",
       },
       {
         id: "clawd-xi",
         workspace: "/home/user/clawd-xi",
-        agentDir: "/home/user/.openclaw/agents/clawd-xi/agent",
+        agentDir: "/home/user/.deneb/agents/clawd-xi/agent",
       },
     ],
   },

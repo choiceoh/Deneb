@@ -1,20 +1,20 @@
 {
-  "name": "openclaw",
+  "name": "deneb",
   "version": "3.141",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
-  "homepage": "https://github.com/openclaw/openclaw#readme",
+  "homepage": "https://github.com/deneb/deneb#readme",
   "bugs": {
-    "url": "https://github.com/openclaw/openclaw/issues"
+    "url": "https://github.com/deneb/deneb/issues"
   },
   "license": "MIT",
   "author": "",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/openclaw/openclaw.git"
+    "url": "git+https://github.com/deneb/deneb.git"
   },
   "bin": {
-    "openclaw": "openclaw.mjs"
+    "deneb": "deneb.mjs"
   },
   "directories": {
     "doc": "docs",
@@ -23,7 +23,7 @@
   "files": [
     "CHANGELOG.md",
     "LICENSE",
-    "openclaw.mjs",
+    "deneb.mjs",
     "README-header.png",
     "README.md",
     "assets/",
@@ -373,7 +373,7 @@
       "types": "./dist/plugin-sdk/discord.d.ts",
       "default": "./dist/plugin-sdk/discord.js"
     },
-    "./cli-entry": "./openclaw.mjs"
+    "./cli-entry": "./deneb.mjs"
   },
   "scripts": {
     "build": "pnpm canvas:a2ui:bundle && node scripts/tsdown-build.mjs && node scripts/runtime-postbuild.mjs && pnpm build:plugin-sdk:dts && node --import tsx scripts/write-plugin-sdk-entry-dts.ts && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-export-html-templates.ts && node --import tsx scripts/write-build-info.ts && node --import tsx scripts/write-cli-startup-metadata.ts && node --import tsx scripts/write-cli-compat.ts",
@@ -412,8 +412,8 @@
     "format:docs": "git ls-files 'docs/**/*.md' 'docs/**/*.mdx' 'README.md' | xargs oxfmt --write",
     "format:docs:check": "git ls-files 'docs/**/*.md' 'docs/**/*.mdx' 'README.md' | xargs oxfmt --check",
     "format:fix": "oxfmt --write",
-    "gateway:dev": "OPENCLAW_SKIP_CHANNELS=1 CLAWDBOT_SKIP_CHANNELS=1 node scripts/run-node.mjs --dev gateway",
-    "gateway:dev:reset": "OPENCLAW_SKIP_CHANNELS=1 CLAWDBOT_SKIP_CHANNELS=1 node scripts/run-node.mjs --dev gateway --reset",
+    "gateway:dev": "DENEB_SKIP_CHANNELS=1 CLAWDBOT_SKIP_CHANNELS=1 node scripts/run-node.mjs --dev gateway",
+    "gateway:dev:reset": "DENEB_SKIP_CHANNELS=1 CLAWDBOT_SKIP_CHANNELS=1 node scripts/run-node.mjs --dev gateway --reset",
     "gateway:watch": "node scripts/watch-node.mjs gateway --force",
     "ghsa:patch": "node scripts/ghsa-patch.mjs",
     "lint": "oxlint --type-aware",
@@ -440,8 +440,8 @@
     "lint:web-search-provider-boundaries": "node scripts/check-web-search-provider-boundaries.mjs",
     "lint:webhook:no-low-level-body-read": "node scripts/check-webhook-auth-body-order.mjs",
     "moltbot:rpc": "node scripts/run-node.mjs agent --mode rpc --json",
-    "openclaw": "node scripts/run-node.mjs",
-    "openclaw:rpc": "node scripts/run-node.mjs agent --mode rpc --json",
+    "deneb": "node scripts/run-node.mjs",
+    "deneb:rpc": "node scripts/run-node.mjs agent --mode rpc --json",
     "plugin-sdk:check-exports": "node scripts/sync-plugin-sdk-exports.mjs --check",
     "plugin-sdk:sync-exports": "node scripts/sync-plugin-sdk-exports.mjs",
     "plugins:sync": "node --import tsx scripts/sync-plugin-versions.ts",
@@ -450,7 +450,7 @@
     "protocol:check": "pnpm protocol:gen && git diff --exit-code -- dist/protocol.schema.json",
     "protocol:gen": "node --import tsx scripts/protocol-gen.ts",
     "release:check": "pnpm config:docs:check && node scripts/stage-bundled-plugin-runtime-deps.mjs && node --import tsx scripts/release-check.ts",
-    "release:openclaw:npm:check": "node --import tsx scripts/openclaw-npm-release-check.ts",
+    "release:deneb:npm:check": "node --import tsx scripts/deneb-npm-release-check.ts",
     "release:plugins:npm:check": "node --import tsx scripts/plugin-npm-release-check.ts",
     "release:plugins:npm:plan": "node --import tsx scripts/plugin-npm-release-plan.ts",
     "stage:bundled-plugin-runtime-deps": "node scripts/stage-bundled-plugin-runtime-deps.mjs",
@@ -461,8 +461,8 @@
     "test:build:singleton": "node scripts/test-built-plugin-singleton.mjs",
     "test:channels": "vitest run --config vitest.channels.config.ts",
     "test:contracts": "pnpm test:contracts:channels && pnpm test:contracts:plugins",
-    "test:contracts:channels": "OPENCLAW_TEST_PROFILE=low pnpm test -- src/channels/plugins/contracts",
-    "test:contracts:plugins": "OPENCLAW_TEST_PROFILE=low pnpm test -- src/plugins/contracts",
+    "test:contracts:channels": "DENEB_TEST_PROFILE=low pnpm test -- src/channels/plugins/contracts",
+    "test:contracts:plugins": "DENEB_TEST_PROFILE=low pnpm test -- src/plugins/contracts",
     "test:coverage": "vitest run --config vitest.unit.config.ts --coverage",
     "test:docker:all": "pnpm test:docker:live-models && pnpm test:docker:live-gateway && pnpm test:docker:onboard && pnpm test:docker:gateway-network && pnpm test:docker:qr && pnpm test:docker:doctor-switch && pnpm test:docker:plugins && pnpm test:docker:cleanup",
     "test:docker:cleanup": "bash scripts/test-cleanup-docker.sh",
@@ -474,7 +474,7 @@
     "test:docker:plugins": "bash scripts/e2e/plugins-docker.sh",
     "test:docker:qr": "bash scripts/e2e/qr-import-docker.sh",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "test:e2e:openshell": "OPENCLAW_E2E_OPENSHELL=1 vitest run --config vitest.e2e.config.ts test/openshell-sandbox.e2e.test.ts",
+    "test:e2e:openshell": "DENEB_E2E_OPENSHELL=1 vitest run --config vitest.e2e.config.ts test/openshell-sandbox.e2e.test.ts",
     "test:extension": "node scripts/test-extension.mjs",
     "test:extensions": "vitest run --config vitest.extensions.config.ts",
     "test:extensions:memory": "node scripts/profile-extension-memory.mjs",
@@ -483,11 +483,11 @@
     "test:gateway": "vitest run --config vitest.gateway.config.ts --pool=forks",
     "test:gateway:watch-regression": "node scripts/check-gateway-watch-regression.mjs",
     "test:install:e2e": "bash scripts/test-install-sh-e2e-docker.sh",
-    "test:install:e2e:anthropic": "OPENCLAW_E2E_MODELS=anthropic CLAWDBOT_E2E_MODELS=anthropic bash scripts/test-install-sh-e2e-docker.sh",
-    "test:install:e2e:openai": "OPENCLAW_E2E_MODELS=openai CLAWDBOT_E2E_MODELS=openai bash scripts/test-install-sh-e2e-docker.sh",
+    "test:install:e2e:anthropic": "DENEB_E2E_MODELS=anthropic CLAWDBOT_E2E_MODELS=anthropic bash scripts/test-install-sh-e2e-docker.sh",
+    "test:install:e2e:openai": "DENEB_E2E_MODELS=openai CLAWDBOT_E2E_MODELS=openai bash scripts/test-install-sh-e2e-docker.sh",
     "test:install:smoke": "bash scripts/test-install-sh-docker.sh",
-    "test:live": "OPENCLAW_LIVE_TEST=1 CLAWDBOT_LIVE_TEST=1 vitest run --config vitest.live.config.ts",
-    "test:macmini": "OPENCLAW_TEST_VM_FORKS=0 OPENCLAW_TEST_PROFILE=serial node scripts/test-parallel.mjs",
+    "test:live": "DENEB_LIVE_TEST=1 CLAWDBOT_LIVE_TEST=1 vitest run --config vitest.live.config.ts",
+    "test:macmini": "DENEB_TEST_VM_FORKS=0 DENEB_TEST_PROFILE=serial node scripts/test-parallel.mjs",
     "test:parallels:linux": "bash scripts/e2e/parallels-linux-smoke.sh",
     "test:parallels:windows": "bash scripts/e2e/parallels-windows-smoke.sh",
     "test:perf:budget": "node scripts/test-perf-budget.mjs",
@@ -499,7 +499,7 @@
     "test:voicecall:closedloop": "vitest run extensions/voice-call/src/manager.test.ts extensions/voice-call/src/media-stream.test.ts src/plugins/voice-call.plugin.test.ts --maxWorkers=1",
     "test:watch": "vitest",
     "tui": "node scripts/run-node.mjs tui",
-    "tui:dev": "OPENCLAW_PROFILE=dev CLAWDBOT_PROFILE=dev node scripts/run-node.mjs --dev tui",
+    "tui:dev": "DENEB_PROFILE=dev CLAWDBOT_PROFILE=dev node scripts/run-node.mjs --dev tui",
     "ui:build": "node scripts/ui.js build",
     "ui:dev": "node scripts/ui.js dev",
     "ui:install": "node scripts/ui.js install"

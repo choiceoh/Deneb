@@ -53,17 +53,17 @@ export async function ensureConfigReady(params: {
       preflightSnapshot = (await runDoctorConfigPreflight()).snapshot;
     } else {
       const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-      const originalSuppressNotes = process.env.OPENCLAW_SUPPRESS_NOTES;
+      const originalSuppressNotes = process.env.DENEB_SUPPRESS_NOTES;
       process.stdout.write = (() => true) as unknown as typeof process.stdout.write;
-      process.env.OPENCLAW_SUPPRESS_NOTES = "1";
+      process.env.DENEB_SUPPRESS_NOTES = "1";
       try {
         preflightSnapshot = (await runDoctorConfigPreflight()).snapshot;
       } finally {
         process.stdout.write = originalStdoutWrite;
         if (originalSuppressNotes === undefined) {
-          delete process.env.OPENCLAW_SUPPRESS_NOTES;
+          delete process.env.DENEB_SUPPRESS_NOTES;
         } else {
-          process.env.OPENCLAW_SUPPRESS_NOTES = originalSuppressNotes;
+          process.env.DENEB_SUPPRESS_NOTES = originalSuppressNotes;
         }
       }
     }
@@ -115,7 +115,7 @@ export async function ensureConfigReady(params: {
   }
   params.runtime.error("");
   params.runtime.error(
-    `${muted("Run:")} ${commandText(formatCliCommand("openclaw doctor --fix"))}`,
+    `${muted("Run:")} ${commandText(formatCliCommand("deneb doctor --fix"))}`,
   );
   if (!allowInvalid) {
     params.runtime.exit(1);

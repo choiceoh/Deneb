@@ -6,8 +6,8 @@ import {
 import { buildTelegramMessageContextForTest } from "./bot-message-context.test-harness.js";
 
 const recordInboundSessionMock = vi.fn().mockResolvedValue(undefined);
-vi.mock("openclaw/plugin-sdk/channel-runtime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/channel-runtime")>();
+vi.mock("deneb/plugin-sdk/channel-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("deneb/plugin-sdk/channel-runtime")>();
   return {
     ...actual,
     recordInboundSession: (...args: unknown[]) => recordInboundSessionMock(...args),
@@ -16,7 +16,7 @@ vi.mock("openclaw/plugin-sdk/channel-runtime", async (importOriginal) => {
 
 describe("buildTelegramMessageContext named-account DM fallback", () => {
   const baseCfg = {
-    agents: { defaults: { model: "anthropic/claude-opus-4-5", workspace: "/tmp/openclaw" } },
+    agents: { defaults: { model: "anthropic/claude-opus-4-5", workspace: "/tmp/deneb" } },
     channels: { telegram: {} },
     messages: { groupChat: { mentionPatterns: [] } },
   };

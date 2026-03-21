@@ -20,7 +20,7 @@ import type {
   ChannelPlugin,
   ChannelStructuredComponents,
 } from "../channels/plugins/types.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { ModelProviderConfig } from "../config/types.js";
 import type { GatewayRequestHandler } from "../gateway/server-methods/types.js";
 import type { InternalHookHandler } from "../hooks/internal-hooks.js";
@@ -77,7 +77,7 @@ export type PluginConfigValidation =
   | { ok: true; value?: unknown }
   | { ok: false; errors: string[] };
 
-export type OpenClawPluginConfigSchema = {
+export type DenebPluginConfigSchema = {
   safeParse?: (value: unknown) => {
     success: boolean;
     data?: unknown;
@@ -91,8 +91,8 @@ export type OpenClawPluginConfigSchema = {
   jsonSchema?: Record<string, unknown>;
 };
 
-export type OpenClawPluginToolContext = {
-  config?: OpenClawConfig;
+export type DenebPluginToolContext = {
+  config?: DenebConfig;
   workspaceDir?: string;
   agentDir?: string;
   agentId?: string;
@@ -108,17 +108,17 @@ export type OpenClawPluginToolContext = {
   sandboxed?: boolean;
 };
 
-export type OpenClawPluginToolFactory = (
-  ctx: OpenClawPluginToolContext,
+export type DenebPluginToolFactory = (
+  ctx: DenebPluginToolContext,
 ) => AnyAgentTool | AnyAgentTool[] | null | undefined;
 
-export type OpenClawPluginToolOptions = {
+export type DenebPluginToolOptions = {
   name?: string;
   names?: string[];
   optional?: boolean;
 };
 
-export type OpenClawPluginHookOptions = {
+export type DenebPluginHookOptions = {
   entry?: HookEntry;
   name?: string;
   description?: string;
@@ -136,13 +136,13 @@ export type ProviderAuthResult = {
    * `models.providers.<id>` entries, default aliases, or agent model helpers.
    * The caller still persists auth-profile bindings separately.
    */
-  configPatch?: Partial<OpenClawConfig>;
+  configPatch?: Partial<DenebConfig>;
   defaultModel?: string;
   notes?: string[];
 };
 
 export type ProviderAuthContext = {
-  config: OpenClawConfig;
+  config: DenebConfig;
   agentDir?: string;
   workspaceDir?: string;
   prompter: WizardPrompter;
@@ -205,8 +205,8 @@ export type ProviderNonInteractiveApiKeyCredentialParams = {
 
 export type ProviderAuthMethodNonInteractiveContext = {
   authChoice: string;
-  config: OpenClawConfig;
-  baseConfig: OpenClawConfig;
+  config: DenebConfig;
+  baseConfig: DenebConfig;
   opts: ProviderAuthOptionBag;
   runtime: RuntimeEnv;
   agentDir?: string;
@@ -228,20 +228,20 @@ export type ProviderAuthMethod = {
    * Optional wizard/onboarding metadata for this specific auth method.
    *
    * Use this when one provider exposes multiple setup entries (for example API
-   * key + OAuth, or region-specific login flows). OpenClaw uses this to expose
+   * key + OAuth, or region-specific login flows). Deneb uses this to expose
    * method-specific auth choices while keeping the provider id stable.
    */
   wizard?: ProviderPluginWizardSetup;
   run: (ctx: ProviderAuthContext) => Promise<ProviderAuthResult>;
   runNonInteractive?: (
     ctx: ProviderAuthMethodNonInteractiveContext,
-  ) => Promise<OpenClawConfig | null>;
+  ) => Promise<DenebConfig | null>;
 };
 
 export type ProviderCatalogOrder = "simple" | "profile" | "paired" | "late";
 
 export type ProviderCatalogContext = {
-  config: OpenClawConfig;
+  config: DenebConfig;
   agentDir?: string;
   workspaceDir?: string;
   env: NodeJS.ProcessEnv;
@@ -299,7 +299,7 @@ export type ProviderRuntimeProviderConfig = {
  * belong in `prepareDynamicModel`.
  */
 export type ProviderResolveDynamicModelContext = {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   agentDir?: string;
   workspaceDir?: string;
   provider: string;
@@ -320,12 +320,12 @@ export type ProviderPrepareDynamicModelContext = ProviderResolveDynamicModelCont
 /**
  * Last-chance rewrite hook for provider-owned transport normalization.
  *
- * Runs after OpenClaw resolves an explicit/discovered/dynamic model and before
+ * Runs after Deneb resolves an explicit/discovered/dynamic model and before
  * the embedded runner uses it. Typical uses: swap API ids, fix base URLs, or
  * patch provider-specific compat bits.
  */
 export type ProviderNormalizeResolvedModelContext = {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   agentDir?: string;
   workspaceDir?: string;
   provider: string;
@@ -340,7 +340,7 @@ export type ProviderNormalizeResolvedModelContext = {
  * for the request.
  */
 export type ProviderPrepareRuntimeAuthContext = {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   agentDir?: string;
   workspaceDir?: string;
   env: NodeJS.ProcessEnv;
@@ -373,7 +373,7 @@ export type ProviderPreparedRuntimeAuth = {
  * snapshots often need a different credential source than live inference
  * requests, and they run outside the embedded runner.
  *
- * The helper methods cover the common OpenClaw auth resolution paths:
+ * The helper methods cover the common Deneb auth resolution paths:
  *
  * - `resolveApiKeyFromConfigAndStore`: env/config/plain token/api_key profiles
  * - `resolveOAuthToken`: oauth/token profiles resolved through the auth store
@@ -382,7 +382,7 @@ export type ProviderPreparedRuntimeAuth = {
  * token blob, read a legacy credential file, or pick between aliases).
  */
 export type ProviderResolveUsageAuthContext = {
-  config: OpenClawConfig;
+  config: DenebConfig;
   agentDir?: string;
   workspaceDir?: string;
   env: NodeJS.ProcessEnv;
@@ -414,7 +414,7 @@ export type ProviderResolvedUsageAuth = {
  * owns the provider-specific HTTP request + response normalization.
  */
 export type ProviderFetchUsageSnapshotContext = {
-  config: OpenClawConfig;
+  config: DenebConfig;
   agentDir?: string;
   workspaceDir?: string;
   env: NodeJS.ProcessEnv;
@@ -428,26 +428,26 @@ export type ProviderFetchUsageSnapshotContext = {
 /**
  * Provider-owned auth-doctor hint input.
  *
- * Called when OAuth refresh fails and OpenClaw wants a provider-specific repair
+ * Called when OAuth refresh fails and Deneb wants a provider-specific repair
  * hint to append to the generic re-auth message. Use this for legacy profile-id
  * migrations or other provider-owned auth-store cleanup guidance.
  */
 export type ProviderAuthDoctorHintContext = {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   store: AuthProfileStore;
   provider: string;
   profileId?: string;
 };
 
 /**
- * Provider-owned extra-param normalization before OpenClaw builds its generic
+ * Provider-owned extra-param normalization before Deneb builds its generic
  * stream option wrapper.
  *
  * Use this to set provider defaults or rewrite provider-specific config keys
  * into the merged `extraParams` object. Return the full next extraParams object.
  */
 export type ProviderPrepareExtraParamsContext = {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   agentDir?: string;
   workspaceDir?: string;
   provider: string;
@@ -457,7 +457,7 @@ export type ProviderPrepareExtraParamsContext = {
 };
 
 /**
- * Provider-owned stream wrapper hook after OpenClaw applies its generic
+ * Provider-owned stream wrapper hook after Deneb applies its generic
  * transport-independent wrappers.
  *
  * Use this for provider-specific payload/header/model mutations that still run
@@ -470,7 +470,7 @@ export type ProviderWrapStreamFnContext = ProviderPrepareExtraParamsContext & {
 /**
  * Provider-owned prompt-cache eligibility.
  *
- * Return `true` or `false` to override OpenClaw's built-in provider cache TTL
+ * Return `true` or `false` to override Deneb's built-in provider cache TTL
  * detection for this provider. Return `undefined` to fall back to core rules.
  */
 export type ProviderCacheTtlEligibilityContext = {
@@ -481,12 +481,12 @@ export type ProviderCacheTtlEligibilityContext = {
 /**
  * Provider-owned missing-auth message override.
  *
- * Runs only after OpenClaw exhausts normal env/profile/config auth resolution
+ * Runs only after Deneb exhausts normal env/profile/config auth resolution
  * for the requested provider. Return a custom message to replace the generic
  * "No API key found" error.
  */
 export type ProviderBuildMissingAuthMessageContext = {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   agentDir?: string;
   workspaceDir?: string;
   env: NodeJS.ProcessEnv;
@@ -502,7 +502,7 @@ export type ProviderBuildMissingAuthMessageContext = {
  * resolution, model listing, and catalog loading.
  */
 export type ProviderBuiltInModelSuppressionContext = {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   agentDir?: string;
   workspaceDir?: string;
   env: NodeJS.ProcessEnv;
@@ -552,13 +552,13 @@ export type ProviderModernModelPolicyContext = {
 /**
  * Final catalog augmentation hook.
  *
- * Runs after OpenClaw loads the discovered model catalog and merges configured
+ * Runs after Deneb loads the discovered model catalog and merges configured
  * opt-in providers. Use this for forward-compat rows or vendor-owned synthetic
  * entries that should appear in `models list` and model pickers even when the
  * upstream registry has not caught up yet.
  */
 export type ProviderAugmentModelCatalogContext = {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   agentDir?: string;
   workspaceDir?: string;
   env: NodeJS.ProcessEnv;
@@ -619,7 +619,7 @@ export type ProviderPluginWizard = {
 };
 
 export type ProviderModelSelectedContext = {
-  config: OpenClawConfig;
+  config: DenebConfig;
   model: string;
   prompter: WizardPrompter;
   agentDir?: string;
@@ -668,7 +668,7 @@ export type ProviderPlugin = {
   /**
    * Optional async prefetch for dynamic model resolution.
    *
-   * OpenClaw calls this only from async model resolution paths. After it
+   * Deneb calls this only from async model resolution paths. After it
    * completes, `resolveDynamicModel` is called again.
    */
   prepareDynamicModel?: (ctx: ProviderPrepareDynamicModelContext) => Promise<void>;
@@ -702,7 +702,7 @@ export type ProviderPlugin = {
     ctx: ProviderPrepareExtraParamsContext,
   ) => Record<string, unknown> | null | undefined;
   /**
-   * Provider-owned stream wrapper applied after generic OpenClaw wrappers.
+   * Provider-owned stream wrapper applied after generic Deneb wrappers.
    *
    * Typical uses: provider attribution headers, request-body rewrites, or
    * provider-specific compat payload patches that do not justify a separate
@@ -712,7 +712,7 @@ export type ProviderPlugin = {
   /**
    * Runtime auth exchange hook.
    *
-   * Called after OpenClaw resolves the raw configured credential but before the
+   * Called after Deneb resolves the raw configured credential but before the
    * runner stores it in runtime auth storage. This lets plugins exchange a
    * source credential (for example a GitHub token) into a short-lived runtime
    * token plus optional base URL override.
@@ -756,7 +756,7 @@ export type ProviderPlugin = {
    * Provider-owned missing-auth message override.
    *
    * Return a custom message when the provider wants a more specific recovery
-   * hint than OpenClaw's generic auth-store guidance.
+   * hint than Deneb's generic auth-store guidance.
    */
   buildMissingAuthMessage?: (
     ctx: ProviderBuildMissingAuthMessageContext,
@@ -765,7 +765,7 @@ export type ProviderPlugin = {
    * Provider-owned built-in model suppression.
    *
    * Return `{ suppress: true }` to hide a stale upstream row. Include
-   * `errorMessage` when OpenClaw should surface a provider-specific hint for
+   * `errorMessage` when Deneb should surface a provider-specific hint for
    * direct model resolution failures.
    */
   suppressBuiltInModel?: (
@@ -775,7 +775,7 @@ export type ProviderPlugin = {
    * Provider-owned final catalog augmentation.
    *
    * Return extra rows to append to the final catalog after discovery/config
-   * merging. OpenClaw deduplicates by `provider/id`, so plugins only need to
+   * merging. Deneb deduplicates by `provider/id`, so plugins only need to
    * describe the desired supplemental rows.
    */
   augmentModelCatalog?: (
@@ -819,14 +819,14 @@ export type ProviderPlugin = {
   /**
    * Provider-owned auth-profile API-key formatter.
    *
-   * OpenClaw uses this when a stored auth profile is already valid and needs to
+   * Deneb uses this when a stored auth profile is already valid and needs to
    * be converted into the runtime `apiKey` string expected by the provider. Use
    * this for providers whose auth profile stores extra metadata alongside the
    * bearer token (for example Gemini CLI's `{ token, projectId }` payload).
    */
   formatApiKey?: (cred: AuthProfileCredential) => string;
   /**
-   * Legacy auth-profile ids that should be retired by `openclaw doctor`.
+   * Legacy auth-profile ids that should be retired by `deneb doctor`.
    *
    * Use this when a provider plugin replaces an older core-managed profile id
    * and wants cleanup/migration messaging to live with the provider instead of
@@ -836,7 +836,7 @@ export type ProviderPlugin = {
   /**
    * Provider-owned OAuth refresh.
    *
-   * OpenClaw calls this before falling back to the shared `pi-ai` OAuth
+   * Deneb calls this before falling back to the shared `pi-ai` OAuth
    * refreshers. Use it when the provider has a custom refresh endpoint, or when
    * the provider needs custom refresh-failure behavior that should stay out of
    * core auth-profile code.
@@ -847,7 +847,7 @@ export type ProviderPlugin = {
    *
    * Return a multiline repair hint when OAuth refresh fails and the provider
    * wants to steer users toward a specific auth-profile migration or recovery
-   * path. Return nothing to keep OpenClaw's generic error text.
+   * path. Return nothing to keep Deneb's generic error text.
    */
   buildAuthDoctorHint?: (
     ctx: ProviderAuthDoctorHintContext,
@@ -864,7 +864,7 @@ export type WebSearchProviderToolDefinition = {
 };
 
 export type WebSearchProviderContext = {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   searchConfig?: Record<string, unknown>;
   runtimeMetadata?: RuntimeWebSearchMetadata;
 };
@@ -872,7 +872,7 @@ export type WebSearchProviderContext = {
 export type WebSearchCredentialResolutionSource = "config" | "secretRef" | "env" | "missing";
 
 export type WebSearchRuntimeMetadataContext = {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   searchConfig?: Record<string, unknown>;
   runtimeMetadata?: RuntimeWebSearchMetadata;
   resolvedCredential?: {
@@ -895,9 +895,9 @@ export type WebSearchProviderPlugin = {
   inactiveSecretPaths?: string[];
   getCredentialValue: (searchConfig?: Record<string, unknown>) => unknown;
   setCredentialValue: (searchConfigTarget: Record<string, unknown>, value: unknown) => void;
-  getConfiguredCredentialValue?: (config?: OpenClawConfig) => unknown;
-  setConfiguredCredentialValue?: (configTarget: OpenClawConfig, value: unknown) => void;
-  applySelectionConfig?: (config: OpenClawConfig) => OpenClawConfig;
+  getConfiguredCredentialValue?: (config?: DenebConfig) => unknown;
+  setConfiguredCredentialValue?: (configTarget: DenebConfig, value: unknown) => void;
+  applySelectionConfig?: (config: DenebConfig) => DenebConfig;
   resolveRuntimeMetadata?: (
     ctx: WebSearchRuntimeMetadataContext,
   ) => Partial<RuntimeWebSearchMetadata> | Promise<Partial<RuntimeWebSearchMetadata>>;
@@ -929,7 +929,7 @@ export type PluginSpeechProviderEntry = SpeechProviderPlugin & {
 export type MediaUnderstandingProviderPlugin = MediaUnderstandingProvider;
 export type ImageGenerationProviderPlugin = ImageGenerationProvider;
 
-export type OpenClawPluginGatewayMethod = {
+export type DenebPluginGatewayMethod = {
   method: string;
   handler: GatewayRequestHandler;
 };
@@ -954,8 +954,8 @@ export type PluginCommandContext = {
   args?: string;
   /** The full normalized command body */
   commandBody: string;
-  /** Current OpenClaw configuration */
-  config: OpenClawConfig;
+  /** Current Deneb configuration */
+  config: DenebConfig;
   /** Raw "From" value (channel-scoped id) */
   from?: string;
   /** Raw "To" value (channel-scoped id) */
@@ -1041,7 +1041,7 @@ export type PluginCommandHandler = (
 /**
  * Definition for a plugin-registered command.
  */
-export type OpenClawPluginCommandDefinition = {
+export type DenebPluginCommandDefinition = {
   /** Command name without leading slash (e.g., "tts") */
   name: string;
   /**
@@ -1224,66 +1224,66 @@ export type PluginInteractiveHandlerRegistration =
   | PluginInteractiveDiscordHandlerRegistration
   | PluginInteractiveSlackHandlerRegistration;
 
-export type OpenClawPluginHttpRouteAuth = "gateway" | "plugin";
-export type OpenClawPluginHttpRouteMatch = "exact" | "prefix";
+export type DenebPluginHttpRouteAuth = "gateway" | "plugin";
+export type DenebPluginHttpRouteMatch = "exact" | "prefix";
 
-export type OpenClawPluginHttpRouteHandler = (
+export type DenebPluginHttpRouteHandler = (
   req: IncomingMessage,
   res: ServerResponse,
 ) => Promise<boolean | void> | boolean | void;
 
-export type OpenClawPluginHttpRouteParams = {
+export type DenebPluginHttpRouteParams = {
   path: string;
-  handler: OpenClawPluginHttpRouteHandler;
-  auth: OpenClawPluginHttpRouteAuth;
-  match?: OpenClawPluginHttpRouteMatch;
+  handler: DenebPluginHttpRouteHandler;
+  auth: DenebPluginHttpRouteAuth;
+  match?: DenebPluginHttpRouteMatch;
   replaceExisting?: boolean;
 };
 
-export type OpenClawPluginCliContext = {
+export type DenebPluginCliContext = {
   program: Command;
-  config: OpenClawConfig;
+  config: DenebConfig;
   workspaceDir?: string;
   logger: PluginLogger;
 };
 
-export type OpenClawPluginCliRegistrar = (ctx: OpenClawPluginCliContext) => void | Promise<void>;
+export type DenebPluginCliRegistrar = (ctx: DenebPluginCliContext) => void | Promise<void>;
 
-export type OpenClawPluginServiceContext = {
-  config: OpenClawConfig;
+export type DenebPluginServiceContext = {
+  config: DenebConfig;
   workspaceDir?: string;
   stateDir: string;
   logger: PluginLogger;
 };
 
-export type OpenClawPluginService = {
+export type DenebPluginService = {
   id: string;
-  start: (ctx: OpenClawPluginServiceContext) => void | Promise<void>;
-  stop?: (ctx: OpenClawPluginServiceContext) => void | Promise<void>;
+  start: (ctx: DenebPluginServiceContext) => void | Promise<void>;
+  stop?: (ctx: DenebPluginServiceContext) => void | Promise<void>;
 };
 
-export type OpenClawPluginChannelRegistration = {
+export type DenebPluginChannelRegistration = {
   plugin: ChannelPlugin;
 };
 
-export type OpenClawPluginDefinition = {
+export type DenebPluginDefinition = {
   id?: string;
   name?: string;
   description?: string;
   version?: string;
   kind?: PluginKind;
-  configSchema?: OpenClawPluginConfigSchema;
-  register?: (api: OpenClawPluginApi) => void | Promise<void>;
-  activate?: (api: OpenClawPluginApi) => void | Promise<void>;
+  configSchema?: DenebPluginConfigSchema;
+  register?: (api: DenebPluginApi) => void | Promise<void>;
+  activate?: (api: DenebPluginApi) => void | Promise<void>;
 };
 
-export type OpenClawPluginModule =
-  | OpenClawPluginDefinition
-  | ((api: OpenClawPluginApi) => void | Promise<void>);
+export type DenebPluginModule =
+  | DenebPluginDefinition
+  | ((api: DenebPluginApi) => void | Promise<void>);
 
 export type PluginRegistrationMode = "full" | "setup-only" | "setup-runtime";
 
-export type OpenClawPluginApi = {
+export type DenebPluginApi = {
   id: string;
   name: string;
   version?: string;
@@ -1291,7 +1291,7 @@ export type OpenClawPluginApi = {
   source: string;
   rootDir?: string;
   registrationMode: PluginRegistrationMode;
-  config: OpenClawConfig;
+  config: DenebConfig;
   pluginConfig?: Record<string, unknown>;
   /**
    * In-process runtime helpers for trusted native plugins.
@@ -1302,20 +1302,20 @@ export type OpenClawPluginApi = {
   runtime: PluginRuntime;
   logger: PluginLogger;
   registerTool: (
-    tool: AnyAgentTool | OpenClawPluginToolFactory,
-    opts?: OpenClawPluginToolOptions,
+    tool: AnyAgentTool | DenebPluginToolFactory,
+    opts?: DenebPluginToolOptions,
   ) => void;
   registerHook: (
     events: string | string[],
     handler: InternalHookHandler,
-    opts?: OpenClawPluginHookOptions,
+    opts?: DenebPluginHookOptions,
   ) => void;
-  registerHttpRoute: (params: OpenClawPluginHttpRouteParams) => void;
+  registerHttpRoute: (params: DenebPluginHttpRouteParams) => void;
   /** Register a native messaging channel plugin (channel capability). */
-  registerChannel: (registration: OpenClawPluginChannelRegistration | ChannelPlugin) => void;
+  registerChannel: (registration: DenebPluginChannelRegistration | ChannelPlugin) => void;
   registerGatewayMethod: (method: string, handler: GatewayRequestHandler) => void;
-  registerCli: (registrar: OpenClawPluginCliRegistrar, opts?: { commands?: string[] }) => void;
-  registerService: (service: OpenClawPluginService) => void;
+  registerCli: (registrar: DenebPluginCliRegistrar, opts?: { commands?: string[] }) => void;
+  registerService: (service: DenebPluginService) => void;
   /** Register a native model/provider plugin (text inference capability). */
   registerProvider: (provider: ProviderPlugin) => void;
   /** Register a speech synthesis provider (speech capability). */
@@ -1335,7 +1335,7 @@ export type OpenClawPluginApi = {
    * Plugin commands are processed before built-in commands and before agent invocation.
    * Use this for simple state-toggling or status commands that don't need AI reasoning.
    */
-  registerCommand: (command: OpenClawPluginCommandDefinition) => void;
+  registerCommand: (command: DenebPluginCommandDefinition) => void;
   /** Register a context engine implementation (exclusive slot — only one active at a time). */
   registerContextEngine: (
     id: string,
@@ -1352,7 +1352,7 @@ export type OpenClawPluginApi = {
 
 export type PluginOrigin = "bundled" | "global" | "workspace" | "config";
 
-export type PluginFormat = "openclaw" | "bundle";
+export type PluginFormat = "deneb" | "bundle";
 
 export type PluginBundleFormat = "codex" | "claude" | "cursor";
 

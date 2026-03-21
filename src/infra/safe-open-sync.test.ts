@@ -54,7 +54,7 @@ function mockFstatSync(stat: fs.Stats): SafeOpenSyncFstatSync {
 
 describe("openVerifiedFileSync", () => {
   it("returns a path error for missing files", async () => {
-    await withTempDir("openclaw-safe-open-", async (root) => {
+    await withTempDir("deneb-safe-open-", async (root) => {
       const opened = openVerifiedFileSync({ filePath: path.join(root, "missing.txt") });
       expect(opened.ok).toBe(false);
       if (!opened.ok) {
@@ -64,7 +64,7 @@ describe("openVerifiedFileSync", () => {
   });
 
   it("rejects directories by default", async () => {
-    await withTempDir("openclaw-safe-open-", async (root) => {
+    await withTempDir("deneb-safe-open-", async (root) => {
       const targetDir = path.join(root, "nested");
       await fsp.mkdir(targetDir, { recursive: true });
 
@@ -77,7 +77,7 @@ describe("openVerifiedFileSync", () => {
   });
 
   it("accepts directories when allowedType is directory", async () => {
-    await withTempDir("openclaw-safe-open-", async (root) => {
+    await withTempDir("deneb-safe-open-", async (root) => {
       const targetDir = path.join(root, "nested");
       await fsp.mkdir(targetDir, { recursive: true });
 
@@ -96,7 +96,7 @@ describe("openVerifiedFileSync", () => {
   });
 
   it("rejects symlink paths when rejectPathSymlink is enabled", async () => {
-    await withTempDir("openclaw-safe-open-", async (root) => {
+    await withTempDir("deneb-safe-open-", async (root) => {
       const targetFile = path.join(root, "target.txt");
       const linkFile = path.join(root, "link.txt");
       await fsp.writeFile(targetFile, "hello");
@@ -114,7 +114,7 @@ describe("openVerifiedFileSync", () => {
   });
 
   it("rejects files larger than maxBytes", async () => {
-    await withTempDir("openclaw-safe-open-", async (root) => {
+    await withTempDir("deneb-safe-open-", async (root) => {
       const filePath = path.join(root, "payload.txt");
       await fsp.writeFile(filePath, "hello");
 

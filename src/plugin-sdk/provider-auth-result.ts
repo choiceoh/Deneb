@@ -1,5 +1,5 @@
 import type { AuthProfileCredential } from "../agents/auth-profiles/types.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { ProviderAuthResult } from "../plugins/types.js";
 
 /** Build the standard auth result payload for OAuth-style provider login flows. */
@@ -12,7 +12,7 @@ export function buildOauthProviderAuthResult(params: {
   email?: string | null;
   profilePrefix?: string;
   credentialExtra?: Record<string, unknown>;
-  configPatch?: Partial<OpenClawConfig>;
+  configPatch?: Partial<DenebConfig>;
   notes?: string[];
 }): ProviderAuthResult {
   const email = params.email ?? undefined;
@@ -41,7 +41,7 @@ export function buildOauthProviderAuthResult(params: {
             },
           },
         },
-      } as Partial<OpenClawConfig>),
+      } as Partial<DenebConfig>),
     defaultModel: params.defaultModel,
     notes: params.notes,
   };

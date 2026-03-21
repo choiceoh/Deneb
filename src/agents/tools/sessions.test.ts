@@ -124,7 +124,7 @@ async function withStubbedStateDir<T>(
   run: (stateDir: string) => Promise<T>,
 ): Promise<T> {
   const stateDir = path.join(os.tmpdir(), name);
-  vi.stubEnv("OPENCLAW_STATE_DIR", stateDir);
+  vi.stubEnv("DENEB_STATE_DIR", stateDir);
   try {
     return await run(stateDir);
   } finally {
@@ -291,7 +291,7 @@ describe("sessions_list transcriptPath resolution", () => {
   });
 
   it("resolves cross-agent transcript paths from agent defaults when gateway store path is relative", async () => {
-    await withStubbedStateDir("openclaw-state-relative", async () => {
+    await withStubbedStateDir("deneb-state-relative", async () => {
       callGatewayMock.mockResolvedValueOnce({
         path: "agents/main/sessions/sessions.json",
         sessions: [
@@ -312,7 +312,7 @@ describe("sessions_list transcriptPath resolution", () => {
   });
 
   it("resolves transcriptPath even when sessions.list does not return a store path", async () => {
-    await withStubbedStateDir("openclaw-state-no-path", async () => {
+    await withStubbedStateDir("deneb-state-no-path", async () => {
       callGatewayMock.mockResolvedValueOnce({
         sessions: [
           {
@@ -332,7 +332,7 @@ describe("sessions_list transcriptPath resolution", () => {
   });
 
   it("falls back to agent defaults when gateway path is non-string", async () => {
-    await withStubbedStateDir("openclaw-state-non-string-path", async () => {
+    await withStubbedStateDir("deneb-state-non-string-path", async () => {
       callGatewayMock.mockResolvedValueOnce({
         path: { raw: "agents/main/sessions/sessions.json" },
         sessions: [
@@ -353,7 +353,7 @@ describe("sessions_list transcriptPath resolution", () => {
   });
 
   it("falls back to agent defaults when gateway path is '(multiple)'", async () => {
-    await withStubbedStateDir("openclaw-state-multiple", async (stateDir) => {
+    await withStubbedStateDir("deneb-state-multiple", async (stateDir) => {
       callGatewayMock.mockResolvedValueOnce({
         path: "(multiple)",
         sessions: [
@@ -374,7 +374,7 @@ describe("sessions_list transcriptPath resolution", () => {
   });
 
   it("resolves absolute {agentId} template paths per session agent", async () => {
-    const templateStorePath = "/tmp/openclaw/agents/{agentId}/sessions/sessions.json";
+    const templateStorePath = "/tmp/deneb/agents/{agentId}/sessions/sessions.json";
 
     callGatewayMock.mockResolvedValueOnce({
       path: templateStorePath,

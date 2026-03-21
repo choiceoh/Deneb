@@ -218,7 +218,7 @@ export async function runServiceStart(params: {
     const configError = await getConfigValidationError();
     if (configError) {
       fail(
-        `${params.serviceNoun} aborted: config is invalid.\n${configError}\nFix the config and retry, or run "openclaw doctor" to repair.`,
+        `${params.serviceNoun} aborted: config is invalid.\n${configError}\nFix the config and retry, or run "deneb doctor" to repair.`,
       );
       return;
     }
@@ -371,7 +371,7 @@ export async function runServiceRestart(params: {
     const configError = await getConfigValidationError();
     if (configError) {
       fail(
-        `${params.serviceNoun} aborted: config is invalid.\n${configError}\nFix the config and retry, or run "openclaw doctor" to repair.`,
+        `${params.serviceNoun} aborted: config is invalid.\n${configError}\nFix the config and retry, or run "deneb doctor" to repair.`,
       );
       return false;
     }
@@ -404,7 +404,7 @@ export async function runServiceRestart(params: {
     // Check for token drift before restart (service token vs config token)
     try {
       const command = await params.service.readCommand(process.env);
-      const serviceToken = command?.environment?.OPENCLAW_GATEWAY_TOKEN;
+      const serviceToken = command?.environment?.DENEB_GATEWAY_TOKEN;
       const cfg = await readBestEffortConfig();
       const configToken = resolveGatewayTokenForDriftCheck({ cfg, env: process.env });
       const driftIssue = checkTokenDrift({ serviceToken, configToken });

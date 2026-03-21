@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import type { DmPolicy } from "../../config/types.js";
 import type { RuntimeEnv } from "../../runtime.js";
 import type { WizardPrompter } from "../../wizard/prompts.js";
@@ -31,11 +31,11 @@ export type SetupChannelsOptions = {
 };
 
 export type PromptAccountIdParams = {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   prompter: WizardPrompter;
   label: string;
   currentId?: string;
-  listAccountIds: (cfg: OpenClawConfig) => string[];
+  listAccountIds: (cfg: DenebConfig) => string[];
   defaultAccountId: string;
 };
 
@@ -50,13 +50,13 @@ export type ChannelSetupStatus = {
 };
 
 export type ChannelSetupStatusContext = {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   options?: SetupChannelsOptions;
   accountOverrides: Partial<Record<ChannelId, string>>;
 };
 
 export type ChannelSetupConfigureContext = {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   runtime: RuntimeEnv;
   prompter: WizardPrompter;
   options?: SetupChannelsOptions;
@@ -66,8 +66,8 @@ export type ChannelSetupConfigureContext = {
 };
 
 export type ChannelOnboardingPostWriteContext = {
-  previousCfg: OpenClawConfig;
-  cfg: OpenClawConfig;
+  previousCfg: DenebConfig;
+  cfg: DenebConfig;
   accountId: string;
   runtime: RuntimeEnv;
 };
@@ -75,11 +75,11 @@ export type ChannelOnboardingPostWriteContext = {
 export type ChannelOnboardingPostWriteHook = {
   channel: ChannelId;
   accountId: string;
-  run: (ctx: { cfg: OpenClawConfig; runtime: RuntimeEnv }) => Promise<void> | void;
+  run: (ctx: { cfg: DenebConfig; runtime: RuntimeEnv }) => Promise<void> | void;
 };
 
 export type ChannelSetupResult = {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   accountId?: string;
 };
 
@@ -96,16 +96,16 @@ export type ChannelSetupDmPolicy = {
   policyKey: string;
   allowFromKey: string;
   resolveConfigKeys?: (
-    cfg: OpenClawConfig,
+    cfg: DenebConfig,
     accountId?: string,
   ) => { policyKey: string; allowFromKey: string };
-  getCurrent: (cfg: OpenClawConfig, accountId?: string) => DmPolicy;
-  setPolicy: (cfg: OpenClawConfig, policy: DmPolicy, accountId?: string) => OpenClawConfig;
+  getCurrent: (cfg: DenebConfig, accountId?: string) => DmPolicy;
+  setPolicy: (cfg: DenebConfig, policy: DmPolicy, accountId?: string) => DenebConfig;
   promptAllowFrom?: (params: {
-    cfg: OpenClawConfig;
+    cfg: DenebConfig;
     prompter: WizardPrompter;
     accountId?: string;
-  }) => Promise<OpenClawConfig>;
+  }) => Promise<DenebConfig>;
 };
 
 export type ChannelSetupWizardAdapter = {
@@ -121,5 +121,5 @@ export type ChannelSetupWizardAdapter = {
   afterConfigWritten?: (ctx: ChannelOnboardingPostWriteContext) => Promise<void> | void;
   dmPolicy?: ChannelSetupDmPolicy;
   onAccountRecorded?: (accountId: string, options?: SetupChannelsOptions) => void;
-  disable?: (cfg: OpenClawConfig) => OpenClawConfig;
+  disable?: (cfg: DenebConfig) => DenebConfig;
 };

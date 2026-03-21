@@ -28,14 +28,14 @@ export type ProviderAttributionPolicy = {
 
 export type ProviderAttributionIdentity = Pick<ProviderAttributionPolicy, "product" | "version">;
 
-const OPENCLAW_ATTRIBUTION_PRODUCT = "OpenClaw";
-const OPENCLAW_ATTRIBUTION_ORIGINATOR = "openclaw";
+const DENEB_ATTRIBUTION_PRODUCT = "Deneb";
+const DENEB_ATTRIBUTION_ORIGINATOR = "deneb";
 
 export function resolveProviderAttributionIdentity(
   env: RuntimeVersionEnv = process.env as RuntimeVersionEnv,
 ): ProviderAttributionIdentity {
   return {
-    product: OPENCLAW_ATTRIBUTION_PRODUCT,
+    product: DENEB_ATTRIBUTION_PRODUCT,
     version: resolveRuntimeServiceVersion(env),
   };
 }
@@ -50,10 +50,10 @@ function buildOpenRouterAttributionPolicy(
     verification: "vendor-documented",
     hook: "request-headers",
     docsUrl: "https://openrouter.ai/docs/app-attribution",
-    reviewNote: "Documented app attribution headers. Verified in OpenClaw runtime wrapper.",
+    reviewNote: "Documented app attribution headers. Verified in Deneb runtime wrapper.",
     ...identity,
     headers: {
-      "HTTP-Referer": "https://openclaw.ai",
+      "HTTP-Referer": "https://deneb.ai",
       "X-OpenRouter-Title": identity.product,
       "X-OpenRouter-Categories": "cli-agent",
     },
@@ -73,8 +73,8 @@ function buildOpenAIAttributionPolicy(
       "OpenAI native traffic supports hidden originator/User-Agent attribution. Verified against the Codex wire contract.",
     ...identity,
     headers: {
-      originator: OPENCLAW_ATTRIBUTION_ORIGINATOR,
-      "User-Agent": `${OPENCLAW_ATTRIBUTION_ORIGINATOR}/${identity.version}`,
+      originator: DENEB_ATTRIBUTION_ORIGINATOR,
+      "User-Agent": `${DENEB_ATTRIBUTION_ORIGINATOR}/${identity.version}`,
     },
   };
 }
@@ -92,8 +92,8 @@ function buildOpenAICodexAttributionPolicy(
       "OpenAI Codex ChatGPT-backed traffic supports the same hidden originator/User-Agent attribution contract.",
     ...identity,
     headers: {
-      originator: OPENCLAW_ATTRIBUTION_ORIGINATOR,
-      "User-Agent": `${OPENCLAW_ATTRIBUTION_ORIGINATOR}/${identity.version}`,
+      originator: DENEB_ATTRIBUTION_ORIGINATOR,
+      "User-Agent": `${DENEB_ATTRIBUTION_ORIGINATOR}/${identity.version}`,
     },
   };
 }

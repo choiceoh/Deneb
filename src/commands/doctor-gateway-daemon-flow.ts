@@ -1,5 +1,5 @@
 import { formatCliCommand } from "../cli/command-format.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { resolveGatewayPort } from "../config/config.js";
 import {
   resolveGatewayLaunchAgentLabel,
@@ -88,7 +88,7 @@ async function maybeRepairLaunchAgentBootstrap(params: {
 }
 
 export async function maybeRepairGatewayDaemon(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   runtime: RuntimeEnv;
   prompter: DoctorPrompter;
   options: DoctorOptions;
@@ -122,7 +122,7 @@ export async function maybeRepairGatewayDaemon(params: {
     await maybeRepairLaunchAgentBootstrap({
       env: {
         ...process.env,
-        OPENCLAW_LAUNCHD_LABEL: resolveNodeLaunchAgentLabel(),
+        DENEB_LAUNCHD_LABEL: resolveNodeLaunchAgentLabel(),
       },
       title: "Node",
       runtime: params.runtime,
@@ -250,9 +250,9 @@ export async function maybeRepairGatewayDaemon(params: {
   }
 
   if (process.platform === "darwin") {
-    const label = resolveGatewayLaunchAgentLabel(process.env.OPENCLAW_PROFILE);
+    const label = resolveGatewayLaunchAgentLabel(process.env.DENEB_PROFILE);
     note(
-      `LaunchAgent loaded; stopping requires "${formatCliCommand("openclaw gateway stop")}" or launchctl bootout gui/$UID/${label}.`,
+      `LaunchAgent loaded; stopping requires "${formatCliCommand("deneb gateway stop")}" or launchctl bootout gui/$UID/${label}.`,
       "Gateway",
     );
   }

@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { ChannelId } from "./plugins/types.js";
 
 type TelegramInspectModule = typeof import("./read-only-account-inspect.telegram.runtime.js");
@@ -16,7 +16,7 @@ export type ReadOnlyInspectedAccount = Awaited<
 
 export async function inspectReadOnlyChannelAccount(params: {
   channelId: ChannelId;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   accountId?: string | null;
 }): Promise<ReadOnlyInspectedAccount | null> {
   if (params.channelId === "telegram") {

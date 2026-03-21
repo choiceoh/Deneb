@@ -1,9 +1,9 @@
-import type { OpenClawConfig } from "../../../config/config.js";
+import type { DenebConfig } from "../../../config/config.js";
 import type { RuntimeEnv } from "../../../runtime.js";
 import type { OnboardOptions } from "../../onboard-types.js";
 
 export function applyNonInteractiveSkillsConfig(params: {
-  nextConfig: OpenClawConfig;
+  nextConfig: DenebConfig;
   opts: OnboardOptions;
   runtime: RuntimeEnv;
 }) {

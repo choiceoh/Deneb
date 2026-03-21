@@ -15,7 +15,7 @@ vi.mock("@mariozechner/pi-ai/oauth", () => ({
   getOAuthProviders: () => [],
 }));
 
-import { createOpenClawCodingTools } from "./pi-tools.js";
+import { createDenebCodingTools } from "./pi-tools.js";
 
 describe("FS tools with workspaceOnly=false", () => {
   let tmpDir: string;
@@ -31,7 +31,7 @@ describe("FS tools with workspaceOnly=false", () => {
     });
 
   const toolsFor = (workspaceOnly: boolean | undefined) =>
-    createOpenClawCodingTools({
+    createDenebCodingTools({
       workspaceDir,
       config:
         workspaceOnly === undefined
@@ -59,7 +59,7 @@ describe("FS tools with workspaceOnly=false", () => {
   };
 
   beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-test-"));
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-test-"));
     workspaceDir = path.join(tmpDir, "workspace");
     await fs.mkdir(workspaceDir);
     outsideFile = path.join(tmpDir, "outside.txt");
@@ -201,7 +201,7 @@ describe("FS tools with workspaceOnly=false", () => {
     await fs.mkdir(path.dirname(allowedAbsolutePath), { recursive: true });
     await fs.writeFile(allowedAbsolutePath, "seed");
 
-    const tools = createOpenClawCodingTools({
+    const tools = createDenebCodingTools({
       workspaceDir,
       trigger: "memory",
       memoryFlushWritePath: allowedRelativePath,

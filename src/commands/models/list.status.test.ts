@@ -30,8 +30,8 @@ const mocks = vi.hoisted(() => {
 
   return {
     store,
-    resolveOpenClawAgentDir: vi.fn().mockReturnValue("/tmp/openclaw-agent"),
-    resolveAgentDir: vi.fn().mockReturnValue("/tmp/openclaw-agent"),
+    resolveDenebAgentDir: vi.fn().mockReturnValue("/tmp/deneb-agent"),
+    resolveAgentDir: vi.fn().mockReturnValue("/tmp/deneb-agent"),
     resolveAgentExplicitModelPrimary: vi.fn().mockReturnValue(undefined),
     resolveAgentEffectiveModelPrimary: vi.fn().mockReturnValue(undefined),
     resolveAgentModelFallbacksOverride: vi.fn().mockReturnValue(undefined),
@@ -45,7 +45,7 @@ const mocks = vi.hoisted(() => {
     resolveAuthProfileDisplayLabel: vi.fn(({ profileId }: { profileId: string }) => profileId),
     resolveAuthStorePathForDisplay: vi
       .fn()
-      .mockReturnValue("/tmp/openclaw-agent/auth-profiles.json"),
+      .mockReturnValue("/tmp/deneb-agent/auth-profiles.json"),
     resolveEnvApiKey: vi.fn((provider: string) => {
       if (provider === "openai") {
         return {
@@ -67,7 +67,7 @@ const mocks = vi.hoisted(() => {
     getShellEnvAppliedKeys: vi.fn().mockReturnValue(["OPENAI_API_KEY", "ANTHROPIC_OAUTH_TOKEN"]),
     shouldEnableShellEnvFallback: vi.fn().mockReturnValue(true),
     createConfigIO: vi.fn().mockReturnValue({
-      configPath: "/tmp/openclaw-dev/openclaw.json",
+      configPath: "/tmp/deneb-dev/deneb.json",
     }),
     loadConfig: vi.fn().mockReturnValue({
       agents: {
@@ -84,7 +84,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("../../agents/agent-paths.js", () => ({
-  resolveOpenClawAgentDir: mocks.resolveOpenClawAgentDir,
+  resolveDenebAgentDir: mocks.resolveDenebAgentDir,
 }));
 
 vi.mock("../../agents/agent-scope.js", () => ({
@@ -196,7 +196,7 @@ async function withAgentScopeOverrides<T>(
     if (originalAgentDir) {
       mocks.resolveAgentDir.mockImplementation(originalAgentDir);
     } else {
-      mocks.resolveAgentDir.mockReturnValue("/tmp/openclaw-agent");
+      mocks.resolveAgentDir.mockReturnValue("/tmp/deneb-agent");
     }
   }
 }
@@ -206,10 +206,10 @@ describe("modelsStatusCommand auth overview", () => {
     await modelsStatusCommand({ json: true }, runtime as never);
     const payload = JSON.parse(String((runtime.log as Mock).mock.calls[0]?.[0]));
 
-    expect(mocks.resolveOpenClawAgentDir).toHaveBeenCalled();
+    expect(mocks.resolveDenebAgentDir).toHaveBeenCalled();
     expect(payload.defaultModel).toBe("anthropic/claude-opus-4-5");
-    expect(payload.configPath).toBe("/tmp/openclaw-dev/openclaw.json");
-    expect(payload.auth.storePath).toBe("/tmp/openclaw-agent/auth-profiles.json");
+    expect(payload.configPath).toBe("/tmp/deneb-dev/deneb.json");
+    expect(payload.auth.storePath).toBe("/tmp/deneb-agent/auth-profiles.json");
     expect(payload.auth.shellEnvFallback.enabled).toBe(true);
     expect(payload.auth.shellEnvFallback.appliedKeys).toContain("OPENAI_API_KEY");
     expect(payload.auth.missingProvidersInUse).toEqual([]);
@@ -273,14 +273,14 @@ describe("modelsStatusCommand auth overview", () => {
       {
         primary: "openai/gpt-4",
         fallbacks: ["openai/gpt-3.5"],
-        agentDir: "/tmp/openclaw-agent-custom",
+        agentDir: "/tmp/deneb-agent-custom",
       },
       async () => {
         await modelsStatusCommand({ json: true, agent: "Jeremiah" }, localRuntime as never);
         expect(mocks.resolveAgentDir).toHaveBeenCalledWith(expect.anything(), "jeremiah");
         const payload = JSON.parse(String((localRuntime.log as Mock).mock.calls[0]?.[0]));
         expect(payload.agentId).toBe("jeremiah");
-        expect(payload.agentDir).toBe("/tmp/openclaw-agent-custom");
+        expect(payload.agentDir).toBe("/tmp/deneb-agent-custom");
         expect(payload.defaultModel).toBe("openai/gpt-4");
         expect(payload.fallbacks).toEqual(["openai/gpt-3.5"]);
         expect(payload.modelConfig).toEqual({

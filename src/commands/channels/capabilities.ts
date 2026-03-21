@@ -10,7 +10,7 @@ import type {
   ChannelCapabilitiesDisplayLine,
   ChannelPlugin,
 } from "../../channels/plugins/types.js";
-import { writeConfigFile, type OpenClawConfig } from "../../config/config.js";
+import { writeConfigFile, type DenebConfig } from "../../config/config.js";
 import { danger } from "../../globals.js";
 import { defaultRuntime, type RuntimeEnv } from "../../runtime.js";
 import { theme } from "../../terminal/theme.js";
@@ -124,7 +124,7 @@ function renderDisplayLine(line: ChannelCapabilitiesDisplayLine) {
 
 async function resolveChannelReports(params: {
   plugin: ChannelPlugin;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   timeoutMs: number;
   accountOverride?: string;
   target?: string;

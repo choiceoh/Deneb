@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import {
   clearConfigCache,
   clearRuntimeConfigSnapshot,
@@ -11,12 +11,12 @@ import {
   installModelsConfigTestHooks,
   withModelsTempHome as withTempHome,
 } from "./models-config.e2e-harness.js";
-import { ensureOpenClawModelsJson } from "./models-config.js";
+import { ensureDenebModelsJson } from "./models-config.js";
 import { readGeneratedModelsJson } from "./models-config.test-utils.js";
 
 installModelsConfigTestHooks();
 
-function createOpenAiApiKeySourceConfig(): OpenClawConfig {
+function createOpenAiApiKeySourceConfig(): DenebConfig {
   return {
     models: {
       providers: {
@@ -31,7 +31,7 @@ function createOpenAiApiKeySourceConfig(): OpenClawConfig {
   };
 }
 
-function createOpenAiApiKeyRuntimeConfig(): OpenClawConfig {
+function createOpenAiApiKeyRuntimeConfig(): DenebConfig {
   return {
     models: {
       providers: {
@@ -46,7 +46,7 @@ function createOpenAiApiKeyRuntimeConfig(): OpenClawConfig {
   };
 }
 
-function createOpenAiHeaderSourceConfig(): OpenClawConfig {
+function createOpenAiHeaderSourceConfig(): DenebConfig {
   return {
     models: {
       providers: {
@@ -72,7 +72,7 @@ function createOpenAiHeaderSourceConfig(): OpenClawConfig {
   };
 }
 
-function createOpenAiHeaderRuntimeConfig(): OpenClawConfig {
+function createOpenAiHeaderRuntimeConfig(): DenebConfig {
   return {
     models: {
       providers: {
@@ -90,7 +90,7 @@ function createOpenAiHeaderRuntimeConfig(): OpenClawConfig {
   };
 }
 
-function withGatewayTokenMode(config: OpenClawConfig): OpenClawConfig {
+function withGatewayTokenMode(config: DenebConfig): DenebConfig {
   return {
     ...config,
     gateway: {
@@ -103,16 +103,16 @@ function withGatewayTokenMode(config: OpenClawConfig): OpenClawConfig {
 
 async function withGeneratedModelsFromRuntimeSource(
   params: {
-    sourceConfig: OpenClawConfig;
-    runtimeConfig: OpenClawConfig;
-    candidateConfig?: OpenClawConfig;
+    sourceConfig: DenebConfig;
+    runtimeConfig: DenebConfig;
+    candidateConfig?: DenebConfig;
   },
   runAssertions: () => Promise<void>,
 ) {
   await withTempHome(async () => {
     try {
       setRuntimeConfigSnapshot(params.runtimeConfig, params.sourceConfig);
-      await ensureOpenClawModelsJson(params.candidateConfig ?? loadConfig());
+      await ensureDenebModelsJson(params.candidateConfig ?? loadConfig());
       await runAssertions();
     } finally {
       clearRuntimeConfigSnapshot();
@@ -151,7 +151,7 @@ describe("models-config runtime source snapshot", () => {
 
   it("uses non-env marker from runtime source snapshot for file refs", async () => {
     await withTempHome(async () => {
-      const sourceConfig: OpenClawConfig = {
+      const sourceConfig: DenebConfig = {
         models: {
           providers: {
             moonshot: {
@@ -163,7 +163,7 @@ describe("models-config runtime source snapshot", () => {
           },
         },
       };
-      const runtimeConfig: OpenClawConfig = {
+      const runtimeConfig: DenebConfig = {
         models: {
           providers: {
             moonshot: {
@@ -178,7 +178,7 @@ describe("models-config runtime source snapshot", () => {
 
       try {
         setRuntimeConfigSnapshot(runtimeConfig, sourceConfig);
-        await ensureOpenClawModelsJson(loadConfig());
+        await ensureDenebModelsJson(loadConfig());
 
         const parsed = await readGeneratedModelsJson<{
           providers: Record<string, { apiKey?: string }>;
@@ -195,7 +195,7 @@ describe("models-config runtime source snapshot", () => {
     await withTempHome(async () => {
       const sourceConfig = createOpenAiApiKeySourceConfig();
       const runtimeConfig = createOpenAiApiKeyRuntimeConfig();
-      const clonedRuntimeConfig: OpenClawConfig = {
+      const clonedRuntimeConfig: DenebConfig = {
         ...runtimeConfig,
         agents: {
           defaults: {
@@ -206,7 +206,7 @@ describe("models-config runtime source snapshot", () => {
 
       try {
         setRuntimeConfigSnapshot(runtimeConfig, sourceConfig);
-        await ensureOpenClawModelsJson(clonedRuntimeConfig);
+        await ensureDenebModelsJson(clonedRuntimeConfig);
         await expectGeneratedProviderApiKey("openai", "OPENAI_API_KEY"); // pragma: allowlist secret
       } finally {
         clearRuntimeConfigSnapshot();
@@ -229,13 +229,13 @@ describe("models-config runtime source snapshot", () => {
     await withTempHome(async () => {
       const sourceConfig = withGatewayTokenMode(createOpenAiApiKeySourceConfig());
       const runtimeConfig = withGatewayTokenMode(createOpenAiApiKeyRuntimeConfig());
-      const incompatibleCandidate: OpenClawConfig = {
+      const incompatibleCandidate: DenebConfig = {
         ...createOpenAiApiKeyRuntimeConfig(),
       };
 
       try {
         setRuntimeConfigSnapshot(runtimeConfig, sourceConfig);
-        await ensureOpenClawModelsJson(incompatibleCandidate);
+        await ensureDenebModelsJson(incompatibleCandidate);
         await expectGeneratedProviderApiKey("openai", "OPENAI_API_KEY"); // pragma: allowlist secret
       } finally {
         clearRuntimeConfigSnapshot();
@@ -248,13 +248,13 @@ describe("models-config runtime source snapshot", () => {
     await withTempHome(async () => {
       const sourceConfig = withGatewayTokenMode(createOpenAiHeaderSourceConfig());
       const runtimeConfig = withGatewayTokenMode(createOpenAiHeaderRuntimeConfig());
-      const incompatibleCandidate: OpenClawConfig = {
+      const incompatibleCandidate: DenebConfig = {
         ...createOpenAiHeaderRuntimeConfig(),
       };
 
       try {
         setRuntimeConfigSnapshot(runtimeConfig, sourceConfig);
-        await ensureOpenClawModelsJson(incompatibleCandidate);
+        await ensureDenebModelsJson(incompatibleCandidate);
         await expectGeneratedOpenAiHeaderMarkers();
       } finally {
         clearRuntimeConfigSnapshot();

@@ -2,8 +2,8 @@ import {
   resolveChannelGroupRequireMention,
   resolveChannelGroupToolsPolicy,
   type GroupToolPolicyConfig,
-} from "openclaw/plugin-sdk/channel-policy";
-import { type ChannelGroupContext } from "openclaw/plugin-sdk/channel-runtime";
+} from "deneb/plugin-sdk/channel-policy";
+import { type ChannelGroupContext } from "deneb/plugin-sdk/channel-runtime";
 
 function parseTelegramGroupId(value?: string | null) {
   const raw = value?.trim() ?? "";

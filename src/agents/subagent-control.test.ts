@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { killSubagentRunAdmin, sendControlledSubagentMessage } from "./subagent-control.js";
 import {
   addSubagentRunForTests,
@@ -15,7 +15,7 @@ describe("sendControlledSubagentMessage", () => {
     const result = await sendControlledSubagentMessage({
       cfg: {
         channels: { whatsapp: { allowFrom: ["*"] } },
-      } as OpenClawConfig,
+      } as DenebConfig,
       controller: {
         controllerSessionKey: "agent:main:subagent:leaf",
         callerSessionKey: "agent:main:subagent:leaf",
@@ -51,7 +51,7 @@ describe("killSubagentRunAdmin", () => {
   });
 
   it("kills a subagent by session key without requester ownership checks", async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-subagent-admin-kill-"));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "deneb-subagent-admin-kill-"));
     const storePath = path.join(tmpDir, "sessions.json");
     const childSessionKey = "agent:main:subagent:worker";
 
@@ -84,7 +84,7 @@ describe("killSubagentRunAdmin", () => {
 
     const cfg = {
       session: { store: storePath },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     const result = await killSubagentRunAdmin({
       cfg,
@@ -102,7 +102,7 @@ describe("killSubagentRunAdmin", () => {
 
   it("returns found=false when the session key is not tracked as a subagent run", async () => {
     const result = await killSubagentRunAdmin({
-      cfg: {} as OpenClawConfig,
+      cfg: {} as DenebConfig,
       sessionKey: "agent:main:subagent:missing",
     });
 

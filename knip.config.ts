@@ -1,5 +1,5 @@
 const rootEntries = [
-  "openclaw.mjs!",
+  "deneb.mjs!",
   "src/index.ts!",
   "src/entry.ts!",
   "src/cli/daemon-cli.ts!",
@@ -88,7 +88,7 @@ const config = {
     "extensions/*": {
       entry: ["index.ts!"],
       project: ["index.ts!", "src/**/*.ts!"],
-      ignoreDependencies: ["openclaw"],
+      ignoreDependencies: ["deneb"],
     },
   },
 } as const;

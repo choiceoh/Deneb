@@ -1,5 +1,5 @@
 import { formatCliCommand } from "../cli/command-format.js";
-import { type OpenClawConfig, readConfigFileSnapshot } from "../config/config.js";
+import { type DenebConfig, readConfigFileSnapshot } from "../config/config.js";
 import { formatConfigIssueLines } from "../config/issue-format.js";
 import {
   buildPluginCompatibilityNotices,
@@ -10,7 +10,7 @@ import type { RuntimeEnv } from "../runtime.js";
 export async function requireValidConfigSnapshot(
   runtime: RuntimeEnv,
   opts?: { includeCompatibilityAdvisory?: boolean },
-): Promise<OpenClawConfig | null> {
+): Promise<DenebConfig | null> {
   const snapshot = await readConfigFileSnapshot();
   if (snapshot.exists && !snapshot.valid) {
     const issues =
@@ -18,7 +18,7 @@ export async function requireValidConfigSnapshot(
         ? formatConfigIssueLines(snapshot.issues, "-").join("\n")
         : "Unknown validation issue.";
     runtime.error(`Config invalid:\n${issues}`);
-    runtime.error(`Fix the config or run ${formatCliCommand("openclaw doctor")}.`);
+    runtime.error(`Fix the config or run ${formatCliCommand("deneb doctor")}.`);
     runtime.exit(1);
     return null;
   }
@@ -34,7 +34,7 @@ export async function requireValidConfigSnapshot(
           .slice(0, 3)
           .map((notice) => `- ${formatPluginCompatibilityNotice(notice)}`),
         ...(compatibility.length > 3 ? [`- ... +${compatibility.length - 3} more`] : []),
-        `Review: ${formatCliCommand("openclaw doctor")}`,
+        `Review: ${formatCliCommand("deneb doctor")}`,
       ].join("\n"),
     );
   }

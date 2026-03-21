@@ -2,10 +2,10 @@
 set -euo pipefail
 
 VM_NAME="Windows 11"
-SNAPSHOT_HINT="pre-openclaw-native-e2e-2026-03-12"
+SNAPSHOT_HINT="pre-deneb-native-e2e-2026-03-12"
 MODE="both"
 OPENAI_API_KEY_ENV="OPENAI_API_KEY"
-INSTALL_URL="https://openclaw.ai/install.ps1"
+INSTALL_URL="https://deneb.ai/install.ps1"
 HOST_PORT="18426"
 HOST_PORT_EXPLICIT=0
 HOST_IP=""
@@ -24,8 +24,8 @@ MAIN_TGZ_PATH=""
 MINGIT_ZIP_PATH=""
 MINGIT_ZIP_NAME=""
 SERVER_PID=""
-RUN_DIR="$(mktemp -d /tmp/openclaw-parallels-windows.XXXXXX)"
-BUILD_LOCK_DIR="${TMPDIR:-/tmp}/openclaw-parallels-build.lock"
+RUN_DIR="$(mktemp -d /tmp/deneb-parallels-windows.XXXXXX)"
+BUILD_LOCK_DIR="${TMPDIR:-/tmp}/deneb-parallels-build.lock"
 
 TIMEOUT_SNAPSHOT_S=240
 TIMEOUT_INSTALL_S=1200
@@ -82,18 +82,18 @@ Usage: bash scripts/e2e/parallels-windows-smoke.sh [options]
 Options:
   --vm <name>                Parallels VM name. Default: "Windows 11"
   --snapshot-hint <name>     Snapshot name substring/fuzzy match.
-                             Default: "pre-openclaw-native-e2e-2026-03-12"
+                             Default: "pre-deneb-native-e2e-2026-03-12"
   --mode <fresh|upgrade|both>
   --openai-api-key-env <var> Host env var name for OpenAI API key.
                              Default: OPENAI_API_KEY
-  --install-url <url>        Installer URL for latest release. Default: https://openclaw.ai/install.ps1
+  --install-url <url>        Installer URL for latest release. Default: https://deneb.ai/install.ps1
   --host-port <port>         Host HTTP port for current-main tgz. Default: 18426
   --host-ip <ip>             Override Parallels host IP.
   --latest-version <ver>     Override npm latest version lookup.
   --install-version <ver>    Pin site-installer version/dist-tag for the baseline lane.
   --target-package-spec <npm-spec>
                              Install this npm package tarball instead of packing current main.
-                             Example: openclaw@2026.3.13-beta.1
+                             Example: deneb@2026.3.13-beta.1
   --skip-latest-ref-check    Skip latest-release ref-mode precheck.
   --keep-server              Leave temp host HTTP server running.
   --json                     Print machine-readable JSON summary.
@@ -328,15 +328,15 @@ PY
   guest_exec powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand "$encoded"
 }
 
-guest_run_openclaw() {
+guest_run_deneb() {
   local env_name="${1:-}"
   local env_value="${2:-}"
   shift 2
 
   local args_literal stdout_name stderr_name env_name_q env_value_q
   args_literal="$(ps_array_literal "$@")"
-  stdout_name="openclaw-stdout-$RANDOM-$RANDOM.log"
-  stderr_name="openclaw-stderr-$RANDOM-$RANDOM.log"
+  stdout_name="deneb-stdout-$RANDOM-$RANDOM.log"
+  stderr_name="deneb-stderr-$RANDOM-$RANDOM.log"
   env_name_q="$(ps_single_quote "$env_name")"
   env_value_q="$(ps_single_quote "$env_value")"
 
@@ -347,7 +347,7 @@ try {
   if ('${env_name_q}' -ne '') {
     Set-Item -Path ('Env:' + '${env_name_q}') -Value '${env_value_q}'
   }
-  \$proc = Start-Process -FilePath (Join-Path \$env:APPDATA 'npm\openclaw.cmd') -ArgumentList $args_literal -NoNewWindow -PassThru -RedirectStandardOutput \$stdout -RedirectStandardError \$stderr
+  \$proc = Start-Process -FilePath (Join-Path \$env:APPDATA 'npm\deneb.cmd') -ArgumentList $args_literal -NoNewWindow -PassThru -RedirectStandardOutput \$stdout -RedirectStandardError \$stderr
   \$proc.WaitForExit()
   if (Test-Path \$stdout) {
     Get-Content \$stdout
@@ -470,7 +470,7 @@ import re
 import sys
 
 text = pathlib.Path(sys.argv[1]).read_text(errors="replace")
-matches = re.findall(r"OpenClaw [^\r\n]+ \([0-9a-f]{7,}\)", text)
+matches = re.findall(r"Deneb [^\r\n]+ \([0-9a-f]{7,}\)", text)
 print(matches[-1] if matches else "")
 PY
 }
@@ -518,7 +518,7 @@ resolve_latest_version() {
     printf '%s\n' "$LATEST_VERSION"
     return
   fi
-  npm view openclaw version --userconfig "$(mktemp)"
+  npm view deneb version --userconfig "$(mktemp)"
 }
 
 resolve_mingit_download() {
@@ -529,7 +529,7 @@ import urllib.request
 req = urllib.request.Request(
     "https://api.github.com/repos/git-for-windows/git/releases/latest",
     headers={
-        "User-Agent": "openclaw-parallels-smoke",
+        "User-Agent": "deneb-parallels-smoke",
         "Accept": "application/vnd.github+json",
     },
 )
@@ -624,12 +624,12 @@ ensure_guest_git() {
   if guest_exec cmd.exe /d /s /c "where git.exe >nul 2>nul && git.exe --version"; then
     return
   fi
-  guest_exec cmd.exe /d /s /c "if exist \"%LOCALAPPDATA%\\OpenClaw\\deps\\portable-git\" rmdir /s /q \"%LOCALAPPDATA%\\OpenClaw\\deps\\portable-git\""
-  guest_exec cmd.exe /d /s /c "if not exist \"%LOCALAPPDATA%\\OpenClaw\\deps\" mkdir \"%LOCALAPPDATA%\\OpenClaw\\deps\""
-  guest_exec cmd.exe /d /s /c "mkdir \"%LOCALAPPDATA%\\OpenClaw\\deps\\portable-git\""
+  guest_exec cmd.exe /d /s /c "if exist \"%LOCALAPPDATA%\\Deneb\\deps\\portable-git\" rmdir /s /q \"%LOCALAPPDATA%\\Deneb\\deps\\portable-git\""
+  guest_exec cmd.exe /d /s /c "if not exist \"%LOCALAPPDATA%\\Deneb\\deps\" mkdir \"%LOCALAPPDATA%\\Deneb\\deps\""
+  guest_exec cmd.exe /d /s /c "mkdir \"%LOCALAPPDATA%\\Deneb\\deps\\portable-git\""
   guest_exec cmd.exe /d /s /c "curl.exe -fsSL \"$mingit_url\" -o \"%TEMP%\\$MINGIT_ZIP_NAME\""
-  guest_exec cmd.exe /d /s /c "tar.exe -xf \"%TEMP%\\$MINGIT_ZIP_NAME\" -C \"%LOCALAPPDATA%\\OpenClaw\\deps\\portable-git\""
-  guest_exec cmd.exe /d /s /c "del /q \"%TEMP%\\$MINGIT_ZIP_NAME\" & set \"PATH=%LOCALAPPDATA%\\OpenClaw\\deps\\portable-git\\cmd;%LOCALAPPDATA%\\OpenClaw\\deps\\portable-git\\mingw64\\bin;%LOCALAPPDATA%\\OpenClaw\\deps\\portable-git\\usr\\bin;%PATH%\" && git.exe --version"
+  guest_exec cmd.exe /d /s /c "tar.exe -xf \"%TEMP%\\$MINGIT_ZIP_NAME\" -C \"%LOCALAPPDATA%\\Deneb\\deps\\portable-git\""
+  guest_exec cmd.exe /d /s /c "del /q \"%TEMP%\\$MINGIT_ZIP_NAME\" & set \"PATH=%LOCALAPPDATA%\\Deneb\\deps\\portable-git\\cmd;%LOCALAPPDATA%\\Deneb\\deps\\portable-git\\mingw64\\bin;%LOCALAPPDATA%\\Deneb\\deps\\portable-git\\usr\\bin;%PATH%\" && git.exe --version"
 }
 
 pack_main_tgz() {
@@ -671,7 +671,7 @@ pack_main_tgz() {
     npm pack --ignore-scripts --json --pack-destination "$MAIN_TGZ_DIR" \
       | python3 -c 'import json, sys; data = json.load(sys.stdin); print(data[-1]["filename"])'
   )"
-  MAIN_TGZ_PATH="$MAIN_TGZ_DIR/openclaw-main-$short_head.tgz"
+  MAIN_TGZ_PATH="$MAIN_TGZ_DIR/deneb-main-$short_head.tgz"
   cp "$MAIN_TGZ_DIR/$pkg" "$MAIN_TGZ_PATH"
   say "Packed $MAIN_TGZ_PATH"
   tar -xOf "$MAIN_TGZ_PATH" package/dist/build-info.json
@@ -696,7 +696,7 @@ start_server() {
     (
       cd "$MAIN_TGZ_DIR"
       exec python3 -m http.server "$HOST_PORT" --bind 0.0.0.0
-    ) >/tmp/openclaw-parallels-windows-http.log 2>&1 &
+    ) >/tmp/deneb-parallels-windows-http.log 2>&1 &
     SERVER_PID=$!
     sleep 1
     probe_url="http://127.0.0.1:$HOST_PORT/$artifact"
@@ -725,7 +725,7 @@ install_latest_release() {
 \$ProgressPreference = 'SilentlyContinue'
 \$script = Invoke-RestMethod -Uri '$install_url_q'
 & ([scriptblock]::Create(\$script)) ${version_flag_q}-NoOnboard
-& (Join-Path \$env:APPDATA 'npm\openclaw.cmd') --version
+& (Join-Path \$env:APPDATA 'npm\deneb.cmd') --version
 EOF
 )"
 }
@@ -735,13 +735,13 @@ install_main_tgz() {
   local temp_name="$2"
   local tgz_url
   tgz_url="http://$host_ip:$HOST_PORT/$(basename "$MAIN_TGZ_PATH")"
-  guest_exec cmd.exe /d /s /c "set \"PATH=%LOCALAPPDATA%\\OpenClaw\\deps\\portable-git\\cmd;%LOCALAPPDATA%\\OpenClaw\\deps\\portable-git\\mingw64\\bin;%LOCALAPPDATA%\\OpenClaw\\deps\\portable-git\\usr\\bin;%PATH%\" && curl.exe -fsSL \"$tgz_url\" -o \"%TEMP%\\$temp_name\" && npm.cmd install -g \"%TEMP%\\$temp_name\" --no-fund --no-audit && \"%APPDATA%\\npm\\openclaw.cmd\" --version"
+  guest_exec cmd.exe /d /s /c "set \"PATH=%LOCALAPPDATA%\\Deneb\\deps\\portable-git\\cmd;%LOCALAPPDATA%\\Deneb\\deps\\portable-git\\mingw64\\bin;%LOCALAPPDATA%\\Deneb\\deps\\portable-git\\usr\\bin;%PATH%\" && curl.exe -fsSL \"$tgz_url\" -o \"%TEMP%\\$temp_name\" && npm.cmd install -g \"%TEMP%\\$temp_name\" --no-fund --no-audit && \"%APPDATA%\\npm\\deneb.cmd\" --version"
 }
 
 verify_version_contains() {
   local needle="$1"
   local version
-  version="$(guest_run_openclaw "" "" "--version")"
+  version="$(guest_run_deneb "" "" "--version")"
   printf '%s\n' "$version"
   case "$version" in
     *"$needle"*) ;;
@@ -755,9 +755,9 @@ verify_version_contains() {
 run_ref_onboard() {
   local openai_key_q runner_name log_name done_name done_status
   openai_key_q="$(ps_single_quote "$OPENAI_API_KEY_VALUE")"
-  runner_name="openclaw-onboard-$RANDOM-$RANDOM.ps1"
-  log_name="openclaw-onboard-$RANDOM-$RANDOM.log"
-  done_name="openclaw-onboard-$RANDOM-$RANDOM.done"
+  runner_name="deneb-onboard-$RANDOM-$RANDOM.ps1"
+  log_name="deneb-onboard-$RANDOM-$RANDOM.log"
+  done_name="deneb-onboard-$RANDOM-$RANDOM.done"
 
   guest_powershell "$(cat <<EOF
 \$runner = Join-Path \$env:TEMP '$runner_name'
@@ -771,8 +771,8 @@ Remove-Item \$runner, \$log, \$done -Force -ErrorAction SilentlyContinue
 \$done = Join-Path \$env:TEMP '$done_name'
 \$env:OPENAI_API_KEY = '$openai_key_q'
 try {
-  \$openclaw = Join-Path \$env:APPDATA 'npm\openclaw.cmd'
-  \$cmdLine = ('"{0}" onboard --non-interactive --mode local --auth-choice openai-api-key --secret-input-mode ref --gateway-port 18789 --gateway-bind loopback --install-daemon --skip-skills --accept-risk --json > "{1}" 2>&1' -f \$openclaw, \$log)
+  \$deneb = Join-Path \$env:APPDATA 'npm\deneb.cmd'
+  \$cmdLine = ('"{0}" onboard --non-interactive --mode local --auth-choice openai-api-key --secret-input-mode ref --gateway-port 18789 --gateway-bind loopback --install-daemon --skip-skills --accept-risk --json > "{1}" 2>&1' -f \$deneb, \$log)
   & cmd.exe /d /s /c \$cmdLine
   Set-Content -Path \$done -Value ([string]\$LASTEXITCODE)
 } catch {
@@ -803,19 +803,19 @@ EOF
 }
 
 verify_gateway() {
-  guest_run_openclaw "" "" gateway status --deep --require-rpc
+  guest_run_deneb "" "" gateway status --deep --require-rpc
 }
 
 show_gateway_status_compat() {
-  if guest_run_openclaw "" "" gateway status --help | grep -Fq -- "--require-rpc"; then
-    guest_run_openclaw "" "" gateway status --deep --require-rpc
+  if guest_run_deneb "" "" gateway status --help | grep -Fq -- "--require-rpc"; then
+    guest_run_deneb "" "" gateway status --deep --require-rpc
     return
   fi
-  guest_run_openclaw "" "" gateway status --deep
+  guest_run_deneb "" "" gateway status --deep
 }
 
 verify_turn() {
-  guest_run_openclaw "" "" agent --agent main --message "Reply with exact ASCII text OK only." --json
+  guest_run_deneb "" "" agent --agent main --message "Reply with exact ASCII text OK only." --json
 }
 
 capture_latest_ref_failure() {
@@ -840,7 +840,7 @@ run_fresh_main_lane() {
   phase_run "fresh.restore-snapshot" "$TIMEOUT_SNAPSHOT_S" restore_snapshot "$snapshot_id" || return $?
   phase_run "fresh.wait-for-user" "$TIMEOUT_SNAPSHOT_S" wait_for_guest_ready || return $?
   phase_run "fresh.ensure-git" "$TIMEOUT_INSTALL_S" ensure_guest_git "$host_ip" || return $?
-  phase_run "fresh.install-main" "$TIMEOUT_INSTALL_S" install_main_tgz "$host_ip" "openclaw-main-fresh.tgz" || return $?
+  phase_run "fresh.install-main" "$TIMEOUT_INSTALL_S" install_main_tgz "$host_ip" "deneb-main-fresh.tgz" || return $?
   FRESH_MAIN_VERSION="$(extract_last_version "$(phase_log_path fresh.install-main)")"
   phase_run "fresh.verify-main-version" "$TIMEOUT_VERIFY_S" verify_target_version || return $?
   phase_run "fresh.onboard-ref" "$TIMEOUT_ONBOARD_S" run_ref_onboard || return $?
@@ -868,7 +868,7 @@ run_upgrade_lane() {
     UPGRADE_PRECHECK_STATUS="skipped"
   fi
   phase_run "upgrade.ensure-git" "$TIMEOUT_INSTALL_S" ensure_guest_git "$host_ip" || return $?
-  phase_run "upgrade.install-main" "$TIMEOUT_INSTALL_S" install_main_tgz "$host_ip" "openclaw-main-upgrade.tgz" || return $?
+  phase_run "upgrade.install-main" "$TIMEOUT_INSTALL_S" install_main_tgz "$host_ip" "deneb-main-upgrade.tgz" || return $?
   UPGRADE_MAIN_VERSION="$(extract_last_version "$(phase_log_path upgrade.install-main)")"
   phase_run "upgrade.verify-main-version" "$TIMEOUT_VERIFY_S" verify_target_version || return $?
   phase_run "upgrade.onboard-ref" "$TIMEOUT_ONBOARD_S" run_ref_onboard || return $?

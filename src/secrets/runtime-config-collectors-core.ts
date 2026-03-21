@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { collectTtsApiKeyAssignments } from "./runtime-config-collectors-tts.js";
 import { evaluateGatewayAuthSurfaceStates } from "./runtime-gateway-auth-surfaces.js";
 import {
@@ -81,7 +81,7 @@ function collectSkillAssignments(params: {
 }
 
 function collectAgentMemorySearchAssignments(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   defaults: SecretDefaults | undefined;
   context: ResolverContext;
 }): void {
@@ -166,7 +166,7 @@ function collectAgentMemorySearchAssignments(params: {
 }
 
 function collectTalkAssignments(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   defaults: SecretDefaults | undefined;
   context: ResolverContext;
 }): void {
@@ -206,7 +206,7 @@ function collectTalkAssignments(params: {
 }
 
 function collectGatewayAssignments(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   defaults: SecretDefaults | undefined;
   context: ResolverContext;
 }): void {
@@ -276,7 +276,7 @@ function collectGatewayAssignments(params: {
 }
 
 function collectMessagesTtsAssignments(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   defaults: SecretDefaults | undefined;
   context: ResolverContext;
 }): void {
@@ -293,7 +293,7 @@ function collectMessagesTtsAssignments(params: {
 }
 
 function collectCronAssignments(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   defaults: SecretDefaults | undefined;
   context: ResolverContext;
 }): void {
@@ -314,7 +314,7 @@ function collectCronAssignments(params: {
 }
 
 function collectSandboxSshAssignments(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   defaults: SecretDefaults | undefined;
   context: ResolverContext;
 }): void {
@@ -398,7 +398,7 @@ function collectSandboxSshAssignments(params: {
 }
 
 export function collectCoreConfigAssignments(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   defaults: SecretDefaults | undefined;
   context: ResolverContext;
 }): void {

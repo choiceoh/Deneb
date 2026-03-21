@@ -5,7 +5,7 @@ import { createSubsystemLogger } from "../logging/subsystem.js";
 import { inspectBundleLspRuntimeSupport } from "./bundle-lsp.js";
 import { inspectBundleMcpRuntimeSupport } from "./bundle-mcp.js";
 import { normalizePluginsConfig } from "./config-state.js";
-import { loadOpenClawPlugins } from "./loader.js";
+import { loadDenebPlugins } from "./loader.js";
 import { createPluginLoaderLogger } from "./logger.js";
 import type { PluginRegistry } from "./registry.js";
 import type { PluginDiagnostic, PluginHookName } from "./types.js";
@@ -126,7 +126,7 @@ export function buildPluginStatusReport(params?: {
     : (resolveAgentWorkspaceDir(config, resolveDefaultAgentId(config)) ??
       resolveDefaultAgentWorkspaceDir());
 
-  const registry = loadOpenClawPlugins({
+  const registry = loadDenebPlugins({
     config,
     workspaceDir,
     env: params?.env,

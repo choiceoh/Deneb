@@ -8,7 +8,7 @@ import {
   resolveGatewayBindUrl,
   runPluginCommandWithTimeout,
   resolveTailnetHostWithRunner,
-  type OpenClawPluginApi,
+  type DenebPluginApi,
 } from "./api.js";
 import {
   armPairNotifyOnce,
@@ -85,9 +85,9 @@ function parsePositiveInteger(raw: string | undefined): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-function resolveGatewayPort(cfg: OpenClawPluginApi["config"]): number {
+function resolveGatewayPort(cfg: DenebPluginApi["config"]): number {
   const envPort =
-    parsePositiveInteger(process.env.OPENCLAW_GATEWAY_PORT?.trim()) ??
+    parsePositiveInteger(process.env.DENEB_GATEWAY_PORT?.trim()) ??
     parsePositiveInteger(process.env.CLAWDBOT_GATEWAY_PORT?.trim());
   if (envPort) {
     return envPort;
@@ -100,7 +100,7 @@ function resolveGatewayPort(cfg: OpenClawPluginApi["config"]): number {
 }
 
 function resolveScheme(
-  cfg: OpenClawPluginApi["config"],
+  cfg: DenebPluginApi["config"],
   opts?: { forceSecure?: boolean },
 ): "ws" | "wss" {
   if (opts?.forceSecure) {
@@ -190,17 +190,17 @@ async function resolveTailnetHost(): Promise<string | null> {
   );
 }
 
-function resolveAuthLabel(cfg: OpenClawPluginApi["config"]): ResolveAuthLabelResult {
+function resolveAuthLabel(cfg: DenebPluginApi["config"]): ResolveAuthLabelResult {
   const mode = cfg.gateway?.auth?.mode;
   const token =
     pickFirstDefined([
-      process.env.OPENCLAW_GATEWAY_TOKEN,
+      process.env.DENEB_GATEWAY_TOKEN,
       process.env.CLAWDBOT_GATEWAY_TOKEN,
       cfg.gateway?.auth?.token,
     ]) ?? undefined;
   const password =
     pickFirstDefined([
-      process.env.OPENCLAW_GATEWAY_PASSWORD,
+      process.env.DENEB_GATEWAY_PASSWORD,
       process.env.CLAWDBOT_GATEWAY_PASSWORD,
       cfg.gateway?.auth?.password,
     ]) ?? undefined;
@@ -244,7 +244,7 @@ function resolveRequiredAuthLabel(
     : { error: "Gateway auth is set to password, but no password is configured." };
 }
 
-async function resolveGatewayUrl(api: OpenClawPluginApi): Promise<ResolveUrlResult> {
+async function resolveGatewayUrl(api: DenebPluginApi): Promise<ResolveUrlResult> {
   const cfg = api.config;
   const pluginCfg = (api.pluginConfig ?? {}) as DevicePairPluginConfig;
   const scheme = resolveScheme(cfg);
@@ -329,8 +329,8 @@ function formatSetupInstructions(): string {
 export default definePluginEntry({
   id: "device-pair",
   name: "Device Pair",
-  description: "QR/bootstrap pairing helpers for OpenClaw devices",
-  register(api: OpenClawPluginApi) {
+  description: "QR/bootstrap pairing helpers for Deneb devices",
+  register(api: DenebPluginApi) {
     registerPairingNotifierService(api);
 
     api.registerCommand({
@@ -442,7 +442,7 @@ export default definePluginEntry({
               if (send) {
                 await send(
                   target,
-                  ["Scan this QR code with the OpenClaw iOS app:", "", "```", qrAscii, "```"].join(
+                  ["Scan this QR code with the Deneb iOS app:", "", "```", qrAscii, "```"].join(
                     "\n",
                   ),
                   {
@@ -498,7 +498,7 @@ export default definePluginEntry({
           // WebUI + CLI/TUI: ASCII QR
           return {
             text: [
-              "Scan this QR code with the OpenClaw iOS app:",
+              "Scan this QR code with the Deneb iOS app:",
               "",
               "```",
               qrAscii,

@@ -1,5 +1,5 @@
-import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
-import type { TelegramInlineButtonsScope } from "openclaw/plugin-sdk/config-runtime";
+import type { DenebConfig } from "deneb/plugin-sdk/config-runtime";
+import type { TelegramInlineButtonsScope } from "deneb/plugin-sdk/config-runtime";
 import { listTelegramAccountIds, resolveTelegramAccount } from "./accounts.js";
 
 const DEFAULT_INLINE_BUTTONS_SCOPE: TelegramInlineButtonsScope = "allowlist";
@@ -41,7 +41,7 @@ function resolveInlineButtonsScopeFromCapabilities(
 }
 
 export function resolveTelegramInlineButtonsScope(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   accountId?: string | null;
 }): TelegramInlineButtonsScope {
   const account = resolveTelegramAccount({ cfg: params.cfg, accountId: params.accountId });
@@ -49,7 +49,7 @@ export function resolveTelegramInlineButtonsScope(params: {
 }
 
 export function isTelegramInlineButtonsEnabled(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   accountId?: string | null;
 }): boolean {
   if (params.accountId) {

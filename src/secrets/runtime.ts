@@ -1,4 +1,4 @@
-import { resolveOpenClawAgentDir } from "../agents/agent-paths.js";
+import { resolveDenebAgentDir } from "../agents/agent-paths.js";
 import { listAgentIds, resolveAgentDir } from "../agents/agent-scope.js";
 import type { AuthProfileStore } from "../agents/auth-profiles.js";
 import {
@@ -10,7 +10,7 @@ import {
   clearRuntimeConfigSnapshot,
   setRuntimeConfigSnapshotRefreshHandler,
   setRuntimeConfigSnapshot,
-  type OpenClawConfig,
+  type DenebConfig,
 } from "../config/config.js";
 import { resolveUserPath } from "../utils.js";
 import {
@@ -30,8 +30,8 @@ import { resolveRuntimeWebTools, type RuntimeWebToolsMetadata } from "./runtime-
 export type { SecretResolverWarning } from "./runtime-shared.js";
 
 export type PreparedSecretsRuntimeSnapshot = {
-  sourceConfig: OpenClawConfig;
-  config: OpenClawConfig;
+  sourceConfig: DenebConfig;
+  config: DenebConfig;
   authStores: Array<{ agentDir: string; store: AuthProfileStore }>;
   warnings: SecretResolverWarning[];
   webTools: RuntimeWebToolsMetadata;
@@ -80,11 +80,11 @@ function clearActiveSecretsRuntimeState(): void {
 }
 
 function collectCandidateAgentDirs(
-  config: OpenClawConfig,
+  config: DenebConfig,
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
   const dirs = new Set<string>();
-  dirs.add(resolveUserPath(resolveOpenClawAgentDir(env), env));
+  dirs.add(resolveUserPath(resolveDenebAgentDir(env), env));
   for (const agentId of listAgentIds(config)) {
     dirs.add(resolveUserPath(resolveAgentDir(config, agentId, env), env));
   }
@@ -92,7 +92,7 @@ function collectCandidateAgentDirs(
 }
 
 function resolveRefreshAgentDirs(
-  config: OpenClawConfig,
+  config: DenebConfig,
   context: SecretsRuntimeRefreshContext,
 ): string[] {
   const configDerived = collectCandidateAgentDirs(config, context.env);
@@ -103,7 +103,7 @@ function resolveRefreshAgentDirs(
 }
 
 export async function prepareSecretsRuntimeSnapshot(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   env?: NodeJS.ProcessEnv;
   agentDirs?: string[];
   loadAuthStore?: (agentDir?: string) => AuthProfileStore;

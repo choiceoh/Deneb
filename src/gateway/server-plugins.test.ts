@@ -5,7 +5,7 @@ import type { PluginRuntime } from "../plugins/runtime/types.js";
 import type { PluginDiagnostic } from "../plugins/types.js";
 import type { GatewayRequestContext, GatewayRequestOptions } from "./server-methods/types.js";
 
-const loadOpenClawPlugins = vi.hoisted(() => vi.fn());
+const loadDenebPlugins = vi.hoisted(() => vi.fn());
 const primeConfiguredBindingRegistry = vi.hoisted(() =>
   vi.fn(() => ({ bindingCount: 0, channelCount: 0 })),
 );
@@ -17,7 +17,7 @@ const handleGatewayRequest = vi.hoisted(() =>
 );
 
 vi.mock("../plugins/loader.js", () => ({
-  loadOpenClawPlugins,
+  loadDenebPlugins,
 }));
 
 vi.mock("../channels/plugins/binding-registry.js", () => ({
@@ -98,7 +98,7 @@ async function createSubagentRuntime(
     error: vi.fn(),
     debug: vi.fn(),
   };
-  loadOpenClawPlugins.mockReturnValue(createRegistry([]));
+  loadDenebPlugins.mockReturnValue(createRegistry([]));
   serverPlugins.loadGatewayPlugins({
     cfg,
     workspaceDir: "/tmp",
@@ -106,7 +106,7 @@ async function createSubagentRuntime(
     coreGatewayHandlers: {},
     baseMethods: [],
   });
-  const call = loadOpenClawPlugins.mock.calls.at(-1)?.[0] as
+  const call = loadDenebPlugins.mock.calls.at(-1)?.[0] as
     | { runtimeOptions?: { allowGatewaySubagentBinding?: boolean } }
     | undefined;
   if (call?.runtimeOptions?.allowGatewaySubagentBinding !== true) {
@@ -117,7 +117,7 @@ async function createSubagentRuntime(
 }
 
 beforeEach(async () => {
-  loadOpenClawPlugins.mockReset();
+  loadDenebPlugins.mockReset();
   primeConfiguredBindingRegistry.mockClear().mockReturnValue({ bindingCount: 0, channelCount: 0 });
   handleGatewayRequest.mockReset();
   const runtimeModule = await import("../plugins/runtime/index.js");
@@ -159,7 +159,7 @@ describe("loadGatewayPlugins", () => {
         message: "failed to load plugin: boom",
       },
     ];
-    loadOpenClawPlugins.mockReturnValue(createRegistry(diagnostics));
+    loadDenebPlugins.mockReturnValue(createRegistry(diagnostics));
 
     const log = {
       info: vi.fn(),
@@ -184,7 +184,7 @@ describe("loadGatewayPlugins", () => {
 
   test("provides subagent runtime with sessions.get method aliases", async () => {
     const { loadGatewayPlugins } = await importServerPluginsModule();
-    loadOpenClawPlugins.mockReturnValue(createRegistry([]));
+    loadDenebPlugins.mockReturnValue(createRegistry([]));
 
     const log = {
       info: vi.fn(),
@@ -201,7 +201,7 @@ describe("loadGatewayPlugins", () => {
       baseMethods: [],
     });
 
-    const call = loadOpenClawPlugins.mock.calls.at(-1)?.[0] as
+    const call = loadDenebPlugins.mock.calls.at(-1)?.[0] as
       | { runtimeOptions?: { allowGatewaySubagentBinding?: boolean } }
       | undefined;
     expect(call?.runtimeOptions?.allowGatewaySubagentBinding).toBe(true);
@@ -315,7 +315,7 @@ describe("loadGatewayPlugins", () => {
         }),
       ),
     ).rejects.toThrow(
-      'plugin "voice-call" is not trusted for fallback provider/model override requests. See https://docs.openclaw.ai/tools/plugin#runtime-helpers and search for: plugins.entries.<id>.subagent.allowModelOverride',
+      'plugin "voice-call" is not trusted for fallback provider/model override requests. See https://docs.deneb.ai/tools/plugin#runtime-helpers and search for: plugins.entries.<id>.subagent.allowModelOverride',
     );
   });
 
@@ -445,7 +445,7 @@ describe("loadGatewayPlugins", () => {
 
   test("can prefer setup-runtime channel plugins during startup loads", async () => {
     const { loadGatewayPlugins } = await importServerPluginsModule();
-    loadOpenClawPlugins.mockReturnValue(createRegistry([]));
+    loadDenebPlugins.mockReturnValue(createRegistry([]));
 
     const log = {
       info: vi.fn(),
@@ -463,7 +463,7 @@ describe("loadGatewayPlugins", () => {
       preferSetupRuntimeForChannelPlugins: true,
     });
 
-    expect(loadOpenClawPlugins).toHaveBeenCalledWith(
+    expect(loadDenebPlugins).toHaveBeenCalledWith(
       expect.objectContaining({
         preferSetupRuntimeForChannelPlugins: true,
       }),
@@ -472,7 +472,7 @@ describe("loadGatewayPlugins", () => {
 
   test("primes configured bindings during gateway startup", async () => {
     const { loadGatewayPlugins } = await importServerPluginsModule();
-    loadOpenClawPlugins.mockReturnValue(createRegistry([]));
+    loadDenebPlugins.mockReturnValue(createRegistry([]));
 
     const log = {
       info: vi.fn(),
@@ -503,7 +503,7 @@ describe("loadGatewayPlugins", () => {
         message: "failed to load plugin: boom",
       },
     ];
-    loadOpenClawPlugins.mockReturnValue(createRegistry(diagnostics));
+    loadDenebPlugins.mockReturnValue(createRegistry(diagnostics));
 
     const log = {
       info: vi.fn(),

@@ -1,5 +1,5 @@
 import { formatCliCommand } from "../cli/command-format.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { normalizeStoredCronJobs } from "../cron/store-migration.js";
 import { resolveCronStorePath, loadCronStore, saveCronStore } from "../cron/store.js";
 import type { CronJob } from "../cron/types.js";
@@ -119,7 +119,7 @@ function migrateLegacyNotifyFallback(params: {
 }
 
 export async function maybeRepairLegacyCronStore(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   options: DoctorOptions;
   prompter: Pick<DoctorPrompter, "confirm">;
 }) {
@@ -147,7 +147,7 @@ export async function maybeRepairLegacyCronStore(params: {
     [
       `Legacy cron job storage detected at ${shortenHomePath(storePath)}.`,
       ...previewLines,
-      `Repair with ${formatCliCommand("openclaw doctor --fix")} to normalize the store before the next scheduler run.`,
+      `Repair with ${formatCliCommand("deneb doctor --fix")} to normalize the store before the next scheduler run.`,
     ].join("\n"),
     "Cron",
   );

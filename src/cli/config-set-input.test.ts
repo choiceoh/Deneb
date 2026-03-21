@@ -78,7 +78,7 @@ describe("config set input parsing", () => {
   });
 
   it("parses valid --batch-file payloads", () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-config-set-input-"));
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "deneb-config-set-input-"));
     const batchPath = path.join(tempDir, "batch.json");
     fs.writeFileSync(batchPath, '[{"path":"gateway.auth.mode","value":"token"}]', "utf8");
     try {
@@ -97,7 +97,7 @@ describe("config set input parsing", () => {
   });
 
   it("rejects malformed --batch-file payloads", () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-config-set-input-invalid-"));
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "deneb-config-set-input-invalid-"));
     const batchPath = path.join(tempDir, "batch.json");
     fs.writeFileSync(batchPath, "{}", "utf8");
     try {

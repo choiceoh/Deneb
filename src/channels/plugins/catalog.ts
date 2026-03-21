@@ -2,9 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { MANIFEST_KEY } from "../../compat/legacy-names.js";
 import { resolveBundledPluginsDir } from "../../plugins/bundled-dir.js";
-import { discoverOpenClawPlugins } from "../../plugins/discovery.js";
+import { discoverDenebPlugins } from "../../plugins/discovery.js";
 import { loadPluginManifest } from "../../plugins/manifest.js";
-import type { OpenClawPackageManifest } from "../../plugins/manifest.js";
+import type { DenebPackageManifest } from "../../plugins/manifest.js";
 import type { PackageManifest as PluginPackageManifest } from "../../plugins/manifest.js";
 import type { PluginOrigin } from "../../plugins/types.js";
 import { isRecord, resolveConfigDir, resolveUserPath } from "../../utils.js";
@@ -54,9 +54,9 @@ type ExternalCatalogEntry = {
   name?: string;
   version?: string;
   description?: string;
-} & Partial<Record<ManifestKey, OpenClawPackageManifest>>;
+} & Partial<Record<ManifestKey, DenebPackageManifest>>;
 
-const ENV_CATALOG_PATHS = ["OPENCLAW_PLUGIN_CATALOG_PATHS", "OPENCLAW_MPM_CATALOG_PATHS"];
+const ENV_CATALOG_PATHS = ["DENEB_PLUGIN_CATALOG_PATHS", "DENEB_MPM_CATALOG_PATHS"];
 
 type ManifestKey = typeof MANIFEST_KEY;
 
@@ -129,7 +129,7 @@ function loadExternalCatalogEntries(options: CatalogOptions): ExternalCatalogEnt
 }
 
 function toChannelMeta(params: {
-  channel: NonNullable<OpenClawPackageManifest["channel"]>;
+  channel: NonNullable<DenebPackageManifest["channel"]>;
   id: string;
 }): ChannelMeta | null {
   const label = params.channel.label?.trim();
@@ -179,7 +179,7 @@ function toChannelMeta(params: {
 }
 
 function resolveInstallInfo(params: {
-  manifest: OpenClawPackageManifest;
+  manifest: DenebPackageManifest;
   packageName?: string;
   packageDir?: string;
   workspaceDir?: string;
@@ -221,7 +221,7 @@ function buildCatalogEntry(candidate: {
   rootDir?: string;
   origin?: PluginOrigin;
   workspaceDir?: string;
-  packageManifest?: OpenClawPackageManifest;
+  packageManifest?: DenebPackageManifest;
 }): ChannelPluginCatalogEntry | null {
   const manifest = candidate.packageManifest;
   if (!manifest?.channel) {
@@ -295,7 +295,7 @@ function loadBundledMetadataCatalogEntries(options: CatalogOptions): ChannelPlug
       rootDir: pluginDir,
       origin: "bundled",
       workspaceDir: options.workspaceDir,
-      packageManifest: packageJson.openclaw,
+      packageManifest: packageJson.deneb,
     });
     if (entry) {
       entries.push(entry);
@@ -336,7 +336,7 @@ export function buildChannelUiCatalog(
 export function listChannelPluginCatalogEntries(
   options: CatalogOptions = {},
 ): ChannelPluginCatalogEntry[] {
-  const discovery = discoverOpenClawPlugins({
+  const discovery = discoverDenebPlugins({
     workspaceDir: options.workspaceDir,
     env: options.env,
   });

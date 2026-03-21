@@ -49,21 +49,21 @@ async function createAdapterHarness(params?: {
 }
 
 describe("createChildAdapter", () => {
-  const originalServiceMarker = process.env.OPENCLAW_SERVICE_MARKER;
+  const originalServiceMarker = process.env.DENEB_SERVICE_MARKER;
 
   beforeEach(async () => {
     vi.resetModules();
     ({ createChildAdapter } = await import("./child.js"));
     spawnWithFallbackMock.mockClear();
     killProcessTreeMock.mockClear();
-    delete process.env.OPENCLAW_SERVICE_MARKER;
+    delete process.env.DENEB_SERVICE_MARKER;
   });
 
   afterAll(() => {
     if (originalServiceMarker === undefined) {
-      delete process.env.OPENCLAW_SERVICE_MARKER;
+      delete process.env.DENEB_SERVICE_MARKER;
     } else {
-      process.env.OPENCLAW_SERVICE_MARKER = originalServiceMarker;
+      process.env.DENEB_SERVICE_MARKER = originalServiceMarker;
     }
   });
 
@@ -100,7 +100,7 @@ describe("createChildAdapter", () => {
   });
 
   it("disables detached mode in service-managed runtime", async () => {
-    process.env.OPENCLAW_SERVICE_MARKER = "openclaw";
+    process.env.DENEB_SERVICE_MARKER = "deneb";
 
     await createAdapterHarness({ pid: 7777 });
 

@@ -1,8 +1,8 @@
 import { expect, type MockInstance } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 
 export function createWhatsAppPollFixture() {
-  const cfg = { marker: "resolved-cfg" } as OpenClawConfig;
+  const cfg = { marker: "resolved-cfg" } as DenebConfig;
   const poll = {
     question: "Lunch?",
     options: ["Pizza", "Sushi"],
@@ -19,7 +19,7 @@ export function createWhatsAppPollFixture() {
 export function expectWhatsAppPollSent(
   sendPollWhatsApp: MockInstance,
   params: {
-    cfg: OpenClawConfig;
+    cfg: DenebConfig;
     poll: { question: string; options: string[]; maxSelections: number };
     to?: string;
     accountId?: string;

@@ -2,7 +2,7 @@
 title: "Volcengine (Doubao)"
 summary: "Volcano Engine setup (Doubao models, general + coding endpoints)"
 read_when:
-  - You want to use Volcano Engine or Doubao models with OpenClaw
+  - You want to use Volcano Engine or Doubao models with Deneb
   - You need the Volcengine API key setup
 ---
 
@@ -21,7 +21,7 @@ workloads.
 1. Set the API key:
 
 ```bash
-openclaw onboard --auth-choice volcengine-api-key
+deneb onboard --auth-choice volcengine-api-key
 ```
 
 2. Set a default model:
@@ -39,7 +39,7 @@ openclaw onboard --auth-choice volcengine-api-key
 ## Non-interactive example
 
 ```bash
-openclaw onboard --non-interactive \
+deneb onboard --non-interactive \
   --mode local \
   --auth-choice volcengine-api-key \
   --volcengine-api-key "$VOLCANO_ENGINE_API_KEY"
@@ -71,4 +71,4 @@ tokens.
 
 If the Gateway runs as a daemon (launchd/systemd), make sure
 `VOLCANO_ENGINE_API_KEY` is available to that process (for example, in
-`~/.openclaw/.env` or via `env.shellEnv`).
+`~/.deneb/.env` or via `env.shellEnv`).

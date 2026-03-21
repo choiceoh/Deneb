@@ -33,15 +33,15 @@ describe("browser server-context loopback direct WebSocket profiles", () => {
     });
 
     global.fetch = withFetchPreconnect(fetchMock);
-    const state = makeState("openclaw");
-    state.resolved.profiles.openclaw = {
+    const state = makeState("deneb");
+    state.resolved.profiles.deneb = {
       cdpUrl: "ws://127.0.0.1:18800/devtools/browser/SESSION?token=abc",
       color: "#FF4500",
     };
     const ctx = createBrowserRouteContext({ getState: () => state });
-    const openclaw = ctx.forProfile("openclaw");
+    const deneb = ctx.forProfile("deneb");
 
-    const opened = await openclaw.openTab("http://127.0.0.1:8080");
+    const opened = await deneb.openTab("http://127.0.0.1:8080");
     expect(opened.targetId).toBe("CREATED");
     expect(createTargetViaCdp).toHaveBeenCalledWith({
       cdpUrl: "ws://127.0.0.1:18800/devtools/browser/SESSION?token=abc",
@@ -77,16 +77,16 @@ describe("browser server-context loopback direct WebSocket profiles", () => {
     });
 
     global.fetch = withFetchPreconnect(fetchMock);
-    const state = makeState("openclaw");
-    state.resolved.profiles.openclaw = {
+    const state = makeState("deneb");
+    state.resolved.profiles.deneb = {
       cdpUrl: "ws://127.0.0.1:18800/devtools/browser/SESSION?token=abc",
       color: "#FF4500",
     };
     const ctx = createBrowserRouteContext({ getState: () => state });
-    const openclaw = ctx.forProfile("openclaw");
+    const deneb = ctx.forProfile("deneb");
 
-    await openclaw.focusTab("T1");
-    await openclaw.closeTab("T1");
+    await deneb.focusTab("T1");
+    await deneb.closeTab("T1");
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://127.0.0.1:18800/json/activate/T1?token=abc",
@@ -125,18 +125,18 @@ describe("browser server-context loopback direct WebSocket profiles", () => {
     });
 
     global.fetch = withFetchPreconnect(fetchMock);
-    const state = makeState("openclaw");
-    state.resolved.profiles.openclaw = {
+    const state = makeState("deneb");
+    state.resolved.profiles.deneb = {
       cdpUrl: "wss://127.0.0.1:18800/cdp?token=abc",
       color: "#FF4500",
     };
     const ctx = createBrowserRouteContext({ getState: () => state });
-    const openclaw = ctx.forProfile("openclaw");
+    const deneb = ctx.forProfile("deneb");
 
-    const tabs = await openclaw.listTabs();
+    const tabs = await deneb.listTabs();
     expect(tabs.map((tab) => tab.targetId)).toEqual(["T2"]);
 
-    await openclaw.focusTab("T2");
-    await openclaw.closeTab("T2");
+    await deneb.focusTab("T2");
+    await deneb.closeTab("T2");
   });
 });

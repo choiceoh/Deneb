@@ -1,5 +1,5 @@
 ---
-summary: "Context window + compaction: how OpenClaw keeps sessions under model limits"
+summary: "Context window + compaction: how Deneb keeps sessions under model limits"
 read_when:
   - You want to understand auto-compaction and /compact
   - You are debugging long sessions hitting context limits
@@ -8,7 +8,7 @@ title: "Compaction"
 
 # Context Window & Compaction
 
-Every model has a **context window** (max tokens it can see). Long-running chats accumulate messages and tool results; once the window is tight, OpenClaw **compacts** older history to stay within limits.
+Every model has a **context window** (max tokens it can see). Long-running chats accumulate messages and tool results; once the window is tight, Deneb **compacts** older history to stay within limits.
 
 ## What compaction is
 
@@ -21,7 +21,7 @@ Compaction **persists** in the session’s JSONL history.
 
 ## Configuration
 
-Use the `agents.defaults.compaction` setting in your `openclaw.json` to configure compaction behavior (mode, target tokens, etc.).
+Use the `agents.defaults.compaction` setting in your `deneb.json` to configure compaction behavior (mode, target tokens, etc.).
 Compaction summarization preserves opaque identifiers by default (`identifierPolicy: "strict"`). You can override this with `identifierPolicy: "off"` or provide custom text with `identifierPolicy: "custom"` and `identifierInstructions`.
 
 You can optionally specify a different model for compaction summarization via `agents.defaults.compaction.model`. This is useful when your primary model is a local or small model and you want compaction summaries produced by a more capable model. The override accepts any `provider/model-id` string:
@@ -56,14 +56,14 @@ When unset, compaction uses the agent's primary model.
 
 ## Auto-compaction (default on)
 
-When a session nears or exceeds the model’s context window, OpenClaw triggers auto-compaction and may retry the original request using the compacted context.
+When a session nears or exceeds the model’s context window, Deneb triggers auto-compaction and may retry the original request using the compacted context.
 
 You’ll see:
 
 - `🧹 Auto-compaction complete` in verbose mode
 - `/status` showing `🧹 Compactions: <count>`
 
-Before compaction, OpenClaw can run a **silent memory flush** turn to store
+Before compaction, Deneb can run a **silent memory flush** turn to store
 durable notes to disk. See [Memory](/concepts/memory) for details and config.
 
 ## Manual compaction
@@ -76,7 +76,7 @@ Use `/compact` (optionally with instructions) to force a compaction pass:
 
 ## Context window source
 
-Context window is model-specific. OpenClaw uses the model definition from the configured provider catalog to determine limits.
+Context window is model-specific. Deneb uses the model definition from the configured provider catalog to determine limits.
 
 ## Compaction vs pruning
 
@@ -87,11 +87,11 @@ See [/concepts/session-pruning](/concepts/session-pruning) for pruning details.
 
 ## OpenAI server-side compaction
 
-OpenClaw also supports OpenAI Responses server-side compaction hints for
-compatible direct OpenAI models. This is separate from local OpenClaw
+Deneb also supports OpenAI Responses server-side compaction hints for
+compatible direct OpenAI models. This is separate from local Deneb
 compaction and can run alongside it.
 
-- Local compaction: OpenClaw summarizes and persists into session JSONL.
+- Local compaction: Deneb summarizes and persists into session JSONL.
 - Server-side compaction: OpenAI compacts context on the provider side when
   `store` + `context_management` are enabled.
 
@@ -105,16 +105,16 @@ summarization described above. Plugin engines (selected via
 `plugins.slots.contextEngine`) can implement any compaction strategy — DAG
 summaries, vector retrieval, incremental condensation, etc.
 
-When a plugin engine sets `ownsCompaction: true`, OpenClaw delegates all
+When a plugin engine sets `ownsCompaction: true`, Deneb delegates all
 compaction decisions to the engine and does not run built-in auto-compaction.
 
-When `ownsCompaction` is `false` or unset, OpenClaw may still use Pi's
+When `ownsCompaction` is `false` or unset, Deneb may still use Pi's
 built-in in-attempt auto-compaction, but the active engine's `compact()` method
 still handles `/compact` and overflow recovery. There is no automatic fallback
 to the legacy engine's compaction path.
 
 If you are building a non-owning context engine, implement `compact()` by
-calling `delegateCompactionToRuntime(...)` from `openclaw/plugin-sdk/core`.
+calling `delegateCompactionToRuntime(...)` from `deneb/plugin-sdk/core`.
 
 ## Tips
 

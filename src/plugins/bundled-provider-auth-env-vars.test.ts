@@ -50,10 +50,10 @@ describe("bundled provider auth env vars", () => {
   });
 
   it("supports check mode for stale generated artifacts", () => {
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-provider-auth-env-vars-"));
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "deneb-provider-auth-env-vars-"));
     tempDirs.push(tempRoot);
 
-    writeJson(path.join(tempRoot, "extensions", "alpha", "openclaw.plugin.json"), {
+    writeJson(path.join(tempRoot, "extensions", "alpha", "deneb.plugin.json"), {
       id: "alpha",
       providerAuthEnvVars: {
         alpha: ["ALPHA_TOKEN"],

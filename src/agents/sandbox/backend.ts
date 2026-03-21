@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import type { SandboxFsBridge } from "./fs-bridge.js";
 import type { SandboxRegistryEntry } from "./registry.js";
 import type { SandboxConfig, SandboxContext } from "./types.js";
@@ -62,12 +62,12 @@ export type SandboxBackendRuntimeInfo = {
 export type SandboxBackendManager = {
   describeRuntime(params: {
     entry: SandboxRegistryEntry;
-    config: OpenClawConfig;
+    config: DenebConfig;
     agentId?: string;
   }): Promise<SandboxBackendRuntimeInfo>;
   removeRuntime(params: {
     entry: SandboxRegistryEntry;
-    config: OpenClawConfig;
+    config: DenebConfig;
     agentId?: string;
   }): Promise<void>;
 };

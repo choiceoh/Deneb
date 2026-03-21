@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { DEFAULT_ACCOUNT_ID } from "../../routing/session-key.js";
 import {
   applySetupAccountConfigPatch,
@@ -9,8 +9,8 @@ import {
   prepareScopedSetupConfig,
 } from "./setup-helpers.js";
 
-function asConfig(value: unknown): OpenClawConfig {
-  return value as OpenClawConfig;
+function asConfig(value: unknown): DenebConfig {
+  return value as DenebConfig;
 }
 
 describe("applySetupAccountConfigPatch", () => {

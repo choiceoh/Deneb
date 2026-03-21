@@ -1,6 +1,6 @@
-import { auditTelegramGroupMembership as auditTelegramGroupMembershipImpl } from "openclaw/plugin-sdk/telegram";
-import { monitorTelegramProvider as monitorTelegramProviderImpl } from "openclaw/plugin-sdk/telegram";
-import { probeTelegram as probeTelegramImpl } from "openclaw/plugin-sdk/telegram";
+import { auditTelegramGroupMembership as auditTelegramGroupMembershipImpl } from "deneb/plugin-sdk/telegram";
+import { monitorTelegramProvider as monitorTelegramProviderImpl } from "deneb/plugin-sdk/telegram";
+import { probeTelegram as probeTelegramImpl } from "deneb/plugin-sdk/telegram";
 import {
   deleteMessageTelegram as deleteMessageTelegramImpl,
   editMessageReplyMarkupTelegram as editMessageReplyMarkupTelegramImpl,
@@ -11,7 +11,7 @@ import {
   sendPollTelegram as sendPollTelegramImpl,
   sendTypingTelegram as sendTypingTelegramImpl,
   unpinMessageTelegram as unpinMessageTelegramImpl,
-} from "openclaw/plugin-sdk/telegram";
+} from "deneb/plugin-sdk/telegram";
 import type { PluginRuntimeChannel } from "./types-channel.js";
 
 type RuntimeTelegramOps = Pick<

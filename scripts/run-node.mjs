@@ -13,7 +13,7 @@ const runNodeSourceRoots = ["src", "extensions"];
 const runNodeConfigFiles = ["tsconfig.json", "package.json", "tsdown.config.ts"];
 export const runNodeWatchedPaths = [...runNodeSourceRoots, ...runNodeConfigFiles];
 const extensionSourceFilePattern = /\.(?:[cm]?[jt]sx?)$/;
-const extensionRestartMetadataFiles = new Set(["openclaw.plugin.json", "package.json"]);
+const extensionRestartMetadataFiles = new Set(["deneb.plugin.json", "package.json"]);
 
 const normalizePath = (filePath) => String(filePath ?? "").replaceAll("\\", "/");
 
@@ -211,7 +211,7 @@ const hasSourceMtimeChanged = (stampMtime, deps) => {
 };
 
 const shouldBuild = (deps) => {
-  if (deps.env.OPENCLAW_FORCE_BUILD === "1") {
+  if (deps.env.DENEB_FORCE_BUILD === "1") {
     return true;
   }
   const stamp = readBuildStamp(deps);
@@ -253,14 +253,14 @@ const shouldBuild = (deps) => {
 };
 
 const logRunner = (message, deps) => {
-  if (deps.env.OPENCLAW_RUNNER_LOG === "0") {
+  if (deps.env.DENEB_RUNNER_LOG === "0") {
     return;
   }
-  deps.stderr.write(`[openclaw] ${message}\n`);
+  deps.stderr.write(`[deneb] ${message}\n`);
 };
 
-const runOpenClaw = async (deps) => {
-  const nodeProcess = deps.spawn(deps.execPath, ["openclaw.mjs", ...deps.args], {
+const runDeneb = async (deps) => {
+  const nodeProcess = deps.spawn(deps.execPath, ["deneb.mjs", ...deps.args], {
     cwd: deps.cwd,
     env: deps.env,
     stdio: "inherit",
@@ -328,7 +328,7 @@ export async function runNodeMain(params = {}) {
     if (!syncRuntimeArtifacts(deps)) {
       return 1;
     }
-    return await runOpenClaw(deps);
+    return await runDeneb(deps);
   }
 
   logRunner("Building TypeScript (dist is stale).", deps);
@@ -353,7 +353,7 @@ export async function runNodeMain(params = {}) {
     return 1;
   }
   writeBuildStamp(deps);
-  return await runOpenClaw(deps);
+  return await runDeneb(deps);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

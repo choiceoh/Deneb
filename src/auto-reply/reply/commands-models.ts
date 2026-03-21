@@ -4,7 +4,7 @@ import {
   calculateTotalPages,
   getModelsPageSize,
   type ProviderInfo,
-} from "openclaw/plugin-sdk/telegram";
+} from "deneb/plugin-sdk/telegram";
 import { resolveAgentDir, resolveSessionAgentId } from "../../agents/agent-scope.js";
 import { resolveModelAuthLabel } from "../../agents/model-auth-label.js";
 import { loadModelCatalog } from "../../agents/model-catalog.js";
@@ -15,7 +15,7 @@ import {
   resolveDefaultModelForAgent,
   resolveModelRefFromString,
 } from "../../agents/model-selection.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import type { ReplyPayload } from "../types.js";
 import { rejectUnauthorizedCommand } from "./command-gates.js";
@@ -35,7 +35,7 @@ export type ModelsProviderData = {
  * Exported for reuse by callback handlers.
  */
 export async function buildModelsProviderData(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   agentId?: string,
 ): Promise<ModelsProviderData> {
   const resolvedDefault = resolveDefaultModelForAgent({
@@ -185,7 +185,7 @@ function parseModelsArgs(raw: string): {
 
 function resolveProviderLabel(params: {
   provider: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentDir?: string;
   sessionEntry?: SessionEntry;
 }): string {
@@ -204,7 +204,7 @@ function resolveProviderLabel(params: {
 export function formatModelsAvailableHeader(params: {
   provider: string;
   total: number;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentDir?: string;
   sessionEntry?: SessionEntry;
 }): string {
@@ -218,7 +218,7 @@ export function formatModelsAvailableHeader(params: {
 }
 
 export async function resolveModelsCommandReply(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   commandBodyNormalized: string;
   surface?: string;
   currentModel?: string;

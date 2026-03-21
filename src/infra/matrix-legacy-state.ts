@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import { resolveLegacyMatrixFlatStoreTarget } from "./matrix-migration-config.js";
 
@@ -36,7 +36,7 @@ function resolveLegacyMatrixPaths(env: NodeJS.ProcessEnv): {
 }
 
 function resolveMatrixMigrationPlan(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   env: NodeJS.ProcessEnv;
 }): MatrixLegacyStatePlan | { warning: string } | null {
   const legacy = resolveLegacyMatrixPaths(params.env);
@@ -66,7 +66,7 @@ function resolveMatrixMigrationPlan(params: {
 }
 
 export function detectLegacyMatrixState(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   env?: NodeJS.ProcessEnv;
 }): MatrixLegacyStatePlan | { warning: string } | null {
   return resolveMatrixMigrationPlan({
@@ -105,7 +105,7 @@ function moveLegacyPath(params: {
 }
 
 export async function autoMigrateLegacyMatrixState(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   env?: NodeJS.ProcessEnv;
   log?: { info?: (message: string) => void; warn?: (message: string) => void };
 }): Promise<MatrixLegacyStateMigrationResult> {

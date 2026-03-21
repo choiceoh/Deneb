@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import {
   canonicalizeMainSessionAlias,
   resolveMainSessionKey,
@@ -51,7 +51,7 @@ export function normalizeSessionKey(sessionKey: string): string {
 }
 
 export function canonicalizeAcpSessionKey(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   sessionKey: string;
 }): string {
   const normalized = normalizeSessionKey(params.sessionKey);
@@ -104,7 +104,7 @@ export function createUnsupportedControlError(params: {
   );
 }
 
-export function resolveRuntimeIdleTtlMs(cfg: OpenClawConfig): number {
+export function resolveRuntimeIdleTtlMs(cfg: DenebConfig): number {
   const ttlMinutes = cfg.acp?.runtime?.ttlMinutes;
   if (typeof ttlMinutes !== "number" || !Number.isFinite(ttlMinutes) || ttlMinutes <= 0) {
     return 0;

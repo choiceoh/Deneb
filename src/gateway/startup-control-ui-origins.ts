@@ -1,14 +1,14 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import {
   ensureControlUiAllowedOriginsForNonLoopbackBind,
   type GatewayNonLoopbackBindMode,
 } from "../config/gateway-control-ui-origins.js";
 
 export async function maybeSeedControlUiAllowedOriginsAtStartup(params: {
-  config: OpenClawConfig;
-  writeConfig: (config: OpenClawConfig) => Promise<void>;
+  config: DenebConfig;
+  writeConfig: (config: DenebConfig) => Promise<void>;
   log: { info: (msg: string) => void; warn: (msg: string) => void };
-}): Promise<OpenClawConfig> {
+}): Promise<DenebConfig> {
   const seeded = ensureControlUiAllowedOriginsForNonLoopbackBind(params.config);
   if (!seeded.seededOrigins || !seeded.bind) {
     return params.config;

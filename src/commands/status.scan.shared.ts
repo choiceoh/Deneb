@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import type { OpenClawConfig } from "../config/types.js";
+import type { DenebConfig } from "../config/types.js";
 import { buildGatewayConnectionDetails } from "../gateway/call.js";
 import { normalizeControlUiBasePath } from "../gateway/control-ui-shared.js";
 import { probeGateway } from "../gateway/probe.js";
@@ -31,7 +31,7 @@ export type GatewayProbeSnapshot = {
   gatewayProbe: Awaited<ReturnType<typeof probeGateway>> | null;
 };
 
-export function hasExplicitMemorySearchConfig(cfg: OpenClawConfig, agentId: string): boolean {
+export function hasExplicitMemorySearchConfig(cfg: DenebConfig, agentId: string): boolean {
   if (
     cfg.agents?.defaults &&
     Object.prototype.hasOwnProperty.call(cfg.agents.defaults, "memorySearch")
@@ -44,7 +44,7 @@ export function hasExplicitMemorySearchConfig(cfg: OpenClawConfig, agentId: stri
   );
 }
 
-export function resolveMemoryPluginStatus(cfg: OpenClawConfig): MemoryPluginStatus {
+export function resolveMemoryPluginStatus(cfg: DenebConfig): MemoryPluginStatus {
   const pluginsEnabled = cfg.plugins?.enabled !== false;
   if (!pluginsEnabled) {
     return { enabled: false, slot: null, reason: "plugins disabled" };
@@ -57,7 +57,7 @@ export function resolveMemoryPluginStatus(cfg: OpenClawConfig): MemoryPluginStat
 }
 
 export async function resolveGatewayProbeSnapshot(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   opts: { timeoutMs?: number; all?: boolean };
 }): Promise<GatewayProbeSnapshot> {
   const gatewayConnection = buildGatewayConnectionDetails({ config: params.cfg });
@@ -103,12 +103,12 @@ export function buildTailscaleHttpsUrl(params: {
 }
 
 export async function resolveSharedMemoryStatusSnapshot(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentStatus: { defaultId?: string | null };
   memoryPlugin: MemoryPluginStatus;
-  resolveMemoryConfig: (cfg: OpenClawConfig, agentId: string) => { store: { path: string } } | null;
+  resolveMemoryConfig: (cfg: DenebConfig, agentId: string) => { store: { path: string } } | null;
   getMemorySearchManager: (params: {
-    cfg: OpenClawConfig;
+    cfg: DenebConfig;
     agentId: string;
     purpose: "status";
   }) => Promise<{

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { createEmptyPluginRegistry } from "../plugins/registry.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
 import { generateImage, listRuntimeImageGenerationProviders } from "./runtime.js";
@@ -48,7 +48,7 @@ describe("image-generation runtime helpers", () => {
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     const result = await generateImage({
       cfg,

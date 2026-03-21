@@ -69,16 +69,16 @@ export function registerChannelsCli(program: Command) {
       "after",
       () =>
         `\n${theme.heading("Examples:")}\n${formatHelpExamples([
-          ["openclaw channels list", "List configured channels and auth profiles."],
-          ["openclaw channels status --probe", "Run channel status checks and probes."],
+          ["deneb channels list", "List configured channels and auth profiles."],
+          ["deneb channels status --probe", "Run channel status checks and probes."],
           [
-            "openclaw channels add --channel telegram --token <token>",
+            "deneb channels add --channel telegram --token <token>",
             "Add or update a channel account non-interactively.",
           ],
-          ["openclaw channels login --channel whatsapp", "Link a WhatsApp Web account."],
+          ["deneb channels login --channel whatsapp", "Link a WhatsApp Web account."],
         ])}\n\n${theme.muted("Docs:")} ${formatDocsLink(
           "/cli/channels",
-          "docs.openclaw.ai/cli/channels",
+          "docs.deneb.ai/cli/channels",
         )}\n`,
     );
 

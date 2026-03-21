@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { resolveOAuthDir } from "../config/paths.js";
 import { DEFAULT_ACCOUNT_ID } from "../routing/session-key.js";
 
@@ -64,7 +64,7 @@ function hasWhatsAppAuthState(env: NodeJS.ProcessEnv): boolean {
 }
 
 export function listPotentialConfiguredChannelIds(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
   const configuredChannelIds = new Set<string>();
@@ -115,7 +115,7 @@ function hasEnvConfiguredChannel(env: NodeJS.ProcessEnv): boolean {
 }
 
 export function hasPotentialConfiguredChannels(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   const channels = isRecord(cfg.channels) ? cfg.channels : null;

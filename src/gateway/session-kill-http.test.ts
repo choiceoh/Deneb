@@ -197,7 +197,7 @@ describe("POST /sessions/:sessionKey/kill", () => {
     killControlledSubagentRunMock.mockResolvedValue({ status: "ok" });
 
     const response = await post("/sessions/agent%3Amain%3Asubagent%3Aworker/kill", "", {
-      "x-openclaw-requester-session-key": "agent:main:main",
+      "x-deneb-requester-session-key": "agent:main:main",
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true, killed: true });
@@ -220,7 +220,7 @@ describe("POST /sessions/:sessionKey/kill", () => {
     const response = await post(
       "/sessions/agent%3Amain%3Asubagent%3Aworker/kill",
       TEST_GATEWAY_TOKEN,
-      { "x-openclaw-requester-session-key": "agent:other:main" },
+      { "x-deneb-requester-session-key": "agent:other:main" },
     );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true, killed: true });

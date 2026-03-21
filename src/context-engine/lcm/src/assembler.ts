@@ -189,8 +189,8 @@ function reasoningBlockFromPart(part: MessagePartRecord, rawType?: string): unkn
 }
 
 /**
- * Detect if a raw block is an OpenClaw-normalised OpenAI reasoning item.
- * OpenClaw converts OpenAI `{type:"reasoning", id:"rs_…", encrypted_content:"…"}`
+ * Detect if a raw block is an Deneb-normalised OpenAI reasoning item.
+ * Deneb converts OpenAI `{type:"reasoning", id:"rs_…", encrypted_content:"…"}`
  * into `{type:"thinking", thinking:"", thinkingSignature:"{…}"}`.
  * When we reassemble for the OpenAI provider we need the original back.
  */
@@ -249,7 +249,7 @@ export function toolCallBlockFromPart(part: MessagePartRecord, rawType?: string)
 
   if (input !== undefined) {
     // toolCall and functionCall use "arguments" (consumed by OpenAI/xAI Chat
-    // Completions extractToolCalls and Responses API paths in OpenClaw).
+    // Completions extractToolCalls and Responses API paths in Deneb).
     // tool_use and variants use "input" (Anthropic native format).
     if (type === "functionCall" || type === "toolCall") {
       block.arguments = input;
@@ -340,7 +340,7 @@ function toRuntimeRole(
 export function blockFromPart(part: MessagePartRecord): unknown {
   const metadata = getPartMetadata(part);
   if (metadata.raw && typeof metadata.raw === "object") {
-    // If this is an OpenClaw-normalised OpenAI reasoning block, restore the original
+    // If this is an Deneb-normalised OpenAI reasoning block, restore the original
     // OpenAI format so the Responses API gets the {type:"reasoning", id:"rs_…"} it expects.
     const restored = tryRestoreOpenAIReasoning(metadata.raw as Record<string, unknown>);
     if (restored) {

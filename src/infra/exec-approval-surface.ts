@@ -1,5 +1,5 @@
 import { getChannelPlugin, listChannelPlugins } from "../channels/plugins/index.js";
-import { loadConfig, type OpenClawConfig } from "../config/config.js";
+import { loadConfig, type DenebConfig } from "../config/config.js";
 import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../utils/message-channel.js";
 
 export type ExecApprovalInitiatingSurfaceState =
@@ -25,7 +25,7 @@ function labelForChannel(channel?: string): string {
 export function resolveExecApprovalInitiatingSurfaceState(params: {
   channel?: string | null;
   accountId?: string | null;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
 }): ExecApprovalInitiatingSurfaceState {
   const channel = normalizeMessageChannel(params.channel);
   const channelLabel = labelForChannel(channel);
@@ -44,7 +44,7 @@ export function resolveExecApprovalInitiatingSurfaceState(params: {
   return { kind: "unsupported", channel, channelLabel };
 }
 
-export function hasConfiguredExecApprovalDmRoute(cfg: OpenClawConfig): boolean {
+export function hasConfiguredExecApprovalDmRoute(cfg: DenebConfig): boolean {
   return listChannelPlugins().some(
     (plugin) => plugin.execApprovals?.hasConfiguredDmRoute?.({ cfg }) ?? false,
   );

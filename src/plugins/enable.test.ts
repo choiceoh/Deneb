@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { enablePluginInConfig } from "./enable.js";
 
 describe("enablePluginInConfig", () => {
   it("enables a plugin entry", () => {
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     const result = enablePluginInConfig(cfg, "google");
     expect(result.enabled).toBe(true);
     expect(result.config.plugins?.entries?.google?.enabled).toBe(true);
   });
 
   it("adds plugin to allowlist when allowlist is configured", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       plugins: {
         allow: ["memory-core"],
       },
@@ -22,7 +22,7 @@ describe("enablePluginInConfig", () => {
   });
 
   it("refuses enable when plugin is denylisted", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       plugins: {
         deny: ["google"],
       },
@@ -33,7 +33,7 @@ describe("enablePluginInConfig", () => {
   });
 
   it("writes built-in channels to channels.<id>.enabled and plugins.entries", () => {
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     const result = enablePluginInConfig(cfg, "telegram");
     expect(result.enabled).toBe(true);
     expect(result.config.channels?.telegram?.enabled).toBe(true);
@@ -41,7 +41,7 @@ describe("enablePluginInConfig", () => {
   });
 
   it("adds built-in channel id to allowlist when allowlist is configured", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       plugins: {
         allow: ["memory-core"],
       },
@@ -53,7 +53,7 @@ describe("enablePluginInConfig", () => {
   });
 
   it("re-enables built-in channels after explicit plugin-level disable", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       channels: {
         telegram: {
           enabled: true,

@@ -12,7 +12,7 @@ export function buildPluginSdkEntrySources() {
 
 export function buildPluginSdkSpecifiers() {
   return pluginSdkEntrypoints.map((entry) =>
-    entry === "index" ? "openclaw/plugin-sdk" : `openclaw/plugin-sdk/${entry}`,
+    entry === "index" ? "deneb/plugin-sdk" : `deneb/plugin-sdk/${entry}`,
   );
 }
 

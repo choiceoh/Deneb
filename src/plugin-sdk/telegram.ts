@@ -4,9 +4,9 @@ export type {
   ChannelMessageActionAdapter,
   ChannelPlugin,
 } from "../channels/plugins/types.js";
-export type { OpenClawConfig } from "../config/config.js";
+export type { DenebConfig } from "../config/config.js";
 export type { PluginRuntime } from "../plugins/runtime/types.js";
-export type { OpenClawPluginApi } from "../plugins/types.js";
+export type { DenebPluginApi } from "../plugins/types.js";
 export type {
   TelegramAccountConfig,
   TelegramActionConfig,

@@ -1,5 +1,5 @@
-import { resolveSendableOutboundReplyParts } from "openclaw/plugin-sdk/reply-payload";
-import type { OpenClawConfig } from "../../config/config.js";
+import { resolveSendableOutboundReplyParts } from "deneb/plugin-sdk/reply-payload";
+import type { DenebConfig } from "../../config/config.js";
 import { loadConfig } from "../../config/config.js";
 import { callGatewayLeastPrivilege, randomIdempotencyKey } from "../../gateway/call.js";
 import type { PollInput } from "../../polls.js";
@@ -47,7 +47,7 @@ type MessageSendParams = {
   dryRun?: boolean;
   bestEffort?: boolean;
   deps?: OutboundSendDeps;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   gateway?: MessageGatewayOptions;
   idempotencyKey?: string;
   mirror?: OutboundMirror;
@@ -78,7 +78,7 @@ type MessagePollParams = {
   silent?: boolean;
   isAnonymous?: boolean;
   dryRun?: boolean;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   gateway?: MessageGatewayOptions;
   idempotencyKey?: string;
 };
@@ -129,7 +129,7 @@ function buildMessagePollResult(params: {
 }
 
 async function resolveRequiredChannel(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   channel?: string;
 }): Promise<string> {
   return (
@@ -140,7 +140,7 @@ async function resolveRequiredChannel(params: {
   ).channel;
 }
 
-function resolveRequiredPlugin(channel: string, cfg: OpenClawConfig) {
+function resolveRequiredPlugin(channel: string, cfg: DenebConfig) {
   const plugin = resolveOutboundChannelPlugin({ channel, cfg });
   if (!plugin) {
     throw new Error(`Unknown channel: ${channel}`);

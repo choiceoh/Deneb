@@ -9,7 +9,7 @@ import {
 } from "./install-source-utils.js";
 
 const runCommandWithTimeoutMock = vi.fn();
-const TEMP_DIR_PREFIX = "openclaw-install-source-utils-";
+const TEMP_DIR_PREFIX = "deneb-install-source-utils-";
 
 vi.mock("../process/exec.js", () => ({
   runCommandWithTimeout: (...args: unknown[]) => runCommandWithTimeoutMock(...args),
@@ -60,8 +60,8 @@ async function expectPackFallsBackToDetectedArchive(params: {
   stdout: string;
   expectedMetadata?: Record<string, unknown>;
 }) {
-  const cwd = await createTempDir("openclaw-install-source-utils-");
-  const archivePath = path.join(cwd, "openclaw-plugin-1.2.3.tgz");
+  const cwd = await createTempDir("deneb-install-source-utils-");
+  const archivePath = path.join(cwd, "deneb-plugin-1.2.3.tgz");
   await fs.writeFile(archivePath, "", "utf-8");
   runCommandWithTimeoutMock.mockResolvedValue({
     stdout: params.stdout,
@@ -72,7 +72,7 @@ async function expectPackFallsBackToDetectedArchive(params: {
   });
 
   const result = await packNpmSpecToArchive({
-    spec: "openclaw-plugin@1.2.3",
+    spec: "deneb-plugin@1.2.3",
     timeoutMs: 5000,
     cwd,
   });
@@ -103,7 +103,7 @@ describe("withTempDir", () => {
     let observedDir = "";
     const markerFile = "marker.txt";
 
-    const value = await withTempDir("openclaw-install-source-utils-", async (tmpDir) => {
+    const value = await withTempDir("deneb-install-source-utils-", async (tmpDir) => {
       observedDir = tmpDir;
       await fs.writeFile(path.join(tmpDir, markerFile), "ok", "utf-8");
       await expect(fs.stat(path.join(tmpDir, markerFile))).resolves.toBeDefined();
@@ -117,7 +117,7 @@ describe("withTempDir", () => {
 
 describe("resolveArchiveSourcePath", () => {
   it("returns not found error for missing archive paths", async () => {
-    const result = await resolveArchiveSourcePath("/tmp/does-not-exist-openclaw-archive.tgz");
+    const result = await resolveArchiveSourcePath("/tmp/does-not-exist-deneb-archive.tgz");
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toContain("archive not found");
@@ -154,36 +154,36 @@ describe("resolveArchiveSourcePath", () => {
 describe("packNpmSpecToArchive", () => {
   it("packs spec and returns archive path using JSON output metadata", async () => {
     const cwd = await createFixtureDir();
-    const archivePath = path.join(cwd, "openclaw-plugin-1.2.3.tgz");
+    const archivePath = path.join(cwd, "deneb-plugin-1.2.3.tgz");
     await fs.writeFile(archivePath, "", "utf-8");
     mockPackCommandResult({
       stdout: JSON.stringify([
         {
-          id: "openclaw-plugin@1.2.3",
-          name: "openclaw-plugin",
+          id: "deneb-plugin@1.2.3",
+          name: "deneb-plugin",
           version: "1.2.3",
-          filename: "openclaw-plugin-1.2.3.tgz",
+          filename: "deneb-plugin-1.2.3.tgz",
           integrity: "sha512-test-integrity",
           shasum: "abc123",
         },
       ]),
     });
 
-    const result = await runPack("openclaw-plugin@1.2.3", cwd);
+    const result = await runPack("deneb-plugin@1.2.3", cwd);
 
     expect(result).toEqual({
       ok: true,
       archivePath,
       metadata: {
-        name: "openclaw-plugin",
+        name: "deneb-plugin",
         version: "1.2.3",
-        resolvedSpec: "openclaw-plugin@1.2.3",
+        resolvedSpec: "deneb-plugin@1.2.3",
         integrity: "sha512-test-integrity",
         shasum: "abc123",
       },
     });
     expect(runCommandWithTimeoutMock).toHaveBeenCalledWith(
-      ["npm", "pack", "openclaw-plugin@1.2.3", "--ignore-scripts", "--json"],
+      ["npm", "pack", "deneb-plugin@1.2.3", "--ignore-scripts", "--json"],
       expect.objectContaining({
         cwd,
         timeoutMs: 300_000,
@@ -193,13 +193,13 @@ describe("packNpmSpecToArchive", () => {
 
   it("falls back to parsing final stdout line when npm json output is unavailable", async () => {
     const cwd = await createFixtureDir();
-    const expectedArchivePath = path.join(cwd, "openclaw-plugin-1.2.3.tgz");
+    const expectedArchivePath = path.join(cwd, "deneb-plugin-1.2.3.tgz");
     await fs.writeFile(expectedArchivePath, "", "utf-8");
     mockPackCommandResult({
-      stdout: "npm notice created package\nopenclaw-plugin-1.2.3.tgz\n",
+      stdout: "npm notice created package\ndeneb-plugin-1.2.3.tgz\n",
     });
 
-    const result = await runPack("openclaw-plugin@1.2.3", cwd);
+    const result = await runPack("deneb-plugin@1.2.3", cwd);
 
     expect(result).toEqual({
       ok: true,
@@ -237,11 +237,11 @@ describe("packNpmSpecToArchive", () => {
     {
       name: "falls back to cwd archive when logged JSON metadata omits filename",
       stdout:
-        'npm notice using cache\n[{"id":"openclaw-plugin@1.2.3","name":"openclaw-plugin","version":"1.2.3","integrity":"sha512-test-integrity","shasum":"abc123"}]\n',
+        'npm notice using cache\n[{"id":"deneb-plugin@1.2.3","name":"deneb-plugin","version":"1.2.3","integrity":"sha512-test-integrity","shasum":"abc123"}]\n',
       expectedMetadata: {
-        name: "openclaw-plugin",
+        name: "deneb-plugin",
         version: "1.2.3",
-        resolvedSpec: "openclaw-plugin@1.2.3",
+        resolvedSpec: "deneb-plugin@1.2.3",
         integrity: "sha512-test-integrity",
         shasum: "abc123",
       },
@@ -254,17 +254,17 @@ describe("packNpmSpecToArchive", () => {
     const cwd = await createFixtureDir();
     mockPackCommandResult({
       stdout: "",
-      stderr: "npm error code E404\nnpm error 404  '@openclaw/whatsapp@*' is not in this registry.",
+      stderr: "npm error code E404\nnpm error 404  '@deneb/whatsapp@*' is not in this registry.",
       code: 1,
     });
 
-    const result = await runPack("@openclaw/whatsapp", cwd);
+    const result = await runPack("@deneb/whatsapp", cwd);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toContain("Package not found on npm");
-      expect(result.error).toContain("@openclaw/whatsapp");
-      expect(result.error).toContain("docs.openclaw.ai/tools/plugin");
+      expect(result.error).toContain("@deneb/whatsapp");
+      expect(result.error).toContain("docs.deneb.ai/tools/plugin");
     }
   });
 
@@ -274,7 +274,7 @@ describe("packNpmSpecToArchive", () => {
       stdout: " \n\n",
     });
 
-    const result = await runPack("openclaw-plugin@1.2.3", cwd, 5000);
+    const result = await runPack("deneb-plugin@1.2.3", cwd, 5000);
 
     expect(result).toEqual({
       ok: false,
@@ -284,24 +284,24 @@ describe("packNpmSpecToArchive", () => {
 
   it("parses scoped metadata from id-only json output even with npm notice prefix", async () => {
     const cwd = await createFixtureDir();
-    await fs.writeFile(path.join(cwd, "openclaw-plugin-demo-2.0.0.tgz"), "", "utf-8");
+    await fs.writeFile(path.join(cwd, "deneb-plugin-demo-2.0.0.tgz"), "", "utf-8");
     mockPackCommandResult({
       stdout:
         "npm notice creating package\n" +
         JSON.stringify([
           {
-            id: "@openclaw/plugin-demo@2.0.0",
-            filename: "openclaw-plugin-demo-2.0.0.tgz",
+            id: "@deneb/plugin-demo@2.0.0",
+            filename: "deneb-plugin-demo-2.0.0.tgz",
           },
         ]),
     });
 
-    const result = await runPack("@openclaw/plugin-demo@2.0.0", cwd);
+    const result = await runPack("@deneb/plugin-demo@2.0.0", cwd);
     expect(result).toEqual({
       ok: true,
-      archivePath: path.join(cwd, "openclaw-plugin-demo-2.0.0.tgz"),
+      archivePath: path.join(cwd, "deneb-plugin-demo-2.0.0.tgz"),
       metadata: {
-        resolvedSpec: "@openclaw/plugin-demo@2.0.0",
+        resolvedSpec: "@deneb/plugin-demo@2.0.0",
       },
     });
   });

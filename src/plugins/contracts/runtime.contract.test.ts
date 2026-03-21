@@ -6,7 +6,7 @@ import openAIPlugin from "../../../extensions/openai/index.js";
 import qwenPortalPlugin from "../../../extensions/qwen-portal-auth/index.js";
 import { createCapturedPluginRegistration } from "../../test-utils/plugin-registration.js";
 import { createProviderUsageFetch, makeResponse } from "../../test-utils/provider-usage-fetch.js";
-import type { OpenClawPluginApi, ProviderPlugin } from "../types.js";
+import type { DenebPluginApi, ProviderPlugin } from "../types.js";
 import type { ProviderRuntimeModel } from "../types.js";
 import { requireProviderContractProvider as requireBundledProviderContractProvider } from "./registry.js";
 
@@ -46,7 +46,7 @@ function createModel(overrides: Partial<ProviderRuntimeModel> & Pick<ProviderRun
   } satisfies ProviderRuntimeModel;
 }
 
-function registerProviders(...plugins: Array<{ register(api: OpenClawPluginApi): void }>) {
+function registerProviders(...plugins: Array<{ register(api: DenebPluginApi): void }>) {
   const captured = createCapturedPluginRegistration();
   for (const plugin of plugins) {
     plugin.register(captured.api);
@@ -152,7 +152,7 @@ describe("provider runtime contract", () => {
       });
 
       expect(hint).toContain("suggested profile: anthropic:oauth-user@example.com");
-      expect(hint).toContain("openclaw doctor --yes");
+      expect(hint).toContain("deneb doctor --yes");
     });
 
     it("owns usage snapshot fetching", async () => {
@@ -706,7 +706,7 @@ describe("provider runtime contract", () => {
 
     it("falls back to legacy pi auth tokens for usage auth", async () => {
       const provider = requireProviderContractProvider("zai");
-      const home = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-zai-contract-"));
+      const home = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-zai-contract-"));
       await fs.mkdir(path.join(home, ".pi", "agent"), { recursive: true });
       await fs.writeFile(
         path.join(home, ".pi", "agent", "auth.json"),

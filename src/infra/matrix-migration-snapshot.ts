@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import { writeJsonFileAtomically } from "../plugin-sdk/json-store.js";
 import { createBackupArchive } from "./backup-create.js";
@@ -10,7 +10,7 @@ import { detectLegacyMatrixCrypto } from "./matrix-legacy-crypto.js";
 import { detectLegacyMatrixState } from "./matrix-legacy-state.js";
 import { isMatrixLegacyCryptoInspectorAvailable } from "./matrix-plugin-helper.js";
 
-const MATRIX_MIGRATION_SNAPSHOT_DIRNAME = "openclaw-migrations";
+const MATRIX_MIGRATION_SNAPSHOT_DIRNAME = "deneb-migrations";
 
 type MatrixMigrationSnapshotMarker = {
   version: 1;
@@ -69,7 +69,7 @@ export function resolveMatrixMigrationSnapshotOutputDir(
 }
 
 export function hasPendingMatrixMigration(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   env?: NodeJS.ProcessEnv;
 }): boolean {
   const env = params.env ?? process.env;
@@ -82,7 +82,7 @@ export function hasPendingMatrixMigration(params: {
 }
 
 export function hasActionableMatrixMigration(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   env?: NodeJS.ProcessEnv;
 }): boolean {
   const env = params.env ?? process.env;

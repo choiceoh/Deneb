@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: openclaw
+  name: deneb
   labels:
-    app: openclaw
+    app: deneb
 spec:
   type: ClusterIP
   selector:
-    app: openclaw
+    app: deneb
   ports:
     - name: gateway
       port: 18789

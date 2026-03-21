@@ -6,7 +6,7 @@ import {
 import type { ReplyDispatcher } from "../auto-reply/reply/reply-dispatcher.js";
 import type { FinalizedMsgContext } from "../auto-reply/templating.js";
 import type { GetReplyOptions } from "../auto-reply/types.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { createChannelReplyPipeline } from "./channel-reply-pipeline.js";
 import { createNormalizedOutboundDeliverer, type OutboundReplyPayload } from "./reply-payload.js";
 
@@ -22,7 +22,7 @@ type ReplyDispatchFromConfigOptions = Omit<GetReplyOptions, "onToolResult" | "on
 
 /** Run `dispatchReplyFromConfig` with a dispatcher that always gets its settled callback. */
 export async function dispatchReplyFromConfigWithSettledDispatcher(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   ctxPayload: FinalizedMsgContext;
   dispatcher: ReplyDispatcher;
   onSettled: () => void | Promise<void>;
@@ -43,7 +43,7 @@ export async function dispatchReplyFromConfigWithSettledDispatcher(params: {
 
 /** Assemble the common inbound reply dispatch dependencies for a resolved route. */
 export function buildInboundReplyDispatchBase(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   channel: string;
   accountId?: string;
   route: {
@@ -102,7 +102,7 @@ export async function dispatchInboundReplyWithBase(
 
 /** Record the inbound session first, then dispatch the reply using normalized outbound delivery. */
 export async function recordInboundSessionAndDispatchReply(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   channel: string;
   accountId?: string;
   agentId: string;

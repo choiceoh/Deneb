@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import {
   createScopedAccountReplyToModeResolver,
   createStaticReplyToModeResolver,
@@ -8,8 +8,8 @@ import {
 
 describe("createStaticReplyToModeResolver", () => {
   it("always returns the configured mode", () => {
-    expect(createStaticReplyToModeResolver("off")({ cfg: {} as OpenClawConfig })).toBe("off");
-    expect(createStaticReplyToModeResolver("all")({ cfg: {} as OpenClawConfig })).toBe("all");
+    expect(createStaticReplyToModeResolver("off")({ cfg: {} as DenebConfig })).toBe("off");
+    expect(createStaticReplyToModeResolver("all")({ cfg: {} as DenebConfig })).toBe("all");
   });
 });
 
@@ -18,14 +18,14 @@ describe("createTopLevelChannelReplyToModeResolver", () => {
     const resolver = createTopLevelChannelReplyToModeResolver("discord");
     expect(
       resolver({
-        cfg: { channels: { discord: { replyToMode: "first" } } } as OpenClawConfig,
+        cfg: { channels: { discord: { replyToMode: "first" } } } as DenebConfig,
       }),
     ).toBe("first");
   });
 
   it("falls back to off", () => {
     const resolver = createTopLevelChannelReplyToModeResolver("discord");
-    expect(resolver({ cfg: {} as OpenClawConfig })).toBe("off");
+    expect(resolver({ cfg: {} as DenebConfig })).toBe("off");
   });
 });
 
@@ -51,7 +51,7 @@ describe("createScopedAccountReplyToModeResolver", () => {
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     expect(resolver({ cfg, accountId: "assistant" })).toBe("all");
     expect(resolver({ cfg, accountId: "default" })).toBe("off");
@@ -67,7 +67,7 @@ describe("createScopedAccountReplyToModeResolver", () => {
       },
     });
 
-    expect(resolver({ cfg: {} as OpenClawConfig, chatType: "group" })).toBe("first");
+    expect(resolver({ cfg: {} as DenebConfig, chatType: "group" })).toBe("first");
     expect(seen).toEqual(["group"]);
   });
 });

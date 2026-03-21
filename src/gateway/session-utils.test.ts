@@ -7,7 +7,7 @@ import {
   resetSubagentRegistryForTests,
 } from "../agents/subagent-registry.js";
 import { clearConfigCache, writeConfigFile } from "../config/config.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { SessionEntry } from "../config/sessions.js";
 import { withStateDirEnv } from "../test-helpers/state-dir-env.js";
 import { withEnv } from "../test-utils/env.js";
@@ -44,19 +44,19 @@ function createSymlinkOrSkip(targetPath: string, linkPath: string): boolean {
   }
 }
 
-function createSingleAgentAvatarConfig(workspace: string): OpenClawConfig {
+function createSingleAgentAvatarConfig(workspace: string): DenebConfig {
   return {
     session: { mainKey: "main" },
     agents: {
       list: [{ id: "main", default: true, workspace, identity: { avatar: "avatar-link.png" } }],
     },
-  } as OpenClawConfig;
+  } as DenebConfig;
 }
 
 function createModelDefaultsConfig(params: {
   primary: string;
   models?: Record<string, Record<string, never>>;
-}): OpenClawConfig {
+}): DenebConfig {
   return {
     agents: {
       defaults: {
@@ -64,12 +64,12 @@ function createModelDefaultsConfig(params: {
         models: params.models,
       },
     },
-  } as OpenClawConfig;
+  } as DenebConfig;
 }
 
 function createLegacyRuntimeListConfig(
   models?: Record<string, Record<string, never>>,
-): OpenClawConfig {
+): DenebConfig {
   return createModelDefaultsConfig({
     primary: "google-gemini-cli/gemini-3-pro-preview",
     ...(models ? { models } : {}),
@@ -123,7 +123,7 @@ describe("gateway session utils", () => {
     const cfg = {
       session: { mainKey: "work" },
       agents: { list: [{ id: "ops", default: true }] },
-    } as OpenClawConfig;
+    } as DenebConfig;
     expect(resolveSessionStoreKey({ cfg, sessionKey: "main" })).toBe("agent:ops:work");
     expect(resolveSessionStoreKey({ cfg, sessionKey: "work" })).toBe("agent:ops:work");
     expect(resolveSessionStoreKey({ cfg, sessionKey: "agent:ops:main" })).toBe("agent:ops:work");
@@ -136,7 +136,7 @@ describe("gateway session utils", () => {
     const cfg = {
       session: { mainKey: "main" },
       agents: { list: [{ id: "ops", default: true }] },
-    } as OpenClawConfig;
+    } as DenebConfig;
     expect(resolveSessionStoreKey({ cfg, sessionKey: "discord:group:123" })).toBe(
       "agent:ops:discord:group:123",
     );
@@ -149,7 +149,7 @@ describe("gateway session utils", () => {
     const cfg = {
       session: { mainKey: "main" },
       agents: { list: [{ id: "ops" }, { id: "review" }] },
-    } as OpenClawConfig;
+    } as DenebConfig;
     expect(resolveSessionStoreKey({ cfg, sessionKey: "main" })).toBe("agent:ops:main");
     expect(resolveSessionStoreKey({ cfg, sessionKey: "discord:group:123" })).toBe(
       "agent:ops:discord:group:123",
@@ -159,7 +159,7 @@ describe("gateway session utils", () => {
   test("resolveSessionStoreKey falls back to main when agents.list is missing", () => {
     const cfg = {
       session: { mainKey: "work" },
-    } as OpenClawConfig;
+    } as DenebConfig;
     expect(resolveSessionStoreKey({ cfg, sessionKey: "main" })).toBe("agent:main:work");
     expect(resolveSessionStoreKey({ cfg, sessionKey: "thread-1" })).toBe("agent:main:thread-1");
   });
@@ -168,7 +168,7 @@ describe("gateway session utils", () => {
     const cfg = {
       session: { mainKey: "main" },
       agents: { list: [{ id: "ops", default: true }] },
-    } as OpenClawConfig;
+    } as DenebConfig;
     // Bare keys with different casing must resolve to the same canonical key
     expect(resolveSessionStoreKey({ cfg, sessionKey: "CoP" })).toBe(
       resolveSessionStoreKey({ cfg, sessionKey: "cop" }),
@@ -185,7 +185,7 @@ describe("gateway session utils", () => {
     const cfg = {
       session: { scope: "global", mainKey: "work" },
       agents: { list: [{ id: "ops", default: true }] },
-    } as OpenClawConfig;
+    } as DenebConfig;
     expect(resolveSessionStoreKey({ cfg, sessionKey: "main" })).toBe("global");
     const target = resolveGatewaySessionStoreTarget({ cfg, key: "main" });
     expect(target.canonicalKey).toBe("global");
@@ -195,14 +195,14 @@ describe("gateway session utils", () => {
   test("resolveGatewaySessionStoreTarget uses canonical key for main alias", () => {
     const storeTemplate = path.join(
       os.tmpdir(),
-      "openclaw-session-utils",
+      "deneb-session-utils",
       "{agentId}",
       "sessions.json",
     );
     const cfg = {
       session: { mainKey: "main", store: storeTemplate },
       agents: { list: [{ id: "ops", default: true }] },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const target = resolveGatewaySessionStoreTarget({ cfg, key: "main" });
     expect(target.canonicalKey).toBe("agent:ops:main");
     expect(target.storeKeys).toEqual(expect.arrayContaining(["agent:ops:main", "main"]));
@@ -221,7 +221,7 @@ describe("gateway session utils", () => {
     const cfg = {
       session: { mainKey: "main", store: storePath },
       agents: { list: [{ id: "ops", default: true }] },
-    } as OpenClawConfig;
+    } as DenebConfig;
     // Client passes the lowercased canonical key (as returned by sessions.list)
     const target = resolveGatewaySessionStoreTarget({ cfg, key: "agent:ops:mysession" });
     expect(target.canonicalKey).toBe("agent:ops:mysession");
@@ -250,7 +250,7 @@ describe("gateway session utils", () => {
     const cfg = {
       session: { mainKey: "main", store: storePath },
       agents: { list: [{ id: "ops", default: true }] },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const target = resolveGatewaySessionStoreTarget({ cfg, key: "agent:ops:mysession" });
     // storeKeys must include BOTH variants so delete/reset/patch can clean up all duplicates
     expect(target.storeKeys).toEqual(
@@ -270,7 +270,7 @@ describe("gateway session utils", () => {
     const cfg = {
       session: { mainKey: "work", store: storePath },
       agents: { list: [{ id: "ops", default: true }] },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const target = resolveGatewaySessionStoreTarget({ cfg, key: "agent:ops:main" });
     expect(target.canonicalKey).toBe("agent:ops:work");
     // storeKeys must include the legacy mixed-case alias key
@@ -296,7 +296,7 @@ describe("gateway session utils", () => {
           store: path.join(stateDir, "agents", "{agentId}", "sessions", "sessions.json"),
         },
         agents: { list: [{ id: "main", default: true }] },
-      } as OpenClawConfig;
+      } as DenebConfig;
 
       const target = resolveGatewaySessionStoreTarget({ cfg, key: "agent:retired-agent:main" });
 
@@ -389,14 +389,14 @@ describe("gateway session utils", () => {
   });
 
   test("listAgentsForGateway keeps explicit agents.list scope over disk-only agents (scope boundary)", async () => {
-    await withStateDirEnv("openclaw-agent-list-scope-", async ({ stateDir }) => {
+    await withStateDirEnv("deneb-agent-list-scope-", async ({ stateDir }) => {
       fs.mkdirSync(path.join(stateDir, "agents", "main"), { recursive: true });
       fs.mkdirSync(path.join(stateDir, "agents", "codex"), { recursive: true });
 
       const cfg = {
         session: { mainKey: "main" },
         agents: { list: [{ id: "main", default: true }] },
-      } as OpenClawConfig;
+      } as DenebConfig;
 
       const { agents } = listAgentsForGateway(cfg);
       expect(agents.map((agent) => agent.id)).toEqual(["main"]);
@@ -492,7 +492,7 @@ describe("resolveSessionModelRef", () => {
 
 describe("resolveSessionModelIdentityRef", () => {
   const resolveLegacyIdentityRef = (
-    cfg: OpenClawConfig,
+    cfg: DenebConfig,
     modelProvider: string | undefined = undefined,
   ) =>
     resolveSessionModelIdentityRef(cfg, {
@@ -675,7 +675,7 @@ describe("listSessionsFromStore search", () => {
   const baseCfg = {
     session: { mainKey: "main" },
     agents: { list: [{ id: "main", default: true }] },
-  } as OpenClawConfig;
+  } as DenebConfig;
 
   const makeStore = (): Record<string, SessionEntry> => ({
     "agent:main:work-project": {
@@ -856,7 +856,7 @@ describe("listSessionsFromStore search", () => {
           },
         },
       },
-    } as unknown as OpenClawConfig;
+    } as unknown as DenebConfig;
     const result = listSessionsFromStore({
       cfg,
       storePath: "/tmp/sessions.json",
@@ -879,7 +879,7 @@ describe("listSessionsFromStore search", () => {
   });
 
   test("prefers persisted estimated session cost from the store", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-session-utils-store-cost-"));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "deneb-session-utils-store-cost-"));
     const storePath = path.join(tmpDir, "sessions.json");
     fs.writeFileSync(
       path.join(tmpDir, "sess-main.jsonl"),
@@ -945,7 +945,7 @@ describe("listSessionsFromStore search", () => {
           },
         },
       },
-    } as unknown as OpenClawConfig;
+    } as unknown as DenebConfig;
     const result = listSessionsFromStore({
       cfg,
       storePath: "/tmp/sessions.json",
@@ -968,7 +968,7 @@ describe("listSessionsFromStore search", () => {
   });
 
   test("falls back to transcript usage for totalTokens and zero estimatedCostUsd", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-session-utils-zero-cost-"));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "deneb-session-utils-zero-cost-"));
     const storePath = path.join(tmpDir, "sessions.json");
     fs.writeFileSync(
       path.join(tmpDir, "sess-main.jsonl"),
@@ -1021,7 +1021,7 @@ describe("listSessionsFromStore search", () => {
   });
 
   test("falls back to transcript usage for totalTokens and estimatedCostUsd, and derives contextTokens from the resolved model", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-session-utils-"));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "deneb-session-utils-"));
     const storePath = path.join(tmpDir, "sessions.json");
     const cfg = {
       session: { mainKey: "main" },
@@ -1033,7 +1033,7 @@ describe("listSessionsFromStore search", () => {
           },
         },
       },
-    } as unknown as OpenClawConfig;
+    } as unknown as DenebConfig;
     fs.writeFileSync(
       path.join(tmpDir, "sess-main.jsonl"),
       [
@@ -1086,7 +1086,7 @@ describe("listSessionsFromStore search", () => {
   });
 
   test("uses subagent run model immediately for child sessions while transcript usage fills live totals", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-session-utils-subagent-"));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "deneb-session-utils-subagent-"));
     const storePath = path.join(tmpDir, "sessions.json");
     const now = Date.now();
     const cfg = {
@@ -1099,7 +1099,7 @@ describe("listSessionsFromStore search", () => {
           },
         },
       },
-    } as unknown as OpenClawConfig;
+    } as unknown as DenebConfig;
     fs.writeFileSync(
       path.join(tmpDir, "sess-child.jsonl"),
       [
@@ -1177,7 +1177,7 @@ describe("listSessionsFromStore subagent metadata", () => {
   const cfg = {
     session: { mainKey: "main" },
     agents: { list: [{ id: "main", default: true }] },
-  } as OpenClawConfig;
+  } as DenebConfig;
 
   test("includes subagent status timing and direct child session keys", () => {
     const now = Date.now();
@@ -1318,7 +1318,7 @@ describe("listSessionsFromStore subagent metadata", () => {
   });
 
   test("uses persisted active subagent runs when the local worker only has terminal snapshots", async () => {
-    await withStateDirEnv("openclaw-session-utils-subagent-", async ({ stateDir }) => {
+    await withStateDirEnv("deneb-session-utils-subagent-", async ({ stateDir }) => {
       const now = Date.now();
       const childSessionKey = "agent:main:subagent:disk-live";
       const registryPath = path.join(stateDir, "subagents", "runs.json");
@@ -1485,7 +1485,7 @@ describe("listSessionsFromStore subagent metadata", () => {
 
 describe("loadCombinedSessionStoreForGateway includes disk-only agents (#32804)", () => {
   test("ACP agent sessions are visible even when agents.list is configured", async () => {
-    await withStateDirEnv("openclaw-acp-vis-", async ({ stateDir }) => {
+    await withStateDirEnv("deneb-acp-vis-", async ({ stateDir }) => {
       const customRoot = path.join(stateDir, "custom-state");
       const agentsDir = path.join(customRoot, "agents");
       const mainDir = path.join(agentsDir, "main", "sessions");
@@ -1517,7 +1517,7 @@ describe("loadCombinedSessionStoreForGateway includes disk-only agents (#32804)"
         agents: {
           list: [{ id: "main", default: true }],
         },
-      } as OpenClawConfig;
+      } as DenebConfig;
 
       const { store } = loadCombinedSessionStoreForGateway(cfg);
       expect(store["agent:main:main"]).toBeDefined();

@@ -1,4 +1,4 @@
-import type { ChannelDirectoryAdapter } from "openclaw/plugin-sdk/channel-runtime";
+import type { ChannelDirectoryAdapter } from "deneb/plugin-sdk/channel-runtime";
 
 export function createDirectoryTestRuntime() {
   return {

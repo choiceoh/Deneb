@@ -5,11 +5,11 @@ import {
   resolveBundledPluginSources,
 } from "./bundled-sources.js";
 
-const discoverOpenClawPluginsMock = vi.fn();
+const discoverDenebPluginsMock = vi.fn();
 const loadPluginManifestMock = vi.fn();
 
 vi.mock("./discovery.js", () => ({
-  discoverOpenClawPlugins: (...args: unknown[]) => discoverOpenClawPluginsMock(...args),
+  discoverDenebPlugins: (...args: unknown[]) => discoverDenebPluginsMock(...args),
 }));
 
 vi.mock("./manifest.js", () => ({
@@ -18,36 +18,36 @@ vi.mock("./manifest.js", () => ({
 
 describe("bundled plugin sources", () => {
   beforeEach(() => {
-    discoverOpenClawPluginsMock.mockReset();
+    discoverDenebPluginsMock.mockReset();
     loadPluginManifestMock.mockReset();
   });
 
   it("resolves bundled sources keyed by plugin id", () => {
-    discoverOpenClawPluginsMock.mockReturnValue({
+    discoverDenebPluginsMock.mockReturnValue({
       candidates: [
         {
           origin: "global",
           rootDir: "/global/feishu",
-          packageName: "@openclaw/feishu",
-          packageManifest: { install: { npmSpec: "@openclaw/feishu" } },
+          packageName: "@deneb/feishu",
+          packageManifest: { install: { npmSpec: "@deneb/feishu" } },
         },
         {
           origin: "bundled",
           rootDir: "/app/extensions/feishu",
-          packageName: "@openclaw/feishu",
-          packageManifest: { install: { npmSpec: "@openclaw/feishu" } },
+          packageName: "@deneb/feishu",
+          packageManifest: { install: { npmSpec: "@deneb/feishu" } },
         },
         {
           origin: "bundled",
           rootDir: "/app/extensions/feishu-dup",
-          packageName: "@openclaw/feishu",
-          packageManifest: { install: { npmSpec: "@openclaw/feishu" } },
+          packageName: "@deneb/feishu",
+          packageManifest: { install: { npmSpec: "@deneb/feishu" } },
         },
         {
           origin: "bundled",
           rootDir: "/app/extensions/msteams",
-          packageName: "@openclaw/msteams",
-          packageManifest: { install: { npmSpec: "@openclaw/msteams" } },
+          packageName: "@deneb/msteams",
+          packageManifest: { install: { npmSpec: "@deneb/msteams" } },
         },
       ],
       diagnostics: [],
@@ -63,7 +63,7 @@ describe("bundled plugin sources", () => {
       return {
         ok: false,
         error: "invalid manifest",
-        manifestPath: `${rootDir}/openclaw.plugin.json`,
+        manifestPath: `${rootDir}/deneb.plugin.json`,
       };
     });
 
@@ -73,18 +73,18 @@ describe("bundled plugin sources", () => {
     expect(map.get("feishu")).toEqual({
       pluginId: "feishu",
       localPath: "/app/extensions/feishu",
-      npmSpec: "@openclaw/feishu",
+      npmSpec: "@deneb/feishu",
     });
   });
 
   it("finds bundled source by npm spec", () => {
-    discoverOpenClawPluginsMock.mockReturnValue({
+    discoverDenebPluginsMock.mockReturnValue({
       candidates: [
         {
           origin: "bundled",
           rootDir: "/app/extensions/feishu",
-          packageName: "@openclaw/feishu",
-          packageManifest: { install: { npmSpec: "@openclaw/feishu" } },
+          packageName: "@deneb/feishu",
+          packageManifest: { install: { npmSpec: "@deneb/feishu" } },
         },
       ],
       diagnostics: [],
@@ -92,10 +92,10 @@ describe("bundled plugin sources", () => {
     loadPluginManifestMock.mockReturnValue({ ok: true, manifest: { id: "feishu" } });
 
     const resolved = findBundledPluginSource({
-      lookup: { kind: "npmSpec", value: "@openclaw/feishu" },
+      lookup: { kind: "npmSpec", value: "@deneb/feishu" },
     });
     const missing = findBundledPluginSource({
-      lookup: { kind: "npmSpec", value: "@openclaw/not-found" },
+      lookup: { kind: "npmSpec", value: "@deneb/not-found" },
     });
 
     expect(resolved?.pluginId).toBe("feishu");
@@ -104,12 +104,12 @@ describe("bundled plugin sources", () => {
   });
 
   it("forwards an explicit env to bundled discovery helpers", () => {
-    discoverOpenClawPluginsMock.mockReturnValue({
+    discoverDenebPluginsMock.mockReturnValue({
       candidates: [],
       diagnostics: [],
     });
 
-    const env = { HOME: "/tmp/openclaw-home" } as NodeJS.ProcessEnv;
+    const env = { HOME: "/tmp/deneb-home" } as NodeJS.ProcessEnv;
 
     resolveBundledPluginSources({
       workspaceDir: "/workspace",
@@ -121,24 +121,24 @@ describe("bundled plugin sources", () => {
       env,
     });
 
-    expect(discoverOpenClawPluginsMock).toHaveBeenNthCalledWith(1, {
+    expect(discoverDenebPluginsMock).toHaveBeenNthCalledWith(1, {
       workspaceDir: "/workspace",
       env,
     });
-    expect(discoverOpenClawPluginsMock).toHaveBeenNthCalledWith(2, {
+    expect(discoverDenebPluginsMock).toHaveBeenNthCalledWith(2, {
       workspaceDir: "/workspace",
       env,
     });
   });
 
   it("finds bundled source by plugin id", () => {
-    discoverOpenClawPluginsMock.mockReturnValue({
+    discoverDenebPluginsMock.mockReturnValue({
       candidates: [
         {
           origin: "bundled",
           rootDir: "/app/extensions/diffs",
-          packageName: "@openclaw/diffs",
-          packageManifest: { install: { npmSpec: "@openclaw/diffs" } },
+          packageName: "@deneb/diffs",
+          packageManifest: { install: { npmSpec: "@deneb/diffs" } },
         },
       ],
       diagnostics: [],
@@ -164,7 +164,7 @@ describe("bundled plugin sources", () => {
         {
           pluginId: "feishu",
           localPath: "/app/extensions/feishu",
-          npmSpec: "@openclaw/feishu",
+          npmSpec: "@deneb/feishu",
         },
       ],
     ]);
@@ -177,12 +177,12 @@ describe("bundled plugin sources", () => {
     ).toEqual({
       pluginId: "feishu",
       localPath: "/app/extensions/feishu",
-      npmSpec: "@openclaw/feishu",
+      npmSpec: "@deneb/feishu",
     });
     expect(
       findBundledPluginSourceInMap({
         bundled,
-        lookup: { kind: "npmSpec", value: "@openclaw/feishu" },
+        lookup: { kind: "npmSpec", value: "@deneb/feishu" },
       })?.pluginId,
     ).toBe("feishu");
   });

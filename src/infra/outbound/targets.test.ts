@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { parseTelegramTarget } from "../../../extensions/telegram/src/targets.js";
 import { telegramOutbound, whatsappOutbound } from "../../../test/channel-outbounds.js";
 import type { ChannelOutboundAdapter } from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import { createOutboundTestPlugin, createTestRegistry } from "../../test-utils/channel-plugins.js";
@@ -92,7 +92,7 @@ beforeEach(() => {
 
 describe("resolveOutboundTarget defaultTo config fallback", () => {
   installResolveOutboundTargetPluginRegistryHooks();
-  const whatsappDefaultCfg: OpenClawConfig = {
+  const whatsappDefaultCfg: DenebConfig = {
     channels: { whatsapp: { defaultTo: "+15551234567", allowFrom: ["*"] } },
   };
 
@@ -107,7 +107,7 @@ describe("resolveOutboundTarget defaultTo config fallback", () => {
   });
 
   it("uses telegram defaultTo when no explicit target is provided", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       channels: { telegram: { defaultTo: "123456789" } },
     };
     const res = resolveOutboundTarget({
@@ -130,7 +130,7 @@ describe("resolveOutboundTarget defaultTo config fallback", () => {
   });
 
   it("still errors when no defaultTo and no explicit target", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       channels: { whatsapp: { allowFrom: ["+1555"] } },
     };
     const res = resolveOutboundTarget({
@@ -574,7 +574,7 @@ describe("resolveSessionDeliveryTarget", () => {
   });
 
   it("allows heartbeat delivery to Discord DMs by default", () => {
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     const resolved = resolveHeartbeatDeliveryTarget({
       cfg,
       entry: {
@@ -593,7 +593,7 @@ describe("resolveSessionDeliveryTarget", () => {
   });
 
   it("keeps heartbeat delivery to Discord channels", () => {
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     const resolved = resolveHeartbeatDeliveryTarget({
       cfg,
       entry: {
@@ -632,7 +632,7 @@ describe("resolveSessionDeliveryTarget", () => {
   });
 
   it("parses explicit heartbeat topic targets into threadId", () => {
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     const resolved = resolveHeartbeatDeliveryTarget({
       cfg,
       heartbeat: {
