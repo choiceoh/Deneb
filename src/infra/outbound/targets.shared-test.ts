@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { telegramPlugin } from "../../../extensions/telegram/index.js";
+import type { ChannelPlugin } from "../../channels/plugins/types.plugin.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import { createTestRegistry } from "../../test-utils/channel-plugins.js";
 import { resolveOutboundTarget } from "./targets.js";
@@ -8,7 +9,7 @@ import { resolveOutboundTarget } from "./targets.js";
 const whatsappPlugin = {
   id: "whatsapp",
   meta: { id: "whatsapp", label: "WhatsApp" },
-} as unknown as typeof telegramPlugin;
+} as unknown as ChannelPlugin;
 
 export function installResolveOutboundTargetPluginRegistryHooks(): void {
   beforeEach(() => {
