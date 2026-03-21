@@ -124,21 +124,39 @@ const POLICY_OFF_EXACT_IDENTIFIERS_INSTRUCTION =
 
 function clampMaxHistoryShare(value: number | undefined): number {
   const raw = value ?? 0.5;
-  return Math.min(MAX_MAX_HISTORY_SHARE, Math.max(MIN_MAX_HISTORY_SHARE, raw));
+  const clamped = Math.min(MAX_MAX_HISTORY_SHARE, Math.max(MIN_MAX_HISTORY_SHARE, raw));
+  if (clamped !== raw) {
+    log.warn(`compaction-safeguard: clamped maxHistoryShare ${raw} → ${clamped}`);
+  }
+  return clamped;
 }
 
 function clampContextWindowTokens(value: number | undefined, modelContextWindow: number): number {
   const raw = value ?? modelContextWindow;
-  return Math.max(MIN_CONTEXT_WINDOW_TOKENS, raw);
+  const clamped = Math.max(MIN_CONTEXT_WINDOW_TOKENS, raw);
+  if (clamped !== raw) {
+    log.warn(`compaction-safeguard: clamped contextWindowTokens ${raw} → ${clamped}`);
+  }
+  return clamped;
 }
 
 function clampMaxChunkTokens(value: number): number {
-  return Math.max(MIN_MAX_CHUNK_TOKENS, value);
+  const clamped = Math.max(MIN_MAX_CHUNK_TOKENS, value);
+  if (clamped !== value) {
+    log.warn(`compaction-safeguard: clamped maxChunkTokens ${value} → ${clamped}`);
+  }
+  return clamped;
 }
 
 function clampReserveTokens(value: number, contextWindowTokens: number): number {
   const maxReserve = Math.floor(contextWindowTokens * MAX_RESERVE_TOKEN_SHARE);
-  return Math.max(1, Math.min(value, maxReserve));
+  const clamped = Math.max(1, Math.min(value, maxReserve));
+  if (clamped !== value) {
+    log.warn(
+      `compaction-safeguard: clamped reserveTokens ${value} → ${clamped} (ctxWindow=${contextWindowTokens})`,
+    );
+  }
+  return clamped;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
