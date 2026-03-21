@@ -12,14 +12,13 @@ SELF_DIR = Path(__file__).resolve().parent.parent
 def _health_summary(d):
     issues = d.get('issues', [])
     if not issues:
-        return f"정상: DB {d.get('db_projects',0)}개 프로젝트, QMD {'연결' if d.get('qmd_available') else '미연결'}"
+        return f"정상: DB {d.get('db_projects',0)}개 프로젝트"
     return f"이슈 {len(issues)}건: {'; '.join(issues[:3])}"
 
 
 @register_command('health', needs_db=False, summary_fn=_health_summary)
 def _exec_health(params=None):
     """시스템 상태 자가 진단 + 자동 복구"""
-    from config import QMD_WRAPPER
     issues = []
 
     # DB 상태
@@ -54,11 +53,6 @@ def _exec_health(params=None):
                 pass
         else:
             issues[-1] += " → 자동 재빌드 실패"
-
-    # QMD 상태
-    qmd_available = bool(QMD_WRAPPER) and os.path.isfile(QMD_WRAPPER) and os.access(QMD_WRAPPER, os.X_OK)
-    if not qmd_available:
-        issues.append("QMD wrapper 없음 (SQLite 폴백 동작)")
 
     # MD 디렉토리
     md_exists = os.path.isdir(config.MD_DIR)
@@ -124,7 +118,6 @@ def _exec_health(params=None):
 
     return {
         'db_exists': db_exists, 'db_size': db_size, 'db_projects': db_projects,
-        'qmd_available': qmd_available, 'qmd_wrapper': QMD_WRAPPER or '(미설정)',
         'sync_daemon': sync_daemon,
         'md_dir': config.MD_DIR, 'md_file_count': md_count,
         'snapshot_exists': snap.exists(),

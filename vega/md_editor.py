@@ -11,23 +11,25 @@ DB는 별도로 동기화해야 합니다 (또는 sync-db 데몬이 감지).
 
 import os, re, shutil
 from datetime import datetime
-from config import DB_PATH, MD_DIR, get_db_connection
+import config
+from config import get_db_connection
 
 
 def _backup_file(md_path):
     """편집 전 .md 파일 백업 (.bak 확장자)"""
+    import logging as _logging
     bak_path = md_path + '.bak'
     try:
         shutil.copy2(md_path, bak_path)
-    except Exception:
-        pass  # 백업 실패해도 편집은 진행
+    except Exception as e:
+        _logging.getLogger(__name__).debug("백업 실패 (편집은 진행): %s — %s", md_path, e)
 
 
 # ──────────────────────────────────────────────
 # 1. 프로젝트 .md 파일 찾기
 # ──────────────────────────────────────────────
 
-def find_md_path(project_id_or_name, db_path=DB_PATH, md_dir=MD_DIR):
+def find_md_path(project_id_or_name, db_path=None, md_dir=None):
     """
     프로젝트 ID(int) 또는 이름(str)으로 .md 파일 경로 반환.
 
@@ -36,6 +38,8 @@ def find_md_path(project_id_or_name, db_path=DB_PATH, md_dir=MD_DIR):
         - .md 파일 없음: (id, name, None)
         - 정상: (id, name, "/path/to/file.md")
     """
+    db_path = db_path or config.DB_PATH
+    md_dir = md_dir or config.MD_DIR
     try:
         conn = get_db_connection(db_path, row_factory=True)
     except Exception:
@@ -130,7 +134,7 @@ def update_meta_field(md_path, field_name, new_value):
     return True, old_value, f"'{field_name}' 변경: {old_value} → {new_value}"
 
 
-def update_db_field(project_id, field, value, db_path=DB_PATH):
+def update_db_field(project_id, field, value, db_path=None):
     """DB의 프로젝트 필드도 동시에 업데이트"""
     field_map = {
         '상태': 'status', '발주처': 'client', '고객사': 'client',
@@ -142,6 +146,7 @@ def update_db_field(project_id, field, value, db_path=DB_PATH):
     db_field = field_map.get(field)
     if not db_field:
         return False
+    db_path = db_path or config.DB_PATH
     conn = None
     try:
         # 상태에서 이모지 제거 (DB용)

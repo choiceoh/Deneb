@@ -339,8 +339,9 @@ def _exec_memory_search(params):
             if scores is not None:
                 for it, sc in zip(items, scores):
                     it['score'] = sc
-        except Exception:
-            pass
+        except Exception as e:
+            import logging as _logging
+            _logging.getLogger(__name__).debug("memory rerank 실패 (점수 없이 진행): %s", e)
 
         # 점수 내림차순 정렬
         items.sort(key=lambda x: x['score'], reverse=True)

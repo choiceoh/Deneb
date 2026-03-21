@@ -10,12 +10,12 @@ def _search_summary(data):
     if len(data.get('projects') or []) > 3:
         names_str += f' 외 {len(data["projects"]) - 3}개'
     sm = data.get('search_meta', {})
-    qmd_note = ''
-    if sm.get('qmd_used') and sm.get('qmd_count', 0) > 0:
-        qmd_note = f", QMD {sm['qmd_count']}건 포함"
+    sem_note = ''
+    if sm.get('semantic_used') and sm.get('semantic_count', 0) > 0:
+        sem_note = f", 의미검색 {sm['semantic_count']}건 포함"
     if names_str:
-        return f"검색 결과: {names_str} ({rc.get('projects',0)}개 프로젝트, {rc.get('communications',0)}건 커뮤니케이션{qmd_note})"
-    return f"검색 결과: {rc.get('projects',0)}개 프로젝트, {rc.get('communications',0)}건 커뮤니케이션{qmd_note}"
+        return f"검색 결과: {names_str} ({rc.get('projects',0)}개 프로젝트, {rc.get('communications',0)}건 커뮤니케이션{sem_note})"
+    return f"검색 결과: {rc.get('projects',0)}개 프로젝트, {rc.get('communications',0)}건 커뮤니케이션{sem_note}"
 
 
 @register_command('search', summary_fn=_search_summary)
@@ -44,19 +44,19 @@ def _exec_search(params):
         'communications': [],
     }
 
-    # 통합 결과 → 프로젝트별 단일 그룹핑 (SQLite + QMD 합침)
+    # 통합 결과 → 프로젝트별 단일 그룹핑 (SQLite + 의미 검색 합침)
     unified = results.get('unified', [])
     grouped = OrderedDict()
     for r in unified:
         pid = r['project_id']
         if not pid:
-            # project_id 없는 QMD 결과 → qmd_extra로 분리
+            # project_id 없는 의미검색 결과 → semantic_extra로 분리
             continue
         if pid not in grouped:
             grouped[pid] = {
                 'id': pid, 'name': r['project_name'], 'client': r['client'],
                 'status': r['status'], 'person': r['person'],
-                'sections': [], 'sources': set(), 'score': r['score'],
+                'sections': [], 'sources': set(), 'score': r.get('score', 0),
             }
         grouped[pid]['sources'].add(r['source'])
         # 점수는 최대값 사용
@@ -70,12 +70,12 @@ def _exec_search(params):
             'source': r['source'],
         })
 
-    # project_id 없는 QMD 결과 (추론 실패)
-    qmd_extra = [r for r in unified if not r['project_id'] and r['source'] == 'qmd']
+    # project_id 없는 의미검색 결과 (추론 실패)
+    semantic_extra = [r for r in unified if not r['project_id'] and r['source'] == 'semantic']
 
     # 랭킹 순서 유지
     ranked_ids = results.get('sqlite', {}).get('project_ids') or list(grouped.keys())
-    # grouped에 있지만 ranked_ids에 없는 항목 추가 (고아 QMD 복구)
+    # grouped에 있지만 ranked_ids에 없는 항목 추가 (고아 복구)
     for pid in grouped:
         if pid not in ranked_ids:
             ranked_ids.append(pid)
@@ -88,7 +88,8 @@ def _exec_search(params):
             # match_reasons: 왜 이 프로젝트가 매칭됐는지
             reasons = []
             query_lower = query.lower()
-            if (proj.get('name') or '').lower() in query_lower or query_lower in (proj.get('name') or '').lower():
+            proj_name_lower = (proj.get('name') or '').lower()
+            if proj_name_lower and len(proj_name_lower) >= 2 and (proj_name_lower in query_lower or query_lower in proj_name_lower):
                 reasons.append('프로젝트명')
             if 'sqlite' in proj['sources']:
                 has_comm = any(s.get('type') == 'comm_log' for s in proj.get('sections', []))
@@ -96,17 +97,17 @@ def _exec_search(params):
                     reasons.append('커뮤니케이션')
                 if not has_comm or len(proj.get('sections', [])) > 1:
                     reasons.append('본문')
-            if 'qmd' in proj['sources']:
+            if 'semantic' in proj['sources']:
                 reasons.append('의미검색')
             proj['match_reasons'] = reasons or ['키워드']
             out['projects'].append(proj)
 
-    # project_id 없는 QMD 결과만 별도 (최소한의 분리)
-    if qmd_extra:
-        out['qmd_extra'] = [
+    # project_id 없는 의미검색 결과만 별도 (최소한의 분리)
+    if semantic_extra:
+        out['semantic_extra'] = [
             {'title': r['heading'], 'content': r['content'][:500],
              'score': r['score'], 'source': r['metadata'].get('filepath', '')}
-            for r in qmd_extra
+            for r in semantic_extra
         ]
 
     # 커뮤니케이션 (최신순 정렬 + 상위 10건 제한)

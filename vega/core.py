@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 SELF_DIR = Path(__file__).parent
 sys.path.insert(0, str(SELF_DIR))
 import config as _cfg
-from config import get_db_connection, db_session, VegaError, write_audit_log, QMD_BIN, get_qmd_executable
+from config import get_db_connection, db_session, VegaError, write_audit_log
 
 
 def _publish(names_dict):
@@ -31,7 +31,6 @@ __all__ = [
     # config 재수출 (DB_PATH, MD_DIR은 config에서 직접 import 권장)
     'SELF_DIR', 'get_db_connection', 'db_session',
     'VegaError', 'write_audit_log',
-    'QMD_BIN', 'get_qmd_executable',
     # 유틸리티 (공개)
     'find_project_id', 'find_project_id_in_text', 'fuzzy_find_project',
     'get_flag', 'escape_like',
@@ -65,7 +64,9 @@ def _ensure_db():
         finally:
             sys.stdout = _orig_stdout
         return os.path.exists(db_path)
-    except Exception:
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("DB 자동 재빌드 실패: %s", e)
         return False
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -97,6 +98,7 @@ EXPLICIT_COMMANDS = {
     'weekly', 'changelog', 'timeline', 'show', 'list',
     'template', 'sync-back', 'health', 'mail-append',
     'update', 'urgent', 'person', 'add-action', 'brief', 'recent',
+    'upgrade',
 }
 
 # 자연어 → 명령 매핑 패턴
@@ -792,14 +794,11 @@ def _build_ai_hint(command, data, query=''):
         elif n > 5:
             hints.append({'situation': 'too_many_results',
                 'guide': '결과가 많습니다. 상위 3개만 언급하고, 조건을 좁혀달라고 요청하세요.'})
-        # QMD 기여도 안내
+        # 의미 검색 기여도 안내
         sm = data.get('search_meta', {})
-        if sm.get('qmd_used') and sm.get('qmd_count', 0) > 0:
-            hints.append({'situation': 'qmd_enriched',
-                'guide': f"QMD 의미 검색이 {sm['qmd_count']}건 추가 결과를 포함합니다. sections[*].source='qmd' 항목 참고."})
-        elif not sm.get('qmd_available', True):
-            hints.append({'situation': 'qmd_unavailable',
-                'guide': 'QMD 미연결 — 키워드 매칭만 수행됩니다. 의미 검색이 필요하면 qmd-index setup을 안내하세요.'})
+        if sm.get('semantic_used') and sm.get('semantic_count', 0) > 0:
+            hints.append({'situation': 'semantic_enriched',
+                'guide': f"의미 검색이 {sm['semantic_count']}건 추가 결과를 포함합니다. sections[*].source='semantic' 항목 참고."})
 
     if command == 'urgent':
         if data.get('critical', 0) > 0:
@@ -893,11 +892,11 @@ def _build_bundle(command, data, pid=None):
                 if recent_3d:
                     bundle['recent_3d_comms'] = recent_3d
                 # 관련 프로젝트 (같은 담당자)
-                person = data.get('person_internal')
-                if person:
+                person = (data.get('person_internal') or '').strip()
+                if person and person.split():
                     related = conn.execute(
                         "SELECT id, name, status FROM projects WHERE person_internal LIKE ? AND id != ? LIMIT 3",
-                        (f"%{person.split()[0] if person and person.split() else ''}%", pid)
+                        (f"%{person.split()[0]}%", pid)
                     ).fetchall()
                     if related:
                         bundle['related_projects'] = [dict(r) for r in related]

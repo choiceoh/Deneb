@@ -45,37 +45,10 @@ def _check_md_dir(path):
 MD_DIR = _find_path(
     'MD_DIR',
     [str(SELF_DIR / "projects")],
-    ['~/.openclaw/agents/main/qmd/xdg-data/qmd/knowledge/projects',
-     '~/.openclaw/*/qmd/xdg-data/qmd/knowledge/projects'],
+    ['~/.openclaw/agents/main/knowledge/projects',
+     '~/.openclaw/*/knowledge/projects'],
     check_fn=lambda p: os.path.isdir(p) and (p == str(SELF_DIR / "projects") or _check_md_dir(p)),
 ) or str(SELF_DIR / "projects")
-
-# QMD 실행 경로 — 동적 탐색 (v1.3: 직접 바이너리 + wrapper 이중 탐색)
-QMD_BIN = _find_path('QMD_BIN', [], use_which='qmd')
-
-def _check_executable(path):
-    return os.path.isfile(path) and os.access(path, os.X_OK)
-
-QMD_WRAPPER = _find_path(
-    'QMD_WRAPPER',
-    [str(SELF_DIR / 'qmd' / 'qmd-wrapper.sh'),
-     os.path.join(os.environ.get('VEGA_HOME', ''), 'qmd', 'qmd-wrapper.sh'),
-     os.path.expanduser('~/.vega/qmd/qmd-wrapper.sh'),
-     '/home/node/.openclaw/.bun/bin/qmd-wrapper.sh',
-     os.path.expanduser('~/.openclaw/.bun/bin/qmd-wrapper.sh')],
-    ['~/.openclaw/*/bin/qmd-wrapper.sh',
-     '/home/node/.openclaw/*/bin/qmd-wrapper.sh'],
-    check_fn=_check_executable,
-    use_which='qmd-wrapper.sh',
-)
-
-def get_qmd_executable():
-    """QMD 실행 가능한 경로 반환. wrapper > binary > None."""
-    if QMD_WRAPPER:
-        return QMD_WRAPPER
-    if QMD_BIN:
-        return QMD_BIN
-    return None
 
 # DB 연결 공통 함수 (WAL + busy_timeout)
 def get_db_connection(db_path=None, row_factory=False):
@@ -110,13 +83,56 @@ class VegaError(Exception):
         super().__init__(message)
 
 
-# ── 로컬 AI 모델 설정 (v1.4) ──
-MODELS_DIR = str(SELF_DIR / "models")
-MODEL_EXPANDER  = os.environ.get('VEGA_MODEL_EXPANDER',  os.path.join(MODELS_DIR, 'Qwen3.5-9B-Q4_K_M.gguf'))
-MODEL_EMBEDDER  = os.environ.get('VEGA_MODEL_EMBEDDER',  os.path.join(MODELS_DIR, 'qwen3-embedding-8b-q4_k_m.gguf'))
-MODEL_RERANKER  = os.environ.get('VEGA_MODEL_RERANKER',  os.path.join(MODELS_DIR, 'qwen3-reranker-4b.gguf'))
+# ── 로컬 AI 모델 설정 (v1.4, v1.45 자동 탐색) ──
+
+def _find_models_dir():
+    """모델 디렉토리 자동 탐색: 환경변수 → ~/.vega/models → ./models"""
+    import glob as _glob
+    env = os.environ.get('VEGA_MODELS_DIR', '')
+    if env and os.path.isdir(env):
+        return env
+    candidates = [
+        str(SELF_DIR / "models"),
+        os.path.expanduser('~/.vega/models'),
+    ]
+    for d in candidates:
+        if os.path.isdir(d) and any(f.endswith('.gguf') for f in os.listdir(d)):
+            return d
+    return str(SELF_DIR / "models")  # 기본값 (없어도 경로 반환)
+
+
+def _find_model(env_var, models_dir, patterns):
+    """모델 파일 탐색: 환경변수 → models_dir 내 패턴 매칭.
+
+    patterns: 우선순위 순 glob 패턴 리스트 (예: ['qwen3-embedding*q4*.gguf', '*embedding*.gguf'])
+    """
+    import glob as _glob
+    env = os.environ.get(env_var, '')
+    if env and os.path.isfile(env):
+        return env
+    for pat in patterns:
+        matches = sorted(_glob.glob(os.path.join(models_dir, pat)))
+        if matches:
+            return matches[0]  # 첫 번째 매칭 (알파벳순 → 가장 안정적인 파일)
+    # 폴백: 와일드카드 없는 첫 패턴을 기본 파일명으로 사용
+    for pat in patterns:
+        if '*' not in pat and '?' not in pat:
+            return os.path.join(models_dir, pat)
+    return os.path.join(models_dir, patterns[0].replace('*', ''))
+
+
+MODELS_DIR = _find_models_dir()
+MODEL_EXPANDER = _find_model('VEGA_MODEL_EXPANDER', MODELS_DIR, [
+    'Qwen3.5-9B-Q4_K_M.gguf', 'Qwen3*-Q4_K_M.gguf', '*expander*.gguf',
+])
+MODEL_EMBEDDER = _find_model('VEGA_MODEL_EMBEDDER', MODELS_DIR, [
+    'qwen3-embedding-8b-q4_k_m.gguf', '*embedding*q4*.gguf', '*embedding*.gguf',
+])
+MODEL_RERANKER = _find_model('VEGA_MODEL_RERANKER', MODELS_DIR, [
+    'qwen3-reranker-4b.gguf', '*reranker*.gguf',
+])
 MODEL_UNLOAD_TTL = int(os.environ.get('VEGA_MODEL_TTL', '300'))   # 초: 비활성 후 모델 해제
-INFERENCE_BACKEND = os.environ.get('VEGA_INFERENCE', 'local')      # 'local' | 'qmd' | 'sqlite_only'
+INFERENCE_BACKEND = os.environ.get('VEGA_INFERENCE', 'local')      # 'local' | 'sqlite_only'
 
 # Memory backend (v1.43)
 MEMORY_PATHS = [p.strip() for p in os.environ.get('VEGA_MEMORY_PATHS', 'MEMORY.md,memory,projects').split(',') if p.strip()]
@@ -152,9 +168,9 @@ def write_audit_log(conn, project_id, action, field=None, old_value=None, new_va
 
 # 거래처/자재 사전 (addons.py에서 사용)
 # 리랭킹 모드 (환경변수 VEGA_RERANK으로 오버라이드 가능)
-#   'full'      — Vega 퓨전 스코어링 + QMD 리랭커 (기본값)
-#   'vega_only' — Vega 퓨전 스코어링만, QMD 리랭커 비활성 (--no-rerank)
-#   'none'      — 리랭킹 없음: SQLite BM25 원본 순서 + QMD 네이티브 점수 유지
+#   'full'      — Vega 퓨전 스코어링 + 로컬 리랭커 (기본값)
+#   'vega_only' — Vega 퓨전 스코어링만, 리랭커 비활성
+#   'none'      — 리랭킹 없음: SQLite BM25 원본 순서 유지
 RERANK_MODE = os.environ.get('VEGA_RERANK', 'full')
 
 KNOWN_VENDORS = [

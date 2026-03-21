@@ -1,7 +1,7 @@
 """
 Vega 통합 검색 라우터 (내부 라이브러리)
 
-SQLite(구조화 검색)와 QMD(의미 검색)를 자동으로 라우팅합니다.
+SQLite(구조화 검색)와 로컬 모델(의미 검색)을 자동으로 라우팅합니다.
 Vega 통합 결과 형식으로 반환합니다.
 """
 
@@ -19,7 +19,8 @@ _CHUNK_LIMIT = 50       # FTS/trigram 청크 결과 최대 수
 _LIKE_LIMIT = 30        # LIKE 폴백 결과 최대 수
 _COMM_LIMIT = 15        # 커뮤니케이션 로그 최대 수
 
-from config import DB_PATH, QMD_WRAPPER, QMD_BIN, get_db_connection, RERANK_MODE
+import config as _cfg
+from config import get_db_connection, RERANK_MODE
 
 
 # ──────────────────────────────────────────────
@@ -54,8 +55,9 @@ import time as _time
 _pattern_cache = {'patterns': None, 'mtime': 0, 'ts': 0}
 _PATTERN_CACHE_TTL = 60  # 초 — mtime 같아도 60초마다 재확인
 
-def _build_dynamic_patterns(db_path=DB_PATH):
+def _build_dynamic_patterns(db_path=None):
     """DB에서 프로젝트명/고객사/담당자를 읽어 패턴을 동적 생성"""
+    db_path = db_path or _cfg.DB_PATH
     import copy
     patterns = copy.deepcopy(_STATIC_PATTERNS)
 
@@ -107,8 +109,9 @@ def _build_dynamic_patterns(db_path=DB_PATH):
 
     return patterns
 
-def _get_structural_patterns(db_path=DB_PATH):
+def _get_structural_patterns(db_path=None):
     """캐시된 동적 패턴 반환. DB 변경 시 자동 갱신."""
+    db_path = db_path or _cfg.DB_PATH
     try:
         mtime = os.path.getmtime(db_path) if os.path.isfile(db_path) else 0
     except OSError:
@@ -125,8 +128,7 @@ def _get_structural_patterns(db_path=DB_PATH):
 
 STRUCTURAL_PATTERNS = _STATIC_PATTERNS  # 폴백 (모듈 레벨 참조 호환)
 
-# 의미/내용 검색 패턴 (QMD가 잘하는 것)
-# v1.332: 대폭 확장 — 사건/상황/인과/경과 패턴 추가로 QMD 활용도 향상
+# 의미/내용 검색 패턴 (벡터 검색이 잘하는 것)
 SEMANTIC_PATTERNS = [
     # 질문형 (기존)
     r'(어떻게|왜|방법|이유|원인|차이|비교)',
@@ -264,14 +266,14 @@ def analyze_query(query):
     
     Returns:
         {
-            'route': 'sqlite' | 'qmd' | 'hybrid',
+            'route': 'sqlite' | 'semantic' | 'hybrid',
             'confidence': float,
             'extracted': {
                 'clients': [...],
                 'persons': [...],
                 'statuses': [...],
                 'tags': [...],
-                'keywords': [...],  # QMD용 키워드
+                'keywords': [...],
             },
             'reason': str
         }
@@ -309,23 +311,22 @@ def analyze_query(query):
             semantic_score += 2
 
     # 순수 키워드 (양쪽 다 사용)
-    # 구조화 필드에 매칭되지 않은 나머지를 QMD/FTS 키워드로
+    # 구조화 필드에 매칭되지 않은 나머지를 FTS/벡터 키워드로
     all_structural = []
     for vals in extracted.values():
         all_structural.extend(vals)
 
     extracted['keywords'] = _extract_keywords(query, all_structural)
 
-    # 라우팅 결정 (v1.332: QMD 활용도 향상)
+    # 라우팅 결정
     total = structural_score + semantic_score
     has_keywords = bool(extracted.get('keywords'))
 
     if total == 0:
         if has_keywords:
-            # 키워드는 있지만 패턴 매칭 없음 → hybrid로 QMD도 활용
             route = 'hybrid'
             confidence = 0.6
-            reason = "키워드 감지 → SQLite + QMD 병행 검색"
+            reason = "키워드 감지 → SQLite + 의미 검색 병행"
         else:
             route = 'sqlite'
             confidence = 0.5
@@ -336,7 +337,6 @@ def analyze_query(query):
         reason = f"구조화({structural_score}) + 의미({semantic_score}) → 혼합 검색"
     elif structural_score > 0 and semantic_score == 0:
         if has_keywords:
-            # 구조 필드 + 비구조 키워드 → hybrid (QMD가 키워드 맥락 보충)
             route = 'hybrid'
             confidence = 0.7
             reason = f"구조화({structural_score}) + 키워드 → 혼합 검색"
@@ -345,15 +345,14 @@ def analyze_query(query):
             confidence = min(0.7 + structural_score * 0.05, 0.95)
             reason = f"구조화 필드 감지({structural_score}) → SQLite 우선"
     else:
-        # 의미 패턴만 매칭 — 키워드가 있으면 hybrid (SQLite 구조 데이터도 활용)
         if has_keywords:
             route = 'hybrid'
             confidence = 0.75
-            reason = f"의미({semantic_score}) + 키워드 → SQLite + QMD 병행"
+            reason = f"의미({semantic_score}) + 키워드 → SQLite + 의미 검색 병행"
         else:
-            route = 'qmd'
+            route = 'semantic'
             confidence = min(0.7 + semantic_score * 0.05, 0.95)
-            reason = f"의미 검색 패턴({semantic_score}) → QMD 우선"
+            reason = f"의미 검색 패턴({semantic_score}) → 벡터 검색 우선"
 
     return {
         'route': route,
@@ -414,8 +413,9 @@ def _sanitize_fts(terms):
     return " OR ".join(safe)
 
 
-def sqlite_search(query, extracted, db_path=DB_PATH):
+def sqlite_search(query, extracted, db_path=None):
     """구조화 + 전문검색 실행"""
+    db_path = db_path or _cfg.DB_PATH
     conn = get_db_connection(db_path, row_factory=True)
     try:
         return _sqlite_search_impl(conn, query, extracted)
@@ -643,7 +643,7 @@ def _make_result(*, project_id="", project_name="", client="", status="",
     """
     Vega canonical 검색 결과 dict.
 
-    SQLite/QMD 양쪽 결과를 이 형식으로 정규화하여
+    SQLite/semantic 양쪽 결과를 이 형식으로 정규화하여
     commands/search.py가 단일 형식만 소비하도록 합니다.
     """
     return {
@@ -655,7 +655,7 @@ def _make_result(*, project_id="", project_name="", client="", status="",
         'content': content,
         'heading': heading,
         'score': score,
-        'source': source,          # 'sqlite' | 'qmd'
+        'source': source,          # 'sqlite' | 'semantic'
         'entry_date': entry_date,
         'chunk_type': chunk_type,
         'metadata': metadata or {},
@@ -709,17 +709,17 @@ def _load_project_lookup(db_path):
         return {}
 
 
-def _qmd_items_to_unified(qmd_results, db_path=None):
-    """QMD 파싱 결과 리스트 → Vega 통합 형식 리스트 (DB 메타데이터 보강)."""
+def _semantic_items_to_unified(semantic_results, db_path=None):
+    """의미 검색 결과 리스트 → Vega 통합 형식 리스트 (DB 메타데이터 보강)."""
     proj_lookup = _load_project_lookup(db_path) if db_path else {}
     unified = []
-    for item in (qmd_results or []):
+    for item in (semantic_results or []):
         meta = item.get('metadata', {})
         if meta.get('error'):
             continue
         project_name = (meta.get('project_name') or '').strip()
         if not project_name:
-            project_name = _infer_qmd_project_name(item) or ''
+            project_name = _infer_semantic_project_name(item) or ''
         # DB 메타데이터 보강
         proj_info = proj_lookup.get(project_name.lower(), {})
         unified.append(_make_result(
@@ -731,8 +731,8 @@ def _qmd_items_to_unified(qmd_results, db_path=None):
             content=str(item.get('content') or '')[:500],
             heading=meta.get('title', ''),
             score=float(item.get('score') or 0.0),
-            source='qmd',
-            chunk_type='qmd_chunk',
+            source='semantic',
+            chunk_type='semantic_chunk',
             metadata={
                 'uri': meta.get('uri', ''),
                 'filepath': meta.get('filepath', ''),
@@ -746,212 +746,7 @@ def _qmd_items_to_unified(qmd_results, db_path=None):
 
 
 # ──────────────────────────────────────────────
-# 3. QMD 어댑터 (CLI: qmd-wrapper.sh)
-# ──────────────────────────────────────────────
-
-class QMDAdapter:
-    """
-    QMD CLI 어댑터.
-    
-    서브명령:
-      query  "검색어"  → 하이브리드 (BM25 + 벡터 + 쿼리 확장)
-      search "검색어"  → BM25만 (빠름)
-      vsearch "검색어" → 벡터만
-    
-    wrapper.sh는 환경변수 세팅 + --no-rerank 패스스루 역할.
-    """
-
-    def __init__(self, config=None):
-        self.config = config or {}
-        self.wrapper_path = self.config.get('wrapper', QMD_WRAPPER)
-        self.binary_path = self.config.get('binary', QMD_BIN)
-        self.use_binary = not self.wrapper_path and bool(self.binary_path)
-        self.available = False
-        self._check_availability()
-
-    def _check_availability(self):
-        """wrapper.sh 또는 qmd 바이너리가 사용 가능한지 확인"""
-        if self.wrapper_path:
-            wrapper = Path(self.wrapper_path)
-            if wrapper.exists() and os.access(str(wrapper), os.X_OK):
-                self.available = True
-            else:
-                self.available = wrapper.exists()
-        elif self.binary_path:
-            self.available = True
-
-    def _run(self, subcmd, query, extra_args=None):
-        """QMD CLI 실행. wrapper 또는 직접 바이너리 지원."""
-        import subprocess
-        if self.use_binary:
-            cmd = [self.binary_path, subcmd, query, '--json']
-        else:
-            cmd = [self.wrapper_path, subcmd, query, '--json']
-        if extra_args:
-            cmd.extend(extra_args)
-
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=30,
-                env={**os.environ}
-            )
-            return result.stdout, result.stderr, result.returncode
-        except subprocess.TimeoutExpired:
-            return "", "QMD 타임아웃 (30초)", -1
-        except FileNotFoundError:
-            return "", f"QMD 실행 파일 없음: {self.wrapper_path or self.binary_path}", -2
-        except Exception as e:
-            return "", str(e), -3
-
-    def _parse_output(self, stdout):
-        """
-        QMD 2.0 JSON 출력 파싱.
-
-        QMD 2.0 HybridQueryResult 필드:
-          file, displayPath, title, body, bestChunk, bestChunkPos,
-          score, context, docid, explain?
-        """
-        if not stdout.strip():
-            return []
-
-        try:
-            data = json.loads(stdout)
-            if isinstance(data, list):
-                return [
-                    {
-                        'source': item.get('displayPath') or item.get('file', ''),
-                        'content': item.get('bestChunk', '') or (item.get('body', '') or '')[:500],
-                        'score': item.get('score'),
-                        'metadata': {
-                            'uri': item.get('docid', ''),
-                            'title': item.get('title', ''),
-                            'context': item.get('context', ''),
-                            'project_name': self._extract_project_from_path(
-                                item.get('displayPath') or item.get('file', '')),
-                            'filepath': item.get('displayPath') or item.get('file', ''),
-                            'docid': item.get('docid', ''),
-                            'best_chunk_pos': item.get('bestChunkPos'),
-                        }
-                    }
-                    for item in data
-                ]
-        except (json.JSONDecodeError, ValueError):
-            pass
-
-        # JSON 파싱 실패 시 raw 결과 반환
-        if stdout.strip():
-            return [{
-                'source': 'qmd',
-                'content': stdout.strip()[:2000],
-                'score': None,
-                'metadata': {'raw': True}
-            }]
-        return []
-
-    def _extract_project_from_path(self, path):
-        """파일 경로에서 프로젝트명 추출.
-
-        qmd:// URI (예: qmd://projects-dir-main/tools/claude.md) 및
-        일반 파일 경로 모두 지원. 비프로젝트 파일(CLAUDE.md 등)은
-        빈 문자열을 반환하여 노이즈를 방지한다.
-        """
-        if not path:
-            return ''
-        # qmd:// URI에서 경로 부분 추출
-        clean = path
-        if clean.startswith('qmd://'):
-            # qmd://collection-name/path/to/file.md → path/to/file.md
-            after = clean[6:]
-            parts = after.split('/', 1)
-            clean = parts[1].strip('/') if len(parts) > 1 and parts[1].strip('/') else parts[0]
-        fname = clean.split('/')[-1] if '/' in clean else clean
-        if fname.endswith('.md'):
-            stem = fname[:-3]
-            # 비프로젝트 파일 제외 (CLAUDE.md, README.md 등)
-            if _NON_PROJECT_RE.search(stem):
-                return ''
-            return stem
-        return ''
-
-    def search(self, query, project_filter=None, mode='query', intent=None):
-        """
-        QMD 검색 실행.
-        
-        Args:
-            query: 검색 질의
-            project_filter: 프로젝트명 리스트 (SQLite에서 좁힌 결과)
-            mode: 'query' (하이브리드) | 'search' (BM25) | 'vsearch' (벡터)
-        
-        Returns:
-            파싱된 결과 리스트, 또는 실패 시 None
-        """
-        if not self.available:
-            return None
-
-        extra = []
-        if intent:
-            extra.extend(['--intent', intent])
-        # RERANK_MODE: 'full' 이외에는 QMD 내부 리랭커 비활성
-        if RERANK_MODE != 'full':
-            extra.append('--no-rerank')
-        stdout, stderr, rc = self._run(mode, query, extra_args=extra if extra else None)
-
-        if rc != 0:
-            # 실패 시 stderr 정보 포함하여 반환
-            if stderr:
-                return [{'source': 'qmd-error', 'content': stderr[:500],
-                         'score': None, 'metadata': {'error': True, 'rc': rc}}]
-            return None
-
-        results = self._parse_output(stdout)
-
-        # 프로젝트 필터 적용 (hybrid 모드)
-        if project_filter and results:
-            filter_lower = [pf.lower() for pf in project_filter]
-            strict_filtered = []
-            loose_filtered = []
-            for r in results:
-                meta = r.get('metadata', {})
-                strict_hay = '\0'.join([
-                    meta.get('project_name', '').lower(),
-                    meta.get('filepath', '').lower(),
-                    meta.get('title', '').lower(),
-                    r.get('source', '').lower(),
-                ])
-                loose_hay = strict_hay + '\0' + '\0'.join([
-                    meta.get('context', '').lower(),
-                    r.get('content', '')[:500].lower(),
-                ])
-                if any(pf in strict_hay for pf in filter_lower):
-                    strict_filtered.append(r)
-                elif any(pf in loose_hay for pf in filter_lower):
-                    loose_filtered.append(r)
-
-            if strict_filtered:
-                results = strict_filtered
-            elif loose_filtered:
-                results = loose_filtered
-            else:
-                # 필터 매칭 실패 → 원본 반환하되 플래그 표시 (recall 보존)
-                for r in results:
-                    r.setdefault('metadata', {})['filter_bypassed'] = True
-
-        return results
-
-    def search_fast(self, query, project_filter=None):
-        """BM25 전용 검색 (빠름)"""
-        return self.search(query, project_filter, mode='search')
-
-    def search_semantic(self, query, project_filter=None):
-        """벡터 전용 검색"""
-        return self.search(query, project_filter, mode='vsearch')
-
-
-# ──────────────────────────────────────────────
-# 4. 결과 재정렬 / 퓨전
+# 3. 결과 재정렬 / 퓨전
 # ──────────────────────────────────────────────
 
 
@@ -977,7 +772,7 @@ def _negate_date_str(date_str):
     return ''.join(str(9 - int(c)) if c.isdigit() else c for c in str(date_str))
 
 
-def _infer_qmd_project_name(result):
+def _infer_semantic_project_name(result):
     meta = result.get('metadata', {})
     project_name = (meta.get('project_name') or '').strip()
     if project_name:
@@ -997,7 +792,7 @@ _NON_PROJECT_RE = re.compile(
     re.IGNORECASE,
 )
 
-# 백업/이전 버전 디렉토리 패턴 — QMD 인덱스 노이즈 필터링
+# 백업/이전 버전 디렉토리 패턴 — 검색 노이즈 필터링
 # 주의: 정규식이 정당한 프로젝트명(서비스-v2 등)을 오탐하지 않도록
 # vega- 접두어와 backup/tools-backup은 리터럴 매칭만 사용
 _BACKUP_DIR_RE = re.compile(
@@ -1070,18 +865,18 @@ def _score_sqlite_chunks(chunks, extracted):
     return project_scores, project_name_by_id, project_id_by_name
 
 
-def _score_qmd_results(qmd_results, project_scores, project_id_by_name, project_name_by_id, db_path=None):
-    """QMD 결과를 프로젝트 스코어에 반영. 고아 QMD 복구 포함."""
+def _score_semantic_results(semantic_results, project_scores, project_id_by_name, project_name_by_id, db_path=None):
+    """의미 검색 결과를 프로젝트 스코어에 반영. 고아 복구 포함."""
     _db_lookup = None
 
-    for rank, item in enumerate(qmd_results, start=1):
+    for rank, item in enumerate(semantic_results, start=1):
         if item.get('metadata', {}).get('error'):
             continue
-        project_name = _infer_qmd_project_name(item)
+        project_name = _infer_semantic_project_name(item)
         if not project_name:
             continue
         pid = project_id_by_name.get(project_name)
-        # 고아 QMD 복구: SQLite 결과에 없는 프로젝트를 DB에서 조회
+        # 고아 복구: SQLite 결과에 없는 프로젝트를 DB에서 조회
         if pid is None and db_path and project_name:
             if _db_lookup is None:
                 _db_lookup = _load_project_lookup(db_path)
@@ -1106,8 +901,8 @@ def _score_qmd_results(qmd_results, project_scores, project_id_by_name, project_
             project_scores[pid] = project_scores.get(pid, 0.0) + base * 0.6 + 10.0
 
 
-def _apply_ranking(sqlite_results, qmd_results, project_scores, project_name_by_id, project_id_by_name):
-    """프로젝트 스코어 기반으로 SQLite/QMD 양쪽 결과를 정렬."""
+def _apply_ranking(sqlite_results, semantic_results, project_scores, project_name_by_id, project_id_by_name):
+    """프로젝트 스코어 기반으로 SQLite/의미 검색 양쪽 결과를 정렬."""
     ranked_project_ids = [pid for pid, _ in sorted(project_scores.items(), key=lambda kv: kv[1], reverse=True)]
     if ranked_project_ids:
         order = {pid: idx for idx, pid in enumerate(ranked_project_ids)}
@@ -1121,11 +916,11 @@ def _apply_ranking(sqlite_results, qmd_results, project_scores, project_name_by_
         )
         sqlite_results['project_ids'] = ranked_project_ids
         sqlite_results['project_names'] = [project_name_by_id[pid] for pid in ranked_project_ids if pid in project_name_by_id]
-        _qmd_name_cache = {id(r): _infer_qmd_project_name(r) for r in qmd_results}
-        qmd_results = sorted(
-            qmd_results,
+        _name_cache = {id(r): _infer_semantic_project_name(r) for r in semantic_results}
+        semantic_results = sorted(
+            semantic_results,
             key=lambda r: (
-                order.get(project_id_by_name.get(_qmd_name_cache.get(id(r), ''), None), 10**9),
+                order.get(project_id_by_name.get(_name_cache.get(id(r), ''), None), 10**9),
                 -(float(r.get('score') or 0.0))
             )
         )
@@ -1134,62 +929,58 @@ def _apply_ranking(sqlite_results, qmd_results, project_scores, project_name_by_
         {'project_id': pid, 'project_name': project_name_by_id.get(pid, ''), 'score': round(project_scores[pid], 2)}
         for pid in ranked_project_ids
     ]
-    return sqlite_results, qmd_results
+    return sqlite_results, semantic_results
 
 
-def _rerank_fusion(sqlite_results, qmd_results, extracted, db_path=None):
-    """SQLite + QMD 결과를 퓨전 스코어링으로 통합 정렬."""
+def _rerank_fusion(sqlite_results, semantic_results, extracted, db_path=None):
+    """SQLite + 의미 검색 결과를 퓨전 스코어링으로 통합 정렬."""
     sqlite_results = sqlite_results or {'chunks': [], 'comms': [], 'project_ids': [], 'project_names': []}
-    qmd_results = qmd_results or []
+    semantic_results = semantic_results or []
 
     # 1) SQLite 스코어링
     project_scores, project_name_by_id, project_id_by_name = _score_sqlite_chunks(
         sqlite_results.get('chunks', []), extracted
     )
 
-    # 2) QMD 스코어링 (고아 복구 포함)
-    _score_qmd_results(qmd_results, project_scores, project_id_by_name, project_name_by_id, db_path)
+    # 2) 의미 검색 스코어링 (고아 복구 포함)
+    _score_semantic_results(semantic_results, project_scores, project_id_by_name, project_name_by_id, db_path)
 
     # 3) 최종 정렬 적용
-    return _apply_ranking(sqlite_results, qmd_results, project_scores, project_name_by_id, project_id_by_name)
+    return _apply_ranking(sqlite_results, semantic_results, project_scores, project_name_by_id, project_id_by_name)
 
 
 # ──────────────────────────────────────────────
-# 5. 통합 라우터
+# 4. 통합 라우터
 # ──────────────────────────────────────────────
 
 class SearchRouter:
 
-    def __init__(self, db_path=DB_PATH, qmd_config=None):
-        self.db_path = db_path
-        # v1.4: INFERENCE_BACKEND에 따라 어댑터 선택
-        import config as _cfg
+    def __init__(self, db_path=None):
+        self.db_path = db_path or _cfg.DB_PATH
+        _null = type('NullAdapter', (), {'available': False, 'search': lambda *a, **kw: None})()
         backend = _cfg.INFERENCE_BACKEND
         if backend == 'local':
             try:
                 from models import LocalAdapter
-                self.qmd = LocalAdapter()
+                self.semantic = LocalAdapter()
                 _log.info("검색 어댑터: LocalAdapter (로컬 모델)")
             except Exception as e:
-                _log.warning("LocalAdapter 로드 실패 → QMDAdapter 폴백: %s", e)
-                self.qmd = QMDAdapter(qmd_config)
-        elif backend == 'qmd':
-            self.qmd = QMDAdapter(qmd_config)
-            _log.info("검색 어댑터: QMDAdapter (외부 QMD)")
+                _log.warning("LocalAdapter 로드 실패 → SQLite 전용: %s", e)
+                self.semantic = _null
         else:
             # sqlite_only — 어댑터 비활성
-            self.qmd = type('NullAdapter', (), {'available': False, 'search': lambda *a, **kw: None})()
+            self.semantic = _null
             _log.info("검색 어댑터: 없음 (sqlite_only)")
 
     def search(self, query):
         """
         통합 검색 실행.
-        
+
         1. 쿼리 분석 → 라우팅 결정
         2. 해당 엔진(들) 실행
         3. 결과 통합 반환
-        
-        QMD 모드 선택:
+
+        의미 검색 모드 선택:
           - 의미 질문 (어떻게/왜/방식) → vsearch (벡터)
           - 키워드 특정 (JOCA, MC4 등) → search (BM25, 빠름)
           - 혼합/기본 → query (하이브리드)
@@ -1198,9 +989,9 @@ class SearchRouter:
         query = _normalize_query(query)
         if not query:
             return {'query': '', 'analysis': {'route': 'sqlite', 'reason': 'empty'},
-                    'sqlite': None, 'qmd': None, 'unified': [], 'comms': [],
-                    'search_meta': {'route': 'sqlite', 'qmd_available': self.qmd.available,
-                                    'qmd_used': False, 'sqlite_count': 0, 'qmd_count': 0,
+                    'sqlite': None, 'semantic': None, 'unified': [], 'comms': [],
+                    'search_meta': {'route': 'sqlite', 'semantic_available': self.semantic.available,
+                                    'semantic_used': False, 'sqlite_count': 0, 'semantic_count': 0,
                                     'rerank_mode': RERANK_MODE}}
 
         # 1. 분석
@@ -1208,73 +999,67 @@ class SearchRouter:
         route = analysis['route']
         extracted = analysis['extracted']
 
-        # QMD 모드 결정
+        # 의미 검색 모드 결정
         has_semantic = any(re.search(p, query.lower()) for p in SEMANTIC_PATTERNS)
         has_specific_kw = bool(extracted['keywords']) and not has_semantic
         if has_semantic and not has_specific_kw:
-            qmd_mode = 'vsearch'   # 순수 의미 → 벡터
+            sem_mode = 'vsearch'   # 순수 의미 → 벡터
         elif has_specific_kw and not has_semantic:
-            qmd_mode = 'search'    # 특정 키워드 → BM25 (빠름)
+            sem_mode = 'search'    # 특정 키워드 → BM25 (빠름)
         else:
-            qmd_mode = 'query'     # 혼합 → 하이브리드
+            sem_mode = 'query'     # 혼합 → 하이브리드
 
-        # QMD 2.0 intent 파라미터 — 의미 패턴에서 맥락 추출
-        qmd_intent = None
+        # intent 파라미터 — 의미 패턴에서 맥락 추출
+        sem_intent = None
         if has_semantic:
-            # 의미 질문에서 핵심 키워드를 intent로 전달
             kw = extracted.get('keywords', [])
             cl = extracted.get('clients', [])
             if kw or cl:
-                qmd_intent = ' '.join(cl + kw)
+                sem_intent = ' '.join(cl + kw)
 
         results = {
             'query': query,
             'analysis': analysis,
             'sqlite': None,
-            'qmd': None,
-            'qmd_mode': qmd_mode,
+            'semantic': None,
         }
 
-        # 2. 선형 실행: SQLite 항상 먼저, QMD는 route에 따라 조건부
+        # 2. 선형 실행: SQLite 항상 먼저, 의미 검색은 route에 따라 조건부
         results['sqlite'] = sqlite_search(query, extracted, self.db_path)
 
-        if self.qmd.available:
-            if route == 'qmd':
-                # 순수 의미 검색 → 필터 없이 전체 QMD
-                results['qmd'] = self.qmd.search(query, mode=qmd_mode, intent=qmd_intent)
+        if self.semantic.available:
+            if route == 'semantic':
+                results['semantic'] = self.semantic.search(query, mode=sem_mode, intent=sem_intent)
             elif route == 'hybrid':
-                # 혼합 → SQLite 프로젝트명으로 QMD 필터
                 project_names = results['sqlite'].get('project_names', [])
-                results['qmd'] = self.qmd.search(
+                results['semantic'] = self.semantic.search(
                     query,
                     project_filter=project_names if project_names else None,
-                    mode=qmd_mode,
-                    intent=qmd_intent,
+                    mode=sem_mode,
+                    intent=sem_intent,
                 )
             elif route == 'sqlite' and (has_semantic or bool(extracted.get('keywords'))):
-                # 보충 → 결과 부족할 때만 BM25 빠른 모드
                 if len(results['sqlite'].get('chunks', [])) < 5:
-                    results['qmd'] = self.qmd.search(query, mode='search', intent=qmd_intent)
-                    results['analysis']['reason'] += " → QMD 보충 검색(BM25)"
-        elif route == 'qmd':
-            # QMD 미연결 → SQLite 폴백 (이미 위에서 실행됨)
-            results['analysis']['reason'] += " (QMD 미연결 → SQLite 폴백)"
+                    results['semantic'] = self.semantic.search(query, mode='search', intent=sem_intent)
+                    results['analysis']['reason'] += " → 의미 검색 보충"
+        elif route == 'semantic':
+            results['analysis']['reason'] += " (의미 검색 미연결 → SQLite 폴백)"
 
         # 리랭킹 적용 (RERANK_MODE 토글)
         results['rerank_mode'] = RERANK_MODE
-        if RERANK_MODE != 'none' and (results.get('sqlite') or results.get('qmd')):
-            results['sqlite'], results['qmd'] = _rerank_fusion(results.get('sqlite'), results.get('qmd'), extracted, db_path=self.db_path)
+        if RERANK_MODE != 'none' and (results.get('sqlite') or results.get('semantic')):
+            results['sqlite'], results['semantic'] = _rerank_fusion(results.get('sqlite'), results.get('semantic'), extracted, db_path=self.db_path)
 
-        # QMD 필터 우회 표기
-        if results.get('qmd') and any(r.get('metadata', {}).get('filter_bypassed') for r in results['qmd']):
-            results['analysis']['reason'] += ' (QMD 프로젝트 필터 우회됨 — 결과 신뢰도 낮음)'
+        # 필터 우회 표기
+        if results.get('semantic') and any(r.get('metadata', {}).get('filter_bypassed') for r in results['semantic']):
+            results['analysis']['reason'] += ' (프로젝트 필터 우회됨 — 결과 신뢰도 낮음)'
 
         # Vega 통합 결과 형식 생성
         unified = []
         if results.get('sqlite') and results['sqlite'].get('chunks'):
             unified.extend(_sqlite_rows_to_unified(results['sqlite']['chunks']))
-        if results.get('qmd'):
-            unified.extend(_qmd_items_to_unified(results['qmd'], db_path=self.db_path))
+        if results.get('semantic'):
+            unified.extend(_semantic_items_to_unified(results['semantic'], db_path=self.db_path))
         # project_scores 반영 (fusion 활성 시에만 존재)
         score_map = {}
         if results.get('sqlite') and results['sqlite'].get('project_scores'):
@@ -1291,10 +1076,10 @@ class SearchRouter:
         sqlite_res = results.get('sqlite') or {}
         results['search_meta'] = {
             'route': route,
-            'qmd_available': self.qmd.available,
-            'qmd_used': results.get('qmd') is not None,
+            'semantic_available': self.semantic.available,
+            'semantic_used': results.get('semantic') is not None,
             'sqlite_count': len(sqlite_res.get('chunks', [])),
-            'qmd_count': len(results.get('qmd') or []),
+            'semantic_count': len(results.get('semantic') or []),
             'rerank_mode': RERANK_MODE,
         }
 

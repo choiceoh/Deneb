@@ -19,6 +19,8 @@ import time
 import logging
 import threading
 from datetime import datetime
+import config as _cfg
+from config import get_db_connection as _get_db_connection
 
 _log = logging.getLogger(__name__)
 
@@ -63,8 +65,7 @@ class ModelManager:
             self._models = {}        # role -> Llama instance
             self._last_used = {}     # role -> timestamp
             self._model_lock = threading.Lock()
-            import config
-            self._config = config
+            self._config = _cfg
 
     @classmethod
     def reset(cls):
@@ -499,7 +500,7 @@ def vector_search(query_vec, db_path=None, limit=20, source_type=None):
 
     Args:
         query_vec: 1D numpy 배열
-        db_path: DB 경로 (None이면 config.DB_PATH)
+        db_path: DB 경로 (None이면 _cfg.DB_PATH)
         limit: 반환 수
         source_type: 'memory'|'project'|None (None=전체)
 
@@ -510,13 +511,11 @@ def vector_search(query_vec, db_path=None, limit=20, source_type=None):
     if not _HAS_NUMPY:
         return []
 
-    import config
-    from config import get_db_connection
-    db = db_path or config.DB_PATH
+    db = db_path or _cfg.DB_PATH
 
     conn = None
     try:
-        conn = get_db_connection(db)
+        conn = _get_db_connection(db)
         sql = """
             SELECT ce.chunk_id, ce.embedding, c.project_id, p.name, c.content,
                    c.start_line, c.end_line, c.section_heading, p.source_file
@@ -633,13 +632,13 @@ def vector_search(query_vec, db_path=None, limit=20, source_type=None):
 
 
 # ──────────────────────────────────────────────
-# 6. LocalAdapter — QMDAdapter drop-in replacement
+# 6. LocalAdapter — 로컬 모델 기반 의미 검색 어댑터
 # ──────────────────────────────────────────────
 
 class LocalAdapter:
-    """로컬 모델 기반 검색 어댑터. QMDAdapter와 동일 인터페이스.
+    """로컬 모델 기반 의미 검색 어댑터.
 
-    search() 반환 형식은 QMDAdapter._parse_output()과 동일:
+    search() 반환 형식:
     [{'source': ..., 'content': ..., 'score': ..., 'metadata': {...}}, ...]
     """
 
@@ -652,19 +651,18 @@ class LocalAdapter:
 
     def _check_availability(self):
         """최소한 embedder 모델 파일이 있으면 사용 가능."""
-        import config
         if not _HAS_LLAMA or not _HAS_NUMPY:
             return False
-        return os.path.isfile(config.MODEL_EMBEDDER)
+        return os.path.isfile(_cfg.MODEL_EMBEDDER)
 
     def search(self, query, project_filter=None, mode='query', intent=None):
-        """QMDAdapter.search()와 동일 인터페이스.
+        """의미 검색 실행.
 
         Args:
             query: 검색 질의
             project_filter: 프로젝트명 리스트
             mode: 'query' (확장+벡터+리랭크) | 'search' (BM25 보조) | 'vsearch' (벡터만)
-            intent: 무시 (QMD 호환용)
+            intent: 검색 의도 힌트 (선택)
 
         Returns:
             list — 결과 리스트 (빈 리스트 = 결과 없음)
@@ -672,8 +670,6 @@ class LocalAdapter:
         """
         if not self.available:
             return None
-
-        import config
 
         if mode == 'search':
             # BM25 보조 모드: 확장 키워드 생성 후 벡터 검색도 실행
@@ -684,7 +680,7 @@ class LocalAdapter:
             query_vec = self.embedder.embed_single(search_query)
             if query_vec is None:
                 return []  # 임베딩 실패 → 빈 결과 (None이 아닌 [])
-            results = vector_search(query_vec, db_path=config.DB_PATH, limit=10)
+            results = vector_search(query_vec, db_path=_cfg.DB_PATH, limit=10)
             return self._results_to_items(results)
 
         # vsearch 또는 query: 벡터 검색
@@ -698,7 +694,7 @@ class LocalAdapter:
         if query_vec is None:
             return []  # 임베딩 실패 → 빈 결과
 
-        results = vector_search(query_vec, db_path=config.DB_PATH, limit=20)
+        results = vector_search(query_vec, db_path=_cfg.DB_PATH, limit=20)
         items = self._results_to_items(results)
 
         # query 모드: 리랭킹 추가
@@ -731,9 +727,9 @@ class LocalAdapter:
 
     @staticmethod
     def _results_to_items(results):
-        """vector_search 결과 → QMDAdapter 호환 아이템 리스트.
+        """vector_search 결과 → 의미 검색 아이템 리스트.
 
-        router.py _qmd_items_to_unified()가 기대하는 metadata 필드:
+        router.py _semantic_items_to_unified()가 기대하는 metadata 필드:
         uri, filepath, context, docid, best_chunk_pos, filter_bypassed, project_name, title
         """
         items = []
@@ -779,13 +775,11 @@ def embed_all_chunks(db_path=None, batch_size=32):
     if batch_size is None or batch_size < 1:
         batch_size = 32
 
-    import config
-    from config import get_db_connection
-    db = db_path or config.DB_PATH
+    db = db_path or _cfg.DB_PATH
 
     embedder = LocalEmbedder()
 
-    conn = get_db_connection(db)
+    conn = _get_db_connection(db)
     try:
         rows = conn.execute("""
             SELECT c.id, c.content
@@ -815,7 +809,7 @@ def embed_all_chunks(db_path=None, batch_size=32):
                     blob = _vector_to_blob(vec)
                     conn.execute(
                         "INSERT OR REPLACE INTO chunk_embeddings (chunk_id, embedding, model_name, updated_at) VALUES (?, ?, ?, ?)",
-                        (chunk_id, blob, os.path.basename(config.MODEL_EMBEDDER), datetime.now().isoformat())
+                        (chunk_id, blob, os.path.basename(_cfg.MODEL_EMBEDDER), datetime.now().isoformat())
                     )
                     embedded += 1
                 except Exception as e:

@@ -590,50 +590,13 @@ class TestCommandMetadata(unittest.TestCase):
                 self.assertTrue(_COMMAND_REGISTRY[name]['read_only'], f'{name}은 read_only=True여야 함')
 
 
-class TestQMDIntegration(unittest.TestCase):
-    """QMD 통합 테스트 (v1.3) — QMD 미설치 환경에서도 안전하게 작동하는지 검증"""
+class TestSearchIntegration(unittest.TestCase):
+    """검색 통합 테스트 — 의미 검색 미연결 환경에서도 안전하게 작동하는지 검증"""
 
-    def test_qmd_status_command_exists(self):
-        """qmd-status 명령이 등록되어 있는지"""
-        r = execute('qmd-status', {})
-        self.assertEqual(r['status'], 'ok')
-        self.assertIn('qmd_available', r['data'])
-        self.assertIn('qmd_binary', r['data'])
-
-    def test_qmd_index_command_exists(self):
-        """qmd-index 명령이 등록되어 있는지"""
-        r = execute('qmd-index', {'sub_args': ['status']})
-        self.assertEqual(r['status'], 'ok')
-
-    def test_qmd_status_metadata(self):
-        """qmd-status 메타데이터 검증"""
-        from core import _COMMAND_REGISTRY
-        entry = _COMMAND_REGISTRY.get('qmd-status')
-        self.assertIsNotNone(entry)
-        self.assertTrue(entry['read_only'])
-        self.assertEqual(entry['category'], 'system')
-
-    def test_qmd_index_metadata(self):
-        """qmd-index 메타데이터 검증"""
-        from core import _COMMAND_REGISTRY
-        entry = _COMMAND_REGISTRY.get('qmd-index')
-        self.assertIsNotNone(entry)
-        self.assertFalse(entry['read_only'])
-        self.assertEqual(entry['category'], 'system')
-
-    def test_config_qmd_exports(self):
-        """config.py에서 QMD 관련 export 확인"""
-        from config import QMD_BIN, QMD_WRAPPER, get_qmd_executable
-        # 이 값들은 None일 수 있지만 import는 성공해야 함
-        exe = get_qmd_executable()
-        # exe는 None이거나 문자열
-        self.assertTrue(exe is None or isinstance(exe, str))
-
-    def test_router_qmd_adapter_graceful_fallback(self):
-        """QMD 미설치 시 SearchRouter가 SQLite 폴백으로 작동"""
+    def test_router_graceful_fallback(self):
+        """의미 검색 미연결 시 SearchRouter가 SQLite 폴백으로 작동"""
         from router import SearchRouter
         router = SearchRouter()
-        # QMD 미연결이어도 검색은 성공해야 함
         results = router.search("테스트")
         self.assertIn('analysis', results)
         self.assertIn('sqlite', results)
@@ -645,7 +608,6 @@ class TestQMDIntegration(unittest.TestCase):
         results = router.search("테스트")
         self.assertIn('unified', results)
         self.assertIsInstance(results['unified'], list)
-        # 통합 결과가 있으면 형식 검증
         for item in results['unified']:
             self.assertIn('project_id', item)
             self.assertIn('project_name', item)
@@ -659,7 +621,7 @@ class TestQMDIntegration(unittest.TestCase):
             self.assertIn('entry_date', item)
             self.assertIn('chunk_type', item)
             self.assertIn('metadata', item)
-            self.assertIn(item['source'], ('sqlite', 'qmd'))
+            self.assertIn(item['source'], ('sqlite', 'semantic'))
 
     def test_make_result_factory(self):
         """_make_result 팩토리가 올바른 Vega canonical dict를 생성하는지 검증"""
@@ -679,15 +641,11 @@ class TestQMDIntegration(unittest.TestCase):
     def test_row_value_none_safety(self):
         """_row_value가 SQL NULL(None) 값에 대해 default를 반환하는지 검증"""
         from router import _row_value
-        # None row → default
         self.assertEqual(_row_value(None, 'key'), '')
         self.assertEqual(_row_value(None, 'key', 'fallback'), 'fallback')
-        # dict with None value → default
         self.assertEqual(_row_value({'name': None}, 'name', ''), '')
         self.assertEqual(_row_value({'name': None}, 'name', 'default'), 'default')
-        # dict with actual value → value
         self.assertEqual(_row_value({'name': '테스트'}, 'name', ''), '테스트')
-        # dict with missing key → default
         self.assertEqual(_row_value({'a': 1}, 'missing', 'default'), 'default')
 
     def test_unified_format_via_search_command(self):
@@ -697,7 +655,6 @@ class TestQMDIntegration(unittest.TestCase):
         data = r['data']
         self.assertIn('projects', data)
         self.assertIn('result_count', data)
-        # projects 내 항목 형식 검증
         for p in data['projects']:
             self.assertIn('id', p)
             self.assertIn('name', p)
@@ -732,7 +689,7 @@ class TestNonProjectPenalty(unittest.TestCase):
     """v1.333: 비프로젝트 문서 노이즈 페널티 테스트"""
 
     def test_index_md_penalized(self):
-        """INDEX.md 소스를 가진 QMD 결과는 0.3× 페널티를 받아야 함"""
+        """INDEX.md 소스를 가진 의미 검색 결과는 0.3× 페널티를 받아야 함"""
         import re
         pattern = re.compile(r'(INDEX|README|CLAUDE|CHANGELOG|TODO|LICENSE|\.github)', re.IGNORECASE)
         self.assertTrue(pattern.search('/projects/INDEX.md'))
@@ -749,8 +706,8 @@ class TestNonProjectPenalty(unittest.TestCase):
         self.assertIsNone(pattern.search('/projects/영암태양광.md'))
 
 
-class TestV1334QMDFusion(unittest.TestCase):
-    """v1.334: QMD 자연 융합 + AI 사용성 개선"""
+class TestSearchFusion(unittest.TestCase):
+    """검색 퓨전 + AI 사용성 테스트"""
 
     def test_load_project_lookup(self):
         """_load_project_lookup이 프로젝트 메타데이터를 반환하는지 검증"""
@@ -773,11 +730,10 @@ class TestV1334QMDFusion(unittest.TestCase):
         from router import _load_project_lookup
         self.assertEqual(_load_project_lookup(None), {})
 
-    def test_qmd_items_to_unified_with_db(self):
-        """_qmd_items_to_unified에 db_path를 전달하면 메타데이터가 보강되는지 검증"""
-        from router import _qmd_items_to_unified
-        # DB에 존재하는 프로젝트명으로 가짜 QMD 결과 생성
-        fake_qmd = [{
+    def test_semantic_items_to_unified_with_db(self):
+        """_semantic_items_to_unified에 db_path를 전달하면 메타데이터가 보강되는지 검증"""
+        from router import _semantic_items_to_unified
+        fake = [{
             'content': '테스트 내용',
             'score': 25.0,
             'source': '/projects/테스트프로젝트.md',
@@ -787,9 +743,9 @@ class TestV1334QMDFusion(unittest.TestCase):
                 'filepath': '/projects/테스트프로젝트.md',
             }
         }]
-        unified = _qmd_items_to_unified(fake_qmd, db_path=config.DB_PATH)
+        unified = _semantic_items_to_unified(fake, db_path=config.DB_PATH)
         self.assertEqual(len(unified), 1)
-        self.assertEqual(unified[0]['source'], 'qmd')
+        self.assertEqual(unified[0]['source'], 'semantic')
 
     def test_search_meta_in_router(self):
         """SearchRouter.search()가 search_meta를 반환하는지 검증"""
@@ -799,10 +755,10 @@ class TestV1334QMDFusion(unittest.TestCase):
         self.assertIn('search_meta', results)
         sm = results['search_meta']
         self.assertIn('route', sm)
-        self.assertIn('qmd_available', sm)
-        self.assertIn('qmd_used', sm)
+        self.assertIn('semantic_available', sm)
+        self.assertIn('semantic_used', sm)
         self.assertIn('sqlite_count', sm)
-        self.assertIn('qmd_count', sm)
+        self.assertIn('semantic_count', sm)
         self.assertIn('rerank_mode', sm)
 
     def test_search_command_no_analysis(self):
@@ -815,11 +771,12 @@ class TestV1334QMDFusion(unittest.TestCase):
         self.assertNotIn('route_reason', data)
         self.assertIn('search_meta', data)
 
-    def test_search_command_no_qmd_results_key(self):
-        """search 명령 응답에 qmd_results[] 배열이 없는지 검증"""
+    def test_search_command_no_raw_semantic_results_key(self):
+        """search 명령 응답에 raw 의미검색 결과 배열이 없는지 검증"""
         r = execute('search', {'query': '테스트'})
         data = r['data']
-        self.assertNotIn('qmd_results', data)
+        self.assertNotIn('raw_semantic_results', data)
+        self.assertNotIn('semantic_results', data)
 
     def test_search_projects_have_sources(self):
         """search 명령의 projects[].sources 필드가 있는지 검증"""
@@ -829,7 +786,7 @@ class TestV1334QMDFusion(unittest.TestCase):
             self.assertIn('sources', p)
             self.assertIsInstance(p['sources'], list)
             for s in p['sources']:
-                self.assertIn(s, ('sqlite', 'qmd'))
+                self.assertIn(s, ('sqlite', 'semantic'))
 
     def test_search_sections_have_source(self):
         """search 명령의 projects[].sections[].source 필드가 있는지 검증"""
@@ -838,7 +795,7 @@ class TestV1334QMDFusion(unittest.TestCase):
         for p in data.get('projects', []):
             for sec in p.get('sections', []):
                 self.assertIn('source', sec)
-                self.assertIn(sec['source'], ('sqlite', 'qmd'))
+                self.assertIn(sec['source'], ('sqlite', 'semantic'))
 
     def test_comms_in_router_results(self):
         """SearchRouter.search()가 comms를 별도 전달하는지 검증"""
@@ -899,7 +856,7 @@ class TestPipelineAmountV1335(unittest.TestCase):
 # ──────────────────────────────────────────────
 
 class TestRerankFusionV1335(unittest.TestCase):
-    """_score_sqlite_chunks, _score_qmd_results, _apply_ranking 분해 후 동작 검증"""
+    """_score_sqlite_chunks, _score_semantic_results, _apply_ranking 분해 후 동작 검증"""
 
     def test_score_sqlite_chunks_basic(self):
         """SQLite 청크 스코어링 기본 동작"""
@@ -924,7 +881,7 @@ class TestRerankFusionV1335(unittest.TestCase):
             ],
             'comms': [], 'project_ids': [1], 'project_names': ['A'],
         }
-        result_sqlite, result_qmd = _rerank_fusion(sqlite_res, [], {'clients': [], 'persons': [], 'statuses': [], 'tags': [], 'keywords': []})
+        result_sqlite, result_semantic = _rerank_fusion(sqlite_res, [], {'clients': [], 'persons': [], 'statuses': [], 'tags': [], 'keywords': []})
         self.assertIn('project_scores', result_sqlite)
         self.assertEqual(len(result_sqlite['project_scores']), 1)
 
@@ -960,122 +917,33 @@ class TestVegaTestCase(VegaTestCase):
         self._assert_ok(r)
 
 
-class TestQMDParseOutputV1338(unittest.TestCase):
-    """v1.338/v1.339: _parse_output file→filepath 매핑 + 백업 디렉토리 필터"""
-
-    def _make_adapter(self):
-        from router import QMDAdapter
-        return QMDAdapter()
-
-    def test_parse_output_file_fallback(self):
-        """displayPath 없을 때 file 필드가 filepath/project_name에 매핑되는지"""
-        adapter = self._make_adapter()
-        stdout = json.dumps([{
-            'file': 'qmd://projects-dir-main/비금도.md',
-            'title': '비금도 프로젝트',
-            'bestChunk': '케이블 납기 이슈',
-            'score': 0.85,
-            'docid': 'doc-1',
-        }])
-        results = adapter._parse_output(stdout)
-        self.assertEqual(len(results), 1)
-        meta = results[0]['metadata']
-        self.assertEqual(meta['filepath'], 'qmd://projects-dir-main/비금도.md')
-        self.assertEqual(meta['project_name'], '비금도')
-        # source 필드도 동일하게 file 폴백 (v1.339)
-        self.assertEqual(results[0]['source'], 'qmd://projects-dir-main/비금도.md')
-        # content 필드는 bestChunk에서 추출
-        self.assertEqual(results[0]['content'], '케이블 납기 이슈')
-
-    def test_parse_output_displaypath_priority(self):
-        """displayPath가 있으면 file보다 우선"""
-        adapter = self._make_adapter()
-        stdout = json.dumps([{
-            'file': 'qmd://projects-dir-main/비금도.md',
-            'displayPath': '/projects/비금도.md',
-            'bestChunk': 'test',
-            'score': 0.5,
-        }])
-        results = adapter._parse_output(stdout)
-        meta = results[0]['metadata']
-        self.assertEqual(meta['filepath'], '/projects/비금도.md')
-        self.assertEqual(meta['project_name'], '비금도')
-
-    def test_extract_project_filters_non_project(self):
-        """CLAUDE.md, README.md 등 비프로젝트 파일은 빈 문자열 반환"""
-        adapter = self._make_adapter()
-        self.assertEqual(adapter._extract_project_from_path('qmd://projects/CLAUDE.md'), '')
-        self.assertEqual(adapter._extract_project_from_path('qmd://coll/README.md'), '')
-        self.assertEqual(adapter._extract_project_from_path('qmd://coll/CHANGELOG.md'), '')
-
-    def test_extract_project_qmd_uri(self):
-        """qmd:// URI에서 프로젝트명 정상 추출"""
-        adapter = self._make_adapter()
-        self.assertEqual(adapter._extract_project_from_path('qmd://projects-dir-main/비금도.md'), '비금도')
-        self.assertEqual(adapter._extract_project_from_path('qmd://coll/sub/화성산단.md'), '화성산단')
-
-    def test_extract_project_trailing_slash(self):
-        """v1.339: qmd://collection/ (trailing slash) 엣지케이스"""
-        adapter = self._make_adapter()
-        # trailing slash → collection name으로 폴백 (빈 문자열이 아님)
-        result = adapter._extract_project_from_path('qmd://projects-dir-main/')
-        self.assertIsInstance(result, str)  # 크래시하지 않으면 OK
+class TestBackupDirFilter(unittest.TestCase):
+    """백업 디렉토리 필터 정규식 테스트"""
 
     def test_backup_dir_penalty_regex(self):
         """백업 디렉토리 패턴 감지 정규식 — 오탐 없이 정확히 매칭"""
         from router import _BACKUP_DIR_RE
-        # 매칭되어야 하는 패턴
         self.assertIsNotNone(_BACKUP_DIR_RE.search('/vega-v1.21/CLAUDE.md'))
         self.assertIsNotNone(_BACKUP_DIR_RE.search('/tools-backup'))
         self.assertIsNotNone(_BACKUP_DIR_RE.search('/path/backup-old/file.md'))
         self.assertIsNotNone(_BACKUP_DIR_RE.search('old-versions/file.md'))
-        # 매칭되지 않아야 하는 패턴 (오탐 방지)
         self.assertIsNone(_BACKUP_DIR_RE.search('/projects/비금도.md'))
-        self.assertIsNone(_BACKUP_DIR_RE.search('qmd://projects/서비스-v2/readme.md'))
+        self.assertIsNone(_BACKUP_DIR_RE.search('/projects/서비스-v2/readme.md'))
         self.assertIsNone(_BACKUP_DIR_RE.search('/projects/nova-v3.md'))
 
     def test_penalty_no_stacking(self):
-        """v1.339: 페널티가 min() 방식으로 적용되어 과도한 스태킹 없음"""
+        """페널티가 min() 방식으로 적용되어 과도한 스태킹 없음"""
         from router import _NON_PROJECT_RE, _BACKUP_DIR_RE
-        # 백업 디렉토리의 비프로젝트 파일 — 양쪽 매칭 확인
         src = '/vega-v1.21/CLAUDE.md'
         self.assertIsNotNone(_BACKUP_DIR_RE.search(src))
         self.assertIsNotNone(_NON_PROJECT_RE.search(src))
-        # 실제 스코어링 로직 검증: min() 방식이면 0.1, 곱셈이면 0.03
         penalty = 1.0
         if _BACKUP_DIR_RE.search(src):
             penalty = min(penalty, 0.1)
         elif _NON_PROJECT_RE.search(src):
             penalty = min(penalty, 0.3)
         self.assertAlmostEqual(penalty, 0.1)
-        # 곱셈 방식(구버전)이었다면 0.03이 되어야 함
         self.assertNotAlmostEqual(penalty, 0.03)
-
-    def test_qmdignore_generation(self):
-        """_write_qmdignore가 .qmdignore 파일을 올바르게 생성"""
-        import tempfile, shutil
-        tmp = tempfile.mkdtemp()
-        try:
-            # 테스트 디렉토리 구조 생성
-            os.makedirs(os.path.join(tmp, 'vega-v1-21'))
-            os.makedirs(os.path.join(tmp, 'tools-backup-v1'))
-            os.makedirs(os.path.join(tmp, 'backup-old'))
-            os.makedirs(os.path.join(tmp, '비금도'))  # 진짜 프로젝트
-            os.makedirs(os.path.join(tmp, '서비스-v2'))  # 정당한 프로젝트 (오탐 아님)
-            from commands.qmd_ops import _write_qmdignore
-            ignore_path, excluded = _write_qmdignore(tmp)
-            self.assertTrue(os.path.isfile(ignore_path))
-            # 제외되어야 하는 디렉토리
-            self.assertIn('backup-old', excluded)
-            self.assertIn('vega-v1-21', excluded)
-            self.assertIn('tools-backup-v1', excluded)
-            # 제외되지 않아야 하는 디렉토리 (오탐 방지)
-            self.assertNotIn('비금도', excluded)
-            self.assertNotIn('서비스-v2', excluded)
-            content = open(ignore_path, encoding='utf-8').read()
-            self.assertIn('v1.34', content)  # 버전 표기 확인
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
 
 
 
@@ -1100,7 +968,7 @@ class TestSearchQualityV134(VegaTestCase):
                        f"급한 쿼리는 sqlite 또는 hybrid여야 함: {result['route']}")
 
     def test_semantic_with_keywords_uses_hybrid(self):
-        """의미 패턴 + 키워드 → hybrid (QMD 단독 아님)"""
+        """의미 패턴 + 키워드 → hybrid (semantic 단독 아님)"""
         from router import analyze_query
         result = analyze_query('해저케이블 설계 어떻게')
         self.assertEqual(result['route'], 'hybrid',
@@ -1627,7 +1495,7 @@ class TestLocalAdapter(VegaTestCase):
         self.assertIsNone(adapter.search("test"))
 
     def test_results_to_items_format(self):
-        """QMDAdapter 호환 형식 검증"""
+        """LocalAdapter 결과 형식 검증"""
         from models import LocalAdapter
         fake_results = [
             (1, 0.95, 10, "비금도 해상태양광", "154kV 해저케이블 공사"),
@@ -1865,19 +1733,6 @@ class TestEmbedAllChunks(VegaTestCase):
         conn.close()
         ModelManager.reset()
 
-
-class TestQmdOpsNewActions(VegaTestCase):
-    """qmd-index embed-local / model-status 액션 테스트"""
-
-    def test_model_status_action(self):
-        r = self._exec('qmd-index', {'sub_args': ['model-status']})
-        data = self._assert_ok(r)
-        self.assertIn('models', data)
-        self.assertIn('inference_backend', data)
-
-    def test_embed_local_graceful(self):
-        r = self._exec('qmd-index', {'sub_args': ['embed-local']})
-        self.assertIn(r.get('status'), ('ok', 'error'))
 
 
 # ──────────────────────────────────────────────
@@ -2230,12 +2085,12 @@ class TestLocalAdapterEdgeCases(VegaTestCase):
         ModelManager.reset()
 
     def test_results_to_items_metadata_fields(self):
-        """QMDAdapter 호환 메타데이터 필드 완전성 검증"""
+        """LocalAdapter 메타데이터 필드 완전성 검증"""
         from models import LocalAdapter
         fake = [(1, 0.95, 10, '비금도', 'content')]
         items = LocalAdapter._results_to_items(fake)
         meta = items[0]['metadata']
-        # router.py _qmd_items_to_unified()가 기대하는 필드
+        # router.py _semantic_items_to_unified()가 기대하는 필드
         self.assertIn('uri', meta)
         self.assertIn('filepath', meta)
         self.assertIn('context', meta)
@@ -2783,6 +2638,43 @@ class TestSchemaV6Migration(VegaTestCase):
         cols = [row[1] for row in conn.execute("PRAGMA table_info(projects)")]
         conn.close()
         self.assertIn('source_type', cols)
+
+
+class TestUpgrade(VegaTestCase):
+    """upgrade 명령 테스트"""
+
+    def test_upgrade_basic(self):
+        """upgrade 실행 → 정상 응답 + 필수 필드"""
+        r = self._exec('upgrade')
+        data = self._assert_ok(r)
+        self.assertIn('schema_version', data)
+        self.assertIn('sync', data)
+        self.assertIn('memory', data)
+        self.assertIn('embed', data)
+        self.assertIn('steps', data)
+        self.assertIn('updated', data['sync'])
+        self.assertIn('skipped', data['sync'])
+
+    def test_upgrade_schema_version(self):
+        """upgrade 후 스키마 버전이 최신"""
+        r = self._exec('upgrade')
+        data = self._assert_ok(r)
+        self.assertEqual(data['schema_version'], config.SCHEMA_VERSION)
+
+    def test_upgrade_memory_section(self):
+        """upgrade 결과에 memory 섹션 정상 포함"""
+        r = self._exec('upgrade')
+        data = self._assert_ok(r)
+        mem = data['memory']
+        self.assertIn('updated', mem)
+        self.assertIn('total', mem)
+
+    def test_upgrade_embed_section(self):
+        """upgrade 결과에 embed 섹션 정상 포함"""
+        r = self._exec('upgrade')
+        data = self._assert_ok(r)
+        emb = data['embed']
+        self.assertIn('embedded', emb)
 
 
 if __name__ == '__main__':

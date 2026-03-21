@@ -1,3 +1,4 @@
+import core as _core_mod
 from core import (register_command, execute, route_input, get_db_connection, VegaError,
                   _resolve_session_context, _apply_depth, _build_ai_hint, _build_bundle,
                   _update_session, _try_auto_correct, _route_confidence, _smart_route)
@@ -6,7 +7,6 @@ from core import (register_command, execute, route_input, get_db_connection, Veg
 @register_command('ask')
 def _exec_ask(params):
     """AI가 사용자의 자연어를 그대로 전달하는 통합 엔드포인트 (E-1)."""
-    from core import _auto_correct_depth
 
     query = (params.get('query', '') or '').strip()
     if not query:
@@ -86,7 +86,7 @@ def _exec_ask(params):
             _update_session(corrected.get('command', command), out)
         else:
             out['_meta']['inner_status'] = 'error'
-    elif inner.get('status') == 'ok' and command == 'search' and _auto_correct_depth < 1:
+    elif inner.get('status') == 'ok' and command == 'search' and _core_mod._auto_correct_depth < 1:
         # 검색 결과 0건이면 status는 'ok'이지만 suggestions 기반 자동 교정 시도
         corrected = _try_auto_correct(command, routed_params, inner)
         if corrected and corrected.get('status') == 'ok':

@@ -32,7 +32,8 @@ from datetime import datetime
 _self_dir = str(Path(__file__).parent)
 if _self_dir not in sys.path:
     sys.path.insert(0, _self_dir)
-from config import DB_PATH, SCHEMA_VERSION, set_schema_version
+import config
+from config import set_schema_version
 
 
 # ──────────────────────────────────────────────
@@ -186,7 +187,8 @@ END;
 """
 
 
-def init_db(db_path=DB_PATH):
+def init_db(db_path=None):
+    db_path = db_path or config.DB_PATH
     conn = sqlite3.connect(db_path, timeout=10)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
@@ -550,106 +552,222 @@ def extract_tags(meta, sections):
 # 6. 임포트
 # ──────────────────────────────────────────────
 
-def import_files(directory, db_path=DB_PATH):
+def import_files(directory, db_path=None):
+    db_path = db_path or config.DB_PATH
     conn = init_db(db_path)
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    md_files = sorted(
-        f for f in Path(directory).rglob("*.md")
-        if not f.is_symlink()
-    )
-    if not md_files:
-        print("파일을 찾을 수 없습니다.")
-        return
+        md_files = sorted(
+            f for f in Path(directory).rglob("*.md")
+            if not f.is_symlink()
+        )
+        if not md_files:
+            print("파일을 찾을 수 없습니다.")
+            return
 
-    imported = 0
-    errors = []
-    for fpath in md_files:
-        fname = fpath.name
-        fpath_str = str(fpath.resolve())
-        try:
-            text = fpath.read_text(encoding='utf-8-sig')
-            text = text.replace('\r\n', '\n')
+        imported = 0
+        errors = []
+        for fpath in md_files:
+            fname = fpath.name
+            fpath_str = str(fpath.resolve())
+            try:
+                text = fpath.read_text(encoding='utf-8-sig')
+                text = text.replace('\r\n', '\n')
 
-            # source_file은 파일명 또는 전체 경로로 확인 (이전 버전 호환)
-            if cur.execute("SELECT id FROM projects WHERE source_file=? OR source_file=?", (fname, fpath_str)).fetchone():
-                print(f"  건너뜀: {fname}")
+                # source_file은 파일명 또는 전체 경로로 확인 (이전 버전 호환)
+                if cur.execute("SELECT id FROM projects WHERE source_file=? OR source_file=?", (fname, fpath_str)).fetchone():
+                    print(f"  건너뜀: {fname}")
+                    continue
+
+                meta = extract_table_meta(text)
+                sections, comm_entries = split_sections(text)
+                tags = extract_tags(meta, sections)
+
+                # 프로젝트 삽입 (source_file에 전체 경로 저장)
+                cur.execute("""
+                    INSERT INTO projects (name, client, status, capacity, biz_type,
+                                          person_internal, person_external, partner,
+                                          source_file, imported_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    meta.get('name', fname.replace('.md', '')),
+                    meta.get('client'),
+                    meta.get('status'),
+                    meta.get('capacity'),
+                    meta.get('biz_type'),
+                    meta.get('person_internal'),
+                    meta.get('person_external'),
+                    meta.get('partner'),
+                    fpath_str,
+                    datetime.now().isoformat()
+                ))
+                pid = cur.lastrowid
+
+                # 섹션 삽입
+                for heading, body, entry_date in sections:
+                    ctype = classify_section(heading, body)
+                    cur.execute("""
+                        INSERT INTO chunks (project_id, section_heading, content, chunk_type, entry_date)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (pid, heading, body, ctype, entry_date))
+                    cid = cur.lastrowid
+
+                    for tag in tags:
+                        cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
+                        tag_row = cur.execute("SELECT id FROM tags WHERE name=?", (tag,)).fetchone()
+                        if tag_row:
+                            cur.execute("INSERT OR IGNORE INTO chunk_tags (chunk_id, tag_id) VALUES (?, ?)", (cid, tag_row[0]))
+
+                # 커뮤니케이션 로그 삽입
+                for entry in comm_entries:
+                    cur.execute("""
+                        INSERT INTO comm_log (project_id, log_date, sender, subject, summary)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (pid, entry['date'], entry['sender'], entry['subject'], entry['summary']))
+
+                imported += 1
+                print(f"  ✓ {fname} → {len(sections)}섹션, {len(comm_entries)}로그, {len(tags)}태그")
+            except Exception as e:
+                errors.append(f"{fname}: {e}")
+                print(f"  ✗ {fname} — 오류: {e}")
                 continue
 
-            meta = extract_table_meta(text)
-            sections, comm_entries = split_sections(text)
-            tags = extract_tags(meta, sections)
+        if errors:
+            print(f"\n⚠ {len(errors)}개 파일 오류 (나머지 {imported}개 정상 임포트)")
 
-            # 프로젝트 삽입 (source_file에 전체 경로 저장)
-            cur.execute("""
-                INSERT INTO projects (name, client, status, capacity, biz_type,
-                                      person_internal, person_external, partner,
-                                      source_file, imported_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                meta.get('name', fname.replace('.md', '')),
-                meta.get('client'),
-                meta.get('status'),
-                meta.get('capacity'),
-                meta.get('biz_type'),
-                meta.get('person_internal'),
-                meta.get('person_external'),
-                meta.get('partner'),
-                fpath_str,
-                datetime.now().isoformat()
-            ))
-            pid = cur.lastrowid
+        conn.commit()
 
-            # 섹션 삽입
-            for heading, body, entry_date in sections:
-                ctype = classify_section(heading, body)
-                cur.execute("""
-                    INSERT INTO chunks (project_id, section_heading, content, chunk_type, entry_date)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (pid, heading, body, ctype, entry_date))
-                cid = cur.lastrowid
-
-                for tag in tags:
-                    cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
-                    tag_row = cur.execute("SELECT id FROM tags WHERE name=?", (tag,)).fetchone()
-                    if tag_row:
-                        cur.execute("INSERT OR IGNORE INTO chunk_tags (chunk_id, tag_id) VALUES (?, ?)", (cid, tag_row[0]))
-
-            # 커뮤니케이션 로그 삽입
-            for entry in comm_entries:
-                cur.execute("""
-                    INSERT INTO comm_log (project_id, log_date, sender, subject, summary)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (pid, entry['date'], entry['sender'], entry['subject'], entry['summary']))
-
-            imported += 1
-            print(f"  ✓ {fname} → {len(sections)}섹션, {len(comm_entries)}로그, {len(tags)}태그")
-        except Exception as e:
-            errors.append(f"{fname}: {e}")
-            print(f"  ✗ {fname} — 오류: {e}")
-            continue
-
-    if errors:
-        print(f"\n⚠ {len(errors)}개 파일 오류 (나머지 {imported}개 정상 임포트)")
-
-    conn.commit()
-
-    stats = cur.execute("""
-        SELECT
-            (SELECT COUNT(*) FROM projects),
-            (SELECT COUNT(*) FROM chunks),
-            (SELECT COUNT(*) FROM comm_log),
-            (SELECT COUNT(DISTINCT name) FROM tags)
-    """).fetchone()
-    print(f"\n완료: {imported}개 임포트")
-    print(f"DB: 프로젝트 {stats[0]}개 | 섹션 {stats[1]}개 | 커뮤니케이션 {stats[2]}건 | 태그 {stats[3]}종")
-    conn.close()
+        stats = cur.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM projects),
+                (SELECT COUNT(*) FROM chunks),
+                (SELECT COUNT(*) FROM comm_log),
+                (SELECT COUNT(DISTINCT name) FROM tags)
+        """).fetchone()
+        print(f"\n완료: {imported}개 임포트")
+        print(f"DB: 프로젝트 {stats[0]}개 | 섹션 {stats[1]}개 | 커뮤니케이션 {stats[2]}건 | 태그 {stats[3]}종")
+    finally:
+        conn.close()
 
 
-def import_incremental(directory, db_path=DB_PATH):
+def import_incremental(directory, db_path=None):
     """증분 업데이트: 변경된 .md 파일만 재파싱 (프로젝트 ID 유지)"""
-    import hashlib
+    db_path = db_path or config.DB_PATH
     conn = init_db(db_path)
+    try:
+        _import_incremental_impl(conn, directory)
+    finally:
+        conn.close()
+
+
+def upsert_md_file(cur, fpath, existing_hashes=None):
+    """단일 .md 파일을 파싱하여 DB에 upsert. 공유 로직.
+
+    Returns:
+        'updated' | 'skipped' | None (에러 시)
+    Raises:
+        Exception on parse/DB errors (호출자가 처리)
+    """
+    import hashlib
+    fname = fpath.name
+    fpath_str = str(fpath.resolve())
+
+    text = fpath.read_text(encoding='utf-8-sig').replace('\r\n', '\n')
+    content_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+
+    # 해시 동일하면 스킵
+    if existing_hashes:
+        if existing_hashes.get(fpath_str) == content_hash or existing_hashes.get(fname) == content_hash:
+            return 'skipped'
+
+    meta = extract_table_meta(text)
+    sections, comm_entries = split_sections(text)
+    tags = extract_tags(meta, sections)
+
+    # 기존 프로젝트 확인
+    old_proj = cur.execute(
+        "SELECT id FROM projects WHERE source_file=? OR source_file=?",
+        (fname, fpath_str)
+    ).fetchone()
+
+    if old_proj:
+        pid = old_proj[0]
+        cur.execute("""
+            UPDATE projects SET name=?, client=?, status=?, capacity=?, biz_type=?,
+                person_internal=?, person_external=?, partner=?,
+                source_file=?, imported_at=?
+            WHERE id=?
+        """, (
+            meta.get('name', fname.replace('.md', '')),
+            meta.get('client'), meta.get('status'), meta.get('capacity'),
+            meta.get('biz_type'), meta.get('person_internal'),
+            meta.get('person_external'), meta.get('partner'),
+            fpath_str, datetime.now().isoformat(), pid
+        ))
+        cur.execute("DELETE FROM comm_log WHERE project_id=?", (pid,))
+        cur.execute("DELETE FROM chunk_tags WHERE chunk_id IN (SELECT id FROM chunks WHERE project_id=?)", (pid,))
+        cur.execute("DELETE FROM chunks WHERE project_id=?", (pid,))
+    else:
+        cur.execute("""
+            INSERT INTO projects (name, client, status, capacity, biz_type,
+                                  person_internal, person_external, partner,
+                                  source_file, imported_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            meta.get('name', fname.replace('.md', '')),
+            meta.get('client'), meta.get('status'), meta.get('capacity'),
+            meta.get('biz_type'), meta.get('person_internal'),
+            meta.get('person_external'), meta.get('partner'),
+            fpath_str, datetime.now().isoformat()
+        ))
+        pid = cur.lastrowid
+
+    # 섹션/태그 삽입
+    for heading, body, entry_date in sections:
+        ctype = classify_section(heading, body)
+        cur.execute(
+            "INSERT INTO chunks (project_id, section_heading, content, chunk_type, entry_date) VALUES (?, ?, ?, ?, ?)",
+            (pid, heading, body, ctype, entry_date))
+        cid = cur.lastrowid
+        for tag in tags:
+            cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
+            tag_row = cur.execute("SELECT id FROM tags WHERE name=?", (tag,)).fetchone()
+            if tag_row:
+                cur.execute("INSERT OR IGNORE INTO chunk_tags (chunk_id, tag_id) VALUES (?, ?)", (cid, tag_row[0]))
+
+    # 커뮤니케이션 로그
+    for entry in comm_entries:
+        cur.execute(
+            "INSERT INTO comm_log (project_id, log_date, sender, subject, summary) VALUES (?, ?, ?, ?, ?)",
+            (pid, entry['date'], entry['sender'], entry['subject'], entry['summary']))
+
+    # 해시 갱신
+    cur.execute("DELETE FROM file_hashes WHERE source_file=?", (fname,))
+    cur.execute(
+        "INSERT OR REPLACE INTO file_hashes (source_file, content_hash, updated_at) VALUES (?, ?, ?)",
+        (fpath_str, content_hash, datetime.now().isoformat()))
+
+    return 'updated'
+
+
+def delete_project_by_source(cur, source_key):
+    """source_file 키로 프로젝트 및 관련 데이터 삭제."""
+    old_proj = cur.execute(
+        "SELECT id FROM projects WHERE source_file=? OR source_file=?",
+        (source_key, os.path.basename(source_key))
+    ).fetchone()
+    if old_proj:
+        pid = old_proj[0]
+        cur.execute("DELETE FROM comm_log WHERE project_id=?", (pid,))
+        cur.execute("DELETE FROM chunk_tags WHERE chunk_id IN (SELECT id FROM chunks WHERE project_id=?)", (pid,))
+        cur.execute("DELETE FROM chunks WHERE project_id=?", (pid,))
+        cur.execute("DELETE FROM projects WHERE id=?", (pid,))
+    cur.execute("DELETE FROM file_hashes WHERE source_file=?", (source_key,))
+
+
+def _import_incremental_impl(conn, directory):
+    """import_incremental 구현부 (conn은 호출자가 관리)."""
     cur = conn.cursor()
 
     md_files = sorted(
@@ -671,103 +789,22 @@ def import_incremental(directory, db_path=DB_PATH):
     current_files = set()
 
     for fpath in md_files:
-        fname = fpath.name
-        fpath_str = str(fpath.resolve())
-        current_files.add(fpath_str)  # 전체경로로 추적
-        current_files.add(fname)      # 이전 버전 호환
+        current_files.add(str(fpath.resolve()))
+        current_files.add(fpath.name)
         try:
-            text = fpath.read_text(encoding='utf-8-sig')
-            text = text.replace('\r\n', '\n')
-            content_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
-
-            # 해시 동일하면 스킵 (파일명/전체경로 양쪽 확인)
-            if existing_hashes.get(fpath_str) == content_hash or existing_hashes.get(fname) == content_hash:
+            result = upsert_md_file(cur, fpath, existing_hashes)
+            if result == 'skipped':
                 skipped += 1
-                continue
-
-            # 파싱
-            meta = extract_table_meta(text)
-            sections, comm_entries = split_sections(text)
-            tags = extract_tags(meta, sections)
-
-            # 기존 프로젝트 확인 (파일명/전체경로 양쪽 확인)
-            old_proj = cur.execute("SELECT id FROM projects WHERE source_file=? OR source_file=?", (fname, fpath_str)).fetchone()
-
-            if old_proj:
-                # UPDATE: 프로젝트 ID를 유지한 채 메타데이터만 갱신
-                pid = old_proj[0]
-                cur.execute("""
-                    UPDATE projects SET name=?, client=?, status=?, capacity=?, biz_type=?,
-                        person_internal=?, person_external=?, partner=?,
-                        source_file=?, imported_at=?
-                    WHERE id=?
-                """, (
-                    meta.get('name', fname.replace('.md', '')),
-                    meta.get('client'), meta.get('status'), meta.get('capacity'),
-                    meta.get('biz_type'), meta.get('person_internal'),
-                    meta.get('person_external'), meta.get('partner'),
-                    fpath_str, datetime.now().isoformat(), pid
-                ))
-
-                # chunks/comm_log는 DELETE→INSERT (트리거가 FTS 정합성 유지)
-                cur.execute("DELETE FROM comm_log WHERE project_id=?", (pid,))
-                cur.execute("DELETE FROM chunk_tags WHERE chunk_id IN (SELECT id FROM chunks WHERE project_id=?)", (pid,))
-                cur.execute("DELETE FROM chunks WHERE project_id=?", (pid,))
-            else:
-                # 신규 프로젝트 INSERT
-                cur.execute("""
-                    INSERT INTO projects (name, client, status, capacity, biz_type,
-                                          person_internal, person_external, partner,
-                                          source_file, imported_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    meta.get('name', fname.replace('.md', '')),
-                    meta.get('client'), meta.get('status'), meta.get('capacity'),
-                    meta.get('biz_type'), meta.get('person_internal'),
-                    meta.get('person_external'), meta.get('partner'),
-                    fpath_str, datetime.now().isoformat()
-                ))
-                pid = cur.lastrowid
-
-            # 섹션/태그 삽입
-            for heading, body, entry_date in sections:
-                ctype = classify_section(heading, body)
-                cur.execute("INSERT INTO chunks (project_id, section_heading, content, chunk_type, entry_date) VALUES (?, ?, ?, ?, ?)",
-                           (pid, heading, body, ctype, entry_date))
-                cid = cur.lastrowid
-                for tag in tags:
-                    cur.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
-                    tag_row = cur.execute("SELECT id FROM tags WHERE name=?", (tag,)).fetchone()
-                    if tag_row:
-                        cur.execute("INSERT OR IGNORE INTO chunk_tags (chunk_id, tag_id) VALUES (?, ?)", (cid, tag_row[0]))
-
-            # 커뮤니케이션 로그 삽입
-            for entry in comm_entries:
-                cur.execute("INSERT INTO comm_log (project_id, log_date, sender, subject, summary) VALUES (?, ?, ?, ?, ?)",
-                           (pid, entry['date'], entry['sender'], entry['subject'], entry['summary']))
-
-            # 해시 업데이트 (전체경로로 저장, 이전 fname 키가 있으면 정리)
-            cur.execute("DELETE FROM file_hashes WHERE source_file=?", (fname,))
-            cur.execute("INSERT OR REPLACE INTO file_hashes (source_file, content_hash, updated_at) VALUES (?, ?, ?)",
-                       (fpath_str, content_hash, datetime.now().isoformat()))
-
-            updated += 1
-            print(f"  ✓ {fname} ({'업데이트' if old_proj else '신규'})")
+            elif result == 'updated':
+                updated += 1
+                print(f"  ✓ {fpath.name}")
         except Exception as e:
-            print(f"  ✗ {fname} — 오류: {e}")
+            print(f"  ✗ {fpath.name} — 오류: {e}")
             continue
 
-    # 삭제된 파일 처리 (해시 키가 파일명/전체경로 어느 쪽이든 처리)
+    # 삭제된 파일 처리
     for key in set(existing_hashes.keys()) - current_files:
-        old_proj = cur.execute("SELECT id FROM projects WHERE source_file=? OR source_file=?",
-                              (key, os.path.basename(key))).fetchone()
-        if old_proj:
-            pid = old_proj[0]
-            cur.execute("DELETE FROM comm_log WHERE project_id=?", (pid,))
-            cur.execute("DELETE FROM chunk_tags WHERE chunk_id IN (SELECT id FROM chunks WHERE project_id=?)", (pid,))
-            cur.execute("DELETE FROM chunks WHERE project_id=?", (pid,))
-            cur.execute("DELETE FROM projects WHERE id=?", (pid,))
-        cur.execute("DELETE FROM file_hashes WHERE source_file=?", (key,))
+        delete_project_by_source(cur, key)
         print(f"  ✗ {os.path.basename(key)} (삭제됨)")
 
     # FTS 인덱스 정합성 보장: 대량 변경 시에만 rebuild (트리거가 기본 정합성 유지)
@@ -776,18 +813,18 @@ def import_incremental(directory, db_path=DB_PATH):
 
     conn.commit()
     print(f"\n증분 업데이트 완료: {updated}개 변경, {skipped}개 변경 없음")
-    conn.close()
 
 
 def rebuild_fts(conn):
     """FTS 인덱스 전체 rebuild. health/system에서 명시적 호출 가능."""
+    import logging as _logging
     try:
         cur = conn.cursor()
         cur.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild')")
         cur.execute("INSERT INTO chunks_fts_trigram(chunks_fts_trigram) VALUES('rebuild')")
         cur.execute("INSERT INTO comm_fts(comm_fts) VALUES('rebuild')")
-    except Exception:
-        pass  # FTS rebuild 실패해도 데이터는 보존
+    except Exception as e:
+        _logging.getLogger(__name__).warning("FTS rebuild 실패 (데이터는 보존): %s", e)
 
 
 # ──────────────────────────────────────────────
@@ -815,7 +852,8 @@ def _sanitize_fts(term):
 
 
 def search(query=None, client=None, status=None, person=None, tag=None,
-           chunk_type=None, date_from=None, date_to=None, db_path=DB_PATH):
+           chunk_type=None, date_from=None, date_to=None, db_path=None):
+    db_path = db_path or config.DB_PATH
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
@@ -990,7 +1028,8 @@ def print_results(chunk_results, comm_results):
 # 8. 유틸리티
 # ──────────────────────────────────────────────
 
-def list_projects(db_path=DB_PATH):
+def list_projects(db_path=None):
+    db_path = db_path or config.DB_PATH
     conn = sqlite3.connect(db_path)
     rows = conn.execute("""
         SELECT p.id, p.name, p.client, p.status, p.person_internal, p.capacity,
@@ -1006,7 +1045,8 @@ def list_projects(db_path=DB_PATH):
         print(f"{r[0]:>3} | {(r[1] or '-')[:30]:<30} | {(r[2] or '-')[:15]:<15} | {(r[3] or '-')[:20]:<20} | {(r[4] or '-')[:15]:<15} | {r[6]:>4} | {r[7]:>4}")
 
 
-def show_project(project_id, db_path=DB_PATH):
+def show_project(project_id, db_path=None):
+    db_path = db_path or config.DB_PATH
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
@@ -1063,7 +1103,8 @@ def show_project(project_id, db_path=DB_PATH):
             print(f"  📬 [{cm['log_date']}] {cm['sender']}: {cm['subject'][:70]}")
 
 
-def show_timeline(project_id, db_path=DB_PATH):
+def show_timeline(project_id, db_path=None):
+    db_path = db_path or config.DB_PATH
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     
@@ -1085,7 +1126,8 @@ def show_timeline(project_id, db_path=DB_PATH):
             print(f"           → {cm['summary'][:100]}")
 
 
-def list_tags(db_path=DB_PATH):
+def list_tags(db_path=None):
+    db_path = db_path or config.DB_PATH
     conn = sqlite3.connect(db_path)
     rows = conn.execute("""
         SELECT t.name, COUNT(DISTINCT c.project_id) as cnt
@@ -1112,7 +1154,7 @@ def main():
 
     p_imp = sub.add_parser('import', help='.md → DB 변환')
     p_imp.add_argument('directory')
-    p_imp.add_argument('--db', default=DB_PATH)
+    p_imp.add_argument('--db', default=None)
     p_imp.add_argument('--incremental', action='store_true', help='증분 업데이트 (변경 파일만)')
 
     p_s = sub.add_parser('search', help='다중 조건 검색')
@@ -1124,21 +1166,21 @@ def main():
     p_s.add_argument('--type', dest='chunk_type', help='섹션 유형')
     p_s.add_argument('--from', dest='date_from', help='시작일 (YYYY-MM-DD)')
     p_s.add_argument('--to', dest='date_to', help='종료일')
-    p_s.add_argument('--db', default=DB_PATH)
+    p_s.add_argument('--db', default=None)
 
     p_l = sub.add_parser('list', help='프로젝트 목록')
-    p_l.add_argument('--db', default=DB_PATH)
+    p_l.add_argument('--db', default=None)
 
     p_sh = sub.add_parser('show', help='상세 보기')
     p_sh.add_argument('id', type=int)
-    p_sh.add_argument('--db', default=DB_PATH)
+    p_sh.add_argument('--db', default=None)
 
     p_tl = sub.add_parser('timeline', help='타임라인')
     p_tl.add_argument('id', type=int)
-    p_tl.add_argument('--db', default=DB_PATH)
+    p_tl.add_argument('--db', default=None)
 
     p_t = sub.add_parser('tags', help='태그 목록')
-    p_t.add_argument('--db', default=DB_PATH)
+    p_t.add_argument('--db', default=None)
 
     args = parser.parse_args()
 

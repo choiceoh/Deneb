@@ -32,14 +32,16 @@ mail_to_md.py — 메일 → 프로젝트 .md 자동 삽입
 import json, os, re, sys
 from pathlib import Path
 from datetime import datetime
-from config import DB_PATH, MD_DIR, get_db_connection
+import config
+from config import get_db_connection
 
 # ──────────────────────────────────────────────
 # 1. 프로젝트 매칭 엔진
 # ──────────────────────────────────────────────
 
-def _load_project_index(db_path=DB_PATH):
+def _load_project_index(db_path=None):
     """DB에서 프로젝트 인덱스 로드: {name, file_path, client, persons, keywords}"""
+    db_path = db_path or config.DB_PATH
     if not os.path.exists(db_path):
         return []
     conn = get_db_connection(db_path, row_factory=True)
@@ -70,8 +72,9 @@ def _load_project_index(db_path=DB_PATH):
                 # 매칭용 키워드: 프로젝트명 토큰 + 고객사
                 'keywords': _extract_keywords(r),
             })
-    except Exception:
-        pass
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("프로젝트 인덱스 로드 실패: %s", e)
     finally:
         conn.close()
     return projects
@@ -87,7 +90,7 @@ def _extract_keywords(row):
     return tokens
 
 
-def match_project(subject, sender, body=None, db_path=DB_PATH, project_name=None):
+def match_project(subject, sender, body=None, db_path=None, project_name=None):
     """
     메일을 프로젝트에 매칭.
 
@@ -207,8 +210,9 @@ def _format_entry(subject, sender, summary=None):
     return entry
 
 
-def _find_md_file(project, md_dir=MD_DIR):
+def _find_md_file(project, md_dir=None):
     """프로젝트에 해당하는 .md 파일 경로 찾기"""
+    md_dir = md_dir or config.MD_DIR
     # file_path가 있으면 사용
     if project.get('file_path'):
         fp = project['file_path']
@@ -333,7 +337,7 @@ def _find_section_end(content, start_pos):
 # 3. 통합 API
 # ──────────────────────────────────────────────
 
-def process_mail(mail_data, db_path=DB_PATH, md_dir=MD_DIR, dry_run=False):
+def process_mail(mail_data, db_path=None, md_dir=None, dry_run=False):
     """
     메일 처리 메인 함수.
 
@@ -520,7 +524,7 @@ def _auto_sync_db(md_path, project_id, date_str, subject, sender, summary, db_pa
             conn.close()
 
 
-def process_mail_batch(mails, db_path=DB_PATH, md_dir=MD_DIR, dry_run=False):
+def process_mail_batch(mails, db_path=None, md_dir=None, dry_run=False):
     """여러 메일을 일괄 처리"""
     results = []
     for mail in mails:
@@ -553,8 +557,8 @@ def main():
     parser.add_argument('--project', '-p', help='프로젝트명 직접 지정')
     parser.add_argument('--dry-run', action='store_true', help='매칭만 확인 (삽입 안 함)')
     parser.add_argument('--batch', action='store_true', help='stdin에서 JSON 배열 읽기')
-    parser.add_argument('--db', default=DB_PATH, help='DB 경로')
-    parser.add_argument('--md-dir', default=MD_DIR, help='.md 디렉토리')
+    parser.add_argument('--db', default=None, help='DB 경로')
+    parser.add_argument('--md-dir', default=None, help='.md 디렉토리')
 
     args = parser.parse_args()
 

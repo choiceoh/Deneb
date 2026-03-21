@@ -1,0 +1,89 @@
+{
+  "mcpServers": {
+    "vega": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "SCRIPT_DIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\" && exec \"$SCRIPT_DIR/vega-wrapper.sh\" \"$@\""
+      ],
+      "env": {
+        "DB_PATH": "",
+        "MD_DIR": ""
+      },
+      "tools": [
+        {
+          "name": "ask",
+          "description": "【읽기 — 기본 도구】 자연어로 아무거나 물어보세요. 오타/축약어/조사 모두 자동 보정됩니다. 내부에서 search/brief/urgent/pipeline 등을 자동 선택합니다. 프로젝트명만 넣어도 brief로 안내합니다. 응답: _ai_hint(행동 가이드), _bundle(선제 데이터), _meta(라우팅 정보), match_reasons(매칭 사유). 쓰기만 아래 개별 도구 사용.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "사용자의 자연어 질문 (예: '비금도 어떻게 되고 있어?', '이번 주 급한 거', '전체 현황', '고건 담당 프로젝트', '통계')"
+              },
+              "depth": {
+                "type": "string",
+                "enum": ["brief", "normal", "full"],
+                "description": "응답 깊이. brief=핵심만(토큰 절약), normal=기본, full=전체 상세"
+              },
+              "context": {
+                "type": "object",
+                "properties": {
+                  "recent_project_ids": {
+                    "type": "array",
+                    "items": { "type": "integer" },
+                    "description": "최근 언급된 프로젝트 ID들"
+                  }
+                },
+                "description": "대화 맥락 (대명사 해석용)"
+              }
+            },
+            "required": ["query"]
+          }
+        },
+        {
+          "name": "update",
+          "description": "【쓰기】 프로젝트 상태/필드 변경. '바꿔줘', '변경해줘' 등 명시적 변경 요청 시만 사용. .md+DB 동시 업데이트, audit_log 자동 기록.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "project": { "type": "string", "description": "프로젝트 ID 또는 이름" },
+              "status": { "type": "string", "description": "새 상태 (예: 완료 🟢)" },
+              "field": { "type": "string", "description": "변경할 필드명" },
+              "value": { "type": "string", "description": "새 값" }
+            },
+            "required": ["project"]
+          }
+        },
+        {
+          "name": "mail-append",
+          "description": "【쓰기】 메일 내용을 프로젝트에 기록. '기록해줘', '넣어줘' 등 요청 시 사용. 발신자/제목으로 자동 매칭.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "subject": { "type": "string", "description": "메일 제목" },
+              "sender": { "type": "string", "description": "발신자" },
+              "date": { "type": "string", "description": "날짜 YYYY-MM-DD" },
+              "body": { "type": "string", "description": "본문 요약" },
+              "project": { "type": "string", "description": "프로젝트명 직접 지정" }
+            },
+            "required": ["subject", "sender"]
+          }
+        },
+        {
+          "name": "add-action",
+          "description": "【쓰기】 다음 액션 또는 이력 추가. '추가해줘', '기록해줘' 등 요청 시 사용.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "project": { "type": "string", "description": "프로젝트 ID 또는 이름" },
+              "text": { "type": "string", "description": "추가할 텍스트" },
+              "history": { "type": "boolean", "description": "true면 이력 섹션에 추가" }
+            },
+            "required": ["project", "text"]
+          }
+        }
+      ]
+    }
+  }
+}
