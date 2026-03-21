@@ -1,20 +1,20 @@
 {
-  "name": "openclaw",
+  "name": "deneb",
   "version": "3.141",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
-  "homepage": "https://github.com/openclaw/openclaw#readme",
+  "homepage": "https://github.com/deneb/deneb#readme",
   "bugs": {
-    "url": "https://github.com/openclaw/openclaw/issues"
+    "url": "https://github.com/deneb/deneb/issues"
   },
   "license": "MIT",
   "author": "",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/openclaw/openclaw.git"
+    "url": "git+https://github.com/deneb/deneb.git"
   },
   "bin": {
-    "openclaw": "openclaw.mjs"
+    "deneb": "deneb.mjs"
   },
   "directories": {
     "doc": "docs",
@@ -23,7 +23,7 @@
   "files": [
     "CHANGELOG.md",
     "LICENSE",
-    "openclaw.mjs",
+    "deneb.mjs",
     "README-header.png",
     "README.md",
     "assets/",
@@ -373,7 +373,7 @@
       "types": "./dist/plugin-sdk/discord.d.ts",
       "default": "./dist/plugin-sdk/discord.js"
     },
-    "./cli-entry": "./openclaw.mjs"
+    "./cli-entry": "./deneb.mjs"
   },
   "scripts": {
     "android:assemble": "cd apps/android && ./gradlew :app:assembleDebug",
@@ -382,9 +382,9 @@
     "android:install": "cd apps/android && ./gradlew :app:installDebug",
     "android:lint": "cd apps/android && ./gradlew :app:ktlintCheck :benchmark:ktlintCheck",
     "android:lint:android": "cd apps/android && ./gradlew :app:lintDebug",
-    "android:run": "cd apps/android && ./gradlew :app:installDebug && adb shell am start -n ai.openclaw.app/.MainActivity",
+    "android:run": "cd apps/android && ./gradlew :app:installDebug && adb shell am start -n ai.deneb.app/.MainActivity",
     "android:test": "cd apps/android && ./gradlew :app:testDebugUnitTest",
-    "android:test:integration": "OPENCLAW_LIVE_TEST=1 OPENCLAW_LIVE_ANDROID_NODE=1 vitest run --config vitest.live.config.ts src/gateway/android-node.capabilities.live.test.ts",
+    "android:test:integration": "DENEB_LIVE_TEST=1 DENEB_LIVE_ANDROID_NODE=1 vitest run --config vitest.live.config.ts src/gateway/android-node.capabilities.live.test.ts",
     "build": "pnpm canvas:a2ui:bundle && node scripts/tsdown-build.mjs && node scripts/runtime-postbuild.mjs && pnpm build:plugin-sdk:dts && node --import tsx scripts/write-plugin-sdk-entry-dts.ts && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-export-html-templates.ts && node --import tsx scripts/write-build-info.ts && node --import tsx scripts/write-cli-startup-metadata.ts && node --import tsx scripts/write-cli-compat.ts",
     "build:docker": "node scripts/tsdown-build.mjs && node scripts/runtime-postbuild.mjs && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-export-html-templates.ts && node --import tsx scripts/write-build-info.ts && node --import tsx scripts/write-cli-startup-metadata.ts && node --import tsx scripts/write-cli-compat.ts",
     "build:plugin-sdk:dts": "tsc -p tsconfig.plugin-sdk.dts.json; exit 0",
@@ -405,6 +405,8 @@
     "deadcode:report:ci:ts-unused": "mkdir -p .artifacts/deadcode && pnpm deadcode:ts-unused > .artifacts/deadcode/ts-unused-exports.txt 2>&1 || true",
     "deadcode:ts-prune": "pnpm dlx ts-prune src extensions scripts",
     "deadcode:ts-unused": "pnpm dlx ts-unused-exports tsconfig.json --ignoreTestFiles --exitWithCount",
+    "deneb": "node scripts/run-node.mjs",
+    "deneb:rpc": "node scripts/run-node.mjs agent --mode rpc --json",
     "dev": "node scripts/run-node.mjs",
     "docs:bin": "node scripts/build-docs-list.mjs",
     "docs:check-i18n-glossary": "node scripts/check-docs-i18n-glossary.mjs",
@@ -422,7 +424,7 @@
     "format:docs": "git ls-files 'docs/**/*.md' 'docs/**/*.mdx' 'README.md' | xargs oxfmt --write",
     "format:docs:check": "git ls-files 'docs/**/*.md' 'docs/**/*.mdx' 'README.md' | xargs oxfmt --check",
     "format:fix": "oxfmt --write",
-    "format:swift": "swiftformat --lint --config .swiftformat apps/macos/Sources apps/ios/Sources apps/shared/OpenClawKit/Sources",
+    "format:swift": "swiftformat --lint --config .swiftformat apps/macos/Sources apps/ios/Sources apps/shared/DenebKit/Sources",
     "gateway:dev": "OPENCLAW_SKIP_CHANNELS=1 CLAWDBOT_SKIP_CHANNELS=1 node scripts/run-node.mjs --dev gateway",
     "gateway:dev:reset": "OPENCLAW_SKIP_CHANNELS=1 CLAWDBOT_SKIP_CHANNELS=1 node scripts/run-node.mjs --dev gateway --reset",
     "gateway:watch": "node scripts/watch-node.mjs gateway --force",
@@ -431,10 +433,10 @@
     "ios:beta": "bash scripts/ios-beta-release.sh",
     "ios:beta:archive": "bash scripts/ios-beta-archive.sh",
     "ios:beta:prepare": "bash scripts/ios-beta-prepare.sh",
-    "ios:build": "bash -lc './scripts/ios-configure-signing.sh && ./scripts/ios-write-version-xcconfig.sh && cd apps/ios && xcodegen generate && xcodebuild -project OpenClaw.xcodeproj -scheme OpenClaw -destination \"${IOS_DEST:-platform=iOS Simulator,name=iPhone 17}\" -configuration Debug build'",
+    "ios:build": "bash -lc './scripts/ios-configure-signing.sh && ./scripts/ios-write-version-xcconfig.sh && cd apps/ios && xcodegen generate && xcodebuild -project Deneb.xcodeproj -scheme Deneb -destination \"${IOS_DEST:-platform=iOS Simulator,name=iPhone 17}\" -configuration Debug build'",
     "ios:gen": "bash -lc './scripts/ios-configure-signing.sh && ./scripts/ios-write-version-xcconfig.sh && cd apps/ios && xcodegen generate'",
-    "ios:open": "bash -lc './scripts/ios-configure-signing.sh && ./scripts/ios-write-version-xcconfig.sh && cd apps/ios && xcodegen generate && open OpenClaw.xcodeproj'",
-    "ios:run": "bash -lc './scripts/ios-configure-signing.sh && ./scripts/ios-write-version-xcconfig.sh && cd apps/ios && xcodegen generate && xcodebuild -project OpenClaw.xcodeproj -scheme OpenClaw -destination \"${IOS_DEST:-platform=iOS Simulator,name=iPhone 17}\" -configuration Debug build && xcrun simctl boot \"${IOS_SIM:-iPhone 17}\" || true && xcrun simctl launch booted ai.openclaw.ios'",
+    "ios:open": "bash -lc './scripts/ios-configure-signing.sh && ./scripts/ios-write-version-xcconfig.sh && cd apps/ios && xcodegen generate && open Deneb.xcodeproj'",
+    "ios:run": "bash -lc './scripts/ios-configure-signing.sh && ./scripts/ios-write-version-xcconfig.sh && cd apps/ios && xcodegen generate && xcodebuild -project Deneb.xcodeproj -scheme Deneb -destination \"${IOS_DEST:-platform=iOS Simulator,name=iPhone 17}\" -configuration Debug build && xcrun simctl boot \"${IOS_SIM:-iPhone 17}\" || true && xcrun simctl launch booted ai.deneb.ios'",
     "lint": "oxlint --type-aware",
     "lint:agent:ingress-owner": "node scripts/check-ingress-agent-owner-context.mjs",
     "lint:all": "pnpm lint && pnpm lint:swift",
@@ -459,22 +461,20 @@
     "lint:ui:no-raw-window-open": "node scripts/check-no-raw-window-open.mjs",
     "lint:web-search-provider-boundaries": "node scripts/check-web-search-provider-boundaries.mjs",
     "lint:webhook:no-low-level-body-read": "node scripts/check-webhook-auth-body-order.mjs",
-    "mac:open": "open dist/OpenClaw.app",
+    "mac:open": "open dist/Deneb.app",
     "mac:package": "bash scripts/package-mac-app.sh",
     "mac:restart": "bash scripts/restart-mac.sh",
     "moltbot:rpc": "node scripts/run-node.mjs agent --mode rpc --json",
-    "openclaw": "node scripts/run-node.mjs",
-    "openclaw:rpc": "node scripts/run-node.mjs agent --mode rpc --json",
     "plugin-sdk:check-exports": "node scripts/sync-plugin-sdk-exports.mjs --check",
     "plugin-sdk:sync-exports": "node scripts/sync-plugin-sdk-exports.mjs",
     "plugins:sync": "node --import tsx scripts/sync-plugin-versions.ts",
     "prepack": "pnpm build && pnpm ui:build",
     "prepare": "command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git config core.hooksPath git-hooks || exit 0",
-    "protocol:check": "pnpm protocol:gen && pnpm protocol:gen:swift && git diff --exit-code -- dist/protocol.schema.json apps/macos/Sources/OpenClawProtocol/GatewayModels.swift apps/shared/OpenClawKit/Sources/OpenClawProtocol/GatewayModels.swift",
+    "protocol:check": "pnpm protocol:gen && pnpm protocol:gen:swift && git diff --exit-code -- dist/protocol.schema.json apps/macos/Sources/DenebProtocol/GatewayModels.swift apps/shared/DenebKit/Sources/DenebProtocol/GatewayModels.swift",
     "protocol:gen": "node --import tsx scripts/protocol-gen.ts",
     "protocol:gen:swift": "node --import tsx scripts/protocol-gen-swift.ts",
     "release:check": "pnpm config:docs:check && node scripts/stage-bundled-plugin-runtime-deps.mjs && node --import tsx scripts/release-check.ts",
-    "release:openclaw:npm:check": "node --import tsx scripts/openclaw-npm-release-check.ts",
+    "release:deneb:npm:check": "node --import tsx scripts/deneb-npm-release-check.ts",
     "release:plugins:npm:check": "node --import tsx scripts/plugin-npm-release-check.ts",
     "release:plugins:npm:plan": "node --import tsx scripts/plugin-npm-release-plan.ts",
     "stage:bundled-plugin-runtime-deps": "node scripts/stage-bundled-plugin-runtime-deps.mjs",
