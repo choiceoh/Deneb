@@ -171,9 +171,6 @@ import {
   type PollParams,
   PollParamsSchema,
   PROTOCOL_VERSION,
-  type PushTestParams,
-  PushTestParamsSchema,
-  PushTestResultSchema,
   type PresenceEntry,
   PresenceEntrySchema,
   ProtocolSchemas,
@@ -320,7 +317,6 @@ export const validateNodePendingDrainParams = ajv.compile<NodePendingDrainParams
 export const validateNodePendingEnqueueParams = ajv.compile<NodePendingEnqueueParams>(
   NodePendingEnqueueParamsSchema,
 );
-export const validatePushTestParams = ajv.compile<PushTestParams>(PushTestParamsSchema);
 export const validateSecretsResolveParams = ajv.compile<SecretsResolveParams>(
   SecretsResolveParamsSchema,
 );
@@ -497,8 +493,6 @@ export {
   AgentIdentityParamsSchema,
   AgentIdentityResultSchema,
   WakeParamsSchema,
-  PushTestParamsSchema,
-  PushTestResultSchema,
   NodePairRequestParamsSchema,
   NodePairListParamsSchema,
   NodePairApproveParamsSchema,

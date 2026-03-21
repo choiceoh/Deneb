@@ -130,7 +130,6 @@ import {
   NodePairVerifyParamsSchema,
   NodeRenameParamsSchema,
 } from "./nodes.js";
-import { PushTestParamsSchema, PushTestResultSchema } from "./push.js";
 import {
   SecretsReloadParamsSchema,
   SecretsResolveAssignmentSchema,
@@ -200,8 +199,6 @@ export const ProtocolSchemas = {
   NodePendingEnqueueParams: NodePendingEnqueueParamsSchema,
   NodePendingEnqueueResult: NodePendingEnqueueResultSchema,
   NodeInvokeRequestEvent: NodeInvokeRequestEventSchema,
-  PushTestParams: PushTestParamsSchema,
-  PushTestResult: PushTestResultSchema,
   SecretsReloadParams: SecretsReloadParamsSchema,
   SecretsResolveParams: SecretsResolveParamsSchema,
   SecretsResolveAssignment: SecretsResolveAssignmentSchema,
