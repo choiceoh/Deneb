@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { DENEB_CLI_ENV_VALUE } from "./deneb-exec-env.js";
 import {
   isDangerousHostEnvOverrideVarName,
   isDangerousHostEnvVarName,
@@ -10,7 +11,6 @@ import {
   sanitizeHostExecEnv,
   sanitizeSystemRunEnvOverrides,
 } from "./host-env-security.js";
-import { DENEB_CLI_ENV_VALUE } from "./deneb-exec-env.js";
 
 function getSystemGitPath() {
   if (process.platform === "win32") {

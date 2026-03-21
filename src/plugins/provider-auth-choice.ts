@@ -98,9 +98,7 @@ export async function runProviderPluginAuthMethod(params: {
   const defaultAgentId = resolveDefaultAgentId(params.config);
   const agentDir =
     params.agentDir ??
-    (agentId === defaultAgentId
-      ? resolveDenebAgentDir()
-      : resolveAgentDir(params.config, agentId));
+    (agentId === defaultAgentId ? resolveDenebAgentDir() : resolveAgentDir(params.config, agentId));
   const workspaceDir =
     params.workspaceDir ??
     resolveAgentWorkspaceDir(params.config, agentId) ??

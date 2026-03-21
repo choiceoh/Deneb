@@ -1,8 +1,5 @@
 import type { DenebConfig } from "deneb/plugin-sdk/config-runtime";
-import {
-  readConfigFileSnapshotForWrite,
-  writeConfigFile,
-} from "deneb/plugin-sdk/config-runtime";
+import { readConfigFileSnapshotForWrite, writeConfigFile } from "deneb/plugin-sdk/config-runtime";
 import {
   loadCronStore,
   resolveCronStorePath,

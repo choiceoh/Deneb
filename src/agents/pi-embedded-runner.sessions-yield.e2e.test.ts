@@ -228,8 +228,7 @@ describe("sessions_yield e2e", () => {
 
       const entries = await readSessionEntries(sessionFile);
       const yieldContext = entries.find(
-        (entry) =>
-          entry.type === "custom_message" && entry.customType === "deneb.sessions_yield",
+        (entry) => entry.type === "custom_message" && entry.customType === "deneb.sessions_yield",
       );
       expect(yieldContext).toMatchObject({
         content: expect.stringContaining("Yielding turn."),

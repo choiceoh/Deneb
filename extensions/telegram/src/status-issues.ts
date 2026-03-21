@@ -4,10 +4,7 @@ import {
   isRecord,
   resolveEnabledConfiguredAccountId,
 } from "deneb/plugin-sdk/channel-runtime";
-import type {
-  ChannelAccountSnapshot,
-  ChannelStatusIssue,
-} from "deneb/plugin-sdk/channel-runtime";
+import type { ChannelAccountSnapshot, ChannelStatusIssue } from "deneb/plugin-sdk/channel-runtime";
 
 type TelegramAccountStatus = {
   accountId?: unknown;

@@ -1,4 +1,3 @@
-import { type Bot, GrammyError, InputFile } from "grammy";
 import type { ReplyToMode } from "deneb/plugin-sdk/config-runtime";
 import type { MarkdownTableMode } from "deneb/plugin-sdk/config-runtime";
 import { fireAndForgetHook } from "deneb/plugin-sdk/hook-runtime";
@@ -18,6 +17,7 @@ import type { ReplyPayload } from "deneb/plugin-sdk/reply-runtime";
 import { danger, logVerbose } from "deneb/plugin-sdk/runtime-env";
 import type { RuntimeEnv } from "deneb/plugin-sdk/runtime-env";
 import { loadWebMedia } from "deneb/plugin-sdk/web-media";
+import { type Bot, GrammyError, InputFile } from "grammy";
 import type { TelegramInlineButtons } from "../button-types.js";
 import { splitTelegramCaption } from "../caption.js";
 import {

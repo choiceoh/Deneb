@@ -2,8 +2,8 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveGitHeadPath } from "./git-root.js";
 import { resolveDenebPackageRootSync } from "./deneb-root.js";
+import { resolveGitHeadPath } from "./git-root.js";
 
 const formatCommit = (value?: string | null) => {
   if (!value) {

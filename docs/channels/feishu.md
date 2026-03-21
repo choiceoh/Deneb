@@ -439,8 +439,8 @@ deneb pairing list feishu
 
 ## Gateway management commands
 
-| Command                    | Description                   |
-| -------------------------- | ----------------------------- |
+| Command                 | Description                   |
+| ----------------------- | ----------------------------- |
 | `deneb gateway status`  | Show gateway status           |
 | `deneb gateway install` | Install/start gateway service |
 | `deneb gateway stop`    | Stop gateway service          |

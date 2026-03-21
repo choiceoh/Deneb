@@ -206,8 +206,7 @@ function buildSessionPresentation(params: {
       id: ACP_THOUGHT_LEVEL_CONFIG_ID,
       name: "Thought level",
       category: "thought_level",
-      description:
-        "Controls how much deliberate reasoning Deneb requests from the Gateway model.",
+      description: "Controls how much deliberate reasoning Deneb requests from the Gateway model.",
       currentValue: currentModeId,
       values: availableLevelIds,
     }),

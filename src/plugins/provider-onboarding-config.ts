@@ -73,10 +73,7 @@ export function applyOnboardAuthAgentModelsAndProviders(
   };
 }
 
-export function applyAgentDefaultModelPrimary(
-  cfg: DenebConfig,
-  primary: string,
-): DenebConfig {
+export function applyAgentDefaultModelPrimary(cfg: DenebConfig, primary: string): DenebConfig {
   const existingFallbacks = extractAgentDefaultModelFallbacks(cfg.agents?.defaults?.model);
   return {
     ...cfg,

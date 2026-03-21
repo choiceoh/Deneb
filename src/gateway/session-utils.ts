@@ -589,10 +589,7 @@ function resolveDefaultStoreAgentId(cfg: DenebConfig): string {
   return normalizeAgentId(resolveDefaultAgentId(cfg));
 }
 
-export function resolveSessionStoreKey(params: {
-  cfg: DenebConfig;
-  sessionKey: string;
-}): string {
+export function resolveSessionStoreKey(params: { cfg: DenebConfig; sessionKey: string }): string {
   const raw = (params.sessionKey ?? "").trim();
   if (!raw) {
     return raw;

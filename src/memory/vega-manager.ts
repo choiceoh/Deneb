@@ -519,8 +519,7 @@ export class VegaMemoryManager implements MemorySearchManager {
       semanticSearch: typeof obj.semanticSearch === "boolean" ? obj.semanticSearch : false,
       reranking: typeof obj.reranking === "boolean" ? obj.reranking : false,
       rerankMode: typeof obj.rerankMode === "string" ? obj.rerankMode : undefined,
-      inferenceBackend:
-        typeof obj.inferenceBackend === "string" ? obj.inferenceBackend : undefined,
+      inferenceBackend: typeof obj.inferenceBackend === "string" ? obj.inferenceBackend : undefined,
       searchModes: Array.isArray(obj.searchModes)
         ? obj.searchModes.filter((s): s is string => typeof s === "string")
         : ["search"],

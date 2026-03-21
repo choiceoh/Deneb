@@ -61,11 +61,7 @@ describe("config cli integration", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "deneb-config-cli-int-"));
     const configPath = path.join(tempDir, "deneb.json");
     const batchPath = path.join(tempDir, "batch.json");
-    const envSnapshot = captureEnv([
-      "DENEB_CONFIG_PATH",
-      "DENEB_TEST_FAST",
-      "DISCORD_BOT_TOKEN",
-    ]);
+    const envSnapshot = captureEnv(["DENEB_CONFIG_PATH", "DENEB_TEST_FAST", "DISCORD_BOT_TOKEN"]);
     try {
       fs.writeFileSync(
         configPath,
@@ -149,11 +145,7 @@ describe("config cli integration", () => {
   it("keeps file unchanged when real-file dry-run fails and reports JSON error payload", async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "deneb-config-cli-int-fail-"));
     const configPath = path.join(tempDir, "deneb.json");
-    const envSnapshot = captureEnv([
-      "DENEB_CONFIG_PATH",
-      "DENEB_TEST_FAST",
-      "MISSING_TEST_SECRET",
-    ]);
+    const envSnapshot = captureEnv(["DENEB_CONFIG_PATH", "DENEB_TEST_FAST", "MISSING_TEST_SECRET"]);
     try {
       fs.writeFileSync(
         configPath,

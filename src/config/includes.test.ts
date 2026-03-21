@@ -665,10 +665,7 @@ describe("security: path traversal protection (CWE-22)", () => {
         }
 
         expect(() =>
-          resolveConfigIncludes(
-            { $include: "./extra.json5" },
-            path.join(configDir, "deneb.json"),
-          ),
+          resolveConfigIncludes({ $include: "./extra.json5" }, path.join(configDir, "deneb.json")),
         ).toThrow(/security checks|hardlink/i);
       } finally {
         await fs.rm(tempRoot, { recursive: true, force: true });

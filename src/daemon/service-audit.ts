@@ -226,8 +226,7 @@ function auditGatewayToken(
   }
   issues.push({
     code: SERVICE_AUDIT_CODES.gatewayTokenMismatch,
-    message:
-      "Gateway service DENEB_GATEWAY_TOKEN does not match gateway.auth.token in deneb.json",
+    message: "Gateway service DENEB_GATEWAY_TOKEN does not match gateway.auth.token in deneb.json",
     detail: "service token is stale",
     level: "recommended",
   });

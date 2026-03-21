@@ -242,19 +242,13 @@ describe("diagnostics-otel service", () => {
     });
 
     expect(telemetryState.counters.get("deneb.webhook.received")?.add).toHaveBeenCalled();
-    expect(
-      telemetryState.histograms.get("deneb.webhook.duration_ms")?.record,
-    ).toHaveBeenCalled();
+    expect(telemetryState.histograms.get("deneb.webhook.duration_ms")?.record).toHaveBeenCalled();
     expect(telemetryState.counters.get("deneb.message.queued")?.add).toHaveBeenCalled();
     expect(telemetryState.counters.get("deneb.message.processed")?.add).toHaveBeenCalled();
-    expect(
-      telemetryState.histograms.get("deneb.message.duration_ms")?.record,
-    ).toHaveBeenCalled();
+    expect(telemetryState.histograms.get("deneb.message.duration_ms")?.record).toHaveBeenCalled();
     expect(telemetryState.histograms.get("deneb.queue.wait_ms")?.record).toHaveBeenCalled();
     expect(telemetryState.counters.get("deneb.session.stuck")?.add).toHaveBeenCalled();
-    expect(
-      telemetryState.histograms.get("deneb.session.stuck_age_ms")?.record,
-    ).toHaveBeenCalled();
+    expect(telemetryState.histograms.get("deneb.session.stuck_age_ms")?.record).toHaveBeenCalled();
     expect(telemetryState.counters.get("deneb.run.attempt")?.add).toHaveBeenCalled();
 
     const spanNames = telemetryState.tracer.startSpan.mock.calls.map((call) => call[0]);

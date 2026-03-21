@@ -14,8 +14,7 @@ import { registerTelegramNativeCommands } from "./bot-native-commands.js";
 type GetPluginCommandSpecsFn =
   typeof import("deneb/plugin-sdk/plugin-runtime").getPluginCommandSpecs;
 type MatchPluginCommandFn = typeof import("deneb/plugin-sdk/plugin-runtime").matchPluginCommand;
-type ExecutePluginCommandFn =
-  typeof import("deneb/plugin-sdk/plugin-runtime").executePluginCommand;
+type ExecutePluginCommandFn = typeof import("deneb/plugin-sdk/plugin-runtime").executePluginCommand;
 type DispatchReplyWithBufferedBlockDispatcherFn =
   typeof import("deneb/plugin-sdk/reply-runtime").dispatchReplyWithBufferedBlockDispatcher;
 type DispatchReplyWithBufferedBlockDispatcherResult = Awaited<
@@ -82,8 +81,7 @@ vi.mock("deneb/plugin-sdk/channel-runtime", async (importOriginal) => {
   };
 });
 vi.mock("deneb/plugin-sdk/channel-reply-pipeline", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("deneb/plugin-sdk/channel-reply-pipeline")>();
+  const actual = await importOriginal<typeof import("deneb/plugin-sdk/channel-reply-pipeline")>();
   return {
     ...actual,
     createChannelReplyPipeline: replyPipelineMocks.createChannelReplyPipeline,

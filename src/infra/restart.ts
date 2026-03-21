@@ -301,10 +301,7 @@ export function triggerDenebRestart(): RestartAttempt {
 
   const tried: string[] = [];
   if (process.platform === "linux") {
-    const unit = normalizeSystemdUnit(
-      process.env.DENEB_SYSTEMD_UNIT,
-      process.env.DENEB_PROFILE,
-    );
+    const unit = normalizeSystemdUnit(process.env.DENEB_SYSTEMD_UNIT, process.env.DENEB_PROFILE);
     const userArgs = ["--user", "restart", unit];
     tried.push(`systemctl ${userArgs.join(" ")}`);
     const userRestart = spawnSync("systemctl", userArgs, {
@@ -343,8 +340,7 @@ export function triggerDenebRestart(): RestartAttempt {
   }
 
   const label =
-    process.env.DENEB_LAUNCHD_LABEL ||
-    resolveGatewayLaunchAgentLabel(process.env.DENEB_PROFILE);
+    process.env.DENEB_LAUNCHD_LABEL || resolveGatewayLaunchAgentLabel(process.env.DENEB_PROFILE);
   const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
   const domain = uid !== undefined ? `gui/${uid}` : "gui/501";
   const target = `${domain}/${label}`;

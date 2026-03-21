@@ -59,10 +59,7 @@ export function registerStatusHealthSessionsCommands(program: Command) {
           ["deneb status --all", "Full diagnosis (read-only)."],
           ["deneb status --json", "Machine-readable output."],
           ["deneb status --usage", "Show model provider usage/quota snapshots."],
-          [
-            "deneb status --deep",
-            "Run channel probes (WA + Telegram + Discord + Slack + Signal).",
-          ],
+          ["deneb status --deep", "Run channel probes (WA + Telegram + Discord + Slack + Signal)."],
           ["deneb status --deep --timeout 5000", "Tighten probe timeout."],
         ])}`,
     )
@@ -182,10 +179,7 @@ export function registerStatusHealthSessionsCommands(program: Command) {
           ["deneb sessions cleanup --enforce", "Apply maintenance now."],
           ["deneb sessions cleanup --agent work --dry-run", "Preview one agent store."],
           ["deneb sessions cleanup --all-agents --dry-run", "Preview all agent stores."],
-          [
-            "deneb sessions cleanup --enforce --store ./tmp/sessions.json",
-            "Use a specific store.",
-          ],
+          ["deneb sessions cleanup --enforce --store ./tmp/sessions.json", "Use a specific store."],
         ])}`,
     )
     .action(async (opts, command) => {

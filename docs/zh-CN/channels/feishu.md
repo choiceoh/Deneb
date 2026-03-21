@@ -444,8 +444,8 @@ deneb pairing list feishu
 
 ## Gateway 网关管理命令
 
-| Command                    | Description                |
-| -------------------------- | -------------------------- |
+| Command                 | Description                |
+| ----------------------- | -------------------------- |
 | `deneb gateway status`  | 显示 Gateway 网关状态      |
 | `deneb gateway install` | 安装/启动 Gateway 网关服务 |
 | `deneb gateway stop`    | 停止 Gateway 网关服务      |

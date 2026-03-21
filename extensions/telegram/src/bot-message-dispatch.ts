@@ -1,4 +1,3 @@
-import type { Bot } from "grammy";
 import { resolveAgentDir } from "deneb/plugin-sdk/agent-runtime";
 import {
   findModelInCatalog,
@@ -27,6 +26,7 @@ import { clearHistoryEntriesIfEnabled } from "deneb/plugin-sdk/reply-runtime";
 import type { ReplyPayload } from "deneb/plugin-sdk/reply-runtime";
 import { danger, logVerbose } from "deneb/plugin-sdk/runtime-env";
 import type { RuntimeEnv } from "deneb/plugin-sdk/runtime-env";
+import type { Bot } from "grammy";
 import { defaultTelegramBotDeps, type TelegramBotDeps } from "./bot-deps.js";
 import type { TelegramMessageContext } from "./bot-message-context.js";
 import type { TelegramBotOptions } from "./bot.js";

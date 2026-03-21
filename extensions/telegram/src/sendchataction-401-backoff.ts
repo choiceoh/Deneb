@@ -1,8 +1,4 @@
-import {
-  computeBackoff,
-  sleepWithAbort,
-  type BackoffPolicy,
-} from "deneb/plugin-sdk/infra-runtime";
+import { computeBackoff, sleepWithAbort, type BackoffPolicy } from "deneb/plugin-sdk/infra-runtime";
 
 export type TelegramSendChatActionLogger = (message: string) => void;
 

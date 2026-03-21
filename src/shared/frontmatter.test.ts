@@ -51,9 +51,7 @@ describe("shared/frontmatter", () => {
 
   test("resolveDenebManifestBlock returns undefined for invalid input", () => {
     expect(resolveDenebManifestBlock({ frontmatter: {} })).toBeUndefined();
-    expect(
-      resolveDenebManifestBlock({ frontmatter: { metadata: "not-json5" } }),
-    ).toBeUndefined();
+    expect(resolveDenebManifestBlock({ frontmatter: { metadata: "not-json5" } })).toBeUndefined();
     expect(resolveDenebManifestBlock({ frontmatter: { metadata: "123" } })).toBeUndefined();
     expect(resolveDenebManifestBlock({ frontmatter: { metadata: "[]" } })).toBeUndefined();
     expect(
@@ -78,10 +76,7 @@ describe("shared/frontmatter", () => {
       config: [],
     });
     expect(resolveDenebManifestRequires({})).toBeUndefined();
-    expect(resolveDenebManifestOs({ os: [" darwin ", "linux", ""] })).toEqual([
-      "darwin",
-      "linux",
-    ]);
+    expect(resolveDenebManifestOs({ os: [" darwin ", "linux", ""] })).toEqual(["darwin", "linux"]);
   });
 
   it("parses and applies install common fields", () => {
@@ -146,10 +141,7 @@ describe("shared/frontmatter", () => {
       kind: "npm",
     });
     expect(
-      applyDenebManifestInstallCommonFields(
-        { id: "keep", label: "Keep", bins: ["bun"] },
-        parsed!,
-      ),
+      applyDenebManifestInstallCommonFields({ id: "keep", label: "Keep", bins: ["bun"] }, parsed!),
     ).toEqual({
       id: "keep",
       label: "Keep",

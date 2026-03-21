@@ -31,12 +31,8 @@ describe("npm registry spec validation", () => {
     expect(validateRegistryNpmSpec("git+ssh://github.com/deneb/deneb")).toContain(
       "URLs are not allowed",
     );
-    expect(validateRegistryNpmSpec("@deneb/voice-call@")).toContain(
-      "missing version/tag after @",
-    );
-    expect(validateRegistryNpmSpec("@deneb/voice-call@../beta")).toContain(
-      "invalid version/tag",
-    );
+    expect(validateRegistryNpmSpec("@deneb/voice-call@")).toContain("missing version/tag after @");
+    expect(validateRegistryNpmSpec("@deneb/voice-call@../beta")).toContain("invalid version/tag");
   });
 });
 

@@ -27,9 +27,9 @@ describe("detectRespawnSupervisor", () => {
   });
 
   it("detects scheduled-task supervision on Windows from either hint family", () => {
-    expect(
-      detectRespawnSupervisor({ DENEB_WINDOWS_TASK_NAME: "Deneb Gateway" }, "win32"),
-    ).toBe("schtasks");
+    expect(detectRespawnSupervisor({ DENEB_WINDOWS_TASK_NAME: "Deneb Gateway" }, "win32")).toBe(
+      "schtasks",
+    );
     expect(
       detectRespawnSupervisor(
         {
@@ -60,8 +60,6 @@ describe("detectRespawnSupervisor", () => {
         "linux",
       ),
     ).toBeNull();
-    expect(
-      detectRespawnSupervisor({ LAUNCH_JOB_LABEL: "ai.deneb.gateway" }, "freebsd"),
-    ).toBeNull();
+    expect(detectRespawnSupervisor({ LAUNCH_JOB_LABEL: "ai.deneb.gateway" }, "freebsd")).toBeNull();
   });
 });

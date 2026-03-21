@@ -367,9 +367,7 @@ async function ensureMockCliScriptPath(): Promise<string> {
     return await sharedMockCliScriptPath;
   }
   sharedMockCliScriptPath = (async () => {
-    const dir = await mkdtemp(
-      path.join(resolvePreferredDenebTmpDir(), "deneb-acpx-runtime-test-"),
-    );
+    const dir = await mkdtemp(path.join(resolvePreferredDenebTmpDir(), "deneb-acpx-runtime-test-"));
     tempDirs.push(dir);
     const scriptPath = path.join(dir, "mock-acpx.cjs");
     await writeFile(scriptPath, MOCK_CLI_SCRIPT, "utf8");

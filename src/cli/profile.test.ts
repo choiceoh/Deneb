@@ -5,13 +5,7 @@ import { applyCliProfileEnv, parseCliProfileArgs } from "./profile.js";
 
 describe("parseCliProfileArgs", () => {
   it("leaves gateway --dev for subcommands", () => {
-    const res = parseCliProfileArgs([
-      "node",
-      "deneb",
-      "gateway",
-      "--dev",
-      "--allow-unconfigured",
-    ]);
+    const res = parseCliProfileArgs(["node", "deneb", "gateway", "--dev", "--allow-unconfigured"]);
     if (!res.ok) {
       throw new Error(res.error);
     }
@@ -94,9 +88,7 @@ describe("applyCliProfileEnv", () => {
 
     const resolvedHome = path.resolve("/srv/deneb-home");
     expect(env.DENEB_STATE_DIR).toBe(path.join(resolvedHome, ".deneb-work"));
-    expect(env.DENEB_CONFIG_PATH).toBe(
-      path.join(resolvedHome, ".deneb-work", "deneb.json"),
-    );
+    expect(env.DENEB_CONFIG_PATH).toBe(path.join(resolvedHome, ".deneb-work", "deneb.json"));
   });
 });
 
@@ -155,9 +147,7 @@ describe("formatCliCommand", () => {
   });
 
   it("handles command with no args after deneb", () => {
-    expect(formatCliCommand("deneb", { DENEB_PROFILE: "test" })).toBe(
-      "deneb --profile test",
-    );
+    expect(formatCliCommand("deneb", { DENEB_PROFILE: "test" })).toBe("deneb --profile test");
   });
 
   it("handles pnpm wrapper", () => {

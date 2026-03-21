@@ -22,10 +22,7 @@ const ROOT_COMMANDS_HINT =
 
 const EXAMPLES = [
   ["deneb models --help", "Show detailed help for the models command."],
-  [
-    "deneb channels login --verbose",
-    "Link personal WhatsApp Web and show QR + connection logs.",
-  ],
+  ["deneb channels login --verbose", "Link personal WhatsApp Web and show QR + connection logs."],
   [
     'deneb message send --target +15555550123 --message "Hi" --json',
     "Send via your web session and print JSON result.",
@@ -111,9 +108,7 @@ export function configureProgramHelp(program: Command, ctx: ProgramContext) {
     hasRootVersionAlias(process.argv)
   ) {
     const commit = resolveCommitHash({ moduleUrl: import.meta.url });
-    console.log(
-      commit ? `Deneb ${ctx.programVersion} (${commit})` : `Deneb ${ctx.programVersion}`,
-    );
+    console.log(commit ? `Deneb ${ctx.programVersion} (${commit})` : `Deneb ${ctx.programVersion}`);
     process.exit(0);
   }
 

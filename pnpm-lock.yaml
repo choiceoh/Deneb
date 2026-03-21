@@ -73,9 +73,6 @@ importers:
       '@mariozechner/pi-coding-agent':
         specifier: 0.60.0
         version: 0.60.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(ws@8.19.0)(zod@4.3.6)
-      '@mariozechner/pi-tui':
-        specifier: 0.60.0
-        version: 0.60.0
       '@matrix-org/matrix-sdk-crypto-nodejs':
         specifier: ^0.4.0
         version: 0.4.0

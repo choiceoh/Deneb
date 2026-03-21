@@ -1036,9 +1036,7 @@ export function collectNodeDenyCommandPatternFindings(cfg: DenebConfig): Securit
   return findings;
 }
 
-export function collectNodeDangerousAllowCommandFindings(
-  cfg: DenebConfig,
-): SecurityAuditFinding[] {
+export function collectNodeDangerousAllowCommandFindings(cfg: DenebConfig): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
   const allowRaw = cfg.gateway?.nodes?.allowCommands;
   if (!Array.isArray(allowRaw) || allowRaw.length === 0) {

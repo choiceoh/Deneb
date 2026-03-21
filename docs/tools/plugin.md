@@ -65,8 +65,8 @@ marketplace source with `--marketplace`.
 
 These are published to npm and installed with `deneb plugins install`:
 
-| Plugin          | Package                | Docs                               |
-| --------------- | ---------------------- | ---------------------------------- |
+| Plugin          | Package             | Docs                               |
+| --------------- | ------------------- | ---------------------------------- |
 | Matrix          | `@deneb/matrix`     | [Matrix](/channels/matrix)         |
 | Microsoft Teams | `@deneb/msteams`    | [MS Teams](/channels/msteams)      |
 | Nostr           | `@deneb/nostr`      | [Nostr](/channels/nostr)           |

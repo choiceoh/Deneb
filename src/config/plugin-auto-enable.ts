@@ -55,10 +55,7 @@ function accountsHaveKeys(value: unknown, keys: readonly string[]): boolean {
   return false;
 }
 
-function resolveChannelConfig(
-  cfg: DenebConfig,
-  channelId: string,
-): Record<string, unknown> | null {
+function resolveChannelConfig(cfg: DenebConfig, channelId: string): Record<string, unknown> | null {
   const channels = cfg.channels as Record<string, unknown> | undefined;
   const entry = channels?.[channelId];
   return isRecord(entry) ? entry : null;

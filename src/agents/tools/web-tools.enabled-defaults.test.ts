@@ -742,9 +742,7 @@ describe("web_search kimi provider", () => {
                 },
               },
             ],
-            search_results: [
-              { title: "Deneb", url: "https://deneb.ai/docs", content: "docs" },
-            ],
+            search_results: [{ title: "Deneb", url: "https://deneb.ai/docs", content: "docs" }],
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         );

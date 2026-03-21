@@ -484,10 +484,7 @@ export function listPluginCommands(): Array<{
   }));
 }
 
-function resolvePluginNativeName(
-  command: DenebPluginCommandDefinition,
-  provider?: string,
-): string {
+function resolvePluginNativeName(command: DenebPluginCommandDefinition, provider?: string): string {
   const providerName = provider?.trim().toLowerCase();
   const providerOverride = providerName ? command.nativeNames?.[providerName] : undefined;
   if (typeof providerOverride === "string" && providerOverride.trim()) {

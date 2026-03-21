@@ -31,9 +31,7 @@ export function normalizeSpeechProviderId(
 function resolveSpeechProviderPluginEntries(cfg?: DenebConfig): SpeechProviderPlugin[] {
   const active = getActivePluginRegistry();
   const registry =
-    (active?.speechProviders?.length ?? 0) > 0 || !cfg
-      ? active
-      : loadDenebPlugins({ config: cfg });
+    (active?.speechProviders?.length ?? 0) > 0 || !cfg ? active : loadDenebPlugins({ config: cfg });
   return registry?.speechProviders?.map((entry) => entry.provider) ?? [];
 }
 

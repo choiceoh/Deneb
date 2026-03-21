@@ -50,9 +50,7 @@ const resolveGatewayBindHost = vi.fn(
 );
 const pickPrimaryTailnetIPv4 = vi.fn(() => "100.64.0.9");
 const resolveGatewayPort = vi.fn((_cfg?: unknown, _env?: unknown) => 18789);
-const resolveStateDir = vi.fn(
-  (env: NodeJS.ProcessEnv) => env.DENEB_STATE_DIR ?? "/tmp/deneb-cli",
-);
+const resolveStateDir = vi.fn((env: NodeJS.ProcessEnv) => env.DENEB_STATE_DIR ?? "/tmp/deneb-cli");
 const resolveConfigPath = vi.fn((env: NodeJS.ProcessEnv, stateDir: string) => {
   return env.DENEB_CONFIG_PATH ?? `${stateDir}/deneb.json`;
 });

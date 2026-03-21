@@ -148,9 +148,7 @@ function createSignalAccountOverrideCfg(): DenebConfig {
   } as DenebConfig;
 }
 
-function createDiscordModerationOverrideCfg(params?: {
-  channelsEnabled?: boolean;
-}): DenebConfig {
+function createDiscordModerationOverrideCfg(params?: { channelsEnabled?: boolean }): DenebConfig {
   const accountActions = params?.channelsEnabled
     ? { moderation: true, channels: true }
     : { moderation: true };

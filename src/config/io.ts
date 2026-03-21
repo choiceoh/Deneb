@@ -1383,10 +1383,7 @@ export function clearConfigCache(): void {
   configCache = null;
 }
 
-export function setRuntimeConfigSnapshot(
-  config: DenebConfig,
-  sourceConfig?: DenebConfig,
-): void {
+export function setRuntimeConfigSnapshot(config: DenebConfig, sourceConfig?: DenebConfig): void {
   runtimeConfigSnapshot = config;
   runtimeConfigSourceSnapshot = sourceConfig ?? null;
   clearConfigCache();

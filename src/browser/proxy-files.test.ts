@@ -47,8 +47,6 @@ describe("persistBrowserProxyFiles", () => {
       ]),
     ).rejects.toThrow("Media exceeds 5MB limit");
 
-    await expect(
-      fs.stat(path.join(tempHome.home, ".deneb", "media", "browser")),
-    ).rejects.toThrow();
+    await expect(fs.stat(path.join(tempHome.home, ".deneb", "media", "browser"))).rejects.toThrow();
   });
 });

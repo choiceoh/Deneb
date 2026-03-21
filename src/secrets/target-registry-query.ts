@@ -257,9 +257,7 @@ export function resolveConfigSecretTargetByPath(pathSegments: string[]): Resolve
   return null;
 }
 
-export function discoverConfigSecretTargets(
-  config: DenebConfig,
-): DiscoveredConfigSecretTarget[] {
+export function discoverConfigSecretTargets(config: DenebConfig): DiscoveredConfigSecretTarget[] {
   return discoverConfigSecretTargetsByIds(config);
 }
 
