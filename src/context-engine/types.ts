@@ -15,6 +15,8 @@ export type CompactResult = {
   ok: boolean;
   compacted: boolean;
   reason?: string;
+  /** Structured reason code for programmatic matching (avoids fragile string checks). */
+  reasonCode?: string;
   result?: {
     summary?: string;
     firstKeptEntryId?: string;
@@ -47,7 +49,13 @@ export type ContextEngineInfo = {
   id: string;
   name: string;
   version?: string;
-  /** True when the engine manages its own compaction lifecycle. */
+  /**
+   * True when the engine manages its own compaction lifecycle.
+   *
+   * @deprecated Hook invocation is now centralized in `fireCompactionHooks`.
+   * This flag is still read for backward compatibility but should not be used
+   * as a branching condition in new code.
+   */
   ownsCompaction?: boolean;
 };
 

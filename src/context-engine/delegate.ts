@@ -1,4 +1,5 @@
-import type { ContextEngine, CompactResult, ContextEngineRuntimeContext } from "./types.js";
+import { narrowRuntimeContext } from "./runtime-context-bridge.js";
+import type { ContextEngine, CompactResult } from "./types.js";
 
 /**
  * Delegate a context-engine compaction request to Deneb's built-in runtime compaction path.
@@ -20,28 +21,28 @@ export async function delegateCompactionToRuntime(
   const { compactEmbeddedPiSessionDirect } =
     await import("../agents/pi-embedded-runner/compact.runtime.js");
 
-  // runtimeContext carries the full CompactEmbeddedPiSessionParams fields set
-  // by runtime callers. We spread them and override the fields that come from
-  // the public ContextEngine compact() signature directly.
-  const runtimeContext: ContextEngineRuntimeContext = params.runtimeContext ?? {};
+  const typed = narrowRuntimeContext(params.runtimeContext);
+  // currentTokenCount may also be passed as an ad-hoc field on runtimeContext
+  // (e.g. during overflow recovery).  Check the raw context for it since the
+  // typed bridge intentionally ignores unknown fields.
+  const rawCurrentTokenCount = params.runtimeContext?.currentTokenCount;
   const currentTokenCount =
     params.currentTokenCount ??
-    (typeof runtimeContext.currentTokenCount === "number" &&
-    Number.isFinite(runtimeContext.currentTokenCount) &&
-    runtimeContext.currentTokenCount > 0
-      ? Math.floor(runtimeContext.currentTokenCount)
+    (typeof rawCurrentTokenCount === "number" &&
+    Number.isFinite(rawCurrentTokenCount) &&
+    rawCurrentTokenCount > 0
+      ? Math.floor(rawCurrentTokenCount)
       : undefined);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bridge runtimeContext matches CompactEmbeddedPiSessionParams
   const result = await compactEmbeddedPiSessionDirect({
-    ...runtimeContext,
+    ...typed,
     sessionId: params.sessionId,
     sessionFile: params.sessionFile,
     tokenBudget: params.tokenBudget,
     ...(currentTokenCount !== undefined ? { currentTokenCount } : {}),
     force: params.force,
     customInstructions: params.customInstructions,
-    workspaceDir: (runtimeContext.workspaceDir as string) ?? process.cwd(),
+    workspaceDir: typed?.workspaceDir ?? process.cwd(),
   } as Parameters<typeof compactEmbeddedPiSessionDirect>[0]);
 
   return {

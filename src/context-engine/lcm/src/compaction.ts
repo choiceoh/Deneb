@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { estimateTokens } from "./engine-helpers.js";
 import { extractFileIdsFromContent } from "./large-files.js";
 import type { ConversationStore, CreateMessagePartInput } from "./store/conversation-store.js";
 import type { SummaryStore, SummaryRecord, ContextItemRecord } from "./store/summary-store.js";
@@ -47,6 +48,8 @@ export interface CompactionConfig {
   condensedTargetTokens: number;
   /** Maximum compaction rounds (default 10) */
   maxRounds: number;
+  /** Maximum iterations per phase in compactFullSweep (default 50) */
+  maxSweepIterations?: number;
   /** IANA timezone for timestamps in summaries (default: UTC) */
   timezone?: string;
 }
@@ -79,11 +82,6 @@ type CondensedPhaseCandidate = {
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Estimate token count from character length (~4 chars per token). */
-function estimateTokens(content: string): number {
-  return Math.ceil(content.length / 4);
-}
 
 /** Format a timestamp as `YYYY-MM-DD HH:mm TZ` for prompt source text. */
 export function formatTimestamp(value: Date, timezone: string = "UTC"): string {
@@ -391,7 +389,8 @@ export class CompactionEngine {
     let previousTokens = tokensBefore;
 
     // Phase 1: leaf passes over oldest raw chunks outside the protected tail.
-    while (true) {
+    const maxSweepIter = this.config.maxSweepIterations ?? 50;
+    for (let leafIter = 0; leafIter < maxSweepIter; leafIter++) {
       const leafChunk = await this.selectOldestLeafChunk(conversationId);
       if (leafChunk.items.length === 0) {
         break;
@@ -426,7 +425,7 @@ export class CompactionEngine {
     }
 
     // Phase 2: depth-aware condensed passes, always processing shallowest depth first.
-    while (true) {
+    for (let condensedIter = 0; condensedIter < maxSweepIter; condensedIter++) {
       const candidate = await this.selectShallowestCondensationCandidate({
         conversationId,
         hardTrigger: hardTrigger === true,

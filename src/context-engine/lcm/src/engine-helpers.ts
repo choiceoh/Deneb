@@ -14,9 +14,11 @@ export type AssembleResultWithSystemPrompt = import("../../types.js").AssembleRe
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+import { estimateTokensFromText } from "../../../shared/token-estimation.js";
+
 /** Rough token estimate: ~4 chars per token. */
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+  return estimateTokensFromText(text);
 }
 
 export function toJson(value: unknown): string {
