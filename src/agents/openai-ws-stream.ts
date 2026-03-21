@@ -444,43 +444,60 @@ export function buildAssistantMessageFromResponse(
   const content: (TextContent | ToolCall)[] = [];
   let assistantPhase: OpenAIResponsesAssistantPhase | undefined;
 
-  for (const item of response.output ?? []) {
-    if (item.type === "message") {
-      const itemPhase = normalizeAssistantPhase(item.phase);
-      if (itemPhase) {
-        assistantPhase = itemPhase;
-      }
-      for (const part of item.content ?? []) {
-        if (part.type === "output_text" && part.text) {
-          content.push({
-            type: "text",
-            text: part.text,
-            textSignature: encodeAssistantTextSignature({
-              id: item.id,
-              ...(itemPhase ? { phase: itemPhase } : {}),
-            }),
-          });
-        }
-      }
-    } else if (item.type === "function_call") {
-      const toolName = toNonEmptyString(item.name);
-      if (!toolName) {
-        continue;
-      }
-      content.push({
-        type: "toolCall",
-        id: toNonEmptyString(item.call_id) ?? `call_${randomUUID()}`,
-        name: toolName,
-        arguments: (() => {
-          try {
-            return JSON.parse(item.arguments) as Record<string, unknown>;
-          } catch {
-            return {} as Record<string, unknown>;
-          }
-        })(),
-      });
+  const outputItems = response.output ?? [];
+  for (let idx = 0; idx < outputItems.length; idx++) {
+    const item = outputItems[idx];
+    // Defensive: skip malformed output items that lack a type field.
+    if (!item || typeof item !== "object" || typeof item.type !== "string") {
+      log.warn(`[ws-stream] skipping malformed output item at index=${idx}`);
+      continue;
     }
-    // "reasoning" items are informational only; skip.
+    try {
+      if (item.type === "message") {
+        const itemPhase = normalizeAssistantPhase(item.phase);
+        if (itemPhase) {
+          assistantPhase = itemPhase;
+        }
+        for (const part of item.content ?? []) {
+          if (part.type === "output_text" && part.text) {
+            content.push({
+              type: "text",
+              text: part.text,
+              textSignature: encodeAssistantTextSignature({
+                id: item.id,
+                ...(itemPhase ? { phase: itemPhase } : {}),
+              }),
+            });
+          }
+        }
+      } else if (item.type === "function_call") {
+        const toolName = toNonEmptyString(item.name);
+        if (!toolName) {
+          continue;
+        }
+        content.push({
+          type: "toolCall",
+          id: toNonEmptyString(item.call_id) ?? `call_${randomUUID()}`,
+          name: toolName,
+          arguments: (() => {
+            try {
+              return JSON.parse(item.arguments) as Record<string, unknown>;
+            } catch {
+              log.warn(
+                `[ws-stream] failed to parse tool call arguments for tool=${toolName}, using empty args`,
+              );
+              return {} as Record<string, unknown>;
+            }
+          })(),
+        });
+      }
+      // "reasoning" items are informational only; skip.
+    } catch (itemErr) {
+      // Defensive: never let a single malformed output item crash the entire response.
+      log.warn(
+        `[ws-stream] error processing output item at index=${idx} type=${item.type}: ${String(itemErr)}`,
+      );
+    }
   }
 
   const hasToolCalls = content.some((c) => c.type === "toolCall");
