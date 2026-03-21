@@ -32,55 +32,27 @@ import type {
   ResolvedQmdConfig,
   ResolvedQmdMcporterConfig,
 } from "./backend-config.js";
+import {
+  isCollectionAlreadyExistsError,
+  isCollectionMissingError,
+  isDirectoryGlobPattern,
+  isMissingCollectionSearchError,
+  normalizeHanBm25Query,
+  parseListedCollections,
+  shouldRepairDuplicateDocumentConstraint,
+  shouldRepairNullByteCollectionError,
+  type ListedCollection,
+} from "./qmd-collections.js";
 import { parseQmdQueryJson, type QmdQueryResult } from "./qmd-query-parser.js";
-import { extractKeywords } from "./query-expansion.js";
 
 const log = createSubsystemLogger("memory");
 
 const SNIPPET_HEADER_RE = /@@\s*-([0-9]+),([0-9]+)/;
 const SEARCH_PENDING_UPDATE_WAIT_MS = 500;
 const MAX_QMD_OUTPUT_CHARS = 200_000;
-const NUL_MARKER_RE = /(?:\^@|\\0|\\x00|\\u0000|null\s*byte|nul\s*byte)/i;
 const QMD_EMBED_BACKOFF_BASE_MS = 60_000;
 const QMD_EMBED_BACKOFF_MAX_MS = 60 * 60 * 1000;
-const HAN_SCRIPT_RE = /[\u3400-\u9fff]/u;
-const QMD_BM25_HAN_KEYWORD_LIMIT = 12;
-
 let qmdEmbedQueueTail: Promise<void> = Promise.resolve();
-
-function hasHanScript(value: string): boolean {
-  return HAN_SCRIPT_RE.test(value);
-}
-
-function normalizeHanBm25Query(query: string): string {
-  const trimmed = query.trim();
-  if (!trimmed || !hasHanScript(trimmed)) {
-    return trimmed;
-  }
-  const keywords = extractKeywords(trimmed);
-  const normalizedKeywords: string[] = [];
-  const seen = new Set<string>();
-  for (const keyword of keywords) {
-    const token = keyword.trim();
-    if (!token || seen.has(token)) {
-      continue;
-    }
-    const includesHan = hasHanScript(token);
-    // Han unigrams are usually too broad for BM25 and can drown signal.
-    if (includesHan && Array.from(token).length < 2) {
-      continue;
-    }
-    if (!includesHan && token.length < 2) {
-      continue;
-    }
-    seen.add(token);
-    normalizedKeywords.push(token);
-    if (normalizedKeywords.length >= QMD_BM25_HAN_KEYWORD_LIMIT) {
-      break;
-    }
-  }
-  return normalizedKeywords.length > 0 ? normalizedKeywords.join(" ") : trimmed;
-}
 
 async function runWithQmdEmbedLock<T>(task: () => Promise<T>): Promise<T> {
   const previous = qmdEmbedQueueTail;
@@ -105,11 +77,6 @@ type SessionExporterConfig = {
   dir: string;
   retentionMs?: number;
   collectionName: string;
-};
-
-type ListedCollection = {
-  path?: string;
-  pattern?: string;
 };
 
 type ManagedCollection = {
@@ -298,7 +265,7 @@ export class QmdMemoryManager implements MemorySearchManager {
           await this.removeCollection(collection.name);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          if (!this.isCollectionMissingError(message)) {
+          if (!isCollectionMissingError(message)) {
             log.warn(`qmd collection remove failed for ${collection.name}: ${message}`);
           }
         }
@@ -312,7 +279,7 @@ export class QmdMemoryManager implements MemorySearchManager {
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        if (this.isCollectionAlreadyExistsError(message)) {
+        if (isCollectionAlreadyExistsError(message)) {
           const rebound = await this.tryRebindConflictingCollection({
             collection,
             existing,
@@ -334,7 +301,7 @@ export class QmdMemoryManager implements MemorySearchManager {
       const result = await this.runQmd(["collection", "list", "--json"], {
         timeoutMs: this.qmd.update.commandTimeoutMs,
       });
-      const parsed = this.parseListedCollections(result.stdout);
+      const parsed = parseListedCollections(result.stdout);
       for (const [name, details] of parsed) {
         existing.set(name, details);
       }
@@ -398,7 +365,7 @@ export class QmdMemoryManager implements MemorySearchManager {
       existing.delete(conflictName);
     } catch (removeErr) {
       const removeMessage = removeErr instanceof Error ? removeErr.message : String(removeErr);
-      if (!this.isCollectionMissingError(removeMessage)) {
+      if (!isCollectionMissingError(removeMessage)) {
         log.warn(`qmd collection remove failed for ${conflictName}: ${removeMessage}`);
       }
       return false;
@@ -446,7 +413,7 @@ export class QmdMemoryManager implements MemorySearchManager {
         existing.delete(legacyName);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        if (!this.isCollectionMissingError(message)) {
+        if (!isCollectionMissingError(message)) {
           log.warn(`qmd collection remove failed for ${legacyName}: ${message}`);
         }
       }
@@ -480,35 +447,14 @@ export class QmdMemoryManager implements MemorySearchManager {
     pattern: string;
     kind: "memory" | "custom" | "sessions";
   }): Promise<void> {
-    if (!this.isDirectoryGlobPattern(collection.pattern)) {
+    if (!isDirectoryGlobPattern(collection.pattern)) {
       return;
     }
     await fs.mkdir(collection.path, { recursive: true });
   }
 
-  private isDirectoryGlobPattern(pattern: string): boolean {
-    return pattern.includes("*") || pattern.includes("?") || pattern.includes("[");
-  }
-
-  private isCollectionAlreadyExistsError(message: string): boolean {
-    const lower = message.toLowerCase();
-    return lower.includes("already exists") || lower.includes("exists");
-  }
-
-  private isCollectionMissingError(message: string): boolean {
-    const lower = message.toLowerCase();
-    return (
-      lower.includes("not found") || lower.includes("does not exist") || lower.includes("missing")
-    );
-  }
-
-  private isMissingCollectionSearchError(err: unknown): boolean {
-    const message = err instanceof Error ? err.message : String(err);
-    return this.isCollectionMissingError(message) && message.toLowerCase().includes("collection");
-  }
-
   private async tryRepairMissingCollectionSearch(err: unknown): Promise<boolean> {
-    if (!this.isMissingCollectionSearchError(err)) {
+    if (!isMissingCollectionSearchError(err)) {
       return false;
     }
     log.warn(
@@ -528,92 +474,6 @@ export class QmdMemoryManager implements MemorySearchManager {
     await this.runQmd(["collection", "remove", name], {
       timeoutMs: this.qmd.update.commandTimeoutMs,
     });
-  }
-
-  private parseListedCollections(output: string): Map<string, ListedCollection> {
-    const listed = new Map<string, ListedCollection>();
-    const trimmed = output.trim();
-    if (!trimmed) {
-      return listed;
-    }
-    try {
-      const parsed = JSON.parse(trimmed) as unknown;
-      if (Array.isArray(parsed)) {
-        for (const entry of parsed) {
-          if (typeof entry === "string") {
-            listed.set(entry, {});
-            continue;
-          }
-          if (!entry || typeof entry !== "object") {
-            continue;
-          }
-          const name = (entry as { name?: unknown }).name;
-          if (typeof name !== "string") {
-            continue;
-          }
-          const listedPath = (entry as { path?: unknown }).path;
-          const listedPattern = (entry as { pattern?: unknown; mask?: unknown }).pattern;
-          const listedMask = (entry as { mask?: unknown }).mask;
-          listed.set(name, {
-            path: typeof listedPath === "string" ? listedPath : undefined,
-            pattern:
-              typeof listedPattern === "string"
-                ? listedPattern
-                : typeof listedMask === "string"
-                  ? listedMask
-                  : undefined,
-          });
-        }
-        return listed;
-      }
-    } catch {
-      // Some qmd builds ignore `--json` and still print table output.
-    }
-
-    let currentName: string | null = null;
-    for (const rawLine of output.split(/\r?\n/)) {
-      const line = rawLine.trimEnd();
-      if (!line.trim()) {
-        currentName = null;
-        continue;
-      }
-      const collectionLine = /^\s*([a-z0-9._-]+)\s+\(qmd:\/\/[^)]+\)\s*$/i.exec(line);
-      if (collectionLine) {
-        currentName = collectionLine[1];
-        if (!listed.has(currentName)) {
-          listed.set(currentName, {});
-        }
-        continue;
-      }
-      if (/^\s*collections\b/i.test(line)) {
-        continue;
-      }
-      const bareNameLine = /^\s*([a-z0-9._-]+)\s*$/i.exec(line);
-      if (bareNameLine && !line.includes(":")) {
-        currentName = bareNameLine[1];
-        if (!listed.has(currentName)) {
-          listed.set(currentName, {});
-        }
-        continue;
-      }
-      if (!currentName) {
-        continue;
-      }
-      const patternLine = /^\s*(?:pattern|mask)\s*:\s*(.+?)\s*$/i.exec(line);
-      if (patternLine) {
-        const existing = listed.get(currentName) ?? {};
-        existing.pattern = patternLine[1].trim();
-        listed.set(currentName, existing);
-        continue;
-      }
-      const pathLine = /^\s*path\s*:\s*(.+?)\s*$/i.exec(line);
-      if (pathLine) {
-        const existing = listed.get(currentName) ?? {};
-        existing.path = pathLine[1].trim();
-        listed.set(currentName, existing);
-      }
-    }
-    return listed;
   }
 
   private shouldRebindCollection(collection: ManagedCollection, listed: ListedCollection): boolean {
@@ -643,32 +503,13 @@ export class QmdMemoryManager implements MemorySearchManager {
     return normalize(left) === normalize(right);
   }
 
-  private shouldRepairNullByteCollectionError(err: unknown): boolean {
-    const message = err instanceof Error ? err.message : String(err);
-    const lower = message.toLowerCase();
-    return (
-      (lower.includes("enotdir") || lower.includes("not a directory")) &&
-      NUL_MARKER_RE.test(message)
-    );
-  }
-
-  private shouldRepairDuplicateDocumentConstraint(err: unknown): boolean {
-    const message = err instanceof Error ? err.message : String(err);
-    const lower = message.toLowerCase();
-    return (
-      lower.includes("unique constraint failed") &&
-      lower.includes("documents.collection") &&
-      lower.includes("documents.path")
-    );
-  }
-
   private async rebuildManagedCollectionsForRepair(reason: string): Promise<void> {
     for (const collection of this.qmd.collections) {
       try {
         await this.removeCollection(collection.name);
       } catch (removeErr) {
         const removeMessage = removeErr instanceof Error ? removeErr.message : String(removeErr);
-        if (!this.isCollectionMissingError(removeMessage)) {
+        if (!isCollectionMissingError(removeMessage)) {
           log.warn(`qmd collection remove failed for ${collection.name}: ${removeMessage}`);
         }
       }
@@ -676,7 +517,7 @@ export class QmdMemoryManager implements MemorySearchManager {
         await this.addCollection(collection.path, collection.name, collection.pattern);
       } catch (addErr) {
         const addMessage = addErr instanceof Error ? addErr.message : String(addErr);
-        if (!this.isCollectionAlreadyExistsError(addMessage)) {
+        if (!isCollectionAlreadyExistsError(addMessage)) {
           log.warn(`qmd collection add failed for ${collection.name}: ${addMessage}`);
         }
       }
@@ -688,7 +529,7 @@ export class QmdMemoryManager implements MemorySearchManager {
     if (this.attemptedNullByteCollectionRepair) {
       return false;
     }
-    if (!this.shouldRepairNullByteCollectionError(err)) {
+    if (!shouldRepairNullByteCollectionError(err)) {
       return false;
     }
     this.attemptedNullByteCollectionRepair = true;
@@ -706,7 +547,7 @@ export class QmdMemoryManager implements MemorySearchManager {
     if (this.attemptedDuplicateDocumentRepair) {
       return false;
     }
-    if (!this.shouldRepairDuplicateDocumentConstraint(err)) {
+    if (!shouldRepairDuplicateDocumentConstraint(err)) {
       return false;
     }
     this.attemptedDuplicateDocumentRepair = true;
@@ -787,7 +628,7 @@ export class QmdMemoryManager implements MemorySearchManager {
         const result = await this.runQmd(args, { timeoutMs: this.qmd.limits.timeoutMs });
         return parseQmdQueryJson(result.stdout, result.stderr);
       } catch (err) {
-        if (allowMissingCollectionRepair && this.isMissingCollectionSearchError(err)) {
+        if (allowMissingCollectionRepair && isMissingCollectionSearchError(err)) {
           throw err;
         }
         if (

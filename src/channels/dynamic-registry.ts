@@ -18,6 +18,7 @@ export interface ChannelRegistration {
   selectionDocsPrefix?: string;
   selectionDocsOmitLabel?: boolean;
   selectionExtras?: string[];
+  preferOver?: string[];
 }
 
 type RegistrationHook = (entry: ChannelRegistration) => void;

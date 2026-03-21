@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { isDeepStrictEqual } from "node:util";
 import JSON5 from "json5";
 import { ensureOwnerDisplaySecret } from "../agents/owner-display.js";
 import { loadDotEnv } from "../infra/dotenv.js";
@@ -29,24 +28,30 @@ import {
   applyTalkApiKey,
 } from "./defaults.js";
 import { restoreEnvVarRefs } from "./env-preserve.js";
-import {
-  type EnvSubstitutionWarning,
-  MissingEnvVarError,
-  containsEnvVarReference,
-  resolveConfigEnvVars,
-} from "./env-substitution.js";
+import { type EnvSubstitutionWarning, resolveConfigEnvVars } from "./env-substitution.js";
 import { applyConfigEnvVars } from "./env-vars.js";
 import {
   ConfigIncludeError,
   readConfigIncludeFileWithGuards,
   resolveConfigIncludes,
 } from "./includes.js";
+import {
+  coerceConfig,
+  collectChangedPaths,
+  collectEnvRefPaths,
+  createMergePatch,
+  formatConfigValidationFailure,
+  isPlainObject,
+  resolveConfigSnapshotHash,
+  restoreEnvRefsFromMap,
+  unsetPathForWrite,
+  warnOnConfigMiskeys,
+} from "./io-path-ops.js";
 import { findLegacyConfigIssues } from "./legacy.js";
 import { applyMergePatch } from "./merge-patch.js";
 import { normalizeExecSafeBinProfilesInConfig } from "./normalize-exec-safe-bin.js";
 import { normalizeConfigPaths } from "./normalize-paths.js";
 import { resolveConfigPath, resolveDefaultConfigCandidates, resolveStateDir } from "./paths.js";
-import { isBlockedObjectKey } from "./prototype-keys.js";
 import { applyConfigOverrides } from "./runtime-overrides.js";
 import type { DenebConfig, ConfigFileSnapshot, LegacyConfigIssue } from "./types.js";
 import {
@@ -58,6 +63,7 @@ import { compareDenebVersions } from "./version.js";
 // Re-export for backwards compatibility
 export { CircularIncludeError, ConfigIncludeError } from "./includes.js";
 export { MissingEnvVarError } from "./env-substitution.js";
+export { resolveConfigSnapshotHash } from "./io-path-ops.js";
 
 const SHELL_ENV_EXPECTED_KEYS = [
   "OPENAI_API_KEY",
@@ -79,9 +85,6 @@ const SHELL_ENV_EXPECTED_KEYS = [
   "DENEB_GATEWAY_TOKEN",
   "DENEB_GATEWAY_PASSWORD",
 ];
-
-const OPEN_DM_POLICY_ALLOW_FROM_RE =
-  /^(?<policyPath>[a-z0-9_.-]+)\s*=\s*"open"\s+requires\s+(?<allowPath>[a-z0-9_.-]+)(?:\s+\(or\s+[a-z0-9_.-]+\))?\s+to include "\*"$/i;
 
 const CONFIG_AUDIT_LOG_FILENAME = "config-audit.jsonl";
 const loggedInvalidConfigs = new Set<string>();
@@ -190,162 +193,6 @@ async function tightenStateDirPermissionsIfNeeded(params: {
   }
 }
 
-function formatConfigValidationFailure(pathLabel: string, issueMessage: string): string {
-  const match = issueMessage.match(OPEN_DM_POLICY_ALLOW_FROM_RE);
-  const policyPath = match?.groups?.policyPath?.trim();
-  const allowPath = match?.groups?.allowPath?.trim();
-  if (!policyPath || !allowPath) {
-    return `Config validation failed: ${pathLabel}: ${issueMessage}`;
-  }
-
-  return [
-    `Config validation failed: ${pathLabel}`,
-    "",
-    `Configuration mismatch: ${policyPath} is "open", but ${allowPath} does not include "*".`,
-    "",
-    "Fix with:",
-    `  deneb config set ${allowPath} '["*"]'`,
-    "",
-    "Or switch policy:",
-    `  deneb config set ${policyPath} "pairing"`,
-  ].join("\n");
-}
-
-function isNumericPathSegment(raw: string): boolean {
-  return /^[0-9]+$/.test(raw);
-}
-
-function isWritePlainObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function hasOwnObjectKey(value: Record<string, unknown>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(value, key);
-}
-
-const WRITE_PRUNED_OBJECT = Symbol("write-pruned-object");
-
-type UnsetPathWriteResult = {
-  changed: boolean;
-  value: unknown;
-};
-
-function unsetPathForWriteAt(
-  value: unknown,
-  pathSegments: string[],
-  depth: number,
-): UnsetPathWriteResult {
-  if (depth >= pathSegments.length) {
-    return { changed: false, value };
-  }
-  const segment = pathSegments[depth];
-  const isLeaf = depth === pathSegments.length - 1;
-
-  if (Array.isArray(value)) {
-    if (!isNumericPathSegment(segment)) {
-      return { changed: false, value };
-    }
-    const index = Number.parseInt(segment, 10);
-    if (!Number.isFinite(index) || index < 0 || index >= value.length) {
-      return { changed: false, value };
-    }
-    if (isLeaf) {
-      const next = value.slice();
-      next.splice(index, 1);
-      return { changed: true, value: next };
-    }
-    const child = unsetPathForWriteAt(value[index], pathSegments, depth + 1);
-    if (!child.changed) {
-      return { changed: false, value };
-    }
-    const next = value.slice();
-    if (child.value === WRITE_PRUNED_OBJECT) {
-      next.splice(index, 1);
-    } else {
-      next[index] = child.value;
-    }
-    return { changed: true, value: next };
-  }
-
-  if (
-    isBlockedObjectKey(segment) ||
-    !isWritePlainObject(value) ||
-    !hasOwnObjectKey(value, segment)
-  ) {
-    return { changed: false, value };
-  }
-  if (isLeaf) {
-    const next: Record<string, unknown> = { ...value };
-    delete next[segment];
-    return {
-      changed: true,
-      value: Object.keys(next).length === 0 ? WRITE_PRUNED_OBJECT : next,
-    };
-  }
-
-  const child = unsetPathForWriteAt(value[segment], pathSegments, depth + 1);
-  if (!child.changed) {
-    return { changed: false, value };
-  }
-  const next: Record<string, unknown> = { ...value };
-  if (child.value === WRITE_PRUNED_OBJECT) {
-    delete next[segment];
-  } else {
-    next[segment] = child.value;
-  }
-  return {
-    changed: true,
-    value: Object.keys(next).length === 0 ? WRITE_PRUNED_OBJECT : next,
-  };
-}
-
-function unsetPathForWrite(
-  root: DenebConfig,
-  pathSegments: string[],
-): { changed: boolean; next: DenebConfig } {
-  if (pathSegments.length === 0) {
-    return { changed: false, next: root };
-  }
-  const result = unsetPathForWriteAt(root, pathSegments, 0);
-  if (!result.changed) {
-    return { changed: false, next: root };
-  }
-  if (result.value === WRITE_PRUNED_OBJECT) {
-    return { changed: true, next: {} };
-  }
-  if (isWritePlainObject(result.value)) {
-    return { changed: true, next: coerceConfig(result.value) };
-  }
-  return { changed: false, next: root };
-}
-
-export function resolveConfigSnapshotHash(snapshot: {
-  hash?: string;
-  raw?: string | null;
-}): string | null {
-  if (typeof snapshot.hash === "string") {
-    const trimmed = snapshot.hash.trim();
-    if (trimmed) {
-      return trimmed;
-    }
-  }
-  if (typeof snapshot.raw !== "string") {
-    return null;
-  }
-  return hashConfigRaw(snapshot.raw);
-}
-
-function coerceConfig(value: unknown): DenebConfig {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {};
-  }
-  return value as DenebConfig;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function hasConfigMeta(value: unknown): boolean {
   if (!isPlainObject(value)) {
     return false;
@@ -364,171 +211,6 @@ function resolveGatewayMode(value: unknown): string | null {
   }
   const trimmed = gateway.mode.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function cloneUnknown<T>(value: T): T {
-  return structuredClone(value);
-}
-
-function createMergePatch(base: unknown, target: unknown): unknown {
-  if (!isPlainObject(base) || !isPlainObject(target)) {
-    return cloneUnknown(target);
-  }
-
-  const patch: Record<string, unknown> = {};
-  const keys = new Set([...Object.keys(base), ...Object.keys(target)]);
-  for (const key of keys) {
-    const hasBase = key in base;
-    const hasTarget = key in target;
-    if (!hasTarget) {
-      patch[key] = null;
-      continue;
-    }
-    const targetValue = target[key];
-    if (!hasBase) {
-      patch[key] = cloneUnknown(targetValue);
-      continue;
-    }
-    const baseValue = base[key];
-    if (isPlainObject(baseValue) && isPlainObject(targetValue)) {
-      const childPatch = createMergePatch(baseValue, targetValue);
-      if (isPlainObject(childPatch) && Object.keys(childPatch).length === 0) {
-        continue;
-      }
-      patch[key] = childPatch;
-      continue;
-    }
-    if (!isDeepStrictEqual(baseValue, targetValue)) {
-      patch[key] = cloneUnknown(targetValue);
-    }
-  }
-  return patch;
-}
-
-function collectEnvRefPaths(value: unknown, path: string, output: Map<string, string>): void {
-  if (typeof value === "string") {
-    if (containsEnvVarReference(value)) {
-      output.set(path, value);
-    }
-    return;
-  }
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => {
-      collectEnvRefPaths(item, `${path}[${index}]`, output);
-    });
-    return;
-  }
-  if (isPlainObject(value)) {
-    for (const [key, child] of Object.entries(value)) {
-      const childPath = path ? `${path}.${key}` : key;
-      collectEnvRefPaths(child, childPath, output);
-    }
-  }
-}
-
-function collectChangedPaths(
-  base: unknown,
-  target: unknown,
-  path: string,
-  output: Set<string>,
-): void {
-  if (Array.isArray(base) && Array.isArray(target)) {
-    const max = Math.max(base.length, target.length);
-    for (let index = 0; index < max; index += 1) {
-      const childPath = path ? `${path}[${index}]` : `[${index}]`;
-      if (index >= base.length || index >= target.length) {
-        output.add(childPath);
-        continue;
-      }
-      collectChangedPaths(base[index], target[index], childPath, output);
-    }
-    return;
-  }
-  if (isPlainObject(base) && isPlainObject(target)) {
-    const keys = new Set([...Object.keys(base), ...Object.keys(target)]);
-    for (const key of keys) {
-      const childPath = path ? `${path}.${key}` : key;
-      const hasBase = key in base;
-      const hasTarget = key in target;
-      if (!hasTarget || !hasBase) {
-        output.add(childPath);
-        continue;
-      }
-      collectChangedPaths(base[key], target[key], childPath, output);
-    }
-    return;
-  }
-  if (!isDeepStrictEqual(base, target)) {
-    output.add(path);
-  }
-}
-
-function parentPath(value: string): string {
-  if (!value) {
-    return "";
-  }
-  if (value.endsWith("]")) {
-    const index = value.lastIndexOf("[");
-    return index > 0 ? value.slice(0, index) : "";
-  }
-  const index = value.lastIndexOf(".");
-  return index >= 0 ? value.slice(0, index) : "";
-}
-
-function isPathChanged(path: string, changedPaths: Set<string>): boolean {
-  if (changedPaths.has(path)) {
-    return true;
-  }
-  let current = parentPath(path);
-  while (current) {
-    if (changedPaths.has(current)) {
-      return true;
-    }
-    current = parentPath(current);
-  }
-  return changedPaths.has("");
-}
-
-function restoreEnvRefsFromMap(
-  value: unknown,
-  path: string,
-  envRefMap: Map<string, string>,
-  changedPaths: Set<string>,
-): unknown {
-  if (typeof value === "string") {
-    if (!isPathChanged(path, changedPaths)) {
-      const original = envRefMap.get(path);
-      if (original !== undefined) {
-        return original;
-      }
-    }
-    return value;
-  }
-  if (Array.isArray(value)) {
-    let changed = false;
-    const next = value.map((item, index) => {
-      const updated = restoreEnvRefsFromMap(item, `${path}[${index}]`, envRefMap, changedPaths);
-      if (updated !== item) {
-        changed = true;
-      }
-      return updated;
-    });
-    return changed ? next : value;
-  }
-  if (isPlainObject(value)) {
-    let changed = false;
-    const next: Record<string, unknown> = {};
-    for (const [key, child] of Object.entries(value)) {
-      const childPath = path ? `${path}.${key}` : key;
-      const updated = restoreEnvRefsFromMap(child, childPath, envRefMap, changedPaths);
-      if (updated !== child) {
-        changed = true;
-      }
-      next[key] = updated;
-    }
-    return changed ? next : value;
-  }
-  return value;
 }
 
 function resolveConfigAuditLogPath(env: NodeJS.ProcessEnv, homedir: () => string): string {
@@ -588,21 +270,6 @@ export type ConfigIoDeps = {
   configPath?: string;
   logger?: Pick<typeof console, "error" | "warn">;
 };
-
-function warnOnConfigMiskeys(raw: unknown, logger: Pick<typeof console, "warn">): void {
-  if (!raw || typeof raw !== "object") {
-    return;
-  }
-  const gateway = (raw as Record<string, unknown>).gateway;
-  if (!gateway || typeof gateway !== "object") {
-    return;
-  }
-  if ("token" in (gateway as Record<string, unknown>)) {
-    logger.warn(
-      'Config uses "gateway.token". This key is ignored; use "gateway.auth.token" instead.',
-    );
-  }
-}
 
 function stampConfigVersion(cfg: DenebConfig): DenebConfig {
   const now = new Date().toISOString();
