@@ -1,1 +1,0 @@
-../../../../../dist/extensions/acpx/skills/acp-router/SKILL.md
