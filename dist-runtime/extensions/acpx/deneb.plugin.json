@@ -2,7 +2,9 @@
   "id": "acpx",
   "name": "ACPX Runtime",
   "description": "ACP runtime backend powered by acpx with configurable command path and version policy.",
-  "skills": ["./skills"],
+  "skills": [
+    "./skills"
+  ],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -18,11 +20,18 @@
       },
       "permissionMode": {
         "type": "string",
-        "enum": ["approve-all", "approve-reads", "deny-all"]
+        "enum": [
+          "approve-all",
+          "approve-reads",
+          "deny-all"
+        ]
       },
       "nonInteractivePermissions": {
         "type": "string",
-        "enum": ["deny", "fail"]
+        "enum": [
+          "deny",
+          "fail"
+        ]
       },
       "strictWindowsCmdWrapper": {
         "type": "boolean"
@@ -59,7 +68,9 @@
               "description": "Environment variables for the MCP server"
             }
           },
-          "required": ["command"]
+          "required": [
+            "command"
+          ]
         }
       }
     }
@@ -97,7 +108,7 @@
     },
     "queueOwnerTtlSeconds": {
       "label": "Queue Owner TTL Seconds",
-      "help": "Idle queue-owner TTL for acpx prompt turns. Keep this short in OpenClaw to avoid delayed completion after each turn.",
+      "help": "Idle queue-owner TTL for acpx prompt turns. Keep this short in Deneb to avoid delayed completion after each turn.",
       "advanced": true
     },
     "mcpServers": {
