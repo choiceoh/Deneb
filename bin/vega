@@ -1,0 +1,4 @@
+#!/bin/bash
+VEGA_HOME="${VEGA_HOME:-$HOME/.vega}"
+export PYTHONPATH="$VEGA_HOME/vega:$PYTHONPATH"
+exec python3 "$VEGA_HOME/vega/vega.py" "$@"

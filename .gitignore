@@ -38,6 +38,13 @@ blob-report/
 deneb-3142/
 .config-backups/
 
+# Vega subtree
+__pycache__/
+*.pyc
+*.db
+.session.json
+*.hash
+
 # Temp
 /tmp/
 *.tmp
