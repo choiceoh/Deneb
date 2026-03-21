@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createConfigIO } from "./io.js";
+import { createConfigIO, ConfigIntegrityError } from "./io.js";
 import type { DenebConfig } from "./types.js";
 
 describe("config io write", () => {
@@ -546,6 +546,49 @@ describe("config io write", () => {
       expect(last.watchMode).toBe(true);
       expect(last.watchSession).toBe("watch-session-1");
       expect(last.watchCommand).toBe("gateway --force");
+    });
+  });
+
+  describe("integrity guard", () => {
+    it("rejects write that removes a critical key (gateway)", async () => {
+      await withSuiteHome(async (home) => {
+        const { io, snapshot } = await writeConfigAndCreateIo({
+          home,
+          initialConfig: { gateway: { port: 18789 } },
+        });
+        const next = structuredClone(snapshot.config);
+        delete next.gateway;
+        await expect(io.writeConfigFile(next)).rejects.toThrow(ConfigIntegrityError);
+      });
+    });
+
+    it("allows removal of critical key when force is set", async () => {
+      await withSuiteHome(async (home) => {
+        const { io, snapshot } = await writeConfigAndCreateIo({
+          home,
+          initialConfig: { gateway: { port: 18789 } },
+        });
+        const next = structuredClone(snapshot.config);
+        delete next.gateway;
+        await expect(io.writeConfigFile(next, { force: true })).resolves.toBeUndefined();
+      });
+    });
+
+    it("allows removal of critical key when DENEB_CONFIG_FORCE_WRITE=1", async () => {
+      await withSuiteHome(async (home) => {
+        const { io: _io, snapshot } = await writeConfigAndCreateIo({
+          home,
+          initialConfig: { gateway: { port: 18789 } },
+        });
+        const forceIo = createConfigIO({
+          env: { DENEB_CONFIG_FORCE_WRITE: "1" } as NodeJS.ProcessEnv,
+          homedir: () => home,
+          logger: silentLogger,
+        });
+        const next = structuredClone(snapshot.config);
+        delete next.gateway;
+        await expect(forceIo.writeConfigFile(next)).resolves.toBeUndefined();
+      });
     });
   });
 });

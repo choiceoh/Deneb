@@ -35,6 +35,7 @@ import {
   readConfigIncludeFileWithGuards,
   resolveConfigIncludes,
 } from "./includes.js";
+import { checkConfigIntegrity, ConfigIntegrityError } from "./integrity-guard.js";
 import {
   coerceConfig,
   collectChangedPaths,
@@ -62,6 +63,7 @@ import { compareDenebVersions } from "./version.js";
 
 // Re-export for backwards compatibility
 export { CircularIncludeError, ConfigIncludeError } from "./includes.js";
+export { ConfigIntegrityError } from "./integrity-guard.js";
 export { MissingEnvVarError } from "./env-substitution.js";
 export { resolveConfigSnapshotHash } from "./io-path-ops.js";
 
@@ -137,6 +139,12 @@ export type ConfigWriteOptions = {
    * even if schema/default normalization reintroduces them.
    */
   unsetPaths?: string[][];
+  /**
+   * Bypass config integrity guards (critical-key removal, bulk-key removal,
+   * size-drop detection). Use only when the destructive write is intentional.
+   * Can also be set via DENEB_CONFIG_FORCE_WRITE=1 environment variable.
+   */
+  force?: boolean;
 };
 
 export type ReadConfigFileSnapshotForWriteResult = {
@@ -873,6 +881,23 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
       gatewayModeBefore,
       gatewayModeAfter,
     });
+    // --- Config integrity guard: reject destructive writes unless forced ---
+    const forceWrite = options.force || deps.env.DENEB_CONFIG_FORCE_WRITE === "1";
+    if (snapshot.exists && !forceWrite) {
+      const violations = checkConfigIntegrity({
+        previous: snapshot.resolved as Record<string, unknown>,
+        next: stampedOutputConfig as Record<string, unknown>,
+        previousBytes,
+        nextBytes,
+      });
+      if (violations.length > 0) {
+        deps.logger.warn(
+          `Config integrity guard blocked write: ${violations.map((v) => v.code).join(", ")}`,
+        );
+        throw new ConfigIntegrityError(violations);
+      }
+    }
+
     const logConfigOverwrite = () => {
       if (!snapshot.exists) {
         return;
