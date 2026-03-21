@@ -166,8 +166,10 @@ async function nativeComplete(params: {
     const cfg = loadConfig();
     const providerCfg = findProviderConfig(cfg, providerId);
 
-    // getModel expects compile-time literal types; cast through KnownProvider
-    // since providerId/modelId are runtime strings that may match a known entry.
+    // getModel's second param is `keyof MODELS[TProvider]`; when TProvider is the
+    // full KnownProvider union this collapses to `never`. We pass runtime strings
+    // (wrapped in try/catch for unknown provider×model combos) and cast modelId
+    // through `never` — no narrower static type is expressible here.
     let knownModel: Model<Api> | undefined;
     try {
       knownModel = getModel(providerId as KnownProvider, modelId as never);
@@ -190,7 +192,7 @@ async function nativeComplete(params: {
           provider: providerId,
           api: fallbackApi as Api,
           reasoning: false,
-          input: ["text"] as const,
+          input: ["text"] as ("text" | "image")[],
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
           contextWindow: 200_000,
           maxTokens: 8_000,
@@ -208,15 +210,18 @@ async function nativeComplete(params: {
       });
     }
 
+    const validRoles = new Set<Message["role"]>(["user", "assistant", "toolResult"]);
     const result: AssistantMessage = await completeSimple(
       resolvedModel,
       {
         ...(params.system?.trim() ? { systemPrompt: params.system.trim() } : {}),
-        messages: params.messages.map((m) => ({
-          role: m.role as Message["role"],
-          content: m.content,
-          timestamp: Date.now(),
-        })) as Message[],
+        messages: params.messages
+          .filter((m) => validRoles.has(m.role as Message["role"]))
+          .map((m) => ({
+            role: m.role as Message["role"],
+            content: m.content,
+            timestamp: Date.now(),
+          })) as Message[],
       },
       {
         apiKey: resolvedApiKey,

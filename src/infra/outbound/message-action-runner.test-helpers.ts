@@ -1,4 +1,5 @@
 import { telegramPlugin, setTelegramRuntime } from "../../../extensions/telegram/index.js";
+import type { ChannelPlugin } from "../../channels/plugins/types.plugin.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import { createPluginRuntime } from "../../plugins/runtime/index.js";
@@ -8,7 +9,7 @@ import { createTestRegistry } from "../../test-utils/channel-plugins.js";
 const slackPlugin = {
   id: "slack",
   meta: { id: "slack", label: "Slack" },
-} as unknown as typeof telegramPlugin;
+} as unknown as ChannelPlugin;
 function setSlackRuntime(_runtime: unknown) {}
 
 export const slackConfig = {

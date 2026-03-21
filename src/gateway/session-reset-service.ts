@@ -68,15 +68,11 @@ export async function emitSessionUnboundLifecycleEvent(params: {
   reason: "session-reset" | "session-delete";
   emitHooks?: boolean;
 }) {
-  const targetKind = isSubagentSessionKey(params.targetSessionKey) ? "subagent" : "acp";
-  // Discord thread-binding cleanup was here; removed with the Discord adapter
-  // in v3.150. If a channel plugin needs unbind-on-reset, wire it through the
-  // plugin hook system instead.
-
   if (params.emitHooks === false) {
     return;
   }
 
+  const targetKind = isSubagentSessionKey(params.targetSessionKey) ? "subagent" : "acp";
   const hookRunner = getGlobalHookRunner();
   if (!hookRunner?.hasHooks("subagent_ended")) {
     return;
