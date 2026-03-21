@@ -3,11 +3,16 @@ import type { DenebConfig } from "../../config/config.js";
 export const EMBEDDED_COMPACTION_TIMEOUT_MS = 900_000;
 
 const MAX_SAFE_TIMEOUT_MS = 2_147_000_000;
+// 30 seconds floor: compaction needs at least one summarization API call.
+const MIN_COMPACTION_TIMEOUT_MS = 30_000;
 
 export function resolveCompactionTimeoutMs(cfg?: DenebConfig): number {
   const raw = cfg?.agents?.defaults?.compaction?.timeoutSeconds;
   if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
-    return Math.min(Math.floor(raw) * 1000, MAX_SAFE_TIMEOUT_MS);
+    return Math.max(
+      MIN_COMPACTION_TIMEOUT_MS,
+      Math.min(Math.floor(raw) * 1000, MAX_SAFE_TIMEOUT_MS),
+    );
   }
   return EMBEDDED_COMPACTION_TIMEOUT_MS;
 }

@@ -116,7 +116,7 @@ export function chunkMessagesByMaxTokens(
  * When messages are large, we use smaller chunks to avoid exceeding model limits.
  */
 export function computeAdaptiveChunkRatio(messages: AgentMessage[], contextWindow: number): number {
-  if (messages.length === 0) {
+  if (messages.length === 0 || contextWindow <= 0) {
     return BASE_CHUNK_RATIO;
   }
 
@@ -290,17 +290,27 @@ export function pruneHistoryForContextShare(params: {
   const rawShare = params.maxHistoryShare ?? 0.5;
   // Clamp to [0.1, 0.9] so extreme config values cannot zero-out or blow up the budget.
   const maxHistoryShare = Math.min(0.9, Math.max(0.1, rawShare));
+  if (rawShare !== maxHistoryShare) {
+    log.warn(
+      `pruneHistoryForContextShare: clamped maxHistoryShare ${rawShare} → ${maxHistoryShare}`,
+    );
+  }
   const budgetTokens = Math.max(1, Math.floor(params.maxContextTokens * maxHistoryShare));
   let keptMessages = params.messages;
   const allDroppedMessages: AgentMessage[] = [];
   let droppedChunks = 0;
 
-  while (keptMessages.length > 1 && estimateMessagesTokens(keptMessages) > budgetTokens) {
+  // Track running token total to avoid O(n²) re-estimation each iteration.
+  let keptTokens = estimateMessagesTokens(keptMessages);
+
+  while (keptMessages.length > 1 && keptTokens > budgetTokens) {
     // Drop ~25% of remaining messages from the front each iteration
     const dropCount = Math.max(1, Math.floor(keptMessages.length * 0.25));
     const dropped = keptMessages.slice(0, dropCount);
+    const droppedTokens = estimateMessagesTokens(dropped);
     allDroppedMessages.push(...dropped);
     keptMessages = keptMessages.slice(dropCount);
+    keptTokens = Math.max(0, keptTokens - droppedTokens);
     droppedChunks += 1;
   }
 
