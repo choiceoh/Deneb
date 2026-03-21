@@ -84,7 +84,7 @@ export {
 } from "../channels/thread-bindings-policy.js";
 export { createTypingCallbacks } from "../channels/typing.js";
 export { createChannelReplyPipeline } from "./channel-reply-pipeline.js";
-export type { OpenClawConfig } from "../config/config.js";
+export type { DenebConfig } from "../config/config.js";
 export {
   GROUP_POLICY_BLOCKED_LABEL,
   resolveAllowlistProviderRuntimeGroupPolicy,
@@ -123,7 +123,7 @@ export { isPrivateOrLoopbackHost } from "../gateway/net.js";
 export { getAgentScopedMediaLocalRoots } from "../media/local-roots.js";
 export { emptyPluginConfigSchema } from "../plugins/config-schema.js";
 export type { PluginRuntime, RuntimeLogger } from "../plugins/runtime/types.js";
-export type { OpenClawPluginApi } from "../plugins/types.js";
+export type { DenebPluginApi } from "../plugins/types.js";
 export type { PollInput } from "../polls.js";
 export { normalizePollInput } from "../polls.js";
 export {
@@ -155,7 +155,7 @@ export {
 const matrixSetup = createOptionalChannelSetupSurface({
   channel: "matrix",
   label: "Matrix",
-  npmSpec: "@openclaw/matrix",
+  npmSpec: "@deneb/matrix",
   docsPath: "/channels/matrix",
 });
 

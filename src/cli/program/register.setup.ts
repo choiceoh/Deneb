@@ -10,15 +10,15 @@ import { hasExplicitOptions } from "../command-options.js";
 export function registerSetupCommand(program: Command) {
   program
     .command("setup")
-    .description("Initialize ~/.openclaw/openclaw.json and the agent workspace")
+    .description("Initialize ~/.deneb/deneb.json and the agent workspace")
     .addHelpText(
       "after",
       () =>
-        `\n${theme.muted("Docs:")} ${formatDocsLink("/cli/setup", "docs.openclaw.ai/cli/setup")}\n`,
+        `\n${theme.muted("Docs:")} ${formatDocsLink("/cli/setup", "docs.deneb.ai/cli/setup")}\n`,
     )
     .option(
       "--workspace <dir>",
-      "Agent workspace directory (default: ~/.openclaw/workspace; stored as agents.defaults.workspace)",
+      "Agent workspace directory (default: ~/.deneb/workspace; stored as agents.defaults.workspace)",
     )
     .option("--wizard", "Run interactive onboarding", false)
     .option("--non-interactive", "Run onboarding without prompts", false)

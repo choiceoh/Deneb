@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ChannelPlugin } from "../channels/plugins/index.js";
-import { resolveOpenClawPackageRootSync } from "../infra/openclaw-root.js";
+import { resolveDenebPackageRootSync } from "../infra/deneb-root.js";
 import { loadPluginManifestRegistry } from "../plugins/manifest-registry.js";
 import { FIELD_HELP } from "./schema.help.js";
 import { buildConfigSchema, type ConfigSchemaResponse } from "./schema.js";
@@ -83,13 +83,13 @@ const DEFAULT_STATEFILE_OUTPUT = "docs/.generated/config-baseline.jsonl";
 let cachedConfigDocBaselinePromise: Promise<ConfigDocBaseline> | null = null;
 
 function logConfigDocBaselineDebug(message: string): void {
-  if (process.env.OPENCLAW_CONFIG_DOC_BASELINE_DEBUG === "1") {
+  if (process.env.DENEB_CONFIG_DOC_BASELINE_DEBUG === "1") {
     console.error(`[config-doc-baseline] ${message}`);
   }
 }
 
 function resolveRepoRoot(): string {
-  const fromPackage = resolveOpenClawPackageRootSync({
+  const fromPackage = resolveDenebPackageRootSync({
     cwd: path.dirname(fileURLToPath(import.meta.url)),
     moduleUrl: import.meta.url,
   });
@@ -282,7 +282,7 @@ function loadPackageChannelMetadata(rootDir: string): PackageChannelMetadata | n
     const packageJson = JSON.parse(
       fsSync.readFileSync(path.join(rootDir, "package.json"), "utf8"),
     ) as {
-      openclaw?: {
+      deneb?: {
         channel?: {
           id?: unknown;
           label?: unknown;
@@ -290,7 +290,7 @@ function loadPackageChannelMetadata(rootDir: string): PackageChannelMetadata | n
         };
       };
     };
-    const channel = packageJson.openclaw?.channel;
+    const channel = packageJson.deneb?.channel;
     if (!channel) {
       return null;
     }
@@ -466,8 +466,8 @@ async function loadBundledConfigSchemaResponse(): Promise<ConfigSchemaResponse> 
   const env = {
     ...process.env,
     HOME: os.tmpdir(),
-    OPENCLAW_STATE_DIR: path.join(os.tmpdir(), "openclaw-config-doc-baseline-state"),
-    OPENCLAW_BUNDLED_PLUGINS_DIR: path.join(repoRoot, "extensions"),
+    DENEB_STATE_DIR: path.join(os.tmpdir(), "deneb-config-doc-baseline-state"),
+    DENEB_BUNDLED_PLUGINS_DIR: path.join(repoRoot, "extensions"),
   };
 
   const manifestRegistry = loadPluginManifestRegistry({
@@ -479,7 +479,7 @@ async function loadBundledConfigSchemaResponse(): Promise<ConfigSchemaResponse> 
   const bundledChannelPlugins = manifestRegistry.plugins.filter(
     (plugin) => plugin.origin === "bundled" && plugin.channels.length > 0,
   );
-  const loadChannelsSequentiallyForDebug = process.env.OPENCLAW_CONFIG_DOC_BASELINE_DEBUG === "1";
+  const loadChannelsSequentiallyForDebug = process.env.DENEB_CONFIG_DOC_BASELINE_DEBUG === "1";
   const channelPlugins = loadChannelsSequentiallyForDebug
     ? await bundledChannelPlugins.reduce<Promise<ChannelSurfaceMetadata[]>>(
         async (promise, plugin) => {

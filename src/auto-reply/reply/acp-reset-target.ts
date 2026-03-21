@@ -1,5 +1,5 @@
 import { resolveConfiguredBindingRecord } from "../../channels/plugins/binding-registry.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { getSessionBindingService } from "../../infra/outbound/session-binding-service.js";
 import { DEFAULT_ACCOUNT_ID, isAcpSessionKey } from "../../routing/session-key.js";
 
@@ -8,7 +8,7 @@ function normalizeText(value: string | undefined | null): string {
 }
 
 export function resolveEffectiveResetTargetSessionKey(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   channel?: string | null;
   accountId?: string | null;
   conversationId?: string | null;

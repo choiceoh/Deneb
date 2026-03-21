@@ -53,7 +53,7 @@ async function expectSyncedSkillConfinement(params: {
 }
 
 beforeAll(async () => {
-  fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-skills-sync-suite-"));
+  fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-skills-sync-suite-"));
   syncSourceTemplateDir = await createCaseDir("source-template");
   await writeSkill({
     dir: path.join(syncSourceTemplateDir, ".extra", "demo-skill"),
@@ -206,7 +206,7 @@ describe("buildWorkspaceSkillsPrompt", () => {
       name: "image-lab",
       description: "Generates images",
       metadata:
-        '{"openclaw":{"requires":{"env":["GEMINI_API_KEY"]},"primaryEnv":"GEMINI_API_KEY"}}',
+        '{"deneb":{"requires":{"env":["GEMINI_API_KEY"]},"primaryEnv":"GEMINI_API_KEY"}}',
       body: "# Image Lab\n",
     });
 

@@ -7,7 +7,7 @@ import { runStartupMatrixMigration } from "./server-startup-matrix-migration.js"
 describe("runStartupMatrixMigration", () => {
   it("creates a snapshot before actionable startup migration", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       await fs.mkdir(path.join(stateDir, "matrix"), { recursive: true });
       await fs.writeFile(path.join(stateDir, "matrix", "bot-storage.json"), '{"legacy":true}');
       const maybeCreateMatrixMigrationSnapshotMock = vi.fn(async () => ({
@@ -55,7 +55,7 @@ describe("runStartupMatrixMigration", () => {
 
   it("skips snapshot creation when startup only has warning-only migration state", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       await fs.mkdir(path.join(stateDir, "matrix"), { recursive: true });
       await fs.writeFile(path.join(stateDir, "matrix", "bot-storage.json"), '{"legacy":true}');
       const maybeCreateMatrixMigrationSnapshotMock = vi.fn();
@@ -91,7 +91,7 @@ describe("runStartupMatrixMigration", () => {
 
   it("skips startup migration when snapshot creation fails", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       await fs.mkdir(path.join(stateDir, "matrix"), { recursive: true });
       await fs.writeFile(path.join(stateDir, "matrix", "bot-storage.json"), '{"legacy":true}');
       const maybeCreateMatrixMigrationSnapshotMock = vi.fn(async () => {
@@ -130,7 +130,7 @@ describe("runStartupMatrixMigration", () => {
 
   it("downgrades migration step failures to warnings so startup can continue", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       await fs.mkdir(path.join(stateDir, "matrix"), { recursive: true });
       await fs.writeFile(path.join(stateDir, "matrix", "bot-storage.json"), '{"legacy":true}');
       const maybeCreateMatrixMigrationSnapshotMock = vi.fn(async () => ({

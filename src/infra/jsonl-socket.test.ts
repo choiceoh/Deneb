@@ -6,7 +6,7 @@ import { requestJsonlSocket } from "./jsonl-socket.js";
 
 describe.runIf(process.platform !== "win32")("requestJsonlSocket", () => {
   it("ignores malformed and non-accepted lines until one is accepted", async () => {
-    await withTempDir({ prefix: "openclaw-jsonl-socket-" }, async (dir) => {
+    await withTempDir({ prefix: "deneb-jsonl-socket-" }, async (dir) => {
       const socketPath = path.join(dir, "socket.sock");
       const server = net.createServer((socket) => {
         socket.on("data", () => {
@@ -36,7 +36,7 @@ describe.runIf(process.platform !== "win32")("requestJsonlSocket", () => {
   });
 
   it("returns null on timeout and on socket errors", async () => {
-    await withTempDir({ prefix: "openclaw-jsonl-socket-" }, async (dir) => {
+    await withTempDir({ prefix: "deneb-jsonl-socket-" }, async (dir) => {
       const socketPath = path.join(dir, "socket.sock");
       const server = net.createServer(() => {
         // Intentionally never reply.

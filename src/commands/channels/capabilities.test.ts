@@ -109,11 +109,11 @@ describe("channelsCapabilitiesCommand", () => {
         userToken: "xoxp-user",
         config: { userToken: "xoxp-user" },
       },
-      probe: { ok: true, bot: { name: "openclaw" }, team: { name: "team" } },
+      probe: { ok: true, bot: { name: "deneb" }, team: { name: "team" } },
     });
     plugin.status = {
       ...plugin.status,
-      formatCapabilitiesProbe: () => [{ text: "Bot: @openclaw" }, { text: "Team: team" }],
+      formatCapabilitiesProbe: () => [{ text: "Bot: @deneb" }, { text: "Team: team" }],
       buildCapabilitiesDiagnostics: async () => ({
         lines: [
           { text: "Bot scopes (auth.scopes): chat:write" },

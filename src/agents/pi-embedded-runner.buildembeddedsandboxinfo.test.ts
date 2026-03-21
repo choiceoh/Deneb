@@ -7,16 +7,16 @@ function createSandboxContext(overrides?: Partial<SandboxContext>): SandboxConte
     enabled: true,
     backendId: "docker",
     sessionKey: "session:test",
-    workspaceDir: "/tmp/openclaw-sandbox",
-    agentWorkspaceDir: "/tmp/openclaw-workspace",
+    workspaceDir: "/tmp/deneb-sandbox",
+    agentWorkspaceDir: "/tmp/deneb-workspace",
     workspaceAccess: "none",
-    runtimeId: "openclaw-sbx-test",
-    runtimeLabel: "openclaw-sbx-test",
-    containerName: "openclaw-sbx-test",
+    runtimeId: "deneb-sbx-test",
+    runtimeLabel: "deneb-sbx-test",
+    containerName: "deneb-sbx-test",
     containerWorkdir: "/workspace",
     docker: {
-      image: "openclaw-sandbox:bookworm-slim",
-      containerPrefix: "openclaw-sbx-",
+      image: "deneb-sandbox:bookworm-slim",
+      containerPrefix: "deneb-sbx-",
       workdir: "/workspace",
       readOnlyRoot: true,
       tmpfs: ["/tmp"],
@@ -33,7 +33,7 @@ function createSandboxContext(overrides?: Partial<SandboxContext>): SandboxConte
     browser: {
       bridgeUrl: "http://localhost:9222",
       noVncUrl: "http://localhost:6080",
-      containerName: "openclaw-sbx-browser-test",
+      containerName: "deneb-sbx-browser-test",
     },
   } satisfies SandboxContext;
   return { ...base, ...overrides };
@@ -49,7 +49,7 @@ describe("buildEmbeddedSandboxInfo", () => {
 
     expect(buildEmbeddedSandboxInfo(sandbox)).toEqual({
       enabled: true,
-      workspaceDir: "/tmp/openclaw-sandbox",
+      workspaceDir: "/tmp/deneb-sandbox",
       containerWorkspaceDir: "/workspace",
       workspaceAccess: "none",
       agentWorkspaceMount: undefined,
@@ -73,7 +73,7 @@ describe("buildEmbeddedSandboxInfo", () => {
       }),
     ).toEqual({
       enabled: true,
-      workspaceDir: "/tmp/openclaw-sandbox",
+      workspaceDir: "/tmp/deneb-sandbox",
       containerWorkspaceDir: "/workspace",
       workspaceAccess: "none",
       agentWorkspaceMount: undefined,

@@ -1,17 +1,17 @@
 import { emptyPluginConfigSchema } from "../plugins/config-schema.js";
 import type {
-  OpenClawPluginApi,
-  OpenClawPluginCommandDefinition,
-  OpenClawPluginConfigSchema,
-  OpenClawPluginDefinition,
+  DenebPluginApi,
+  DenebPluginCommandDefinition,
+  DenebPluginConfigSchema,
+  DenebPluginDefinition,
   PluginInteractiveTelegramHandlerContext,
 } from "../plugins/types.js";
 
 export type {
   AnyAgentTool,
   MediaUnderstandingProviderPlugin,
-  OpenClawPluginApi,
-  OpenClawPluginConfigSchema,
+  DenebPluginApi,
+  DenebPluginConfigSchema,
   ProviderDiscoveryContext,
   ProviderCatalogContext,
   ProviderCatalogResult,
@@ -35,19 +35,19 @@ export type {
   SpeechProviderPlugin,
   ProviderThinkingPolicyContext,
   ProviderWrapStreamFnContext,
-  OpenClawPluginService,
-  OpenClawPluginServiceContext,
+  DenebPluginService,
+  DenebPluginServiceContext,
   ProviderAuthContext,
   ProviderAuthDoctorHintContext,
   ProviderAuthMethodNonInteractiveContext,
   ProviderAuthMethod,
   ProviderAuthResult,
-  OpenClawPluginCommandDefinition,
-  OpenClawPluginDefinition,
+  DenebPluginCommandDefinition,
+  DenebPluginDefinition,
   PluginLogger,
   PluginInteractiveTelegramHandlerContext,
 } from "../plugins/types.js";
-export type { OpenClawConfig } from "../config/config.js";
+export type { DenebConfig } from "../config/config.js";
 
 export { emptyPluginConfigSchema } from "../plugins/config-schema.js";
 
@@ -55,22 +55,22 @@ type DefinePluginEntryOptions = {
   id: string;
   name: string;
   description: string;
-  kind?: OpenClawPluginDefinition["kind"];
-  configSchema?: OpenClawPluginConfigSchema | (() => OpenClawPluginConfigSchema);
-  register: (api: OpenClawPluginApi) => void;
+  kind?: DenebPluginDefinition["kind"];
+  configSchema?: DenebPluginConfigSchema | (() => DenebPluginConfigSchema);
+  register: (api: DenebPluginApi) => void;
 };
 
 type DefinedPluginEntry = {
   id: string;
   name: string;
   description: string;
-  configSchema: OpenClawPluginConfigSchema;
-  register: NonNullable<OpenClawPluginDefinition["register"]>;
-} & Pick<OpenClawPluginDefinition, "kind">;
+  configSchema: DenebPluginConfigSchema;
+  register: NonNullable<DenebPluginDefinition["register"]>;
+} & Pick<DenebPluginDefinition, "kind">;
 
 function resolvePluginConfigSchema(
   configSchema: DefinePluginEntryOptions["configSchema"] = emptyPluginConfigSchema,
-): OpenClawPluginConfigSchema {
+): DenebPluginConfigSchema {
   return typeof configSchema === "function" ? configSchema() : configSchema;
 }
 

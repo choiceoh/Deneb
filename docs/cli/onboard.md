@@ -1,11 +1,11 @@
 ---
-summary: "CLI reference for `openclaw onboard` (interactive onboarding)"
+summary: "CLI reference for `deneb onboard` (interactive onboarding)"
 read_when:
   - You want guided setup for gateway, workspace, auth, channels, and skills
 title: "onboard"
 ---
 
-# `openclaw onboard`
+# `deneb onboard`
 
 Interactive onboarding for local or remote Gateway setup.
 
@@ -20,19 +20,19 @@ Interactive onboarding for local or remote Gateway setup.
 ## Examples
 
 ```bash
-openclaw onboard
-openclaw onboard --flow quickstart
-openclaw onboard --flow manual
-openclaw onboard --mode remote --remote-url wss://gateway-host:18789
+deneb onboard
+deneb onboard --flow quickstart
+deneb onboard --flow manual
+deneb onboard --mode remote --remote-url wss://gateway-host:18789
 ```
 
 For plaintext private-network `ws://` targets (trusted networks only), set
-`OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1` in the onboarding process environment.
+`DENEB_ALLOW_INSECURE_PRIVATE_WS=1` in the onboarding process environment.
 
 Non-interactive custom provider:
 
 ```bash
-openclaw onboard --non-interactive \
+deneb onboard --non-interactive \
   --auth-choice custom-api-key \
   --custom-base-url "https://llm.example.com/v1" \
   --custom-model-id "foo-large" \
@@ -46,7 +46,7 @@ openclaw onboard --non-interactive \
 Non-interactive Ollama:
 
 ```bash
-openclaw onboard --non-interactive \
+deneb onboard --non-interactive \
   --auth-choice ollama \
   --custom-base-url "http://ollama-host:11434" \
   --custom-model-id "qwen3.5:27b" \
@@ -58,7 +58,7 @@ openclaw onboard --non-interactive \
 Store provider keys as refs instead of plaintext:
 
 ```bash
-openclaw onboard --non-interactive \
+deneb onboard --non-interactive \
   --auth-choice openai-api-key \
   --secret-input-mode ref \
   --accept-risk
@@ -86,19 +86,19 @@ Gateway token options in non-interactive mode:
 Example:
 
 ```bash
-export OPENCLAW_GATEWAY_TOKEN="your-token"
-openclaw onboard --non-interactive \
+export DENEB_GATEWAY_TOKEN="your-token"
+deneb onboard --non-interactive \
   --mode local \
   --auth-choice skip \
   --gateway-auth token \
-  --gateway-token-ref-env OPENCLAW_GATEWAY_TOKEN \
+  --gateway-token-ref-env DENEB_GATEWAY_TOKEN \
   --accept-risk
 ```
 
 Non-interactive local gateway health:
 
 - Unless you pass `--skip-health`, onboarding waits for a reachable local gateway before it exits successfully.
-- `--install-daemon` starts the managed gateway install path first. Without it, you must already have a local gateway running, for example `openclaw gateway run`.
+- `--install-daemon` starts the managed gateway install path first. Without it, you must already have a local gateway running, for example `deneb gateway run`.
 - If you only want config/workspace/bootstrap writes in automation, use `--skip-health`.
 - On native Windows, `--install-daemon` tries Scheduled Tasks first and falls back to a per-user Startup-folder login item if task creation is denied.
 
@@ -118,7 +118,7 @@ If you specifically want the GLM Coding Plan endpoints, pick `zai-coding-global`
 
 ```bash
 # Promptless endpoint selection
-openclaw onboard --non-interactive \
+deneb onboard --non-interactive \
   --auth-choice zai-coding-global \
   --zai-api-key "$ZAI_API_KEY"
 
@@ -131,7 +131,7 @@ openclaw onboard --non-interactive \
 Non-interactive Mistral example:
 
 ```bash
-openclaw onboard --non-interactive \
+deneb onboard --non-interactive \
   --auth-choice mistral-api-key \
   --mistral-api-key "$MISTRAL_API_KEY"
 ```
@@ -141,15 +141,15 @@ Flow notes:
 - `quickstart`: minimal prompts, auto-generates a gateway token.
 - `manual`: full prompts for port/bind/auth (alias of `advanced`).
 - Local onboarding DM scope behavior: [CLI Setup Reference](/start/wizard-cli-reference#outputs-and-internals).
-- Fastest first chat: `openclaw dashboard` (Control UI, no channel setup).
+- Fastest first chat: `deneb dashboard` (Control UI, no channel setup).
 - Custom Provider: connect any OpenAI or Anthropic compatible endpoint,
   including hosted providers not listed. Use Unknown to auto-detect.
 
 ## Common follow-up commands
 
 ```bash
-openclaw configure
-openclaw agents add <name>
+deneb configure
+deneb agents add <name>
 ```
 
 <Note>

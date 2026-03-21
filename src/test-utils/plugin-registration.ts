@@ -1,14 +1,14 @@
 import { createCapturedPluginRegistration } from "../plugins/captured-registration.js";
-import type { OpenClawPluginApi, ProviderPlugin } from "../plugins/types.js";
+import type { DenebPluginApi, ProviderPlugin } from "../plugins/types.js";
 
 export { createCapturedPluginRegistration };
 
 type RegistrablePlugin = {
-  register(api: OpenClawPluginApi): void;
+  register(api: DenebPluginApi): void;
 };
 
 export function registerSingleProviderPlugin(params: {
-  register(api: OpenClawPluginApi): void;
+  register(api: DenebPluginApi): void;
 }): ProviderPlugin {
   const captured = createCapturedPluginRegistration();
   params.register(captured.api);

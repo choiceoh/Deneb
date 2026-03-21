@@ -25,7 +25,7 @@ This page covers the Perplexity **provider** setup. For the Perplexity
 1. Set the API key:
 
 ```bash
-openclaw config set tools.web.search.perplexity.apiKey "pplx-xxxxxxxxxxxx"
+deneb config set tools.web.search.perplexity.apiKey "pplx-xxxxxxxxxxxx"
 ```
 
 2. The agent will automatically use Perplexity for web searches when configured.
@@ -53,4 +53,4 @@ When using the native Perplexity API (`pplx-` key), searches support:
 
 If the Gateway runs as a daemon (launchd/systemd), make sure
 `PERPLEXITY_API_KEY` is available to that process (for example, in
-`~/.openclaw/.env` or via `env.shellEnv`).
+`~/.deneb/.env` or via `env.shellEnv`).

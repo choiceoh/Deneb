@@ -7,7 +7,7 @@ export function resolveGatewayLogPaths(_env: NodeJS.ProcessEnv): {
 } {
   // Linux systemd journald - logs go to journal, not files
   // Return placeholder paths for diagnostics compatibility
-  const stateDir = process.env.OPENCLAW_STATE_DIR || "/var/lib/openclaw";
+  const stateDir = process.env.DENEB_STATE_DIR || "/var/lib/deneb";
   return {
     stdoutPath: path.join(stateDir, "gateway.log"),
     stderrPath: path.join(stateDir, "gateway.error.log"),

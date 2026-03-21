@@ -8,17 +8,17 @@ const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const RUNTIME_API_EXPORT_GUARDS: Record<string, readonly string[]> = {
   "extensions/matrix/runtime-api.ts": [
-    'export * from "openclaw/plugin-sdk/matrix";',
+    'export * from "deneb/plugin-sdk/matrix";',
     'export * from "./src/auth-precedence.js";',
     'export { findMatrixAccountEntry, hashMatrixAccessToken, listMatrixEnvAccountIds, resolveConfiguredMatrixAccountIds, resolveMatrixChannelConfig, resolveMatrixCredentialsFilename, resolveMatrixEnvAccountToken, resolveMatrixHomeserverKey, resolveMatrixLegacyFlatStoreRoot, sanitizeMatrixPathSegment } from "./helper-api.js";',
   ],
   "extensions/telegram/runtime-api.ts": [
-    'export type { ChannelMessageActionAdapter, ChannelPlugin, OpenClawConfig, OpenClawPluginApi, PluginRuntime, TelegramAccountConfig, TelegramActionConfig, TelegramNetworkConfig } from "openclaw/plugin-sdk/telegram";',
-    'export type { OpenClawPluginService, OpenClawPluginServiceContext, PluginLogger } from "openclaw/plugin-sdk/core";',
-    'export type { AcpRuntime, AcpRuntimeCapabilities, AcpRuntimeDoctorReport, AcpRuntimeEnsureInput, AcpRuntimeEvent, AcpRuntimeHandle, AcpRuntimeStatus, AcpRuntimeTurnInput, AcpRuntimeErrorCode, AcpSessionUpdateTag } from "openclaw/plugin-sdk/acp-runtime";',
-    'export { AcpRuntimeError } from "openclaw/plugin-sdk/acp-runtime";',
-    'export { buildTokenChannelStatusSummary, clearAccountEntryFields, DEFAULT_ACCOUNT_ID, normalizeAccountId, PAIRING_APPROVED_MESSAGE, parseTelegramTopicConversation, projectCredentialSnapshotFields, resolveConfiguredFromCredentialStatuses, resolveTelegramPollVisibility } from "openclaw/plugin-sdk/telegram";',
-    'export { buildChannelConfigSchema, getChatChannelMeta, jsonResult, readNumberParam, readReactionParams, readStringArrayParam, readStringOrNumberParam, readStringParam, resolvePollMaxSelections, TelegramConfigSchema } from "openclaw/plugin-sdk/telegram-core";',
+    'export type { ChannelMessageActionAdapter, ChannelPlugin, DenebConfig, DenebPluginApi, PluginRuntime, TelegramAccountConfig, TelegramActionConfig, TelegramNetworkConfig } from "deneb/plugin-sdk/telegram";',
+    'export type { DenebPluginService, DenebPluginServiceContext, PluginLogger } from "deneb/plugin-sdk/core";',
+    'export type { AcpRuntime, AcpRuntimeCapabilities, AcpRuntimeDoctorReport, AcpRuntimeEnsureInput, AcpRuntimeEvent, AcpRuntimeHandle, AcpRuntimeStatus, AcpRuntimeTurnInput, AcpRuntimeErrorCode, AcpSessionUpdateTag } from "deneb/plugin-sdk/acp-runtime";',
+    'export { AcpRuntimeError } from "deneb/plugin-sdk/acp-runtime";',
+    'export { buildTokenChannelStatusSummary, clearAccountEntryFields, DEFAULT_ACCOUNT_ID, normalizeAccountId, PAIRING_APPROVED_MESSAGE, parseTelegramTopicConversation, projectCredentialSnapshotFields, resolveConfiguredFromCredentialStatuses, resolveTelegramPollVisibility } from "deneb/plugin-sdk/telegram";',
+    'export { buildChannelConfigSchema, getChatChannelMeta, jsonResult, readNumberParam, readReactionParams, readStringArrayParam, readStringOrNumberParam, readStringParam, resolvePollMaxSelections, TelegramConfigSchema } from "deneb/plugin-sdk/telegram-core";',
     'export type { TelegramProbe } from "./src/probe.js";',
     'export { auditTelegramGroupMembership, collectTelegramUnmentionedGroupIds } from "./src/audit.js";',
     'export { telegramMessageActions } from "./src/channel-actions.js";',

@@ -12,9 +12,9 @@ import {
 } from "./widearea-dns.js";
 
 const baseZoneOpts: WideAreaGatewayZoneOpts = {
-  domain: "openclaw.internal.",
+  domain: "deneb.internal.",
   gatewayPort: 18789,
-  displayName: "Mac Studio (OpenClaw)",
+  displayName: "Mac Studio (Deneb)",
   tailnetIPv4: "100.123.224.76",
   hostLabel: "studio-london",
   instanceLabel: "studio-london",
@@ -31,9 +31,9 @@ afterEach(() => {
 
 describe("wide-area DNS discovery domain helpers", () => {
   it.each([
-    { value: "openclaw.internal", expected: "openclaw.internal." },
-    { value: "openclaw.internal.", expected: "openclaw.internal." },
-    { value: "  openclaw.internal  ", expected: "openclaw.internal." },
+    { value: "deneb.internal", expected: "deneb.internal." },
+    { value: "deneb.internal.", expected: "deneb.internal." },
+    { value: "  deneb.internal  ", expected: "deneb.internal." },
     { value: "", expected: null },
     { value: "   ", expected: null },
     { value: null, expected: null },
@@ -46,7 +46,7 @@ describe("wide-area DNS discovery domain helpers", () => {
     {
       name: "prefers config domain over env",
       params: {
-        env: { OPENCLAW_WIDE_AREA_DOMAIN: "env.internal" } as NodeJS.ProcessEnv,
+        env: { DENEB_WIDE_AREA_DOMAIN: "env.internal" } as NodeJS.ProcessEnv,
         configDomain: "config.internal",
       },
       expected: "config.internal.",
@@ -54,14 +54,14 @@ describe("wide-area DNS discovery domain helpers", () => {
     {
       name: "falls back to env domain",
       params: {
-        env: { OPENCLAW_WIDE_AREA_DOMAIN: "env.internal" } as NodeJS.ProcessEnv,
+        env: { DENEB_WIDE_AREA_DOMAIN: "env.internal" } as NodeJS.ProcessEnv,
       },
       expected: "env.internal.",
     },
     {
       name: "returns null when both sources are blank",
       params: {
-        env: { OPENCLAW_WIDE_AREA_DOMAIN: "   " } as NodeJS.ProcessEnv,
+        env: { DENEB_WIDE_AREA_DOMAIN: "   " } as NodeJS.ProcessEnv,
         configDomain: " ",
       },
       expected: null,
@@ -71,8 +71,8 @@ describe("wide-area DNS discovery domain helpers", () => {
   });
 
   it("builds the default zone path from the normalized domain", () => {
-    expect(getWideAreaZonePath("openclaw.internal.")).toBe(
-      path.join(utils.CONFIG_DIR, "dns", "openclaw.internal.db"),
+    expect(getWideAreaZonePath("deneb.internal.")).toBe(
+      path.join(utils.CONFIG_DIR, "dns", "deneb.internal.db"),
     );
   });
 });
@@ -80,35 +80,35 @@ describe("wide-area DNS discovery domain helpers", () => {
 describe("wide-area DNS-SD zone rendering", () => {
   it("renders a zone with gateway PTR/SRV/TXT records", () => {
     const txt = renderWideAreaGatewayZoneText({
-      domain: "openclaw.internal.",
+      domain: "deneb.internal.",
       serial: 2025121701,
       gatewayPort: 18789,
-      displayName: "Mac Studio (OpenClaw)",
+      displayName: "Mac Studio (Deneb)",
       tailnetIPv4: "100.123.224.76",
       tailnetIPv6: "fd7a:115c:a1e0::8801:e04c",
       hostLabel: "studio-london",
       instanceLabel: "studio-london",
       sshPort: 22,
-      cliPath: "/opt/homebrew/bin/openclaw",
+      cliPath: "/opt/homebrew/bin/deneb",
     });
 
-    expect(txt).toContain(`$ORIGIN openclaw.internal.`);
+    expect(txt).toContain(`$ORIGIN deneb.internal.`);
     expect(txt).toContain(`studio-london IN A 100.123.224.76`);
     expect(txt).toContain(`studio-london IN AAAA fd7a:115c:a1e0::8801:e04c`);
-    expect(txt).toContain(`_openclaw-gw._tcp IN PTR studio-london._openclaw-gw._tcp`);
-    expect(txt).toContain(`studio-london._openclaw-gw._tcp IN SRV 0 0 18789 studio-london`);
-    expect(txt).toContain(`displayName=Mac Studio (OpenClaw)`);
+    expect(txt).toContain(`_deneb-gw._tcp IN PTR studio-london._deneb-gw._tcp`);
+    expect(txt).toContain(`studio-london._deneb-gw._tcp IN SRV 0 0 18789 studio-london`);
+    expect(txt).toContain(`displayName=Mac Studio (Deneb)`);
     expect(txt).toContain(`gatewayPort=18789`);
     expect(txt).toContain(`sshPort=22`);
-    expect(txt).toContain(`cliPath=/opt/homebrew/bin/openclaw`);
+    expect(txt).toContain(`cliPath=/opt/homebrew/bin/deneb`);
   });
 
   it("includes tailnetDns when provided", () => {
     const txt = renderWideAreaGatewayZoneText({
-      domain: "openclaw.internal.",
+      domain: "deneb.internal.",
       serial: 2025121701,
       gatewayPort: 18789,
-      displayName: "Mac Studio (OpenClaw)",
+      displayName: "Mac Studio (Deneb)",
       tailnetIPv4: "100.123.224.76",
       tailnetDns: "peters-mac-studio-1.sheep-coho.ts.net",
       hostLabel: "studio-london",
@@ -120,27 +120,27 @@ describe("wide-area DNS-SD zone rendering", () => {
 
   it("includes gateway TLS TXT fields and trims display metadata", () => {
     const txt = renderWideAreaGatewayZoneText({
-      domain: "openclaw.internal",
+      domain: "deneb.internal",
       serial: 2025121701,
       gatewayPort: 18789,
-      displayName: "  Mac Studio (OpenClaw)  ",
+      displayName: "  Mac Studio (Deneb)  ",
       tailnetIPv4: "100.123.224.76",
       hostLabel: " Studio London ",
       instanceLabel: " Studio London ",
       gatewayTlsEnabled: true,
       gatewayTlsFingerprintSha256: "abc123",
       tailnetDns: " tailnet.ts.net ",
-      cliPath: " /opt/homebrew/bin/openclaw ",
+      cliPath: " /opt/homebrew/bin/deneb ",
     });
 
-    expect(txt).toContain(`$ORIGIN openclaw.internal.`);
+    expect(txt).toContain(`$ORIGIN deneb.internal.`);
     expect(txt).toContain(`studio-london IN A 100.123.224.76`);
-    expect(txt).toContain(`studio-london._openclaw-gw._tcp IN TXT`);
-    expect(txt).toContain(`displayName=Mac Studio (OpenClaw)`);
+    expect(txt).toContain(`studio-london._deneb-gw._tcp IN TXT`);
+    expect(txt).toContain(`displayName=Mac Studio (Deneb)`);
     expect(txt).toContain(`gatewayTls=1`);
     expect(txt).toContain(`gatewayTlsSha256=abc123`);
     expect(txt).toContain(`tailnetDns=tailnet.ts.net`);
-    expect(txt).toContain(`cliPath=/opt/homebrew/bin/openclaw`);
+    expect(txt).toContain(`cliPath=/opt/homebrew/bin/deneb`);
   });
 });
 
@@ -160,7 +160,7 @@ describe("wide-area DNS zone writes", () => {
     const result = await writeWideAreaGatewayZone(makeZoneOpts());
 
     expect(result).toEqual({
-      zonePath: getWideAreaZonePath("openclaw.internal."),
+      zonePath: getWideAreaZonePath("deneb.internal."),
       changed: false,
     });
     expect(writeSpy).not.toHaveBeenCalled();
@@ -180,11 +180,11 @@ describe("wide-area DNS zone writes", () => {
     );
 
     expect(result).toEqual({
-      zonePath: getWideAreaZonePath("openclaw.internal."),
+      zonePath: getWideAreaZonePath("deneb.internal."),
       changed: true,
     });
     expect(writeSpy).toHaveBeenCalledWith(
-      getWideAreaZonePath("openclaw.internal."),
+      getWideAreaZonePath("deneb.internal."),
       expect.stringContaining("@ IN SOA ns1 hostmaster 2026031305 7200 3600 1209600 60"),
       "utf-8",
     );

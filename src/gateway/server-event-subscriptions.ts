@@ -17,7 +17,7 @@ import {
 import { resolveSessionKeyForRun } from "./server-session-key.js";
 import { resolveSessionKeyForTranscriptFile } from "./session-transcript-key.js";
 import {
-  attachOpenClawTranscriptMeta,
+  attachDenebTranscriptMeta,
   loadGatewaySessionRow,
   loadSessionEntry,
   readSessionMessages,
@@ -140,7 +140,7 @@ export function createGatewayEventSubscriptions(
               runtimeMs: sessionRow.runtimeMs,
             }
           : {};
-        const message = attachOpenClawTranscriptMeta(update.message, {
+        const message = attachDenebTranscriptMeta(update.message, {
           ...(typeof update.messageId === "string" ? { id: update.messageId } : {}),
           ...(typeof messageSeq === "number" ? { seq: messageSeq } : {}),
         });

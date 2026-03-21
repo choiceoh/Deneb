@@ -103,7 +103,7 @@ beforeAll(async () => {
   vi.useRealTimers();
   ({ runEmbeddedPiAgent } = await import("./pi-embedded-runner/run.js"));
   ({ SessionManager } = await import("@mariozechner/pi-coding-agent"));
-  e2eWorkspace = await createEmbeddedPiRunnerTestWorkspace("openclaw-embedded-agent-");
+  e2eWorkspace = await createEmbeddedPiRunnerTestWorkspace("deneb-embedded-agent-");
   ({ agentDir, workspaceDir } = e2eWorkspace);
 }, 180_000);
 

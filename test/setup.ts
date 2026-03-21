@@ -14,7 +14,7 @@ vi.mock("@mariozechner/pi-ai", async (importOriginal) => {
 process.env.VITEST = "true";
 // Config validation walks plugin manifests; keep an aggressive cache in tests to avoid
 // repeated filesystem discovery across suites/workers.
-process.env.OPENCLAW_PLUGIN_MANIFEST_CACHE_MS ??= "60000";
+process.env.DENEB_PLUGIN_MANIFEST_CACHE_MS ??= "60000";
 // Vitest vm forks can load transitive lockfile helpers many times per worker.
 // Raise listener budget to avoid noisy MaxListeners warnings and warning-stack overhead.
 const TEST_PROCESS_MAX_LISTENERS = 128;
@@ -27,11 +27,11 @@ import type {
   ChannelOutboundAdapter,
   ChannelPlugin,
 } from "../src/channels/plugins/types.js";
-import type { OpenClawConfig } from "../src/config/config.js";
+import type { DenebConfig } from "../src/config/config.js";
 import type { OutboundSendDeps } from "../src/infra/outbound/deliver.js";
 import { withIsolatedTestHome } from "./test-env.js";
 
-// Set HOME/state isolation before importing any runtime OpenClaw modules.
+// Set HOME/state isolation before importing any runtime Deneb modules.
 const testEnv = withIsolatedTestHome();
 afterAll(() => testEnv.cleanup());
 
@@ -99,7 +99,7 @@ const createStubPlugin = (params: {
   },
   capabilities: { chatTypes: ["direct", "group"] },
   config: {
-    listAccountIds: (cfg: OpenClawConfig) => {
+    listAccountIds: (cfg: DenebConfig) => {
       const channels = cfg.channels as Record<string, unknown> | undefined;
       const entry = channels?.[params.id];
       if (!entry || typeof entry !== "object") {
@@ -109,7 +109,7 @@ const createStubPlugin = (params: {
       const ids = accounts ? Object.keys(accounts).filter(Boolean) : [];
       return ids.length > 0 ? ids : ["default"];
     },
-    resolveAccount: (cfg: OpenClawConfig, accountId?: string | null) => {
+    resolveAccount: (cfg: DenebConfig, accountId?: string | null) => {
       const channels = cfg.channels as Record<string, unknown> | undefined;
       const entry = channels?.[params.id];
       if (!entry || typeof entry !== "object") {
@@ -119,7 +119,7 @@ const createStubPlugin = (params: {
       const match = accountId ? accounts?.[accountId] : undefined;
       return (match && typeof match === "object") || typeof match === "string" ? match : entry;
     },
-    isConfigured: async (_account, cfg: OpenClawConfig) => {
+    isConfigured: async (_account, cfg: DenebConfig) => {
       const channels = cfg.channels as Record<string, unknown> | undefined;
       return Boolean(channels?.[params.id]);
     },

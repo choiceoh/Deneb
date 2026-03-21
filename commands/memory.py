@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Vega Memory Backend for OpenClaw (v1.43)
+Vega Memory Backend for Deneb (v1.43)
 
 4개 CLI 명령: memory-search, memory-update, memory-embed, memory-status.
 기존 Vega 명령과 다른 출력 규약: bare JSON stdout, stderr 에러, exit code.

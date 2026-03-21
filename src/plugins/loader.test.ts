@@ -39,13 +39,13 @@ const {
   getActivePluginRegistry,
   getActivePluginRegistryKey,
   getGlobalHookRunner,
-  loadOpenClawPlugins,
+  loadDenebPlugins,
   resetGlobalHookRunner,
   setActivePluginRegistry,
 } = await importFreshPluginTestModules();
 
 type TempPlugin = { dir: string; file: string; id: string };
-type PluginLoadConfig = NonNullable<Parameters<typeof loadOpenClawPlugins>[0]>["config"];
+type PluginLoadConfig = NonNullable<Parameters<typeof loadDenebPlugins>[0]>["config"];
 
 function chmodSafeDir(dir: string) {
   if (process.platform === "win32") {
@@ -65,9 +65,9 @@ function mkdirSafe(dir: string) {
   chmodSafeDir(dir);
 }
 
-const fixtureRoot = mkdtempSafe(path.join(os.tmpdir(), "openclaw-plugin-"));
+const fixtureRoot = mkdtempSafe(path.join(os.tmpdir(), "deneb-plugin-"));
 let tempDirIndex = 0;
-const prevBundledDir = process.env.OPENCLAW_BUNDLED_PLUGINS_DIR;
+const prevBundledDir = process.env.DENEB_BUNDLED_PLUGINS_DIR;
 const EMPTY_PLUGIN_SCHEMA = { type: "object", additionalProperties: false, properties: {} };
 let cachedBundledTelegramDir = "";
 let cachedBundledMemoryDir = "";
@@ -123,7 +123,7 @@ function writePlugin(params: {
   const file = path.join(dir, filename);
   fs.writeFileSync(file, params.body, "utf-8");
   fs.writeFileSync(
-    path.join(dir, "openclaw.plugin.json"),
+    path.join(dir, "deneb.plugin.json"),
     JSON.stringify(
       {
         id: params.id,
@@ -143,8 +143,8 @@ function loadBundledMemoryPluginRegistry(options?: {
   pluginFilename?: string;
 }) {
   if (!options && cachedBundledMemoryDir) {
-    process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = cachedBundledMemoryDir;
-    return loadOpenClawPlugins({
+    process.env.DENEB_BUNDLED_PLUGINS_DIR = cachedBundledMemoryDir;
+    return loadDenebPlugins({
       cache: false,
       workspaceDir: cachedBundledMemoryDir,
       config: {
@@ -172,7 +172,7 @@ function loadBundledMemoryPluginRegistry(options?: {
           name: options.packageMeta.name,
           version: options.packageMeta.version,
           description: options.packageMeta.description,
-          openclaw: { extensions: [`./${pluginFilename}`] },
+          deneb: { extensions: [`./${pluginFilename}`] },
         },
         null,
         2,
@@ -192,9 +192,9 @@ function loadBundledMemoryPluginRegistry(options?: {
   if (!options) {
     cachedBundledMemoryDir = bundledDir;
   }
-  process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = bundledDir;
+  process.env.DENEB_BUNDLED_PLUGINS_DIR = bundledDir;
 
-  return loadOpenClawPlugins({
+  return loadDenebPlugins({
     cache: false,
     workspaceDir: bundledDir,
     config: {
@@ -217,27 +217,27 @@ function setupBundledTelegramPlugin() {
       filename: "telegram.cjs",
     });
   }
-  process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = cachedBundledTelegramDir;
+  process.env.DENEB_BUNDLED_PLUGINS_DIR = cachedBundledTelegramDir;
 }
 
-function expectTelegramLoaded(registry: ReturnType<typeof loadOpenClawPlugins>) {
+function expectTelegramLoaded(registry: ReturnType<typeof loadDenebPlugins>) {
   const telegram = registry.plugins.find((entry) => entry.id === "telegram");
   expect(telegram?.status).toBe("loaded");
   expect(registry.channels.some((entry) => entry.plugin.id === "telegram")).toBe(true);
 }
 
 function useNoBundledPlugins() {
-  process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
+  process.env.DENEB_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
 }
 
 function loadRegistryFromSinglePlugin(params: {
   plugin: TempPlugin;
   pluginConfig?: Record<string, unknown>;
   includeWorkspaceDir?: boolean;
-  options?: Omit<Parameters<typeof loadOpenClawPlugins>[0], "cache" | "workspaceDir" | "config">;
+  options?: Omit<Parameters<typeof loadDenebPlugins>[0], "cache" | "workspaceDir" | "config">;
 }) {
   const pluginConfig = params.pluginConfig ?? {};
-  return loadOpenClawPlugins({
+  return loadDenebPlugins({
     cache: false,
     ...(params.includeWorkspaceDir === false ? {} : { workspaceDir: params.plugin.dir }),
     ...params.options,
@@ -252,9 +252,9 @@ function loadRegistryFromSinglePlugin(params: {
 
 function loadRegistryFromAllowedPlugins(
   plugins: TempPlugin[],
-  options?: Omit<Parameters<typeof loadOpenClawPlugins>[0], "cache" | "config">,
+  options?: Omit<Parameters<typeof loadDenebPlugins>[0], "cache" | "config">,
 ) {
-  return loadOpenClawPlugins({
+  return loadDenebPlugins({
     cache: false,
     ...options,
     config: {
@@ -290,7 +290,7 @@ function createEscapingEntryFixture(params: { id: string; sourceBody: string }) 
   const linkedEntry = path.join(pluginDir, "entry.cjs");
   fs.writeFileSync(outsideEntry, params.sourceBody, "utf-8");
   fs.writeFileSync(
-    path.join(pluginDir, "openclaw.plugin.json"),
+    path.join(pluginDir, "deneb.plugin.json"),
     JSON.stringify(
       {
         id: params.id,
@@ -323,12 +323,12 @@ function createPluginSdkAliasFixture(params?: {
     params?.trustedRootIndicatorMode ??
     (params?.trustedRootIndicators === false ? "none" : "bin+marker");
   const packageJson: Record<string, unknown> = {
-    name: params?.packageName ?? "openclaw",
+    name: params?.packageName ?? "deneb",
     type: "module",
   };
   if (trustedRootIndicatorMode === "bin+marker") {
     packageJson.bin = {
-      openclaw: "openclaw.mjs",
+      deneb: "deneb.mjs",
     };
   }
   if (params?.packageExports || trustedRootIndicatorMode === "cli-entry-only") {
@@ -344,7 +344,7 @@ function createPluginSdkAliasFixture(params?: {
   }
   fs.writeFileSync(path.join(root, "package.json"), JSON.stringify(packageJson, null, 2), "utf-8");
   if (trustedRootIndicatorMode === "bin+marker") {
-    fs.writeFileSync(path.join(root, "openclaw.mjs"), "export {};\n", "utf-8");
+    fs.writeFileSync(path.join(root, "deneb.mjs"), "export {};\n", "utf-8");
   }
   fs.writeFileSync(srcFile, params?.srcBody ?? "export {};\n", "utf-8");
   fs.writeFileSync(distFile, params?.distBody ?? "export {};\n", "utf-8");
@@ -359,7 +359,7 @@ function createPluginRuntimeAliasFixture(params?: { srcBody?: string; distBody?:
   mkdirSafe(path.dirname(distFile));
   fs.writeFileSync(
     path.join(root, "package.json"),
-    JSON.stringify({ name: "openclaw", type: "module" }, null, 2),
+    JSON.stringify({ name: "deneb", type: "module" }, null, 2),
     "utf-8",
   );
   fs.writeFileSync(
@@ -384,10 +384,10 @@ function loadBundleFixture(params: {
   useNoBundledPlugins();
   const workspaceDir = makeTempDir();
   const stateDir = makeTempDir();
-  const bundleRoot = path.join(workspaceDir, ".openclaw", "extensions", params.pluginId);
+  const bundleRoot = path.join(workspaceDir, ".deneb", "extensions", params.pluginId);
   params.build(bundleRoot);
-  return withEnv({ OPENCLAW_STATE_DIR: stateDir, ...params.env }, () =>
-    loadOpenClawPlugins({
+  return withEnv({ DENEB_STATE_DIR: stateDir, ...params.env }, () =>
+    loadDenebPlugins({
       workspaceDir,
       onlyPluginIds: params.onlyPluginIds ?? [params.pluginId],
       config: {
@@ -405,7 +405,7 @@ function loadBundleFixture(params: {
 }
 
 function expectNoUnwiredBundleDiagnostic(
-  registry: ReturnType<typeof loadOpenClawPlugins>,
+  registry: ReturnType<typeof loadDenebPlugins>,
   pluginId: string,
 ) {
   expect(
@@ -418,7 +418,7 @@ function expectNoUnwiredBundleDiagnostic(
 }
 
 function resolveLoadedPluginSource(
-  registry: ReturnType<typeof loadOpenClawPlugins>,
+  registry: ReturnType<typeof loadDenebPlugins>,
   pluginId: string,
 ) {
   return fs.realpathSync(registry.plugins.find((entry) => entry.id === pluginId)?.source ?? "");
@@ -426,8 +426,8 @@ function resolveLoadedPluginSource(
 
 function expectCachePartitionByPluginSource(params: {
   pluginId: string;
-  loadFirst: () => ReturnType<typeof loadOpenClawPlugins>;
-  loadSecond: () => ReturnType<typeof loadOpenClawPlugins>;
+  loadFirst: () => ReturnType<typeof loadDenebPlugins>;
+  loadSecond: () => ReturnType<typeof loadDenebPlugins>;
   expectedFirstSource: string;
   expectedSecondSource: string;
 }) {
@@ -444,8 +444,8 @@ function expectCachePartitionByPluginSource(params: {
 }
 
 function expectCacheMissThenHit(params: {
-  loadFirst: () => ReturnType<typeof loadOpenClawPlugins>;
-  loadVariant: () => ReturnType<typeof loadOpenClawPlugins>;
+  loadFirst: () => ReturnType<typeof loadDenebPlugins>;
+  loadVariant: () => ReturnType<typeof loadDenebPlugins>;
 }) {
   const first = params.loadFirst();
   const second = params.loadVariant();
@@ -478,7 +478,7 @@ function createSetupEntryChannelPluginFixture(params: {
     JSON.stringify(
       {
         name: params.packageName,
-        openclaw: {
+        deneb: {
           extensions: ["./index.cjs"],
           setupEntry: "./setup-entry.cjs",
           ...(params.startupDeferConfiguredChannelFullLoadUntilAfterListen
@@ -496,7 +496,7 @@ function createSetupEntryChannelPluginFixture(params: {
     "utf-8",
   );
   fs.writeFileSync(
-    path.join(pluginDir, "openclaw.plugin.json"),
+    path.join(pluginDir, "deneb.plugin.json"),
     JSON.stringify(
       {
         id: params.id,
@@ -565,10 +565,10 @@ module.exports = {
 
 function createEnvResolvedPluginFixture(pluginId: string) {
   useNoBundledPlugins();
-  const openclawHome = makeTempDir();
+  const denebHome = makeTempDir();
   const ignoredHome = makeTempDir();
   const stateDir = makeTempDir();
-  const pluginDir = path.join(openclawHome, "plugins", pluginId);
+  const pluginDir = path.join(denebHome, "plugins", pluginId);
   mkdirSafe(pluginDir);
   const plugin = writePlugin({
     id: pluginId,
@@ -578,11 +578,11 @@ function createEnvResolvedPluginFixture(pluginId: string) {
   });
   const env = {
     ...process.env,
-    OPENCLAW_HOME: openclawHome,
+    DENEB_HOME: denebHome,
     HOME: ignoredHome,
-    OPENCLAW_STATE_DIR: stateDir,
+    DENEB_STATE_DIR: stateDir,
     CLAWDBOT_STATE_DIR: undefined,
-    OPENCLAW_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
+    DENEB_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
   };
   return { plugin, env };
 }
@@ -613,7 +613,7 @@ function expectEscapingEntryRejected(params: {
     throw err;
   }
 
-  const registry = loadOpenClawPlugins({
+  const registry = loadDenebPlugins({
     cache: false,
     config: {
       plugins: {
@@ -679,9 +679,9 @@ function resolvePluginRuntimeModule(params: {
 afterEach(() => {
   clearPluginLoaderCache();
   if (prevBundledDir === undefined) {
-    delete process.env.OPENCLAW_BUNDLED_PLUGINS_DIR;
+    delete process.env.DENEB_BUNDLED_PLUGINS_DIR;
   } else {
-    process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = prevBundledDir;
+    process.env.DENEB_BUNDLED_PLUGINS_DIR = prevBundledDir;
   }
 });
 
@@ -690,7 +690,7 @@ describe("bundle plugins", () => {
     useNoBundledPlugins();
     const workspaceDir = makeTempDir();
     const stateDir = makeTempDir();
-    const bundleRoot = path.join(workspaceDir, ".openclaw", "extensions", "sample-bundle");
+    const bundleRoot = path.join(workspaceDir, ".deneb", "extensions", "sample-bundle");
     mkdirSafe(path.join(bundleRoot, ".codex-plugin"));
     mkdirSafe(path.join(bundleRoot, "skills"));
     fs.writeFileSync(
@@ -707,8 +707,8 @@ describe("bundle plugins", () => {
       "---\ndescription: fixture\n---\n",
     );
 
-    const registry = withEnv({ OPENCLAW_STATE_DIR: stateDir }, () =>
-      loadOpenClawPlugins({
+    const registry = withEnv({ DENEB_STATE_DIR: stateDir }, () =>
+      loadDenebPlugins({
         workspaceDir,
         onlyPluginIds: ["sample-bundle"],
         config: {
@@ -814,7 +814,7 @@ describe("bundle plugins", () => {
     const registry = loadBundleFixture({
       pluginId: "claude-mcp-url",
       env: {
-        OPENCLAW_HOME: stateDir,
+        DENEB_HOME: stateDir,
       },
       build: (bundleRoot) => {
         mkdirSafe(path.join(bundleRoot, ".claude-plugin"));
@@ -864,7 +864,7 @@ afterAll(() => {
   }
 });
 
-describe("loadOpenClawPlugins", () => {
+describe("loadDenebPlugins", () => {
   it("disables bundled plugins by default", () => {
     const bundledDir = makeTempDir();
     writePlugin({
@@ -873,9 +873,9 @@ describe("loadOpenClawPlugins", () => {
       dir: bundledDir,
       filename: "bundled.cjs",
     });
-    process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = bundledDir;
+    process.env.DENEB_BUNDLED_PLUGINS_DIR = bundledDir;
 
-    const registry = loadOpenClawPlugins({
+    const registry = loadDenebPlugins({
       cache: false,
       config: {
         plugins: {
@@ -901,7 +901,7 @@ describe("loadOpenClawPlugins", () => {
             },
           },
         } satisfies PluginLoadConfig,
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           expectTelegramLoaded(registry);
         },
       },
@@ -917,7 +917,7 @@ describe("loadOpenClawPlugins", () => {
             enabled: true,
           },
         } satisfies PluginLoadConfig,
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           expectTelegramLoaded(registry);
         },
       },
@@ -935,7 +935,7 @@ describe("loadOpenClawPlugins", () => {
             },
           },
         } satisfies PluginLoadConfig,
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           const telegram = registry.plugins.find((entry) => entry.id === "telegram");
           expect(telegram?.status).toBe("disabled");
           expect(telegram?.error).toBe("disabled in config");
@@ -944,7 +944,7 @@ describe("loadOpenClawPlugins", () => {
     ] as const;
 
     for (const testCase of cases) {
-      const registry = loadOpenClawPlugins({
+      const registry = loadDenebPlugins({
         cache: false,
         workspaceDir: cachedBundledTelegramDir,
         config: testCase.config,
@@ -956,7 +956,7 @@ describe("loadOpenClawPlugins", () => {
   it("preserves package.json metadata for bundled memory plugins", () => {
     const registry = loadBundledMemoryPluginRegistry({
       packageMeta: {
-        name: "@openclaw/memory-core",
+        name: "@deneb/memory-core",
         version: "1.2.3",
         description: "Memory plugin package",
       },
@@ -975,7 +975,7 @@ describe("loadOpenClawPlugins", () => {
       {
         label: "loads plugins from config paths",
         run: () => {
-          process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
+          process.env.DENEB_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
           const plugin = writePlugin({
             id: "allowed-config-path",
             filename: "allowed-config-path.cjs",
@@ -987,7 +987,7 @@ describe("loadOpenClawPlugins", () => {
 };`,
           });
 
-          const registry = loadOpenClawPlugins({
+          const registry = loadDenebPlugins({
             cache: false,
             workspaceDir: plugin.dir,
             config: {
@@ -1020,7 +1020,7 @@ describe("loadOpenClawPlugins", () => {
 module.exports = { id: "skipped-scoped-only", register() { throw new Error("skipped plugin should not load"); } };`,
           });
 
-          const registry = loadOpenClawPlugins({
+          const registry = loadDenebPlugins({
             cache: false,
             config: {
               plugins: {
@@ -1058,12 +1058,12 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
             },
           };
 
-          const full = loadOpenClawPlugins(options);
-          const scoped = loadOpenClawPlugins({
+          const full = loadDenebPlugins(options);
+          const scoped = loadDenebPlugins({
             ...options,
             onlyPluginIds: ["allowed-cache-scope"],
           });
-          const scopedAgain = loadOpenClawPlugins({
+          const scopedAgain = loadDenebPlugins({
             ...options,
             onlyPluginIds: ["allowed-cache-scope"],
           });
@@ -1090,7 +1090,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
           setActivePluginRegistry(previousRegistry, "existing-registry");
           resetGlobalHookRunner();
 
-          const scoped = loadOpenClawPlugins({
+          const scoped = loadDenebPlugins({
             cache: false,
             activate: false,
             workspaceDir: plugin.dir,
@@ -1137,7 +1137,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
 
     clearPluginCommands();
 
-    const scoped = loadOpenClawPlugins({
+    const scoped = loadDenebPlugins({
       cache: false,
       activate: false,
       workspaceDir: plugin.dir,
@@ -1154,7 +1154,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
     expect(scoped.commands.map((entry) => entry.command.name)).toEqual(["pair"]);
     expect(getPluginCommandSpecs("telegram")).toEqual([]);
 
-    const active = loadOpenClawPlugins({
+    const active = loadDenebPlugins({
       cache: false,
       workspaceDir: plugin.dir,
       config: {
@@ -1179,16 +1179,16 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
   });
 
   it("throws when activate:false is used without cache:false", () => {
-    expect(() => loadOpenClawPlugins({ activate: false })).toThrow(
+    expect(() => loadDenebPlugins({ activate: false })).toThrow(
       "activate:false requires cache:false",
     );
-    expect(() => loadOpenClawPlugins({ activate: false, cache: true })).toThrow(
+    expect(() => loadDenebPlugins({ activate: false, cache: true })).toThrow(
       "activate:false requires cache:false",
     );
   });
 
   it("re-initializes global hook runner when serving registry from cache", () => {
-    process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
+    process.env.DENEB_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
     const plugin = writePlugin({
       id: "cache-hook-runner",
       filename: "cache-hook-runner.cjs",
@@ -1205,13 +1205,13 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
       },
     };
 
-    const first = loadOpenClawPlugins(options);
+    const first = loadDenebPlugins(options);
     expect(getGlobalHookRunner()).not.toBeNull();
 
     resetGlobalHookRunner();
     expect(getGlobalHookRunner()).toBeNull();
 
-    const second = loadOpenClawPlugins(options);
+    const second = loadDenebPlugins(options);
     expect(second).toBe(first);
     expect(getGlobalHookRunner()).not.toBeNull();
 
@@ -1253,19 +1253,19 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
           expectedFirstSource: pluginA.file,
           expectedSecondSource: pluginB.file,
           loadFirst: () =>
-            loadOpenClawPlugins({
+            loadDenebPlugins({
               ...options,
               env: {
                 ...process.env,
-                OPENCLAW_BUNDLED_PLUGINS_DIR: bundledA,
+                DENEB_BUNDLED_PLUGINS_DIR: bundledA,
               },
             }),
           loadSecond: () =>
-            loadOpenClawPlugins({
+            loadDenebPlugins({
               ...options,
               env: {
                 ...process.env,
-                OPENCLAW_BUNDLED_PLUGINS_DIR: bundledB,
+                DENEB_BUNDLED_PLUGINS_DIR: bundledB,
               },
             }),
         };
@@ -1310,25 +1310,25 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
           expectedFirstSource: pluginA.file,
           expectedSecondSource: pluginB.file,
           loadFirst: () =>
-            loadOpenClawPlugins({
+            loadDenebPlugins({
               ...options,
               env: {
                 ...process.env,
                 HOME: homeA,
-                OPENCLAW_HOME: undefined,
-                OPENCLAW_STATE_DIR: stateDir,
-                OPENCLAW_BUNDLED_PLUGINS_DIR: bundledDir,
+                DENEB_HOME: undefined,
+                DENEB_STATE_DIR: stateDir,
+                DENEB_BUNDLED_PLUGINS_DIR: bundledDir,
               },
             }),
           loadSecond: () =>
-            loadOpenClawPlugins({
+            loadDenebPlugins({
               ...options,
               env: {
                 ...process.env,
                 HOME: homeB,
-                OPENCLAW_HOME: undefined,
-                OPENCLAW_STATE_DIR: stateDir,
-                OPENCLAW_BUNDLED_PLUGINS_DIR: bundledDir,
+                DENEB_HOME: undefined,
+                DENEB_STATE_DIR: stateDir,
+                DENEB_BUNDLED_PLUGINS_DIR: bundledDir,
               },
             }),
         };
@@ -1350,10 +1350,10 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
       name: "does not reuse cached registries when env-resolved install paths change",
       setup: () => {
         useNoBundledPlugins();
-        const openclawHome = makeTempDir();
+        const denebHome = makeTempDir();
         const ignoredHome = makeTempDir();
         const stateDir = makeTempDir();
-        const pluginDir = path.join(openclawHome, "plugins", "tracked-install-cache");
+        const pluginDir = path.join(denebHome, "plugins", "tracked-install-cache");
         mkdirSafe(pluginDir);
         const plugin = writePlugin({
           id: "tracked-install-cache",
@@ -1381,27 +1381,27 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
         const secondHome = makeTempDir();
         return {
           loadFirst: () =>
-            loadOpenClawPlugins({
+            loadDenebPlugins({
               ...options,
               env: {
                 ...process.env,
-                OPENCLAW_HOME: openclawHome,
+                DENEB_HOME: denebHome,
                 HOME: ignoredHome,
-                OPENCLAW_STATE_DIR: stateDir,
+                DENEB_STATE_DIR: stateDir,
                 CLAWDBOT_STATE_DIR: undefined,
-                OPENCLAW_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
+                DENEB_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
               },
             }),
           loadVariant: () =>
-            loadOpenClawPlugins({
+            loadDenebPlugins({
               ...options,
               env: {
                 ...process.env,
-                OPENCLAW_HOME: secondHome,
+                DENEB_HOME: secondHome,
                 HOME: ignoredHome,
-                OPENCLAW_STATE_DIR: stateDir,
+                DENEB_STATE_DIR: stateDir,
                 CLAWDBOT_STATE_DIR: undefined,
-                OPENCLAW_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
+                DENEB_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
               },
             }),
         };
@@ -1430,9 +1430,9 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
         };
 
         return {
-          loadFirst: () => loadOpenClawPlugins(options),
+          loadFirst: () => loadDenebPlugins(options),
           loadVariant: () =>
-            loadOpenClawPlugins({
+            loadDenebPlugins({
               ...options,
               runtimeOptions: {
                 allowGatewaySubagentBinding: true,
@@ -1457,11 +1457,11 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
     );
 
     const loadWithStateDir = (stateDir: string) =>
-      loadOpenClawPlugins({
+      loadDenebPlugins({
         env: {
           ...process.env,
-          OPENCLAW_STATE_DIR: stateDir,
-          OPENCLAW_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
+          DENEB_STATE_DIR: stateDir,
+          DENEB_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
         },
         config: {
           plugins: {
@@ -1497,12 +1497,12 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
       body: `module.exports = { id: "tilde-bundled", register() {} };`,
     });
 
-    const registry = loadOpenClawPlugins({
+    const registry = loadDenebPlugins({
       env: {
         ...process.env,
         HOME: homeDir,
-        OPENCLAW_HOME: undefined,
-        OPENCLAW_BUNDLED_PLUGINS_DIR: override,
+        DENEB_HOME: undefined,
+        DENEB_BUNDLED_PLUGINS_DIR: override,
       },
       config: {
         plugins: {
@@ -1519,34 +1519,34 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
     ).toBe(fs.realpathSync(plugin.file));
   });
 
-  it("prefers OPENCLAW_HOME over HOME for env-expanded load paths", () => {
+  it("prefers DENEB_HOME over HOME for env-expanded load paths", () => {
     const ignoredHome = makeTempDir();
-    const openclawHome = makeTempDir();
+    const denebHome = makeTempDir();
     const stateDir = makeTempDir();
     const bundledDir = makeTempDir();
     const plugin = writePlugin({
-      id: "openclaw-home-demo",
-      dir: path.join(openclawHome, "plugins", "openclaw-home-demo"),
+      id: "deneb-home-demo",
+      dir: path.join(denebHome, "plugins", "deneb-home-demo"),
       filename: "index.cjs",
-      body: `module.exports = { id: "openclaw-home-demo", register() {} };`,
+      body: `module.exports = { id: "deneb-home-demo", register() {} };`,
     });
 
-    const registry = loadOpenClawPlugins({
+    const registry = loadDenebPlugins({
       env: {
         ...process.env,
         HOME: ignoredHome,
-        OPENCLAW_HOME: openclawHome,
-        OPENCLAW_STATE_DIR: stateDir,
-        OPENCLAW_BUNDLED_PLUGINS_DIR: bundledDir,
+        DENEB_HOME: denebHome,
+        DENEB_STATE_DIR: stateDir,
+        DENEB_BUNDLED_PLUGINS_DIR: bundledDir,
       },
       config: {
         plugins: {
-          allow: ["openclaw-home-demo"],
+          allow: ["deneb-home-demo"],
           entries: {
-            "openclaw-home-demo": { enabled: true },
+            "deneb-home-demo": { enabled: true },
           },
           load: {
-            paths: ["~/plugins/openclaw-home-demo"],
+            paths: ["~/plugins/deneb-home-demo"],
           },
         },
       },
@@ -1554,7 +1554,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
 
     expect(
       fs.realpathSync(
-        registry.plugins.find((entry) => entry.id === "openclaw-home-demo")?.source ?? "",
+        registry.plugins.find((entry) => entry.id === "deneb-home-demo")?.source ?? "",
       ),
     ).toBe(fs.realpathSync(plugin.file));
   });
@@ -1682,7 +1682,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
     }
   });
 } };`,
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           const channel = registry.channels.find((entry) => entry.plugin.id === "demo");
           expect(channel).toBeDefined();
         },
@@ -1728,7 +1728,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
     }
   });
 } };`,
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           expect(registry.channels.filter((entry) => entry.plugin.id === "demo")).toHaveLength(1);
           expect(
             registry.diagnostics.some(
@@ -1746,7 +1746,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
         body: `module.exports = { id: "context-engine-core-collision", register(api) {
   api.registerContextEngine("legacy", () => ({}));
 } };`,
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           expect(
             registry.diagnostics.some(
               (diag) =>
@@ -1763,7 +1763,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
         body: `module.exports = { id: "cli-missing-metadata", register(api) {
   api.registerCli(() => {});
 } };`,
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           expect(registry.cliRegistrars).toHaveLength(0);
           expect(
             registry.diagnostics.some(
@@ -1854,7 +1854,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
         buildBody: (ownerId: string) => `module.exports = { id: "${ownerId}", register(api) {
   api.registerHook("gateway:startup", () => {}, { name: "shared-hook" });
 } };`,
-        selectCount: (registry: ReturnType<typeof loadOpenClawPlugins>) =>
+        selectCount: (registry: ReturnType<typeof loadDenebPlugins>) =>
           registry.hooks.filter((entry) => entry.entry.hook.name === "shared-hook").length,
         duplicateMessage: "hook already registered: shared-hook (hook-owner-a)",
       },
@@ -1865,7 +1865,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
         buildBody: (ownerId: string) => `module.exports = { id: "${ownerId}", register(api) {
   api.registerService({ id: "shared-service", start() {} });
 } };`,
-        selectCount: (registry: ReturnType<typeof loadOpenClawPlugins>) =>
+        selectCount: (registry: ReturnType<typeof loadDenebPlugins>) =>
           registry.services.filter((entry) => entry.service.id === "shared-service").length,
         duplicateMessage: "service already registered: shared-service (service-owner-a)",
       },
@@ -1887,10 +1887,10 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
         buildBody: (ownerId: string) => `module.exports = { id: "${ownerId}", register(api) {
   api.registerCli(() => {}, { commands: ["shared-cli"] });
 } };`,
-        selectCount: (registry: ReturnType<typeof loadOpenClawPlugins>) =>
+        selectCount: (registry: ReturnType<typeof loadDenebPlugins>) =>
           registry.cliRegistrars.length,
         duplicateMessage: "cli command already registered: shared-cli (cli-owner-a)",
-        assertPrimaryOwner: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assertPrimaryOwner: (registry: ReturnType<typeof loadDenebPlugins>) => {
           expect(registry.cliRegistrars[0]?.pluginId).toBe("cli-owner-a");
         },
       },
@@ -1999,7 +1999,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
 } };`,
           }),
         ],
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           expect(
             registry.httpRoutes.find((entry) => entry.pluginId === "http-route-missing-auth"),
           ).toBeUndefined();
@@ -2022,7 +2022,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
 } };`,
           }),
         ],
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           const routes = registry.httpRoutes.filter(
             (entry) => entry.pluginId === "http-route-replace-self",
           );
@@ -2049,7 +2049,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
 } };`,
           }),
         ],
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           const route = registry.httpRoutes.find((entry) => entry.path === "/demo");
           expect(route?.pluginId).toBe("http-route-owner-a");
           expect(
@@ -2071,7 +2071,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
 } };`,
           }),
         ],
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           const routes = registry.httpRoutes.filter(
             (entry) => entry.pluginId === "http-route-overlap",
           );
@@ -2096,7 +2096,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
 } };`,
           }),
         ],
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           const routes = registry.httpRoutes.filter(
             (entry) => entry.pluginId === "http-route-overlap-same-auth",
           );
@@ -2122,13 +2122,13 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
   });
 
   it("respects explicit disable in config", () => {
-    process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
+    process.env.DENEB_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
     const plugin = writePlugin({
       id: "config-disable",
       body: `module.exports = { id: "config-disable", register() {} };`,
     });
 
-    const registry = loadOpenClawPlugins({
+    const registry = loadDenebPlugins({
       cache: false,
       config: {
         plugins: {
@@ -2176,7 +2176,7 @@ module.exports = {
 };`,
     });
     fs.writeFileSync(
-      path.join(plugin.dir, "openclaw.plugin.json"),
+      path.join(plugin.dir, "deneb.plugin.json"),
       JSON.stringify(
         {
           id: "lazy-channel",
@@ -2198,7 +2198,7 @@ module.exports = {
       },
     };
 
-    const registry = loadOpenClawPlugins({
+    const registry = loadDenebPlugins({
       cache: false,
       config,
     });
@@ -2207,7 +2207,7 @@ module.exports = {
     expect(registry.channelSetups).toHaveLength(0);
     expect(registry.plugins.find((entry) => entry.id === "lazy-channel")?.status).toBe("disabled");
 
-    const setupRegistry = loadOpenClawPlugins({
+    const setupRegistry = loadDenebPlugins({
       cache: false,
       config,
       includeSetupOnlyChannelPlugins: true,
@@ -2227,13 +2227,13 @@ module.exports = {
       fixture: {
         id: "setup-entry-test",
         label: "Setup Entry Test",
-        packageName: "@openclaw/setup-entry-test",
+        packageName: "@deneb/setup-entry-test",
         fullBlurb: "full entry should not run in setup-only mode",
         setupBlurb: "setup entry",
         configured: false,
       },
       load: ({ pluginDir }: { pluginDir: string }) =>
-        loadOpenClawPlugins({
+        loadDenebPlugins({
           cache: false,
           config: {
             plugins: {
@@ -2255,13 +2255,13 @@ module.exports = {
       fixture: {
         id: "setup-runtime-test",
         label: "Setup Runtime Test",
-        packageName: "@openclaw/setup-runtime-test",
+        packageName: "@deneb/setup-runtime-test",
         fullBlurb: "full entry should not run while unconfigured",
         setupBlurb: "setup runtime",
         configured: false,
       },
       load: ({ pluginDir }: { pluginDir: string }) =>
-        loadOpenClawPlugins({
+        loadDenebPlugins({
           cache: false,
           config: {
             plugins: {
@@ -2279,14 +2279,14 @@ module.exports = {
       fixture: {
         id: "setup-runtime-preferred-test",
         label: "Setup Runtime Preferred Test",
-        packageName: "@openclaw/setup-runtime-preferred-test",
+        packageName: "@deneb/setup-runtime-preferred-test",
         fullBlurb: "full entry should be deferred while startup is still cold",
         setupBlurb: "setup runtime preferred",
         configured: true,
         startupDeferConfiguredChannelFullLoadUntilAfterListen: true,
       },
       load: ({ pluginDir }: { pluginDir: string }) =>
-        loadOpenClawPlugins({
+        loadDenebPlugins({
           cache: false,
           preferSetupRuntimeForChannelPlugins: true,
           config: {
@@ -2311,13 +2311,13 @@ module.exports = {
       fixture: {
         id: "setup-runtime-not-preferred-test",
         label: "Setup Runtime Not Preferred Test",
-        packageName: "@openclaw/setup-runtime-not-preferred-test",
+        packageName: "@deneb/setup-runtime-not-preferred-test",
         fullBlurb: "full entry should still load without explicit startup opt-in",
         setupBlurb: "setup runtime not preferred",
         configured: true,
       },
       load: ({ pluginDir }: { pluginDir: string }) =>
-        loadOpenClawPlugins({
+        loadDenebPlugins({
           cache: false,
           preferSetupRuntimeForChannelPlugins: true,
           config: {
@@ -2468,7 +2468,7 @@ module.exports = {
       {
         label: "enforces memory slot selection",
         loadRegistry: () => {
-          process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
+          process.env.DENEB_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
           const memoryA = writePlugin({
             id: "memory-a",
             body: `module.exports = { id: "memory-a", kind: "memory", register() {} };`,
@@ -2478,7 +2478,7 @@ module.exports = {
             body: `module.exports = { id: "memory-b", kind: "memory", register() {} };`,
           });
 
-          return loadOpenClawPlugins({
+          return loadDenebPlugins({
             cache: false,
             config: {
               plugins: {
@@ -2488,7 +2488,7 @@ module.exports = {
             },
           });
         },
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           const a = registry.plugins.find((entry) => entry.id === "memory-a");
           const b = registry.plugins.find((entry) => entry.id === "memory-b");
           expect(b?.status).toBe("loaded");
@@ -2516,7 +2516,7 @@ module.exports = {
             body: `module.exports = { id: "memory-b", kind: "memory", register() {} };`,
           });
           fs.writeFileSync(
-            path.join(memoryADir, "openclaw.plugin.json"),
+            path.join(memoryADir, "deneb.plugin.json"),
             JSON.stringify(
               {
                 id: "memory-a",
@@ -2529,7 +2529,7 @@ module.exports = {
             "utf-8",
           );
           fs.writeFileSync(
-            path.join(memoryBDir, "openclaw.plugin.json"),
+            path.join(memoryBDir, "deneb.plugin.json"),
             JSON.stringify(
               {
                 id: "memory-b",
@@ -2541,9 +2541,9 @@ module.exports = {
             ),
             "utf-8",
           );
-          process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = bundledDir;
+          process.env.DENEB_BUNDLED_PLUGINS_DIR = bundledDir;
 
-          return loadOpenClawPlugins({
+          return loadDenebPlugins({
             cache: false,
             config: {
               plugins: {
@@ -2557,7 +2557,7 @@ module.exports = {
             },
           });
         },
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           const a = registry.plugins.find((entry) => entry.id === "memory-a");
           const b = registry.plugins.find((entry) => entry.id === "memory-b");
           expect(a?.status).toBe("disabled");
@@ -2568,13 +2568,13 @@ module.exports = {
       {
         label: "disables memory plugins when slot is none",
         loadRegistry: () => {
-          process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
+          process.env.DENEB_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
           const memory = writePlugin({
             id: "memory-off",
             body: `module.exports = { id: "memory-off", kind: "memory", register() {} };`,
           });
 
-          return loadOpenClawPlugins({
+          return loadDenebPlugins({
             cache: false,
             config: {
               plugins: {
@@ -2584,7 +2584,7 @@ module.exports = {
             },
           });
         },
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           const entry = registry.plugins.find((item) => item.id === "memory-off");
           expect(entry?.status).toBe("disabled");
         },
@@ -2611,14 +2611,14 @@ module.exports = {
             dir: bundledDir,
             filename: "shadow.cjs",
           });
-          process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = bundledDir;
+          process.env.DENEB_BUNDLED_PLUGINS_DIR = bundledDir;
 
           const override = writePlugin({
             id: "shadow",
             body: `module.exports = { id: "shadow", register() {} };`,
           });
 
-          return loadOpenClawPlugins({
+          return loadDenebPlugins({
             cache: false,
             config: {
               plugins: {
@@ -2645,10 +2645,10 @@ module.exports = {
             dir: bundledDir,
             filename: "index.cjs",
           });
-          process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = bundledDir;
+          process.env.DENEB_BUNDLED_PLUGINS_DIR = bundledDir;
 
           const stateDir = makeTempDir();
-          return withEnv({ OPENCLAW_STATE_DIR: stateDir, CLAWDBOT_STATE_DIR: undefined }, () => {
+          return withEnv({ DENEB_STATE_DIR: stateDir, CLAWDBOT_STATE_DIR: undefined }, () => {
             const globalDir = path.join(stateDir, "extensions", "feishu");
             mkdirSafe(globalDir);
             writePlugin({
@@ -2658,7 +2658,7 @@ module.exports = {
               filename: "index.cjs",
             });
 
-            return loadOpenClawPlugins({
+            return loadDenebPlugins({
               cache: false,
               config: {
                 plugins: {
@@ -2687,10 +2687,10 @@ module.exports = {
             dir: bundledDir,
             filename: "index.cjs",
           });
-          process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = bundledDir;
+          process.env.DENEB_BUNDLED_PLUGINS_DIR = bundledDir;
 
           const stateDir = makeTempDir();
-          return withEnv({ OPENCLAW_STATE_DIR: stateDir, CLAWDBOT_STATE_DIR: undefined }, () => {
+          return withEnv({ DENEB_STATE_DIR: stateDir, CLAWDBOT_STATE_DIR: undefined }, () => {
             const globalDir = path.join(stateDir, "extensions", "zalouser");
             mkdirSafe(globalDir);
             writePlugin({
@@ -2700,7 +2700,7 @@ module.exports = {
               filename: "index.cjs",
             });
 
-            return loadOpenClawPlugins({
+            return loadDenebPlugins({
               cache: false,
               config: {
                 plugins: {
@@ -2773,7 +2773,7 @@ module.exports = {
       };
 
       for (let index = 0; index < scenario.loads; index += 1) {
-        loadOpenClawPlugins(options);
+        loadDenebPlugins(options);
       }
 
       const openAllowWarnings = warnings.filter((msg) => msg.includes("plugins.allow is empty"));
@@ -2795,7 +2795,7 @@ module.exports = {
           const workspaceDir = makeTempDir();
           const workspaceExtDir = path.join(
             workspaceDir,
-            ".openclaw",
+            ".deneb",
             "extensions",
             "workspace-helper",
           );
@@ -2807,7 +2807,7 @@ module.exports = {
             filename: "index.cjs",
           });
 
-          return loadOpenClawPlugins({
+          return loadDenebPlugins({
             cache: false,
             workspaceDir,
             config: {
@@ -2817,7 +2817,7 @@ module.exports = {
             },
           });
         },
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           const workspacePlugin = registry.plugins.find((entry) => entry.id === "workspace-helper");
           expect(workspacePlugin?.origin).toBe("workspace");
           expect(workspacePlugin?.status).toBe("disabled");
@@ -2831,7 +2831,7 @@ module.exports = {
           const workspaceDir = makeTempDir();
           const workspaceExtDir = path.join(
             workspaceDir,
-            ".openclaw",
+            ".deneb",
             "extensions",
             "workspace-helper",
           );
@@ -2843,7 +2843,7 @@ module.exports = {
             filename: "index.cjs",
           });
 
-          return loadOpenClawPlugins({
+          return loadDenebPlugins({
             cache: false,
             workspaceDir,
             config: {
@@ -2854,7 +2854,7 @@ module.exports = {
             },
           });
         },
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           const workspacePlugin = registry.plugins.find((entry) => entry.id === "workspace-helper");
           expect(workspacePlugin?.origin).toBe("workspace");
           expect(workspacePlugin?.status).toBe("loaded");
@@ -2871,10 +2871,10 @@ module.exports = {
             dir: bundledDir,
             filename: "index.cjs",
           });
-          process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = bundledDir;
+          process.env.DENEB_BUNDLED_PLUGINS_DIR = bundledDir;
 
           const workspaceDir = makeTempDir();
-          const workspaceExtDir = path.join(workspaceDir, ".openclaw", "extensions", "shadowed");
+          const workspaceExtDir = path.join(workspaceDir, ".deneb", "extensions", "shadowed");
           mkdirSafe(workspaceExtDir);
           writePlugin({
             id: "shadowed",
@@ -2883,7 +2883,7 @@ module.exports = {
             filename: "index.cjs",
           });
 
-          return loadOpenClawPlugins({
+          return loadDenebPlugins({
             cache: false,
             workspaceDir,
             config: {
@@ -2897,7 +2897,7 @@ module.exports = {
             },
           });
         },
-        assert: (registry: ReturnType<typeof loadOpenClawPlugins>) => {
+        assert: (registry: ReturnType<typeof loadDenebPlugins>) => {
           const entries = registry.plugins.filter((entry) => entry.id === "shadowed");
           const loaded = entries.find((entry) => entry.status === "loaded");
           const overridden = entries.find((entry) => entry.status === "disabled");
@@ -2923,7 +2923,7 @@ module.exports = {
       filename: "index.cjs",
     });
     fs.writeFileSync(
-      path.join(plugin.dir, "openclaw.plugin.json"),
+      path.join(plugin.dir, "deneb.plugin.json"),
       JSON.stringify(
         {
           id: "profile-aware",
@@ -2935,9 +2935,9 @@ module.exports = {
       ),
       "utf-8",
     );
-    process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = bundledDir;
+    process.env.DENEB_BUNDLED_PLUGINS_DIR = bundledDir;
 
-    const registry = loadOpenClawPlugins({
+    const registry = loadDenebPlugins({
       cache: false,
       workspaceDir: bundledDir,
       config: {
@@ -2965,7 +2965,7 @@ module.exports = {
       filename: "unscoped.cjs",
     });
 
-    const registry = loadOpenClawPlugins({
+    const registry = loadDenebPlugins({
       cache: false,
       config: {
         plugins: {
@@ -2989,7 +2989,7 @@ module.exports = {
         label: "warns when loaded non-bundled plugin has no install/load-path provenance",
         loadRegistry: () => {
           const stateDir = makeTempDir();
-          return withEnv({ OPENCLAW_STATE_DIR: stateDir, CLAWDBOT_STATE_DIR: undefined }, () => {
+          return withEnv({ DENEB_STATE_DIR: stateDir, CLAWDBOT_STATE_DIR: undefined }, () => {
             const globalDir = path.join(stateDir, "extensions", "rogue");
             mkdirSafe(globalDir);
             writePlugin({
@@ -3000,7 +3000,7 @@ module.exports = {
             });
 
             const warnings: string[] = [];
-            const registry = loadOpenClawPlugins({
+            const registry = loadDenebPlugins({
               cache: false,
               logger: createWarningLogger(warnings),
               config: {
@@ -3019,7 +3019,7 @@ module.exports = {
         loadRegistry: () => {
           const { plugin, env } = createEnvResolvedPluginFixture("tracked-load-path");
           const warnings: string[] = [];
-          const registry = loadOpenClawPlugins({
+          const registry = loadDenebPlugins({
             cache: false,
             logger: createWarningLogger(warnings),
             env,
@@ -3045,7 +3045,7 @@ module.exports = {
         loadRegistry: () => {
           const { plugin, env } = createEnvResolvedPluginFixture("tracked-install-path");
           const warnings: string[] = [];
-          const registry = loadOpenClawPlugins({
+          const registry = loadDenebPlugins({
             cache: false,
             logger: createWarningLogger(warnings),
             env,
@@ -3149,8 +3149,8 @@ module.exports = {
       throw err;
     }
 
-    process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = bundledDir;
-    const registry = loadOpenClawPlugins({
+    process.env.DENEB_BUNDLED_PLUGINS_DIR = bundledDir;
+    const registry = loadDenebPlugins({
       cache: false,
       workspaceDir: bundledDir,
       config: {
@@ -3191,7 +3191,7 @@ module.exports = {
 } };`,
     });
 
-    const registry = withEnv({ OPENCLAW_STATE_DIR: stateDir }, () =>
+    const registry = withEnv({ DENEB_STATE_DIR: stateDir }, () =>
       loadRegistryFromSinglePlugin({
         plugin,
         pluginConfig: {
@@ -3214,7 +3214,7 @@ module.exports = {
       filename: "legacy-root-import.cjs",
       body: `module.exports = {
   id: "legacy-root-import",
-  configSchema: (require("openclaw/plugin-sdk").emptyPluginConfigSchema)(),
+  configSchema: (require("deneb/plugin-sdk").emptyPluginConfigSchema)(),
   register() {},
 };`,
     });
@@ -3223,8 +3223,8 @@ module.exports = {
       path.join(process.cwd(), "src", "plugins", "loader.ts"),
     ).href;
     const script = `
-      import { loadOpenClawPlugins } from ${JSON.stringify(loaderModuleUrl)};
-      const registry = loadOpenClawPlugins({
+      import { loadDenebPlugins } from ${JSON.stringify(loaderModuleUrl)};
+      const registry = loadDenebPlugins({
         cache: false,
         workspaceDir: ${JSON.stringify(plugin.dir)},
         config: {
@@ -3245,8 +3245,8 @@ module.exports = {
       cwd: process.cwd(),
       env: {
         ...process.env,
-        OPENCLAW_HOME: undefined,
-        OPENCLAW_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
+        DENEB_HOME: undefined,
+        DENEB_BUNDLED_PLUGINS_DIR: "/nonexistent/bundled/plugins",
       },
       encoding: "utf-8",
       stdio: "pipe",
@@ -3316,8 +3316,8 @@ module.exports = {
     {
       name: "resolves plugin-sdk alias from package root when loader runs from transpiler cache path",
       buildFixture: () => createPluginSdkAliasFixture(),
-      modulePath: () => "/tmp/tsx-cache/openclaw-loader.js",
-      argv1: (root: string) => path.join(root, "openclaw.mjs"),
+      modulePath: () => "/tmp/tsx-cache/deneb-loader.js",
+      argv1: (root: string) => path.join(root, "deneb.mjs"),
       srcFile: "index.ts",
       distFile: "index.js",
       env: { NODE_ENV: undefined },
@@ -3400,7 +3400,7 @@ module.exports = {
     });
     const subpaths = withCwd(fixture.root, () =>
       __testing.listPluginSdkExportedSubpaths({
-        modulePath: "/tmp/tsx-cache/openclaw-loader.js",
+        modulePath: "/tmp/tsx-cache/deneb-loader.js",
       }),
     );
     expect(subpaths).toEqual(["channel-runtime", "core"]);
@@ -3420,7 +3420,7 @@ module.exports = {
         root: fixture.root,
         srcFile: "channel-runtime.ts",
         distFile: "channel-runtime.js",
-        modulePath: "/tmp/tsx-cache/openclaw-loader.js",
+        modulePath: "/tmp/tsx-cache/deneb-loader.js",
         env: { NODE_ENV: undefined },
       }),
     );
@@ -3428,7 +3428,7 @@ module.exports = {
     expect(fs.realpathSync(resolved ?? "")).toBe(fs.realpathSync(fixture.srcFile));
   });
 
-  it("does not derive plugin-sdk subpaths from cwd fallback when package root is not an OpenClaw root", () => {
+  it("does not derive plugin-sdk subpaths from cwd fallback when package root is not an Deneb root", () => {
     const fixture = createPluginSdkAliasFixture({
       packageName: "moltbot",
       trustedRootIndicators: false,
@@ -3439,7 +3439,7 @@ module.exports = {
     });
     const subpaths = withCwd(fixture.root, () =>
       __testing.listPluginSdkExportedSubpaths({
-        modulePath: "/tmp/tsx-cache/openclaw-loader.js",
+        modulePath: "/tmp/tsx-cache/deneb-loader.js",
       }),
     );
     expect(subpaths).toEqual([]);
@@ -3456,13 +3456,13 @@ module.exports = {
     });
     const subpaths = withCwd(fixture.root, () =>
       __testing.listPluginSdkExportedSubpaths({
-        modulePath: "/tmp/tsx-cache/openclaw-loader.js",
+        modulePath: "/tmp/tsx-cache/deneb-loader.js",
       }),
     );
     expect(subpaths).toEqual(["channel-runtime", "core"]);
   });
 
-  it("does not resolve plugin-sdk alias files from cwd fallback when package root is not an OpenClaw root", () => {
+  it("does not resolve plugin-sdk alias files from cwd fallback when package root is not an Deneb root", () => {
     const fixture = createPluginSdkAliasFixture({
       srcFile: "channel-runtime.ts",
       distFile: "channel-runtime.js",
@@ -3477,7 +3477,7 @@ module.exports = {
         root: fixture.root,
         srcFile: "channel-runtime.ts",
         distFile: "channel-runtime.js",
-        modulePath: "/tmp/tsx-cache/openclaw-loader.js",
+        modulePath: "/tmp/tsx-cache/deneb-loader.js",
         env: { NODE_ENV: undefined },
       }),
     );
@@ -3529,7 +3529,7 @@ module.exports = {
     fs.writeFileSync(jitiBaseFile, "export {};\n", "utf-8");
     fs.writeFileSync(
       path.join(copiedSourceDir, "channel.runtime.ts"),
-      `import { resolveOutboundSendDep } from "openclaw/plugin-sdk/channel-runtime";
+      `import { resolveOutboundSendDep } from "deneb/plugin-sdk/channel-runtime";
 import { PAIRING_APPROVED_MESSAGE } from "../runtime-api.js";
 
 export const copiedRuntimeMarker = {
@@ -3567,7 +3567,7 @@ export const copiedRuntimeMarker = {
 
     const withAlias = createJiti(jitiBaseUrl, {
       ...__testing.buildPluginLoaderJitiOptions({
-        "openclaw/plugin-sdk/channel-runtime": copiedChannelRuntimeShim,
+        "deneb/plugin-sdk/channel-runtime": copiedChannelRuntimeShim,
       }),
       tryNative: false,
     });
@@ -3595,10 +3595,10 @@ export const copiedRuntimeMarker = {
       path.join(gitExtensionRoot, "package.json"),
       JSON.stringify(
         {
-          name: `@openclaw/${pluginId}`,
+          name: `@deneb/${pluginId}`,
           version: "0.0.1",
           type: "module",
-          openclaw: {
+          deneb: {
             extensions: ["./src/index.ts"],
           },
         },
@@ -3608,7 +3608,7 @@ export const copiedRuntimeMarker = {
       "utf-8",
     );
     fs.writeFileSync(
-      path.join(gitExtensionRoot, "openclaw.plugin.json"),
+      path.join(gitExtensionRoot, "deneb.plugin.json"),
       JSON.stringify(
         {
           id: pluginId,
@@ -3621,7 +3621,7 @@ export const copiedRuntimeMarker = {
     );
     fs.writeFileSync(
       path.join(gitSourceDir, "channel.runtime.ts"),
-      `import { resolveOutboundSendDep } from "openclaw/plugin-sdk/channel-runtime";
+      `import { resolveOutboundSendDep } from "deneb/plugin-sdk/channel-runtime";
 
 export function runtimeProbeType() {
   return typeof resolveOutboundSendDep;
@@ -3646,7 +3646,7 @@ export default {
     );
 
     const registry = withEnv({ NODE_ENV: "production", VITEST: undefined }, () =>
-      loadOpenClawPlugins({
+      loadDenebPlugins({
         cache: false,
         workspaceDir: gitExtensionRoot,
         config: {
@@ -3685,7 +3685,7 @@ export const runtimeValue = helperValue;`,
       "utf-8",
     );
 
-    const registry = loadOpenClawPlugins({
+    const registry = loadDenebPlugins({
       cache: false,
       workspaceDir: plugin.dir,
       config: {
@@ -3708,8 +3708,8 @@ export const runtimeValue = helperValue;`,
     },
     {
       name: "resolves plugin runtime module from package root when loader runs from transpiler cache path",
-      modulePath: () => "/tmp/tsx-cache/openclaw-loader.js",
-      argv1: (root: string) => path.join(root, "openclaw.mjs"),
+      modulePath: () => "/tmp/tsx-cache/deneb-loader.js",
+      argv1: (root: string) => path.join(root, "deneb.mjs"),
       env: { NODE_ENV: undefined },
       expected: "src" as const,
     },

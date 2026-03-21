@@ -10,7 +10,7 @@ import {
 let tempRoot: string | null = null;
 
 async function makeTempRoot() {
-  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "openclaw-state-dir-"));
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "deneb-state-dir-"));
   tempRoot = root;
   return root;
 }
@@ -44,19 +44,19 @@ describe("legacy state dir auto-migration", () => {
     expect(result.migrated).toBe(true);
     expect(result.warnings).toEqual([]);
 
-    const targetMarker = path.join(root, ".openclaw", "marker.txt");
+    const targetMarker = path.join(root, ".deneb", "marker.txt");
     expect(fs.readFileSync(targetMarker, "utf-8")).toBe("ok");
     expect(fs.readFileSync(path.join(root, ".moltbot", "marker.txt"), "utf-8")).toBe("ok");
     expect(fs.readFileSync(path.join(root, ".clawdbot", "marker.txt"), "utf-8")).toBe("ok");
   });
 
-  it("skips state-dir migration when OPENCLAW_STATE_DIR is explicitly set", async () => {
+  it("skips state-dir migration when DENEB_STATE_DIR is explicitly set", async () => {
     const root = await makeTempRoot();
     const legacyDir = path.join(root, ".clawdbot");
     fs.mkdirSync(legacyDir, { recursive: true });
 
     const result = await autoMigrateLegacyStateDir({
-      env: { OPENCLAW_STATE_DIR: path.join(root, "custom-state") } as NodeJS.ProcessEnv,
+      env: { DENEB_STATE_DIR: path.join(root, "custom-state") } as NodeJS.ProcessEnv,
       homedir: () => root,
     });
 

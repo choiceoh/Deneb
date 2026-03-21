@@ -1,7 +1,7 @@
 import type { AuthProfileStore } from "../agents/auth-profiles.js";
 import { describeFailoverError, isFailoverError } from "../agents/failover-error.js";
 import type { FallbackAttempt } from "../agents/model-fallback.types.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import {
   resolveAgentModelFallbackValues,
   resolveAgentModelPrimaryValue,
@@ -18,7 +18,7 @@ import type {
 const log = createSubsystemLogger("image-generation");
 
 export type GenerateImageParams = {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   prompt: string;
   agentDir?: string;
   authStore?: AuthProfileStore;
@@ -54,7 +54,7 @@ function parseModelRef(raw: string | undefined): { provider: string; model: stri
 }
 
 function resolveImageGenerationCandidates(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   modelOverride?: string;
 }): Array<{ provider: string; model: string }> {
   const candidates: Array<{ provider: string; model: string }> = [];
@@ -100,7 +100,7 @@ function throwImageGenerationFailure(params: {
   });
 }
 
-export function listRuntimeImageGenerationProviders(params?: { config?: OpenClawConfig }) {
+export function listRuntimeImageGenerationProviders(params?: { config?: DenebConfig }) {
   return listImageGenerationProviders(params?.config);
 }
 

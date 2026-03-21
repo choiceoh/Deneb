@@ -1,6 +1,6 @@
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-import { readBooleanParam } from "openclaw/plugin-sdk/boolean-param";
-import { resolveReactionMessageId } from "openclaw/plugin-sdk/channel-runtime";
+import { readBooleanParam } from "deneb/plugin-sdk/boolean-param";
+import { resolveReactionMessageId } from "deneb/plugin-sdk/channel-runtime";
 import { resolveTelegramPollVisibility } from "../runtime-api.js";
 import {
   jsonResult,
@@ -10,7 +10,7 @@ import {
   readStringOrNumberParam,
   readStringParam,
   resolvePollMaxSelections,
-  type OpenClawConfig,
+  type DenebConfig,
   type TelegramActionConfig,
 } from "../runtime-api.js";
 import { createTelegramActionGate, resolveTelegramPollActionGateState } from "./accounts.js";
@@ -179,7 +179,7 @@ function readTelegramSendContent(params: {
 
 export async function handleTelegramAction(
   params: Record<string, unknown>,
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   options?: {
     mediaLocalRoots?: readonly string[];
   },

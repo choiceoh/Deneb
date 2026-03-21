@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../../config/config.js";
+import type { DenebConfig } from "../../../config/config.js";
 import { applyNonInteractiveAuthChoice } from "./auth-choice.js";
 
 const applySimpleNonInteractiveApiKeyChoice = vi.hoisted(() =>
-  vi.fn<() => Promise<OpenClawConfig | null | undefined>>(async () => undefined),
+  vi.fn<() => Promise<DenebConfig | null | undefined>>(async () => undefined),
 );
 vi.mock("./auth-choice.api-key-providers.js", () => ({
   applySimpleNonInteractiveApiKeyChoice,
@@ -34,7 +34,7 @@ function createRuntime() {
 describe("applyNonInteractiveAuthChoice", () => {
   it("resolves plugin provider auth before builtin API key fallbacks", async () => {
     const runtime = createRuntime();
-    const nextConfig = { agents: { defaults: {} } } as OpenClawConfig;
+    const nextConfig = { agents: { defaults: {} } } as DenebConfig;
     const resolvedConfig = { auth: { profiles: { "openai:default": { mode: "api_key" } } } };
     applyNonInteractivePluginProviderChoice.mockResolvedValueOnce(resolvedConfig as never);
 

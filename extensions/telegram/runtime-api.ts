@@ -1,18 +1,18 @@
 export type {
   ChannelMessageActionAdapter,
   ChannelPlugin,
-  OpenClawConfig,
-  OpenClawPluginApi,
+  DenebConfig,
+  DenebPluginApi,
   PluginRuntime,
   TelegramAccountConfig,
   TelegramActionConfig,
   TelegramNetworkConfig,
-} from "openclaw/plugin-sdk/telegram";
+} from "deneb/plugin-sdk/telegram";
 export type {
-  OpenClawPluginService,
-  OpenClawPluginServiceContext,
+  DenebPluginService,
+  DenebPluginServiceContext,
   PluginLogger,
-} from "openclaw/plugin-sdk/core";
+} from "deneb/plugin-sdk/core";
 export type {
   AcpRuntime,
   AcpRuntimeCapabilities,
@@ -24,8 +24,8 @@ export type {
   AcpRuntimeTurnInput,
   AcpRuntimeErrorCode,
   AcpSessionUpdateTag,
-} from "openclaw/plugin-sdk/acp-runtime";
-export { AcpRuntimeError } from "openclaw/plugin-sdk/acp-runtime";
+} from "deneb/plugin-sdk/acp-runtime";
+export { AcpRuntimeError } from "deneb/plugin-sdk/acp-runtime";
 
 export {
   buildTokenChannelStatusSummary,
@@ -37,7 +37,7 @@ export {
   projectCredentialSnapshotFields,
   resolveConfiguredFromCredentialStatuses,
   resolveTelegramPollVisibility,
-} from "openclaw/plugin-sdk/telegram";
+} from "deneb/plugin-sdk/telegram";
 export {
   buildChannelConfigSchema,
   getChatChannelMeta,
@@ -49,7 +49,7 @@ export {
   readStringParam,
   resolvePollMaxSelections,
   TelegramConfigSchema,
-} from "openclaw/plugin-sdk/telegram-core";
+} from "deneb/plugin-sdk/telegram-core";
 export type { TelegramProbe } from "./src/probe.js";
 export { auditTelegramGroupMembership, collectTelegramUnmentionedGroupIds } from "./src/audit.js";
 export { telegramMessageActions } from "./src/channel-actions.js";

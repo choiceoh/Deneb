@@ -283,15 +283,15 @@ describe("buildServiceEnvironment", () => {
     } else {
       expect(env.PATH).toContain("/usr/bin");
     }
-    expect(env.OPENCLAW_GATEWAY_PORT).toBe("18789");
-    expect(env.OPENCLAW_GATEWAY_TOKEN).toBeUndefined();
-    expect(env.OPENCLAW_SERVICE_MARKER).toBe("openclaw");
-    expect(env.OPENCLAW_SERVICE_KIND).toBe("gateway");
-    expect(typeof env.OPENCLAW_SERVICE_VERSION).toBe("string");
-    expect(env.OPENCLAW_SYSTEMD_UNIT).toBe("openclaw-gateway.service");
-    expect(env.OPENCLAW_WINDOWS_TASK_NAME).toBe("OpenClaw Gateway");
+    expect(env.DENEB_GATEWAY_PORT).toBe("18789");
+    expect(env.DENEB_GATEWAY_TOKEN).toBeUndefined();
+    expect(env.DENEB_SERVICE_MARKER).toBe("deneb");
+    expect(env.DENEB_SERVICE_KIND).toBe("gateway");
+    expect(typeof env.DENEB_SERVICE_VERSION).toBe("string");
+    expect(env.DENEB_SYSTEMD_UNIT).toBe("deneb-gateway.service");
+    expect(env.DENEB_WINDOWS_TASK_NAME).toBe("Deneb Gateway");
     if (process.platform === "darwin") {
-      expect(env.OPENCLAW_LAUNCHD_LABEL).toBe("ai.openclaw.gateway");
+      expect(env.DENEB_LAUNCHD_LABEL).toBe("ai.deneb.gateway");
     }
   });
 
@@ -313,13 +313,13 @@ describe("buildServiceEnvironment", () => {
 
   it("uses profile-specific unit and label", () => {
     const env = buildServiceEnvironment({
-      env: { HOME: "/home/user", OPENCLAW_PROFILE: "work" },
+      env: { HOME: "/home/user", DENEB_PROFILE: "work" },
       port: 18789,
     });
-    expect(env.OPENCLAW_SYSTEMD_UNIT).toBe("openclaw-gateway-work.service");
-    expect(env.OPENCLAW_WINDOWS_TASK_NAME).toBe("OpenClaw Gateway (work)");
+    expect(env.DENEB_SYSTEMD_UNIT).toBe("deneb-gateway-work.service");
+    expect(env.DENEB_WINDOWS_TASK_NAME).toBe("Deneb Gateway (work)");
     if (process.platform === "darwin") {
-      expect(env.OPENCLAW_LAUNCHD_LABEL).toBe("ai.openclaw.work");
+      expect(env.DENEB_LAUNCHD_LABEL).toBe("ai.deneb.work");
     }
   });
 
@@ -354,7 +354,7 @@ describe("buildServiceEnvironment", () => {
     });
 
     expect(env).not.toHaveProperty("PATH");
-    expect(env.OPENCLAW_WINDOWS_TASK_NAME).toBe("OpenClaw Gateway");
+    expect(env.DENEB_WINDOWS_TASK_NAME).toBe("Deneb Gateway");
   });
 
   it("prepends extra runtime directories to the gateway service PATH", () => {
@@ -379,40 +379,40 @@ describe("buildNodeServiceEnvironment", () => {
     expect(env.HOME).toBe("/home/user");
   });
 
-  it("passes through OPENCLAW_GATEWAY_TOKEN for node services", () => {
+  it("passes through DENEB_GATEWAY_TOKEN for node services", () => {
     const env = buildNodeServiceEnvironment({
-      env: { HOME: "/home/user", OPENCLAW_GATEWAY_TOKEN: " node-token " },
+      env: { HOME: "/home/user", DENEB_GATEWAY_TOKEN: " node-token " },
     });
-    expect(env.OPENCLAW_GATEWAY_TOKEN).toBe("node-token");
+    expect(env.DENEB_GATEWAY_TOKEN).toBe("node-token");
   });
 
-  it("maps legacy CLAWDBOT_GATEWAY_TOKEN to OPENCLAW_GATEWAY_TOKEN for node services", () => {
+  it("maps legacy CLAWDBOT_GATEWAY_TOKEN to DENEB_GATEWAY_TOKEN for node services", () => {
     const env = buildNodeServiceEnvironment({
       env: { HOME: "/home/user", CLAWDBOT_GATEWAY_TOKEN: " legacy-token " },
     });
-    expect(env.OPENCLAW_GATEWAY_TOKEN).toBe("legacy-token");
+    expect(env.DENEB_GATEWAY_TOKEN).toBe("legacy-token");
   });
 
-  it("prefers OPENCLAW_GATEWAY_TOKEN over legacy CLAWDBOT_GATEWAY_TOKEN", () => {
+  it("prefers DENEB_GATEWAY_TOKEN over legacy CLAWDBOT_GATEWAY_TOKEN", () => {
     const env = buildNodeServiceEnvironment({
       env: {
         HOME: "/home/user",
-        OPENCLAW_GATEWAY_TOKEN: "openclaw-token",
+        DENEB_GATEWAY_TOKEN: "deneb-token",
         CLAWDBOT_GATEWAY_TOKEN: "legacy-token",
       },
     });
-    expect(env.OPENCLAW_GATEWAY_TOKEN).toBe("openclaw-token");
+    expect(env.DENEB_GATEWAY_TOKEN).toBe("deneb-token");
   });
 
-  it("omits OPENCLAW_GATEWAY_TOKEN when both token env vars are empty", () => {
+  it("omits DENEB_GATEWAY_TOKEN when both token env vars are empty", () => {
     const env = buildNodeServiceEnvironment({
       env: {
         HOME: "/home/user",
-        OPENCLAW_GATEWAY_TOKEN: "   ",
+        DENEB_GATEWAY_TOKEN: "   ",
         CLAWDBOT_GATEWAY_TOKEN: " ",
       },
     });
-    expect(env.OPENCLAW_GATEWAY_TOKEN).toBeUndefined();
+    expect(env.DENEB_GATEWAY_TOKEN).toBeUndefined();
   });
 
   it("forwards proxy environment variables for node services", () => {
@@ -503,31 +503,31 @@ describe("shared Node TLS env defaults", () => {
 describe("resolveGatewayStateDir", () => {
   it("uses the default state dir when no overrides are set", () => {
     const env = { HOME: "/Users/test" };
-    expect(resolveGatewayStateDir(env)).toBe(path.join("/Users/test", ".openclaw"));
+    expect(resolveGatewayStateDir(env)).toBe(path.join("/Users/test", ".deneb"));
   });
 
   it("appends the profile suffix when set", () => {
-    const env = { HOME: "/Users/test", OPENCLAW_PROFILE: "rescue" };
-    expect(resolveGatewayStateDir(env)).toBe(path.join("/Users/test", ".openclaw-rescue"));
+    const env = { HOME: "/Users/test", DENEB_PROFILE: "rescue" };
+    expect(resolveGatewayStateDir(env)).toBe(path.join("/Users/test", ".deneb-rescue"));
   });
 
   it("treats default profiles as the base state dir", () => {
-    const env = { HOME: "/Users/test", OPENCLAW_PROFILE: "Default" };
-    expect(resolveGatewayStateDir(env)).toBe(path.join("/Users/test", ".openclaw"));
+    const env = { HOME: "/Users/test", DENEB_PROFILE: "Default" };
+    expect(resolveGatewayStateDir(env)).toBe(path.join("/Users/test", ".deneb"));
   });
 
-  it("uses OPENCLAW_STATE_DIR when provided", () => {
-    const env = { HOME: "/Users/test", OPENCLAW_STATE_DIR: "/var/lib/openclaw" };
-    expect(resolveGatewayStateDir(env)).toBe(path.resolve("/var/lib/openclaw"));
+  it("uses DENEB_STATE_DIR when provided", () => {
+    const env = { HOME: "/Users/test", DENEB_STATE_DIR: "/var/lib/deneb" };
+    expect(resolveGatewayStateDir(env)).toBe(path.resolve("/var/lib/deneb"));
   });
 
-  it("expands ~ in OPENCLAW_STATE_DIR", () => {
-    const env = { HOME: "/Users/test", OPENCLAW_STATE_DIR: "~/openclaw-state" };
-    expect(resolveGatewayStateDir(env)).toBe(path.resolve("/Users/test/openclaw-state"));
+  it("expands ~ in DENEB_STATE_DIR", () => {
+    const env = { HOME: "/Users/test", DENEB_STATE_DIR: "~/deneb-state" };
+    expect(resolveGatewayStateDir(env)).toBe(path.resolve("/Users/test/deneb-state"));
   });
 
   it("preserves Windows absolute paths without HOME", () => {
-    const env = { OPENCLAW_STATE_DIR: "C:\\State\\openclaw" };
-    expect(resolveGatewayStateDir(env)).toBe("C:\\State\\openclaw");
+    const env = { DENEB_STATE_DIR: "C:\\State\\deneb" };
+    expect(resolveGatewayStateDir(env)).toBe("C:\\State\\deneb");
   });
 });

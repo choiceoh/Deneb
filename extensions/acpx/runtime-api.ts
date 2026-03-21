@@ -1,1 +1,1 @@
-export * from "openclaw/plugin-sdk/acpx";
+export * from "deneb/plugin-sdk/acpx";

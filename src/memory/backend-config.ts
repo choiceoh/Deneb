@@ -1,7 +1,7 @@
 import path from "node:path";
 import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import { parseDurationMs } from "../cli/parse-duration.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { SessionSendPolicyConfig } from "../config/types.base.js";
 import type {
   MemoryBackend,
@@ -360,7 +360,7 @@ export function resolveVegaConfig(
 }
 
 export function resolveMemoryBackendConfig(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentId: string;
 }): ResolvedMemoryBackendConfig {
   const backend = params.cfg.memory?.backend ?? DEFAULT_BACKEND;

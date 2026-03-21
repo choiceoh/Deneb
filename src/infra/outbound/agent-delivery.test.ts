@@ -12,7 +12,7 @@ vi.mock("./targets.js", async () => {
   };
 });
 
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 type AgentDeliveryModule = typeof import("./agent-delivery.js");
 
 let resolveAgentDeliveryPlan: AgentDeliveryModule["resolveAgentDeliveryPlan"];
@@ -57,7 +57,7 @@ describe("agent delivery helpers", () => {
     });
 
     const resolved = resolveAgentOutboundTarget({
-      cfg: {} as OpenClawConfig,
+      cfg: {} as DenebConfig,
       plan,
       targetMode: "implicit",
     });
@@ -95,7 +95,7 @@ describe("agent delivery helpers", () => {
 
     mocks.resolveOutboundTarget.mockClear();
     const resolved = resolveAgentOutboundTarget({
-      cfg: {} as OpenClawConfig,
+      cfg: {} as DenebConfig,
       plan,
       targetMode: "explicit",
       validateExplicitTarget: false,

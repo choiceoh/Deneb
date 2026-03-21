@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ensureCustomApiRegistered } from "../agents/custom-api-registry.js";
 import { getApiKeyForModel } from "../agents/model-auth.js";
 import { resolveModelAsync } from "../agents/pi-embedded-runner/model.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { withEnv } from "../test-utils/env.js";
 import * as tts from "./tts.js";
 
@@ -100,7 +100,7 @@ const mockAssistantMessage = (content: AssistantMessage["content"]): AssistantMe
   timestamp: Date.now(),
 });
 
-function createOpenAiTelephonyCfg(model: "tts-1" | "gpt-4o-mini-tts"): OpenClawConfig {
+function createOpenAiTelephonyCfg(model: "tts-1" | "gpt-4o-mini-tts"): DenebConfig {
   return {
     messages: {
       tts: {
@@ -263,7 +263,7 @@ describe("tts", () => {
   });
 
   describe("resolveEdgeOutputFormat", () => {
-    const baseCfg: OpenClawConfig = {
+    const baseCfg: DenebConfig = {
       agents: { defaults: { model: { primary: "openai/gpt-4o-mini" } } },
       messages: { tts: {} },
     };
@@ -284,7 +284,7 @@ describe("tts", () => {
                 edge: { outputFormat: "audio-24khz-96kbitrate-mono-mp3" },
               },
             },
-          } as OpenClawConfig,
+          } as DenebConfig,
           expected: "audio-24khz-96kbitrate-mono-mp3",
         },
       ] as const;
@@ -369,7 +369,7 @@ describe("tts", () => {
     let resolveModelAsyncForTest: typeof resolveModelAsync;
     let ensureCustomApiRegisteredForTest: typeof ensureCustomApiRegistered;
 
-    const baseCfg: OpenClawConfig = {
+    const baseCfg: DenebConfig = {
       agents: { defaults: { model: { primary: "openai/gpt-4o-mini" } } },
       messages: { tts: {} },
     };
@@ -431,7 +431,7 @@ describe("tts", () => {
     });
 
     it("uses summaryModel override when configured", async () => {
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         agents: { defaults: { model: { primary: "anthropic/claude-opus-4-5" } } },
         messages: { tts: { summaryModel: "openai/gpt-4.1-mini" } },
       };
@@ -525,7 +525,7 @@ describe("tts", () => {
   });
 
   describe("getTtsProvider", () => {
-    const baseCfg: OpenClawConfig = {
+    const baseCfg: DenebConfig = {
       agents: { defaults: { model: { primary: "openai/gpt-4o-mini" } } },
       messages: { tts: {} },
     };
@@ -591,7 +591,7 @@ describe("tts", () => {
   });
 
   describe("resolveTtsConfig – openai.baseUrl", () => {
-    const baseCfg: OpenClawConfig = {
+    const baseCfg: DenebConfig = {
       agents: { defaults: { model: { primary: "openai/gpt-4o-mini" } } },
       messages: { tts: {} },
     };
@@ -617,7 +617,7 @@ describe("tts", () => {
             messages: {
               tts: { openai: { baseUrl: "http://my-server:9000/v1" } },
             },
-          } as OpenClawConfig,
+          } as DenebConfig,
           env: { OPENAI_TTS_BASE_URL: "http://localhost:8880/v1" },
           expected: "http://my-server:9000/v1",
         },
@@ -628,7 +628,7 @@ describe("tts", () => {
             messages: {
               tts: { openai: { baseUrl: "http://my-server:9000/v1///" } },
             },
-          } as OpenClawConfig,
+          } as DenebConfig,
           env: { OPENAI_TTS_BASE_URL: undefined },
           expected: "http://my-server:9000/v1",
         },
@@ -694,7 +694,7 @@ describe("tts", () => {
   });
 
   describe("maybeApplyTtsToPayload", () => {
-    const baseCfg: OpenClawConfig = {
+    const baseCfg: DenebConfig = {
       agents: { defaults: { model: { primary: "openai/gpt-4o-mini" } } },
       messages: {
         tts: {
@@ -708,8 +708,8 @@ describe("tts", () => {
     const withMockedAutoTtsFetch = async (
       run: (fetchMock: ReturnType<typeof vi.fn>) => Promise<void>,
     ) => {
-      const prevPrefs = process.env.OPENCLAW_TTS_PREFS;
-      process.env.OPENCLAW_TTS_PREFS = `/tmp/tts-test-${Date.now()}.json`;
+      const prevPrefs = process.env.DENEB_TTS_PREFS;
+      process.env.DENEB_TTS_PREFS = `/tmp/tts-test-${Date.now()}.json`;
       const originalFetch = globalThis.fetch;
       const fetchMock = vi.fn(async () => ({
         ok: true,
@@ -720,11 +720,11 @@ describe("tts", () => {
         await run(fetchMock);
       } finally {
         globalThis.fetch = originalFetch;
-        process.env.OPENCLAW_TTS_PREFS = prevPrefs;
+        process.env.DENEB_TTS_PREFS = prevPrefs;
       }
     };
 
-    const taggedCfg: OpenClawConfig = {
+    const taggedCfg: DenebConfig = {
       ...baseCfg,
       messages: {
         ...baseCfg.messages!,

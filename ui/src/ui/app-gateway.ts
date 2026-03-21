@@ -11,7 +11,7 @@ import {
   setLastActiveSessionKey,
 } from "./app-settings.ts";
 import { handleAgentEvent, resetToolStream, type AgentEventPayload } from "./app-tool-stream.ts";
-import type { OpenClawApp } from "./app.ts";
+import type { DenebApp } from "./app.ts";
 import { shouldReloadHistoryForFinalEvent } from "./chat-event-reload.ts";
 import { formatConnectError } from "./connect-error.ts";
 import { loadAgents } from "./controllers/agents.ts";
@@ -193,7 +193,7 @@ export function connectGateway(host: GatewayHost) {
     url: host.settings.gatewayUrl,
     token: host.settings.token.trim() ? host.settings.token : undefined,
     password: host.password.trim() ? host.password : undefined,
-    clientName: "openclaw-control-ui",
+    clientName: "deneb-control-ui",
     clientVersion,
     mode: "webchat",
     instanceId: host.clientInstanceId,
@@ -213,12 +213,12 @@ export function connectGateway(host: GatewayHost) {
       (host as unknown as { chatStream: string | null }).chatStream = null;
       (host as unknown as { chatStreamStartedAt: number | null }).chatStreamStartedAt = null;
       resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
-      void subscribeSessions(host as unknown as OpenClawApp);
-      void loadAssistantIdentity(host as unknown as OpenClawApp);
-      void loadAgents(host as unknown as OpenClawApp);
-      void loadHealthState(host as unknown as OpenClawApp);
-      void loadNodes(host as unknown as OpenClawApp, { quiet: true });
-      void loadDevices(host as unknown as OpenClawApp, { quiet: true });
+      void subscribeSessions(host as unknown as DenebApp);
+      void loadAssistantIdentity(host as unknown as DenebApp);
+      void loadAgents(host as unknown as DenebApp);
+      void loadHealthState(host as unknown as DenebApp);
+      void loadNodes(host as unknown as DenebApp, { quiet: true });
+      void loadDevices(host as unknown as DenebApp, { quiet: true });
       void refreshActiveTab(host as unknown as Parameters<typeof refreshActiveTab>[0]);
     },
     onClose: ({ code, reason, error }) => {
@@ -293,7 +293,7 @@ function handleTerminalChatEvent(
   if (runId && host.refreshSessionsAfterChat.has(runId)) {
     host.refreshSessionsAfterChat.delete(runId);
     if (state === "final") {
-      void loadSessions(host as unknown as OpenClawApp, {
+      void loadSessions(host as unknown as DenebApp, {
         activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
       });
     }
@@ -301,7 +301,7 @@ function handleTerminalChatEvent(
   // Reload history when tools were used so the persisted tool results
   // replace the now-cleared streaming state.
   if (hadToolEvents && state === "final") {
-    void loadChatHistory(host as unknown as OpenClawApp);
+    void loadChatHistory(host as unknown as DenebApp);
     return true;
   }
   return false;
@@ -314,10 +314,10 @@ function handleChatGatewayEvent(host: GatewayHost, payload: ChatEventPayload | u
       payload.sessionKey,
     );
   }
-  const state = handleChatEvent(host as unknown as OpenClawApp, payload);
+  const state = handleChatEvent(host as unknown as DenebApp, payload);
   const historyReloaded = handleTerminalChatEvent(host, payload, state);
   if (state === "final" && !historyReloaded && shouldReloadHistoryForFinalEvent(payload)) {
-    void loadChatHistory(host as unknown as OpenClawApp);
+    void loadChatHistory(host as unknown as DenebApp);
   }
 }
 
@@ -373,7 +373,7 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
   }
 
   if (evt.event === "sessions.changed") {
-    void loadSessions(host as unknown as OpenClawApp);
+    void loadSessions(host as unknown as DenebApp);
     return;
   }
 
@@ -382,7 +382,7 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
   }
 
   if (evt.event === "device.pair.requested" || evt.event === "device.pair.resolved") {
-    void loadDevices(host as unknown as OpenClawApp, { quiet: true });
+    void loadDevices(host as unknown as DenebApp, { quiet: true });
   }
 
   if (evt.event === "exec.approval.requested") {

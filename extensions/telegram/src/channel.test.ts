@@ -1,9 +1,9 @@
 import type {
   ChannelAccountSnapshot,
   ChannelGatewayContext,
-  OpenClawConfig,
+  DenebConfig,
   PluginRuntime,
-} from "openclaw/plugin-sdk/telegram";
+} from "deneb/plugin-sdk/telegram";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRuntimeEnv } from "../../../test/helpers/extensions/runtime-env.js";
 import type { ResolvedTelegramAccount } from "./accounts.js";
@@ -43,7 +43,7 @@ vi.mock("./monitor.js", async (importOriginal) => {
   };
 });
 
-function createCfg(): OpenClawConfig {
+function createCfg(): DenebConfig {
   return {
     channels: {
       telegram: {
@@ -55,11 +55,11 @@ function createCfg(): OpenClawConfig {
         },
       },
     },
-  } as OpenClawConfig;
+  } as DenebConfig;
 }
 
 function createStartAccountCtx(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   accountId: string;
   runtime: ReturnType<typeof createRuntimeEnv>;
 }): ChannelGatewayContext<ResolvedTelegramAccount> {
@@ -126,7 +126,7 @@ function installGatewayRuntime(params?: { probeOk?: boolean; botUsername?: strin
   };
 }
 
-function configureOpsProxyNetwork(cfg: OpenClawConfig) {
+function configureOpsProxyNetwork(cfg: DenebConfig) {
   cfg.channels!.telegram!.accounts!.ops = {
     ...cfg.channels!.telegram!.accounts!.ops,
     proxy: "http://127.0.0.1:8888",
@@ -173,7 +173,7 @@ describe("telegramPlugin groups", () => {
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
 
     expect(
       telegramPlugin.groups?.resolveRequireMention?.({

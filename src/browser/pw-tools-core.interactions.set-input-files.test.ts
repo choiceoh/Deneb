@@ -34,7 +34,7 @@ vi.mock("./pw-session.js", () => {
 
 vi.mock("./paths.js", () => {
   return {
-    DEFAULT_UPLOAD_DIR: "/tmp/openclaw/uploads",
+    DEFAULT_UPLOAD_DIR: "/tmp/deneb/uploads",
     resolveStrictExistingPathsWithinRoot,
   };
 });
@@ -64,7 +64,7 @@ describe("setInputFilesViaPlaywright", () => {
     locator = null;
     resolveStrictExistingPathsWithinRoot.mockResolvedValue({
       ok: true,
-      paths: ["/private/tmp/openclaw/uploads/ok.txt"],
+      paths: ["/private/tmp/deneb/uploads/ok.txt"],
     });
   });
 
@@ -75,16 +75,16 @@ describe("setInputFilesViaPlaywright", () => {
       cdpUrl: "http://127.0.0.1:18792",
       targetId: "T1",
       inputRef: "e7",
-      paths: ["/tmp/openclaw/uploads/ok.txt"],
+      paths: ["/tmp/deneb/uploads/ok.txt"],
     });
 
     expect(resolveStrictExistingPathsWithinRoot).toHaveBeenCalledWith({
-      rootDir: "/tmp/openclaw/uploads",
-      requestedPaths: ["/tmp/openclaw/uploads/ok.txt"],
-      scopeLabel: "uploads directory (/tmp/openclaw/uploads)",
+      rootDir: "/tmp/deneb/uploads",
+      requestedPaths: ["/tmp/deneb/uploads/ok.txt"],
+      scopeLabel: "uploads directory (/tmp/deneb/uploads)",
     });
     expect(refLocator).toHaveBeenCalledWith(page, "e7");
-    expect(setInputFiles).toHaveBeenCalledWith(["/private/tmp/openclaw/uploads/ok.txt"]);
+    expect(setInputFiles).toHaveBeenCalledWith(["/private/tmp/deneb/uploads/ok.txt"]);
   });
 
   it("throws and skips setInputFiles when use-time validation fails", async () => {
@@ -100,7 +100,7 @@ describe("setInputFilesViaPlaywright", () => {
         cdpUrl: "http://127.0.0.1:18792",
         targetId: "T1",
         element: "input[type=file]",
-        paths: ["/tmp/openclaw/uploads/missing.txt"],
+        paths: ["/tmp/deneb/uploads/missing.txt"],
       }),
     ).rejects.toThrow("Invalid path: must stay within uploads directory");
 

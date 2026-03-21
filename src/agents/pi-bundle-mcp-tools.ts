@@ -2,7 +2,7 @@ import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { logDebug, logWarn } from "../logger.js";
 import { loadEmbeddedPiMcpConfig } from "./embedded-pi-mcp.js";
 import {
@@ -121,7 +121,7 @@ async function disposeSession(session: BundleMcpSession) {
 
 export async function createBundleMcpToolRuntime(params: {
   workspaceDir: string;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   reservedToolNames?: Iterable<string>;
 }): Promise<BundleMcpToolRuntime> {
   const loaded = loadEmbeddedPiMcpConfig({
@@ -160,7 +160,7 @@ export async function createBundleMcpToolRuntime(params: {
       });
       const client = new Client(
         {
-          name: "openclaw-bundle-mcp",
+          name: "deneb-bundle-mcp",
           version: "0.0.0",
         },
         {},

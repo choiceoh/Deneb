@@ -43,7 +43,7 @@ type TalkConfigPayload = {
 type TalkConfig = NonNullable<NonNullable<TalkConfigPayload["config"]>["talk"]>;
 const TALK_CONFIG_DEVICE_PATH = path.join(
   os.tmpdir(),
-  `openclaw-talk-config-device-${process.pid}.json`,
+  `deneb-talk-config-device-${process.pid}.json`,
 );
 const TALK_CONFIG_DEVICE = loadOrCreateDeviceIdentity(TALK_CONFIG_DEVICE_PATH);
 
@@ -142,7 +142,7 @@ describe("gateway talk.config", () => {
       expect(res.ok).toBe(true);
       expectElevenLabsTalkConfig(res.payload?.config?.talk, {
         voiceId: "voice-123",
-        apiKey: "__OPENCLAW_REDACTED__",
+        apiKey: "__DENEB_REDACTED__",
         silenceTimeoutMs: 1500,
       });
       expect(res.payload?.config?.session?.mainKey).toBe("main-test");

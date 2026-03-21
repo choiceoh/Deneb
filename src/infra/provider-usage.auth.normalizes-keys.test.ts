@@ -25,7 +25,7 @@ describe("resolveProviderAuths key normalization", () => {
   } satisfies Record<string, string | undefined>;
 
   beforeAll(async () => {
-    suiteRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-provider-auth-suite-"));
+    suiteRoot = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-provider-auth-suite-"));
     ({ resolveProviderAuths } = await import("./provider-usage.auth.js"));
   });
 
@@ -46,15 +46,15 @@ describe("resolveProviderAuths key normalization", () => {
   ): Promise<T> {
     const base = path.join(suiteRoot, `case-${++suiteCase}`);
     await fs.mkdir(base, { recursive: true });
-    await fs.mkdir(path.join(base, ".openclaw", "agents", "main", "sessions"), { recursive: true });
+    await fs.mkdir(path.join(base, ".deneb", "agents", "main", "sessions"), { recursive: true });
 
     const keysToRestore = new Set<string>([
       "HOME",
       "USERPROFILE",
       "HOMEDRIVE",
       "HOMEPATH",
-      "OPENCLAW_HOME",
-      "OPENCLAW_STATE_DIR",
+      "DENEB_HOME",
+      "DENEB_STATE_DIR",
       ...Object.keys(env),
     ]);
     const snapshot: Record<string, string | undefined> = {};
@@ -71,8 +71,8 @@ describe("resolveProviderAuths key normalization", () => {
         process.env.HOMEPATH = match[2] || "\\";
       }
     }
-    delete process.env.OPENCLAW_HOME;
-    process.env.OPENCLAW_STATE_DIR = path.join(base, ".openclaw");
+    delete process.env.DENEB_HOME;
+    process.env.DENEB_STATE_DIR = path.join(base, ".deneb");
     for (const [key, value] of Object.entries(env)) {
       if (value === undefined) {
         delete process.env[key];
@@ -94,7 +94,7 @@ describe("resolveProviderAuths key normalization", () => {
   }
 
   async function writeAuthProfiles(home: string, profiles: Record<string, unknown>) {
-    const agentDir = path.join(home, ".openclaw", "agents", "main", "agent");
+    const agentDir = path.join(home, ".deneb", "agents", "main", "agent");
     await fs.mkdir(agentDir, { recursive: true });
     await fs.writeFile(
       path.join(agentDir, "auth-profiles.json"),
@@ -104,17 +104,17 @@ describe("resolveProviderAuths key normalization", () => {
   }
 
   async function writeConfig(home: string, config: Record<string, unknown>) {
-    const stateDir = path.join(home, ".openclaw");
+    const stateDir = path.join(home, ".deneb");
     await fs.mkdir(stateDir, { recursive: true });
     await fs.writeFile(
-      path.join(stateDir, "openclaw.json"),
+      path.join(stateDir, "deneb.json"),
       `${JSON.stringify(config, null, 2)}\n`,
       "utf8",
     );
   }
 
   async function writeProfileOrder(home: string, provider: string, profileIds: string[]) {
-    const agentDir = path.join(home, ".openclaw", "agents", "main", "agent");
+    const agentDir = path.join(home, ".deneb", "agents", "main", "agent");
     const parsed = JSON.parse(
       await fs.readFile(path.join(agentDir, "auth-profiles.json"), "utf8"),
     ) as Record<string, unknown>;

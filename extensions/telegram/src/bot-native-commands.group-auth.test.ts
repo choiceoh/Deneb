@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../../../src/config/config.js";
+import type { DenebConfig } from "../../../src/config/config.js";
 import type { ChannelGroupPolicy } from "../../../src/config/group-policy.js";
 import type { TelegramAccountConfig } from "../../../src/config/types.js";
 import {
@@ -10,7 +10,7 @@ import {
 
 describe("native command auth in groups", () => {
   function setup(params: {
-    cfg?: OpenClawConfig;
+    cfg?: DenebConfig;
     telegramCfg?: TelegramAccountConfig;
     allowFrom?: string[];
     groupAllowFrom?: string[];
@@ -19,7 +19,7 @@ describe("native command auth in groups", () => {
     resolveGroupPolicy?: () => ChannelGroupPolicy;
   }) {
     return createNativeCommandsHarness({
-      cfg: params.cfg ?? ({} as OpenClawConfig),
+      cfg: params.cfg ?? ({} as DenebConfig),
       telegramCfg: params.telegramCfg ?? ({} as TelegramAccountConfig),
       allowFrom: params.allowFrom ?? [],
       groupAllowFrom: params.groupAllowFrom ?? [],
@@ -58,7 +58,7 @@ describe("native command auth in groups", () => {
             telegram: ["12345"],
           },
         },
-      } as OpenClawConfig,
+      } as DenebConfig,
       allowFrom: ["99999"],
       groupAllowFrom: ["99999"],
       useAccessGroups: true,
@@ -80,7 +80,7 @@ describe("native command auth in groups", () => {
             telegram: ["99999"],
           },
         },
-      } as OpenClawConfig,
+      } as DenebConfig,
       groupAllowFrom: ["12345"],
       useAccessGroups: true,
     });
@@ -109,7 +109,7 @@ describe("native command auth in groups", () => {
             telegram: ["12345"],
           },
         },
-      } as OpenClawConfig,
+      } as DenebConfig,
       useAccessGroups: true,
       resolveGroupPolicy: () =>
         ({
@@ -137,7 +137,7 @@ describe("native command auth in groups", () => {
             telegram: ["12345"],
           },
         },
-      } as OpenClawConfig,
+      } as DenebConfig,
       useAccessGroups: true,
       resolveGroupPolicy: () =>
         ({

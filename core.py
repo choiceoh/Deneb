@@ -1193,7 +1193,7 @@ def main():
 
 
 def _run_memory_command():
-    """OpenClaw memory backend — bare JSON 출력, exit code 에러."""
+    """Deneb memory backend — bare JSON 출력, exit code 에러."""
     args = sys.argv[1:]
     cmd = args[0]
 

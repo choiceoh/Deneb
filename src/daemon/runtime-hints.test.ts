@@ -7,15 +7,15 @@ describe("buildPlatformRuntimeLogHints", () => {
       buildPlatformRuntimeLogHints({
         platform: "darwin",
         env: {
-          OPENCLAW_STATE_DIR: "/tmp/openclaw-state",
-          OPENCLAW_LOG_PREFIX: "gateway",
+          DENEB_STATE_DIR: "/tmp/deneb-state",
+          DENEB_LOG_PREFIX: "gateway",
         },
-        systemdServiceName: "openclaw-gateway",
-        windowsTaskName: "OpenClaw Gateway",
+        systemdServiceName: "deneb-gateway",
+        windowsTaskName: "Deneb Gateway",
       }),
     ).toEqual([
-      "Launchd stdout (if installed): /tmp/openclaw-state/logs/gateway.log",
-      "Launchd stderr (if installed): /tmp/openclaw-state/logs/gateway.err.log",
+      "Launchd stdout (if installed): /tmp/deneb-state/logs/gateway.log",
+      "Launchd stderr (if installed): /tmp/deneb-state/logs/gateway.err.log",
     ]);
   });
 
@@ -23,17 +23,17 @@ describe("buildPlatformRuntimeLogHints", () => {
     expect(
       buildPlatformRuntimeLogHints({
         platform: "linux",
-        systemdServiceName: "openclaw-gateway",
-        windowsTaskName: "OpenClaw Gateway",
+        systemdServiceName: "deneb-gateway",
+        windowsTaskName: "Deneb Gateway",
       }),
-    ).toEqual(["Logs: journalctl --user -u openclaw-gateway.service -n 200 --no-pager"]);
+    ).toEqual(["Logs: journalctl --user -u deneb-gateway.service -n 200 --no-pager"]);
     expect(
       buildPlatformRuntimeLogHints({
         platform: "win32",
-        systemdServiceName: "openclaw-gateway",
-        windowsTaskName: "OpenClaw Gateway",
+        systemdServiceName: "deneb-gateway",
+        windowsTaskName: "Deneb Gateway",
       }),
-    ).toEqual(['Logs: schtasks /Query /TN "OpenClaw Gateway" /V /FO LIST']);
+    ).toEqual(['Logs: schtasks /Query /TN "Deneb Gateway" /V /FO LIST']);
   });
 });
 
@@ -42,30 +42,30 @@ describe("buildPlatformServiceStartHints", () => {
     expect(
       buildPlatformServiceStartHints({
         platform: "darwin",
-        installCommand: "openclaw gateway install",
-        startCommand: "openclaw gateway",
-        launchAgentPlistPath: "~/Library/LaunchAgents/com.openclaw.gateway.plist",
-        systemdServiceName: "openclaw-gateway",
-        windowsTaskName: "OpenClaw Gateway",
+        installCommand: "deneb gateway install",
+        startCommand: "deneb gateway",
+        launchAgentPlistPath: "~/Library/LaunchAgents/com.deneb.gateway.plist",
+        systemdServiceName: "deneb-gateway",
+        windowsTaskName: "Deneb Gateway",
       }),
     ).toEqual([
-      "openclaw gateway install",
-      "openclaw gateway",
-      "launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.openclaw.gateway.plist",
+      "deneb gateway install",
+      "deneb gateway",
+      "launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.deneb.gateway.plist",
     ]);
     expect(
       buildPlatformServiceStartHints({
         platform: "linux",
-        installCommand: "openclaw gateway install",
-        startCommand: "openclaw gateway",
-        launchAgentPlistPath: "~/Library/LaunchAgents/com.openclaw.gateway.plist",
-        systemdServiceName: "openclaw-gateway",
-        windowsTaskName: "OpenClaw Gateway",
+        installCommand: "deneb gateway install",
+        startCommand: "deneb gateway",
+        launchAgentPlistPath: "~/Library/LaunchAgents/com.deneb.gateway.plist",
+        systemdServiceName: "deneb-gateway",
+        windowsTaskName: "Deneb Gateway",
       }),
     ).toEqual([
-      "openclaw gateway install",
-      "openclaw gateway",
-      "systemctl --user start openclaw-gateway.service",
+      "deneb gateway install",
+      "deneb gateway",
+      "systemctl --user start deneb-gateway.service",
     ]);
   });
 });

@@ -45,7 +45,7 @@ export type AcpServerOptions = {
 };
 
 export const ACP_AGENT_INFO = {
-  name: "openclaw-acp",
-  title: "OpenClaw ACP Gateway",
+  name: "deneb-acp",
+  title: "Deneb ACP Gateway",
   version: VERSION,
 };

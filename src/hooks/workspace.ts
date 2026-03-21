@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { MANIFEST_KEY } from "../compat/legacy-names.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { isPathInsideWithRealpath } from "../security/scan-paths.js";
@@ -10,7 +10,7 @@ import { resolveBundledHooksDir } from "./bundled-dir.js";
 import { shouldIncludeHook } from "./config.js";
 import {
   parseFrontmatter,
-  resolveOpenClawMetadata,
+  resolveDenebMetadata,
   resolveHookInvocationPolicy,
 } from "./frontmatter.js";
 import { resolvePluginHookDirs } from "./plugin-hooks.js";
@@ -30,7 +30,7 @@ const log = createSubsystemLogger("hooks/workspace");
 
 function filterHookEntries(
   entries: HookEntry[],
-  config?: OpenClawConfig,
+  config?: DenebConfig,
   eligibility?: HookEligibilityContext,
 ): HookEntry[] {
   return entries.filter((entry) => shouldIncludeHook({ entry, config, eligibility }));
@@ -228,7 +228,7 @@ export function loadHookEntriesFromDir(params: {
         pluginId: params.pluginId,
       },
       frontmatter,
-      metadata: resolveOpenClawMetadata(frontmatter),
+      metadata: resolveDenebMetadata(frontmatter),
       invocation: resolveHookInvocationPolicy(frontmatter),
     };
     return entry;
@@ -238,7 +238,7 @@ export function loadHookEntriesFromDir(params: {
 function loadHookEntries(
   workspaceDir: string,
   opts?: {
-    config?: OpenClawConfig;
+    config?: DenebConfig;
     managedHooksDir?: string;
     bundledHooksDir?: string;
   },
@@ -258,30 +258,30 @@ function loadHookEntries(
   const bundledHooks = bundledHooksDir
     ? loadHooksFromDir({
         dir: bundledHooksDir,
-        source: "openclaw-bundled",
+        source: "deneb-bundled",
       })
     : [];
   const extraHooks = extraDirs.flatMap((dir) => {
     const resolved = resolveUserPath(dir);
     return loadHooksFromDir({
       dir: resolved,
-      source: "openclaw-workspace", // Extra dirs treated as workspace
+      source: "deneb-workspace", // Extra dirs treated as workspace
     });
   });
   const pluginHooks = pluginHookDirs.flatMap(({ dir, pluginId }) =>
     loadHooksFromDir({
       dir,
-      source: "openclaw-plugin",
+      source: "deneb-plugin",
       pluginId,
     }),
   );
   const managedHooks = loadHooksFromDir({
     dir: managedHooksDir,
-    source: "openclaw-managed",
+    source: "deneb-managed",
   });
   const workspaceHooks = loadHooksFromDir({
     dir: workspaceHooksDir,
-    source: "openclaw-workspace",
+    source: "deneb-workspace",
   });
 
   const merged = new Map<string, Hook>();
@@ -315,7 +315,7 @@ function loadHookEntries(
     return {
       hook,
       frontmatter,
-      metadata: resolveOpenClawMetadata(frontmatter),
+      metadata: resolveDenebMetadata(frontmatter),
       invocation: resolveHookInvocationPolicy(frontmatter),
     };
   });
@@ -324,7 +324,7 @@ function loadHookEntries(
 export function buildWorkspaceHookSnapshot(
   workspaceDir: string,
   opts?: {
-    config?: OpenClawConfig;
+    config?: DenebConfig;
     managedHooksDir?: string;
     bundledHooksDir?: string;
     entries?: HookEntry[];
@@ -348,7 +348,7 @@ export function buildWorkspaceHookSnapshot(
 export function loadWorkspaceHookEntries(
   workspaceDir: string,
   opts?: {
-    config?: OpenClawConfig;
+    config?: DenebConfig;
     managedHooksDir?: string;
     bundledHooksDir?: string;
   },

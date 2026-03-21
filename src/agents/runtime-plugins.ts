@@ -1,9 +1,9 @@
-import type { OpenClawConfig } from "../config/config.js";
-import { loadOpenClawPlugins } from "../plugins/loader.js";
+import type { DenebConfig } from "../config/config.js";
+import { loadDenebPlugins } from "../plugins/loader.js";
 import { resolveUserPath } from "../utils.js";
 
 export function ensureRuntimePluginsLoaded(params: {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   workspaceDir?: string | null;
   allowGatewaySubagentBinding?: boolean;
 }): void {
@@ -12,7 +12,7 @@ export function ensureRuntimePluginsLoaded(params: {
       ? resolveUserPath(params.workspaceDir)
       : undefined;
 
-  loadOpenClawPlugins({
+  loadDenebPlugins({
     config: params.config,
     workspaceDir,
     runtimeOptions: params.allowGatewaySubagentBinding

@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { coerceSecretRef, resolveSecretInputRef } from "../config/types.secrets.js";
 import {
   groupPluginDiscoveryProvidersByOrder,
@@ -20,7 +20,7 @@ import { resolveAwsSdkEnvVarName, resolveEnvApiKey } from "./model-auth.js";
 import { normalizeGoogleModelId } from "./model-id-normalization.js";
 export { normalizeGoogleModelId };
 
-type ModelsConfig = NonNullable<OpenClawConfig["models"]>;
+type ModelsConfig = NonNullable<DenebConfig["models"]>;
 export type ProviderConfig = NonNullable<ModelsConfig["providers"]>[string];
 type SecretDefaults = {
   env?: string;
@@ -582,7 +582,7 @@ export function normalizeProviders(params: {
 
 type ImplicitProviderParams = {
   agentDir: string;
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   env?: NodeJS.ProcessEnv;
   workspaceDir?: string;
   explicitProviders?: Record<string, ProviderConfig> | null;
@@ -793,7 +793,7 @@ export async function resolveImplicitProviders(
 
 export async function resolveImplicitBedrockProvider(params: {
   agentDir: string;
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   env?: NodeJS.ProcessEnv;
 }): Promise<ProviderConfig | null> {
   const env = params.env ?? process.env;

@@ -141,7 +141,7 @@ beforeAll(async () => {
   responsePlan = [];
   observedContexts = [];
   ({ runEmbeddedPiAgent } = await import("./pi-embedded-runner/run.js"));
-  e2eWorkspace = await createEmbeddedPiRunnerTestWorkspace("openclaw-yield-e2e-");
+  e2eWorkspace = await createEmbeddedPiRunnerTestWorkspace("deneb-yield-e2e-");
   ({ agentDir, workspaceDir } = e2eWorkspace);
 }, 180_000);
 
@@ -229,7 +229,7 @@ describe("sessions_yield e2e", () => {
       const entries = await readSessionEntries(sessionFile);
       const yieldContext = entries.find(
         (entry) =>
-          entry.type === "custom_message" && entry.customType === "openclaw.sessions_yield",
+          entry.type === "custom_message" && entry.customType === "deneb.sessions_yield",
       );
       expect(yieldContext).toMatchObject({
         content: expect.stringContaining("Yielding turn."),

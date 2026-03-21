@@ -15,7 +15,7 @@ describe("Claude bundle plugin inspect integration", () => {
   let rootDir: string;
 
   beforeAll(() => {
-    rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-claude-bundle-"));
+    rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "deneb-claude-bundle-"));
 
     // .claude-plugin/plugin.json
     const manifestDir = path.join(rootDir, ".claude-plugin");

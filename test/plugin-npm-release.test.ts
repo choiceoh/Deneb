@@ -19,8 +19,8 @@ describe("parsePluginReleaseSelection", () => {
 
   it("dedupes and sorts comma or whitespace separated package names", () => {
     expect(
-      parsePluginReleaseSelection(" @openclaw/zalo, @openclaw/feishu  @openclaw/zalo "),
-    ).toEqual(["@openclaw/feishu", "@openclaw/zalo"]);
+      parsePluginReleaseSelection(" @deneb/zalo, @deneb/feishu  @deneb/zalo "),
+    ).toEqual(["@deneb/feishu", "@deneb/zalo"]);
   });
 });
 
@@ -56,7 +56,7 @@ describe("parsePluginReleaseArgs", () => {
         "--selection-mode",
         "all-publishable",
         "--plugins",
-        "@openclaw/zalo",
+        "@deneb/zalo",
       ]),
     ).toThrowError("`--selection-mode all-publishable` must not be combined with `--plugins`.");
   });
@@ -77,9 +77,9 @@ describe("collectPublishablePluginPackageErrors", () => {
         extensionId: "zalo",
         packageDir: "extensions/zalo",
         packageJson: {
-          name: "@openclaw/zalo",
+          name: "@deneb/zalo",
           version: "2026.3.15",
-          openclaw: {
+          deneb: {
             extensions: ["./index.ts"],
             release: {
               publishToNpm: true,
@@ -99,7 +99,7 @@ describe("collectPublishablePluginPackageErrors", () => {
           name: "broken",
           version: "latest",
           private: true,
-          openclaw: {
+          deneb: {
             extensions: [""],
             release: {
               publishToNpm: true,
@@ -108,10 +108,10 @@ describe("collectPublishablePluginPackageErrors", () => {
         },
       }),
     ).toEqual([
-      'package name must start with "@openclaw/"; found "broken".',
+      'package name must start with "@deneb/"; found "broken".',
       "package.json private must not be true.",
       'package.json version must match YYYY.M.D or YYYY.M.D-beta.N; found "latest".',
-      "openclaw.extensions must contain only non-empty strings.",
+      "deneb.extensions must contain only non-empty strings.",
     ]);
   });
 });
@@ -121,7 +121,7 @@ describe("resolveSelectedPublishablePluginPackages", () => {
     {
       extensionId: "feishu",
       packageDir: "extensions/feishu",
-      packageName: "@openclaw/feishu",
+      packageName: "@deneb/feishu",
       version: "2026.3.15",
       channel: "stable",
       publishTag: "latest",
@@ -129,7 +129,7 @@ describe("resolveSelectedPublishablePluginPackages", () => {
     {
       extensionId: "zalo",
       packageDir: "extensions/zalo",
-      packageName: "@openclaw/zalo",
+      packageName: "@deneb/zalo",
       version: "2026.3.15-beta.1",
       channel: "beta",
       publishTag: "beta",
@@ -149,7 +149,7 @@ describe("resolveSelectedPublishablePluginPackages", () => {
     expect(
       resolveSelectedPublishablePluginPackages({
         plugins: publishablePlugins,
-        selection: ["@openclaw/zalo"],
+        selection: ["@deneb/zalo"],
       }),
     ).toEqual([publishablePlugins[1]]);
   });
@@ -158,9 +158,9 @@ describe("resolveSelectedPublishablePluginPackages", () => {
     expect(() =>
       resolveSelectedPublishablePluginPackages({
         plugins: publishablePlugins,
-        selection: ["@openclaw/missing"],
+        selection: ["@deneb/missing"],
       }),
-    ).toThrowError("Unknown or non-publishable plugin package selection: @openclaw/missing.");
+    ).toThrowError("Unknown or non-publishable plugin package selection: @deneb/missing.");
   });
 });
 
@@ -182,7 +182,7 @@ describe("resolveChangedPublishablePluginPackages", () => {
     {
       extensionId: "feishu",
       packageDir: "extensions/feishu",
-      packageName: "@openclaw/feishu",
+      packageName: "@deneb/feishu",
       version: "2026.3.15",
       channel: "stable",
       publishTag: "latest",
@@ -190,7 +190,7 @@ describe("resolveChangedPublishablePluginPackages", () => {
     {
       extensionId: "zalo",
       packageDir: "extensions/zalo",
-      packageName: "@openclaw/zalo",
+      packageName: "@deneb/zalo",
       version: "2026.3.15-beta.1",
       channel: "beta",
       publishTag: "beta",

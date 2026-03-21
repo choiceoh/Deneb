@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { createProviderUsageFetch } from "../test-utils/provider-usage-fetch.js";
 import type { ProviderAuth } from "./provider-usage.auth.js";
 import type { UsageSummary } from "./provider-usage.types.js";
@@ -9,7 +9,7 @@ type ProviderUsageLoader = (params: {
   now: number;
   auth?: ProviderAuth[];
   fetch?: typeof fetch;
-  config?: OpenClawConfig;
+  config?: DenebConfig;
 }) => Promise<UsageSummary>;
 
 export type ProviderUsageAuth<T extends ProviderUsageLoader> = NonNullable<
@@ -26,6 +26,6 @@ export async function loadUsageWithAuth<T extends ProviderUsageLoader>(
     auth,
     fetch: mockFetch as unknown as typeof fetch,
     // These tests exercise the built-in usage fetchers, not provider plugin hooks.
-    config: { plugins: { enabled: false } } as OpenClawConfig,
+    config: { plugins: { enabled: false } } as DenebConfig,
   });
 }

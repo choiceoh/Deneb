@@ -1,4 +1,4 @@
-import type { RuntimeEnv } from "openclaw/plugin-sdk/testing";
+import type { RuntimeEnv } from "deneb/plugin-sdk/testing";
 import { vi } from "vitest";
 
 export function createRuntimeEnv(): RuntimeEnv {

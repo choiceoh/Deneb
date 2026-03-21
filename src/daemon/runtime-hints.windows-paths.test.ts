@@ -9,8 +9,8 @@ describe("buildPlatformRuntimeLogHints", () => {
   it("strips windows drive prefixes from darwin display paths", async () => {
     vi.doMock("./launchd.js", () => ({
       resolveGatewayLogPaths: () => ({
-        stdoutPath: "C:\\tmp\\openclaw-state\\logs\\gateway.log",
-        stderrPath: "C:\\tmp\\openclaw-state\\logs\\gateway.err.log",
+        stdoutPath: "C:\\tmp\\deneb-state\\logs\\gateway.log",
+        stderrPath: "C:\\tmp\\deneb-state\\logs\\gateway.err.log",
       }),
     }));
 
@@ -19,12 +19,12 @@ describe("buildPlatformRuntimeLogHints", () => {
     expect(
       buildPlatformRuntimeLogHints({
         platform: "darwin",
-        systemdServiceName: "openclaw-gateway",
-        windowsTaskName: "OpenClaw Gateway",
+        systemdServiceName: "deneb-gateway",
+        windowsTaskName: "Deneb Gateway",
       }),
     ).toEqual([
-      "Launchd stdout (if installed): /tmp/openclaw-state/logs/gateway.log",
-      "Launchd stderr (if installed): /tmp/openclaw-state/logs/gateway.err.log",
+      "Launchd stdout (if installed): /tmp/deneb-state/logs/gateway.log",
+      "Launchd stderr (if installed): /tmp/deneb-state/logs/gateway.err.log",
     ]);
   });
 });

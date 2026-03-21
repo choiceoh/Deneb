@@ -3,13 +3,13 @@ summary: "Pairing overview: approve who can DM you + which nodes can join"
 read_when:
   - Setting up DM access control
   - Pairing a new iOS/Android node
-  - Reviewing OpenClaw security posture
+  - Reviewing Deneb security posture
 title: "Pairing"
 ---
 
 # Pairing
 
-“Pairing” is OpenClaw’s explicit **owner approval** step.
+“Pairing” is Deneb’s explicit **owner approval** step.
 It is used in two places:
 
 1. **DM pairing** (who is allowed to talk to the bot)
@@ -32,15 +32,15 @@ Pairing codes:
 ### Approve a sender
 
 ```bash
-openclaw pairing list telegram
-openclaw pairing approve telegram <CODE>
+deneb pairing list telegram
+deneb pairing approve telegram <CODE>
 ```
 
 Supported channels: `telegram`, `whatsapp`, `signal`, `imessage`, `discord`, `slack`, `feishu`.
 
 ### Where the state lives
 
-Stored under `~/.openclaw/credentials/`:
+Stored under `~/.deneb/credentials/`:
 
 - Pending requests: `<channel>-pairing.json`
 - Approved allowlist store:
@@ -65,7 +65,7 @@ If you use the `device-pair` plugin, you can do first-time device pairing entire
 
 1. In Telegram, message your bot: `/pair`
 2. The bot replies with two messages: an instruction message and a separate **setup code** message (easy to copy/paste in Telegram).
-3. On your phone, open the OpenClaw iOS app → Settings → Gateway.
+3. On your phone, open the Deneb iOS app → Settings → Gateway.
 4. Paste the setup code and connect.
 5. Back in Telegram: `/pair approve`
 
@@ -79,21 +79,21 @@ Treat the setup code like a password while it is valid.
 ### Approve a node device
 
 ```bash
-openclaw devices list
-openclaw devices approve <requestId>
-openclaw devices reject <requestId>
+deneb devices list
+deneb devices approve <requestId>
+deneb devices reject <requestId>
 ```
 
 ### Node pairing state storage
 
-Stored under `~/.openclaw/devices/`:
+Stored under `~/.deneb/devices/`:
 
 - `pending.json` (short-lived; pending requests expire)
 - `paired.json` (paired devices + tokens)
 
 ### Notes
 
-- The legacy `node.pair.*` API (CLI: `openclaw nodes pending/approve`) is a
+- The legacy `node.pair.*` API (CLI: `deneb nodes pending/approve`) is a
   separate gateway-owned pairing store. WS nodes still require device pairing.
 
 ## Related docs

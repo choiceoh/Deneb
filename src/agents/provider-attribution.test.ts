@@ -7,20 +7,20 @@ import {
 } from "./provider-attribution.js";
 
 describe("provider attribution", () => {
-  it("resolves the canonical OpenClaw product and runtime version", () => {
+  it("resolves the canonical Deneb product and runtime version", () => {
     const identity = resolveProviderAttributionIdentity({
-      OPENCLAW_VERSION: "2026.3.99",
+      DENEB_VERSION: "2026.3.99",
     });
 
     expect(identity).toEqual({
-      product: "OpenClaw",
+      product: "Deneb",
       version: "2026.3.99",
     });
   });
 
   it("returns a documented OpenRouter attribution policy", () => {
     const policy = resolveProviderAttributionPolicy("openrouter", {
-      OPENCLAW_VERSION: "2026.3.14",
+      DENEB_VERSION: "2026.3.14",
     });
 
     expect(policy).toEqual({
@@ -29,12 +29,12 @@ describe("provider attribution", () => {
       verification: "vendor-documented",
       hook: "request-headers",
       docsUrl: "https://openrouter.ai/docs/app-attribution",
-      reviewNote: "Documented app attribution headers. Verified in OpenClaw runtime wrapper.",
-      product: "OpenClaw",
+      reviewNote: "Documented app attribution headers. Verified in Deneb runtime wrapper.",
+      product: "Deneb",
       version: "2026.3.14",
       headers: {
-        "HTTP-Referer": "https://openclaw.ai",
-        "X-OpenRouter-Title": "OpenClaw",
+        "HTTP-Referer": "https://deneb.ai",
+        "X-OpenRouter-Title": "Deneb",
         "X-OpenRouter-Categories": "cli-agent",
       },
     });
@@ -43,39 +43,39 @@ describe("provider attribution", () => {
   it("normalizes aliases when resolving provider headers", () => {
     expect(
       resolveProviderAttributionHeaders("OpenRouter", {
-        OPENCLAW_VERSION: "2026.3.14",
+        DENEB_VERSION: "2026.3.14",
       }),
     ).toEqual({
-      "HTTP-Referer": "https://openclaw.ai",
-      "X-OpenRouter-Title": "OpenClaw",
+      "HTTP-Referer": "https://deneb.ai",
+      "X-OpenRouter-Title": "Deneb",
       "X-OpenRouter-Categories": "cli-agent",
     });
   });
 
   it("returns a hidden-spec OpenAI attribution policy", () => {
-    expect(resolveProviderAttributionPolicy("openai", { OPENCLAW_VERSION: "2026.3.14" })).toEqual({
+    expect(resolveProviderAttributionPolicy("openai", { DENEB_VERSION: "2026.3.14" })).toEqual({
       provider: "openai",
       enabledByDefault: true,
       verification: "vendor-hidden-api-spec",
       hook: "request-headers",
       reviewNote:
         "OpenAI native traffic supports hidden originator/User-Agent attribution. Verified against the Codex wire contract.",
-      product: "OpenClaw",
+      product: "Deneb",
       version: "2026.3.14",
       headers: {
-        originator: "openclaw",
-        "User-Agent": "openclaw/2026.3.14",
+        originator: "deneb",
+        "User-Agent": "deneb/2026.3.14",
       },
     });
-    expect(resolveProviderAttributionHeaders("openai", { OPENCLAW_VERSION: "2026.3.14" })).toEqual({
-      originator: "openclaw",
-      "User-Agent": "openclaw/2026.3.14",
+    expect(resolveProviderAttributionHeaders("openai", { DENEB_VERSION: "2026.3.14" })).toEqual({
+      originator: "deneb",
+      "User-Agent": "deneb/2026.3.14",
     });
   });
 
   it("returns a hidden-spec OpenAI Codex attribution policy", () => {
     expect(
-      resolveProviderAttributionPolicy("openai-codex", { OPENCLAW_VERSION: "2026.3.14" }),
+      resolveProviderAttributionPolicy("openai-codex", { DENEB_VERSION: "2026.3.14" }),
     ).toEqual({
       provider: "openai-codex",
       enabledByDefault: true,
@@ -83,18 +83,18 @@ describe("provider attribution", () => {
       hook: "request-headers",
       reviewNote:
         "OpenAI Codex ChatGPT-backed traffic supports the same hidden originator/User-Agent attribution contract.",
-      product: "OpenClaw",
+      product: "Deneb",
       version: "2026.3.14",
       headers: {
-        originator: "openclaw",
-        "User-Agent": "openclaw/2026.3.14",
+        originator: "deneb",
+        "User-Agent": "deneb/2026.3.14",
       },
     });
   });
 
   it("lists the current attribution support matrix", () => {
     expect(
-      listProviderAttributionPolicies({ OPENCLAW_VERSION: "2026.3.14" }).map((policy) => [
+      listProviderAttributionPolicies({ DENEB_VERSION: "2026.3.14" }).map((policy) => [
         policy.provider,
         policy.enabledByDefault,
         policy.verification,

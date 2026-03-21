@@ -25,32 +25,32 @@ describe("system-presence version fallback", () => {
     });
   }
 
-  it("uses runtime VERSION when OPENCLAW_VERSION is not set", async () => {
+  it("uses runtime VERSION when DENEB_VERSION is not set", async () => {
     await expectSelfVersion(
       {
-        OPENCLAW_SERVICE_VERSION: "2.4.6-service",
+        DENEB_SERVICE_VERSION: "2.4.6-service",
         npm_package_version: "1.0.0-package",
       },
       async () => (await import("../version.js")).VERSION,
     );
   });
 
-  it("prefers OPENCLAW_VERSION over runtime VERSION", async () => {
+  it("prefers DENEB_VERSION over runtime VERSION", async () => {
     await expectSelfVersion(
       {
-        OPENCLAW_VERSION: "9.9.9-cli",
-        OPENCLAW_SERVICE_VERSION: "2.4.6-service",
+        DENEB_VERSION: "9.9.9-cli",
+        DENEB_SERVICE_VERSION: "2.4.6-service",
         npm_package_version: "1.0.0-package",
       },
       "9.9.9-cli",
     );
   });
 
-  it("still prefers runtime VERSION over OPENCLAW_SERVICE_VERSION when OPENCLAW_VERSION is blank", async () => {
+  it("still prefers runtime VERSION over DENEB_SERVICE_VERSION when DENEB_VERSION is blank", async () => {
     await expectSelfVersion(
       {
-        OPENCLAW_VERSION: " ",
-        OPENCLAW_SERVICE_VERSION: "2.4.6-service",
+        DENEB_VERSION: " ",
+        DENEB_SERVICE_VERSION: "2.4.6-service",
         npm_package_version: "1.0.0-package",
       },
       async () => (await import("../version.js")).VERSION,
@@ -60,19 +60,19 @@ describe("system-presence version fallback", () => {
   it("still prefers runtime VERSION over npm_package_version when service markers are blank", async () => {
     await expectSelfVersion(
       {
-        OPENCLAW_VERSION: " ",
-        OPENCLAW_SERVICE_VERSION: "\t",
+        DENEB_VERSION: " ",
+        DENEB_SERVICE_VERSION: "\t",
         npm_package_version: "1.0.0-package",
       },
       async () => (await import("../version.js")).VERSION,
     );
   });
 
-  it("uses runtime VERSION when OPENCLAW_VERSION and OPENCLAW_SERVICE_VERSION are blank", async () => {
+  it("uses runtime VERSION when DENEB_VERSION and DENEB_SERVICE_VERSION are blank", async () => {
     await expectSelfVersion(
       {
-        OPENCLAW_VERSION: " ",
-        OPENCLAW_SERVICE_VERSION: "\t",
+        DENEB_VERSION: " ",
+        DENEB_SERVICE_VERSION: "\t",
         npm_package_version: "1.0.0-package",
       },
       async () => (await import("../version.js")).VERSION,

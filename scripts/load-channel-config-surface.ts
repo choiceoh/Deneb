@@ -159,7 +159,7 @@ function copyModuleImportGraphWithoutNodeModules(params: {
   const relativeFiles = collectRelativeImportGraph(params.modulePath);
   const copyRoot = resolveCommonAncestor([packageRoot, ...relativeFiles]);
   const relativeModulePath = path.relative(copyRoot, params.modulePath);
-  const tempParent = path.join(params.repoRoot, ".openclaw-config-doc-cache");
+  const tempParent = path.join(params.repoRoot, ".deneb-config-doc-cache");
   fs.mkdirSync(tempParent, { recursive: true });
   const isolatedRoot = fs.mkdtempSync(path.join(tempParent, `${path.basename(packageRoot)}-`));
 

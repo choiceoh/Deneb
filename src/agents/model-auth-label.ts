@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { SessionEntry } from "../config/sessions.js";
 import {
   ensureAuthProfileStore,
@@ -10,7 +10,7 @@ import { normalizeProviderId } from "./model-selection.js";
 
 export function resolveModelAuthLabel(params: {
   provider?: string;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   sessionEntry?: SessionEntry;
   agentDir?: string;
 }): string | undefined {

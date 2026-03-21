@@ -6,16 +6,16 @@ import { withTempHome as withTempHomeHelper } from "../../test/helpers/temp-home
 import { loadModelCatalog } from "../agents/model-catalog.js";
 import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
 import type { CliDeps } from "../cli/deps.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { runCronIsolatedAgentTurn } from "./isolated-agent.js";
 import type { CronJob } from "./types.js";
 
 async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
-  return withTempHomeHelper(fn, { prefix: "openclaw-cron-submodel-" });
+  return withTempHomeHelper(fn, { prefix: "deneb-cron-submodel-" });
 }
 
 async function writeSessionStore(home: string) {
-  const dir = path.join(home, ".openclaw", "sessions");
+  const dir = path.join(home, ".deneb", "sessions");
   await fs.mkdir(dir, { recursive: true });
   const storePath = path.join(dir, "sessions.json");
   await fs.writeFile(
@@ -40,17 +40,17 @@ async function writeSessionStore(home: string) {
 function makeCfg(
   home: string,
   storePath: string,
-  overrides: Partial<OpenClawConfig> = {},
-): OpenClawConfig {
-  const base: OpenClawConfig = {
+  overrides: Partial<DenebConfig> = {},
+): DenebConfig {
+  const base: DenebConfig = {
     agents: {
       defaults: {
         model: "anthropic/claude-sonnet-4-5",
-        workspace: path.join(home, "openclaw"),
+        workspace: path.join(home, "deneb"),
       },
     },
     session: { store: storePath, mainKey: "main" },
-  } as OpenClawConfig;
+  } as DenebConfig;
   return { ...base, ...overrides };
 }
 
@@ -93,7 +93,7 @@ function mockEmbeddedAgent() {
 
 async function runSubagentModelCase(params: {
   home: string;
-  cfgOverrides?: Partial<OpenClawConfig>;
+  cfgOverrides?: Partial<DenebConfig>;
   jobModelOverride?: string;
 }) {
   const storePath = await writeSessionStore(params.home);
@@ -131,7 +131,7 @@ describe("runCronIsolatedAgentTurn: subagent model resolution (#11461)", () => {
             subagents: { model: "ollama/llama3.2:3b" },
           },
         },
-      } satisfies Partial<OpenClawConfig>,
+      } satisfies Partial<DenebConfig>,
       expectedProvider: "ollama",
       expectedModel: "llama3.2:3b",
     },
@@ -150,7 +150,7 @@ describe("runCronIsolatedAgentTurn: subagent model resolution (#11461)", () => {
             subagents: { model: { primary: "google/gemini-2.5-flash" } },
           },
         },
-      } satisfies Partial<OpenClawConfig>,
+      } satisfies Partial<DenebConfig>,
       expectedProvider: "google",
       expectedModel: "gemini-2.5-flash",
     },
@@ -163,10 +163,10 @@ describe("runCronIsolatedAgentTurn: subagent model resolution (#11461)", () => {
               agents: {
                 defaults: {
                   ...cfgOverrides.agents?.defaults,
-                  workspace: path.join(home, "openclaw"),
+                  workspace: path.join(home, "deneb"),
                 },
               },
-            } satisfies Partial<OpenClawConfig>);
+            } satisfies Partial<DenebConfig>);
       const call = await runSubagentModelCase({ home, cfgOverrides: resolvedCfg });
       expect(call?.provider).toBe(expectedProvider);
       expect(call?.model).toBe(expectedModel);
@@ -181,7 +181,7 @@ describe("runCronIsolatedAgentTurn: subagent model resolution (#11461)", () => {
           agents: {
             defaults: {
               model: "anthropic/claude-sonnet-4-5",
-              workspace: path.join(home, "openclaw"),
+              workspace: path.join(home, "deneb"),
               subagents: { model: "ollama/llama3.2:3b" },
             },
           },

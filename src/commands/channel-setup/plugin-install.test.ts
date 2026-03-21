@@ -46,7 +46,7 @@ vi.mock("../../plugins/bundled-sources.js", () => ({
 }));
 
 vi.mock("../../plugins/loader.js", () => ({
-  loadOpenClawPlugins: vi.fn(),
+  loadDenebPlugins: vi.fn(),
 }));
 
 const clearPluginDiscoveryCache = vi.fn();
@@ -56,8 +56,8 @@ vi.mock("../../plugins/discovery.js", () => ({
 
 import fs from "node:fs";
 import type { ChannelPluginCatalogEntry } from "../../channels/plugins/catalog.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { loadOpenClawPlugins } from "../../plugins/loader.js";
+import type { DenebConfig } from "../../config/config.js";
+import { loadDenebPlugins } from "../../plugins/loader.js";
 import { createEmptyPluginRegistry } from "../../plugins/registry.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import type { WizardPrompter } from "../../wizard/prompts.js";
@@ -81,7 +81,7 @@ const baseEntry: ChannelPluginCatalogEntry = {
     blurb: "Test",
   },
   install: {
-    npmSpec: "@openclaw/zalo",
+    npmSpec: "@deneb/zalo",
     localPath: "extensions/zalo",
   },
 };
@@ -103,7 +103,7 @@ async function runInitialValueForChannel(channel: "dev" | "beta") {
   const runtime = makeRuntime();
   const select = vi.fn((async <T extends string>() => "skip" as T) as WizardPrompter["select"]);
   const prompter = makePrompter({ select: select as unknown as WizardPrompter["select"] });
-  const cfg: OpenClawConfig = { update: { channel } };
+  const cfg: DenebConfig = { update: { channel } };
   mockRepoLocalPathExists();
 
   await ensureChannelSetupPluginInstalled({
@@ -131,7 +131,7 @@ describe("ensureChannelSetupPluginInstalled", () => {
     const prompter = makePrompter({
       select: vi.fn(async () => "npm") as WizardPrompter["select"],
     });
-    const cfg: OpenClawConfig = { plugins: { allow: ["other"] } };
+    const cfg: DenebConfig = { plugins: { allow: ["other"] } };
     vi.mocked(fs.existsSync).mockReturnValue(false);
     installPluginFromNpmSpec.mockResolvedValue({
       ok: true,
@@ -151,10 +151,10 @@ describe("ensureChannelSetupPluginInstalled", () => {
     expect(result.cfg.plugins?.entries?.zalo?.enabled).toBe(true);
     expect(result.cfg.plugins?.allow).toContain("zalo");
     expect(result.cfg.plugins?.installs?.zalo?.source).toBe("npm");
-    expect(result.cfg.plugins?.installs?.zalo?.spec).toBe("@openclaw/zalo");
+    expect(result.cfg.plugins?.installs?.zalo?.spec).toBe("@deneb/zalo");
     expect(result.cfg.plugins?.installs?.zalo?.installPath).toBe("/tmp/zalo");
     expect(installPluginFromNpmSpec).toHaveBeenCalledWith(
-      expect.objectContaining({ spec: "@openclaw/zalo" }),
+      expect.objectContaining({ spec: "@deneb/zalo" }),
     );
   });
 
@@ -163,7 +163,7 @@ describe("ensureChannelSetupPluginInstalled", () => {
     const prompter = makePrompter({
       select: vi.fn(async () => "local") as WizardPrompter["select"],
     });
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     mockRepoLocalPathExists();
 
     const result = await ensureChannelSetupPluginInstalled({
@@ -182,7 +182,7 @@ describe("ensureChannelSetupPluginInstalled", () => {
     const prompter = makePrompter({
       select: vi.fn(async () => "local") as WizardPrompter["select"],
     });
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     mockRepoLocalPathExists();
 
     const result = await ensureChannelSetupPluginInstalled({
@@ -190,15 +190,15 @@ describe("ensureChannelSetupPluginInstalled", () => {
       entry: {
         ...baseEntry,
         id: "teams",
-        pluginId: "@openclaw/msteams-plugin",
+        pluginId: "@deneb/msteams-plugin",
       },
       prompter,
       runtime,
     });
 
     expect(result.installed).toBe(true);
-    expect(result.pluginId).toBe("@openclaw/msteams-plugin");
-    expect(result.cfg.plugins?.entries?.["@openclaw/msteams-plugin"]?.enabled).toBe(true);
+    expect(result.pluginId).toBe("@deneb/msteams-plugin");
+    expect(result.cfg.plugins?.entries?.["@deneb/msteams-plugin"]?.enabled).toBe(true);
   });
 
   it("defaults to local on dev channel when local path exists", async () => {
@@ -213,7 +213,7 @@ describe("ensureChannelSetupPluginInstalled", () => {
     const runtime = makeRuntime();
     const select = vi.fn((async <T extends string>() => "skip" as T) as WizardPrompter["select"]);
     const prompter = makePrompter({ select: select as unknown as WizardPrompter["select"] });
-    const cfg: OpenClawConfig = { update: { channel: "beta" } };
+    const cfg: DenebConfig = { update: { channel: "beta" } };
     vi.mocked(fs.existsSync).mockReturnValue(false);
     resolveBundledPluginSources.mockReturnValue(
       new Map([
@@ -221,8 +221,8 @@ describe("ensureChannelSetupPluginInstalled", () => {
           "zalo",
           {
             pluginId: "zalo",
-            localPath: "/opt/openclaw/extensions/zalo",
-            npmSpec: "@openclaw/zalo",
+            localPath: "/opt/deneb/extensions/zalo",
+            npmSpec: "@deneb/zalo",
           },
         ],
       ]),
@@ -241,7 +241,7 @@ describe("ensureChannelSetupPluginInstalled", () => {
         options: expect.arrayContaining([
           expect.objectContaining({
             value: "local",
-            hint: "/opt/openclaw/extensions/zalo",
+            hint: "/opt/deneb/extensions/zalo",
           }),
         ]),
       }),
@@ -257,7 +257,7 @@ describe("ensureChannelSetupPluginInstalled", () => {
       note,
       confirm,
     });
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     mockRepoLocalPathExists();
     installPluginFromNpmSpec.mockResolvedValue({
       ok: false,
@@ -278,43 +278,43 @@ describe("ensureChannelSetupPluginInstalled", () => {
 
   it("clears discovery cache before reloading the setup plugin registry", () => {
     const runtime = makeRuntime();
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
 
     reloadChannelSetupPluginRegistry({
       cfg,
       runtime,
-      workspaceDir: "/tmp/openclaw-workspace",
+      workspaceDir: "/tmp/deneb-workspace",
     });
 
     expect(clearPluginDiscoveryCache).toHaveBeenCalledTimes(1);
-    expect(loadOpenClawPlugins).toHaveBeenCalledWith(
+    expect(loadDenebPlugins).toHaveBeenCalledWith(
       expect.objectContaining({
         config: cfg,
-        workspaceDir: "/tmp/openclaw-workspace",
+        workspaceDir: "/tmp/deneb-workspace",
         cache: false,
         includeSetupOnlyChannelPlugins: true,
       }),
     );
     expect(clearPluginDiscoveryCache.mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(loadOpenClawPlugins).mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+      vi.mocked(loadDenebPlugins).mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
     );
   });
 
   it("scopes channel reloads when setup starts from an empty registry", () => {
     const runtime = makeRuntime();
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
 
     reloadChannelSetupPluginRegistryForChannel({
       cfg,
       runtime,
       channel: "telegram",
-      workspaceDir: "/tmp/openclaw-workspace",
+      workspaceDir: "/tmp/deneb-workspace",
     });
 
-    expect(loadOpenClawPlugins).toHaveBeenCalledWith(
+    expect(loadDenebPlugins).toHaveBeenCalledWith(
       expect.objectContaining({
         config: cfg,
-        workspaceDir: "/tmp/openclaw-workspace",
+        workspaceDir: "/tmp/deneb-workspace",
         cache: false,
         onlyPluginIds: ["telegram"],
         includeSetupOnlyChannelPlugins: true,
@@ -324,7 +324,7 @@ describe("ensureChannelSetupPluginInstalled", () => {
 
   it("keeps full reloads when the active plugin registry is already populated", () => {
     const runtime = makeRuntime();
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     const registry = createEmptyPluginRegistry();
     registry.plugins.push({
       id: "loaded",
@@ -355,10 +355,10 @@ describe("ensureChannelSetupPluginInstalled", () => {
       cfg,
       runtime,
       channel: "telegram",
-      workspaceDir: "/tmp/openclaw-workspace",
+      workspaceDir: "/tmp/deneb-workspace",
     });
 
-    expect(loadOpenClawPlugins).toHaveBeenCalledWith(
+    expect(loadDenebPlugins).toHaveBeenCalledWith(
       expect.not.objectContaining({
         onlyPluginIds: expect.anything(),
       }),
@@ -367,19 +367,19 @@ describe("ensureChannelSetupPluginInstalled", () => {
 
   it("can load a channel-scoped snapshot without activating the global registry", () => {
     const runtime = makeRuntime();
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
 
     loadChannelSetupPluginRegistrySnapshotForChannel({
       cfg,
       runtime,
       channel: "telegram",
-      workspaceDir: "/tmp/openclaw-workspace",
+      workspaceDir: "/tmp/deneb-workspace",
     });
 
-    expect(loadOpenClawPlugins).toHaveBeenCalledWith(
+    expect(loadDenebPlugins).toHaveBeenCalledWith(
       expect.objectContaining({
         config: cfg,
-        workspaceDir: "/tmp/openclaw-workspace",
+        workspaceDir: "/tmp/deneb-workspace",
         cache: false,
         onlyPluginIds: ["telegram"],
         includeSetupOnlyChannelPlugins: true,
@@ -390,22 +390,22 @@ describe("ensureChannelSetupPluginInstalled", () => {
 
   it("scopes snapshots by plugin id when channel and plugin ids differ", () => {
     const runtime = makeRuntime();
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
 
     loadChannelSetupPluginRegistrySnapshotForChannel({
       cfg,
       runtime,
       channel: "msteams",
-      pluginId: "@openclaw/msteams-plugin",
-      workspaceDir: "/tmp/openclaw-workspace",
+      pluginId: "@deneb/msteams-plugin",
+      workspaceDir: "/tmp/deneb-workspace",
     });
 
-    expect(loadOpenClawPlugins).toHaveBeenCalledWith(
+    expect(loadDenebPlugins).toHaveBeenCalledWith(
       expect.objectContaining({
         config: cfg,
-        workspaceDir: "/tmp/openclaw-workspace",
+        workspaceDir: "/tmp/deneb-workspace",
         cache: false,
-        onlyPluginIds: ["@openclaw/msteams-plugin"],
+        onlyPluginIds: ["@deneb/msteams-plugin"],
         includeSetupOnlyChannelPlugins: true,
         activate: false,
       }),

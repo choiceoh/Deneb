@@ -1,7 +1,7 @@
 import { DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { parseModelRef } from "../agents/model-selection.js";
 import { normalizeProviderId } from "../agents/model-selection.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { WizardPrompter } from "../wizard/prompts.js";
 import { resolvePluginProviders } from "./providers.js";
 import type {
@@ -96,7 +96,7 @@ export function buildProviderPluginMethodChoice(providerId: string, methodId: st
 }
 
 export function resolveProviderWizardOptions(params: {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
 }): ProviderWizardOption[] {
@@ -165,7 +165,7 @@ function resolveModelPickerChoiceValue(
 }
 
 export function resolveProviderModelPickerEntries(params: {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
 }): ProviderModelPickerEntry[] {
@@ -245,7 +245,7 @@ export function resolveProviderPluginChoice(params: {
 }
 
 export async function runProviderModelSelectedHook(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   model: string;
   prompter: WizardPrompter;
   agentDir?: string;

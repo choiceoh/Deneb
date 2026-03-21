@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "./config.js";
+import type { DenebConfig } from "./config.js";
 import { DEFAULT_GATEWAY_PORT } from "./paths.js";
 
 export type GatewayNonLoopbackBindMode = "lan" | "tailnet" | "custom";
@@ -44,10 +44,10 @@ export function buildDefaultControlUiAllowedOrigins(params: {
 }
 
 export function ensureControlUiAllowedOriginsForNonLoopbackBind(
-  config: OpenClawConfig,
+  config: DenebConfig,
   opts?: { defaultPort?: number; requireControlUiEnabled?: boolean },
 ): {
-  config: OpenClawConfig;
+  config: DenebConfig;
   seededOrigins: string[] | null;
   bind: GatewayNonLoopbackBindMode | null;
 } {

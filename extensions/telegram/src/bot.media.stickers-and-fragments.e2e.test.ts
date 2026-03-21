@@ -51,7 +51,7 @@ describe("telegram stickers", () => {
           },
           date: 1736380800,
         },
-        me: { username: "openclaw_bot" },
+        me: { username: "deneb_bot" },
         getFile: async () => ({ file_path: "stickers/sticker.webp" }),
       });
 
@@ -111,7 +111,7 @@ describe("telegram stickers", () => {
           },
           date: 1736380800,
         },
-        me: { username: "openclaw_bot" },
+        me: { username: "deneb_bot" },
         getFile: async () => ({ file_path: "stickers/sticker.webp" }),
       });
 
@@ -186,7 +186,7 @@ describe("telegram stickers", () => {
             sticker: scenario.sticker,
             date: 1736380800,
           },
-          me: { username: "openclaw_bot" },
+          me: { username: "deneb_bot" },
           getFile: async () => ({ file_path: scenario.filePath }),
         });
 
@@ -222,7 +222,7 @@ describe("telegram text fragments", () => {
           date: 1736380800,
           text: part1,
         },
-        me: { username: "openclaw_bot" },
+        me: { username: "deneb_bot" },
         getFile: async () => ({}),
       });
 
@@ -234,7 +234,7 @@ describe("telegram text fragments", () => {
           date: 1736380801,
           text: part2,
         },
-        me: { username: "openclaw_bot" },
+        me: { username: "deneb_bot" },
         getFile: async () => ({}),
       });
 

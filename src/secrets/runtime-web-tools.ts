@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { resolveSecretInputRef } from "../config/types.secrets.js";
 import type {
   PluginWebSearchProviderEntry,
@@ -32,7 +32,7 @@ export type {
   RuntimeWebToolsMetadata,
 };
 
-type FetchConfig = NonNullable<OpenClawConfig["tools"]>["web"] extends infer Web
+type FetchConfig = NonNullable<DenebConfig["tools"]>["web"] extends infer Web
   ? Web extends { fetch?: infer Fetch }
     ? Fetch
     : undefined
@@ -93,7 +93,7 @@ function buildUnresolvedReason(params: {
 }
 
 async function resolveSecretInputWithEnvFallback(params: {
-  sourceConfig: OpenClawConfig;
+  sourceConfig: DenebConfig;
   context: ResolverContext;
   defaults: SecretDefaults | undefined;
   value: unknown;
@@ -207,7 +207,7 @@ function ensureObject(target: Record<string, unknown>, key: string): Record<stri
 }
 
 function setResolvedWebSearchApiKey(params: {
-  resolvedConfig: OpenClawConfig;
+  resolvedConfig: DenebConfig;
   provider: PluginWebSearchProviderEntry;
   value: string;
 }): void {
@@ -221,7 +221,7 @@ function setResolvedWebSearchApiKey(params: {
 }
 
 function setResolvedFirecrawlApiKey(params: {
-  resolvedConfig: OpenClawConfig;
+  resolvedConfig: DenebConfig;
   value: string;
 }): void {
   const tools = ensureObject(params.resolvedConfig as Record<string, unknown>, "tools");
@@ -251,8 +251,8 @@ function hasConfiguredSecretRef(value: unknown, defaults: SecretDefaults | undef
 }
 
 export async function resolveRuntimeWebTools(params: {
-  sourceConfig: OpenClawConfig;
-  resolvedConfig: OpenClawConfig;
+  sourceConfig: DenebConfig;
+  resolvedConfig: DenebConfig;
   context: ResolverContext;
 }): Promise<RuntimeWebToolsMetadata> {
   const defaults = params.sourceConfig.secrets?.defaults;

@@ -28,7 +28,7 @@ export {
   shouldResolveSessionIdInput,
   shouldVerifyRequesterSpawnedSessionVisibility,
 } from "./sessions-resolution.js";
-import { type OpenClawConfig, loadConfig } from "../../config/config.js";
+import { type DenebConfig, loadConfig } from "../../config/config.js";
 import { extractTextFromChatContent } from "../../shared/chat-content.js";
 import { sanitizeUserFacingText } from "../pi-embedded-helpers.js";
 import {
@@ -86,7 +86,7 @@ function normalizeKey(value?: string) {
 export function resolveSessionToolContext(opts?: {
   agentSessionKey?: string;
   sandboxed?: boolean;
-  config?: OpenClawConfig;
+  config?: DenebConfig;
 }) {
   const cfg = opts?.config ?? loadConfig();
   return {

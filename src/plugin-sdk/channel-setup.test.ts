@@ -6,7 +6,7 @@ describe("createOptionalChannelSetupSurface", () => {
     const setup = createOptionalChannelSetupSurface({
       channel: "example",
       label: "Example",
-      npmSpec: "@openclaw/example",
+      npmSpec: "@deneb/example",
       docsPath: "/channels/example",
     });
 
@@ -17,7 +17,7 @@ describe("createOptionalChannelSetupSurface", () => {
         accountId: "default",
         input: {},
       }),
-    ).toContain("@openclaw/example");
+    ).toContain("@deneb/example");
     expect(setup.setupWizard.channel).toBe("example");
     expect(setup.setupWizard.status.unconfiguredHint).toContain("/channels/example");
     await expect(
@@ -33,6 +33,6 @@ describe("createOptionalChannelSetupSurface", () => {
         prompter: {} as never,
         forceAllowFrom: false,
       }),
-    ).rejects.toThrow("@openclaw/example");
+    ).rejects.toThrow("@deneb/example");
   });
 });

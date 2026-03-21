@@ -1,7 +1,7 @@
 import { createEmptyPluginRegistry } from "./registry-empty.js";
 import type { PluginRegistry } from "./registry.js";
 
-const REGISTRY_STATE = Symbol.for("openclaw.pluginRegistryState");
+const REGISTRY_STATE = Symbol.for("deneb.pluginRegistryState");
 
 type RegistryState = {
   registry: PluginRegistry | null;

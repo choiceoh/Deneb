@@ -428,7 +428,7 @@ describe("channels command", () => {
       patterns: [
         /Warnings:/,
         /Message Content Intent is disabled/i,
-        /Run: (?:openclaw|openclaw)( --profile isolated)? doctor/,
+        /Run: (?:deneb|deneb)( --profile isolated)? doctor/,
       ],
     },
     {
@@ -482,11 +482,11 @@ describe("channels command", () => {
           accountId: "default",
           enabled: true,
           configured: true,
-          probe: { ok: true, bot: { username: "openclaw_bot" } },
+          probe: { ok: true, bot: { username: "deneb_bot" } },
         },
       ],
     });
-    expect(joined).toMatch(/bot:@openclaw_bot/);
+    expect(joined).toMatch(/bot:@deneb_bot/);
   });
 
   it("surfaces Telegram group membership audit issues in channels status output", () => {

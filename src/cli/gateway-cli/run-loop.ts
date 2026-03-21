@@ -82,7 +82,7 @@ export async function runGatewayLoop(params: {
       );
     } else {
       gatewayLog.info(
-        `restart mode: in-process restart (${respawn.detail ?? "OPENCLAW_NO_RESPAWN"})`,
+        `restart mode: in-process restart (${respawn.detail ?? "DENEB_NO_RESPAWN"})`,
       );
     }
     if (hadLock && !(await reacquireLockForInProcessRestart())) {

@@ -1,11 +1,11 @@
 import type { RunOptions } from "@grammyjs/runner";
-import { resolveAgentMaxConcurrent } from "openclaw/plugin-sdk/config-runtime";
-import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
-import { loadConfig } from "openclaw/plugin-sdk/config-runtime";
-import { formatErrorMessage } from "openclaw/plugin-sdk/infra-runtime";
-import { waitForAbortSignal } from "openclaw/plugin-sdk/runtime-env";
-import { registerUnhandledRejectionHandler } from "openclaw/plugin-sdk/runtime-env";
-import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
+import { resolveAgentMaxConcurrent } from "deneb/plugin-sdk/config-runtime";
+import type { DenebConfig } from "deneb/plugin-sdk/config-runtime";
+import { loadConfig } from "deneb/plugin-sdk/config-runtime";
+import { formatErrorMessage } from "deneb/plugin-sdk/infra-runtime";
+import { waitForAbortSignal } from "deneb/plugin-sdk/runtime-env";
+import { registerUnhandledRejectionHandler } from "deneb/plugin-sdk/runtime-env";
+import type { RuntimeEnv } from "deneb/plugin-sdk/runtime-env";
 import { resolveTelegramAccount } from "./accounts.js";
 import { resolveTelegramAllowedUpdates } from "./allowed-updates.js";
 import { TelegramExecApprovalHandler } from "./exec-approvals-handler.js";
@@ -22,7 +22,7 @@ import { startTelegramWebhook } from "./webhook.js";
 export type MonitorTelegramOpts = {
   token?: string;
   accountId?: string;
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   runtime?: RuntimeEnv;
   abortSignal?: AbortSignal;
   useWebhook?: boolean;
@@ -35,7 +35,7 @@ export type MonitorTelegramOpts = {
   webhookCertPath?: string;
 };
 
-export function createTelegramRunnerOptions(cfg: OpenClawConfig): RunOptions<unknown> {
+export function createTelegramRunnerOptions(cfg: DenebConfig): RunOptions<unknown> {
   return {
     sink: {
       concurrency: resolveAgentMaxConcurrent(cfg),

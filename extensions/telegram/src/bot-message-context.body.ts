@@ -2,26 +2,26 @@ import {
   findModelInCatalog,
   loadModelCatalog,
   modelSupportsVision,
-} from "openclaw/plugin-sdk/agent-runtime";
-import { resolveDefaultModelForAgent } from "openclaw/plugin-sdk/agent-runtime";
-import { resolveControlCommandGate } from "openclaw/plugin-sdk/channel-runtime";
-import { formatLocationText, type NormalizedLocation } from "openclaw/plugin-sdk/channel-runtime";
-import { logInboundDrop } from "openclaw/plugin-sdk/channel-runtime";
-import { resolveMentionGatingWithBypass } from "openclaw/plugin-sdk/channel-runtime";
-import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
+} from "deneb/plugin-sdk/agent-runtime";
+import { resolveDefaultModelForAgent } from "deneb/plugin-sdk/agent-runtime";
+import { resolveControlCommandGate } from "deneb/plugin-sdk/channel-runtime";
+import { formatLocationText, type NormalizedLocation } from "deneb/plugin-sdk/channel-runtime";
+import { logInboundDrop } from "deneb/plugin-sdk/channel-runtime";
+import { resolveMentionGatingWithBypass } from "deneb/plugin-sdk/channel-runtime";
+import type { DenebConfig } from "deneb/plugin-sdk/config-runtime";
 import type {
   TelegramDirectConfig,
   TelegramGroupConfig,
   TelegramTopicConfig,
-} from "openclaw/plugin-sdk/config-runtime";
-import { hasControlCommand } from "openclaw/plugin-sdk/reply-runtime";
+} from "deneb/plugin-sdk/config-runtime";
+import { hasControlCommand } from "deneb/plugin-sdk/reply-runtime";
 import {
   recordPendingHistoryEntryIfEnabled,
   type HistoryEntry,
-} from "openclaw/plugin-sdk/reply-runtime";
-import { buildMentionRegexes, matchesMentionWithExplicit } from "openclaw/plugin-sdk/reply-runtime";
-import type { MsgContext } from "openclaw/plugin-sdk/reply-runtime";
-import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
+} from "deneb/plugin-sdk/reply-runtime";
+import { buildMentionRegexes, matchesMentionWithExplicit } from "deneb/plugin-sdk/reply-runtime";
+import type { MsgContext } from "deneb/plugin-sdk/reply-runtime";
+import { logVerbose } from "deneb/plugin-sdk/runtime-env";
 import type { NormalizedAllowFrom } from "./bot-access.js";
 import { isSenderAllowed } from "./bot-access.js";
 import type {
@@ -54,7 +54,7 @@ export type TelegramInboundBodyResult = {
 };
 
 async function resolveStickerVisionSupport(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentId?: string;
 }): Promise<boolean> {
   try {
@@ -74,7 +74,7 @@ async function resolveStickerVisionSupport(params: {
 }
 
 export async function resolveTelegramInboundBody(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   primaryCtx: TelegramContext;
   msg: TelegramContext["message"];
   allMedia: TelegramMediaRef[];

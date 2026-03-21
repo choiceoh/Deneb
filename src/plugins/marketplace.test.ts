@@ -11,7 +11,7 @@ vi.mock("./install.js", () => ({
 }));
 
 async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-marketplace-test-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-marketplace-test-"));
   try {
     return await fn(dir);
   } finally {

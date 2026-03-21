@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { withTempHome } from "../../test/helpers/temp-home.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { autoMigrateLegacyMatrixState, detectLegacyMatrixState } from "./matrix-legacy-state.js";
 
 function writeFile(filePath: string, value: string) {
@@ -13,11 +13,11 @@ function writeFile(filePath: string, value: string) {
 describe("matrix legacy state migration", () => {
   it("migrates the flat legacy Matrix store into account-scoped storage", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       writeFile(path.join(stateDir, "matrix", "bot-storage.json"), '{"next_batch":"s1"}');
       writeFile(path.join(stateDir, "matrix", "crypto", "store.db"), "crypto");
 
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         channels: {
           matrix: {
             homeserver: "https://matrix.example.org",
@@ -45,7 +45,7 @@ describe("matrix legacy state migration", () => {
 
   it("uses cached Matrix credentials when the config no longer stores an access token", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       writeFile(path.join(stateDir, "matrix", "bot-storage.json"), '{"next_batch":"s1"}');
       writeFile(
         path.join(stateDir, "credentials", "matrix", "credentials.json"),
@@ -60,7 +60,7 @@ describe("matrix legacy state migration", () => {
         ),
       );
 
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         channels: {
           matrix: {
             homeserver: "https://matrix.example.org",
@@ -86,10 +86,10 @@ describe("matrix legacy state migration", () => {
 
   it("records which account receives a flat legacy store when multiple Matrix accounts exist", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       writeFile(path.join(stateDir, "matrix", "bot-storage.json"), '{"next_batch":"s1"}');
 
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         channels: {
           matrix: {
             defaultAccount: "work",
@@ -122,10 +122,10 @@ describe("matrix legacy state migration", () => {
 
   it("requires channels.matrix.defaultAccount before migrating a flat store into one of multiple accounts", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       writeFile(path.join(stateDir, "matrix", "bot-storage.json"), '{"next_batch":"s1"}');
 
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         channels: {
           matrix: {
             accounts: {
@@ -156,11 +156,11 @@ describe("matrix legacy state migration", () => {
   it("uses scoped Matrix env vars when resolving a flat-store migration target", async () => {
     await withTempHome(
       async (home) => {
-        const stateDir = path.join(home, ".openclaw");
+        const stateDir = path.join(home, ".deneb");
         writeFile(path.join(stateDir, "matrix", "bot-storage.json"), '{"next_batch":"s1"}');
         writeFile(path.join(stateDir, "matrix", "crypto", "store.db"), "crypto");
 
-        const cfg: OpenClawConfig = {
+        const cfg: DenebConfig = {
           channels: {
             matrix: {
               accounts: {
@@ -197,7 +197,7 @@ describe("matrix legacy state migration", () => {
 
   it("migrates flat legacy Matrix state into the only configured non-default account", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       writeFile(path.join(stateDir, "matrix", "bot-storage.json"), '{"next_batch":"s1"}');
       writeFile(path.join(stateDir, "matrix", "crypto", "store.db"), "crypto");
       writeFile(
@@ -213,7 +213,7 @@ describe("matrix legacy state migration", () => {
         ),
       );
 
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         channels: {
           matrix: {
             accounts: {

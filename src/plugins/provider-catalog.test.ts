@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { ModelProviderConfig } from "../config/types.models.js";
 import {
   buildPairedProviderApiKeyCatalog,
@@ -18,7 +18,7 @@ function createProviderConfig(overrides: Partial<ModelProviderConfig> = {}): Mod
 }
 
 function createCatalogContext(params: {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   apiKeys?: Record<string, string | undefined>;
 }): ProviderCatalogContext {
   return {

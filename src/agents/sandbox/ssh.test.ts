@@ -31,7 +31,7 @@ describe("sandbox ssh helpers", () => {
     sessions.push(session);
 
     const config = await fs.readFile(session.configPath, "utf8");
-    expect(config).toContain("Host openclaw-sandbox");
+    expect(config).toContain("Host deneb-sandbox");
     expect(config).toContain("HostName example.com");
     expect(config).toContain("User peter");
     expect(config).toContain("Port 2222");

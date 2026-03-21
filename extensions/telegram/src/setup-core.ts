@@ -4,11 +4,11 @@ import {
   patchChannelConfigForAccount,
   promptResolvedAllowFrom,
   splitSetupEntries,
-  type OpenClawConfig,
+  type DenebConfig,
   type WizardPrompter,
-} from "openclaw/plugin-sdk/setup";
-import type { ChannelSetupAdapter, ChannelSetupDmPolicy } from "openclaw/plugin-sdk/setup";
-import { formatCliCommand, formatDocsLink } from "openclaw/plugin-sdk/setup-tools";
+} from "deneb/plugin-sdk/setup";
+import type { ChannelSetupAdapter, ChannelSetupDmPolicy } from "deneb/plugin-sdk/setup";
+import { formatCliCommand, formatDocsLink } from "deneb/plugin-sdk/setup-tools";
 import { resolveDefaultTelegramAccountId, resolveTelegramAccount } from "./accounts.js";
 import { fetchTelegramChatId } from "./api-fetch.js";
 
@@ -20,15 +20,15 @@ export const TELEGRAM_TOKEN_HELP_LINES = [
   "3) Copy the token (looks like 123456:ABC...)",
   "Tip: you can also set TELEGRAM_BOT_TOKEN in your env.",
   `Docs: ${formatDocsLink("/telegram")}`,
-  "Website: https://openclaw.ai",
+  "Website: https://deneb.ai",
 ];
 
 export const TELEGRAM_USER_ID_HELP_LINES = [
-  `1) DM your bot, then read from.id in \`${formatCliCommand("openclaw logs --follow")}\` (safest)`,
+  `1) DM your bot, then read from.id in \`${formatCliCommand("deneb logs --follow")}\` (safest)`,
   "2) Or call https://api.telegram.org/bot<bot_token>/getUpdates and read message.from.id",
   "3) Third-party: DM @userinfobot or @getidsbot",
   `Docs: ${formatDocsLink("/telegram")}`,
-  "Website: https://openclaw.ai",
+  "Website: https://deneb.ai",
 ];
 
 export function normalizeTelegramAllowFromInput(raw: string): string {
@@ -68,7 +68,7 @@ export async function resolveTelegramAllowFromEntries(params: {
 }
 
 export async function promptTelegramAllowFromForAccount(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   prompter: WizardPrompter;
   accountId?: string;
 }) {

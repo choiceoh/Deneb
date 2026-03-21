@@ -16,7 +16,7 @@ export const optionalBundledClusters = [
 
 export const optionalBundledClusterSet = new Set(optionalBundledClusters);
 
-export const OPTIONAL_BUNDLED_BUILD_ENV = "OPENCLAW_INCLUDE_OPTIONAL_BUNDLED";
+export const OPTIONAL_BUNDLED_BUILD_ENV = "DENEB_INCLUDE_OPTIONAL_BUNDLED";
 
 export function isOptionalBundledCluster(cluster) {
   return optionalBundledClusterSet.has(cluster);

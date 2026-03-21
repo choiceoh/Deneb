@@ -12,9 +12,9 @@ import {
 installPwToolsCoreTestHooks();
 const sessionMocks = getPwToolsCoreSessionMocks();
 const tmpDirMocks = vi.hoisted(() => ({
-  resolvePreferredOpenClawTmpDir: vi.fn(() => "/tmp/openclaw"),
+  resolvePreferredDenebTmpDir: vi.fn(() => "/tmp/deneb"),
 }));
-vi.mock("../infra/tmp-openclaw-dir.js", () => tmpDirMocks);
+vi.mock("../infra/tmp-deneb-dir.js", () => tmpDirMocks);
 const mod = await import("./pw-tools-core.js");
 
 describe("pw-tools-core", () => {
@@ -22,11 +22,11 @@ describe("pw-tools-core", () => {
     for (const fn of Object.values(tmpDirMocks)) {
       fn.mockClear();
     }
-    tmpDirMocks.resolvePreferredOpenClawTmpDir.mockReturnValue("/tmp/openclaw");
+    tmpDirMocks.resolvePreferredDenebTmpDir.mockReturnValue("/tmp/deneb");
   });
 
   async function withTempDir<T>(run: (tempDir: string) => Promise<T>): Promise<T> {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-browser-download-test-"));
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-browser-download-test-"));
     try {
       return await run(tempDir);
     } finally {
@@ -92,7 +92,7 @@ describe("pw-tools-core", () => {
       fs.realpath(params.tempDir).catch(() => params.tempDir),
     ]);
     expect(savedDirReal).toBe(tempDirReal);
-    expect(path.basename(String(savedPath))).toContain(".openclaw-output-");
+    expect(path.basename(String(savedPath))).toContain(".deneb-output-");
     expect(path.basename(String(savedPath))).toContain(".part");
     expect(await fs.readFile(params.targetPath, "utf8")).toBe(params.content);
   }
@@ -200,35 +200,35 @@ describe("pw-tools-core", () => {
   );
 
   it("uses preferred tmp dir when waiting for download without explicit path", async () => {
-    tmpDirMocks.resolvePreferredOpenClawTmpDir.mockReturnValue("/tmp/openclaw-preferred");
+    tmpDirMocks.resolvePreferredDenebTmpDir.mockReturnValue("/tmp/deneb-preferred");
     const { res, outPath } = await waitForImplicitDownloadOutput({
       downloadUrl: "https://example.com/file.bin",
       suggestedFilename: "file.bin",
     });
     expect(typeof outPath).toBe("string");
     const expectedRootedDownloadsDir = path.resolve(
-      path.join(path.sep, "tmp", "openclaw-preferred", "downloads"),
+      path.join(path.sep, "tmp", "deneb-preferred", "downloads"),
     );
-    const expectedDownloadsTail = `${path.join("tmp", "openclaw-preferred", "downloads")}${path.sep}`;
+    const expectedDownloadsTail = `${path.join("tmp", "deneb-preferred", "downloads")}${path.sep}`;
     expect(path.dirname(String(outPath))).toBe(expectedRootedDownloadsDir);
     expect(path.basename(String(outPath))).toMatch(/-file\.bin$/);
     expect(path.normalize(res.path)).toContain(path.normalize(expectedDownloadsTail));
-    expect(tmpDirMocks.resolvePreferredOpenClawTmpDir).toHaveBeenCalled();
+    expect(tmpDirMocks.resolvePreferredDenebTmpDir).toHaveBeenCalled();
   });
 
   it("sanitizes suggested download filenames to prevent traversal escapes", async () => {
-    tmpDirMocks.resolvePreferredOpenClawTmpDir.mockReturnValue("/tmp/openclaw-preferred");
+    tmpDirMocks.resolvePreferredDenebTmpDir.mockReturnValue("/tmp/deneb-preferred");
     const { res, outPath } = await waitForImplicitDownloadOutput({
       downloadUrl: "https://example.com/evil",
       suggestedFilename: "../../../../etc/passwd",
     });
     expect(typeof outPath).toBe("string");
     expect(path.dirname(String(outPath))).toBe(
-      path.resolve(path.join(path.sep, "tmp", "openclaw-preferred", "downloads")),
+      path.resolve(path.join(path.sep, "tmp", "deneb-preferred", "downloads")),
     );
     expect(path.basename(String(outPath))).toMatch(/-passwd$/);
     expect(path.normalize(res.path)).toContain(
-      path.normalize(`${path.join("tmp", "openclaw-preferred", "downloads")}${path.sep}`),
+      path.normalize(`${path.join("tmp", "deneb-preferred", "downloads")}${path.sep}`),
     );
   });
   it("waits for a matching response and returns its body", async () => {

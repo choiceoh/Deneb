@@ -321,7 +321,7 @@ function packageClusterMeta(relativePackagePath) {
   if (relativePackagePath === "ui/package.json") {
     return {
       cluster: "ui",
-      packageName: "openclaw-control-ui",
+      packageName: "deneb-control-ui",
       packagePath: relativePackagePath,
       reachability: "workspace-ui",
     };
@@ -397,7 +397,7 @@ async function buildMissingPackages() {
       continue;
     }
     const missing = Object.keys(pkg.dependencies ?? {})
-      .filter((dep) => dep !== "openclaw" && !rootDeps.has(dep))
+      .filter((dep) => dep !== "deneb" && !rootDeps.has(dep))
       .toSorted(compareStrings);
     if (missing.length === 0) {
       continue;
@@ -416,7 +416,7 @@ async function buildMissingPackages() {
       decisionReason: classification.reason,
       packageName: pkg.name ?? meta.packageName,
       packagePath: relativePackagePath,
-      npmSpec: pkg.openclaw?.install?.npmSpec ?? null,
+      npmSpec: pkg.deneb?.install?.npmSpec ?? null,
       private: pkg.private === true,
       pluginSdkReachability:
         pluginSdkEntries.length > 0 ? { staticEntryPoints: pluginSdkEntries } : undefined,

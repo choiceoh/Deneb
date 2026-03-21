@@ -203,7 +203,7 @@ async function run() {
   const dryRun = rawArgs.includes("--dry-run");
   const requireTests =
     rawArgs.includes("--require-tests") ||
-    process.env.OPENCLAW_TEST_EXTENSION_REQUIRE_TESTS === "1";
+    process.env.DENEB_TEST_EXTENSION_REQUIRE_TESTS === "1";
   const json = rawArgs.includes("--json");
   const list = rawArgs.includes("--list");
   const listChanged = rawArgs.includes("--list-changed");

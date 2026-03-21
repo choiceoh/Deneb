@@ -33,7 +33,7 @@ let configOverride: Record<string, unknown> = {
 };
 let workspaceDirOverride = "";
 let configPathOverride = "";
-let previousConfigPath = process.env.OPENCLAW_CONFIG_PATH;
+let previousConfigPath = process.env.DENEB_CONFIG_PATH;
 
 vi.mock("./subagent-registry.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./subagent-registry.js")>();
@@ -153,19 +153,19 @@ describe("spawnSubagentDirect filename validation", () => {
     callGatewayMock.mockClear();
     setupGatewayMock();
     workspaceDirOverride = fs.mkdtempSync(
-      path.join(os.tmpdir(), `openclaw-subagent-attachments-${process.pid}-${Date.now()}-`),
+      path.join(os.tmpdir(), `deneb-subagent-attachments-${process.pid}-${Date.now()}-`),
     );
-    configPathOverride = path.join(workspaceDirOverride, "openclaw.test.json");
+    configPathOverride = path.join(workspaceDirOverride, "deneb.test.json");
     fs.writeFileSync(configPathOverride, JSON.stringify(configOverride, null, 2));
-    previousConfigPath = process.env.OPENCLAW_CONFIG_PATH;
-    process.env.OPENCLAW_CONFIG_PATH = configPathOverride;
+    previousConfigPath = process.env.DENEB_CONFIG_PATH;
+    process.env.DENEB_CONFIG_PATH = configPathOverride;
   });
 
   afterEach(() => {
     if (previousConfigPath === undefined) {
-      delete process.env.OPENCLAW_CONFIG_PATH;
+      delete process.env.DENEB_CONFIG_PATH;
     } else {
-      process.env.OPENCLAW_CONFIG_PATH = previousConfigPath;
+      process.env.DENEB_CONFIG_PATH = previousConfigPath;
     }
     configPathOverride = "";
     if (workspaceDirOverride) {
@@ -267,7 +267,7 @@ describe("spawnSubagentDirect filename validation", () => {
       status: "error",
       error: "lineage patch failed",
     });
-    const attachmentsRoot = path.join(workspaceDirOverride, ".openclaw", "attachments");
+    const attachmentsRoot = path.join(workspaceDirOverride, ".deneb", "attachments");
     const retainedDirs = fs.existsSync(attachmentsRoot)
       ? fs.readdirSync(attachmentsRoot).filter((entry) => !entry.startsWith("."))
       : [];

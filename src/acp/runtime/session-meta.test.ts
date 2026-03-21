@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 
 const hoisted = vi.hoisted(() => {
   const resolveAllAgentSessionStoreTargetsMock = vi.fn();
@@ -16,7 +16,7 @@ vi.mock("../../config/sessions.js", async () => {
   );
   return {
     ...actual,
-    resolveAllAgentSessionStoreTargets: (cfg: OpenClawConfig, opts: unknown) =>
+    resolveAllAgentSessionStoreTargets: (cfg: DenebConfig, opts: unknown) =>
       hoisted.resolveAllAgentSessionStoreTargetsMock(cfg, opts),
     loadSessionStore: (storePath: string) => hoisted.loadSessionStoreMock(storePath),
   };
@@ -38,7 +38,7 @@ describe("listAcpSessionEntries", () => {
       session: {
         store: "/custom/sessions/{agentId}.json",
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     hoisted.resolveAllAgentSessionStoreTargetsMock.mockResolvedValue([
       {
         agentId: "ops",

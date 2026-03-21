@@ -62,7 +62,7 @@ describe("provider-usage.shared", () => {
   });
 
   it("reads legacy pi auth tokens for known provider aliases", async () => {
-    const home = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-provider-usage-"));
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-provider-usage-"));
     await fs.mkdir(path.join(home, ".pi", "agent"), { recursive: true });
     await fs.writeFile(
       path.join(home, ".pi", "agent", "auth.json"),
@@ -80,7 +80,7 @@ describe("provider-usage.shared", () => {
   });
 
   it("returns undefined for invalid legacy pi auth files", async () => {
-    const home = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-provider-usage-"));
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-provider-usage-"));
     await fs.mkdir(path.join(home, ".pi", "agent"), { recursive: true });
     await fs.writeFile(path.join(home, ".pi", "agent", "auth.json"), "{not-json", "utf8");
 

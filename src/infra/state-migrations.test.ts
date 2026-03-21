@@ -1,15 +1,15 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { resolveChannelAllowFromPath } from "../pairing/pairing-store.js";
 import { createTrackedTempDirs } from "../test-utils/tracked-temp-dirs.js";
 import { detectLegacyStateMigrations, runLegacyStateMigrations } from "./state-migrations.js";
 
 const tempDirs = createTrackedTempDirs();
-const createTempDir = () => tempDirs.make("openclaw-state-migrations-test-");
+const createTempDir = () => tempDirs.make("deneb-state-migrations-test-");
 
-function createConfig(): OpenClawConfig {
+function createConfig(): DenebConfig {
   return {
     agents: {
       list: [{ id: "worker-1", default: true }],
@@ -25,13 +25,13 @@ function createConfig(): OpenClawConfig {
         },
       },
     },
-  } as OpenClawConfig;
+  } as DenebConfig;
 }
 
 function createEnv(stateDir: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    OPENCLAW_STATE_DIR: stateDir,
+    DENEB_STATE_DIR: stateDir,
   };
 }
 
@@ -42,7 +42,7 @@ afterEach(async () => {
 describe("state migrations", () => {
   it("detects legacy sessions, agent files, whatsapp auth, and telegram allowFrom copies", async () => {
     const root = await createTempDir();
-    const stateDir = path.join(root, ".openclaw");
+    const stateDir = path.join(root, ".deneb");
     const env = createEnv(stateDir);
     const cfg = createConfig();
 
@@ -100,7 +100,7 @@ describe("state migrations", () => {
 
   it("runs legacy state migrations and canonicalizes the merged session store", async () => {
     const root = await createTempDir();
-    const stateDir = path.join(root, ".openclaw");
+    const stateDir = path.join(root, ".deneb");
     const env = createEnv(stateDir);
     const cfg = createConfig();
 

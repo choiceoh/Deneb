@@ -6,7 +6,7 @@ import { resolveBundledPluginsDir } from "./bundled-dir.js";
 
 const tempDirs: string[] = [];
 const originalCwd = process.cwd();
-const originalBundledDir = process.env.OPENCLAW_BUNDLED_PLUGINS_DIR;
+const originalBundledDir = process.env.DENEB_BUNDLED_PLUGINS_DIR;
 const originalVitest = process.env.VITEST;
 
 function makeRepoRoot(prefix: string): string {
@@ -18,9 +18,9 @@ function makeRepoRoot(prefix: string): string {
 afterEach(() => {
   process.chdir(originalCwd);
   if (originalBundledDir === undefined) {
-    delete process.env.OPENCLAW_BUNDLED_PLUGINS_DIR;
+    delete process.env.DENEB_BUNDLED_PLUGINS_DIR;
   } else {
-    process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = originalBundledDir;
+    process.env.DENEB_BUNDLED_PLUGINS_DIR = originalBundledDir;
   }
   if (originalVitest === undefined) {
     delete process.env.VITEST;
@@ -34,12 +34,12 @@ afterEach(() => {
 
 describe("resolveBundledPluginsDir", () => {
   it("prefers the staged runtime bundled plugin tree from the package root", () => {
-    const repoRoot = makeRepoRoot("openclaw-bundled-dir-runtime-");
+    const repoRoot = makeRepoRoot("deneb-bundled-dir-runtime-");
     fs.mkdirSync(path.join(repoRoot, "dist-runtime", "extensions"), { recursive: true });
     fs.mkdirSync(path.join(repoRoot, "dist", "extensions"), { recursive: true });
     fs.writeFileSync(
       path.join(repoRoot, "package.json"),
-      `${JSON.stringify({ name: "openclaw" }, null, 2)}\n`,
+      `${JSON.stringify({ name: "deneb" }, null, 2)}\n`,
       "utf8",
     );
 
@@ -51,11 +51,11 @@ describe("resolveBundledPluginsDir", () => {
   });
 
   it("falls back to built dist/extensions in installed package roots", () => {
-    const repoRoot = makeRepoRoot("openclaw-bundled-dir-dist-");
+    const repoRoot = makeRepoRoot("deneb-bundled-dir-dist-");
     fs.mkdirSync(path.join(repoRoot, "dist", "extensions"), { recursive: true });
     fs.writeFileSync(
       path.join(repoRoot, "package.json"),
-      `${JSON.stringify({ name: "openclaw" }, null, 2)}\n`,
+      `${JSON.stringify({ name: "deneb" }, null, 2)}\n`,
       "utf8",
     );
 
@@ -67,13 +67,13 @@ describe("resolveBundledPluginsDir", () => {
   });
 
   it("prefers source extensions under vitest to avoid stale staged plugins", () => {
-    const repoRoot = makeRepoRoot("openclaw-bundled-dir-vitest-");
+    const repoRoot = makeRepoRoot("deneb-bundled-dir-vitest-");
     fs.mkdirSync(path.join(repoRoot, "extensions"), { recursive: true });
     fs.mkdirSync(path.join(repoRoot, "dist-runtime", "extensions"), { recursive: true });
     fs.mkdirSync(path.join(repoRoot, "dist", "extensions"), { recursive: true });
     fs.writeFileSync(
       path.join(repoRoot, "package.json"),
-      `${JSON.stringify({ name: "openclaw" }, null, 2)}\n`,
+      `${JSON.stringify({ name: "deneb" }, null, 2)}\n`,
       "utf8",
     );
 
@@ -86,7 +86,7 @@ describe("resolveBundledPluginsDir", () => {
   });
 
   it("prefers source extensions in a git checkout even without vitest env", () => {
-    const repoRoot = makeRepoRoot("openclaw-bundled-dir-git-");
+    const repoRoot = makeRepoRoot("deneb-bundled-dir-git-");
     fs.mkdirSync(path.join(repoRoot, "extensions"), { recursive: true });
     fs.mkdirSync(path.join(repoRoot, "src"), { recursive: true });
     fs.mkdirSync(path.join(repoRoot, "dist-runtime", "extensions"), { recursive: true });
@@ -94,7 +94,7 @@ describe("resolveBundledPluginsDir", () => {
     fs.writeFileSync(path.join(repoRoot, ".git"), "gitdir: /tmp/fake.git\n", "utf8");
     fs.writeFileSync(
       path.join(repoRoot, "package.json"),
-      `${JSON.stringify({ name: "openclaw" }, null, 2)}\n`,
+      `${JSON.stringify({ name: "deneb" }, null, 2)}\n`,
       "utf8",
     );
 

@@ -24,7 +24,7 @@ describe("chutes implicit provider auth mode", () => {
   });
 
   it("auto-loads bundled chutes discovery for env api keys", async () => {
-    const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
     const providers = await resolveImplicitProviders({
       agentDir,
       env: {
@@ -37,7 +37,7 @@ describe("chutes implicit provider auth mode", () => {
   });
 
   it("keeps api_key-backed chutes profiles on the api-key loader path", async () => {
-    const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
     await writeFile(
       join(agentDir, "auth-profiles.json"),
       JSON.stringify(
@@ -64,7 +64,7 @@ describe("chutes implicit provider auth mode", () => {
   });
 
   it("keeps api_key precedence when oauth profile is inserted first", async () => {
-    const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
     await writeFile(
       join(agentDir, "auth-profiles.json"),
       JSON.stringify(
@@ -98,7 +98,7 @@ describe("chutes implicit provider auth mode", () => {
   });
 
   it("keeps api_key precedence when api_key profile is inserted first", async () => {
-    const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
     await writeFile(
       join(agentDir, "auth-profiles.json"),
       JSON.stringify(
@@ -146,7 +146,7 @@ describe("chutes implicit provider auth mode", () => {
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     try {
-      const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+      const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
       await writeFile(
         join(agentDir, "auth-profiles.json"),
         JSON.stringify(
@@ -183,7 +183,7 @@ describe("chutes implicit provider auth mode", () => {
   });
 
   it("uses CHUTES_OAUTH_MARKER only for oauth-backed chutes profiles", async () => {
-    const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
     await writeFile(
       join(agentDir, "auth-profiles.json"),
       JSON.stringify(

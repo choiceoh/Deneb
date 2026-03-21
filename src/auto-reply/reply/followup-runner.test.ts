@@ -86,7 +86,7 @@ function createAsyncReplySpy() {
 describe("createFollowupRunner compaction", () => {
   it("adds verbose auto-compaction notice and tracks count", async () => {
     const storePath = path.join(
-      await fs.mkdtemp(path.join(tmpdir(), "openclaw-compaction-")),
+      await fs.mkdtemp(path.join(tmpdir(), "deneb-compaction-")),
       "sessions.json",
     );
     const sessionEntry: SessionEntry = {
@@ -130,7 +130,7 @@ describe("createFollowupRunner compaction", () => {
 
   it("tracks auto-compaction from embedded result metadata even when no compaction event is emitted", async () => {
     const storePath = path.join(
-      await fs.mkdtemp(path.join(tmpdir(), "openclaw-compaction-meta-")),
+      await fs.mkdtemp(path.join(tmpdir(), "deneb-compaction-meta-")),
       "sessions.json",
     );
     const sessionEntry: SessionEntry = {
@@ -179,7 +179,7 @@ describe("createFollowupRunner compaction", () => {
 
   it("does not count failed compaction end events in followup runs", async () => {
     const storePath = path.join(
-      await fs.mkdtemp(path.join(tmpdir(), "openclaw-compaction-failed-")),
+      await fs.mkdtemp(path.join(tmpdir(), "deneb-compaction-failed-")),
       "sessions.json",
     );
     const sessionEntry: SessionEntry = {
@@ -447,7 +447,7 @@ describe("createFollowupRunner messaging tool dedupe", () => {
 
   it("persists usage even when replies are suppressed", async () => {
     const storePath = path.join(
-      await fs.mkdtemp(path.join(tmpdir(), "openclaw-followup-usage-")),
+      await fs.mkdtemp(path.join(tmpdir(), "deneb-followup-usage-")),
       "sessions.json",
     );
     const sessionKey = "main";
@@ -489,7 +489,7 @@ describe("createFollowupRunner messaging tool dedupe", () => {
 
   it("passes queued config into usage persistence during drained followups", async () => {
     const storePath = path.join(
-      await fs.mkdtemp(path.join(tmpdir(), "openclaw-followup-usage-cfg-")),
+      await fs.mkdtemp(path.join(tmpdir(), "deneb-followup-usage-cfg-")),
       "sessions.json",
     );
     const sessionKey = "main";

@@ -1,5 +1,5 @@
-import { isRecord } from "openclaw/plugin-sdk/text-runtime";
-import { fetchWithTimeout } from "openclaw/plugin-sdk/text-runtime";
+import { isRecord } from "deneb/plugin-sdk/text-runtime";
+import { fetchWithTimeout } from "deneb/plugin-sdk/text-runtime";
 import type {
   AuditTelegramGroupMembershipParams,
   TelegramGroupMembershipAudit,

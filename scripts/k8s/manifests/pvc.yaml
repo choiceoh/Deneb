@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: openclaw-home-pvc
+  name: deneb-home-pvc
   labels:
-    app: openclaw
+    app: deneb
 spec:
   accessModes:
     - ReadWriteOnce

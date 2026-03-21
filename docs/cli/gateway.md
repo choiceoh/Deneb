@@ -1,5 +1,5 @@
 ---
-summary: "OpenClaw Gateway CLI (`openclaw gateway`) — run, query, and discover gateways"
+summary: "Deneb Gateway CLI (`deneb gateway`) — run, query, and discover gateways"
 read_when:
   - Running the Gateway from the CLI (dev or servers)
   - Debugging Gateway auth, bind modes, and connectivity
@@ -9,9 +9,9 @@ title: "gateway"
 
 # Gateway CLI
 
-The Gateway is OpenClaw’s WebSocket server (channels, nodes, sessions, hooks).
+The Gateway is Deneb’s WebSocket server (channels, nodes, sessions, hooks).
 
-Subcommands in this page live under `openclaw gateway …`.
+Subcommands in this page live under `deneb gateway …`.
 
 Related docs:
 
@@ -24,18 +24,18 @@ Related docs:
 Run a local Gateway process:
 
 ```bash
-openclaw gateway
+deneb gateway
 ```
 
 Foreground alias:
 
 ```bash
-openclaw gateway run
+deneb gateway run
 ```
 
 Notes:
 
-- By default, the Gateway refuses to start unless `gateway.mode=local` is set in `~/.openclaw/openclaw.json`. Use `--allow-unconfigured` for ad-hoc/dev runs.
+- By default, the Gateway refuses to start unless `gateway.mode=local` is set in `~/.deneb/deneb.json`. Use `--allow-unconfigured` for ad-hoc/dev runs.
 - Binding beyond loopback without auth is blocked (safety guardrail).
 - `SIGUSR1` triggers an in-process restart when authorized (`commands.restart` is enabled by default; set `commands.restart: false` to block manual restart, while gateway tool/config apply/update remain allowed).
 - `SIGINT`/`SIGTERM` handlers stop the gateway process, but they don’t restore any custom terminal state. If you wrap the CLI with a TUI or raw-mode input, restore the terminal before exit.
@@ -45,7 +45,7 @@ Notes:
 - `--port <port>`: WebSocket port (default comes from config/env; usually `18789`).
 - `--bind <loopback|lan|tailnet|auto|custom>`: listener bind mode.
 - `--auth <token|password>`: auth mode override.
-- `--token <token>`: token override (also sets `OPENCLAW_GATEWAY_TOKEN` for the process).
+- `--token <token>`: token override (also sets `DENEB_GATEWAY_TOKEN` for the process).
 - `--password <password>`: password override. Warning: inline passwords can be exposed in local process listings.
 - `--password-file <path>`: read the gateway password from a file.
 - `--tailscale <off|serve|funnel>`: expose the Gateway via Tailscale.
@@ -85,7 +85,7 @@ Pass `--token` or `--password` explicitly. Missing explicit credentials is an er
 ### `gateway health`
 
 ```bash
-openclaw gateway health --url ws://127.0.0.1:18789
+deneb gateway health --url ws://127.0.0.1:18789
 ```
 
 ### `gateway status`
@@ -93,9 +93,9 @@ openclaw gateway health --url ws://127.0.0.1:18789
 `gateway status` shows the Gateway service (launchd/systemd/schtasks) plus an optional RPC probe.
 
 ```bash
-openclaw gateway status
-openclaw gateway status --json
-openclaw gateway status --require-rpc
+deneb gateway status
+deneb gateway status --json
+deneb gateway status --require-rpc
 ```
 
 Options:
@@ -126,8 +126,8 @@ Notes:
 If multiple gateways are reachable, it prints all of them. Multiple gateways are supported when you use isolated profiles/ports (e.g., a rescue bot), but most installs still run a single gateway.
 
 ```bash
-openclaw gateway probe
-openclaw gateway probe --json
+deneb gateway probe
+deneb gateway probe --json
 ```
 
 Interpretation:
@@ -154,7 +154,7 @@ The macOS app “Remote over SSH” mode uses a local port-forward so the remote
 CLI equivalent:
 
 ```bash
-openclaw gateway probe --ssh user@gateway-host
+deneb gateway probe --ssh user@gateway-host
 ```
 
 Options:
@@ -173,18 +173,18 @@ Config (optional, used as defaults):
 Low-level RPC helper.
 
 ```bash
-openclaw gateway call status
-openclaw gateway call logs.tail --params '{"sinceMs": 60000}'
+deneb gateway call status
+deneb gateway call logs.tail --params '{"sinceMs": 60000}'
 ```
 
 ## Manage the Gateway service
 
 ```bash
-openclaw gateway install
-openclaw gateway start
-openclaw gateway stop
-openclaw gateway restart
-openclaw gateway uninstall
+deneb gateway install
+deneb gateway start
+deneb gateway stop
+deneb gateway restart
+deneb gateway uninstall
 ```
 
 Notes:
@@ -192,17 +192,17 @@ Notes:
 - `gateway install` supports `--port`, `--runtime`, `--token`, `--force`, `--json`.
 - When token auth requires a token and `gateway.auth.token` is SecretRef-managed, `gateway install` validates that the SecretRef is resolvable but does not persist the resolved token into service environment metadata.
 - If token auth requires a token and the configured token SecretRef is unresolved, install fails closed instead of persisting fallback plaintext.
-- For password auth on `gateway run`, prefer `OPENCLAW_GATEWAY_PASSWORD`, `--password-file`, or a SecretRef-backed `gateway.auth.password` over inline `--password`.
-- In inferred auth mode, shell-only `OPENCLAW_GATEWAY_PASSWORD`/`CLAWDBOT_GATEWAY_PASSWORD` does not relax install token requirements; use durable config (`gateway.auth.password` or config `env`) when installing a managed service.
+- For password auth on `gateway run`, prefer `DENEB_GATEWAY_PASSWORD`, `--password-file`, or a SecretRef-backed `gateway.auth.password` over inline `--password`.
+- In inferred auth mode, shell-only `DENEB_GATEWAY_PASSWORD`/`CLAWDBOT_GATEWAY_PASSWORD` does not relax install token requirements; use durable config (`gateway.auth.password` or config `env`) when installing a managed service.
 - If both `gateway.auth.token` and `gateway.auth.password` are configured and `gateway.auth.mode` is unset, install is blocked until mode is set explicitly.
 - Lifecycle commands accept `--json` for scripting.
 
 ## Discover gateways (Bonjour)
 
-`gateway discover` scans for Gateway beacons (`_openclaw-gw._tcp`).
+`gateway discover` scans for Gateway beacons (`_deneb-gw._tcp`).
 
 - Multicast DNS-SD: `local.`
-- Unicast DNS-SD (Wide-Area Bonjour): choose a domain (example: `openclaw.internal.`) and set up split DNS + a DNS server; see [/gateway/bonjour](/gateway/bonjour)
+- Unicast DNS-SD (Wide-Area Bonjour): choose a domain (example: `deneb.internal.`) and set up split DNS + a DNS server; see [/gateway/bonjour](/gateway/bonjour)
 
 Only gateways with Bonjour discovery enabled (default) advertise the beacon.
 
@@ -219,7 +219,7 @@ Wide-Area discovery records include (TXT):
 ### `gateway discover`
 
 ```bash
-openclaw gateway discover
+deneb gateway discover
 ```
 
 Options:
@@ -230,6 +230,6 @@ Options:
 Examples:
 
 ```bash
-openclaw gateway discover --timeout 4000
-openclaw gateway discover --json | jq '.beacons[].wsUrl'
+deneb gateway discover --timeout 4000
+deneb gateway discover --json | jq '.beacons[].wsUrl'
 ```

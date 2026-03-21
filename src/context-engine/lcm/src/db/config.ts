@@ -86,7 +86,7 @@ export function resolveLcmConfig(
       env.LCM_DATABASE_PATH ??
       toStr(pc.dbPath) ??
       toStr(pc.databasePath) ??
-      join(homedir(), ".openclaw", "lcm.db"),
+      join(homedir(), ".deneb", "lcm.db"),
     contextThreshold:
       (env.LCM_CONTEXT_THRESHOLD !== undefined
         ? parseFloat(env.LCM_CONTEXT_THRESHOLD)

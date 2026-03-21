@@ -8,7 +8,7 @@ import { buildBackupArchiveRoot } from "./backup-shared.js";
 import { backupVerifyCommand } from "./backup-verify.js";
 import { backupCreateCommand } from "./backup.js";
 
-const TEST_ARCHIVE_ROOT = "2026-03-09T00-00-00.000Z-openclaw-backup";
+const TEST_ARCHIVE_ROOT = "2026-03-09T00-00-00.000Z-deneb-backup";
 
 const createBackupVerifyRuntime = () => ({
   log: vi.fn(),
@@ -27,7 +27,7 @@ function createBackupManifest(assetArchivePath: string) {
     assets: [
       {
         kind: "state",
-        sourcePath: "/tmp/.openclaw",
+        sourcePath: "/tmp/.deneb",
         archivePath: assetArchivePath,
       },
     ],
@@ -98,7 +98,7 @@ describe("backupVerifyCommand", () => {
   let tempHome: TempHomeEnv;
 
   beforeEach(async () => {
-    tempHome = await createTempHomeEnv("openclaw-backup-verify-test-");
+    tempHome = await createTempHomeEnv("deneb-backup-verify-test-");
   });
 
   afterEach(async () => {
@@ -106,10 +106,10 @@ describe("backupVerifyCommand", () => {
   });
 
   it("verifies an archive created by backup create", async () => {
-    const stateDir = path.join(tempHome.home, ".openclaw");
-    const archiveDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-backup-verify-out-"));
+    const stateDir = path.join(tempHome.home, ".deneb");
+    const archiveDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-backup-verify-out-"));
     try {
-      await fs.writeFile(path.join(stateDir, "openclaw.json"), JSON.stringify({}), "utf8");
+      await fs.writeFile(path.join(stateDir, "deneb.json"), JSON.stringify({}), "utf8");
       await fs.writeFile(path.join(stateDir, "state.txt"), "hello\n", "utf8");
 
       const runtime = createBackupVerifyRuntime();
@@ -126,7 +126,7 @@ describe("backupVerifyCommand", () => {
   });
 
   it("fails when the archive does not contain a manifest", async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-backup-no-manifest-"));
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-backup-no-manifest-"));
     const archivePath = path.join(tempDir, "broken.tar.gz");
     try {
       const root = path.join(tempDir, "root");
@@ -144,10 +144,10 @@ describe("backupVerifyCommand", () => {
   });
 
   it("fails when the manifest references a missing asset payload", async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-backup-missing-asset-"));
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-backup-missing-asset-"));
     const archivePath = path.join(tempDir, "broken.tar.gz");
     try {
-      const rootName = "2026-03-09T00-00-00.000Z-openclaw-backup";
+      const rootName = "2026-03-09T00-00-00.000Z-deneb-backup";
       const root = path.join(tempDir, rootName);
       await fs.mkdir(root, { recursive: true });
       const manifest = {
@@ -160,8 +160,8 @@ describe("backupVerifyCommand", () => {
         assets: [
           {
             kind: "state",
-            sourcePath: "/tmp/.openclaw",
-            archivePath: `${rootName}/payload/posix/tmp/.openclaw`,
+            sourcePath: "/tmp/.deneb",
+            archivePath: `${rootName}/payload/posix/tmp/.deneb`,
           },
         ],
       };
@@ -184,7 +184,7 @@ describe("backupVerifyCommand", () => {
     const traversalPath = `${TEST_ARCHIVE_ROOT}/payload/../escaped.txt`;
     await withBrokenArchiveFixture(
       {
-        tempPrefix: "openclaw-backup-traversal-",
+        tempPrefix: "deneb-backup-traversal-",
         manifestAssetArchivePath: traversalPath,
         payloads: [{ fileName: "payload.txt", contents: "payload\n", archivePath: traversalPath }],
       },
@@ -201,7 +201,7 @@ describe("backupVerifyCommand", () => {
     const invalidPath = `${TEST_ARCHIVE_ROOT}/payload\\..\\escaped.txt`;
     await withBrokenArchiveFixture(
       {
-        tempPrefix: "openclaw-backup-backslash-",
+        tempPrefix: "deneb-backup-backslash-",
         manifestAssetArchivePath: invalidPath,
         payloads: [{ fileName: "payload.txt", contents: "payload\n", archivePath: invalidPath }],
       },
@@ -215,12 +215,12 @@ describe("backupVerifyCommand", () => {
   });
 
   it("ignores payload manifest.json files when locating the backup manifest", async () => {
-    const stateDir = path.join(tempHome.home, ".openclaw");
-    const externalWorkspace = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-workspace-"));
+    const stateDir = path.join(tempHome.home, ".deneb");
+    const externalWorkspace = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-workspace-"));
     const configPath = path.join(tempHome.home, "custom-config.json");
-    const archiveDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-backup-verify-out-"));
+    const archiveDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-backup-verify-out-"));
     try {
-      process.env.OPENCLAW_CONFIG_PATH = configPath;
+      process.env.DENEB_CONFIG_PATH = configPath;
       await fs.writeFile(
         configPath,
         JSON.stringify({
@@ -232,7 +232,7 @@ describe("backupVerifyCommand", () => {
         }),
         "utf8",
       );
-      await fs.writeFile(path.join(stateDir, "openclaw.json"), JSON.stringify({}), "utf8");
+      await fs.writeFile(path.join(stateDir, "deneb.json"), JSON.stringify({}), "utf8");
       await fs.writeFile(path.join(stateDir, "state.txt"), "hello\n", "utf8");
       await fs.writeFile(
         path.join(externalWorkspace, "manifest.json"),
@@ -251,17 +251,17 @@ describe("backupVerifyCommand", () => {
       expect(verified.ok).toBe(true);
       expect(verified.assetCount).toBeGreaterThanOrEqual(2);
     } finally {
-      delete process.env.OPENCLAW_CONFIG_PATH;
+      delete process.env.DENEB_CONFIG_PATH;
       await fs.rm(externalWorkspace, { recursive: true, force: true });
       await fs.rm(archiveDir, { recursive: true, force: true });
     }
   });
 
   it("fails when the archive contains duplicate root manifest entries", async () => {
-    const payloadArchivePath = `${TEST_ARCHIVE_ROOT}/payload/posix/tmp/.openclaw/payload.txt`;
+    const payloadArchivePath = `${TEST_ARCHIVE_ROOT}/payload/posix/tmp/.deneb/payload.txt`;
     await withBrokenArchiveFixture(
       {
-        tempPrefix: "openclaw-backup-duplicate-manifest-",
+        tempPrefix: "deneb-backup-duplicate-manifest-",
         manifestAssetArchivePath: payloadArchivePath,
         payloads: [{ fileName: "payload.txt", contents: "payload\n" }],
         buildTarEntries: ({ manifestPath, payloadPaths }) => [
@@ -280,10 +280,10 @@ describe("backupVerifyCommand", () => {
   });
 
   it("fails when the archive contains duplicate payload entries", async () => {
-    const payloadArchivePath = `${TEST_ARCHIVE_ROOT}/payload/posix/tmp/.openclaw/payload.txt`;
+    const payloadArchivePath = `${TEST_ARCHIVE_ROOT}/payload/posix/tmp/.deneb/payload.txt`;
     await withBrokenArchiveFixture(
       {
-        tempPrefix: "openclaw-backup-duplicate-payload-",
+        tempPrefix: "deneb-backup-duplicate-payload-",
         manifestAssetArchivePath: payloadArchivePath,
         payloads: [
           { fileName: "payload-a.txt", contents: "payload-a\n", archivePath: payloadArchivePath },

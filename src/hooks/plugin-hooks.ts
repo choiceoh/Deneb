@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import {
   normalizePluginsConfig,
@@ -19,7 +19,7 @@ export type PluginHookDirEntry = {
 
 export function resolvePluginHookDirs(params: {
   workspaceDir: string | undefined;
-  config?: OpenClawConfig;
+  config?: DenebConfig;
 }): PluginHookDirEntry[] {
   const workspaceDir = (params.workspaceDir ?? "").trim();
   if (!workspaceDir) {

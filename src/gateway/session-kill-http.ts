@@ -17,7 +17,7 @@ import { getBearerToken } from "./http-utils.js";
 import { ADMIN_SCOPE, WRITE_SCOPE, authorizeOperatorScopesForMethod } from "./method-scopes.js";
 import { loadSessionEntry } from "./session-utils.js";
 
-const REQUESTER_SESSION_KEY_HEADER = "x-openclaw-requester-session-key";
+const REQUESTER_SESSION_KEY_HEADER = "x-deneb-requester-session-key";
 
 function canBearerTokenKillSessions(token: string | undefined, authOk: boolean): boolean {
   if (!token || !authOk) {

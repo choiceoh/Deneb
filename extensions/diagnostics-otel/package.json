@@ -1,7 +1,7 @@
 {
-  "name": "@openclaw/diagnostics-otel",
+  "name": "@deneb/diagnostics-otel",
   "version": "2026.3.14",
-  "description": "OpenClaw diagnostics OpenTelemetry exporter",
+  "description": "Deneb diagnostics OpenTelemetry exporter",
   "type": "module",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
@@ -16,7 +16,7 @@
     "@opentelemetry/sdk-trace-base": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0"
   },
-  "openclaw": {
+  "deneb": {
     "extensions": [
       "./index.ts"
     ],

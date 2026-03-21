@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { autoPrepareLegacyMatrixCrypto } from "../infra/matrix-legacy-crypto.js";
 import { autoMigrateLegacyMatrixState } from "../infra/matrix-legacy-state.js";
 import {
@@ -28,7 +28,7 @@ async function runBestEffortMatrixMigrationStep(params: {
 }
 
 export async function runStartupMatrixMigration(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   env?: NodeJS.ProcessEnv;
   log: MatrixMigrationLogger;
   trigger?: string;

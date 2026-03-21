@@ -14,28 +14,28 @@ Use this page for scheduler and delivery issues (`cron` + `heartbeat`).
 ## Command ladder
 
 ```bash
-openclaw status
-openclaw gateway status
-openclaw logs --follow
-openclaw doctor
-openclaw channels status --probe
+deneb status
+deneb gateway status
+deneb logs --follow
+deneb doctor
+deneb channels status --probe
 ```
 
 Then run automation checks:
 
 ```bash
-openclaw cron status
-openclaw cron list
-openclaw system heartbeat last
+deneb cron status
+deneb cron list
+deneb system heartbeat last
 ```
 
 ## Cron not firing
 
 ```bash
-openclaw cron status
-openclaw cron list
-openclaw cron runs --id <jobId> --limit 20
-openclaw logs --follow
+deneb cron status
+deneb cron list
+deneb cron runs --id <jobId> --limit 20
+deneb logs --follow
 ```
 
 Good output looks like:
@@ -53,10 +53,10 @@ Common signatures:
 ## Cron fired but no delivery
 
 ```bash
-openclaw cron runs --id <jobId> --limit 20
-openclaw cron list
-openclaw channels status --probe
-openclaw logs --follow
+deneb cron runs --id <jobId> --limit 20
+deneb cron list
+deneb channels status --probe
+deneb logs --follow
 ```
 
 Good output looks like:
@@ -74,10 +74,10 @@ Common signatures:
 ## Heartbeat suppressed or skipped
 
 ```bash
-openclaw system heartbeat last
-openclaw logs --follow
-openclaw config get agents.defaults.heartbeat
-openclaw channels status --probe
+deneb system heartbeat last
+deneb logs --follow
+deneb config get agents.defaults.heartbeat
+deneb channels status --probe
 ```
 
 Good output looks like:
@@ -95,11 +95,11 @@ Common signatures:
 ## Timezone and activeHours gotchas
 
 ```bash
-openclaw config get agents.defaults.heartbeat.activeHours
-openclaw config get agents.defaults.heartbeat.activeHours.timezone
-openclaw config get agents.defaults.userTimezone || echo "agents.defaults.userTimezone not set"
-openclaw cron list
-openclaw logs --follow
+deneb config get agents.defaults.heartbeat.activeHours
+deneb config get agents.defaults.heartbeat.activeHours.timezone
+deneb config get agents.defaults.userTimezone || echo "agents.defaults.userTimezone not set"
+deneb cron list
+deneb logs --follow
 ```
 
 Quick rules:

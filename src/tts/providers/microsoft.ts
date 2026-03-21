@@ -5,7 +5,7 @@ import {
   TRUSTED_CLIENT_TOKEN,
   generateSecMsGecToken,
 } from "node-edge-tts/dist/drm.js";
-import { resolvePreferredOpenClawTmpDir } from "../../infra/tmp-openclaw-dir.js";
+import { resolvePreferredDenebTmpDir } from "../../infra/tmp-deneb-dir.js";
 import { isVoiceCompatibleAudio } from "../../media/audio.js";
 import type { SpeechProviderPlugin } from "../../plugins/types.js";
 import type { SpeechVoiceOption } from "../provider-types.js";
@@ -80,7 +80,7 @@ export function buildMicrosoftSpeechProvider(): SpeechProviderPlugin {
     listVoices: async () => await listMicrosoftVoices(),
     isConfigured: ({ config }) => config.edge.enabled,
     synthesize: async (req) => {
-      const tempRoot = resolvePreferredOpenClawTmpDir();
+      const tempRoot = resolvePreferredDenebTmpDir();
       mkdirSync(tempRoot, { recursive: true, mode: 0o700 });
       const tempDir = mkdtempSync(path.join(tempRoot, "tts-microsoft-"));
       let outputFormat = req.config.edge.outputFormat;

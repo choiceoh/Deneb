@@ -147,7 +147,7 @@ describe("secrets CLI", () => {
         version: 1,
         protocolVersion: 1,
         generatedAt: "2026-02-26T00:00:00.000Z",
-        generatedBy: "openclaw secrets configure",
+        generatedBy: "deneb secrets configure",
         targets: [
           {
             type: "skills.entries.apiKey",
@@ -164,7 +164,7 @@ describe("secrets CLI", () => {
       preflight: {
         mode: "dry-run",
         changed: true,
-        changedFiles: ["/tmp/openclaw.json"],
+        changedFiles: ["/tmp/deneb.json"],
         checks: {
           resolvability: true,
           resolvabilityComplete: true,
@@ -179,7 +179,7 @@ describe("secrets CLI", () => {
     runSecretsApply.mockResolvedValue({
       mode: "write",
       changed: true,
-      changedFiles: ["/tmp/openclaw.json"],
+      changedFiles: ["/tmp/deneb.json"],
       checks: {
         resolvability: true,
         resolvabilityComplete: true,
@@ -214,7 +214,7 @@ describe("secrets CLI", () => {
         version: 1,
         protocolVersion: 1,
         generatedAt: "2026-02-26T00:00:00.000Z",
-        generatedBy: "openclaw secrets configure",
+        generatedBy: "deneb secrets configure",
         targets: [],
       },
       preflight: {
@@ -245,7 +245,7 @@ describe("secrets CLI", () => {
   it("forwards --allow-exec to secrets apply dry-run", async () => {
     const planPath = path.join(
       os.tmpdir(),
-      `openclaw-secrets-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+      `deneb-secrets-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
     );
     await fs.writeFile(
       planPath,
@@ -290,7 +290,7 @@ describe("secrets CLI", () => {
   it("forwards --allow-exec to secrets apply write mode", async () => {
     const planPath = path.join(
       os.tmpdir(),
-      `openclaw-secrets-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+      `deneb-secrets-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
     );
     await fs.writeFile(
       planPath,
@@ -332,7 +332,7 @@ describe("secrets CLI", () => {
   it("does not print skipped-exec note when apply dry-run skippedExecRefs is zero", async () => {
     const planPath = path.join(
       os.tmpdir(),
-      `openclaw-secrets-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+      `deneb-secrets-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
     );
     await fs.writeFile(
       planPath,
@@ -374,7 +374,7 @@ describe("secrets CLI", () => {
         version: 1,
         protocolVersion: 1,
         generatedAt: "2026-02-26T00:00:00.000Z",
-        generatedBy: "openclaw secrets configure",
+        generatedBy: "deneb secrets configure",
         targets: [],
       },
       preflight: {
@@ -403,7 +403,7 @@ describe("secrets CLI", () => {
         version: 1,
         protocolVersion: 1,
         generatedAt: "2026-02-26T00:00:00.000Z",
-        generatedBy: "openclaw secrets configure",
+        generatedBy: "deneb secrets configure",
         targets: [],
       },
       preflight: {

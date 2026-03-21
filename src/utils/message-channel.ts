@@ -15,7 +15,7 @@ import {
 
 export const INTERNAL_MESSAGE_CHANNEL = "webchat" as const;
 export type InternalMessageChannel = typeof INTERNAL_MESSAGE_CHANNEL;
-const REGISTRY_STATE = Symbol.for("openclaw.pluginRegistryState");
+const REGISTRY_STATE = Symbol.for("deneb.pluginRegistryState");
 
 type PluginRegistryStateLike = {
   registry?: {

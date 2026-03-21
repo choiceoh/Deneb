@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-IMAGE_NAME="openclaw-plugins-e2e"
+IMAGE_NAME="deneb-plugins-e2e"
 
 echo "Building Docker image..."
 docker build -t "$IMAGE_NAME" -f "$ROOT_DIR/scripts/e2e/Dockerfile" "$ROOT_DIR"
@@ -12,17 +12,17 @@ docker run --rm -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 -i "$IMAGE_NAME" bash -s <<
 set -euo pipefail
 
 if [ -f dist/index.mjs ]; then
-  OPENCLAW_ENTRY="dist/index.mjs"
+  DENEB_ENTRY="dist/index.mjs"
 elif [ -f dist/index.js ]; then
-  OPENCLAW_ENTRY="dist/index.js"
+  DENEB_ENTRY="dist/index.js"
 else
   echo "Missing dist/index.(m)js (build output):"
   ls -la dist || true
   exit 1
 fi
-export OPENCLAW_ENTRY
+export DENEB_ENTRY
 
-home_dir=$(mktemp -d "/tmp/openclaw-plugins-e2e.XXXXXX")
+home_dir=$(mktemp -d "/tmp/deneb-plugins-e2e.XXXXXX")
 export HOME="$home_dir"
 
 write_fixture_plugin() {
@@ -35,9 +35,9 @@ write_fixture_plugin() {
   mkdir -p "$dir"
   cat > "$dir/package.json" <<JSON
 {
-  "name": "@openclaw/$id",
+  "name": "@deneb/$id",
   "version": "$version",
-  "openclaw": { "extensions": ["./index.js"] }
+  "deneb": { "extensions": ["./index.js"] }
 }
 JSON
   cat > "$dir/index.js" <<JS
@@ -49,7 +49,7 @@ module.exports = {
   },
 };
 JS
-  cat > "$dir/openclaw.plugin.json" <<'JSON'
+  cat > "$dir/deneb.plugin.json" <<'JSON'
 {
   "id": "placeholder",
   "configSchema": {
@@ -58,7 +58,7 @@ JS
   }
 }
 JSON
-  node - <<'NODE' "$dir/openclaw.plugin.json" "$id"
+  node - <<'NODE' "$dir/deneb.plugin.json" "$id"
 const fs = require("node:fs");
 const file = process.argv[2];
 const id = process.argv[3];
@@ -68,9 +68,9 @@ fs.writeFileSync(file, `${JSON.stringify(parsed, null, 2)}\n`);
 NODE
 }
 
-mkdir -p "$HOME/.openclaw/extensions/demo-plugin"
+mkdir -p "$HOME/.deneb/extensions/demo-plugin"
 
-cat > "$HOME/.openclaw/extensions/demo-plugin/index.js" <<'JS'
+cat > "$HOME/.deneb/extensions/demo-plugin/index.js" <<'JS'
 module.exports = {
   id: "demo-plugin",
   name: "Demo Plugin",
@@ -83,7 +83,7 @@ module.exports = {
   },
 };
 JS
-cat > "$HOME/.openclaw/extensions/demo-plugin/openclaw.plugin.json" <<'JSON'
+cat > "$HOME/.deneb/extensions/demo-plugin/deneb.plugin.json" <<'JSON'
 {
   "id": "demo-plugin",
   "configSchema": {
@@ -93,7 +93,7 @@ cat > "$HOME/.openclaw/extensions/demo-plugin/openclaw.plugin.json" <<'JSON'
 }
 JSON
 
-node "$OPENCLAW_ENTRY" plugins list --json > /tmp/plugins.json
+node "$DENEB_ENTRY" plugins list --json > /tmp/plugins.json
 
 node - <<'NODE'
 const fs = require("node:fs");
@@ -125,13 +125,13 @@ console.log("ok");
 NODE
 
 echo "Testing tgz install flow..."
-pack_dir="$(mktemp -d "/tmp/openclaw-plugin-pack.XXXXXX")"
+pack_dir="$(mktemp -d "/tmp/deneb-plugin-pack.XXXXXX")"
 mkdir -p "$pack_dir/package"
 cat > "$pack_dir/package/package.json" <<'JSON'
 {
-  "name": "@openclaw/demo-plugin-tgz",
+  "name": "@deneb/demo-plugin-tgz",
   "version": "0.0.1",
-  "openclaw": { "extensions": ["./index.js"] }
+  "deneb": { "extensions": ["./index.js"] }
 }
 JSON
 cat > "$pack_dir/package/index.js" <<'JS'
@@ -143,7 +143,7 @@ module.exports = {
   },
 };
 JS
-cat > "$pack_dir/package/openclaw.plugin.json" <<'JSON'
+cat > "$pack_dir/package/deneb.plugin.json" <<'JSON'
 {
   "id": "demo-plugin-tgz",
   "configSchema": {
@@ -154,8 +154,8 @@ cat > "$pack_dir/package/openclaw.plugin.json" <<'JSON'
 JSON
 tar -czf /tmp/demo-plugin-tgz.tgz -C "$pack_dir" package
 
-node "$OPENCLAW_ENTRY" plugins install /tmp/demo-plugin-tgz.tgz
-node "$OPENCLAW_ENTRY" plugins list --json > /tmp/plugins2.json
+node "$DENEB_ENTRY" plugins install /tmp/demo-plugin-tgz.tgz
+node "$DENEB_ENTRY" plugins list --json > /tmp/plugins2.json
 
 node - <<'NODE'
 const fs = require("node:fs");
@@ -173,12 +173,12 @@ console.log("ok");
 NODE
 
 echo "Testing install from local folder (plugins.load.paths)..."
-dir_plugin="$(mktemp -d "/tmp/openclaw-plugin-dir.XXXXXX")"
+dir_plugin="$(mktemp -d "/tmp/deneb-plugin-dir.XXXXXX")"
 cat > "$dir_plugin/package.json" <<'JSON'
 {
-  "name": "@openclaw/demo-plugin-dir",
+  "name": "@deneb/demo-plugin-dir",
   "version": "0.0.1",
-  "openclaw": { "extensions": ["./index.js"] }
+  "deneb": { "extensions": ["./index.js"] }
 }
 JSON
 cat > "$dir_plugin/index.js" <<'JS'
@@ -190,7 +190,7 @@ module.exports = {
   },
 };
 JS
-cat > "$dir_plugin/openclaw.plugin.json" <<'JSON'
+cat > "$dir_plugin/deneb.plugin.json" <<'JSON'
 {
   "id": "demo-plugin-dir",
   "configSchema": {
@@ -200,8 +200,8 @@ cat > "$dir_plugin/openclaw.plugin.json" <<'JSON'
 }
 JSON
 
-node "$OPENCLAW_ENTRY" plugins install "$dir_plugin"
-node "$OPENCLAW_ENTRY" plugins list --json > /tmp/plugins3.json
+node "$DENEB_ENTRY" plugins install "$dir_plugin"
+node "$DENEB_ENTRY" plugins list --json > /tmp/plugins3.json
 
 node - <<'NODE'
 const fs = require("node:fs");
@@ -219,13 +219,13 @@ console.log("ok");
 NODE
 
 echo "Testing install from npm spec (file:)..."
-file_pack_dir="$(mktemp -d "/tmp/openclaw-plugin-filepack.XXXXXX")"
+file_pack_dir="$(mktemp -d "/tmp/deneb-plugin-filepack.XXXXXX")"
 mkdir -p "$file_pack_dir/package"
 cat > "$file_pack_dir/package/package.json" <<'JSON'
 {
-  "name": "@openclaw/demo-plugin-file",
+  "name": "@deneb/demo-plugin-file",
   "version": "0.0.1",
-  "openclaw": { "extensions": ["./index.js"] }
+  "deneb": { "extensions": ["./index.js"] }
 }
 JSON
 cat > "$file_pack_dir/package/index.js" <<'JS'
@@ -237,7 +237,7 @@ module.exports = {
   },
 };
 JS
-cat > "$file_pack_dir/package/openclaw.plugin.json" <<'JSON'
+cat > "$file_pack_dir/package/deneb.plugin.json" <<'JSON'
 {
   "id": "demo-plugin-file",
   "configSchema": {
@@ -247,8 +247,8 @@ cat > "$file_pack_dir/package/openclaw.plugin.json" <<'JSON'
 }
 JSON
 
-node "$OPENCLAW_ENTRY" plugins install "file:$file_pack_dir/package"
-node "$OPENCLAW_ENTRY" plugins list --json > /tmp/plugins4.json
+node "$DENEB_ENTRY" plugins install "file:$file_pack_dir/package"
+node "$DENEB_ENTRY" plugins list --json > /tmp/plugins4.json
 
 node - <<'NODE'
 const fs = require("node:fs");
@@ -309,13 +309,13 @@ cat > "$HOME/.claude/plugins/known_marketplaces.json" <<JSON
     "installLocation": "$marketplace_root",
     "source": {
       "type": "github",
-      "repo": "openclaw/fixture-marketplace"
+      "repo": "deneb/fixture-marketplace"
     }
   }
 }
 JSON
 
-node "$OPENCLAW_ENTRY" plugins marketplace list claude-fixtures --json > /tmp/marketplace-list.json
+node "$DENEB_ENTRY" plugins marketplace list claude-fixtures --json > /tmp/marketplace-list.json
 
 node - <<'NODE'
 const fs = require("node:fs");
@@ -331,9 +331,9 @@ if (!names.includes("marketplace-shortcut") || !names.includes("marketplace-dire
 console.log("ok");
 NODE
 
-node "$OPENCLAW_ENTRY" plugins install marketplace-shortcut@claude-fixtures
-node "$OPENCLAW_ENTRY" plugins install marketplace-direct --marketplace claude-fixtures
-node "$OPENCLAW_ENTRY" plugins list --json > /tmp/plugins-marketplace.json
+node "$DENEB_ENTRY" plugins install marketplace-shortcut@claude-fixtures
+node "$DENEB_ENTRY" plugins install marketplace-direct --marketplace claude-fixtures
+node "$DENEB_ENTRY" plugins list --json > /tmp/plugins-marketplace.json
 
 node - <<'NODE'
 const fs = require("node:fs");
@@ -369,7 +369,7 @@ node - <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
 
-const configPath = path.join(process.env.HOME, ".openclaw", "openclaw.json");
+const configPath = path.join(process.env.HOME, ".deneb", "deneb.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
 for (const id of ["marketplace-shortcut", "marketplace-direct"]) {
   const record = config.plugins?.installs?.[id];
@@ -393,9 +393,9 @@ write_fixture_plugin \
   "0.0.2" \
   "demo.marketplace.shortcut.v2" \
   "Marketplace Shortcut"
-node "$OPENCLAW_ENTRY" plugins update marketplace-shortcut --dry-run
-node "$OPENCLAW_ENTRY" plugins update marketplace-shortcut
-node "$OPENCLAW_ENTRY" plugins list --json > /tmp/plugins-marketplace-updated.json
+node "$DENEB_ENTRY" plugins update marketplace-shortcut --dry-run
+node "$DENEB_ENTRY" plugins update marketplace-shortcut
+node "$DENEB_ENTRY" plugins list --json > /tmp/plugins-marketplace-updated.json
 
 node - <<'NODE'
 const fs = require("node:fs");

@@ -18,7 +18,7 @@ describe("ports-format", () => {
         expected: "ssh",
       },
       {
-        listener: { commandLine: "node /Users/me/Projects/openclaw/dist/entry.js gateway" },
+        listener: { commandLine: "node /Users/me/Projects/deneb/dist/entry.js gateway" },
         expected: "gateway",
       },
       {
@@ -39,7 +39,7 @@ describe("ports-format", () => {
     expect(
       buildPortHints(
         [
-          { commandLine: "node dist/index.js openclaw gateway" },
+          { commandLine: "node dist/index.js deneb gateway" },
           { commandLine: "ssh -N -L 18789:127.0.0.1:18789" },
           { commandLine: "python -m http.server 18789" },
         ],

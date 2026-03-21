@@ -1,5 +1,5 @@
 import { listConfiguredBindings } from "../../config/bindings.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { getActivePluginRegistry, getActivePluginRegistryVersion } from "../../plugins/runtime.js";
 import { pickFirstExistingAgentId } from "../../routing/resolve-route.js";
 import { resolveChannelConfiguredBindingProvider } from "./binding-provider.js";
@@ -26,7 +26,7 @@ type CachedCompiledConfiguredBindingRegistry = {
 };
 
 const compiledRegistryCache = new WeakMap<
-  OpenClawConfig,
+  DenebConfig,
   CachedCompiledConfiguredBindingRegistry
 >();
 
@@ -105,7 +105,7 @@ function compileConfiguredBindingTarget(params: {
 }
 
 function compileConfiguredBindingRule(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   channel: ConfiguredBindingChannel;
   binding: CompiledConfiguredBinding["binding"];
   target: ChannelConfiguredBindingConversationRef;
@@ -153,7 +153,7 @@ function pushCompiledRule(
 }
 
 function compileConfiguredBindingRegistry(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
 }): CompiledConfiguredBindingRegistry {
   const rulesByChannel = new Map<ConfiguredBindingChannel, CompiledConfiguredBinding[]>();
 
@@ -197,7 +197,7 @@ function compileConfiguredBindingRegistry(params: {
 }
 
 export function resolveCompiledBindingRegistry(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
 ): CompiledConfiguredBindingRegistry {
   const registryVersion = getActivePluginRegistryVersion();
   const cached = compiledRegistryCache.get(cfg);
@@ -216,7 +216,7 @@ export function resolveCompiledBindingRegistry(
 }
 
 export function primeCompiledBindingRegistry(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
 ): CompiledConfiguredBindingRegistry {
   const registry = compileConfiguredBindingRegistry({ cfg });
   compiledRegistryCache.set(cfg, {

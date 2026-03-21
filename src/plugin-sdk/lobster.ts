@@ -4,7 +4,7 @@
 export { definePluginEntry } from "./core.js";
 export type {
   AnyAgentTool,
-  OpenClawPluginApi,
-  OpenClawPluginToolContext,
-  OpenClawPluginToolFactory,
+  DenebPluginApi,
+  DenebPluginToolContext,
+  DenebPluginToolFactory,
 } from "../plugins/types.js";

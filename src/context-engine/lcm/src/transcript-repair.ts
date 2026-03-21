@@ -1,7 +1,7 @@
 /**
  * Tool use/result pairing repair for assembled context.
  *
- * Copied from openclaw core (src/agents/session-transcript-repair.ts +
+ * Copied from deneb core (src/agents/session-transcript-repair.ts +
  * src/agents/tool-call-id.ts) to avoid depending on unexported internals.
  * When the plugin SDK exports sanitizeToolUseResultPairing, this file can
  * be removed in favor of the SDK import.

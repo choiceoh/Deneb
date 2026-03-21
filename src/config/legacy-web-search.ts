@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "./config.js";
+import type { DenebConfig } from "./config.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -134,7 +134,7 @@ export function normalizeLegacyWebSearchConfig<T>(raw: T): T {
 }
 
 export function resolvePluginWebSearchConfig(
-  config: OpenClawConfig | undefined,
+  config: DenebConfig | undefined,
   pluginId: string,
 ): Record<string, unknown> | undefined {
   const pluginConfig = config?.plugins?.entries?.[pluginId]?.config;

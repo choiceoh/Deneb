@@ -78,7 +78,7 @@ describe("telegram inbound media", () => {
             photo: [{ file_id: "fid" }],
             date: 1736380800, // 2025-01-09T00:00:00Z
           },
-          me: { username: "openclaw_bot" },
+          me: { username: "deneb_bot" },
           getFile: scenario.getFile,
         });
 
@@ -114,7 +114,7 @@ describe("telegram inbound media", () => {
             photo: [{ file_id: "fid" }],
             date: 1736380800,
           },
-          me: { username: "openclaw_bot" },
+          me: { username: "deneb_bot" },
           getFile: async () => ({ file_path: "photos/1.jpg" }),
         });
 
@@ -156,7 +156,7 @@ describe("telegram inbound media", () => {
         chat: { id: 1234, type: "private" },
         photo: [{ file_id: "fid" }],
       },
-      me: { username: "openclaw_bot" },
+      me: { username: "deneb_bot" },
       getFile: async () => ({ file_path: "photos/2.jpg" }),
     });
 
@@ -218,7 +218,7 @@ describe("telegram inbound media", () => {
       replySpy.mockClear();
       await handler({
         message: testCase.message,
-        me: { username: "openclaw_bot" },
+        me: { username: "deneb_bot" },
         getFile: async () => ({ file_path: "unused" }),
       });
 
@@ -309,7 +309,7 @@ describe("telegram media groups", () => {
             scenario.messages.map((message) =>
               handler({
                 message,
-                me: { username: "openclaw_bot" },
+                me: { username: "deneb_bot" },
                 getFile: async () => ({ file_path: message.filePath }),
               }),
             ),
@@ -359,7 +359,7 @@ describe("telegram forwarded bursts", () => {
             date: 1736380800,
             forward_origin: { type: "hidden_user", date: 1736380700, sender_user_name: "A" },
           },
-          me: { username: "openclaw_bot" },
+          me: { username: "deneb_bot" },
           getFile: async () => ({}),
         });
 
@@ -372,7 +372,7 @@ describe("telegram forwarded bursts", () => {
             photo: [{ file_id: "fwd_photo_1" }],
             forward_origin: { type: "hidden_user", date: 1736380701, sender_user_name: "A" },
           },
-          me: { username: "openclaw_bot" },
+          me: { username: "deneb_bot" },
           getFile: async () => ({ file_path: "photos/fwd1.jpg" }),
         });
 

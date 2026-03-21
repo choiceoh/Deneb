@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { ExplicitGatewayAuth } from "./call.js";
 import { resolveGatewayCredentialsWithSecretInputs } from "./call.js";
 import type {
@@ -10,7 +10,7 @@ import type {
 import { resolveGatewayCredentialsFromConfig } from "./credentials.js";
 
 export type GatewayConnectionAuthOptions = {
-  config: OpenClawConfig;
+  config: DenebConfig;
   env?: NodeJS.ProcessEnv;
   explicitAuth?: ExplicitGatewayAuth;
   urlOverride?: string;
@@ -26,7 +26,7 @@ export type GatewayConnectionAuthOptions = {
 };
 
 function toGatewayCredentialOptions(
-  params: Omit<GatewayConnectionAuthOptions, "config"> & { cfg: OpenClawConfig },
+  params: Omit<GatewayConnectionAuthOptions, "config"> & { cfg: DenebConfig },
 ) {
   return {
     cfg: params.cfg,
@@ -55,7 +55,7 @@ export async function resolveGatewayConnectionAuth(
 }
 
 export function resolveGatewayConnectionAuthFromConfig(
-  params: Omit<GatewayConnectionAuthOptions, "config"> & { cfg: OpenClawConfig },
+  params: Omit<GatewayConnectionAuthOptions, "config"> & { cfg: DenebConfig },
 ): { token?: string; password?: string } {
   return resolveGatewayCredentialsFromConfig(toGatewayCredentialOptions(params));
 }

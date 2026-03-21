@@ -1,10 +1,10 @@
-import { collectTelegramUnmentionedGroupIds } from "openclaw/plugin-sdk/telegram";
-import { telegramMessageActions } from "openclaw/plugin-sdk/telegram";
+import { collectTelegramUnmentionedGroupIds } from "deneb/plugin-sdk/telegram";
+import { telegramMessageActions } from "deneb/plugin-sdk/telegram";
 import {
   setTelegramThreadBindingIdleTimeoutBySessionKey,
   setTelegramThreadBindingMaxAgeBySessionKey,
-} from "openclaw/plugin-sdk/telegram";
-import { resolveTelegramToken } from "openclaw/plugin-sdk/telegram";
+} from "deneb/plugin-sdk/telegram";
+import { resolveTelegramToken } from "deneb/plugin-sdk/telegram";
 import {
   createLazyRuntimeMethodBinder,
   createLazyRuntimeSurface,

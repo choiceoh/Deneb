@@ -1,5 +1,5 @@
 import { normalizeFastMode } from "../auto-reply/thinking.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { SessionEntry } from "../config/sessions.js";
 
 export type FastModeState = {
@@ -16,7 +16,7 @@ export function resolveFastModeParam(
 }
 
 function resolveConfiguredFastModeRaw(params: {
-  cfg: OpenClawConfig | undefined;
+  cfg: DenebConfig | undefined;
   provider: string;
   model: string;
 }): unknown {
@@ -26,7 +26,7 @@ function resolveConfiguredFastModeRaw(params: {
 }
 
 export function resolveConfiguredFastMode(params: {
-  cfg: OpenClawConfig | undefined;
+  cfg: DenebConfig | undefined;
   provider: string;
   model: string;
 }): boolean {
@@ -38,7 +38,7 @@ export function resolveConfiguredFastMode(params: {
 }
 
 export function resolveFastModeState(params: {
-  cfg: OpenClawConfig | undefined;
+  cfg: DenebConfig | undefined;
   provider: string;
   model: string;
   sessionEntry?: Pick<SessionEntry, "fastMode"> | undefined;

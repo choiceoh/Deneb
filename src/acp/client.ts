@@ -14,7 +14,7 @@ import {
   type SessionNotification,
 } from "@agentclientprotocol/sdk";
 import { isKnownCoreToolId } from "../agents/tool-catalog.js";
-import { ensureOpenClawCliOnPath } from "../infra/path-env.js";
+import { ensureDenebCliOnPath } from "../infra/path-env.js";
 import {
   listKnownProviderAuthEnvVarNames,
   omitEnvKeysCaseInsensitive,
@@ -370,7 +370,7 @@ export function resolveAcpClientSpawnEnv(
   options: AcpClientSpawnEnvOptions = {},
 ): NodeJS.ProcessEnv {
   const env = omitEnvKeysCaseInsensitive(baseEnv, options.stripKeys ?? []);
-  env.OPENCLAW_SHELL = "acp-client";
+  env.DENEB_SHELL = "acp-client";
   return env;
 }
 
@@ -492,11 +492,11 @@ export async function createAcpClient(opts: AcpClientOptions = {}): Promise<AcpC
   const verbose = Boolean(opts.verbose);
   const log = verbose ? (msg: string) => console.error(`[acp-client] ${msg}`) : () => {};
 
-  ensureOpenClawCliOnPath();
+  ensureDenebCliOnPath();
   const serverArgs = buildServerArgs(opts);
 
   const entryPath = resolveSelfEntryPath();
-  const defaultServerCommand = entryPath ? process.execPath : "openclaw";
+  const defaultServerCommand = entryPath ? process.execPath : "deneb";
   const defaultServerArgs = entryPath ? [entryPath, ...serverArgs] : serverArgs;
   const serverCommand = opts.serverCommand ?? defaultServerCommand;
   const effectiveArgs = opts.serverCommand || !entryPath ? serverArgs : defaultServerArgs;
@@ -558,7 +558,7 @@ export async function createAcpClient(opts: AcpClientOptions = {}): Promise<AcpC
       fs: { readTextFile: true, writeTextFile: true },
       terminal: true,
     },
-    clientInfo: { name: "openclaw-acp-client", version: "1.0.0" },
+    clientInfo: { name: "deneb-acp-client", version: "1.0.0" },
   });
 
   log("creating session");
@@ -582,7 +582,7 @@ export async function runAcpClientInteractive(opts: AcpClientOptions = {}): Prom
     output: process.stdout,
   });
 
-  console.log("OpenClaw ACP client");
+  console.log("Deneb ACP client");
   console.log(`Session: ${sessionId}`);
   console.log('Type a prompt, or "exit" to quit.\n');
 

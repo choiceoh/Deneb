@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import type { ProviderPlugin, WebSearchProviderPlugin } from "../types.js";
 
 export function installProviderPluginContractSuite(params: { provider: ProviderPlugin }) {
@@ -113,7 +113,7 @@ export function installWebSearchProviderContractSuite(params: {
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     const tool = provider.createTool({ config, searchConfig: searchConfigTarget });
 
     expect(tool).not.toBeNull();

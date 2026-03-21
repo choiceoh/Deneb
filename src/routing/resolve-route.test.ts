@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import type { ChatType } from "../channels/chat-type.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import * as routingBindings from "./bindings.js";
 import {
   deriveLastRoutePolicy,
@@ -9,7 +9,7 @@ import {
 } from "./resolve-route.js";
 
 describe("resolveAgentRoute", () => {
-  const resolveDiscordGuildRoute = (cfg: OpenClawConfig) =>
+  const resolveDiscordGuildRoute = (cfg: DenebConfig) =>
     resolveAgentRoute({
       cfg,
       channel: "discord",
@@ -19,7 +19,7 @@ describe("resolveAgentRoute", () => {
     });
 
   test("defaults to main/default when no bindings exist", () => {
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     const route = resolveAgentRoute({
       cfg,
       channel: "whatsapp",
@@ -42,7 +42,7 @@ describe("resolveAgentRoute", () => {
       },
     ];
     for (const testCase of cases) {
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         session: { dmScope: testCase.dmScope },
       };
       const route = resolveAgentRoute({
@@ -109,7 +109,7 @@ describe("resolveAgentRoute", () => {
       },
     ];
     for (const testCase of cases) {
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         session: {
           dmScope: testCase.dmScope,
           identityLinks: {
@@ -128,7 +128,7 @@ describe("resolveAgentRoute", () => {
   });
 
   test("peer binding wins over account binding", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "a",
@@ -156,7 +156,7 @@ describe("resolveAgentRoute", () => {
   });
 
   test("discord channel peer binding wins over guild binding", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "chan",
@@ -183,7 +183,7 @@ describe("resolveAgentRoute", () => {
   });
 
   test("coerces numeric peer ids to stable session keys", () => {
-    const cfg: OpenClawConfig = {};
+    const cfg: DenebConfig = {};
     const route = resolveAgentRoute({
       cfg,
       channel: "discord",
@@ -194,7 +194,7 @@ describe("resolveAgentRoute", () => {
   });
 
   test("guild binding wins over account binding when peer not bound", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "guild",
@@ -216,7 +216,7 @@ describe("resolveAgentRoute", () => {
   });
 
   test("peer+guild binding does not act as guild-wide fallback when peer mismatches (#14752)", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "olga",
@@ -246,7 +246,7 @@ describe("resolveAgentRoute", () => {
   });
 
   test("peer+guild binding requires guild match even when peer matches", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "wrongguild",
@@ -276,7 +276,7 @@ describe("resolveAgentRoute", () => {
   });
 
   test("peer+team binding does not act as team-wide fallback when peer mismatches", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "roomonly",
@@ -306,7 +306,7 @@ describe("resolveAgentRoute", () => {
   });
 
   test("peer+team binding requires team match even when peer matches", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "wrongteam",
@@ -336,7 +336,7 @@ describe("resolveAgentRoute", () => {
   });
 
   test("missing accountId in binding matches default account only", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [{ agentId: "defaultAcct", match: { channel: "whatsapp" } }],
     };
 
@@ -359,7 +359,7 @@ describe("resolveAgentRoute", () => {
   });
 
   test("accountId=* matches any account as a channel fallback", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "any",
@@ -378,7 +378,7 @@ describe("resolveAgentRoute", () => {
   });
 
   test("binding accountId matching is canonicalized", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [{ agentId: "biz", match: { channel: "discord", accountId: "BIZ" } }],
     };
     const route = resolveAgentRoute({
@@ -393,9 +393,9 @@ describe("resolveAgentRoute", () => {
   });
 
   test("defaultAgentId is used when no binding matches", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       agents: {
-        list: [{ id: "home", default: true, workspace: "~/openclaw-home" }],
+        list: [{ id: "home", default: true, workspace: "~/deneb-home" }],
       },
     };
     const route = resolveAgentRoute({
@@ -410,7 +410,7 @@ describe("resolveAgentRoute", () => {
 });
 
 test("dmScope=per-account-channel-peer isolates DM sessions per account, channel and sender", () => {
-  const cfg: OpenClawConfig = {
+  const cfg: DenebConfig = {
     session: { dmScope: "per-account-channel-peer" },
   };
   const route = resolveAgentRoute({
@@ -423,7 +423,7 @@ test("dmScope=per-account-channel-peer isolates DM sessions per account, channel
 });
 
 test("dmScope=per-account-channel-peer uses default accountId when not provided", () => {
-  const cfg: OpenClawConfig = {
+  const cfg: DenebConfig = {
     session: { dmScope: "per-account-channel-peer" },
   };
   const route = resolveAgentRoute({
@@ -460,7 +460,7 @@ describe("parentPeer binding inheritance (thread support)", () => {
   }
 
   function resolveDiscordThreadRoute(params: {
-    cfg: OpenClawConfig;
+    cfg: DenebConfig;
     parentPeer?: { kind: "channel"; id: string } | null;
     guildId?: string;
   }) {
@@ -475,7 +475,7 @@ describe("parentPeer binding inheritance (thread support)", () => {
   }
 
   test("thread inherits binding from parent channel when no direct match", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [makeDiscordPeerBinding("adecco", defaultParentPeer.id)],
     };
     const route = resolveDiscordThreadRoute({ cfg });
@@ -484,7 +484,7 @@ describe("parentPeer binding inheritance (thread support)", () => {
   });
 
   test("direct peer binding wins over parent peer binding", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         makeDiscordPeerBinding("thread-agent", threadPeer.id),
         makeDiscordPeerBinding("parent-agent", defaultParentPeer.id),
@@ -496,7 +496,7 @@ describe("parentPeer binding inheritance (thread support)", () => {
   });
 
   test("parent peer binding wins over guild binding", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         makeDiscordPeerBinding("parent-agent", defaultParentPeer.id),
         makeDiscordGuildBinding("guild-agent", "guild-789"),
@@ -508,7 +508,7 @@ describe("parentPeer binding inheritance (thread support)", () => {
   });
 
   test("falls back to guild binding when no parent peer match", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         makeDiscordPeerBinding("other-parent-agent", "other-parent-999"),
         makeDiscordGuildBinding("guild-agent", "guild-789"),
@@ -520,7 +520,7 @@ describe("parentPeer binding inheritance (thread support)", () => {
   });
 
   test("parentPeer with empty id is ignored", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [makeDiscordPeerBinding("parent-agent", defaultParentPeer.id)],
     };
     const route = resolveDiscordThreadRoute({ cfg, parentPeer: { kind: "channel", id: "" } });
@@ -529,7 +529,7 @@ describe("parentPeer binding inheritance (thread support)", () => {
   });
 
   test("null parentPeer is handled gracefully", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [makeDiscordPeerBinding("parent-agent", defaultParentPeer.id)],
     };
     const route = resolveDiscordThreadRoute({ cfg, parentPeer: null });
@@ -540,7 +540,7 @@ describe("parentPeer binding inheritance (thread support)", () => {
 
 describe("backward compatibility: peer.kind dm → direct", () => {
   test("legacy dm in config matches runtime direct peer", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "alex",
@@ -564,7 +564,7 @@ describe("backward compatibility: peer.kind dm → direct", () => {
   });
 
   test("runtime dm peer.kind matches config direct binding (#22730)", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "alex",
@@ -590,7 +590,7 @@ describe("backward compatibility: peer.kind dm → direct", () => {
 
 describe("backward compatibility: peer.kind group ↔ channel", () => {
   test("config group binding matches runtime channel scope", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "slack-group-agent",
@@ -612,7 +612,7 @@ describe("backward compatibility: peer.kind group ↔ channel", () => {
   });
 
   test("config channel binding matches runtime group scope", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "slack-channel-agent",
@@ -634,7 +634,7 @@ describe("backward compatibility: peer.kind group ↔ channel", () => {
   });
 
   test("group/channel compatibility does not match direct peer kind", () => {
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: [
         {
           agentId: "group-only-agent",
@@ -657,7 +657,7 @@ describe("backward compatibility: peer.kind group ↔ channel", () => {
 });
 
 describe("role-based agent routing", () => {
-  type DiscordBinding = NonNullable<OpenClawConfig["bindings"]>[number];
+  type DiscordBinding = NonNullable<DenebConfig["bindings"]>[number];
 
   function makeDiscordRoleBinding(
     agentId: string,
@@ -816,7 +816,7 @@ describe("role-based agent routing", () => {
 describe("binding evaluation cache scalability", () => {
   test("does not rescan full bindings after channel/account cache rollover (#36915)", () => {
     const bindingCount = 2_205;
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       bindings: Array.from({ length: bindingCount }, (_, idx) => ({
         agentId: `agent-${idx}`,
         match: {

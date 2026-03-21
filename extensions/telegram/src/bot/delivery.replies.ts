@@ -1,23 +1,23 @@
 import { type Bot, GrammyError, InputFile } from "grammy";
-import type { ReplyToMode } from "openclaw/plugin-sdk/config-runtime";
-import type { MarkdownTableMode } from "openclaw/plugin-sdk/config-runtime";
-import { fireAndForgetHook } from "openclaw/plugin-sdk/hook-runtime";
-import { createInternalHookEvent, triggerInternalHook } from "openclaw/plugin-sdk/hook-runtime";
+import type { ReplyToMode } from "deneb/plugin-sdk/config-runtime";
+import type { MarkdownTableMode } from "deneb/plugin-sdk/config-runtime";
+import { fireAndForgetHook } from "deneb/plugin-sdk/hook-runtime";
+import { createInternalHookEvent, triggerInternalHook } from "deneb/plugin-sdk/hook-runtime";
 import {
   buildCanonicalSentMessageHookContext,
   toInternalMessageSentContext,
   toPluginMessageContext,
   toPluginMessageSentEvent,
-} from "openclaw/plugin-sdk/hook-runtime";
-import { formatErrorMessage } from "openclaw/plugin-sdk/infra-runtime";
-import { buildOutboundMediaLoadOptions } from "openclaw/plugin-sdk/media-runtime";
-import { isGifMedia, kindFromMime } from "openclaw/plugin-sdk/media-runtime";
-import { getGlobalHookRunner } from "openclaw/plugin-sdk/plugin-runtime";
-import { chunkMarkdownTextWithMode, type ChunkMode } from "openclaw/plugin-sdk/reply-runtime";
-import type { ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
-import { danger, logVerbose } from "openclaw/plugin-sdk/runtime-env";
-import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
-import { loadWebMedia } from "openclaw/plugin-sdk/web-media";
+} from "deneb/plugin-sdk/hook-runtime";
+import { formatErrorMessage } from "deneb/plugin-sdk/infra-runtime";
+import { buildOutboundMediaLoadOptions } from "deneb/plugin-sdk/media-runtime";
+import { isGifMedia, kindFromMime } from "deneb/plugin-sdk/media-runtime";
+import { getGlobalHookRunner } from "deneb/plugin-sdk/plugin-runtime";
+import { chunkMarkdownTextWithMode, type ChunkMode } from "deneb/plugin-sdk/reply-runtime";
+import type { ReplyPayload } from "deneb/plugin-sdk/reply-runtime";
+import { danger, logVerbose } from "deneb/plugin-sdk/runtime-env";
+import type { RuntimeEnv } from "deneb/plugin-sdk/runtime-env";
+import { loadWebMedia } from "deneb/plugin-sdk/web-media";
 import type { TelegramInlineButtons } from "../button-types.js";
 import { splitTelegramCaption } from "../caption.js";
 import {

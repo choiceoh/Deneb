@@ -2,13 +2,13 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { parseReleaseVersion } from "../openclaw-npm-release-check.ts";
+import { parseReleaseVersion } from "../deneb-npm-release-check.ts";
 
 export type PluginPackageJson = {
   name?: string;
   version?: string;
   private?: boolean;
-  openclaw?: {
+  deneb?: {
     extensions?: string[];
     install?: {
       npmSpec?: string;
@@ -156,11 +156,11 @@ export function collectPublishablePluginPackageErrors(
   const errors: string[] = [];
   const packageName = packageJson.name?.trim() ?? "";
   const packageVersion = packageJson.version?.trim() ?? "";
-  const extensions = packageJson.openclaw?.extensions ?? [];
+  const extensions = packageJson.deneb?.extensions ?? [];
 
-  if (!packageName.startsWith("@openclaw/")) {
+  if (!packageName.startsWith("@deneb/")) {
     errors.push(
-      `package name must start with "@openclaw/"; found "${packageName || "<missing>"}".`,
+      `package name must start with "@deneb/"; found "${packageName || "<missing>"}".`,
     );
   }
   if (packageJson.private === true) {
@@ -174,10 +174,10 @@ export function collectPublishablePluginPackageErrors(
     );
   }
   if (!Array.isArray(extensions) || extensions.length === 0) {
-    errors.push("openclaw.extensions must contain at least one entry.");
+    errors.push("deneb.extensions must contain at least one entry.");
   }
   if (extensions.some((entry) => typeof entry !== "string" || !entry.trim())) {
-    errors.push("openclaw.extensions must contain only non-empty strings.");
+    errors.push("deneb.extensions must contain only non-empty strings.");
   }
 
   return errors;
@@ -205,7 +205,7 @@ export function collectPublishablePluginPackages(
       continue;
     }
 
-    if (packageJson.openclaw?.release?.publishToNpm !== true) {
+    if (packageJson.deneb?.release?.publishToNpm !== true) {
       continue;
     }
 
@@ -236,7 +236,7 @@ export function collectPublishablePluginPackages(
       version,
       channel: parsedVersion.channel,
       publishTag: parsedVersion.channel === "beta" ? "beta" : "latest",
-      installNpmSpec: packageJson.openclaw?.install?.npmSpec?.trim() || undefined,
+      installNpmSpec: packageJson.deneb?.install?.npmSpec?.trim() || undefined,
     });
   }
 
@@ -335,7 +335,7 @@ export function resolveChangedPublishablePluginPackages(params: {
 }
 
 export function isPluginVersionPublished(packageName: string, version: string): boolean {
-  const tempDir = mkdtempSync(join(tmpdir(), "openclaw-plugin-npm-view-"));
+  const tempDir = mkdtempSync(join(tmpdir(), "deneb-plugin-npm-view-"));
   const userconfigPath = join(tempDir, "npmrc");
   writeFileSync(userconfigPath, "");
 

@@ -65,7 +65,7 @@ function createUnavailableSubagentRuntime(): PluginRuntime["subagent"] {
 // ordinary plugin runtimes.
 
 const GATEWAY_SUBAGENT_SYMBOL: unique symbol = Symbol.for(
-  "openclaw.plugin.gatewaySubagentRuntime",
+  "deneb.plugin.gatewaySubagentRuntime",
 ) as unknown as typeof GATEWAY_SUBAGENT_SYMBOL;
 
 type GatewaySubagentState = {

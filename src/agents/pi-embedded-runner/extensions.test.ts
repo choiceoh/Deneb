@@ -1,12 +1,12 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { SessionManager } from "@mariozechner/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { getCompactionSafeguardRuntime } from "../pi-extensions/compaction-safeguard-runtime.js";
 import compactionSafeguardExtension from "../pi-extensions/compaction-safeguard.js";
 import { buildEmbeddedExtensionFactories } from "./extensions.js";
 
-function buildSafeguardFactories(cfg: OpenClawConfig) {
+function buildSafeguardFactories(cfg: DenebConfig) {
   const sessionManager = {} as SessionManager;
   const model = {
     id: "claude-sonnet-4-20250514",
@@ -25,7 +25,7 @@ function buildSafeguardFactories(cfg: OpenClawConfig) {
 }
 
 function expectSafeguardRuntime(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   expectedRuntime: { qualityGuardEnabled: boolean; qualityGuardMaxRetries?: number },
 ) {
   const { factories, sessionManager } = buildSafeguardFactories(cfg);
@@ -44,7 +44,7 @@ describe("buildEmbeddedExtensionFactories", () => {
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     expectSafeguardRuntime(cfg, {
       qualityGuardEnabled: false,
     });
@@ -63,7 +63,7 @@ describe("buildEmbeddedExtensionFactories", () => {
           },
         },
       },
-    } as OpenClawConfig;
+    } as DenebConfig;
     expectSafeguardRuntime(cfg, {
       qualityGuardEnabled: true,
       qualityGuardMaxRetries: 2,

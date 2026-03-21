@@ -1,5 +1,5 @@
 ---
-summary: "Overview of OpenClaw onboarding options and flows"
+summary: "Overview of Deneb onboarding options and flows"
 read_when:
   - Choosing an onboarding path
   - Setting up a new environment
@@ -9,7 +9,7 @@ sidebarTitle: "Onboarding Overview"
 
 # Onboarding Overview
 
-OpenClaw supports multiple onboarding paths depending on where the Gateway runs
+Deneb supports multiple onboarding paths depending on where the Gateway runs
 and how you prefer to configure providers.
 
 ## Choose your onboarding path
@@ -22,18 +22,18 @@ and how you prefer to configure providers.
 Run onboarding in a terminal:
 
 ```bash
-openclaw onboard
+deneb onboard
 ```
 
 Use CLI onboarding when you want full control of the Gateway, workspace,
 channels, and skills. Docs:
 
 - [Onboarding (CLI)](/start/wizard)
-- [`openclaw onboard` command](/cli/onboard)
+- [`deneb onboard` command](/cli/onboard)
 
 ## macOS app onboarding
 
-Use the OpenClaw app when you want a fully guided setup on macOS. Docs:
+Use the Deneb app when you want a fully guided setup on macOS. Docs:
 
 - [Onboarding (macOS App)](/start/onboarding)
 

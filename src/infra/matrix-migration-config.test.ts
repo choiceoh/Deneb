@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { withTempHome } from "../../test/helpers/temp-home.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { resolveMatrixMigrationAccountTarget } from "./matrix-migration-config.js";
 
 function writeFile(filePath: string, value: string) {
@@ -13,7 +13,7 @@ function writeFile(filePath: string, value: string) {
 describe("resolveMatrixMigrationAccountTarget", () => {
   it("reuses stored user identity for token-only configs when the access token matches", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       writeFile(
         path.join(stateDir, "credentials", "matrix", "credentials-ops.json"),
         JSON.stringify(
@@ -28,7 +28,7 @@ describe("resolveMatrixMigrationAccountTarget", () => {
         ),
       );
 
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         channels: {
           matrix: {
             accounts: {
@@ -55,7 +55,7 @@ describe("resolveMatrixMigrationAccountTarget", () => {
 
   it("ignores stored device IDs from stale cached Matrix credentials", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       writeFile(
         path.join(stateDir, "credentials", "matrix", "credentials-ops.json"),
         JSON.stringify(
@@ -70,7 +70,7 @@ describe("resolveMatrixMigrationAccountTarget", () => {
         ),
       );
 
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         channels: {
           matrix: {
             accounts: {
@@ -99,7 +99,7 @@ describe("resolveMatrixMigrationAccountTarget", () => {
 
   it("does not trust stale stored creds on the same homeserver when the token changes", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       writeFile(
         path.join(stateDir, "credentials", "matrix", "credentials-ops.json"),
         JSON.stringify(
@@ -114,7 +114,7 @@ describe("resolveMatrixMigrationAccountTarget", () => {
         ),
       );
 
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         channels: {
           matrix: {
             accounts: {
@@ -139,7 +139,7 @@ describe("resolveMatrixMigrationAccountTarget", () => {
 
   it("does not inherit the base userId for non-default token-only accounts", async () => {
     await withTempHome(async (home) => {
-      const stateDir = path.join(home, ".openclaw");
+      const stateDir = path.join(home, ".deneb");
       writeFile(
         path.join(stateDir, "credentials", "matrix", "credentials-ops.json"),
         JSON.stringify(
@@ -154,7 +154,7 @@ describe("resolveMatrixMigrationAccountTarget", () => {
         ),
       );
 
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         channels: {
           matrix: {
             homeserver: "https://matrix.example.org",
@@ -183,7 +183,7 @@ describe("resolveMatrixMigrationAccountTarget", () => {
 
   it("does not inherit the base access token for non-default accounts", async () => {
     await withTempHome(async () => {
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         channels: {
           matrix: {
             homeserver: "https://matrix.example.org",
@@ -212,7 +212,7 @@ describe("resolveMatrixMigrationAccountTarget", () => {
   it("does not inherit the global Matrix access token for non-default accounts", async () => {
     await withTempHome(
       async () => {
-        const cfg: OpenClawConfig = {
+        const cfg: DenebConfig = {
           channels: {
             matrix: {
               accounts: {
@@ -243,7 +243,7 @@ describe("resolveMatrixMigrationAccountTarget", () => {
 
   it("uses the same scoped env token encoding as runtime account auth", async () => {
     await withTempHome(async () => {
-      const cfg: OpenClawConfig = {
+      const cfg: DenebConfig = {
         channels: {
           matrix: {
             accounts: {

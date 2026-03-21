@@ -12,7 +12,7 @@ title: "LLM Task"
 returns structured output (optionally validated against JSON Schema).
 
 This is ideal for workflow engines like Lobster: you can add a single LLM step
-without writing custom OpenClaw code for each workflow.
+without writing custom Deneb code for each workflow.
 
 ## Enable the plugin
 
@@ -81,7 +81,7 @@ outside the list is rejected.
 - `maxTokens` (number, optional)
 - `timeoutMs` (number, optional)
 
-`thinking` accepts the standard OpenClaw reasoning presets, such as `low` or `medium`.
+`thinking` accepts the standard Deneb reasoning presets, such as `low` or `medium`.
 
 ## Output
 
@@ -91,7 +91,7 @@ Returns `details.json` containing the parsed JSON (and validates against
 ## Example: Lobster workflow step
 
 ```lobster
-openclaw.invoke --tool llm-task --action json --args-json '{
+deneb.invoke --tool llm-task --action json --args-json '{
   "prompt": "Given the input email, return intent and draft.",
   "thinking": "low",
   "input": {

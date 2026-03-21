@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-extract_openclaw_semver() {
+extract_deneb_semver() {
   local raw="${1:-}"
   local parsed=""
   parsed="$(

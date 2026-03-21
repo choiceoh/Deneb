@@ -4,7 +4,7 @@ import {
   hasNonzeroUsage,
   type NormalizedUsage,
 } from "../../agents/usage.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { loadConfig } from "../../config/config.js";
 import {
   type SessionSystemPromptReport,
@@ -40,7 +40,7 @@ function resolveNonNegativeNumber(value: number | undefined): number | undefined
 }
 
 function estimateSessionRunCostUsd(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   usage?: NormalizedUsage;
   providerUsed?: string;
   modelUsed?: string;
@@ -59,7 +59,7 @@ function estimateSessionRunCostUsd(params: {
 export async function persistSessionUsageUpdate(params: {
   storePath?: string;
   sessionKey?: string;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   usage?: NormalizedUsage;
   /**
    * Usage from the last individual API call (not accumulated). When provided,

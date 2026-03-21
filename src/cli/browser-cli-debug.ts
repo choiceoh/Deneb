@@ -209,7 +209,7 @@ export function registerBrowserDebugCommands(
     .description("Stop trace recording and write a .zip")
     .option(
       "--out <path>",
-      "Output path within openclaw temp dir (e.g. trace.zip or /tmp/openclaw/trace.zip)",
+      "Output path within deneb temp dir (e.g. trace.zip or /tmp/deneb/trace.zip)",
     )
     .option("--target-id <id>", "CDP target id (or unique prefix)")
     .action(async (opts, cmd) => {

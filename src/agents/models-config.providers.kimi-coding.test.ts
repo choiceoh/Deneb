@@ -8,7 +8,7 @@ import { buildKimiCodingProvider } from "./models-config.providers.js";
 
 describe("Kimi implicit provider (#22409)", () => {
   it("should include Kimi when KIMI_API_KEY is configured", async () => {
-    const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
     const envSnapshot = captureEnv(["KIMI_API_KEY"]);
     process.env.KIMI_API_KEY = "test-key"; // pragma: allowlist secret
 
@@ -34,7 +34,7 @@ describe("Kimi implicit provider (#22409)", () => {
   });
 
   it("should not include Kimi when no API key is configured", async () => {
-    const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
     const envSnapshot = captureEnv(["KIMI_API_KEY"]);
     delete process.env.KIMI_API_KEY;
 
@@ -47,7 +47,7 @@ describe("Kimi implicit provider (#22409)", () => {
   });
 
   it("uses explicit legacy kimi-coding baseUrl when provided", async () => {
-    const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
     const envSnapshot = captureEnv(["KIMI_API_KEY"]);
     process.env.KIMI_API_KEY = "test-key";
 
@@ -69,7 +69,7 @@ describe("Kimi implicit provider (#22409)", () => {
   });
 
   it("merges explicit legacy kimi-coding headers on top of the built-in user agent", async () => {
-    const agentDir = mkdtempSync(join(tmpdir(), "openclaw-test-"));
+    const agentDir = mkdtempSync(join(tmpdir(), "deneb-test-"));
     const envSnapshot = captureEnv(["KIMI_API_KEY"]);
     process.env.KIMI_API_KEY = "test-key";
 

@@ -4,11 +4,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertSandboxPath } from "../../agents/sandbox-paths.js";
 import { ensureSandboxWorkspaceForSession } from "../../agents/sandbox.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { logVerbose } from "../../globals.js";
 import { copyFileWithinRoot, SafeOpenError } from "../../infra/fs-safe.js";
 import { normalizeScpRemoteHost, normalizeScpRemotePath } from "../../infra/scp-host.js";
-import { resolvePreferredOpenClawTmpDir } from "../../infra/tmp-openclaw-dir.js";
+import { resolvePreferredDenebTmpDir } from "../../infra/tmp-deneb-dir.js";
 import {
   isInboundPathAllowed,
   resolveIMessageRemoteAttachmentRoots,
@@ -22,7 +22,7 @@ const STAGED_MEDIA_MAX_BYTES = MEDIA_MAX_BYTES;
 export async function stageSandboxMedia(params: {
   ctx: MsgContext;
   sessionCtx: TemplateContext;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   sessionKey?: string;
   workspaceDir: string;
 }) {
@@ -39,7 +39,7 @@ export async function stageSandboxMedia(params: {
     workspaceDir,
   });
 
-  // For remote attachments without sandbox, use ~/.openclaw/media (not agent workspace for privacy)
+  // For remote attachments without sandbox, use ~/.deneb/media (not agent workspace for privacy)
   const remoteMediaCacheDir = ctx.MediaRemoteHost
     ? path.join(CONFIG_DIR, "media", "remote-cache", sessionKey)
     : null;
@@ -140,7 +140,7 @@ async function stageRemoteFileIntoRoot(params: {
   relativeDestPath: string;
   maxBytes?: number;
 }): Promise<void> {
-  const tmpRoot = resolvePreferredOpenClawTmpDir();
+  const tmpRoot = resolvePreferredDenebTmpDir();
   await fs.mkdir(tmpRoot, { recursive: true });
   const tmpDir = await fs.mkdtemp(path.join(tmpRoot, "stage-sandbox-media-"));
   const tmpPath = path.join(tmpDir, "download");

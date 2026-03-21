@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { writeSkill } from "../../../src/agents/skills.e2e-test-helpers.js";
-import type { OpenClawConfig } from "../../../src/config/config.js";
+import type { DenebConfig } from "../../../src/config/config.js";
 import {
   pluginCommandMocks,
   resetPluginCommandMocks,
@@ -36,7 +36,7 @@ describe("registerTelegramNativeCommands skill allowlist integration", () => {
   });
 
   it("registers only allowlisted skills for the bound agent menu", async () => {
-    const workspaceDir = await makeWorkspace("openclaw-telegram-skills-");
+    const workspaceDir = await makeWorkspace("deneb-telegram-skills-");
     await writeSkill({
       dir: path.join(workspaceDir, "skills", "alpha-skill"),
       name: "alpha-skill",
@@ -49,7 +49,7 @@ describe("registerTelegramNativeCommands skill allowlist integration", () => {
     });
 
     const setMyCommands = vi.fn().mockResolvedValue(undefined);
-    const cfg: OpenClawConfig = {
+    const cfg: DenebConfig = {
       agents: {
         list: [
           { id: "alpha", workspace: workspaceDir, skills: ["alpha-skill"] },

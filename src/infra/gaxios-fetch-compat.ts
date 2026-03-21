@@ -36,7 +36,7 @@ type GaxiosConstructor = {
   prototype: GaxiosPrototype;
 };
 
-const TEST_GAXIOS_CONSTRUCTOR_OVERRIDE = "__OPENCLAW_TEST_GAXIOS_CONSTRUCTOR__";
+const TEST_GAXIOS_CONSTRUCTOR_OVERRIDE = "__DENEB_TEST_GAXIOS_CONSTRUCTOR__";
 
 let installState: "not-installed" | "installing" | "shimmed" | "installed" = "not-installed";
 

@@ -23,30 +23,30 @@ describe("isGatewayArgv", () => {
   });
 
   it("matches known entrypoints across slash and case variants", () => {
-    expect(isGatewayArgv(["NODE", "C:\\OpenClaw\\DIST\\ENTRY.JS", "gateway"])).toBe(true);
-    expect(isGatewayArgv(["bun", "/srv/openclaw/scripts/run-node.mjs", "gateway"])).toBe(true);
-    expect(isGatewayArgv(["node", "/srv/openclaw/openclaw.mjs", "gateway"])).toBe(true);
-    expect(isGatewayArgv(["tsx", "/srv/openclaw/src/entry.ts", "gateway"])).toBe(true);
-    expect(isGatewayArgv(["tsx", "/srv/openclaw/src/index.ts", "gateway"])).toBe(true);
+    expect(isGatewayArgv(["NODE", "C:\\Deneb\\DIST\\ENTRY.JS", "gateway"])).toBe(true);
+    expect(isGatewayArgv(["bun", "/srv/deneb/scripts/run-node.mjs", "gateway"])).toBe(true);
+    expect(isGatewayArgv(["node", "/srv/deneb/deneb.mjs", "gateway"])).toBe(true);
+    expect(isGatewayArgv(["tsx", "/srv/deneb/src/entry.ts", "gateway"])).toBe(true);
+    expect(isGatewayArgv(["tsx", "/srv/deneb/src/index.ts", "gateway"])).toBe(true);
   });
 
-  it("matches the openclaw executable but gates the gateway binary behind the opt-in flag", () => {
-    expect(isGatewayArgv(["C:\\bin\\openclaw.cmd", "gateway"])).toBe(true);
-    expect(isGatewayArgv(["/usr/local/bin/openclaw-gateway", "gateway"])).toBe(false);
+  it("matches the deneb executable but gates the gateway binary behind the opt-in flag", () => {
+    expect(isGatewayArgv(["C:\\bin\\deneb.cmd", "gateway"])).toBe(true);
+    expect(isGatewayArgv(["/usr/local/bin/deneb-gateway", "gateway"])).toBe(false);
     expect(
-      isGatewayArgv(["/usr/local/bin/openclaw-gateway", "gateway"], {
+      isGatewayArgv(["/usr/local/bin/deneb-gateway", "gateway"], {
         allowGatewayBinary: true,
       }),
     ).toBe(true);
     expect(
-      isGatewayArgv(["C:\\bin\\openclaw-gateway.EXE", "gateway"], {
+      isGatewayArgv(["C:\\bin\\deneb-gateway.EXE", "gateway"], {
         allowGatewayBinary: true,
       }),
     ).toBe(true);
   });
 
   it("rejects unknown gateway argv even when the token is present", () => {
-    expect(isGatewayArgv(["node", "/srv/openclaw/custom.js", "gateway"])).toBe(false);
+    expect(isGatewayArgv(["node", "/srv/deneb/custom.js", "gateway"])).toBe(false);
     expect(isGatewayArgv(["python", "gateway", "script.py"])).toBe(false);
   });
 });

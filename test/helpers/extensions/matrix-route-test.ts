@@ -1,4 +1,4 @@
-export type { OpenClawConfig } from "../../../src/config/config.js";
+export type { DenebConfig } from "../../../src/config/config.js";
 export {
   __testing as sessionBindingTesting,
   registerSessionBindingAdapter,

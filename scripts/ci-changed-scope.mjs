@@ -7,9 +7,9 @@ const DOCS_PATH_RE = /^(docs\/|.*\.mdx?$)/;
 const SKILLS_PYTHON_SCOPE_RE = /^skills\//;
 const CI_WORKFLOW_SCOPE_RE = /^\.github\/workflows\/ci\.yml$/;
 const NODE_SCOPE_RE =
-  /^(src\/|test\/|extensions\/|packages\/|scripts\/|ui\/|\.github\/|openclaw\.mjs$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig.*\.json$|vitest.*\.ts$|tsdown\.config\.ts$|\.oxlintrc\.json$|\.oxfmtrc\.jsonc$)/;
+  /^(src\/|test\/|extensions\/|packages\/|scripts\/|ui\/|\.github\/|deneb\.mjs$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig.*\.json$|vitest.*\.ts$|tsdown\.config\.ts$|\.oxlintrc\.json$|\.oxfmtrc\.jsonc$)/;
 const WINDOWS_SCOPE_RE =
-  /^(src\/|test\/|extensions\/|packages\/|scripts\/|ui\/|openclaw\.mjs$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig.*\.json$|vitest.*\.ts$|tsdown\.config\.ts$|\.github\/workflows\/ci\.yml$|\.github\/actions\/setup-node-env\/action\.yml$|\.github\/actions\/setup-pnpm-store-cache\/action\.yml$)/;
+  /^(src\/|test\/|extensions\/|packages\/|scripts\/|ui\/|deneb\.mjs$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig.*\.json$|vitest.*\.ts$|tsdown\.config\.ts$|\.github\/workflows\/ci\.yml$|\.github\/actions\/setup-node-env\/action\.yml$|\.github\/actions\/setup-pnpm-store-cache\/action\.yml$)/;
 
 /**
  * @param {string[]} changedPaths

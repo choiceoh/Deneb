@@ -1,4 +1,4 @@
-import * as ssrf from "openclaw/plugin-sdk/infra-runtime";
+import * as ssrf from "deneb/plugin-sdk/infra-runtime";
 import { afterEach, beforeAll, beforeEach, expect, vi, type Mock } from "vitest";
 import * as harness from "./bot.media.e2e-harness.js";
 
@@ -148,7 +148,7 @@ beforeAll(async () => {
       ...opts,
       telegramDeps: harness.telegramBotDepsForTest,
     });
-  const replyModule = await import("openclaw/plugin-sdk/reply-runtime");
+  const replyModule = await import("deneb/plugin-sdk/reply-runtime");
   replySpyRef = (replyModule as unknown as { __replySpy: ReturnType<typeof vi.fn> }).__replySpy;
 }, TELEGRAM_BOT_IMPORT_TIMEOUT_MS);
 

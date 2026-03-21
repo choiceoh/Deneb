@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { SessionEntry } from "../config/sessions.js";
 import { resolveExecApprovalSessionTarget } from "./exec-approval-session-target.js";
 import type { ExecApprovalRequest } from "./exec-approvals.js";
@@ -26,7 +26,7 @@ const baseRequest: ExecApprovalRequest = {
 };
 
 function createTempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-exec-approval-session-target-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "deneb-exec-approval-session-target-"));
   tempDirs.push(dir);
   return dir;
 }
@@ -34,12 +34,12 @@ function createTempDir(): string {
 function writeStoreFile(
   storePath: string,
   entries: Record<string, Partial<SessionEntry>>,
-): OpenClawConfig {
+): DenebConfig {
   fs.mkdirSync(path.dirname(storePath), { recursive: true });
   fs.writeFileSync(storePath, JSON.stringify(entries), "utf-8");
   return {
     session: { store: storePath },
-  } as OpenClawConfig;
+  } as DenebConfig;
 }
 
 describe("exec approval session target", () => {

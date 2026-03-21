@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveGitHeadPath } from "./git-root.js";
-import { resolveOpenClawPackageRootSync } from "./openclaw-root.js";
+import { resolveDenebPackageRootSync } from "./deneb-root.js";
 
 const formatCommit = (value?: string | null) => {
   if (!value) {
@@ -201,7 +201,7 @@ export const resolveCommitHash = (
   if (cachedGitCommitBySearchDir.has(searchDir)) {
     return cachedGitCommitBySearchDir.get(searchDir) ?? null;
   }
-  const packageRoot = resolveOpenClawPackageRootSync({
+  const packageRoot = resolveDenebPackageRootSync({
     cwd: options.cwd,
     moduleUrl: options.moduleUrl,
   });

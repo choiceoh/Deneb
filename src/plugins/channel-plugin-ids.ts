@@ -1,9 +1,9 @@
 import { listPotentialConfiguredChannelIds } from "../channels/config-presence.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { loadPluginManifestRegistry } from "./manifest-registry.js";
 
 export function resolveChannelPluginIds(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   workspaceDir?: string;
   env: NodeJS.ProcessEnv;
 }): string[] {
@@ -17,7 +17,7 @@ export function resolveChannelPluginIds(params: {
 }
 
 export function resolveConfiguredChannelPluginIds(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   workspaceDir?: string;
   env: NodeJS.ProcessEnv;
 }): string[] {
@@ -31,7 +31,7 @@ export function resolveConfiguredChannelPluginIds(params: {
 }
 
 export function resolveConfiguredDeferredChannelPluginIds(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   workspaceDir?: string;
   env: NodeJS.ProcessEnv;
 }): string[] {

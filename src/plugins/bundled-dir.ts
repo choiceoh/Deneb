@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveOpenClawPackageRootSync } from "../infra/openclaw-root.js";
+import { resolveDenebPackageRootSync } from "../infra/deneb-root.js";
 import { resolveUserPath } from "../utils.js";
 
 function isSourceCheckoutRoot(packageRoot: string): boolean {
@@ -13,7 +13,7 @@ function isSourceCheckoutRoot(packageRoot: string): boolean {
 }
 
 export function resolveBundledPluginsDir(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const override = env.OPENCLAW_BUNDLED_PLUGINS_DIR?.trim();
+  const override = env.DENEB_BUNDLED_PLUGINS_DIR?.trim();
   if (override) {
     return resolveUserPath(override, env);
   }
@@ -22,8 +22,8 @@ export function resolveBundledPluginsDir(env: NodeJS.ProcessEnv = process.env): 
 
   try {
     const packageRoots = [
-      resolveOpenClawPackageRootSync({ cwd: process.cwd() }),
-      resolveOpenClawPackageRootSync({ moduleUrl: import.meta.url }),
+      resolveDenebPackageRootSync({ cwd: process.cwd() }),
+      resolveDenebPackageRootSync({ moduleUrl: import.meta.url }),
     ].filter(
       (entry, index, all): entry is string => Boolean(entry) && all.indexOf(entry) === index,
     );

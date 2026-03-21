@@ -4,7 +4,7 @@ import {
   createExitThrowingRuntime,
   createWizardPrompter,
   readAuthProfilesForAgent,
-  requireOpenClawAgentDir,
+  requireDenebAgentDir,
   setupAuthTestEnv,
 } from "../../../test/helpers/auth-wizard.js";
 import { clearRuntimeAuthProfileStoreSnapshots } from "../../agents/auth-profiles/store.js";
@@ -52,8 +52,8 @@ type StoredAuthProfile = {
 
 describe("provider auth-choice contract", () => {
   const lifecycle = createAuthTestLifecycle([
-    "OPENCLAW_STATE_DIR",
-    "OPENCLAW_AGENT_DIR",
+    "DENEB_STATE_DIR",
+    "DENEB_AGENT_DIR",
     "PI_CODING_AGENT_DIR",
   ]);
   let activeStateDir: string | null = null;
@@ -62,7 +62,7 @@ describe("provider auth-choice contract", () => {
     if (activeStateDir) {
       await lifecycle.cleanup();
     }
-    const env = await setupAuthTestEnv("openclaw-provider-auth-choice-");
+    const env = await setupAuthTestEnv("deneb-provider-auth-choice-");
     activeStateDir = env.stateDir;
     lifecycle.setStateDir(env.stateDir);
   }
@@ -170,7 +170,7 @@ describe("provider auth-choice contract", () => {
     );
 
     const stored = await readAuthProfilesForAgent<{ profiles?: Record<string, StoredAuthProfile> }>(
-      requireOpenClawAgentDir(),
+      requireDenebAgentDir(),
     );
     expect(stored.profiles?.["qwen-portal:default"]).toMatchObject({
       type: "oauth",
@@ -233,7 +233,7 @@ describe("provider auth-choice contract", () => {
 
     const stored = await readAuthProfilesForAgent<{
       profiles?: Record<string, StoredAuthProfile>;
-    }>(requireOpenClawAgentDir());
+    }>(requireDenebAgentDir());
     expect(stored.profiles?.["qwen-portal:default"]).toMatchObject({
       type: "oauth",
       provider: "qwen-portal",

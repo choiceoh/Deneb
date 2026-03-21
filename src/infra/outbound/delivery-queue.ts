@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ReplyPayload } from "../../auto-reply/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { resolveStateDir } from "../../config/paths.js";
 import { generateSecureUuid } from "../secure-random.js";
 import type { OutboundMirror } from "./mirror.js";
@@ -300,7 +300,7 @@ function normalizeLegacyQueuedDeliveryEntry(entry: QueuedDelivery): {
 
 export type DeliverFn = (
   params: {
-    cfg: OpenClawConfig;
+    cfg: DenebConfig;
   } & QueuedDeliveryParams & {
       skipQueue?: boolean;
     },
@@ -319,7 +319,7 @@ export interface RecoveryLogger {
 export async function recoverPendingDeliveries(opts: {
   deliver: DeliverFn;
   log: RecoveryLogger;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   stateDir?: string;
   /** Maximum wall-clock time for recovery in ms. Remaining entries are deferred to next restart. Default: 60 000. */
   maxRecoveryMs?: number;

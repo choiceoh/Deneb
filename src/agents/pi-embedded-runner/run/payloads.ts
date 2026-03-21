@@ -1,10 +1,10 @@
 import type { AssistantMessage } from "@mariozechner/pi-ai";
-import { hasOutboundReplyContent } from "openclaw/plugin-sdk/reply-payload";
+import { hasOutboundReplyContent } from "deneb/plugin-sdk/reply-payload";
 import { parseReplyDirectives } from "../../../auto-reply/reply/reply-directives.js";
 import type { ReasoningLevel, VerboseLevel } from "../../../auto-reply/thinking.js";
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../../../auto-reply/tokens.js";
 import { formatToolAggregate } from "../../../auto-reply/tool-meta.js";
-import type { OpenClawConfig } from "../../../config/config.js";
+import type { DenebConfig } from "../../../config/config.js";
 import {
   BILLING_ERROR_USER_MESSAGE,
   formatAssistantErrorText,
@@ -93,7 +93,7 @@ export function buildEmbeddedRunPayloads(params: {
   toolMetas: ToolMetaEntry[];
   lastAssistant: AssistantMessage | undefined;
   lastToolError?: LastToolError;
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   sessionKey: string;
   provider?: string;
   model?: string;

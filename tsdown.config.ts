@@ -26,7 +26,7 @@ const env = {
 };
 
 function buildInputOptions(options: InputOptionsArg): InputOptionsReturn {
-  if (process.env.OPENCLAW_BUILD_VERBOSE === "1") {
+  if (process.env.DENEB_BUILD_VERBOSE === "1") {
     return undefined;
   }
 
@@ -87,7 +87,7 @@ function listBundledPluginBuildEntries(): Record<string, string> {
     }
 
     const pluginDir = path.join(extensionsRoot, dirent.name);
-    const manifestPath = path.join(pluginDir, "openclaw.plugin.json");
+    const manifestPath = path.join(pluginDir, "deneb.plugin.json");
     if (!fs.existsSync(manifestPath)) {
       continue;
     }
@@ -97,17 +97,17 @@ function listBundledPluginBuildEntries(): Record<string, string> {
     if (fs.existsSync(packageJsonPath)) {
       try {
         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
-          openclaw?: { extensions?: unknown; setupEntry?: unknown };
+          deneb?: { extensions?: unknown; setupEntry?: unknown };
         };
-        packageEntries = Array.isArray(packageJson.openclaw?.extensions)
-          ? packageJson.openclaw.extensions.filter(
+        packageEntries = Array.isArray(packageJson.deneb?.extensions)
+          ? packageJson.deneb.extensions.filter(
               (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
             )
           : [];
         const setupEntry =
-          typeof packageJson.openclaw?.setupEntry === "string" &&
-          packageJson.openclaw.setupEntry.trim().length > 0
-            ? packageJson.openclaw.setupEntry
+          typeof packageJson.deneb?.setupEntry === "string" &&
+          packageJson.deneb.setupEntry.trim().length > 0
+            ? packageJson.deneb.setupEntry
             : undefined;
         if (setupEntry) {
           packageEntries = Array.from(new Set([...packageEntries, setupEntry]));

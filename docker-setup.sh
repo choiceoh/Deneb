@@ -4,13 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
 EXTRA_COMPOSE_FILE="$ROOT_DIR/docker-compose.extra.yml"
-IMAGE_NAME="${OPENCLAW_IMAGE:-openclaw:local}"
-EXTRA_MOUNTS="${OPENCLAW_EXTRA_MOUNTS:-}"
-HOME_VOLUME_NAME="${OPENCLAW_HOME_VOLUME:-}"
-RAW_SANDBOX_SETTING="${OPENCLAW_SANDBOX:-}"
+IMAGE_NAME="${DENEB_IMAGE:-deneb:local}"
+EXTRA_MOUNTS="${DENEB_EXTRA_MOUNTS:-}"
+HOME_VOLUME_NAME="${DENEB_HOME_VOLUME:-}"
+RAW_SANDBOX_SETTING="${DENEB_SANDBOX:-}"
 SANDBOX_ENABLED=""
-DOCKER_SOCKET_PATH="${OPENCLAW_DOCKER_SOCKET:-}"
-TIMEZONE="${OPENCLAW_TZ:-}"
+DOCKER_SOCKET_PATH="${DENEB_DOCKER_SOCKET:-}"
+TIMEZONE="${DENEB_TZ:-}"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -34,7 +34,7 @@ is_truthy_value() {
 }
 
 read_config_gateway_token() {
-  local config_path="$OPENCLAW_CONFIG_DIR/openclaw.json"
+  local config_path="$DENEB_CONFIG_DIR/deneb.json"
   if [[ ! -f "$config_path" ]]; then
     return 0
   fi
@@ -90,8 +90,8 @@ read_env_gateway_token() {
   fi
   while IFS= read -r line || [[ -n "$line" ]]; do
     line="${line%$'\r'}"
-    if [[ "$line" == OPENCLAW_GATEWAY_TOKEN=* ]]; then
-      token="${line#OPENCLAW_GATEWAY_TOKEN=}"
+    if [[ "$line" == DENEB_GATEWAY_TOKEN=* ]]; then
+      token="${line#DENEB_GATEWAY_TOKEN=}"
     fi
   done <"$env_path"
   if [[ -n "$token" ]]; then
@@ -100,15 +100,15 @@ read_env_gateway_token() {
 }
 
 ensure_control_ui_allowed_origins() {
-  if [[ "${OPENCLAW_GATEWAY_BIND}" == "loopback" ]]; then
+  if [[ "${DENEB_GATEWAY_BIND}" == "loopback" ]]; then
     return 0
   fi
 
   local allowed_origin_json
   local current_allowed_origins
-  allowed_origin_json="$(printf '["http://127.0.0.1:%s"]' "$OPENCLAW_GATEWAY_PORT")"
+  allowed_origin_json="$(printf '["http://127.0.0.1:%s"]' "$DENEB_GATEWAY_PORT")"
   current_allowed_origins="$(
-    docker compose "${COMPOSE_ARGS[@]}" run --rm openclaw-cli \
+    docker compose "${COMPOSE_ARGS[@]}" run --rm deneb-cli \
       config get gateway.controlUi.allowedOrigins 2>/dev/null || true
   )"
   current_allowed_origins="${current_allowed_origins//$'\r'/}"
@@ -118,17 +118,17 @@ ensure_control_ui_allowed_origins() {
     return 0
   fi
 
-  docker compose "${COMPOSE_ARGS[@]}" run --rm openclaw-cli \
+  docker compose "${COMPOSE_ARGS[@]}" run --rm deneb-cli \
     config set gateway.controlUi.allowedOrigins "$allowed_origin_json" --strict-json >/dev/null
   echo "Set gateway.controlUi.allowedOrigins to $allowed_origin_json for non-loopback bind."
 }
 
 sync_gateway_mode_and_bind() {
-  docker compose "${COMPOSE_ARGS[@]}" run --rm openclaw-cli \
+  docker compose "${COMPOSE_ARGS[@]}" run --rm deneb-cli \
     config set gateway.mode local >/dev/null
-  docker compose "${COMPOSE_ARGS[@]}" run --rm openclaw-cli \
-    config set gateway.bind "$OPENCLAW_GATEWAY_BIND" >/dev/null
-  echo "Pinned gateway.mode=local and gateway.bind=$OPENCLAW_GATEWAY_BIND for Docker setup."
+  docker compose "${COMPOSE_ARGS[@]}" run --rm deneb-cli \
+    config set gateway.bind "$DENEB_GATEWAY_BIND" >/dev/null
+  echo "Pinned gateway.mode=local and gateway.bind=$DENEB_GATEWAY_BIND for Docker setup."
 }
 
 contains_disallowed_chars() {
@@ -158,14 +158,14 @@ validate_mount_path_value() {
 validate_named_volume() {
   local value="$1"
   if [[ ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
-    fail "OPENCLAW_HOME_VOLUME must match [A-Za-z0-9][A-Za-z0-9_.-]* when using a named volume."
+    fail "DENEB_HOME_VOLUME must match [A-Za-z0-9][A-Za-z0-9_.-]* when using a named volume."
   fi
 }
 
 validate_mount_spec() {
   local mount="$1"
   if contains_disallowed_chars "$mount"; then
-    fail "OPENCLAW_EXTRA_MOUNTS entries cannot contain control characters."
+    fail "DENEB_EXTRA_MOUNTS entries cannot contain control characters."
   fi
   # Keep mount specs strict to avoid YAML structure injection.
   # Expected format: source:target[:options]
@@ -190,58 +190,58 @@ if is_truthy_value "$RAW_SANDBOX_SETTING"; then
   SANDBOX_ENABLED="1"
 fi
 
-OPENCLAW_CONFIG_DIR="${OPENCLAW_CONFIG_DIR:-$HOME/.openclaw}"
-OPENCLAW_WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-$HOME/.openclaw/workspace}"
+DENEB_CONFIG_DIR="${DENEB_CONFIG_DIR:-$HOME/.deneb}"
+DENEB_WORKSPACE_DIR="${DENEB_WORKSPACE_DIR:-$HOME/.deneb/workspace}"
 
-validate_mount_path_value "OPENCLAW_CONFIG_DIR" "$OPENCLAW_CONFIG_DIR"
-validate_mount_path_value "OPENCLAW_WORKSPACE_DIR" "$OPENCLAW_WORKSPACE_DIR"
+validate_mount_path_value "DENEB_CONFIG_DIR" "$DENEB_CONFIG_DIR"
+validate_mount_path_value "DENEB_WORKSPACE_DIR" "$DENEB_WORKSPACE_DIR"
 if [[ -n "$HOME_VOLUME_NAME" ]]; then
   if [[ "$HOME_VOLUME_NAME" == *"/"* ]]; then
-    validate_mount_path_value "OPENCLAW_HOME_VOLUME" "$HOME_VOLUME_NAME"
+    validate_mount_path_value "DENEB_HOME_VOLUME" "$HOME_VOLUME_NAME"
   else
     validate_named_volume "$HOME_VOLUME_NAME"
   fi
 fi
 if contains_disallowed_chars "$EXTRA_MOUNTS"; then
-  fail "OPENCLAW_EXTRA_MOUNTS cannot contain control characters."
+  fail "DENEB_EXTRA_MOUNTS cannot contain control characters."
 fi
 if [[ -n "$SANDBOX_ENABLED" ]]; then
-  validate_mount_path_value "OPENCLAW_DOCKER_SOCKET" "$DOCKER_SOCKET_PATH"
+  validate_mount_path_value "DENEB_DOCKER_SOCKET" "$DOCKER_SOCKET_PATH"
 fi
 if [[ -n "$TIMEZONE" ]]; then
   if contains_disallowed_chars "$TIMEZONE"; then
-    fail "OPENCLAW_TZ contains unsupported control characters."
+    fail "DENEB_TZ contains unsupported control characters."
   fi
   if [[ ! "$TIMEZONE" =~ ^[A-Za-z0-9/_+\-]+$ ]]; then
-    fail "OPENCLAW_TZ must be a valid IANA timezone string (e.g. Asia/Shanghai)."
+    fail "DENEB_TZ must be a valid IANA timezone string (e.g. Asia/Shanghai)."
   fi
   if ! is_valid_timezone "$TIMEZONE"; then
-    fail "OPENCLAW_TZ must match a timezone in /usr/share/zoneinfo (e.g. Asia/Shanghai)."
+    fail "DENEB_TZ must match a timezone in /usr/share/zoneinfo (e.g. Asia/Shanghai)."
   fi
 fi
 
-mkdir -p "$OPENCLAW_CONFIG_DIR"
-mkdir -p "$OPENCLAW_WORKSPACE_DIR"
+mkdir -p "$DENEB_CONFIG_DIR"
+mkdir -p "$DENEB_WORKSPACE_DIR"
 # Seed directory tree eagerly so bind mounts work even on Docker Desktop/Windows
 # where the container (even as root) cannot create new host subdirectories.
-mkdir -p "$OPENCLAW_CONFIG_DIR/identity"
-mkdir -p "$OPENCLAW_CONFIG_DIR/agents/main/agent"
-mkdir -p "$OPENCLAW_CONFIG_DIR/agents/main/sessions"
+mkdir -p "$DENEB_CONFIG_DIR/identity"
+mkdir -p "$DENEB_CONFIG_DIR/agents/main/agent"
+mkdir -p "$DENEB_CONFIG_DIR/agents/main/sessions"
 
-export OPENCLAW_CONFIG_DIR
-export OPENCLAW_WORKSPACE_DIR
-export OPENCLAW_GATEWAY_PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
-export OPENCLAW_BRIDGE_PORT="${OPENCLAW_BRIDGE_PORT:-18790}"
-export OPENCLAW_GATEWAY_BIND="${OPENCLAW_GATEWAY_BIND:-lan}"
-export OPENCLAW_IMAGE="$IMAGE_NAME"
-export OPENCLAW_DOCKER_APT_PACKAGES="${OPENCLAW_DOCKER_APT_PACKAGES:-}"
-export OPENCLAW_EXTENSIONS="${OPENCLAW_EXTENSIONS:-}"
-export OPENCLAW_EXTRA_MOUNTS="$EXTRA_MOUNTS"
-export OPENCLAW_HOME_VOLUME="$HOME_VOLUME_NAME"
-export OPENCLAW_ALLOW_INSECURE_PRIVATE_WS="${OPENCLAW_ALLOW_INSECURE_PRIVATE_WS:-}"
-export OPENCLAW_SANDBOX="$SANDBOX_ENABLED"
-export OPENCLAW_DOCKER_SOCKET="$DOCKER_SOCKET_PATH"
-export OPENCLAW_TZ="$TIMEZONE"
+export DENEB_CONFIG_DIR
+export DENEB_WORKSPACE_DIR
+export DENEB_GATEWAY_PORT="${DENEB_GATEWAY_PORT:-18789}"
+export DENEB_BRIDGE_PORT="${DENEB_BRIDGE_PORT:-18790}"
+export DENEB_GATEWAY_BIND="${DENEB_GATEWAY_BIND:-lan}"
+export DENEB_IMAGE="$IMAGE_NAME"
+export DENEB_DOCKER_APT_PACKAGES="${DENEB_DOCKER_APT_PACKAGES:-}"
+export DENEB_EXTENSIONS="${DENEB_EXTENSIONS:-}"
+export DENEB_EXTRA_MOUNTS="$EXTRA_MOUNTS"
+export DENEB_HOME_VOLUME="$HOME_VOLUME_NAME"
+export DENEB_ALLOW_INSECURE_PRIVATE_WS="${DENEB_ALLOW_INSECURE_PRIVATE_WS:-}"
+export DENEB_SANDBOX="$SANDBOX_ENABLED"
+export DENEB_DOCKER_SOCKET="$DOCKER_SOCKET_PATH"
+export DENEB_TZ="$TIMEZONE"
 
 # Detect Docker socket GID for sandbox group_add.
 DOCKER_GID=""
@@ -250,20 +250,20 @@ if [[ -n "$SANDBOX_ENABLED" && -S "$DOCKER_SOCKET_PATH" ]]; then
 fi
 export DOCKER_GID
 
-if [[ -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then
+if [[ -z "${DENEB_GATEWAY_TOKEN:-}" ]]; then
   EXISTING_CONFIG_TOKEN="$(read_config_gateway_token || true)"
   if [[ -n "$EXISTING_CONFIG_TOKEN" ]]; then
-    OPENCLAW_GATEWAY_TOKEN="$EXISTING_CONFIG_TOKEN"
-    echo "Reusing gateway token from $OPENCLAW_CONFIG_DIR/openclaw.json"
+    DENEB_GATEWAY_TOKEN="$EXISTING_CONFIG_TOKEN"
+    echo "Reusing gateway token from $DENEB_CONFIG_DIR/deneb.json"
   else
     DOTENV_GATEWAY_TOKEN="$(read_env_gateway_token "$ROOT_DIR/.env" || true)"
     if [[ -n "$DOTENV_GATEWAY_TOKEN" ]]; then
-      OPENCLAW_GATEWAY_TOKEN="$DOTENV_GATEWAY_TOKEN"
+      DENEB_GATEWAY_TOKEN="$DOTENV_GATEWAY_TOKEN"
       echo "Reusing gateway token from $ROOT_DIR/.env"
     elif command -v openssl >/dev/null 2>&1; then
-      OPENCLAW_GATEWAY_TOKEN="$(openssl rand -hex 32)"
+      DENEB_GATEWAY_TOKEN="$(openssl rand -hex 32)"
     else
-      OPENCLAW_GATEWAY_TOKEN="$(python3 - <<'PY'
+      DENEB_GATEWAY_TOKEN="$(python3 - <<'PY'
 import secrets
 print(secrets.token_hex(32))
 PY
@@ -271,7 +271,7 @@ PY
     fi
   fi
 fi
-export OPENCLAW_GATEWAY_TOKEN
+export DENEB_GATEWAY_TOKEN
 
 COMPOSE_FILES=("$COMPOSE_FILE")
 COMPOSE_ARGS=()
@@ -286,14 +286,14 @@ write_extra_compose() {
 
   cat >"$EXTRA_COMPOSE_FILE" <<'YAML'
 services:
-  openclaw-gateway:
+  deneb-gateway:
     volumes:
 YAML
 
   if [[ -n "$home_volume" ]]; then
     gateway_home_mount="${home_volume}:/home/node"
-    gateway_config_mount="${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw"
-    gateway_workspace_mount="${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace"
+    gateway_config_mount="${DENEB_CONFIG_DIR}:/home/node/.deneb"
+    gateway_workspace_mount="${DENEB_WORKSPACE_DIR}:/home/node/.deneb/workspace"
     validate_mount_spec "$gateway_home_mount"
     validate_mount_spec "$gateway_config_mount"
     validate_mount_spec "$gateway_workspace_mount"
@@ -308,7 +308,7 @@ YAML
   done
 
   cat >>"$EXTRA_COMPOSE_FILE" <<'YAML'
-  openclaw-cli:
+  deneb-cli:
     volumes:
 YAML
 
@@ -335,8 +335,8 @@ YAML
 # When sandbox is requested, ensure Docker CLI build arg is set for local builds.
 # Docker socket mount is deferred until sandbox prerequisites are verified.
 if [[ -n "$SANDBOX_ENABLED" ]]; then
-  if [[ -z "${OPENCLAW_INSTALL_DOCKER_CLI:-}" ]]; then
-    export OPENCLAW_INSTALL_DOCKER_CLI=1
+  if [[ -z "${DENEB_INSTALL_DOCKER_CLI:-}" ]]; then
+    export DENEB_INSTALL_DOCKER_CLI=1
   fi
 fi
 
@@ -411,30 +411,30 @@ upsert_env() {
 }
 
 upsert_env "$ENV_FILE" \
-  OPENCLAW_CONFIG_DIR \
-  OPENCLAW_WORKSPACE_DIR \
-  OPENCLAW_GATEWAY_PORT \
-  OPENCLAW_BRIDGE_PORT \
-  OPENCLAW_GATEWAY_BIND \
-  OPENCLAW_GATEWAY_TOKEN \
-  OPENCLAW_IMAGE \
-  OPENCLAW_EXTRA_MOUNTS \
-  OPENCLAW_HOME_VOLUME \
-  OPENCLAW_DOCKER_APT_PACKAGES \
-  OPENCLAW_EXTENSIONS \
-  OPENCLAW_SANDBOX \
-  OPENCLAW_DOCKER_SOCKET \
+  DENEB_CONFIG_DIR \
+  DENEB_WORKSPACE_DIR \
+  DENEB_GATEWAY_PORT \
+  DENEB_BRIDGE_PORT \
+  DENEB_GATEWAY_BIND \
+  DENEB_GATEWAY_TOKEN \
+  DENEB_IMAGE \
+  DENEB_EXTRA_MOUNTS \
+  DENEB_HOME_VOLUME \
+  DENEB_DOCKER_APT_PACKAGES \
+  DENEB_EXTENSIONS \
+  DENEB_SANDBOX \
+  DENEB_DOCKER_SOCKET \
   DOCKER_GID \
-  OPENCLAW_INSTALL_DOCKER_CLI \
-  OPENCLAW_ALLOW_INSECURE_PRIVATE_WS \
-  OPENCLAW_TZ
+  DENEB_INSTALL_DOCKER_CLI \
+  DENEB_ALLOW_INSECURE_PRIVATE_WS \
+  DENEB_TZ
 
-if [[ "$IMAGE_NAME" == "openclaw:local" ]]; then
+if [[ "$IMAGE_NAME" == "deneb:local" ]]; then
   echo "==> Building Docker image: $IMAGE_NAME"
   docker build \
-    --build-arg "OPENCLAW_DOCKER_APT_PACKAGES=${OPENCLAW_DOCKER_APT_PACKAGES}" \
-    --build-arg "OPENCLAW_EXTENSIONS=${OPENCLAW_EXTENSIONS}" \
-    --build-arg "OPENCLAW_INSTALL_DOCKER_CLI=${OPENCLAW_INSTALL_DOCKER_CLI:-}" \
+    --build-arg "DENEB_DOCKER_APT_PACKAGES=${DENEB_DOCKER_APT_PACKAGES}" \
+    --build-arg "DENEB_EXTENSIONS=${DENEB_EXTENSIONS}" \
+    --build-arg "DENEB_INSTALL_DOCKER_CLI=${DENEB_INSTALL_DOCKER_CLI:-}" \
     -t "$IMAGE_NAME" \
     -f "$ROOT_DIR/Dockerfile" \
     "$ROOT_DIR"
@@ -456,22 +456,22 @@ echo "==> Fixing data-directory permissions"
 # Use -xdev to restrict chown to the config-dir mount only — without it,
 # the recursive chown would cross into the workspace bind mount and rewrite
 # ownership of all user project files on Linux hosts.
-# After fixing the config dir, only the OpenClaw metadata subdirectory
-# (.openclaw/) inside the workspace gets chowned, not the user's project files.
-docker compose "${COMPOSE_ARGS[@]}" run --rm --user root --entrypoint sh openclaw-cli -c \
-  'find /home/node/.openclaw -xdev -exec chown node:node {} +; \
-   [ -d /home/node/.openclaw/workspace/.openclaw ] && chown -R node:node /home/node/.openclaw/workspace/.openclaw || true'
+# After fixing the config dir, only the Deneb metadata subdirectory
+# (.deneb/) inside the workspace gets chowned, not the user's project files.
+docker compose "${COMPOSE_ARGS[@]}" run --rm --user root --entrypoint sh deneb-cli -c \
+  'find /home/node/.deneb -xdev -exec chown node:node {} +; \
+   [ -d /home/node/.deneb/workspace/.deneb ] && chown -R node:node /home/node/.deneb/workspace/.deneb || true'
 
 echo ""
 echo "==> Onboarding (interactive)"
 echo "Docker setup pins Gateway mode to local."
-echo "Gateway runtime bind comes from OPENCLAW_GATEWAY_BIND (default: lan)."
-echo "Current runtime bind: $OPENCLAW_GATEWAY_BIND"
-echo "Gateway token: $OPENCLAW_GATEWAY_TOKEN"
+echo "Gateway runtime bind comes from DENEB_GATEWAY_BIND (default: lan)."
+echo "Current runtime bind: $DENEB_GATEWAY_BIND"
+echo "Gateway token: $DENEB_GATEWAY_TOKEN"
 echo "Tailscale exposure: Off (use host-level tailnet/Tailscale setup separately)."
 echo "Install Gateway daemon: No (managed by Docker Compose)"
 echo ""
-docker compose "${COMPOSE_ARGS[@]}" run --rm openclaw-cli onboard --mode local --no-install-daemon
+docker compose "${COMPOSE_ARGS[@]}" run --rm deneb-cli onboard --mode local --no-install-daemon
 
 echo ""
 echo "==> Docker gateway defaults"
@@ -484,27 +484,27 @@ ensure_control_ui_allowed_origins
 echo ""
 echo "==> Provider setup (optional)"
 echo "WhatsApp (QR):"
-echo "  ${COMPOSE_HINT} run --rm openclaw-cli channels login"
+echo "  ${COMPOSE_HINT} run --rm deneb-cli channels login"
 echo "Telegram (bot token):"
-echo "  ${COMPOSE_HINT} run --rm openclaw-cli channels add --channel telegram --token <token>"
+echo "  ${COMPOSE_HINT} run --rm deneb-cli channels add --channel telegram --token <token>"
 echo "Discord (bot token):"
-echo "  ${COMPOSE_HINT} run --rm openclaw-cli channels add --channel discord --token <token>"
-echo "Docs: https://docs.openclaw.ai/channels"
+echo "  ${COMPOSE_HINT} run --rm deneb-cli channels add --channel discord --token <token>"
+echo "Docs: https://docs.deneb.ai/channels"
 
 echo ""
 echo "==> Starting gateway"
-docker compose "${COMPOSE_ARGS[@]}" up -d openclaw-gateway
+docker compose "${COMPOSE_ARGS[@]}" up -d deneb-gateway
 
-# --- Sandbox setup (opt-in via OPENCLAW_SANDBOX=1) ---
+# --- Sandbox setup (opt-in via DENEB_SANDBOX=1) ---
 if [[ -n "$SANDBOX_ENABLED" ]]; then
   echo ""
   echo "==> Sandbox setup"
 
   # Build sandbox image if Dockerfile.sandbox exists.
   if [[ -f "$ROOT_DIR/Dockerfile.sandbox" ]]; then
-    echo "Building sandbox image: openclaw-sandbox:bookworm-slim"
+    echo "Building sandbox image: deneb-sandbox:bookworm-slim"
     docker build \
-      -t "openclaw-sandbox:bookworm-slim" \
+      -t "deneb-sandbox:bookworm-slim" \
       -f "$ROOT_DIR/Dockerfile.sandbox" \
       "$ROOT_DIR"
   else
@@ -516,10 +516,10 @@ if [[ -n "$SANDBOX_ENABLED" ]]; then
   # Defense-in-depth: verify Docker CLI in the running image before enabling
   # sandbox. This avoids claiming sandbox is enabled when the image cannot
   # launch sandbox containers.
-  if ! docker compose "${COMPOSE_ARGS[@]}" run --rm --entrypoint docker openclaw-gateway --version >/dev/null 2>&1; then
+  if ! docker compose "${COMPOSE_ARGS[@]}" run --rm --entrypoint docker deneb-gateway --version >/dev/null 2>&1; then
     echo "WARNING: Docker CLI not found inside the container image." >&2
-    echo "  Sandbox requires Docker CLI. Rebuild with --build-arg OPENCLAW_INSTALL_DOCKER_CLI=1" >&2
-    echo "  or use a local build (OPENCLAW_IMAGE=openclaw:local). Skipping sandbox setup." >&2
+    echo "  Sandbox requires Docker CLI. Rebuild with --build-arg DENEB_INSTALL_DOCKER_CLI=1" >&2
+    echo "  or use a local build (DENEB_IMAGE=deneb:local). Skipping sandbox setup." >&2
     SANDBOX_ENABLED=""
   fi
 fi
@@ -533,7 +533,7 @@ if [[ -n "$SANDBOX_ENABLED" ]]; then
     SANDBOX_COMPOSE_FILE="$ROOT_DIR/docker-compose.sandbox.yml"
     cat >"$SANDBOX_COMPOSE_FILE" <<YAML
 services:
-  openclaw-gateway:
+  deneb-gateway:
     volumes:
       - ${DOCKER_SOCKET_PATH}:/var/run/docker.sock
 YAML
@@ -546,26 +546,26 @@ YAML
     COMPOSE_ARGS+=("-f" "$SANDBOX_COMPOSE_FILE")
     echo "==> Sandbox: added Docker socket mount"
   else
-    echo "WARNING: OPENCLAW_SANDBOX enabled but Docker socket not found at $DOCKER_SOCKET_PATH." >&2
+    echo "WARNING: DENEB_SANDBOX enabled but Docker socket not found at $DOCKER_SOCKET_PATH." >&2
     echo "  Sandbox requires Docker socket access. Skipping sandbox setup." >&2
     SANDBOX_ENABLED=""
   fi
 fi
 
 if [[ -n "$SANDBOX_ENABLED" ]]; then
-  # Enable sandbox in OpenClaw config.
+  # Enable sandbox in Deneb config.
   sandbox_config_ok=true
-  if ! docker compose "${COMPOSE_ARGS[@]}" run --rm --no-deps openclaw-cli \
+  if ! docker compose "${COMPOSE_ARGS[@]}" run --rm --no-deps deneb-cli \
     config set agents.defaults.sandbox.mode "non-main" >/dev/null; then
     echo "WARNING: Failed to set agents.defaults.sandbox.mode" >&2
     sandbox_config_ok=false
   fi
-  if ! docker compose "${COMPOSE_ARGS[@]}" run --rm --no-deps openclaw-cli \
+  if ! docker compose "${COMPOSE_ARGS[@]}" run --rm --no-deps deneb-cli \
     config set agents.defaults.sandbox.scope "agent" >/dev/null; then
     echo "WARNING: Failed to set agents.defaults.sandbox.scope" >&2
     sandbox_config_ok=false
   fi
-  if ! docker compose "${COMPOSE_ARGS[@]}" run --rm --no-deps openclaw-cli \
+  if ! docker compose "${COMPOSE_ARGS[@]}" run --rm --no-deps deneb-cli \
     config set agents.defaults.sandbox.workspaceAccess "none" >/dev/null; then
     echo "WARNING: Failed to set agents.defaults.sandbox.workspaceAccess" >&2
     sandbox_config_ok=false
@@ -573,13 +573,13 @@ if [[ -n "$SANDBOX_ENABLED" ]]; then
 
   if [[ "$sandbox_config_ok" == true ]]; then
     echo "Sandbox enabled: mode=non-main, scope=agent, workspaceAccess=none"
-    echo "Docs: https://docs.openclaw.ai/gateway/sandboxing"
+    echo "Docs: https://docs.deneb.ai/gateway/sandboxing"
     # Restart gateway with sandbox compose overlay to pick up socket mount + config.
-    docker compose "${COMPOSE_ARGS[@]}" up -d openclaw-gateway
+    docker compose "${COMPOSE_ARGS[@]}" up -d deneb-gateway
   else
     echo "WARNING: Sandbox config was partially applied. Check errors above." >&2
     echo "  Skipping gateway restart to avoid exposing Docker socket without a full sandbox policy." >&2
-    if ! docker compose "${BASE_COMPOSE_ARGS[@]}" run --rm --no-deps openclaw-cli \
+    if ! docker compose "${BASE_COMPOSE_ARGS[@]}" run --rm --no-deps deneb-cli \
       config set agents.defaults.sandbox.mode "off" >/dev/null; then
       echo "WARNING: Failed to roll back agents.defaults.sandbox.mode to off" >&2
     else
@@ -589,13 +589,13 @@ if [[ -n "$SANDBOX_ENABLED" ]]; then
       rm -f "$SANDBOX_COMPOSE_FILE"
     fi
     # Ensure gateway service definition is reset without sandbox overlay mount.
-    docker compose "${BASE_COMPOSE_ARGS[@]}" up -d --force-recreate openclaw-gateway
+    docker compose "${BASE_COMPOSE_ARGS[@]}" up -d --force-recreate deneb-gateway
   fi
 else
   # Keep reruns deterministic: if sandbox is not active for this run, reset
   # persisted sandbox mode so future execs do not require docker.sock by stale
   # config alone.
-  if ! docker compose "${COMPOSE_ARGS[@]}" run --rm openclaw-cli \
+  if ! docker compose "${COMPOSE_ARGS[@]}" run --rm deneb-cli \
     config set agents.defaults.sandbox.mode "off" >/dev/null; then
     echo "WARNING: Failed to reset agents.defaults.sandbox.mode to off" >&2
   fi
@@ -607,10 +607,10 @@ fi
 echo ""
 echo "Gateway running with host port mapping."
 echo "Access from tailnet devices via the host's tailnet IP."
-echo "Config: $OPENCLAW_CONFIG_DIR"
-echo "Workspace: $OPENCLAW_WORKSPACE_DIR"
-echo "Token: $OPENCLAW_GATEWAY_TOKEN"
+echo "Config: $DENEB_CONFIG_DIR"
+echo "Workspace: $DENEB_WORKSPACE_DIR"
+echo "Token: $DENEB_GATEWAY_TOKEN"
 echo ""
 echo "Commands:"
-echo "  ${COMPOSE_HINT} logs -f openclaw-gateway"
-echo "  ${COMPOSE_HINT} exec openclaw-gateway node dist/index.js health --token \"$OPENCLAW_GATEWAY_TOKEN\""
+echo "  ${COMPOSE_HINT} logs -f deneb-gateway"
+echo "  ${COMPOSE_HINT} exec deneb-gateway node dist/index.js health --token \"$DENEB_GATEWAY_TOKEN\""

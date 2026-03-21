@@ -9,11 +9,11 @@ import {
   unlinkSync,
 } from "node:fs";
 import path from "node:path";
-import { resolveSendableOutboundReplyParts } from "openclaw/plugin-sdk/reply-payload";
+import { resolveSendableOutboundReplyParts } from "deneb/plugin-sdk/reply-payload";
 import type { ReplyPayload } from "../auto-reply/types.js";
 import { normalizeChannelId } from "../channels/plugins/index.js";
 import type { ChannelId } from "../channels/plugins/types.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { normalizeResolvedSecretInputString } from "../config/types.secrets.js";
 import type {
   TtsConfig,
@@ -23,7 +23,7 @@ import type {
   TtsModelOverrideConfig,
 } from "../config/types.tts.js";
 import { logVerbose } from "../globals.js";
-import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
+import { resolvePreferredDenebTmpDir } from "../infra/tmp-deneb-dir.js";
 import { CONFIG_DIR, resolveUserPath } from "../utils.js";
 import { stripMarkdown } from "../utils/strip-markdown.js";
 import {
@@ -254,7 +254,7 @@ function resolveModelOverridePolicy(
   };
 }
 
-export function resolveTtsConfig(cfg: OpenClawConfig): ResolvedTtsConfig {
+export function resolveTtsConfig(cfg: DenebConfig): ResolvedTtsConfig {
   const raw: TtsConfig = cfg.messages?.tts ?? {};
   const providerSource = raw.provider ? "config" : "default";
   const rawMicrosoft = { ...raw.edge, ...raw.microsoft };
@@ -330,7 +330,7 @@ export function resolveTtsPrefsPath(config: ResolvedTtsConfig): string {
   if (config.prefsPath?.trim()) {
     return resolveUserPath(config.prefsPath.trim());
   }
-  const envPath = process.env.OPENCLAW_TTS_PREFS?.trim();
+  const envPath = process.env.DENEB_TTS_PREFS?.trim();
   if (envPath) {
     return resolveUserPath(envPath);
   }
@@ -364,7 +364,7 @@ export function resolveTtsAutoMode(params: {
   return params.config.auto;
 }
 
-export function buildTtsSystemPromptHint(cfg: OpenClawConfig): string | undefined {
+export function buildTtsSystemPromptHint(cfg: DenebConfig): string | undefined {
   const config = resolveTtsConfig(cfg);
   const prefsPath = resolveTtsPrefsPath(config);
   const autoMode = resolveTtsAutoMode({ config, prefsPath });
@@ -532,7 +532,7 @@ export function resolveTtsApiKey(
 
 export const TTS_PROVIDERS = ["openai", "elevenlabs", "microsoft"] as const;
 
-export function resolveTtsProviderOrder(primary: TtsProvider, cfg?: OpenClawConfig): TtsProvider[] {
+export function resolveTtsProviderOrder(primary: TtsProvider, cfg?: DenebConfig): TtsProvider[] {
   const normalizedPrimary = normalizeSpeechProviderId(primary) ?? primary;
   const ordered = new Set<TtsProvider>([normalizedPrimary]);
   for (const provider of TTS_PROVIDERS) {
@@ -552,7 +552,7 @@ export function resolveTtsProviderOrder(primary: TtsProvider, cfg?: OpenClawConf
 export function isTtsProviderConfigured(
   config: ResolvedTtsConfig,
   provider: TtsProvider,
-  cfg?: OpenClawConfig,
+  cfg?: DenebConfig,
 ): boolean {
   const resolvedProvider = getSpeechProvider(provider, cfg);
   return resolvedProvider?.isConfigured({ cfg, config }) ?? false;
@@ -575,7 +575,7 @@ function buildTtsFailureResult(errors: string[]): { success: false; error: strin
 
 function resolveReadySpeechProvider(params: {
   provider: TtsProvider;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   config: ResolvedTtsConfig;
   errors: string[];
   requireTelephony?: boolean;
@@ -598,7 +598,7 @@ function resolveReadySpeechProvider(params: {
 
 function resolveTtsRequestSetup(params: {
   text: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   prefsPath?: string;
   providerOverride?: TtsProvider;
 }):
@@ -627,7 +627,7 @@ function resolveTtsRequestSetup(params: {
 
 export async function textToSpeech(params: {
   text: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   prefsPath?: string;
   channel?: string;
   overrides?: TtsDirectiveOverrides;
@@ -669,7 +669,7 @@ export async function textToSpeech(params: {
       });
       const latencyMs = Date.now() - providerStart;
 
-      const tempRoot = resolvePreferredOpenClawTmpDir();
+      const tempRoot = resolvePreferredDenebTmpDir();
       mkdirSync(tempRoot, { recursive: true, mode: 0o700 });
       const tempDir = mkdtempSync(path.join(tempRoot, "tts-"));
       const audioPath = path.join(tempDir, `voice-${Date.now()}${synthesis.fileExtension}`);
@@ -694,7 +694,7 @@ export async function textToSpeech(params: {
 
 export async function textToSpeechTelephony(params: {
   text: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   prefsPath?: string;
 }): Promise<TtsTelephonyResult> {
   const setup = resolveTtsRequestSetup({
@@ -747,7 +747,7 @@ export async function textToSpeechTelephony(params: {
 
 export async function listSpeechVoices(params: {
   provider: string;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   config?: ResolvedTtsConfig;
   apiKey?: string;
   baseUrl?: string;
@@ -777,7 +777,7 @@ export async function listSpeechVoices(params: {
 
 export async function maybeApplyTtsToPayload(params: {
   payload: ReplyPayload;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   channel?: string;
   kind?: "tool" | "block" | "final";
   inboundAudio?: boolean;

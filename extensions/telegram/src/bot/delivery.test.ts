@@ -24,7 +24,7 @@ type DeliverWithParams = Omit<
   Partial<Pick<DeliverRepliesParams, "replyToMode" | "textLimit">>;
 type RuntimeStub = Pick<RuntimeEnv, "error" | "log" | "exit">;
 
-vi.mock("openclaw/plugin-sdk/web-media", () => ({
+vi.mock("deneb/plugin-sdk/web-media", () => ({
   loadWebMedia: (...args: unknown[]) => loadWebMedia(...args),
 }));
 

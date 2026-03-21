@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import type { MemoryIndexManager } from "./index.js";
 import { closeAllMemorySearchManagers } from "./index.js";
 import { createOpenAIEmbeddingProviderMock } from "./test-embeddings-mock.js";
@@ -24,7 +24,7 @@ describe("memory search async sync", () => {
   let indexPath: string;
   let manager: MemoryIndexManager | null = null;
 
-  const buildConfig = (): OpenClawConfig =>
+  const buildConfig = (): DenebConfig =>
     ({
       agents: {
         defaults: {
@@ -40,13 +40,13 @@ describe("memory search async sync", () => {
         },
         list: [{ id: "main", default: true }],
       },
-    }) as OpenClawConfig;
+    }) as DenebConfig;
 
   beforeEach(async () => {
     await closeAllMemorySearchManagers();
     embedBatch.mockClear();
     embedBatch.mockImplementation(async (input: string[]) => input.map(() => [0.2, 0.2, 0.2]));
-    workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-mem-async-"));
+    workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-mem-async-"));
     indexPath = path.join(workspaceDir, "index.sqlite");
     await fs.mkdir(path.join(workspaceDir, "memory"));
     await fs.writeFile(path.join(workspaceDir, "memory", "2026-01-07.md"), "hello\n");

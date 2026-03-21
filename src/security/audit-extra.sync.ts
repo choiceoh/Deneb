@@ -12,7 +12,7 @@ import { isToolAllowedByPolicies } from "../agents/tool-policy-match.js";
 import { resolveToolProfilePolicy } from "../agents/tool-policy.js";
 import { resolveBrowserConfig } from "../browser/config.js";
 import { formatCliCommand } from "../cli/command-format.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import {
   resolveAgentModelFallbackValues,
   resolveAgentModelPrimaryValue,
@@ -41,7 +41,7 @@ const SMALL_MODEL_PARAM_B_MAX = 300;
 // Helpers
 // --------------------------------------------------------------------------
 
-function summarizeGroupPolicy(cfg: OpenClawConfig): {
+function summarizeGroupPolicy(cfg: DenebConfig): {
   open: number;
   allowlist: number;
   other: number;
@@ -86,7 +86,7 @@ function looksLikeEnvRef(value: string): boolean {
   return v.startsWith("${") && v.endsWith("}");
 }
 
-function isGatewayRemotelyExposed(cfg: OpenClawConfig): boolean {
+function isGatewayRemotelyExposed(cfg: DenebConfig): boolean {
   const bind = typeof cfg.gateway?.bind === "string" ? cfg.gateway.bind : "loopback";
   if (bind !== "loopback") {
     return true;
@@ -108,7 +108,7 @@ function addModel(models: ModelRef[], raw: unknown, source: string) {
   models.push({ id, source });
 }
 
-function collectModels(cfg: OpenClawConfig): ModelRef[] {
+function collectModels(cfg: DenebConfig): ModelRef[] {
   const out: ModelRef[] = [];
   addModel(
     out,
@@ -197,8 +197,8 @@ function normalizeNodeCommand(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function listKnownNodeCommands(cfg: OpenClawConfig): Set<string> {
-  const baseCfg: OpenClawConfig = {
+function listKnownNodeCommands(cfg: DenebConfig): Set<string> {
+  const baseCfg: DenebConfig = {
     ...cfg,
     gateway: {
       ...cfg.gateway,
@@ -295,7 +295,7 @@ function suggestKnownNodeCommands(unknown: string, known: Set<string>): string[]
 }
 
 function resolveToolPolicies(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentTools?: AgentToolsConfig;
   sandboxMode?: "off" | "non-main" | "all";
   agentId?: string | null;
@@ -325,14 +325,14 @@ function resolveToolPolicies(params: {
   return policies;
 }
 
-function hasWebSearchKey(cfg: OpenClawConfig, env: NodeJS.ProcessEnv): boolean {
+function hasWebSearchKey(cfg: DenebConfig, env: NodeJS.ProcessEnv): boolean {
   const search = cfg.tools?.web?.search;
   return Boolean(
     search?.apiKey || search?.perplexity?.apiKey || env.BRAVE_API_KEY || env.PERPLEXITY_API_KEY,
   );
 }
 
-function isWebSearchEnabled(cfg: OpenClawConfig, env: NodeJS.ProcessEnv): boolean {
+function isWebSearchEnabled(cfg: DenebConfig, env: NodeJS.ProcessEnv): boolean {
   const enabled = cfg.tools?.web?.search?.enabled;
   if (enabled === false) {
     return false;
@@ -343,7 +343,7 @@ function isWebSearchEnabled(cfg: OpenClawConfig, env: NodeJS.ProcessEnv): boolea
   return hasWebSearchKey(cfg, env);
 }
 
-function isWebFetchEnabled(cfg: OpenClawConfig): boolean {
+function isWebFetchEnabled(cfg: DenebConfig): boolean {
   const enabled = cfg.tools?.web?.fetch?.enabled;
   if (enabled === false) {
     return false;
@@ -351,7 +351,7 @@ function isWebFetchEnabled(cfg: OpenClawConfig): boolean {
   return true;
 }
 
-function isBrowserEnabled(cfg: OpenClawConfig): boolean {
+function isBrowserEnabled(cfg: DenebConfig): boolean {
   try {
     return resolveBrowserConfig(cfg.browser, cfg).enabled;
   } catch {
@@ -359,7 +359,7 @@ function isBrowserEnabled(cfg: OpenClawConfig): boolean {
   }
 }
 
-function listGroupPolicyOpen(cfg: OpenClawConfig): string[] {
+function listGroupPolicyOpen(cfg: DenebConfig): string[] {
   const out: string[] = [];
   const channels = cfg.channels as Record<string, unknown> | undefined;
   if (!channels || typeof channels !== "object") {
@@ -397,7 +397,7 @@ function hasConfiguredGroupTargets(section: Record<string, unknown>): boolean {
   });
 }
 
-function listPotentialMultiUserSignals(cfg: OpenClawConfig): string[] {
+function listPotentialMultiUserSignals(cfg: DenebConfig): string[] {
   const out = new Set<string>();
   const channels = cfg.channels as Record<string, unknown> | undefined;
   if (!channels || typeof channels !== "object") {
@@ -465,7 +465,7 @@ function listPotentialMultiUserSignals(cfg: OpenClawConfig): string[] {
   return Array.from(out);
 }
 
-function collectRiskyToolExposureContexts(cfg: OpenClawConfig): {
+function collectRiskyToolExposureContexts(cfg: DenebConfig): {
   riskyContexts: string[];
   hasRuntimeRisk: boolean;
 } {
@@ -524,7 +524,7 @@ function collectRiskyToolExposureContexts(cfg: OpenClawConfig): {
 // Exported collectors
 // --------------------------------------------------------------------------
 
-export function collectAttackSurfaceSummaryFindings(cfg: OpenClawConfig): SecurityAuditFinding[] {
+export function collectAttackSurfaceSummaryFindings(cfg: DenebConfig): SecurityAuditFinding[] {
   const group = summarizeGroupPolicy(cfg);
   const elevated = cfg.tools?.elevated?.enabled !== false;
   const webhooksEnabled = cfg.hooks?.enabled === true;
@@ -565,13 +565,13 @@ export function collectSyncedFolderFindings(params: {
       severity: "warn",
       title: "State/config path looks like a synced folder",
       detail: `stateDir=${params.stateDir}, configPath=${params.configPath}. Synced folders (iCloud/Dropbox/OneDrive/Google Drive) can leak tokens and transcripts onto other devices.`,
-      remediation: `Keep OPENCLAW_STATE_DIR on a local-only volume and re-run "${formatCliCommand("openclaw security audit --fix")}".`,
+      remediation: `Keep DENEB_STATE_DIR on a local-only volume and re-run "${formatCliCommand("deneb security audit --fix")}".`,
     });
   }
   return findings;
 }
 
-export function collectSecretsInConfigFindings(cfg: OpenClawConfig): SecurityAuditFinding[] {
+export function collectSecretsInConfigFindings(cfg: DenebConfig): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
   const password =
     typeof cfg.gateway?.auth?.password === "string" ? cfg.gateway.auth.password.trim() : "";
@@ -583,7 +583,7 @@ export function collectSecretsInConfigFindings(cfg: OpenClawConfig): SecurityAud
       detail:
         "gateway.auth.password is set in the config file; prefer environment variables for secrets when possible.",
       remediation:
-        "Prefer OPENCLAW_GATEWAY_PASSWORD (env) and remove gateway.auth.password from disk.",
+        "Prefer DENEB_GATEWAY_PASSWORD (env) and remove gateway.auth.password from disk.",
     });
   }
 
@@ -602,7 +602,7 @@ export function collectSecretsInConfigFindings(cfg: OpenClawConfig): SecurityAud
 }
 
 export function collectHooksHardeningFindings(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   env: NodeJS.ProcessEnv = process.env,
 ): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
@@ -625,17 +625,17 @@ export function collectHooksHardeningFindings(
     tailscaleMode: cfg.gateway?.tailscale?.mode ?? "off",
     env,
   });
-  const openclawGatewayToken =
-    typeof env.OPENCLAW_GATEWAY_TOKEN === "string" && env.OPENCLAW_GATEWAY_TOKEN.trim()
-      ? env.OPENCLAW_GATEWAY_TOKEN.trim()
+  const denebGatewayToken =
+    typeof env.DENEB_GATEWAY_TOKEN === "string" && env.DENEB_GATEWAY_TOKEN.trim()
+      ? env.DENEB_GATEWAY_TOKEN.trim()
       : null;
   const gatewayToken =
     gatewayAuth.mode === "token" &&
     typeof gatewayAuth.token === "string" &&
     gatewayAuth.token.trim()
       ? gatewayAuth.token.trim()
-      : openclawGatewayToken
-        ? openclawGatewayToken
+      : denebGatewayToken
+        ? denebGatewayToken
         : null;
   if (token && gatewayToken && token === gatewayToken) {
     findings.push({
@@ -721,7 +721,7 @@ export function collectHooksHardeningFindings(
 }
 
 export function collectGatewayHttpSessionKeyOverrideFindings(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
 ): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
   const chatCompletionsEnabled = cfg.gateway?.http?.endpoints?.chatCompletions?.enabled === true;
@@ -740,7 +740,7 @@ export function collectGatewayHttpSessionKeyOverrideFindings(
     severity: "info",
     title: "HTTP API session-key override is enabled",
     detail:
-      `${enabledEndpoints.join(", ")} accept x-openclaw-session-key for per-request session routing. ` +
+      `${enabledEndpoints.join(", ")} accept x-deneb-session-key for per-request session routing. ` +
       "Treat API credential holders as trusted principals.",
   });
 
@@ -748,7 +748,7 @@ export function collectGatewayHttpSessionKeyOverrideFindings(
 }
 
 export function collectGatewayHttpNoAuthFindings(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   env: NodeJS.ProcessEnv,
 ): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
@@ -781,7 +781,7 @@ export function collectGatewayHttpNoAuthFindings(
   return findings;
 }
 
-export function collectSandboxDockerNoopFindings(cfg: OpenClawConfig): SecurityAuditFinding[] {
+export function collectSandboxDockerNoopFindings(cfg: DenebConfig): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
   const configuredPaths: string[] = [];
   const agents = Array.isArray(cfg.agents?.list) ? cfg.agents.list : [];
@@ -831,7 +831,7 @@ export function collectSandboxDockerNoopFindings(cfg: OpenClawConfig): SecurityA
   return findings;
 }
 
-export function collectSandboxDangerousConfigFindings(cfg: OpenClawConfig): SecurityAuditFinding[] {
+export function collectSandboxDangerousConfigFindings(cfg: DenebConfig): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
   const agents = Array.isArray(cfg.agents?.list) ? cfg.agents.list : [];
 
@@ -971,7 +971,7 @@ export function collectSandboxDangerousConfigFindings(cfg: OpenClawConfig): Secu
         "These sandbox browser configs use Docker bridge networking with no CDP source restriction:\n" +
         browserExposurePaths.map((entry) => `- ${entry}`).join("\n"),
       remediation:
-        "Set sandbox.browser.network to a dedicated bridge network (recommended default: openclaw-sandbox-browser), " +
+        "Set sandbox.browser.network to a dedicated bridge network (recommended default: deneb-sandbox-browser), " +
         "or set sandbox.browser.cdpSourceRange (for example 172.21.0.1/32) to restrict container-edge CDP ingress.",
     });
   }
@@ -979,7 +979,7 @@ export function collectSandboxDangerousConfigFindings(cfg: OpenClawConfig): Secu
   return findings;
 }
 
-export function collectNodeDenyCommandPatternFindings(cfg: OpenClawConfig): SecurityAuditFinding[] {
+export function collectNodeDenyCommandPatternFindings(cfg: DenebConfig): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
   const denyListRaw = cfg.gateway?.nodes?.denyCommands;
   if (!Array.isArray(denyListRaw) || denyListRaw.length === 0) {
@@ -1037,7 +1037,7 @@ export function collectNodeDenyCommandPatternFindings(cfg: OpenClawConfig): Secu
 }
 
 export function collectNodeDangerousAllowCommandFindings(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
 ): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
   const allowRaw = cfg.gateway?.nodes?.allowCommands;
@@ -1073,7 +1073,7 @@ export function collectNodeDangerousAllowCommandFindings(
   return findings;
 }
 
-export function collectMinimalProfileOverrideFindings(cfg: OpenClawConfig): SecurityAuditFinding[] {
+export function collectMinimalProfileOverrideFindings(cfg: DenebConfig): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
   if (cfg.tools?.profile !== "minimal") {
     return findings;
@@ -1109,7 +1109,7 @@ export function collectMinimalProfileOverrideFindings(cfg: OpenClawConfig): Secu
   return findings;
 }
 
-export function collectModelHygieneFindings(cfg: OpenClawConfig): SecurityAuditFinding[] {
+export function collectModelHygieneFindings(cfg: DenebConfig): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
   const models = collectModels(cfg);
   if (models.length === 0) {
@@ -1195,7 +1195,7 @@ export function collectModelHygieneFindings(cfg: OpenClawConfig): SecurityAuditF
 }
 
 export function collectSmallModelRiskFindings(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   env: NodeJS.ProcessEnv;
 }): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
@@ -1289,7 +1289,7 @@ export function collectSmallModelRiskFindings(params: {
   return findings;
 }
 
-export function collectExposureMatrixFindings(cfg: OpenClawConfig): SecurityAuditFinding[] {
+export function collectExposureMatrixFindings(cfg: DenebConfig): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
   const openGroups = listGroupPolicyOpen(cfg);
   if (openGroups.length === 0) {
@@ -1328,7 +1328,7 @@ export function collectExposureMatrixFindings(cfg: OpenClawConfig): SecurityAudi
   return findings;
 }
 
-export function collectLikelyMultiUserSetupFindings(cfg: OpenClawConfig): SecurityAuditFinding[] {
+export function collectLikelyMultiUserSetupFindings(cfg: DenebConfig): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
   const signals = listPotentialMultiUserSignals(cfg);
   if (signals.length === 0) {
@@ -1352,7 +1352,7 @@ export function collectLikelyMultiUserSetupFindings(cfg: OpenClawConfig): Securi
       "Heuristic signals indicate this gateway may be reachable by multiple users:\n" +
       signals.map((signal) => `- ${signal}`).join("\n") +
       `\n${impactLine}\n${riskyContextsDetail}\n` +
-      "OpenClaw's default security model is personal-assistant (one trusted operator boundary), not hostile multi-tenant isolation on one shared gateway.",
+      "Deneb's default security model is personal-assistant (one trusted operator boundary), not hostile multi-tenant isolation on one shared gateway.",
     remediation:
       'If users may be mutually untrusted, split trust boundaries (separate gateways + credentials, ideally separate OS users/hosts). If you intentionally run shared-user access, set agents.defaults.sandbox.mode="all", keep tools.fs.workspaceOnly=true, deny runtime/fs/web tools unless required, and keep personal/private identities + credentials off that runtime.',
   });

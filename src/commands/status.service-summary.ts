@@ -5,7 +5,7 @@ export type ServiceStatusSummary = {
   label: string;
   installed: boolean | null;
   loaded: boolean;
-  managedByOpenClaw: boolean;
+  managedByDeneb: boolean;
   externallyManaged: boolean;
   loadedText: string;
   runtime: GatewayServiceRuntime | undefined;
@@ -27,9 +27,9 @@ export async function readServiceStatusSummary(
       service.isLoaded({ env: serviceEnv }).catch(() => false),
       service.readRuntime(serviceEnv).catch(() => undefined),
     ]);
-    const managedByOpenClaw = command != null;
-    const externallyManaged = !managedByOpenClaw && runtime?.status === "running";
-    const installed = managedByOpenClaw || externallyManaged;
+    const managedByDeneb = command != null;
+    const externallyManaged = !managedByDeneb && runtime?.status === "running";
+    const installed = managedByDeneb || externallyManaged;
     const loadedText = externallyManaged
       ? "running (externally managed)"
       : loaded
@@ -39,7 +39,7 @@ export async function readServiceStatusSummary(
       label: service.label,
       installed,
       loaded,
-      managedByOpenClaw,
+      managedByDeneb,
       externallyManaged,
       loadedText,
       runtime,
@@ -49,7 +49,7 @@ export async function readServiceStatusSummary(
       label: fallbackLabel,
       installed: null,
       loaded: false,
-      managedByOpenClaw: false,
+      managedByDeneb: false,
       externallyManaged: false,
       loadedText: "unknown",
       runtime: undefined,

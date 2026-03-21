@@ -1,5 +1,5 @@
 ---
-summary: "OpenClaw plugins/extensions: discovery, config, and safety"
+summary: "Deneb plugins/extensions: discovery, config, and safety"
 read_when:
   - Adding or modifying plugins/extensions
   - Documenting plugin install or load rules
@@ -13,22 +13,22 @@ title: "Plugins"
 
 A plugin is either:
 
-- a native **OpenClaw plugin** (`openclaw.plugin.json` + runtime module), or
+- a native **Deneb plugin** (`deneb.plugin.json` + runtime module), or
 - a compatible **bundle** (`.codex-plugin/plugin.json` or `.claude-plugin/plugin.json`)
 
-Both show up under `openclaw plugins`, but only native OpenClaw plugins execute
+Both show up under `deneb plugins`, but only native Deneb plugins execute
 runtime code in-process.
 
 1. See what is already loaded:
 
 ```bash
-openclaw plugins list
+deneb plugins list
 ```
 
 2. Install an official plugin (example: Voice Call):
 
 ```bash
-openclaw plugins install @openclaw/voice-call
+deneb plugins install @deneb/voice-call
 ```
 
 Npm specs are registry-only. See [install rules](/cli/plugins#install) for
@@ -43,19 +43,19 @@ Need the bundle compatibility details? See [Plugin bundles](/plugins/bundles).
 For compatible bundles, install from a local directory or archive:
 
 ```bash
-openclaw plugins install ./my-bundle
-openclaw plugins install ./my-bundle.tgz
+deneb plugins install ./my-bundle
+deneb plugins install ./my-bundle.tgz
 ```
 
 For Claude marketplace installs, list the marketplace first, then install by
 marketplace entry name:
 
 ```bash
-openclaw plugins marketplace list <marketplace-name>
-openclaw plugins install <plugin-name>@<marketplace-name>
+deneb plugins marketplace list <marketplace-name>
+deneb plugins install <plugin-name>@<marketplace-name>
 ```
 
-OpenClaw resolves known Claude marketplace names from
+Deneb resolves known Claude marketplace names from
 `~/.claude/plugins/known_marketplaces.json`. You can also pass an explicit
 marketplace source with `--marketplace`.
 
@@ -63,28 +63,28 @@ marketplace source with `--marketplace`.
 
 ### Installable plugins
 
-These are published to npm and installed with `openclaw plugins install`:
+These are published to npm and installed with `deneb plugins install`:
 
 | Plugin          | Package                | Docs                               |
 | --------------- | ---------------------- | ---------------------------------- |
-| Matrix          | `@openclaw/matrix`     | [Matrix](/channels/matrix)         |
-| Microsoft Teams | `@openclaw/msteams`    | [MS Teams](/channels/msteams)      |
-| Nostr           | `@openclaw/nostr`      | [Nostr](/channels/nostr)           |
-| Voice Call      | `@openclaw/voice-call` | [Voice Call](/plugins/voice-call)  |
-| Zalo            | `@openclaw/zalo`       | [Zalo](/channels/zalo)             |
-| Zalo Personal   | `@openclaw/zalouser`   | [Zalo Personal](/plugins/zalouser) |
+| Matrix          | `@deneb/matrix`     | [Matrix](/channels/matrix)         |
+| Microsoft Teams | `@deneb/msteams`    | [MS Teams](/channels/msteams)      |
+| Nostr           | `@deneb/nostr`      | [Nostr](/channels/nostr)           |
+| Voice Call      | `@deneb/voice-call` | [Voice Call](/plugins/voice-call)  |
+| Zalo            | `@deneb/zalo`       | [Zalo](/channels/zalo)             |
+| Zalo Personal   | `@deneb/zalouser`   | [Zalo Personal](/plugins/zalouser) |
 
 Microsoft Teams is plugin-only as of 2026.1.15.
 
 Packaged installs also ship install-on-demand metadata for heavyweight official
 plugins. Today that includes WhatsApp and `memory-lancedb`: onboarding,
-`openclaw channels add`, `openclaw channels login --channel whatsapp`, and
+`deneb channels add`, `deneb channels login --channel whatsapp`, and
 other channel setup flows prompt to install them when first used instead of
 shipping their full runtime trees inside the main npm tarball.
 
 ### Bundled plugins
 
-These ship with OpenClaw and are enabled by default unless noted.
+These ship with Deneb and are enabled by default unless noted.
 
 **Memory:**
 
@@ -105,7 +105,7 @@ These ship with OpenClaw and are enabled by default unless noted.
 
 ## Compatible bundles
 
-OpenClaw also recognizes compatible external bundle layouts:
+Deneb also recognizes compatible external bundle layouts:
 
 - Codex-style bundles: `.codex-plugin/plugin.json`
 - Claude-style bundles: `.claude-plugin/plugin.json` or the default Claude
@@ -152,8 +152,8 @@ Validation rules (strict):
 - Unknown `channels.<id>` keys are **errors** unless a plugin manifest declares
   the channel id.
 - Native plugin config is validated using the JSON Schema embedded in
-  `openclaw.plugin.json` (`configSchema`).
-- Compatible bundles currently do not expose native OpenClaw config schemas.
+  `deneb.plugin.json` (`configSchema`).
+- Compatible bundles currently do not expose native Deneb config schemas.
 - If a plugin is disabled, its config is preserved and a **warning** is emitted.
 
 ### Disabled vs missing vs invalid
@@ -164,12 +164,12 @@ These states are intentionally different:
 - **missing**: config references a plugin id that discovery did not find
 - **invalid**: plugin exists, but its config does not match the declared schema
 
-OpenClaw preserves config for disabled plugins so toggling them back on is not
+Deneb preserves config for disabled plugins so toggling them back on is not
 destructive.
 
 ## Discovery and precedence
 
-OpenClaw scans, in order:
+Deneb scans, in order:
 
 1. Config paths
 
@@ -177,24 +177,24 @@ OpenClaw scans, in order:
 
 2. Workspace extensions
 
-- `<workspace>/.openclaw/extensions/*.ts`
-- `<workspace>/.openclaw/extensions/*/index.ts`
+- `<workspace>/.deneb/extensions/*.ts`
+- `<workspace>/.deneb/extensions/*/index.ts`
 
 3. Global extensions
 
-- `~/.openclaw/extensions/*.ts`
-- `~/.openclaw/extensions/*/index.ts`
+- `~/.deneb/extensions/*.ts`
+- `~/.deneb/extensions/*/index.ts`
 
-4. Bundled extensions (shipped with OpenClaw; mixed default-on/default-off)
+4. Bundled extensions (shipped with Deneb; mixed default-on/default-off)
 
-- `<openclaw>/dist/extensions/*` in packaged installs
+- `<deneb>/dist/extensions/*` in packaged installs
 - `<workspace>/dist-runtime/extensions/*` in local built checkouts
 - `<workspace>/extensions/*` in source/Vitest workflows
 
 Many bundled provider plugins are enabled by default so model catalogs/runtime
 hooks stay available without extra setup. Others still require explicit
 enablement via `plugins.entries.<id>.enabled` or
-`openclaw plugins enable <id>`.
+`deneb plugins enable <id>`.
 
 Bundled plugin runtime dependencies are owned by each plugin package. Packaged
 builds stage opted-in bundled dependencies under
@@ -261,43 +261,43 @@ Default plugin ids:
 - Package packs: `package.json` `name`
 - Standalone file: file base name (`~/.../voice-call.ts` -> `voice-call`)
 
-If a plugin exports `id`, OpenClaw uses it but warns when it does not match the
+If a plugin exports `id`, Deneb uses it but warns when it does not match the
 configured id.
 
 ## Inspection
 
 ```bash
-openclaw plugins inspect openai        # deep detail on one plugin
-openclaw plugins inspect openai --json # machine-readable
-openclaw plugins list                  # compact inventory
-openclaw plugins status                # operational summary
-openclaw plugins doctor                # issue-focused diagnostics
+deneb plugins inspect openai        # deep detail on one plugin
+deneb plugins inspect openai --json # machine-readable
+deneb plugins list                  # compact inventory
+deneb plugins status                # operational summary
+deneb plugins doctor                # issue-focused diagnostics
 ```
 
 ## CLI
 
 ```bash
-openclaw plugins list
-openclaw plugins inspect <id>
-openclaw plugins install <path>                 # copy a local file/dir into ~/.openclaw/extensions/<id>
-openclaw plugins install ./extensions/voice-call # relative path ok
-openclaw plugins install ./plugin.tgz           # install from a local tarball
-openclaw plugins install ./plugin.zip           # install from a local zip
-openclaw plugins install -l ./extensions/voice-call # link (no copy) for dev
-openclaw plugins install @openclaw/voice-call   # install from npm
-openclaw plugins install @openclaw/voice-call --pin # store exact resolved name@version
-openclaw plugins update <id>
-openclaw plugins update --all
-openclaw plugins enable <id>
-openclaw plugins disable <id>
-openclaw plugins doctor
+deneb plugins list
+deneb plugins inspect <id>
+deneb plugins install <path>                 # copy a local file/dir into ~/.deneb/extensions/<id>
+deneb plugins install ./extensions/voice-call # relative path ok
+deneb plugins install ./plugin.tgz           # install from a local tarball
+deneb plugins install ./plugin.zip           # install from a local zip
+deneb plugins install -l ./extensions/voice-call # link (no copy) for dev
+deneb plugins install @deneb/voice-call   # install from npm
+deneb plugins install @deneb/voice-call --pin # store exact resolved name@version
+deneb plugins update <id>
+deneb plugins update --all
+deneb plugins enable <id>
+deneb plugins disable <id>
+deneb plugins doctor
 ```
 
-See [`openclaw plugins` CLI reference](/cli/plugins) for full details on each
+See [`deneb plugins` CLI reference](/cli/plugins) for full details on each
 command (install rules, inspect output, marketplace installs, uninstall).
 
 Plugins may also register their own top-level commands (example:
-`openclaw voicecall`).
+`deneb voicecall`).
 
 ## Plugin API (overview)
 

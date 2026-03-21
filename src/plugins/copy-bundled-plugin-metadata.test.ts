@@ -37,7 +37,7 @@ describe("rewritePackageExtensions", () => {
 
 describe("copyBundledPluginMetadata", () => {
   it("copies plugin manifests, package metadata, and local skill directories", () => {
-    const repoRoot = makeRepoRoot("openclaw-bundled-plugin-meta-");
+    const repoRoot = makeRepoRoot("deneb-bundled-plugin-meta-");
     const pluginDir = path.join(repoRoot, "extensions", "acpx");
     fs.mkdirSync(path.join(pluginDir, "skills", "acp-router"), { recursive: true });
     fs.writeFileSync(
@@ -45,20 +45,20 @@ describe("copyBundledPluginMetadata", () => {
       "# ACP Router\n",
       "utf8",
     );
-    writeJson(path.join(pluginDir, "openclaw.plugin.json"), {
+    writeJson(path.join(pluginDir, "deneb.plugin.json"), {
       id: "acpx",
       configSchema: { type: "object" },
       skills: ["./skills"],
     });
     writeJson(path.join(pluginDir, "package.json"), {
-      name: "@openclaw/acpx",
-      openclaw: { extensions: ["./index.ts"] },
+      name: "@deneb/acpx",
+      deneb: { extensions: ["./index.ts"] },
     });
 
     copyBundledPluginMetadata({ repoRoot });
 
     expect(
-      fs.existsSync(path.join(repoRoot, "dist", "extensions", "acpx", "openclaw.plugin.json")),
+      fs.existsSync(path.join(repoRoot, "dist", "extensions", "acpx", "deneb.plugin.json")),
     ).toBe(true);
     expect(
       fs.readFileSync(
@@ -68,19 +68,19 @@ describe("copyBundledPluginMetadata", () => {
     ).toContain("ACP Router");
     const bundledManifest = JSON.parse(
       fs.readFileSync(
-        path.join(repoRoot, "dist", "extensions", "acpx", "openclaw.plugin.json"),
+        path.join(repoRoot, "dist", "extensions", "acpx", "deneb.plugin.json"),
         "utf8",
       ),
     ) as { skills?: string[] };
     expect(bundledManifest.skills).toEqual(["./skills"]);
     const packageJson = JSON.parse(
       fs.readFileSync(path.join(repoRoot, "dist", "extensions", "acpx", "package.json"), "utf8"),
-    ) as { openclaw?: { extensions?: string[] } };
-    expect(packageJson.openclaw?.extensions).toEqual(["./index.js"]);
+    ) as { deneb?: { extensions?: string[] } };
+    expect(packageJson.deneb?.extensions).toEqual(["./index.js"]);
   });
 
   it("relocates node_modules-backed skill paths into bundled-skills and rewrites the manifest", () => {
-    const repoRoot = makeRepoRoot("openclaw-bundled-plugin-node-modules-");
+    const repoRoot = makeRepoRoot("deneb-bundled-plugin-node-modules-");
     const pluginDir = path.join(repoRoot, "extensions", "tlon");
     const storeSkillDir = path.join(
       repoRoot,
@@ -105,14 +105,14 @@ describe("copyBundledPluginMetadata", () => {
       path.join(pluginDir, "node_modules", "@tloncorp", "tlon-skill"),
       process.platform === "win32" ? "junction" : "dir",
     );
-    writeJson(path.join(pluginDir, "openclaw.plugin.json"), {
+    writeJson(path.join(pluginDir, "deneb.plugin.json"), {
       id: "tlon",
       configSchema: { type: "object" },
       skills: ["node_modules/@tloncorp/tlon-skill"],
     });
     writeJson(path.join(pluginDir, "package.json"), {
-      name: "@openclaw/tlon",
-      openclaw: { extensions: ["./index.ts"] },
+      name: "@deneb/tlon",
+      deneb: { extensions: ["./index.ts"] },
     });
     const staleNodeModulesSkillDir = path.join(
       repoRoot,
@@ -145,7 +145,7 @@ describe("copyBundledPluginMetadata", () => {
     );
     const bundledManifest = JSON.parse(
       fs.readFileSync(
-        path.join(repoRoot, "dist", "extensions", "tlon", "openclaw.plugin.json"),
+        path.join(repoRoot, "dist", "extensions", "tlon", "deneb.plugin.json"),
         "utf8",
       ),
     ) as { skills?: string[] };
@@ -153,20 +153,20 @@ describe("copyBundledPluginMetadata", () => {
   });
 
   it("falls back to repo-root hoisted node_modules skill paths", () => {
-    const repoRoot = makeRepoRoot("openclaw-bundled-plugin-hoisted-skill-");
+    const repoRoot = makeRepoRoot("deneb-bundled-plugin-hoisted-skill-");
     const pluginDir = path.join(repoRoot, "extensions", "tlon");
     const hoistedSkillDir = path.join(repoRoot, "node_modules", "@tloncorp", "tlon-skill");
     fs.mkdirSync(hoistedSkillDir, { recursive: true });
     fs.writeFileSync(path.join(hoistedSkillDir, "SKILL.md"), "# Hoisted Tlon Skill\n", "utf8");
     fs.mkdirSync(pluginDir, { recursive: true });
-    writeJson(path.join(pluginDir, "openclaw.plugin.json"), {
+    writeJson(path.join(pluginDir, "deneb.plugin.json"), {
       id: "tlon",
       configSchema: { type: "object" },
       skills: ["node_modules/@tloncorp/tlon-skill"],
     });
     writeJson(path.join(pluginDir, "package.json"), {
-      name: "@openclaw/tlon",
-      openclaw: { extensions: ["./index.ts"] },
+      name: "@deneb/tlon",
+      deneb: { extensions: ["./index.ts"] },
     });
 
     copyBundledPluginMetadata({ repoRoot });
@@ -188,7 +188,7 @@ describe("copyBundledPluginMetadata", () => {
     ).toContain("Hoisted Tlon Skill");
     const bundledManifest = JSON.parse(
       fs.readFileSync(
-        path.join(repoRoot, "dist", "extensions", "tlon", "openclaw.plugin.json"),
+        path.join(repoRoot, "dist", "extensions", "tlon", "deneb.plugin.json"),
         "utf8",
       ),
     ) as { skills?: string[] };
@@ -196,17 +196,17 @@ describe("copyBundledPluginMetadata", () => {
   });
 
   it("omits missing declared skill paths and removes stale generated outputs", () => {
-    const repoRoot = makeRepoRoot("openclaw-bundled-plugin-missing-skill-");
+    const repoRoot = makeRepoRoot("deneb-bundled-plugin-missing-skill-");
     const pluginDir = path.join(repoRoot, "extensions", "tlon");
     fs.mkdirSync(pluginDir, { recursive: true });
-    writeJson(path.join(pluginDir, "openclaw.plugin.json"), {
+    writeJson(path.join(pluginDir, "deneb.plugin.json"), {
       id: "tlon",
       configSchema: { type: "object" },
       skills: ["node_modules/@tloncorp/tlon-skill"],
     });
     writeJson(path.join(pluginDir, "package.json"), {
-      name: "@openclaw/tlon",
-      openclaw: { extensions: ["./index.ts"] },
+      name: "@deneb/tlon",
+      deneb: { extensions: ["./index.ts"] },
     });
     const staleBundledSkillDir = path.join(
       repoRoot,
@@ -226,7 +226,7 @@ describe("copyBundledPluginMetadata", () => {
 
     const bundledManifest = JSON.parse(
       fs.readFileSync(
-        path.join(repoRoot, "dist", "extensions", "tlon", "openclaw.plugin.json"),
+        path.join(repoRoot, "dist", "extensions", "tlon", "deneb.plugin.json"),
         "utf8",
       ),
     ) as { skills?: string[] };
@@ -238,18 +238,18 @@ describe("copyBundledPluginMetadata", () => {
   });
 
   it("retries transient skill copy races from concurrent runtime postbuilds", () => {
-    const repoRoot = makeRepoRoot("openclaw-bundled-plugin-retry-");
+    const repoRoot = makeRepoRoot("deneb-bundled-plugin-retry-");
     const pluginDir = path.join(repoRoot, "extensions", "diffs");
     fs.mkdirSync(path.join(pluginDir, "skills", "diffs"), { recursive: true });
     fs.writeFileSync(path.join(pluginDir, "skills", "diffs", "SKILL.md"), "# Diffs\n", "utf8");
-    writeJson(path.join(pluginDir, "openclaw.plugin.json"), {
+    writeJson(path.join(pluginDir, "deneb.plugin.json"), {
       id: "diffs",
       configSchema: { type: "object" },
       skills: ["./skills"],
     });
     writeJson(path.join(pluginDir, "package.json"), {
-      name: "@openclaw/diffs",
-      openclaw: { extensions: ["./index.ts"] },
+      name: "@deneb/diffs",
+      deneb: { extensions: ["./index.ts"] },
     });
 
     const realCpSync = fs.cpSync.bind(fs);
@@ -279,7 +279,7 @@ describe("copyBundledPluginMetadata", () => {
   });
 
   it("removes generated outputs for plugins no longer present in source", () => {
-    const repoRoot = makeRepoRoot("openclaw-bundled-plugin-removed-");
+    const repoRoot = makeRepoRoot("deneb-bundled-plugin-removed-");
     const staleBundledSkillDir = path.join(
       repoRoot,
       "dist",
@@ -304,13 +304,13 @@ describe("copyBundledPluginMetadata", () => {
       "export default {}\n",
       "utf8",
     );
-    writeJson(path.join(repoRoot, "dist", "extensions", "removed-plugin", "openclaw.plugin.json"), {
+    writeJson(path.join(repoRoot, "dist", "extensions", "removed-plugin", "deneb.plugin.json"), {
       id: "removed-plugin",
       configSchema: { type: "object" },
       skills: ["./bundled-skills/@scope/skill"],
     });
     writeJson(path.join(repoRoot, "dist", "extensions", "removed-plugin", "package.json"), {
-      name: "@openclaw/removed-plugin",
+      name: "@deneb/removed-plugin",
     });
     fs.mkdirSync(path.join(repoRoot, "extensions"), { recursive: true });
 
@@ -320,18 +320,18 @@ describe("copyBundledPluginMetadata", () => {
   });
 
   it("removes stale dist outputs when a source extension directory no longer has a manifest", () => {
-    const repoRoot = makeRepoRoot("openclaw-bundled-plugin-manifestless-source-");
+    const repoRoot = makeRepoRoot("deneb-bundled-plugin-manifestless-source-");
     const sourcePluginDir = path.join(repoRoot, "extensions", "google-gemini-cli-auth");
     fs.mkdirSync(path.join(sourcePluginDir, "node_modules"), { recursive: true });
     const staleDistDir = path.join(repoRoot, "dist", "extensions", "google-gemini-cli-auth");
     fs.mkdirSync(staleDistDir, { recursive: true });
     fs.writeFileSync(path.join(staleDistDir, "index.js"), "export default {}\n", "utf8");
-    writeJson(path.join(staleDistDir, "openclaw.plugin.json"), {
+    writeJson(path.join(staleDistDir, "deneb.plugin.json"), {
       id: "google-gemini-cli-auth",
       configSchema: { type: "object" },
     });
     writeJson(path.join(staleDistDir, "package.json"), {
-      name: "@openclaw/google-gemini-cli-auth",
+      name: "@deneb/google-gemini-cli-auth",
     });
 
     copyBundledPluginMetadata({ repoRoot });

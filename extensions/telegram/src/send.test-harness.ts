@@ -1,4 +1,4 @@
-import type { MockFn } from "openclaw/plugin-sdk/testing";
+import type { MockFn } from "deneb/plugin-sdk/testing";
 import { beforeEach, vi } from "vitest";
 
 const { botApi, botCtorSpy } = vi.hoisted(() => ({
@@ -44,7 +44,7 @@ type TelegramSendTestMocks = {
   maybePersistResolvedTelegramTarget: MockFn;
 };
 
-vi.mock("openclaw/plugin-sdk/web-media", () => ({
+vi.mock("deneb/plugin-sdk/web-media", () => ({
   loadWebMedia,
 }));
 
@@ -72,8 +72,8 @@ vi.mock("grammy", () => ({
   InputFile: class {},
 }));
 
-vi.mock("openclaw/plugin-sdk/config-runtime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/config-runtime")>();
+vi.mock("deneb/plugin-sdk/config-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("deneb/plugin-sdk/config-runtime")>();
   return {
     ...actual,
     loadConfig,

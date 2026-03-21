@@ -1,18 +1,18 @@
 import { readConfigFileSnapshot, writeConfigFile } from "./io.js";
-import type { OpenClawConfig } from "./types.openclaw.js";
+import type { DenebConfig } from "./types.deneb.js";
 import { validateConfigObjectWithPlugins } from "./validation.js";
 
 export type ConfigMcpServers = Record<string, Record<string, unknown>>;
 
 type ConfigMcpReadResult =
-  | { ok: true; path: string; config: OpenClawConfig; mcpServers: ConfigMcpServers }
+  | { ok: true; path: string; config: DenebConfig; mcpServers: ConfigMcpServers }
   | { ok: false; path: string; error: string };
 
 type ConfigMcpWriteResult =
   | {
       ok: true;
       path: string;
-      config: OpenClawConfig;
+      config: DenebConfig;
       mcpServers: ConfigMcpServers;
       removed?: boolean;
     }

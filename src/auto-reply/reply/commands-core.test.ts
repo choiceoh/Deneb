@@ -37,7 +37,7 @@ describe("emitResetCommandHooks", () => {
       previousSessionEntry: {
         sessionId: "prev-session",
       } as HandleCommandsParams["previousSessionEntry"],
-      workspaceDir: "/tmp/openclaw-workspace",
+      workspaceDir: "/tmp/deneb-workspace",
     });
 
     await vi.waitFor(() => expect(hookRunnerMocks.runBeforeReset).toHaveBeenCalledTimes(1));
@@ -62,7 +62,7 @@ describe("emitResetCommandHooks", () => {
       agentId: "navi",
       sessionKey: "agent:navi:main",
       sessionId: "prev-session",
-      workspaceDir: "/tmp/openclaw-workspace",
+      workspaceDir: "/tmp/deneb-workspace",
     });
   });
 
@@ -72,7 +72,7 @@ describe("emitResetCommandHooks", () => {
       agentId: "main",
       sessionKey: undefined,
       sessionId: "prev-session",
-      workspaceDir: "/tmp/openclaw-workspace",
+      workspaceDir: "/tmp/deneb-workspace",
     });
   });
 
@@ -82,7 +82,7 @@ describe("emitResetCommandHooks", () => {
       agentId: "main",
       sessionKey: "agent:main:main",
       sessionId: "prev-session",
-      workspaceDir: "/tmp/openclaw-workspace",
+      workspaceDir: "/tmp/deneb-workspace",
     });
   });
 });

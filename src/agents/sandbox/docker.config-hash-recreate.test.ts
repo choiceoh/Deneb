@@ -55,7 +55,7 @@ vi.mock("node:child_process", async (importOriginal) => {
       } else if (
         args[0] === "inspect" &&
         args[1] === "-f" &&
-        args[2]?.includes('index .Config.Labels "openclaw.configHash"')
+        args[2]?.includes('index .Config.Labels "deneb.configHash"')
       ) {
         stdout = `${spawnState.labelHash}\n`;
       } else if (
@@ -94,9 +94,9 @@ function createSandboxConfig(
     backend: "docker",
     scope: "shared",
     workspaceAccess,
-    workspaceRoot: "~/.openclaw/sandboxes",
+    workspaceRoot: "~/.deneb/sandboxes",
     docker: {
-      image: "openclaw-sandbox:test",
+      image: "deneb-sandbox:test",
       containerPrefix: "oc-test-",
       workdir: "/workspace",
       readOnlyRoot: true,
@@ -111,15 +111,15 @@ function createSandboxConfig(
     },
     ssh: {
       command: "ssh",
-      workspaceRoot: "/tmp/openclaw-sandboxes",
+      workspaceRoot: "/tmp/deneb-sandboxes",
       strictHostKeyChecking: true,
       updateHostKeys: true,
     },
     browser: {
       enabled: false,
-      image: "openclaw-browser:test",
+      image: "deneb-browser:test",
       containerPrefix: "oc-browser-",
-      network: "openclaw-sandbox-browser",
+      network: "deneb-sandbox-browser",
       cdpPort: 9222,
       vncPort: 5900,
       noVncPort: 6080,
@@ -194,7 +194,7 @@ describe("ensureSandboxContainer config-hash recreation", () => {
     ).toBe(true);
     const createCall = dockerCalls.find((call) => call.args[0] === "create");
     expect(createCall).toBeDefined();
-    expect(createCall?.args).toContain(`openclaw.configHash=${newHash}`);
+    expect(createCall?.args).toContain(`deneb.configHash=${newHash}`);
     expect(registryMocks.updateRegistry).toHaveBeenCalledWith(
       expect.objectContaining({
         containerName: "oc-test-shared",
@@ -243,7 +243,7 @@ describe("ensureSandboxContainer config-hash recreation", () => {
       (call) => call.command === "docker" && call.args[0] === "create",
     );
     expect(createCall).toBeDefined();
-    expect(createCall?.args).toContain(`openclaw.configHash=${expectedHash}`);
+    expect(createCall?.args).toContain(`deneb.configHash=${expectedHash}`);
 
     const bindArgs = collectDockerFlagValues(createCall?.args ?? [], "-v");
     const workspaceMountIdx = bindArgs.indexOf("/tmp/workspace:/workspace");

@@ -25,7 +25,7 @@ vi.mock("../banner.js", () => ({
 }));
 
 vi.mock("../cli-name.js", () => ({
-  resolveCliName: () => "openclaw",
+  resolveCliName: () => "deneb",
 }));
 
 vi.mock("./config-guard.js", () => ({
@@ -51,9 +51,9 @@ beforeEach(() => {
   originalProcessArgv = [...process.argv];
   originalProcessTitle = process.title;
   originalNodeNoWarnings = process.env.NODE_NO_WARNINGS;
-  originalHideBanner = process.env.OPENCLAW_HIDE_BANNER;
+  originalHideBanner = process.env.DENEB_HIDE_BANNER;
   delete process.env.NODE_NO_WARNINGS;
-  delete process.env.OPENCLAW_HIDE_BANNER;
+  delete process.env.DENEB_HIDE_BANNER;
 });
 
 afterEach(() => {
@@ -65,9 +65,9 @@ afterEach(() => {
     process.env.NODE_NO_WARNINGS = originalNodeNoWarnings;
   }
   if (originalHideBanner === undefined) {
-    delete process.env.OPENCLAW_HIDE_BANNER;
+    delete process.env.DENEB_HIDE_BANNER;
   } else {
-    process.env.OPENCLAW_HIDE_BANNER = originalHideBanner;
+    process.env.DENEB_HIDE_BANNER = originalHideBanner;
   }
 });
 
@@ -78,7 +78,7 @@ describe("registerPreActionHooks", () => {
     | null = null;
 
   function buildProgram() {
-    const program = new Command().name("openclaw");
+    const program = new Command().name("deneb");
     program.command("status").action(() => {});
     program
       .command("backup")
@@ -142,7 +142,7 @@ describe("registerPreActionHooks", () => {
   it("handles debug mode and plugin-required command preaction", async () => {
     await runPreAction({
       parseArgv: ["status"],
-      processArgv: ["node", "openclaw", "status", "--debug"],
+      processArgv: ["node", "deneb", "status", "--debug"],
     });
 
     expect(emitCliBannerMock).toHaveBeenCalledWith("9.9.9-test");
@@ -152,12 +152,12 @@ describe("registerPreActionHooks", () => {
       commandPath: ["status"],
     });
     expect(ensurePluginRegistryLoadedMock).toHaveBeenCalledWith({ scope: "channels" });
-    expect(process.title).toBe("openclaw-status");
+    expect(process.title).toBe("deneb-status");
 
     vi.clearAllMocks();
     await runPreAction({
       parseArgv: ["message", "send"],
-      processArgv: ["node", "openclaw", "message", "send"],
+      processArgv: ["node", "deneb", "message", "send"],
     });
 
     expect(setVerboseMock).toHaveBeenCalledWith(false);
@@ -172,7 +172,7 @@ describe("registerPreActionHooks", () => {
   it("keeps setup alias and channels add manifest-first", async () => {
     await runPreAction({
       parseArgv: ["onboard"],
-      processArgv: ["node", "openclaw", "onboard"],
+      processArgv: ["node", "deneb", "onboard"],
     });
 
     expect(ensureConfigReadyMock).toHaveBeenCalledWith({
@@ -184,7 +184,7 @@ describe("registerPreActionHooks", () => {
     vi.clearAllMocks();
     await runPreAction({
       parseArgv: ["channels", "add"],
-      processArgv: ["node", "openclaw", "channels", "add"],
+      processArgv: ["node", "deneb", "channels", "add"],
     });
 
     expect(ensureConfigReadyMock).toHaveBeenCalledWith({
@@ -197,7 +197,7 @@ describe("registerPreActionHooks", () => {
   it("skips help/version preaction and respects banner opt-out", async () => {
     await runPreAction({
       parseArgv: ["status"],
-      processArgv: ["node", "openclaw", "--version"],
+      processArgv: ["node", "deneb", "--version"],
     });
 
     expect(emitCliBannerMock).not.toHaveBeenCalled();
@@ -205,11 +205,11 @@ describe("registerPreActionHooks", () => {
     expect(ensureConfigReadyMock).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.OPENCLAW_HIDE_BANNER = "1";
+    process.env.DENEB_HIDE_BANNER = "1";
 
     await runPreAction({
       parseArgv: ["status"],
-      processArgv: ["node", "openclaw", "status"],
+      processArgv: ["node", "deneb", "status"],
     });
 
     expect(emitCliBannerMock).not.toHaveBeenCalled();
@@ -219,7 +219,7 @@ describe("registerPreActionHooks", () => {
   it("applies --json stdout suppression only for explicit JSON output commands", async () => {
     await runPreAction({
       parseArgv: ["status"],
-      processArgv: ["node", "openclaw", "status", "--json"],
+      processArgv: ["node", "deneb", "status", "--json"],
     });
 
     expect(ensureConfigReadyMock).toHaveBeenCalledWith({
@@ -232,7 +232,7 @@ describe("registerPreActionHooks", () => {
     vi.clearAllMocks();
     await runPreAction({
       parseArgv: ["update", "status", "--json"],
-      processArgv: ["node", "openclaw", "update", "status", "--json"],
+      processArgv: ["node", "deneb", "update", "status", "--json"],
     });
 
     expect(ensureConfigReadyMock).toHaveBeenCalledWith({
@@ -245,7 +245,7 @@ describe("registerPreActionHooks", () => {
     vi.clearAllMocks();
     await runPreAction({
       parseArgv: ["config", "set", "gateway.auth.mode", "{bad", "--json"],
-      processArgv: ["node", "openclaw", "config", "set", "gateway.auth.mode", "{bad", "--json"],
+      processArgv: ["node", "deneb", "config", "set", "gateway.auth.mode", "{bad", "--json"],
     });
 
     expect(ensureConfigReadyMock).toHaveBeenCalledWith({
@@ -257,7 +257,7 @@ describe("registerPreActionHooks", () => {
   it("bypasses config guard for config validate", async () => {
     await runPreAction({
       parseArgv: ["config", "validate"],
-      processArgv: ["node", "openclaw", "config", "validate"],
+      processArgv: ["node", "deneb", "config", "validate"],
     });
 
     expect(ensureConfigReadyMock).not.toHaveBeenCalled();
@@ -266,7 +266,7 @@ describe("registerPreActionHooks", () => {
   it("bypasses config guard for config validate when root option values are present", async () => {
     await runPreAction({
       parseArgv: ["config", "validate"],
-      processArgv: ["node", "openclaw", "--profile", "work", "config", "validate"],
+      processArgv: ["node", "deneb", "--profile", "work", "config", "validate"],
     });
 
     expect(ensureConfigReadyMock).not.toHaveBeenCalled();
@@ -275,7 +275,7 @@ describe("registerPreActionHooks", () => {
   it("bypasses config guard for backup create", async () => {
     await runPreAction({
       parseArgv: ["backup", "create"],
-      processArgv: ["node", "openclaw", "backup", "create", "--json"],
+      processArgv: ["node", "deneb", "backup", "create", "--json"],
     });
 
     expect(ensureConfigReadyMock).not.toHaveBeenCalled();

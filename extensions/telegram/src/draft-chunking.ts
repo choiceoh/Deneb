@@ -1,14 +1,14 @@
-import { type OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
-import { resolveTextChunkLimit } from "openclaw/plugin-sdk/reply-runtime";
-import { resolveAccountEntry } from "openclaw/plugin-sdk/routing";
-import { normalizeAccountId } from "openclaw/plugin-sdk/routing";
+import { type DenebConfig } from "deneb/plugin-sdk/config-runtime";
+import { resolveTextChunkLimit } from "deneb/plugin-sdk/reply-runtime";
+import { resolveAccountEntry } from "deneb/plugin-sdk/routing";
+import { normalizeAccountId } from "deneb/plugin-sdk/routing";
 import { TELEGRAM_TEXT_CHUNK_LIMIT } from "./outbound-adapter.js";
 
 const DEFAULT_TELEGRAM_DRAFT_STREAM_MIN = 200;
 const DEFAULT_TELEGRAM_DRAFT_STREAM_MAX = 800;
 
 export function resolveTelegramDraftStreamingChunking(
-  cfg: OpenClawConfig | undefined,
+  cfg: DenebConfig | undefined,
   accountId?: string | null,
 ): {
   minChars: number;

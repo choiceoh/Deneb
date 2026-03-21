@@ -184,7 +184,7 @@ describe("applySkillsPromptLimits (via buildWorkspaceSkillsPrompt)", () => {
       makeSkill(
         `skill-${i}`,
         "A".repeat(200),
-        `${home}/.openclaw/workspace/skills/skill-${i}/SKILL.md`,
+        `${home}/.deneb/workspace/skills/skill-${i}/SKILL.md`,
       ),
     );
     // Compute compacted lengths (what the prompt will actually contain)
@@ -213,7 +213,7 @@ describe("applySkillsPromptLimits (via buildWorkspaceSkillsPrompt)", () => {
   it("resolvedSkills in snapshot keeps canonical paths, not compacted", () => {
     const home = os.homedir();
     const skills = Array.from({ length: 5 }, (_, i) =>
-      makeSkill(`skill-${i}`, "A skill", `${home}/.openclaw/workspace/skills/skill-${i}/SKILL.md`),
+      makeSkill(`skill-${i}`, "A skill", `${home}/.deneb/workspace/skills/skill-${i}/SKILL.md`),
     );
     const snapshot = buildWorkspaceSkillSnapshot("/fake", {
       entries: skills.map(makeEntry),

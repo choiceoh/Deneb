@@ -8,7 +8,7 @@ import type { ChannelId } from "../channels/plugins/types.js";
 import { inspectReadOnlyChannelAccount } from "../channels/read-only-account-inspect.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import { resolveNativeCommandsEnabled, resolveNativeSkillsEnabled } from "../config/commands.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { isDangerousNameMatchingEnabled } from "../config/dangerous-name-matching.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { createLazyRuntimeSurface } from "../shared/lazy-runtime.js";
@@ -122,7 +122,7 @@ function dedupeFindings(findings: SecurityAuditFinding[]): SecurityAuditFinding[
 }
 
 function hasExplicitProviderAccountConfig(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   provider: string,
   accountId: string,
 ): boolean {
@@ -138,8 +138,8 @@ function hasExplicitProviderAccountConfig(
 }
 
 export async function collectChannelSecurityFindings(params: {
-  cfg: OpenClawConfig;
-  sourceConfig?: OpenClawConfig;
+  cfg: DenebConfig;
+  sourceConfig?: DenebConfig;
   plugins: ReturnType<typeof listChannelPlugins>;
 }): Promise<SecurityAuditFinding[]> {
   const findings: SecurityAuditFinding[] = [];
@@ -147,7 +147,7 @@ export async function collectChannelSecurityFindings(params: {
 
   const inspectChannelAccount = async (
     plugin: (typeof params.plugins)[number],
-    cfg: OpenClawConfig,
+    cfg: DenebConfig,
     accountId: string,
   ) =>
     plugin.config.inspectAccount?.(cfg, accountId) ??
@@ -322,7 +322,7 @@ export async function collectChannelSecurityFindings(params: {
           "Multiple DM senders currently share the main session, which can leak context across users.",
         remediation:
           "Run: " +
-          formatCliCommand('openclaw config set session.dmScope "per-channel-peer"') +
+          formatCliCommand('deneb config set session.dmScope "per-channel-peer"') +
           ' (or "per-account-channel-peer" for multi-account channels) to isolate DM sessions per sender.',
       });
     }
@@ -415,7 +415,7 @@ export async function collectChannelSecurityFindings(params: {
         addDiscordNameBasedEntries({
           target: discordNameBasedAllowEntries,
           values: storeAllowFrom,
-          source: "~/.openclaw/credentials/discord-allowFrom.json",
+          source: "~/.deneb/credentials/discord-allowFrom.json",
           isDiscordMutableAllowEntry,
         });
         const discordGuildEntries =

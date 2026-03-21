@@ -1,5 +1,5 @@
 ---
-summary: "Install OpenClaw — installer script, npm/pnpm, from source, Docker, and more"
+summary: "Install Deneb — installer script, npm/pnpm, from source, Docker, and more"
 read_when:
   - You need an install method other than the Getting Started quickstart
   - You want to deploy to a cloud platform
@@ -18,17 +18,17 @@ Already followed [Getting Started](/start/getting-started)? You're all set — t
 - `pnpm` only if you build from source
 
 <Note>
-On Windows, we strongly recommend running OpenClaw under [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install).
+On Windows, we strongly recommend running Deneb under [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install).
 </Note>
 
 ## Install methods
 
 <Tip>
-The **installer script** is the recommended way to install OpenClaw. It handles Node detection, installation, and onboarding in one step.
+The **installer script** is the recommended way to install Deneb. It handles Node detection, installation, and onboarding in one step.
 </Tip>
 
 <Warning>
-For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possible. Prefer a clean base OS image (for example Ubuntu LTS), then install OpenClaw yourself with the installer script.
+For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possible. Prefer a clean base OS image (for example Ubuntu LTS), then install Deneb yourself with the installer script.
 </Warning>
 
 <AccordionGroup>
@@ -38,12 +38,12 @@ For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possibl
     <Tabs>
       <Tab title="macOS / Linux / WSL2">
         ```bash
-        curl -fsSL https://openclaw.ai/install.sh | bash
+        curl -fsSL https://deneb.ai/install.sh | bash
         ```
       </Tab>
       <Tab title="Windows (PowerShell)">
         ```powershell
-        iwr -useb https://openclaw.ai/install.ps1 | iex
+        iwr -useb https://deneb.ai/install.ps1 | iex
         ```
       </Tab>
     </Tabs>
@@ -55,12 +55,12 @@ For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possibl
     <Tabs>
       <Tab title="macOS / Linux / WSL2">
         ```bash
-        curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard
+        curl -fsSL https://deneb.ai/install.sh | bash -s -- --no-onboard
         ```
       </Tab>
       <Tab title="Windows (PowerShell)">
         ```powershell
-        & ([scriptblock]::Create((iwr -useb https://openclaw.ai/install.ps1))) -NoOnboard
+        & ([scriptblock]::Create((iwr -useb https://deneb.ai/install.ps1))) -NoOnboard
         ```
       </Tab>
     </Tabs>
@@ -70,20 +70,20 @@ For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possibl
   </Accordion>
 
   <Accordion title="npm / pnpm" icon="package">
-    If you already manage Node yourself, we recommend Node 24. OpenClaw still supports Node 22 LTS, currently `22.16+`, for compatibility:
+    If you already manage Node yourself, we recommend Node 24. Deneb still supports Node 22 LTS, currently `22.16+`, for compatibility:
 
     <Tabs>
       <Tab title="npm">
         ```bash
-        npm install -g openclaw@latest
-        openclaw onboard --install-daemon
+        npm install -g deneb@latest
+        deneb onboard --install-daemon
         ```
 
         <Accordion title="sharp build errors?">
           If you have libvips installed globally (common on macOS via Homebrew) and `sharp` fails, force prebuilt binaries:
 
           ```bash
-          SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g openclaw@latest
+          SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install -g deneb@latest
           ```
 
           If you see `sharp: Please add node-gyp to your dependencies`, either install build tooling (macOS: Xcode CLT + `npm install -g node-gyp`) or use the env var above.
@@ -91,9 +91,9 @@ For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possibl
       </Tab>
       <Tab title="pnpm">
         ```bash
-        pnpm add -g openclaw@latest
-        pnpm approve-builds -g        # approve openclaw, node-llama-cpp, sharp, etc.
-        openclaw onboard --install-daemon
+        pnpm add -g deneb@latest
+        pnpm approve-builds -g        # approve deneb, node-llama-cpp, sharp, etc.
+        deneb onboard --install-daemon
         ```
 
         <Note>
@@ -105,11 +105,11 @@ For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possibl
     Want the current GitHub `main` head with a package-manager install?
 
     ```bash
-    npm install -g github:openclaw/openclaw#main
+    npm install -g github:deneb/deneb#main
     ```
 
     ```bash
-    pnpm add -g github:openclaw/openclaw#main
+    pnpm add -g github:deneb/deneb#main
     ```
 
   </Accordion>
@@ -119,28 +119,28 @@ For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possibl
 
     <Steps>
       <Step title="Clone and build">
-        Clone the [OpenClaw repo](https://github.com/openclaw/openclaw) and build:
+        Clone the [Deneb repo](https://github.com/deneb/deneb) and build:
 
         ```bash
-        git clone https://github.com/openclaw/openclaw.git
-        cd openclaw
+        git clone https://github.com/deneb/deneb.git
+        cd deneb
         pnpm install
         pnpm ui:build
         pnpm build
         ```
       </Step>
       <Step title="Link the CLI">
-        Make the `openclaw` command available globally:
+        Make the `deneb` command available globally:
 
         ```bash
         pnpm link --global
         ```
 
-        Alternatively, skip the link and run commands via `pnpm openclaw ...` from inside the repo.
+        Alternatively, skip the link and run commands via `pnpm deneb ...` from inside the repo.
       </Step>
       <Step title="Run onboarding">
         ```bash
-        openclaw onboard --install-daemon
+        deneb onboard --install-daemon
         ```
       </Step>
     </Steps>
@@ -175,20 +175,20 @@ For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possibl
 Verify everything is working:
 
 ```bash
-openclaw doctor         # check for config issues
-openclaw status         # gateway status
-openclaw dashboard      # open the browser UI
+deneb doctor         # check for config issues
+deneb status         # gateway status
+deneb dashboard      # open the browser UI
 ```
 
 If you need custom runtime paths, use:
 
-- `OPENCLAW_HOME` for home-directory based internal paths
-- `OPENCLAW_STATE_DIR` for mutable state location
-- `OPENCLAW_CONFIG_PATH` for config file location
+- `DENEB_HOME` for home-directory based internal paths
+- `DENEB_STATE_DIR` for mutable state location
+- `DENEB_CONFIG_PATH` for config file location
 
 See [Environment vars](/help/environment) for precedence and full details.
 
-## Troubleshooting: `openclaw` not found
+## Troubleshooting: `deneb` not found
 
 <Accordion title="PATH diagnosis and fix">
   Quick diagnosis:
@@ -200,7 +200,7 @@ npm prefix -g
 echo "$PATH"
 ```
 
-If `$(npm prefix -g)/bin` (macOS/Linux) or `$(npm prefix -g)` (Windows) is **not** in your `$PATH`, your shell can't find global npm binaries (including `openclaw`).
+If `$(npm prefix -g)/bin` (macOS/Linux) or `$(npm prefix -g)` (Windows) is **not** in your `$PATH`, your shell can't find global npm binaries (including `deneb`).
 
 Fix — add it to your shell startup file (`~/.zshrc` or `~/.bashrc`):
 
@@ -217,12 +217,12 @@ Then open a new terminal (or `rehash` in zsh / `hash -r` in bash).
 
 <CardGroup cols={3}>
   <Card title="Updating" href="/install/updating" icon="refresh-cw">
-    Keep OpenClaw up to date.
+    Keep Deneb up to date.
   </Card>
   <Card title="Migrating" href="/install/migrating" icon="arrow-right">
     Move to a new machine.
   </Card>
   <Card title="Uninstall" href="/install/uninstall" icon="trash-2">
-    Remove OpenClaw completely.
+    Remove Deneb completely.
   </Card>
 </CardGroup>

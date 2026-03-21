@@ -5,7 +5,7 @@
  * instantiation using the native LCM engine.
  */
 
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { createNativeLcmDependencies } from "../../context-engine/lcm/native-bridge.js";
 import { LcmContextEngine } from "../../context-engine/lcm/src/engine.js";
 import type { AnyAgentTool } from "../../context-engine/lcm/src/tools/common.js";
@@ -18,7 +18,7 @@ import type { LcmDependencies } from "../../context-engine/lcm/src/types.js";
 
 let _sharedEngine: { deps: LcmDependencies; lcm: LcmContextEngine } | undefined;
 
-function getSharedEngine(_config?: OpenClawConfig) {
+function getSharedEngine(_config?: DenebConfig) {
   if (!_sharedEngine) {
     const deps = createNativeLcmDependencies();
     const lcm = new LcmContextEngine(deps);
@@ -29,7 +29,7 @@ function getSharedEngine(_config?: OpenClawConfig) {
 
 export function resolveLcmTools(params: {
   sessionKey?: string;
-  config?: OpenClawConfig;
+  config?: DenebConfig;
 }): AnyAgentTool[] {
   try {
     const { deps, lcm } = getSharedEngine(params.config);

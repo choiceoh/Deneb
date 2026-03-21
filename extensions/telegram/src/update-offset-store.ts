@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { writeJsonAtomic } from "openclaw/plugin-sdk/infra-runtime";
-import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
+import { writeJsonAtomic } from "deneb/plugin-sdk/infra-runtime";
+import { resolveStateDir } from "deneb/plugin-sdk/state-paths";
 
 const STORE_VERSION = 2;
 

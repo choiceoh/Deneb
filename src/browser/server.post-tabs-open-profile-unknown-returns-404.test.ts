@@ -87,7 +87,7 @@ describe("profile CRUD endpoints", () => {
     const createDuplicate = await realFetch(`${base}/profiles/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "openclaw" }),
+      body: JSON.stringify({ name: "deneb" }),
     });
     expect(createDuplicate.status).toBe(409);
     const createDuplicateBody = (await createDuplicate.json()) as { error: string };
@@ -134,7 +134,7 @@ describe("profile CRUD endpoints", () => {
     expect(createClawdBody.cdpPort).toBeTypeOf("number");
     expect(createClawdBody.userDataDir).toBeNull();
 
-    const explicitUserDataDir = "/tmp/openclaw-brave-profile";
+    const explicitUserDataDir = "/tmp/deneb-brave-profile";
     await fs.promises.mkdir(explicitUserDataDir, { recursive: true });
     const createExistingSession = await realFetch(`${base}/profiles/create`, {
       method: "POST",
@@ -185,7 +185,7 @@ describe("profile CRUD endpoints", () => {
     const deleteMissingBody = (await deleteMissing.json()) as { error: string };
     expect(deleteMissingBody.error).toContain("not found");
 
-    const deleteDefault = await realFetch(`${base}/profiles/openclaw`, {
+    const deleteDefault = await realFetch(`${base}/profiles/deneb`, {
       method: "DELETE",
     });
     expect(deleteDefault.status).toBe(400);

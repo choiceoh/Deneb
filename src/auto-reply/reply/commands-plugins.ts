@@ -3,7 +3,7 @@ import {
   validateConfigObjectWithPlugins,
   writeConfigFile,
 } from "../../config/config.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import type { PluginInstallRecord } from "../../config/types.plugins.js";
 import type { PluginRecord } from "../../plugins/registry.js";
 import {
@@ -30,7 +30,7 @@ function renderJsonBlock(label: string, value: unknown): string {
 
 function buildPluginInspectJson(params: {
   id: string;
-  config: OpenClawConfig;
+  config: DenebConfig;
   report: PluginStatusReport;
 }): {
   inspect: NonNullable<ReturnType<typeof buildPluginInspectReport>>;
@@ -61,7 +61,7 @@ function buildPluginInspectJson(params: {
 }
 
 function buildAllPluginInspectJson(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   report: PluginStatusReport;
 }): Array<{
   inspect: ReturnType<typeof buildAllPluginInspectReports>[number];
@@ -103,8 +103,8 @@ function formatPluginsList(report: PluginStatusReport): string {
     `🔌 Plugins (${loaded}/${report.plugins.length} loaded)`,
     ...report.plugins.map((plugin) => {
       const format = plugin.bundleFormat
-        ? `${plugin.format ?? "openclaw"}/${plugin.bundleFormat}`
-        : (plugin.format ?? "openclaw");
+        ? `${plugin.format ?? "deneb"}/${plugin.bundleFormat}`
+        : (plugin.format ?? "deneb");
       return `- ${formatPluginLabel(plugin)} [${plugin.status}] ${format}`;
     }),
   ];
@@ -125,7 +125,7 @@ async function loadPluginCommandState(workspaceDir: string): Promise<
   | {
       ok: true;
       path: string;
-      config: OpenClawConfig;
+      config: DenebConfig;
       report: PluginStatusReport;
     }
   | { ok: false; path: string; error: string }

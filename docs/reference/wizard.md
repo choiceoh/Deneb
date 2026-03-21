@@ -10,20 +10,20 @@ sidebarTitle: "Onboarding Reference"
 
 # Onboarding Reference
 
-This is the full reference for `openclaw onboard`.
+This is the full reference for `deneb onboard`.
 For a high-level overview, see [Onboarding (CLI)](/start/wizard).
 
 ## Flow details (local mode)
 
 <Steps>
   <Step title="Existing config detection">
-    - If `~/.openclaw/openclaw.json` exists, choose **Keep / Modify / Reset**.
+    - If `~/.deneb/deneb.json` exists, choose **Keep / Modify / Reset**.
     - Re-running onboarding does **not** wipe anything unless you explicitly choose **Reset**
       (or pass `--reset`).
     - CLI `--reset` defaults to `config+creds+sessions`; use `--reset-scope full`
       to also remove workspace.
     - If the config is invalid or contains legacy keys, the wizard stops and asks
-      you to run `openclaw doctor` before continuing.
+      you to run `deneb doctor` before continuing.
     - Reset uses `trash` (never `rm`) and offers scopes:
       - Config only
       - Config + credentials + sessions
@@ -57,16 +57,16 @@ For a high-level overview, see [Onboarding (CLI)](/start/wizard).
     - Pick a default model from detected options (or enter provider/model manually). For best quality and lower prompt-injection risk, choose the strongest latest-generation model available in your provider stack.
     - Onboarding runs a model check and warns if the configured model is unknown or missing auth.
     - API key storage mode defaults to plaintext auth-profile values. Use `--secret-input-mode ref` to store env-backed refs instead (for example `keyRef: { source: "env", provider: "default", id: "OPENAI_API_KEY" }`).
-    - OAuth credentials live in `~/.openclaw/credentials/oauth.json`; auth profiles live in `~/.openclaw/agents/<agentId>/agent/auth-profiles.json` (API keys + OAuth).
+    - OAuth credentials live in `~/.deneb/credentials/oauth.json`; auth profiles live in `~/.deneb/agents/<agentId>/agent/auth-profiles.json` (API keys + OAuth).
     - More detail: [/concepts/oauth](/concepts/oauth)
     <Note>
     Headless/server tip: complete OAuth on a machine with a browser, then copy
-    `~/.openclaw/credentials/oauth.json` (or `$OPENCLAW_STATE_DIR/credentials/oauth.json`) to the
+    `~/.deneb/credentials/oauth.json` (or `$DENEB_STATE_DIR/credentials/oauth.json`) to the
     gateway host.
     </Note>
   </Step>
   <Step title="Workspace">
-    - Default `~/.openclaw/workspace` (configurable).
+    - Default `~/.deneb/workspace` (configurable).
     - Seeds the workspace files needed for the agent bootstrap ritual.
     - Full workspace layout + backup guide: [Agent workspace](/concepts/agent-workspace)
   </Step>
@@ -94,13 +94,13 @@ For a high-level overview, see [Onboarding (CLI)](/start/wizard).
     - [Signal](/channels/signal): optional `signal-cli` install + account config.
     - [BlueBubbles](/channels/bluebubbles): **recommended for iMessage**; server URL + password + webhook.
     - [iMessage](/channels/imessage): legacy `imsg` CLI path + DB access.
-    - DM security: default is pairing. First DM sends a code; approve via `openclaw pairing approve <channel> <code>` or use allowlists.
+    - DM security: default is pairing. First DM sends a code; approve via `deneb pairing approve <channel> <code>` or use allowlists.
   </Step>
   <Step title="Web search">
     - Pick a provider: Perplexity, Brave, Gemini, Grok, or Kimi (or skip).
     - Paste your API key (QuickStart auto-detects keys from env vars or existing config).
     - Skip with `--skip-search`.
-    - Configure later: `openclaw configure --section web`.
+    - Configure later: `deneb configure --section web`.
   </Step>
   <Step title="Daemon install">
     - macOS: LaunchAgent
@@ -114,8 +114,8 @@ For a high-level overview, see [Onboarding (CLI)](/start/wizard).
     - If both `gateway.auth.token` and `gateway.auth.password` are configured and `gateway.auth.mode` is unset, daemon install is blocked until mode is set explicitly.
   </Step>
   <Step title="Health check">
-    - Starts the Gateway (if needed) and runs `openclaw health`.
-    - Tip: `openclaw status --deep` adds gateway health probes to status output (requires a reachable gateway).
+    - Starts the Gateway (if needed) and runs `deneb health`.
+    - Tip: `deneb status --deep` adds gateway health probes to status output (requires a reachable gateway).
   </Step>
   <Step title="Skills (recommended)">
     - Reads the available skills and checks requirements.
@@ -137,7 +137,7 @@ If the Control UI assets are missing, onboarding attempts to build them; fallbac
 Use `--non-interactive` to automate or script onboarding:
 
 ```bash
-openclaw onboard --non-interactive \
+deneb onboard --non-interactive \
   --mode local \
   --auth-choice apiKey \
   --anthropic-api-key "$ANTHROPIC_API_KEY" \
@@ -153,12 +153,12 @@ Add `--json` for a machine‑readable summary.
 Gateway token SecretRef in non-interactive mode:
 
 ```bash
-export OPENCLAW_GATEWAY_TOKEN="your-token"
-openclaw onboard --non-interactive \
+export DENEB_GATEWAY_TOKEN="your-token"
+deneb onboard --non-interactive \
   --mode local \
   --auth-choice skip \
   --gateway-auth token \
-  --gateway-token-ref-env OPENCLAW_GATEWAY_TOKEN
+  --gateway-token-ref-env DENEB_GATEWAY_TOKEN
 ```
 
 `--gateway-token` and `--gateway-token-ref-env` are mutually exclusive.
@@ -173,8 +173,8 @@ Use this reference page for flag semantics and step ordering.
 ### Add agent (non-interactive)
 
 ```bash
-openclaw agents add work \
-  --workspace ~/.openclaw/workspace-work \
+deneb agents add work \
+  --workspace ~/.deneb/workspace-work \
   --model openai/gpt-5.2 \
   --bind whatsapp:biz \
   --non-interactive \
@@ -191,7 +191,7 @@ Clients (macOS app, Control UI) can render steps without re‑implementing onboa
 Onboarding can install `signal-cli` from GitHub releases:
 
 - Downloads the appropriate release asset.
-- Stores it under `~/.openclaw/tools/signal-cli/<version>/`.
+- Stores it under `~/.deneb/tools/signal-cli/<version>/`.
 - Writes `channels.signal.cliPath` to your config.
 
 Notes:
@@ -202,7 +202,7 @@ Notes:
 
 ## What the wizard writes
 
-Typical fields in `~/.openclaw/openclaw.json`:
+Typical fields in `~/.deneb/deneb.json`:
 
 - `agents.defaults.workspace`
 - `agents.defaults.model` / `models.providers` (if Minimax chosen)
@@ -218,10 +218,10 @@ Typical fields in `~/.openclaw/openclaw.json`:
 - `wizard.lastRunCommand`
 - `wizard.lastRunMode`
 
-`openclaw agents add` writes `agents.list[]` and optional `bindings`.
+`deneb agents add` writes `agents.list[]` and optional `bindings`.
 
-WhatsApp credentials go under `~/.openclaw/credentials/whatsapp/<accountId>/`.
-Sessions are stored under `~/.openclaw/agents/<agentId>/sessions/`.
+WhatsApp credentials go under `~/.deneb/credentials/whatsapp/<accountId>/`.
+Sessions are stored under `~/.deneb/agents/<agentId>/sessions/`.
 
 Some channels are delivered as plugins. When you pick one during setup, onboarding
 will prompt to install it (npm or a local path) before it can be configured.

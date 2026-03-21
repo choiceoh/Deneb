@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { normalizeResolvedSecretInputString } from "../../config/types.secrets.js";
 import { logVerbose } from "../../globals.js";
 import type { PluginWebSearchProviderEntry } from "../../plugins/types.js";
@@ -70,7 +70,7 @@ function resolveSearchProvider(search?: WebSearchConfig): string {
 }
 
 export function createWebSearchTool(options?: {
-  config?: OpenClawConfig;
+  config?: DenebConfig;
   sandboxed?: boolean;
   runtimeWebSearch?: RuntimeWebSearchMetadata;
 }): AnyAgentTool | null {

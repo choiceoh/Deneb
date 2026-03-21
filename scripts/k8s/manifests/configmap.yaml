@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: openclaw-config
+  name: deneb-config
   labels:
-    app: openclaw
+    app: deneb
 data:
-  openclaw.json: |
+  deneb.json: |
     {
       "gateway": {
         "mode": "local",
@@ -20,19 +20,19 @@ data:
       },
       "agents": {
         "defaults": {
-          "workspace": "~/.openclaw/workspace"
+          "workspace": "~/.deneb/workspace"
         },
         "list": [
           {
             "id": "default",
-            "name": "OpenClaw Assistant",
-            "workspace": "~/.openclaw/workspace"
+            "name": "Deneb Assistant",
+            "workspace": "~/.deneb/workspace"
           }
         ]
       },
       "cron": { "enabled": false }
     }
   AGENTS.md: |
-    # OpenClaw Assistant
+    # Deneb Assistant
 
     You are a helpful AI assistant running in Kubernetes.

@@ -9,7 +9,7 @@ import {
   normalizeProviderId,
   resolveConfiguredModelRef,
 } from "../agents/model-selection.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { resolveAgentModelPrimaryValue } from "../config/model-input.js";
 import { applyPrimaryModel } from "../plugins/provider-model-primary.js";
 import type { ProviderPlugin } from "../plugins/types.js";
@@ -29,7 +29,7 @@ const PROVIDER_FILTER_THRESHOLD = 30;
 const HIDDEN_ROUTER_MODELS = new Set(["openrouter/auto"]);
 
 type PromptDefaultModelParams = {
-  config: OpenClawConfig;
+  config: DenebConfig;
   prompter: WizardPrompter;
   allowKeep?: boolean;
   includeManual?: boolean;
@@ -43,7 +43,7 @@ type PromptDefaultModelParams = {
   message?: string;
 };
 
-type PromptDefaultModelResult = { model?: string; config?: OpenClawConfig };
+type PromptDefaultModelResult = { model?: string; config?: DenebConfig };
 type PromptModelAllowlistResult = { models?: string[] };
 
 async function loadModelPickerRuntime() {
@@ -57,7 +57,7 @@ const loadResolvedModelPickerRuntime = createLazyRuntimeSurface(
 
 function hasAuthForProvider(
   provider: string,
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   store: ReturnType<typeof ensureAuthProfileStore>,
 ) {
   if (listProfilesForProvider(store, provider).length > 0) {
@@ -73,7 +73,7 @@ function hasAuthForProvider(
 }
 
 function createProviderAuthChecker(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentDir?: string;
 }): (provider: string) => boolean {
   const authStore = ensureAuthProfileStore(params.agentDir, {
@@ -91,11 +91,11 @@ function createProviderAuthChecker(params: {
   };
 }
 
-function resolveConfiguredModelRaw(cfg: OpenClawConfig): string {
+function resolveConfiguredModelRaw(cfg: DenebConfig): string {
   return resolveAgentModelPrimaryValue(cfg.agents?.defaults?.model) ?? "";
 }
 
-function resolveConfiguredModelKeys(cfg: OpenClawConfig): string[] {
+function resolveConfiguredModelKeys(cfg: DenebConfig): string[] {
   const models = cfg.agents?.defaults?.models ?? {};
   return Object.keys(models)
     .map((key) => String(key ?? "").trim())
@@ -423,7 +423,7 @@ export async function promptDefaultModel(
 }
 
 export async function promptModelAllowlist(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   prompter: WizardPrompter;
   message?: string;
   agentDir?: string;
@@ -525,7 +525,7 @@ export async function promptModelAllowlist(params: {
   return { models: [] };
 }
 
-export function applyModelAllowlist(cfg: OpenClawConfig, models: string[]): OpenClawConfig {
+export function applyModelAllowlist(cfg: DenebConfig, models: string[]): DenebConfig {
   const defaults = cfg.agents?.defaults;
   const normalized = normalizeModelKeys(models);
   if (normalized.length === 0) {
@@ -561,9 +561,9 @@ export function applyModelAllowlist(cfg: OpenClawConfig, models: string[]): Open
 }
 
 export function applyModelFallbacksFromSelection(
-  cfg: OpenClawConfig,
+  cfg: DenebConfig,
   selection: string[],
-): OpenClawConfig {
+): DenebConfig {
   const normalized = normalizeModelKeys(selection);
   if (normalized.length <= 1) {
     return cfg;

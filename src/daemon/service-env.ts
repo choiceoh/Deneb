@@ -246,20 +246,20 @@ export function buildServiceEnvironment(params: {
   const { env, port, launchdLabel, extraPathDirs } = params;
   const platform = params.platform ?? process.platform;
   const sharedEnv = resolveSharedServiceEnvironmentFields(env, platform, extraPathDirs);
-  const profile = env.OPENCLAW_PROFILE;
+  const profile = env.DENEB_PROFILE;
   const resolvedLaunchdLabel =
     launchdLabel || (platform === "darwin" ? resolveGatewayLaunchAgentLabel(profile) : undefined);
   const systemdUnit = `${resolveGatewaySystemdServiceName(profile)}.service`;
   return {
     ...buildCommonServiceEnvironment(env, sharedEnv),
-    OPENCLAW_PROFILE: profile,
-    OPENCLAW_GATEWAY_PORT: String(port),
-    OPENCLAW_LAUNCHD_LABEL: resolvedLaunchdLabel,
-    OPENCLAW_SYSTEMD_UNIT: systemdUnit,
-    OPENCLAW_WINDOWS_TASK_NAME: resolveGatewayWindowsTaskName(profile),
-    OPENCLAW_SERVICE_MARKER: GATEWAY_SERVICE_MARKER,
-    OPENCLAW_SERVICE_KIND: GATEWAY_SERVICE_KIND,
-    OPENCLAW_SERVICE_VERSION: VERSION,
+    DENEB_PROFILE: profile,
+    DENEB_GATEWAY_PORT: String(port),
+    DENEB_LAUNCHD_LABEL: resolvedLaunchdLabel,
+    DENEB_SYSTEMD_UNIT: systemdUnit,
+    DENEB_WINDOWS_TASK_NAME: resolveGatewayWindowsTaskName(profile),
+    DENEB_SERVICE_MARKER: GATEWAY_SERVICE_MARKER,
+    DENEB_SERVICE_KIND: GATEWAY_SERVICE_KIND,
+    DENEB_SERVICE_VERSION: VERSION,
   };
 }
 
@@ -272,8 +272,8 @@ function buildCommonServiceEnvironment(
     ...sharedEnv.proxyEnv,
     NODE_EXTRA_CA_CERTS: sharedEnv.nodeCaCerts,
     NODE_USE_SYSTEM_CA: sharedEnv.nodeUseSystemCa,
-    OPENCLAW_STATE_DIR: sharedEnv.stateDir,
-    OPENCLAW_CONFIG_PATH: sharedEnv.configPath,
+    DENEB_STATE_DIR: sharedEnv.stateDir,
+    DENEB_CONFIG_PATH: sharedEnv.configPath,
   };
   if (sharedEnv.minimalPath) {
     serviceEnv.PATH = sharedEnv.minimalPath;
@@ -286,8 +286,8 @@ function resolveSharedServiceEnvironmentFields(
   platform: NodeJS.Platform,
   extraPathDirs: string[] | undefined,
 ): SharedServiceEnvironmentFields {
-  const stateDir = env.OPENCLAW_STATE_DIR;
-  const configPath = env.OPENCLAW_CONFIG_PATH;
+  const stateDir = env.DENEB_STATE_DIR;
+  const configPath = env.DENEB_CONFIG_PATH;
   // Keep a usable temp directory for supervised services even when the host env omits TMPDIR.
   const tmpDir = env.TMPDIR?.trim() || os.tmpdir();
   const proxyEnv = readServiceProxyEnvironment(env);

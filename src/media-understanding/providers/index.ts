@@ -1,6 +1,6 @@
 import { normalizeProviderId } from "../../agents/model-selection.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { loadOpenClawPlugins } from "../../plugins/loader.js";
+import type { DenebConfig } from "../../config/config.js";
+import { loadDenebPlugins } from "../../plugins/loader.js";
 import { getActivePluginRegistry } from "../../plugins/runtime.js";
 import type { MediaUnderstandingProvider } from "../types.js";
 import { deepgramProvider } from "./deepgram/index.js";
@@ -34,7 +34,7 @@ export function normalizeMediaProviderId(id: string): string {
 
 export function buildMediaUnderstandingRegistry(
   overrides?: Record<string, MediaUnderstandingProvider>,
-  cfg?: OpenClawConfig,
+  cfg?: DenebConfig,
 ): Map<string, MediaUnderstandingProvider> {
   const registry = new Map<string, MediaUnderstandingProvider>();
   for (const provider of PROVIDERS) {
@@ -44,7 +44,7 @@ export function buildMediaUnderstandingRegistry(
   const pluginRegistry =
     (active?.mediaUnderstandingProviders?.length ?? 0) > 0
       ? active
-      : loadOpenClawPlugins({ config: cfg });
+      : loadDenebPlugins({ config: cfg });
   for (const entry of pluginRegistry?.mediaUnderstandingProviders ?? []) {
     mergeProviderIntoRegistry(registry, entry.provider);
   }

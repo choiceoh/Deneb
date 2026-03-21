@@ -1450,7 +1450,7 @@
         "advanced"
       ],
       "label": "Embedded Pi",
-      "help": "Embedded Pi runner hardening controls for how workspace-local Pi settings are trusted and applied in OpenClaw sessions.",
+      "help": "Embedded Pi runner hardening controls for how workspace-local Pi settings are trusted and applied in Deneb sessions.",
       "hasChildren": true
     },
     {
@@ -2619,7 +2619,7 @@
         "storage"
       ],
       "label": "Memory Search Index Path",
-      "help": "Sets where the SQLite memory index is stored on disk for each agent. Keep the default `~/.openclaw/memory/{agentId}.sqlite` unless you need custom storage placement or backup policy alignment.",
+      "help": "Sets where the SQLite memory index is stored on disk for each agent. Keep the default `~/.deneb/memory/{agentId}.sqlite` unless you need custom storage placement or backup policy alignment.",
       "hasChildren": false
     },
     {
@@ -3163,7 +3163,7 @@
         "storage"
       ],
       "label": "Sandbox Browser Network",
-      "help": "Docker network for sandbox browser containers (default: openclaw-sandbox-browser). Avoid bridge if you need stricter isolation.",
+      "help": "Docker network for sandbox browser containers (default: deneb-sandbox-browser). Avoid bridge if you need stricter isolation.",
       "hasChildren": false
     },
     {
@@ -5237,7 +5237,7 @@
         "advanced"
       ],
       "label": "Agent Runtime",
-      "help": "Optional runtime descriptor for this agent. Use embedded for default OpenClaw execution or acp for external ACP harness defaults.",
+      "help": "Optional runtime descriptor for this agent. Use embedded for default Deneb execution or acp for external ACP harness defaults.",
       "hasChildren": true
     },
     {
@@ -5265,7 +5265,7 @@
         "advanced"
       ],
       "label": "Agent ACP Harness Agent",
-      "help": "Optional ACP harness agent id to use for this OpenClaw agent (for example codex, claude).",
+      "help": "Optional ACP harness agent id to use for this Deneb agent (for example codex, claude).",
       "hasChildren": false
     },
     {
@@ -5325,7 +5325,7 @@
         "advanced"
       ],
       "label": "Agent Runtime Type",
-      "help": "Runtime type for this agent: \"embedded\" (default OpenClaw runtime) or \"acp\" (ACP harness defaults).",
+      "help": "Runtime type for this agent: \"embedded\" (default Deneb runtime) or \"acp\" (ACP harness defaults).",
       "hasChildren": false
     },
     {
@@ -8087,7 +8087,7 @@
         "storage"
       ],
       "label": "Browser Profile Driver",
-      "help": "Per-profile browser driver mode. Use \"openclaw\" (or legacy \"clawd\") for CDP-based profiles, or use \"existing-session\" for host-local Chrome DevTools MCP attachment.",
+      "help": "Per-profile browser driver mode. Use \"deneb\" (or legacy \"clawd\") for CDP-based profiles, or use \"existing-session\" for host-local Chrome DevTools MCP attachment.",
       "hasChildren": false
     },
     {
@@ -13010,7 +13010,7 @@
         "performance"
       ],
       "label": "Discord EventQueue Listener Timeout (ms)",
-      "help": "Canonical Discord listener timeout control in ms for gateway normalization/enqueue handlers. Default is 120000 in OpenClaw; set per account via channels.discord.accounts.<id>.eventQueue.listenerTimeout.",
+      "help": "Canonical Discord listener timeout control in ms for gateway normalization/enqueue handlers. Default is 120000 in Deneb; set per account via channels.discord.accounts.<id>.eventQueue.listenerTimeout.",
       "hasChildren": false
     },
     {
@@ -30798,7 +30798,7 @@
         "network"
       ],
       "label": "Synology Chat",
-      "help": "Connect your Synology NAS Chat to OpenClaw with full agent capabilities.",
+      "help": "Connect your Synology NAS Chat to Deneb with full agent capabilities.",
       "hasChildren": true
     },
     {
@@ -38377,7 +38377,7 @@
         "advanced"
       ],
       "label": "Allow /mcp",
-      "help": "Allow /mcp chat command to manage OpenClaw MCP server config under mcp.servers (default: false).",
+      "help": "Allow /mcp chat command to manage Deneb MCP server config under mcp.servers (default: false).",
       "hasChildren": false
     },
     {
@@ -38980,7 +38980,7 @@
         "storage"
       ],
       "label": "Cache Trace File Path",
-      "help": "JSONL output path for cache trace logs (default: $OPENCLAW_STATE_DIR/logs/cache-trace.jsonl).",
+      "help": "JSONL output path for cache trace logs (default: $DENEB_STATE_DIR/logs/cache-trace.jsonl).",
       "hasChildren": false
     },
     {
@@ -39318,7 +39318,7 @@
         "network"
       ],
       "label": "Wide-area Discovery Domain",
-      "help": "Optional unicast DNS-SD domain for wide-area discovery, such as openclaw.internal. Use this when you intentionally publish gateway discovery beyond local mDNS scopes.",
+      "help": "Optional unicast DNS-SD domain for wide-area discovery, such as deneb.internal. Use this when you intentionally publish gateway discovery beyond local mDNS scopes.",
       "hasChildren": false
     },
     {
@@ -39412,7 +39412,7 @@
         "advanced"
       ],
       "label": "Environment Variable Overrides",
-      "help": "Explicit key/value environment variable overrides merged into runtime process environment for OpenClaw. Use this for deterministic env configuration instead of relying only on shell profile side effects.",
+      "help": "Explicit key/value environment variable overrides merged into runtime process environment for Deneb. Use this for deterministic env configuration instead of relying only on shell profile side effects.",
       "hasChildren": true
     },
     {
@@ -39843,7 +39843,7 @@
         "storage"
       ],
       "label": "Control UI Base Path",
-      "help": "Optional URL prefix where the Control UI is served (e.g. /openclaw).",
+      "help": "Optional URL prefix where the Control UI is served (e.g. /deneb).",
       "hasChildren": false
     },
     {
@@ -40490,7 +40490,7 @@
         "network"
       ],
       "label": "Gateway Node Allowlist (Extra Commands)",
-      "help": "Extra node.invoke commands to allow beyond the gateway defaults (array of command strings). Enabling dangerous commands here is a security-sensitive override and is flagged by `openclaw security audit`.",
+      "help": "Extra node.invoke commands to allow beyond the gateway defaults (array of command strings). Enabling dangerous commands here is a security-sensitive override and is flagged by `deneb security audit`.",
       "hasChildren": true
     },
     {
@@ -41126,7 +41126,7 @@
         "advanced"
       ],
       "label": "Hooks",
-      "help": "Inbound webhook automation surface for mapping external events into wake or agent actions in OpenClaw. Keep this locked down with explicit token/session/agent controls before exposing it beyond trusted networks.",
+      "help": "Inbound webhook automation surface for mapping external events into wake or agent actions in Deneb. Keep this locked down with explicit token/session/agent controls before exposing it beyond trusted networks.",
       "hasChildren": true
     },
     {
@@ -42407,7 +42407,7 @@
         "advanced"
       ],
       "label": "MCP",
-      "help": "Global MCP server definitions managed by OpenClaw. Embedded Pi and other runtime adapters can consume these servers without storing them inside Pi-owned project settings.",
+      "help": "Global MCP server definitions managed by Deneb. Embedded Pi and other runtime adapters can consume these servers without storing them inside Pi-owned project settings.",
       "hasChildren": true
     },
     {
@@ -42421,7 +42421,7 @@
         "advanced"
       ],
       "label": "MCP Servers",
-      "help": "Named MCP server definitions. OpenClaw stores them in its own config and runtime adapters decide which transports are supported at execution time.",
+      "help": "Named MCP server definitions. Deneb stores them in its own config and runtime adapters decide which transports are supported at execution time.",
       "hasChildren": true
     },
     {
@@ -42594,7 +42594,7 @@
         "storage"
       ],
       "label": "Memory Backend",
-      "help": "Selects the global memory engine: \"builtin\" uses OpenClaw memory internals, while \"qmd\" uses the QMD sidecar pipeline. Keep \"builtin\" unless you intentionally operate QMD.",
+      "help": "Selects the global memory engine: \"builtin\" uses Deneb memory internals, while \"qmd\" uses the QMD sidecar pipeline. Keep \"builtin\" unless you intentionally operate QMD.",
       "hasChildren": false
     },
     {
@@ -44455,7 +44455,7 @@
         "advanced"
       ],
       "label": "Metadata",
-      "help": "Metadata fields automatically maintained by OpenClaw to record write/version history for this config file. Keep these values system-managed and avoid manual edits unless debugging migration history.",
+      "help": "Metadata fields automatically maintained by Deneb to record write/version history for this config file. Keep these values system-managed and avoid manual edits unless debugging migration history.",
       "hasChildren": true
     },
     {
@@ -44483,7 +44483,7 @@
         "media"
       ],
       "label": "Config Last Touched Version",
-      "help": "Auto-set when OpenClaw writes the config.",
+      "help": "Auto-set when Deneb writes the config.",
       "hasChildren": false
     },
     {
@@ -44836,7 +44836,7 @@
         "models"
       ],
       "label": "Model Provider Inject num_ctx (OpenAI Compat)",
-      "help": "Controls whether OpenClaw injects `options.num_ctx` for Ollama providers configured with the OpenAI-compatible adapter (`openai-completions`). Default is true. Set false only if your proxy/upstream rejects unknown `options` payload fields.",
+      "help": "Controls whether Deneb injects `options.num_ctx` for Ollama providers configured with the OpenAI-compatible adapter (`openai-completions`). Default is true. Set false only if your proxy/upstream rejects unknown `options` payload fields.",
       "hasChildren": false
     },
     {
@@ -45671,7 +45671,7 @@
         "advanced"
       ],
       "label": "Queue Owner TTL Seconds",
-      "help": "Idle queue-owner TTL for acpx prompt turns. Keep this short in OpenClaw to avoid delayed completion after each turn.",
+      "help": "Idle queue-owner TTL for acpx prompt turns. Keep this short in Deneb to avoid delayed completion after each turn.",
       "hasChildren": false
     },
     {
@@ -45806,8 +45806,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/amazon-bedrock-provider",
-      "help": "OpenClaw Amazon Bedrock provider plugin (plugin: amazon-bedrock)",
+      "label": "@deneb/amazon-bedrock-provider",
+      "help": "Deneb Amazon Bedrock provider plugin (plugin: amazon-bedrock)",
       "hasChildren": true
     },
     {
@@ -45820,7 +45820,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/amazon-bedrock-provider Config",
+      "label": "@deneb/amazon-bedrock-provider Config",
       "help": "Plugin-defined config payload for amazon-bedrock.",
       "hasChildren": false
     },
@@ -45834,7 +45834,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/amazon-bedrock-provider",
+      "label": "Enable @deneb/amazon-bedrock-provider",
       "hasChildren": false
     },
     {
@@ -45927,8 +45927,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/anthropic-provider",
-      "help": "OpenClaw Anthropic provider plugin (plugin: anthropic)",
+      "label": "@deneb/anthropic-provider",
+      "help": "Deneb Anthropic provider plugin (plugin: anthropic)",
       "hasChildren": true
     },
     {
@@ -45941,7 +45941,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/anthropic-provider Config",
+      "label": "@deneb/anthropic-provider Config",
       "help": "Plugin-defined config payload for anthropic.",
       "hasChildren": false
     },
@@ -45955,7 +45955,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/anthropic-provider",
+      "label": "Enable @deneb/anthropic-provider",
       "hasChildren": false
     },
     {
@@ -46048,8 +46048,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/bluebubbles",
-      "help": "OpenClaw BlueBubbles channel plugin (plugin: bluebubbles)",
+      "label": "@deneb/bluebubbles",
+      "help": "Deneb BlueBubbles channel plugin (plugin: bluebubbles)",
       "hasChildren": true
     },
     {
@@ -46062,7 +46062,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/bluebubbles Config",
+      "label": "@deneb/bluebubbles Config",
       "help": "Plugin-defined config payload for bluebubbles.",
       "hasChildren": false
     },
@@ -46076,7 +46076,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/bluebubbles",
+      "label": "Enable @deneb/bluebubbles",
       "hasChildren": false
     },
     {
@@ -46169,8 +46169,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/brave-plugin",
-      "help": "OpenClaw Brave plugin (plugin: brave)",
+      "label": "@deneb/brave-plugin",
+      "help": "Deneb Brave plugin (plugin: brave)",
       "hasChildren": true
     },
     {
@@ -46183,7 +46183,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/brave-plugin Config",
+      "label": "@deneb/brave-plugin Config",
       "help": "Plugin-defined config payload for brave.",
       "hasChildren": true
     },
@@ -46243,7 +46243,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/brave-plugin",
+      "label": "Enable @deneb/brave-plugin",
       "hasChildren": false
     },
     {
@@ -46336,8 +46336,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/byteplus-provider",
-      "help": "OpenClaw BytePlus provider plugin (plugin: byteplus)",
+      "label": "@deneb/byteplus-provider",
+      "help": "Deneb BytePlus provider plugin (plugin: byteplus)",
       "hasChildren": true
     },
     {
@@ -46350,7 +46350,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/byteplus-provider Config",
+      "label": "@deneb/byteplus-provider Config",
       "help": "Plugin-defined config payload for byteplus.",
       "hasChildren": false
     },
@@ -46364,7 +46364,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/byteplus-provider",
+      "label": "Enable @deneb/byteplus-provider",
       "hasChildren": false
     },
     {
@@ -46457,8 +46457,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/chutes-provider",
-      "help": "OpenClaw Chutes.ai provider plugin (plugin: chutes)",
+      "label": "@deneb/chutes-provider",
+      "help": "Deneb Chutes.ai provider plugin (plugin: chutes)",
       "hasChildren": true
     },
     {
@@ -46471,7 +46471,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/chutes-provider Config",
+      "label": "@deneb/chutes-provider Config",
       "help": "Plugin-defined config payload for chutes.",
       "hasChildren": false
     },
@@ -46485,7 +46485,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/chutes-provider",
+      "label": "Enable @deneb/chutes-provider",
       "hasChildren": false
     },
     {
@@ -46578,8 +46578,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/cloudflare-ai-gateway-provider",
-      "help": "OpenClaw Cloudflare AI Gateway provider plugin (plugin: cloudflare-ai-gateway)",
+      "label": "@deneb/cloudflare-ai-gateway-provider",
+      "help": "Deneb Cloudflare AI Gateway provider plugin (plugin: cloudflare-ai-gateway)",
       "hasChildren": true
     },
     {
@@ -46592,7 +46592,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/cloudflare-ai-gateway-provider Config",
+      "label": "@deneb/cloudflare-ai-gateway-provider Config",
       "help": "Plugin-defined config payload for cloudflare-ai-gateway.",
       "hasChildren": false
     },
@@ -46606,7 +46606,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/cloudflare-ai-gateway-provider",
+      "label": "Enable @deneb/cloudflare-ai-gateway-provider",
       "hasChildren": false
     },
     {
@@ -46699,8 +46699,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/copilot-proxy",
-      "help": "OpenClaw Copilot Proxy provider plugin (plugin: copilot-proxy)",
+      "label": "@deneb/copilot-proxy",
+      "help": "Deneb Copilot Proxy provider plugin (plugin: copilot-proxy)",
       "hasChildren": true
     },
     {
@@ -46713,7 +46713,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/copilot-proxy Config",
+      "label": "@deneb/copilot-proxy Config",
       "help": "Plugin-defined config payload for copilot-proxy.",
       "hasChildren": false
     },
@@ -46727,7 +46727,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/copilot-proxy",
+      "label": "Enable @deneb/copilot-proxy",
       "hasChildren": false
     },
     {
@@ -46955,8 +46955,8 @@
       "tags": [
         "observability"
       ],
-      "label": "@openclaw/diagnostics-otel",
-      "help": "OpenClaw diagnostics OpenTelemetry exporter (plugin: diagnostics-otel)",
+      "label": "@deneb/diagnostics-otel",
+      "help": "Deneb diagnostics OpenTelemetry exporter (plugin: diagnostics-otel)",
       "hasChildren": true
     },
     {
@@ -46969,7 +46969,7 @@
       "tags": [
         "observability"
       ],
-      "label": "@openclaw/diagnostics-otel Config",
+      "label": "@deneb/diagnostics-otel Config",
       "help": "Plugin-defined config payload for diagnostics-otel.",
       "hasChildren": false
     },
@@ -46983,7 +46983,7 @@
       "tags": [
         "observability"
       ],
-      "label": "Enable @openclaw/diagnostics-otel",
+      "label": "Enable @deneb/diagnostics-otel",
       "hasChildren": false
     },
     {
@@ -47534,8 +47534,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/discord",
-      "help": "OpenClaw Discord channel plugin (plugin: discord)",
+      "label": "@deneb/discord",
+      "help": "Deneb Discord channel plugin (plugin: discord)",
       "hasChildren": true
     },
     {
@@ -47548,7 +47548,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/discord Config",
+      "label": "@deneb/discord Config",
       "help": "Plugin-defined config payload for discord.",
       "hasChildren": false
     },
@@ -47562,7 +47562,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/discord",
+      "label": "Enable @deneb/discord",
       "hasChildren": false
     },
     {
@@ -47655,8 +47655,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/elevenlabs-speech",
-      "help": "OpenClaw ElevenLabs speech plugin (plugin: elevenlabs)",
+      "label": "@deneb/elevenlabs-speech",
+      "help": "Deneb ElevenLabs speech plugin (plugin: elevenlabs)",
       "hasChildren": true
     },
     {
@@ -47669,7 +47669,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/elevenlabs-speech Config",
+      "label": "@deneb/elevenlabs-speech Config",
       "help": "Plugin-defined config payload for elevenlabs.",
       "hasChildren": false
     },
@@ -47683,7 +47683,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/elevenlabs-speech",
+      "label": "Enable @deneb/elevenlabs-speech",
       "hasChildren": false
     },
     {
@@ -47776,8 +47776,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/fal-provider",
-      "help": "OpenClaw fal provider plugin (plugin: fal)",
+      "label": "@deneb/fal-provider",
+      "help": "Deneb fal provider plugin (plugin: fal)",
       "hasChildren": true
     },
     {
@@ -47790,7 +47790,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/fal-provider Config",
+      "label": "@deneb/fal-provider Config",
       "help": "Plugin-defined config payload for fal.",
       "hasChildren": false
     },
@@ -47804,7 +47804,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/fal-provider",
+      "label": "Enable @deneb/fal-provider",
       "hasChildren": false
     },
     {
@@ -47897,8 +47897,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/feishu",
-      "help": "OpenClaw Feishu/Lark channel plugin (community maintained by @m1heng) (plugin: feishu)",
+      "label": "@deneb/feishu",
+      "help": "Deneb Feishu/Lark channel plugin (community maintained by @m1heng) (plugin: feishu)",
       "hasChildren": true
     },
     {
@@ -47911,7 +47911,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/feishu Config",
+      "label": "@deneb/feishu Config",
       "help": "Plugin-defined config payload for feishu.",
       "hasChildren": false
     },
@@ -47925,7 +47925,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/feishu",
+      "label": "Enable @deneb/feishu",
       "hasChildren": false
     },
     {
@@ -48018,8 +48018,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/firecrawl-plugin",
-      "help": "OpenClaw Firecrawl plugin (plugin: firecrawl)",
+      "label": "@deneb/firecrawl-plugin",
+      "help": "Deneb Firecrawl plugin (plugin: firecrawl)",
       "hasChildren": true
     },
     {
@@ -48032,7 +48032,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/firecrawl-plugin Config",
+      "label": "@deneb/firecrawl-plugin Config",
       "help": "Plugin-defined config payload for firecrawl.",
       "hasChildren": true
     },
@@ -48088,7 +48088,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/firecrawl-plugin",
+      "label": "Enable @deneb/firecrawl-plugin",
       "hasChildren": false
     },
     {
@@ -48181,8 +48181,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/github-copilot-provider",
-      "help": "OpenClaw GitHub Copilot provider plugin (plugin: github-copilot)",
+      "label": "@deneb/github-copilot-provider",
+      "help": "Deneb GitHub Copilot provider plugin (plugin: github-copilot)",
       "hasChildren": true
     },
     {
@@ -48195,7 +48195,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/github-copilot-provider Config",
+      "label": "@deneb/github-copilot-provider Config",
       "help": "Plugin-defined config payload for github-copilot.",
       "hasChildren": false
     },
@@ -48209,7 +48209,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/github-copilot-provider",
+      "label": "Enable @deneb/github-copilot-provider",
       "hasChildren": false
     },
     {
@@ -48302,8 +48302,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/google-plugin",
-      "help": "OpenClaw Google plugin (plugin: google)",
+      "label": "@deneb/google-plugin",
+      "help": "Deneb Google plugin (plugin: google)",
       "hasChildren": true
     },
     {
@@ -48316,7 +48316,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/google-plugin Config",
+      "label": "@deneb/google-plugin Config",
       "help": "Plugin-defined config payload for google.",
       "hasChildren": true
     },
@@ -48372,7 +48372,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/google-plugin",
+      "label": "Enable @deneb/google-plugin",
       "hasChildren": false
     },
     {
@@ -48465,8 +48465,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/googlechat",
-      "help": "OpenClaw Google Chat channel plugin (plugin: googlechat)",
+      "label": "@deneb/googlechat",
+      "help": "Deneb Google Chat channel plugin (plugin: googlechat)",
       "hasChildren": true
     },
     {
@@ -48479,7 +48479,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/googlechat Config",
+      "label": "@deneb/googlechat Config",
       "help": "Plugin-defined config payload for googlechat.",
       "hasChildren": false
     },
@@ -48493,7 +48493,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/googlechat",
+      "label": "Enable @deneb/googlechat",
       "hasChildren": false
     },
     {
@@ -48586,8 +48586,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/huggingface-provider",
-      "help": "OpenClaw Hugging Face provider plugin (plugin: huggingface)",
+      "label": "@deneb/huggingface-provider",
+      "help": "Deneb Hugging Face provider plugin (plugin: huggingface)",
       "hasChildren": true
     },
     {
@@ -48600,7 +48600,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/huggingface-provider Config",
+      "label": "@deneb/huggingface-provider Config",
       "help": "Plugin-defined config payload for huggingface.",
       "hasChildren": false
     },
@@ -48614,7 +48614,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/huggingface-provider",
+      "label": "Enable @deneb/huggingface-provider",
       "hasChildren": false
     },
     {
@@ -48707,8 +48707,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/imessage",
-      "help": "OpenClaw iMessage channel plugin (plugin: imessage)",
+      "label": "@deneb/imessage",
+      "help": "Deneb iMessage channel plugin (plugin: imessage)",
       "hasChildren": true
     },
     {
@@ -48721,7 +48721,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/imessage Config",
+      "label": "@deneb/imessage Config",
       "help": "Plugin-defined config payload for imessage.",
       "hasChildren": false
     },
@@ -48735,7 +48735,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/imessage",
+      "label": "Enable @deneb/imessage",
       "hasChildren": false
     },
     {
@@ -48828,8 +48828,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/irc",
-      "help": "OpenClaw IRC channel plugin (plugin: irc)",
+      "label": "@deneb/irc",
+      "help": "Deneb IRC channel plugin (plugin: irc)",
       "hasChildren": true
     },
     {
@@ -48842,7 +48842,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/irc Config",
+      "label": "@deneb/irc Config",
       "help": "Plugin-defined config payload for irc.",
       "hasChildren": false
     },
@@ -48856,7 +48856,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/irc",
+      "label": "Enable @deneb/irc",
       "hasChildren": false
     },
     {
@@ -48949,8 +48949,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/kilocode-provider",
-      "help": "OpenClaw Kilo Gateway provider plugin (plugin: kilocode)",
+      "label": "@deneb/kilocode-provider",
+      "help": "Deneb Kilo Gateway provider plugin (plugin: kilocode)",
       "hasChildren": true
     },
     {
@@ -48963,7 +48963,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/kilocode-provider Config",
+      "label": "@deneb/kilocode-provider Config",
       "help": "Plugin-defined config payload for kilocode.",
       "hasChildren": false
     },
@@ -48977,7 +48977,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/kilocode-provider",
+      "label": "Enable @deneb/kilocode-provider",
       "hasChildren": false
     },
     {
@@ -49070,8 +49070,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/kimi-provider",
-      "help": "OpenClaw Kimi provider plugin (plugin: kimi)",
+      "label": "@deneb/kimi-provider",
+      "help": "Deneb Kimi provider plugin (plugin: kimi)",
       "hasChildren": true
     },
     {
@@ -49084,7 +49084,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/kimi-provider Config",
+      "label": "@deneb/kimi-provider Config",
       "help": "Plugin-defined config payload for kimi.",
       "hasChildren": false
     },
@@ -49098,7 +49098,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/kimi-provider",
+      "label": "Enable @deneb/kimi-provider",
       "hasChildren": false
     },
     {
@@ -49191,8 +49191,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/line",
-      "help": "OpenClaw LINE channel plugin (plugin: line)",
+      "label": "@deneb/line",
+      "help": "Deneb LINE channel plugin (plugin: line)",
       "hasChildren": true
     },
     {
@@ -49205,7 +49205,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/line Config",
+      "label": "@deneb/line Config",
       "help": "Plugin-defined config payload for line.",
       "hasChildren": false
     },
@@ -49219,7 +49219,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/line",
+      "label": "Enable @deneb/line",
       "hasChildren": false
     },
     {
@@ -49624,8 +49624,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/matrix",
-      "help": "OpenClaw Matrix channel plugin (plugin: matrix)",
+      "label": "@deneb/matrix",
+      "help": "Deneb Matrix channel plugin (plugin: matrix)",
       "hasChildren": true
     },
     {
@@ -49638,7 +49638,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/matrix Config",
+      "label": "@deneb/matrix Config",
       "help": "Plugin-defined config payload for matrix.",
       "hasChildren": false
     },
@@ -49652,7 +49652,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/matrix",
+      "label": "Enable @deneb/matrix",
       "hasChildren": false
     },
     {
@@ -49745,8 +49745,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/mattermost",
-      "help": "OpenClaw Mattermost channel plugin (plugin: mattermost)",
+      "label": "@deneb/mattermost",
+      "help": "Deneb Mattermost channel plugin (plugin: mattermost)",
       "hasChildren": true
     },
     {
@@ -49759,7 +49759,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/mattermost Config",
+      "label": "@deneb/mattermost Config",
       "help": "Plugin-defined config payload for mattermost.",
       "hasChildren": false
     },
@@ -49773,7 +49773,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/mattermost",
+      "label": "Enable @deneb/mattermost",
       "hasChildren": false
     },
     {
@@ -49866,8 +49866,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/memory-core",
-      "help": "OpenClaw core memory search plugin (plugin: memory-core)",
+      "label": "@deneb/memory-core",
+      "help": "Deneb core memory search plugin (plugin: memory-core)",
       "hasChildren": true
     },
     {
@@ -49880,7 +49880,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/memory-core Config",
+      "label": "@deneb/memory-core Config",
       "help": "Plugin-defined config payload for memory-core.",
       "hasChildren": false
     },
@@ -49894,7 +49894,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/memory-core",
+      "label": "Enable @deneb/memory-core",
       "hasChildren": false
     },
     {
@@ -49987,8 +49987,8 @@
       "tags": [
         "storage"
       ],
-      "label": "@openclaw/memory-lancedb",
-      "help": "OpenClaw LanceDB-backed long-term memory plugin with auto-recall/capture (plugin: memory-lancedb)",
+      "label": "@deneb/memory-lancedb",
+      "help": "Deneb LanceDB-backed long-term memory plugin with auto-recall/capture (plugin: memory-lancedb)",
       "hasChildren": true
     },
     {
@@ -50001,7 +50001,7 @@
       "tags": [
         "storage"
       ],
-      "label": "@openclaw/memory-lancedb Config",
+      "label": "@deneb/memory-lancedb Config",
       "help": "Plugin-defined config payload for memory-lancedb.",
       "hasChildren": true
     },
@@ -50144,7 +50144,7 @@
       "tags": [
         "storage"
       ],
-      "label": "Enable @openclaw/memory-lancedb",
+      "label": "Enable @deneb/memory-lancedb",
       "hasChildren": false
     },
     {
@@ -50237,8 +50237,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/microsoft-speech",
-      "help": "OpenClaw Microsoft speech plugin (plugin: microsoft)",
+      "label": "@deneb/microsoft-speech",
+      "help": "Deneb Microsoft speech plugin (plugin: microsoft)",
       "hasChildren": true
     },
     {
@@ -50251,7 +50251,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/microsoft-speech Config",
+      "label": "@deneb/microsoft-speech Config",
       "help": "Plugin-defined config payload for microsoft.",
       "hasChildren": false
     },
@@ -50265,7 +50265,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/microsoft-speech",
+      "label": "Enable @deneb/microsoft-speech",
       "hasChildren": false
     },
     {
@@ -50358,8 +50358,8 @@
       "tags": [
         "performance"
       ],
-      "label": "@openclaw/minimax-provider",
-      "help": "OpenClaw MiniMax provider and OAuth plugin (plugin: minimax)",
+      "label": "@deneb/minimax-provider",
+      "help": "Deneb MiniMax provider and OAuth plugin (plugin: minimax)",
       "hasChildren": true
     },
     {
@@ -50372,7 +50372,7 @@
       "tags": [
         "performance"
       ],
-      "label": "@openclaw/minimax-provider Config",
+      "label": "@deneb/minimax-provider Config",
       "help": "Plugin-defined config payload for minimax.",
       "hasChildren": false
     },
@@ -50386,7 +50386,7 @@
       "tags": [
         "performance"
       ],
-      "label": "Enable @openclaw/minimax-provider",
+      "label": "Enable @deneb/minimax-provider",
       "hasChildren": false
     },
     {
@@ -50479,8 +50479,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/mistral-provider",
-      "help": "OpenClaw Mistral provider plugin (plugin: mistral)",
+      "label": "@deneb/mistral-provider",
+      "help": "Deneb Mistral provider plugin (plugin: mistral)",
       "hasChildren": true
     },
     {
@@ -50493,7 +50493,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/mistral-provider Config",
+      "label": "@deneb/mistral-provider Config",
       "help": "Plugin-defined config payload for mistral.",
       "hasChildren": false
     },
@@ -50507,7 +50507,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/mistral-provider",
+      "label": "Enable @deneb/mistral-provider",
       "hasChildren": false
     },
     {
@@ -50600,8 +50600,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/modelstudio-provider",
-      "help": "OpenClaw Model Studio provider plugin (plugin: modelstudio)",
+      "label": "@deneb/modelstudio-provider",
+      "help": "Deneb Model Studio provider plugin (plugin: modelstudio)",
       "hasChildren": true
     },
     {
@@ -50614,7 +50614,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/modelstudio-provider Config",
+      "label": "@deneb/modelstudio-provider Config",
       "help": "Plugin-defined config payload for modelstudio.",
       "hasChildren": false
     },
@@ -50628,7 +50628,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/modelstudio-provider",
+      "label": "Enable @deneb/modelstudio-provider",
       "hasChildren": false
     },
     {
@@ -50721,8 +50721,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/moonshot-provider",
-      "help": "OpenClaw Moonshot provider plugin (plugin: moonshot)",
+      "label": "@deneb/moonshot-provider",
+      "help": "Deneb Moonshot provider plugin (plugin: moonshot)",
       "hasChildren": true
     },
     {
@@ -50735,7 +50735,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/moonshot-provider Config",
+      "label": "@deneb/moonshot-provider Config",
       "help": "Plugin-defined config payload for moonshot.",
       "hasChildren": true
     },
@@ -50805,7 +50805,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/moonshot-provider",
+      "label": "Enable @deneb/moonshot-provider",
       "hasChildren": false
     },
     {
@@ -50898,8 +50898,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/msteams",
-      "help": "OpenClaw Microsoft Teams channel plugin (plugin: msteams)",
+      "label": "@deneb/msteams",
+      "help": "Deneb Microsoft Teams channel plugin (plugin: msteams)",
       "hasChildren": true
     },
     {
@@ -50912,7 +50912,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/msteams Config",
+      "label": "@deneb/msteams Config",
       "help": "Plugin-defined config payload for msteams.",
       "hasChildren": false
     },
@@ -50926,7 +50926,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/msteams",
+      "label": "Enable @deneb/msteams",
       "hasChildren": false
     },
     {
@@ -51019,8 +51019,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/nextcloud-talk",
-      "help": "OpenClaw Nextcloud Talk channel plugin (plugin: nextcloud-talk)",
+      "label": "@deneb/nextcloud-talk",
+      "help": "Deneb Nextcloud Talk channel plugin (plugin: nextcloud-talk)",
       "hasChildren": true
     },
     {
@@ -51033,7 +51033,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/nextcloud-talk Config",
+      "label": "@deneb/nextcloud-talk Config",
       "help": "Plugin-defined config payload for nextcloud-talk.",
       "hasChildren": false
     },
@@ -51047,7 +51047,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/nextcloud-talk",
+      "label": "Enable @deneb/nextcloud-talk",
       "hasChildren": false
     },
     {
@@ -51140,8 +51140,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/nostr",
-      "help": "OpenClaw Nostr channel plugin for NIP-04 encrypted DMs (plugin: nostr)",
+      "label": "@deneb/nostr",
+      "help": "Deneb Nostr channel plugin for NIP-04 encrypted DMs (plugin: nostr)",
       "hasChildren": true
     },
     {
@@ -51154,7 +51154,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/nostr Config",
+      "label": "@deneb/nostr Config",
       "help": "Plugin-defined config payload for nostr.",
       "hasChildren": false
     },
@@ -51168,7 +51168,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/nostr",
+      "label": "Enable @deneb/nostr",
       "hasChildren": false
     },
     {
@@ -51261,8 +51261,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/nvidia-provider",
-      "help": "OpenClaw NVIDIA provider plugin (plugin: nvidia)",
+      "label": "@deneb/nvidia-provider",
+      "help": "Deneb NVIDIA provider plugin (plugin: nvidia)",
       "hasChildren": true
     },
     {
@@ -51275,7 +51275,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/nvidia-provider Config",
+      "label": "@deneb/nvidia-provider Config",
       "help": "Plugin-defined config payload for nvidia.",
       "hasChildren": false
     },
@@ -51289,7 +51289,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/nvidia-provider",
+      "label": "Enable @deneb/nvidia-provider",
       "hasChildren": false
     },
     {
@@ -51382,8 +51382,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/ollama-provider",
-      "help": "OpenClaw Ollama provider plugin (plugin: ollama)",
+      "label": "@deneb/ollama-provider",
+      "help": "Deneb Ollama provider plugin (plugin: ollama)",
       "hasChildren": true
     },
     {
@@ -51396,7 +51396,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/ollama-provider Config",
+      "label": "@deneb/ollama-provider Config",
       "help": "Plugin-defined config payload for ollama.",
       "hasChildren": false
     },
@@ -51410,7 +51410,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/ollama-provider",
+      "label": "Enable @deneb/ollama-provider",
       "hasChildren": false
     },
     {
@@ -51624,8 +51624,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/openai-provider",
-      "help": "OpenClaw OpenAI provider plugins (plugin: openai)",
+      "label": "@deneb/openai-provider",
+      "help": "Deneb OpenAI provider plugins (plugin: openai)",
       "hasChildren": true
     },
     {
@@ -51638,7 +51638,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/openai-provider Config",
+      "label": "@deneb/openai-provider Config",
       "help": "Plugin-defined config payload for openai.",
       "hasChildren": false
     },
@@ -51652,7 +51652,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/openai-provider",
+      "label": "Enable @deneb/openai-provider",
       "hasChildren": false
     },
     {
@@ -51745,8 +51745,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/opencode-provider",
-      "help": "OpenClaw OpenCode Zen provider plugin (plugin: opencode)",
+      "label": "@deneb/opencode-provider",
+      "help": "Deneb OpenCode Zen provider plugin (plugin: opencode)",
       "hasChildren": true
     },
     {
@@ -51759,8 +51759,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/opencode-go-provider",
-      "help": "OpenClaw OpenCode Go provider plugin (plugin: opencode-go)",
+      "label": "@deneb/opencode-go-provider",
+      "help": "Deneb OpenCode Go provider plugin (plugin: opencode-go)",
       "hasChildren": true
     },
     {
@@ -51773,7 +51773,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/opencode-go-provider Config",
+      "label": "@deneb/opencode-go-provider Config",
       "help": "Plugin-defined config payload for opencode-go.",
       "hasChildren": false
     },
@@ -51787,7 +51787,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/opencode-go-provider",
+      "label": "Enable @deneb/opencode-go-provider",
       "hasChildren": false
     },
     {
@@ -51880,7 +51880,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/opencode-provider Config",
+      "label": "@deneb/opencode-provider Config",
       "help": "Plugin-defined config payload for opencode.",
       "hasChildren": false
     },
@@ -51894,7 +51894,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/opencode-provider",
+      "label": "Enable @deneb/opencode-provider",
       "hasChildren": false
     },
     {
@@ -51987,8 +51987,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/openrouter-provider",
-      "help": "OpenClaw OpenRouter provider plugin (plugin: openrouter)",
+      "label": "@deneb/openrouter-provider",
+      "help": "Deneb OpenRouter provider plugin (plugin: openrouter)",
       "hasChildren": true
     },
     {
@@ -52001,7 +52001,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/openrouter-provider Config",
+      "label": "@deneb/openrouter-provider Config",
       "help": "Plugin-defined config payload for openrouter.",
       "hasChildren": false
     },
@@ -52015,7 +52015,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/openrouter-provider",
+      "label": "Enable @deneb/openrouter-provider",
       "hasChildren": false
     },
     {
@@ -52165,7 +52165,7 @@
         "advanced"
       ],
       "label": "Sandbox Source",
-      "help": "OpenShell sandbox source for first-time create. Defaults to openclaw.",
+      "help": "OpenShell sandbox source for first-time create. Defaults to deneb.",
       "hasChildren": false
     },
     {
@@ -52396,8 +52396,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/perplexity-plugin",
-      "help": "OpenClaw Perplexity plugin (plugin: perplexity)",
+      "label": "@deneb/perplexity-plugin",
+      "help": "Deneb Perplexity plugin (plugin: perplexity)",
       "hasChildren": true
     },
     {
@@ -52410,7 +52410,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/perplexity-plugin Config",
+      "label": "@deneb/perplexity-plugin Config",
       "help": "Plugin-defined config payload for perplexity.",
       "hasChildren": true
     },
@@ -52480,7 +52480,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/perplexity-plugin",
+      "label": "Enable @deneb/perplexity-plugin",
       "hasChildren": false
     },
     {
@@ -52694,8 +52694,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/qianfan-provider",
-      "help": "OpenClaw Qianfan provider plugin (plugin: qianfan)",
+      "label": "@deneb/qianfan-provider",
+      "help": "Deneb Qianfan provider plugin (plugin: qianfan)",
       "hasChildren": true
     },
     {
@@ -52708,7 +52708,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/qianfan-provider Config",
+      "label": "@deneb/qianfan-provider Config",
       "help": "Plugin-defined config payload for qianfan.",
       "hasChildren": false
     },
@@ -52722,7 +52722,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/qianfan-provider",
+      "label": "Enable @deneb/qianfan-provider",
       "hasChildren": false
     },
     {
@@ -52936,8 +52936,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/sglang-provider",
-      "help": "OpenClaw SGLang provider plugin (plugin: sglang)",
+      "label": "@deneb/sglang-provider",
+      "help": "Deneb SGLang provider plugin (plugin: sglang)",
       "hasChildren": true
     },
     {
@@ -52950,7 +52950,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/sglang-provider Config",
+      "label": "@deneb/sglang-provider Config",
       "help": "Plugin-defined config payload for sglang.",
       "hasChildren": false
     },
@@ -52964,7 +52964,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/sglang-provider",
+      "label": "Enable @deneb/sglang-provider",
       "hasChildren": false
     },
     {
@@ -53057,8 +53057,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/signal",
-      "help": "OpenClaw Signal channel plugin (plugin: signal)",
+      "label": "@deneb/signal",
+      "help": "Deneb Signal channel plugin (plugin: signal)",
       "hasChildren": true
     },
     {
@@ -53071,7 +53071,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/signal Config",
+      "label": "@deneb/signal Config",
       "help": "Plugin-defined config payload for signal.",
       "hasChildren": false
     },
@@ -53085,7 +53085,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/signal",
+      "label": "Enable @deneb/signal",
       "hasChildren": false
     },
     {
@@ -53178,8 +53178,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/slack",
-      "help": "OpenClaw Slack channel plugin (plugin: slack)",
+      "label": "@deneb/slack",
+      "help": "Deneb Slack channel plugin (plugin: slack)",
       "hasChildren": true
     },
     {
@@ -53192,7 +53192,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/slack Config",
+      "label": "@deneb/slack Config",
       "help": "Plugin-defined config payload for slack.",
       "hasChildren": false
     },
@@ -53206,7 +53206,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/slack",
+      "label": "Enable @deneb/slack",
       "hasChildren": false
     },
     {
@@ -53299,8 +53299,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/synology-chat",
-      "help": "Synology Chat channel plugin for OpenClaw (plugin: synology-chat)",
+      "label": "@deneb/synology-chat",
+      "help": "Synology Chat channel plugin for Deneb (plugin: synology-chat)",
       "hasChildren": true
     },
     {
@@ -53313,7 +53313,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/synology-chat Config",
+      "label": "@deneb/synology-chat Config",
       "help": "Plugin-defined config payload for synology-chat.",
       "hasChildren": false
     },
@@ -53327,7 +53327,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/synology-chat",
+      "label": "Enable @deneb/synology-chat",
       "hasChildren": false
     },
     {
@@ -53420,8 +53420,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/synthetic-provider",
-      "help": "OpenClaw Synthetic provider plugin (plugin: synthetic)",
+      "label": "@deneb/synthetic-provider",
+      "help": "Deneb Synthetic provider plugin (plugin: synthetic)",
       "hasChildren": true
     },
     {
@@ -53434,7 +53434,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/synthetic-provider Config",
+      "label": "@deneb/synthetic-provider Config",
       "help": "Plugin-defined config payload for synthetic.",
       "hasChildren": false
     },
@@ -53448,7 +53448,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/synthetic-provider",
+      "label": "Enable @deneb/synthetic-provider",
       "hasChildren": false
     },
     {
@@ -53662,8 +53662,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/telegram",
-      "help": "OpenClaw Telegram channel plugin (plugin: telegram)",
+      "label": "@deneb/telegram",
+      "help": "Deneb Telegram channel plugin (plugin: telegram)",
       "hasChildren": true
     },
     {
@@ -53676,7 +53676,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/telegram Config",
+      "label": "@deneb/telegram Config",
       "help": "Plugin-defined config payload for telegram.",
       "hasChildren": false
     },
@@ -53690,7 +53690,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/telegram",
+      "label": "Enable @deneb/telegram",
       "hasChildren": false
     },
     {
@@ -53942,8 +53942,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/tlon",
-      "help": "OpenClaw Tlon/Urbit channel plugin (plugin: tlon)",
+      "label": "@deneb/tlon",
+      "help": "Deneb Tlon/Urbit channel plugin (plugin: tlon)",
       "hasChildren": true
     },
     {
@@ -53956,7 +53956,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/tlon Config",
+      "label": "@deneb/tlon Config",
       "help": "Plugin-defined config payload for tlon.",
       "hasChildren": false
     },
@@ -53970,7 +53970,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/tlon",
+      "label": "Enable @deneb/tlon",
       "hasChildren": false
     },
     {
@@ -54063,8 +54063,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/together-provider",
-      "help": "OpenClaw Together provider plugin (plugin: together)",
+      "label": "@deneb/together-provider",
+      "help": "Deneb Together provider plugin (plugin: together)",
       "hasChildren": true
     },
     {
@@ -54077,7 +54077,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/together-provider Config",
+      "label": "@deneb/together-provider Config",
       "help": "Plugin-defined config payload for together.",
       "hasChildren": false
     },
@@ -54091,7 +54091,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/together-provider",
+      "label": "Enable @deneb/together-provider",
       "hasChildren": false
     },
     {
@@ -54184,8 +54184,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/twitch",
-      "help": "OpenClaw Twitch channel plugin (plugin: twitch)",
+      "label": "@deneb/twitch",
+      "help": "Deneb Twitch channel plugin (plugin: twitch)",
       "hasChildren": true
     },
     {
@@ -54198,7 +54198,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/twitch Config",
+      "label": "@deneb/twitch Config",
       "help": "Plugin-defined config payload for twitch.",
       "hasChildren": false
     },
@@ -54212,7 +54212,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/twitch",
+      "label": "Enable @deneb/twitch",
       "hasChildren": false
     },
     {
@@ -54305,8 +54305,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/venice-provider",
-      "help": "OpenClaw Venice provider plugin (plugin: venice)",
+      "label": "@deneb/venice-provider",
+      "help": "Deneb Venice provider plugin (plugin: venice)",
       "hasChildren": true
     },
     {
@@ -54319,7 +54319,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/venice-provider Config",
+      "label": "@deneb/venice-provider Config",
       "help": "Plugin-defined config payload for venice.",
       "hasChildren": false
     },
@@ -54333,7 +54333,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/venice-provider",
+      "label": "Enable @deneb/venice-provider",
       "hasChildren": false
     },
     {
@@ -54426,8 +54426,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/vercel-ai-gateway-provider",
-      "help": "OpenClaw Vercel AI Gateway provider plugin (plugin: vercel-ai-gateway)",
+      "label": "@deneb/vercel-ai-gateway-provider",
+      "help": "Deneb Vercel AI Gateway provider plugin (plugin: vercel-ai-gateway)",
       "hasChildren": true
     },
     {
@@ -54440,7 +54440,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/vercel-ai-gateway-provider Config",
+      "label": "@deneb/vercel-ai-gateway-provider Config",
       "help": "Plugin-defined config payload for vercel-ai-gateway.",
       "hasChildren": false
     },
@@ -54454,7 +54454,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/vercel-ai-gateway-provider",
+      "label": "Enable @deneb/vercel-ai-gateway-provider",
       "hasChildren": false
     },
     {
@@ -54547,8 +54547,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/vllm-provider",
-      "help": "OpenClaw vLLM provider plugin (plugin: vllm)",
+      "label": "@deneb/vllm-provider",
+      "help": "Deneb vLLM provider plugin (plugin: vllm)",
       "hasChildren": true
     },
     {
@@ -54561,7 +54561,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/vllm-provider Config",
+      "label": "@deneb/vllm-provider Config",
       "help": "Plugin-defined config payload for vllm.",
       "hasChildren": false
     },
@@ -54575,7 +54575,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/vllm-provider",
+      "label": "Enable @deneb/vllm-provider",
       "hasChildren": false
     },
     {
@@ -54668,8 +54668,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/voice-call",
-      "help": "OpenClaw voice-call plugin (plugin: voice-call)",
+      "label": "@deneb/voice-call",
+      "help": "Deneb voice-call plugin (plugin: voice-call)",
       "hasChildren": true
     },
     {
@@ -54682,7 +54682,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/voice-call Config",
+      "label": "@deneb/voice-call Config",
       "help": "Plugin-defined config payload for voice-call.",
       "hasChildren": true
     },
@@ -56052,7 +56052,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/voice-call",
+      "label": "Enable @deneb/voice-call",
       "hasChildren": false
     },
     {
@@ -56145,8 +56145,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/volcengine-provider",
-      "help": "OpenClaw Volcengine provider plugin (plugin: volcengine)",
+      "label": "@deneb/volcengine-provider",
+      "help": "Deneb Volcengine provider plugin (plugin: volcengine)",
       "hasChildren": true
     },
     {
@@ -56159,7 +56159,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/volcengine-provider Config",
+      "label": "@deneb/volcengine-provider Config",
       "help": "Plugin-defined config payload for volcengine.",
       "hasChildren": false
     },
@@ -56173,7 +56173,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/volcengine-provider",
+      "label": "Enable @deneb/volcengine-provider",
       "hasChildren": false
     },
     {
@@ -56266,8 +56266,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/whatsapp",
-      "help": "OpenClaw WhatsApp channel plugin (plugin: whatsapp)",
+      "label": "@deneb/whatsapp",
+      "help": "Deneb WhatsApp channel plugin (plugin: whatsapp)",
       "hasChildren": true
     },
     {
@@ -56280,7 +56280,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/whatsapp Config",
+      "label": "@deneb/whatsapp Config",
       "help": "Plugin-defined config payload for whatsapp.",
       "hasChildren": false
     },
@@ -56294,7 +56294,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/whatsapp",
+      "label": "Enable @deneb/whatsapp",
       "hasChildren": false
     },
     {
@@ -56387,8 +56387,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/xai-plugin",
-      "help": "OpenClaw xAI plugin (plugin: xai)",
+      "label": "@deneb/xai-plugin",
+      "help": "Deneb xAI plugin (plugin: xai)",
       "hasChildren": true
     },
     {
@@ -56401,7 +56401,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/xai-plugin Config",
+      "label": "@deneb/xai-plugin Config",
       "help": "Plugin-defined config payload for xai.",
       "hasChildren": true
     },
@@ -56471,7 +56471,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/xai-plugin",
+      "label": "Enable @deneb/xai-plugin",
       "hasChildren": false
     },
     {
@@ -56564,8 +56564,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/xiaomi-provider",
-      "help": "OpenClaw Xiaomi provider plugin (plugin: xiaomi)",
+      "label": "@deneb/xiaomi-provider",
+      "help": "Deneb Xiaomi provider plugin (plugin: xiaomi)",
       "hasChildren": true
     },
     {
@@ -56578,7 +56578,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/xiaomi-provider Config",
+      "label": "@deneb/xiaomi-provider Config",
       "help": "Plugin-defined config payload for xiaomi.",
       "hasChildren": false
     },
@@ -56592,7 +56592,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/xiaomi-provider",
+      "label": "Enable @deneb/xiaomi-provider",
       "hasChildren": false
     },
     {
@@ -56685,8 +56685,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/zai-provider",
-      "help": "OpenClaw Z.AI provider plugin (plugin: zai)",
+      "label": "@deneb/zai-provider",
+      "help": "Deneb Z.AI provider plugin (plugin: zai)",
       "hasChildren": true
     },
     {
@@ -56699,7 +56699,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/zai-provider Config",
+      "label": "@deneb/zai-provider Config",
       "help": "Plugin-defined config payload for zai.",
       "hasChildren": false
     },
@@ -56713,7 +56713,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/zai-provider",
+      "label": "Enable @deneb/zai-provider",
       "hasChildren": false
     },
     {
@@ -56806,8 +56806,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/zalo",
-      "help": "OpenClaw Zalo channel plugin (plugin: zalo)",
+      "label": "@deneb/zalo",
+      "help": "Deneb Zalo channel plugin (plugin: zalo)",
       "hasChildren": true
     },
     {
@@ -56820,7 +56820,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/zalo Config",
+      "label": "@deneb/zalo Config",
       "help": "Plugin-defined config payload for zalo.",
       "hasChildren": false
     },
@@ -56834,7 +56834,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/zalo",
+      "label": "Enable @deneb/zalo",
       "hasChildren": false
     },
     {
@@ -56927,8 +56927,8 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/zalouser",
-      "help": "OpenClaw Zalo Personal Account plugin via native zca-js integration (plugin: zalouser)",
+      "label": "@deneb/zalouser",
+      "help": "Deneb Zalo Personal Account plugin via native zca-js integration (plugin: zalouser)",
       "hasChildren": true
     },
     {
@@ -56941,7 +56941,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "@openclaw/zalouser Config",
+      "label": "@deneb/zalouser Config",
       "help": "Plugin-defined config payload for zalouser.",
       "hasChildren": false
     },
@@ -56955,7 +56955,7 @@
       "tags": [
         "advanced"
       ],
-      "label": "Enable @openclaw/zalouser",
+      "label": "Enable @deneb/zalouser",
       "hasChildren": false
     },
     {
@@ -57049,7 +57049,7 @@
         "advanced"
       ],
       "label": "Plugin Install Records",
-      "help": "CLI-managed install metadata (used by `openclaw plugins update` to locate install sources).",
+      "help": "CLI-managed install metadata (used by `deneb plugins update` to locate install sources).",
       "hasChildren": true
     },
     {
@@ -57087,7 +57087,7 @@
         "storage"
       ],
       "label": "Plugin Install Path",
-      "help": "Resolved install directory (usually ~/.openclaw/extensions/<id>).",
+      "help": "Resolved install directory (usually ~/.deneb/extensions/<id>).",
       "hasChildren": false
     },
     {
@@ -57953,7 +57953,7 @@
         "storage"
       ],
       "label": "Session Parent Fork Max Tokens",
-      "help": "Maximum parent-session token count allowed for thread/session inheritance forking. If the parent exceeds this, OpenClaw starts a fresh thread session instead of forking; set 0 to disable this protection.",
+      "help": "Maximum parent-session token count allowed for thread/session inheritance forking. If the parent exceeds this, Deneb starts a fresh thread session instead of forking; set 0 to disable this protection.",
       "hasChildren": false
     },
     {
@@ -63898,7 +63898,7 @@
         "advanced"
       ],
       "label": "Updates",
-      "help": "Update-channel and startup-check behavior for keeping OpenClaw runtime versions current. Use conservative channels in production and more experimental channels only in controlled environments.",
+      "help": "Update-channel and startup-check behavior for keeping Deneb runtime versions current. Use conservative channels in production and more experimental channels only in controlled environments.",
       "hasChildren": true
     },
     {
@@ -64202,7 +64202,7 @@
         "advanced"
       ],
       "label": "Wizard Last Run Version",
-      "help": "OpenClaw version recorded at the time of the most recent wizard run on this config. Use this when diagnosing behavior differences across version-to-version setup changes.",
+      "help": "Deneb version recorded at the time of the most recent wizard run on this config. Use this when diagnosing behavior differences across version-to-version setup changes.",
       "hasChildren": false
     }
   ]

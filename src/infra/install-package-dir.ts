@@ -173,7 +173,7 @@ export async function installPackageDir(params: {
       installBaseDir: installBaseRealPath,
       candidatePaths: [canonicalTargetDir],
     });
-    stageDir = await fs.mkdtemp(path.join(installBaseRealPath, ".openclaw-install-stage-"));
+    stageDir = await fs.mkdtemp(path.join(installBaseRealPath, ".deneb-install-stage-"));
     await fs.cp(params.sourceDir, stageDir, { recursive: true });
   } catch (err) {
     return await fail(`${params.copyErrorPrefix}: ${String(err)}`, err);
@@ -203,7 +203,7 @@ export async function installPackageDir(params: {
   }
 
   if (params.mode === "update" && (await fileExists(canonicalTargetDir))) {
-    const backupRoot = path.join(installBaseRealPath, ".openclaw-install-backups");
+    const backupRoot = path.join(installBaseRealPath, ".deneb-install-backups");
     backupDir = path.join(backupRoot, `${path.basename(canonicalTargetDir)}-${Date.now()}`);
     try {
       await fs.mkdir(backupRoot, { recursive: true });

@@ -2,11 +2,11 @@
 // Keep this list additive and scoped to symbols used under extensions/llm-task.
 
 export { definePluginEntry } from "./core.js";
-export { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
+export { resolvePreferredDenebTmpDir } from "../infra/tmp-deneb-dir.js";
 export {
   formatThinkingLevels,
   formatXHighModelHint,
   normalizeThinkLevel,
   supportsXHighThinking,
 } from "../auto-reply/thinking.js";
-export type { AnyAgentTool, OpenClawPluginApi } from "../plugins/types.js";
+export type { AnyAgentTool, DenebPluginApi } from "../plugins/types.js";

@@ -29,7 +29,7 @@ type GuardedSource = {
 const SAME_CHANNEL_SDK_GUARDS: GuardedSource[] = [
   {
     path: "extensions/telegram/src/shared.ts",
-    forbiddenPatterns: [/["']openclaw\/plugin-sdk\/telegram["']/, /plugin-sdk-internal\/telegram/],
+    forbiddenPatterns: [/["']deneb\/plugin-sdk\/telegram["']/, /plugin-sdk-internal\/telegram/],
   },
 ];
 
@@ -295,11 +295,11 @@ describe("channel import guardrails", () => {
   it("keeps bundled extension source files off root and compat plugin-sdk imports", () => {
     for (const file of collectExtensionSourceFiles()) {
       const text = readFileSync(file, "utf8");
-      expect(text, `${file} should not import openclaw/plugin-sdk root`).not.toMatch(
-        /["']openclaw\/plugin-sdk["']/,
+      expect(text, `${file} should not import deneb/plugin-sdk root`).not.toMatch(
+        /["']deneb\/plugin-sdk["']/,
       );
-      expect(text, `${file} should not import openclaw/plugin-sdk/compat`).not.toMatch(
-        /["']openclaw\/plugin-sdk\/compat["']/,
+      expect(text, `${file} should not import deneb/plugin-sdk/compat`).not.toMatch(
+        /["']deneb\/plugin-sdk\/compat["']/,
       );
     }
   });
@@ -361,7 +361,7 @@ describe("channel import guardrails", () => {
         expect(
           text,
           `${normalized} should import ${extensionId} helpers via the local api barrel`,
-        ).not.toMatch(new RegExp(`["']openclaw/plugin-sdk/${extensionId}["']`, "u"));
+        ).not.toMatch(new RegExp(`["']deneb/plugin-sdk/${extensionId}["']`, "u"));
       }
     }
   });

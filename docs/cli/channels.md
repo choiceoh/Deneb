@@ -1,12 +1,12 @@
 ---
-summary: "CLI reference for `openclaw channels` (accounts, status, login/logout, logs)"
+summary: "CLI reference for `deneb channels` (accounts, status, login/logout, logs)"
 read_when:
   - You want to add/remove channel accounts (WhatsApp/Telegram/Discord/Google Chat/Slack/Mattermost (plugin)/Signal/iMessage)
   - You want to check channel status or tail channel logs
 title: "channels"
 ---
 
-# `openclaw channels`
+# `deneb channels`
 
 Manage chat channel accounts and their runtime status on the Gateway.
 
@@ -18,25 +18,25 @@ Related docs:
 ## Common commands
 
 ```bash
-openclaw channels list
-openclaw channels status
-openclaw channels capabilities
-openclaw channels capabilities --channel discord --target channel:123
-openclaw channels resolve --channel slack "#general" "@jane"
-openclaw channels logs --channel all
+deneb channels list
+deneb channels status
+deneb channels capabilities
+deneb channels capabilities --channel discord --target channel:123
+deneb channels resolve --channel slack "#general" "@jane"
+deneb channels logs --channel all
 ```
 
 ## Add / remove accounts
 
 ```bash
-openclaw channels add --channel telegram --token <bot-token>
-openclaw channels add --channel nostr --private-key "$NOSTR_PRIVATE_KEY"
-openclaw channels remove --channel telegram --delete
+deneb channels add --channel telegram --token <bot-token>
+deneb channels add --channel nostr --private-key "$NOSTR_PRIVATE_KEY"
+deneb channels remove --channel telegram --delete
 ```
 
-Tip: `openclaw channels add --help` shows per-channel flags (token, private key, app token, signal-cli paths, etc).
+Tip: `deneb channels add --help` shows per-channel flags (token, private key, app token, signal-cli paths, etc).
 
-When you run `openclaw channels add` without flags, the interactive wizard can prompt:
+When you run `deneb channels add` without flags, the interactive wizard can prompt:
 
 - account ids per selected channel
 - optional display names for those accounts
@@ -44,9 +44,9 @@ When you run `openclaw channels add` without flags, the interactive wizard can p
 
 If you confirm bind now, the wizard asks which agent should own each configured channel account and writes account-scoped routing bindings.
 
-You can also manage the same routing rules later with `openclaw agents bindings`, `openclaw agents bind`, and `openclaw agents unbind` (see [agents](/cli/agents)).
+You can also manage the same routing rules later with `deneb agents bindings`, `deneb agents bind`, and `deneb agents unbind` (see [agents](/cli/agents)).
 
-When you add a non-default account to a channel that is still using single-account top-level settings (no `channels.<channel>.accounts` entries yet), OpenClaw moves account-scoped single-account top-level values into `channels.<channel>.accounts.default`, then writes the new account. This preserves the original account behavior while moving to the multi-account shape.
+When you add a non-default account to a channel that is still using single-account top-level settings (no `channels.<channel>.accounts` entries yet), Deneb moves account-scoped single-account top-level values into `channels.<channel>.accounts.default`, then writes the new account. This preserves the original account behavior while moving to the multi-account shape.
 
 Routing behavior stays consistent:
 
@@ -54,29 +54,29 @@ Routing behavior stays consistent:
 - `channels add` does not auto-create or rewrite bindings in non-interactive mode.
 - Interactive setup can optionally add account-scoped bindings.
 
-If your config was already in a mixed state (named accounts present, missing `default`, and top-level single-account values still set), run `openclaw doctor --fix` to move account-scoped values into `accounts.default`.
+If your config was already in a mixed state (named accounts present, missing `default`, and top-level single-account values still set), run `deneb doctor --fix` to move account-scoped values into `accounts.default`.
 
 ## Login / logout (interactive)
 
 ```bash
-openclaw channels login --channel whatsapp
-openclaw channels logout --channel whatsapp
+deneb channels login --channel whatsapp
+deneb channels logout --channel whatsapp
 ```
 
 ## Troubleshooting
 
-- Run `openclaw status --deep` for a broad probe.
-- Use `openclaw doctor` for guided fixes.
-- `openclaw channels list` prints `Claude: HTTP 403 ... user:profile` → usage snapshot needs the `user:profile` scope. Use `--no-usage`, or provide a claude.ai session key (`CLAUDE_WEB_SESSION_KEY` / `CLAUDE_WEB_COOKIE`), or re-auth via Claude Code CLI.
-- `openclaw channels status` falls back to config-only summaries when the gateway is unreachable. If a supported channel credential is configured via SecretRef but unavailable in the current command path, it reports that account as configured with degraded notes instead of showing it as not configured.
+- Run `deneb status --deep` for a broad probe.
+- Use `deneb doctor` for guided fixes.
+- `deneb channels list` prints `Claude: HTTP 403 ... user:profile` → usage snapshot needs the `user:profile` scope. Use `--no-usage`, or provide a claude.ai session key (`CLAUDE_WEB_SESSION_KEY` / `CLAUDE_WEB_COOKIE`), or re-auth via Claude Code CLI.
+- `deneb channels status` falls back to config-only summaries when the gateway is unreachable. If a supported channel credential is configured via SecretRef but unavailable in the current command path, it reports that account as configured with degraded notes instead of showing it as not configured.
 
 ## Capabilities probe
 
 Fetch provider capability hints (intents/scopes where available) plus static feature support:
 
 ```bash
-openclaw channels capabilities
-openclaw channels capabilities --channel discord --target channel:123
+deneb channels capabilities
+deneb channels capabilities --channel discord --target channel:123
 ```
 
 Notes:
@@ -90,9 +90,9 @@ Notes:
 Resolve channel/user names to IDs using the provider directory:
 
 ```bash
-openclaw channels resolve --channel slack "#general" "@jane"
-openclaw channels resolve --channel discord "My Server/#support" "@someone"
-openclaw channels resolve --channel matrix "Project Room"
+deneb channels resolve --channel slack "#general" "@jane"
+deneb channels resolve --channel discord "My Server/#support" "@someone"
+deneb channels resolve --channel matrix "Project Room"
 ```
 
 Notes:

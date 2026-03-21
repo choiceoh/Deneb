@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { MsgContext } from "../auto-reply/templating.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { getMediaUnderstandingProvider } from "./providers/index.js";
 import {
   buildProviderRegistry,
@@ -21,7 +21,7 @@ const KIND_BY_CAPABILITY: Record<MediaUnderstandingCapability, MediaUnderstandin
 export type RunMediaUnderstandingFileParams = {
   capability: MediaUnderstandingCapability;
   filePath: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentDir?: string;
   mime?: string;
   activeModel?: ActiveMediaModel;
@@ -84,7 +84,7 @@ export async function runMediaUnderstandingFile(
 
 export async function describeImageFile(params: {
   filePath: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentDir?: string;
   mime?: string;
   activeModel?: ActiveMediaModel;
@@ -94,7 +94,7 @@ export async function describeImageFile(params: {
 
 export async function describeImageFileWithModel(params: {
   filePath: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentDir?: string;
   mime?: string;
   provider: string;
@@ -126,7 +126,7 @@ export async function describeImageFileWithModel(params: {
 
 export async function describeVideoFile(params: {
   filePath: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentDir?: string;
   mime?: string;
   activeModel?: ActiveMediaModel;
@@ -136,7 +136,7 @@ export async function describeVideoFile(params: {
 
 export async function transcribeAudioFile(params: {
   filePath: string;
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   agentDir?: string;
   mime?: string;
   activeModel?: ActiveMediaModel;

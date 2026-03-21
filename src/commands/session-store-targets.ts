@@ -3,12 +3,12 @@ import {
   type SessionStoreSelectionOptions,
   type SessionStoreTarget,
 } from "../config/sessions.js";
-import type { OpenClawConfig } from "../config/types.openclaw.js";
+import type { DenebConfig } from "../config/types.deneb.js";
 import type { RuntimeEnv } from "../runtime.js";
 export { resolveSessionStoreTargets, type SessionStoreSelectionOptions, type SessionStoreTarget };
 
 export function resolveSessionStoreTargetsOrExit(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   opts: SessionStoreSelectionOptions;
   runtime: RuntimeEnv;
 }): SessionStoreTarget[] | null {

@@ -1,12 +1,12 @@
 import { DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { resolveAllowlistModelKey } from "../agents/model-selection.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 
 export function ensureModelAllowlistEntry(params: {
-  cfg: OpenClawConfig;
+  cfg: DenebConfig;
   modelRef: string;
   defaultProvider?: string;
-}): OpenClawConfig {
+}): DenebConfig {
   const rawModelRef = params.modelRef.trim();
   if (!rawModelRef) {
     return params.cfg;

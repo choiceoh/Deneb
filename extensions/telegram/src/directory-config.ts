@@ -1,8 +1,8 @@
-import { mapAllowFromEntries } from "openclaw/plugin-sdk/channel-config-helpers";
+import { mapAllowFromEntries } from "deneb/plugin-sdk/channel-config-helpers";
 import {
   listInspectedDirectoryEntriesFromSources,
   type DirectoryConfigParams,
-} from "openclaw/plugin-sdk/directory-runtime";
+} from "deneb/plugin-sdk/directory-runtime";
 import { inspectTelegramAccount, type InspectedTelegramAccount } from "../api.js";
 
 export async function listTelegramDirectoryPeersFromConfig(params: DirectoryConfigParams) {

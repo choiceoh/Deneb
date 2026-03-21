@@ -1,7 +1,7 @@
 /**
  * dynamic-registry.ts — Deneb: 런타임 채널 등록 시스템
  *
- * 기존 OpenClaw은 빌드 시점에 채널 목록을 결정(ids.ts, registry.ts, entrypoints.json).
+ * 기존 Deneb은 빌드 시점에 채널 목록을 결정(ids.ts, registry.ts, entrypoints.json).
  * 데네브는 채널이 런타임에 자신을 등록하는 구조로 변경.
  * 코어는 등록된 채널만 알고, 나머지는 모름.
  */

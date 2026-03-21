@@ -2,7 +2,7 @@
 summary: "Webhook ingress for wake and isolated agent runs"
 read_when:
   - Adding or changing webhook endpoints
-  - Wiring external systems into OpenClaw
+  - Wiring external systems into Deneb
 title: "Webhooks"
 ---
 
@@ -36,7 +36,7 @@ Notes:
 Every request must include the hook token. Prefer headers:
 
 - `Authorization: Bearer <token>` (recommended)
-- `x-openclaw-token: <token>`
+- `x-deneb-token: <token>`
 - Query-string tokens are rejected (`?token=...` returns `400`).
 - Treat `hooks.token` holders as full-trust callers for the hook ingress surface on that gateway. Hook payload content is still untrusted, but this is not a separate non-owner auth boundary.
 
@@ -109,7 +109,7 @@ Recommended config:
 {
   hooks: {
     enabled: true,
-    token: "${OPENCLAW_HOOKS_TOKEN}",
+    token: "${DENEB_HOOKS_TOKEN}",
     defaultSessionKey: "hook:ingress",
     allowRequestSessionKey: false,
     allowedSessionKeyPrefixes: ["hook:"],
@@ -123,7 +123,7 @@ Compatibility config (legacy behavior):
 {
   hooks: {
     enabled: true,
-    token: "${OPENCLAW_HOOKS_TOKEN}",
+    token: "${DENEB_HOOKS_TOKEN}",
     allowRequestSessionKey: true,
     allowedSessionKeyPrefixes: ["hook:"], // strongly recommended
   },
@@ -141,7 +141,7 @@ Mapping options (summary):
 - `hooks.presets: ["gmail"]` enables the built-in Gmail mapping.
 - `hooks.mappings` lets you define `match`, `action`, and templates in config.
 - `hooks.transformsDir` + `transform.module` loads a JS/TS module for custom logic.
-  - `hooks.transformsDir` (if set) must stay within the transforms root under your OpenClaw config directory (typically `~/.openclaw/hooks/transforms`).
+  - `hooks.transformsDir` (if set) must stay within the transforms root under your Deneb config directory (typically `~/.deneb/hooks/transforms`).
   - `transform.module` must resolve within the effective transforms directory (traversal/escape paths are rejected).
 - Use `match.source` to keep a generic ingest endpoint (payload-driven routing).
 - TS transforms require a TS loader (e.g. `bun` or `tsx`) or precompiled `.js` at runtime.
@@ -154,7 +154,7 @@ Mapping options (summary):
 - `hooks.allowedSessionKeyPrefixes` optionally restricts explicit `sessionKey` values from request payloads and mappings.
 - `allowUnsafeExternalContent: true` disables the external content safety wrapper for that hook
   (dangerous; only for trusted internal sources).
-- `openclaw webhooks gmail setup` writes `hooks.gmail` config for `openclaw webhooks gmail run`.
+- `deneb webhooks gmail setup` writes `hooks.gmail` config for `deneb webhooks gmail run`.
   See [Gmail Pub/Sub](/automation/gmail-pubsub) for the full Gmail watch flow.
 
 ## Responses
@@ -177,7 +177,7 @@ curl -X POST http://127.0.0.1:18789/hooks/wake \
 
 ```bash
 curl -X POST http://127.0.0.1:18789/hooks/agent \
-  -H 'x-openclaw-token: SECRET' \
+  -H 'x-deneb-token: SECRET' \
   -H 'Content-Type: application/json' \
   -d '{"message":"Summarize inbox","name":"Email","wakeMode":"next-heartbeat"}'
 ```
@@ -188,7 +188,7 @@ Add `model` to the agent payload (or mapping) to override the model for that run
 
 ```bash
 curl -X POST http://127.0.0.1:18789/hooks/agent \
-  -H 'x-openclaw-token: SECRET' \
+  -H 'x-deneb-token: SECRET' \
   -H 'Content-Type: application/json' \
   -d '{"message":"Summarize inbox","name":"Email","model":"openai/gpt-5.2-mini"}'
 ```

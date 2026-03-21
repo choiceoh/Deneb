@@ -10,7 +10,7 @@ title: "Firecrawl"
 
 # Firecrawl
 
-OpenClaw can use **Firecrawl** in three ways:
+Deneb can use **Firecrawl** in three ways:
 
 - as the `web_search` provider
 - as explicit plugin tools: `firecrawl_search` and `firecrawl_scrape`
@@ -53,7 +53,7 @@ which helps with JS-heavy sites or pages that block plain HTTP fetches.
 
 Notes:
 
-- Choosing Firecrawl in onboarding or `openclaw configure --section web` enables the bundled Firecrawl plugin automatically.
+- Choosing Firecrawl in onboarding or `deneb configure --section web` enables the bundled Firecrawl plugin automatically.
 - `web_search` with Firecrawl supports `query` and `count`.
 - For Firecrawl-specific controls like `sources`, `categories`, or result scraping, use `firecrawl_search`.
 
@@ -125,7 +125,7 @@ Core parameters:
 ## Stealth / bot circumvention
 
 Firecrawl exposes a **proxy mode** parameter for bot circumvention (`basic`, `stealth`, or `auto`).
-OpenClaw always uses `proxy: "auto"` plus `storeInCache: true` for Firecrawl requests.
+Deneb always uses `proxy: "auto"` plus `storeInCache: true` for Firecrawl requests.
 If proxy is omitted, Firecrawl defaults to `auto`. `auto` retries with stealth proxies if a basic attempt fails, which may use more credits
 than basic-only scraping.
 

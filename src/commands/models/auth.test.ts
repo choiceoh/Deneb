@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import type { ProviderPlugin } from "../../plugins/types.js";
 import type { RuntimeEnv } from "../../runtime.js";
 
@@ -125,8 +125,8 @@ function createProvider(params: {
 
 describe("modelsAuthLoginCommand", () => {
   let restoreStdin: (() => void) | null = null;
-  let currentConfig: OpenClawConfig;
-  let lastUpdatedConfig: OpenClawConfig | null;
+  let currentConfig: DenebConfig;
+  let lastUpdatedConfig: DenebConfig | null;
   let runProviderAuth: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -144,12 +144,12 @@ describe("modelsAuthLoginCommand", () => {
     mocks.upsertAuthProfile.mockReset();
 
     mocks.resolveDefaultAgentId.mockReturnValue("main");
-    mocks.resolveAgentDir.mockReturnValue("/tmp/openclaw/agents/main");
-    mocks.resolveAgentWorkspaceDir.mockReturnValue("/tmp/openclaw/workspace");
-    mocks.resolveDefaultAgentWorkspaceDir.mockReturnValue("/tmp/openclaw/workspace");
+    mocks.resolveAgentDir.mockReturnValue("/tmp/deneb/agents/main");
+    mocks.resolveAgentWorkspaceDir.mockReturnValue("/tmp/deneb/workspace");
+    mocks.resolveDefaultAgentWorkspaceDir.mockReturnValue("/tmp/deneb/workspace");
     mocks.loadValidConfigOrThrow.mockImplementation(async () => currentConfig);
     mocks.updateConfig.mockImplementation(
-      async (mutator: (cfg: OpenClawConfig) => OpenClawConfig) => {
+      async (mutator: (cfg: DenebConfig) => DenebConfig) => {
         lastUpdatedConfig = mutator(currentConfig);
         currentConfig = lastUpdatedConfig;
         return lastUpdatedConfig;
@@ -204,7 +204,7 @@ describe("modelsAuthLoginCommand", () => {
         type: "oauth",
         provider: "openai-codex",
       }),
-      agentDir: "/tmp/openclaw/agents/main",
+      agentDir: "/tmp/deneb/agents/main",
     });
     expect(lastUpdatedConfig?.auth?.profiles?.["openai-codex:user@example.com"]).toMatchObject({
       provider: "openai-codex",
@@ -254,7 +254,7 @@ describe("modelsAuthLoginCommand", () => {
     expect(mocks.clearAuthProfileCooldown).toHaveBeenCalledWith({
       store: fakeStore,
       profileId: "openai-codex:user@example.com",
-      agentDir: "/tmp/openclaw/agents/main",
+      agentDir: "/tmp/deneb/agents/main",
     });
     // Verify clearing happens before login attempt
     const clearOrder = mocks.clearAuthProfileCooldown.mock.invocationCallOrder[0];
@@ -280,14 +280,14 @@ describe("modelsAuthLoginCommand", () => {
 
     await modelsAuthLoginCommand({ provider: "openai-codex" }, runtime);
 
-    expect(mocks.loadAuthProfileStoreForRuntime).toHaveBeenCalledWith("/tmp/openclaw/agents/main");
+    expect(mocks.loadAuthProfileStoreForRuntime).toHaveBeenCalledWith("/tmp/deneb/agents/main");
   });
 
   it("reports loaded plugin providers when requested provider is unavailable", async () => {
     const runtime = createRuntime();
 
     await expect(modelsAuthLoginCommand({ provider: "anthropic" }, runtime)).rejects.toThrow(
-      'Unknown provider "anthropic". Loaded providers: openai-codex. Verify plugins via `openclaw plugins list --json`.',
+      'Unknown provider "anthropic". Loaded providers: openai-codex. Verify plugins via `deneb plugins list --json`.',
     );
   });
 
@@ -354,7 +354,7 @@ describe("modelsAuthLoginCommand", () => {
         provider: "moonshot",
         token: "moonshot-token",
       },
-      agentDir: "/tmp/openclaw/agents/main",
+      agentDir: "/tmp/deneb/agents/main",
     });
   });
 });

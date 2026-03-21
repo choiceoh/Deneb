@@ -1,6 +1,6 @@
 ---
 title: "Memory"
-summary: "How OpenClaw memory works (workspace files + automatic memory flush)"
+summary: "How Deneb memory works (workspace files + automatic memory flush)"
 read_when:
   - You want the memory file layout and workflow
   - You want to tune the automatic pre-compaction memory flush
@@ -8,7 +8,7 @@ read_when:
 
 # Memory
 
-OpenClaw memory is **plain Markdown in the agent workspace**. The files are the
+Deneb memory is **plain Markdown in the agent workspace**. The files are the
 source of truth; the model only "remembers" what gets written to disk.
 
 Memory search tools are provided by the active memory plugin (default:
@@ -23,16 +23,16 @@ The default workspace layout uses two memory layers:
   - Read today + yesterday at session start.
 - `MEMORY.md` (optional)
   - Curated long-term memory.
-  - If both `MEMORY.md` and `memory.md` exist at the workspace root, OpenClaw only loads `MEMORY.md`.
+  - If both `MEMORY.md` and `memory.md` exist at the workspace root, Deneb only loads `MEMORY.md`.
   - Lowercase `memory.md` is only used as a fallback when `MEMORY.md` is absent.
   - **Only load in the main, private session** (never in group contexts).
 
 These files live under the workspace (`agents.defaults.workspace`, default
-`~/.openclaw/workspace`). See [Agent workspace](/concepts/agent-workspace) for the full layout.
+`~/.deneb/workspace`). See [Agent workspace](/concepts/agent-workspace) for the full layout.
 
 ## Memory tools
 
-OpenClaw exposes two agent-facing tools for these Markdown files:
+Deneb exposes two agent-facing tools for these Markdown files:
 
 - `memory_search` — semantic recall over indexed snippets.
 - `memory_get` — targeted read of a specific Markdown file/line range.
@@ -53,7 +53,7 @@ tool call in try/catch logic.
 
 ## Automatic memory flush (pre-compaction ping)
 
-When a session is **close to auto-compaction**, OpenClaw triggers a **silent,
+When a session is **close to auto-compaction**, Deneb triggers a **silent,
 agentic turn** that reminds the model to write durable memory **before** the
 context is compacted. The default prompts explicitly say the model _may reply_,
 but usually `NO_REPLY` is the correct response so the user never sees this turn.
@@ -93,7 +93,7 @@ For the full compaction lifecycle, see
 
 ## Vector memory search
 
-OpenClaw can build a small vector index over `MEMORY.md` and `memory/*.md` so
+Deneb can build a small vector index over `MEMORY.md` and `memory/*.md` so
 semantic queries can find related notes even when wording differs.
 
 Defaults:
@@ -102,7 +102,7 @@ Defaults:
 - Watches memory files for changes (debounced).
 - Configure memory search under `agents.defaults.memorySearch` (not top-level
   `memorySearch`).
-- Uses remote embeddings by default. If `memorySearch.provider` is not set, OpenClaw auto-selects:
+- Uses remote embeddings by default. If `memorySearch.provider` is not set, Deneb auto-selects:
   1. `local` if a `memorySearch.local.modelPath` is configured and the file exists.
   2. `openai` if an OpenAI key can be resolved.
   3. `gemini` if a Gemini key can be resolved.
@@ -114,7 +114,7 @@ Defaults:
 - `memorySearch.provider = "ollama"` is also supported for local/self-hosted
   Ollama embeddings (`/api/embeddings`), but it is not auto-selected.
 
-Remote embeddings **require** an API key for the embedding provider. OpenClaw
+Remote embeddings **require** an API key for the embedding provider. Deneb
 resolves keys from auth profiles, `models.providers.*.apiKey`, or environment
 variables. Codex OAuth only covers chat/completions and does **not** satisfy
 embeddings for memory search. For Gemini, use `GEMINI_API_KEY` or
@@ -130,7 +130,7 @@ set `memorySearch.remote.apiKey` (and optional `memorySearch.remote.headers`).
 
 Set `memory.backend = "qmd"` to swap the built-in SQLite indexer for
 [QMD](https://github.com/tobi/qmd): a local-first search sidecar that combines
-BM25 + vectors + reranking. Markdown stays the source of truth; OpenClaw shells
+BM25 + vectors + reranking. Markdown stays the source of truth; Deneb shells
 out to QMD for retrieval. Key points:
 
 **Prereqs**
@@ -143,7 +143,7 @@ out to QMD for retrieval. Key points:
 - QMD runs fully locally via Bun + `node-llama-cpp` and auto-downloads GGUF
   models from HuggingFace on first use (no separate Ollama daemon required).
 - The gateway runs QMD in a self-contained XDG home under
-  `~/.openclaw/agents/<agentId>/qmd/` by setting `XDG_CONFIG_HOME` and
+  `~/.deneb/agents/<agentId>/qmd/` by setting `XDG_CONFIG_HOME` and
   `XDG_CACHE_HOME`.
 - OS support: macOS and Linux work out of the box once Bun + SQLite are
   installed. Windows is best supported via WSL2.
@@ -151,7 +151,7 @@ out to QMD for retrieval. Key points:
 **How the sidecar runs**
 
 - The gateway writes a self-contained QMD home under
-  `~/.openclaw/agents/<agentId>/qmd/` (config + cache + sqlite DB).
+  `~/.deneb/agents/<agentId>/qmd/` (config + cache + sqlite DB).
 - Collections are created via `qmd collection add` from `memory.qmd.paths`
   (plus default workspace memory files), then `qmd update` + `qmd embed` run
   on boot and on a configurable interval (`memory.qmd.update.interval`,
@@ -163,24 +163,24 @@ out to QMD for retrieval. Key points:
   blocking behavior.
 - Searches run via `memory.qmd.searchMode` (default `qmd search --json`; also
   supports `vsearch` and `query`). If the selected mode rejects flags on your
-  QMD build, OpenClaw retries with `qmd query`. If QMD fails or the binary is
-  missing, OpenClaw automatically falls back to the builtin SQLite manager so
+  QMD build, Deneb retries with `qmd query`. If QMD fails or the binary is
+  missing, Deneb automatically falls back to the builtin SQLite manager so
   memory tools keep working.
-- OpenClaw does not expose QMD embed batch-size tuning today; batch behavior is
+- Deneb does not expose QMD embed batch-size tuning today; batch behavior is
   controlled by QMD itself.
 - **First search may be slow**: QMD may download local GGUF models (reranker/query
   expansion) on the first `qmd query` run.
-  - OpenClaw sets `XDG_CONFIG_HOME`/`XDG_CACHE_HOME` automatically when it runs QMD.
-  - If you want to pre-download models manually (and warm the same index OpenClaw
+  - Deneb sets `XDG_CONFIG_HOME`/`XDG_CACHE_HOME` automatically when it runs QMD.
+  - If you want to pre-download models manually (and warm the same index Deneb
     uses), run a one-off query with the agent’s XDG dirs.
 
-    OpenClaw’s QMD state lives under your **state dir** (defaults to `~/.openclaw`).
+    Deneb’s QMD state lives under your **state dir** (defaults to `~/.deneb`).
     You can point `qmd` at the exact same index by exporting the same XDG vars
-    OpenClaw uses:
+    Deneb uses:
 
     ```bash
-    # Pick the same state dir OpenClaw uses
-    STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
+    # Pick the same state dir Deneb uses
+    STATE_DIR="${DENEB_STATE_DIR:-$HOME/.deneb}"
 
     export XDG_CONFIG_HOME="$STATE_DIR/agents/main/qmd/xdg-config"
     export XDG_CACHE_HOME="$STATE_DIR/agents/main/qmd/xdg-cache"
@@ -217,14 +217,14 @@ out to QMD for retrieval. Key points:
     `agent:<id>:`. Example: `agent:main:discord:`.
   - Legacy: `match.keyPrefix: "agent:..."` is still treated as a raw-key prefix,
     but prefer `rawKeyPrefix` for clarity.
-- When `scope` denies a search, OpenClaw logs a warning with the derived
+- When `scope` denies a search, Deneb logs a warning with the derived
   `channel`/`chatType` so empty results are easier to debug.
 - Snippets sourced outside the workspace show up as
   `qmd/<collection>/<relative-path>` in `memory_search` results; `memory_get`
   understands that prefix and reads from the configured QMD collection root.
-- When `memory.qmd.sessions.enabled = true`, OpenClaw exports sanitized session
+- When `memory.qmd.sessions.enabled = true`, Deneb exports sanitized session
   transcripts (User/Assistant turns) into a dedicated QMD collection under
-  `~/.openclaw/agents/<id>/qmd/sessions/`, so `memory_search` can recall recent
+  `~/.deneb/agents/<id>/qmd/sessions/`, so `memory_search` can recall recent
   conversations without touching the builtin SQLite index.
 - `memory_search` snippets now include a `Source: <path#line>` footer when
   `memory.citations` is `auto`/`on`; set `memory.citations = "off"` to keep
@@ -287,12 +287,12 @@ Notes:
 - Paths can be absolute or workspace-relative.
 - Directories are scanned recursively for `.md` files.
 - By default, only Markdown files are indexed.
-- If `memorySearch.multimodal.enabled = true`, OpenClaw also indexes supported image/audio files under `extraPaths` only. Default memory roots (`MEMORY.md`, `memory.md`, `memory/**/*.md`) stay Markdown-only.
+- If `memorySearch.multimodal.enabled = true`, Deneb also indexes supported image/audio files under `extraPaths` only. Default memory roots (`MEMORY.md`, `memory.md`, `memory/**/*.md`) stay Markdown-only.
 - Symlinks are ignored (files or directories).
 
 ### Multimodal memory files (Gemini image + audio)
 
-OpenClaw can index image and audio files from `memorySearch.extraPaths` when using Gemini embedding 2:
+Deneb can index image and audio files from `memorySearch.extraPaths` when using Gemini embedding 2:
 
 ```json5
 agents: {
@@ -371,7 +371,7 @@ agents: {
 > **⚠️ Re-index required:** Switching from `gemini-embedding-001` (768 dimensions)
 > to `gemini-embedding-2-preview` (3072 dimensions) changes the vector size. The same is true if you
 > change `outputDimensionality` between 768, 1536, and 3072.
-> OpenClaw will automatically reindex when it detects a model or dimension change.
+> Deneb will automatically reindex when it detects a model or dimension change.
 
 If you want to use a **custom OpenAI-compatible endpoint** (OpenRouter, vLLM, or a proxy),
 you can use the `remote` configuration with the OpenAI provider:
@@ -454,18 +454,18 @@ Local mode:
 ### What gets indexed (and when)
 
 - File type: Markdown only (`MEMORY.md`, `memory/**/*.md`).
-- Index storage: per-agent SQLite at `~/.openclaw/memory/<agentId>.sqlite` (configurable via `agents.defaults.memorySearch.store.path`, supports `{agentId}` token).
+- Index storage: per-agent SQLite at `~/.deneb/memory/<agentId>.sqlite` (configurable via `agents.defaults.memorySearch.store.path`, supports `{agentId}` token).
 - Freshness: watcher on `MEMORY.md` + `memory/` marks the index dirty (debounce 1.5s). Sync is scheduled on session start, on search, or on an interval and runs asynchronously. Session transcripts use delta thresholds to trigger background sync.
-- Reindex triggers: the index stores the embedding **provider/model + endpoint fingerprint + chunking params**. If any of those change, OpenClaw automatically resets and reindexes the entire store.
+- Reindex triggers: the index stores the embedding **provider/model + endpoint fingerprint + chunking params**. If any of those change, Deneb automatically resets and reindexes the entire store.
 
 ### Hybrid search (BM25 + vector)
 
-When enabled, OpenClaw combines:
+When enabled, Deneb combines:
 
 - **Vector similarity** (semantic match, wording can differ)
 - **BM25 keyword relevance** (exact tokens like IDs, env vars, code symbols)
 
-If full-text search is unavailable on your platform, OpenClaw falls back to vector-only search.
+If full-text search is unavailable on your platform, Deneb falls back to vector-only search.
 
 #### Why hybrid?
 
@@ -677,7 +677,7 @@ You can enable either feature independently:
 
 ### Embedding cache
 
-OpenClaw can cache **chunk embeddings** in SQLite so reindexing and frequent updates (especially session transcripts) don't re-embed unchanged text.
+Deneb can cache **chunk embeddings** in SQLite so reindexing and frequent updates (especially session transcripts) don't re-embed unchanged text.
 
 Config:
 
@@ -717,7 +717,7 @@ Notes:
 - `memory_search` never blocks on indexing; results can be slightly stale until background sync finishes.
 - Results still include snippets only; `memory_get` remains limited to memory files.
 - Session indexing is isolated per agent (only that agent’s session logs are indexed).
-- Session logs live on disk (`~/.openclaw/agents/<agentId>/sessions/*.jsonl`). Any process/user with filesystem access can read them, so treat disk access as the trust boundary. For stricter isolation, run agents under separate OS users or hosts.
+- Session logs live on disk (`~/.deneb/agents/<agentId>/sessions/*.jsonl`). Any process/user with filesystem access can read them, so treat disk access as the trust boundary. For stricter isolation, run agents under separate OS users or hosts.
 
 Delta thresholds (defaults shown):
 
@@ -738,7 +738,7 @@ agents: {
 
 ### SQLite vector acceleration (sqlite-vec)
 
-When the sqlite-vec extension is available, OpenClaw stores embeddings in a
+When the sqlite-vec extension is available, Deneb stores embeddings in a
 SQLite virtual table (`vec0`) and performs vector distance queries in the
 database. This keeps search fast without loading every embedding into JS.
 
@@ -763,7 +763,7 @@ Notes:
 
 - `enabled` defaults to true; when disabled, search falls back to in-process
   cosine similarity over stored embeddings.
-- If the sqlite-vec extension is missing or fails to load, OpenClaw logs the
+- If the sqlite-vec extension is missing or fails to load, Deneb logs the
   error and continues with the JS fallback (no vector table).
 - `extensionPath` overrides the bundled sqlite-vec path (useful for custom builds
   or non-standard install locations).

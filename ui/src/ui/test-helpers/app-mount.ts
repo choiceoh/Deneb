@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, vi } from "vitest";
 import { i18n } from "../../i18n/index.ts";
 import "../app.ts";
-import type { OpenClawApp } from "../app.ts";
+import type { DenebApp } from "../app.ts";
 
 class MockWebSocket {
   static CONNECTING = 0;
@@ -22,7 +22,7 @@ class MockWebSocket {
 
 export function mountApp(pathname: string) {
   window.history.replaceState({}, "", pathname);
-  const app = document.createElement("openclaw-app") as OpenClawApp;
+  const app = document.createElement("deneb-app") as DenebApp;
   document.body.append(app);
   app.connected = true;
   app.requestUpdate();
@@ -31,7 +31,7 @@ export function mountApp(pathname: string) {
 
 export function registerAppMountHooks() {
   beforeEach(async () => {
-    window.__OPENCLAW_CONTROL_UI_BASE_PATH__ = undefined;
+    window.__DENEB_CONTROL_UI_BASE_PATH__ = undefined;
     localStorage.clear();
     sessionStorage.clear();
     document.body.innerHTML = "";
@@ -44,7 +44,7 @@ export function registerAppMountHooks() {
   });
 
   afterEach(async () => {
-    window.__OPENCLAW_CONTROL_UI_BASE_PATH__ = undefined;
+    window.__DENEB_CONTROL_UI_BASE_PATH__ = undefined;
     localStorage.clear();
     sessionStorage.clear();
     document.body.innerHTML = "";

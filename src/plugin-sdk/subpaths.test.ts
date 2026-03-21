@@ -1,35 +1,35 @@
-import * as channelPairingSdk from "openclaw/plugin-sdk/channel-pairing";
-import * as channelReplyPipelineSdk from "openclaw/plugin-sdk/channel-reply-pipeline";
-import * as channelRuntimeSdk from "openclaw/plugin-sdk/channel-runtime";
-import * as channelSendResultSdk from "openclaw/plugin-sdk/channel-send-result";
-import * as channelSetupSdk from "openclaw/plugin-sdk/channel-setup";
-import * as coreSdk from "openclaw/plugin-sdk/core";
+import * as channelPairingSdk from "deneb/plugin-sdk/channel-pairing";
+import * as channelReplyPipelineSdk from "deneb/plugin-sdk/channel-reply-pipeline";
+import * as channelRuntimeSdk from "deneb/plugin-sdk/channel-runtime";
+import * as channelSendResultSdk from "deneb/plugin-sdk/channel-send-result";
+import * as channelSetupSdk from "deneb/plugin-sdk/channel-setup";
+import * as coreSdk from "deneb/plugin-sdk/core";
 import type {
   ChannelMessageActionContext as CoreChannelMessageActionContext,
-  OpenClawPluginApi as CoreOpenClawPluginApi,
+  DenebPluginApi as CoreDenebPluginApi,
   PluginRuntime as CorePluginRuntime,
-} from "openclaw/plugin-sdk/core";
-import * as directoryRuntimeSdk from "openclaw/plugin-sdk/directory-runtime";
-import * as lazyRuntimeSdk from "openclaw/plugin-sdk/lazy-runtime";
-import * as providerModelsSdk from "openclaw/plugin-sdk/provider-models";
-import * as providerSetupSdk from "openclaw/plugin-sdk/provider-setup";
-import * as replyPayloadSdk from "openclaw/plugin-sdk/reply-payload";
-import * as routingSdk from "openclaw/plugin-sdk/routing";
-import * as runtimeSdk from "openclaw/plugin-sdk/runtime";
-import * as sandboxSdk from "openclaw/plugin-sdk/sandbox";
-import * as secretInputSdk from "openclaw/plugin-sdk/secret-input";
-import * as selfHostedProviderSetupSdk from "openclaw/plugin-sdk/self-hosted-provider-setup";
-import * as setupSdk from "openclaw/plugin-sdk/setup";
-import * as telegramSdk from "openclaw/plugin-sdk/telegram";
-import * as testingSdk from "openclaw/plugin-sdk/testing";
-import * as webhookIngressSdk from "openclaw/plugin-sdk/webhook-ingress";
+} from "deneb/plugin-sdk/core";
+import * as directoryRuntimeSdk from "deneb/plugin-sdk/directory-runtime";
+import * as lazyRuntimeSdk from "deneb/plugin-sdk/lazy-runtime";
+import * as providerModelsSdk from "deneb/plugin-sdk/provider-models";
+import * as providerSetupSdk from "deneb/plugin-sdk/provider-setup";
+import * as replyPayloadSdk from "deneb/plugin-sdk/reply-payload";
+import * as routingSdk from "deneb/plugin-sdk/routing";
+import * as runtimeSdk from "deneb/plugin-sdk/runtime";
+import * as sandboxSdk from "deneb/plugin-sdk/sandbox";
+import * as secretInputSdk from "deneb/plugin-sdk/secret-input";
+import * as selfHostedProviderSetupSdk from "deneb/plugin-sdk/self-hosted-provider-setup";
+import * as setupSdk from "deneb/plugin-sdk/setup";
+import * as telegramSdk from "deneb/plugin-sdk/telegram";
+import * as testingSdk from "deneb/plugin-sdk/testing";
+import * as webhookIngressSdk from "deneb/plugin-sdk/webhook-ingress";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ChannelMessageActionContext } from "../channels/plugins/types.js";
 import type { PluginRuntime } from "../plugins/runtime/types.js";
-import type { OpenClawPluginApi } from "../plugins/types.js";
+import type { DenebPluginApi } from "../plugins/types.js";
 import type {
   ChannelMessageActionContext as SharedChannelMessageActionContext,
-  OpenClawPluginApi as SharedOpenClawPluginApi,
+  DenebPluginApi as SharedDenebPluginApi,
   PluginRuntime as SharedPluginRuntime,
 } from "./channel-plugin-common.js";
 import { pluginSdkSubpaths } from "./entrypoints.js";
@@ -38,12 +38,12 @@ const importPluginSdkSubpath = (specifier: string) => import(/* @vite-ignore */ 
 
 const bundledExtensionSubpathLoaders = pluginSdkSubpaths.map((id: string) => ({
   id,
-  load: () => importPluginSdkSubpath(`openclaw/plugin-sdk/${id}`),
+  load: () => importPluginSdkSubpath(`deneb/plugin-sdk/${id}`),
 }));
 
 const asExports = (mod: object) => mod as Record<string, unknown>;
-const accountHelpersSdk = await import("openclaw/plugin-sdk/account-helpers");
-const allowlistEditSdk = await import("openclaw/plugin-sdk/allowlist-config-edit");
+const accountHelpersSdk = await import("deneb/plugin-sdk/account-helpers");
+const allowlistEditSdk = await import("deneb/plugin-sdk/allowlist-config-edit");
 
 describe("plugin-sdk subpath exports", () => {
   it("keeps the curated public list free of internal implementation subpaths", () => {
@@ -176,7 +176,7 @@ describe("plugin-sdk subpath exports", () => {
   });
 
   it("exports shared core types used by bundled channels", () => {
-    expectTypeOf<CoreOpenClawPluginApi>().toMatchTypeOf<OpenClawPluginApi>();
+    expectTypeOf<CoreDenebPluginApi>().toMatchTypeOf<DenebPluginApi>();
     expectTypeOf<CorePluginRuntime>().toMatchTypeOf<PluginRuntime>();
     expectTypeOf<CoreChannelMessageActionContext>().toMatchTypeOf<ChannelMessageActionContext>();
   });
@@ -187,7 +187,7 @@ describe("plugin-sdk subpath exports", () => {
   });
 
   it("keeps core shared types aligned with the channel prelude", () => {
-    expectTypeOf<CoreOpenClawPluginApi>().toMatchTypeOf<SharedOpenClawPluginApi>();
+    expectTypeOf<CoreDenebPluginApi>().toMatchTypeOf<SharedDenebPluginApi>();
     expectTypeOf<CorePluginRuntime>().toMatchTypeOf<SharedPluginRuntime>();
     expectTypeOf<CoreChannelMessageActionContext>().toMatchTypeOf<SharedChannelMessageActionContext>();
   });

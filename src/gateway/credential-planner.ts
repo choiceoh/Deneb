@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { containsEnvVarReference } from "../config/env-substitution.js";
 import { hasConfiguredSecretInput, resolveSecretInputRef } from "../config/types.secrets.js";
 
@@ -40,7 +40,7 @@ export type GatewayCredentialPlan = {
   remotePasswordActive: boolean;
 };
 
-type GatewaySecretDefaults = NonNullable<OpenClawConfig["secrets"]>["defaults"];
+type GatewaySecretDefaults = NonNullable<DenebConfig["secrets"]>["defaults"];
 
 function readGatewayEnv(
   env: NodeJS.ProcessEnv,
@@ -67,7 +67,7 @@ export function trimToUndefined(value: unknown): string | undefined {
 
 /**
  * Like trimToUndefined but also rejects unresolved env var placeholders (e.g. `${VAR}`).
- * This prevents literal placeholder strings like `${OPENCLAW_GATEWAY_TOKEN}` from being
+ * This prevents literal placeholder strings like `${DENEB_GATEWAY_TOKEN}` from being
  * accepted as valid credentials when the referenced env var is missing.
  * Note: legitimate credential values containing literal `${UPPER_CASE}` patterns will
  * also be rejected, but this is an extremely unlikely edge case.
@@ -86,7 +86,7 @@ export function readGatewayTokenEnv(
 ): string | undefined {
   return readGatewayEnv(
     env,
-    ["OPENCLAW_GATEWAY_TOKEN", "CLAWDBOT_GATEWAY_TOKEN"],
+    ["DENEB_GATEWAY_TOKEN", "CLAWDBOT_GATEWAY_TOKEN"],
     includeLegacyEnv,
   );
 }
@@ -97,7 +97,7 @@ export function readGatewayPasswordEnv(
 ): string | undefined {
   return readGatewayEnv(
     env,
-    ["OPENCLAW_GATEWAY_PASSWORD", "CLAWDBOT_GATEWAY_PASSWORD"],
+    ["DENEB_GATEWAY_PASSWORD", "CLAWDBOT_GATEWAY_PASSWORD"],
     includeLegacyEnv,
   );
 }
@@ -135,7 +135,7 @@ function resolveConfiguredGatewayCredentialInput(params: {
 }
 
 export function createGatewayCredentialPlan(params: {
-  config: OpenClawConfig;
+  config: DenebConfig;
   env?: NodeJS.ProcessEnv;
   includeLegacyEnv?: boolean;
   defaults?: GatewaySecretDefaults;

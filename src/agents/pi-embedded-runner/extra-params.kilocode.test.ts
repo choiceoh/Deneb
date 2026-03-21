@@ -1,6 +1,6 @@
 import type { Model } from "@mariozechner/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { captureEnv } from "../../test-utils/env.js";
 import { runExtraParamsCase } from "./extra-params.test-support.js";
 
@@ -12,13 +12,13 @@ const TEST_CFG = {
       },
     },
   },
-} satisfies OpenClawConfig;
+} satisfies DenebConfig;
 
 function applyAndCapture(params: {
   provider: string;
   modelId: string;
   callerHeaders?: Record<string, string>;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
 }) {
   return runExtraParamsCase({
     applyModelId: params.modelId,
@@ -35,7 +35,7 @@ function applyAndCapture(params: {
 }
 
 function applyAndCaptureReasoning(params: {
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
   modelId: string;
   initialPayload?: Record<string, unknown>;
   thinkingLevel?: "minimal" | "low" | "medium" | "high";
@@ -69,7 +69,7 @@ describe("extra-params: Kilocode wrapper", () => {
       modelId: "anthropic/claude-sonnet-4",
     });
 
-    expect(headers?.["X-KILOCODE-FEATURE"]).toBe("openclaw");
+    expect(headers?.["X-KILOCODE-FEATURE"]).toBe("deneb");
   });
 
   it("reads X-KILOCODE-FEATURE from KILOCODE_FEATURE env var", () => {
@@ -92,7 +92,7 @@ describe("extra-params: Kilocode wrapper", () => {
       callerHeaders: { "X-KILOCODE-FEATURE": "should-be-overwritten" },
     });
 
-    expect(headers?.["X-KILOCODE-FEATURE"]).toBe("openclaw");
+    expect(headers?.["X-KILOCODE-FEATURE"]).toBe("deneb");
   });
 
   it("keeps Kilocode runtime wrapping under restrictive plugins.allow", () => {
@@ -108,7 +108,7 @@ describe("extra-params: Kilocode wrapper", () => {
       },
     });
 
-    expect(headers?.["X-KILOCODE-FEATURE"]).toBe("openclaw");
+    expect(headers?.["X-KILOCODE-FEATURE"]).toBe("deneb");
   });
 
   it("does not inject header for non-kilocode providers", () => {

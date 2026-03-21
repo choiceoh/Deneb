@@ -40,8 +40,8 @@ export type {
 export type {
   AnyAgentTool,
   MediaUnderstandingProviderPlugin,
-  OpenClawPluginApi,
-  OpenClawPluginConfigSchema,
+  DenebPluginApi,
+  DenebPluginConfigSchema,
   PluginLogger,
   ProviderAuthContext,
   ProviderAuthResult,
@@ -54,9 +54,9 @@ export type {
   SubagentRunParams,
   SubagentRunResult,
 } from "../plugins/runtime/types.js";
-export type { OpenClawConfig } from "../config/config.js";
-/** @deprecated Use OpenClawConfig instead */
-export type { OpenClawConfig as ClawdbotConfig } from "../config/config.js";
+export type { DenebConfig } from "../config/config.js";
+/** @deprecated Use DenebConfig instead */
+export type { DenebConfig as ClawdbotConfig } from "../config/config.js";
 export * from "./image-generation.js";
 export type { SecretInput, SecretRef } from "../config/types.secrets.js";
 export type { RuntimeEnv } from "../runtime.js";

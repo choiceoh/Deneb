@@ -57,11 +57,11 @@ describe("refreshChatAvatar", () => {
     });
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
 
-    const host = makeHost({ basePath: "/openclaw/", sessionKey: "agent:ops:main" });
+    const host = makeHost({ basePath: "/deneb/", sessionKey: "agent:ops:main" });
     await refreshChatAvatar(host);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/openclaw/avatar/ops?meta=1",
+      "/deneb/avatar/ops?meta=1",
       expect.objectContaining({ method: "GET" }),
     );
     expect(host.chatAvatarUrl).toBeNull();

@@ -6,10 +6,10 @@ import type { Bot } from "grammy";
 import {
   normalizeTelegramCommandName,
   TELEGRAM_COMMAND_NAME_PATTERN,
-} from "openclaw/plugin-sdk/config-runtime";
-import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
-import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
-import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
+} from "deneb/plugin-sdk/config-runtime";
+import { logVerbose } from "deneb/plugin-sdk/runtime-env";
+import type { RuntimeEnv } from "deneb/plugin-sdk/runtime-env";
+import { resolveStateDir } from "deneb/plugin-sdk/state-paths";
 import { withTelegramApiErrorLogging } from "./api-logging.js";
 
 export const TELEGRAM_MAX_COMMANDS = 100;
@@ -178,7 +178,7 @@ export function syncTelegramMenuCommands(params: {
     // Skip sync if the command list hasn't changed since the last successful
     // sync. This prevents hitting Telegram's 429 rate limit when the gateway
     // is restarted several times in quick succession.
-    // See: openclaw/openclaw#32017
+    // See: deneb/deneb#32017
     const currentHash = hashCommandList(commandsToRegister);
     const cachedHash = await readCachedCommandHash(accountId, botIdentity);
     if (cachedHash === currentHash) {

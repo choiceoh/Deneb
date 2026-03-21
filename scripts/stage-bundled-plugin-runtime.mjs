@@ -24,7 +24,7 @@ function shouldCopyRuntimeFile(sourcePath) {
   const relativePath = sourcePath.replace(/\\/g, "/");
   return (
     relativePath.endsWith("/package.json") ||
-    relativePath.endsWith("/openclaw.plugin.json") ||
+    relativePath.endsWith("/deneb.plugin.json") ||
     relativePath.endsWith("/.codex-plugin/plugin.json") ||
     relativePath.endsWith("/.claude-plugin/plugin.json") ||
     relativePath.endsWith("/.cursor-plugin/plugin.json")

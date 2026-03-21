@@ -1,5 +1,5 @@
 export type {
-  OpenClawPluginApi,
+  DenebPluginApi,
   ProviderAuthContext,
   ProviderAuthMethodNonInteractiveContext,
   ProviderAuthResult,

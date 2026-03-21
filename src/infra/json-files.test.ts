@@ -6,7 +6,7 @@ import { createAsyncLock, readJsonFile, writeJsonAtomic, writeTextAtomic } from 
 
 describe("json file helpers", () => {
   it("reads valid json and returns null for missing or invalid files", async () => {
-    const base = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-json-files-"));
+    const base = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-json-files-"));
     const validPath = path.join(base, "valid.json");
     const invalidPath = path.join(base, "invalid.json");
 
@@ -19,7 +19,7 @@ describe("json file helpers", () => {
   });
 
   it("writes json atomically with pretty formatting and optional trailing newline", async () => {
-    const base = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-json-files-"));
+    const base = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-json-files-"));
     const filePath = path.join(base, "nested", "config.json");
 
     await writeJsonAtomic(
@@ -34,7 +34,7 @@ describe("json file helpers", () => {
   });
 
   it("writes text atomically and avoids duplicate trailing newlines", async () => {
-    const base = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-json-files-"));
+    const base = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-json-files-"));
     const filePath = path.join(base, "nested", "note.txt");
 
     await writeTextAtomic(filePath, "hello", { appendTrailingNewline: true });

@@ -3,7 +3,7 @@ import { buildDiscordInboundAccessContext } from "../../../../extensions/discord
 import type { ResolvedSlackAccount } from "../../../../extensions/slack/src/accounts.js";
 import type { SlackMessageEvent } from "../../../../extensions/slack/src/types.js";
 import type { MsgContext } from "../../../auto-reply/templating.js";
-import type { OpenClawConfig } from "../../../config/config.js";
+import type { DenebConfig } from "../../../config/config.js";
 import { inboundCtxCapture } from "./inbound-testkit.js";
 import { expectChannelInboundContextContract } from "./suites.js";
 
@@ -19,8 +19,8 @@ const dispatchInboundMessageMock = vi.hoisted(() =>
   ),
 );
 
-vi.mock("openclaw/plugin-sdk/reply-runtime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/reply-runtime")>();
+vi.mock("deneb/plugin-sdk/reply-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("deneb/plugin-sdk/reply-runtime")>();
   return {
     ...actual,
     dispatchInboundMessage: vi.fn(async (params: { ctx: MsgContext }) => {
@@ -38,8 +38,8 @@ vi.mock("openclaw/plugin-sdk/reply-runtime", async (importOriginal) => {
   };
 });
 
-vi.mock("openclaw/plugin-sdk/channel-runtime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/channel-runtime")>();
+vi.mock("deneb/plugin-sdk/channel-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("deneb/plugin-sdk/channel-runtime")>();
   return {
     ...actual,
     recordInboundSession: vi.fn(async (params: { ctx: MsgContext }) => {
@@ -181,7 +181,7 @@ describe("channel inbound contract", () => {
     const ctx = createInboundSlackTestContext({
       cfg: {
         channels: { slack: { enabled: true } },
-      } as OpenClawConfig,
+      } as DenebConfig,
     });
     // oxlint-disable-next-line typescript/no-explicit-any
     ctx.resolveUserName = async () => ({ name: "Alice" }) as any;
@@ -211,7 +211,7 @@ describe("channel inbound contract", () => {
             groups: { "*": { requireMention: false } },
           },
         },
-      } satisfies OpenClawConfig,
+      } satisfies DenebConfig,
       message: {
         chat: { id: 42, type: "group", title: "Ops" },
         text: "hello",

@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { defaultSlotIdForKey } from "../plugins/slots.js";
 import type { ContextEngine } from "./types.js";
 
@@ -13,7 +13,7 @@ type RegisterContextEngineForOwnerOptions = {
   allowSameOwnerRefresh?: boolean;
 };
 
-const LEGACY_SESSION_KEY_COMPAT = Symbol.for("openclaw.contextEngine.sessionKeyCompat");
+const LEGACY_SESSION_KEY_COMPAT = Symbol.for("deneb.contextEngine.sessionKeyCompat");
 const SESSION_KEY_COMPAT_METHODS = [
   "bootstrap",
   "ingest",
@@ -213,7 +213,7 @@ function wrapContextEngineWithSessionKeyCompat(engine: ContextEngine): ContextEn
 // Registry (module-level singleton)
 // ---------------------------------------------------------------------------
 
-const CONTEXT_ENGINE_REGISTRY_STATE = Symbol.for("openclaw.contextEngineRegistryState");
+const CONTEXT_ENGINE_REGISTRY_STATE = Symbol.for("deneb.contextEngineRegistryState");
 const CORE_CONTEXT_ENGINE_OWNER = "core";
 const PUBLIC_CONTEXT_ENGINE_OWNER = "public-sdk";
 
@@ -320,7 +320,7 @@ export function listContextEngineIds(): string[] {
  *
  * Throws if the resolved engine id has no registered factory.
  */
-export async function resolveContextEngine(config?: OpenClawConfig): Promise<ContextEngine> {
+export async function resolveContextEngine(config?: DenebConfig): Promise<ContextEngine> {
   const slotValue = config?.plugins?.slots?.contextEngine;
   const engineId =
     typeof slotValue === "string" && slotValue.trim()

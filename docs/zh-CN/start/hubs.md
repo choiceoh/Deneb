@@ -1,7 +1,7 @@
 ---
 read_when:
   - 你想要一份完整的文档地图
-summary: 链接到所有 OpenClaw 文档的导航中心
+summary: 链接到所有 Deneb 文档的导航中心
 title: 文档导航中心
 x-i18n:
   generated_at: "2026-03-15T19:29:16Z"
@@ -15,7 +15,7 @@ x-i18n:
 # 文档导航中心
 
 <Note>
-如果你是 OpenClaw 新用户，请从[入门指南](/start/getting-started)开始。
+如果你是 Deneb 新用户，请从[入门指南](/start/getting-started)开始。
 </Note>
 
 使用这些导航中心发现每一个页面，包括深入解析和参考文档——它们可能不会出现在左侧导航栏中。
@@ -33,7 +33,7 @@ x-i18n:
 - [文档目录](/start/docs-directory)
 - [配置](/gateway/configuration)
 - [配置示例](/gateway/configuration-examples)
-- [OpenClaw 助手](/start/openclaw)
+- [Deneb 助手](/start/deneb)
 - [展示](/start/showcase)
 - [背景故事](/start/lore)
 

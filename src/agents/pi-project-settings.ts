@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SettingsManager } from "@mariozechner/pi-coding-agent";
-import type { OpenClawConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/config.js";
 import { applyMergePatch } from "../config/merge-patch.js";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
@@ -68,7 +68,7 @@ function loadBundleSettingsFile(params: {
 
 export function loadEnabledBundlePiSettingsSnapshot(params: {
   cwd: string;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
 }): PiSettingsSnapshot {
   const workspaceDir = params.cwd.trim();
   if (!workspaceDir) {
@@ -128,7 +128,7 @@ export function loadEnabledBundlePiSettingsSnapshot(params: {
 }
 
 export function resolveEmbeddedPiProjectSettingsPolicy(
-  cfg?: OpenClawConfig,
+  cfg?: DenebConfig,
 ): EmbeddedPiProjectSettingsPolicy {
   const raw = cfg?.agents?.defaults?.embeddedPi?.projectSettingsPolicy;
   if (raw === "trusted" || raw === "sanitize" || raw === "ignore") {
@@ -159,7 +159,7 @@ export function buildEmbeddedPiSettingsSnapshot(params: {
 export function createEmbeddedPiSettingsManager(params: {
   cwd: string;
   agentDir: string;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
 }): SettingsManager {
   const fileSettingsManager = SettingsManager.create(params.cwd, params.agentDir);
   const policy = resolveEmbeddedPiProjectSettingsPolicy(params.cfg);
@@ -183,7 +183,7 @@ export function createEmbeddedPiSettingsManager(params: {
 export function createPreparedEmbeddedPiSettingsManager(params: {
   cwd: string;
   agentDir: string;
-  cfg?: OpenClawConfig;
+  cfg?: DenebConfig;
 }): SettingsManager {
   const settingsManager = createEmbeddedPiSettingsManager(params);
   applyPiCompactionSettingsFromConfig({
