@@ -223,11 +223,16 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
     defaultRuntime.exit(1);
     return;
   }
-  if (process.env.DENEB_SERVICE_MARKER?.trim()) {
+  // Always clean stale gateway processes before attempting to start, not just
+  // in service mode. This prevents stale locks left by a crashed gateway from
+  // blocking manual restarts (previously required --force as a workaround).
+  {
+    const isServiceMode = Boolean(process.env.DENEB_SERVICE_MARKER?.trim());
     const stale = cleanStaleGatewayProcessesSync(port);
     if (stale.length > 0) {
+      const modeLabel = isServiceMode ? "service-mode" : "startup";
       gatewayLog.info(
-        `service-mode: cleared ${stale.length} stale gateway pid(s) before bind on port ${port}`,
+        `${modeLabel}: cleared ${stale.length} stale gateway pid(s) before bind on port ${port}`,
       );
     }
   }
