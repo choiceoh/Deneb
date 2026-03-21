@@ -63,7 +63,7 @@ import {
 import { ensureRuntimePluginsLoaded } from "../runtime-plugins.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js";
-import { fireCompactionHooks } from "./compaction-hooks.js";
+import { buildCompactionHookContext, fireCompactionHooks } from "./compaction-hooks.js";
 import { buildEmbeddedCompactionRuntimeContext } from "./compaction-runtime-context.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
 import { log } from "./logger.js";
@@ -957,20 +957,15 @@ export async function runEmbeddedPiAgent(
                 `context overflow detected (attempt ${compactionTracker.overflowAttempts}/${MAX_OVERFLOW_COMPACTION_ATTEMPTS}); attempting auto-compaction for ${provider}/${modelId}`,
               );
               let compactResult: Awaited<ReturnType<typeof contextEngine.compact>>;
-              const overflowEngineOwnsCompaction = contextEngine.info.ownsCompaction === true;
-              // When the engine owns compaction, fire hooks here since
-              // compactEmbeddedPiSessionDirect (which has its own hooks) is bypassed.
-              const overflowHookCtx = {
+              const overflowHookCtx = buildCompactionHookContext({
                 sessionId: params.sessionId,
+                sessionKey: params.sessionKey,
                 agentId: hookCtx.agentId,
-                sessionKey: params.sessionKey ?? params.sessionId,
                 workspaceDir: resolvedWorkspace,
                 messageProvider: params.messageProvider,
                 sessionFile: params.sessionFile,
-              };
-              if (overflowEngineOwnsCompaction) {
-                await fireCompactionHooks({ phase: "before" }, overflowHookCtx);
-              }
+              });
+              await fireCompactionHooks({ phase: "before" }, overflowHookCtx);
               try {
                 compactResult = await contextEngine.compact({
                   sessionId: params.sessionId,
@@ -1022,7 +1017,7 @@ export async function runEmbeddedPiAgent(
                 );
                 compactResult = { ok: false, compacted: false, reason: String(compactErr) };
               }
-              if (compactResult.ok && compactResult.compacted && overflowEngineOwnsCompaction) {
+              if (compactResult.ok && compactResult.compacted) {
                 await fireCompactionHooks(
                   {
                     phase: "after",

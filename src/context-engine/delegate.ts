@@ -1,30 +1,75 @@
-import { narrowRuntimeContext } from "./runtime-context-bridge.js";
-import type { ContextEngine, CompactResult } from "./types.js";
+import type { EmbeddedCompactionRuntimeContext } from "../agents/pi-embedded-runner/compaction-runtime-context.js";
+import type { ContextEngine, CompactResult, ContextEngineRuntimeContext } from "./types.js";
+
+// ── Type-safe narrowing helpers ──────────────────────────────────────────────
+
+function safeString(v: unknown): string | undefined {
+  return typeof v === "string" ? v : undefined;
+}
+
+function safeStringOrNumber(v: unknown): string | number | undefined {
+  return typeof v === "string" || typeof v === "number" ? v : undefined;
+}
+
+function safeBoolean(v: unknown): boolean | undefined {
+  return typeof v === "boolean" ? v : undefined;
+}
+
+function safeStringArray(v: unknown): string[] | undefined {
+  return Array.isArray(v) && v.every((x) => typeof x === "string") ? v : undefined;
+}
+
+/** Narrow untyped runtimeContext into EmbeddedCompactionRuntimeContext. */
+function narrowRuntimeContext(
+  ctx: ContextEngineRuntimeContext | undefined,
+): EmbeddedCompactionRuntimeContext | undefined {
+  if (!ctx || typeof ctx !== "object") {
+    return undefined;
+  }
+  return {
+    sessionKey: safeString(ctx.sessionKey),
+    messageChannel: safeString(ctx.messageChannel),
+    messageProvider: safeString(ctx.messageProvider),
+    agentAccountId: safeString(ctx.agentAccountId),
+    currentChannelId: safeString(ctx.currentChannelId),
+    currentThreadTs: safeString(ctx.currentThreadTs),
+    currentMessageId: safeStringOrNumber(ctx.currentMessageId),
+    authProfileId: safeString(ctx.authProfileId),
+    workspaceDir: safeString(ctx.workspaceDir) ?? process.cwd(),
+    agentDir: safeString(ctx.agentDir) ?? "",
+    config: ctx.config as EmbeddedCompactionRuntimeContext["config"],
+    skillsSnapshot: ctx.skillsSnapshot as EmbeddedCompactionRuntimeContext["skillsSnapshot"],
+    senderIsOwner: safeBoolean(ctx.senderIsOwner),
+    senderId: safeString(ctx.senderId),
+    provider: safeString(ctx.provider),
+    model: safeString(ctx.model),
+    thinkLevel: safeString(ctx.thinkLevel) as EmbeddedCompactionRuntimeContext["thinkLevel"],
+    reasoningLevel: safeString(
+      ctx.reasoningLevel,
+    ) as EmbeddedCompactionRuntimeContext["reasoningLevel"],
+    bashElevated: ctx.bashElevated as EmbeddedCompactionRuntimeContext["bashElevated"],
+    extraSystemPrompt: safeString(ctx.extraSystemPrompt),
+    ownerNumbers: safeStringArray(ctx.ownerNumbers),
+  };
+}
+
+// ── Delegation ───────────────────────────────────────────────────────────────
 
 /**
  * Delegate a context-engine compaction request to Deneb's built-in runtime compaction path.
  *
- * This is the same bridge used by the legacy context engine. Third-party
- * engines can call it from their own `compact()` implementations when they do
- * not own the compaction algorithm but still need `/compact` and overflow
- * recovery to use the stock runtime behavior.
- *
- * Note: `compactionTarget` is part of the public `compact()` contract, but the
- * built-in runtime compaction path does not expose that knob. This helper
- * ignores it to preserve legacy behavior; engines that need target-specific
- * compaction should implement their own `compact()` algorithm.
+ * Third-party engines can call this from their own `compact()` when they do not
+ * own the compaction algorithm but still need `/compact` and overflow recovery
+ * to use the stock runtime behavior.
  */
 export async function delegateCompactionToRuntime(
   params: Parameters<ContextEngine["compact"]>[0],
 ): Promise<CompactResult> {
-  // Import through a dedicated runtime boundary so the lazy edge remains effective.
   const { compactEmbeddedPiSessionDirect } =
     await import("../agents/pi-embedded-runner/compact.runtime.js");
 
   const typed = narrowRuntimeContext(params.runtimeContext);
-  // currentTokenCount may also be passed as an ad-hoc field on runtimeContext
-  // (e.g. during overflow recovery).  Check the raw context for it since the
-  // typed bridge intentionally ignores unknown fields.
+  // currentTokenCount may be an ad-hoc field on runtimeContext (overflow recovery).
   const rawCurrentTokenCount = params.runtimeContext?.currentTokenCount;
   const currentTokenCount =
     params.currentTokenCount ??

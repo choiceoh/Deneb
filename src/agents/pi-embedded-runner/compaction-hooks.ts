@@ -2,7 +2,9 @@ import { createInternalHookEvent, triggerInternalHook } from "../../hooks/intern
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { log } from "./logger.js";
 
-/** Context identifying the session for hook subscribers. */
+// ── Types ────────────────────────────────────────────────────────────────────
+
+/** Session context for hook subscribers. */
 export type CompactionHookContext = {
   sessionId: string;
   agentId?: string;
@@ -36,13 +38,40 @@ export type AfterCompactionHookData = {
 
 export type CompactionHookData = BeforeCompactionHookData | AfterCompactionHookData;
 
+// ── Context builder ──────────────────────────────────────────────────────────
+
 /**
- * Fire both internal hooks (triggerInternalHook) and plugin hooks
- * (hookRunner.runBeforeCompaction / runAfterCompaction) in a single call.
+ * Build a CompactionHookContext from common session parameters.
+ * Eliminates the need to manually construct hookCtx objects at each call site.
+ */
+export function buildCompactionHookContext(params: {
+  sessionId: string;
+  sessionKey?: string | null;
+  agentId?: string;
+  workspaceDir: string;
+  messageProvider?: string;
+  sessionFile: string;
+}): CompactionHookContext {
+  const sessionKey = params.sessionKey?.trim() || params.sessionId;
+  return {
+    sessionId: params.sessionId,
+    agentId: params.agentId,
+    sessionKey,
+    workspaceDir: params.workspaceDir,
+    messageProvider: params.messageProvider,
+    sessionFile: params.sessionFile,
+    missingSessionKey: !params.sessionKey || !params.sessionKey.trim(),
+  };
+}
+
+// ── Hook firing ──────────────────────────────────────────────────────────────
+
+/**
+ * Fire both internal hooks and plugin hooks in a single call.
  *
- * This centralizes hook invocation that was previously duplicated across
- * compactEmbeddedPiSessionDirect, compactEmbeddedPiSession, and the
- * overflow recovery loop in run.ts.
+ * Centralizes hook invocation so callers only need:
+ *   const ctx = buildCompactionHookContext({ ... });
+ *   await fireCompactionHooks({ phase: "before" }, ctx);
  */
 export async function fireCompactionHooks(
   data: CompactionHookData,
@@ -51,7 +80,6 @@ export async function fireCompactionHooks(
   const hookRunner = getGlobalHookRunner();
 
   if (data.phase === "before") {
-    // Internal hook
     try {
       const hookEvent = createInternalHookEvent("session", "compact:before", ctx.sessionKey, {
         sessionId: ctx.sessionId,
@@ -69,7 +97,6 @@ export async function fireCompactionHooks(
       });
     }
 
-    // Plugin hook
     if (hookRunner?.hasHooks("before_compaction")) {
       try {
         await hookRunner.runBeforeCompaction(
@@ -94,7 +121,6 @@ export async function fireCompactionHooks(
       }
     }
   } else {
-    // Internal hook
     try {
       const hookEvent = createInternalHookEvent("session", "compact:after", ctx.sessionKey, {
         sessionId: ctx.sessionId,
@@ -115,7 +141,6 @@ export async function fireCompactionHooks(
       });
     }
 
-    // Plugin hook
     if (hookRunner?.hasHooks("after_compaction")) {
       try {
         await hookRunner.runAfterCompaction(
