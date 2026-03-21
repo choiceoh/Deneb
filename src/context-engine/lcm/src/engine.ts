@@ -119,34 +119,15 @@ export class LcmContextEngine implements ContextEngine {
     );
 
     // Initialize compression observer if enabled.
+    // Summarizer resolution and warmup happen asynchronously after construction.
     const observerCfg = deps.config.observer;
     if (observerCfg.enabled) {
-      // Warn early if model/provider are not configured — the observer will
-      // permanently disable itself on the first failed summarizer resolution
-      // rather than silently falling back to an expensive default model.
-      if (!observerCfg.model && !observerCfg.provider) {
+      this.initObserverAsync().catch((err) => {
         console.error(
-          `[lcm] compression observer is enabled but no observer.model or observer.provider is configured. ` +
-            `The observer will attempt to use the default LCM summarizer. ` +
-            `For best results, set LCM_OBSERVER_MODEL and LCM_OBSERVER_PROVIDER.`,
+          `[lcm] compression observer initialization failed:`,
+          err instanceof Error ? err.message : err,
         );
-      }
-
-      this.compressionObserver = new CompressionObserver(
-        {
-          ...DEFAULT_OBSERVER_CONFIG,
-          enabled: observerCfg.enabled,
-          targetRatio: observerCfg.targetRatio,
-          messageInterval: observerCfg.messageInterval,
-          model: observerCfg.model || undefined,
-          provider: observerCfg.provider || undefined,
-          maxStalenessMs: observerCfg.maxStalenessMs,
-        },
-        this.conversationStore,
-        this.summaryStore,
-        () => this.resolveObserverSummarize(),
-      );
-      this.compaction.attachObserver(this.compressionObserver);
+      });
     }
 
     this.retrieval = new RetrievalEngine(this.conversationStore, this.summaryStore);
@@ -408,58 +389,98 @@ export class LcmContextEngine implements ContextEngine {
   }
 
   /**
-   * Resolve a summarizer for the compression observer.
+   * Eagerly initialize the compression observer: resolve the summarizer,
+   * validate it with a warmup call, then create and attach the observer.
    *
-   * When observer-specific model/provider are configured, resolves that model.
-   * When not configured, falls back to the default LCM summarizer.
-   *
-   * Returns null if resolution fails — the observer will permanently disable
-   * itself rather than silently falling back to an expensive default model.
+   * If resolution or warmup fails, the observer is simply not created —
+   * no silent fallbacks, no lazy failures minutes later.
    */
-  private async resolveObserverSummarize(): Promise<
-    ((text: string, aggressive?: boolean) => Promise<string>) | null
-  > {
+  private async initObserverAsync(): Promise<void> {
     const observerCfg = this.deps.config.observer;
     const model = observerCfg.model || undefined;
     const provider = observerCfg.provider || undefined;
 
-    // Try observer-specific model/provider first.
+    // Step 1: Resolve the summarizer function.
+    let summarize: ((text: string, aggressive?: boolean) => Promise<string>) | undefined;
+
     if (model || provider) {
       try {
-        const runtimeSummarizer = await createLcmSummarizeFromLegacyParams({
-          deps: this.deps,
-          legacyParams: {
-            ...(provider ? { provider } : {}),
-            ...(model ? { model } : {}),
-          },
-        });
-        if (runtimeSummarizer) {
-          return runtimeSummarizer;
-        }
-        console.error(
-          `[lcm] resolveObserverSummarize: observer model/provider configured but resolution returned undefined. ` +
-            `model="${model ?? ""}" provider="${provider ?? ""}"`,
-        );
-        return null;
+        summarize =
+          (await createLcmSummarizeFromLegacyParams({
+            deps: this.deps,
+            legacyParams: {
+              ...(provider ? { provider } : {}),
+              ...(model ? { model } : {}),
+            },
+          })) ?? undefined;
       } catch (err) {
         console.error(
-          `[lcm] resolveObserverSummarize failed for observer model/provider:`,
+          `[lcm] observer model resolution failed: model="${model ?? ""}" provider="${provider ?? ""}":`,
           err instanceof Error ? err.message : err,
         );
-        return null;
       }
     }
 
-    // No observer-specific model — try default LCM summarizer.
+    if (!summarize) {
+      // No observer-specific model or it failed — try default LCM summarizer.
+      try {
+        const defaultFn = await this.resolveSummarize({});
+        summarize = defaultFn;
+      } catch (err) {
+        console.error(
+          `[lcm] observer default summarizer resolution also failed:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+
+    if (!summarize) {
+      console.error(
+        `[lcm] compression observer NOT initialized — no summarizer available. ` +
+          `Check observer.model/observer.provider or default LCM summary model config.`,
+      );
+      return;
+    }
+
+    // Step 2: Warmup — validate the model is reachable with a tiny test call.
     try {
-      return await this.resolveSummarize({});
+      const warmupResult = await summarize("Hello world. This is a test.", false);
+      if (!warmupResult || warmupResult.trim().length === 0) {
+        console.error(
+          `[lcm] observer warmup returned empty response — model may not support summarization. ` +
+            `model="${model ?? "(default)"}" provider="${provider ?? "(default)"}"`,
+        );
+        return;
+      }
+      console.error(
+        `[lcm] compression observer warmup OK: model="${model ?? "(default)"}" provider="${provider ?? "(default)"}"`,
+      );
     } catch (err) {
       console.error(
-        `[lcm] resolveObserverSummarize: default summarizer resolution failed:`,
-        err instanceof Error ? err.message : err,
+        `[lcm] observer warmup call failed — model is not reachable. Observer NOT started. ` +
+          `model="${model ?? "(default)"}" provider="${provider ?? "(default)"}": ${
+            err instanceof Error ? err.message : String(err)
+          }`,
       );
-      return null;
+      return;
     }
+
+    // Step 3: Create and attach the observer with the validated summarizer.
+    this.compressionObserver = new CompressionObserver(
+      {
+        ...DEFAULT_OBSERVER_CONFIG,
+        enabled: observerCfg.enabled,
+        targetRatio: observerCfg.targetRatio,
+        messageInterval: observerCfg.messageInterval,
+        model: model,
+        provider: provider,
+        maxStalenessMs: observerCfg.maxStalenessMs,
+      },
+      this.conversationStore,
+      this.summaryStore,
+      summarize,
+    );
+    this.compaction.attachObserver(this.compressionObserver);
   }
 
   // ── ContextEngine interface ─────────────────────────────────────────────

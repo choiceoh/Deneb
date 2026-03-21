@@ -59,17 +59,13 @@ function createMockSummaryStore(
 
 function createMockSummarize(): CompactionSummarizeFn {
   return vi.fn(async (text: string) => {
-    // Simple mock: return a short summary that is always shorter than input.
-    // Uses ~10% of source to ensure the sanity check (summary < source) passes.
     const targetLen = Math.max(4, Math.floor(text.length * 0.1));
     return text.slice(0, targetLen);
   });
 }
 
 /**
- * Add enough messages to a conversation so that some are outside the fresh tail.
- * The observer's OBSERVER_FRESH_TAIL_COUNT is 8, so we need >8 messages for
- * any to be compactable (outside the tail).
+ * Add enough messages so some are outside the fresh tail (OBSERVER_FRESH_TAIL_COUNT = 8).
  */
 function addMessagesForCompaction(
   conversationStore: ReturnType<typeof createMockConversationStore>,
@@ -111,7 +107,7 @@ describe("CompressionObserver", () => {
       { ...config, ...overrides },
       conversationStore as never,
       summaryStore as never,
-      async () => mockSummarize,
+      mockSummarize,
     );
   }
 
@@ -122,20 +118,18 @@ describe("CompressionObserver", () => {
 
       observer.onMessage(conversationId);
       observer.onMessage(conversationId);
-      // Only 2 messages, interval is 3 — no update yet
       expect(observer.getCachedSummary(conversationId)).toBeNull();
     });
 
     it("should trigger background update at messageInterval", async () => {
       const conversationId = 1;
-      // Need >8 messages so some are outside the fresh tail (OBSERVER_FRESH_TAIL_COUNT = 8)
       addMessagesForCompaction(conversationStore, summaryStore, conversationId, 12);
 
       const observer = createObserver();
 
       observer.onMessage(conversationId);
       observer.onMessage(conversationId);
-      observer.onMessage(conversationId); // triggers at 3
+      observer.onMessage(conversationId);
 
       await vi.waitFor(
         () => {
@@ -147,8 +141,7 @@ describe("CompressionObserver", () => {
       const cached = observer.getCachedSummary(conversationId);
       expect(cached).toBeDefined();
       expect(cached!.summary.length).toBeGreaterThan(0);
-      // messagesCovered should be 4 (12 total - 8 fresh tail)
-      expect(cached!.messagesCovered).toBe(4);
+      expect(cached!.messagesCovered).toBe(4); // 12 - 8 tail
       expect(cached!.tokenCount).toBeGreaterThan(0);
       expect(cached!.sourceTokenCount).toBeGreaterThan(0);
       expect(cached!.hasMixedContext).toBe(false);
@@ -156,16 +149,13 @@ describe("CompressionObserver", () => {
 
     it("should not produce cache when all messages are in fresh tail", async () => {
       const conversationId = 1;
-      // Only 5 messages — all within fresh tail (OBSERVER_FRESH_TAIL_COUNT = 8)
       addMessagesForCompaction(conversationStore, summaryStore, conversationId, 5);
 
       const observer = createObserver();
       observer.triggerUpdate(conversationId);
 
-      // Wait for background attempt
       await new Promise((resolve) => setTimeout(resolve, 200));
 
-      // No compactable messages outside tail — no cache
       expect(observer.getCachedSummary(conversationId)).toBeNull();
     });
 
@@ -175,7 +165,6 @@ describe("CompressionObserver", () => {
 
       const observer = createObserver();
 
-      // First trigger
       observer.onMessage(conversationId);
       observer.onMessage(conversationId);
       observer.onMessage(conversationId);
@@ -187,7 +176,6 @@ describe("CompressionObserver", () => {
         { timeout: 2000 },
       );
 
-      // Counter should be reset — next 2 messages shouldn't trigger
       observer.invalidate(conversationId);
       observer.onMessage(conversationId);
       observer.onMessage(conversationId);
@@ -229,7 +217,6 @@ describe("CompressionObserver", () => {
       );
 
       const cached = observer.getCachedSummary(conversationId)!;
-      // Tokens grown 2x — should be stale (drift factor 1.3)
       expect(observer.isSummaryFresh(conversationId, cached.sourceTokenCount * 2)).toBe(false);
     });
 
@@ -269,9 +256,7 @@ describe("CompressionObserver", () => {
 
       const observer = createObserver();
 
-      // Trigger conv1 first
       observer.triggerUpdate(conv1);
-
       await vi.waitFor(
         () => {
           expect(observer.getCachedSummary(conv1)).not.toBeNull();
@@ -279,9 +264,7 @@ describe("CompressionObserver", () => {
         { timeout: 2000 },
       );
 
-      // Then trigger conv2
       observer.triggerUpdate(conv2);
-
       await vi.waitFor(
         () => {
           expect(observer.getCachedSummary(conv2)).not.toBeNull();
@@ -289,7 +272,6 @@ describe("CompressionObserver", () => {
         { timeout: 2000 },
       );
 
-      // Invalidating one should not affect the other
       observer.invalidate(conv1);
       expect(observer.getCachedSummary(conv1)).toBeNull();
       expect(observer.getCachedSummary(conv2)).not.toBeNull();
@@ -302,11 +284,6 @@ describe("CompressionObserver", () => {
       observer.onMessage(1);
       observer.onMessage(1);
       observer.onMessage(1);
-      expect(observer.getCachedSummary(1)).toBeNull();
-    });
-
-    it("should always return null from getCachedSummary when disabled", () => {
-      const observer = createObserver({ enabled: false });
       expect(observer.getCachedSummary(1)).toBeNull();
     });
   });
@@ -327,9 +304,8 @@ describe("CompressionObserver", () => {
       );
 
       observer.dispose();
-
       expect(observer.getCachedSummary(conversationId)).toBeNull();
-      // No new updates should be enqueued after dispose
+
       observer.onMessage(conversationId);
       observer.onMessage(conversationId);
       observer.onMessage(conversationId);
@@ -343,8 +319,6 @@ describe("CompressionObserver", () => {
       addMessagesForCompaction(conversationStore, summaryStore, conversationId, 12);
 
       const observer = createObserver();
-
-      // Trigger directly without reaching messageInterval
       observer.triggerUpdate(conversationId);
 
       await vi.waitFor(
@@ -354,47 +328,80 @@ describe("CompressionObserver", () => {
         { timeout: 2000 },
       );
 
-      // Should cover messages outside fresh tail (12 - 8 = 4)
       expect(observer.getCachedSummary(conversationId)!.messagesCovered).toBe(4);
     });
   });
 
-  describe("error handling", () => {
-    it("should handle summarization failure gracefully", async () => {
+  describe("error handling and retry", () => {
+    it("should retry transient LLM failures", async () => {
       const conversationId = 1;
       addMessagesForCompaction(conversationStore, summaryStore, conversationId, 12);
 
-      const failingSummarize = vi.fn(async () => {
-        throw new Error("Summarization failed");
+      let callCount = 0;
+      const flakyFn = vi.fn(async (text: string) => {
+        callCount++;
+        if (callCount <= 1) {
+          throw new Error("Connection refused");
+        }
+        const targetLen = Math.max(4, Math.floor(text.length * 0.1));
+        return text.slice(0, targetLen);
       }) as unknown as CompactionSummarizeFn;
 
       const observer = new CompressionObserver(
         config,
         conversationStore as never,
         summaryStore as never,
-        async () => failingSummarize,
+        flakyFn,
       );
 
-      observer.onMessage(conversationId);
-      observer.onMessage(conversationId);
-      observer.onMessage(conversationId);
+      observer.triggerUpdate(conversationId);
 
-      // Wait a bit for the background update to attempt and fail
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await vi.waitFor(
+        () => {
+          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
+        },
+        { timeout: 10000 },
+      );
 
-      // Should not crash, just no cached summary
-      expect(observer.getCachedSummary(conversationId)).toBeNull();
+      // First call failed, retry succeeded
+      expect(callCount).toBeGreaterThanOrEqual(2);
     });
+
+    it("should not crash on repeated failures", async () => {
+      const conversationId = 1;
+      addMessagesForCompaction(conversationStore, summaryStore, conversationId, 12);
+
+      const alwaysFail = vi.fn(async () => {
+        throw new Error("Model unavailable");
+      }) as unknown as CompactionSummarizeFn;
+
+      const observer = new CompressionObserver(
+        config,
+        conversationStore as never,
+        summaryStore as never,
+        alwaysFail,
+      );
+
+      // Trigger an update that will fail (after retries)
+      observer.triggerUpdate(conversationId);
+
+      // Wait for retries to exhaust (MAX_CALL_RETRIES=2, delays=2s+4s)
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+
+      // Should have tried (1 initial + 2 retries = 3 calls)
+      expect(alwaysFail.mock.calls.length).toBeGreaterThanOrEqual(3);
+
+      // No cached summary
+      expect(observer.getCachedSummary(conversationId)).toBeNull();
+
+      // Observer should still be operational (not crashed)
+      observer.dispose();
+    }, 15000);
 
     it("should handle empty conversation gracefully", async () => {
       const observer = createObserver();
-
-      // Trigger for non-existent conversation
       observer.triggerUpdate(999);
-
-      // Wait for attempt to complete
       await new Promise((resolve) => setTimeout(resolve, 200));
-
       expect(observer.getCachedSummary(999)).toBeNull();
     });
 
@@ -402,53 +409,19 @@ describe("CompressionObserver", () => {
       const conversationId = 1;
       addMessagesForCompaction(conversationStore, summaryStore, conversationId, 12);
 
-      // Mock summarizer that produces verbose output
-      const verboseSummarize = vi.fn(async (text: string) => {
-        return "A".repeat(text.length * 2); // Much larger than source
+      const verboseFn = vi.fn(async (text: string) => {
+        return "A".repeat(text.length * 2);
       }) as unknown as CompactionSummarizeFn;
 
       const observer = new CompressionObserver(
         config,
         conversationStore as never,
         summaryStore as never,
-        async () => verboseSummarize,
+        verboseFn,
       );
 
       observer.triggerUpdate(conversationId);
-
-      // Wait for the background update to attempt
       await new Promise((resolve) => setTimeout(resolve, 200));
-
-      // Should reject the summary because it's larger than source
-      expect(observer.getCachedSummary(conversationId)).toBeNull();
-    });
-
-    it("should permanently disable when summarizer resolution returns null", async () => {
-      const conversationId = 1;
-      addMessagesForCompaction(conversationStore, summaryStore, conversationId, 12);
-
-      const observer = new CompressionObserver(
-        config,
-        conversationStore as never,
-        summaryStore as never,
-        async () => null, // Simulate failed resolution
-      );
-
-      observer.onMessage(conversationId);
-      observer.onMessage(conversationId);
-      observer.onMessage(conversationId);
-
-      await new Promise((resolve) => setTimeout(resolve, 200));
-
-      // Should not have cached anything
-      expect(observer.getCachedSummary(conversationId)).toBeNull();
-
-      // Further messages should be ignored (summarizerFailed = true)
-      // Even after enough messages, no update should be enqueued
-      for (let i = 0; i < 10; i++) {
-        observer.onMessage(conversationId);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
       expect(observer.getCachedSummary(conversationId)).toBeNull();
     });
   });
@@ -459,9 +432,8 @@ describe("CompressionObserver", () => {
       addMessagesForCompaction(conversationStore, summaryStore, conversationId, 12);
 
       let callCount = 0;
-      const slowSummarize = vi.fn(async (text: string) => {
+      const slowFn = vi.fn(async (text: string) => {
         callCount++;
-        // First call is slow
         if (callCount === 1) {
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
@@ -473,17 +445,13 @@ describe("CompressionObserver", () => {
         { ...config, messageInterval: 1 },
         conversationStore as never,
         summaryStore as never,
-        async () => slowSummarize,
+        slowFn,
       );
 
-      // First message triggers update (messageInterval = 1)
       observer.onMessage(conversationId);
-
-      // Second message arrives while first is in-flight — should be re-triggered
       await new Promise((resolve) => setTimeout(resolve, 30));
       observer.onMessage(conversationId);
 
-      // Wait for both updates to complete
       await vi.waitFor(
         () => {
           expect(callCount).toBeGreaterThanOrEqual(2);
@@ -498,10 +466,8 @@ describe("CompressionObserver", () => {
   describe("mixed context handling", () => {
     it("should flag hasMixedContext when summaries exist in context", async () => {
       const conversationId = 1;
-      // Add enough messages so some are outside fresh tail
       addMessagesForCompaction(conversationStore, summaryStore, conversationId, 12);
 
-      // Add a summary item to the context (simulating prior compaction)
       summaryStore._contextItems.push({
         conversationId,
         ordinal: 1000,
@@ -521,15 +487,13 @@ describe("CompressionObserver", () => {
         { timeout: 2000 },
       );
 
-      const cached = observer.getCachedSummary(conversationId)!;
-      expect(cached.hasMixedContext).toBe(true);
+      expect(observer.getCachedSummary(conversationId)!.hasMixedContext).toBe(true);
     });
 
     it("isSummaryFresh should return false for mixed context summaries", async () => {
       const conversationId = 1;
       addMessagesForCompaction(conversationStore, summaryStore, conversationId, 12);
 
-      // Add a summary item
       summaryStore._contextItems.push({
         conversationId,
         ordinal: 500,
@@ -550,8 +514,6 @@ describe("CompressionObserver", () => {
       );
 
       const cached = observer.getCachedSummary(conversationId)!;
-      // Even though the summary is fresh in time and tokens, it should
-      // be rejected because the context has mixed content.
       expect(observer.isSummaryFresh(conversationId, cached.sourceTokenCount)).toBe(false);
     });
   });
