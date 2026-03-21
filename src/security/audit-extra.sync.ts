@@ -5,11 +5,8 @@ import { isDangerousNetworkMode, normalizeNetworkMode } from "../agents/sandbox/
  *
  * These functions analyze config-based security properties without I/O.
  */
-import { resolveSandboxToolPolicyForAgent } from "../agents/sandbox/tool-policy.js";
-import type { SandboxToolPolicy } from "../agents/sandbox/types.js";
 import { getBlockedBindReason } from "../agents/sandbox/validate-sandbox-security.js";
 import { isToolAllowedByPolicies } from "../agents/tool-policy-match.js";
-import { resolveToolProfilePolicy } from "../agents/tool-policy.js";
 import { resolveBrowserConfig } from "../browser/config.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { DenebConfig } from "../config/config.js";
@@ -25,15 +22,9 @@ import {
   resolveNodeCommandAllowlist,
 } from "../gateway/node-command-policy.js";
 import { inferParamBFromIdOrName } from "../shared/model-param-b.js";
-import { pickSandboxToolPolicy } from "./audit-tool-policy.js";
+import { resolveToolPolicies, type SecurityAuditFinding } from "./audit-extra-shared.js";
 
-export type SecurityAuditFinding = {
-  checkId: string;
-  severity: "info" | "warn" | "critical";
-  title: string;
-  detail: string;
-  remediation?: string;
-};
+export type { SecurityAuditFinding } from "./audit-extra-shared.js";
 
 const SMALL_MODEL_PARAM_B_MAX = 300;
 
@@ -292,37 +283,6 @@ function suggestKnownNodeCommands(unknown: string, known: Set<string>): string[]
     .filter((r) => r.d <= threshold)
     .slice(0, 3)
     .map((r) => r.cmd);
-}
-
-function resolveToolPolicies(params: {
-  cfg: DenebConfig;
-  agentTools?: AgentToolsConfig;
-  sandboxMode?: "off" | "non-main" | "all";
-  agentId?: string | null;
-}): SandboxToolPolicy[] {
-  const policies: SandboxToolPolicy[] = [];
-  const profile = params.agentTools?.profile ?? params.cfg.tools?.profile;
-  const profilePolicy = resolveToolProfilePolicy(profile);
-  if (profilePolicy) {
-    policies.push(profilePolicy);
-  }
-
-  const globalPolicy = pickSandboxToolPolicy(params.cfg.tools ?? undefined);
-  if (globalPolicy) {
-    policies.push(globalPolicy);
-  }
-
-  const agentPolicy = pickSandboxToolPolicy(params.agentTools);
-  if (agentPolicy) {
-    policies.push(agentPolicy);
-  }
-
-  if (params.sandboxMode === "all") {
-    const sandboxPolicy = resolveSandboxToolPolicyForAgent(params.cfg, params.agentId ?? undefined);
-    policies.push(sandboxPolicy);
-  }
-
-  return policies;
 }
 
 function hasWebSearchKey(cfg: DenebConfig, env: NodeJS.ProcessEnv): boolean {

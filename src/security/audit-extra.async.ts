@@ -9,8 +9,6 @@ import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { resolveSandboxConfigForAgent } from "../agents/sandbox/config.js";
 import { SANDBOX_BROWSER_SECURITY_HASH_EPOCH } from "../agents/sandbox/constants.js";
 import { execDockerRaw, type ExecDockerRawResult } from "../agents/sandbox/docker.js";
-import { resolveSandboxToolPolicyForAgent } from "../agents/sandbox/tool-policy.js";
-import type { SandboxToolPolicy } from "../agents/sandbox/types.js";
 import { isToolAllowedByPolicies } from "../agents/tool-policy-match.js";
 import { resolveToolProfilePolicy } from "../agents/tool-policy.js";
 import { listAgentWorkspaceDirs } from "../agents/workspace-dirs.js";
@@ -25,25 +23,19 @@ import { hasConfiguredSecretInput } from "../config/types.secrets.js";
 import type { AgentToolsConfig } from "../config/types.tools.js";
 import { normalizePluginsConfig } from "../plugins/config-state.js";
 import { normalizeAgentId } from "../routing/session-key.js";
+import { resolveToolPolicies, type SecurityAuditFinding } from "./audit-extra-shared.js";
 import {
   formatPermissionDetail,
   formatPermissionRemediation,
   inspectPathPermissions,
   safeStat,
 } from "./audit-fs.js";
-import { pickSandboxToolPolicy } from "./audit-tool-policy.js";
 import { extensionUsesSkippedScannerPath, isPathInside } from "./scan-paths.js";
 import type { SkillScanFinding } from "./skill-scanner.js";
 import * as skillScanner from "./skill-scanner.js";
 import type { ExecFn } from "./windows-acl.js";
 
-export type SecurityAuditFinding = {
-  checkId: string;
-  severity: "info" | "warn" | "critical";
-  title: string;
-  detail: string;
-  remediation?: string;
-};
+export type { SecurityAuditFinding } from "./audit-extra-shared.js";
 
 type ExecDockerRawFn = (
   args: string[],
@@ -136,25 +128,6 @@ async function listInstalledPluginDirs(params: {
     .map((entry) => entry.name)
     .filter(Boolean);
   return { extensionsDir, pluginDirs };
-}
-
-function resolveToolPolicies(params: {
-  cfg: DenebConfig;
-  agentTools?: AgentToolsConfig;
-  sandboxMode?: "off" | "non-main" | "all";
-  agentId?: string | null;
-}): Array<SandboxToolPolicy | undefined> {
-  const profile = params.agentTools?.profile ?? params.cfg.tools?.profile;
-  const profilePolicy = resolveToolProfilePolicy(profile);
-  const policies: Array<SandboxToolPolicy | undefined> = [
-    profilePolicy,
-    pickSandboxToolPolicy(params.cfg.tools ?? undefined),
-    pickSandboxToolPolicy(params.agentTools),
-  ];
-  if (params.sandboxMode === "all") {
-    policies.push(resolveSandboxToolPolicyForAgent(params.cfg, params.agentId ?? undefined));
-  }
-  return policies;
 }
 
 function normalizePluginIdSet(entries: string[]): Set<string> {
