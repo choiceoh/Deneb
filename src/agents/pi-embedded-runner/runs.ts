@@ -273,6 +273,28 @@ export function clearActiveEmbeddedRun(
   }
 }
 
+/**
+ * Clear all active embedded run state. Called during in-process restarts
+ * (SIGUSR1) where interrupted tasks' finally blocks may not run, leaving
+ * stale entries in `ACTIVE_EMBEDDED_RUNS` that permanently mark sessions
+ * as "active" and cause all subsequent messages to be queued.
+ */
+export function resetActiveEmbeddedRunState(): void {
+  const hadActive = ACTIVE_EMBEDDED_RUNS.size;
+  for (const waiters of EMBEDDED_RUN_WAITERS.values()) {
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer);
+      waiter.resolve(true);
+    }
+  }
+  EMBEDDED_RUN_WAITERS.clear();
+  ACTIVE_EMBEDDED_RUNS.clear();
+  ACTIVE_EMBEDDED_RUN_SNAPSHOTS.clear();
+  if (hadActive > 0) {
+    diag.debug(`resetActiveEmbeddedRunState: cleared ${hadActive} stale active run(s)`);
+  }
+}
+
 export const __testing = {
   resetActiveEmbeddedRuns() {
     for (const waiters of EMBEDDED_RUN_WAITERS.values()) {

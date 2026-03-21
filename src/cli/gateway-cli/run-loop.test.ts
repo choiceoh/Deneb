@@ -28,6 +28,8 @@ const abortEmbeddedPiRun = vi.fn(
   (_sessionId?: string, _opts?: { mode?: "all" | "compacting" }) => false,
 );
 const getActiveEmbeddedRunCount = vi.fn(() => 0);
+const resetActiveEmbeddedRunState = vi.fn();
+const resetFollowupQueueDrainState = vi.fn();
 const waitForActiveEmbeddedRuns = vi.fn(async (_timeoutMs: number) => ({ drained: true }));
 const DRAIN_TIMEOUT_LOG = "drain timeout reached; proceeding with restart";
 const gatewayLog = {
@@ -63,7 +65,12 @@ vi.mock("../../agents/pi-embedded-runner/runs.js", () => ({
   abortEmbeddedPiRun: (sessionId?: string, opts?: { mode?: "all" | "compacting" }) =>
     abortEmbeddedPiRun(sessionId, opts),
   getActiveEmbeddedRunCount: () => getActiveEmbeddedRunCount(),
+  resetActiveEmbeddedRunState: () => resetActiveEmbeddedRunState(),
   waitForActiveEmbeddedRuns: (timeoutMs: number) => waitForActiveEmbeddedRuns(timeoutMs),
+}));
+
+vi.mock("../../auto-reply/reply/queue/drain.js", () => ({
+  resetFollowupQueueDrainState: () => resetFollowupQueueDrainState(),
 }));
 
 vi.mock("../../logging/subsystem.js", () => ({
@@ -280,6 +287,8 @@ describe("runGatewayLoop", () => {
       });
       expect(markGatewaySigusr1RestartHandled).toHaveBeenCalledTimes(1);
       expect(resetAllLanes).toHaveBeenCalledTimes(1);
+      expect(resetActiveEmbeddedRunState).toHaveBeenCalledTimes(1);
+      expect(resetFollowupQueueDrainState).toHaveBeenCalledTimes(1);
 
       sigusr1();
 
@@ -292,6 +301,8 @@ describe("runGatewayLoop", () => {
       expect(markGatewaySigusr1RestartHandled).toHaveBeenCalledTimes(2);
       expect(markGatewayDraining).toHaveBeenCalledTimes(2);
       expect(resetAllLanes).toHaveBeenCalledTimes(2);
+      expect(resetActiveEmbeddedRunState).toHaveBeenCalledTimes(2);
+      expect(resetFollowupQueueDrainState).toHaveBeenCalledTimes(2);
       expect(acquireGatewayLock).toHaveBeenCalledTimes(3);
 
       sigterm();

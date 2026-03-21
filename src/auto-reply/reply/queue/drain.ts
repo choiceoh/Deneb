@@ -26,6 +26,30 @@ export function clearFollowupDrainCallback(key: string): void {
   FOLLOWUP_RUN_CALLBACKS.delete(key);
 }
 
+/**
+ * Reset followup queue state after an in-process restart (SIGUSR1).
+ *
+ * Interrupted drain coroutines leave `draining: true` on queue entries,
+ * permanently blocking `beginQueueDrain` from starting new drains.
+ * This resets the flag and attempts to restart drains for queues that
+ * still have items, using cached callbacks when available.
+ */
+export function resetFollowupQueueDrainState(): void {
+  const keysToKick: string[] = [];
+  for (const [key, queue] of FOLLOWUP_QUEUES) {
+    queue.draining = false;
+    if (queue.items.length > 0 || queue.droppedCount > 0) {
+      keysToKick.push(key);
+    }
+  }
+  // Try to restart drains using cached callbacks. Queues without a
+  // cached callback will remain idle until the next finalizeWithFollowup
+  // call provides one (i.e., when a new user message triggers a run).
+  for (const key of keysToKick) {
+    kickFollowupDrainIfIdle(key);
+  }
+}
+
 /** Restart the drain for `key` if it is currently idle, using the stored callback. */
 export function kickFollowupDrainIfIdle(key: string): void {
   const cb = FOLLOWUP_RUN_CALLBACKS.get(key);

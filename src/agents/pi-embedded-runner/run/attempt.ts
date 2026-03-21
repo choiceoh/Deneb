@@ -550,6 +550,11 @@ export async function runEmbeddedAttempt(
     let sessionManager: ReturnType<typeof guardSessionManager> | undefined;
     let session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
     let removeToolResultContextGuard: (() => void) | undefined;
+    // Track queue handle for safety-net cleanup in the outer finally block.
+    // If the inner try/finally (which normally clears the active run) is never
+    // reached due to an exception between setActiveEmbeddedRun and the inner
+    // try, the outer finally ensures the session doesn't stay stuck as "active".
+    let activeRunQueueHandle: EmbeddedPiQueueHandle | undefined;
     try {
       await repairSessionFileIfNeeded({
         sessionFile: params.sessionFile,
@@ -1063,6 +1068,7 @@ export async function runEmbeddedAttempt(
         abort: abortRun,
       };
       setActiveEmbeddedRun(params.sessionId, queueHandle, params.sessionKey);
+      activeRunQueueHandle = queueHandle;
 
       let abortWarnTimer: NodeJS.Timeout | undefined;
       const isProbeSession = params.sessionId?.startsWith("probe-") ?? false;
@@ -1674,6 +1680,15 @@ export async function runEmbeddedAttempt(
       releaseWsSession(params.sessionId);
       await bundleMcpRuntime?.dispose();
       await bundleLspRuntime?.dispose();
+      // Safety net: if setActiveEmbeddedRun was called but the inner
+      // try/finally (which normally calls clearActiveEmbeddedRun) was never
+      // reached, clear the stale active-run entry here so subsequent
+      // messages aren't permanently queued. The handle identity check
+      // inside clearActiveEmbeddedRun makes this idempotent — calling it
+      // twice with the same handle is harmless.
+      if (activeRunQueueHandle) {
+        clearActiveEmbeddedRun(params.sessionId, activeRunQueueHandle, params.sessionKey);
+      }
       await sessionLock.release();
     }
   } finally {
