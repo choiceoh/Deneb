@@ -121,6 +121,17 @@ export class LcmContextEngine implements ContextEngine {
     // Initialize compression observer if enabled.
     const observerCfg = deps.config.observer;
     if (observerCfg.enabled) {
+      // Warn early if model/provider are not configured — the observer will
+      // permanently disable itself on the first failed summarizer resolution
+      // rather than silently falling back to an expensive default model.
+      if (!observerCfg.model && !observerCfg.provider) {
+        console.error(
+          `[lcm] compression observer is enabled but no observer.model or observer.provider is configured. ` +
+            `The observer will attempt to use the default LCM summarizer. ` +
+            `For best results, set LCM_OBSERVER_MODEL and LCM_OBSERVER_PROVIDER.`,
+        );
+      }
+
       this.compressionObserver = new CompressionObserver(
         {
           ...DEFAULT_OBSERVER_CONFIG,
@@ -399,16 +410,20 @@ export class LcmContextEngine implements ContextEngine {
   /**
    * Resolve a summarizer for the compression observer.
    *
-   * When observer-specific model/provider are configured, use those;
-   * otherwise fall back to the default LCM summarizer.
+   * When observer-specific model/provider are configured, resolves that model.
+   * When not configured, falls back to the default LCM summarizer.
+   *
+   * Returns null if resolution fails — the observer will permanently disable
+   * itself rather than silently falling back to an expensive default model.
    */
   private async resolveObserverSummarize(): Promise<
-    (text: string, aggressive?: boolean) => Promise<string>
+    ((text: string, aggressive?: boolean) => Promise<string>) | null
   > {
     const observerCfg = this.deps.config.observer;
     const model = observerCfg.model || undefined;
     const provider = observerCfg.provider || undefined;
 
+    // Try observer-specific model/provider first.
     if (model || provider) {
       try {
         const runtimeSummarizer = await createLcmSummarizeFromLegacyParams({
@@ -421,16 +436,30 @@ export class LcmContextEngine implements ContextEngine {
         if (runtimeSummarizer) {
           return runtimeSummarizer;
         }
+        console.error(
+          `[lcm] resolveObserverSummarize: observer model/provider configured but resolution returned undefined. ` +
+            `model="${model ?? ""}" provider="${provider ?? ""}"`,
+        );
+        return null;
       } catch (err) {
         console.error(
-          `[lcm] resolveObserverSummarize failed, falling back to default:`,
+          `[lcm] resolveObserverSummarize failed for observer model/provider:`,
           err instanceof Error ? err.message : err,
         );
+        return null;
       }
     }
 
-    // Fall back to default summarizer.
-    return this.resolveSummarize({});
+    // No observer-specific model — try default LCM summarizer.
+    try {
+      return await this.resolveSummarize({});
+    } catch (err) {
+      console.error(
+        `[lcm] resolveObserverSummarize: default summarizer resolution failed:`,
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    }
   }
 
   // ── ContextEngine interface ─────────────────────────────────────────────
