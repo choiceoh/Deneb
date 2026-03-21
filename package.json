@@ -369,10 +369,6 @@
       "types": "./dist/plugin-sdk/self-hosted-provider-setup.d.ts",
       "default": "./dist/plugin-sdk/self-hosted-provider-setup.js"
     },
-    "./plugin-sdk/discord": {
-      "types": "./dist/plugin-sdk/discord.d.ts",
-      "default": "./dist/plugin-sdk/discord.js"
-    },
     "./cli-entry": "./openclaw.mjs"
   },
   "scripts": {
