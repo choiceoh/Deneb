@@ -51,6 +51,34 @@ describe("resolveMemoryBackendConfig", () => {
     expect(resolved.qmd?.command).toBe("/Applications/QMD Tools/qmd");
   });
 
+  it("normalizes qmd-wrapper.sh to bare qmd command", () => {
+    const cfg = {
+      agents: { defaults: { workspace: "/tmp/memory-test" } },
+      memory: {
+        backend: "qmd",
+        qmd: {
+          command: "/home/user/.openclaw/.bun/bin/qmd-wrapper.sh",
+        },
+      },
+    } as DenebConfig;
+    const resolved = resolveMemoryBackendConfig({ cfg, agentId: "main" });
+    expect(resolved.qmd?.command).toBe("qmd");
+  });
+
+  it("normalizes bare qmd-wrapper filename to qmd", () => {
+    const cfg = {
+      agents: { defaults: { workspace: "/tmp/memory-test" } },
+      memory: {
+        backend: "qmd",
+        qmd: {
+          command: "qmd-wrapper.sh",
+        },
+      },
+    } as DenebConfig;
+    const resolved = resolveMemoryBackendConfig({ cfg, agentId: "main" });
+    expect(resolved.qmd?.command).toBe("qmd");
+  });
+
   it("resolves custom paths relative to workspace", () => {
     const cfg = {
       agents: {

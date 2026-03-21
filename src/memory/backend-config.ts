@@ -106,6 +106,20 @@ const DEFAULT_QMD_SCOPE: SessionSendPolicyConfig = {
   ],
 };
 
+/**
+ * Normalize legacy qmd-wrapper.sh references to bare "qmd".
+ * The wrapper only set XDG_CONFIG_HOME / XDG_CACHE_HOME / QMD_EMBED_MODEL
+ * before exec-ing qmd — all of which QmdMemoryManager already handles.
+ * After Vega v1.47 the wrapper was removed, so stale config paths cause ENOENT.
+ */
+function normalizeQmdCommand(command: string): string {
+  const base = path.basename(command);
+  if (base === "qmd-wrapper.sh" || base === "qmd-wrapper") {
+    return "qmd";
+  }
+  return command;
+}
+
 function sanitizeName(input: string): string {
   const lower = input.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
   const trimmed = lower.replace(/^-+|-+$/g, "");
@@ -414,7 +428,7 @@ export function resolveMemoryBackendConfig(params: {
 
   const rawCommand = qmdCfg?.command?.trim() || "qmd";
   const parsedCommand = splitShellArgs(rawCommand);
-  const command = parsedCommand?.[0] || rawCommand.split(/\s+/)[0] || "qmd";
+  const command = normalizeQmdCommand(parsedCommand?.[0] || rawCommand.split(/\s+/)[0] || "qmd");
   const resolved: ResolvedQmdConfig = {
     command,
     mcporter: resolveMcporterConfig(qmdCfg?.mcporter),
