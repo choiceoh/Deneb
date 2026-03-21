@@ -55,6 +55,19 @@ import type {
   PluginHookBeforeMessageWriteResult,
 } from "./types.js";
 
+/**
+ * Checks whether a value looks like a Promise (thenable).
+ * Used to guard sync-only hook paths against accidentally async handlers.
+ */
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    value !== null &&
+    value !== undefined &&
+    typeof value === "object" &&
+    typeof (value as Record<string, unknown>).then === "function"
+  );
+}
+
 // Re-export types for consumers
 export type {
   PluginHookAgentContext,
@@ -668,11 +681,23 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
    * handler may return `{ message }` to replace the message passed to the next
    * handler.
    */
-  function runToolResultPersist(
-    event: PluginHookToolResultPersistEvent,
-    ctx: PluginHookToolResultPersistContext,
-  ): PluginHookToolResultPersistResult | undefined {
-    const hooks = getHooksForName(registry, "tool_result_persist");
+  /**
+   * Shared runner for synchronous message-transforming hooks.
+   * Both tool_result_persist and before_message_write follow the same pattern:
+   * call each handler synchronously, guard against async returns, and thread
+   * a mutable `message` through the handler chain.
+   */
+  function runSyncMessageHook<
+    K extends PluginHookName,
+    TEvent extends { message: unknown },
+    TResult extends { message?: unknown; block?: boolean },
+  >(
+    hookName: K,
+    event: TEvent,
+    ctx: unknown,
+    opts?: { allowBlock?: boolean },
+  ): TResult | undefined {
+    const hooks = getHooksForName(registry, hookName);
     if (hooks.length === 0) {
       return undefined;
     }
@@ -681,17 +706,14 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
 
     for (const hook of hooks) {
       try {
-        // oxlint-disable-next-line typescript/no-explicit-any
-        const out = (hook.handler as any)({ ...event, message: current }, ctx) as
-          | PluginHookToolResultPersistResult
-          | void
-          | Promise<unknown>;
+        const out = (
+          hook.handler as (event: unknown, ctx: unknown) => TResult | void | PromiseLike<unknown>
+        )({ ...event, message: current }, ctx);
 
         // Guard against accidental async handlers (this hook is sync-only).
-        // oxlint-disable-next-line typescript/no-explicit-any
-        if (out && typeof (out as any).then === "function") {
+        if (isThenable(out)) {
           const msg =
-            `[hooks] tool_result_persist handler from ${hook.pluginId} returned a Promise; ` +
+            `[hooks] ${hookName} handler from ${hook.pluginId} returned a Promise; ` +
             `this hook is synchronous and the result was ignored.`;
           if (catchErrors) {
             logger?.warn?.(msg);
@@ -700,12 +722,18 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
           throw new Error(msg);
         }
 
-        const next = (out as PluginHookToolResultPersistResult | undefined)?.message;
-        if (next) {
-          current = next;
+        const result = out as TResult | undefined;
+
+        // If any handler blocks (before_message_write), return immediately.
+        if (opts?.allowBlock && result?.block) {
+          return { block: true } as TResult;
+        }
+
+        if (result?.message) {
+          current = result.message;
         }
       } catch (err) {
-        const msg = `[hooks] tool_result_persist handler from ${hook.pluginId} failed: ${String(err)}`;
+        const msg = `[hooks] ${hookName} handler from ${hook.pluginId} failed: ${String(err)}`;
         if (catchErrors) {
           logger?.error(msg);
         } else {
@@ -714,7 +742,23 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
       }
     }
 
-    return { message: current };
+    // For before_message_write, only return if message was modified.
+    if (opts?.allowBlock && current === event.message) {
+      return undefined;
+    }
+
+    return { message: current } as TResult;
+  }
+
+  function runToolResultPersist(
+    event: PluginHookToolResultPersistEvent,
+    ctx: PluginHookToolResultPersistContext,
+  ): PluginHookToolResultPersistResult | undefined {
+    return runSyncMessageHook<
+      "tool_result_persist",
+      PluginHookToolResultPersistEvent,
+      PluginHookToolResultPersistResult
+    >("tool_result_persist", event, ctx);
   }
 
   // =========================================================================
@@ -737,61 +781,11 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
     event: PluginHookBeforeMessageWriteEvent,
     ctx: { agentId?: string; sessionKey?: string },
   ): PluginHookBeforeMessageWriteResult | undefined {
-    const hooks = getHooksForName(registry, "before_message_write");
-    if (hooks.length === 0) {
-      return undefined;
-    }
-
-    let current = event.message;
-
-    for (const hook of hooks) {
-      try {
-        // oxlint-disable-next-line typescript/no-explicit-any
-        const out = (hook.handler as any)({ ...event, message: current }, ctx) as
-          | PluginHookBeforeMessageWriteResult
-          | void
-          | Promise<unknown>;
-
-        // Guard against accidental async handlers (this hook is sync-only).
-        // oxlint-disable-next-line typescript/no-explicit-any
-        if (out && typeof (out as any).then === "function") {
-          const msg =
-            `[hooks] before_message_write handler from ${hook.pluginId} returned a Promise; ` +
-            `this hook is synchronous and the result was ignored.`;
-          if (catchErrors) {
-            logger?.warn?.(msg);
-            continue;
-          }
-          throw new Error(msg);
-        }
-
-        const result = out as PluginHookBeforeMessageWriteResult | undefined;
-
-        // If any handler blocks, return immediately.
-        if (result?.block) {
-          return { block: true };
-        }
-
-        // If handler provided a modified message, use it for subsequent handlers.
-        if (result?.message) {
-          current = result.message;
-        }
-      } catch (err) {
-        const msg = `[hooks] before_message_write handler from ${hook.pluginId} failed: ${String(err)}`;
-        if (catchErrors) {
-          logger?.error(msg);
-        } else {
-          throw new Error(msg, { cause: err });
-        }
-      }
-    }
-
-    // If message was modified by any handler, return it.
-    if (current !== event.message) {
-      return { message: current };
-    }
-
-    return undefined;
+    return runSyncMessageHook<
+      "before_message_write",
+      PluginHookBeforeMessageWriteEvent,
+      PluginHookBeforeMessageWriteResult
+    >("before_message_write", event, ctx, { allowBlock: true });
   }
 
   // =========================================================================
