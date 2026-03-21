@@ -25,4 +25,6 @@ export type AutonomousConfig = {
   model?: string;
   /** Thinking level for autonomous cycles. */
   thinking?: string;
+  /** Timeout per cycle in seconds. Default: 120. */
+  timeoutSeconds?: number;
 };

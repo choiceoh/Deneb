@@ -7,6 +7,7 @@ import { AttentionManager } from "./attention.js";
 import { buildCyclePrompt } from "./prompt.js";
 import { loadAutonomousState, saveAutonomousState } from "./state-store.js";
 import type { AutonomousConfig, AutonomousState, CycleOutcome } from "./types.js";
+import { clampDelay, safeMaxPerHour, isFinitePositive, MAX_TIMEOUT_MS } from "./validation.js";
 
 const log = createSubsystemLogger("autonomous");
 
@@ -27,14 +28,27 @@ export async function runAutonomousCycle(params: {
   abortSignal?: AbortSignal;
 }): Promise<CycleOutcome> {
   const { cfg, deps, attention, agentId, storePath, abortSignal } = params;
-  const autonomousCfg = cfg.autonomous;
   const startedAt = Date.now();
+
+  // Check abort signal BEFORE doing any work.
+  if (abortSignal?.aborted) {
+    log.info("autonomous cycle skipped: already aborted");
+    return {
+      cycleNumber: 0,
+      startedAt,
+      finishedAt: Date.now(),
+      actionsTaken: [],
+      error: "aborted",
+    };
+  }
+
+  const autonomousCfg = cfg.autonomous;
 
   // Load state.
   const state = await loadAutonomousState(storePath);
 
-  // Rate limit check.
-  const maxPerHour = autonomousCfg?.maxCyclesPerHour ?? DEFAULT_MAX_CYCLES_PER_HOUR;
+  // Rate limit check — use safeMaxPerHour to prevent division by zero / NaN.
+  const maxPerHour = safeMaxPerHour(autonomousCfg?.maxCyclesPerHour, DEFAULT_MAX_CYCLES_PER_HOUR);
   if (isRateLimited(state, maxPerHour)) {
     log.info("autonomous cycle skipped: rate limit reached");
     return {
@@ -80,24 +94,43 @@ export async function runAutonomousCycle(params: {
     });
     outputText = result.outputText;
   } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
-    log.error(`autonomous cycle error: ${error}`);
+    // Classify the error type for better diagnostics.
+    if (abortSignal?.aborted) {
+      error = "aborted";
+      log.info("autonomous cycle aborted by signal");
+    } else if (err instanceof Error && err.name === "TimeoutError") {
+      error = `timeout: ${err.message}`;
+      log.error(`autonomous cycle timed out: ${err.message}`);
+    } else if (err instanceof DOMException && err.name === "AbortError") {
+      error = "aborted";
+      log.info("autonomous cycle aborted (AbortError)");
+    } else {
+      error = err instanceof Error ? err.message : String(err);
+      log.error(`autonomous cycle error: ${error}`);
+    }
+  } finally {
+    // Always persist state, even if the agent turn threw — prevents lost cycle tracking.
+    const finishedAt = Date.now();
+    state.lastCycleAt = finishedAt;
+    state.cycleCount += 1;
+
+    // Set next cycle time (default interval unless the agent requested something else).
+    // Validate the interval to guard against NaN/Infinity from config.
+    const rawInterval = autonomousCfg?.cycleIntervalMs ?? DEFAULT_CYCLE_INTERVAL_MS;
+    const defaultInterval = clampDelay(rawInterval, 1000, MAX_TIMEOUT_MS);
+    if (!state.nextCycleAt || state.nextCycleAt <= finishedAt) {
+      state.nextCycleAt = finishedAt + defaultInterval;
+    }
+
+    try {
+      await saveAutonomousState(state, storePath);
+    } catch (saveErr) {
+      const saveMsg = saveErr instanceof Error ? saveErr.message : String(saveErr);
+      log.error(`failed to save autonomous state: ${saveMsg}`);
+    }
   }
 
-  // Update state.
   const finishedAt = Date.now();
-  state.lastCycleAt = finishedAt;
-  state.cycleCount += 1;
-
-  // Set next cycle time (default interval unless the agent requested something else).
-  const defaultInterval = autonomousCfg?.cycleIntervalMs ?? DEFAULT_CYCLE_INTERVAL_MS;
-  if (!state.nextCycleAt || state.nextCycleAt <= finishedAt) {
-    state.nextCycleAt = finishedAt + defaultInterval;
-  }
-
-  // Persist state.
-  await saveAutonomousState(state, storePath);
-
   const outcome: CycleOutcome = {
     cycleNumber: state.cycleCount,
     startedAt,
@@ -115,52 +148,68 @@ export async function runAutonomousCycle(params: {
 }
 
 function isRateLimited(state: AutonomousState, maxPerHour: number): boolean {
-  if (maxPerHour <= 0) {
+  // safeMaxPerHour guarantees maxPerHour >= 1, but guard defensively anyway.
+  if (!isFinitePositive(maxPerHour)) {
     return true;
   }
-  if (state.lastCycleAt === 0) {
+  if (!isFinitePositive(state.lastCycleAt)) {
     return false;
   }
   const minInterval = 3_600_000 / maxPerHour;
-  return Date.now() - state.lastCycleAt < minInterval;
+  const elapsed = Date.now() - state.lastCycleAt;
+  if (!Number.isFinite(elapsed)) {
+    return false;
+  }
+  return elapsed < minInterval;
 }
 
 function buildSyntheticCronJob(
   autonomousCfg: AutonomousConfig | undefined,
   agentId: string,
 ): CronJob {
+  // Validate interval for the schedule field.
+  const rawInterval = autonomousCfg?.cycleIntervalMs ?? DEFAULT_CYCLE_INTERVAL_MS;
+  const safeInterval = clampDelay(rawInterval, 1000, MAX_TIMEOUT_MS);
+
+  // Validate timeout; fall back to default if invalid.
+  const rawTimeout = autonomousCfg?.timeoutSeconds;
+  const safeTimeout = isFinitePositive(rawTimeout) ? rawTimeout : DEFAULT_TIMEOUT_SECONDS;
+
+  const now = Date.now();
   return {
     id: "autonomous-cycle",
     name: "Autonomous Cycle",
     enabled: true,
-    agentId,
+    agentId: agentId || "autonomous",
     schedule: {
       kind: "every",
-      everyMs: autonomousCfg?.cycleIntervalMs ?? DEFAULT_CYCLE_INTERVAL_MS,
+      everyMs: safeInterval,
     },
     sessionTarget: "isolated",
     wakeMode: "now",
     payload: {
       kind: "agentTurn",
       message: "", // Filled by caller.
-      model: autonomousCfg?.model,
-      thinking: autonomousCfg?.thinking,
-      timeoutSeconds: DEFAULT_TIMEOUT_SECONDS,
+      model: autonomousCfg?.model ?? undefined,
+      thinking: autonomousCfg?.thinking ?? undefined,
+      timeoutSeconds: safeTimeout,
     },
     delivery: { mode: "none" },
     failureAlert: false,
-    createdAtMs: Date.now(),
-    updatedAtMs: Date.now(),
+    createdAtMs: now,
+    updatedAtMs: now,
     state: {},
   };
 }
 
 /** Resolve the interval until the next cycle should run (in ms). */
 export function resolveNextCycleDelay(state: AutonomousState, cfg?: AutonomousConfig): number {
-  const defaultInterval = cfg?.cycleIntervalMs ?? DEFAULT_CYCLE_INTERVAL_MS;
-  if (!state.nextCycleAt || state.nextCycleAt <= 0) {
+  const rawInterval = cfg?.cycleIntervalMs ?? DEFAULT_CYCLE_INTERVAL_MS;
+  const defaultInterval = clampDelay(rawInterval, 1000, MAX_TIMEOUT_MS);
+  if (!state.nextCycleAt || !isFinitePositive(state.nextCycleAt)) {
     return defaultInterval;
   }
   const remaining = state.nextCycleAt - Date.now();
-  return Math.max(0, remaining);
+  // Clamp the return value to a safe setTimeout range.
+  return clampDelay(Math.max(0, remaining), 0, MAX_TIMEOUT_MS);
 }

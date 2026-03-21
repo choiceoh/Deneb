@@ -1,9 +1,25 @@
 import type { AttentionSignal, AutonomousState } from "./types.js";
+import { isFiniteNonNegative } from "./validation.js";
 
 const MAX_SIGNALS = 50;
 const URGENCY_HIGH = 0.9;
 const URGENCY_MEDIUM = 0.6;
 const URGENCY_LOW = 0.3;
+
+/** Clamp a value to the 0-1 range, defaulting to 0 for non-finite inputs. */
+function clampUrgency(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, value));
+}
+
+/** Safe numeric comparator that treats NaN/non-finite as 0. */
+function safeDesc(a: number, b: number): number {
+  const sa = Number.isFinite(a) ? a : 0;
+  const sb = Number.isFinite(b) ? b : 0;
+  return sb - sa;
+}
 
 /**
  * In-memory attention signal collector. Accumulates signals from various
@@ -14,10 +30,29 @@ export class AttentionManager {
   private signals: AttentionSignal[] = [];
 
   addSignal(signal: AttentionSignal): void {
-    this.signals.push(signal);
+    // Validate signal inputs.
+    if (typeof signal.source !== "string" || typeof signal.content !== "string") {
+      return;
+    }
+    if (!isFiniteNonNegative(signal.timestamp)) {
+      return;
+    }
+    if (!Number.isFinite(signal.urgency)) {
+      return;
+    }
+
+    // Clamp urgency to 0-1 range.
+    const clamped: AttentionSignal = {
+      ...signal,
+      urgency: clampUrgency(signal.urgency),
+    };
+
+    this.signals.push(clamped);
     if (this.signals.length > MAX_SIGNALS) {
       // Drop lowest urgency signals when buffer is full.
-      this.signals = this.signals.toSorted((a, b) => b.urgency - a.urgency).slice(0, MAX_SIGNALS);
+      this.signals = this.signals
+        .toSorted((a, b) => safeDesc(a.urgency, b.urgency))
+        .slice(0, MAX_SIGNALS);
     }
   }
 
@@ -26,7 +61,7 @@ export class AttentionManager {
       source,
       type: "message",
       content,
-      urgency: urgency ?? URGENCY_MEDIUM,
+      urgency: urgency !== undefined ? clampUrgency(urgency) : URGENCY_MEDIUM,
       timestamp: Date.now(),
     });
   }
@@ -36,7 +71,7 @@ export class AttentionManager {
       source,
       type: "event",
       content,
-      urgency: urgency ?? URGENCY_LOW,
+      urgency: urgency !== undefined ? clampUrgency(urgency) : URGENCY_LOW,
       timestamp: Date.now(),
     });
   }
@@ -51,6 +86,9 @@ export class AttentionManager {
     // Goal deadlines approaching.
     for (const goal of state.goals) {
       if (goal.status !== "active" || !goal.dueAt) {
+        continue;
+      }
+      if (!isFiniteNonNegative(goal.dueAt)) {
         continue;
       }
       const remaining = goal.dueAt - now;
@@ -79,6 +117,9 @@ export class AttentionManager {
       if (!entry.followUpAt) {
         continue;
       }
+      if (!isFiniteNonNegative(entry.followUpAt)) {
+        continue;
+      }
       if (entry.followUpAt <= now) {
         this.addSignal({
           source: `social:${entry.channel}:${entry.peerId}`,
@@ -101,7 +142,7 @@ export class AttentionManager {
           type: "event",
           content: `Unprocessed observation: ${obs.content}`,
           urgency: URGENCY_MEDIUM,
-          timestamp: obs.observedAt,
+          timestamp: isFiniteNonNegative(obs.observedAt) ? obs.observedAt : now,
         });
       }
     }
@@ -112,11 +153,15 @@ export class AttentionManager {
    * Drains the returned signals from the buffer.
    */
   getTopSignals(n: number): AttentionSignal[] {
+    if (this.signals.length === 0 || n <= 0) {
+      return [];
+    }
     const sorted = this.signals.toSorted((a, b) => {
-      if (b.urgency !== a.urgency) {
-        return b.urgency - a.urgency;
+      const urgencyDiff = safeDesc(a.urgency, b.urgency);
+      if (urgencyDiff !== 0) {
+        return urgencyDiff;
       }
-      return b.timestamp - a.timestamp;
+      return safeDesc(a.timestamp, b.timestamp);
     });
     const top = sorted.slice(0, n);
     this.signals = sorted.slice(n);
@@ -125,7 +170,10 @@ export class AttentionManager {
 
   /** Check if there are any signals with urgency above the threshold. */
   hasUrgentSignals(threshold = 0.8): boolean {
-    return this.signals.some((s) => s.urgency >= threshold);
+    return this.signals.some((s) => {
+      const u = Number.isFinite(s.urgency) ? s.urgency : 0;
+      return u >= threshold;
+    });
   }
 
   /** Current number of pending signals. */
