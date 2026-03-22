@@ -56,9 +56,6 @@ export {
   registerSessionBindingAdapter,
   unregisterSessionBindingAdapter,
 } from "../infra/outbound/session-binding-service.js";
-export * from "../pairing/pairing-challenge.js";
-export * from "../pairing/pairing-messages.js";
-export * from "../pairing/pairing-store.js";
 export {
   buildPluginBindingApprovalCustomId,
   buildPluginBindingDeclinedText,

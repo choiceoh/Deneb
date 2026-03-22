@@ -1,13 +1,28 @@
 import crypto from "node:crypto";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-import {
-  type ExecApprovalsFile,
-  type ExecAsk,
-  type ExecSecurity,
-  evaluateShellAllowlist,
-  requiresExecApproval,
-  resolveExecApprovalsFromFile,
-} from "../infra/exec-approvals.js";
+// Exec approval system removed for solo-dev simplification.
+// Inline type aliases and stub functions for removed module.
+type ExecApprovalsFile = Record<string, unknown>;
+type ExecAsk = string;
+type ExecSecurity = string;
+function evaluateShellAllowlist(_params: Record<string, unknown>): {
+  allowlistMatches: Array<{ pattern: string }>;
+  analysisOk: boolean;
+  allowlistSatisfied: boolean;
+  segments: Array<{ argv: string[]; resolution?: { resolvedPath?: string } }>;
+} {
+  return { allowlistMatches: [], analysisOk: true, allowlistSatisfied: true, segments: [] };
+}
+function requiresExecApproval(_params: Record<string, unknown>): boolean {
+  return false;
+}
+function resolveExecApprovalsFromFile(_params: {
+  file: ExecApprovalsFile;
+  agentId?: string;
+  overrides?: { security?: string };
+}): { allowlist: Array<unknown> } {
+  return { allowlist: [] };
+}
 import { detectCommandObfuscation } from "../infra/exec-obfuscation-detect.js";
 import { buildNodeShellCommand } from "../infra/node-shell.js";
 import { parsePreparedSystemRunPayload } from "../infra/system-run-approval-context.js";

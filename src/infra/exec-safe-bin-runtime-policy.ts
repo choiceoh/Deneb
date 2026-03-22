@@ -1,4 +1,4 @@
-import { resolveSafeBins } from "./exec-approvals-allowlist.js";
+import { DEFAULT_SAFE_BINS } from "./exec-command-resolution.js";
 import {
   normalizeSafeBinProfileFixtures,
   resolveSafeBinProfiles,
@@ -18,6 +18,20 @@ export type ExecSafeBinConfigScope = {
   safeBinProfiles?: SafeBinProfileFixtures | null;
   safeBinTrustedDirs?: string[] | null;
 };
+
+function normalizeSafeBins(entries?: string[]): Set<string> {
+  if (!Array.isArray(entries)) {
+    return new Set();
+  }
+  return new Set(entries.map((e) => e.trim().toLowerCase()).filter(Boolean));
+}
+
+function resolveSafeBins(entries?: string[] | null): Set<string> {
+  if (entries === undefined) {
+    return normalizeSafeBins(DEFAULT_SAFE_BINS);
+  }
+  return normalizeSafeBins(entries ?? []);
+}
 
 const INTERPRETER_LIKE_SAFE_BINS = new Set([
   "ash",

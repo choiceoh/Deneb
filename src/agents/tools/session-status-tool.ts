@@ -12,11 +12,6 @@ import {
 } from "../../config/sessions.js";
 import { loadCombinedSessionStoreForGateway } from "../../gateway/session-utils.js";
 import {
-  formatUsageWindowSummary,
-  loadProviderUsageSummary,
-  resolveUsageProviderId,
-} from "../../infra/provider-usage.js";
-import {
   buildAgentMainSessionKey,
   DEFAULT_AGENT_ID,
   parseAgentSessionKey,
@@ -24,7 +19,6 @@ import {
 } from "../../routing/session-key.js";
 import { applyModelOverrideToSessionEntry } from "../../sessions/model-overrides.js";
 import { resolvePreferredSessionKeyForSessionIdMatches } from "../../sessions/session-id-resolution.js";
-import { resolveAgentDir } from "../agent-scope.js";
 import { formatUserTime, resolveUserTimeFormat, resolveUserTimezone } from "../date-time.js";
 import { resolveModelAuthLabel } from "../model-auth-label.js";
 import { loadModelCatalog } from "../model-catalog.js";
@@ -364,32 +358,7 @@ export function createSessionStatusTool(opts?: {
         }
       }
 
-      const agentDir = resolveAgentDir(cfg, agentId);
-      const providerForCard = resolved.entry.providerOverride?.trim() || configured.provider;
-      const usageProvider = resolveUsageProviderId(providerForCard);
-      let usageLine: string | undefined;
-      if (usageProvider) {
-        try {
-          const usageSummary = await loadProviderUsageSummary({
-            timeoutMs: 3500,
-            providers: [usageProvider],
-            agentDir,
-          });
-          const snapshot = usageSummary.providers.find((entry) => entry.provider === usageProvider);
-          if (snapshot) {
-            const formatted = formatUsageWindowSummary(snapshot, {
-              now: Date.now(),
-              maxWindows: 2,
-              includeResets: true,
-            });
-            if (formatted && !formatted.startsWith("error:")) {
-              usageLine = `📊 Usage: ${formatted}`;
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
+      const usageLine: string | undefined = undefined;
 
       const isGroup =
         resolved.entry.chatType === "group" ||

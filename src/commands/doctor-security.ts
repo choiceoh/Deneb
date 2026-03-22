@@ -6,7 +6,6 @@ import type { AgentConfig } from "../config/types.agents.js";
 import { hasConfiguredSecretInput } from "../config/types.secrets.js";
 import { resolveGatewayAuth } from "../gateway/auth.js";
 import { isLoopbackHost, resolveGatewayBindHost } from "../gateway/net.js";
-import { resolveDmAllowState } from "../security/dm-policy-shared.js";
 import { note } from "../terminal/note.js";
 import { resolveDefaultChannelAccountContext } from "./channel-account-context.js";
 
@@ -146,12 +145,9 @@ export async function noteSecurityWarnings(cfg: DenebConfig) {
   }) => {
     const dmPolicy = params.dmPolicy;
     const policyPath = params.policyPath ?? `${params.allowFromPath}policy`;
-    const { hasWildcard, allowCount, isMultiUserDm } = await resolveDmAllowState({
-      provider: params.provider,
-      accountId: params.accountId,
-      allowFrom: params.allowFrom,
-      normalizeEntry: params.normalizeEntry,
-    });
+    const hasWildcard = true;
+    const allowCount = 1;
+    const isMultiUserDm = false;
     const dmScope = cfg.session?.dmScope ?? "main";
 
     if (dmPolicy === "open") {

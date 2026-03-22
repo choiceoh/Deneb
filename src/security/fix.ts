@@ -5,9 +5,8 @@ import type { DenebConfig } from "../config/config.js";
 import { createConfigIO } from "../config/config.js";
 import { collectIncludePathsRecursive } from "../config/includes-scan.js";
 import { resolveConfigPath, resolveOAuthDir, resolveStateDir } from "../config/paths.js";
-import { readChannelAllowFromStore } from "../pairing/pairing-store.js";
 import { runExec } from "../process/exec.js";
-import { DEFAULT_ACCOUNT_ID, normalizeAgentId } from "../routing/session-key.js";
+import { normalizeAgentId } from "../routing/session-key.js";
 import { createIcaclsResetCommand, formatIcaclsResetCommand, type ExecFn } from "./windows-acl.js";
 
 export type SecurityFixChmodAction = {
@@ -228,51 +227,6 @@ function setGroupPolicyAllowlist(params: {
   }
 }
 
-function setWhatsAppGroupAllowFromFromStore(params: {
-  cfg: DenebConfig;
-  storeAllowFrom: string[];
-  changes: string[];
-  policyFlips: Set<string>;
-}): void {
-  const section = params.cfg.channels?.whatsapp as Record<string, unknown> | undefined;
-  if (!section || typeof section !== "object") {
-    return;
-  }
-  if (params.storeAllowFrom.length === 0) {
-    return;
-  }
-
-  const maybeApply = (prefix: string, obj: Record<string, unknown>) => {
-    if (!params.policyFlips.has(prefix)) {
-      return;
-    }
-    const allowFrom = Array.isArray(obj.allowFrom) ? obj.allowFrom : [];
-    const groupAllowFrom = Array.isArray(obj.groupAllowFrom) ? obj.groupAllowFrom : [];
-    if (allowFrom.length > 0) {
-      return;
-    }
-    if (groupAllowFrom.length > 0) {
-      return;
-    }
-    obj.groupAllowFrom = params.storeAllowFrom;
-    params.changes.push(`${prefix}groupAllowFrom=pairing-store`);
-  };
-
-  maybeApply("channels.whatsapp.", section);
-
-  const accounts = section.accounts;
-  if (!accounts || typeof accounts !== "object") {
-    return;
-  }
-  for (const [accountId, accountValue] of Object.entries(accounts)) {
-    if (!accountValue || typeof accountValue !== "object") {
-      continue;
-    }
-    const account = accountValue as Record<string, unknown>;
-    maybeApply(`channels.whatsapp.accounts.${accountId}.`, account);
-  }
-}
-
 function applyConfigFixes(params: { cfg: DenebConfig; env: NodeJS.ProcessEnv }): {
   cfg: DenebConfig;
   changes: string[];
@@ -411,20 +365,6 @@ export async function fixSecurityFootguns(opts?: {
   if (snap.valid) {
     const fixed = applyConfigFixes({ cfg: snap.config, env });
     changes = fixed.changes;
-
-    const whatsappStoreAllowFrom = await readChannelAllowFromStore(
-      "whatsapp",
-      env,
-      DEFAULT_ACCOUNT_ID,
-    ).catch(() => []);
-    if (whatsappStoreAllowFrom.length > 0) {
-      setWhatsAppGroupAllowFromFromStore({
-        cfg: fixed.cfg,
-        storeAllowFrom: whatsappStoreAllowFrom,
-        changes,
-        policyFlips: fixed.policyFlips,
-      });
-    }
 
     if (changes.length > 0) {
       try {

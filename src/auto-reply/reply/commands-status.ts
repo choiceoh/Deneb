@@ -14,11 +14,6 @@ import type { DenebConfig } from "../../config/config.js";
 import { toAgentModelListLike } from "../../config/model-input.js";
 import type { SessionEntry, SessionScope } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
-import {
-  formatUsageWindowSummary,
-  loadProviderUsageSummary,
-  resolveUsageProviderId,
-} from "../../infra/provider-usage.js";
 import type { MediaUnderstandingDecision } from "../../media-understanding/types.js";
 import { normalizeGroupActivation } from "../group-activation.js";
 import { resolveSelectedAndActiveModel } from "../model-runtime.js";
@@ -78,36 +73,7 @@ export async function buildStatusReply(params: {
     ? resolveSessionAgentId({ sessionKey, config: cfg })
     : resolveDefaultAgentId(cfg);
   const statusAgentDir = resolveAgentDir(cfg, statusAgentId);
-  const currentUsageProvider = (() => {
-    try {
-      return resolveUsageProviderId(provider);
-    } catch {
-      return undefined;
-    }
-  })();
-  let usageLine: string | null = null;
-  if (currentUsageProvider) {
-    try {
-      const usageSummary = await loadProviderUsageSummary({
-        timeoutMs: 3500,
-        providers: [currentUsageProvider],
-        agentDir: statusAgentDir,
-      });
-      const usageEntry = usageSummary.providers[0];
-      if (usageEntry && !usageEntry.error && usageEntry.windows.length > 0) {
-        const summaryLine = formatUsageWindowSummary(usageEntry, {
-          now: Date.now(),
-          maxWindows: 2,
-          includeResets: true,
-        });
-        if (summaryLine) {
-          usageLine = `📊 Usage: ${summaryLine}`;
-        }
-      }
-    } catch {
-      usageLine = null;
-    }
-  }
+  const usageLine: string | null = null;
   const queueSettings = resolveQueueSettings({
     cfg,
     channel: command.channel,

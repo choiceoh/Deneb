@@ -39,13 +39,7 @@ import {
   resolveUpdateAvailability,
 } from "./status.update.js";
 
-let providerUsagePromise: Promise<typeof import("../infra/provider-usage.js")> | undefined;
 let securityAuditModulePromise: Promise<typeof import("../security/audit.runtime.js")> | undefined;
-
-function loadProviderUsage() {
-  providerUsagePromise ??= import("../infra/provider-usage.js");
-  return providerUsagePromise;
-}
 
 function loadSecurityAuditModule() {
   securityAuditModulePromise ??= import("../security/audit.runtime.js");
@@ -144,19 +138,7 @@ export async function statusCommand(
     pluginCompatibility,
   } = scan;
 
-  const usage = opts.usage
-    ? await withProgress(
-        {
-          label: "Fetching usage snapshot…",
-          indeterminate: true,
-          enabled: opts.json !== true,
-        },
-        async () => {
-          const { loadProviderUsageSummary } = await loadProviderUsage();
-          return await loadProviderUsageSummary({ timeoutMs: opts.timeoutMs });
-        },
-      )
-    : undefined;
+  const usage = undefined;
   const health: HealthSummary | undefined = opts.deep
     ? await withProgress(
         {
@@ -680,15 +662,6 @@ export async function statusCommand(
         rows,
       }).trimEnd(),
     );
-  }
-
-  if (usage) {
-    const { formatUsageReportLines } = await loadProviderUsage();
-    runtime.log("");
-    runtime.log(theme.heading("Usage"));
-    for (const line of formatUsageReportLines(usage)) {
-      runtime.log(line);
-    }
   }
 
   runtime.log("");
