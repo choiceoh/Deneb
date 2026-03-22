@@ -257,25 +257,11 @@ export const nodeHandlers: GatewayRequestHandlers = {
       });
       return;
     }
-    const p = params as Parameters<typeof requestNodePairing>[0];
+    const p = params as Record<string, unknown>;
     await respondUnavailableOnThrow(respond, async () => {
-      const result = await requestNodePairing({
-        nodeId: p.nodeId,
-        displayName: p.displayName,
-        platform: p.platform,
-        version: p.version,
-        coreVersion: p.coreVersion,
-        uiVersion: p.uiVersion,
-        deviceFamily: p.deviceFamily,
-        modelIdentifier: p.modelIdentifier,
-        caps: p.caps,
-        commands: p.commands,
-        permissions: p.permissions,
-        remoteIp: p.remoteIp,
-        silent: p.silent,
-      });
-      if (result.status === "pending" && result.created) {
-        context.broadcast("node.pair.requested", result.request, {
+      const result = await requestNodePairing(p);
+      if (result.requestId) {
+        context.broadcast("node.pair.requested", result, {
           dropIfSlow: true,
         });
       }
@@ -363,12 +349,12 @@ export const nodeHandlers: GatewayRequestHandlers = {
       });
       return;
     }
-    const { nodeId, token } = params as {
+    const { nodeId: _nodeId, token } = params as {
       nodeId: string;
       token: string;
     };
     await respondUnavailableOnThrow(respond, async () => {
-      const result = await verifyNodeToken(nodeId, token);
+      const result = verifyNodeToken(token);
       respond(true, result, undefined);
     });
   },
@@ -391,12 +377,8 @@ export const nodeHandlers: GatewayRequestHandlers = {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "displayName required"));
         return;
       }
-      const updated = await renamePairedNode(nodeId, trimmed);
-      if (!updated) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown nodeId"));
-        return;
-      }
-      respond(true, { nodeId: updated.nodeId, displayName: updated.displayName }, undefined);
+      await renamePairedNode(nodeId, trimmed);
+      respond(true, { nodeId, displayName: trimmed }, undefined);
     });
   },
   "node.list": async ({ params, respond, context }) => {
@@ -625,8 +607,13 @@ export const nodeHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "nodeId required"));
       return;
     }
+    const rawIds = Array.isArray(params.ids) ? params.ids : [];
     const ackIds = Array.from(
-      new Set((params.ids ?? []).map((value) => String(value ?? "").trim()).filter(Boolean)),
+      new Set(
+        rawIds
+          .map((value: unknown) => (typeof value === "string" ? value.trim() : ""))
+          .filter(Boolean),
+      ),
     );
     const remaining = ackPendingNodeActions(trimmedNodeId, ackIds);
     respond(

@@ -21,3 +21,19 @@ export function publicKeyRawBase64UrlFromPem(_pem: string): string {
 export function signDevicePayload(_payload: unknown): string {
   return "";
 }
+
+export function deriveDeviceIdFromPublicKey(_publicKey: string): string {
+  return "";
+}
+
+export function normalizeDevicePublicKeyBase64Url(_key: string): string {
+  return "";
+}
+
+export function verifyDeviceSignature(
+  _publicKey: string,
+  _payload: string,
+  _signature: string,
+): boolean {
+  return false;
+}

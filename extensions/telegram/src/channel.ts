@@ -12,10 +12,9 @@ function createNestedAllowlistOverrideResolver(
   return () => [];
 }
 // Inline stub for removed channel-policy module.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createAllowlistProviderRouteAllowlistWarningCollector<T>(
   opts: Record<string, unknown>,
-): (ctx: any) => string[] {
+): (ctx: { cfg: DenebConfig; accountId?: string | null; account: T }) => string[] {
   void opts;
   return () => [];
 }
@@ -311,9 +310,9 @@ const resolveTelegramAllowlistGroupOverrides = createNestedAllowlistOverrideReso
 
 const collectTelegramSecurityWarnings =
   createAllowlistProviderRouteAllowlistWarningCollector<ResolvedTelegramAccount>({
-    providerConfigPresent: (cfg) => cfg.channels?.telegram !== undefined,
-    resolveGroupPolicy: (account) => account.config.groupPolicy,
-    resolveRouteAllowlistConfigured: (account) =>
+    providerConfigPresent: (cfg: DenebConfig) => cfg.channels?.telegram !== undefined,
+    resolveGroupPolicy: (account: ResolvedTelegramAccount) => account.config.groupPolicy,
+    resolveRouteAllowlistConfigured: (account: ResolvedTelegramAccount) =>
       Boolean(account.config.groups) && Object.keys(account.config.groups ?? {}).length > 0,
     restrictSenders: {
       surface: "Telegram groups",
