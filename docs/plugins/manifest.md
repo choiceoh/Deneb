@@ -39,7 +39,7 @@ For the native capability model and current external-compatibility guidance:
 
 ```json
 {
-  "id": "voice-call",
+  "id": "my-plugin",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
