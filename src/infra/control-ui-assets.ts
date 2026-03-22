@@ -185,7 +185,21 @@ export function resolveControlUiRootOverrideSync(rootOverride: string): string |
   return null;
 }
 
+let controlUiRootCache: { key: string; result: string | null } | null = null;
+
 export function resolveControlUiRootSync(opts: ControlUiRootResolveOptions = {}): string | null {
+  // Cache the result since this involves many synchronous filesystem stat calls
+  // and the result doesn't change during a process lifetime.
+  const cacheKey = `${opts.argv1 ?? process.argv[1]}|${opts.moduleUrl ?? ""}|${opts.cwd ?? process.cwd()}|${opts.execPath ?? ""}`;
+  if (controlUiRootCache && controlUiRootCache.key === cacheKey) {
+    return controlUiRootCache.result;
+  }
+  const result = resolveControlUiRootSyncUncached(opts);
+  controlUiRootCache = { key: cacheKey, result };
+  return result;
+}
+
+function resolveControlUiRootSyncUncached(opts: ControlUiRootResolveOptions = {}): string | null {
   const candidates = new Set<string>();
   const argv1 = opts.argv1 ?? process.argv[1];
   const cwd = opts.cwd ?? process.cwd();

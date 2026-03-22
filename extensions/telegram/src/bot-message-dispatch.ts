@@ -127,7 +127,7 @@ function resolveTelegramReasoningLevel(params: {
   }
   try {
     const storePath = resolveStorePath(cfg.session?.store, { agentId });
-    const store = loadSessionStore(storePath, { skipCache: true });
+    const store = loadSessionStore(storePath);
     const entry = resolveSessionStoreEntry({ store, sessionKey }).existing;
     const level = entry?.reasoningLevel;
     if (level === "on" || level === "stream") {

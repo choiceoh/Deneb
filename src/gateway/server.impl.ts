@@ -242,10 +242,11 @@ export async function startGatewayServer(
             .join("\n")}`,
         );
       }
+      // Re-read only when migration actually wrote changes.
+      configSnapshot = await readConfigFileSnapshot();
     }
   }
 
-  configSnapshot = await readConfigFileSnapshot();
   if (configSnapshot.exists) {
     assertValidGatewayStartupConfigSnapshot(configSnapshot, { includeDoctorHint: true });
   }

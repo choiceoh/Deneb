@@ -18,6 +18,12 @@ import { STATE_DIR } from "deneb/plugin-sdk/state-paths";
 const CACHE_FILE = path.join(STATE_DIR, "telegram", "sticker-cache.json");
 const CACHE_VERSION = 1;
 
+/** In-memory cache to avoid repeated disk reads. */
+let memCache: StickerCache | null = null;
+let memCacheTs = 0;
+/** Stale after 60 seconds; re-read from disk to pick up external changes. */
+const MEM_CACHE_TTL_MS = 60_000;
+
 export interface CachedSticker {
   fileId: string;
   fileUniqueId: string;
@@ -34,19 +40,31 @@ interface StickerCache {
 }
 
 function loadCache(): StickerCache {
+  const now = Date.now();
+  if (memCache && now - memCacheTs < MEM_CACHE_TTL_MS) {
+    return memCache;
+  }
   const data = loadJsonFile(CACHE_FILE);
   if (!data || typeof data !== "object") {
-    return { version: CACHE_VERSION, stickers: {} };
+    memCache = { version: CACHE_VERSION, stickers: {} };
+    memCacheTs = now;
+    return memCache;
   }
   const cache = data as StickerCache;
   if (cache.version !== CACHE_VERSION) {
     // Future: handle migration if needed
-    return { version: CACHE_VERSION, stickers: {} };
+    memCache = { version: CACHE_VERSION, stickers: {} };
+    memCacheTs = now;
+    return memCache;
   }
+  memCache = cache;
+  memCacheTs = now;
   return cache;
 }
 
 function saveCache(cache: StickerCache): void {
+  memCache = cache;
+  memCacheTs = Date.now();
   saveJsonFile(CACHE_FILE, cache);
 }
 

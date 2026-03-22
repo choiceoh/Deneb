@@ -178,6 +178,15 @@ export function observeTopbar(host: ScrollHost) {
     host.style.setProperty("--topbar-height", `${height}px`);
   };
   update();
-  host.topbarObserver = new ResizeObserver(() => update());
+  let rafId: number | null = null;
+  host.topbarObserver = new ResizeObserver(() => {
+    if (rafId != null) {
+      return;
+    }
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      update();
+    });
+  });
   host.topbarObserver.observe(topbar);
 }

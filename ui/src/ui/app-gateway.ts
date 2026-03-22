@@ -322,10 +322,10 @@ function handleChatGatewayEvent(host: GatewayHost, payload: ChatEventPayload | u
 }
 
 function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
-  host.eventLogBuffer = [
-    { ts: Date.now(), event: evt.event, payload: evt.payload },
-    ...host.eventLogBuffer,
-  ].slice(0, 250);
+  host.eventLogBuffer.unshift({ ts: Date.now(), event: evt.event, payload: evt.payload });
+  if (host.eventLogBuffer.length > 250) {
+    host.eventLogBuffer.length = 250;
+  }
   if (host.tab === "debug" || host.tab === "overview") {
     host.eventLog = host.eventLogBuffer;
   }

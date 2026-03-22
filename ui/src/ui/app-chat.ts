@@ -94,18 +94,15 @@ function enqueueChatMessage(
   if (!trimmed && !hasAttachments) {
     return;
   }
-  host.chatQueue = [
-    ...host.chatQueue,
-    {
-      id: generateUUID(),
-      text: trimmed,
-      createdAt: Date.now(),
-      attachments: hasAttachments ? attachments?.map((att) => ({ ...att })) : undefined,
-      refreshSessions,
-      localCommandArgs: localCommand?.args,
-      localCommandName: localCommand?.name,
-    },
-  ];
+  host.chatQueue = host.chatQueue.concat({
+    id: generateUUID(),
+    text: trimmed,
+    createdAt: Date.now(),
+    attachments: hasAttachments ? attachments?.map((att) => ({ ...att })) : undefined,
+    refreshSessions,
+    localCommandArgs: localCommand?.args,
+    localCommandName: localCommand?.name,
+  });
 }
 
 async function sendChatMessageNow(
@@ -158,11 +155,11 @@ async function flushChatQueue(host: ChatHost) {
   if (!host.connected || isChatBusy(host)) {
     return;
   }
-  const [next, ...rest] = host.chatQueue;
+  const next = host.chatQueue[0];
   if (!next) {
     return;
   }
-  host.chatQueue = rest;
+  host.chatQueue = host.chatQueue.slice(1);
   let ok = false;
   try {
     if (next.localCommandName) {
@@ -178,7 +175,7 @@ async function flushChatQueue(host: ChatHost) {
     host.lastError = String(err);
   }
   if (!ok) {
-    host.chatQueue = [next, ...host.chatQueue];
+    host.chatQueue = [next].concat(host.chatQueue);
   } else if (host.chatQueue.length > 0) {
     // Continue draining — local commands don't block on server response
     void flushChatQueue(host);
@@ -342,14 +339,11 @@ async function clearChatHistory(host: ChatHost) {
 }
 
 function injectCommandResult(host: ChatHost, content: string) {
-  host.chatMessages = [
-    ...host.chatMessages,
-    {
-      role: "system",
-      content,
-      timestamp: Date.now(),
-    },
-  ];
+  host.chatMessages = host.chatMessages.concat({
+    role: "system",
+    content,
+    timestamp: Date.now(),
+  });
 }
 
 export async function refreshChat(host: ChatHost, opts?: { scheduleScroll?: boolean }) {
