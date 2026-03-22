@@ -361,8 +361,6 @@ export type AgentCompactionConfig = {
 export type AgentCompactionObserverConfig = {
   /** Enable the compression observer (default: false). */
   enabled?: boolean;
-  /** Target compression ratio — summary tokens / source tokens (default: 0.2). */
-  targetRatio?: number;
   /** Number of new messages before triggering re-compression (default: 5). */
   messageInterval?: number;
   /** Model identifier for background compression. */
