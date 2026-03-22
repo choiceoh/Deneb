@@ -34,9 +34,22 @@ export function registerLcmContextEngine(): void {
   if (registered) {
     return;
   }
-  registered = true;
 
-  const { deps, lcm } = getOrCreateLcmSingleton();
+  let deps: ReturnType<typeof createNativeLcmDependencies>;
+  let lcm: LcmContextEngine;
+  try {
+    const singleton = getOrCreateLcmSingleton();
+    deps = singleton.deps;
+    lcm = singleton.lcm;
+  } catch (err) {
+    // Log but don't set registered=true so a retry is possible after config fix.
+    console.error(
+      `[lcm] Failed to initialize LCM dependencies: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return;
+  }
+
+  registered = true;
 
   // Register as core-owned engine with id "lcm"
   const result = registerContextEngineForOwner("lcm", () => lcm, "core", {
