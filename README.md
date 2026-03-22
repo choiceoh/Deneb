@@ -35,7 +35,14 @@ Most AI agent frameworks hit the same wall: when conversations grow long, contex
 
 ### Intentional Simplification
 
-Every feature that doesn't serve the core mission was removed — not because we couldn't build it, but because leaner code means fewer bugs, faster iterations, and code you can actually read and modify.
+We deliberately support fewer channels and architectures than OpenClaw — not because we can't, but because **a smaller surface lets us move faster and ship fewer bugs.**
+
+Rather than spreading thin across 20+ channels and a broad user base, we focus on delivering the best possible experience to a focused group of users. This means:
+
+- **One channel done right** (Telegram) > eight channels done halfway
+- **230K lines of auditable code** > 1M+ lines nobody can fully understand
+- **Every feature battle-tested in production** before landing in the repo
+- **Faster iteration** — fewer platforms to test, fewer edge cases to chase
 
 What's gone: mobile apps, desktop companions, 12+ niche channels, enterprise multi-tenant plugins. What remains: a focused agent engine that remembers everything and runs on a single GPU.
 
@@ -68,6 +75,14 @@ Spawn and manage sub-agents with bounded contexts for complex tasks.
 - **Bounded execution** — Token limits, timeouts, and tool policy per agent
 - **Result streaming** — Real-time progress from sub-agents to parent
 
+### 📡 Messaging Channels
+
+**Telegram** is the only channel with full, battle-tested production support — reactions, inline buttons, polls, topics, group policies, and all core features.
+
+Other channel configs (Discord, Signal, Slack, WhatsApp, iMessage, Google Chat, MS Teams) exist at the schema level as stubs inherited from OpenClaw. These are not actively maintained — enabling them will likely encounter bugs. They remain in the codebase as config-level scaffolding for future implementation, not as working features.
+
+We chose to ship one channel that works perfectly over eight that sort of work.
+
 ### 🧰 Tool System
 
 | Tool       | Description                                  |
@@ -84,9 +99,11 @@ Spawn and manage sub-agents with bounded contexts for complex tasks.
 
 ### 🤖 Model Providers
 
-**Cloud:** Anthropic · OpenAI · Google · OpenRouter
+**Cloud:** Anthropic · OpenAI · Google (Gemini) · Mistral · xAI (Grok) · Z.AI (GLM) · OpenRouter · Perplexity · Together AI · DeepSeek
 
 **Self-Hosted:** Ollama · SGLang · vLLM · LiteLLM
+
+**Enterprise:** AWS Bedrock · Google Vertex AI · Azure OpenAI
 
 ## 🚀 Quick Start
 
