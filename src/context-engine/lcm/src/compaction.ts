@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
+import { createSubsystemLogger } from "../../../logging/subsystem.js";
 import type { CompressionObserver } from "./compression-observer.js";
 import { estimateTokens } from "./engine-helpers.js";
 import { extractFileIdsFromContent } from "./large-files.js";
 import type { ConversationStore, CreateMessagePartInput } from "./store/conversation-store.js";
 import type { SummaryStore, SummaryRecord, ContextItemRecord } from "./store/summary-store.js";
+
+const log = createSubsystemLogger("lcm-compaction");
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -125,7 +128,7 @@ function shortTzAbbr(value: Date, timezone: string): string {
   }
 }
 
-/** Generate a deterministic summary ID from content + timestamp. */
+/** Generate a unique summary ID from content + current timestamp. */
 function generateSummaryId(content: string): string {
   return (
     "sum_" +
@@ -635,6 +638,13 @@ export class CompactionEngine {
       return null;
     }
 
+    // Bail if the cached summary wouldn't actually reduce tokens — avoids
+    // committing an ineffective compaction to the DB.
+    if (cached.tokenCount >= cached.sourceTokenCount) {
+      this.observer.invalidate(conversationId);
+      return null;
+    }
+
     // ── Apply the pre-computed summary ──────────────────────────────────
     try {
       const summaryId = generateSummaryId(cached.summary);
@@ -682,13 +692,13 @@ export class CompactionEngine {
       });
 
       if (tokensAfter >= tokensBefore) {
-        console.error(
-          `[lcm:compaction] observer fast path did not reduce tokens for conversation=${conversationId}: ` +
+        log.warn(
+          `observer fast path did not reduce tokens for conversation=${conversationId}: ` +
             `before=${tokensBefore} after=${tokensAfter}`,
         );
       } else {
-        console.error(
-          `[lcm:compaction] observer fast path OK conversation=${conversationId}: ` +
+        log.info(
+          `observer fast path OK conversation=${conversationId}: ` +
             `before=${tokensBefore} after=${tokensAfter} messages=${rawMessageItems.length} ` +
             `age=${Date.now() - cached.updatedAt}ms`,
         );
@@ -708,8 +718,8 @@ export class CompactionEngine {
       // DB operation failed mid-way. Invalidate cache and fall back to
       // normal compaction which will see the (possibly partial) state
       // and handle it correctly via its own leaf/condensed passes.
-      console.error(
-        `[lcm:compaction] observer fast path DB error, falling back: ${
+      log.error(
+        `observer fast path DB error, falling back: ${
           err instanceof Error ? err.message : String(err)
         }`,
       );

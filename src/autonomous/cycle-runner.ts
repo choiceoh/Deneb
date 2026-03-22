@@ -80,6 +80,7 @@ export async function runAutonomousCycle(params: {
 
   let outputText: string | undefined;
   let error: string | undefined;
+  let finishedAt = 0;
 
   try {
     const result = await runCronIsolatedAgentTurn({
@@ -110,7 +111,7 @@ export async function runAutonomousCycle(params: {
     }
   } finally {
     // Always persist state, even if the agent turn threw — prevents lost cycle tracking.
-    const finishedAt = Date.now();
+    finishedAt = Date.now();
     state.lastCycleAt = finishedAt;
     state.cycleCount += 1;
 
@@ -130,7 +131,6 @@ export async function runAutonomousCycle(params: {
     }
   }
 
-  const finishedAt = Date.now();
   const outcome: CycleOutcome = {
     cycleNumber: state.cycleCount,
     startedAt,

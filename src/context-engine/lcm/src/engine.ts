@@ -123,9 +123,8 @@ export class LcmContextEngine implements ContextEngine {
     const observerCfg = deps.config.observer;
     if (observerCfg.enabled) {
       this.initObserverAsync().catch((err) => {
-        console.error(
-          `[lcm] compression observer initialization failed:`,
-          err instanceof Error ? err.message : err,
+        this.deps.log.error(
+          `[lcm] compression observer initialization failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
     }
@@ -414,9 +413,8 @@ export class LcmContextEngine implements ContextEngine {
             },
           })) ?? undefined;
       } catch (err) {
-        console.error(
-          `[lcm] observer model resolution failed: model="${model ?? ""}" provider="${provider ?? ""}":`,
-          err instanceof Error ? err.message : err,
+        this.deps.log.error(
+          `[lcm] observer model resolution failed: model="${model ?? ""}" provider="${provider ?? ""}": ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }
@@ -427,15 +425,14 @@ export class LcmContextEngine implements ContextEngine {
         const defaultFn = await this.resolveSummarize({});
         summarize = defaultFn;
       } catch (err) {
-        console.error(
-          `[lcm] observer default summarizer resolution also failed:`,
-          err instanceof Error ? err.message : err,
+        this.deps.log.error(
+          `[lcm] observer default summarizer resolution also failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }
 
     if (!summarize) {
-      console.error(
+      this.deps.log.error(
         `[lcm] compression observer NOT initialized — no summarizer available. ` +
           `Check observer.model/observer.provider or default LCM summary model config.`,
       );
@@ -446,17 +443,17 @@ export class LcmContextEngine implements ContextEngine {
     try {
       const warmupResult = await summarize("Hello world. This is a test.", false);
       if (!warmupResult || warmupResult.trim().length === 0) {
-        console.error(
+        this.deps.log.error(
           `[lcm] observer warmup returned empty response — model may not support summarization. ` +
             `model="${model ?? "(default)"}" provider="${provider ?? "(default)"}"`,
         );
         return;
       }
-      console.error(
+      this.deps.log.info(
         `[lcm] compression observer warmup OK: model="${model ?? "(default)"}" provider="${provider ?? "(default)"}"`,
       );
     } catch (err) {
-      console.error(
+      this.deps.log.error(
         `[lcm] observer warmup call failed — model is not reachable. Observer NOT started. ` +
           `model="${model ?? "(default)"}" provider="${provider ?? "(default)"}": ${
             err instanceof Error ? err.message : String(err)

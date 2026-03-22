@@ -143,11 +143,12 @@ function isValidPlan(entry: unknown): entry is Plan {
 }
 
 function sanitizePlan(p: Plan): Plan {
+  const steps = validateStringArray(p.steps).map((s) => sanitizeText(s));
   return {
     id: sanitizeId(p.id),
     goalId: p.goalId !== undefined ? sanitizeId(p.goalId) : undefined,
-    steps: validateStringArray(p.steps).map((s) => sanitizeText(s)),
-    currentStep: Math.max(0, Math.floor(p.currentStep)),
+    steps,
+    currentStep: Math.min(Math.max(0, Math.floor(p.currentStep)), Math.max(0, steps.length - 1)),
     status: p.status,
   };
 }
@@ -235,7 +236,7 @@ export async function loadAutonomousState(storePath?: string): Promise<Autonomou
       socialContext: rawSocial.filter(isValidSocialEntry).map(sanitizeSocialEntry),
       lastCycleAt: safeTimestamp(state.lastCycleAt),
       nextCycleAt: safeTimestamp(state.nextCycleAt),
-      cycleCount: safeTimestamp(state.cycleCount),
+      cycleCount: Math.max(0, Math.floor(Number(state.cycleCount) || 0)),
     };
   } catch (err) {
     if ((err as { code?: unknown })?.code === "ENOENT") {
@@ -293,9 +294,11 @@ export async function saveAutonomousState(
   }
 }
 
-/** Safe numeric comparator that treats NaN as 0. */
+/** Safe numeric comparator that treats NaN/non-finite as 0. */
 function safeNumericCompare(a: number, b: number): number {
-  return (b || 0) - (a || 0);
+  const sa = Number.isFinite(a) ? a : 0;
+  const sb = Number.isFinite(b) ? b : 0;
+  return sb - sa;
 }
 
 function pruneState(state: AutonomousState): AutonomousState {
@@ -508,6 +511,11 @@ export function updatePlan(
     }
   }
   Object.assign(plan, safePatch);
+  // Clamp currentStep to valid range after both steps and currentStep may have changed.
+  const maxStep = Math.max(0, plan.steps.length - 1);
+  if (plan.currentStep > maxStep) {
+    plan.currentStep = maxStep;
+  }
   return plan;
 }
 
