@@ -1,13 +1,37 @@
-import {
-  clearDeviceAuthTokenFromStore,
-  type DeviceAuthEntry,
-  loadDeviceAuthTokenFromStore,
-  storeDeviceAuthTokenInStore,
-} from "../../../src/shared/device-auth-store.js";
-import type { DeviceAuthStore } from "../../../src/shared/device-auth.js";
 import { getSafeLocalStorage } from "../local-storage.ts";
 
 const STORAGE_KEY = "deneb.device.auth.v1";
+
+export type DeviceAuthEntry = {
+  token: string;
+  role: string;
+  scopes: string[];
+  updatedAtMs: number;
+};
+
+export type DeviceAuthStore = {
+  version: 1;
+  deviceId: string;
+  tokens: Record<string, DeviceAuthEntry>;
+};
+
+function normalizeDeviceAuthRole(role: string): string {
+  return role.trim();
+}
+
+function normalizeDeviceAuthScopes(scopes: string[] | undefined): string[] {
+  if (!Array.isArray(scopes)) {
+    return [];
+  }
+  const out = new Set<string>();
+  for (const scope of scopes) {
+    const trimmed = scope.trim();
+    if (trimmed) {
+      out.add(trimmed);
+    }
+  }
+  return [...out].toSorted();
+}
 
 function readStore(): DeviceAuthStore | null {
   try {
@@ -43,11 +67,16 @@ export function loadDeviceAuthToken(params: {
   deviceId: string;
   role: string;
 }): DeviceAuthEntry | null {
-  return loadDeviceAuthTokenFromStore({
-    adapter: { readStore, writeStore },
-    deviceId: params.deviceId,
-    role: params.role,
-  });
+  const store = readStore();
+  if (!store || store.deviceId !== params.deviceId) {
+    return null;
+  }
+  const role = normalizeDeviceAuthRole(params.role);
+  const entry = store.tokens[role];
+  if (!entry || typeof entry.token !== "string") {
+    return null;
+  }
+  return entry;
 }
 
 export function storeDeviceAuthToken(params: {
@@ -56,19 +85,41 @@ export function storeDeviceAuthToken(params: {
   token: string;
   scopes?: string[];
 }): DeviceAuthEntry {
-  return storeDeviceAuthTokenInStore({
-    adapter: { readStore, writeStore },
+  const role = normalizeDeviceAuthRole(params.role);
+  const existing = readStore();
+  const next: DeviceAuthStore = {
+    version: 1,
     deviceId: params.deviceId,
-    role: params.role,
+    tokens:
+      existing && existing.deviceId === params.deviceId && existing.tokens
+        ? { ...existing.tokens }
+        : {},
+  };
+  const entry: DeviceAuthEntry = {
     token: params.token,
-    scopes: params.scopes,
-  });
+    role,
+    scopes: normalizeDeviceAuthScopes(params.scopes),
+    updatedAtMs: Date.now(),
+  };
+  next.tokens[role] = entry;
+  writeStore(next);
+  return entry;
 }
 
 export function clearDeviceAuthToken(params: { deviceId: string; role: string }) {
-  clearDeviceAuthTokenFromStore({
-    adapter: { readStore, writeStore },
-    deviceId: params.deviceId,
-    role: params.role,
-  });
+  const store = readStore();
+  if (!store || store.deviceId !== params.deviceId) {
+    return;
+  }
+  const role = normalizeDeviceAuthRole(params.role);
+  if (!store.tokens[role]) {
+    return;
+  }
+  const next: DeviceAuthStore = {
+    version: 1,
+    deviceId: store.deviceId,
+    tokens: { ...store.tokens },
+  };
+  delete next.tokens[role];
+  writeStore(next);
 }
