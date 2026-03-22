@@ -96,68 +96,22 @@ export function resolveLcmConfig(
       toStr(pc.dbPath) ??
       toStr(pc.databasePath) ??
       join(homedir(), ".deneb", "lcm.db"),
-    contextThreshold:
-      (env.LCM_CONTEXT_THRESHOLD !== undefined
-        ? parseFloat(env.LCM_CONTEXT_THRESHOLD)
-        : undefined) ??
-      toNumber(pc.contextThreshold) ??
-      0.75,
-    freshTailCount:
-      (env.LCM_FRESH_TAIL_COUNT !== undefined
-        ? parseInt(env.LCM_FRESH_TAIL_COUNT, 10)
-        : undefined) ??
-      toNumber(pc.freshTailCount) ??
-      32,
-    leafMinFanout:
-      (env.LCM_LEAF_MIN_FANOUT !== undefined ? parseInt(env.LCM_LEAF_MIN_FANOUT, 10) : undefined) ??
-      toNumber(pc.leafMinFanout) ??
-      8,
+    contextThreshold: toNumber(env.LCM_CONTEXT_THRESHOLD) ?? toNumber(pc.contextThreshold) ?? 0.75,
+    freshTailCount: toNumber(env.LCM_FRESH_TAIL_COUNT) ?? toNumber(pc.freshTailCount) ?? 32,
+    leafMinFanout: toNumber(env.LCM_LEAF_MIN_FANOUT) ?? toNumber(pc.leafMinFanout) ?? 8,
     condensedMinFanout:
-      (env.LCM_CONDENSED_MIN_FANOUT !== undefined
-        ? parseInt(env.LCM_CONDENSED_MIN_FANOUT, 10)
-        : undefined) ??
-      toNumber(pc.condensedMinFanout) ??
-      4,
+      toNumber(env.LCM_CONDENSED_MIN_FANOUT) ?? toNumber(pc.condensedMinFanout) ?? 4,
     condensedMinFanoutHard:
-      (env.LCM_CONDENSED_MIN_FANOUT_HARD !== undefined
-        ? parseInt(env.LCM_CONDENSED_MIN_FANOUT_HARD, 10)
-        : undefined) ??
-      toNumber(pc.condensedMinFanoutHard) ??
-      2,
+      toNumber(env.LCM_CONDENSED_MIN_FANOUT_HARD) ?? toNumber(pc.condensedMinFanoutHard) ?? 2,
     incrementalMaxDepth:
-      (env.LCM_INCREMENTAL_MAX_DEPTH !== undefined
-        ? parseInt(env.LCM_INCREMENTAL_MAX_DEPTH, 10)
-        : undefined) ??
-      toNumber(pc.incrementalMaxDepth) ??
-      0,
-    leafChunkTokens:
-      (env.LCM_LEAF_CHUNK_TOKENS !== undefined
-        ? parseInt(env.LCM_LEAF_CHUNK_TOKENS, 10)
-        : undefined) ??
-      toNumber(pc.leafChunkTokens) ??
-      20000,
-    leafTargetTokens:
-      (env.LCM_LEAF_TARGET_TOKENS !== undefined
-        ? parseInt(env.LCM_LEAF_TARGET_TOKENS, 10)
-        : undefined) ??
-      toNumber(pc.leafTargetTokens) ??
-      1200,
+      toNumber(env.LCM_INCREMENTAL_MAX_DEPTH) ?? toNumber(pc.incrementalMaxDepth) ?? 0,
+    leafChunkTokens: toNumber(env.LCM_LEAF_CHUNK_TOKENS) ?? toNumber(pc.leafChunkTokens) ?? 20000,
+    leafTargetTokens: toNumber(env.LCM_LEAF_TARGET_TOKENS) ?? toNumber(pc.leafTargetTokens) ?? 1200,
     condensedTargetTokens:
-      (env.LCM_CONDENSED_TARGET_TOKENS !== undefined
-        ? parseInt(env.LCM_CONDENSED_TARGET_TOKENS, 10)
-        : undefined) ??
-      toNumber(pc.condensedTargetTokens) ??
-      2000,
-    maxExpandTokens:
-      (env.LCM_MAX_EXPAND_TOKENS !== undefined
-        ? parseInt(env.LCM_MAX_EXPAND_TOKENS, 10)
-        : undefined) ??
-      toNumber(pc.maxExpandTokens) ??
-      4000,
+      toNumber(env.LCM_CONDENSED_TARGET_TOKENS) ?? toNumber(pc.condensedTargetTokens) ?? 2000,
+    maxExpandTokens: toNumber(env.LCM_MAX_EXPAND_TOKENS) ?? toNumber(pc.maxExpandTokens) ?? 4000,
     largeFileTokenThreshold:
-      (env.LCM_LARGE_FILE_TOKEN_THRESHOLD !== undefined
-        ? parseInt(env.LCM_LARGE_FILE_TOKEN_THRESHOLD, 10)
-        : undefined) ??
+      toNumber(env.LCM_LARGE_FILE_TOKEN_THRESHOLD) ??
       toNumber(pc.largeFileThresholdTokens) ??
       toNumber(pc.largeFileTokenThreshold) ??
       25000,
@@ -182,15 +136,11 @@ export function resolveLcmConfig(
           ? env.LCM_OBSERVER_ENABLED === "true"
           : (toBool((pc.observer as Record<string, unknown> | undefined)?.enabled) ?? false),
       targetRatio:
-        (env.LCM_OBSERVER_TARGET_RATIO !== undefined
-          ? parseFloat(env.LCM_OBSERVER_TARGET_RATIO)
-          : undefined) ??
+        toNumber(env.LCM_OBSERVER_TARGET_RATIO) ??
         toNumber((pc.observer as Record<string, unknown> | undefined)?.targetRatio) ??
         0.2,
       messageInterval:
-        (env.LCM_OBSERVER_MESSAGE_INTERVAL !== undefined
-          ? parseInt(env.LCM_OBSERVER_MESSAGE_INTERVAL, 10)
-          : undefined) ??
+        toNumber(env.LCM_OBSERVER_MESSAGE_INTERVAL) ??
         toNumber((pc.observer as Record<string, unknown> | undefined)?.messageInterval) ??
         5,
       model:
@@ -202,9 +152,7 @@ export function resolveLcmConfig(
         toStr((pc.observer as Record<string, unknown> | undefined)?.provider) ??
         "",
       maxStalenessMs:
-        (env.LCM_OBSERVER_MAX_STALENESS_MS !== undefined
-          ? parseInt(env.LCM_OBSERVER_MAX_STALENESS_MS, 10)
-          : undefined) ??
+        toNumber(env.LCM_OBSERVER_MAX_STALENESS_MS) ??
         toNumber((pc.observer as Record<string, unknown> | undefined)?.maxStalenessMs) ??
         60_000,
     },

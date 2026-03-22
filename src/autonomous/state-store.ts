@@ -14,12 +14,19 @@ import type {
 } from "./types.js";
 import { safeTimestamp, sanitizeText, sanitizeId, validateStringArray } from "./validation.js";
 
+/** Return a valid timestamp, or undefined if the value is invalid (instead of falling back to 0). */
+function validTimestampOrUndefined(value: unknown): number | undefined {
+  const ts = safeTimestamp(value, -1);
+  return ts >= 0 ? ts : undefined;
+}
+
 export const DEFAULT_AUTONOMOUS_DIR = path.join(CONFIG_DIR, "autonomous");
 export const DEFAULT_AUTONOMOUS_STORE_PATH = path.join(DEFAULT_AUTONOMOUS_DIR, "state.json");
 
 const MAX_OBSERVATIONS = 100;
 const MAX_COMPLETED_GOALS = 50;
 const MAX_SOCIAL_ENTRIES = 200;
+const MAX_COMPLETED_PLANS = 50;
 
 const VALID_GOAL_PRIORITIES = new Set<GoalPriority>(["high", "medium", "low"]);
 const VALID_GOAL_STATUSES = new Set(["active", "paused", "completed"]);
@@ -127,7 +134,7 @@ function isValidPlan(entry: unknown): entry is Plan {
   if (typeof p.id !== "string" || p.id.length === 0) {
     return false;
   }
-  if (!Array.isArray(p.steps)) {
+  if (!Array.isArray(p.steps) || p.steps.length === 0) {
     return false;
   }
   if (!VALID_PLAN_STATUSES.has(p.status as string)) {
@@ -143,11 +150,12 @@ function isValidPlan(entry: unknown): entry is Plan {
 }
 
 function sanitizePlan(p: Plan): Plan {
+  const steps = validateStringArray(p.steps).map((s) => sanitizeText(s));
   return {
     id: sanitizeId(p.id),
     goalId: p.goalId !== undefined ? sanitizeId(p.goalId) : undefined,
-    steps: validateStringArray(p.steps).map((s) => sanitizeText(s)),
-    currentStep: Math.max(0, Math.floor(p.currentStep)),
+    steps,
+    currentStep: Math.min(Math.max(0, Math.floor(p.currentStep)), Math.max(0, steps.length - 1)),
     status: p.status,
   };
 }
@@ -235,7 +243,7 @@ export async function loadAutonomousState(storePath?: string): Promise<Autonomou
       socialContext: rawSocial.filter(isValidSocialEntry).map(sanitizeSocialEntry),
       lastCycleAt: safeTimestamp(state.lastCycleAt),
       nextCycleAt: safeTimestamp(state.nextCycleAt),
-      cycleCount: safeTimestamp(state.cycleCount),
+      cycleCount: Math.max(0, Math.floor(Number(state.cycleCount) || 0)),
     };
   } catch (err) {
     if ((err as { code?: unknown })?.code === "ENOENT") {
@@ -293,9 +301,11 @@ export async function saveAutonomousState(
   }
 }
 
-/** Safe numeric comparator that treats NaN as 0. */
+/** Safe numeric comparator that treats NaN/non-finite as 0. */
 function safeNumericCompare(a: number, b: number): number {
-  return (b || 0) - (a || 0);
+  const sa = Number.isFinite(a) ? a : 0;
+  const sb = Number.isFinite(b) ? b : 0;
+  return sb - sa;
 }
 
 function pruneState(state: AutonomousState): AutonomousState {
@@ -322,10 +332,16 @@ function pruneState(state: AutonomousState): AutonomousState {
           .toSorted((a, b) => safeNumericCompare(a.lastInteraction, b.lastInteraction))
           .slice(0, MAX_SOCIAL_ENTRIES);
 
+  const activePlans = state.plans.filter((p) => p.status === "active");
+  const completedPlans = state.plans
+    .filter((p) => p.status !== "active")
+    .slice(0, MAX_COMPLETED_PLANS);
+
   return {
     ...state,
     goals: [...activeGoals, ...completedGoals],
     observations,
+    plans: [...activePlans, ...completedPlans],
     socialContext,
   };
 }
@@ -352,7 +368,7 @@ export function addGoal(
     priority,
     status: "active",
     createdAt: Date.now(),
-    dueAt: dueAt !== undefined ? safeTimestamp(dueAt) : undefined,
+    dueAt: dueAt !== undefined ? validTimestampOrUndefined(dueAt) : undefined,
   };
   state.goals.push(goal);
   return goal;
@@ -431,7 +447,7 @@ export function addSocialEntry(
     peerId: sanitizedPeerId,
     lastInteraction: Date.now(),
     context: sanitizedContext,
-    followUpAt: followUpAt !== undefined ? safeTimestamp(followUpAt) : undefined,
+    followUpAt: followUpAt !== undefined ? validTimestampOrUndefined(followUpAt) : undefined,
   };
   state.socialContext.push(entry);
   return entry;
@@ -468,7 +484,10 @@ export function updateGoal(
     safePatch.progress = sanitizeText(patch.progress);
   }
   if (patch.dueAt !== undefined) {
-    safePatch.dueAt = safeTimestamp(patch.dueAt);
+    const ts = validTimestampOrUndefined(patch.dueAt);
+    if (ts !== undefined) {
+      safePatch.dueAt = ts;
+    }
   }
   Object.assign(goal, safePatch);
   return goal;
@@ -508,6 +527,11 @@ export function updatePlan(
     }
   }
   Object.assign(plan, safePatch);
+  // Clamp currentStep to valid range after both steps and currentStep may have changed.
+  const maxStep = Math.max(0, plan.steps.length - 1);
+  if (plan.currentStep > maxStep) {
+    plan.currentStep = maxStep;
+  }
   return plan;
 }
 
@@ -526,10 +550,16 @@ export function updateSocialEntry(
     safePatch.context = sanitizeText(patch.context);
   }
   if (patch.followUpAt !== undefined) {
-    safePatch.followUpAt = safeTimestamp(patch.followUpAt);
+    const ts = validTimestampOrUndefined(patch.followUpAt);
+    if (ts !== undefined) {
+      safePatch.followUpAt = ts;
+    }
   }
   if (patch.lastInteraction !== undefined) {
-    safePatch.lastInteraction = safeTimestamp(patch.lastInteraction);
+    const ts = validTimestampOrUndefined(patch.lastInteraction);
+    if (ts !== undefined) {
+      safePatch.lastInteraction = ts;
+    }
   }
   Object.assign(entry, safePatch);
   return entry;

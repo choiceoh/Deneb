@@ -84,8 +84,8 @@ export class CompressionObserver {
   private retriggerNeeded = new Set<number>();
   private disposed = false;
 
-  private consecutiveFailures = 0;
-  private cooldownUntil = 0;
+  private consecutiveFailures = new Map<number, number>();
+  private cooldownUntil = new Map<number, number>();
 
   constructor(
     private config: CompressionObserverConfig,
@@ -95,7 +95,7 @@ export class CompressionObserver {
   ) {}
 
   onMessage(conversationId: number): void {
-    if (this.disposed || !this.config.enabled || this.isInCooldown()) {
+    if (this.disposed || !this.config.enabled || this.isInCooldown(conversationId)) {
       return;
     }
 
@@ -133,7 +133,7 @@ export class CompressionObserver {
   }
 
   triggerUpdate(conversationId: number): void {
-    if (this.disposed || !this.config.enabled || this.isInCooldown()) {
+    if (this.disposed || !this.config.enabled || this.isInCooldown(conversationId)) {
       return;
     }
     this.messageCounters.set(conversationId, 0);
@@ -152,18 +152,23 @@ export class CompressionObserver {
     this.messageCounters.clear();
     this.pendingUpdates.clear();
     this.retriggerNeeded.clear();
+    this.consecutiveFailures.clear();
+    this.cooldownUntil.clear();
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
 
-  private isInCooldown(): boolean {
-    if (this.cooldownUntil === 0) {
+  private isInCooldown(conversationId: number): boolean {
+    const until = this.cooldownUntil.get(conversationId) ?? 0;
+    if (until === 0) {
       return false;
     }
-    if (Date.now() >= this.cooldownUntil) {
-      this.cooldownUntil = 0;
-      this.consecutiveFailures = 0;
-      log.info(`[compression-observer] cooldown expired, resuming`);
+    if (Date.now() >= until) {
+      this.cooldownUntil.delete(conversationId);
+      this.consecutiveFailures.delete(conversationId);
+      log.info(
+        `[compression-observer] cooldown expired for conversation=${conversationId}, resuming`,
+      );
       return false;
     }
     return true;
@@ -179,7 +184,7 @@ export class CompressionObserver {
       this.pendingUpdates.delete(conversationId);
       if (this.retriggerNeeded.has(conversationId)) {
         this.retriggerNeeded.delete(conversationId);
-        if (!this.disposed && !this.isInCooldown()) {
+        if (!this.disposed && !this.isInCooldown(conversationId)) {
           this.enqueueUpdate(conversationId);
         }
       }
@@ -288,7 +293,7 @@ export class CompressionObserver {
         return;
       }
 
-      this.consecutiveFailures = 0;
+      this.consecutiveFailures.set(conversationId, 0);
 
       this.cache.set(conversationId, {
         summary,
@@ -307,11 +312,12 @@ export class CompressionObserver {
           `hasMixedContext=${hasMixedContext}`,
       );
     } catch (err) {
-      this.consecutiveFailures++;
-      if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-        this.cooldownUntil = Date.now() + FAILURE_COOLDOWN_MS;
+      const failures = (this.consecutiveFailures.get(conversationId) ?? 0) + 1;
+      this.consecutiveFailures.set(conversationId, failures);
+      if (failures >= MAX_CONSECUTIVE_FAILURES) {
+        this.cooldownUntil.set(conversationId, Date.now() + FAILURE_COOLDOWN_MS);
         log.warn(
-          `[compression-observer] ${this.consecutiveFailures} consecutive failures, ` +
+          `[compression-observer] ${failures} consecutive failures for conversation=${conversationId}, ` +
             `entering ${FAILURE_COOLDOWN_MS / 1000}s cooldown: ${
               err instanceof Error ? err.message : String(err)
             }`,
@@ -319,7 +325,7 @@ export class CompressionObserver {
       } else {
         log.warn(
           `[compression-observer] update failed for conversation=${conversationId} ` +
-            `(${this.consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} before cooldown): ${
+            `(${failures}/${MAX_CONSECUTIVE_FAILURES} before cooldown): ${
               err instanceof Error ? err.message : String(err)
             }`,
         );

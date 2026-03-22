@@ -104,13 +104,17 @@ export function sanitizeText(value: unknown, maxLength = MAX_TEXT_LENGTH): strin
 }
 
 /**
- * Sanitize an ID string. Trims, clamps length, allows only safe characters.
+ * Sanitize an ID string. Trims, clamps length, strips unsafe characters.
  */
 export function sanitizeId(value: unknown): string {
   if (typeof value !== "string") {
     return "";
   }
-  return value.trim().slice(0, MAX_ID_LENGTH);
+  // Keep only alphanumeric, hyphens, underscores, dots, and colons.
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9\-_.:]/g, "")
+    .slice(0, MAX_ID_LENGTH);
 }
 
 /**

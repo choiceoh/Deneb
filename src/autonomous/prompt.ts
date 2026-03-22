@@ -22,7 +22,7 @@ function formatGoals(state: AutonomousState): string {
       const progress = g.progress ? ` — Progress: ${g.progress}` : "";
       const desc = g.description ?? "untitled goal";
       const id = g.id ?? "unknown";
-      return `- [${g.priority ?? "normal"}] ${desc}${due}${progress} (id: ${id})`;
+      return `- [${g.priority ?? "medium"}] ${desc}${due}${progress} (id: ${id})`;
     })
     .join("\n");
 }
@@ -76,7 +76,7 @@ function formatSocialContext(state: AutonomousState): string {
     .map((e) => {
       const lastAge = formatAge(e.lastInteraction);
       let followUp = "";
-      if (e.followUpAt) {
+      if (e.followUpAt != null) {
         if (e.followUpAt <= Date.now()) {
           followUp = " ⚡ FOLLOW-UP DUE";
         } else {

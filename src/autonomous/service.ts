@@ -225,13 +225,15 @@ async function seedInitialGoals(
     return;
   }
 
+  let seededCount = 0;
   for (const goalDesc of cfg.goals) {
     if (typeof goalDesc === "string" && goalDesc.trim().length > 0) {
       addGoal(state, goalDesc.trim(), "medium");
+      seededCount++;
     }
   }
   await saveAutonomousState(state, storePath);
-  log.info(`seeded ${cfg.goals.length} initial goals from config`);
+  log.info(`seeded ${seededCount} initial goals from config`);
 }
 
 function createNoopHandle(): AutonomousServiceHandle {
