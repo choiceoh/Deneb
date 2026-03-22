@@ -22,7 +22,6 @@ const resolveGatewayAuthMock = vi.hoisted(() =>
     allowTailscale: false,
   })),
 );
-const shouldRequireGatewayTokenForInstallMock = vi.hoisted(() => vi.fn(() => true));
 const resolveSecretRefValuesMock = vi.hoisted(() => vi.fn());
 const secretRefKeyMock = vi.hoisted(() => vi.fn(() => "env:default:DENEB_GATEWAY_TOKEN"));
 const randomTokenMock = vi.hoisted(() => vi.fn(() => "generated-token"));
@@ -39,10 +38,6 @@ vi.mock("../config/types.secrets.js", () => ({
 
 vi.mock("../gateway/auth.js", () => ({
   resolveGatewayAuth: resolveGatewayAuthMock,
-}));
-
-vi.mock("../gateway/auth-install-policy.js", () => ({
-  shouldRequireGatewayTokenForInstall: shouldRequireGatewayTokenForInstallMock,
 }));
 
 vi.mock("../secrets/ref-contract.js", () => ({
@@ -71,7 +66,6 @@ describe("resolveGatewayInstallToken", () => {
       return value != null;
     });
     resolveSecretRefValuesMock.mockResolvedValue(new Map());
-    shouldRequireGatewayTokenForInstallMock.mockReturnValue(true);
     resolveGatewayAuthMock.mockReturnValue({
       mode: "token",
       token: undefined,
@@ -97,12 +91,9 @@ describe("resolveGatewayInstallToken", () => {
     });
   });
 
-  it("validates SecretRef token but does not persist resolved plaintext", async () => {
+  it("returns no token and no warnings when SecretRef-backed token is configured", async () => {
     const tokenRef = { source: "env", provider: "default", id: "DENEB_GATEWAY_TOKEN" };
     resolveSecretInputRefMock.mockReturnValue({ ref: tokenRef });
-    resolveSecretRefValuesMock.mockResolvedValue(
-      new Map([["env:default:DENEB_GATEWAY_TOKEN", "resolved-token"]]),
-    );
 
     const result = await resolveGatewayInstallToken({
       config: {
@@ -114,14 +105,13 @@ describe("resolveGatewayInstallToken", () => {
     expect(result.token).toBeUndefined();
     expect(result.tokenRefConfigured).toBe(true);
     expect(result.unavailableReason).toBeUndefined();
-    expect(result.warnings.some((message) => message.includes("SecretRef-managed"))).toBeTruthy();
+    expect(result.warnings).toEqual([]);
   });
 
-  it("returns unavailable reason when token SecretRef is unresolved in token mode", async () => {
+  it("returns no unavailable reason when token SecretRef is unresolved (needsToken is always false)", async () => {
     resolveSecretInputRefMock.mockReturnValue({
       ref: { source: "env", provider: "default", id: "MISSING_GATEWAY_TOKEN" },
     });
-    resolveSecretRefValuesMock.mockRejectedValue(new Error("missing env var"));
 
     const result = await resolveGatewayInstallToken({
       config: {
@@ -131,10 +121,10 @@ describe("resolveGatewayInstallToken", () => {
     });
 
     expect(result.token).toBeUndefined();
-    expect(result.unavailableReason).toContain("gateway.auth.token SecretRef is configured");
+    expect(result.unavailableReason).toBeUndefined();
   });
 
-  it("returns unavailable reason when token and password are both configured and mode is unset", async () => {
+  it("returns plaintext token when both token and password are configured and mode is unset", async () => {
     const result = await resolveGatewayInstallToken({
       config: {
         gateway: {
@@ -149,90 +139,27 @@ describe("resolveGatewayInstallToken", () => {
       persistGeneratedToken: true,
     });
 
-    expect(result.token).toBeUndefined();
-    expect(result.unavailableReason).toContain("gateway.auth.mode is unset");
-    expect(result.unavailableReason).toContain("deneb config set gateway.auth.mode token");
-    expect(result.unavailableReason).toContain("deneb config set gateway.auth.mode password");
-    expect(writeConfigFileMock).not.toHaveBeenCalled();
-    expect(resolveSecretRefValuesMock).not.toHaveBeenCalled();
-  });
-
-  it("auto-generates token when no source exists and auto-generation is enabled", async () => {
-    const result = await resolveGatewayInstallToken({
-      config: {
-        gateway: { auth: { mode: "token" } },
-      } as DenebConfig,
-      env: {} as NodeJS.ProcessEnv,
-      autoGenerateWhenMissing: true,
-    });
-
-    expect(result.token).toBe("generated-token");
+    expect(result.token).toBe("token-value");
     expect(result.unavailableReason).toBeUndefined();
-    expect(
-      result.warnings.some((message) => message.includes("without saving to config")),
-    ).toBeTruthy();
     expect(writeConfigFileMock).not.toHaveBeenCalled();
   });
 
-  it("persists auto-generated token when requested", async () => {
+  it("does not auto-generate token (needsToken is always false)", async () => {
     const result = await resolveGatewayInstallToken({
       config: {
         gateway: { auth: { mode: "token" } },
       } as DenebConfig,
       env: {} as NodeJS.ProcessEnv,
       autoGenerateWhenMissing: true,
-      persistGeneratedToken: true,
-    });
-
-    expect(result.warnings.some((message) => message.includes("saving to config"))).toBeTruthy();
-    expect(writeConfigFileMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        gateway: {
-          auth: {
-            mode: "token",
-            token: "generated-token",
-          },
-        },
-      }),
-    );
-  });
-
-  it("drops generated plaintext when config changes to SecretRef before persist", async () => {
-    readConfigFileSnapshotMock.mockResolvedValue({
-      exists: true,
-      valid: true,
-      config: {
-        gateway: {
-          auth: {
-            token: "${DENEB_GATEWAY_TOKEN}",
-          },
-        },
-      },
-      issues: [],
-    });
-    resolveSecretInputRefMock.mockReturnValueOnce({ ref: undefined }).mockReturnValueOnce({
-      ref: { source: "env", provider: "default", id: "DENEB_GATEWAY_TOKEN" },
-    });
-
-    const result = await resolveGatewayInstallToken({
-      config: {
-        gateway: { auth: { mode: "token" } },
-      } as DenebConfig,
-      env: {} as NodeJS.ProcessEnv,
-      autoGenerateWhenMissing: true,
-      persistGeneratedToken: true,
     });
 
     expect(result.token).toBeUndefined();
-    expect(
-      result.warnings.some((message) => message.includes("skipping plaintext token persistence")),
-    ).toBeTruthy();
+    expect(result.unavailableReason).toBeUndefined();
+    expect(result.warnings).toEqual([]);
     expect(writeConfigFileMock).not.toHaveBeenCalled();
   });
 
   it("does not auto-generate when inferred mode has password SecretRef configured", async () => {
-    shouldRequireGatewayTokenForInstallMock.mockReturnValue(false);
-
     const result = await resolveGatewayInstallToken({
       config: {
         gateway: {
@@ -260,8 +187,6 @@ describe("resolveGatewayInstallToken", () => {
   it("skips token SecretRef resolution when token auth is not required", async () => {
     const tokenRef = { source: "env", provider: "default", id: "DENEB_GATEWAY_TOKEN" };
     resolveSecretInputRefMock.mockReturnValue({ ref: tokenRef });
-    shouldRequireGatewayTokenForInstallMock.mockReturnValue(false);
-
     const result = await resolveGatewayInstallToken({
       config: {
         gateway: {

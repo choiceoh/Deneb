@@ -36,7 +36,6 @@ import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
 import { normalizeSessionDeliveryFields } from "../../utils/delivery-context.js";
-import { resolveCommandAuthorization } from "../command-auth.js";
 import type { MsgContext, TemplateContext } from "../templating.js";
 import { resolveEffectiveResetTargetSessionKey } from "./acp-reset-target.js";
 import { normalizeInboundTextNewlines } from "./inbound-text.js";
@@ -152,7 +151,7 @@ export async function initSessionState(params: {
   cfg: DenebConfig;
   commandAuthorized: boolean;
 }): Promise<SessionInitResult> {
-  const { ctx, cfg, commandAuthorized } = params;
+  const { ctx, cfg } = params;
   // Native slash commands (Telegram/Discord/Slack) are delivered on a separate
   // "slash session" key, but should mutate the target chat session.
   const targetSessionKey =
@@ -217,11 +216,6 @@ export async function initSessionState(params: {
   // Use CommandBody/RawBody for reset trigger matching (clean message without structural context).
   const rawBody = commandSource;
   const trimmedBody = rawBody.trim();
-  const resetAuthorized = resolveCommandAuthorization({
-    ctx,
-    cfg,
-    commandAuthorized,
-  }).isAuthorizedSender;
   // Timestamp/message prefixes (e.g. "[Dec 4 17:35] ") are added by the
   // web inbox before we get here. They prevented reset triggers like "/new"
   // from matching, so strip structural wrappers when checking for resets.
@@ -246,9 +240,6 @@ export async function initSessionState(params: {
   for (const trigger of resetTriggers) {
     if (!trigger) {
       continue;
-    }
-    if (!resetAuthorized) {
-      break;
     }
     const triggerLower = trigger.toLowerCase();
     if (trimmedBodyLower === triggerLower || strippedForResetLower === triggerLower) {

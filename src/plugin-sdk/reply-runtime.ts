@@ -2,7 +2,6 @@
 // off direct src/auto-reply imports by routing common reply primitives here.
 
 export * from "../auto-reply/chunk.js";
-export * from "../auto-reply/command-auth.js";
 export * from "../auto-reply/command-detection.js";
 export * from "../auto-reply/commands-registry.js";
 export * from "../auto-reply/dispatch.js";

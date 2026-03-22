@@ -1,4 +1,5 @@
-// Stub: rate limiting removed for solo-dev simplification.
+// Solo-dev mode: auth rate limiting is intentionally permissive.
+// createAuthRateLimiter returns a no-op limiter that allows all requests.
 
 export type RateLimitConfig = {
   maxAttempts?: number;

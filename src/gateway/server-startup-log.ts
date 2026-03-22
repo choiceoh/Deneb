@@ -3,8 +3,6 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { resolveConfiguredModelRef } from "../agents/model-selection.js";
 import type { loadConfig } from "../config/config.js";
 import { getResolvedLoggerSettings } from "../logging.js";
-import { collectEnabledInsecureOrDangerousFlags } from "../security/dangerous-config-flags.js";
-
 export function logGatewayStartup(params: {
   cfg: ReturnType<typeof loadConfig>;
   bindHost: string;
@@ -34,7 +32,7 @@ export function logGatewayStartup(params: {
     params.log.info("gateway: running in Nix mode (config managed externally)");
   }
 
-  const enabledDangerousFlags = collectEnabledInsecureOrDangerousFlags(params.cfg);
+  const enabledDangerousFlags: string[] = [];
   if (enabledDangerousFlags.length > 0) {
     const warning =
       `security warning: dangerous config flags enabled: ${enabledDangerousFlags.join(", ")}. ` +

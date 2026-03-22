@@ -19,7 +19,6 @@ import {
 } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
 import { parseAgentSessionKey } from "../../routing/session-key.js";
-import { resolveCommandAuthorization } from "../command-auth.js";
 import { normalizeCommandBody, type CommandNormalizeOptions } from "../commands-registry.js";
 import type { FinalizedMsgContext, MsgContext } from "../templating.js";
 import {
@@ -295,17 +294,9 @@ export async function tryFastAbortFromMessage(params: {
     return { handled: false, aborted: false };
   }
 
-  const commandAuthorized = ctx.CommandAuthorized;
-  const auth = resolveCommandAuthorization({
-    ctx,
-    cfg,
-    commandAuthorized,
-  });
-  if (!auth.isAuthorizedSender) {
-    return { handled: false, aborted: false };
-  }
-
-  const abortKey = targetKey ?? auth.from ?? auth.to;
+  const from = (ctx.From ?? "").trim() || undefined;
+  const to = (ctx.To ?? "").trim() || undefined;
+  const abortKey = targetKey ?? from ?? to;
   const requesterSessionKey = targetKey ?? ctx.SessionKey ?? abortKey;
 
   if (targetKey) {

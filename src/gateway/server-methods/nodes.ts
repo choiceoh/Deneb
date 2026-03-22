@@ -1,14 +1,40 @@
 import { randomUUID } from "node:crypto";
 import { loadConfig } from "../../config/config.js";
 import { listDevicePairing } from "../../infra/device-pairing.js";
-import {
-  approveNodePairing,
-  listNodePairing,
-  rejectNodePairing,
-  renamePairedNode,
-  requestNodePairing,
-  verifyNodeToken,
-} from "../../infra/node-pairing.js";
+// Inlined stubs (node pairing removed for solo-dev simplification).
+type PairedNode = {
+  nodeId: string;
+  displayName?: string;
+  platform?: string;
+  deviceFamily?: string;
+  commands?: string[];
+  remoteIp?: string;
+  bins?: string[];
+};
+
+async function listNodePairing(): Promise<{ pending: unknown[]; paired: PairedNode[] }> {
+  return { pending: [], paired: [] };
+}
+
+async function approveNodePairing(_requestId: string): Promise<{ node: PairedNode } | null> {
+  return null;
+}
+
+async function rejectNodePairing(_requestId: string): Promise<{ nodeId: string } | null> {
+  return null;
+}
+
+async function requestNodePairing(
+  _params: unknown,
+): Promise<{ requestId: string; node?: unknown }> {
+  return { requestId: "" };
+}
+
+function verifyNodeToken(_token: string): { valid: boolean; nodeId?: string } {
+  return { valid: false };
+}
+
+async function renamePairedNode(_nodeId: string, _name: string): Promise<void> {}
 import { sleep } from "../../utils.js";
 import {
   buildCanvasScopedHostUrl,

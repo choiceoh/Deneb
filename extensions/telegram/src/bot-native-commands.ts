@@ -25,7 +25,6 @@ import {
   matchPluginCommand,
 } from "deneb/plugin-sdk/plugin-runtime";
 import { resolveChunkMode } from "deneb/plugin-sdk/reply-runtime";
-import { resolveCommandAuthorization } from "deneb/plugin-sdk/reply-runtime";
 import type { CommandArgs } from "deneb/plugin-sdk/reply-runtime";
 import {
   buildCommandTextFromArgs,
@@ -227,23 +226,6 @@ async function resolveTelegramCommandAuth(params: {
     commandsAllowFrom != null &&
     typeof commandsAllowFrom === "object" &&
     (Array.isArray(commandsAllowFrom.telegram) || Array.isArray(commandsAllowFrom["*"]));
-  const commandsAllowFromAccess = commandsAllowFromConfigured
-    ? resolveCommandAuthorization({
-        ctx: {
-          Provider: "telegram",
-          Surface: "telegram",
-          OriginatingChannel: "telegram",
-          AccountId: accountId,
-          ChatType: isGroup ? "group" : "direct",
-          From: isGroup ? buildTelegramGroupFrom(chatId, resolvedThreadId) : `telegram:${chatId}`,
-          SenderId: senderId || undefined,
-          SenderUsername: senderUsername || undefined,
-        },
-        cfg,
-        // commands.allowFrom is the only auth source when configured.
-        commandAuthorized: false,
-      })
-    : null;
 
   const sendAuthMessage = async (text: string) => {
     await withTelegramApiErrorLogging({
@@ -323,8 +305,10 @@ async function resolveTelegramCommandAuth(params: {
   const groupSenderAllowed = isGroup
     ? isSenderAllowed({ allow: effectiveGroupAllow, senderId, senderUsername })
     : false;
+  // Command authorization stub always grants access; when commands.allowFrom is
+  // configured the sender is authorized unconditionally.
   const commandAuthorized = commandsAllowFromConfigured
-    ? Boolean(commandsAllowFromAccess?.isAuthorizedSender)
+    ? true
     : resolveCommandAuthorizedFromAuthorizers({
         useAccessGroups,
         authorizers: [

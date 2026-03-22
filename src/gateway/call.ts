@@ -26,11 +26,7 @@ import {
   type GatewayRemoteCredentialFallback,
   type GatewayRemoteCredentialPrecedence,
 } from "./credentials.js";
-import {
-  CLI_DEFAULT_OPERATOR_SCOPES,
-  resolveLeastPrivilegeOperatorScopesForMethod,
-  type OperatorScope,
-} from "./method-scopes.js";
+import { CLI_DEFAULT_OPERATOR_SCOPES, type OperatorScope } from "./method-scopes.js";
 import { isSecureWebSocketUrl } from "./net.js";
 import { PROTOCOL_VERSION } from "./protocol/index.js";
 
@@ -915,7 +911,7 @@ export async function callGatewayCli<T = Record<string, unknown>>(
 export async function callGatewayLeastPrivilege<T = Record<string, unknown>>(
   opts: CallGatewayBaseOptions,
 ): Promise<T> {
-  const scopes = resolveLeastPrivilegeOperatorScopesForMethod(opts.method);
+  const scopes: OperatorScope[] = [];
   return await callGatewayWithScopes(opts, scopes);
 }
 

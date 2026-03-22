@@ -1,5 +1,4 @@
 import type { DenebConfig } from "../config/config.js";
-export { shouldRequireGatewayTokenForInstall } from "../gateway/auth-install-policy.js";
 import { readGatewayTokenEnv } from "../gateway/credentials.js";
 import { resolveConfiguredSecretInputWithFallback } from "../gateway/resolve-configured-secret-input-string.js";
 

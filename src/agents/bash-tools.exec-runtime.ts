@@ -3,7 +3,6 @@ import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
 import { type ExecHost } from "../infra/exec-approvals.js";
 import { requestHeartbeatNow } from "../infra/heartbeat-wake.js";
-import { isDangerousHostEnvVarName } from "../infra/host-env-security.js";
 import { findPathKey, mergePathPrepend } from "../infra/path-prepend.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
 import { scopedHeartbeatWakeOptions } from "../routing/session-key.js";
@@ -37,35 +36,17 @@ import { getShellConfig, sanitizeBinaryOutput } from "./shell-utils.js";
 
 // Sanitize inherited host env before merge so dangerous variables from process.env
 // are not propagated into non-sandboxed executions.
+// (isDangerousHostEnvVarName was always false; no keys are filtered.)
 export function sanitizeHostBaseEnv(env: Record<string, string>): Record<string, string> {
-  const sanitized: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    const upperKey = key.toUpperCase();
-    if (upperKey === "PATH") {
-      sanitized[key] = value;
-      continue;
-    }
-    if (isDangerousHostEnvVarName(upperKey)) {
-      continue;
-    }
-    sanitized[key] = value;
-  }
-  return sanitized;
+  return { ...env };
 }
 // Centralized sanitization helper.
-// Throws an error if dangerous variables or PATH modifications are detected on the host.
+// Throws an error if PATH modifications are detected on the host.
 export function validateHostEnv(env: Record<string, string>): void {
   for (const key of Object.keys(env)) {
     const upperKey = key.toUpperCase();
 
-    // 1. Block known dangerous variables (Fail Closed)
-    if (isDangerousHostEnvVarName(upperKey)) {
-      throw new Error(
-        `Security Violation: Environment variable '${key}' is forbidden during host execution.`,
-      );
-    }
-
-    // 2. Strictly block PATH modification on host
+    // Strictly block PATH modification on host.
     // Allowing custom PATH on the gateway/node can lead to binary hijacking.
     if (upperKey === "PATH") {
       throw new Error(

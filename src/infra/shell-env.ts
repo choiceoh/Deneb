@@ -2,8 +2,8 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { markDenebExecEnv } from "./deneb-exec-env.js";
 import { isTruthyEnvValue } from "./env.js";
-import { sanitizeHostExecEnv } from "./host-env-security.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_BUFFER_BYTES = 2 * 1024 * 1024;
@@ -11,6 +11,28 @@ const DEFAULT_SHELL = "/bin/sh";
 let lastAppliedKeys: string[] = [];
 let cachedShellPath: string | null | undefined;
 let cachedEtcShells: Set<string> | null | undefined;
+
+function sanitizeHostExecEnv(params?: {
+  baseEnv?: Record<string, string | undefined>;
+  overrides?: Record<string, string> | null;
+  blockPathOverrides?: boolean;
+}): Record<string, string> {
+  const baseEnv = params?.baseEnv ?? process.env;
+  const merged: Record<string, string> = {};
+  for (const [key, value] of Object.entries(baseEnv)) {
+    if (typeof value === "string") {
+      merged[key] = value;
+    }
+  }
+  if (params?.overrides) {
+    for (const [key, value] of Object.entries(params.overrides)) {
+      if (typeof value === "string") {
+        merged[key] = value;
+      }
+    }
+  }
+  return markDenebExecEnv(merged);
+}
 
 function resolveShellExecEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const execEnv = sanitizeHostExecEnv({ baseEnv: env });

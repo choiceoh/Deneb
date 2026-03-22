@@ -1,17 +1,11 @@
 import crypto from "node:crypto";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-import { loadConfig } from "../config/config.js";
-import { buildExecApprovalUnavailableReplyPayload } from "../infra/exec-approval-reply.js";
-import {
-  hasConfiguredExecApprovalDmRoute,
-  type ExecApprovalInitiatingSurfaceState,
-  resolveExecApprovalInitiatingSurfaceState,
-} from "../infra/exec-approval-surface.js";
 import {
   maxAsk,
   minSecurity,
   resolveExecApprovals,
   type ExecAsk,
+  type ExecApprovalInitiatingSurfaceState,
   type ExecSecurity,
 } from "../infra/exec-approvals.js";
 import { sendExecApprovalFollowup } from "./bash-tools.exec-approval-followup.js";
@@ -215,24 +209,12 @@ export function resolveExecApprovalUnavailableState(params: {
   sentApproverDms: boolean;
   unavailableReason: ExecApprovalUnavailableReason | null;
 } {
-  const initiatingSurface = resolveExecApprovalInitiatingSurfaceState({
-    channel: params.turnSourceChannel,
-    accountId: params.turnSourceAccountId,
-  });
-  const sentApproverDms =
-    (initiatingSurface.kind === "disabled" || initiatingSurface.kind === "unsupported") &&
-    hasConfiguredExecApprovalDmRoute(loadConfig());
+  const initiatingSurface: ExecApprovalInitiatingSurfaceState = { kind: "unsupported" };
   const unavailableReason =
-    params.preResolvedDecision === null
-      ? "no-approval-route"
-      : initiatingSurface.kind === "disabled"
-        ? "initiating-platform-disabled"
-        : initiatingSurface.kind === "unsupported"
-          ? "initiating-platform-unsupported"
-          : null;
+    params.preResolvedDecision === null ? "no-approval-route" : "initiating-platform-unsupported";
   return {
     initiatingSurface,
-    sentApproverDms,
+    sentApproverDms: false,
     unavailableReason,
   };
 }
@@ -356,12 +338,7 @@ export function buildExecApprovalPendingToolResult(params: {
         type: "text",
         text:
           params.unavailableReason !== null
-            ? (buildExecApprovalUnavailableReplyPayload({
-                warningText: params.warningText,
-                reason: params.unavailableReason,
-                channelLabel: params.initiatingSurface.channelLabel,
-                sentApproverDms: params.sentApproverDms,
-              }).text ?? "")
+            ? (params.warningText ?? "Exec approval unavailable.")
             : buildApprovalPendingMessage({
                 warningText: params.warningText,
                 approvalSlug: params.approvalSlug,

@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import type { GatewayAuthConfig, GatewayTailscaleConfig, DenebConfig } from "../config/config.js";
 import { writeConfigFile } from "../config/config.js";
 import { hasConfiguredSecretInput } from "../config/types.secrets.js";
-import { assertExplicitGatewayAuthModeWhenBothConfigured } from "./auth-mode-policy.js";
 import { resolveGatewayAuth, type ResolvedGatewayAuth } from "./auth.js";
 import {
   hasGatewayPasswordEnvCandidate,
@@ -223,7 +222,6 @@ export async function ensureGatewayStartupAuth(params: {
   generatedToken?: string;
   persistedGeneratedToken: boolean;
 }> {
-  assertExplicitGatewayAuthModeWhenBothConfigured(params.cfg);
   const env = params.env ?? process.env;
   const persistRequested = params.persist === true;
   const [resolvedTokenRefValue, resolvedPasswordRefValue] = await Promise.all([

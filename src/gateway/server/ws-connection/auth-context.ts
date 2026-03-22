@@ -147,7 +147,7 @@ export async function resolveConnectAuthState(params: {
     }));
   // Trusted-proxy auth is semantically shared: the proxy vouches for identity,
   // no per-device credential needed. Include it so operator connections
-  // can skip device identity via roleCanSkipDeviceIdentity().
+  // can skip device identity.
   const sharedAuthOk =
     (sharedAuthResult?.ok === true &&
       (sharedAuthResult.method === "token" || sharedAuthResult.method === "password")) ||

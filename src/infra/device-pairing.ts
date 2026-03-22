@@ -1,4 +1,4 @@
-// Stub: device pairing removed for solo-dev simplification.
+// Device pairing (disabled in solo-dev mode).
 export type PairedDevice = {
   deviceId: string;
   publicKey?: string;

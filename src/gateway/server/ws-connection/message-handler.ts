@@ -2,7 +2,6 @@ import type { IncomingMessage } from "node:http";
 import os from "node:os";
 import type { WebSocket } from "ws";
 import { loadConfig } from "../../../config/config.js";
-import { verifyDeviceBootstrapToken } from "../../../infra/device-bootstrap.js";
 import {
   deriveDeviceIdFromPublicKey,
   normalizeDevicePublicKeyBase64Url,
@@ -15,7 +14,6 @@ import {
   updatePairedDeviceMetadata,
   verifyDeviceToken,
 } from "../../../infra/device-pairing.js";
-import { updatePairedNodeMetadata } from "../../../infra/node-pairing.js";
 import { recordRemoteNodeInfo, refreshRemoteNodeBins } from "../../../infra/skills-remote.js";
 import { upsertPresence } from "../../../infra/system-presence.js";
 import { loadVoiceWakeConfig } from "../../../infra/voicewake.js";
@@ -32,7 +30,6 @@ import {
   CANVAS_CAPABILITY_TTL_MS,
   mintCanvasCapabilityToken,
 } from "../../canvas-capability.js";
-import { normalizeDeviceMetadataForAuth } from "../../device-auth.js";
 import {
   isLocalishHost,
   isLoopbackAddress,
@@ -92,7 +89,6 @@ import {
   shouldAllowSilentLocalPairing,
   shouldSkipBackendSelfPairing,
 } from "./handshake-auth-helpers.js";
-import { isUnauthorizedRoleError, UnauthorizedFloodGuard } from "./unauthorized-flood-guard.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -113,10 +109,10 @@ function resolvePinnedClientMetadata(params: {
   pinnedPlatform?: string;
   pinnedDeviceFamily?: string;
 } {
-  const claimedPlatform = normalizeDeviceMetadataForAuth(params.claimedPlatform);
-  const claimedDeviceFamily = normalizeDeviceMetadataForAuth(params.claimedDeviceFamily);
-  const pairedPlatform = normalizeDeviceMetadataForAuth(params.pairedPlatform);
-  const pairedDeviceFamily = normalizeDeviceMetadataForAuth(params.pairedDeviceFamily);
+  const claimedPlatform = "";
+  const claimedDeviceFamily = "";
+  const pairedPlatform = "";
+  const pairedDeviceFamily = "";
   const hasPinnedPlatform = pairedPlatform !== "";
   const hasPinnedDeviceFamily = pairedDeviceFamily !== "";
   const platformMismatch = hasPinnedPlatform && claimedPlatform !== pairedPlatform;
@@ -241,7 +237,6 @@ export function attachGatewayWsMessageHandler(params: {
   }
 
   const isWebchatConnect = (p: ConnectParams | null | undefined) => isWebchatClient(p?.client);
-  const unauthorizedFloodGuard = new UnauthorizedFloodGuard();
   const browserSecurity = resolveHandshakeBrowserSecurityContext({
     requestOrigin,
     clientIp,
@@ -652,14 +647,10 @@ export function attachGatewayWsMessageHandler(params: {
           scopes,
           rateLimiter: authRateLimiter,
           clientIp: browserRateLimitClientIp,
-          verifyBootstrapToken: async ({ deviceId, publicKey, token, role, scopes }) =>
-            await verifyDeviceBootstrapToken({
-              deviceId,
-              publicKey,
-              token,
-              role,
-              scopes,
-            }),
+          verifyBootstrapToken: async () => ({
+            ok: false as const,
+            reason: "device_bootstrap_disabled",
+          }),
           verifyDeviceToken,
         }));
         if (!authOk) {
@@ -999,19 +990,6 @@ export function attachGatewayWsMessageHandler(params: {
           const nodeSession = context.nodeRegistry.register(nextClient, {
             remoteIp: reportedClientIp,
           });
-          const instanceIdRaw = connectParams.client.instanceId;
-          const instanceId = typeof instanceIdRaw === "string" ? instanceIdRaw.trim() : "";
-          const nodeIdsForPairing = new Set<string>([nodeSession.nodeId]);
-          if (instanceId) {
-            nodeIdsForPairing.add(instanceId);
-          }
-          for (const nodeId of nodeIdsForPairing) {
-            void updatePairedNodeMetadata(nodeId, {
-              lastConnectedAtMs: nodeSession.connectedAtMs,
-            }).catch((err) =>
-              logGateway.warn(`failed to record last connect for ${nodeId}: ${formatForLog(err)}`),
-            );
-          }
           recordRemoteNodeInfo({
             nodeId: nodeSession.nodeId,
             displayName: nodeSession.displayName,
@@ -1081,33 +1059,6 @@ export function attachGatewayWsMessageHandler(params: {
         meta?: Record<string, unknown>,
       ) => {
         send({ type: "res", id: req.id, ok, payload, error });
-        const unauthorizedRoleError = isUnauthorizedRoleError(error);
-        let logMeta = meta;
-        if (unauthorizedRoleError) {
-          const unauthorizedDecision = unauthorizedFloodGuard.registerUnauthorized();
-          if (unauthorizedDecision.suppressedSinceLastLog > 0) {
-            logMeta = {
-              ...logMeta,
-              suppressedUnauthorizedResponses: unauthorizedDecision.suppressedSinceLastLog,
-            };
-          }
-          if (!unauthorizedDecision.shouldLog) {
-            return;
-          }
-          if (unauthorizedDecision.shouldClose) {
-            setCloseCause("repeated-unauthorized-requests", {
-              unauthorizedCount: unauthorizedDecision.count,
-              method: req.method,
-            });
-            queueMicrotask(() => close(1008, "repeated unauthorized calls"));
-          }
-          logMeta = {
-            ...logMeta,
-            unauthorizedCount: unauthorizedDecision.count,
-          };
-        } else {
-          unauthorizedFloodGuard.reset();
-        }
         logWs("out", "res", {
           connId,
           id: req.id,
@@ -1115,7 +1066,7 @@ export function attachGatewayWsMessageHandler(params: {
           method: req.method,
           errorCode: error?.code,
           errorMessage: error?.message,
-          ...logMeta,
+          ...meta,
         });
       };
 

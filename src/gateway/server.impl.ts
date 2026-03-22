@@ -28,7 +28,6 @@ import {
 } from "../infra/control-ui-assets.js";
 import { isDiagnosticsEnabled } from "../infra/diagnostic-events.js";
 import { logAcceptedEnvOption } from "../infra/env.js";
-import { createExecApprovalForwarder } from "../infra/exec-approval-forwarder.js";
 import { startHeartbeatRunner, type HeartbeatRunner } from "../infra/heartbeat-runner.js";
 import { getMachineDisplayName } from "../infra/machine-name.js";
 import { ensureDenebCliOnPath } from "../infra/path-env.js";
@@ -705,7 +704,11 @@ export async function startGatewayServer(
   }
 
   const execApprovalManager = new ExecApprovalManager();
-  const execApprovalForwarder = createExecApprovalForwarder();
+  const execApprovalForwarder = {
+    stop: () => {},
+    handleRequested: async () => false as const,
+    handleResolved: async () => {},
+  };
   const execApprovalHandlers = createExecApprovalHandlers(execApprovalManager, {
     forwarder: execApprovalForwarder,
   });

@@ -1,5 +1,3 @@
-import { sanitizeExecApprovalDisplayText } from "../../infra/exec-approval-command-display.js";
-import type { ExecApprovalForwarder } from "../../infra/exec-approval-forwarder.js";
 import {
   DEFAULT_EXEC_APPROVAL_TIMEOUT_MS,
   type ExecApprovalDecision,
@@ -18,6 +16,12 @@ import {
   validateExecApprovalResolveParams,
 } from "../protocol/index.js";
 import type { GatewayRequestHandlers } from "./types.js";
+
+type ExecApprovalForwarder = {
+  stop: () => void;
+  handleRequested: (payload: unknown) => Promise<boolean>;
+  handleResolved: (payload: unknown) => Promise<void>;
+};
 
 export function createExecApprovalHandlers(
   manager: ExecApprovalManager,
@@ -130,11 +134,11 @@ export function createExecApprovalHandlers(
         return;
       }
       const request = {
-        command: sanitizeExecApprovalDisplayText(effectiveCommandText),
+        command: effectiveCommandText,
         commandPreview:
           host === "node" || !approvalContext.commandPreview
             ? undefined
-            : sanitizeExecApprovalDisplayText(approvalContext.commandPreview),
+            : approvalContext.commandPreview,
         commandArgv: host === "node" ? undefined : effectiveCommandArgv,
         envKeys: envBinding.envKeys.length > 0 ? envBinding.envKeys : undefined,
         systemRunBinding: systemRunBinding?.binding ?? null,

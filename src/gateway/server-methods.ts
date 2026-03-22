@@ -1,9 +1,6 @@
 import { withPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
-import { formatControlPlaneActor, resolveControlPlaneActor } from "./control-plane-audit.js";
-import { consumeControlPlaneWriteBudget } from "./control-plane-rate-limit.js";
-import { ADMIN_SCOPE, authorizeOperatorScopesForMethod } from "./method-scopes.js";
 import { ErrorCodes, errorShape } from "./protocol/index.js";
-import { isRoleAuthorizedForMethod, parseGatewayRole } from "./role-policy.js";
+import { parseGatewayRole } from "./role-policy.js";
 import { agentHandlers } from "./server-methods/agent.js";
 import { agentsHandlers } from "./server-methods/agents.js";
 import { autoMaintenanceHandlers } from "./server-methods/auto-maintenance.js";
@@ -31,7 +28,6 @@ import { voicewakeHandlers } from "./server-methods/voicewake.js";
 import { webHandlers } from "./server-methods/web.js";
 import { wizardHandlers } from "./server-methods/wizard.js";
 
-const CONTROL_PLANE_WRITE_METHODS = new Set(["config.apply", "config.patch", "update.run"]);
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
   if (!client?.connect) {
     return null;
@@ -43,20 +39,6 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
   const role = parseGatewayRole(roleRaw);
   if (!role) {
     return errorShape(ErrorCodes.INVALID_REQUEST, `unauthorized role: ${roleRaw}`);
-  }
-  const scopes = client.connect.scopes ?? [];
-  if (!isRoleAuthorizedForMethod(role, method)) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, `unauthorized role: ${role}`);
-  }
-  if (role === "node") {
-    return null;
-  }
-  if (scopes.includes(ADMIN_SCOPE)) {
-    return null;
-  }
-  const scopeAuth = authorizeOperatorScopesForMethod(method, scopes);
-  if (!scopeAuth.allowed) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, `missing scope: ${scopeAuth.missingScope}`);
   }
   return null;
 }
@@ -97,27 +79,6 @@ export async function handleGatewayRequest(
   if (authError) {
     respond(false, undefined, authError);
     return;
-  }
-  if (CONTROL_PLANE_WRITE_METHODS.has(req.method)) {
-    const budget = consumeControlPlaneWriteBudget();
-    if (!budget.allowed) {
-      const actor = resolveControlPlaneActor(client);
-      context.logGateway.warn(
-        `control-plane write rate-limited method=${req.method} ${formatControlPlaneActor(actor)}`,
-      );
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, `rate limit exceeded for ${req.method}`, {
-          retryable: true,
-          details: {
-            method: req.method,
-            limit: "3 per 60s",
-          },
-        }),
-      );
-      return;
-    }
   }
   const handler = opts.extraHandlers?.[req.method] ?? coreGatewayHandlers[req.method];
   if (!handler) {

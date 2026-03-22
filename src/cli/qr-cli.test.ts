@@ -27,12 +27,6 @@ vi.mock("../process/exec.js", () => ({ runCommandWithTimeout: mocks.runCommandWi
 vi.mock("./command-secret-gateway.js", () => ({
   resolveCommandSecretRefsViaGateway: mocks.resolveCommandSecretRefsViaGateway,
 }));
-vi.mock("../infra/device-bootstrap.js", () => ({
-  issueDeviceBootstrapToken: vi.fn(async () => ({
-    token: "bootstrap-123",
-    expiresAtMs: 123,
-  })),
-}));
 vi.mock("qrcode-terminal", () => ({
   default: {
     generate: mocks.qrGenerate,

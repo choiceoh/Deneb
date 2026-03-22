@@ -7,7 +7,6 @@ import {
   buildExecApprovalPendingReplyPayload,
   type ExecApprovalPendingReplyParams,
 } from "deneb/plugin-sdk/infra-runtime";
-import { resolveExecApprovalSessionTarget } from "deneb/plugin-sdk/infra-runtime";
 import type { ExecApprovalRequest, ExecApprovalResolved } from "deneb/plugin-sdk/infra-runtime";
 import { normalizeAccountId, parseAgentSessionKey } from "deneb/plugin-sdk/routing";
 import { createSubsystemLogger } from "deneb/plugin-sdk/runtime-env";
@@ -115,18 +114,11 @@ function isHandlerConfigured(params: { cfg: DenebConfig; accountId: string }): b
   );
 }
 
-function resolveRequestSessionTarget(params: {
+function resolveRequestSessionTarget(_params: {
   cfg: DenebConfig;
   request: ExecApprovalRequest;
 }): { to: string; accountId?: string; threadId?: number; channel?: string } | null {
-  return resolveExecApprovalSessionTarget({
-    cfg: params.cfg,
-    request: params.request,
-    turnSourceChannel: params.request.request.turnSourceChannel ?? undefined,
-    turnSourceTo: params.request.request.turnSourceTo ?? undefined,
-    turnSourceAccountId: params.request.request.turnSourceAccountId ?? undefined,
-    turnSourceThreadId: params.request.request.turnSourceThreadId ?? undefined,
-  });
+  return null;
 }
 
 function resolveTelegramSourceTarget(params: {

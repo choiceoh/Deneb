@@ -1,6 +1,5 @@
 import type { DenebConfig } from "../../config/config.js";
 import { normalizeResolvedSecretInputString } from "../../config/types.secrets.js";
-import { isDangerousHostEnvVarName } from "../../infra/host-env-security.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { sanitizeEnvVars, validateEnvVarValue } from "../sandbox/sanitize-env-vars.js";
 import { resolveSkillConfig } from "./config.js";
@@ -84,9 +83,7 @@ function matchesAnyPattern(value: string, patterns: readonly RegExp[]): boolean 
 }
 
 function isAlwaysBlockedSkillEnvKey(key: string): boolean {
-  return (
-    isDangerousHostEnvVarName(key) || matchesAnyPattern(key, SKILL_ALWAYS_BLOCKED_ENV_PATTERNS)
-  );
+  return matchesAnyPattern(key, SKILL_ALWAYS_BLOCKED_ENV_PATTERNS);
 }
 
 function sanitizeSkillEnvOverrides(params: {
