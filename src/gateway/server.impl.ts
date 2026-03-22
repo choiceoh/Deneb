@@ -74,6 +74,10 @@ import { ExecApprovalManager } from "./exec-approval-manager.js";
 import { startGatewaySelfWatchdog, type GatewaySelfWatchdog } from "./gateway-self-watchdog.js";
 import { startGatewayModelPricingRefresh } from "./model-pricing-cache.js";
 import { NodeRegistry } from "./node-registry.js";
+import {
+  type AutoMaintenanceServiceHandle,
+  startAutoMaintenanceService,
+} from "./server-auto-maintenance.js";
 import type { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import { createChannelManager } from "./server-channels.js";
 import {
@@ -902,6 +906,13 @@ export async function startGatewayServer(
     });
   }
 
+  // Start auto-maintenance service (periodic health checks + cleanup).
+  let autoMaintenanceHandle: AutoMaintenanceServiceHandle | null = null;
+  if (!minimalTestGateway) {
+    autoMaintenanceHandle = startAutoMaintenanceService({ cfg: cfgAtStart });
+    gatewayRequestContext.autoMaintenance = autoMaintenanceHandle;
+  }
+
   // Run gateway_start plugin hook (fire-and-forget)
   if (!minimalTestGateway) {
     const hookRunner = getGlobalHookRunner();
@@ -1045,6 +1056,7 @@ export async function startGatewayServer(
       channelHealthMonitor?.stop();
       selfWatchdog?.stop();
       autonomousHandle?.stop();
+      autoMaintenanceHandle?.stop();
       clearSecretsRuntimeSnapshot();
       await close(opts);
     },
