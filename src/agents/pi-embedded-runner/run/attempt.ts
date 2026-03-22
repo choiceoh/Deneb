@@ -202,6 +202,10 @@ export async function runEmbeddedAttempt(
     : resolvedWorkspace;
   await fs.mkdir(effectiveWorkspace, { recursive: true });
 
+  // Start session file prewarm early so the OS page cache is warm by the time
+  // we acquire the session lock and open the SessionManager.
+  const sessionPrewarmPromise = prewarmSessionFile(params.sessionFile);
+
   let restoreSkillEnv: (() => void) | undefined;
   process.chdir(effectiveWorkspace);
   try {
@@ -228,38 +232,17 @@ export async function runEmbeddedAttempt(
     });
 
     const sessionLabel = params.sessionKey ?? params.sessionId;
-    const { bootstrapFiles: hookAdjustedBootstrapFiles, contextFiles } =
-      await resolveBootstrapContextForRun({
-        workspaceDir: effectiveWorkspace,
-        config: params.config,
-        sessionKey: params.sessionKey,
-        sessionId: params.sessionId,
-        warn: makeBootstrapWarn({ sessionLabel, warn: (message) => log.warn(message) }),
-        contextMode: params.bootstrapContextMode,
-        runKind: params.bootstrapContextRunKind,
-      });
-    const bootstrapMaxChars = resolveBootstrapMaxChars(params.config);
-    const bootstrapTotalMaxChars = resolveBootstrapTotalMaxChars(params.config);
-    const bootstrapAnalysis = analyzeBootstrapBudget({
-      files: buildBootstrapInjectionStats({
-        bootstrapFiles: hookAdjustedBootstrapFiles,
-        injectedFiles: contextFiles,
-      }),
-      bootstrapMaxChars,
-      bootstrapTotalMaxChars,
+    // Kick off bootstrap context file I/O early so it runs in parallel with
+    // synchronous tool creation and MCP/LSP runtime initialization below.
+    const bootstrapContextPromise = resolveBootstrapContextForRun({
+      workspaceDir: effectiveWorkspace,
+      config: params.config,
+      sessionKey: params.sessionKey,
+      sessionId: params.sessionId,
+      warn: makeBootstrapWarn({ sessionLabel, warn: (message) => log.warn(message) }),
+      contextMode: params.bootstrapContextMode,
+      runKind: params.bootstrapContextRunKind,
     });
-    const bootstrapPromptWarningMode = resolveBootstrapPromptTruncationWarningMode(params.config);
-    const bootstrapPromptWarning = buildBootstrapPromptWarning({
-      analysis: bootstrapAnalysis,
-      mode: bootstrapPromptWarningMode,
-      seenSignatures: params.bootstrapPromptWarningSignaturesSeen,
-      previousSignature: params.bootstrapPromptWarningSignature,
-    });
-    const workspaceNotes = hookAdjustedBootstrapFiles.some(
-      (file) => file.name === DEFAULT_BOOTSTRAP_FILENAME && !file.missing,
-    )
-      ? ["Reminder: commit your changes in this workspace after edits."]
-      : undefined;
 
     const agentDir = params.agentDir ?? resolveDenebAgentDir();
 
@@ -343,27 +326,36 @@ export async function runEmbeddedAttempt(
       provider: params.provider,
     });
     const clientTools = toolsEnabled ? params.clientTools : undefined;
-    const bundleMcpRuntime = toolsEnabled
-      ? await createBundleMcpToolRuntime({
-          workspaceDir: effectiveWorkspace,
-          cfg: params.config,
-          reservedToolNames: [
-            ...tools.map((tool) => tool.name),
-            ...(clientTools?.map((tool) => tool.function.name) ?? []),
-          ],
-        })
-      : undefined;
-    const bundleLspRuntime = toolsEnabled
-      ? await createBundleLspToolRuntime({
-          workspaceDir: effectiveWorkspace,
-          cfg: params.config,
-          reservedToolNames: [
-            ...tools.map((tool) => tool.name),
-            ...(clientTools?.map((tool) => tool.function.name) ?? []),
-            ...(bundleMcpRuntime?.tools.map((tool) => tool.name) ?? []),
-          ],
-        })
-      : undefined;
+    // Kick off independent async work in parallel to reduce sequential latency.
+    const machineNamePromise = getMachineDisplayName();
+    const docsPathPromise = resolveDenebDocsPath({
+      workspaceDir: effectiveWorkspace,
+      argv1: process.argv[1],
+      cwd: process.cwd(),
+      moduleUrl: import.meta.url,
+    });
+
+    const baseReservedToolNames = [
+      ...tools.map((tool) => tool.name),
+      ...(clientTools?.map((tool) => tool.function.name) ?? []),
+    ];
+    // Run MCP and LSP tool runtime creation in parallel. Both receive the same
+    // base reserved names; name collisions between MCP and LSP tools are
+    // extremely unlikely and the latency savings outweigh the theoretical risk.
+    const [bundleMcpRuntime, bundleLspRuntime] = toolsEnabled
+      ? await Promise.all([
+          createBundleMcpToolRuntime({
+            workspaceDir: effectiveWorkspace,
+            cfg: params.config,
+            reservedToolNames: baseReservedToolNames,
+          }),
+          createBundleLspToolRuntime({
+            workspaceDir: effectiveWorkspace,
+            cfg: params.config,
+            reservedToolNames: baseReservedToolNames,
+          }),
+        ])
+      : [undefined, undefined];
     const effectiveTools = [
       ...tools,
       ...(bundleMcpRuntime?.tools ?? []),
@@ -375,7 +367,7 @@ export async function runEmbeddedAttempt(
     });
     logToolSchemasForGoogle({ tools: effectiveTools, provider: params.provider });
 
-    const machineName = await getMachineDisplayName();
+    const machineName = await machineNamePromise;
     const runtimeChannel = normalizeMessageChannel(params.messageChannel ?? params.messageProvider);
     let runtimeCapabilities = runtimeChannel
       ? (resolveChannelCapabilities({
@@ -466,12 +458,34 @@ export async function runEmbeddedAttempt(
     });
     const isDefaultAgent = sessionAgentId === defaultAgentId;
     const promptMode = resolvePromptModeForSession(params.sessionKey);
-    const docsPath = await resolveDenebDocsPath({
-      workspaceDir: effectiveWorkspace,
-      argv1: process.argv[1],
-      cwd: process.cwd(),
-      moduleUrl: import.meta.url,
+    const docsPath = await docsPathPromise;
+
+    // Await bootstrap context that was kicked off in parallel with tool setup.
+    const { bootstrapFiles: hookAdjustedBootstrapFiles, contextFiles } =
+      await bootstrapContextPromise;
+    const bootstrapMaxChars = resolveBootstrapMaxChars(params.config);
+    const bootstrapTotalMaxChars = resolveBootstrapTotalMaxChars(params.config);
+    const bootstrapAnalysis = analyzeBootstrapBudget({
+      files: buildBootstrapInjectionStats({
+        bootstrapFiles: hookAdjustedBootstrapFiles,
+        injectedFiles: contextFiles,
+      }),
+      bootstrapMaxChars,
+      bootstrapTotalMaxChars,
     });
+    const bootstrapPromptWarningMode = resolveBootstrapPromptTruncationWarningMode(params.config);
+    const bootstrapPromptWarning = buildBootstrapPromptWarning({
+      analysis: bootstrapAnalysis,
+      mode: bootstrapPromptWarningMode,
+      seenSignatures: params.bootstrapPromptWarningSignaturesSeen,
+      previousSignature: params.bootstrapPromptWarningSignature,
+    });
+    const workspaceNotes = hookAdjustedBootstrapFiles.some(
+      (file) => file.name === DEFAULT_BOOTSTRAP_FILENAME && !file.missing,
+    )
+      ? ["Reminder: commit your changes in this workspace after edits."]
+      : undefined;
+
     const ttsHint = params.config ? buildTtsSystemPromptHint(params.config) : undefined;
     const ownerDisplay = resolveOwnerDisplaySetting(params.config);
     const heartbeatPrompt = isDefaultAgent
@@ -571,7 +585,7 @@ export async function runEmbeddedAttempt(
         modelId: params.modelId,
       });
 
-      await prewarmSessionFile(params.sessionFile);
+      await sessionPrewarmPromise;
       sessionManager = guardSessionManager(SessionManager.open(params.sessionFile), {
         agentId: sessionAgentId,
         sessionKey: params.sessionKey,
