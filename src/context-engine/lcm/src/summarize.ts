@@ -5,6 +5,8 @@ export type LcmSummarizeOptions = {
   previousSummary?: string;
   isCondensed?: boolean;
   depth?: number;
+  /** Explicit target token count override. When set, bypasses the default cap logic in resolveTargetTokens. */
+  targetTokens?: number;
 };
 
 export type LcmSummarizeFn = (
@@ -398,7 +400,20 @@ function resolveTargetTokens(params: {
   mode: SummaryMode;
   isCondensed: boolean;
   condensedTargetTokens: number;
+  /** Explicit caller-supplied target. Bypasses default caps when set. */
+  targetTokensOverride?: number;
 }): number {
+  // When the caller (e.g. CompressionObserver) supplies an explicit target,
+  // honour it with only a sane floor — no upper cap — so the compression
+  // ratio stays close to the observer's configured targetRatio.
+  if (
+    params.targetTokensOverride !== undefined &&
+    Number.isFinite(params.targetTokensOverride) &&
+    params.targetTokensOverride > 0
+  ) {
+    return Math.max(96, params.targetTokensOverride);
+  }
+
   if (params.isCondensed) {
     return Math.max(512, params.condensedTargetTokens);
   }
@@ -775,6 +790,7 @@ export async function createLcmSummarize(params: {
       mode,
       isCondensed,
       condensedTargetTokens,
+      targetTokensOverride: options?.targetTokens,
     });
     const prompt = isCondensed
       ? buildCondensedSummaryPrompt({

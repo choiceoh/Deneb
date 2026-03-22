@@ -195,11 +195,19 @@ export class CompressionObserver {
     this.pendingUpdates.set(conversationId, updatePromise);
   }
 
-  private async summarizeWithRetry(text: string, aggressive: boolean): Promise<string> {
+  private async summarizeWithRetry(
+    text: string,
+    aggressive: boolean,
+    targetTokens?: number,
+  ): Promise<string> {
     let lastErr: unknown;
     for (let attempt = 0; attempt <= MAX_CALL_RETRIES; attempt++) {
       try {
-        return await this.summarize(text, aggressive);
+        return await this.summarize(
+          text,
+          aggressive,
+          targetTokens != null ? { targetTokens } : undefined,
+        );
       } catch (err) {
         lastErr = err;
         if (attempt < MAX_CALL_RETRIES) {
@@ -282,7 +290,15 @@ export class CompressionObserver {
       const sourceText = messageTexts.join("\n\n---\n\n");
       const isAggressive = this.config.targetRatio <= 0.15;
 
-      const summary = await this.summarizeWithRetry(sourceText, isAggressive);
+      // Calculate explicit target tokens from the observer's targetRatio so
+      // the summarizer doesn't hit the tight leaf-level caps (640/1200) that
+      // cause the compression ratio to drop to ~3% on large conversations.
+      const observerTargetTokens = Math.max(
+        256,
+        Math.floor(totalSourceTokens * this.config.targetRatio),
+      );
+
+      const summary = await this.summarizeWithRetry(sourceText, isAggressive, observerTargetTokens);
 
       if (this.disposed) {
         return;
