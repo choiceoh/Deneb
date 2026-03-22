@@ -67,6 +67,11 @@ function toBool(value: unknown): boolean | undefined {
   return undefined;
 }
 
+/** Clamp a number to [min, max] range. */
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
 /** Safely coerce an unknown value to a trimmed non-empty string, or return undefined. */
 function toStr(value: unknown): string | undefined {
   if (typeof value === "string") {
@@ -96,7 +101,11 @@ export function resolveLcmConfig(
       toStr(pc.dbPath) ??
       toStr(pc.databasePath) ??
       join(homedir(), ".deneb", "lcm.db"),
-    contextThreshold: toNumber(env.LCM_CONTEXT_THRESHOLD) ?? toNumber(pc.contextThreshold) ?? 0.75,
+    contextThreshold: clampNumber(
+      toNumber(env.LCM_CONTEXT_THRESHOLD) ?? toNumber(pc.contextThreshold) ?? 0.75,
+      0.1,
+      1.0,
+    ),
     freshTailCount: toNumber(env.LCM_FRESH_TAIL_COUNT) ?? toNumber(pc.freshTailCount) ?? 32,
     leafMinFanout: toNumber(env.LCM_LEAF_MIN_FANOUT) ?? toNumber(pc.leafMinFanout) ?? 8,
     condensedMinFanout:
@@ -135,10 +144,13 @@ export function resolveLcmConfig(
         env.LCM_OBSERVER_ENABLED !== undefined
           ? env.LCM_OBSERVER_ENABLED === "true"
           : (toBool((pc.observer as Record<string, unknown> | undefined)?.enabled) ?? false),
-      targetRatio:
+      targetRatio: clampNumber(
         toNumber(env.LCM_OBSERVER_TARGET_RATIO) ??
-        toNumber((pc.observer as Record<string, unknown> | undefined)?.targetRatio) ??
-        0.2,
+          toNumber((pc.observer as Record<string, unknown> | undefined)?.targetRatio) ??
+          0.2,
+        0.05,
+        0.5,
+      ),
       messageInterval:
         toNumber(env.LCM_OBSERVER_MESSAGE_INTERVAL) ??
         toNumber((pc.observer as Record<string, unknown> | undefined)?.messageInterval) ??

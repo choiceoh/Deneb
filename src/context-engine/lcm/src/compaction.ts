@@ -651,33 +651,37 @@ export class CompactionEngine {
       const fileIds = dedupeOrderedIds(
         messageContents.flatMap((m) => extractFileIdsFromContent(m.content)),
       );
-
-      await this.summaryStore.insertSummary({
-        summaryId,
-        conversationId,
-        kind: "leaf",
-        depth: 0,
-        content: cached.summary,
-        tokenCount: cached.tokenCount,
-        fileIds,
-        earliestAt: new Date(Math.min(...messageContents.map((m) => m.createdAt.getTime()))),
-        latestAt: new Date(Math.max(...messageContents.map((m) => m.createdAt.getTime()))),
-        descendantCount: 0,
-        descendantTokenCount: 0,
-        sourceMessageTokenCount: cached.sourceTokenCount,
-      });
-
-      await this.summaryStore.linkSummaryToMessages(
-        summaryId,
-        messageContents.map((m) => m.messageId),
-      );
-
       const ordinals = rawMessageItems.map((ci) => ci.ordinal);
-      await this.summaryStore.replaceContextRangeWithSummary({
-        conversationId,
-        startOrdinal: Math.min(...ordinals),
-        endOrdinal: Math.max(...ordinals),
-        summaryId,
+
+      // Wrap all DB mutations in a single transaction to prevent orphaned
+      // records on partial failure.
+      await this.conversationStore.withTransaction(async () => {
+        await this.summaryStore.insertSummary({
+          summaryId,
+          conversationId,
+          kind: "leaf",
+          depth: 0,
+          content: cached.summary,
+          tokenCount: cached.tokenCount,
+          fileIds,
+          earliestAt: new Date(Math.min(...messageContents.map((m) => m.createdAt.getTime()))),
+          latestAt: new Date(Math.max(...messageContents.map((m) => m.createdAt.getTime()))),
+          descendantCount: 0,
+          descendantTokenCount: 0,
+          sourceMessageTokenCount: cached.sourceTokenCount,
+        });
+
+        await this.summaryStore.linkSummaryToMessages(
+          summaryId,
+          messageContents.map((m) => m.messageId),
+        );
+
+        await this.summaryStore.replaceContextRangeWithSummary({
+          conversationId,
+          startOrdinal: Math.min(...ordinals),
+          endOrdinal: Math.max(...ordinals),
+          summaryId,
+        });
       });
 
       const tokensAfter = await this.summaryStore.getContextTokenCount(conversationId);
