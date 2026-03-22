@@ -1,7 +1,9 @@
+import { PERF } from "../infra/hardware-profile.js";
 import type { DenebConfig } from "./types.js";
 
-export const DEFAULT_AGENT_MAX_CONCURRENT = 4;
-export const DEFAULT_SUBAGENT_MAX_CONCURRENT = 8;
+// Defaults tuned for DGX SPARK (Grace Blackwell, 128GB unified memory)
+export const DEFAULT_AGENT_MAX_CONCURRENT = PERF.agentMaxConcurrent;
+export const DEFAULT_SUBAGENT_MAX_CONCURRENT = PERF.subagentMaxConcurrent;
 // Keep depth-1 subagents as leaves unless config explicitly opts into nesting.
 export const DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH = 1;
 

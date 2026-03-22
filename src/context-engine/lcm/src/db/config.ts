@@ -114,16 +114,17 @@ export function resolveLcmConfig(
       toNumber(env.LCM_CONDENSED_MIN_FANOUT_HARD) ?? toNumber(pc.condensedMinFanoutHard) ?? 2,
     incrementalMaxDepth:
       toNumber(env.LCM_INCREMENTAL_MAX_DEPTH) ?? toNumber(pc.incrementalMaxDepth) ?? 0,
-    leafChunkTokens: toNumber(env.LCM_LEAF_CHUNK_TOKENS) ?? toNumber(pc.leafChunkTokens) ?? 20000,
-    leafTargetTokens: toNumber(env.LCM_LEAF_TARGET_TOKENS) ?? toNumber(pc.leafTargetTokens) ?? 1200,
+    // DGX SPARK: moderately larger chunks — GPU can handle more context per pass
+    leafChunkTokens: toNumber(env.LCM_LEAF_CHUNK_TOKENS) ?? toNumber(pc.leafChunkTokens) ?? 30000,
+    leafTargetTokens: toNumber(env.LCM_LEAF_TARGET_TOKENS) ?? toNumber(pc.leafTargetTokens) ?? 1500,
     condensedTargetTokens:
-      toNumber(env.LCM_CONDENSED_TARGET_TOKENS) ?? toNumber(pc.condensedTargetTokens) ?? 2000,
-    maxExpandTokens: toNumber(env.LCM_MAX_EXPAND_TOKENS) ?? toNumber(pc.maxExpandTokens) ?? 4000,
+      toNumber(env.LCM_CONDENSED_TARGET_TOKENS) ?? toNumber(pc.condensedTargetTokens) ?? 2500,
+    maxExpandTokens: toNumber(env.LCM_MAX_EXPAND_TOKENS) ?? toNumber(pc.maxExpandTokens) ?? 6000,
     largeFileTokenThreshold:
       toNumber(env.LCM_LARGE_FILE_TOKEN_THRESHOLD) ??
       toNumber(pc.largeFileThresholdTokens) ??
       toNumber(pc.largeFileTokenThreshold) ??
-      25000,
+      35000,
     largeFileSummaryProvider:
       env.LCM_LARGE_FILE_SUMMARY_PROVIDER?.trim() ?? toStr(pc.largeFileSummaryProvider) ?? "",
     largeFileSummaryModel:

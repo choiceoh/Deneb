@@ -21,7 +21,7 @@ export type MemoryMultimodalSettings = {
   maxFileBytes: number;
 };
 
-export const DEFAULT_MEMORY_MULTIMODAL_MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const DEFAULT_MEMORY_MULTIMODAL_MAX_FILE_BYTES = 20 * 1024 * 1024; // 20MB (up from 10MB)
 
 export function normalizeMemoryMultimodalModalities(
   raw: MemoryMultimodalSelection[] | undefined,

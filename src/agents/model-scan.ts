@@ -12,7 +12,7 @@ import { inferParamBFromIdOrName } from "../shared/model-param-b.js";
 
 const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 const DEFAULT_TIMEOUT_MS = 12_000;
-const DEFAULT_CONCURRENCY = 3;
+const DEFAULT_CONCURRENCY = 6; // Higher concurrency for DGX SPARK (up from 3)
 
 const BASE_IMAGE_PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X3mIAAAAASUVORK5CYII=";
