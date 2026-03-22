@@ -69,13 +69,10 @@ describe("acp runtime registry", () => {
       healthy: () => false,
     });
 
-    try {
-      requireAcpRuntimeBackend("acpx");
-      throw new Error("expected requireAcpRuntimeBackend to throw");
-    } catch (err) {
-      expect(err).toBeInstanceOf(AcpRuntimeError);
-      expect((err as AcpRuntimeError).code).toBe("ACP_BACKEND_UNAVAILABLE");
-    }
+    expect(() => requireAcpRuntimeBackend("acpx")).toThrowDomainError(
+      AcpRuntimeError,
+      "ACP_BACKEND_UNAVAILABLE",
+    );
   });
 
   it("unregisters a backend by id", () => {

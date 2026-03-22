@@ -13,6 +13,13 @@ type TestChannelRegistration = {
   source: string;
 };
 
+/**
+ * Create a PluginRegistry populated with the given channel registrations.
+ * Use when a test needs to override the default plugin registry
+ * (e.g., to add a custom channel stub or clear channels entirely).
+ * The default registry in test/setup.ts covers Discord, Slack, Telegram,
+ * WhatsApp, Signal, and iMessage; only create a custom one when needed.
+ */
 export const createTestRegistry = (channels: TestChannelRegistration[] = []): PluginRegistry => ({
   plugins: [],
   tools: [],
