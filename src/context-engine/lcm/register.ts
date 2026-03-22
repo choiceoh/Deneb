@@ -3,8 +3,6 @@
  *
  * Registers the LCM context engine and its 4 tools (lcm_grep, lcm_describe,
  * lcm_expand, lcm_expand_query) as core-provided entries.
- *
- * Replaces the lossless-claw plugin's index.ts register() function.
  */
 
 import { registerContextEngineForOwner } from "../registry.js";
@@ -20,7 +18,7 @@ let sharedDeps: ReturnType<typeof createNativeLcmDependencies> | null = null;
 let sharedLcm: LcmContextEngine | null = null;
 
 /** Lazily create or return the singleton LCM engine + deps. */
-function getOrCreateLcmSingleton() {
+export function getOrCreateLcmSingleton() {
   if (!sharedDeps || !sharedLcm) {
     sharedDeps = createNativeLcmDependencies();
     sharedLcm = new LcmContextEngine(sharedDeps);

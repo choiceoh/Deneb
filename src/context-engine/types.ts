@@ -57,6 +57,11 @@ export type ContextEngineInfo = {
    * as a branching condition in new code.
    */
   ownsCompaction?: boolean;
+  /**
+   * True when the engine natively accepts `sessionKey` on lifecycle methods.
+   * When set, the registry skips the legacy sessionKey compatibility wrapper.
+   */
+  acceptsSessionKey?: boolean;
 };
 
 export type SubagentSpawnPreparation = {

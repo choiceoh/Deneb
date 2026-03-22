@@ -1,8 +1,8 @@
 /**
- * Core type definitions for the LCM plugin.
+ * Core type definitions for the LCM context engine.
  *
- * These types define the contracts between LCM and Deneb core,
- * abstracting away direct imports from core internals.
+ * These types define the dependency-injection contracts used by the LCM engine
+ * for model completion, gateway RPC, and session key utilities.
  */
 
 import type { LcmConfig } from "./db/config.js";

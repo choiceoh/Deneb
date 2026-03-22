@@ -413,9 +413,8 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
   normalizeBrowserSsrFPolicyAlias();
   normalizeLegacyNanoBananaSkill();
 
-  // Migrate lossless-claw plugin entry keys into config sub-object.
-  // After nativization (v3.150), these keys must live under
-  // plugins.entries.lossless-claw.config to pass PluginEntrySchema (.strict()).
+  // Migrate lossless-claw plugin entry: move top-level LCM keys into its
+  // .config sub-object so PluginEntrySchema (.strict()) passes.
   const LCM_CONFIG_KEYS = new Set([
     "leafTargetTokens",
     "condensedTargetTokens",
@@ -477,6 +476,38 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
         `Moved lossless-claw keys into plugins.entries.lossless-claw.config: ${movedKeys.join(", ")}.`,
       );
     }
+  }
+
+  // Migrate lossless-claw plugin entry to the canonical "lcm" entry.
+  // After nativization the engine reads from plugins.entries.lcm.config,
+  // so move the legacy entry there to complete the migration.
+  const updatedEntries = (next.plugins as Record<string, unknown> | undefined)?.entries as
+    | Record<string, Record<string, unknown>>
+    | undefined;
+  const legacyLcm = updatedEntries?.["lossless-claw"];
+  if (isRecord(legacyLcm)) {
+    const existingLcmEntry = updatedEntries?.["lcm"];
+    const mergedLcmEntry = isRecord(existingLcmEntry)
+      ? { ...legacyLcm, ...existingLcmEntry }
+      : { ...legacyLcm };
+    // Merge config sub-objects: existing lcm.config takes precedence over legacy.
+    if (isRecord(legacyLcm.config) || isRecord(existingLcmEntry?.config)) {
+      const legacyCfg = isRecord(legacyLcm.config) ? legacyLcm.config : {};
+      const existCfg = isRecord(existingLcmEntry?.config) ? existingLcmEntry.config : {};
+      mergedLcmEntry.config = { ...legacyCfg, ...existCfg };
+    }
+    const { "lossless-claw": _removed, ...restEntries } = updatedEntries!;
+    next = {
+      ...next,
+      plugins: {
+        ...(next.plugins as Record<string, unknown>),
+        entries: {
+          ...restEntries,
+          lcm: mergedLcmEntry,
+        },
+      },
+    };
+    changes.push("Migrated plugins.entries.lossless-claw to plugins.entries.lcm.");
   }
 
   return { config: next, changes };

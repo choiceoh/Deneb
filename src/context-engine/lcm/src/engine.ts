@@ -45,7 +45,7 @@ import {
 import { RetrievalEngine } from "./retrieval.js";
 import { ConversationStore } from "./store/conversation-store.js";
 import { SummaryStore } from "./store/summary-store.js";
-import { createLcmSummarizeFromLegacyParams } from "./summarize.js";
+import { createLcmSummarize } from "./summarize.js";
 import type { LcmDependencies } from "./types.js";
 // ── LcmContextEngine ────────────────────────────────────────────────────────
 
@@ -55,6 +55,7 @@ export class LcmContextEngine implements ContextEngine {
     name: "Lossless Context Management Engine",
     version: "0.1.0",
     ownsCompaction: true,
+    acceptsSessionKey: true,
   };
 
   private config: LcmConfig;
@@ -178,9 +179,9 @@ export class LcmContextEngine implements ContextEngine {
   /** Resolve token budget from direct params or legacy fallback input. */
   private resolveTokenBudget(params: {
     tokenBudget?: number;
-    legacyParams?: Record<string, unknown>;
+    runtimeParams?: Record<string, unknown>;
   }): number | undefined {
-    const lp = params.legacyParams ?? {};
+    const lp = params.runtimeParams ?? {};
     if (
       typeof params.tokenBudget === "number" &&
       Number.isFinite(params.tokenBudget) &&
@@ -221,25 +222,23 @@ export class LcmContextEngine implements ContextEngine {
 
   /** Build a summarize callback with runtime provider fallback handling. */
   private async resolveSummarize(params: {
-    legacyParams?: Record<string, unknown>;
+    runtimeParams?: Record<string, unknown>;
     customInstructions?: string;
   }): Promise<(text: string, aggressive?: boolean) => Promise<string>> {
-    const lp = params.legacyParams ?? {};
+    const lp = params.runtimeParams ?? {};
     if (typeof lp.summarize === "function") {
       return lp.summarize as (text: string, aggressive?: boolean) => Promise<string>;
     }
     try {
-      const runtimeSummarizer = await createLcmSummarizeFromLegacyParams({
+      const runtimeSummarizer = await createLcmSummarize({
         deps: this.deps,
-        legacyParams: lp,
+        runtimeParams: lp,
         customInstructions: params.customInstructions,
       });
       if (runtimeSummarizer) {
         return runtimeSummarizer;
       }
-      this.deps.log.warn(
-        `[lcm] resolveSummarize: createLcmSummarizeFromLegacyParams returned undefined`,
-      );
+      this.deps.log.warn(`[lcm] resolveSummarize: createLcmSummarize returned undefined`);
     } catch (err) {
       this.deps.log.error(
         `[lcm] resolveSummarize failed, using emergency fallback: ${err instanceof Error ? err.message : String(err)}`,
@@ -270,9 +269,9 @@ export class LcmContextEngine implements ContextEngine {
     }
 
     try {
-      const summarize = await createLcmSummarizeFromLegacyParams({
+      const summarize = await createLcmSummarize({
         deps: this.deps,
-        legacyParams: { provider, model },
+        runtimeParams: { provider, model },
       });
       if (!summarize) {
         return undefined;
@@ -404,9 +403,9 @@ export class LcmContextEngine implements ContextEngine {
     if (model || provider) {
       try {
         summarize =
-          (await createLcmSummarizeFromLegacyParams({
+          (await createLcmSummarize({
             deps: this.deps,
-            legacyParams: {
+            runtimeParams: {
               ...(provider ? { provider } : {}),
               ...(model ? { model } : {}),
             },
@@ -821,10 +820,10 @@ export class LcmContextEngine implements ContextEngine {
     autoCompactionSummary?: string;
     isHeartbeat?: boolean;
     tokenBudget?: number;
-    /** Deneb runtime param name (preferred). */
+    /** Runtime context for model/provider resolution. */
     runtimeContext?: Record<string, unknown>;
-    /** Back-compat param name. */
-    legacyCompactionParams?: Record<string, unknown>;
+    /** Alternate compaction params (fallback when runtimeContext is absent). */
+    compactionParams?: Record<string, unknown>;
   }): Promise<void> {
     this.ensureMigrated();
 
@@ -866,7 +865,7 @@ export class LcmContextEngine implements ContextEngine {
       return;
     }
 
-    const legacyParams = asRecord(params.runtimeContext) ?? asRecord(params.legacyCompactionParams);
+    const runtimeParams = asRecord(params.runtimeContext) ?? asRecord(params.compactionParams);
 
     const liveContextTokens = estimateSessionTokenCountForAfterTurn(params.messages);
 
@@ -878,7 +877,7 @@ export class LcmContextEngine implements ContextEngine {
           sessionFile: params.sessionFile,
           tokenBudget,
           currentTokenCount: liveContextTokens,
-          legacyParams,
+          runtimeParams,
         }).catch((err) => {
           // Leaf compaction is best-effort and should not fail the caller.
           this.deps.log.warn(
@@ -897,7 +896,7 @@ export class LcmContextEngine implements ContextEngine {
         tokenBudget,
         currentTokenCount: liveContextTokens,
         compactionTarget: "threshold",
-        legacyParams,
+        runtimeParams,
       });
     } catch {
       // Proactive compaction is best-effort in the post-turn lifecycle.
@@ -1013,7 +1012,7 @@ export class LcmContextEngine implements ContextEngine {
     /** Deneb runtime param name (preferred). */
     runtimeContext?: Record<string, unknown>;
     /** Back-compat param name. */
-    legacyParams?: Record<string, unknown>;
+    runtimeParams?: Record<string, unknown>;
     force?: boolean;
     previousSummaryContent?: string;
   }): Promise<CompactResult> {
@@ -1030,11 +1029,11 @@ export class LcmContextEngine implements ContextEngine {
         };
       }
 
-      const legacyParams = asRecord(params.runtimeContext) ?? params.legacyParams;
+      const runtimeParams = asRecord(params.runtimeContext) ?? params.runtimeParams;
 
       const tokenBudget = this.resolveTokenBudget({
         tokenBudget: params.tokenBudget,
-        legacyParams,
+        runtimeParams,
       });
       if (!tokenBudget) {
         return {
@@ -1044,7 +1043,7 @@ export class LcmContextEngine implements ContextEngine {
         };
       }
 
-      const lp = legacyParams ?? {};
+      const lp = runtimeParams ?? {};
       const observedTokens = this.normalizeObservedTokenCount(
         params.currentTokenCount ??
           (
@@ -1054,7 +1053,7 @@ export class LcmContextEngine implements ContextEngine {
           ).currentTokenCount,
       );
       const summarize = await this.resolveSummarize({
-        legacyParams,
+        runtimeParams,
         customInstructions: params.customInstructions,
       });
 
@@ -1094,7 +1093,7 @@ export class LcmContextEngine implements ContextEngine {
     /** Deneb runtime param name (preferred). */
     runtimeContext?: Record<string, unknown>;
     /** Back-compat param name. */
-    legacyParams?: Record<string, unknown>;
+    runtimeParams?: Record<string, unknown>;
     /** Force compaction even if below threshold */
     force?: boolean;
   }): Promise<CompactResult> {
@@ -1114,8 +1113,8 @@ export class LcmContextEngine implements ContextEngine {
 
       const conversationId = conversation.conversationId;
 
-      const legacyParams = asRecord(params.runtimeContext) ?? params.legacyParams;
-      const lp = legacyParams ?? {};
+      const runtimeParams = asRecord(params.runtimeContext) ?? params.runtimeParams;
+      const lp = runtimeParams ?? {};
       const manualCompactionRequested =
         (
           lp as {
@@ -1125,7 +1124,7 @@ export class LcmContextEngine implements ContextEngine {
       const forceCompaction = force || manualCompactionRequested;
       const tokenBudget = this.resolveTokenBudget({
         tokenBudget: params.tokenBudget,
-        legacyParams,
+        runtimeParams,
       });
       if (!tokenBudget) {
         return {
@@ -1136,7 +1135,7 @@ export class LcmContextEngine implements ContextEngine {
       }
 
       const summarize = await this.resolveSummarize({
-        legacyParams,
+        runtimeParams,
         customInstructions: params.customInstructions,
       });
 

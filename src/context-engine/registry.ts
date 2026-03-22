@@ -316,7 +316,7 @@ export function listContextEngineIds(): string[] {
  *
  * Resolution order:
  *   1. `config.plugins.slots.contextEngine` (explicit slot override)
- *   2. Default slot value ("legacy")
+ *   2. Default slot value ("lcm")
  *
  * Throws if the resolved engine id has no registered factory.
  */
@@ -335,5 +335,12 @@ export async function resolveContextEngine(config?: DenebConfig): Promise<Contex
     );
   }
 
-  return wrapContextEngineWithSessionKeyCompat(await entry.factory());
+  const engine = await entry.factory();
+
+  // Skip the legacy sessionKey compat wrapper for engines that natively accept it.
+  if (engine.info.acceptsSessionKey) {
+    return engine;
+  }
+
+  return wrapContextEngineWithSessionKeyCompat(engine);
 }
