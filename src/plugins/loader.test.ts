@@ -3579,7 +3579,7 @@ export const copiedRuntimeMarker = {
     });
   });
 
-  it("loads git-style package extension entries through the plugin loader when they import plugin-sdk channel-runtime (#49806)", () => {
+  it("loads git-style package extension entries through the plugin loader when they import plugin-sdk channel-runtime (#49806)", async () => {
     useNoBundledPlugins();
     const pluginId = "imessage-loader-regression";
     const gitExtensionRoot = path.join(
@@ -3590,6 +3590,20 @@ export const copiedRuntimeMarker = {
     );
     const gitSourceDir = path.join(gitExtensionRoot, "src");
     mkdirSafe(gitSourceDir);
+
+    // Create a lightweight channel-runtime shim to avoid synchronous jiti compilation
+    // of the full barrel module (30+ re-exports with hundreds of transitive deps)
+    // which blocks the event loop and prevents vitest timeouts from firing.
+    // The real alias resolution path is already tested by the "loads copied imessage
+    // runtime sources from git-style paths" test above.
+    const shimDir = path.join(makeTempDir(), "plugin-sdk-shim");
+    mkdirSafe(shimDir);
+    const channelRuntimeShimPath = path.join(shimDir, "channel-runtime.ts");
+    fs.writeFileSync(
+      channelRuntimeShimPath,
+      `export function resolveOutboundSendDep() { return "shimmed"; }\n`,
+      "utf-8",
+    );
 
     fs.writeFileSync(
       path.join(gitExtensionRoot, "package.json"),
@@ -3645,8 +3659,23 @@ export default {
       "utf-8",
     );
 
+    // Re-import loadDenebPlugins with a mocked sdk-alias that points channel-runtime
+    // to our lightweight shim instead of the real barrel module.
+    vi.resetModules();
+    vi.doMock("./sdk-alias.js", async (importOriginal) => {
+      const original = await importOriginal<typeof import("./sdk-alias.js")>();
+      return {
+        ...original,
+        resolvePluginSdkScopedAliasMap: (params?: { modulePath?: string }) => {
+          const realMap = original.resolvePluginSdkScopedAliasMap(params);
+          return { ...realMap, "deneb/plugin-sdk/channel-runtime": channelRuntimeShimPath };
+        },
+      };
+    });
+    const { loadDenebPlugins: loadWithShim } = await import("./loader.js");
+
     const registry = withEnv({ NODE_ENV: "production", VITEST: undefined }, () =>
-      loadDenebPlugins({
+      loadWithShim({
         cache: false,
         workspaceDir: gitExtensionRoot,
         config: {
