@@ -134,7 +134,7 @@ function expectStickyAutoSelectDispatcher(
   expect(dispatcher?.options?.[field]).toEqual(
     expect.objectContaining({
       autoSelectFamily: true,
-      autoSelectFamilyAttemptTimeout: 300,
+      autoSelectFamilyAttemptTimeout: 200,
     }),
   );
 }
@@ -260,7 +260,7 @@ describe("resolveTelegramFetch", () => {
     expect(dispatcher?.options?.connect).toEqual(
       expect.objectContaining({
         autoSelectFamily: true,
-        autoSelectFamilyAttemptTimeout: 300,
+        autoSelectFamilyAttemptTimeout: 200,
       }),
     );
     expect(typeof dispatcher?.options?.connect?.lookup).toBe("function");
@@ -286,13 +286,13 @@ describe("resolveTelegramFetch", () => {
     expect(dispatcher?.options?.connect).toEqual(
       expect.objectContaining({
         autoSelectFamily: false,
-        autoSelectFamilyAttemptTimeout: 300,
+        autoSelectFamilyAttemptTimeout: 200,
       }),
     );
     expect(dispatcher?.options?.proxyTls).toEqual(
       expect.objectContaining({
         autoSelectFamily: false,
-        autoSelectFamilyAttemptTimeout: 300,
+        autoSelectFamilyAttemptTimeout: 200,
       }),
     );
   });
@@ -314,13 +314,13 @@ describe("resolveTelegramFetch", () => {
     expect(dispatcher?.options?.connect).toEqual(
       expect.objectContaining({
         autoSelectFamily: true,
-        autoSelectFamilyAttemptTimeout: 300,
+        autoSelectFamilyAttemptTimeout: 200,
       }),
     );
     expect(dispatcher?.options?.proxyTls).toEqual(
       expect.objectContaining({
         autoSelectFamily: true,
-        autoSelectFamilyAttemptTimeout: 300,
+        autoSelectFamilyAttemptTimeout: 200,
       }),
     );
   });
