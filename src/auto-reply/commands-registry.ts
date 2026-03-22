@@ -432,11 +432,6 @@ export function normalizeCommandBody(raw: string, options?: CommandNormalizeOpti
   return normalizedRest ? `${tokenSpec.canonical} ${normalizedRest}` : tokenSpec.canonical;
 }
 
-export function isCommandMessage(raw: string): boolean {
-  const trimmed = normalizeCommandBody(raw);
-  return trimmed.startsWith("/");
-}
-
 export function getCommandDetection(_cfg?: DenebConfig): CommandDetection {
   const commands = getChatCommands();
   if (cachedDetection && cachedDetectionCommands === commands) {
@@ -489,33 +484,6 @@ export function maybeResolveTextAlias(raw: string, cfg?: DenebConfig) {
   }
   const tokenKey = `/${tokenMatch[1]}`;
   return getTextAliasMap().has(tokenKey) ? tokenKey : null;
-}
-
-export function resolveTextCommand(
-  raw: string,
-  cfg?: DenebConfig,
-): {
-  command: ChatCommandDefinition;
-  args?: string;
-} | null {
-  const trimmed = normalizeCommandBody(raw).trim();
-  const alias = maybeResolveTextAlias(trimmed, cfg);
-  if (!alias) {
-    return null;
-  }
-  const spec = getTextAliasMap().get(alias);
-  if (!spec) {
-    return null;
-  }
-  const command = getChatCommands().find((entry) => entry.key === spec.key);
-  if (!command) {
-    return null;
-  }
-  if (!spec.acceptsArgs) {
-    return { command };
-  }
-  const args = trimmed.slice(alias.length).trim();
-  return { command, args: args || undefined };
 }
 
 export function isNativeCommandSurface(surface?: string): boolean {

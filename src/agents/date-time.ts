@@ -72,27 +72,6 @@ export function normalizeTimestamp(
   return { timestampMs, timestampUtc: new Date(timestampMs).toISOString() };
 }
 
-export function withNormalizedTimestamp<T extends Record<string, unknown>>(
-  value: T,
-  rawTimestamp: unknown,
-): T & { timestampMs?: number; timestampUtc?: string } {
-  const normalized = normalizeTimestamp(rawTimestamp);
-  if (!normalized) {
-    return value;
-  }
-  return {
-    ...value,
-    timestampMs:
-      typeof value.timestampMs === "number" && Number.isFinite(value.timestampMs)
-        ? value.timestampMs
-        : normalized.timestampMs,
-    timestampUtc:
-      typeof value.timestampUtc === "string" && value.timestampUtc.trim()
-        ? value.timestampUtc
-        : normalized.timestampUtc,
-  };
-}
-
 function detectSystemTimeFormat(): boolean {
   if (process.platform === "darwin") {
     try {

@@ -1,40 +1,11 @@
 import type { DenebConfig } from "../../config/config.js";
 import { resolvePluginWebSearchConfig } from "../../config/legacy-web-search.js";
 
-type ConfiguredWebSearchProvider = NonNullable<
-  NonNullable<NonNullable<DenebConfig["tools"]>["web"]>["search"]
->["provider"];
-
 export type WebSearchConfig = NonNullable<DenebConfig["tools"]>["web"] extends infer Web
   ? Web extends { search?: infer Search }
     ? Search
     : undefined
   : undefined;
-
-function cloneWithDescriptors<T extends object>(value: T | undefined): T {
-  const next = Object.create(Object.getPrototypeOf(value ?? {})) as T;
-  if (value) {
-    Object.defineProperties(next, Object.getOwnPropertyDescriptors(value));
-  }
-  return next;
-}
-
-export function withForcedProvider(
-  config: DenebConfig | undefined,
-  provider: ConfiguredWebSearchProvider,
-): DenebConfig {
-  const next = cloneWithDescriptors(config ?? {});
-  const tools = cloneWithDescriptors(next.tools ?? {});
-  const web = cloneWithDescriptors(tools.web ?? {});
-  const search = cloneWithDescriptors(web.search ?? {});
-
-  search.provider = provider;
-  web.search = search;
-  tools.web = web;
-  next.tools = tools;
-
-  return next;
-}
 
 export function getTopLevelCredentialValue(searchConfig?: Record<string, unknown>): unknown {
   return searchConfig?.apiKey;

@@ -43,17 +43,6 @@ export function safeTimestamp(value: unknown, fallback = 0): number {
 }
 
 /**
- * Validate a timestamp that should be a recent/future date.
- * Accepts any finite positive number but clamps to reasonable range.
- */
-export function clampTimestamp(value: number): number {
-  if (!Number.isFinite(value) || value < 0) {
-    return 0;
-  }
-  return Math.min(value, MAX_TIMESTAMP_MS);
-}
-
-/**
  * Safely parse a date string. Returns the timestamp or undefined if invalid.
  */
 export function safeDateParse(value: string | undefined | null): number | undefined {

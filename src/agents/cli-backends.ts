@@ -202,18 +202,6 @@ function normalizeClaudeBackendConfig(config: CliBackendConfig): CliBackendConfi
   };
 }
 
-export function resolveCliBackendIds(cfg?: DenebConfig): Set<string> {
-  const ids = new Set<string>([
-    normalizeBackendKey("claude-cli"),
-    normalizeBackendKey("codex-cli"),
-  ]);
-  const configured = cfg?.agents?.defaults?.cliBackends ?? {};
-  for (const key of Object.keys(configured)) {
-    ids.add(normalizeBackendKey(key));
-  }
-  return ids;
-}
-
 export function resolveCliBackendConfig(
   provider: string,
   cfg?: DenebConfig,

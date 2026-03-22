@@ -159,28 +159,8 @@ function resolveScopedMethod(method: string): OperatorScope | undefined {
   return undefined;
 }
 
-export function isApprovalMethod(method: string): boolean {
-  return resolveScopedMethod(method) === APPROVALS_SCOPE;
-}
-
-export function isPairingMethod(method: string): boolean {
-  return resolveScopedMethod(method) === PAIRING_SCOPE;
-}
-
-export function isReadMethod(method: string): boolean {
-  return resolveScopedMethod(method) === READ_SCOPE;
-}
-
-export function isWriteMethod(method: string): boolean {
-  return resolveScopedMethod(method) === WRITE_SCOPE;
-}
-
 export function isNodeRoleMethod(method: string): boolean {
   return NODE_ROLE_METHODS.has(method);
-}
-
-export function isAdminOnlyMethod(method: string): boolean {
-  return resolveScopedMethod(method) === ADMIN_SCOPE;
 }
 
 export function resolveRequiredOperatorScopeForMethod(method: string): OperatorScope | undefined {

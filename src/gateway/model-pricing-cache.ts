@@ -55,7 +55,7 @@ const WRAPPER_PROVIDERS = new Set([
 const log = createSubsystemLogger("gateway").child("model-pricing");
 
 let cachedPricing = new Map<string, CachedModelPricing>();
-let cachedAt = 0;
+let _cachedAt = 0;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlightRefresh: Promise<void> | null = null;
 
@@ -372,7 +372,7 @@ export async function refreshGatewayModelPricingCache(params: {
     const refs = collectConfiguredModelPricingRefs(params.config);
     if (refs.length === 0) {
       cachedPricing = new Map();
-      cachedAt = Date.now();
+      _cachedAt = Date.now();
       clearRefreshTimer();
       return;
     }
@@ -401,7 +401,7 @@ export async function refreshGatewayModelPricingCache(params: {
     }
 
     cachedPricing = nextPricing;
-    cachedAt = Date.now();
+    _cachedAt = Date.now();
     scheduleRefresh({ config: params.config, fetchImpl });
   })();
 
@@ -437,21 +437,9 @@ export function getCachedGatewayModelPricing(params: {
   return cachedPricing.get(modelKey(normalized.provider, normalized.model));
 }
 
-export function getGatewayModelPricingCacheMeta(): {
-  cachedAt: number;
-  ttlMs: number;
-  size: number;
-} {
-  return {
-    cachedAt,
-    ttlMs: CACHE_TTL_MS,
-    size: cachedPricing.size,
-  };
-}
-
 export function __resetGatewayModelPricingCacheForTest(): void {
   cachedPricing = new Map();
-  cachedAt = 0;
+  _cachedAt = 0;
   clearRefreshTimer();
   inFlightRefresh = null;
 }
@@ -465,5 +453,5 @@ export function __setGatewayModelPricingForTest(
       return [modelKey(normalized.provider, normalized.model), entry.pricing] as const;
     }),
   );
-  cachedAt = Date.now();
+  _cachedAt = Date.now();
 }

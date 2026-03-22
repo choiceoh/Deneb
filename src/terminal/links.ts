@@ -16,9 +16,3 @@ export function formatDocsLink(
     force: opts?.force,
   });
 }
-
-export function formatDocsRootLink(label?: string): string {
-  return formatTerminalLink(label ?? DOCS_ROOT, DOCS_ROOT, {
-    fallback: DOCS_ROOT,
-  });
-}
