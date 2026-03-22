@@ -154,15 +154,6 @@ const entries: SubCliEntry[] = [
     },
   },
   {
-    name: "dns",
-    description: "DNS helpers for wide-area discovery (Tailscale + CoreDNS)",
-    hasSubcommands: true,
-    register: async (program) => {
-      const mod = await import("../dns-cli.js");
-      mod.registerDnsCli(program);
-    },
-  },
-  {
     name: "docs",
     description: "Search the live Deneb docs",
     hasSubcommands: false,
@@ -196,15 +187,6 @@ const entries: SubCliEntry[] = [
     register: async (program) => {
       const mod = await import("../qr-cli.js");
       mod.registerQrCli(program);
-    },
-  },
-  {
-    name: "clawbot",
-    description: "Legacy clawbot command aliases",
-    hasSubcommands: true,
-    register: async (program) => {
-      const mod = await import("../clawbot-cli.js");
-      mod.registerClawbotCli(program);
     },
   },
   {

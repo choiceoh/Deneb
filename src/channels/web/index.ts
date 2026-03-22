@@ -1,13 +1,4 @@
 /* istanbul ignore file */
-export {
-  createWaSocket,
-  loginWeb,
-  logWebSelfId,
-  monitorWebChannel,
-  monitorWebInbox,
-  pickWebChannel,
-  sendMessageWhatsApp,
-  WA_WEB_AUTH_DIR,
-  waitForWaConnection,
-  webAuthExists,
-} from "../../channel-web.js";
+// WhatsApp-specific exports were removed along with the WhatsApp channel code.
+// Heartbeat helpers are still available via channel-web.ts barrel.
+export { HEARTBEAT_PROMPT } from "../../channel-web.js";

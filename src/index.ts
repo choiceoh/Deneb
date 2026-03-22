@@ -25,7 +25,6 @@ export let getReplyFromConfig: LibraryExports["getReplyFromConfig"];
 export let handlePortError: LibraryExports["handlePortError"];
 export let loadConfig: LibraryExports["loadConfig"];
 export let loadSessionStore: LibraryExports["loadSessionStore"];
-export let monitorWebChannel: LibraryExports["monitorWebChannel"];
 export let normalizeE164: LibraryExports["normalizeE164"];
 export let PortInUseError: LibraryExports["PortInUseError"];
 export let promptYesNo: LibraryExports["promptYesNo"];
@@ -72,7 +71,6 @@ if (!isMain) {
     handlePortError,
     loadConfig,
     loadSessionStore,
-    monitorWebChannel,
     normalizeE164,
     PortInUseError,
     promptYesNo,

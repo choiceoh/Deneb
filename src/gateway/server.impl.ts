@@ -7,7 +7,6 @@ import { getTotalPendingReplies } from "../auto-reply/reply/dispatcher-registry.
 import { type AutonomousServiceHandle, startAutonomousService } from "../autonomous/service.js";
 import type { CanvasHostServer } from "../canvas-host/server.js";
 import { type ChannelId, listChannelPlugins } from "../channels/plugins/index.js";
-import { formatCliCommand } from "../cli/command-format.js";
 import { createDefaultDeps } from "../cli/deps.js";
 import { isRestartEnabled } from "../config/commands.js";
 import {
@@ -33,10 +32,6 @@ import { createExecApprovalForwarder } from "../infra/exec-approval-forwarder.js
 import { startHeartbeatRunner, type HeartbeatRunner } from "../infra/heartbeat-runner.js";
 import { getMachineDisplayName } from "../infra/machine-name.js";
 import { ensureDenebCliOnPath } from "../infra/path-env.js";
-import {
-  detectPluginInstallPathIssue,
-  formatPluginInstallPathIssue,
-} from "../infra/plugin-install-path-warnings.js";
 import { setGatewaySigusr1RestartPolicy, setPreRestartDeferralCheck } from "../infra/restart.js";
 import {
   primeRemoteSkillsCache,
@@ -110,7 +105,6 @@ import { buildGatewayRequestContext } from "./server-request-context.js";
 import { resolveGatewayRuntimeConfig } from "./server-runtime-config.js";
 import { createGatewayRuntimeState } from "./server-runtime-state.js";
 import { logGatewayStartup } from "./server-startup-log.js";
-import { runStartupMatrixMigration } from "./server-startup-matrix-migration.js";
 import { startGatewaySidecars } from "./server-startup.js";
 import { startGatewayTailscaleExposure } from "./server-tailscale.js";
 import { createWizardSessionTracker } from "./server-wizard-sessions.js";
@@ -374,28 +368,6 @@ export async function startGatewayServer(
     writeConfig: writeConfigFile,
     log,
   });
-  await runStartupMatrixMigration({
-    cfg: cfgAtStart,
-    env: process.env,
-    log,
-  });
-  const matrixInstallPathIssue = await detectPluginInstallPathIssue({
-    pluginId: "matrix",
-    install: cfgAtStart.plugins?.installs?.matrix,
-  });
-  if (matrixInstallPathIssue) {
-    const lines = formatPluginInstallPathIssue({
-      issue: matrixInstallPathIssue,
-      pluginLabel: "Matrix",
-      defaultInstallCommand: "deneb plugins install @deneb/matrix",
-      repoInstallCommand: "deneb plugins install ./extensions/matrix",
-      formatCommand: formatCliCommand,
-    });
-    log.warn(
-      `gateway: matrix install path warning:\n${lines.map((entry) => `- ${entry}`).join("\n")}`,
-    );
-  }
-
   initSubagentRegistry();
   const defaultAgentId = resolveDefaultAgentId(cfgAtStart);
   const defaultWorkspaceDir = resolveAgentWorkspaceDir(cfgAtStart, defaultAgentId);
