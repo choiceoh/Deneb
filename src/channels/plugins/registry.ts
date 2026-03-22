@@ -41,16 +41,23 @@ function resolveCachedChannelPlugins(): CachedChannelPlugins {
     return cached;
   }
 
-  const sorted = dedupeChannels(registry.channels.map((entry) => entry.plugin)).toSorted((a, b) => {
-    const indexA = CHAT_CHANNEL_ORDER.indexOf(a.id as ChatChannelId);
-    const indexB = CHAT_CHANNEL_ORDER.indexOf(b.id as ChatChannelId);
-    const orderA = a.meta.order ?? (indexA === -1 ? 999 : indexA);
-    const orderB = b.meta.order ?? (indexB === -1 ? 999 : indexB);
-    if (orderA !== orderB) {
-      return orderA - orderB;
-    }
-    return a.id.localeCompare(b.id);
-  });
+  const deduped = dedupeChannels(registry.channels.map((entry) => entry.plugin));
+
+  // Optimization: skip the full sort when only one channel is registered
+  // (common case — Telegram is the only bundled channel).
+  const sorted =
+    deduped.length <= 1
+      ? deduped
+      : deduped.toSorted((a, b) => {
+          const indexA = CHAT_CHANNEL_ORDER.indexOf(a.id as ChatChannelId);
+          const indexB = CHAT_CHANNEL_ORDER.indexOf(b.id as ChatChannelId);
+          const orderA = a.meta.order ?? (indexA === -1 ? 999 : indexA);
+          const orderB = b.meta.order ?? (indexB === -1 ? 999 : indexB);
+          if (orderA !== orderB) {
+            return orderA - orderB;
+          }
+          return a.id.localeCompare(b.id);
+        });
   const byId = new Map<string, ChannelPlugin>();
   for (const plugin of sorted) {
     byId.set(plugin.id, plugin);

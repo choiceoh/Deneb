@@ -32,6 +32,12 @@ function maybeBootstrapChannelPlugin(params: {
     return;
   }
 
+  // Optimization: Telegram is always bundled — skip the expensive
+  // applyPluginAutoEnable() + loadDenebPlugins() bootstrap path.
+  if (params.channel === "telegram") {
+    return;
+  }
+
   const activeRegistry = getActivePluginRegistry();
   const activeHasRequestedChannel = activeRegistry?.channels?.some(
     (entry) => entry?.plugin?.id === params.channel,
