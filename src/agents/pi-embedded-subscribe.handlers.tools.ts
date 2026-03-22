@@ -333,9 +333,15 @@ export async function handleToolExecutionStart(
 
   const meta = extendExecMeta(toolName, args, inferToolMetaFromArgs(toolName, args));
   ctx.state.toolMetaById.set(toolCallId, buildToolCallSummary(toolName, args, meta));
-  ctx.log.debug(
-    `embedded run tool start: runId=${ctx.params.runId} tool=${toolName} toolCallId=${toolCallId}`,
-  );
+  ctx.log.debug("tool execution start", {
+    event: "tool_execution_start",
+    tags: ["tool", "tool_start"],
+    runId,
+    toolCallId,
+    toolName,
+    meta,
+    consoleMessage: `tool start: ${toolName}${meta ? ` (${meta})` : ""} runId=${runId} callId=${toolCallId}`,
+  });
 
   const shouldEmitToolEvents = ctx.shouldEmitToolResult();
   try {
@@ -567,9 +573,35 @@ export async function handleToolExecutionEnd(
     },
   });
 
-  ctx.log.debug(
-    `embedded run tool end: runId=${ctx.params.runId} tool=${toolName} toolCallId=${toolCallId}`,
-  );
+  const toolDurationMs =
+    startData?.startTime != null ? Date.now() - startData.startTime : undefined;
+  const toolErrorMessage = isToolError ? extractToolErrorMessage(sanitizedResult) : undefined;
+  if (isToolError) {
+    ctx.log.warn("tool execution error", {
+      event: "tool_execution_end",
+      tags: ["tool", "tool_end", "tool_error"],
+      runId,
+      toolCallId,
+      toolName,
+      meta,
+      isError: true,
+      durationMs: toolDurationMs,
+      error: toolErrorMessage,
+      consoleMessage: `tool ERROR: ${toolName}${meta ? ` (${meta})` : ""} error=${toolErrorMessage ?? "unknown"}${toolDurationMs != null ? ` duration=${toolDurationMs}ms` : ""}`,
+    });
+  } else {
+    ctx.log.debug("tool execution end", {
+      event: "tool_execution_end",
+      tags: ["tool", "tool_end"],
+      runId,
+      toolCallId,
+      toolName,
+      meta,
+      isError: false,
+      durationMs: toolDurationMs,
+      consoleMessage: `tool OK: ${toolName}${meta ? ` (${meta})` : ""}${toolDurationMs != null ? ` duration=${toolDurationMs}ms` : ""}`,
+    });
+  }
 
   await emitToolResultOutput({ ctx, toolName, meta, isToolError, result, sanitizedResult });
 
