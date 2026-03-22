@@ -36,12 +36,3 @@ export type SubagentLifecycleEndedOutcome =
   | typeof SUBAGENT_ENDED_OUTCOME_KILLED
   | typeof SUBAGENT_ENDED_OUTCOME_RESET
   | typeof SUBAGENT_ENDED_OUTCOME_DELETED;
-
-export function resolveSubagentSessionEndedOutcome(
-  reason: SubagentSessionLifecycleEndedReason,
-): SubagentLifecycleEndedOutcome {
-  if (reason === SUBAGENT_ENDED_REASON_SESSION_RESET) {
-    return SUBAGENT_ENDED_OUTCOME_RESET;
-  }
-  return SUBAGENT_ENDED_OUTCOME_DELETED;
-}

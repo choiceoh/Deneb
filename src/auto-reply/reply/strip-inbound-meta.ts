@@ -96,20 +96,6 @@ function shouldStripTrailingUntrustedContext(lines: string[], index: number): bo
   return /<<<EXTERNAL_UNTRUSTED_CONTENT|UNTRUSTED channel metadata \(|Source:\s+/.test(probe);
 }
 
-function stripTrailingUntrustedContextSuffix(lines: string[]): string[] {
-  for (let i = 0; i < lines.length; i++) {
-    if (!shouldStripTrailingUntrustedContext(lines, i)) {
-      continue;
-    }
-    let end = i;
-    while (end > 0 && lines[end - 1]?.trim() === "") {
-      end -= 1;
-    }
-    return lines.slice(0, end);
-  }
-  return lines;
-}
-
 /**
  * Remove all injected inbound metadata prefix blocks from `text`.
  *
@@ -185,54 +171,6 @@ export function stripInboundMetadata(text: string): string {
   }
 
   return result.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
-}
-
-export function stripLeadingInboundMetadata(text: string): string {
-  if (!text || !SENTINEL_FAST_RE.test(text)) {
-    return text;
-  }
-
-  const lines = text.split("\n");
-  let index = 0;
-
-  while (index < lines.length && lines[index] === "") {
-    index++;
-  }
-  if (index >= lines.length) {
-    return "";
-  }
-
-  if (!isInboundMetaSentinelLine(lines[index])) {
-    const strippedNoLeading = stripTrailingUntrustedContextSuffix(lines);
-    return strippedNoLeading.join("\n");
-  }
-
-  while (index < lines.length) {
-    const line = lines[index];
-    if (!isInboundMetaSentinelLine(line)) {
-      break;
-    }
-
-    index++;
-    if (index < lines.length && lines[index].trim() === "```json") {
-      index++;
-      while (index < lines.length && lines[index].trim() !== "```") {
-        index++;
-      }
-      if (index < lines.length && lines[index].trim() === "```") {
-        index++;
-      }
-    } else {
-      return text;
-    }
-
-    while (index < lines.length && lines[index].trim() === "") {
-      index++;
-    }
-  }
-
-  const strippedRemainder = stripTrailingUntrustedContextSuffix(lines.slice(index));
-  return strippedRemainder.join("\n");
 }
 
 export function extractInboundSenderLabel(text: string): string | null {

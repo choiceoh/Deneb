@@ -1,7 +1,7 @@
 import type { IncomingMessage } from "node:http";
 import net from "node:net";
 import os from "node:os";
-import { pickPrimaryTailnetIPv4, pickPrimaryTailnetIPv6 } from "../infra/tailnet.js";
+import { pickPrimaryTailnetIPv4 } from "../infra/tailnet.js";
 import {
   isCanonicalDottedDecimalIPv4,
   isIpInCidr,
@@ -207,28 +207,6 @@ export function resolveRequestClientIp(
     trustedProxies,
     allowRealIpFallback,
   });
-}
-
-export function isLocalGatewayAddress(ip: string | undefined): boolean {
-  if (isLoopbackAddress(ip)) {
-    return true;
-  }
-  if (!ip) {
-    return false;
-  }
-  const normalized = normalizeIp(ip);
-  if (!normalized) {
-    return false;
-  }
-  const tailnetIPv4 = pickPrimaryTailnetIPv4();
-  if (tailnetIPv4 && normalized === tailnetIPv4.toLowerCase()) {
-    return true;
-  }
-  const tailnetIPv6 = pickPrimaryTailnetIPv6();
-  if (tailnetIPv6 && ip.trim().toLowerCase() === tailnetIPv6.toLowerCase()) {
-    return true;
-  }
-  return false;
 }
 
 /**

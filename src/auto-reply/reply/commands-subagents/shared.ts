@@ -24,11 +24,6 @@ import { isSubagentSessionKey } from "../../../routing/session-key.js";
 import { looksLikeSessionId } from "../../../sessions/session-id.js";
 import { extractTextFromChatContent } from "../../../shared/chat-content.js";
 import {
-  formatDurationCompact,
-  formatTokenUsageDisplay,
-  truncateLine,
-} from "../../../shared/subagents-format.js";
-import {
   isDiscordSurface,
   isTelegramSurface,
   resolveCommandSurfaceChannel,
@@ -76,52 +71,7 @@ export const ACTIONS = new Set([
 ]);
 
 export const RECENT_WINDOW_MINUTES = 30;
-const SUBAGENT_TASK_PREVIEW_MAX = 110;
 export const STEER_ABORT_SETTLE_TIMEOUT_MS = 5_000;
-
-function compactLine(value: string) {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function formatTaskPreview(value: string) {
-  return truncateLine(compactLine(value), SUBAGENT_TASK_PREVIEW_MAX);
-}
-
-function resolveModelDisplay(
-  entry?: {
-    model?: unknown;
-    modelProvider?: unknown;
-    modelOverride?: unknown;
-    providerOverride?: unknown;
-  },
-  fallbackModel?: string,
-) {
-  const model = typeof entry?.model === "string" ? entry.model.trim() : "";
-  const provider = typeof entry?.modelProvider === "string" ? entry.modelProvider.trim() : "";
-  let combined = model.includes("/") ? model : model && provider ? `${provider}/${model}` : model;
-  if (!combined) {
-    const overrideModel =
-      typeof entry?.modelOverride === "string" ? entry.modelOverride.trim() : "";
-    const overrideProvider =
-      typeof entry?.providerOverride === "string" ? entry.providerOverride.trim() : "";
-    combined = overrideModel.includes("/")
-      ? overrideModel
-      : overrideModel && overrideProvider
-        ? `${overrideProvider}/${overrideModel}`
-        : overrideModel;
-  }
-  if (!combined) {
-    combined = fallbackModel?.trim() || "";
-  }
-  if (!combined) {
-    return "model n/a";
-  }
-  const slash = combined.lastIndexOf("/");
-  if (slash >= 0 && slash < combined.length - 1) {
-    return combined.slice(slash + 1);
-  }
-  return combined;
-}
 
 export function resolveDisplayStatus(
   entry: SubagentRunRecord,
@@ -134,23 +84,6 @@ export function resolveDisplayStatus(
   }
   const status = formatRunStatus(entry);
   return status === "error" ? "failed" : status;
-}
-
-export function formatSubagentListLine(params: {
-  entry: SubagentRunRecord;
-  index: number;
-  runtimeMs: number;
-  sessionEntry?: SessionEntry;
-  pendingDescendants?: number;
-}) {
-  const usageText = formatTokenUsageDisplay(params.sessionEntry);
-  const label = truncateLine(formatRunLabel(params.entry, { maxLength: 48 }), 48);
-  const task = formatTaskPreview(params.entry.task);
-  const runtime = formatDurationCompact(params.runtimeMs);
-  const status = resolveDisplayStatus(params.entry, {
-    pendingDescendants: params.pendingDescendants,
-  });
-  return `${params.index}. ${label} (${resolveModelDisplay(params.sessionEntry, params.entry.model)}, ${runtime}${usageText ? `, ${usageText}` : ""}) ${status}${task.toLowerCase() !== label.toLowerCase() ? ` - ${task}` : ""}`;
 }
 
 function formatTimestamp(valueMs?: number) {

@@ -136,13 +136,6 @@ export function supportsOpenAiCompatTurnValidation(
   return resolveProviderCapabilities(provider, options).openAiCompatTurnValidation;
 }
 
-export function sanitizesGeminiThoughtSignatures(
-  provider?: string | null,
-  options?: ProviderCapabilityLookupOptions,
-): boolean {
-  return resolveProviderCapabilities(provider, options).geminiThoughtSignatureSanitization;
-}
-
 function modelIncludesAnyHint(modelId: string | null | undefined, hints: string[]): boolean {
   const normalized = (modelId ?? "").toLowerCase();
   return Boolean(normalized) && hints.some((hint) => normalized.includes(hint));

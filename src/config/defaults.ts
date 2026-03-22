@@ -530,7 +530,3 @@ export function applyCompactionDefaults(cfg: DenebConfig): DenebConfig {
     },
   };
 }
-
-export function resetSessionDefaultsWarningForTests() {
-  defaultWarnState = { warned: false };
-}

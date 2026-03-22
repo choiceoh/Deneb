@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import type { ChannelPlugin } from "../channels/plugins/index.js";
 import { resolveDenebPackageRootSync } from "../infra/deneb-root.js";
 import { loadPluginManifestRegistry } from "../plugins/manifest-registry.js";
-import { FIELD_HELP } from "./schema.help.js";
 import { buildConfigSchema, type ConfigSchemaResponse } from "./schema.js";
 import { findWildcardHintMatch, schemaHasChildren } from "./schema.shared.js";
 
@@ -745,12 +744,4 @@ export async function writeConfigDocBaselineStatefile(params?: {
 
 export function normalizeConfigDocBaselineHelpPath(pathValue: string): string {
   return normalizeBaselinePath(pathValue);
-}
-
-export function getNormalizedFieldHelp(): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(FIELD_HELP)
-      .map(([configPath, help]) => [normalizeBaselinePath(configPath), help] as const)
-      .toSorted(([left], [right]) => left.localeCompare(right)),
-  );
 }
