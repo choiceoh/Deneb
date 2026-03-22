@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { resolveMatrixAccountStorageRoot } from "../../extensions/matrix/runtime-api.js";
-import { withTempHome } from "../../test/helpers/temp-home.js";
 import type { DenebConfig } from "../config/config.js";
+import { withTempHome } from "../test-utils/temp-home.js";
 import { autoPrepareLegacyMatrixCrypto, detectLegacyMatrixCrypto } from "./matrix-legacy-crypto.js";
 import { MATRIX_LEGACY_CRYPTO_INSPECTOR_UNAVAILABLE_MESSAGE } from "./matrix-plugin-helper.js";
 

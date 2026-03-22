@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { withTempHome } from "../../test/helpers/temp-home.js";
+import { withTempHome } from "../test-utils/temp-home.js";
 import { runStartupMatrixMigration } from "./server-startup-matrix-migration.js";
 
 describe("runStartupMatrixMigration", () => {

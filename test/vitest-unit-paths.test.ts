@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isUnitConfigTestFile } from "../vitest.unit-paths.mjs";
+import { isUnitConfigTestFile } from "../vitest.paths.mjs";
 
 describe("isUnitConfigTestFile", () => {
   it("accepts unit-config src, test, and whitelisted ui tests", () => {

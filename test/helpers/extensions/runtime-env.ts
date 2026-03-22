@@ -1,12 +1,1 @@
-import type { RuntimeEnv } from "deneb/plugin-sdk/testing";
-import { vi } from "vitest";
-
-export function createRuntimeEnv(): RuntimeEnv {
-  return {
-    log: vi.fn(),
-    error: vi.fn(),
-    exit: vi.fn((code: number): never => {
-      throw new Error(`exit ${code}`);
-    }),
-  };
-}
+export { createRuntimeEnv } from "../../../src/test-utils/runtime-env-mock.js";

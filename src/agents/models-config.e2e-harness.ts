@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, vi } from "vitest";
-import { withTempHome as withTempHomeBase } from "../../test/helpers/temp-home.js";
 import type { DenebConfig } from "../config/config.js";
+import { withTempHome as withTempHomeBase } from "../test-utils/temp-home.js";
 import type { MockFn } from "../test-utils/vitest-mock-fn.js";
 import { resolveImplicitProviders } from "./models-config.providers.js";
 

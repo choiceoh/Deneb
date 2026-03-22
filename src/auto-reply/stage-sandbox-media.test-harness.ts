@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { withTempHome as withTempHomeBase } from "../../test/helpers/temp-home.js";
 import type { DenebConfig } from "../config/config.js";
+import { withTempHome as withTempHomeBase } from "../test-utils/temp-home.js";
 import type { MsgContext, TemplateContext } from "./templating.js";
 
 export async function withSandboxMediaTempHome<T>(

@@ -2,8 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { channelTestPrefixes } from "../vitest.channel-paths.mjs";
-import { isUnitConfigTestFile } from "../vitest.unit-paths.mjs";
+import { channelTestPrefixes, isUnitConfigTestFile } from "../vitest.paths.mjs";
 import {
   loadTestRunnerBehavior,
   loadUnitTimingManifest,
