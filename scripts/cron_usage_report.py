@@ -2,9 +2,9 @@
 """Cron usage report: parses JSONL run logs and aggregates token usage by job/model."""
 
 import json
+import math
 import os
 import sys
-from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -73,7 +73,7 @@ def safe_parse_line(line: str) -> dict | None:
     if obj.get("action") != "finished":
         return None
     ts = obj.get("ts")
-    if not isinstance(ts, (int, float)) or not (ts == ts):  # NaN check
+    if not isinstance(ts, (int, float)) or math.isnan(ts):
         return None
     job_id = obj.get("jobId", "")
     if not isinstance(job_id, str) or not job_id.strip():
@@ -118,11 +118,13 @@ def main() -> None:
     if isinstance(from_arg, str):
         from_ms = iso_to_ms(from_arg)
     else:
-        safe_hours = max(1.0, hours if hours == hours else 24.0)
+        safe_hours = max(1.0, hours if math.isfinite(hours) else 24.0)
         from_ms = to_ms - safe_hours * 60 * 60 * 1000
 
-    filter_job_id = args.get("jobId", "").strip() if isinstance(args.get("jobId"), str) else ""
-    filter_model = args.get("model", "").strip() if isinstance(args.get("model"), str) else ""
+    job_id_val = args.get("jobId")
+    filter_job_id = job_id_val.strip() if isinstance(job_id_val, str) else ""
+    model_val = args.get("model")
+    filter_model = model_val.strip() if isinstance(model_val, str) else ""
     as_json = args.get("json") is True
 
     files = list_jsonl_files(runs_dir)

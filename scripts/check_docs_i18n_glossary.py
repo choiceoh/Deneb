@@ -8,8 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = os.getcwd()
-GLOSSARY_PATH = os.path.join(ROOT, "docs", ".i18n", "glossary.zh-CN.json")
 DOC_FILE_RE = re.compile(r"^docs/(?!zh-CN/).+\.(md|mdx)$", re.IGNORECASE)
 LIST_ITEM_LINK_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s+\[([^\]]+)\]\((/[^)]+)\)")
 MAX_TITLE_WORDS = 8
@@ -33,10 +31,10 @@ def parse_args(argv: list[str]) -> dict[str, str]:
     return args
 
 
-def run_git(git_args: list[str]) -> str:
+def run_git(git_args: list[str], cwd: str | None = None) -> str:
     result = subprocess.run(
         ["git", *git_args],
-        cwd=ROOT,
+        cwd=cwd,
         capture_output=True,
         text=True,
     )
@@ -71,8 +69,8 @@ def list_changed_docs(base: str, head: str) -> list[str]:
     return [line.strip() for line in output.split("\n") if DOC_FILE_RE.match(line.strip())]
 
 
-def load_glossary_sources() -> set[str]:
-    with open(GLOSSARY_PATH, encoding="utf-8") as f:
+def load_glossary_sources(glossary_path: str) -> set[str]:
+    with open(glossary_path, encoding="utf-8") as f:
         entries = json.load(f)
     return {str(e.get("source", "")).strip() for e in entries if str(e.get("source", "")).strip()}
 
@@ -146,6 +144,9 @@ def extract_terms(file: str, text: str) -> dict[str, dict]:
 
 
 def main() -> None:
+    root = os.getcwd()
+    glossary_path = os.path.join(root, "docs", ".i18n", "glossary.zh-CN.json")
+
     args = parse_args(sys.argv[1:])
     base = resolve_base(args["base"])
 
@@ -159,11 +160,11 @@ def main() -> None:
     if not changed_docs:
         sys.exit(0)
 
-    glossary = load_glossary_sources()
+    glossary = load_glossary_sources(glossary_path)
     missing: list[dict] = []
 
     for rel_path in changed_docs:
-        abs_path = os.path.join(ROOT, rel_path)
+        abs_path = os.path.join(root, rel_path)
         if not os.path.exists(abs_path):
             continue
 
