@@ -1,6 +1,7 @@
 import { mkdirSync } from "fs";
 import { DatabaseSync } from "node:sqlite";
 import { dirname } from "path";
+import { applySqlitePerfPragmas } from "../../../../infra/sqlite-perf-pragmas.js";
 
 type ConnectionEntry = {
   db: DatabaseSync;
@@ -45,8 +46,8 @@ export function getLcmConnection(dbPath: string): DatabaseSync {
 
   const db = new DatabaseSync(dbPath);
 
-  // Enable WAL mode for better concurrent read performance
-  db.exec("PRAGMA journal_mode = WAL");
+  // Apply DGX SPARK SQLite performance pragmas (includes WAL mode)
+  applySqlitePerfPragmas(db);
   // Enable foreign key enforcement
   db.exec("PRAGMA foreign_keys = ON");
 

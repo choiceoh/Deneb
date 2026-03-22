@@ -17,11 +17,13 @@ export function ensureContextEnginesInitialized(): void {
   if (initialized) {
     return;
   }
-  initialized = true;
 
   // Always available – safe fallback for the "legacy" slot default.
   registerLegacyContextEngine();
 
   // Native LCM engine (DAG-based summarization, FTS, sub-agent expansion).
+  // registerLcmContextEngine handles its own errors — won't throw here.
   registerLcmContextEngine();
+
+  initialized = true;
 }
