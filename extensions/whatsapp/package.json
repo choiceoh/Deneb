@@ -1,0 +1,16 @@
+{
+  "name": "@deneb/whatsapp",
+  "version": "3.5.4",
+  "private": true,
+  "description": "Deneb WhatsApp channel plugin",
+  "type": "module",
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc.9",
+    "zca-js": "2.1.2"
+  },
+  "deneb": {
+    "bundle": {
+      "stageRuntimeDependencies": true
+    }
+  }
+}

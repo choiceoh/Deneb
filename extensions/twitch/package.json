@@ -1,0 +1,17 @@
+{
+  "name": "@deneb/twitch",
+  "version": "3.5.4",
+  "private": true,
+  "description": "Deneb Twitch channel plugin",
+  "type": "module",
+  "dependencies": {
+    "@twurple/api": "^8.0.3",
+    "@twurple/auth": "^8.0.3",
+    "@twurple/chat": "^8.0.3"
+  },
+  "deneb": {
+    "bundle": {
+      "stageRuntimeDependencies": true
+    }
+  }
+}

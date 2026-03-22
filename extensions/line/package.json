@@ -1,0 +1,15 @@
+{
+  "name": "@deneb/line",
+  "version": "3.5.4",
+  "private": true,
+  "description": "Deneb LINE channel plugin",
+  "type": "module",
+  "dependencies": {
+    "@line/bot-sdk": "^10.6.0"
+  },
+  "deneb": {
+    "bundle": {
+      "stageRuntimeDependencies": true
+    }
+  }
+}
