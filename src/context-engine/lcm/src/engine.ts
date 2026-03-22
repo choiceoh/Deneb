@@ -237,16 +237,15 @@ export class LcmContextEngine implements ContextEngine {
       if (runtimeSummarizer) {
         return runtimeSummarizer;
       }
-      console.error(
+      this.deps.log.warn(
         `[lcm] resolveSummarize: createLcmSummarizeFromLegacyParams returned undefined`,
       );
     } catch (err) {
-      console.error(
-        `[lcm] resolveSummarize failed, using emergency fallback:`,
-        err instanceof Error ? err.message : err,
+      this.deps.log.error(
+        `[lcm] resolveSummarize failed, using emergency fallback: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-    console.error(`[lcm] resolveSummarize: FALLING BACK TO EMERGENCY TRUNCATION`);
+    this.deps.log.error(`[lcm] resolveSummarize: FALLING BACK TO EMERGENCY TRUNCATION`);
     return createEmergencyFallbackSummarize();
   }
 
@@ -640,7 +639,7 @@ export class LcmContextEngine implements ContextEngine {
           if (this.config.pruneHeartbeatOk) {
             const pruned = await this.pruneHeartbeatOkTurns(conversationId);
             if (pruned > 0) {
-              console.error(
+              this.deps.log.info(
                 `[lcm] bootstrap: pruned ${pruned} HEARTBEAT_OK messages from conversation ${conversationId}`,
               );
             }
@@ -700,15 +699,14 @@ export class LcmContextEngine implements ContextEngine {
         if (conversation) {
           const pruned = await this.pruneHeartbeatOkTurns(conversation.conversationId);
           if (pruned > 0) {
-            console.error(
+            this.deps.log.info(
               `[lcm] bootstrap: retroactively pruned ${pruned} HEARTBEAT_OK messages from conversation ${conversation.conversationId}`,
             );
           }
         }
       } catch (err) {
-        console.error(
-          `[lcm] bootstrap: heartbeat pruning failed:`,
-          err instanceof Error ? err.message : err,
+        this.deps.log.error(
+          `[lcm] bootstrap: heartbeat pruning failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }
