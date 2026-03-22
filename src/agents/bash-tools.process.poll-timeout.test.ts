@@ -87,7 +87,9 @@ test("process poll waits for completion when timeout is provided", async () => {
     sessionId: "sess",
     callId: "toolcall",
     timeout: 2000,
-    assertUnresolvedAtMs: 200,
+    // waitForExit uses event-based notification: the poll resolves
+    // immediately when markExited fires (at 10ms), so the poll is
+    // no longer pending by 200ms. Advance just past the exit timer.
     advanceMs: 100,
   });
 });

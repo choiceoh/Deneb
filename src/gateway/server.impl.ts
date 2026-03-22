@@ -1,7 +1,6 @@
 import path from "node:path";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { getActiveEmbeddedRunCount } from "../agents/pi-embedded-runner/runs.js";
-import { registerSkillsChangeListener } from "../agents/skills/refresh.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
 import { getTotalPendingReplies } from "../auto-reply/reply/dispatcher-registry.js";
 import { type AutonomousServiceHandle, startAutonomousService } from "../autonomous/service.js";
@@ -29,16 +28,9 @@ import {
 import { isDiagnosticsEnabled } from "../infra/diagnostic-events.js";
 import { logAcceptedEnvOption } from "../infra/env.js";
 import { startHeartbeatRunner, type HeartbeatRunner } from "../infra/heartbeat-runner.js";
-import { getMachineDisplayName } from "../infra/machine-name.js";
 import { ensureDenebCliOnPath } from "../infra/path-env.js";
 import { setGatewaySigusr1RestartPolicy, setPreRestartDeferralCheck } from "../infra/restart.js";
-import {
-  primeRemoteSkillsCache,
-  refreshRemoteBinsForConnectedNodes,
-  setSkillsRemoteRegistry,
-} from "../infra/skills-remote.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
-import { scheduleGatewayUpdateCheck } from "../infra/update-startup.js";
 import { startDiagnosticHeartbeat, stopDiagnosticHeartbeat } from "../logging/diagnostic.js";
 import { createSubsystemLogger, runtimeForLogger } from "../logging/subsystem.js";
 import { resolveConfiguredDeferredChannelPluginIds } from "../plugins/channel-plugin-ids.js";
@@ -87,7 +79,6 @@ import {
   resolveMediaCleanupTtlMs,
 } from "./server-config-bootstrap.js";
 import { buildGatewayCronService } from "./server-cron.js";
-import { startGatewayDiscovery } from "./server-discovery-runtime.js";
 import { createGatewayEventSubscriptions } from "./server-event-subscriptions.js";
 import { applyGatewayLaneConcurrency } from "./server-lanes.js";
 import { startGatewayMaintenanceTimers } from "./server-maintenance.js";
@@ -119,6 +110,28 @@ import { resolveHookClientIpConfig } from "./server/hooks.js";
 import { createReadinessChecker } from "./server/readiness.js";
 import { loadGatewayTlsRuntime } from "./server/tls.js";
 import { maybeSeedControlUiAllowedOriginsAtStartup } from "./startup-control-ui-origins.js";
+
+// Deferred imports: these modules are only needed for non-minimal gateway startup.
+// Lazy-loading them avoids pulling in discovery, tailscale, skills, machine-name,
+// and update-check subsystems when they are not used (e.g. test gateways, CLI).
+async function loadDeferredGatewayModules() {
+  const [discovery, skillsRemote, machineName, updateStartup, registerSkills] = await Promise.all([
+    import("./server-discovery-runtime.js"),
+    import("../infra/skills-remote.js"),
+    import("../infra/machine-name.js"),
+    import("../infra/update-startup.js"),
+    import("../agents/skills/refresh.js"),
+  ]);
+  return {
+    startGatewayDiscovery: discovery.startGatewayDiscovery,
+    primeRemoteSkillsCache: skillsRemote.primeRemoteSkillsCache,
+    refreshRemoteBinsForConnectedNodes: skillsRemote.refreshRemoteBinsForConnectedNodes,
+    setSkillsRemoteRegistry: skillsRemote.setSkillsRemoteRegistry,
+    getMachineDisplayName: machineName.getMachineDisplayName,
+    scheduleGatewayUpdateCheck: updateStartup.scheduleGatewayUpdateCheck,
+    registerSkillsChangeListener: registerSkills.registerSkillsChangeListener,
+  };
+}
 
 export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
 
@@ -208,6 +221,11 @@ export async function startGatewayServer(
 ): Promise<GatewayServer> {
   const minimalTestGateway =
     process.env.VITEST === "1" && process.env.DENEB_TEST_MINIMAL_GATEWAY === "1";
+
+  // Load deferred modules concurrently for non-minimal gateways.
+  // This avoids eagerly importing discovery, skills, machine-name, and
+  // update-check subsystems at module evaluation time.
+  const deferredModsPromise = minimalTestGateway ? null : loadDeferredGatewayModules();
 
   // Ensure all default port derivations (browser/canvas) see the actual runtime port.
   process.env.DENEB_GATEWAY_PORT = String(port);
@@ -578,8 +596,9 @@ export async function startGatewayServer(
     channelManager;
 
   if (!minimalTestGateway) {
-    const machineDisplayName = await getMachineDisplayName();
-    const discovery = await startGatewayDiscovery({
+    const deferred = await deferredModsPromise!;
+    const machineDisplayName = await deferred.getMachineDisplayName();
+    const discovery = await deferred.startGatewayDiscovery({
       machineDisplayName,
       port,
       gatewayTls: gatewayTls.enabled
@@ -595,29 +614,32 @@ export async function startGatewayServer(
   }
 
   if (!minimalTestGateway) {
-    setSkillsRemoteRegistry(nodeRegistry);
-    void primeRemoteSkillsCache();
+    const deferred = await deferredModsPromise!;
+    deferred.setSkillsRemoteRegistry(nodeRegistry);
+    void deferred.primeRemoteSkillsCache();
   }
   // Debounce skills-triggered node probes to avoid feedback loops and rapid-fire invokes.
   // Skills changes can happen in bursts (e.g., file watcher events), and each probe
   // takes time to complete. A 30-second delay ensures we batch changes together.
   let skillsRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   const skillsRefreshDelayMs = 30_000;
-  const skillsChangeUnsub = minimalTestGateway
-    ? () => {}
-    : registerSkillsChangeListener((event) => {
-        if (event.reason === "remote-node") {
-          return;
-        }
-        if (skillsRefreshTimer) {
-          clearTimeout(skillsRefreshTimer);
-        }
-        skillsRefreshTimer = setTimeout(() => {
-          skillsRefreshTimer = null;
-          const latest = loadConfig();
-          void refreshRemoteBinsForConnectedNodes(latest);
-        }, skillsRefreshDelayMs);
-      });
+  let skillsChangeUnsub: () => void = () => {};
+  if (!minimalTestGateway) {
+    const deferred = await deferredModsPromise!;
+    skillsChangeUnsub = deferred.registerSkillsChangeListener((event) => {
+      if (event.reason === "remote-node") {
+        return;
+      }
+      if (skillsRefreshTimer) {
+        clearTimeout(skillsRefreshTimer);
+      }
+      skillsRefreshTimer = setTimeout(() => {
+        skillsRefreshTimer = null;
+        const latest = loadConfig();
+        void deferred.refreshRemoteBinsForConnectedNodes(latest);
+      }, skillsRefreshDelayMs);
+    });
+  }
 
   const noopInterval = () => setInterval(() => {}, 1 << 30);
   let tickInterval = noopInterval();
@@ -819,17 +841,19 @@ export async function startGatewayServer(
     log,
     isNixMode,
   });
-  const stopGatewayUpdateCheck = minimalTestGateway
-    ? () => {}
-    : scheduleGatewayUpdateCheck({
-        cfg: cfgAtStart,
-        log,
-        isNixMode,
-        onUpdateAvailableChange: (updateAvailable) => {
-          const payload: GatewayUpdateAvailableEventPayload = { updateAvailable };
-          broadcast(GATEWAY_EVENT_UPDATE_AVAILABLE, payload, { dropIfSlow: true });
-        },
-      });
+  let stopGatewayUpdateCheck: () => void = () => {};
+  if (!minimalTestGateway) {
+    const deferred = await deferredModsPromise!;
+    stopGatewayUpdateCheck = deferred.scheduleGatewayUpdateCheck({
+      cfg: cfgAtStart,
+      log,
+      isNixMode,
+      onUpdateAvailableChange: (updateAvailable) => {
+        const payload: GatewayUpdateAvailableEventPayload = { updateAvailable };
+        broadcast(GATEWAY_EVENT_UPDATE_AVAILABLE, payload, { dropIfSlow: true });
+      },
+    });
+  }
   const tailscaleCleanup = minimalTestGateway
     ? null
     : await startGatewayTailscaleExposure({

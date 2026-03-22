@@ -92,6 +92,8 @@ function preferTsInExtensions(): import("rolldown").Plugin {
   };
 }
 
+const enableMinify = process.env.DENEB_BUILD_MINIFY === "1";
+
 function nodeBuildConfig(config: UserConfig): UserConfig {
   return {
     ...config,
@@ -99,6 +101,9 @@ function nodeBuildConfig(config: UserConfig): UserConfig {
     fixedExtension: false,
     platform: "node",
     inputOptions: buildInputOptions,
+    // Enable minification for production builds via DENEB_BUILD_MINIFY=1.
+    // Reduces dist/ size by ~30-40% at the cost of slightly slower builds.
+    ...(enableMinify && { minify: true }),
     plugins: [...(Array.isArray(config.plugins) ? config.plugins : []), preferTsInExtensions()],
   };
 }
