@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { autoMaintenanceCommand } from "../../commands/auto-maintenance.js";
 import { dashboardCommand } from "../../commands/dashboard.js";
 import { doctorCommand } from "../../commands/doctor.js";
 import { resetCommand } from "../../commands/reset.js";
@@ -9,6 +10,32 @@ import { theme } from "../../terminal/theme.js";
 import { runCommandWithRuntime } from "../cli-utils.js";
 
 export function registerMaintenanceCommands(program: Command) {
+  program
+    .command("auto-maintenance")
+    .description("Auto-detect and fix performance issues, stale logs, broken connections")
+    .option("--json", "Output JSON instead of text", false)
+    .option("--dry-run", "Preview actions without applying changes", false)
+    .option("--verbose", "Show all diagnostics including info-level", false)
+    .option("--non-interactive", "Run without prompts", false)
+    .addHelpText(
+      "after",
+      () =>
+        `\n${theme.muted("Cleans up stale logs/sessions, checks channel connectivity, and reports issues.")}\n`,
+    )
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await autoMaintenanceCommand(
+          {
+            json: Boolean(opts.json),
+            dryRun: Boolean(opts.dryRun),
+            verbose: Boolean(opts.verbose),
+            nonInteractive: Boolean(opts.nonInteractive),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
   program
     .command("doctor")
     .description("Health checks + quick fixes for the gateway and channels")
