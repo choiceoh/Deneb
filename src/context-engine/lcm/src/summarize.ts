@@ -663,7 +663,10 @@ export async function createLcmSummarize(params: {
         })
       : undefined;
 
-  const nestedPluginConfig = runtimeConfig?.plugins?.entries?.["lcm"]?.config;
+  // Prefer lcm entry; fall back to lossless-claw for users who haven't run `deneb doctor`.
+  const nestedPluginConfig =
+    runtimeConfig?.plugins?.entries?.["lcm"]?.config ??
+    runtimeConfig?.plugins?.entries?.["lossless-claw"]?.config;
 
   const summaryLevels = [
     {

@@ -337,10 +337,13 @@ async function nativeResolveSessionIdFromSessionKey(
 export function createNativeLcmDependencies(): LcmDependencies {
   const cfg = loadConfig();
 
-  // Read LCM config from plugins.entries.lcm.config.
+  // Read LCM config from plugins.entries.lcm.config, with fallback to the
+  // legacy lossless-claw entry for users who haven't run `deneb doctor` yet.
   const entries = cfg.plugins?.entries as Record<string, Record<string, unknown>> | undefined;
-  const lcmEntry = entries?.["lcm"];
-  const pluginConfig = (lcmEntry?.config as Record<string, unknown> | undefined) ?? {};
+  const lcmConfig = (entries?.["lcm"]?.config as Record<string, unknown> | undefined) ?? {};
+  const legacyConfig =
+    (entries?.["lossless-claw"]?.config as Record<string, unknown> | undefined) ?? {};
+  const pluginConfig = { ...legacyConfig, ...lcmConfig };
   const config = resolveLcmConfig(process.env, pluginConfig);
 
   // Apply model overrides from config entry
