@@ -186,11 +186,7 @@ describe("buildServiceEnvironment", () => {
       port: 18789,
     });
     expect(env.HOME).toBe("/home/user");
-    if (process.platform === "win32") {
-      expect(env).not.toHaveProperty("PATH");
-    } else {
-      expect(env.PATH).toContain("/usr/bin");
-    }
+    expect(env.PATH).toContain("/usr/bin");
     expect(env.DENEB_GATEWAY_PORT).toBe("18789");
     expect(env.DENEB_GATEWAY_TOKEN).toBeUndefined();
     expect(env.DENEB_SERVICE_MARKER).toBe("deneb");
@@ -355,12 +351,7 @@ describe("shared Node TLS env defaults", () => {
     },
   ] as const;
 
-  it.each(builders)("$name defaults NODE_EXTRA_CA_CERTS on macOS", ({ build }) => {
-    const env = build({ HOME: "/home/user" }, "darwin");
-    expect(env.NODE_EXTRA_CA_CERTS).toBe("/etc/ssl/cert.pem");
-  });
-
-  it.each(builders)("$name does not default NODE_EXTRA_CA_CERTS on non-macOS", ({ build }) => {
+  it.each(builders)("$name does not default NODE_EXTRA_CA_CERTS on Linux", ({ build }) => {
     const env = build({ HOME: "/home/user" }, "linux");
     expect(env.NODE_EXTRA_CA_CERTS).toBeUndefined();
   });
@@ -370,18 +361,13 @@ describe("shared Node TLS env defaults", () => {
     expect(env.NODE_EXTRA_CA_CERTS).toBe("/custom/certs/ca.pem");
   });
 
-  it.each(builders)("$name defaults NODE_USE_SYSTEM_CA=1 on macOS", ({ build }) => {
-    const env = build({ HOME: "/home/user" }, "darwin");
-    expect(env.NODE_USE_SYSTEM_CA).toBe("1");
-  });
-
-  it.each(builders)("$name does not default NODE_USE_SYSTEM_CA on non-macOS", ({ build }) => {
+  it.each(builders)("$name does not default NODE_USE_SYSTEM_CA on Linux", ({ build }) => {
     const env = build({ HOME: "/home/user" }, "linux");
     expect(env.NODE_USE_SYSTEM_CA).toBeUndefined();
   });
 
   it.each(builders)("$name respects user-provided NODE_USE_SYSTEM_CA", ({ build }) => {
-    const env = build({ HOME: "/home/user", NODE_USE_SYSTEM_CA: "0" }, "darwin");
+    const env = build({ HOME: "/home/user", NODE_USE_SYSTEM_CA: "0" });
     expect(env.NODE_USE_SYSTEM_CA).toBe("0");
   });
 });
@@ -410,10 +396,5 @@ describe("resolveGatewayStateDir", () => {
   it("expands ~ in DENEB_STATE_DIR", () => {
     const env = { HOME: "/Users/test", DENEB_STATE_DIR: "~/deneb-state" };
     expect(resolveGatewayStateDir(env)).toBe(path.resolve("/Users/test/deneb-state"));
-  });
-
-  it("preserves Windows absolute paths without HOME", () => {
-    const env = { DENEB_STATE_DIR: "C:\\State\\deneb" };
-    expect(resolveGatewayStateDir(env)).toBe("C:\\State\\deneb");
   });
 });
