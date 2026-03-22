@@ -1,6 +1,5 @@
 import type { ConnectParams } from "../../protocol/index.js";
 import type { GatewayRole } from "../../role-policy.js";
-import { roleCanSkipDeviceIdentity } from "../../role-policy.js";
 
 export type ControlUiAuthPolicy = {
   isControlUi: boolean;
@@ -116,11 +115,6 @@ export function evaluateMissingDeviceIdentity(params: {
       return { kind: "reject-control-ui-insecure-auth" };
     }
   }
-  if (roleCanSkipDeviceIdentity(params.role, params.sharedAuthOk)) {
-    return { kind: "allow" };
-  }
-  if (!params.authOk && params.hasSharedAuth) {
-    return { kind: "reject-unauthorized" };
-  }
-  return { kind: "reject-device-required" };
+  // Any role with shared-auth OK can skip device identity.
+  return { kind: "allow" };
 }

@@ -1,10 +1,5 @@
 import { resolveIsNixMode } from "../../config/paths.js";
-import { resolveGatewaySystemdServiceName } from "../../daemon/constants.js";
 import { formatRuntimeStatus } from "../../daemon/runtime-format.js";
-import {
-  buildPlatformRuntimeLogHints,
-  buildPlatformServiceStartHints,
-} from "../../daemon/runtime-hints.js";
 import { getResolvedLoggerSettings } from "../../logging.js";
 import { colorize, isRich, theme } from "../../terminal/theme.js";
 import { formatCliCommand } from "../command-format.js";
@@ -164,21 +159,10 @@ export function renderRuntimeHints(
     if (fileLog) {
       hints.push(`File logs: ${fileLog}`);
     }
-    hints.push(
-      ...buildPlatformRuntimeLogHints({
-        env,
-        systemdServiceName: resolveGatewaySystemdServiceName(env.DENEB_PROFILE),
-      }),
-    );
   }
   return hints;
 }
 
-export function renderGatewayServiceStartHints(env: NodeJS.ProcessEnv = process.env): string[] {
-  const profile = env.DENEB_PROFILE;
-  return buildPlatformServiceStartHints({
-    installCommand: formatCliCommand("deneb gateway install", env),
-    startCommand: formatCliCommand("deneb gateway", env),
-    systemdServiceName: resolveGatewaySystemdServiceName(profile),
-  });
+export function renderGatewayServiceStartHints(_env: NodeJS.ProcessEnv = process.env): string[] {
+  return [];
 }

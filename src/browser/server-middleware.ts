@@ -1,6 +1,5 @@
 import type { Express } from "express";
 import express from "express";
-import { browserMutationGuardMiddleware } from "./csrf.js";
 import { isAuthorizedBrowserRequest } from "./http-auth.js";
 
 export function installBrowserCommonMiddleware(app: Express) {
@@ -18,7 +17,6 @@ export function installBrowserCommonMiddleware(app: Express) {
     next();
   });
   app.use(express.json({ limit: "1mb" }));
-  app.use(browserMutationGuardMiddleware());
 }
 
 export function installBrowserAuthMiddleware(

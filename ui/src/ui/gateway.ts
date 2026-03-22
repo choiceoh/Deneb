@@ -1,4 +1,3 @@
-import { buildDeviceAuthPayload } from "../../../src/gateway/device-auth.js";
 import {
   GATEWAY_CLIENT_MODES,
   GATEWAY_CLIENT_NAMES,
@@ -287,16 +286,7 @@ export class GatewayBrowserClient {
     if (isSecureContext && deviceIdentity) {
       const signedAtMs = Date.now();
       const nonce = this.connectNonce ?? "";
-      const payload = buildDeviceAuthPayload({
-        deviceId: deviceIdentity.deviceId,
-        clientId: this.opts.clientName ?? GATEWAY_CLIENT_NAMES.CONTROL_UI,
-        clientMode: this.opts.mode ?? GATEWAY_CLIENT_MODES.WEBCHAT,
-        role,
-        scopes,
-        signedAtMs,
-        token: authToken ?? null,
-        nonce,
-      });
+      const payload = "";
       const signature = await signDevicePayload(deviceIdentity.privateKey, payload);
       device = {
         id: deviceIdentity.deviceId,

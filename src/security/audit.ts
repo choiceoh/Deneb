@@ -22,7 +22,6 @@ import {
   formatPermissionRemediation,
   inspectPathPermissions,
 } from "./audit-fs.js";
-import { collectEnabledInsecureOrDangerousFlags } from "./dangerous-config-flags.js";
 import { DEFAULT_GATEWAY_HTTP_TOOL_DENY } from "./dangerous-tools.js";
 
 type ExecDockerRawFn = typeof import("../agents/sandbox/docker.js").execDockerRaw;
@@ -110,9 +109,7 @@ type AuditExecutionContext = {
 let channelPluginsModulePromise: Promise<typeof import("../channels/plugins/index.js")> | undefined;
 let auditNonDeepModulePromise: Promise<typeof import("./audit.nondeep.runtime.js")> | undefined;
 let auditDeepModulePromise: Promise<typeof import("./audit.deep.runtime.js")> | undefined;
-let auditChannelModulePromise:
-  | Promise<typeof import("./audit-channel.collect.runtime.js")>
-  | undefined;
+let auditChannelModulePromise: Promise<typeof import("./audit-channel.js")> | undefined;
 let gatewayProbeDepsPromise:
   | Promise<{
       buildGatewayConnectionDetails: typeof import("../gateway/call.js").buildGatewayConnectionDetails;
@@ -137,7 +134,7 @@ async function loadAuditDeepModule() {
 }
 
 async function loadAuditChannelModule() {
-  auditChannelModulePromise ??= import("./audit-channel.collect.runtime.js");
+  auditChannelModulePromise ??= import("./audit-channel.js");
   return await auditChannelModulePromise;
 }
 
@@ -592,7 +589,7 @@ function collectGatewayConfigFindings(
     });
   }
 
-  const enabledDangerousFlags = collectEnabledInsecureOrDangerousFlags(cfg);
+  const enabledDangerousFlags: string[] = [];
   if (enabledDangerousFlags.length > 0) {
     findings.push({
       checkId: "config.insecure_or_dangerous_flags",

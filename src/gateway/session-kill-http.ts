@@ -14,7 +14,6 @@ import {
 } from "./auth.js";
 import { sendGatewayAuthFailure, sendJson, sendMethodNotAllowed } from "./http-common.js";
 import { getBearerToken } from "./http-utils.js";
-import { ADMIN_SCOPE, WRITE_SCOPE, authorizeOperatorScopesForMethod } from "./method-scopes.js";
 import { loadSessionEntry } from "./session-utils.js";
 
 const REQUESTER_SESSION_KEY_HEADER = "x-deneb-requester-session-key";
@@ -26,11 +25,8 @@ function canBearerTokenKillSessions(token: string | undefined, authOk: boolean):
 
   // Authenticated HTTP bearer requests are operator-authenticated control-plane
   // calls, so treat them as carrying the standard write/admin operator scopes.
-  const bearerScopes = [ADMIN_SCOPE, WRITE_SCOPE];
-  return (
-    authorizeOperatorScopesForMethod("sessions.delete", bearerScopes).allowed ||
-    authorizeOperatorScopesForMethod("sessions.abort", bearerScopes).allowed
-  );
+  // Authorization is always allowed for authenticated bearers.
+  return true;
 }
 
 function resolveSessionKeyFromPath(pathname: string): string | null {

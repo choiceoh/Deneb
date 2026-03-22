@@ -1,7 +1,5 @@
 import { formatCliCommand } from "../cli/command-format.js";
-import { resolveGatewaySystemdServiceName } from "../daemon/constants.js";
 import { formatRuntimeStatus } from "../daemon/runtime-format.js";
-import { buildPlatformRuntimeLogHints } from "../daemon/runtime-hints.js";
 import type { GatewayServiceRuntime } from "../daemon/service-runtime.js";
 import {
   isSystemdUnavailableDetail,
@@ -57,13 +55,6 @@ export function buildGatewayRuntimeHints(
     if (fileLog) {
       hints.push(`File logs: ${fileLog}`);
     }
-    hints.push(
-      ...buildPlatformRuntimeLogHints({
-        platform,
-        env,
-        systemdServiceName: resolveGatewaySystemdServiceName(env.DENEB_PROFILE),
-      }),
-    );
   }
   return hints;
 }

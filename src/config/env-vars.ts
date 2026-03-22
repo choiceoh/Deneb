@@ -1,13 +1,17 @@
-import {
-  isDangerousHostEnvOverrideVarName,
-  isDangerousHostEnvVarName,
-  normalizeEnvVarKey,
-} from "../infra/host-env-security.js";
 import { containsEnvVarReference } from "./env-substitution.js";
 import type { DenebConfig } from "./types.js";
 
-function isBlockedConfigEnvVar(key: string): boolean {
-  return isDangerousHostEnvVarName(key) || isDangerousHostEnvOverrideVarName(key);
+const PORTABLE_ENV_VAR_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function normalizeEnvVarKey(rawKey: string, options?: { portable?: boolean }): string | null {
+  const key = rawKey.trim();
+  if (!key) {
+    return null;
+  }
+  if (options?.portable && !PORTABLE_ENV_VAR_KEY.test(key)) {
+    return null;
+  }
+  return key;
 }
 
 function collectConfigEnvVarsByTarget(cfg?: DenebConfig): Record<string, string> {
@@ -27,9 +31,6 @@ function collectConfigEnvVarsByTarget(cfg?: DenebConfig): Record<string, string>
       if (!key) {
         continue;
       }
-      if (isBlockedConfigEnvVar(key)) {
-        continue;
-      }
       entries[key] = value;
     }
   }
@@ -43,9 +44,6 @@ function collectConfigEnvVarsByTarget(cfg?: DenebConfig): Record<string, string>
     }
     const key = normalizeEnvVarKey(rawKey, { portable: true });
     if (!key) {
-      continue;
-    }
-    if (isBlockedConfigEnvVar(key)) {
       continue;
     }
     entries[key] = value;

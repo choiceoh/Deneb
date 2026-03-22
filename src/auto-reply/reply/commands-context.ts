@@ -1,5 +1,4 @@
 import type { DenebConfig } from "../../config/config.js";
-import { resolveCommandAuthorization } from "../command-auth.js";
 import { normalizeCommandBody } from "../commands-registry.js";
 import type { MsgContext } from "../templating.js";
 import type { CommandContext } from "./commands-types.js";
@@ -15,14 +14,11 @@ export function buildCommandContext(params: {
   commandAuthorized: boolean;
 }): CommandContext {
   const { ctx, cfg, agentId, sessionKey, isGroup, triggerBodyNormalized } = params;
-  const auth = resolveCommandAuthorization({
-    ctx,
-    cfg,
-    commandAuthorized: params.commandAuthorized,
-  });
+  const from = (ctx.From ?? "").trim() || undefined;
+  const to = (ctx.To ?? "").trim() || undefined;
   const surface = (ctx.Surface ?? ctx.Provider ?? "").trim().toLowerCase();
   const channel = (ctx.Provider ?? surface).trim().toLowerCase();
-  const abortKey = sessionKey ?? (auth.from || undefined) ?? (auth.to || undefined);
+  const abortKey = sessionKey ?? from ?? to;
   const rawBodyNormalized = triggerBodyNormalized;
   const commandBodyNormalized = normalizeCommandBody(
     isGroup ? stripMentions(rawBodyNormalized, ctx, cfg, agentId) : rawBodyNormalized,
@@ -32,15 +28,15 @@ export function buildCommandContext(params: {
   return {
     surface,
     channel,
-    channelId: auth.providerId,
-    ownerList: auth.ownerList,
-    senderIsOwner: auth.senderIsOwner,
-    isAuthorizedSender: auth.isAuthorizedSender,
-    senderId: auth.senderId,
+    channelId: undefined,
+    ownerList: [],
+    senderIsOwner: true,
+    isAuthorizedSender: true,
+    senderId: undefined,
     abortKey,
     rawBodyNormalized,
     commandBodyNormalized,
-    from: auth.from,
-    to: auth.to,
+    from,
+    to,
   };
 }

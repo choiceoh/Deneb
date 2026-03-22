@@ -20,7 +20,6 @@ import { finalizeInboundContext } from "deneb/plugin-sdk/reply-runtime";
 import type { ResolvedAgentRoute } from "deneb/plugin-sdk/routing";
 import { resolveInboundLastRouteSessionKey } from "deneb/plugin-sdk/routing";
 import { logVerbose, shouldLogVerbose } from "deneb/plugin-sdk/runtime-env";
-import { resolvePinnedMainDmOwnerFromAllowlist } from "deneb/plugin-sdk/security-runtime";
 import { normalizeAllowFrom } from "./bot-access.js";
 import type {
   TelegramMediaRef,
@@ -249,13 +248,7 @@ export async function buildTelegramInboundContextPayload(params: {
     OriginatingTo: `telegram:${chatId}`,
   });
 
-  const pinnedMainDmOwner = !isGroup
-    ? resolvePinnedMainDmOwnerFromAllowlist({
-        dmScope: cfg.session?.dmScope,
-        allowFrom: dmAllowFrom,
-        normalizeEntry: (entry) => normalizeAllowFrom([entry]).entries[0],
-      })
-    : null;
+  const pinnedMainDmOwner: string | null = null;
   const updateLastRouteSessionKey = resolveInboundLastRouteSessionKey({
     route,
     sessionKey: route.sessionKey,

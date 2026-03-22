@@ -1,4 +1,4 @@
-// Minimal stub: provider usage tracking removed for solo-dev simplification.
+// Provider usage tracking (disabled in solo-dev mode).
 
 export type UsageProviderId = string;
 

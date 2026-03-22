@@ -4,8 +4,20 @@ import type {
   SystemRunApprovalFileOperand,
   SystemRunApprovalPlan,
 } from "./exec-approvals.js";
-import { normalizeEnvVarKey } from "./host-env-security.js";
 import { normalizeNonEmptyString, normalizeStringArray } from "./system-run-normalize.js";
+
+const PORTABLE_ENV_VAR_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function normalizeEnvVarKey(rawKey: string, options?: { portable?: boolean }): string | null {
+  const key = rawKey.trim();
+  if (!key) {
+    return null;
+  }
+  if (options?.portable && !PORTABLE_ENV_VAR_KEY.test(key)) {
+    return null;
+  }
+  return key;
+}
 
 type NormalizedSystemRunEnvEntry = [key: string, value: string];
 

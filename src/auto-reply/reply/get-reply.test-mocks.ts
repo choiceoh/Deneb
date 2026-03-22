@@ -26,9 +26,6 @@ export function registerGetReplyCommonMocks(): void {
   vi.mock("../../runtime.js", () => ({
     defaultRuntime: { log: vi.fn() },
   }));
-  vi.mock("../command-auth.js", () => ({
-    resolveCommandAuthorization: vi.fn(() => ({ isAuthorizedSender: true })),
-  }));
   vi.mock("./directive-handling.js", () => ({
     resolveDefaultModel: vi.fn(() => ({
       defaultProvider: "openai",

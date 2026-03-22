@@ -1,5 +1,4 @@
-// Minimal stub: exec approvals removed for solo-dev simplification.
-// Types and no-op functions retained for compilation compatibility.
+// Exec approvals (simplified for solo-dev mode).
 
 export type ExecHost = "sandbox" | "gateway" | "node";
 export type ExecSecurity = "deny" | "allowlist" | "full";
@@ -209,7 +208,6 @@ export function matchAllowlist(): boolean {
   return true;
 }
 
-// Solo-dev stub types for exec approval reply/display/session-target.
 export type ExecApprovalReplyDecision = "allow-once" | "allow-always" | "deny";
 
 export type ExecApprovalPendingReplyParams = {

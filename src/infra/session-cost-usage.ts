@@ -1,4 +1,4 @@
-// Stub: session cost usage tracking removed for solo-dev simplification.
+// Session cost/usage tracking (disabled in solo-dev mode).
 
 export type SessionMessageCounts = {
   total: number;

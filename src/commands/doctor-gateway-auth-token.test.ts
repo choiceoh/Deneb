@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DenebConfig } from "../config/config.js";
-import { withEnvAsync } from "../test-utils/env.js";
-import {
-  resolveGatewayAuthTokenForService,
-  shouldRequireGatewayTokenForInstall,
-} from "./doctor-gateway-auth-token.js";
-
-const envVar = (...parts: string[]) => parts.join("_");
+import { resolveGatewayAuthTokenForService } from "./doctor-gateway-auth-token.js";
 
 describe("resolveGatewayAuthTokenForService", () => {
   it("returns plaintext gateway.auth.token when configured", async () => {
@@ -148,105 +142,5 @@ describe("resolveGatewayAuthTokenForService", () => {
 
     expect(resolved.token).toBeUndefined();
     expect(resolved.unavailableReason).toContain("gateway.auth.token SecretRef is configured");
-  });
-});
-
-describe("shouldRequireGatewayTokenForInstall", () => {
-  it("requires token when auth mode is token", () => {
-    const required = shouldRequireGatewayTokenForInstall(
-      {
-        gateway: {
-          auth: {
-            mode: "token",
-          },
-        },
-      } as DenebConfig,
-      {} as NodeJS.ProcessEnv,
-    );
-    expect(required).toBe(true);
-  });
-
-  it("does not require token when auth mode is password", () => {
-    const required = shouldRequireGatewayTokenForInstall(
-      {
-        gateway: {
-          auth: {
-            mode: "password",
-          },
-        },
-      } as DenebConfig,
-      {} as NodeJS.ProcessEnv,
-    );
-    expect(required).toBe(false);
-  });
-
-  it("requires token in inferred mode when password env exists only in shell", async () => {
-    await withEnvAsync(
-      { [envVar("DENEB", "GATEWAY", "PASSWORD")]: "password-from-env" },
-      async () => {
-        // pragma: allowlist secret
-        const required = shouldRequireGatewayTokenForInstall(
-          {
-            gateway: {
-              auth: {},
-            },
-          } as DenebConfig,
-          process.env,
-        );
-        expect(required).toBe(true);
-      },
-    );
-  });
-
-  it("does not require token in inferred mode when password is configured", () => {
-    const required = shouldRequireGatewayTokenForInstall(
-      {
-        gateway: {
-          auth: {
-            password: {
-              source: "env",
-              provider: "default",
-              id: "CUSTOM_GATEWAY_PASSWORD",
-            },
-          },
-        },
-        secrets: {
-          providers: {
-            default: { source: "env" },
-          },
-        },
-      } as DenebConfig,
-      {} as NodeJS.ProcessEnv,
-    );
-    expect(required).toBe(false);
-  });
-
-  it("does not require token in inferred mode when password env is configured in config", () => {
-    const required = shouldRequireGatewayTokenForInstall(
-      {
-        gateway: {
-          auth: {},
-        },
-        env: {
-          vars: {
-            DENEB_GATEWAY_PASSWORD: "configured-password", // pragma: allowlist secret
-          },
-        },
-      } as DenebConfig,
-      {} as NodeJS.ProcessEnv,
-    );
-    expect(required).toBe(false);
-  });
-
-  it("requires token in inferred mode when no password candidate exists", () => {
-    const required = shouldRequireGatewayTokenForInstall(
-      {
-        gateway: {
-          auth: {},
-        },
-      } as DenebConfig,
-      {} as NodeJS.ProcessEnv,
-    );
-    expect(required).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-// Stub: device identity removed for solo-dev simplification.
+// Device identity (disabled in solo-dev mode).
 export type DeviceIdentity = {
   deviceId: string;
   publicKey?: string;

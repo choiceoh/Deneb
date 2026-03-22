@@ -173,11 +173,10 @@ async function collectDiscordFindings(ctx: {
   hasExplicitAccountPath: boolean;
 }): Promise<SecurityAuditFinding[]> {
   const findings: SecurityAuditFinding[] = [];
-  const { isDiscordMutableAllowEntry, readChannelAllowFromStore } =
-    await loadAuditChannelRuntimeModule();
+  const { isDiscordMutableAllowEntry } = await loadAuditChannelRuntimeModule();
   const discordCfg = extractAccountConfig(ctx.account);
   const dangerousNameMatchingEnabled = isDangerousNameMatchingEnabled(discordCfg);
-  const storeAllowFrom = await readChannelAllowFromStore().catch(() => []);
+  const storeAllowFrom: string[] = [];
   const discordNameBasedAllowEntries = new Set<string>();
   const discordPathPrefix =
     ctx.orderedAccountIds.length > 1 || ctx.hasExplicitAccountPath
@@ -386,7 +385,6 @@ async function collectSlackFindings(ctx: {
   accountId: string;
 }): Promise<SecurityAuditFinding[]> {
   const findings: SecurityAuditFinding[] = [];
-  const { readChannelAllowFromStore } = await loadAuditChannelRuntimeModule();
   const slackCfg = extractAccountConfig(ctx.account);
   const nativeEnabled = resolveNativeCommandsEnabled({
     providerId: "slack",
@@ -434,7 +432,7 @@ async function collectSlackFindings(ctx: {
     : Array.isArray(legacyAllowFromRaw)
       ? legacyAllowFromRaw
       : [];
-  const storeAllowFrom = await readChannelAllowFromStore().catch(() => []);
+  const storeAllowFrom: string[] = [];
   const ownerAllowFromConfigured =
     normalizeAllowFromList([...allowFrom, ...storeAllowFrom]).length > 0;
   const channels = (slackCfg.channels as Record<string, unknown> | undefined) ?? {};
@@ -481,8 +479,7 @@ async function collectTelegramFindings(ctx: {
     return findings;
   }
 
-  const { readChannelAllowFromStore } = await loadAuditChannelRuntimeModule();
-  const storeAllowFrom = await readChannelAllowFromStore().catch(() => []);
+  const storeAllowFrom: string[] = [];
   const storeHasWildcard = storeAllowFrom.some((v) => String(v).trim() === "*");
   const invalidTelegramAllowFromEntries = new Set<string>();
   await collectInvalidTelegramAllowFromEntries({

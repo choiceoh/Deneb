@@ -1,4 +1,5 @@
-// Stub: timing-safe secret comparison removed for solo-dev simplification.
+import crypto from "node:crypto";
+
 export function safeEqualSecret(
   provided: string | undefined | null,
   expected: string | undefined | null,
@@ -6,5 +7,8 @@ export function safeEqualSecret(
   if (typeof provided !== "string" || typeof expected !== "string") {
     return false;
   }
-  return provided === expected;
+  if (provided.length !== expected.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
 }
