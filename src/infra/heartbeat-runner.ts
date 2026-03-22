@@ -4,60 +4,45 @@ import {
   hasOutboundReplyContent,
   resolveSendableOutboundReplyParts,
 } from "deneb/plugin-sdk/reply-payload";
-import {
-  resolveAgentConfig,
-  resolveAgentWorkspaceDir,
-  resolveDefaultAgentId,
-} from "../agents/agent-scope.js";
+import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { appendCronStyleCurrentTimeLine } from "../agents/current-time.js";
 import { resolveEffectiveMessagesConfig } from "../agents/identity.js";
-import { DEFAULT_HEARTBEAT_FILENAME } from "../agents/workspace.js";
 import { resolveHeartbeatReplyPayload } from "../auto-reply/heartbeat-reply-payload.js";
-import {
-  DEFAULT_HEARTBEAT_ACK_MAX_CHARS,
-  isHeartbeatContentEffectivelyEmpty,
-  resolveHeartbeatPrompt as resolveHeartbeatPromptText,
-  stripHeartbeatToken,
-} from "../auto-reply/heartbeat.js";
 import { getReplyFromConfig } from "../auto-reply/reply.js";
 import { HEARTBEAT_TOKEN } from "../auto-reply/tokens.js";
-import type { ReplyPayload } from "../auto-reply/types.js";
 import { getChannelPlugin } from "../channels/plugins/index.js";
 import type { ChannelHeartbeatDeps } from "../channels/plugins/types.js";
 import type { DenebConfig } from "../config/config.js";
 import { loadConfig } from "../config/config.js";
 import {
-  canonicalizeMainSessionAlias,
   loadSessionStore,
   resolveAgentIdFromSessionKey,
-  resolveAgentMainSessionKey,
   resolveSessionFilePath,
-  resolveStorePath,
   saveSessionStore,
   updateSessionStore,
 } from "../config/sessions.js";
-import type { AgentDefaultsConfig } from "../config/types.agent-defaults.js";
 import { resolveCronSession } from "../cron/isolated-agent/session.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { getQueueSize } from "../process/command-queue.js";
 import { CommandLane } from "../process/lanes.js";
-import {
-  normalizeAgentId,
-  parseAgentSessionKey,
-  toAgentStoreSessionKey,
-} from "../routing/session-key.js";
+import { normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
-import { escapeRegExp } from "../utils.js";
-import { formatErrorMessage, hasErrnoCode } from "./errors.js";
+import { formatErrorMessage } from "./errors.js";
 import { isWithinActiveHours } from "./heartbeat-active-hours.js";
-import {
-  buildExecEventPrompt,
-  buildCronEventPrompt,
-  isCronSystemEvent,
-  isExecCompletionEvent,
-} from "./heartbeat-events-filter.js";
+import { isCronSystemEvent } from "./heartbeat-events-filter.js";
 import { emitHeartbeatEvent, resolveIndicatorType } from "./heartbeat-events.js";
-import { resolveHeartbeatReasonKind } from "./heartbeat-reason.js";
+import type { HeartbeatConfig } from "./heartbeat-runner-config.js";
+import {
+  resolveHeartbeatAckMaxChars,
+  resolveHeartbeatAgents,
+  resolveHeartbeatConfig,
+} from "./heartbeat-runner-config.js";
+import {
+  normalizeHeartbeatReply,
+  resolveHeartbeatPreflight,
+  resolveHeartbeatReasoningPayloads,
+  resolveHeartbeatRunPrompt,
+} from "./heartbeat-runner-preflight.js";
 import {
   isHeartbeatEnabledForAgent,
   resolveHeartbeatIntervalMs,
@@ -80,7 +65,6 @@ import {
   resolveHeartbeatDeliveryTarget,
   resolveHeartbeatSenderContext,
 } from "./outbound/targets.js";
-import { peekSystemEventEntries } from "./system-events.js";
 
 export type HeartbeatDeps = OutboundSendDeps &
   ChannelHeartbeatDeps & {
@@ -98,12 +82,7 @@ export {
   resolveHeartbeatSummaryForAgent,
   type HeartbeatSummary,
 } from "./heartbeat-summary.js";
-
-type HeartbeatConfig = AgentDefaultsConfig["heartbeat"];
-type HeartbeatAgent = {
-  agentId: string;
-  heartbeat?: HeartbeatConfig;
-};
+export { resolveHeartbeatPrompt } from "./heartbeat-runner-config.js";
 
 export { isCronSystemEvent };
 
@@ -119,143 +98,6 @@ export type HeartbeatRunner = {
   stop: () => void;
   updateConfig: (cfg: DenebConfig) => void;
 };
-
-function hasExplicitHeartbeatAgents(cfg: DenebConfig) {
-  const list = cfg.agents?.list ?? [];
-  return list.some((entry) => Boolean(entry?.heartbeat));
-}
-
-function resolveHeartbeatConfig(cfg: DenebConfig, agentId?: string): HeartbeatConfig | undefined {
-  const defaults = cfg.agents?.defaults?.heartbeat;
-  if (!agentId) {
-    return defaults;
-  }
-  const overrides = resolveAgentConfig(cfg, agentId)?.heartbeat;
-  if (!defaults && !overrides) {
-    return overrides;
-  }
-  return { ...defaults, ...overrides };
-}
-
-function resolveHeartbeatAgents(cfg: DenebConfig): HeartbeatAgent[] {
-  const list = cfg.agents?.list ?? [];
-  if (hasExplicitHeartbeatAgents(cfg)) {
-    return list
-      .filter((entry) => entry?.heartbeat)
-      .map((entry) => {
-        const id = normalizeAgentId(entry.id);
-        return { agentId: id, heartbeat: resolveHeartbeatConfig(cfg, id) };
-      })
-      .filter((entry) => entry.agentId);
-  }
-  const fallbackId = resolveDefaultAgentId(cfg);
-  return [{ agentId: fallbackId, heartbeat: resolveHeartbeatConfig(cfg, fallbackId) }];
-}
-
-export function resolveHeartbeatPrompt(cfg: DenebConfig, heartbeat?: HeartbeatConfig) {
-  return resolveHeartbeatPromptText(heartbeat?.prompt ?? cfg.agents?.defaults?.heartbeat?.prompt);
-}
-
-function resolveHeartbeatAckMaxChars(cfg: DenebConfig, heartbeat?: HeartbeatConfig) {
-  return Math.max(
-    0,
-    heartbeat?.ackMaxChars ??
-      cfg.agents?.defaults?.heartbeat?.ackMaxChars ??
-      DEFAULT_HEARTBEAT_ACK_MAX_CHARS,
-  );
-}
-
-function resolveHeartbeatSession(
-  cfg: DenebConfig,
-  agentId?: string,
-  heartbeat?: HeartbeatConfig,
-  forcedSessionKey?: string,
-) {
-  const sessionCfg = cfg.session;
-  const scope = sessionCfg?.scope ?? "per-sender";
-  const resolvedAgentId = normalizeAgentId(agentId ?? resolveDefaultAgentId(cfg));
-  const mainSessionKey =
-    scope === "global" ? "global" : resolveAgentMainSessionKey({ cfg, agentId: resolvedAgentId });
-  const storeAgentId = scope === "global" ? resolveDefaultAgentId(cfg) : resolvedAgentId;
-  const storePath = resolveStorePath(sessionCfg?.store, {
-    agentId: storeAgentId,
-  });
-  const store = loadSessionStore(storePath);
-  const mainEntry = store[mainSessionKey];
-
-  if (scope === "global") {
-    return { sessionKey: mainSessionKey, storePath, store, entry: mainEntry };
-  }
-
-  const forced = forcedSessionKey?.trim();
-  if (forced) {
-    const forcedCandidate = toAgentStoreSessionKey({
-      agentId: resolvedAgentId,
-      requestKey: forced,
-      mainKey: cfg.session?.mainKey,
-    });
-    const forcedCanonical = canonicalizeMainSessionAlias({
-      cfg,
-      agentId: resolvedAgentId,
-      sessionKey: forcedCandidate,
-    });
-    if (forcedCanonical !== "global") {
-      const sessionAgentId = resolveAgentIdFromSessionKey(forcedCanonical);
-      if (sessionAgentId === normalizeAgentId(resolvedAgentId)) {
-        return {
-          sessionKey: forcedCanonical,
-          storePath,
-          store,
-          entry: store[forcedCanonical],
-        };
-      }
-    }
-  }
-
-  const trimmed = heartbeat?.session?.trim() ?? "";
-  if (!trimmed) {
-    return { sessionKey: mainSessionKey, storePath, store, entry: mainEntry };
-  }
-
-  const normalized = trimmed.toLowerCase();
-  if (normalized === "main" || normalized === "global") {
-    return { sessionKey: mainSessionKey, storePath, store, entry: mainEntry };
-  }
-
-  const candidate = toAgentStoreSessionKey({
-    agentId: resolvedAgentId,
-    requestKey: trimmed,
-    mainKey: cfg.session?.mainKey,
-  });
-  const canonical = canonicalizeMainSessionAlias({
-    cfg,
-    agentId: resolvedAgentId,
-    sessionKey: candidate,
-  });
-  if (canonical !== "global") {
-    const sessionAgentId = resolveAgentIdFromSessionKey(canonical);
-    if (sessionAgentId === normalizeAgentId(resolvedAgentId)) {
-      return {
-        sessionKey: canonical,
-        storePath,
-        store,
-        entry: store[canonical],
-      };
-    }
-  }
-
-  return { sessionKey: mainSessionKey, storePath, store, entry: mainEntry };
-}
-
-function resolveHeartbeatReasoningPayloads(
-  replyResult: ReplyPayload | ReplyPayload[] | undefined,
-): ReplyPayload[] {
-  const payloads = Array.isArray(replyResult) ? replyResult : replyResult ? [replyResult] : [];
-  return payloads.filter((payload) => {
-    const text = typeof payload.text === "string" ? payload.text : "";
-    return text.trimStart().startsWith("Reasoning:");
-  });
-}
 
 async function restoreHeartbeatUpdatedAt(params: {
   storePath: string;
@@ -338,183 +180,6 @@ async function captureTranscriptState(params: {
     // Session or transcript doesn't exist yet - nothing to prune
     return {};
   }
-}
-
-function stripLeadingHeartbeatResponsePrefix(
-  text: string,
-  responsePrefix: string | undefined,
-): string {
-  const normalizedPrefix = responsePrefix?.trim();
-  if (!normalizedPrefix) {
-    return text;
-  }
-
-  // Require a boundary after the configured prefix so short prefixes like "Hi"
-  // do not strip the beginning of normal words like "History".
-  const prefixPattern = new RegExp(
-    `^${escapeRegExp(normalizedPrefix)}(?=$|\\s|[\\p{P}\\p{S}])\\s*`,
-    "iu",
-  );
-  return text.replace(prefixPattern, "");
-}
-
-function normalizeHeartbeatReply(
-  payload: ReplyPayload,
-  responsePrefix: string | undefined,
-  ackMaxChars: number,
-) {
-  const rawText = typeof payload.text === "string" ? payload.text : "";
-  const textForStrip = stripLeadingHeartbeatResponsePrefix(rawText, responsePrefix);
-  const stripped = stripHeartbeatToken(textForStrip, {
-    mode: "heartbeat",
-    maxAckChars: ackMaxChars,
-  });
-  const hasMedia = resolveSendableOutboundReplyParts(payload).hasMedia;
-  if (stripped.shouldSkip && !hasMedia) {
-    return {
-      shouldSkip: true,
-      text: "",
-      hasMedia,
-    };
-  }
-  let finalText = stripped.text;
-  if (responsePrefix && finalText && !finalText.startsWith(responsePrefix)) {
-    finalText = `${responsePrefix} ${finalText}`;
-  }
-  return { shouldSkip: false, text: finalText, hasMedia };
-}
-
-type HeartbeatReasonFlags = {
-  isExecEventReason: boolean;
-  isCronEventReason: boolean;
-  isWakeReason: boolean;
-};
-
-type HeartbeatSkipReason = "empty-heartbeat-file";
-
-type HeartbeatPreflight = HeartbeatReasonFlags & {
-  session: ReturnType<typeof resolveHeartbeatSession>;
-  pendingEventEntries: ReturnType<typeof peekSystemEventEntries>;
-  hasTaggedCronEvents: boolean;
-  shouldInspectPendingEvents: boolean;
-  skipReason?: HeartbeatSkipReason;
-};
-
-function resolveHeartbeatReasonFlags(reason?: string): HeartbeatReasonFlags {
-  const reasonKind = resolveHeartbeatReasonKind(reason);
-  return {
-    isExecEventReason: reasonKind === "exec-event",
-    isCronEventReason: reasonKind === "cron",
-    isWakeReason: reasonKind === "wake" || reasonKind === "hook",
-  };
-}
-
-async function resolveHeartbeatPreflight(params: {
-  cfg: DenebConfig;
-  agentId: string;
-  heartbeat?: HeartbeatConfig;
-  forcedSessionKey?: string;
-  reason?: string;
-}): Promise<HeartbeatPreflight> {
-  const reasonFlags = resolveHeartbeatReasonFlags(params.reason);
-  const session = resolveHeartbeatSession(
-    params.cfg,
-    params.agentId,
-    params.heartbeat,
-    params.forcedSessionKey,
-  );
-  const pendingEventEntries = peekSystemEventEntries(session.sessionKey);
-  const hasTaggedCronEvents = pendingEventEntries.some((event) =>
-    event.contextKey?.startsWith("cron:"),
-  );
-  const shouldInspectPendingEvents =
-    reasonFlags.isExecEventReason || reasonFlags.isCronEventReason || hasTaggedCronEvents;
-  const shouldBypassFileGates =
-    reasonFlags.isExecEventReason ||
-    reasonFlags.isCronEventReason ||
-    reasonFlags.isWakeReason ||
-    hasTaggedCronEvents;
-  const basePreflight = {
-    ...reasonFlags,
-    session,
-    pendingEventEntries,
-    hasTaggedCronEvents,
-    shouldInspectPendingEvents,
-  } satisfies Omit<HeartbeatPreflight, "skipReason">;
-
-  if (shouldBypassFileGates) {
-    return basePreflight;
-  }
-
-  const workspaceDir = resolveAgentWorkspaceDir(params.cfg, params.agentId);
-  const heartbeatFilePath = path.join(workspaceDir, DEFAULT_HEARTBEAT_FILENAME);
-  try {
-    const heartbeatFileContent = await fs.readFile(heartbeatFilePath, "utf-8");
-    if (isHeartbeatContentEffectivelyEmpty(heartbeatFileContent)) {
-      return {
-        ...basePreflight,
-        skipReason: "empty-heartbeat-file",
-      };
-    }
-  } catch (err: unknown) {
-    if (hasErrnoCode(err, "ENOENT")) {
-      // Missing HEARTBEAT.md is intentional in some setups (for example, when
-      // heartbeat instructions live outside the file), so keep the run active.
-      // The heartbeat prompt already says "if it exists".
-      return basePreflight;
-    }
-    // For other read errors, proceed with heartbeat as before.
-  }
-
-  return basePreflight;
-}
-
-type HeartbeatPromptResolution = {
-  prompt: string;
-  hasExecCompletion: boolean;
-  hasCronEvents: boolean;
-};
-
-function appendHeartbeatWorkspacePathHint(prompt: string, workspaceDir: string): string {
-  if (!/heartbeat\.md/i.test(prompt)) {
-    return prompt;
-  }
-  const heartbeatFilePath = path.join(workspaceDir, DEFAULT_HEARTBEAT_FILENAME).replace(/\\/g, "/");
-  const hint = `When reading HEARTBEAT.md, use workspace file ${heartbeatFilePath} (exact case). Do not read docs/heartbeat.md.`;
-  if (prompt.includes(hint)) {
-    return prompt;
-  }
-  return `${prompt}\n${hint}`;
-}
-
-function resolveHeartbeatRunPrompt(params: {
-  cfg: DenebConfig;
-  heartbeat?: HeartbeatConfig;
-  preflight: HeartbeatPreflight;
-  canRelayToUser: boolean;
-  workspaceDir: string;
-}): HeartbeatPromptResolution {
-  const pendingEventEntries = params.preflight.pendingEventEntries;
-  const pendingEvents = params.preflight.shouldInspectPendingEvents
-    ? pendingEventEntries.map((event) => event.text)
-    : [];
-  const cronEvents = pendingEventEntries
-    .filter(
-      (event) =>
-        (params.preflight.isCronEventReason || event.contextKey?.startsWith("cron:")) &&
-        isCronSystemEvent(event.text),
-    )
-    .map((event) => event.text);
-  const hasExecCompletion = pendingEvents.some(isExecCompletionEvent);
-  const hasCronEvents = cronEvents.length > 0;
-  const basePrompt = hasExecCompletion
-    ? buildExecEventPrompt({ deliverToUser: params.canRelayToUser })
-    : hasCronEvents
-      ? buildCronEventPrompt(cronEvents, { deliverToUser: params.canRelayToUser })
-      : resolveHeartbeatPrompt(params.cfg, params.heartbeat);
-  const prompt = appendHeartbeatWorkspacePathHint(basePrompt, params.workspaceDir);
-
-  return { prompt, hasExecCompletion, hasCronEvents };
 }
 
 export async function runHeartbeatOnce(opts: {
