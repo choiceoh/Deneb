@@ -474,17 +474,23 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
         manuallyStopped.add(restartKey(channelId, id));
         abort?.abort();
         if (plugin?.gateway?.stopAccount) {
-          const account = plugin.config.resolveAccount(cfg, id);
-          await plugin.gateway.stopAccount({
-            cfg,
-            accountId: id,
-            account,
-            runtime: channelRuntimeEnvs[channelId],
-            abortSignal: abort?.signal ?? new AbortController().signal,
-            log: channelLogs[channelId],
-            getStatus: () => getRuntime(channelId, id),
-            setStatus: (next) => setRuntime(channelId, id, next),
-          });
+          try {
+            const account = plugin.config.resolveAccount(cfg, id);
+            await plugin.gateway.stopAccount({
+              cfg,
+              accountId: id,
+              account,
+              runtime: channelRuntimeEnvs[channelId],
+              abortSignal: abort?.signal ?? new AbortController().signal,
+              log: channelLogs[channelId],
+              getStatus: () => getRuntime(channelId, id),
+              setStatus: (next) => setRuntime(channelId, id, next),
+            });
+          } catch (err) {
+            channelLogs[channelId]?.warn?.(
+              `[${id}] stopAccount failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
         }
         try {
           await task;

@@ -138,30 +138,48 @@ export const channelsHandlers: GatewayRequestHandlers = {
         if (probe && enabled && plugin.status?.probeAccount) {
           let configured = true;
           if (plugin.config.isConfigured) {
-            configured = await plugin.config.isConfigured(account, cfg);
+            try {
+              configured = await plugin.config.isConfigured(account, cfg);
+            } catch {
+              configured = false;
+            }
           }
           if (configured) {
-            probeResult = await plugin.status.probeAccount({
-              account,
-              timeoutMs,
-              cfg,
-            });
-            lastProbeAt = Date.now();
+            try {
+              probeResult = await plugin.status.probeAccount({
+                account,
+                timeoutMs,
+                cfg,
+              });
+              lastProbeAt = Date.now();
+            } catch {
+              // Probe failure should not crash the entire status request.
+              probeResult = undefined;
+            }
           }
         }
         let auditResult: unknown;
         if (probe && enabled && plugin.status?.auditAccount) {
           let configured = true;
           if (plugin.config.isConfigured) {
-            configured = await plugin.config.isConfigured(account, cfg);
+            try {
+              configured = await plugin.config.isConfigured(account, cfg);
+            } catch {
+              configured = false;
+            }
           }
           if (configured) {
-            auditResult = await plugin.status.auditAccount({
-              account,
-              timeoutMs,
-              cfg,
-              probe: probeResult,
-            });
+            try {
+              auditResult = await plugin.status.auditAccount({
+                account,
+                timeoutMs,
+                cfg,
+                probe: probeResult,
+              });
+            } catch {
+              // Audit failure should not crash the entire status request.
+              auditResult = undefined;
+            }
           }
         }
         const runtimeSnapshot = resolveRuntimeSnapshot(channelId, accountId, defaultAccountId);
@@ -209,24 +227,41 @@ export const channelsHandlers: GatewayRequestHandlers = {
     const accountsMap = payload.channelAccounts as Record<string, unknown>;
     const defaultAccountIdMap = payload.channelDefaultAccountId as Record<string, unknown>;
     for (const plugin of plugins) {
-      const { accounts, defaultAccountId, defaultAccount, resolvedAccounts } =
-        await buildChannelAccounts(plugin.id);
-      const fallbackAccount =
-        resolvedAccounts[defaultAccountId] ?? plugin.config.resolveAccount(cfg, defaultAccountId);
-      const summary = plugin.status?.buildChannelSummary
-        ? await plugin.status.buildChannelSummary({
-            account: fallbackAccount,
-            cfg,
-            defaultAccountId,
-            snapshot:
-              defaultAccount ??
-              ({
-                accountId: defaultAccountId,
-              } as ChannelAccountSnapshot),
-          })
-        : {
-            configured: defaultAccount?.configured ?? false,
-          };
+      let channelBuild: Awaited<ReturnType<typeof buildChannelAccounts>>;
+      try {
+        channelBuild = await buildChannelAccounts(plugin.id);
+      } catch {
+        // Skip channels that fail to build status — prevents one broken channel
+        // from crashing the entire channels.status response.
+        continue;
+      }
+      const { accounts, defaultAccountId, defaultAccount, resolvedAccounts } = channelBuild;
+      let fallbackAccount: unknown;
+      try {
+        fallbackAccount =
+          resolvedAccounts[defaultAccountId] ?? plugin.config.resolveAccount(cfg, defaultAccountId);
+      } catch {
+        fallbackAccount = resolvedAccounts[defaultAccountId];
+      }
+      let summary: Record<string, unknown>;
+      try {
+        summary = plugin.status?.buildChannelSummary
+          ? await plugin.status.buildChannelSummary({
+              account: fallbackAccount,
+              cfg,
+              defaultAccountId,
+              snapshot:
+                defaultAccount ??
+                ({
+                  accountId: defaultAccountId,
+                } as ChannelAccountSnapshot),
+            })
+          : {
+              configured: defaultAccount?.configured ?? false,
+            };
+      } catch {
+        summary = { configured: false };
+      }
       channelsMap[plugin.id] = summary;
       accountsMap[plugin.id] = accounts;
       defaultAccountIdMap[plugin.id] = defaultAccountId;

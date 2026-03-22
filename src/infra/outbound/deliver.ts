@@ -132,11 +132,25 @@ async function createChannelHandler(params: ChannelHandlerParams): Promise<Chann
   // Recover channel plugins the same way target resolution does so direct cron
   // delivery still works when a prior test or lazy path left the active plugin
   // registry empty.
-  resolveOutboundChannelPlugin({
-    channel: params.channel,
-    cfg: params.cfg,
-  });
-  const outbound = await loadChannelOutboundAdapter(params.channel);
+  try {
+    resolveOutboundChannelPlugin({
+      channel: params.channel,
+      cfg: params.cfg,
+    });
+  } catch (err) {
+    log.warn(
+      `failed to resolve outbound channel plugin for ${params.channel}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  let outbound;
+  try {
+    outbound = await loadChannelOutboundAdapter(params.channel);
+  } catch (err) {
+    throw new Error(
+      `Failed to load outbound adapter for channel ${params.channel}: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
+  }
   const handler = createPluginHandler({ ...params, outbound });
   if (!handler) {
     throw new Error(`Outbound not configured for channel: ${params.channel}`);

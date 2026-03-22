@@ -122,7 +122,12 @@ function parseDigSrv(stdout: string): { host: string; port: number } | null {
 }
 
 function parseTailscaleStatusIPv4s(stdout: string): string[] {
-  const parsed = stdout ? (JSON.parse(stdout) as Record<string, unknown>) : {};
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = stdout ? (JSON.parse(stdout) as Record<string, unknown>) : {};
+  } catch {
+    return [];
+  }
   const out: string[] = [];
 
   const addIps = (value: unknown) => {

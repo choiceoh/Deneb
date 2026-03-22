@@ -40,12 +40,17 @@ const BATCH_FAILURE_LIMIT = 2;
 const log = createSubsystemLogger("memory");
 
 const INDEX_CACHE = new Map<string, MemoryIndexManager>();
-const INDEX_CACHE_PENDING = new Map<string, Promise<MemoryIndexManager>>();
+const INDEX_CACHE_PENDING = new Map<string, Promise<MemoryIndexManager | null>>();
 
 export async function closeAllMemoryIndexManagers(): Promise<void> {
   const pending = Array.from(INDEX_CACHE_PENDING.values());
   if (pending.length > 0) {
-    await Promise.allSettled(pending);
+    const results = await Promise.allSettled(pending);
+    for (const result of results) {
+      if (result.status === "rejected") {
+        log.warn(`pending memory index manager failed during shutdown: ${String(result.reason)}`);
+      }
+    }
   }
   const managers = Array.from(INDEX_CACHE.values());
   INDEX_CACHE.clear();
@@ -153,16 +158,24 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       return pending;
     }
     const createPromise = (async () => {
-      const providerResult = await createEmbeddingProvider({
-        config: cfg,
-        agentDir: resolveAgentDir(cfg, agentId),
-        provider: settings.provider,
-        remote: settings.remote,
-        model: settings.model,
-        outputDimensionality: settings.outputDimensionality,
-        fallback: settings.fallback,
-        local: settings.local,
-      });
+      let providerResult: EmbeddingProviderResult;
+      try {
+        providerResult = await createEmbeddingProvider({
+          config: cfg,
+          agentDir: resolveAgentDir(cfg, agentId),
+          provider: settings.provider,
+          remote: settings.remote,
+          model: settings.model,
+          outputDimensionality: settings.outputDimensionality,
+          fallback: settings.fallback,
+          local: settings.local,
+        });
+      } catch (err) {
+        log.warn(
+          `failed to create embedding provider for agent ${agentId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return null;
+      }
       const refreshed = INDEX_CACHE.get(key);
       if (refreshed) {
         return refreshed;
