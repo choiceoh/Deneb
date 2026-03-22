@@ -169,6 +169,12 @@ export type AgentDefaultsConfig = {
   contextTokens?: number;
   /** Optional CLI backends for text-only fallback (claude-cli, etc.). */
   cliBackends?: Record<string, CliBackendConfig>;
+  /**
+   * Maximum number of user turns to keep in context when no channel-specific
+   * historyLimit is configured. Prevents unbounded context growth in
+   * long-running sessions. Default: 100. Set 0 to disable.
+   */
+  maxHistoryTurns?: number;
   /** Opt-in: prune old tool results from the LLM context to reduce token usage. */
   contextPruning?: AgentContextPruningConfig;
   /** Compaction tuning and pre-compaction memory flush behavior. */
@@ -345,7 +351,7 @@ export type AgentCompactionConfig = {
   /**
    * Truncate the session JSONL file after compaction to remove entries that
    * were summarized. Prevents unbounded file growth in long-running sessions.
-   * Default: false (existing behavior preserved).
+   * Default: true.
    */
   truncateAfterCompaction?: boolean;
   /** Background compression observer for proactive pre-computed summaries. */

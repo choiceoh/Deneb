@@ -119,6 +119,7 @@ import {
 import { dropThinkingBlocks } from "../thinking.js";
 import { collectAllowedToolNames } from "../tool-name-allowlist.js";
 import { installToolResultContextGuard } from "../tool-result-context-guard.js";
+import { truncateOversizedToolResultsInMessages } from "../tool-result-truncation.js";
 import { splitSdkTools } from "../tool-split.js";
 import { describeUnknownError, mapThinkingLevel } from "../utils.js";
 import { flushPendingToolResultsAfterIdle } from "../wait-for-idle-before-flush.js";
@@ -574,10 +575,27 @@ export async function runEmbeddedAttempt(
         sessionFile: params.sessionFile,
         warn: (message) => log.warn(message),
       });
+      let sessionFileBytes = 0;
       const hadSessionFile = await fs
         .stat(params.sessionFile)
-        .then(() => true)
+        .then((stat) => {
+          sessionFileBytes = stat.size;
+          return true;
+        })
         .catch(() => false);
+
+      // Warn when session files grow excessively large (> 2 MB).
+      // Large session files cause slow SessionManager.open() and degrade
+      // response quality due to context bloat.
+      const SESSION_FILE_WARN_BYTES = 2 * 1024 * 1024;
+      if (hadSessionFile && sessionFileBytes > SESSION_FILE_WARN_BYTES) {
+        log.warn(
+          `[session-size] Large session file detected: ` +
+            `bytes=${sessionFileBytes} (${(sessionFileBytes / 1024 / 1024).toFixed(1)} MB) ` +
+            `sessionKey=${params.sessionKey ?? params.sessionId} ` +
+            `file=${params.sessionFile}`,
+        );
+      }
 
       const transcriptPolicy = resolveTranscriptPolicy({
         modelApi: params.model?.api,
@@ -952,6 +970,27 @@ export async function runEmbeddedAttempt(
               `context engine assemble failed, using pipeline messages: ${String(assembleErr)}`,
             );
           }
+        }
+
+        // Pre-send guard: truncate oversized tool results before the model
+        // sees them. This prevents context overflow from accumulated tool
+        // output without waiting for the error-recovery path.
+        const contextWindowTokens = Math.max(
+          1,
+          Math.floor(
+            params.model.contextWindow ?? params.model.maxTokens ?? DEFAULT_CONTEXT_TOKENS,
+          ),
+        );
+        const preSendTrunc = truncateOversizedToolResultsInMessages(
+          activeSession.messages,
+          contextWindowTokens,
+        );
+        if (preSendTrunc.truncatedCount > 0) {
+          activeSession.agent.replaceMessages(preSendTrunc.messages);
+          log.info(
+            `[pre-send-truncation] Truncated ${preSendTrunc.truncatedCount} oversized tool result(s) ` +
+              `before prompt (contextWindow=${contextWindowTokens})`,
+          );
         }
       } catch (err) {
         await flushPendingToolResultsAfterIdle({
