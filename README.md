@@ -68,8 +68,6 @@ Spawn and manage sub-agents with bounded contexts for complex tasks.
 - **Bounded execution** — Token limits, timeouts, and tool policy per agent
 - **Result streaming** — Real-time progress from sub-agents to parent
 
-
-
 ### 🧰 Tool System
 
 | Tool       | Description                                  |
@@ -86,7 +84,7 @@ Spawn and manage sub-agents with bounded contexts for complex tasks.
 
 ### 🤖 Model Providers
 
-**Cloud:** Anthropic · OpenAI · Google ·  OpenRouter 
+**Cloud:** Anthropic · OpenAI · Google · OpenRouter
 
 **Self-Hosted:** Ollama · SGLang · vLLM · LiteLLM
 
