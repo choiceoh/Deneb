@@ -18,16 +18,15 @@ export function createChannelRegistryLoader<TValue>(
       cache.clear();
       lastRegistry = registry;
     }
-    const cached = cache.get(id);
-    if (cached) {
-      return cached;
+    if (cache.has(id)) {
+      return cache.get(id);
     }
     const pluginEntry = registry?.channels.find((entry) => entry.plugin.id === id);
     if (!pluginEntry) {
       return undefined;
     }
     const resolved = resolveValue(pluginEntry);
-    if (resolved) {
+    if (resolved !== undefined) {
       cache.set(id, resolved);
     }
     return resolved;

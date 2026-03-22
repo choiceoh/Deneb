@@ -119,11 +119,11 @@ export async function sendTextMediaPayload(params: {
   }
   const limit = params.adapter.textChunkLimit;
   const chunks = limit && params.adapter.chunker ? params.adapter.chunker(text, limit) : [text];
-  let lastResult: Awaited<ReturnType<NonNullable<typeof params.adapter.sendText>>>;
+  let lastResult: Awaited<ReturnType<NonNullable<typeof params.adapter.sendText>>> | undefined;
   for (const chunk of chunks) {
     lastResult = await params.adapter.sendText!({ ...params.ctx, text: chunk });
   }
-  return lastResult!;
+  return lastResult ?? { channel: params.channel, messageId: "" };
 }
 
 export function resolveScopedChannelMediaMaxBytes(params: {

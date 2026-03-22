@@ -380,6 +380,7 @@ export function createStatusReactionController(params: {
     }
 
     clearAllTimers();
+    finished = false;
     await enqueue(async () => {
       await applyEmoji(initialEmoji);
       pendingEmoji = "";
