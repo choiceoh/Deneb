@@ -68,6 +68,8 @@ type CompactionSummarizeOptions = {
   previousSummary?: string;
   isCondensed?: boolean;
   depth?: number;
+  /** Explicit target token count. Bypasses resolveTargetTokens caps when set. */
+  targetTokens?: number;
 };
 export type CompactionSummarizeFn = (
   text: string,

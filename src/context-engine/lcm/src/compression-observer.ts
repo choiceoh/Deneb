@@ -195,11 +195,11 @@ export class CompressionObserver {
     this.pendingUpdates.set(conversationId, updatePromise);
   }
 
-  private async summarizeWithRetry(text: string, aggressive: boolean): Promise<string> {
+  private async summarizeWithRetry(text: string, targetTokens: number): Promise<string> {
     let lastErr: unknown;
     for (let attempt = 0; attempt <= MAX_CALL_RETRIES; attempt++) {
       try {
-        return await this.summarize(text, aggressive);
+        return await this.summarize(text, true, { targetTokens });
       } catch (err) {
         lastErr = err;
         if (attempt < MAX_CALL_RETRIES) {
@@ -280,8 +280,9 @@ export class CompressionObserver {
       }
 
       const sourceText = messageTexts.join("\n\n---\n\n");
+      const observerTargetTokens = Math.max(96, Math.floor(totalSourceTokens * TARGET_RATIO));
 
-      const summary = await this.summarizeWithRetry(sourceText, true);
+      const summary = await this.summarizeWithRetry(sourceText, observerTargetTokens);
 
       if (this.disposed) {
         return;

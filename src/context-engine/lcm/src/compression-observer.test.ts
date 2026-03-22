@@ -470,14 +470,31 @@ describe("CompressionObserver", () => {
   });
 
   describe("compression ratio targeting", () => {
-    it("should achieve ~10% compression ratio on large conversations", async () => {
+    it("should pass targetTokens at ~10% of source tokens", async () => {
       const conversationId = 1;
       for (let i = 0; i < 50; i++) {
         const msgId = conversationStore.addMessage(`${"W".repeat(800)} msg-${i}`, 200);
         summaryStore.addContextMessage(conversationId, msgId);
       }
 
-      const observer = createObserver();
+      let receivedOptions: { targetTokens?: number } | undefined;
+      const captureFn = vi.fn(
+        async (text: string, _aggressive?: boolean, options?: { targetTokens?: number }) => {
+          receivedOptions = options;
+          const targetLen = options?.targetTokens
+            ? Math.floor(options.targetTokens * 4)
+            : Math.floor(text.length * 0.1);
+          return text.slice(0, Math.max(4, targetLen));
+        },
+      ) as unknown as CompactionSummarizeFn;
+
+      const observer = new CompressionObserver(
+        config,
+        conversationStore as never,
+        summaryStore as never,
+        captureFn,
+      );
+
       observer.triggerUpdate(conversationId);
 
       await vi.waitFor(
@@ -487,10 +504,11 @@ describe("CompressionObserver", () => {
         { timeout: 2000 },
       );
 
-      const cached = observer.getCachedSummary(conversationId)!;
-      const ratio = cached.tokenCount / cached.sourceTokenCount;
-      expect(ratio).toBeGreaterThan(0.02);
-      expect(ratio).toBeLessThan(0.3);
+      // 50 messages - 8 fresh tail = 42 compactable, each 200 tokens = 8400 source tokens
+      // TARGET_RATIO = 0.1 → targetTokens ≈ 840
+      expect(receivedOptions).toBeDefined();
+      expect(receivedOptions!.targetTokens).toBeGreaterThanOrEqual(800);
+      expect(receivedOptions!.targetTokens).toBeLessThanOrEqual(900);
     });
   });
 
