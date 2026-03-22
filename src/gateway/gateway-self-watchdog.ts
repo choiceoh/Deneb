@@ -108,7 +108,12 @@ export function startGatewaySelfWatchdog(deps: GatewaySelfWatchdogDeps): Gateway
       return;
     }
 
-    // Check 3: no activity for a long time (gateway might be stuck)
+    // Check 3: no activity for a long time (gateway might be stuck).
+    // Skip when no channels are configured (API-only / headless mode) since
+    // there is no expected inbound traffic and the gateway is legitimately idle.
+    if (expected === 0) {
+      return;
+    }
     const lastActivity = Math.max(getLastActivityAt(), lastTouchAt);
     const idleMs = now - lastActivity;
     if (idleMs > staleThresholdMs) {

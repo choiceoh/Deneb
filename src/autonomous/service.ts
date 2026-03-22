@@ -101,14 +101,19 @@ export async function startAutonomousService(params: {
       });
       // Rate-limited and aborted are normal operational states, not failures.
       // Only real errors (timeout, LLM failure, etc.) should trigger backoff.
+      // Crucially, rate-limited/aborted must NOT reset the failure counter either —
+      // otherwise a rate-limited response during backoff would clear the counter
+      // and cause an immediate retry against a still-failing service.
       const isRealError =
         outcome.error && outcome.error !== "rate-limited" && outcome.error !== "aborted";
+      const isNeutral = outcome.error === "rate-limited" || outcome.error === "aborted";
       if (isRealError) {
         consecutiveFailures++;
         log.warn(
           `autonomous cycle error (${consecutiveFailures} consecutive failures): ${outcome.error}`,
         );
-      } else {
+      } else if (!isNeutral) {
+        // Genuine success (no error) — reset the backoff counter.
         if (consecutiveFailures > 0) {
           log.info(`autonomous cycle recovered after ${consecutiveFailures} consecutive failures`);
         }
