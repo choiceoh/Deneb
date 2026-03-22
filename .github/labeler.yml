@@ -84,10 +84,6 @@
       - any-glob-to-any-file:
           - "extensions/twitch/**"
           - "docs/channels/twitch.md"
-"channel: voice-call":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/voice-call/**"
 "channel: whatsapp-web":
   - changed-files:
       - any-glob-to-any-file:
@@ -182,10 +178,6 @@
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/diagnostics-otel/**"
-"extensions: llm-task":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/llm-task/**"
 "extensions: lobster":
   - changed-files:
       - any-glob-to-any-file:
@@ -194,14 +186,6 @@
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/memory-core/**"
-"extensions: memory-lancedb":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/memory-lancedb/**"
-"extensions: open-prose":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/open-prose/**"
 "extensions: qwen-portal-auth":
   - changed-files:
       - any-glob-to-any-file:
