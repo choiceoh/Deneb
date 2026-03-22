@@ -40,6 +40,10 @@ if (
 ) {
   // Imported as a dependency — skip all entry-point side effects.
 } else {
+  // DGX SPARK: set UV_THREADPOOL_SIZE before any async I/O
+  const { applyDgxSparkEnvTuning } = await import("./infra/dgx-spark-init.js");
+  applyDgxSparkEnvTuning();
+
   const { installGaxiosFetchCompat } = await import("./infra/gaxios-fetch-compat.js");
 
   await installGaxiosFetchCompat();

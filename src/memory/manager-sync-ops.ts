@@ -71,8 +71,8 @@ const META_KEY = "memory_index_meta_v1";
 const VECTOR_TABLE = "chunks_vec";
 const FTS_TABLE = "chunks_fts";
 const EMBEDDING_CACHE_TABLE = "embedding_cache";
-const SESSION_DIRTY_DEBOUNCE_MS = 5000;
-const SESSION_DELTA_READ_CHUNK_BYTES = 64 * 1024;
+const SESSION_DIRTY_DEBOUNCE_MS = 2000; // Faster dirty detection (down from 5s)
+const SESSION_DELTA_READ_CHUNK_BYTES = 256 * 1024; // Larger read chunks (up from 64KB)
 const VECTOR_LOAD_TIMEOUT_MS = 30_000;
 const IGNORED_MEMORY_WATCH_DIR_NAMES = new Set([
   ".git",

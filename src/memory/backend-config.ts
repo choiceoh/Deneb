@@ -74,20 +74,19 @@ export type ResolvedQmdConfig = {
 
 const DEFAULT_BACKEND: MemoryBackend = "builtin";
 const DEFAULT_CITATIONS: MemoryCitationsMode = "auto";
-const DEFAULT_QMD_INTERVAL = "5m";
-const DEFAULT_QMD_DEBOUNCE_MS = 15_000;
-const DEFAULT_QMD_TIMEOUT_MS = 4_000;
-// Defaulting to `query` can be extremely slow on CPU-only systems (query expansion + rerank).
-// Prefer a faster mode for interactive use; users can opt into `query` for best recall.
-const DEFAULT_QMD_SEARCH_MODE: MemoryQmdSearchMode = "search";
-const DEFAULT_QMD_EMBED_INTERVAL = "60m";
+const DEFAULT_QMD_INTERVAL = "3m"; // Faster sync (down from 5m)
+const DEFAULT_QMD_DEBOUNCE_MS = 5_000; // Snappier debounce (down from 15s)
+const DEFAULT_QMD_TIMEOUT_MS = 6_000; // Slightly more headroom (up from 4s)
+// DGX SPARK has GPU — `query` mode uses GPU-accelerated rerank for better recall
+const DEFAULT_QMD_SEARCH_MODE: MemoryQmdSearchMode = "query";
+const DEFAULT_QMD_EMBED_INTERVAL = "30m"; // More frequent embedding (down from 60m)
 const DEFAULT_QMD_COMMAND_TIMEOUT_MS = 30_000;
 const DEFAULT_QMD_UPDATE_TIMEOUT_MS = 120_000;
 const DEFAULT_QMD_EMBED_TIMEOUT_MS = 120_000;
 const DEFAULT_QMD_LIMITS: ResolvedQmdLimitsConfig = {
-  maxResults: 6,
-  maxSnippetChars: 700,
-  maxInjectedChars: 4_000,
+  maxResults: 8, // Slightly more results (up from 6)
+  maxSnippetChars: 900, // Slightly larger snippets (up from 700)
+  maxInjectedChars: 5_000, // Slightly more context (up from 4000)
   timeoutMs: DEFAULT_QMD_TIMEOUT_MS,
 };
 const DEFAULT_QMD_MCPORTER: ResolvedQmdMcporterConfig = {
@@ -338,14 +337,15 @@ export type ResolvedVegaLimitsConfig = {
 };
 
 const DEFAULT_VEGA_TIMEOUT_MS = 60_000;
-const DEFAULT_VEGA_MAX_RESULTS = 10;
-const DEFAULT_VEGA_MAX_SNIPPET_CHARS = 2_000;
-const DEFAULT_VEGA_MAX_INJECTED_CHARS = 8_000;
-const DEFAULT_VEGA_UPDATE_INTERVAL_MS = 300_000;
-const DEFAULT_VEGA_EMBED_INTERVAL_MS = 1_800_000;
+const DEFAULT_VEGA_MAX_RESULTS = 12; // Slightly more (up from 10)
+const DEFAULT_VEGA_MAX_SNIPPET_CHARS = 2_500; // Slightly more (up from 2000)
+const DEFAULT_VEGA_MAX_INJECTED_CHARS = 10_000; // Slightly more (up from 8000)
+const DEFAULT_VEGA_UPDATE_INTERVAL_MS = 180_000; // 3 min (down from 5m)
+const DEFAULT_VEGA_EMBED_INTERVAL_MS = 900_000; // 15 min (down from 30m)
 const DEFAULT_VEGA_COMMAND_TIMEOUT_MS = 120_000;
 
-const DEFAULT_VEGA_SEARCH_MODE: MemoryVegaSearchMode = "search";
+// GPU-accelerated rerank — use query mode for best recall
+const DEFAULT_VEGA_SEARCH_MODE: MemoryVegaSearchMode = "query";
 
 function resolveVegaSearchMode(raw?: MemoryVegaSearchMode): MemoryVegaSearchMode {
   if (raw === "search" || raw === "vsearch" || raw === "query") {

@@ -1,10 +1,11 @@
 import { execFile, type ExecFileOptions } from "node:child_process";
 import { promisify } from "node:util";
 import {
-  MEDIA_FFMPEG_MAX_BUFFER_BYTES,
-  MEDIA_FFMPEG_TIMEOUT_MS,
-  MEDIA_FFPROBE_TIMEOUT_MS,
-} from "./ffmpeg-limits.js";
+  buildGpuFfmpegArgs,
+  getOptimizedFfmpegMaxBuffer,
+  getOptimizedFfmpegTimeout,
+  getOptimizedFfprobeTimeout,
+} from "../infra/gpu-ffmpeg.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -19,7 +20,7 @@ function resolveExecOptions(
 ): ExecFileOptions {
   return {
     timeout: options?.timeoutMs ?? defaultTimeoutMs,
-    maxBuffer: options?.maxBufferBytes ?? MEDIA_FFMPEG_MAX_BUFFER_BYTES,
+    maxBuffer: options?.maxBufferBytes ?? getOptimizedFfmpegMaxBuffer(),
   };
 }
 
@@ -27,16 +28,18 @@ export async function runFfprobe(args: string[], options?: MediaExecOptions): Pr
   const { stdout } = await execFileAsync(
     "ffprobe",
     args,
-    resolveExecOptions(MEDIA_FFPROBE_TIMEOUT_MS, options),
+    resolveExecOptions(getOptimizedFfprobeTimeout(), options),
   );
   return stdout.toString();
 }
 
 export async function runFfmpeg(args: string[], options?: MediaExecOptions): Promise<string> {
+  // Apply GPU acceleration flags when available (NVENC/NVDEC on DGX SPARK)
+  const enhancedArgs = buildGpuFfmpegArgs(args);
   const { stdout } = await execFileAsync(
     "ffmpeg",
-    args,
-    resolveExecOptions(MEDIA_FFMPEG_TIMEOUT_MS, options),
+    enhancedArgs,
+    resolveExecOptions(getOptimizedFfmpegTimeout(), options),
   );
   return stdout.toString();
 }
