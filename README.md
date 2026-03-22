@@ -14,7 +14,9 @@
 
 ---
 
-**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. Built on top of OpenClaw, Deneb strips away the mobile apps and trims the codebase to a lean 230K-line server engine — while adding a custom Lossless Context Management (LCM) system with DAG-based compaction, proactive background summarization, and full memory recall across sessions.
+**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. Starting from OpenClaw, Deneb intentionally shed mobile clients, unused channels, and enterprise plugins to create a lean 230K-line server engine — then built a custom Lossless Context Management (LCM) system with DAG-based compaction, proactive background summarization, and full memory recall across sessions.
+
+Deneb is actively diverging from OpenClaw. We're not maintaining a fork — we're building a different program with a different focus: **memory-first, local-first, lean-first.**
 
 ## ⭐ Why Deneb
 
@@ -31,16 +33,11 @@ Most AI agent frameworks hit the same wall: when conversations grow long, contex
 | **Codebase size**      | 500K–1M+ lines           | 230K lines — lean and auditable                |
 | **Local LLM**          | Optional                 | First-class: SGLang, Ollama, vLLM support      |
 
-### What We Removed from OpenClaw
+### Intentional Simplification
 
-Deneb is a focused fork of [OpenClaw](https://github.com/openclaw/openclaw). We removed:
+Every feature that doesn't serve the core mission was removed — not because we couldn't build it, but because leaner code means fewer bugs, faster iterations, and code you can actually read and modify.
 
-- Mobile apps (iOS/Android/macOS companion apps — Swift + Kotlin)
-- Desktop companion app
-- Unused channel implementations (Nostr, Twitch, Tlon, Zalo, etc.)
-- Enterprise plugins not needed for single-instance deployment
-
-The result: **110K lines → 230K lines of pure server-side agent engine**, with every feature battle-tested in production.
+What's gone: mobile apps, desktop companions, 12+ niche channels, enterprise multi-tenant plugins. What remains: a focused agent engine that remembers everything and runs on a single GPU.
 
 ## ⭐ Key Features
 
@@ -176,7 +173,7 @@ pnpm format     # Format
 
 ## 📄 License
 
-MIT — Forked from [OpenClaw](https://github.com/openclaw/openclaw) with ❤️
+MIT — Originally forked from [OpenClaw](https://github.com/openclaw/openclaw). Deneb is an independent project with its own roadmap and direction.
 
 ---
 
