@@ -25,6 +25,7 @@ export default defineConfig({
     ],
   },
   test: {
+    reporters: ["default", "./test/infinite-loop-reporter.ts"],
     testTimeout: 30_000,
     hookTimeout: isWindows ? 60_000 : 45_000,
     // Many suites rely on `vi.stubEnv(...)` and expect it to be scoped to the test.

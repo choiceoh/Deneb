@@ -48,6 +48,7 @@ __pycache__/
 
 # Vitest test artifacts
 __deneb_vitest__/
+test/reports/
 
 # Temp
 /tmp/
