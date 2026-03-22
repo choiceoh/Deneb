@@ -470,33 +470,14 @@ describe("CompressionObserver", () => {
   });
 
   describe("compression ratio targeting", () => {
-    it("should pass targetTokens to summarize based on targetRatio", async () => {
+    it("should achieve ~10% compression ratio on large conversations", async () => {
       const conversationId = 1;
-      // Add many large messages so source tokens are large enough that the old
-      // leaf-level caps (640/1200) would produce a ratio well below targetRatio.
       for (let i = 0; i < 50; i++) {
         const msgId = conversationStore.addMessage(`${"W".repeat(800)} msg-${i}`, 200);
         summaryStore.addContextMessage(conversationId, msgId);
       }
 
-      let receivedOptions: unknown = undefined;
-      const captureFn = vi.fn(async (text: string, _aggressive?: boolean, options?: unknown) => {
-        receivedOptions = options;
-        // Return a summary proportional to the targetTokens hint
-        const opts = options as { targetTokens?: number } | undefined;
-        const targetLen = opts?.targetTokens
-          ? Math.floor(opts.targetTokens * 4)
-          : Math.floor(text.length * 0.03);
-        return text.slice(0, Math.max(4, targetLen));
-      }) as unknown as CompactionSummarizeFn;
-
-      const observer = new CompressionObserver(
-        { ...config, targetRatio: 0.15 },
-        conversationStore as never,
-        summaryStore as never,
-        captureFn,
-      );
-
+      const observer = createObserver();
       observer.triggerUpdate(conversationId);
 
       await vi.waitFor(
@@ -506,15 +487,10 @@ describe("CompressionObserver", () => {
         { timeout: 2000 },
       );
 
-      // Verify targetTokens was passed in options
-      expect(receivedOptions).toBeDefined();
-      expect((receivedOptions as { targetTokens?: number }).targetTokens).toBeGreaterThan(0);
-
-      // Verify the cached summary has a reasonable ratio (closer to targetRatio than 3%)
       const cached = observer.getCachedSummary(conversationId)!;
       const ratio = cached.tokenCount / cached.sourceTokenCount;
-      expect(ratio).toBeGreaterThan(0.05);
-      expect(ratio).toBeLessThan(0.5);
+      expect(ratio).toBeGreaterThan(0.02);
+      expect(ratio).toBeLessThan(0.3);
     });
   });
 

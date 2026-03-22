@@ -31,7 +31,6 @@ export type LcmConfig = {
   /** Compression observer configuration for proactive background summarization. */
   observer: {
     enabled: boolean;
-    targetRatio: number;
     messageInterval: number;
     model: string;
     provider: string;
@@ -145,13 +144,6 @@ export function resolveLcmConfig(
         env.LCM_OBSERVER_ENABLED !== undefined
           ? env.LCM_OBSERVER_ENABLED === "true"
           : (toBool((pc.observer as Record<string, unknown> | undefined)?.enabled) ?? false),
-      targetRatio: clampNumber(
-        toNumber(env.LCM_OBSERVER_TARGET_RATIO) ??
-          toNumber((pc.observer as Record<string, unknown> | undefined)?.targetRatio) ??
-          0.2,
-        0.05,
-        0.5,
-      ),
       messageInterval: Math.max(
         1,
         Math.floor(

@@ -467,7 +467,6 @@ export class LcmContextEngine implements ContextEngine {
       {
         ...DEFAULT_OBSERVER_CONFIG,
         enabled: observerCfg.enabled,
-        targetRatio: observerCfg.targetRatio,
         messageInterval: observerCfg.messageInterval,
         model: model,
         provider: provider,

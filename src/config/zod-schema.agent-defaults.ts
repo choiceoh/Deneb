@@ -129,7 +129,6 @@ export const AgentDefaultsSchema = z
         observer: z
           .object({
             enabled: z.boolean().optional(),
-            targetRatio: z.number().min(0.05).max(0.5).optional(),
             messageInterval: z.number().int().min(1).max(50).optional(),
             model: z.string().optional(),
             provider: z.string().optional(),

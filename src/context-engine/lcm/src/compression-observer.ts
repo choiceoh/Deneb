@@ -11,8 +11,6 @@ const log = createSubsystemLogger("compression-observer");
 export interface CompressionObserverConfig {
   /** Whether the observer is enabled (default false). */
   enabled: boolean;
-  /** Target compression ratio — summary tokens / source tokens (default 0.2). */
-  targetRatio: number;
   /** Number of new messages before triggering a background re-compression (default 5). */
   messageInterval: number;
   /** Model identifier for background compression (e.g. "qwen3.5-35b-a3b"). */
@@ -51,9 +49,11 @@ export interface CachedSummary {
   hasMixedContext: boolean;
 }
 
+/** Fixed compression ratio (10%). */
+const TARGET_RATIO = 0.1;
+
 export const DEFAULT_OBSERVER_CONFIG: CompressionObserverConfig = {
   enabled: false,
-  targetRatio: 0.2,
   messageInterval: 5,
   maxStalenessMs: 60_000,
   freshTailCount: 32,
@@ -195,19 +195,11 @@ export class CompressionObserver {
     this.pendingUpdates.set(conversationId, updatePromise);
   }
 
-  private async summarizeWithRetry(
-    text: string,
-    aggressive: boolean,
-    targetTokens?: number,
-  ): Promise<string> {
+  private async summarizeWithRetry(text: string, aggressive: boolean): Promise<string> {
     let lastErr: unknown;
     for (let attempt = 0; attempt <= MAX_CALL_RETRIES; attempt++) {
       try {
-        return await this.summarize(
-          text,
-          aggressive,
-          targetTokens != null ? { targetTokens } : undefined,
-        );
+        return await this.summarize(text, aggressive);
       } catch (err) {
         lastErr = err;
         if (attempt < MAX_CALL_RETRIES) {
@@ -288,17 +280,8 @@ export class CompressionObserver {
       }
 
       const sourceText = messageTexts.join("\n\n---\n\n");
-      const isAggressive = this.config.targetRatio <= 0.15;
 
-      // Calculate explicit target tokens from the observer's targetRatio so
-      // the summarizer doesn't hit the tight leaf-level caps (640/1200) that
-      // cause the compression ratio to drop to ~3% on large conversations.
-      const observerTargetTokens = Math.max(
-        256,
-        Math.floor(totalSourceTokens * this.config.targetRatio),
-      );
-
-      const summary = await this.summarizeWithRetry(sourceText, isAggressive, observerTargetTokens);
+      const summary = await this.summarizeWithRetry(sourceText, true);
 
       if (this.disposed) {
         return;
@@ -329,7 +312,7 @@ export class CompressionObserver {
       log.info(
         `[compression-observer] updated cache for conversation=${conversationId} ` +
           `sourceTokens=${totalSourceTokens} summaryTokens=${summaryTokens} ` +
-          `ratio=${(summaryTokens / totalSourceTokens).toFixed(3)} ` +
+          `ratio=${(summaryTokens / totalSourceTokens).toFixed(3)} target=${TARGET_RATIO} ` +
           `messages=${compactableItems.length} freshTailCount=${freshTailCount} ` +
           `hasMixedContext=${hasMixedContext}`,
       );
