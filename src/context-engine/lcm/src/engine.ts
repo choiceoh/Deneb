@@ -1307,8 +1307,16 @@ export class LcmContextEngine implements ContextEngine {
     // the DB here would break subsequent runs with "database is not open".
     // The connection is cleaned up on process exit via closeLcmConnection().
     // Note: compression observer is NOT disposed here because the engine
-    // instance is a singleton reused across runs. Observer cleanup happens
-    // only on process exit.
+    // instance is a singleton reused across runs. Observer is cleaned up
+    // via disposeObserver() on process exit.
+  }
+
+  /** Dispose only the compression observer (for process shutdown). */
+  disposeObserver(): void {
+    if (this.compressionObserver) {
+      this.compressionObserver.dispose();
+      this.compressionObserver = undefined;
+    }
   }
 
   // ── Public accessors for retrieval (used by subagent expansion) ─────────

@@ -85,7 +85,7 @@ export class AttentionManager {
 
     // Goal deadlines approaching.
     for (const goal of state.goals) {
-      if (goal.status !== "active" || !goal.dueAt) {
+      if (goal.status !== "active" || goal.dueAt == null) {
         continue;
       }
       if (!isFiniteNonNegative(goal.dueAt)) {
@@ -114,7 +114,7 @@ export class AttentionManager {
 
     // Social follow-ups due.
     for (const entry of state.socialContext) {
-      if (!entry.followUpAt) {
+      if (entry.followUpAt == null) {
         continue;
       }
       if (!isFiniteNonNegative(entry.followUpAt)) {
