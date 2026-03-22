@@ -1,6 +1,6 @@
 {
   "name": "@deneb/memory-core",
-  "version": "2026.3.14",
+  "version": "3.5.2",
   "private": true,
   "description": "Deneb core memory search plugin",
   "type": "module",
