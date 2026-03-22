@@ -1012,7 +1012,7 @@ export async function compactEmbeddedPiSessionDirect(
           hookCtx,
         );
         // Truncate session file to remove compacted entries (#39953)
-        if (params.config?.agents?.defaults?.compaction?.truncateAfterCompaction) {
+        if (params.config?.agents?.defaults?.compaction?.truncateAfterCompaction !== false) {
           try {
             const truncResult = await truncateSessionAfterCompaction({
               sessionFile: params.sessionFile,

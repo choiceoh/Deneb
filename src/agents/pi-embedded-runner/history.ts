@@ -3,6 +3,12 @@ import type { DenebConfig } from "../../config/config.js";
 
 const THREAD_SUFFIX_REGEX = /^(.*)(?::(?:thread|topic):\d+)$/i;
 
+/**
+ * Default maximum user turns when no channel-specific or global limit is set.
+ * Prevents unbounded context growth in long-running sessions.
+ */
+export const DEFAULT_MAX_HISTORY_TURNS = 100;
+
 function stripThreadSuffix(value: string): string {
   const match = value.match(THREAD_SUFFIX_REGEX);
   return match?.[1] ?? value;
@@ -36,11 +42,40 @@ export function limitHistoryTurns(
 }
 
 /**
- * Extract provider + user ID from a session key and look up dmHistoryLimit.
- * Supports per-DM overrides and provider defaults.
- * For channel/group sessions, uses historyLimit from provider config.
+ * Extract provider + user ID from a session key and look up historyLimit.
+ * Resolution order:
+ *   1. Per-DM/per-channel override from channel config
+ *   2. Provider-level dmHistoryLimit / historyLimit
+ *   3. Global agents.defaults.maxHistoryTurns
+ *   4. DEFAULT_MAX_HISTORY_TURNS (100)
+ *
+ * Returns 0 only when the user explicitly sets it to 0 (disable).
  */
 export function getHistoryLimitFromSessionKey(
+  sessionKey: string | undefined,
+  config: DenebConfig | undefined,
+): number | undefined {
+  const channelLimit = resolveChannelHistoryLimit(sessionKey, config);
+  if (channelLimit !== undefined) {
+    return channelLimit;
+  }
+
+  // Fall back to the global maxHistoryTurns default.
+  const globalLimit = config?.agents?.defaults?.maxHistoryTurns;
+  if (globalLimit !== undefined) {
+    // Explicit 0 means "disable limit"
+    return globalLimit === 0 ? undefined : globalLimit;
+  }
+
+  return DEFAULT_MAX_HISTORY_TURNS;
+}
+
+/**
+ * Resolve a channel-specific history limit from session key + channel config.
+ * Returns undefined when no channel-level limit is configured (caller should
+ * fall through to a global default).
+ */
+function resolveChannelHistoryLimit(
   sessionKey: string | undefined,
   config: DenebConfig | undefined,
 ): number | undefined {
