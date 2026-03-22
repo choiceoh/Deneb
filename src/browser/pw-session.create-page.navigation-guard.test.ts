@@ -1,9 +1,13 @@
 import { chromium } from "playwright-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as proxyEnvModule from "../infra/net/proxy-env.js";
 import { SsrFBlockedError } from "../infra/net/ssrf.js";
 import * as chromeModule from "./chrome.js";
 import { InvalidBrowserNavigationUrlError } from "./navigation-guard.js";
 import { closePlaywrightBrowserConnection, createPageViaPlaywright } from "./pw-session.js";
+
+// Mock proxy env detection so tests don't depend on the host environment
+const hasProxyEnvConfiguredSpy = vi.spyOn(proxyEnvModule, "hasProxyEnvConfigured");
 
 const connectOverCdpSpy = vi.spyOn(chromium, "connectOverCDP");
 const getChromeWebSocketUrlSpy = vi.spyOn(chromeModule, "getChromeWebSocketUrl");
@@ -59,6 +63,7 @@ function installBrowserMocks() {
 afterEach(async () => {
   connectOverCdpSpy.mockClear();
   getChromeWebSocketUrlSpy.mockClear();
+  hasProxyEnvConfiguredSpy.mockReset();
   await closePlaywrightBrowserConnection().catch(() => {});
 });
 
@@ -89,6 +94,7 @@ describe("pw-session createPageViaPlaywright navigation guard", () => {
   });
 
   it("blocks private intermediate redirect hops", async () => {
+    hasProxyEnvConfiguredSpy.mockReturnValue(false);
     const { pageGoto } = installBrowserMocks();
     pageGoto.mockResolvedValueOnce({
       request: () => ({

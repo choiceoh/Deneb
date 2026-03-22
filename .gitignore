@@ -46,6 +46,9 @@ __pycache__/
 .session.json
 *.hash
 
+# Vitest test artifacts
+__deneb_vitest__/
+
 # Temp
 /tmp/
 *.tmp
