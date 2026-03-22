@@ -1,18 +1,18 @@
 services:
   deneb-gateway:
-    image: ${DENEB_IMAGE:-${OPENCLAW_IMAGE:-deneb:local}}
+    image: ${DENEB_IMAGE:-deneb:local}
     environment:
       HOME: /home/node
       TERM: xterm-256color
-      DENEB_GATEWAY_TOKEN: ${DENEB_GATEWAY_TOKEN:-${OPENCLAW_GATEWAY_TOKEN:-}}
-      DENEB_ALLOW_INSECURE_PRIVATE_WS: ${DENEB_ALLOW_INSECURE_PRIVATE_WS:-${OPENCLAW_ALLOW_INSECURE_PRIVATE_WS:-}}
+      DENEB_GATEWAY_TOKEN: ${DENEB_GATEWAY_TOKEN:-}
+      DENEB_ALLOW_INSECURE_PRIVATE_WS: ${DENEB_ALLOW_INSECURE_PRIVATE_WS:-}
       CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY:-}
       CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY:-}
       CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE:-}
-      TZ: ${DENEB_TZ:-${OPENCLAW_TZ:-UTC}}
+      TZ: ${DENEB_TZ:-UTC}
     volumes:
-      - ${DENEB_CONFIG_DIR:-${OPENCLAW_CONFIG_DIR:-./.deneb}}:/home/node/.deneb
-      - ${DENEB_WORKSPACE_DIR:-${OPENCLAW_WORKSPACE_DIR:-./.deneb/workspace}}:/home/node/.deneb/workspace
+      - ${DENEB_CONFIG_DIR:-./.deneb}:/home/node/.deneb
+      - ${DENEB_WORKSPACE_DIR:-./.deneb/workspace}:/home/node/.deneb/workspace
       ## Uncomment the lines below to enable sandbox isolation
       ## (agents.defaults.sandbox). Requires Docker CLI in the image
       ## (build with --build-arg DENEB_INSTALL_DOCKER_CLI=1) or use
@@ -22,8 +22,8 @@ services:
     # group_add:
     #   - "${DOCKER_GID:-999}"
     ports:
-      - "${DENEB_GATEWAY_PORT:-${OPENCLAW_GATEWAY_PORT:-18789}}:18789"
-      - "${DENEB_BRIDGE_PORT:-${OPENCLAW_BRIDGE_PORT:-18790}}:18790"
+      - "${DENEB_GATEWAY_PORT:-18789}:18789"
+      - "${DENEB_BRIDGE_PORT:-18790}:18790"
     init: true
     restart: unless-stopped
     command:
@@ -32,7 +32,7 @@ services:
         "dist/index.js",
         "gateway",
         "--bind",
-        "${DENEB_GATEWAY_BIND:-${OPENCLAW_GATEWAY_BIND:-lan}}",
+        "${DENEB_GATEWAY_BIND:-lan}",
         "--port",
         "18789",
       ]
@@ -50,7 +50,7 @@ services:
       start_period: 20s
 
   deneb-cli:
-    image: ${DENEB_IMAGE:-${OPENCLAW_IMAGE:-deneb:local}}
+    image: ${DENEB_IMAGE:-deneb:local}
     network_mode: "service:deneb-gateway"
     cap_drop:
       - NET_RAW
@@ -60,16 +60,16 @@ services:
     environment:
       HOME: /home/node
       TERM: xterm-256color
-      DENEB_GATEWAY_TOKEN: ${DENEB_GATEWAY_TOKEN:-${OPENCLAW_GATEWAY_TOKEN:-}}
-      DENEB_ALLOW_INSECURE_PRIVATE_WS: ${DENEB_ALLOW_INSECURE_PRIVATE_WS:-${OPENCLAW_ALLOW_INSECURE_PRIVATE_WS:-}}
+      DENEB_GATEWAY_TOKEN: ${DENEB_GATEWAY_TOKEN:-}
+      DENEB_ALLOW_INSECURE_PRIVATE_WS: ${DENEB_ALLOW_INSECURE_PRIVATE_WS:-}
       BROWSER: echo
       CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY:-}
       CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY:-}
       CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE:-}
-      TZ: ${DENEB_TZ:-${OPENCLAW_TZ:-UTC}}
+      TZ: ${DENEB_TZ:-UTC}
     volumes:
-      - ${DENEB_CONFIG_DIR:-${OPENCLAW_CONFIG_DIR:-./.deneb}}:/home/node/.deneb
-      - ${DENEB_WORKSPACE_DIR:-${OPENCLAW_WORKSPACE_DIR:-./.deneb/workspace}}:/home/node/.deneb/workspace
+      - ${DENEB_CONFIG_DIR:-./.deneb}:/home/node/.deneb
+      - ${DENEB_WORKSPACE_DIR:-./.deneb/workspace}:/home/node/.deneb/workspace
     stdin_open: true
     tty: true
     init: true

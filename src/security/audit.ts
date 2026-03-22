@@ -355,12 +355,9 @@ function collectGatewayConfigFindings(
   const hasToken = typeof auth.token === "string" && auth.token.trim().length > 0;
   const hasPassword = typeof auth.password === "string" && auth.password.trim().length > 0;
   const envTokenConfigured =
-    hasNonEmptyString(env.DENEB_GATEWAY_TOKEN) ||
-    hasNonEmptyString(env.OPENCLAW_GATEWAY_TOKEN) ||
-    hasNonEmptyString(env.CLAWDBOT_GATEWAY_TOKEN);
+    hasNonEmptyString(env.DENEB_GATEWAY_TOKEN) || hasNonEmptyString(env.CLAWDBOT_GATEWAY_TOKEN);
   const envPasswordConfigured =
     hasNonEmptyString(env.DENEB_GATEWAY_PASSWORD) ||
-    hasNonEmptyString(env.OPENCLAW_GATEWAY_PASSWORD) ||
     hasNonEmptyString(env.CLAWDBOT_GATEWAY_PASSWORD);
   const tokenConfiguredFromConfig = hasConfiguredSecretInput(
     sourceConfig.gateway?.auth?.token,
@@ -745,7 +742,6 @@ function collectBrowserControlFindings(
   const tokenConfigured =
     Boolean(browserAuth.token) ||
     hasNonEmptyString(env.DENEB_GATEWAY_TOKEN) ||
-    hasNonEmptyString(env.OPENCLAW_GATEWAY_TOKEN) ||
     hasNonEmptyString(env.CLAWDBOT_GATEWAY_TOKEN) ||
     hasConfiguredSecretInput(cfg.gateway?.auth?.token, cfg.secrets?.defaults);
   const passwordCanWin =
