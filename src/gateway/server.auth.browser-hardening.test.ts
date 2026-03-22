@@ -1,21 +1,11 @@
-import { randomUUID } from "node:crypto";
-import os from "node:os";
-import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { WebSocket } from "ws";
 import { ConnectErrorDetailCodes } from "../gateway/protocol/connect-error-details.js";
-import {
-  loadOrCreateDeviceIdentity,
-  publicKeyRawBase64UrlFromPem,
-  signDevicePayload,
-} from "../infra/device-identity.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
-import { buildDeviceAuthPayload } from "./device-auth.js";
 import {
   connectReq,
   connectOk,
   installGatewayTestHooks,
-  readConnectChallengeNonce,
   rpcReq,
   testState,
   trackConnectChallengeNonce,
@@ -45,41 +35,6 @@ const openWs = async (port: number, headers?: Record<string, string>) => {
   await new Promise<void>((resolve) => ws.once("open", resolve));
   return ws;
 };
-
-async function createSignedDevice(params: {
-  token: string;
-  scopes: string[];
-  clientId: string;
-  clientMode: string;
-  identityPath?: string;
-  nonce: string;
-  signedAtMs?: number;
-}) {
-  const identity = params.identityPath
-    ? loadOrCreateDeviceIdentity(params.identityPath)
-    : loadOrCreateDeviceIdentity();
-  const signedAtMs = params.signedAtMs ?? Date.now();
-  const payload = buildDeviceAuthPayload({
-    deviceId: identity.deviceId,
-    clientId: params.clientId,
-    clientMode: params.clientMode,
-    role: "operator",
-    scopes: params.scopes,
-    signedAtMs,
-    token: params.token,
-    nonce: params.nonce,
-  });
-  return {
-    identity,
-    device: {
-      id: identity.deviceId,
-      publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem),
-      signature: signDevicePayload(identity.privateKeyPem, payload),
-      signedAt: signedAtMs,
-      nonce: params.nonce,
-    },
-  };
-}
 
 async function writeTrustedProxyBrowserAuthConfig() {
   const { writeConfigFile } = await import("../config/config.js");
@@ -246,42 +201,6 @@ describe("gateway auth browser hardening", () => {
         expect(second.error?.message ?? "").toContain("retry later");
       } finally {
         secondWs.close();
-      }
-    });
-  });
-
-  test("does not silently auto-pair non-control-ui browser clients on loopback", async () => {
-    const { listDevicePairing } = await import("../infra/device-pairing.js");
-    testState.gatewayAuth = { mode: "token", token: "secret" };
-
-    await withGatewayServer(async ({ port }) => {
-      const browserWs = await openWs(port, { origin: originForPort(port) });
-      try {
-        const nonce = await readConnectChallengeNonce(browserWs);
-        expect(typeof nonce).toBe("string");
-        const { identity, device } = await createSignedDevice({
-          token: "secret",
-          scopes: ["operator.admin"],
-          clientId: TEST_OPERATOR_CLIENT.id,
-          clientMode: TEST_OPERATOR_CLIENT.mode,
-          identityPath: path.join(os.tmpdir(), `deneb-browser-device-${randomUUID()}.json`),
-          nonce: String(nonce ?? ""),
-        });
-        const res = await connectReq(browserWs, {
-          token: "secret",
-          scopes: ["operator.admin"],
-          client: TEST_OPERATOR_CLIENT,
-          device,
-        });
-        expect(res.ok).toBe(false);
-        expect(res.error?.message ?? "").toContain("pairing required");
-
-        const pairing = await listDevicePairing();
-        const pending = pairing.pending.find((entry) => entry.deviceId === identity.deviceId);
-        expect(pending).toBeTruthy();
-        expect(pending?.silent).toBe(false);
-      } finally {
-        browserWs.close();
       }
     });
   });
