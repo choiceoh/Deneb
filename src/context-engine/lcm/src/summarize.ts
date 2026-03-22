@@ -416,9 +416,9 @@ function resolveTargetTokens(params: {
 
   const { inputTokens, mode } = params;
   if (mode === "aggressive") {
-    return Math.max(96, Math.min(640, Math.floor(inputTokens * 0.2)));
+    return Math.max(96, Math.min(5000, Math.floor(inputTokens * 0.2)));
   }
-  return Math.max(192, Math.min(1200, Math.floor(inputTokens * 0.35)));
+  return Math.max(192, Math.min(10000, Math.floor(inputTokens * 0.35)));
 }
 
 /**
@@ -441,8 +441,8 @@ function buildLeafSummaryPrompt(params: {
     mode === "aggressive"
       ? [
           "Aggressive summary policy:",
-          "- Keep only durable facts and current task state.",
-          "- Remove examples, repetition, and low-value narrative details.",
+          "- Keep facts and current task state.",
+          "- Remove examples, repetition.",
           "- Preserve explicit TODOs, blockers, decisions, and constraints.",
         ].join("\n")
       : [
