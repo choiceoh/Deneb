@@ -71,6 +71,7 @@ import {
   type GatewayUpdateAvailableEventPayload,
 } from "./events.js";
 import { ExecApprovalManager } from "./exec-approval-manager.js";
+import { startGatewaySelfWatchdog, type GatewaySelfWatchdog } from "./gateway-self-watchdog.js";
 import { startGatewayModelPricingRefresh } from "./model-pricing-cache.js";
 import { NodeRegistry } from "./node-registry.js";
 import type { startBrowserControlServerIfEnabled } from "./server-browser.js";
@@ -890,6 +891,17 @@ export async function startGatewayServer(
     autonomousHandle = await startAutonomousService({ cfg: cfgAtStart, deps });
   }
 
+  // Start self-health watchdog for auto-recovery when gateway gets stuck.
+  let selfWatchdog: GatewaySelfWatchdog | null = null;
+  if (!minimalTestGateway) {
+    selfWatchdog = startGatewaySelfWatchdog({
+      isServerListening: () => !!httpServer?.listening,
+      getExpectedChannelCount: () => channelManager.getExpectedRunningCount(),
+      getConnectedChannelCount: () => channelManager.getConnectedCount(),
+      getLastActivityAt: () => channelManager.getLastEventAt(),
+    });
+  }
+
   // Run gateway_start plugin hook (fire-and-forget)
   if (!minimalTestGateway) {
     const hookRunner = getGlobalHookRunner();
@@ -1031,6 +1043,7 @@ export async function startGatewayServer(
       browserAuthRateLimiter.dispose();
       stopModelPricingRefresh();
       channelHealthMonitor?.stop();
+      selfWatchdog?.stop();
       autonomousHandle?.stop();
       clearSecretsRuntimeSnapshot();
       await close(opts);

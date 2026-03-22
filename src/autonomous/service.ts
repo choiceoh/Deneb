@@ -13,6 +13,9 @@ const log = createSubsystemLogger("autonomous");
 const DEFAULT_CYCLE_INTERVAL_MS = 300_000;
 const MIN_CYCLE_DELAY_MS = 10_000;
 const STARTUP_DELAY_MS = 5_000;
+const MAX_CONSECUTIVE_FAILURES = 10;
+const INITIAL_BACKOFF_MS = 30_000; // 30s initial backoff after failure
+const MAX_BACKOFF_MS = 600_000; // 10 minute max backoff
 
 export type AutonomousServiceHandle = {
   stop: () => void;
@@ -62,6 +65,7 @@ export async function startAutonomousService(params: {
   // Start the cycle loop.
   let timer: NodeJS.Timeout | null = null;
   let running = false;
+  let consecutiveFailures = 0;
 
   function clearTimer(): void {
     if (timer) {
@@ -87,7 +91,7 @@ export async function startAutonomousService(params: {
     }
     running = true;
     try {
-      await runAutonomousCycle({
+      const outcome = await runAutonomousCycle({
         cfg,
         deps,
         attention,
@@ -95,8 +99,31 @@ export async function startAutonomousService(params: {
         storePath,
         abortSignal: abortController.signal,
       });
+      // Rate-limited and aborted are normal operational states, not failures.
+      // Only real errors (timeout, LLM failure, etc.) should trigger backoff.
+      // Crucially, rate-limited/aborted must NOT reset the failure counter either —
+      // otherwise a rate-limited response during backoff would clear the counter
+      // and cause an immediate retry against a still-failing service.
+      const isRealError =
+        outcome.error && outcome.error !== "rate-limited" && outcome.error !== "aborted";
+      const isNeutral = outcome.error === "rate-limited" || outcome.error === "aborted";
+      if (isRealError) {
+        consecutiveFailures++;
+        log.warn(
+          `autonomous cycle error (${consecutiveFailures} consecutive failures): ${outcome.error}`,
+        );
+      } else if (!isNeutral) {
+        // Genuine success (no error) — reset the backoff counter.
+        if (consecutiveFailures > 0) {
+          log.info(`autonomous cycle recovered after ${consecutiveFailures} consecutive failures`);
+        }
+        consecutiveFailures = 0;
+      }
     } catch (err) {
-      log.error(`autonomous cycle failed: ${err instanceof Error ? err.message : String(err)}`);
+      consecutiveFailures++;
+      log.error(
+        `autonomous cycle failed (${consecutiveFailures} consecutive): ${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       running = false;
       // Only schedule next if we haven't been stopped.
@@ -110,6 +137,24 @@ export async function startAutonomousService(params: {
     if (stopped || abortController.signal.aborted) {
       return;
     }
+
+    // Apply exponential backoff when consecutive failures occur,
+    // so we don't hammer a failing LLM/service and allow time to recover.
+    if (consecutiveFailures > 0) {
+      const backoffMs = Math.min(
+        INITIAL_BACKOFF_MS *
+          Math.pow(2, Math.min(consecutiveFailures - 1, MAX_CONSECUTIVE_FAILURES)),
+        MAX_BACKOFF_MS,
+      );
+      log.info(
+        `scheduling retry after ${Math.round(backoffMs / 1000)}s backoff (${consecutiveFailures} failures)`,
+      );
+      setTimer(backoffMs, () => {
+        void executeCycle();
+      });
+      return;
+    }
+
     loadAutonomousState(storePath)
       .then((state) => {
         // Re-check after async load.

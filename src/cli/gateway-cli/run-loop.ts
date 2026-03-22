@@ -99,6 +99,11 @@ export async function runGatewayLoop(params: {
   const DRAIN_TIMEOUT_MS = 90_000;
   const SHUTDOWN_TIMEOUT_MS = 5_000;
 
+  // Auto-retry startup on non-initial failures with exponential backoff.
+  const MAX_STARTUP_RETRIES = 5;
+  const INITIAL_RETRY_DELAY_MS = 5_000;
+  const MAX_RETRY_DELAY_MS = 120_000;
+
   const request = (action: GatewayRunSignalAction, signal: string) => {
     if (shuttingDown) {
       gatewayLog.info(`received ${signal} during shutdown; ignoring`);
@@ -230,29 +235,71 @@ export async function runGatewayLoop(params: {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       onIteration();
-      try {
-        server = await params.start();
-        isFirstStart = false;
-      } catch (err) {
-        // On initial startup, let the error propagate so the outer handler
-        // can report "Gateway failed to start" and exit non-zero. Only
-        // swallow errors on subsequent in-process restarts to keep the
-        // process alive (a crash would lose macOS TCC permissions). (#35862)
-        if (isFirstStart) {
-          throw err;
+      let startupRetries = 0;
+      // Inner retry loop: on non-initial startup failures, retry with backoff
+      // instead of sitting idle forever waiting for a manual SIGUSR1.
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        // If a shutdown signal arrived during retry sleep, stop retrying.
+        if (shuttingDown) {
+          break;
         }
-        server = null;
-        // Release the gateway lock so that `daemon restart/stop` (which
-        // discovers PIDs via the gateway port) can still manage the process.
-        // Without this, the process holds the lock but is not listening,
-        // forcing manual cleanup. (#35862)
-        await releaseLockIfHeld();
-        const errMsg = err instanceof Error ? err.message : String(err);
-        const errStack = err instanceof Error && err.stack ? `\n${err.stack}` : "";
-        gatewayLog.error(
-          `gateway startup failed: ${errMsg}. ` +
-            `Process will stay alive; fix the issue and restart.${errStack}`,
-        );
+        try {
+          server = await params.start();
+          isFirstStart = false;
+          break; // success — proceed to wait for restart signal
+        } catch (err) {
+          // On initial startup, let the error propagate so the outer handler
+          // can report "Gateway failed to start" and exit non-zero. Only
+          // swallow errors on subsequent in-process restarts to keep the
+          // process alive (a crash would lose macOS TCC permissions). (#35862)
+          if (isFirstStart) {
+            throw err;
+          }
+          server = null;
+          startupRetries++;
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const errStack = err instanceof Error && err.stack ? `\n${err.stack}` : "";
+
+          if (startupRetries > MAX_STARTUP_RETRIES) {
+            // Release the gateway lock so that `daemon restart/stop` (which
+            // discovers PIDs via the gateway port) can still manage the process.
+            // Without this, the process holds the lock but is not listening,
+            // forcing manual cleanup. (#35862)
+            await releaseLockIfHeld();
+            gatewayLog.error(
+              `gateway startup failed after ${MAX_STARTUP_RETRIES} retries: ${errMsg}. ` +
+                `Process will stay alive; fix the issue and restart.${errStack}`,
+            );
+            break; // fall through to wait for manual restart signal
+          }
+
+          const retryDelay = Math.min(
+            INITIAL_RETRY_DELAY_MS * Math.pow(2, startupRetries - 1),
+            MAX_RETRY_DELAY_MS,
+          );
+          gatewayLog.warn(
+            `gateway startup failed (attempt ${startupRetries}/${MAX_STARTUP_RETRIES}): ${errMsg}. ` +
+              `Retrying in ${Math.round(retryDelay / 1000)}s...${errStack}`,
+          );
+          // Cancellable sleep: resolve immediately if shutdown signal arrives
+          // so we don't delay SIGTERM/SIGINT response by up to 120 seconds.
+          await new Promise<void>((resolve) => {
+            const cleanup = () => {
+              clearTimeout(retryTimer);
+              process.removeListener("SIGTERM", onSignal);
+              process.removeListener("SIGINT", onSignal);
+              resolve();
+            };
+            const onSignal = () => cleanup();
+            const retryTimer = setTimeout(() => cleanup(), retryDelay);
+            if (typeof retryTimer === "object" && "unref" in retryTimer) {
+              retryTimer.unref();
+            }
+            process.once("SIGTERM", onSignal);
+            process.once("SIGINT", onSignal);
+          });
+        }
       }
       await new Promise<void>((resolve) => {
         restartResolver = resolve;

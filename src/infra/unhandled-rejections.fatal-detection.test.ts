@@ -1,6 +1,9 @@
 import process from "node:process";
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
-import { installUnhandledRejectionHandler } from "./unhandled-rejections.js";
+import {
+  installUnhandledRejectionHandler,
+  _resetUnknownRejectionWindow,
+} from "./unhandled-rejections.js";
 
 describe("installUnhandledRejectionHandler - fatal detection", () => {
   let exitCalls: Array<string | number | null> = [];
@@ -15,6 +18,7 @@ describe("installUnhandledRejectionHandler - fatal detection", () => {
 
   beforeEach(() => {
     exitCalls = [];
+    _resetUnknownRejectionWindow();
 
     vi.spyOn(process, "exit").mockImplementation((code?: string | number | null): never => {
       if (code !== undefined && code !== null) {
@@ -126,17 +130,27 @@ describe("installUnhandledRejectionHandler - fatal detection", () => {
       );
     });
 
-    it("exits on generic errors without code", () => {
+    it("tolerates isolated generic errors without code", () => {
       const genericErr = new Error("Something went wrong");
 
-      expectExitCodeFromUnhandled(genericErr, [1]);
+      // A single unknown rejection is tolerated (logged but no exit).
+      expectExitCodeFromUnhandled(genericErr, []);
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        "[deneb] Unhandled promise rejection:",
+        "[deneb] Unhandled promise rejection (non-fatal, continuing):",
         expect.stringContaining("Something went wrong"),
       );
     });
 
-    it("exits on non-transient Slack request errors", () => {
+    it("exits after repeated unknown rejections within the rolling window", () => {
+      // The threshold is 5 unknown rejections within 60 seconds.
+      for (let i = 0; i < 4; i++) {
+        expectExitCodeFromUnhandled(new Error(`error ${i}`), []);
+      }
+      // The 5th should trigger process.exit(1).
+      expectExitCodeFromUnhandled(new Error("final straw"), [1]);
+    });
+
+    it("tolerates isolated non-transient Slack request errors", () => {
       const slackErr = Object.assign(
         new Error("A request error occurred: invalid request payload"),
         {
@@ -144,7 +158,8 @@ describe("installUnhandledRejectionHandler - fatal detection", () => {
         },
       );
 
-      expectExitCodeFromUnhandled(slackErr, [1]);
+      // Single non-transient Slack error is tolerated (not immediately fatal).
+      expectExitCodeFromUnhandled(slackErr, []);
     });
 
     it("does not exit on AbortError and logs suppression warning", () => {

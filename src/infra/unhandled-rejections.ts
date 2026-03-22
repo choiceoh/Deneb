@@ -218,6 +218,31 @@ export function isUnhandledRejectionHandled(reason: unknown): boolean {
   return false;
 }
 
+// Track unknown rejections within a rolling window. Only crash when the
+// threshold is breached — isolated one-off rejections are logged but tolerated
+// so the gateway stays up for transient hiccups (e.g. a plugin throwing once).
+const UNKNOWN_REJECTION_WINDOW_MS = 60_000;
+const UNKNOWN_REJECTION_CRASH_THRESHOLD = 5;
+const unknownRejectionTimestamps: number[] = [];
+
+/** @internal — test-only: reset the rolling window counter. */
+export function _resetUnknownRejectionWindow(): void {
+  unknownRejectionTimestamps.length = 0;
+}
+
+function recordUnknownRejection(): boolean {
+  const now = Date.now();
+  unknownRejectionTimestamps.push(now);
+  // Prune entries older than the window.
+  while (
+    unknownRejectionTimestamps.length > 0 &&
+    now - unknownRejectionTimestamps[0] > UNKNOWN_REJECTION_WINDOW_MS
+  ) {
+    unknownRejectionTimestamps.shift();
+  }
+  return unknownRejectionTimestamps.length >= UNKNOWN_REJECTION_CRASH_THRESHOLD;
+}
+
 export function installUnhandledRejectionHandler(): void {
   process.on("unhandledRejection", (reason, _promise) => {
     if (isUnhandledRejectionHandled(reason)) {
@@ -251,7 +276,20 @@ export function installUnhandledRejectionHandler(): void {
       return;
     }
 
-    console.error("[deneb] Unhandled promise rejection:", formatUncaughtError(reason));
-    process.exit(1);
+    // Unknown rejection: log but only crash if we hit the threshold within the
+    // rolling window. A single stray rejection should not take down the gateway.
+    const shouldCrash = recordUnknownRejection();
+    if (shouldCrash) {
+      console.error(
+        `[deneb] Unhandled promise rejection (${UNKNOWN_REJECTION_CRASH_THRESHOLD} within ${UNKNOWN_REJECTION_WINDOW_MS / 1000}s — crashing):`,
+        formatUncaughtError(reason),
+      );
+      process.exit(1);
+    } else {
+      console.error(
+        "[deneb] Unhandled promise rejection (non-fatal, continuing):",
+        formatUncaughtError(reason),
+      );
+    }
   });
 }
