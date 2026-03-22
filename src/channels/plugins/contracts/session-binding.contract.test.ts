@@ -6,11 +6,11 @@ import { __testing as sessionBindingTesting } from "../../../infra/outbound/sess
 import { sessionBindingContractRegistry } from "./registry.js";
 import { installSessionBindingContractSuite } from "./suites.js";
 
-beforeEach(() => {
+beforeEach(async () => {
   sessionBindingTesting.resetSessionBindingAdaptersForTests();
   discordThreadBindingTesting.resetThreadBindingsForTests();
   feishuThreadBindingTesting.resetFeishuThreadBindingsForTests();
-  telegramThreadBindingTesting.resetTelegramThreadBindingsForTests();
+  await telegramThreadBindingTesting.resetTelegramThreadBindingsForTests();
 });
 
 for (const entry of sessionBindingContractRegistry) {

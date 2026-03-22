@@ -769,14 +769,18 @@ export abstract class MemoryManagerSyncOps {
             `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`,
           )
           .run(stale.path, "memory");
-      } catch {}
+      } catch (err) {
+        log.debug?.(`failed to delete vector rows for ${stale.path}: ${String(err)}`);
+      }
       this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(stale.path, "memory");
       if (this.fts.enabled && this.fts.available) {
         try {
           this.db
             .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
             .run(stale.path, "memory", this.provider.model);
-        } catch {}
+        } catch (err) {
+          log.debug?.(`failed to delete FTS rows for ${stale.path}: ${String(err)}`);
+        }
       }
     }
   }
@@ -890,7 +894,9 @@ export abstract class MemoryManagerSyncOps {
             `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`,
           )
           .run(stale.path, "sessions");
-      } catch {}
+      } catch (err) {
+        log.debug?.(`failed to delete vector rows for ${stale.path}: ${String(err)}`);
+      }
       this.db
         .prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`)
         .run(stale.path, "sessions");
@@ -899,7 +905,9 @@ export abstract class MemoryManagerSyncOps {
           this.db
             .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
             .run(stale.path, "sessions", this.provider.model);
-        } catch {}
+        } catch (err) {
+          log.debug?.(`failed to delete FTS rows for ${stale.path}: ${String(err)}`);
+        }
       }
     }
   }
@@ -1293,7 +1301,9 @@ export abstract class MemoryManagerSyncOps {
     if (this.fts.enabled && this.fts.available) {
       try {
         this.db.exec(`DELETE FROM ${FTS_TABLE}`);
-      } catch {}
+      } catch (err) {
+        log.debug?.(`failed to reset FTS table: ${String(err)}`);
+      }
     }
     this.dropVectorTable();
     this.vector.dims = undefined;

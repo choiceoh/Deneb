@@ -409,8 +409,13 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
                   preserveRestartAttempts: true,
                   preserveManualStop: true,
                 });
-              } catch {
+              } catch (err) {
                 // abort or startup failure — next crash will retry
+                if (!(err instanceof DOMException && err.name === "AbortError")) {
+                  log.error?.(
+                    `[${id}] restart failed: ${err instanceof Error ? err.message : String(err)}`,
+                  );
+                }
               }
             })
             .finally(() => {
