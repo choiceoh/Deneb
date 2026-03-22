@@ -99,7 +99,11 @@ export async function startAutonomousService(params: {
         storePath,
         abortSignal: abortController.signal,
       });
-      if (outcome.error) {
+      // Rate-limited and aborted are normal operational states, not failures.
+      // Only real errors (timeout, LLM failure, etc.) should trigger backoff.
+      const isRealError =
+        outcome.error && outcome.error !== "rate-limited" && outcome.error !== "aborted";
+      if (isRealError) {
         consecutiveFailures++;
         log.warn(
           `autonomous cycle error (${consecutiveFailures} consecutive failures): ${outcome.error}`,

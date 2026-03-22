@@ -240,6 +240,10 @@ export async function runGatewayLoop(params: {
       // instead of sitting idle forever waiting for a manual SIGUSR1.
       // eslint-disable-next-line no-constant-condition
       while (true) {
+        // If a shutdown signal arrived during retry sleep, stop retrying.
+        if (shuttingDown) {
+          break;
+        }
         try {
           server = await params.start();
           isFirstStart = false;
@@ -278,7 +282,23 @@ export async function runGatewayLoop(params: {
             `gateway startup failed (attempt ${startupRetries}/${MAX_STARTUP_RETRIES}): ${errMsg}. ` +
               `Retrying in ${Math.round(retryDelay / 1000)}s...${errStack}`,
           );
-          await new Promise<void>((resolve) => setTimeout(resolve, retryDelay));
+          // Cancellable sleep: resolve immediately if shutdown signal arrives
+          // so we don't delay SIGTERM/SIGINT response by up to 120 seconds.
+          await new Promise<void>((resolve) => {
+            const cleanup = () => {
+              clearTimeout(retryTimer);
+              process.removeListener("SIGTERM", onSignal);
+              process.removeListener("SIGINT", onSignal);
+              resolve();
+            };
+            const onSignal = () => cleanup();
+            const retryTimer = setTimeout(() => cleanup(), retryDelay);
+            if (typeof retryTimer === "object" && "unref" in retryTimer) {
+              retryTimer.unref();
+            }
+            process.once("SIGTERM", onSignal);
+            process.once("SIGINT", onSignal);
+          });
         }
       }
       await new Promise<void>((resolve) => {

@@ -4,6 +4,7 @@ import { createSubsystemLogger } from "../logging/subsystem.js";
 const log = createSubsystemLogger("gateway/self-watchdog");
 
 const DEFAULT_CHECK_INTERVAL_MS = 2 * 60_000; // 2 minutes
+const DEFAULT_STARTUP_GRACE_MS = 3 * 60_000; // 3 minutes grace for initial channel connect
 const DEFAULT_STALE_THRESHOLD_MS = 30 * 60_000; // 30 minutes without any activity
 const DEFAULT_MAX_AUTO_RESTARTS = 3;
 const AUTO_RESTART_WINDOW_MS = 60 * 60_000; // 1 hour
@@ -18,6 +19,8 @@ export type GatewaySelfWatchdogDeps = {
   /** Returns the timestamp of the last successfully processed inbound or outbound event. */
   getLastActivityAt: () => number;
   checkIntervalMs?: number;
+  /** Grace period after watchdog starts before health checks activate. */
+  startupGraceMs?: number;
   staleThresholdMs?: number;
   maxAutoRestarts?: number;
   abortSignal?: AbortSignal;
@@ -41,6 +44,7 @@ export function startGatewaySelfWatchdog(deps: GatewaySelfWatchdogDeps): Gateway
     getConnectedChannelCount,
     getLastActivityAt,
     checkIntervalMs = DEFAULT_CHECK_INTERVAL_MS,
+    startupGraceMs = DEFAULT_STARTUP_GRACE_MS,
     staleThresholdMs = DEFAULT_STALE_THRESHOLD_MS,
     maxAutoRestarts = DEFAULT_MAX_AUTO_RESTARTS,
     abortSignal,
@@ -49,6 +53,7 @@ export function startGatewaySelfWatchdog(deps: GatewaySelfWatchdogDeps): Gateway
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
   let lastTouchAt = Date.now();
+  const createdAt = Date.now();
   const autoRestartTimestamps: number[] = [];
 
   function touch() {
@@ -83,6 +88,11 @@ export function startGatewaySelfWatchdog(deps: GatewaySelfWatchdogDeps): Gateway
       return;
     }
     const now = Date.now();
+
+    // Skip checks during startup grace period so channels have time to connect.
+    if (now - createdAt < startupGraceMs) {
+      return;
+    }
 
     // Check 1: server not listening
     if (!isServerListening()) {
