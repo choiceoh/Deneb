@@ -1,6 +1,6 @@
 {
   "name": "@deneb/telegram",
-  "version": "2026.3.14",
+  "version": "3.5.2",
   "private": true,
   "description": "Deneb Telegram channel plugin",
   "type": "module",
