@@ -2,9 +2,7 @@
 // surface instead of reaching into src/channels or adjacent infra modules.
 
 export * from "../channels/ack-reactions.js";
-export * from "../channels/allow-from.js";
 export * from "../channels/allowlists/resolve-utils.js";
-export * from "../channels/allowlist-match.js";
 export * from "../channels/channel-config.js";
 export * from "../channels/chat-type.js";
 export * from "../channels/command-gating.js";
@@ -34,11 +32,9 @@ export type * from "../channels/plugins/types.js";
 export * from "../channels/plugins/config-writes.js";
 export * from "../channels/plugins/directory-adapters.js";
 export * from "../channels/plugins/media-payload.js";
-export { PAIRING_APPROVED_MESSAGE } from "../channels/plugins/pairing-message.js";
 export * from "./message-tool-schema.js";
 export * from "../channels/plugins/outbound/direct-text-media.js";
 export * from "../channels/plugins/outbound/interactive.js";
-export * from "../channels/plugins/pairing-adapters.js";
 export * from "../channels/plugins/runtime-forwarders.js";
 export * from "../channels/plugins/target-resolvers.js";
 export * from "../channels/plugins/threading-helpers.js";
@@ -67,3 +63,16 @@ export {
   normalizeInteractiveReply,
   resolveInteractiveTextFallback,
 } from "../interactive/payload.js";
+
+// Solo-dev stubs for removed pairing system.
+export function createPairingPrefixStripper(_re: RegExp): (raw: string) => string {
+  return (raw: string) => raw;
+}
+export function createTextPairingAdapter(_opts: {
+  idLabel: string;
+  message: string;
+  normalizeAllowEntry: (raw: string) => string;
+  notify: (params: { cfg: unknown; id: string; message: string }) => Promise<void>;
+}): unknown {
+  return {};
+}

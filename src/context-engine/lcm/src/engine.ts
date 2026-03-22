@@ -1172,6 +1172,7 @@ export class LcmContextEngine implements ContextEngine {
       const useSweep =
         manualCompactionRequested || forceCompaction || params.compactionTarget === "threshold";
       if (useSweep) {
+        const startMs = Date.now();
         const sweepResult = await this.compaction.compactFullSweep({
           conversationId,
           tokenBudget,
@@ -1179,6 +1180,22 @@ export class LcmContextEngine implements ContextEngine {
           force: forceCompaction,
           hardTrigger: false,
         });
+
+        // Notify via callback (e.g. Telegram notification).
+        if (sweepResult.actionTaken && this.deps.onCompaction) {
+          try {
+            this.deps.onCompaction({
+              conversationId,
+              tokensBefore: sweepResult.tokensBefore,
+              tokensAfter: sweepResult.tokensAfter,
+              actionTaken: true,
+              engine: this.config.summaryProvider || this.config.observer?.provider || undefined,
+              durationMs: Date.now() - startMs,
+            });
+          } catch {
+            // Notification failure must never break compaction.
+          }
+        }
 
         return {
           ok: sweepResult.actionTaken || !liveContextStillExceedsTarget,

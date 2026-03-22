@@ -4,9 +4,7 @@ import { VERSION } from "../version.js";
 import {
   GATEWAY_SERVICE_KIND,
   GATEWAY_SERVICE_MARKER,
-  resolveGatewayLaunchAgentLabel,
   resolveGatewaySystemdServiceName,
-  resolveGatewayWindowsTaskName,
 } from "./constants.js";
 
 export type MinimalServicePathOptions = {
@@ -93,57 +91,10 @@ function addCommonEnvConfiguredBinDirs(
 }
 
 function resolveSystemPathDirs(platform: NodeJS.Platform): string[] {
-  if (platform === "darwin") {
-    return ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"];
-  }
   if (platform === "linux") {
     return ["/usr/local/bin", "/usr/bin", "/bin"];
   }
   return [];
-}
-
-/**
- * Resolve common user bin directories for macOS.
- * These are paths where npm global installs and node version managers typically place binaries.
- *
- * Key differences from Linux:
- * - fnm: macOS uses ~/Library/Application Support/fnm (not ~/.local/share/fnm)
- * - pnpm: macOS uses ~/Library/pnpm (not ~/.local/share/pnpm)
- */
-export function resolveDarwinUserBinDirs(
-  home: string | undefined,
-  env?: Record<string, string | undefined>,
-): string[] {
-  if (!home) {
-    return [];
-  }
-
-  const dirs: string[] = [];
-
-  // Env-configured bin roots (override defaults when present).
-  // Note: FNM_DIR on macOS defaults to ~/Library/Application Support/fnm
-  // Note: PNPM_HOME on macOS defaults to ~/Library/pnpm
-  addCommonEnvConfiguredBinDirs(dirs, env);
-  // nvm: no stable default path, relies on env or user's shell config
-  // User must set NVM_DIR and source nvm.sh for it to work
-  addNonEmptyDir(dirs, env?.NVM_DIR);
-  // fnm: use aliases/default (not current)
-  addNonEmptyDir(dirs, appendSubdir(env?.FNM_DIR, "aliases/default/bin"));
-  // pnpm: binary is directly in PNPM_HOME (not in bin subdirectory)
-
-  // Common user bin directories
-  addCommonUserBinDirs(dirs, home);
-
-  // Node version managers - macOS specific paths
-  // nvm: no stable default path, depends on user's shell configuration
-  // fnm: macOS default is ~/Library/Application Support/fnm, not ~/.fnm
-  dirs.push(`${home}/Library/Application Support/fnm/aliases/default/bin`); // fnm default
-  dirs.push(`${home}/.fnm/aliases/default/bin`); // fnm if customized to ~/.fnm
-  // pnpm: macOS default is ~/Library/pnpm, not ~/.local/share/pnpm
-  dirs.push(`${home}/Library/pnpm`); // pnpm default
-  dirs.push(`${home}/.local/share/pnpm`); // pnpm XDG fallback
-
-  return dirs;
 }
 
 /**
@@ -178,21 +129,12 @@ export function resolveLinuxUserBinDirs(
 
 export function getMinimalServicePathParts(options: MinimalServicePathOptions = {}): string[] {
   const platform = options.platform ?? process.platform;
-  if (platform === "win32") {
-    return [];
-  }
-
   const parts: string[] = [];
   const extraDirs = options.extraDirs ?? [];
   const systemDirs = resolveSystemPathDirs(platform);
 
   // Add user bin directories for version managers (npm global, nvm, fnm, volta, etc.)
-  const userDirs =
-    platform === "linux"
-      ? resolveLinuxUserBinDirs(options.home, options.env)
-      : platform === "darwin"
-        ? resolveDarwinUserBinDirs(options.home, options.env)
-        : [];
+  const userDirs = platform === "linux" ? resolveLinuxUserBinDirs(options.home, options.env) : [];
 
   const add = (dir: string) => {
     if (!dir) {
@@ -228,35 +170,25 @@ export function getMinimalServicePathPartsFromEnv(options: BuildServicePathOptio
 
 export function buildMinimalServicePath(options: BuildServicePathOptions = {}): string {
   const env = options.env ?? process.env;
-  const platform = options.platform ?? process.platform;
-  if (platform === "win32") {
-    return env.PATH ?? "";
-  }
-
   return getMinimalServicePathPartsFromEnv({ ...options, env }).join(path.posix.delimiter);
 }
 
 export function buildServiceEnvironment(params: {
   env: Record<string, string | undefined>;
   port: number;
-  launchdLabel?: string;
   platform?: NodeJS.Platform;
   extraPathDirs?: string[];
 }): Record<string, string | undefined> {
-  const { env, port, launchdLabel, extraPathDirs } = params;
+  const { env, port, extraPathDirs } = params;
   const platform = params.platform ?? process.platform;
   const sharedEnv = resolveSharedServiceEnvironmentFields(env, platform, extraPathDirs);
   const profile = env.DENEB_PROFILE;
-  const resolvedLaunchdLabel =
-    launchdLabel || (platform === "darwin" ? resolveGatewayLaunchAgentLabel(profile) : undefined);
   const systemdUnit = `${resolveGatewaySystemdServiceName(profile)}.service`;
   return {
     ...buildCommonServiceEnvironment(env, sharedEnv),
     DENEB_PROFILE: profile,
     DENEB_GATEWAY_PORT: String(port),
-    DENEB_LAUNCHD_LABEL: resolvedLaunchdLabel,
     DENEB_SYSTEMD_UNIT: systemdUnit,
-    DENEB_WINDOWS_TASK_NAME: resolveGatewayWindowsTaskName(profile),
     DENEB_SERVICE_MARKER: GATEWAY_SERVICE_MARKER,
     DENEB_SERVICE_KIND: GATEWAY_SERVICE_KIND,
     DENEB_SERVICE_VERSION: VERSION,
@@ -291,22 +223,13 @@ function resolveSharedServiceEnvironmentFields(
   // Keep a usable temp directory for supervised services even when the host env omits TMPDIR.
   const tmpDir = env.TMPDIR?.trim() || os.tmpdir();
   const proxyEnv = readServiceProxyEnvironment(env);
-  // On macOS, launchd services don't inherit the shell environment, so Node's undici/fetch
-  // cannot locate the system CA bundle. Default to /etc/ssl/cert.pem so TLS verification
-  // works correctly when running as a LaunchAgent without extra user configuration.
-  const nodeCaCerts =
-    env.NODE_EXTRA_CA_CERTS ?? (platform === "darwin" ? "/etc/ssl/cert.pem" : undefined);
-  const nodeUseSystemCa = env.NODE_USE_SYSTEM_CA ?? (platform === "darwin" ? "1" : undefined);
+  const nodeCaCerts = env.NODE_EXTRA_CA_CERTS;
+  const nodeUseSystemCa = env.NODE_USE_SYSTEM_CA;
   return {
     stateDir,
     configPath,
     tmpDir,
-    // On Windows, Scheduled Tasks should inherit the current task PATH instead of
-    // freezing the install-time snapshot into gateway.cmd/node-host.cmd.
-    minimalPath:
-      platform === "win32"
-        ? undefined
-        : buildMinimalServicePath({ env, platform, extraDirs: extraPathDirs }),
+    minimalPath: buildMinimalServicePath({ env, platform, extraDirs: extraPathDirs }),
     proxyEnv,
     nodeCaCerts,
     nodeUseSystemCa,

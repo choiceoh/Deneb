@@ -21,21 +21,18 @@ Perfect for:
 
 ## Hardware Requirements
 
-| Pi Model        | RAM     | Works?   | Notes                              |
-| --------------- | ------- | -------- | ---------------------------------- |
-| **Pi 5**        | 4GB/8GB | ✅ Best  | Fastest, recommended               |
-| **Pi 4**        | 4GB     | ✅ Good  | Sweet spot for most users          |
-| **Pi 4**        | 2GB     | ✅ OK    | Works, add swap                    |
-| **Pi 4**        | 1GB     | ⚠️ Tight | Possible with swap, minimal config |
-| **Pi 3B+**      | 1GB     | ⚠️ Slow  | Works but sluggish                 |
-| **Pi Zero 2 W** | 512MB   | ❌       | Not recommended                    |
+| Pi Model | RAM     | Works?  | Notes                     |
+| -------- | ------- | ------- | ------------------------- |
+| **Pi 5** | 4GB/8GB | ✅ Best | Fastest, recommended      |
+| **Pi 4** | 4GB     | ✅ Good | Sweet spot for most users |
+| **Pi 4** | 2GB     | ✅ OK   | Works, add swap           |
 
-**Minimum specs:** 1GB RAM, 1 core, 500MB disk  
-**Recommended:** 2GB+ RAM, 64-bit OS, 16GB+ SD card (or USB SSD)
+**Minimum specs:** 2GB RAM, 64-bit ARM (aarch64), 500MB disk
+**Recommended:** 4GB+ RAM, 64-bit OS, 16GB+ SD card (or USB SSD)
 
 ## What you need
 
-- Raspberry Pi 4 or 5 (2GB+ recommended)
+- Raspberry Pi 4 (2GB+) or Pi 5
 - MicroSD card (16GB+) or USB SSD (better performance)
 - Power supply (official Pi PSU recommended)
 - Network connection (Ethernet or WiFi)
@@ -271,29 +268,27 @@ htop
 
 ---
 
-## ARM-Specific Notes
+## ARM64-Specific Notes
 
 ### Binary Compatibility
 
-Most Deneb features work on ARM64, but some external binaries may need ARM builds:
+Most Deneb features work on ARM64 (aarch64), but some external binaries may need ARM64 builds:
 
 | Tool               | ARM64 Status | Notes                               |
 | ------------------ | ------------ | ----------------------------------- |
 | Node.js            | ✅           | Works great                         |
 | WhatsApp (Baileys) | ✅           | Pure JS, no issues                  |
 | Telegram           | ✅           | Pure JS, no issues                  |
-| gog (Gmail CLI)    | ⚠️           | Check for ARM release               |
+| gog (Gmail CLI)    | ⚠️           | Check for ARM64 release             |
 | Chromium (browser) | ✅           | `sudo apt install chromium-browser` |
 
-If a skill fails, check if its binary has an ARM build. Many Go/Rust tools do; some don't.
+If a skill fails, check if its binary has an ARM64 build. Many Go/Rust tools do; some don't.
 
-### 32-bit vs 64-bit
-
-**Always use 64-bit OS.** Node.js and many modern tools require it. Check with:
+Verify your OS is 64-bit:
 
 ```bash
 uname -m
-# Should show: aarch64 (64-bit) not armv7l (32-bit)
+# Must show: aarch64
 ```
 
 ---
@@ -366,13 +361,13 @@ npm run build
 sudo systemctl restart deneb
 ```
 
-### ARM Binary Issues
+### ARM64 Binary Issues
 
 If a skill fails with "exec format error":
 
-1. Check if the binary has an ARM64 build
+1. Check if the binary has an ARM64 (aarch64) build
 2. Try building from source
-3. Or use a Docker container with ARM support
+3. Or use a Docker container with ARM64 support
 
 ### WiFi Drops
 
@@ -390,14 +385,13 @@ echo 'wireless-power off' | sudo tee -a /etc/network/interfaces
 
 ## Cost Comparison
 
-| Setup          | One-Time Cost | Monthly Cost | Notes                     |
-| -------------- | ------------- | ------------ | ------------------------- |
-| **Pi 4 (2GB)** | ~$45          | $0           | + power (~$5/yr)          |
-| **Pi 4 (4GB)** | ~$55          | $0           | Recommended               |
-| **Pi 5 (4GB)** | ~$60          | $0           | Best performance          |
-| **Pi 5 (8GB)** | ~$80          | $0           | Overkill but future-proof |
-| DigitalOcean   | $0            | $6/mo        | $72/year                  |
-| Hetzner        | $0            | €3.79/mo     | ~$50/year                 |
+| Setup          | One-Time Cost | Monthly Cost | Notes            |
+| -------------- | ------------- | ------------ | ---------------- |
+| **Pi 4 (4GB)** | ~$55          | $0           | Recommended      |
+| **Pi 5 (4GB)** | ~$60          | $0           | Best performance |
+| **Pi 5 (8GB)** | ~$80          | $0           | Future-proof     |
+| DigitalOcean   | $0            | $6/mo        | $72/year         |
+| Hetzner        | $0            | €3.79/mo     | ~$50/year        |
 
 **Break-even:** A Pi pays for itself in ~6-12 months vs cloud VPS.
 

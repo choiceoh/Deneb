@@ -51,11 +51,6 @@ import { getChannelActivity, recordChannelActivity } from "../../infra/channel-a
 import { convertMarkdownTables } from "../../markdown/tables.js";
 import { fetchRemoteMedia } from "../../media/fetch.js";
 import { saveMediaBuffer } from "../../media/store.js";
-import { buildPairingReply } from "../../pairing/pairing-messages.js";
-import {
-  readChannelAllowFromStore,
-  upsertChannelPairingRequest,
-} from "../../pairing/pairing-store.js";
 import { buildAgentSessionKey, resolveAgentRoute } from "../../routing/resolve-route.js";
 import { createRuntimeTelegram } from "./runtime-telegram.js";
 import type { PluginRuntime } from "./types.js";
@@ -110,20 +105,6 @@ export function createRuntimeChannel(): PluginRuntime["channel"] {
     routing: {
       buildAgentSessionKey,
       resolveAgentRoute,
-    },
-    pairing: {
-      buildPairingReply,
-      readAllowFromStore: ({ channel, accountId, env }) =>
-        readChannelAllowFromStore(channel, env, accountId),
-      upsertPairingRequest: ({ channel, id, accountId, meta, env, pairingAdapter }) =>
-        upsertChannelPairingRequest({
-          channel,
-          id,
-          accountId,
-          meta,
-          env,
-          pairingAdapter,
-        }),
     },
     media: {
       fetchRemoteMedia,

@@ -290,8 +290,8 @@ export async function installSignalCli(runtime: RuntimeEnv): Promise<SignalInsta
   }
 
   // The official signal-cli GitHub releases only ship a native binary for
-  // x86-64 Linux.  On other architectures (arm64, armv7, etc.) we delegate
-  // to Homebrew which builds from source and bundles the JRE automatically.
+  // x86-64 Linux.  On other architectures (arm64, etc.) we delegate to
+  // Homebrew which builds from source and bundles the JRE automatically.
   const hasNativeRelease = process.arch === "x64";
 
   if (hasNativeRelease) {

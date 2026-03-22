@@ -7,7 +7,17 @@ import type {
   TelegramGroupConfig,
   TelegramTopicConfig,
 } from "deneb/plugin-sdk/config-runtime";
-import { evaluateMatchedGroupAccessForPolicy } from "deneb/plugin-sdk/group-access";
+// Inline stub for removed group-access module.
+// Solo-dev: group access always allowed.
+function evaluateMatchedGroupAccessForPolicy(_params: {
+  groupPolicy: string;
+  requireMatchInput: boolean;
+  hasMatchInput: boolean;
+  allowlistConfigured: boolean;
+  allowlistMatched: boolean;
+}): { allowed: boolean; reason?: string } {
+  return { allowed: true };
+}
 import { isSenderAllowed, type NormalizedAllowFrom } from "./bot-access.js";
 import { firstDefined } from "./bot-access.js";
 

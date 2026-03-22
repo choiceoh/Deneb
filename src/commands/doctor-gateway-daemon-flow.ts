@@ -1,17 +1,6 @@
-import { formatCliCommand } from "../cli/command-format.js";
 import type { DenebConfig } from "../config/config.js";
 import { resolveGatewayPort } from "../config/config.js";
-import {
-  resolveGatewayLaunchAgentLabel,
-  resolveNodeLaunchAgentLabel,
-} from "../daemon/constants.js";
 import { readLastGatewayErrorLine } from "../daemon/diagnostics.js";
-import {
-  isLaunchAgentListed,
-  isLaunchAgentLoaded,
-  launchAgentPlistExists,
-  repairLaunchAgentBootstrap,
-} from "../daemon/launchd.js";
 import { describeGatewayServiceRestart, resolveGatewayService } from "../daemon/service.js";
 import { renderSystemdUnavailableHints } from "../daemon/systemd-hints.js";
 import { isSystemdUserServiceAvailable } from "../daemon/systemd.js";
@@ -31,61 +20,6 @@ import type { DoctorOptions, DoctorPrompter } from "./doctor-prompter.js";
 import { resolveGatewayInstallToken } from "./gateway-install-token.js";
 import { formatHealthCheckFailure } from "./health-format.js";
 import { healthCommand } from "./health.js";
-
-async function maybeRepairLaunchAgentBootstrap(params: {
-  env: Record<string, string | undefined>;
-  title: string;
-  runtime: RuntimeEnv;
-  prompter: DoctorPrompter;
-}): Promise<boolean> {
-  if (process.platform !== "darwin") {
-    return false;
-  }
-
-  const listed = isLaunchAgentListed();
-  if (!listed) {
-    return false;
-  }
-
-  const loaded = isLaunchAgentLoaded();
-  if (loaded) {
-    return false;
-  }
-
-  const plistExists = launchAgentPlistExists();
-  if (!plistExists) {
-    return false;
-  }
-
-  note("LaunchAgent is listed but not loaded in launchd.", `${params.title} LaunchAgent`);
-
-  const shouldFix = await params.prompter.confirmSkipInNonInteractive({
-    message: `Repair ${params.title} LaunchAgent bootstrap now?`,
-    initialValue: true,
-  });
-  if (!shouldFix) {
-    return false;
-  }
-
-  params.runtime.log(`Bootstrapping ${params.title} LaunchAgent...`);
-  try {
-    await repairLaunchAgentBootstrap();
-  } catch (err) {
-    params.runtime.error(
-      `${params.title} LaunchAgent bootstrap failed: ${err instanceof Error ? err.message : "unknown error"}`,
-    );
-    return false;
-  }
-
-  const verified = isLaunchAgentLoaded();
-  if (!verified) {
-    params.runtime.error(`${params.title} LaunchAgent still not loaded after repair.`);
-    return false;
-  }
-
-  note(`${params.title} LaunchAgent repaired.`, `${params.title} LaunchAgent`);
-  return true;
-}
 
 export async function maybeRepairGatewayDaemon(params: {
   cfg: DenebConfig;
@@ -110,30 +44,6 @@ export async function maybeRepairGatewayDaemon(params: {
   let serviceRuntime: Awaited<ReturnType<typeof service.readRuntime>> | undefined;
   if (loaded) {
     serviceRuntime = await service.readRuntime(process.env).catch(() => undefined);
-  }
-
-  if (process.platform === "darwin" && params.cfg.gateway?.mode !== "remote") {
-    const gatewayRepaired = await maybeRepairLaunchAgentBootstrap({
-      env: process.env,
-      title: "Gateway",
-      runtime: params.runtime,
-      prompter: params.prompter,
-    });
-    await maybeRepairLaunchAgentBootstrap({
-      env: {
-        ...process.env,
-        DENEB_LAUNCHD_LABEL: resolveNodeLaunchAgentLabel(),
-      },
-      title: "Node",
-      runtime: params.runtime,
-      prompter: params.prompter,
-    });
-    if (gatewayRepaired) {
-      loaded = await service.isLoaded({ env: process.env });
-      if (loaded) {
-        serviceRuntime = await service.readRuntime(process.env).catch(() => undefined);
-      }
-    }
   }
 
   if (params.cfg.gateway?.mode !== "remote") {
@@ -247,14 +157,6 @@ export async function maybeRepairGatewayDaemon(params: {
         note(restartStatus.message, "Gateway");
       }
     }
-  }
-
-  if (process.platform === "darwin") {
-    const label = resolveGatewayLaunchAgentLabel(process.env.DENEB_PROFILE);
-    note(
-      `LaunchAgent loaded; stopping requires "${formatCliCommand("deneb gateway stop")}" or launchctl bootout gui/$UID/${label}.`,
-      "Gateway",
-    );
   }
 
   if (serviceRuntime?.status === "running") {

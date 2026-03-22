@@ -28,12 +28,6 @@ import {
 } from "../routing/session-key.js";
 import { note } from "../terminal/note.js";
 import {
-  detectEmptyAllowlistPolicy,
-  maybeRepairAllowlistPolicyAllowFrom,
-  maybeRepairOpenPolicyAllowFrom,
-  scanMutableAllowlistEntries,
-} from "./doctor-allowlist-repair.js";
-import {
   formatConfigPath,
   noteOpencodeProviderOverrides,
   resolveConfigPathTarget,
@@ -579,27 +573,6 @@ export async function loadAndMaybeMigrateDoctorConfig(params: {
       cfg = discordRepair.config;
     }
 
-    const allowFromRepair = maybeRepairOpenPolicyAllowFrom(candidate);
-    if (allowFromRepair.changes.length > 0) {
-      note(allowFromRepair.changes.join("\n"), "Doctor changes");
-      candidate = allowFromRepair.config;
-      pendingChanges = true;
-      cfg = allowFromRepair.config;
-    }
-
-    const allowlistRepair = await maybeRepairAllowlistPolicyAllowFrom(candidate);
-    if (allowlistRepair.changes.length > 0) {
-      note(allowlistRepair.changes.join("\n"), "Doctor changes");
-      candidate = allowlistRepair.config;
-      pendingChanges = true;
-      cfg = allowlistRepair.config;
-    }
-
-    const emptyAllowlistWarnings = detectEmptyAllowlistPolicy(candidate);
-    if (emptyAllowlistWarnings.length > 0) {
-      note(emptyAllowlistWarnings.join("\n"), "Doctor warnings");
-    }
-
     const toolsBySenderRepair = maybeRepairLegacyToolsBySenderKeys(candidate);
     if (toolsBySenderRepair.changes.length > 0) {
       note(toolsBySenderRepair.changes.join("\n"), "Doctor changes");
@@ -639,22 +612,6 @@ export async function loadAndMaybeMigrateDoctorConfig(params: {
         ].join("\n"),
         "Doctor warnings",
       );
-    }
-
-    const allowFromScan = maybeRepairOpenPolicyAllowFrom(candidate);
-    if (allowFromScan.changes.length > 0) {
-      note(
-        [
-          ...allowFromScan.changes,
-          `- Run "${formatCliCommand("deneb doctor --fix")}" to add missing allowFrom wildcards.`,
-        ].join("\n"),
-        "Doctor warnings",
-      );
-    }
-
-    const emptyAllowlistWarnings = detectEmptyAllowlistPolicy(candidate);
-    if (emptyAllowlistWarnings.length > 0) {
-      note(emptyAllowlistWarnings.join("\n"), "Doctor warnings");
     }
 
     const toolsBySenderHits = scanLegacyToolsBySenderKeys(candidate);
@@ -724,34 +681,6 @@ export async function loadAndMaybeMigrateDoctorConfig(params: {
       );
       note(lines.join("\n"), "Doctor warnings");
     }
-  }
-
-  const mutableAllowlistHits = scanMutableAllowlistEntries(candidate);
-  if (mutableAllowlistHits.length > 0) {
-    const channels = Array.from(new Set(mutableAllowlistHits.map((hit) => hit.channel))).toSorted();
-    const exampleLines = mutableAllowlistHits
-      .slice(0, 8)
-      .map((hit) => `- ${hit.path}: ${hit.entry}`)
-      .join("\n");
-    const remaining =
-      mutableAllowlistHits.length > 8
-        ? `- +${mutableAllowlistHits.length - 8} more mutable allowlist entries.`
-        : null;
-    const flagPaths = Array.from(new Set(mutableAllowlistHits.map((hit) => hit.dangerousFlagPath)));
-    const flagHint =
-      flagPaths.length === 1
-        ? flagPaths[0]
-        : `${flagPaths[0]} (and ${flagPaths.length - 1} other scope flags)`;
-    note(
-      [
-        `- Found ${mutableAllowlistHits.length} mutable allowlist ${mutableAllowlistHits.length === 1 ? "entry" : "entries"} across ${channels.join(", ")} while name matching is disabled by default.`,
-        exampleLines,
-        ...(remaining ? [remaining] : []),
-        `- Option A (break-glass): enable ${flagHint}=true to keep name/email/nick matching.`,
-        "- Option B (recommended): resolve names/emails/nicks to stable sender IDs and rewrite the allowlist entries.",
-      ].join("\n"),
-      "Doctor warnings",
-    );
   }
 
   const unknown = stripUnknownConfigKeys(candidate);

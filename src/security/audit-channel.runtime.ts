@@ -2,7 +2,10 @@ import {
   isNumericTelegramUserId,
   normalizeTelegramAllowFromEntry,
 } from "deneb/plugin-sdk/telegram";
-import { readChannelAllowFromStore } from "../pairing/pairing-store.js";
+// Stub: pairing store removed.
+async function readChannelAllowFromStore(): Promise<string[]> {
+  return [];
+}
 import {
   isDiscordMutableAllowEntry,
   isZalouserMutableGroupEntry,

@@ -1,18 +1,12 @@
 import { spawnSync } from "node:child_process";
-import os from "node:os";
-import path from "node:path";
 import { loadConfig } from "../config/config.js";
-import {
-  resolveGatewayLaunchAgentLabel,
-  resolveGatewaySystemdServiceName,
-} from "../daemon/constants.js";
+import { resolveGatewaySystemdServiceName } from "../daemon/constants.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { cleanStaleGatewayProcessesSync, findGatewayPidsOnPortSync } from "./restart-stale-pids.js";
-import { relaunchGatewayScheduledTask } from "./windows-task-restart.js";
 
 export type RestartAttempt = {
   ok: boolean;
-  method: "launchctl" | "systemd" | "schtasks" | "supervisor";
+  method: "systemd" | "supervisor";
   detail?: string;
   tried?: string[];
 };
@@ -300,94 +294,30 @@ export function triggerDenebRestart(): RestartAttempt {
   cleanStaleGatewayProcessesSync();
 
   const tried: string[] = [];
-  if (process.platform === "linux") {
-    const unit = normalizeSystemdUnit(process.env.DENEB_SYSTEMD_UNIT, process.env.DENEB_PROFILE);
-    const userArgs = ["--user", "restart", unit];
-    tried.push(`systemctl ${userArgs.join(" ")}`);
-    const userRestart = spawnSync("systemctl", userArgs, {
-      encoding: "utf8",
-      timeout: SPAWN_TIMEOUT_MS,
-    });
-    if (!userRestart.error && userRestart.status === 0) {
-      return { ok: true, method: "systemd", tried };
-    }
-    const systemArgs = ["restart", unit];
-    tried.push(`systemctl ${systemArgs.join(" ")}`);
-    const systemRestart = spawnSync("systemctl", systemArgs, {
-      encoding: "utf8",
-      timeout: SPAWN_TIMEOUT_MS,
-    });
-    if (!systemRestart.error && systemRestart.status === 0) {
-      return { ok: true, method: "systemd", tried };
-    }
-    const detail = [
-      `user: ${formatSpawnDetail(userRestart)}`,
-      `system: ${formatSpawnDetail(systemRestart)}`,
-    ].join("; ");
-    return { ok: false, method: "systemd", detail, tried };
-  }
-
-  if (process.platform === "win32") {
-    return relaunchGatewayScheduledTask(process.env);
-  }
-
-  if (process.platform !== "darwin") {
-    return {
-      ok: false,
-      method: "supervisor",
-      detail: "unsupported platform restart",
-    };
-  }
-
-  const label =
-    process.env.DENEB_LAUNCHD_LABEL || resolveGatewayLaunchAgentLabel(process.env.DENEB_PROFILE);
-  const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
-  const domain = uid !== undefined ? `gui/${uid}` : "gui/501";
-  const target = `${domain}/${label}`;
-  const args = ["kickstart", "-k", target];
-  tried.push(`launchctl ${args.join(" ")}`);
-  const res = spawnSync("launchctl", args, {
+  const unit = normalizeSystemdUnit(process.env.DENEB_SYSTEMD_UNIT, process.env.DENEB_PROFILE);
+  const userArgs = ["--user", "restart", unit];
+  tried.push(`systemctl ${userArgs.join(" ")}`);
+  const userRestart = spawnSync("systemctl", userArgs, {
     encoding: "utf8",
     timeout: SPAWN_TIMEOUT_MS,
   });
-  if (!res.error && res.status === 0) {
-    return { ok: true, method: "launchctl", tried };
+  if (!userRestart.error && userRestart.status === 0) {
+    return { ok: true, method: "systemd", tried };
   }
-
-  // kickstart fails when the service was previously booted out (deregistered from launchd).
-  // Fall back to bootstrap (re-register from plist) + kickstart.
-  // Use env HOME to match how launchd.ts resolves the plist install path.
-  const home = process.env.HOME?.trim() || os.homedir();
-  const plistPath = path.join(home, "Library", "LaunchAgents", `${label}.plist`);
-  const bootstrapArgs = ["bootstrap", domain, plistPath];
-  tried.push(`launchctl ${bootstrapArgs.join(" ")}`);
-  const boot = spawnSync("launchctl", bootstrapArgs, {
+  const systemArgs = ["restart", unit];
+  tried.push(`systemctl ${systemArgs.join(" ")}`);
+  const systemRestart = spawnSync("systemctl", systemArgs, {
     encoding: "utf8",
     timeout: SPAWN_TIMEOUT_MS,
   });
-  if (boot.error || (boot.status !== 0 && boot.status !== null)) {
-    return {
-      ok: false,
-      method: "launchctl",
-      detail: formatSpawnDetail(boot),
-      tried,
-    };
+  if (!systemRestart.error && systemRestart.status === 0) {
+    return { ok: true, method: "systemd", tried };
   }
-  const retryArgs = ["kickstart", "-k", target];
-  tried.push(`launchctl ${retryArgs.join(" ")}`);
-  const retry = spawnSync("launchctl", retryArgs, {
-    encoding: "utf8",
-    timeout: SPAWN_TIMEOUT_MS,
-  });
-  if (!retry.error && retry.status === 0) {
-    return { ok: true, method: "launchctl", tried };
-  }
-  return {
-    ok: false,
-    method: "launchctl",
-    detail: formatSpawnDetail(retry),
-    tried,
-  };
+  const detail = [
+    `user: ${formatSpawnDetail(userRestart)}`,
+    `system: ${formatSpawnDetail(systemRestart)}`,
+  ].join("; ");
+  return { ok: false, method: "systemd", detail, tried };
 }
 
 export type ScheduledRestart = {

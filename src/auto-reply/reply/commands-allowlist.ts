@@ -7,16 +7,7 @@ import {
   validateConfigObjectWithPlugins,
   writeConfigFile,
 } from "../../config/config.js";
-import {
-  addChannelAllowFromStoreEntry,
-  readChannelAllowFromStore,
-  removeChannelAllowFromStoreEntry,
-} from "../../pairing/pairing-store.js";
-import {
-  DEFAULT_ACCOUNT_ID,
-  normalizeAccountId,
-  normalizeOptionalAccountId,
-} from "../../routing/session-key.js";
+import { normalizeAccountId, normalizeOptionalAccountId } from "../../routing/session-key.js";
 import { normalizeStringEntries } from "../../shared/string-normalization.js";
 import { rejectUnauthorizedCommand, requireCommandFlagEnabled } from "./command-gates.js";
 import type { CommandHandler } from "./commands-types.js";
@@ -171,29 +162,14 @@ function formatEntryList(entries: string[], resolved?: Map<string, string>): str
     .join(", ");
 }
 
-async function updatePairingStoreAllowlist(params: {
+/** No-op — pairing store has been removed. */
+async function updatePairingStoreAllowlist(_params: {
   action: "add" | "remove";
   channelId: ChannelId;
   accountId?: string;
   entry: string;
 }) {
-  const storeEntry = {
-    channel: params.channelId,
-    entry: params.entry,
-    accountId: params.accountId,
-  };
-  if (params.action === "add") {
-    await addChannelAllowFromStoreEntry(storeEntry);
-    return;
-  }
-
-  await removeChannelAllowFromStoreEntry(storeEntry);
-  if (params.accountId === DEFAULT_ACCOUNT_ID) {
-    await removeChannelAllowFromStoreEntry({
-      channel: params.channelId,
-      entry: params.entry,
-    });
-  }
+  // Pairing store removed; nothing to persist.
 }
 
 function mapResolvedAllowlistNames(entries: ResolvedAllowlistName[]): Map<string, string> {
@@ -282,9 +258,7 @@ export const handleAllowlistCommand: CommandHandler = async (params, allowTextCo
         reply: { text: `⚠️ ${channelId} does not expose allowlist configuration.` },
       };
     }
-    const storeAllowFrom = supportsStore
-      ? await readChannelAllowFromStore(channelId, process.env, accountId).catch(() => [])
-      : [];
+    const storeAllowFrom: string[] = [];
     const configState = await readAllowlistConfig({
       cfg: params.cfg,
       channelId,

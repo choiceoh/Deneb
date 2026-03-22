@@ -2,8 +2,6 @@ import { loadAuthProfileStore } from "../../agents/auth-profiles.js";
 import { listChannelPlugins } from "../../channels/plugins/index.js";
 import { buildChannelAccountSnapshot } from "../../channels/plugins/status.js";
 import type { ChannelAccountSnapshot, ChannelPlugin } from "../../channels/plugins/types.js";
-import { withProgress } from "../../cli/progress.js";
-import { formatUsageReportLines, loadProviderUsageSummary } from "../../infra/provider-usage.js";
 import { defaultRuntime, type RuntimeEnv } from "../../runtime.js";
 import { formatDocsLink } from "../../terminal/links.js";
 import { theme } from "../../terminal/theme.js";
@@ -86,18 +84,8 @@ function formatAccountLine(params: {
   }
   return `- ${label}: ${bits.join(", ")}`;
 }
-async function loadUsageWithProgress(
-  runtime: RuntimeEnv,
-): Promise<Awaited<ReturnType<typeof loadProviderUsageSummary>> | null> {
-  try {
-    return await withProgress(
-      { label: "Fetching usage snapshot…", indeterminate: true, enabled: true },
-      async () => await loadProviderUsageSummary(),
-    );
-  } catch (err) {
-    runtime.error(String(err));
-    return null;
-  }
+async function loadUsageWithProgress(_runtime: RuntimeEnv): Promise<null> {
+  return null;
 }
 
 export async function channelsListCommand(
@@ -120,7 +108,7 @@ export async function channelsListCommand(
     isExternal: false,
   }));
   if (opts.json) {
-    const usage = includeUsage ? await loadProviderUsageSummary() : undefined;
+    const usage = undefined;
     const chat: Record<string, string[]> = {};
     for (const plugin of plugins) {
       chat[plugin.id] = plugin.config.listAccountIds(cfg);
@@ -170,7 +158,7 @@ export async function channelsListCommand(
     runtime.log("");
     const usage = await loadUsageWithProgress(runtime);
     if (usage) {
-      const usageLines = formatUsageReportLines(usage);
+      const usageLines: string[] = [];
       if (usageLines.length > 0) {
         usageLines[0] = theme.accent(usageLines[0]);
         runtime.log(usageLines.join("\n"));

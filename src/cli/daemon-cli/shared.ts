@@ -1,9 +1,5 @@
 import { resolveIsNixMode } from "../../config/paths.js";
-import {
-  resolveGatewayLaunchAgentLabel,
-  resolveGatewaySystemdServiceName,
-  resolveGatewayWindowsTaskName,
-} from "../../daemon/constants.js";
+import { resolveGatewaySystemdServiceName } from "../../daemon/constants.js";
 import { formatRuntimeStatus } from "../../daemon/runtime-format.js";
 import {
   buildPlatformRuntimeLogHints,
@@ -172,7 +168,6 @@ export function renderRuntimeHints(
       ...buildPlatformRuntimeLogHints({
         env,
         systemdServiceName: resolveGatewaySystemdServiceName(env.DENEB_PROFILE),
-        windowsTaskName: resolveGatewayWindowsTaskName(env.DENEB_PROFILE),
       }),
     );
   }
@@ -184,8 +179,6 @@ export function renderGatewayServiceStartHints(env: NodeJS.ProcessEnv = process.
   return buildPlatformServiceStartHints({
     installCommand: formatCliCommand("deneb gateway install", env),
     startCommand: formatCliCommand("deneb gateway", env),
-    launchAgentPlistPath: `~/Library/LaunchAgents/${resolveGatewayLaunchAgentLabel(profile)}.plist`,
     systemdServiceName: resolveGatewaySystemdServiceName(profile),
-    windowsTaskName: resolveGatewayWindowsTaskName(profile),
   });
 }

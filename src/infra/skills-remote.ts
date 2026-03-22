@@ -5,7 +5,6 @@ import { listAgentWorkspaceDirs } from "../agents/workspace-dirs.js";
 import type { DenebConfig } from "../config/config.js";
 import type { NodeRegistry } from "../gateway/node-registry.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { listNodePairing, updatePairedNodeMetadata } from "./node-pairing.js";
 
 type RemoteNodeRecord = {
   nodeId: string;
@@ -128,29 +127,7 @@ export function setSkillsRemoteRegistry(registry: NodeRegistry | null) {
 }
 
 export async function primeRemoteSkillsCache() {
-  try {
-    const list = await listNodePairing();
-    let sawMac = false;
-    for (const node of list.paired) {
-      upsertNode({
-        nodeId: node.nodeId,
-        displayName: node.displayName,
-        platform: node.platform,
-        deviceFamily: node.deviceFamily,
-        commands: node.commands,
-        remoteIp: node.remoteIp,
-        bins: node.bins,
-      });
-      if (isMacPlatform(node.platform, node.deviceFamily) && supportsSystemRun(node.commands)) {
-        sawMac = true;
-      }
-    }
-    if (sawMac) {
-      bumpSkillsSnapshotVersion({ reason: "remote-node" });
-    }
-  } catch (err) {
-    log.warn(`failed to prime remote skills cache: ${String(err)}`);
-  }
+  // No-op: node pairing removed (solo-dev mode).
 }
 
 export function recordRemoteNodeInfo(node: {
@@ -301,7 +278,6 @@ export async function refreshRemoteNodeBins(params: {
     if (!hasChanged) {
       return;
     }
-    await updatePairedNodeMetadata(params.nodeId, { bins });
     bumpSkillsSnapshotVersion({ reason: "remote-node" });
   } catch (err) {
     logRemoteBinProbeFailure(params.nodeId, err);

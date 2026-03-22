@@ -8,7 +8,6 @@ const isMainModuleMock = vi.hoisted(() => vi.fn(() => true));
 const isRootHelpInvocationMock = vi.hoisted(() => vi.fn(() => false));
 const isRootVersionInvocationMock = vi.hoisted(() => vi.fn(() => true));
 const normalizeEnvMock = vi.hoisted(() => vi.fn());
-const normalizeWindowsArgvMock = vi.hoisted(() => vi.fn((argv: string[]) => argv));
 const parseCliProfileArgsMock = vi.hoisted(() => vi.fn((argv: string[]) => ({ ok: true, argv })));
 const resolveCommitHashMock = vi.hoisted(() => vi.fn<() => string | null>(() => "abc1234"));
 const shouldSkipRespawnForArgvMock = vi.hoisted(() => vi.fn(() => true));
@@ -25,10 +24,6 @@ vi.mock("./cli/profile.js", () => ({
 
 vi.mock("./cli/respawn-policy.js", () => ({
   shouldSkipRespawnForArgv: shouldSkipRespawnForArgvMock,
-}));
-
-vi.mock("./cli/windows-argv.js", () => ({
-  normalizeWindowsArgv: normalizeWindowsArgvMock,
 }));
 
 vi.mock("./infra/env.js", () => ({

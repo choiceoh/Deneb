@@ -17,25 +17,9 @@ vi.mock("../config/config.js", () => ({
   resolveGatewayPort: vi.fn(() => 18789),
 }));
 
-vi.mock("../daemon/constants.js", () => ({
-  resolveGatewayLaunchAgentLabel: vi.fn(() => "ai.deneb.gateway"),
-  resolveNodeLaunchAgentLabel: vi.fn(() => "ai.deneb.node"),
-}));
-
 vi.mock("../daemon/diagnostics.js", () => ({
   readLastGatewayErrorLine,
 }));
-
-vi.mock("../daemon/launchd.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../daemon/launchd.js")>();
-  return {
-    ...actual,
-    isLaunchAgentListed: vi.fn(async () => false),
-    isLaunchAgentLoaded: vi.fn(async () => false),
-    launchAgentPlistExists: vi.fn(async () => false),
-    repairLaunchAgentBootstrap: vi.fn(async () => ({ ok: true })),
-  };
-});
 
 vi.mock("../daemon/service.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../daemon/service.js")>();

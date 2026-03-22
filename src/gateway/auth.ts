@@ -7,12 +7,18 @@ import type {
 import { resolveSecretInputRef } from "../config/types.secrets.js";
 import { readTailscaleWhoisIdentity, type TailscaleWhoisIdentity } from "../infra/tailscale.js";
 import { safeEqualSecret } from "../security/secret-equal.js";
-import {
-  AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET,
-  type AuthRateLimiter,
-  type RateLimitCheckResult,
-} from "./auth-rate-limit.js";
 import { resolveGatewayCredentialsFromValues } from "./credentials.js";
+
+/** Stub types — rate limiting module has been removed. */
+const AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET = "shared-secret";
+
+type RateLimitCheckResult = { allowed: boolean; retryAfterMs?: number };
+
+type AuthRateLimiter = {
+  check(ip: string | undefined, scope: string): RateLimitCheckResult;
+  recordFailure(ip: string | undefined, scope: string): void;
+  reset(ip: string | undefined, scope: string): void;
+};
 import {
   isLocalishHost,
   isLoopbackAddress,

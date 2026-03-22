@@ -13,11 +13,6 @@ import type { SecurityAuditOptions, SecurityAuditReport } from "./audit.js";
 import { runSecurityAudit } from "./audit.js";
 import * as skillScanner from "./skill-scanner.js";
 
-const isWindows = process.platform === "win32";
-const windowsAuditEnv = {
-  USERNAME: "Tester",
-  USERDOMAIN: "DESKTOP-TEST",
-};
 const execDockerRawUnavailable: NonNullable<SecurityAuditOptions["execDockerRawFn"]> = async () => {
   return {
     stdout: Buffer.alloc(0),
@@ -235,9 +230,7 @@ describe("security audit", () => {
     await fs.mkdir(stateDir, { recursive: true, mode: 0o700 });
     const configPath = path.join(stateDir, "deneb.json");
     await fs.writeFile(configPath, "{}\n", "utf-8");
-    if (!isWindows) {
-      await fs.chmod(configPath, 0o600);
-    }
+    await fs.chmod(configPath, 0o600);
     return { tmp, stateDir, configPath };
   };
 
@@ -764,82 +757,7 @@ description: test skill
     );
   });
 
-  it("evaluates Windows ACL-derived filesystem findings", async () => {
-    const cases = [
-      {
-        name: "treats Windows ACL-only perms as secure",
-        label: "win",
-        execIcacls: async (_cmd: string, args: string[]) => ({
-          stdout: `${args[0]} NT AUTHORITY\\SYSTEM:(F)\n DESKTOP-TEST\\Tester:(F)\n`,
-          stderr: "",
-        }),
-        assert: (res: SecurityAuditReport) => {
-          const forbidden = new Set([
-            "fs.state_dir.perms_world_writable",
-            "fs.state_dir.perms_group_writable",
-            "fs.state_dir.perms_readable",
-            "fs.config.perms_writable",
-            "fs.config.perms_world_readable",
-            "fs.config.perms_group_readable",
-          ]);
-          for (const id of forbidden) {
-            expect(
-              res.findings.some((f) => f.checkId === id),
-              id,
-            ).toBe(false);
-          }
-        },
-      },
-      {
-        name: "flags Windows ACLs when Users can read the state dir",
-        label: "win-open",
-        execIcacls: async (_cmd: string, args: string[]) => {
-          const target = args[0];
-          if (target.endsWith(`${path.sep}state`)) {
-            return {
-              stdout: `${target} NT AUTHORITY\\SYSTEM:(F)\n BUILTIN\\Users:(RX)\n DESKTOP-TEST\\Tester:(F)\n`,
-              stderr: "",
-            };
-          }
-          return {
-            stdout: `${target} NT AUTHORITY\\SYSTEM:(F)\n DESKTOP-TEST\\Tester:(F)\n`,
-            stderr: "",
-          };
-        },
-        assert: (res: SecurityAuditReport) => {
-          expect(
-            res.findings.some(
-              (f) => f.checkId === "fs.state_dir.perms_readable" && f.severity === "warn",
-            ),
-          ).toBe(true);
-        },
-      },
-    ] as const;
-
-    await Promise.all(
-      cases.map(async (testCase) => {
-        const tmp = await makeTmpDir(testCase.label);
-        const stateDir = path.join(tmp, "state");
-        await fs.mkdir(stateDir, { recursive: true });
-        const configPath = path.join(stateDir, "deneb.json");
-        await fs.writeFile(configPath, "{}\n", "utf-8");
-
-        const res = await runSecurityAudit({
-          config: {},
-          includeFilesystem: true,
-          includeChannelSecurity: false,
-          stateDir,
-          configPath,
-          platform: "win32",
-          env: windowsAuditEnv,
-          execIcacls: testCase.execIcacls,
-          execDockerRawFn: execDockerRawUnavailable,
-        });
-
-        testCase.assert(res);
-      }),
-    );
-  });
+  // Windows ACL test removed: Windows support was dropped, icacls is no longer available.
 
   it("evaluates sandbox browser findings", async () => {
     const cases = [
@@ -1014,10 +932,6 @@ description: test skill
   });
 
   it("uses symlink target permissions for config checks", async () => {
-    if (isWindows) {
-      return;
-    }
-
     const tmp = await makeTmpDir("config-symlink");
     const stateDir = path.join(tmp, "state");
     await fs.mkdir(stateDir, { recursive: true, mode: 0o700 });
@@ -1050,7 +964,7 @@ description: test skill
     const cases = [
       {
         name: "warns when workspace skill files resolve outside workspace root",
-        supported: !isWindows,
+        supported: true,
         setup: async () => {
           const tmp = await makeTmpDir("workspace-skill-symlink-escape");
           const stateDir = path.join(tmp, "state");
@@ -2938,52 +2852,23 @@ description: test skill
 
     const includePath = path.join(stateDir, "extra.json5");
     await fs.writeFile(includePath, "{ logging: { redactSensitive: 'off' } }\n", "utf-8");
-    if (isWindows) {
-      // Grant "Everyone" write access to trigger the perms_writable check on Windows
-      const { execSync } = await import("node:child_process");
-      execSync(`icacls "${includePath}" /grant Everyone:W`, { stdio: "ignore" });
-    } else {
-      await fs.chmod(includePath, 0o644);
-    }
+    await fs.chmod(includePath, 0o644);
 
     const configPath = path.join(stateDir, "deneb.json");
     await fs.writeFile(configPath, `{ "$include": "./extra.json5" }\n`, "utf-8");
     await fs.chmod(configPath, 0o600);
 
     const cfg: DenebConfig = { logging: { redactSensitive: "off" } };
-    const user = "DESKTOP-TEST\\Tester";
-    const execIcacls = isWindows
-      ? async (_cmd: string, args: string[]) => {
-          const target = args[0];
-          if (target === includePath) {
-            return {
-              stdout: `${target} NT AUTHORITY\\SYSTEM:(F)\n BUILTIN\\Users:(W)\n ${user}:(F)\n`,
-              stderr: "",
-            };
-          }
-          return {
-            stdout: `${target} NT AUTHORITY\\SYSTEM:(F)\n ${user}:(F)\n`,
-            stderr: "",
-          };
-        }
-      : undefined;
     const res = await runSecurityAudit({
       config: cfg,
       includeFilesystem: true,
       includeChannelSecurity: false,
       stateDir,
       configPath,
-      platform: isWindows ? "win32" : undefined,
-      env: isWindows
-        ? { ...process.env, USERNAME: "Tester", USERDOMAIN: "DESKTOP-TEST" }
-        : undefined,
-      execIcacls,
       execDockerRawFn: execDockerRawUnavailable,
     });
 
-    const expectedCheckId = isWindows
-      ? "fs.config_include.perms_writable"
-      : "fs.config_include.perms_world_readable";
+    const expectedCheckId = "fs.config_include.perms_world_readable";
 
     expect(res.findings).toEqual(
       expect.arrayContaining([
