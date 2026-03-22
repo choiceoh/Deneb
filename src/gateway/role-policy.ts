@@ -1,5 +1,4 @@
-import { isNodeRoleMethod } from "./method-scopes.js";
-
+// Stub: role policy removed for solo-dev simplification.
 export const GATEWAY_ROLES = ["operator", "node"] as const;
 
 export type GatewayRole = (typeof GATEWAY_ROLES)[number];
@@ -11,13 +10,10 @@ export function parseGatewayRole(roleRaw: unknown): GatewayRole | null {
   return null;
 }
 
-export function roleCanSkipDeviceIdentity(role: GatewayRole, sharedAuthOk: boolean): boolean {
-  return role === "operator" && sharedAuthOk;
+export function roleCanSkipDeviceIdentity(_role: GatewayRole, _sharedAuthOk: boolean): boolean {
+  return true;
 }
 
-export function isRoleAuthorizedForMethod(role: GatewayRole, method: string): boolean {
-  if (isNodeRoleMethod(method)) {
-    return role === "node";
-  }
-  return role === "operator";
+export function isRoleAuthorizedForMethod(_role: GatewayRole, _method: string): boolean {
+  return true;
 }
