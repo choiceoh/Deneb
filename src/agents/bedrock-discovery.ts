@@ -1,10 +1,10 @@
-import {
-  BedrockClient,
-  ListFoundationModelsCommand,
-  type ListFoundationModelsCommandOutput,
-} from "@aws-sdk/client-bedrock";
+import type { BedrockClient, ListFoundationModelsCommandOutput } from "@aws-sdk/client-bedrock";
 import type { BedrockDiscoveryConfig, ModelDefinitionConfig } from "../config/types.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+
+async function loadBedrockSdk() {
+  return import("./bedrock-sdk.runtime.js");
+}
 
 const log = createSubsystemLogger("bedrock-discovery");
 
@@ -177,11 +177,13 @@ export async function discoverBedrockModels(params: {
     }
   }
 
-  const clientFactory = params.clientFactory ?? ((region: string) => new BedrockClient({ region }));
+  const sdk = await loadBedrockSdk();
+  const clientFactory =
+    params.clientFactory ?? ((region: string) => new sdk.BedrockClient({ region }));
   const client = clientFactory(params.region);
 
   const discoveryPromise = (async () => {
-    const response = await client.send(new ListFoundationModelsCommand({}));
+    const response = await client.send(new sdk.ListFoundationModelsCommand({}));
     const discovered: ModelDefinitionConfig[] = [];
     for (const summary of response.modelSummaries ?? []) {
       if (!shouldIncludeSummary(summary, providerFilter)) {

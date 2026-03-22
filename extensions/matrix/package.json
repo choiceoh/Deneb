@@ -1,0 +1,16 @@
+{
+  "name": "@deneb/matrix",
+  "version": "3.5.4",
+  "private": true,
+  "description": "Deneb Matrix channel plugin",
+  "type": "module",
+  "dependencies": {
+    "@matrix-org/matrix-sdk-crypto-nodejs": "^0.4.0",
+    "matrix-js-sdk": "^40.2.0"
+  },
+  "deneb": {
+    "bundle": {
+      "stageRuntimeDependencies": true
+    }
+  }
+}

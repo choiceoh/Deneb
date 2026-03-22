@@ -1,0 +1,16 @@
+{
+  "name": "@deneb/slack",
+  "version": "3.5.4",
+  "private": true,
+  "description": "Deneb Slack channel plugin",
+  "type": "module",
+  "dependencies": {
+    "@slack/bolt": "^4.6.0",
+    "@slack/web-api": "^7.15.0"
+  },
+  "deneb": {
+    "bundle": {
+      "stageRuntimeDependencies": true
+    }
+  }
+}
