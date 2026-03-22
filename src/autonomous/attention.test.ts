@@ -351,7 +351,7 @@ describe("AttentionManager", () => {
     expect(reQueued[0]?.urgency).toBe(1.0);
   });
 
-  it("derives stale goal signals when lastProgressAt is old", () => {
+  it("derives stale goal signals based on cycle count gap", () => {
     const mgr = new AttentionManager();
     const state = createEmptyState();
     state.cycleCount = 20;
@@ -361,8 +361,8 @@ describe("AttentionManager", () => {
       description: "Stale goal",
       priority: "medium",
       status: "active",
-      createdAt: Date.now() - 86400000 * 10, // 10 days ago
-      lastProgressAt: Date.now() - 86400000 * 10, // 10 days ago
+      createdAt: Date.now() - 86400000,
+      lastProgressCycleCount: 5, // Last progress at cycle 5, now at 20 = 15 cycles stale.
     });
 
     mgr.deriveSignalsFromState(state);
@@ -370,21 +370,21 @@ describe("AttentionManager", () => {
     const signals = mgr.getTopSignals(10);
     const staleSignal = signals.find((s) => s.content.includes("Stale goal"));
     expect(staleSignal).toBeDefined();
-    expect(staleSignal?.content).toContain("no progress for");
+    expect(staleSignal?.content).toContain("no progress for ~15 cycles");
   });
 
-  it("does not flag recent goals as stale", () => {
+  it("does not flag goals with recent progress cycle count as stale", () => {
     const mgr = new AttentionManager();
     const state = createEmptyState();
-    state.cycleCount = 2;
+    state.cycleCount = 10;
     state.lastCycleAt = Date.now();
     state.goals.push({
       id: "fresh-g1",
       description: "Fresh goal",
       priority: "medium",
       status: "active",
-      createdAt: Date.now() - 60000, // 1 minute ago
-      lastProgressAt: Date.now() - 60000,
+      createdAt: Date.now() - 60000,
+      lastProgressCycleCount: 8, // Only 2 cycles ago.
     });
 
     mgr.deriveSignalsFromState(state);
@@ -392,6 +392,78 @@ describe("AttentionManager", () => {
     const signals = mgr.getTopSignals(10);
     const staleSignal = signals.find((s) => s.content.includes("Stale goal"));
     expect(staleSignal).toBeUndefined();
+  });
+
+  it("treats goal without lastProgressCycleCount as stale from cycle 0", () => {
+    const mgr = new AttentionManager();
+    const state = createEmptyState();
+    state.cycleCount = 6; // 6 cycles with no progress = stale (threshold = 5).
+    state.lastCycleAt = Date.now();
+    state.goals.push({
+      id: "old-g1",
+      description: "Old goal",
+      priority: "high",
+      status: "active",
+      createdAt: Date.now() - 86400000,
+      // No lastProgressCycleCount — falls back to 0.
+    });
+
+    mgr.deriveSignalsFromState(state);
+
+    const signals = mgr.getTopSignals(10);
+    const staleSignal = signals.find((s) => s.content.includes("Stale goal"));
+    expect(staleSignal).toBeDefined();
+  });
+
+  it("does not re-escalate external message when agent made state changes", () => {
+    const mgr = new AttentionManager();
+    mgr.addSignal({
+      source: "telegram:user123",
+      type: "message",
+      content: "Hello from user",
+      urgency: 0.6,
+      timestamp: Date.now(),
+    });
+    mgr.getTopSignals(10);
+
+    const preState = createEmptyState();
+    const postState = createEmptyState();
+    // Agent made some state change (processed an observation).
+    postState.observations.push({
+      id: "obs1",
+      source: "test",
+      content: "something",
+      observedAt: Date.now(),
+      processed: true,
+    });
+
+    mgr.reEscalateIgnoredSignals(preState, postState);
+
+    // External message should NOT be re-escalated since agent was active.
+    expect(mgr.pendingCount).toBe(0);
+  });
+
+  it("re-escalates external message when agent made no state changes", () => {
+    const mgr = new AttentionManager();
+    mgr.addSignal({
+      source: "telegram:user123",
+      type: "message",
+      content: "Hello from user",
+      urgency: 0.6,
+      timestamp: Date.now(),
+    });
+    mgr.getTopSignals(10);
+
+    const preState = createEmptyState();
+    const postState = createEmptyState();
+    // No state changes — agent did nothing.
+
+    mgr.reEscalateIgnoredSignals(preState, postState);
+
+    // External message SHOULD be re-escalated.
+    expect(mgr.pendingCount).toBe(1);
+    const reQueued = mgr.getTopSignals(1);
+    expect(reQueued[0]?.ignoredCount).toBe(1);
   });
 
   it("clear resets lastPresented", () => {

@@ -179,10 +179,12 @@ describe("updateGoal", () => {
     expect(updated?.progress).toBe("Done!");
   });
 
-  it("sets lastProgressAt when progress is updated", () => {
+  it("sets lastProgressAt and lastProgressCycleCount when progress is updated", () => {
     const state = createEmptyState();
+    state.cycleCount = 7;
     const goal = addGoal(state, "Track progress", "medium");
     expect(goal.lastProgressAt).toBeUndefined();
+    expect(goal.lastProgressCycleCount).toBeUndefined();
 
     const before = Date.now();
     const updated = updateGoal(state, goal.id, { progress: "50% done" });
@@ -191,6 +193,7 @@ describe("updateGoal", () => {
     expect(updated?.lastProgressAt).toBeTypeOf("number");
     expect(updated?.lastProgressAt).toBeGreaterThanOrEqual(before);
     expect(updated?.lastProgressAt).toBeLessThanOrEqual(after);
+    expect(updated?.lastProgressCycleCount).toBe(7);
   });
 
   it("does not set lastProgressAt when only status changes", () => {

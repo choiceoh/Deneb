@@ -31,6 +31,8 @@ export type Goal = {
   dueAt?: number;
   /** Timestamp of last progress update. Used for stale goal detection. */
   lastProgressAt?: number;
+  /** Cycle count when progress was last updated. Used for stale goal detection. */
+  lastProgressCycleCount?: number;
 };
 
 export type ObservationRelevance = "high" | "medium" | "low";

@@ -101,9 +101,20 @@ export class AttentionManager {
       }
     }
 
+    const anyStateChanged =
+      changedGoalIds.size > 0 || changedSocialIds.size > 0 || processedObsIds.size > 0;
+
     // Check each presented signal against changes.
     for (const signal of this.lastPresented) {
-      if (wasSignalAddressed(signal, changedGoalIds, changedSocialIds, processedObsIds)) {
+      if (
+        wasSignalAddressed(
+          signal,
+          changedGoalIds,
+          changedSocialIds,
+          processedObsIds,
+          anyStateChanged,
+        )
+      ) {
         continue;
       }
       // Signal was ignored — re-queue with boosted urgency.
@@ -231,13 +242,9 @@ export class AttentionManager {
       if (goal.status !== "active") {
         continue;
       }
-      // Determine how many cycles have passed since last progress update.
-      const lastProgress = goal.lastProgressAt ?? goal.createdAt;
-      if (!isFiniteNonNegative(lastProgress)) {
-        continue;
-      }
-      const cyclesSinceProgress =
-        state.cycleCount > 0 ? estimateCyclesSince(lastProgress, state) : 0;
+      // Use cycle count directly for accurate staleness measurement.
+      const lastCycleAtProgress = goal.lastProgressCycleCount ?? 0;
+      const cyclesSinceProgress = state.cycleCount - lastCycleAtProgress;
       if (cyclesSinceProgress >= STALE_GOAL_CYCLE_THRESHOLD) {
         const staleness = Math.min(cyclesSinceProgress, 20);
         // Urgency escalates from MEDIUM toward HIGH as staleness increases.
@@ -325,6 +332,7 @@ function wasSignalAddressed(
   changedGoalIds: Set<string>,
   changedSocialIds: Set<string>,
   processedObsIds: Set<string>,
+  anyStateChanged: boolean,
 ): boolean {
   const src = signal.source;
   // Goal-related signal: "goal:<id>"
@@ -334,36 +342,14 @@ function wasSignalAddressed(
   }
   // Social follow-up: "social:<channel>:<peerId>"
   if (src.startsWith("social:")) {
-    // Check if any social entry was updated.
     return changedSocialIds.size > 0;
   }
   // Observation-based signals: check if any observation was processed.
   if (signal.type === "event" && signal.content.startsWith("Unprocessed observation:")) {
     return processedObsIds.size > 0;
   }
-  // Message/event from external sources: assume addressed if agent took any action.
-  // (This is conservative — we don't re-escalate external messages unless
-  // nothing at all happened, which is handled by the "no actions" path.)
-  return false;
-}
-
-/**
- * Estimate how many cycles have elapsed since a given timestamp,
- * based on the average cycle interval derived from state.
- */
-function estimateCyclesSince(timestamp: number, state: AutonomousState): number {
-  if (state.cycleCount <= 0 || !isFiniteNonNegative(state.lastCycleAt)) {
-    return 0;
-  }
-  const elapsed = state.lastCycleAt - timestamp;
-  if (elapsed <= 0) {
-    return 0;
-  }
-  // Use lastCycleAt / cycleCount as a rough average interval.
-  // This avoids needing to store cycle history.
-  const avgInterval = state.lastCycleAt > 0 ? elapsed / state.cycleCount : 300_000;
-  if (avgInterval <= 0) {
-    return 0;
-  }
-  return Math.floor(elapsed / avgInterval);
+  // Message/event from external sources: consider addressed if the agent
+  // made any state change at all (conservative — avoids re-escalating
+  // every external message when the agent was busy with other work).
+  return anyStateChanged;
 }

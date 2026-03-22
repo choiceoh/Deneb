@@ -97,6 +97,14 @@ function isValidGoal(entry: unknown): entry is Goal {
   ) {
     return false;
   }
+  if (
+    g.lastProgressCycleCount !== undefined &&
+    (typeof g.lastProgressCycleCount !== "number" ||
+      !Number.isFinite(g.lastProgressCycleCount) ||
+      g.lastProgressCycleCount < 0)
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -110,6 +118,10 @@ function sanitizeGoal(g: Goal): Goal {
     progress: g.progress !== undefined ? sanitizeText(g.progress) : undefined,
     dueAt: g.dueAt !== undefined ? safeTimestamp(g.dueAt) : undefined,
     lastProgressAt: g.lastProgressAt !== undefined ? safeTimestamp(g.lastProgressAt) : undefined,
+    lastProgressCycleCount:
+      g.lastProgressCycleCount !== undefined
+        ? Math.max(0, Math.floor(g.lastProgressCycleCount))
+        : undefined,
   };
 }
 
@@ -581,6 +593,7 @@ export function updateGoal(
   if (patch.progress !== undefined) {
     safePatch.progress = sanitizeText(patch.progress);
     safePatch.lastProgressAt = Date.now();
+    safePatch.lastProgressCycleCount = state.cycleCount;
   }
   if (patch.dueAt !== undefined) {
     if (patch.dueAt === null) {
