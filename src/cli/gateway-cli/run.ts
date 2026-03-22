@@ -319,9 +319,9 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
   const snapshot = await readConfigFileSnapshot().catch(() => null);
   const configExists = snapshot?.exists ?? fs.existsSync(CONFIG_PATH);
   const configAuditPath = path.join(resolveStateDir(process.env), "logs", "config-audit.jsonl");
-  // Default to "local" when gateway.mode is unset, consistent with 7 other call sites
-  // that treat undefined mode as "local" (e.g. doctor, status, credential-planner).
-  const mode = cfg.gateway?.mode ?? "local";
+  // Default to "local" when no config file exists (first-run experience).
+  // When a config file exists but gateway.mode is unset, keep undefined to surface the helpful error.
+  const mode = cfg.gateway?.mode ?? (configExists ? undefined : "local");
   if (!opts.allowUnconfigured && mode !== "local") {
     if (!configExists) {
       defaultRuntime.error(
