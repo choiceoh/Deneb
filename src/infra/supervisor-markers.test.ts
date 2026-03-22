@@ -2,64 +2,20 @@ import { describe, expect, it } from "vitest";
 import { detectRespawnSupervisor, SUPERVISOR_HINT_ENV_VARS } from "./supervisor-markers.js";
 
 describe("SUPERVISOR_HINT_ENV_VARS", () => {
-  it("includes the cross-platform supervisor hint env vars", () => {
+  it("includes systemd supervisor hint env vars", () => {
     expect(SUPERVISOR_HINT_ENV_VARS).toEqual(
-      expect.arrayContaining([
-        "LAUNCH_JOB_LABEL",
-        "INVOCATION_ID",
-        "DENEB_WINDOWS_TASK_NAME",
-        "DENEB_SERVICE_MARKER",
-        "DENEB_SERVICE_KIND",
-      ]),
+      expect.arrayContaining(["INVOCATION_ID", "DENEB_SERVICE_MARKER", "DENEB_SERVICE_KIND"]),
     );
   });
 });
 
 describe("detectRespawnSupervisor", () => {
-  it("detects launchd and systemd only from non-blank platform-specific hints", () => {
-    expect(detectRespawnSupervisor({ LAUNCH_JOB_LABEL: " ai.deneb.gateway " }, "darwin")).toBe(
-      "launchd",
-    );
-    expect(detectRespawnSupervisor({ LAUNCH_JOB_LABEL: "   " }, "darwin")).toBeNull();
-
-    expect(detectRespawnSupervisor({ INVOCATION_ID: "abc123" }, "linux")).toBe("systemd");
-    expect(detectRespawnSupervisor({ JOURNAL_STREAM: "" }, "linux")).toBeNull();
+  it("detects systemd from non-blank hints", () => {
+    expect(detectRespawnSupervisor({ INVOCATION_ID: "abc123" })).toBe("systemd");
+    expect(detectRespawnSupervisor({ JOURNAL_STREAM: "" })).toBeNull();
   });
 
-  it("detects scheduled-task supervision on Windows from either hint family", () => {
-    expect(detectRespawnSupervisor({ DENEB_WINDOWS_TASK_NAME: "Deneb Gateway" }, "win32")).toBe(
-      "schtasks",
-    );
-    expect(
-      detectRespawnSupervisor(
-        {
-          DENEB_SERVICE_MARKER: "deneb",
-          DENEB_SERVICE_KIND: "gateway",
-        },
-        "win32",
-      ),
-    ).toBe("schtasks");
-    expect(
-      detectRespawnSupervisor(
-        {
-          DENEB_SERVICE_MARKER: "deneb",
-          DENEB_SERVICE_KIND: "worker",
-        },
-        "win32",
-      ),
-    ).toBeNull();
-  });
-
-  it("ignores service markers on non-Windows platforms and unknown platforms", () => {
-    expect(
-      detectRespawnSupervisor(
-        {
-          DENEB_SERVICE_MARKER: "deneb",
-          DENEB_SERVICE_KIND: "gateway",
-        },
-        "linux",
-      ),
-    ).toBeNull();
-    expect(detectRespawnSupervisor({ LAUNCH_JOB_LABEL: "ai.deneb.gateway" }, "freebsd")).toBeNull();
+  it("returns null when no systemd hints are present", () => {
+    expect(detectRespawnSupervisor({})).toBeNull();
   });
 });

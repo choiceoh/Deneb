@@ -1,8 +1,5 @@
-import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { writeConfigFile, type DenebConfig } from "../config/config.js";
 import { resolveGatewayPort, resolveIsNixMode } from "../config/paths.js";
 import { resolveSecretInputRef } from "../config/types.secrets.js";
@@ -26,8 +23,6 @@ import { buildGatewayInstallPlan } from "./daemon-install-helpers.js";
 import { DEFAULT_GATEWAY_DAEMON_RUNTIME, type GatewayDaemonRuntime } from "./daemon-runtime.js";
 import { resolveGatewayAuthTokenForService } from "./doctor-gateway-auth-token.js";
 import type { DoctorOptions, DoctorPrompter } from "./doctor-prompter.js";
-
-const execFileAsync = promisify(execFile);
 
 function detectGatewayRuntime(programArguments: string[] | undefined): GatewayDaemonRuntime {
   const first = programArguments?.[0];
@@ -63,98 +58,22 @@ async function normalizeExecutablePath(value: string): Promise<string> {
   }
 }
 
-function extractDetailPath(detail: string, prefix: string): string | null {
-  if (!detail.startsWith(prefix)) {
-    return null;
-  }
-  const value = detail.slice(prefix.length).trim();
-  return value.length > 0 ? value : null;
-}
-
-async function cleanupLegacyLaunchdService(params: {
-  label: string;
-  plistPath: string;
-}): Promise<string | null> {
-  const domain = typeof process.getuid === "function" ? `gui/${process.getuid()}` : "gui/501";
-  await execFileAsync("launchctl", ["bootout", domain, params.plistPath]).catch(() => undefined);
-  await execFileAsync("launchctl", ["unload", params.plistPath]).catch(() => undefined);
-
-  const trashDir = path.join(os.homedir(), ".Trash");
-  try {
-    await fs.mkdir(trashDir, { recursive: true });
-  } catch {
-    // ignore
-  }
-
-  try {
-    await fs.access(params.plistPath);
-  } catch {
-    return null;
-  }
-
-  const dest = path.join(trashDir, `${params.label}-${Date.now()}.plist`);
-  try {
-    await fs.rename(params.plistPath, dest);
-    return dest;
-  } catch {
-    return null;
-  }
-}
-
 function classifyLegacyServices(legacyServices: ExtraGatewayService[]): {
-  darwinUserServices: ExtraGatewayService[];
   linuxUserServices: ExtraGatewayService[];
   failed: string[];
 } {
-  const darwinUserServices: ExtraGatewayService[] = [];
   const linuxUserServices: ExtraGatewayService[] = [];
   const failed: string[] = [];
 
   for (const svc of legacyServices) {
-    if (svc.platform === "darwin") {
-      if (svc.scope === "user") {
-        darwinUserServices.push(svc);
-      } else {
-        failed.push(`${svc.label} (${svc.scope})`);
-      }
-      continue;
+    if (svc.scope === "user") {
+      linuxUserServices.push(svc);
+    } else {
+      failed.push(`${svc.label} (${svc.scope})`);
     }
-
-    if (svc.platform === "linux") {
-      if (svc.scope === "user") {
-        linuxUserServices.push(svc);
-      } else {
-        failed.push(`${svc.label} (${svc.scope})`);
-      }
-      continue;
-    }
-
-    failed.push(`${svc.label} (${svc.platform})`);
   }
 
-  return { darwinUserServices, linuxUserServices, failed };
-}
-
-async function cleanupLegacyDarwinServices(
-  services: ExtraGatewayService[],
-): Promise<{ removed: string[]; failed: string[] }> {
-  const removed: string[] = [];
-  const failed: string[] = [];
-
-  for (const svc of services) {
-    const plistPath = extractDetailPath(svc.detail, "plist:");
-    if (!plistPath) {
-      failed.push(`${svc.label} (missing plist path)`);
-      continue;
-    }
-    const dest = await cleanupLegacyLaunchdService({
-      label: svc.label,
-      plistPath,
-    });
-    removed.push(dest ? `${svc.label} -> ${dest}` : svc.label);
-  }
-
-  return { removed, failed };
+  return { linuxUserServices, failed };
 }
 
 async function cleanupLegacyLinuxUserServices(
@@ -409,14 +328,7 @@ export async function maybeScanExtraGatewayServices(
     });
     if (shouldRemove) {
       const removed: string[] = [];
-      const { darwinUserServices, linuxUserServices, failed } =
-        classifyLegacyServices(legacyServices);
-
-      if (darwinUserServices.length > 0) {
-        const result = await cleanupLegacyDarwinServices(darwinUserServices);
-        removed.push(...result.removed);
-        failed.push(...result.failed);
-      }
+      const { linuxUserServices, failed } = classifyLegacyServices(legacyServices);
 
       if (linuxUserServices.length > 0) {
         const result = await cleanupLegacyLinuxUserServices(linuxUserServices, runtime);

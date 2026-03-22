@@ -3,21 +3,12 @@ import path from "node:path";
 import {
   GATEWAY_SERVICE_KIND,
   GATEWAY_SERVICE_MARKER,
-  resolveGatewayLaunchAgentLabel,
   resolveGatewaySystemdServiceName,
-  resolveGatewayWindowsTaskName,
 } from "./constants.js";
 import { resolveHomeDir } from "./paths.js";
 
-/** Stub for removed schtasks module. */
-async function execSchtasks(
-  _argv: string[],
-): Promise<{ code: number; stdout: string; stderr: string }> {
-  return { code: 1, stdout: "", stderr: "schtasks module removed" };
-}
-
 export type ExtraGatewayService = {
-  platform: "linux" | "darwin" | "win32";
+  platform: "linux";
   label: string;
   detail: string;
   scope: "user" | "system";
@@ -70,17 +61,6 @@ function hasGatewayServiceMarker(content: string): boolean {
   );
 }
 
-function isDenebGatewayLaunchdService(label: string, contents: string): boolean {
-  if (hasGatewayServiceMarker(contents)) {
-    return true;
-  }
-  const lowerContents = contents.toLowerCase();
-  if (!lowerContents.includes("gateway")) {
-    return false;
-  }
-  return label.startsWith("ai.deneb.");
-}
-
 function isDenebGatewaySystemdService(name: string, contents: string): boolean {
   if (hasGatewayServiceMarker(contents)) {
     return true;
@@ -91,34 +71,8 @@ function isDenebGatewaySystemdService(name: string, contents: string): boolean {
   return contents.toLowerCase().includes("gateway");
 }
 
-function isDenebGatewayTaskName(name: string): boolean {
-  const normalized = name.trim().toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-  const defaultName = resolveGatewayWindowsTaskName().toLowerCase();
-  return normalized === defaultName || normalized.startsWith("deneb gateway");
-}
-
-function tryExtractPlistLabel(contents: string): string | null {
-  const match = contents.match(/<key>Label<\/key>\s*<string>([\s\S]*?)<\/string>/i);
-  if (!match) {
-    return null;
-  }
-  return match[1]?.trim() || null;
-}
-
-function isIgnoredLaunchdLabel(label: string): boolean {
-  return label === resolveGatewayLaunchAgentLabel();
-}
-
 function isIgnoredSystemdName(name: string): boolean {
   return name === resolveGatewaySystemdServiceName();
-}
-
-function isLegacyLabel(label: string): boolean {
-  const lower = label.toLowerCase();
-  return lower.includes("clawdbot") || lower.includes("moltbot");
 }
 
 async function readDirEntries(dir: string): Promise<string[]> {
@@ -169,54 +123,6 @@ async function collectServiceFiles(params: {
   return out;
 }
 
-async function scanLaunchdDir(params: {
-  dir: string;
-  scope: "user" | "system";
-}): Promise<ExtraGatewayService[]> {
-  const results: ExtraGatewayService[] = [];
-  const candidates = await collectServiceFiles({
-    dir: params.dir,
-    extension: ".plist",
-    isIgnoredName: isIgnoredLaunchdLabel,
-  });
-
-  for (const { name: labelFromName, fullPath, contents } of candidates) {
-    const marker = detectMarker(contents);
-    const label = tryExtractPlistLabel(contents) ?? labelFromName;
-    if (!marker) {
-      const legacyLabel = isLegacyLabel(labelFromName) || isLegacyLabel(label);
-      if (!legacyLabel) {
-        continue;
-      }
-      results.push({
-        platform: "darwin",
-        label,
-        detail: `plist: ${fullPath}`,
-        scope: params.scope,
-        marker: isLegacyLabel(label) ? "clawdbot" : "moltbot",
-        legacy: true,
-      });
-      continue;
-    }
-    if (isIgnoredLaunchdLabel(label)) {
-      continue;
-    }
-    if (marker === "deneb" && isDenebGatewayLaunchdService(label, contents)) {
-      continue;
-    }
-    results.push({
-      platform: "darwin",
-      label,
-      detail: `plist: ${fullPath}`,
-      scope: params.scope,
-      marker,
-      legacy: marker !== "deneb" || isLegacyLabel(label),
-    });
-  }
-
-  return results;
-}
-
 async function scanSystemdDir(params: {
   dir: string;
   scope: "user" | "system";
@@ -249,54 +155,6 @@ async function scanSystemdDir(params: {
   return results;
 }
 
-type ScheduledTaskInfo = {
-  name: string;
-  taskToRun?: string;
-};
-
-function parseSchtasksList(output: string): ScheduledTaskInfo[] {
-  const tasks: ScheduledTaskInfo[] = [];
-  let current: ScheduledTaskInfo | null = null;
-
-  for (const rawLine of output.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) {
-      if (current) {
-        tasks.push(current);
-        current = null;
-      }
-      continue;
-    }
-    const idx = line.indexOf(":");
-    if (idx <= 0) {
-      continue;
-    }
-    const key = line.slice(0, idx).trim().toLowerCase();
-    const value = line.slice(idx + 1).trim();
-    if (!value) {
-      continue;
-    }
-    if (key === "taskname") {
-      if (current) {
-        tasks.push(current);
-      }
-      current = { name: value };
-      continue;
-    }
-    if (!current) {
-      continue;
-    }
-    if (key === "task to run") {
-      current.taskToRun = value;
-    }
-  }
-
-  if (current) {
-    tasks.push(current);
-  }
-  return tasks;
-}
-
 export async function findExtraGatewayServices(
   env: Record<string, string | undefined>,
   opts: FindExtraGatewayServicesOptions = {},
@@ -312,106 +170,27 @@ export async function findExtraGatewayServices(
     results.push(svc);
   };
 
-  if (process.platform === "darwin") {
-    try {
-      const home = resolveHomeDir(env);
-      const userDir = path.join(home, "Library", "LaunchAgents");
-      for (const svc of await scanLaunchdDir({
-        dir: userDir,
-        scope: "user",
-      })) {
-        push(svc);
-      }
-      if (opts.deep) {
-        for (const svc of await scanLaunchdDir({
-          dir: path.join(path.sep, "Library", "LaunchAgents"),
-          scope: "system",
-        })) {
-          push(svc);
-        }
-        for (const svc of await scanLaunchdDir({
-          dir: path.join(path.sep, "Library", "LaunchDaemons"),
+  try {
+    const home = resolveHomeDir(env);
+    const userDir = path.join(home, ".config", "systemd", "user");
+    for (const svc of await scanSystemdDir({
+      dir: userDir,
+      scope: "user",
+    })) {
+      push(svc);
+    }
+    if (opts.deep) {
+      for (const dir of ["/etc/systemd/system", "/usr/lib/systemd/system", "/lib/systemd/system"]) {
+        for (const svc of await scanSystemdDir({
+          dir,
           scope: "system",
         })) {
           push(svc);
         }
       }
-    } catch {
-      return results;
     }
+  } catch {
     return results;
   }
-
-  if (process.platform === "linux") {
-    try {
-      const home = resolveHomeDir(env);
-      const userDir = path.join(home, ".config", "systemd", "user");
-      for (const svc of await scanSystemdDir({
-        dir: userDir,
-        scope: "user",
-      })) {
-        push(svc);
-      }
-      if (opts.deep) {
-        for (const dir of [
-          "/etc/systemd/system",
-          "/usr/lib/systemd/system",
-          "/lib/systemd/system",
-        ]) {
-          for (const svc of await scanSystemdDir({
-            dir,
-            scope: "system",
-          })) {
-            push(svc);
-          }
-        }
-      }
-    } catch {
-      return results;
-    }
-    return results;
-  }
-
-  if (process.platform === "win32") {
-    if (!opts.deep) {
-      return results;
-    }
-    const res = await execSchtasks(["/Query", "/FO", "LIST", "/V"]);
-    if (res.code !== 0) {
-      return results;
-    }
-    const tasks = parseSchtasksList(res.stdout);
-    for (const task of tasks) {
-      const name = task.name.trim();
-      if (!name) {
-        continue;
-      }
-      if (isDenebGatewayTaskName(name)) {
-        continue;
-      }
-      const lowerName = name.toLowerCase();
-      const lowerCommand = task.taskToRun?.toLowerCase() ?? "";
-      let marker: Marker | null = null;
-      for (const candidate of EXTRA_MARKERS) {
-        if (lowerName.includes(candidate) || lowerCommand.includes(candidate)) {
-          marker = candidate;
-          break;
-        }
-      }
-      if (!marker) {
-        continue;
-      }
-      push({
-        platform: "win32",
-        label: name,
-        detail: task.taskToRun ? `task: ${name}, run: ${task.taskToRun}` : name,
-        scope: "system",
-        marker,
-        legacy: marker !== "deneb",
-      });
-    }
-    return results;
-  }
-
   return results;
 }

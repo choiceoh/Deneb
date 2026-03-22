@@ -43,8 +43,6 @@ import {
 import { noteSourceInstallIssues } from "./doctor-install.js";
 import { noteMemorySearchHealth } from "./doctor-memory-search.js";
 import {
-  noteMacLaunchAgentOverrides,
-  noteMacLaunchctlGatewayEnvOverrides,
   noteDeprecatedLegacyEnvVars,
   noteStartupOptimizationHints,
 } from "./doctor-platform-notes.js";
@@ -234,9 +232,6 @@ export async function doctorCommand(
 
   await maybeScanExtraGatewayServices(options, runtime, prompter);
   await maybeRepairGatewayServiceConfig(cfg, resolveMode(cfg), runtime, prompter);
-  await noteMacLaunchAgentOverrides();
-  await noteMacLaunchctlGatewayEnvOverrides(cfg);
-
   if (prompter.shouldRepair) {
     await runStartupMatrixMigration({
       cfg,

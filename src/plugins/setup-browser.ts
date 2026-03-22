@@ -103,7 +103,6 @@ export async function openUrl(url: string): Promise<boolean> {
   try {
     await runCommandWithTimeout(command, {
       timeoutMs: 5_000,
-      windowsVerbatimArguments: quoteUrl,
     });
     return true;
   } catch {

@@ -24,7 +24,6 @@ import {
 } from "./audit-fs.js";
 import { collectEnabledInsecureOrDangerousFlags } from "./dangerous-config-flags.js";
 import { DEFAULT_GATEWAY_HTTP_TOOL_DENY } from "./dangerous-tools.js";
-import type { ExecFn } from "./windows-acl.js";
 
 type ExecDockerRawFn = typeof import("../agents/sandbox/docker.js").execDockerRaw;
 type ProbeGatewayFn = typeof import("../gateway/probe.js").probeGateway;
@@ -77,7 +76,6 @@ export type SecurityAuditOptions = {
   /** Dependency injection for tests. */
   plugins?: ReturnType<typeof listChannelPlugins>;
   /** Dependency injection for tests (Windows ACL checks). */
-  execIcacls?: ExecFn;
   /** Dependency injection for tests (Docker label checks). */
   execDockerRawFn?: ExecDockerRawFn;
   /** Optional preloaded config snapshot to skip audit-time config file reads. */
@@ -101,7 +99,6 @@ type AuditExecutionContext = {
   deepTimeoutMs: number;
   stateDir: string;
   configPath: string;
-  execIcacls?: ExecFn;
   execDockerRawFn?: ExecDockerRawFn;
   probeGatewayFn?: ProbeGatewayFn;
   plugins?: ReturnType<typeof listChannelPlugins>;
@@ -234,17 +231,10 @@ function isFeishuDocToolEnabled(cfg: DenebConfig): boolean {
 async function collectFilesystemFindings(params: {
   stateDir: string;
   configPath: string;
-  env?: NodeJS.ProcessEnv;
-  platform?: NodeJS.Platform;
-  execIcacls?: ExecFn;
 }): Promise<SecurityAuditFinding[]> {
   const findings: SecurityAuditFinding[] = [];
 
-  const stateDirPerms = await inspectPathPermissions(params.stateDir, {
-    env: params.env,
-    platform: params.platform,
-    exec: params.execIcacls,
-  });
+  const stateDirPerms = await inspectPathPermissions(params.stateDir);
   if (stateDirPerms.ok) {
     if (stateDirPerms.isSymlink) {
       findings.push({
@@ -262,10 +252,8 @@ async function collectFilesystemFindings(params: {
         detail: `${formatPermissionDetail(params.stateDir, stateDirPerms)}; other users can write into your Deneb state.`,
         remediation: formatPermissionRemediation({
           targetPath: params.stateDir,
-          perms: stateDirPerms,
           isDir: true,
           posixMode: 0o700,
-          env: params.env,
         }),
       });
     } else if (stateDirPerms.groupWritable) {
@@ -276,10 +264,8 @@ async function collectFilesystemFindings(params: {
         detail: `${formatPermissionDetail(params.stateDir, stateDirPerms)}; group users can write into your Deneb state.`,
         remediation: formatPermissionRemediation({
           targetPath: params.stateDir,
-          perms: stateDirPerms,
           isDir: true,
           posixMode: 0o700,
-          env: params.env,
         }),
       });
     } else if (stateDirPerms.groupReadable || stateDirPerms.worldReadable) {
@@ -290,20 +276,14 @@ async function collectFilesystemFindings(params: {
         detail: `${formatPermissionDetail(params.stateDir, stateDirPerms)}; consider restricting to 700.`,
         remediation: formatPermissionRemediation({
           targetPath: params.stateDir,
-          perms: stateDirPerms,
           isDir: true,
           posixMode: 0o700,
-          env: params.env,
         }),
       });
     }
   }
 
-  const configPerms = await inspectPathPermissions(params.configPath, {
-    env: params.env,
-    platform: params.platform,
-    exec: params.execIcacls,
-  });
+  const configPerms = await inspectPathPermissions(params.configPath);
   if (configPerms.ok) {
     const skipReadablePermWarnings = configPerms.isSymlink;
     if (configPerms.isSymlink) {
@@ -322,10 +302,8 @@ async function collectFilesystemFindings(params: {
         detail: `${formatPermissionDetail(params.configPath, configPerms)}; another user could change gateway/auth/tool policies.`,
         remediation: formatPermissionRemediation({
           targetPath: params.configPath,
-          perms: configPerms,
           isDir: false,
           posixMode: 0o600,
-          env: params.env,
         }),
       });
     } else if (!skipReadablePermWarnings && configPerms.worldReadable) {
@@ -336,10 +314,8 @@ async function collectFilesystemFindings(params: {
         detail: `${formatPermissionDetail(params.configPath, configPerms)}; config can contain tokens and private settings.`,
         remediation: formatPermissionRemediation({
           targetPath: params.configPath,
-          perms: configPerms,
           isDir: false,
           posixMode: 0o600,
-          env: params.env,
         }),
       });
     } else if (!skipReadablePermWarnings && configPerms.groupReadable) {
@@ -350,10 +326,8 @@ async function collectFilesystemFindings(params: {
         detail: `${formatPermissionDetail(params.configPath, configPerms)}; config can contain tokens and private settings.`,
         remediation: formatPermissionRemediation({
           targetPath: params.configPath,
-          perms: configPerms,
           isDir: false,
           posixMode: 0o600,
-          env: params.env,
         }),
       });
     }
@@ -1180,7 +1154,6 @@ async function createAuditExecutionContext(
     deepTimeoutMs,
     stateDir,
     configPath,
-    execIcacls: opts.execIcacls,
     execDockerRawFn: opts.execDockerRawFn,
     probeGatewayFn: opts.probeGatewayFn,
     plugins: opts.plugins,
@@ -1223,9 +1196,6 @@ export async function runSecurityAudit(opts: SecurityAuditOptions): Promise<Secu
       ...(await collectFilesystemFindings({
         stateDir,
         configPath,
-        env,
-        platform,
-        execIcacls: context.execIcacls,
       })),
     );
     if (context.configSnapshot) {
@@ -1234,7 +1204,6 @@ export async function runSecurityAudit(opts: SecurityAuditOptions): Promise<Secu
           configSnapshot: context.configSnapshot,
           env,
           platform,
-          execIcacls: context.execIcacls,
         })),
       );
     }
@@ -1243,8 +1212,6 @@ export async function runSecurityAudit(opts: SecurityAuditOptions): Promise<Secu
         cfg,
         env,
         stateDir,
-        platform,
-        execIcacls: context.execIcacls,
       })),
     );
     findings.push(...(await auditNonDeep.collectWorkspaceSkillSymlinkEscapeFindings({ cfg })));
