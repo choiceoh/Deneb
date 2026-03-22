@@ -274,7 +274,16 @@ function listKnownChannelPluginIds(env: NodeJS.ProcessEnv): string[] {
 }
 
 function collectCandidateChannelIds(cfg: DenebConfig, env: NodeJS.ProcessEnv): string[] {
-  const channelIds = new Set<string>(listKnownChannelPluginIds(env));
+  // Optimization: always include Telegram as the primary known channel
+  // so we avoid scanning when no other channels are configured.
+  const channelIds = new Set<string>(["telegram"]);
+
+  // Still collect any additional channels from the registry + catalog
+  // to preserve plugin-system extensibility.
+  for (const id of listKnownChannelPluginIds(env)) {
+    channelIds.add(id);
+  }
+
   const configuredChannels = cfg.channels as Record<string, unknown> | undefined;
   if (!configuredChannels || typeof configuredChannels !== "object") {
     return Array.from(channelIds);

@@ -39,10 +39,6 @@ function createLazySender(
 
 export function createDefaultDeps(): CliDeps {
   return {
-    whatsapp: createLazySender(
-      "whatsapp",
-      () => import("./send-runtime/whatsapp.js") as Promise<RuntimeSendModule>,
-    ),
     telegram: createLazySender(
       "telegram",
       () => import("./send-runtime/telegram.js") as Promise<RuntimeSendModule>,
@@ -53,5 +49,3 @@ export function createDefaultDeps(): CliDeps {
 export function createOutboundSendDeps(deps: CliDeps): OutboundSendDeps {
   return createOutboundSendDepsFromCliSource(deps);
 }
-
-export { logWebSelfId } from "../plugins/runtime/runtime-whatsapp-boundary.js";

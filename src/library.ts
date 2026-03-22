@@ -18,7 +18,6 @@ import {
   handlePortError,
   PortInUseError,
 } from "./infra/ports.js";
-import { monitorWebChannel } from "./plugins/runtime/runtime-whatsapp-boundary.js";
 import { runCommandWithTimeout, runExec } from "./process/exec.js";
 import { assertWebChannel, normalizeE164, toWhatsappJid } from "./utils.js";
 
@@ -34,7 +33,6 @@ export {
   handlePortError,
   loadConfig,
   loadSessionStore,
-  monitorWebChannel,
   normalizeE164,
   PortInUseError,
   promptYesNo,

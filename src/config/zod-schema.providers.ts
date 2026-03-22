@@ -1,21 +1,13 @@
+/**
+ * zod-schema.providers.ts — Deneb: Telegram-only channel schema.
+ */
+
 import { z } from "zod";
 import { ChannelHeartbeatVisibilitySchema } from "./zod-schema.channels.js";
 import { GroupPolicySchema } from "./zod-schema.core.js";
-import {
-  BlueBubblesConfigSchema,
-  DiscordConfigSchema,
-  GoogleChatConfigSchema,
-  IMessageConfigSchema,
-  IrcConfigSchema,
-  MSTeamsConfigSchema,
-  SignalConfigSchema,
-  SlackConfigSchema,
-  TelegramConfigSchema,
-} from "./zod-schema.providers-core.js";
-import { WhatsAppConfigSchema } from "./zod-schema.providers-whatsapp.js";
+import { TelegramConfigSchema } from "./zod-schema.providers-core.js";
 
 export * from "./zod-schema.providers-core.js";
-export * from "./zod-schema.providers-whatsapp.js";
 export { ChannelHeartbeatVisibilitySchema } from "./zod-schema.channels.js";
 
 const ChannelModelByChannelSchema = z
@@ -32,16 +24,7 @@ export const ChannelsSchema = z
       .strict()
       .optional(),
     modelByChannel: ChannelModelByChannelSchema,
-    whatsapp: WhatsAppConfigSchema.optional(),
     telegram: TelegramConfigSchema.optional(),
-    discord: DiscordConfigSchema.optional(),
-    irc: IrcConfigSchema.optional(),
-    googlechat: GoogleChatConfigSchema.optional(),
-    slack: SlackConfigSchema.optional(),
-    signal: SignalConfigSchema.optional(),
-    imessage: IMessageConfigSchema.optional(),
-    bluebubbles: BlueBubblesConfigSchema.optional(),
-    msteams: MSTeamsConfigSchema.optional(),
   })
-  .passthrough() // Allow extension channel configs (nostr, matrix, zalo, etc.)
+  .passthrough() // Allow extension channel configs
   .optional();

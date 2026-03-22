@@ -2,16 +2,8 @@ export const optionalBundledClusters = [
   "acpx",
   "diagnostics-otel",
   "diffs",
-  "googlechat",
-  "matrix",
   "memory-lancedb",
-  "msteams",
-  "nostr",
-  "tlon",
-  "twitch",
   "ui",
-  "whatsapp",
-  "zalouser",
 ];
 
 export const optionalBundledClusterSet = new Set(optionalBundledClusters);

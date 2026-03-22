@@ -1,11 +1,4 @@
-import {
-  formatSlackStreamingBooleanMigrationMessage,
-  formatSlackStreamModeMigrationMessage,
-  resolveDiscordPreviewStreamMode,
-  resolveSlackNativeStreaming,
-  resolveSlackStreamingMode,
-  resolveTelegramPreviewStreamMode,
-} from "./discord-preview-streaming.js";
+import { resolveTelegramPreviewStreamMode } from "./discord-preview-streaming.js";
 import {
   ensureRecord,
   getRecord,
@@ -217,17 +210,9 @@ export const LEGACY_CONFIG_MIGRATIONS_PART_1: LegacyConfigMigration[] = [
   },
   {
     id: "providers->channels",
-    describe: "Move provider config sections to channels.*",
+    describe: "Move provider config sections to channels.telegram",
     apply: (raw, changes) => {
-      const legacyKeys = [
-        "whatsapp",
-        "telegram",
-        "discord",
-        "slack",
-        "signal",
-        "imessage",
-        "msteams",
-      ];
+      const legacyKeys = ["telegram"];
       const legacyEntries = legacyKeys.filter((key) => isRecord(raw[key]));
       if (legacyEntries.length === 0) {
         return;
@@ -253,8 +238,7 @@ export const LEGACY_CONFIG_MIGRATIONS_PART_1: LegacyConfigMigration[] = [
   },
   {
     id: "thread-bindings.ttlHours->idleHours",
-    describe:
-      "Move legacy threadBindings.ttlHours keys to threadBindings.idleHours (session + channels.discord)",
+    describe: "Move legacy threadBindings.ttlHours keys to threadBindings.idleHours (session)",
     apply: (raw, changes) => {
       const session = getRecord(raw.session);
       if (session) {
@@ -265,185 +249,66 @@ export const LEGACY_CONFIG_MIGRATIONS_PART_1: LegacyConfigMigration[] = [
         });
         raw.session = session;
       }
-
-      const channels = getRecord(raw.channels);
-      const discord = getRecord(channels?.discord);
-      if (!channels || !discord) {
-        return;
-      }
-
-      migrateThreadBindingsTtlHoursForPath({
-        owner: discord,
-        pathPrefix: "channels.discord",
-        changes,
-      });
-
-      const accounts = getRecord(discord.accounts);
-      if (accounts) {
-        for (const [accountId, accountRaw] of Object.entries(accounts)) {
-          const account = getRecord(accountRaw);
-          if (!account) {
-            continue;
-          }
-          migrateThreadBindingsTtlHoursForPath({
-            owner: account,
-            pathPrefix: `channels.discord.accounts.${accountId}`,
-            changes,
-          });
-          accounts[accountId] = account;
-        }
-        discord.accounts = accounts;
-      }
-
-      channels.discord = discord;
-      raw.channels = channels;
     },
   },
   {
     id: "channels.streaming-keys->channels.streaming",
-    describe:
-      "Normalize legacy streaming keys to channels.<provider>.streaming (Telegram/Discord/Slack)",
+    describe: "Normalize legacy streaming keys to channels.telegram.streaming",
     apply: (raw, changes) => {
       const channels = getRecord(raw.channels);
       if (!channels) {
         return;
       }
 
-      const migrateProviderEntry = (params: {
-        provider: "telegram" | "discord" | "slack";
+      const migrateTelegramEntry = (params: {
         entry: Record<string, unknown>;
         pathPrefix: string;
       }) => {
-        const migrateCommonStreamingMode = (
-          resolveMode: (entry: Record<string, unknown>) => string,
-        ) => {
-          const hasLegacyStreamMode = params.entry.streamMode !== undefined;
-          const legacyStreaming = params.entry.streaming;
-          if (!hasLegacyStreamMode && typeof legacyStreaming !== "boolean") {
-            return false;
-          }
-          const resolved = resolveMode(params.entry);
-          params.entry.streaming = resolved;
-          if (hasLegacyStreamMode) {
-            delete params.entry.streamMode;
-            changes.push(
-              `Moved ${params.pathPrefix}.streamMode → ${params.pathPrefix}.streaming (${resolved}).`,
-            );
-          }
-          if (typeof legacyStreaming === "boolean") {
-            changes.push(`Normalized ${params.pathPrefix}.streaming boolean → enum (${resolved}).`);
-          }
-          return true;
-        };
-
         const hasLegacyStreamMode = params.entry.streamMode !== undefined;
         const legacyStreaming = params.entry.streaming;
-        const legacyNativeStreaming = params.entry.nativeStreaming;
-
-        if (params.provider === "telegram") {
-          migrateCommonStreamingMode(resolveTelegramPreviewStreamMode);
-          return;
-        }
-
-        if (params.provider === "discord") {
-          migrateCommonStreamingMode(resolveDiscordPreviewStreamMode);
-          return;
-        }
-
         if (!hasLegacyStreamMode && typeof legacyStreaming !== "boolean") {
           return;
         }
-        const resolvedStreaming = resolveSlackStreamingMode(params.entry);
-        const resolvedNativeStreaming = resolveSlackNativeStreaming(params.entry);
-        params.entry.streaming = resolvedStreaming;
-        params.entry.nativeStreaming = resolvedNativeStreaming;
+        const resolved = resolveTelegramPreviewStreamMode(params.entry);
+        params.entry.streaming = resolved;
         if (hasLegacyStreamMode) {
           delete params.entry.streamMode;
-          changes.push(formatSlackStreamModeMigrationMessage(params.pathPrefix, resolvedStreaming));
+          changes.push(
+            `Moved ${params.pathPrefix}.streamMode → ${params.pathPrefix}.streaming (${resolved}).`,
+          );
         }
         if (typeof legacyStreaming === "boolean") {
-          changes.push(
-            formatSlackStreamingBooleanMigrationMessage(params.pathPrefix, resolvedNativeStreaming),
-          );
-        } else if (typeof legacyNativeStreaming !== "boolean" && hasLegacyStreamMode) {
-          changes.push(`Set ${params.pathPrefix}.nativeStreaming → ${resolvedNativeStreaming}.`);
+          changes.push(`Normalized ${params.pathPrefix}.streaming boolean → enum (${resolved}).`);
         }
       };
 
-      const migrateProvider = (provider: "telegram" | "discord" | "slack") => {
-        const providerEntry = getRecord(channels[provider]);
-        if (!providerEntry) {
-          return;
+      const telegramEntry = getRecord(channels.telegram);
+      if (!telegramEntry) {
+        return;
+      }
+      migrateTelegramEntry({
+        entry: telegramEntry,
+        pathPrefix: "channels.telegram",
+      });
+      const accounts = getRecord(telegramEntry.accounts);
+      if (!accounts) {
+        return;
+      }
+      for (const [accountId, accountValue] of Object.entries(accounts)) {
+        const account = getRecord(accountValue);
+        if (!account) {
+          continue;
         }
-        migrateProviderEntry({
-          provider,
-          entry: providerEntry,
-          pathPrefix: `channels.${provider}`,
+        migrateTelegramEntry({
+          entry: account,
+          pathPrefix: `channels.telegram.accounts.${accountId}`,
         });
-        const accounts = getRecord(providerEntry.accounts);
-        if (!accounts) {
-          return;
-        }
-        for (const [accountId, accountValue] of Object.entries(accounts)) {
-          const account = getRecord(accountValue);
-          if (!account) {
-            continue;
-          }
-          migrateProviderEntry({
-            provider,
-            entry: account,
-            pathPrefix: `channels.${provider}.accounts.${accountId}`,
-          });
-        }
-      };
-
-      migrateProvider("telegram");
-      migrateProvider("discord");
-      migrateProvider("slack");
-    },
-  },
-  {
-    id: "routing.allowFrom->channels.whatsapp.allowFrom",
-    describe: "Move routing.allowFrom to channels.whatsapp.allowFrom",
-    apply: (raw, changes) => {
-      const routing = raw.routing;
-      if (!routing || typeof routing !== "object") {
-        return;
       }
-      const allowFrom = (routing as Record<string, unknown>).allowFrom;
-      if (allowFrom === undefined) {
-        return;
-      }
-
-      const channels = getRecord(raw.channels);
-      const whatsapp = channels ? getRecord(channels.whatsapp) : null;
-      if (!whatsapp) {
-        delete (routing as Record<string, unknown>).allowFrom;
-        if (Object.keys(routing as Record<string, unknown>).length === 0) {
-          delete raw.routing;
-        }
-        changes.push("Removed routing.allowFrom (channels.whatsapp not configured).");
-        return;
-      }
-
-      if (whatsapp.allowFrom === undefined) {
-        whatsapp.allowFrom = allowFrom;
-        changes.push("Moved routing.allowFrom → channels.whatsapp.allowFrom.");
-      } else {
-        changes.push("Removed routing.allowFrom (channels.whatsapp.allowFrom already set).");
-      }
-
-      delete (routing as Record<string, unknown>).allowFrom;
-      if (Object.keys(routing as Record<string, unknown>).length === 0) {
-        delete raw.routing;
-      }
-      channels!.whatsapp = whatsapp;
-      raw.channels = channels!;
     },
   },
   {
     id: "routing.groupChat.requireMention->groups.*.requireMention",
-    describe: "Move routing.groupChat.requireMention to channels.whatsapp/telegram/imessage groups",
+    describe: "Move routing.groupChat.requireMention to channels.telegram groups",
     apply: (raw, changes) => {
       const routing = raw.routing;
       if (!routing || typeof routing !== "object") {
@@ -463,37 +328,25 @@ export const LEGACY_CONFIG_MIGRATIONS_PART_1: LegacyConfigMigration[] = [
       }
 
       const channels = ensureRecord(raw, "channels");
-      const applyTo = (
-        key: "whatsapp" | "telegram" | "imessage",
-        options?: { requireExisting?: boolean },
-      ) => {
-        if (options?.requireExisting && !isRecord(channels[key])) {
-          return;
-        }
-        const section =
-          channels[key] && typeof channels[key] === "object"
-            ? (channels[key] as Record<string, unknown>)
-            : {};
-        const { groups, entry } = ensureDefaultGroupEntry(section);
-        const defaultKey = "*";
-        if (entry.requireMention === undefined) {
-          entry.requireMention = requireMention;
-          groups[defaultKey] = entry;
-          section.groups = groups;
-          channels[key] = section;
-          changes.push(
-            `Moved routing.groupChat.requireMention → channels.${key}.groups."*".requireMention.`,
-          );
-        } else {
-          changes.push(
-            `Removed routing.groupChat.requireMention (channels.${key}.groups."*" already set).`,
-          );
-        }
-      };
-
-      applyTo("whatsapp", { requireExisting: true });
-      applyTo("telegram");
-      applyTo("imessage");
+      const section =
+        channels.telegram && typeof channels.telegram === "object"
+          ? (channels.telegram as Record<string, unknown>)
+          : {};
+      const { groups, entry } = ensureDefaultGroupEntry(section);
+      const defaultKey = "*";
+      if (entry.requireMention === undefined) {
+        entry.requireMention = requireMention;
+        groups[defaultKey] = entry;
+        section.groups = groups;
+        channels.telegram = section;
+        changes.push(
+          'Moved routing.groupChat.requireMention → channels.telegram.groups."*".requireMention.',
+        );
+      } else {
+        changes.push(
+          'Removed routing.groupChat.requireMention (channels.telegram.groups."*" already set).',
+        );
+      }
 
       delete groupChat.requireMention;
       if (Object.keys(groupChat).length === 0) {

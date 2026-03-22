@@ -1,7 +1,12 @@
+/**
+ * Preview streaming mode utilities.
+ *
+ * Historically shared across Discord/Slack/Telegram. Now only Telegram is used.
+ * Kept at the same path to avoid churn in the Telegram schema import.
+ */
+
 export type StreamingMode = "off" | "partial" | "block" | "progress";
-export type DiscordPreviewStreamMode = "off" | "partial" | "block";
 export type TelegramPreviewStreamMode = "off" | "partial" | "block";
-export type SlackLegacyDraftStreamMode = "replace" | "status_final" | "append";
 
 function normalizeStreamingMode(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -24,32 +29,12 @@ export function parseStreamingMode(value: unknown): StreamingMode | null {
   return null;
 }
 
-export function parseDiscordPreviewStreamMode(value: unknown): DiscordPreviewStreamMode | null {
+function parsePreviewStreamMode(value: unknown): TelegramPreviewStreamMode | null {
   const parsed = parseStreamingMode(value);
   if (!parsed) {
     return null;
   }
   return parsed === "progress" ? "partial" : parsed;
-}
-
-export function parseSlackLegacyDraftStreamMode(value: unknown): SlackLegacyDraftStreamMode | null {
-  const normalized = normalizeStreamingMode(value);
-  if (normalized === "replace" || normalized === "status_final" || normalized === "append") {
-    return normalized;
-  }
-  return null;
-}
-
-export function mapSlackLegacyDraftStreamModeToStreaming(
-  mode: SlackLegacyDraftStreamMode,
-): StreamingMode {
-  if (mode === "append") {
-    return "block";
-  }
-  if (mode === "status_final") {
-    return "progress";
-  }
-  return "partial";
 }
 
 export function resolveTelegramPreviewStreamMode(
@@ -66,7 +51,7 @@ export function resolveTelegramPreviewStreamMode(
     return parsedStreaming;
   }
 
-  const legacy = parseDiscordPreviewStreamMode(params.streamMode);
+  const legacy = parsePreviewStreamMode(params.streamMode);
   if (legacy) {
     return legacy;
   }
@@ -74,75 +59,4 @@ export function resolveTelegramPreviewStreamMode(
     return params.streaming ? "partial" : "off";
   }
   return "partial";
-}
-
-export function resolveDiscordPreviewStreamMode(
-  params: {
-    streamMode?: unknown;
-    streaming?: unknown;
-  } = {},
-): DiscordPreviewStreamMode {
-  const parsedStreaming = parseDiscordPreviewStreamMode(params.streaming);
-  if (parsedStreaming) {
-    return parsedStreaming;
-  }
-
-  const legacy = parseDiscordPreviewStreamMode(params.streamMode);
-  if (legacy) {
-    return legacy;
-  }
-  if (typeof params.streaming === "boolean") {
-    return params.streaming ? "partial" : "off";
-  }
-  return "off";
-}
-
-export function resolveSlackStreamingMode(
-  params: {
-    streamMode?: unknown;
-    streaming?: unknown;
-  } = {},
-): StreamingMode {
-  const parsedStreaming = parseStreamingMode(params.streaming);
-  if (parsedStreaming) {
-    return parsedStreaming;
-  }
-  const legacyStreamMode = parseSlackLegacyDraftStreamMode(params.streamMode);
-  if (legacyStreamMode) {
-    return mapSlackLegacyDraftStreamModeToStreaming(legacyStreamMode);
-  }
-  // Legacy boolean `streaming` values map to the unified enum.
-  if (typeof params.streaming === "boolean") {
-    return params.streaming ? "partial" : "off";
-  }
-  return "partial";
-}
-
-export function resolveSlackNativeStreaming(
-  params: {
-    nativeStreaming?: unknown;
-    streaming?: unknown;
-  } = {},
-): boolean {
-  if (typeof params.nativeStreaming === "boolean") {
-    return params.nativeStreaming;
-  }
-  if (typeof params.streaming === "boolean") {
-    return params.streaming;
-  }
-  return true;
-}
-
-export function formatSlackStreamModeMigrationMessage(
-  pathPrefix: string,
-  resolvedStreaming: string,
-): string {
-  return `Moved ${pathPrefix}.streamMode → ${pathPrefix}.streaming (${resolvedStreaming}).`;
-}
-
-export function formatSlackStreamingBooleanMigrationMessage(
-  pathPrefix: string,
-  resolvedNativeStreaming: boolean,
-): string {
-  return `Moved ${pathPrefix}.streaming (boolean) → ${pathPrefix}.nativeStreaming (${resolvedNativeStreaming}).`;
 }
