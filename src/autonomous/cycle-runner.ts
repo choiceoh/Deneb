@@ -95,7 +95,7 @@ export async function runAutonomousCycle(params: {
       job: syntheticJob,
       message: prompt,
       abortSignal,
-      sessionKey: `agent:${agentId}@autonomous/cycle`,
+      sessionKey: `agent:${agentId}:autonomous/cycle`,
       agentId,
       lane: "autonomous",
     });

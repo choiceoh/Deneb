@@ -28,7 +28,11 @@ import { findLegacyConfigIssues } from "./legacy.js";
 import type { DenebConfig, ConfigValidationIssue } from "./types.js";
 import { DenebSchema } from "./zod-schema.js";
 
-const LEGACY_REMOVED_PLUGIN_IDS = new Set(["google-antigravity-auth", "google-gemini-cli-auth"]);
+const LEGACY_REMOVED_PLUGIN_IDS = new Set([
+  "google-antigravity-auth",
+  "google-gemini-cli-auth",
+  "lossless-claw",
+]);
 
 type UnknownIssueRecord = Record<string, unknown>;
 type AllowedValuesCollection = {
@@ -487,10 +491,8 @@ function validateConfigObjectWithPluginsBase(
     opts?: { warnOnly?: boolean },
   ) => {
     if (LEGACY_REMOVED_PLUGIN_IDS.has(pluginId)) {
-      warnings.push({
-        path,
-        message: `plugin removed: ${pluginId} (stale config entry ignored; remove it from plugins config)`,
-      });
+      // Silently skip — these are known removed/built-in plugins whose config
+      // entries are still read by native code (e.g. lossless-claw → LCM).
       return;
     }
     if (opts?.warnOnly) {
