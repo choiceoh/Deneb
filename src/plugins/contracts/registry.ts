@@ -1,38 +1,3 @@
-import amazonBedrockPlugin from "../../../extensions/amazon-bedrock/index.js";
-import anthropicPlugin from "../../../extensions/anthropic/index.js";
-import bravePlugin from "../../../extensions/brave/index.js";
-import byteplusPlugin from "../../../extensions/byteplus/index.js";
-import chutesPlugin from "../../../extensions/chutes/index.js";
-import cloudflareAiGatewayPlugin from "../../../extensions/cloudflare-ai-gateway/index.js";
-import elevenLabsPlugin from "../../../extensions/elevenlabs/index.js";
-import falPlugin from "../../../extensions/fal/index.js";
-import firecrawlPlugin from "../../../extensions/firecrawl/index.js";
-import githubCopilotPlugin from "../../../extensions/github-copilot/index.js";
-import googlePlugin from "../../../extensions/google/index.js";
-import huggingFacePlugin from "../../../extensions/huggingface/index.js";
-import kilocodePlugin from "../../../extensions/kilocode/index.js";
-import kimiCodingPlugin from "../../../extensions/kimi-coding/index.js";
-import microsoftPlugin from "../../../extensions/microsoft/index.js";
-import minimaxPlugin from "../../../extensions/minimax/index.js";
-import mistralPlugin from "../../../extensions/mistral/index.js";
-import modelStudioPlugin from "../../../extensions/modelstudio/index.js";
-import moonshotPlugin from "../../../extensions/moonshot/index.js";
-import nvidiaPlugin from "../../../extensions/nvidia/index.js";
-import openAIPlugin from "../../../extensions/openai/index.js";
-import opencodeGoPlugin from "../../../extensions/opencode-go/index.js";
-import opencodePlugin from "../../../extensions/opencode/index.js";
-import openrouterPlugin from "../../../extensions/openrouter/index.js";
-import perplexityPlugin from "../../../extensions/perplexity/index.js";
-import qianfanPlugin from "../../../extensions/qianfan/index.js";
-import qwenPortalAuthPlugin from "../../../extensions/qwen-portal-auth/index.js";
-import syntheticPlugin from "../../../extensions/synthetic/index.js";
-import togetherPlugin from "../../../extensions/together/index.js";
-import venicePlugin from "../../../extensions/venice/index.js";
-import vercelAiGatewayPlugin from "../../../extensions/vercel-ai-gateway/index.js";
-import volcenginePlugin from "../../../extensions/volcengine/index.js";
-import xaiPlugin from "../../../extensions/xai/index.js";
-import xiaomiPlugin from "../../../extensions/xiaomi/index.js";
-import zaiPlugin from "../../../extensions/zai/index.js";
 import { createCapturedPluginRegistration } from "../captured-registration.js";
 import { resolvePluginProviders } from "../providers.js";
 import type {
@@ -74,28 +39,13 @@ type PluginRegistrationContractEntry = {
   toolNames: string[];
 };
 
-const bundledWebSearchPlugins: Array<RegistrablePlugin & { credentialValue: unknown }> = [
-  { ...bravePlugin, credentialValue: "BSA-test" },
-  { ...firecrawlPlugin, credentialValue: "fc-test" },
-  { ...googlePlugin, credentialValue: "AIza-test" },
-  { ...moonshotPlugin, credentialValue: "sk-test" },
-  { ...perplexityPlugin, credentialValue: "pplx-test" },
-  { ...xaiPlugin, credentialValue: "xai-test" },
-];
+const bundledWebSearchPlugins: Array<RegistrablePlugin & { credentialValue: unknown }> = [];
 
-const bundledSpeechPlugins: RegistrablePlugin[] = [elevenLabsPlugin, microsoftPlugin, openAIPlugin];
+const bundledSpeechPlugins: RegistrablePlugin[] = [];
 
-const bundledMediaUnderstandingPlugins: RegistrablePlugin[] = [
-  anthropicPlugin,
-  googlePlugin,
-  minimaxPlugin,
-  mistralPlugin,
-  moonshotPlugin,
-  openAIPlugin,
-  zaiPlugin,
-];
+const bundledMediaUnderstandingPlugins: RegistrablePlugin[] = [];
 
-const bundledImageGenerationPlugins: RegistrablePlugin[] = [falPlugin, googlePlugin, openAIPlugin];
+const bundledImageGenerationPlugins: RegistrablePlugin[] = [];
 
 function captureRegistrations(plugin: RegistrablePlugin) {
   const captured = createCapturedPluginRegistration();
@@ -348,38 +298,7 @@ export const mediaUnderstandingProviderContractRegistry: MediaUnderstandingProvi
 export const imageGenerationProviderContractRegistry: ImageGenerationProviderContractEntry[] =
   createLazyArrayView(loadImageGenerationProviderContractRegistry);
 
-const bundledProviderPlugins = dedupePlugins([
-  amazonBedrockPlugin,
-  anthropicPlugin,
-  byteplusPlugin,
-  chutesPlugin,
-  cloudflareAiGatewayPlugin,
-  githubCopilotPlugin,
-  falPlugin,
-  googlePlugin,
-  huggingFacePlugin,
-  kilocodePlugin,
-  kimiCodingPlugin,
-  minimaxPlugin,
-  mistralPlugin,
-  modelStudioPlugin,
-  moonshotPlugin,
-  nvidiaPlugin,
-  openAIPlugin,
-  opencodePlugin,
-  opencodeGoPlugin,
-  openrouterPlugin,
-  qianfanPlugin,
-  qwenPortalAuthPlugin,
-  syntheticPlugin,
-  togetherPlugin,
-  venicePlugin,
-  vercelAiGatewayPlugin,
-  volcenginePlugin,
-  xaiPlugin,
-  xiaomiPlugin,
-  zaiPlugin,
-]);
+const bundledProviderPlugins = dedupePlugins<RegistrablePlugin>([]);
 
 const bundledPluginRegistrationList = dedupePlugins([
   ...bundledSpeechPlugins,
