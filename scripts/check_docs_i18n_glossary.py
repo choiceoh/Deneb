@@ -6,7 +6,6 @@ import os
 import re
 import subprocess
 import sys
-from pathlib import Path
 
 DOC_FILE_RE = re.compile(r"^docs/(?!zh-CN/).+\.(md|mdx)$", re.IGNORECASE)
 LIST_ITEM_LINK_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s+\[([^\]]+)\]\((/[^)]+)\)")

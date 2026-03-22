@@ -73,7 +73,7 @@ def safe_parse_line(line: str) -> dict | None:
     if obj.get("action") != "finished":
         return None
     ts = obj.get("ts")
-    if not isinstance(ts, (int, float)) or math.isnan(ts):
+    if not isinstance(ts, (int, float)) or not math.isfinite(ts):
         return None
     job_id = obj.get("jobId", "")
     if not isinstance(job_id, str) or not job_id.strip():
@@ -190,9 +190,12 @@ def main() -> None:
                 model_agg["missingUsageRuns"] += 1
                 continue
 
-            inp = max(0, int(usage.get("input_tokens") or 0))
-            out = max(0, int(usage.get("output_tokens") or 0))
-            total = max(0, int(usage.get("total_tokens") or (inp + out)))
+            inp_raw = usage.get("input_tokens")
+            out_raw = usage.get("output_tokens")
+            total_raw = usage.get("total_tokens")
+            inp = max(0, int(inp_raw if inp_raw is not None else 0))
+            out = max(0, int(out_raw if out_raw is not None else 0))
+            total = max(0, int(total_raw if total_raw is not None else (inp + out)))
 
             job_agg["input_tokens"] += inp
             job_agg["output_tokens"] += out
