@@ -80,3 +80,18 @@ export { createRuntimeEnv } from "./runtime-env-mock.js";
 
 // Telegram plugin command mocks
 export { pluginCommandMocks, resetPluginCommandMocks } from "./telegram-plugin-command-mock.js";
+
+// Custom Vitest matchers (auto-registered in test/setup.ts; re-exported for manual use)
+export { customMatchers, installCustomMatchers } from "./custom-matchers.js";
+
+// Test data builders
+export {
+  buildTestConfig,
+  buildTelegramAccount,
+  buildTestSession,
+  buildFailoverError,
+  buildAcpError,
+} from "./builders.js";
+
+// Contextual assertion helpers
+export { assertWithContext, expectErrorShape } from "./context-assertions.js";

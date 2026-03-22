@@ -12,6 +12,12 @@ export type TempHomeEnv = {
   restore: () => Promise<void>;
 };
 
+/**
+ * Create an isolated temp HOME directory and redirect HOME/USERPROFILE env vars to it.
+ * Returns a handle with `home` path and `restore()` for manual cleanup.
+ * Use when you need the HOME to persist across multiple async steps (e.g., beforeAll/afterAll).
+ * For simpler per-test isolation, prefer `withTempHome()`.
+ */
 export async function createTempHomeEnv(prefix: string): Promise<TempHomeEnv> {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
   await fs.mkdir(path.join(home, ".deneb"), { recursive: true });
@@ -136,6 +142,12 @@ async function allocateTempHomeBase(prefix: string): Promise<string> {
   return base;
 }
 
+/**
+ * Run an async callback with an isolated temp HOME directory.
+ * HOME/USERPROFILE are set for the callback duration and restored after.
+ * Preferred for most config/state tests that need filesystem isolation.
+ * Pass `opts.env` to set additional env vars scoped to the callback.
+ */
 export async function withTempHome<T>(
   fn: (home: string) => Promise<T>,
   opts: { env?: Record<string, EnvValue>; prefix?: string } = {},

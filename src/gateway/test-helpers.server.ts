@@ -193,6 +193,13 @@ async function cleanupGatewayTestHome(options: { restoreEnv: boolean }) {
   }
 }
 
+/**
+ * Install beforeAll/beforeEach/afterEach/afterAll hooks for gateway tests.
+ * Call at the top level of a describe() block.
+ *
+ * - `scope: "test"` (default): fresh state per test (slower, full isolation).
+ * - `scope: "suite"`: shared state per describe block (faster, use when tests are independent).
+ */
 export function installGatewayTestHooks(options?: { scope?: "test" | "suite" }) {
   const scope = options?.scope ?? "test";
   if (scope === "suite") {
@@ -282,6 +289,11 @@ export function trackConnectChallengeNonce(ws: WebSocket): void {
   });
 }
 
+/**
+ * Wait for a single WebSocket message matching the filter.
+ * Rejects on timeout (default 10s) or socket close. Use for asserting
+ * specific server responses in gateway protocol tests.
+ */
 export function onceMessage<T extends GatewayTestMessage = GatewayTestMessage>(
   ws: WebSocket,
   filter: (obj: T) => boolean,
@@ -380,6 +392,11 @@ async function openTrackedWebSocket(params: {
   return ws;
 }
 
+/**
+ * Start a gateway server, run a callback, then shut it down.
+ * Simplest way to test gateway behavior — handles lifecycle automatically.
+ * For tests needing persistent server + client pairs, use `startServerWithClient()`.
+ */
 export async function withGatewayServer<T>(
   fn: (ctx: { port: number; server: Awaited<ReturnType<typeof startGatewayServer>> }) => Promise<T>,
   opts?: { port?: number; serverOptions?: GatewayServerOptions },
@@ -423,6 +440,11 @@ export async function createGatewaySuiteHarness(opts?: {
   };
 }
 
+/**
+ * Start a gateway server and connect a WebSocket client.
+ * Returns `{ port, server, ws, close }` for direct protocol interaction.
+ * Use when you need to send multiple messages or test connection lifecycle.
+ */
 export async function startServerWithClient(
   token?: string,
   opts?: GatewayServerOptions & { wsHeaders?: Record<string, string> },
@@ -662,6 +684,10 @@ export async function connectReq(
   return await onceMessage<ConnectResponse>(ws, isResponseForId, opts?.timeoutMs);
 }
 
+/**
+ * Send a connect request and assert it succeeds (hello-ok).
+ * Shorthand for the common "connect and expect success" gateway handshake.
+ */
 export async function connectOk(ws: WebSocket, opts?: Parameters<typeof connectReq>[1]) {
   const res = await connectReq(ws, opts);
   expect(res.ok).toBe(true);
@@ -707,6 +733,10 @@ export async function connectWebchatClient(params: {
   return ws;
 }
 
+/**
+ * Send a JSON-RPC request over a WebSocket and wait for the matching response.
+ * Returns the parsed response object. Use for testing gateway RPC methods.
+ */
 export async function rpcReq<T extends Record<string, unknown>>(
   ws: WebSocket,
   method: string,

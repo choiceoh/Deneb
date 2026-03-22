@@ -110,13 +110,10 @@ describe("createAcpxRuntimeService", () => {
 
     await service.start(context);
 
-    expect(() => requireAcpRuntimeBackend("acpx")).toThrowError(AcpRuntimeError);
-    try {
-      requireAcpRuntimeBackend("acpx");
-      throw new Error("expected ACP backend lookup to fail");
-    } catch (error) {
-      expect((error as AcpRuntimeError).code).toBe("ACP_BACKEND_UNAVAILABLE");
-    }
+    expect(() => requireAcpRuntimeBackend("acpx")).toThrowDomainError(
+      AcpRuntimeError,
+      "ACP_BACKEND_UNAVAILABLE",
+    );
   });
 
   it("passes queue-owner TTL from plugin config", async () => {
