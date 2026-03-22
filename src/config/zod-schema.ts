@@ -981,6 +981,24 @@ export const DenebSchema = z
       })
       .strict()
       .optional(),
+    autonomous: z
+      .object({
+        enabled: z.boolean().optional(),
+        agentId: z.string().optional(),
+        defaultChannel: z.string().optional(),
+        defaultChannelTarget: z.string().optional(),
+        defaultAccountId: z.string().optional(),
+        cycleIntervalMs: z.number().int().positive().optional(),
+        maxCyclesPerHour: z.number().int().positive().optional(),
+        goals: z.array(z.string()).optional(),
+        monitorChannels: z.array(z.string()).optional(),
+        dryRun: z.boolean().optional(),
+        model: z.string().optional(),
+        thinking: z.string().optional(),
+        timeoutSeconds: z.number().int().positive().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((cfg, ctx) => {

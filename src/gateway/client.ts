@@ -1,17 +1,41 @@
 import { randomUUID } from "node:crypto";
 import { WebSocket, type ClientOptions, type CertMeta } from "ws";
-import {
-  clearDeviceAuthToken,
-  loadDeviceAuthToken,
-  storeDeviceAuthToken,
-} from "../infra/device-auth-store.js";
-import type { DeviceIdentity } from "../infra/device-identity.js";
-import {
-  loadOrCreateDeviceIdentity,
-  publicKeyRawBase64UrlFromPem,
-  signDevicePayload,
-} from "../infra/device-identity.js";
 import { normalizeFingerprint } from "../infra/tls/fingerprint.js";
+
+/** Stub types/functions — device auth store and device identity modules have been removed. */
+type DeviceIdentity = {
+  deviceId: string;
+  privateKeyPem: string;
+  publicKeyPem: string;
+};
+
+function loadOrCreateDeviceIdentity(): DeviceIdentity | undefined {
+  return undefined;
+}
+
+function publicKeyRawBase64UrlFromPem(_pem: string): string {
+  return "";
+}
+
+function signDevicePayload(_privateKeyPem: string, _payload: string): string {
+  return "";
+}
+
+function loadDeviceAuthToken(_params: {
+  deviceId: string;
+  role: string;
+}): { token: string } | null {
+  return null;
+}
+
+function storeDeviceAuthToken(_params: {
+  deviceId: string;
+  role: string;
+  token: string;
+  scopes: string[];
+}): void {}
+
+function clearDeviceAuthToken(_params: { deviceId: string; role: string }): void {}
 import { rawDataToString } from "../infra/ws.js";
 import { logDebug, logError } from "../logger.js";
 import {
@@ -21,8 +45,23 @@ import {
   type GatewayClientName,
 } from "../utils/message-channel.js";
 import { VERSION } from "../version.js";
-import { buildDeviceAuthPayloadV3 } from "./device-auth.js";
 import { isLoopbackHost, isSecureWebSocketUrl } from "./net.js";
+
+/** Stub — device-auth module has been removed. */
+function buildDeviceAuthPayloadV3(_params: {
+  deviceId: string;
+  clientId: string;
+  clientMode: string;
+  role: string;
+  scopes: string[];
+  signedAtMs: number;
+  token: string | null;
+  nonce: string;
+  platform: string;
+  deviceFamily?: string;
+}): string {
+  return "";
+}
 import {
   ConnectErrorDetailCodes,
   readConnectErrorDetailCode,

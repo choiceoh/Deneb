@@ -14,7 +14,10 @@ export type { ReplyPayload } from "../auto-reply/types.js";
 export type { ChatType } from "../channels/chat-type.js";
 export { resolveControlCommandGate } from "../channels/command-gating.js";
 export { logInboundDrop, logTypingFailure } from "../channels/logging.js";
-export { resolveAllowlistMatchSimple } from "../channels/plugins/allowlist-match.js";
+// Solo-dev stub for removed plugins/allowlist-match module.
+export function resolveAllowlistMatchSimple(): { allowed: true } {
+  return { allowed: true };
+}
 export { normalizeProviderId } from "../agents/model-selection.js";
 export {
   buildModelsProviderData,
@@ -81,16 +84,27 @@ export {
   resolveThreadSessionKeys,
 } from "../routing/session-key.js";
 export type { RuntimeEnv } from "../runtime.js";
-export {
-  DM_GROUP_ACCESS_REASON,
-  readStoreAllowFromForDmPolicy,
-  resolveDmGroupAccessWithLists,
-  resolveEffectiveAllowFromLists,
-} from "../security/dm-policy-shared.js";
-export { evaluateSenderGroupAccessForPolicy } from "./group-access.js";
+// Solo-dev stubs for removed dm-policy-shared module.
+export const DM_GROUP_ACCESS_REASON = "allowlist" as const;
+export function readStoreAllowFromForDmPolicy(): string[] {
+  return [];
+}
+export function resolveDmGroupAccessWithLists(): { allowed: true } {
+  return { allowed: true };
+}
+export function resolveEffectiveAllowFromLists(): { combined: string[]; hasWildcard: boolean } {
+  return { combined: [], hasWildcard: false };
+}
+// Solo-dev stub for removed group-access module.
+export function evaluateSenderGroupAccessForPolicy(): { allowed: true } {
+  return { allowed: true };
+}
 export type { WizardPrompter } from "../wizard/prompts.js";
 export { buildAgentMediaPayload } from "./agent-media-payload.js";
 export { getAgentScopedMediaLocalRoots } from "../media/local-roots.js";
 export { loadOutboundMediaFromUrl } from "./outbound-media.js";
-export { createChannelPairingController } from "./channel-pairing.js";
+// Solo-dev stub for removed channel-pairing module.
+export function createChannelPairingController(): unknown {
+  return {};
+}
 export { isRequestBodyLimitError, readRequestBodyWithLimit } from "../infra/http-body.js";

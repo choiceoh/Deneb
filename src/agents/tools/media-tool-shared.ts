@@ -25,13 +25,6 @@ export function applyImageModelConfigDefaults(
   return applyAgentDefaultModelConfig(cfg, "imageModel", imageModelConfig);
 }
 
-export function applyImageGenerationModelConfigDefaults(
-  cfg: DenebConfig | undefined,
-  imageGenerationModelConfig: ToolModelConfig,
-): DenebConfig | undefined {
-  return applyAgentDefaultModelConfig(cfg, "imageGenerationModel", imageGenerationModelConfig);
-}
-
 function applyAgentDefaultModelConfig(
   cfg: DenebConfig | undefined,
   key: "imageModel" | "imageGenerationModel",

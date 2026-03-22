@@ -339,7 +339,7 @@ export function createExecApprovalHandlers(
           ts: Date.now(),
           request: snapshot?.request,
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           context.logGateway?.error?.(`exec approvals: forward resolve failed: ${String(err)}`);
         });
       respond(true, { ok: true }, undefined);

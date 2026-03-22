@@ -1,9 +1,17 @@
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import { emitAgentEvent } from "../infra/agent-events.js";
-import {
-  buildExecApprovalPendingReplyPayload,
-  buildExecApprovalUnavailableReplyPayload,
-} from "../infra/exec-approval-reply.js";
+// Exec approval system removed for solo-dev simplification.
+// Stub builders return a minimal payload shape for type compatibility.
+function buildExecApprovalPendingReplyPayload(_params: Record<string, unknown>): {
+  text: string;
+} {
+  return { text: "[exec-approval-pending: approval system removed]" };
+}
+function buildExecApprovalUnavailableReplyPayload(_params: Record<string, unknown>): {
+  text: string;
+} {
+  return { text: "[exec-approval-unavailable: approval system removed]" };
+}
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import type { PluginHookAfterToolCallEvent } from "../plugins/types.js";
 import { normalizeTextForComparison } from "./pi-embedded-helpers.js";

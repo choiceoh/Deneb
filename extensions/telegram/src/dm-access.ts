@@ -1,7 +1,32 @@
 import type { Message } from "@grammyjs/types";
-import { createChannelPairingChallengeIssuer } from "deneb/plugin-sdk/channel-pairing";
 import type { DmPolicy } from "deneb/plugin-sdk/config-runtime";
 import { upsertChannelPairingRequest } from "deneb/plugin-sdk/conversation-runtime";
+
+// Inline stub for removed channel-pairing module.
+// Solo-dev: pairing always succeeds.
+function createChannelPairingChallengeIssuer(_opts: {
+  channel: string;
+  upsertPairingRequest: (params: {
+    channel: string;
+    id: string;
+    accountId: string;
+    meta?: unknown;
+  }) => Promise<void>;
+}) {
+  return (params: {
+    senderId: string;
+    senderIdLine: string;
+    meta?: unknown;
+    onCreated?: () => void;
+    sendPairingReply: (text: string) => Promise<void>;
+    onReplyError?: (err: unknown) => void;
+  }) => {
+    params.onCreated?.();
+    return params
+      .sendPairingReply("Pairing auto-approved (solo-dev mode).")
+      .catch(params.onReplyError ?? (() => {}));
+  };
+}
 import { logVerbose } from "deneb/plugin-sdk/runtime-env";
 import type { Bot } from "grammy";
 import { withTelegramApiErrorLogging } from "./api-logging.js";

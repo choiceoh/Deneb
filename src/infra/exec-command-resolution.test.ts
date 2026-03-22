@@ -3,45 +3,11 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { makePathEnv, makeTempDir } from "./exec-approvals-test-helpers.js";
 import {
-  evaluateExecAllowlist,
-  normalizeSafeBins,
   parseExecArgvToken,
   resolveAllowlistCandidatePath,
   resolveCommandResolution,
   resolveCommandResolutionFromArgv,
-} from "./exec-approvals.js";
-
-function buildNestedEnvShellCommand(params: {
-  envExecutable: string;
-  depth: number;
-  payload: string;
-}): string[] {
-  return [...Array(params.depth).fill(params.envExecutable), "/bin/sh", "-c", params.payload];
-}
-
-function analyzeEnvWrapperAllowlist(params: { argv: string[]; envPath: string; cwd: string }) {
-  const analysis = {
-    ok: true as const,
-    segments: [
-      {
-        raw: params.argv.join(" "),
-        argv: params.argv,
-        resolution: resolveCommandResolutionFromArgv(
-          params.argv,
-          params.cwd,
-          makePathEnv(params.envPath),
-        ),
-      },
-    ],
-  };
-  const allowlistEval = evaluateExecAllowlist({
-    analysis,
-    allowlist: [{ pattern: params.envPath }],
-    safeBins: normalizeSafeBins([]),
-    cwd: params.cwd,
-  });
-  return { analysis, allowlistEval };
-}
+} from "./exec-command-resolution.js";
 
 function createPathExecutableFixture(params?: { executable?: string }): {
   exeName: string;
@@ -168,26 +134,7 @@ describe("exec-command-resolution", () => {
     fs.writeFileSync(envPath, "#!/bin/sh\n");
     fs.chmodSync(envPath, 0o755);
 
-    const envS = analyzeEnvWrapperAllowlist({
-      argv: [envPath, "-S", 'sh -c "echo pwned"'],
-      envPath,
-      cwd: dir,
-    });
-    expect(envS.analysis.segments[0]?.resolution?.policyBlocked).toBe(true);
-    expect(envS.allowlistEval.allowlistSatisfied).toBe(false);
-
-    const deep = analyzeEnvWrapperAllowlist({
-      argv: buildNestedEnvShellCommand({
-        envExecutable: envPath,
-        depth: 5,
-        payload: "echo pwned",
-      }),
-      envPath,
-      cwd: dir,
-    });
-    expect(deep.analysis.segments[0]?.resolution?.policyBlocked).toBe(true);
-    expect(deep.analysis.segments[0]?.resolution?.blockedWrapper).toBe("env");
-    expect(deep.allowlistEval.allowlistSatisfied).toBe(false);
+    // Allowlist evaluation tests removed (exec approvals stripped for solo-dev).
   });
 
   it("resolves allowlist candidate paths from unresolved raw executables", () => {

@@ -4,14 +4,8 @@ import type { RuntimeEnv } from "../runtime.js";
 import { getDaemonStatusSummary } from "./status.daemon.js";
 import { scanStatusJsonFast } from "./status.scan.fast-json.js";
 
-let providerUsagePromise: Promise<typeof import("../infra/provider-usage.js")> | undefined;
 let securityAuditModulePromise: Promise<typeof import("../security/audit.runtime.js")> | undefined;
 let gatewayCallModulePromise: Promise<typeof import("../gateway/call.js")> | undefined;
-
-function loadProviderUsage() {
-  providerUsagePromise ??= import("../infra/provider-usage.js");
-  return providerUsagePromise;
-}
 
 function loadSecurityAuditModule() {
   securityAuditModulePromise ??= import("../security/audit.runtime.js");
@@ -43,11 +37,7 @@ export async function statusJsonCommand(
     }),
   );
 
-  const usage = opts.usage
-    ? await loadProviderUsage().then(({ loadProviderUsageSummary }) =>
-        loadProviderUsageSummary({ timeoutMs: opts.timeoutMs }),
-      )
-    : undefined;
+  const usage = undefined;
   const gatewayCall = opts.deep
     ? await loadGatewayCallModule().then((mod) => mod.callGateway)
     : null;

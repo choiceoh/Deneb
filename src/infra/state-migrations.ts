@@ -15,7 +15,14 @@ import { saveSessionStore } from "../config/sessions.js";
 import { canonicalizeMainSessionAlias } from "../config/sessions/main-session.js";
 import type { SessionScope } from "../config/sessions/types.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { resolveChannelAllowFromPath } from "../pairing/pairing-store.js";
+// Stub: pairing store removed.
+function resolveChannelAllowFromPath(
+  _channel: string,
+  _env: NodeJS.ProcessEnv,
+  _accountId?: string,
+): string {
+  return "";
+}
 import {
   buildAgentMainSessionKey,
   DEFAULT_ACCOUNT_ID,

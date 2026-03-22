@@ -1,51 +1,21 @@
-import { getChannelPlugin, listChannelPlugins } from "../channels/plugins/index.js";
-import { loadConfig, type DenebConfig } from "../config/config.js";
-import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../utils/message-channel.js";
+// Stub: exec approval surface removed for solo-dev simplification.
+export type ExecApprovalInitiatingSurfaceState = {
+  kind: "enabled" | "available" | "disabled" | "unsupported";
+  channelLabel?: string;
+};
 
-export type ExecApprovalInitiatingSurfaceState =
-  | { kind: "enabled"; channel: string | undefined; channelLabel: string }
-  | { kind: "disabled"; channel: string; channelLabel: string }
-  | { kind: "unsupported"; channel: string; channelLabel: string };
-
-function labelForChannel(channel?: string): string {
-  switch (channel) {
-    case "discord":
-      return "Discord";
-    case "telegram":
-      return "Telegram";
-    case "tui":
-      return "terminal UI";
-    case INTERNAL_MESSAGE_CHANNEL:
-      return "Web UI";
-    default:
-      return channel ? channel[0]?.toUpperCase() + channel.slice(1) : "this platform";
-  }
+export function requestExecApproval(): Promise<{ decision: "allow-once" }> {
+  return Promise.resolve({ decision: "allow-once" });
 }
-
-export function resolveExecApprovalInitiatingSurfaceState(params: {
-  channel?: string | null;
-  accountId?: string | null;
-  cfg?: DenebConfig;
+export function resolveExecApprovalSurface(): unknown {
+  return null;
+}
+export function resolveExecApprovalInitiatingSurfaceState(_params?: {
+  channel?: string;
+  accountId?: string;
 }): ExecApprovalInitiatingSurfaceState {
-  const channel = normalizeMessageChannel(params.channel);
-  const channelLabel = labelForChannel(channel);
-  if (!channel || channel === INTERNAL_MESSAGE_CHANNEL || channel === "tui") {
-    return { kind: "enabled", channel, channelLabel };
-  }
-
-  const cfg = params.cfg ?? loadConfig();
-  const state = getChannelPlugin(channel)?.execApprovals?.getInitiatingSurfaceState?.({
-    cfg,
-    accountId: params.accountId,
-  });
-  if (state) {
-    return { ...state, channel, channelLabel };
-  }
-  return { kind: "unsupported", channel, channelLabel };
+  return { kind: "unsupported" };
 }
-
-export function hasConfiguredExecApprovalDmRoute(cfg: DenebConfig): boolean {
-  return listChannelPlugins().some(
-    (plugin) => plugin.execApprovals?.hasConfiguredDmRoute?.({ cfg }) ?? false,
-  );
+export function hasConfiguredExecApprovalDmRoute(_cfg?: unknown): boolean {
+  return false;
 }

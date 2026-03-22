@@ -3,11 +3,6 @@ import { callGateway } from "../../gateway/call.js";
 import { isAcpSessionKey, normalizeMainKey } from "../../routing/session-key.js";
 import { looksLikeSessionId } from "../../sessions/session-id.js";
 
-function normalizeKey(value?: string) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
-}
-
 export function resolveMainSessionAlias(cfg: DenebConfig) {
   const mainKey = normalizeMainKey(cfg.session?.mainKey);
   const scope = cfg.session?.scope ?? "per-sender";
@@ -322,8 +317,4 @@ export async function resolveVisibleSessionReference(params: {
     };
   }
   return { ok: true, key: resolvedKey, displayKey };
-}
-
-export function normalizeOptionalKey(value?: string) {
-  return normalizeKey(value);
 }

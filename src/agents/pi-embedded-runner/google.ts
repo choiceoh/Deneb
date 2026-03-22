@@ -407,11 +407,6 @@ export type CompactionFailureListener = (reason: string) => void;
  * e.g., when the summarization request itself exceeds the model's token limit.
  * Returns an unsubscribe function.
  */
-export function onUnhandledCompactionFailure(cb: CompactionFailureListener): () => void {
-  compactionFailureEmitter.on("failure", cb);
-  return () => compactionFailureEmitter.off("failure", cb);
-}
-
 registerUnhandledRejectionHandler((reason) => {
   const message = describeUnknownError(reason);
   if (!isCompactionFailureError(message)) {

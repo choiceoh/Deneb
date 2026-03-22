@@ -143,10 +143,6 @@ export function collectAnthropicApiKeys(): string[] {
   return collectProviderApiKeys("anthropic");
 }
 
-export function collectGeminiApiKeys(): string[] {
-  return collectProviderApiKeys("google");
-}
-
 export function isApiKeyRateLimitError(message: string): boolean {
   const lower = message.toLowerCase();
   if (lower.includes("rate_limit")) {

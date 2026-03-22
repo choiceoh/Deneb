@@ -20,11 +20,18 @@ export {
 } from "../channels/command-gating.js";
 export { logInboundDrop, logTypingFailure } from "../channels/logging.js";
 export { resolveMentionGating } from "../channels/mention-gating.js";
-export type { AllowlistMatch } from "../channels/plugins/allowlist-match.js";
-export {
-  formatAllowlistMatchMeta,
-  resolveAllowlistMatchSimple,
-} from "../channels/plugins/allowlist-match.js";
+// Solo-dev stubs for removed plugins/allowlist-match module.
+export type AllowlistMatch<T extends string = string> = {
+  allowed: boolean;
+  matchKey?: string;
+  matchSource?: T;
+};
+export function formatAllowlistMatchMeta(): string {
+  return "";
+}
+export function resolveAllowlistMatchSimple(): { allowed: true } {
+  return { allowed: true };
+}
 export {
   buildChannelKeyCandidates,
   normalizeChannelSlug,
@@ -42,7 +49,8 @@ export {
   setTopLevelChannelGroupPolicy,
   splitSetupEntries,
 } from "../channels/plugins/setup-wizard-helpers.js";
-export { PAIRING_APPROVED_MESSAGE } from "../channels/plugins/pairing-message.js";
+// Solo-dev stub for removed pairing-message module.
+export const PAIRING_APPROVED_MESSAGE = "Pairing approved.";
 export { resolveOutboundMediaUrls, resolveSendableOutboundReplyParts } from "./reply-payload.js";
 export type {
   BaseProbeResult,
@@ -87,15 +95,23 @@ export type { PluginRuntime } from "../plugins/runtime/types.js";
 export type { DenebPluginApi } from "../plugins/types.js";
 export { DEFAULT_ACCOUNT_ID } from "../routing/session-key.js";
 export type { RuntimeEnv } from "../runtime.js";
-export {
-  readStoreAllowFromForDmPolicy,
-  resolveDmGroupAccessWithLists,
-  resolveEffectiveAllowFromLists,
-} from "../security/dm-policy-shared.js";
-export {
-  evaluateSenderGroupAccessForPolicy,
-  resolveSenderScopedGroupPolicy,
-} from "./group-access.js";
+// Solo-dev stubs for removed dm-policy-shared module.
+export function readStoreAllowFromForDmPolicy(): string[] {
+  return [];
+}
+export function resolveDmGroupAccessWithLists(): { allowed: true } {
+  return { allowed: true };
+}
+export function resolveEffectiveAllowFromLists(): { combined: string[]; hasWildcard: boolean } {
+  return { combined: [], hasWildcard: false };
+}
+// Solo-dev stubs for removed group-access module.
+export function evaluateSenderGroupAccessForPolicy(): { allowed: true } {
+  return { allowed: true };
+}
+export function resolveSenderScopedGroupPolicy(): unknown {
+  return { groupPolicy: "open" };
+}
 export { formatDocsLink } from "../terminal/links.js";
 export { sleep } from "../utils.js";
 export { loadWebMedia } from "./web-media.js";
@@ -105,7 +121,10 @@ export { withFileLock } from "./file-lock.js";
 export { dispatchReplyFromConfigWithSettledDispatcher } from "./inbound-reply-dispatch.js";
 export { readJsonFileWithFallback, writeJsonFileAtomically } from "./json-store.js";
 export { loadOutboundMediaFromUrl } from "./outbound-media.js";
-export { createChannelPairingController } from "./channel-pairing.js";
+// Solo-dev stub for removed channel-pairing module.
+export function createChannelPairingController(): unknown {
+  return {};
+}
 export { resolveInboundSessionEnvelopeContext } from "../channels/session-envelope.js";
 export {
   buildHostnameAllowlistPolicyFromSuffixAllowlist,

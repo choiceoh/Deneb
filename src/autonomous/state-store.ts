@@ -3,8 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { CONFIG_DIR } from "../utils.js";
 import type {
+  AttentionSignal,
   AutonomousState,
   AutonomousStoreFile,
+  CycleOutcome,
   Goal,
   GoalPriority,
   Observation,
@@ -12,7 +14,13 @@ import type {
   Plan,
   SocialEntry,
 } from "./types.js";
-import { safeTimestamp, sanitizeText, sanitizeId, validateStringArray } from "./validation.js";
+import {
+  isFiniteNonNegative,
+  safeTimestamp,
+  sanitizeText,
+  sanitizeId,
+  validateStringArray,
+} from "./validation.js";
 
 /** Return a valid timestamp, or undefined if the value is invalid (instead of falling back to 0). */
 function validTimestampOrUndefined(value: unknown): number | undefined {
@@ -27,14 +35,17 @@ const MAX_OBSERVATIONS = 100;
 const MAX_COMPLETED_GOALS = 50;
 const MAX_SOCIAL_ENTRIES = 200;
 const MAX_COMPLETED_PLANS = 50;
+const MAX_PENDING_SIGNALS = 50;
+/** Auto-expire unprocessed observations older than 7 days. */
+const OBSERVATION_TTL_MS = 7 * 24 * 3_600_000;
 
 const VALID_GOAL_PRIORITIES = new Set<GoalPriority>(["high", "medium", "low"]);
 const VALID_GOAL_STATUSES = new Set(["active", "paused", "completed"]);
 const VALID_OBSERVATION_RELEVANCES = new Set(["high", "medium", "low"]);
 const VALID_PLAN_STATUSES = new Set(["active", "blocked", "completed"]);
 
-/** Simple in-flight flag to prevent concurrent saves from corrupting state. */
-let saveInFlight = false;
+/** Promise-based mutex to prevent concurrent saves from corrupting state. */
+let saveMutex: Promise<void> = Promise.resolve();
 
 function createEmptyState(): AutonomousState {
   return {
@@ -43,6 +54,7 @@ function createEmptyState(): AutonomousState {
     observations: [],
     plans: [],
     socialContext: [],
+    pendingSignals: [],
     lastCycleAt: 0,
     nextCycleAt: 0,
     cycleCount: 0,
@@ -77,6 +89,22 @@ function isValidGoal(entry: unknown): entry is Goal {
   ) {
     return false;
   }
+  if (
+    g.lastProgressAt !== undefined &&
+    (typeof g.lastProgressAt !== "number" ||
+      !Number.isFinite(g.lastProgressAt) ||
+      g.lastProgressAt < 0)
+  ) {
+    return false;
+  }
+  if (
+    g.lastProgressCycleCount !== undefined &&
+    (typeof g.lastProgressCycleCount !== "number" ||
+      !Number.isFinite(g.lastProgressCycleCount) ||
+      g.lastProgressCycleCount < 0)
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -89,6 +117,11 @@ function sanitizeGoal(g: Goal): Goal {
     createdAt: safeTimestamp(g.createdAt),
     progress: g.progress !== undefined ? sanitizeText(g.progress) : undefined,
     dueAt: g.dueAt !== undefined ? safeTimestamp(g.dueAt) : undefined,
+    lastProgressAt: g.lastProgressAt !== undefined ? safeTimestamp(g.lastProgressAt) : undefined,
+    lastProgressCycleCount:
+      g.lastProgressCycleCount !== undefined
+        ? Math.max(0, Math.floor(g.lastProgressCycleCount))
+        : undefined,
   };
 }
 
@@ -204,6 +237,65 @@ function sanitizeSocialEntry(e: SocialEntry): SocialEntry {
   };
 }
 
+// -- Validation for AttentionSignal --
+
+const VALID_SIGNAL_TYPES = new Set(["message", "event", "schedule", "followup", "goal-deadline"]);
+
+function isValidSignal(entry: unknown): entry is AttentionSignal {
+  if (!entry || typeof entry !== "object") {
+    return false;
+  }
+  const s = entry as Record<string, unknown>;
+  if (typeof s.source !== "string" || typeof s.content !== "string") {
+    return false;
+  }
+  if (typeof s.type !== "string" || !VALID_SIGNAL_TYPES.has(s.type)) {
+    return false;
+  }
+  if (!isFiniteNonNegative(s.timestamp)) {
+    return false;
+  }
+  if (typeof s.urgency !== "number" || !Number.isFinite(s.urgency)) {
+    return false;
+  }
+  return true;
+}
+
+function sanitizeSignal(s: AttentionSignal): AttentionSignal {
+  return {
+    source: sanitizeText(s.source, 500),
+    type: s.type,
+    content: sanitizeText(s.content),
+    urgency: Math.max(0, Math.min(1, s.urgency)),
+    timestamp: safeTimestamp(s.timestamp),
+  };
+}
+
+// -- Validation for CycleOutcome --
+
+function loadCycleOutcome(raw: unknown): CycleOutcome | undefined {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const o = raw as Record<string, unknown>;
+  if (!isFiniteNonNegative(o.cycleNumber)) {
+    return undefined;
+  }
+  if (!isFiniteNonNegative(o.startedAt)) {
+    return undefined;
+  }
+  if (!isFiniteNonNegative(o.finishedAt)) {
+    return undefined;
+  }
+  return {
+    cycleNumber: o.cycleNumber,
+    startedAt: safeTimestamp(o.startedAt),
+    finishedAt: safeTimestamp(o.finishedAt),
+    actionsTaken: Array.isArray(o.actionsTaken) ? validateStringArray(o.actionsTaken) : [],
+    error: typeof o.error === "string" ? sanitizeText(o.error, 1000) : undefined,
+  };
+}
+
 export async function loadAutonomousState(storePath?: string): Promise<AutonomousState> {
   const resolved = storePath ?? DEFAULT_AUTONOMOUS_STORE_PATH;
   try {
@@ -234,6 +326,7 @@ export async function loadAutonomousState(storePath?: string): Promise<Autonomou
     const rawObservations = Array.isArray(state.observations) ? state.observations : [];
     const rawPlans = Array.isArray(state.plans) ? state.plans : [];
     const rawSocial = Array.isArray(state.socialContext) ? state.socialContext : [];
+    const rawSignals = Array.isArray(state.pendingSignals) ? state.pendingSignals : [];
 
     return {
       version: 1,
@@ -241,6 +334,8 @@ export async function loadAutonomousState(storePath?: string): Promise<Autonomou
       observations: rawObservations.filter(isValidObservation).map(sanitizeObservation),
       plans: rawPlans.filter(isValidPlan).map(sanitizePlan),
       socialContext: rawSocial.filter(isValidSocialEntry).map(sanitizeSocialEntry),
+      pendingSignals: rawSignals.filter(isValidSignal).map(sanitizeSignal),
+      lastCycleOutcome: loadCycleOutcome(state.lastCycleOutcome),
       lastCycleAt: safeTimestamp(state.lastCycleAt),
       nextCycleAt: safeTimestamp(state.nextCycleAt),
       cycleCount: Math.max(0, Math.floor(Number(state.cycleCount) || 0)),
@@ -259,20 +354,16 @@ export async function saveAutonomousState(
   state: AutonomousState,
   storePath?: string,
 ): Promise<void> {
-  // Mutex-like guard: wait for any in-flight save to complete.
-  if (saveInFlight) {
-    // Spin-wait with yielding (prevents corruption from concurrent saves).
-    let waited = 0;
-    while (saveInFlight && waited < 5000) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 50));
-      waited += 50;
-    }
-    if (saveInFlight) {
-      console.warn("[autonomous] Save still in-flight after 5s, proceeding anyway.");
-    }
-  }
+  // Chain on the mutex so concurrent saves serialize properly without spin-waiting.
+  const previous = saveMutex;
+  let releaseMutex: () => void;
+  saveMutex = new Promise<void>((resolve) => {
+    releaseMutex = resolve;
+  });
 
-  saveInFlight = true;
+  // Wait for any in-flight save to finish.
+  await previous;
+
   const resolved = storePath ?? DEFAULT_AUTONOMOUS_STORE_PATH;
   const tmp = `${resolved}.${process.pid}.${crypto.randomBytes(8).toString("hex")}.tmp`;
 
@@ -292,12 +383,11 @@ export async function saveAutonomousState(
       try {
         await fs.promises.copyFile(tmp, resolved);
       } finally {
-        // Always clean up temp file even if copy fails.
         await fs.promises.unlink(tmp).catch(() => undefined);
       }
     }
   } finally {
-    saveInFlight = false;
+    releaseMutex!();
   }
 }
 
@@ -309,10 +399,21 @@ function safeNumericCompare(a: number, b: number): number {
 }
 
 function pruneState(state: AutonomousState): AutonomousState {
+  const now = Date.now();
+
+  // Auto-expire old unprocessed observations (TTL-based cleanup).
+  const nonExpiredObservations = state.observations.filter((o) => {
+    if (o.processed) {
+      return true;
+    }
+    const age = now - (isFiniteNonNegative(o.observedAt) ? o.observedAt : 0);
+    return age < OBSERVATION_TTL_MS;
+  });
+
   const observations =
-    state.observations.length === 0
+    nonExpiredObservations.length === 0
       ? []
-      : state.observations
+      : nonExpiredObservations
           .toSorted((a, b) => safeNumericCompare(a.observedAt, b.observedAt))
           .slice(0, MAX_OBSERVATIONS);
 
@@ -337,12 +438,21 @@ function pruneState(state: AutonomousState): AutonomousState {
     .filter((p) => p.status !== "active")
     .slice(0, MAX_COMPLETED_PLANS);
 
+  // Keep only the most urgent pending signals, capped at MAX_PENDING_SIGNALS.
+  const pendingSignals =
+    state.pendingSignals.length === 0
+      ? []
+      : state.pendingSignals
+          .toSorted((a, b) => safeNumericCompare(a.urgency, b.urgency))
+          .slice(0, MAX_PENDING_SIGNALS);
+
   return {
     ...state,
     goals: [...activeGoals, ...completedGoals],
     observations,
     plans: [...activePlans, ...completedPlans],
     socialContext,
+    pendingSignals,
   };
 }
 
@@ -482,6 +592,8 @@ export function updateGoal(
   }
   if (patch.progress !== undefined) {
     safePatch.progress = sanitizeText(patch.progress);
+    safePatch.lastProgressAt = Date.now();
+    safePatch.lastProgressCycleCount = state.cycleCount;
   }
   if (patch.dueAt !== undefined) {
     if (patch.dueAt === null) {

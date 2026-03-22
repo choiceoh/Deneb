@@ -7,7 +7,6 @@ import {
   resolveStateDir,
 } from "../config/config.js";
 import { resolveSecretInputRef } from "../config/types.secrets.js";
-import { loadOrCreateDeviceIdentity } from "../infra/device-identity.js";
 import { loadGatewayTlsRuntime } from "../infra/tls/gateway.js";
 import { resolveSecretInputString } from "../secrets/resolve-secret-input-string.js";
 import {
@@ -80,19 +79,6 @@ export type GatewayConnectionDetails = {
   remoteFallbackNote?: string;
   message: string;
 };
-
-function shouldAttachDeviceIdentityForGatewayCall(params: {
-  url: string;
-  token?: string;
-  password?: string;
-}): boolean {
-  void params;
-  // Shared-auth local calls used to skip device identity as an optimization, but
-  // device-less operator connects now have their self-declared scopes stripped.
-  // Keep identity enabled so local authenticated calls stay device-bound and
-  // retain their least-privilege scopes.
-  return true;
-}
 
 export type ExplicitGatewayAuth = {
   token?: string;
@@ -832,9 +818,7 @@ async function executeGatewayRequestWithScopes<T>(params: {
       mode: opts.mode ?? GATEWAY_CLIENT_MODES.CLI,
       role: "operator",
       scopes,
-      deviceIdentity: shouldAttachDeviceIdentityForGatewayCall({ url, token, password })
-        ? loadOrCreateDeviceIdentity()
-        : undefined,
+      deviceIdentity: undefined,
       minProtocol: opts.minProtocol ?? PROTOCOL_VERSION,
       maxProtocol: opts.maxProtocol ?? PROTOCOL_VERSION,
       onHelloOk: async (hello) => {

@@ -5,8 +5,8 @@
 <h1 align="center">Deneb</h1>
 
 <p align="center">
-  <strong>Multi-Channel AI Gateway & Autonomous Agent Framework</strong><br>
-  <a href="https://github.com/choiceoh/Deneb/releases"><img src="https://img.shields.io/badge/version-3.3-blue" alt="Version"></a>
+  <strong>Self-Hosted AI Agent with Lossless Memory</strong><br>
+  <a href="https://github.com/choiceoh/Deneb/releases"><img src="https://img.shields.io/badge/version-3.5-blue" alt="Version"></a>
   <a href="https://github.com/choiceoh/Deneb/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.x-3178c6" alt="TypeScript"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22+-339933" alt="Node.js"></a>
@@ -14,26 +14,86 @@
 
 ---
 
-**Deneb** is a self-hosted AI gateway that connects LLMs to your messaging channels — Telegram, Discord, Signal, Slack, WhatsApp, LINE, and 20+ more. It runs your AI agent as a persistent service with memory, tools, cron automation, multi-agent orchestration, and an autonomous loop engine for 24/7 operation.
+**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. Starting from OpenClaw, Deneb intentionally shed mobile clients, unused channels, and enterprise plugins to create a lean 230K-line server engine — then built a custom Lossless Context Management (LCM) system with DAG-based compaction, proactive background summarization, and full memory recall across sessions.
+
+Deneb is actively diverging from OpenClaw. We're not maintaining a fork — we're building a different program with a different focus: **memory-first, local-first, lean-first.**
+
+## ⭐ Why Deneb
+
+Most AI agent frameworks hit the same wall: when conversations grow long, context gets compressed and important details vanish. Deneb solves this with **lossless memory** — every decision, number, name, and technical detail is preserved through intelligent compaction and multi-layer recall.
+
+### What's Different
+
+|                        | Typical Agent Framework  | Deneb                                          |
+| ---------------------- | ------------------------ | ---------------------------------------------- |
+| **Long conversations** | Summarize → lose details | DAG-based compaction preserves everything      |
+| **Context recall**     | Vector search only       | Semantic search + DAG expansion + memory files |
+| **Compaction latency** | Blocks on LLM call       | Background observer pre-computes summaries     |
+| **Memory persistence** | Session-scoped           | Workspace files + JSONL transcripts + LCM DAG  |
+| **Codebase size**      | 500K–1M+ lines           | 230K lines — lean and auditable                |
+| **Local LLM**          | Optional                 | First-class: SGLang, Ollama, vLLM support      |
+
+### Intentional Simplification
+
+Every feature that doesn't serve the core mission was removed — not because we couldn't build it, but because leaner code means fewer bugs, faster iterations, and code you can actually read and modify.
+
+What's gone: mobile apps, desktop companions, 12+ niche channels, enterprise multi-tenant plugins. What remains: a focused agent engine that remembers everything and runs on a single GPU.
 
 ## ⭐ Key Features
 
-- **20+ Messaging Channels** — Telegram, Discord, Signal, Slack, WhatsApp, LINE, iMessage (BlueBubbles), Matrix, MS Teams, Google Chat, IRC, Nostr, Twitch, and more
-- **Multi-Provider LLM Support** — Anthropic, OpenAI, Google, Mistral, xAI, Z.AI, OpenRouter, Perplexity, Together, Ollama, vLLM, SGLang, Bedrock, Vertex, Azure, and custom OpenAI-compatible endpoints
-- **Lossless Context Management (LCM)** — DAG-based conversation compaction that preserves details across context window limits. Never lose important context.
-- **Autonomous Loop Engine** — 24/7 self-directed operation with attention management, goal tracking, and cyclic task execution
-- **Persistent Memory** — Session history, workspace files, and semantic memory search that survives restarts
-- **Tool System** — File I/O, web search, browser automation, PDF analysis, image understanding, cron scheduling, and extensible MCP tools
-- **Multi-Agent Orchestration** — Spawn, manage, and communicate between sub-agents with bounded contexts
-- **Plugin Architecture** — Extensions for channels, tools, context engines, and web search providers
-- **Dashboard & CLI** — Web-based control panel + full-featured command-line interface
+### 🧠 Lossless Context Management (LCM)
+
+The core differentiator. A DAG-structured summary system that compresses conversations without losing details.
+
+- **DAG-based compaction** — Summaries reference each other in a directed acyclic graph, enabling deep recall of any past detail
+- **Custom identifier preservation** — Project names, amounts, dates, and technical terms survive compression intact
+- **Background observer** — Proactively pre-computes summaries using local LLM, so compaction is instant when triggered
+- **Multi-layer recall** — `lcm_grep` → `lcm_describe` → `lcm_expand` → `lcm_expand_query` for progressively deeper memory retrieval
+- **Quality guard** — Automatic retry with conservative settings if summary quality drops
+
+### 🤖 Autonomous Loop Engine
+
+24/7 self-directed operation for proactive monitoring and task execution.
+
+- **Attention system** — Priority queue for signals from channels, goals, and deadlines
+- **Goal tracking** — Define, track progress, and manage deadlines
+- **State persistence** — Survives restarts with corruption recovery
+- **Configurable cycles** — Adjustable interval (default 5min) with rate limiting
+
+### 🔄 Multi-Agent Orchestration
+
+Spawn and manage sub-agents with bounded contexts for complex tasks.
+
+- **Sub-agent sessions** — Each with independent context and lifecycle
+- **Bounded execution** — Token limits, timeouts, and tool policy per agent
+- **Result streaming** — Real-time progress from sub-agents to parent
+
+### 🧰 Tool System
+
+| Tool       | Description                                  |
+| ---------- | -------------------------------------------- |
+| File I/O   | Read, write, edit workspace files            |
+| Web Search | Perplexity, Brave Search, auto-detect        |
+| Browser    | Playwright automation and scraping           |
+| PDF        | Native PDF analysis with vision models       |
+| Image      | Multi-image analysis with vision models      |
+| Memory     | Semantic search + LCM expansion              |
+| Cron       | Scheduled tasks, heartbeats, morning letters |
+| Sub-agents | Spawn bounded sub-agents for complex tasks   |
+| MCP        | Model Context Protocol tool integration      |
+
+### 🤖 Model Providers
+
+**Cloud:** Anthropic · OpenAI · Google · OpenRouter
+
+**Self-Hosted:** Ollama · SGLang · vLLM · LiteLLM
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 - Node.js 22+
-- An LLM API key (Anthropic, OpenAI, Google, etc.)
+- An LLM API key (or a local model server)
 
 ### Install
 
@@ -51,163 +111,50 @@ pnpm build
 node deneb.mjs onboard
 ```
 
-Or edit `deneb.json` directly:
-
-```json
-{
-  "models": {
-    "providers": {
-      "anthropic": {
-        "apiKey": "sk-ant-..."
-      }
-    }
-  },
-  "channels": {
-    "telegram": {
-      "token": "BOT_TOKEN_HERE"
-    }
-  }
-}
-```
+Or edit `~/.openclaw/openclaw.json` directly.
 
 ### Run
 
 ```bash
 # Start the gateway daemon
 node deneb.mjs gateway
-
-# Or in development mode
-pnpm dev
 ```
 
-## 📡 Supported Channels
-
-| Channel        | Type              | Status    |
-| -------------- | ----------------- | --------- |
-| Telegram       | Bot API           | ✅ Stable |
-| Discord        | Bot Gateway       | ✅ Stable |
-| Signal         | signal-cli        | ✅ Stable |
-| Slack          | Socket Mode       | ✅ Stable |
-| WhatsApp       | WhatsApp Bridge   | ✅ Stable |
-| LINE           | Messaging API     | ✅ Stable |
-| iMessage       | BlueBubbles       | ✅ Stable |
-| Matrix         | Client-Server API | ✅ Stable |
-| MS Teams       | Bot Framework     | ✅ Stable |
-| Google Chat    | Service Account   | ✅ Stable |
-| IRC            | IRCv3             | ✅ Stable |
-| Nostr          | NIP-04/44         | ✅ Stable |
-| Twitch         | EventSub          | ✅ Stable |
-| Feishu (Lark)  | Open API          | ✅ Stable |
-| Mattermost     | REST API          | ✅ Stable |
-| Nextcloud Talk | REST API          | ✅ Stable |
-| Zalo           | OA API            | ✅ Stable |
-| Tlon           | HTTP API          | ✅ Stable |
-| Synology Chat  | REST API          | ✅ Stable |
-
-## 🤖 Model Providers
-
-### Cloud
-
-Anthropic · OpenAI · Google (Gemini) · Mistral · xAI (Grok) · Z.AI (GLM) · OpenRouter · Perplexity · Together AI · Fireworks · Venice · DeepSeek · Moonshot · Minimax · Kilocode
-
-### Self-Hosted
-
-Ollama · vLLM · SGLang · LiteLLM
-
-### Enterprise
-
-AWS Bedrock · Google Vertex AI · Azure OpenAI · Cloudflare AI Gateway · Vercel AI Gateway · NVIDIA NIM
-
-### HuggingFace
-
-Any HuggingFace model via the HF provider or self-hosted inference endpoints
-
-## 🧠 Autonomous Agent
-
-Deneb includes a built-in autonomous loop engine for continuous, self-directed operation:
-
-- **Goal Management** — Define and track long-running objectives
-- **Attention System** — Prioritize tasks and decide when to act
-- **Cycle Runner** — Periodic execution with configurable intervals
-- **State Persistence** — Survives restarts with full state recovery
-
-```bash
-# Start autonomous mode
-node deneb.mjs autonomous start
-
-# Check status
-node deneb.mjs autonomous status
-```
-
-## 🔧 Tools & Capabilities
-
-| Tool       | Description                                          |
-| ---------- | ---------------------------------------------------- |
-| File I/O   | Read, write, edit files in the workspace             |
-| Web Search | Perplexity, Brave Search, or custom providers        |
-| Browser    | Playwright-based automation and scraping             |
-| PDF        | Native PDF analysis with vision models               |
-| Image      | Multi-image analysis with vision models              |
-| Memory     | Semantic search across session history and workspace |
-| Cron       | Scheduled tasks and heartbeat monitoring             |
-| Messaging  | Send messages, reactions, polls across channels      |
-| Sub-agents | Spawn bounded sub-agents for complex tasks           |
-| MCP        | Model Context Protocol tool integration              |
-
-## 📁 Project Structure
+## 📁 Architecture
 
 ```
-Deneb/
+Deneb/                          (~230K lines TypeScript)
 ├── src/
-│   ├── agents/          # Agent loop, sessions, identity, tools
-│   ├── autonomous/      # Autonomous loop engine
-│   ├── channels/        # Channel plugins and routing
-│   ├── cli/             # CLI commands and interactive setup
-│   ├── commands/        # Agent commands (browser, dashboard, etc.)
-│   ├── config/          # Configuration schema and types
-│   ├── gateway/         # Gateway server and daemon management
-│   ├── plugins/         # Plugin SDK and bundled providers
-│   ├── lcm/             # Lossless Context Management
-│   └── auto-reply/      # Message routing and agent invocation
-├── extensions/          # Channel extensions
-│   ├── telegram/
-│   ├── discord/
-│   ├── signal/
-│   ├── slack/
-│   └── ...
-├── apps/                # Mobile apps (Android, iOS, macOS)
-├── docs/                # Documentation (Mintlify)
-└── ui/                  # Web dashboard (React)
+│   ├── context-engine/lcm/     # LCM engine — compaction, observer, DAG
+│   ├── autonomous/             # Autonomous loop engine
+│   ├── agents/                 # Agent loop, sessions, compaction
+│   ├── cron/                   # Scheduled tasks & heartbeat
+│   ├── memory/                 # Semantic memory search
+│   ├── channels/               # Channel plugin framework
+│   ├── config/                 # Config schema & validation
+│   ├── gateway/                # Gateway server & daemon
+│   ├── plugins/                # Plugin SDK
+│   ├── secrets/                # Credential management
+│   ├── infra/outbound/         # LLM provider adapters
+│   └── auto-reply/             # Message routing
+├── extensions/                 # Channel extensions (Telegram, Discord, etc.)
+└── ui/                         # Web dashboard
 ```
 
 ## 🛠️ Development
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Build
 pnpm build
-
-# Run in development mode
-pnpm dev
-
-# Run tests
-pnpm test
-
-# Run linter
-pnpm lint
-
-# Format code
-pnpm format
-
-# Type check
-pnpm tsgo
+pnpm dev        # Development mode
+pnpm test       # Run tests
+pnpm lint       # Lint
+pnpm format     # Format
 ```
 
 ## 📄 License
 
-MIT
+MIT — Originally forked from [OpenClaw](https://github.com/openclaw/openclaw). Deneb is an independent project with its own roadmap and direction.
 
 ---
 

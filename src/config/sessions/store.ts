@@ -175,11 +175,6 @@ export function clearSessionStoreCacheForTest(): void {
   LOCK_QUEUES.clear();
 }
 
-/** Expose lock queue size for tests. */
-export function getSessionStoreLockQueueSizeForTest(): number {
-  return LOCK_QUEUES.size;
-}
-
 export async function withSessionStoreLockForTest<T>(
   storePath: string,
   fn: () => Promise<T>,

@@ -42,7 +42,6 @@ const SETUP_BARREL_GUARDS: GuardedSource[] = [
 
 const LOCAL_EXTENSION_API_BARREL_GUARDS = [
   "acpx",
-  "device-pair",
   "diagnostics-otel",
   "diffs",
   "google",

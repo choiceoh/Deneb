@@ -208,6 +208,13 @@ export async function startAutonomousService(params: {
         log.debug("autonomous cycle already running, skipping trigger");
         return;
       }
+      // Respect backoff: if we're in a failure state, don't bypass the backoff.
+      if (consecutiveFailures > 0) {
+        log.info(
+          `manual trigger skipped: ${consecutiveFailures} consecutive failures, waiting for backoff`,
+        );
+        return;
+      }
       clearTimer();
       scheduleGeneration++; // Invalidate any in-flight scheduleNext callbacks.
       void executeCycle();

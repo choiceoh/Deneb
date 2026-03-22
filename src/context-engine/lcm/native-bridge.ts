@@ -37,15 +37,16 @@ const log = createSubsystemLogger("lcm");
 
 function inferApiFromProvider(provider: string): string {
   const map: Record<string, string> = {
-    openai: "openai",
+    openai: "openai-completions",
     anthropic: "anthropic",
     google: "google-genai",
     openrouter: "openrouter",
     ollama: "ollama",
-    deepseek: "openai",
-    zai: "openai",
+    deepseek: "openai-completions",
+    zai: "openai-completions",
+    sglang: "openai-completions",
   };
-  return map[provider] ?? "openai";
+  return map[provider] ?? "openai-completions";
 }
 
 /** Find provider-level config (baseUrl, headers, apiKey) from runtime config. */

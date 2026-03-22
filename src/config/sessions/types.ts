@@ -314,12 +314,6 @@ export function resolveFreshSessionTotalTokens(
   return total;
 }
 
-export function isSessionTotalTokensFresh(
-  entry?: Pick<SessionEntry, "totalTokens" | "totalTokensFresh"> | null,
-): boolean {
-  return resolveFreshSessionTotalTokens(entry) !== undefined;
-}
-
 export type GroupKeyResolution = {
   key: string;
   channel?: string;

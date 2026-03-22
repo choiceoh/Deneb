@@ -309,11 +309,3 @@ export async function fetchOpencodeZenModels(apiKey?: string): Promise<ModelDefi
     return getOpencodeZenStaticFallbackModels();
   }
 }
-
-/**
- * Clear the model cache (useful for testing or forcing refresh).
- */
-export function clearOpencodeZenModelCache(): void {
-  cachedModels = null;
-  cacheTimestamp = 0;
-}

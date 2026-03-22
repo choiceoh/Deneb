@@ -264,10 +264,6 @@ export function listFinishedSessions() {
   return Array.from(finishedSessions.values());
 }
 
-export function clearFinished() {
-  finishedSessions.clear();
-}
-
 export function resetProcessRegistryForTests() {
   runningSessions.clear();
   finishedSessions.clear();
