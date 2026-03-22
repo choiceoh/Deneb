@@ -9,7 +9,7 @@
  *   - Time: useFrozenTime, useRealTime
  *   - Temp dirs: withTempDir, createFixtureSuite, createTrackedTempDirs, createTempHomeEnv
  *   - Mocking: createMockServerResponse, withFetchPreconnect, createModelAuthMockModule
- *   - Channel/plugin: createTestRegistry, makeDirectPlugin
+ *   - Channel/plugin: createTestRegistry, makeDirectPlugin, createIMessageTestPlugin
  *   - Assertions: expectGeneratedTokenPersistedToGatewayAuth, exec assertions
  *   - Types: MockFn, TempHomeEnv, FetchMock
  */
@@ -42,6 +42,7 @@ export type { MockFn } from "./vitest-mock-fn.js";
 // Channel / plugin testing
 export { createTestRegistry } from "./channel-plugins.js";
 export { makeDirectPlugin } from "./channel-plugin-test-fixtures.js";
+export { createIMessageTestPlugin } from "./imessage-test-plugin.js";
 export {
   createCapturedPluginRegistration,
   registerSingleProviderPlugin,
