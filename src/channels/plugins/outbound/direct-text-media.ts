@@ -144,8 +144,7 @@ export function createScopedChannelMediaMaxBytesResolver(channel: "imessage" | "
       cfg: params.cfg,
       accountId: params.accountId,
       resolveChannelLimitMb: ({ cfg, accountId }) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic channel config access
-        const ch = (cfg.channels as Record<string, any> | undefined)?.[channel];
+        const ch = cfg.channels?.[channel];
         return (ch?.accounts?.[accountId]?.mediaMaxMb ?? ch?.mediaMaxMb) as number | undefined;
       },
     });
