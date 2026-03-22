@@ -1,9 +1,6 @@
 import { defineConfig } from "vitest/config";
 import baseConfig from "./vitest.config.ts";
-import {
-  unitTestAdditionalExcludePatterns,
-  unitTestIncludePatterns,
-} from "./vitest.unit-paths.mjs";
+import { unitTestAdditionalExcludePatterns, unitTestIncludePatterns } from "./vitest.paths.mjs";
 
 const base = baseConfig as unknown as Record<string, unknown>;
 const baseTest = (baseConfig as { test?: { include?: string[]; exclude?: string[] } }).test ?? {};

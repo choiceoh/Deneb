@@ -1,4 +1,11 @@
+/**
+ * Consolidated test path patterns for all vitest configs.
+ *
+ * Previously split across vitest.unit-paths.mjs and vitest.channel-paths.mjs.
+ */
 import path from "node:path";
+
+// ── Unit test paths ─────────────────────────────────────────────────────────
 
 export const unitTestIncludePatterns = [
   "src/**/*.test.ts",
@@ -44,3 +51,20 @@ export function isUnitConfigTestFile(file) {
     !matchesAny(normalizedFile, unitTestAdditionalExcludePatterns)
   );
 }
+
+// ── Channel test paths ──────────────────────────────────────────────────────
+
+export const channelTestRoots = [
+  "extensions/telegram",
+  "extensions/discord",
+  "extensions/whatsapp",
+  "extensions/slack",
+  "extensions/signal",
+  "extensions/imessage",
+  "src/browser",
+  "src/line",
+];
+
+export const channelTestPrefixes = channelTestRoots.map((root) => `${root}/`);
+export const channelTestInclude = channelTestRoots.map((root) => `${root}/**/*.test.ts`);
+export const channelTestExclude = channelTestRoots.map((root) => `${root}/**`);

@@ -1,4 +1,4 @@
-import { channelTestExclude } from "./vitest.channel-paths.mjs";
+import { channelTestExclude } from "./vitest.paths.mjs";
 import { createScopedVitestConfig } from "./vitest.scoped-config.ts";
 
 export default createScopedVitestConfig(["extensions/**/*.test.ts"], {

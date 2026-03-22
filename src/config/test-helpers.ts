@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { withTempHome as withTempHomeBase } from "../../test/helpers/temp-home.js";
+import { withTempHome as withTempHomeBase } from "../test-utils/temp-home.js";
 import type { DenebConfig } from "./config.js";
 
 export async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
