@@ -4,6 +4,7 @@ import { installCustomMatchers } from "../src/test-utils/custom-matchers.js";
 installCustomMatchers();
 
 vi.mock("@mariozechner/pi-ai", async (importOriginal) => {
+  // Cache the original module to avoid re-importing on every mock reset.
   const original = await importOriginal<typeof import("@mariozechner/pi-ai")>();
   return {
     ...original,
@@ -186,10 +187,12 @@ beforeAll(() => {
 });
 
 afterEach(() => {
+  // Fast path: only restore registry if a test actually changed it.
   if (getActivePluginRegistry() !== DEFAULT_PLUGIN_REGISTRY) {
     setActivePluginRegistry(DEFAULT_PLUGIN_REGISTRY);
   }
   // Guard against leaked fake timers across test files/workers.
+  // Check is cheap; only the restore path has overhead.
   if (vi.isFakeTimers()) {
     vi.useRealTimers();
   }

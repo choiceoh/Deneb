@@ -45,9 +45,11 @@ const nodeMajor = Number.parseInt(process.versions.node.split(".")[0] ?? "", 10)
 // isolation, but Node 25+ still falls back to process forks until re-validated.
 // Keep it opt-out via DENEB_TEST_VM_FORKS=0, and let users force-enable with =1.
 const supportsVmForks = Number.isFinite(nodeMajor) ? nodeMajor <= 24 : true;
+// vmForks is safe on low-memory hosts with constrained worker counts; the import
+// caching win outweighs the per-worker overhead when workers stay <= 4.
 const useVmForks =
   process.env.DENEB_TEST_VM_FORKS === "1" ||
-  (process.env.DENEB_TEST_VM_FORKS !== "0" && !isWindows && supportsVmForks && !lowMemLocalHost);
+  (process.env.DENEB_TEST_VM_FORKS !== "0" && !isWindows && supportsVmForks);
 const disableIsolation = process.env.DENEB_TEST_NO_ISOLATE === "1";
 const includeGatewaySuite = process.env.DENEB_TEST_INCLUDE_GATEWAY === "1";
 const includeExtensionsSuite = process.env.DENEB_TEST_INCLUDE_EXTENSIONS === "1";
@@ -591,10 +593,10 @@ const defaultWorkerBudget =
             }
           : lowMemLocalHost
             ? {
-                // Sub-64 GiB local hosts are prone to OOM with large vmFork runs.
-                unit: 2,
+                // Sub-64 GiB local hosts: vmForks import caching makes 3-4 workers viable.
+                unit: Math.max(2, Math.min(4, hostCpuCount)),
                 unitIsolated: 1,
-                extensions: 4,
+                extensions: Math.max(1, Math.min(3, Math.floor(hostCpuCount / 2))),
                 gateway: 1,
               }
             : {
