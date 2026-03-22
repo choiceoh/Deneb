@@ -5,6 +5,7 @@ import { randomIdempotencyKey } from "../../gateway/call.js";
 import {
   DEFAULT_EXEC_APPROVAL_TIMEOUT_MS,
   type ExecApprovalsFile,
+  type ExecApprovalDecision,
   type ExecAsk,
   type ExecSecurity,
   loadExecApprovals,
@@ -192,7 +193,7 @@ async function maybeRequestNodesRunApproval(params: {
   approvalPlan: ReturnType<typeof requirePreparedRunPayload>["plan"];
   hostSecurity: ExecSecurity;
   hostAsk: ExecAsk;
-  askFallback: ExecSecurity;
+  askFallback: ExecSecurity | ExecApprovalDecision | undefined;
 }) {
   let approvedByAsk = false;
   let approvalDecision: "allow-once" | "allow-always" | null = null;

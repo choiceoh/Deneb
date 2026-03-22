@@ -153,7 +153,7 @@ export const telegramBotDepsForTest: TelegramBotDeps = {
   upsertChannelPairingRequest: vi.fn(async () => ({
     code: "PAIRCODE",
     created: true,
-  })) as TelegramBotDeps["upsertChannelPairingRequest"],
+  })) as unknown as TelegramBotDeps["upsertChannelPairingRequest"],
   enqueueSystemEvent: vi.fn() as TelegramBotDeps["enqueueSystemEvent"],
   dispatchReplyWithBufferedBlockDispatcher: mediaHarnessDispatchReplyWithBufferedBlockDispatcher,
   buildModelsProviderData: vi.fn(async () => ({

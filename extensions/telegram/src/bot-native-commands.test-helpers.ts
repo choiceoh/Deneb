@@ -4,6 +4,7 @@ import type { TelegramAccountConfig } from "deneb/plugin-sdk/config-runtime";
 import type { RuntimeEnv } from "deneb/plugin-sdk/runtime-env";
 import type { MockFn } from "deneb/plugin-sdk/testing";
 import { vi } from "vitest";
+import type { TelegramBotDeps } from "./bot-deps.js";
 import {
   createNativeCommandTestParams,
   type NativeCommandTestParams,
@@ -117,21 +118,28 @@ export function createNativeCommandsHarness(params?: {
   const sendMessage: AnyAsyncMock = vi.fn(async () => undefined);
   const setMyCommands: AnyAsyncMock = vi.fn(async () => undefined);
   const log: AnyMock = vi.fn();
-  const telegramDeps = {
-    loadConfig: vi.fn(() => params?.cfg ?? ({} as DenebConfig)),
-    resolveStorePath: vi.fn((storePath?: string) => storePath ?? "/tmp/sessions.json"),
-    readChannelAllowFromStore: vi.fn(async () => []),
-    upsertChannelPairingRequest: vi.fn(async () => ({ code: "PAIRCODE", created: true })),
-    enqueueSystemEvent: vi.fn(),
+  const telegramDeps: TelegramBotDeps = {
+    loadConfig: vi.fn(() => params?.cfg ?? ({} as DenebConfig)) as TelegramBotDeps["loadConfig"],
+    resolveStorePath: vi.fn(
+      (storePath?: string) => storePath ?? "/tmp/sessions.json",
+    ) as TelegramBotDeps["resolveStorePath"],
+    readChannelAllowFromStore: vi.fn(
+      async () => [],
+    ) as TelegramBotDeps["readChannelAllowFromStore"],
+    upsertChannelPairingRequest: vi.fn(async () => ({
+      code: "PAIRCODE",
+      created: true,
+    })) as unknown as TelegramBotDeps["upsertChannelPairingRequest"],
+    enqueueSystemEvent: vi.fn() as TelegramBotDeps["enqueueSystemEvent"],
     dispatchReplyWithBufferedBlockDispatcher:
       replyPipelineMocks.dispatchReplyWithBufferedBlockDispatcher,
     buildModelsProviderData: vi.fn(async () => ({
       byProvider: new Map<string, Set<string>>(),
       providers: [],
       resolvedDefault: { provider: "openai", model: "gpt-4.1" },
-    })),
-    listSkillCommandsForAgents: vi.fn(() => []),
-    wasSentByBot: vi.fn(() => false),
+    })) as TelegramBotDeps["buildModelsProviderData"],
+    listSkillCommandsForAgents: vi.fn(() => []) as TelegramBotDeps["listSkillCommandsForAgents"],
+    wasSentByBot: vi.fn(() => false) as TelegramBotDeps["wasSentByBot"],
   };
   const bot = {
     api: {

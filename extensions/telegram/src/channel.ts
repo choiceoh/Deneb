@@ -338,8 +338,10 @@ export const telegramPlugin: ChannelPlugin<ResolvedTelegramAccount, TelegramProb
     idLabel: "telegramUserId",
     message: PAIRING_APPROVED_MESSAGE,
     normalizeAllowEntry: createPairingPrefixStripper(/^(telegram|tg):/i),
-    notify: async ({ cfg, id, message }: { cfg: DenebConfig; id: string; message: string }) => {
-      const { token } = getTelegramRuntime().channel.telegram.resolveTelegramToken(cfg);
+    notify: async ({ cfg, id, message }: { cfg: unknown; id: string; message: string }) => {
+      const { token } = getTelegramRuntime().channel.telegram.resolveTelegramToken(
+        cfg as DenebConfig,
+      );
       if (!token) {
         throw new Error("telegram token not configured");
       }
@@ -360,7 +362,12 @@ export const telegramPlugin: ChannelPlugin<ResolvedTelegramAccount, TelegramProb
       cfg: DenebConfig;
       accountId: string;
       values: unknown;
-    }) => telegramConfigAdapter.formatAllowFrom!({ cfg, accountId, allowFrom: values }),
+    }) =>
+      telegramConfigAdapter.formatAllowFrom!({
+        cfg,
+        accountId,
+        allowFrom: values as (string | number)[],
+      }),
     resolveDmAllowFrom: (account: ResolvedTelegramAccount) => account.config.allowFrom,
     resolveGroupAllowFrom: (account: ResolvedTelegramAccount) => account.config.groupAllowFrom,
     resolveDmPolicy: (account: ResolvedTelegramAccount) => account.config.dmPolicy,

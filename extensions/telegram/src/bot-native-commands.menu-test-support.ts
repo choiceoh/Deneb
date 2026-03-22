@@ -99,7 +99,7 @@ export function createNativeCommandTestParams(
     upsertChannelPairingRequest: vi.fn(async () => ({
       code: "PAIRCODE",
       created: true,
-    })) as TelegramBotDeps["upsertChannelPairingRequest"],
+    })) as unknown as TelegramBotDeps["upsertChannelPairingRequest"],
     enqueueSystemEvent: vi.fn() as TelegramBotDeps["enqueueSystemEvent"],
     dispatchReplyWithBufferedBlockDispatcher: vi.fn(
       async () => dispatchResult,

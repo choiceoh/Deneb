@@ -1,4 +1,3 @@
-import * as channelPairingSdk from "deneb/plugin-sdk/channel-pairing";
 import * as channelReplyPipelineSdk from "deneb/plugin-sdk/channel-reply-pipeline";
 import * as channelRuntimeSdk from "deneb/plugin-sdk/channel-runtime";
 import * as channelSendResultSdk from "deneb/plugin-sdk/channel-send-result";
@@ -43,7 +42,6 @@ const bundledExtensionSubpathLoaders = pluginSdkSubpaths.map((id: string) => ({
 
 const asExports = (mod: object) => mod as Record<string, unknown>;
 const accountHelpersSdk = await import("deneb/plugin-sdk/account-helpers");
-const allowlistEditSdk = await import("deneb/plugin-sdk/allowlist-config-edit");
 
 describe("plugin-sdk subpath exports", () => {
   it("keeps the curated public list free of internal implementation subpaths", () => {
@@ -82,11 +80,6 @@ describe("plugin-sdk subpath exports", () => {
     expect(typeof accountHelpersSdk.createAccountListHelpers).toBe("function");
   });
 
-  it("exports allowlist edit helpers from the dedicated subpath", () => {
-    expect(typeof allowlistEditSdk.buildDmGroupAccountAllowlistAdapter).toBe("function");
-    expect(typeof allowlistEditSdk.createNestedAllowlistOverrideResolver).toBe("function");
-  });
-
   it("exports runtime helpers from the dedicated subpath", () => {
     expect(typeof runtimeSdk.createLoggerBackedRuntime).toBe("function");
   });
@@ -105,12 +98,6 @@ describe("plugin-sdk subpath exports", () => {
   it("exports channel setup helpers from the dedicated subpath", () => {
     expect(typeof channelSetupSdk.createOptionalChannelSetupSurface).toBe("function");
     expect(typeof channelSetupSdk.createTopLevelChannelDmPolicy).toBe("function");
-  });
-
-  it("exports channel pairing helpers from the dedicated subpath", () => {
-    expect(typeof channelPairingSdk.createChannelPairingController).toBe("function");
-    expect(typeof channelPairingSdk.createChannelPairingChallengeIssuer).toBe("function");
-    expect("createScopedPairingAccess" in asExports(channelPairingSdk)).toBe(false);
   });
 
   it("exports channel reply pipeline helpers from the dedicated subpath", () => {

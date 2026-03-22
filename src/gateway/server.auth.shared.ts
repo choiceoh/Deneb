@@ -174,6 +174,9 @@ async function createSignedDevice(params: {
   const identity = params.identityPath
     ? loadOrCreateDeviceIdentity(params.identityPath)
     : loadOrCreateDeviceIdentity();
+  if (!identity) {
+    throw new Error("device identity unavailable (stub)");
+  }
   const signedAtMs = params.signedAtMs ?? Date.now();
   const payload = buildDeviceAuthPayload({
     deviceId: identity.deviceId,
@@ -190,8 +193,8 @@ async function createSignedDevice(params: {
     signedAtMs,
     device: {
       id: identity.deviceId,
-      publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem),
-      signature: signDevicePayload(identity.privateKeyPem, payload),
+      publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem ?? ""),
+      signature: signDevicePayload(payload),
       signedAt: signedAtMs,
       nonce: params.nonce,
     },
@@ -299,6 +302,9 @@ async function resolvePairedTokenForDeviceIdentityPath(deviceIdentityPath: strin
   const { getPairedDevice } = await import("../infra/device-pairing.js");
 
   const identity = loadOrCreateDeviceIdentity(deviceIdentityPath);
+  if (!identity) {
+    throw new Error("device identity unavailable (stub)");
+  }
   const paired = await getPairedDevice(identity.deviceId);
   const deviceToken = paired?.tokens?.operator?.token;
   expect(paired?.deviceId).toBe(identity.deviceId);

@@ -88,7 +88,8 @@ export async function connectGatewayClient(params: {
       caps: params.caps,
       commands: params.commands,
       instanceId: params.instanceId,
-      deviceIdentity,
+      // oxlint-disable-next-line typescript/no-explicit-any
+      deviceIdentity: deviceIdentity as any,
       onEvent: params.onEvent,
       onHelloOk: () => stop(undefined, client),
       onConnectError: (err) => stop(err),
@@ -148,6 +149,9 @@ export async function connectDeviceAuthReq(params: { url: string; token?: string
   await new Promise<void>((resolve) => ws.once("open", resolve));
   const connectNonce = await connectNoncePromise;
   const identity = loadOrCreateDeviceIdentity();
+  if (!identity) {
+    throw new Error("device identity unavailable (stub)");
+  }
   const signedAtMs = Date.now();
   const platform = process.platform;
   const payload = buildDeviceAuthPayloadV3({
@@ -163,8 +167,8 @@ export async function connectDeviceAuthReq(params: { url: string; token?: string
   });
   const device = {
     id: identity.deviceId,
-    publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem),
-    signature: signDevicePayload(identity.privateKeyPem, payload),
+    publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem ?? ""),
+    signature: signDevicePayload(payload),
     signedAt: signedAtMs,
     nonce: connectNonce,
   };
