@@ -162,7 +162,10 @@ const buildQuerySuggestions = (
     ...sessions.map((s) => s.model),
     ...(aggregates?.byModel.map((m) => m.model) ?? []),
   ]).slice(0, 6);
-  const tools = unique(aggregates?.tools.tools.map((t) => t.name) ?? []).slice(0, 6);
+  const tools = unique(aggregates?.tools.tools.map((t: { name: string }) => t.name) ?? []).slice(
+    0,
+    6,
+  );
 
   if (!key) {
     return [

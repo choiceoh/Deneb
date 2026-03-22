@@ -158,7 +158,7 @@ export function renderUsage(props: UsageProps) {
     props.selectedDays.length > 0
       ? sortedSessions.filter((s) => {
           if (s.usage?.activityDates?.length) {
-            return s.usage.activityDates.some((d) => props.selectedDays.includes(d));
+            return s.usage.activityDates.some((d: string) => props.selectedDays.includes(d));
           }
           if (!s.updatedAt) {
             return false;
@@ -237,10 +237,9 @@ export function renderUsage(props: UsageProps) {
     ...sortedSessions.map((s) => s.model),
     ...(props.aggregates?.byModel.map((entry) => entry.model) ?? []),
   ]).slice(0, 12);
-  const toolOptions = unique(props.aggregates?.tools.tools.map((tool) => tool.name) ?? []).slice(
-    0,
-    12,
-  );
+  const toolOptions = unique(
+    props.aggregates?.tools.tools.map((tool: { name: string }) => tool.name) ?? [],
+  ).slice(0, 12);
 
   // Get first selected session for detail view (timeseries, logs)
   const primarySelectedEntry =

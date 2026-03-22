@@ -48,7 +48,6 @@
   "directory-runtime",
   "json-store",
   "keyed-async-queue",
-  "llm-task",
   "plugin-entry",
   "provider-auth",
   "provider-auth-api-key",

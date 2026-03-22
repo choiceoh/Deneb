@@ -177,11 +177,7 @@ async function collectDiscordFindings(ctx: {
     await loadAuditChannelRuntimeModule();
   const discordCfg = extractAccountConfig(ctx.account);
   const dangerousNameMatchingEnabled = isDangerousNameMatchingEnabled(discordCfg);
-  const storeAllowFrom = await readChannelAllowFromStore(
-    "discord",
-    process.env,
-    ctx.accountId,
-  ).catch(() => []);
+  const storeAllowFrom = await readChannelAllowFromStore().catch(() => []);
   const discordNameBasedAllowEntries = new Set<string>();
   const discordPathPrefix =
     ctx.orderedAccountIds.length > 1 || ctx.hasExplicitAccountPath
@@ -438,9 +434,7 @@ async function collectSlackFindings(ctx: {
     : Array.isArray(legacyAllowFromRaw)
       ? legacyAllowFromRaw
       : [];
-  const storeAllowFrom = await readChannelAllowFromStore("slack", process.env, ctx.accountId).catch(
-    () => [],
-  );
+  const storeAllowFrom = await readChannelAllowFromStore().catch(() => []);
   const ownerAllowFromConfigured =
     normalizeAllowFromList([...allowFrom, ...storeAllowFrom]).length > 0;
   const channels = (slackCfg.channels as Record<string, unknown> | undefined) ?? {};
@@ -488,11 +482,7 @@ async function collectTelegramFindings(ctx: {
   }
 
   const { readChannelAllowFromStore } = await loadAuditChannelRuntimeModule();
-  const storeAllowFrom = await readChannelAllowFromStore(
-    "telegram",
-    process.env,
-    ctx.accountId,
-  ).catch(() => []);
+  const storeAllowFrom = await readChannelAllowFromStore().catch(() => []);
   const storeHasWildcard = storeAllowFrom.some((v) => String(v).trim() === "*");
   const invalidTelegramAllowFromEntries = new Set<string>();
   await collectInvalidTelegramAllowFromEntries({

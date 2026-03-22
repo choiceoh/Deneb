@@ -118,7 +118,7 @@ export async function resolveConnectAuthState(params: {
     (authResult.method === "token" || authResult.method === "password")
   ) {
     const sharedRateCheck: RateLimitCheckResult = params.rateLimiter.check(
-      params.clientIp,
+      params.clientIp ?? "",
       AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET,
     );
     if (!sharedRateCheck.allowed) {
@@ -129,7 +129,7 @@ export async function resolveConnectAuthState(params: {
         retryAfterMs: sharedRateCheck.retryAfterMs,
       };
     } else {
-      params.rateLimiter.reset(params.clientIp, AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET);
+      params.rateLimiter.reset(params.clientIp ?? "", AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET);
     }
   }
 
@@ -223,7 +223,7 @@ export async function resolveConnectAuthDecision(params: {
 
   if (params.rateLimiter) {
     const deviceRateCheck = params.rateLimiter.check(
-      params.clientIp,
+      params.clientIp ?? "",
       AUTH_RATE_LIMIT_SCOPE_DEVICE_TOKEN,
     );
     if (!deviceRateCheck.allowed) {
@@ -245,7 +245,7 @@ export async function resolveConnectAuthDecision(params: {
     if (tokenCheck.ok) {
       authOk = true;
       authMethod = "device-token";
-      params.rateLimiter?.reset(params.clientIp, AUTH_RATE_LIMIT_SCOPE_DEVICE_TOKEN);
+      params.rateLimiter?.reset(params.clientIp ?? "", AUTH_RATE_LIMIT_SCOPE_DEVICE_TOKEN);
     } else {
       authResult = {
         ok: false,
@@ -254,7 +254,7 @@ export async function resolveConnectAuthDecision(params: {
             ? "device_token_mismatch"
             : (authResult.reason ?? "device_token_mismatch"),
       };
-      params.rateLimiter?.recordFailure(params.clientIp, AUTH_RATE_LIMIT_SCOPE_DEVICE_TOKEN);
+      params.rateLimiter?.recordFailure(params.clientIp ?? "", AUTH_RATE_LIMIT_SCOPE_DEVICE_TOKEN);
     }
   }
 

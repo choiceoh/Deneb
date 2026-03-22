@@ -12,10 +12,9 @@ function createNestedAllowlistOverrideResolver(
   return () => [];
 }
 // Inline stub for removed channel-policy module.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createAllowlistProviderRouteAllowlistWarningCollector<T>(
   opts: Record<string, unknown>,
-): (ctx: any) => string[] {
+): (ctx: { cfg: DenebConfig; accountId?: string | null; account: T }) => string[] {
   void opts;
   return () => [];
 }
@@ -311,9 +310,9 @@ const resolveTelegramAllowlistGroupOverrides = createNestedAllowlistOverrideReso
 
 const collectTelegramSecurityWarnings =
   createAllowlistProviderRouteAllowlistWarningCollector<ResolvedTelegramAccount>({
-    providerConfigPresent: (cfg) => cfg.channels?.telegram !== undefined,
-    resolveGroupPolicy: (account) => account.config.groupPolicy,
-    resolveRouteAllowlistConfigured: (account) =>
+    providerConfigPresent: (cfg: DenebConfig) => cfg.channels?.telegram !== undefined,
+    resolveGroupPolicy: (account: ResolvedTelegramAccount) => account.config.groupPolicy,
+    resolveRouteAllowlistConfigured: (account: ResolvedTelegramAccount) =>
       Boolean(account.config.groups) && Object.keys(account.config.groups ?? {}).length > 0,
     restrictSenders: {
       surface: "Telegram groups",
@@ -339,8 +338,10 @@ export const telegramPlugin: ChannelPlugin<ResolvedTelegramAccount, TelegramProb
     idLabel: "telegramUserId",
     message: PAIRING_APPROVED_MESSAGE,
     normalizeAllowEntry: createPairingPrefixStripper(/^(telegram|tg):/i),
-    notify: async ({ cfg, id, message }: { cfg: DenebConfig; id: string; message: string }) => {
-      const { token } = getTelegramRuntime().channel.telegram.resolveTelegramToken(cfg);
+    notify: async ({ cfg, id, message }: { cfg: unknown; id: string; message: string }) => {
+      const { token } = getTelegramRuntime().channel.telegram.resolveTelegramToken(
+        cfg as DenebConfig,
+      );
       if (!token) {
         throw new Error("telegram token not configured");
       }
@@ -361,7 +362,12 @@ export const telegramPlugin: ChannelPlugin<ResolvedTelegramAccount, TelegramProb
       cfg: DenebConfig;
       accountId: string;
       values: unknown;
-    }) => telegramConfigAdapter.formatAllowFrom!({ cfg, accountId, allowFrom: values }),
+    }) =>
+      telegramConfigAdapter.formatAllowFrom!({
+        cfg,
+        accountId,
+        allowFrom: values as (string | number)[],
+      }),
     resolveDmAllowFrom: (account: ResolvedTelegramAccount) => account.config.allowFrom,
     resolveGroupAllowFrom: (account: ResolvedTelegramAccount) => account.config.groupAllowFrom,
     resolveDmPolicy: (account: ResolvedTelegramAccount) => account.config.dmPolicy,

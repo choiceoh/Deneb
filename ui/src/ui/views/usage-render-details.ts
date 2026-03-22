@@ -80,7 +80,8 @@ function renderSessionSummary(
   }
 
   // Always use the full tool list for stable layout; update counts when filtering
-  const baseTools = usage.toolUsage?.tools.slice(0, 6) ?? [];
+  const baseTools: Array<{ name: string; count: number }> =
+    usage.toolUsage?.tools.slice(0, 6) ?? [];
   let toolCallCount: number;
   let uniqueToolCount: number;
   let toolItems: Array<{ label: string; value: string; sub: string }>;
@@ -111,11 +112,13 @@ function renderSessionSummary(
     uniqueToolCount = usage.toolUsage?.uniqueTools ?? 0;
   }
   const modelItems =
-    usage.modelUsage?.slice(0, 6).map((entry) => ({
-      label: entry.model ?? "unknown",
-      value: formatCost(entry.totals.totalCost),
-      sub: formatTokens(entry.totals.totalTokens),
-    })) ?? [];
+    usage.modelUsage
+      ?.slice(0, 6)
+      .map((entry: { model?: string; totals: { totalCost: number; totalTokens: number } }) => ({
+        label: entry.model ?? "unknown",
+        value: formatCost(entry.totals.totalCost),
+        sub: formatTokens(entry.totals.totalTokens),
+      })) ?? [];
 
   return html`
     ${badges.length > 0 ? html`<div class="usage-badges">${badges.map((b) => html`<span class="usage-badge">${b}</span>`)}</div>` : nothing}

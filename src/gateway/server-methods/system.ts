@@ -17,8 +17,10 @@ export const systemHandlers: GatewayRequestHandlers = {
     respond(
       true,
       {
-        deviceId: identity.deviceId,
-        publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem),
+        deviceId: identity?.deviceId,
+        publicKey: identity?.publicKeyPem
+          ? publicKeyRawBase64UrlFromPem(identity.publicKeyPem)
+          : undefined,
       },
       undefined,
     );

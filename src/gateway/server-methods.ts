@@ -99,27 +99,22 @@ export async function handleGatewayRequest(
     return;
   }
   if (CONTROL_PLANE_WRITE_METHODS.has(req.method)) {
-    const budget = consumeControlPlaneWriteBudget({ client });
+    const budget = consumeControlPlaneWriteBudget();
     if (!budget.allowed) {
       const actor = resolveControlPlaneActor(client);
       context.logGateway.warn(
-        `control-plane write rate-limited method=${req.method} ${formatControlPlaneActor(actor)} retryAfterMs=${budget.retryAfterMs} key=${budget.key}`,
+        `control-plane write rate-limited method=${req.method} ${formatControlPlaneActor(actor)}`,
       );
       respond(
         false,
         undefined,
-        errorShape(
-          ErrorCodes.UNAVAILABLE,
-          `rate limit exceeded for ${req.method}; retry after ${Math.ceil(budget.retryAfterMs / 1000)}s`,
-          {
-            retryable: true,
-            retryAfterMs: budget.retryAfterMs,
-            details: {
-              method: req.method,
-              limit: "3 per 60s",
-            },
+        errorShape(ErrorCodes.UNAVAILABLE, `rate limit exceeded for ${req.method}`, {
+          retryable: true,
+          details: {
+            method: req.method,
+            limit: "3 per 60s",
           },
-        ),
+        }),
       );
       return;
     }

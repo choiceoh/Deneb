@@ -430,11 +430,13 @@ function renderUsageInsights(
     value: formatCost(entry.totals.totalCost),
     sub: `${formatTokens(entry.totals.totalTokens)} · ${entry.count} msgs`,
   }));
-  const topTools = aggregates.tools.tools.slice(0, 6).map((tool) => ({
-    label: tool.name,
-    value: `${tool.count}`,
-    sub: "calls",
-  }));
+  const topTools = aggregates.tools.tools
+    .slice(0, 6)
+    .map((tool: { name: string; count: number }) => ({
+      label: tool.name,
+      value: `${tool.count}`,
+      sub: "calls",
+    }));
   const topAgents = aggregates.byAgent.slice(0, 5).map((entry) => ({
     label: entry.agentId,
     value: formatCost(entry.totals.totalCost),
@@ -615,10 +617,12 @@ function renderSessionsCard(
 
     // If days are selected and session has daily breakdown, compute filtered total
     if (selectedDays.length > 0 && usage.dailyBreakdown && usage.dailyBreakdown.length > 0) {
-      const filteredDays = usage.dailyBreakdown.filter((d) => selectedDays.includes(d.date));
+      const filteredDays = usage.dailyBreakdown.filter(
+        (d: { date: string; tokens: number; cost: number }) => selectedDays.includes(d.date),
+      );
       return isTokenMode
-        ? filteredDays.reduce((sum, d) => sum + d.tokens, 0)
-        : filteredDays.reduce((sum, d) => sum + d.cost, 0);
+        ? filteredDays.reduce((sum: number, d: { tokens: number }) => sum + d.tokens, 0)
+        : filteredDays.reduce((sum: number, d: { cost: number }) => sum + d.cost, 0);
     }
 
     // Otherwise use total

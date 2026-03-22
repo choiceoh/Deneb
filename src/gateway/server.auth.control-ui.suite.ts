@@ -142,6 +142,9 @@ export function registerControlUiAndPairingSuite(): void {
     const identityDir = await mkdtemp(join(tmpdir(), identityPrefix));
     const identityPath = join(identityDir, "device.json");
     const identity = loadOrCreateDeviceIdentity(identityPath);
+    if (!identity) {
+      throw new Error("device identity unavailable (stub)");
+    }
     return {
       identityPath,
       identity,
@@ -155,7 +158,7 @@ export function registerControlUiAndPairingSuite(): void {
     return { server, ws, port, prevToken, identityPath, identity, client };
   };
 
-  const getRequiredPairedMetadata = (
+  const _getRequiredPairedMetadata = (
     paired: Record<string, Record<string, unknown>>,
     deviceId: string,
   ) => {
@@ -167,16 +170,8 @@ export function registerControlUiAndPairingSuite(): void {
     return metadata;
   };
 
-  const stripPairedMetadataRolesAndScopes = async (deviceId: string) => {
-    const { resolvePairingPaths, readJsonFile } = await import("../infra/pairing-files.js");
-    const { writeJsonAtomic } = await import("../infra/json-files.js");
-    const { pairedPath } = resolvePairingPaths(undefined, "devices");
-    const paired = (await readJsonFile<Record<string, Record<string, unknown>>>(pairedPath)) ?? {};
-    const legacy = getRequiredPairedMetadata(paired, deviceId);
-    delete legacy.roles;
-    delete legacy.scopes;
-    await writeJsonAtomic(pairedPath, paired);
-  };
+  // Stub: pairing files removed; this is a no-op.
+  const stripPairedMetadataRolesAndScopes = async (_deviceId: string) => {};
 
   const seedApprovedOperatorReadPairing = async (params: {
     identityPrefix: string;
@@ -189,7 +184,7 @@ export function registerControlUiAndPairingSuite(): void {
     const { approveDevicePairing, requestDevicePairing } =
       await import("../infra/device-pairing.js");
     const { identityPath, identity } = await createOperatorIdentityFixture(params.identityPrefix);
-    const devicePublicKey = publicKeyRawBase64UrlFromPem(identity.publicKeyPem);
+    const devicePublicKey = publicKeyRawBase64UrlFromPem(identity.publicKeyPem ?? "");
     const seeded = await requestDevicePairing({
       deviceId: identity.deviceId,
       publicKey: devicePublicKey,
@@ -256,7 +251,7 @@ export function registerControlUiAndPairingSuite(): void {
     const { identity } = await createOperatorIdentityFixture("deneb-control-ui-trusted-proxy-");
     const pendingRequest = await requestDevicePairing({
       deviceId: identity.deviceId,
-      publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem),
+      publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem ?? ""),
       role: "operator",
       scopes: ["operator.admin"],
       clientId: CONTROL_UI_CLIENT.id,
@@ -784,7 +779,7 @@ export function registerControlUiAndPairingSuite(): void {
       "deneb-device-legacy-meta-",
     );
     const deviceId = identity.deviceId;
-    const publicKey = publicKeyRawBase64UrlFromPem(identity.publicKeyPem);
+    const publicKey = publicKeyRawBase64UrlFromPem(identity.publicKeyPem ?? "");
     const pending = await requestDevicePairing({
       deviceId,
       publicKey,

@@ -602,6 +602,9 @@ export async function connectReq(
         role,
       });
     const identity = loadOrCreateDeviceIdentity(identityPath);
+    if (!identity) {
+      throw new Error("device identity unavailable (stub)");
+    }
     const signedAtMs = Date.now();
     const payload = buildDeviceAuthPayloadV3({
       deviceId: identity.deviceId,
@@ -617,8 +620,8 @@ export async function connectReq(
     });
     return {
       id: identity.deviceId,
-      publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem),
-      signature: signDevicePayload(identity.privateKeyPem, payload),
+      publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem ?? ""),
+      signature: signDevicePayload(payload),
       signedAt: signedAtMs,
       nonce: connectChallengeNonce,
     };

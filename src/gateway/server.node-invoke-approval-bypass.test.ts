@@ -183,7 +183,7 @@ describe("node.invoke approval bypass", () => {
     return await connectOperatorWithRetry(scopes, (nonce) => {
       const signedAtMs = Date.now();
       const payload = buildDeviceAuthPayload({
-        deviceId: deviceId!,
+        deviceId: deviceId,
         clientId: GATEWAY_CLIENT_NAMES.TEST,
         clientMode: GATEWAY_CLIENT_MODES.TEST,
         role: "operator",
@@ -193,7 +193,7 @@ describe("node.invoke approval bypass", () => {
         nonce,
       });
       return {
-        id: deviceId!,
+        id: deviceId,
         publicKey: publicKeyRaw,
         signature: signDevicePayload(privateKeyPem, payload),
         signedAt: signedAtMs,
