@@ -10,21 +10,14 @@ type PollingHost = {
   tab: string;
 };
 
-/** Skip polling callbacks while the tab is not visible to save CPU/network. */
-function isTabVisible(): boolean {
-  return typeof document === "undefined" || document.visibilityState !== "hidden";
-}
-
 export function startNodesPolling(host: PollingHost) {
   if (host.nodesPollInterval != null) {
     return;
   }
-  host.nodesPollInterval = window.setInterval(() => {
-    if (!isTabVisible()) {
-      return;
-    }
-    void loadNodes(host as unknown as DenebApp, { quiet: true });
-  }, 5000);
+  host.nodesPollInterval = window.setInterval(
+    () => void loadNodes(host as unknown as DenebApp, { quiet: true }),
+    5000,
+  );
 }
 
 export function stopNodesPolling(host: PollingHost) {
@@ -40,7 +33,7 @@ export function startLogsPolling(host: PollingHost) {
     return;
   }
   host.logsPollInterval = window.setInterval(() => {
-    if (!isTabVisible() || host.tab !== "logs") {
+    if (host.tab !== "logs") {
       return;
     }
     void loadLogs(host as unknown as DenebApp, { quiet: true });
@@ -60,7 +53,7 @@ export function startDebugPolling(host: PollingHost) {
     return;
   }
   host.debugPollInterval = window.setInterval(() => {
-    if (!isTabVisible() || host.tab !== "debug") {
+    if (host.tab !== "debug") {
       return;
     }
     void loadDebug(host as unknown as DenebApp);
