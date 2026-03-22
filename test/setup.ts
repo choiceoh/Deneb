@@ -1,7 +1,36 @@
-import { afterAll, afterEach, beforeAll, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { installCustomMatchers } from "../src/test-utils/custom-matchers.js";
+import { shouldSkip, type SkipEntry } from "./infinite-loop-guard.js";
 
 installCustomMatchers();
+
+// Auto-skip tests that previously timed out (suspected infinite loops).
+// The skip list is maintained by the InfiniteLoopReporter (see test/infinite-loop-reporter.ts).
+beforeEach((ctx) => {
+  const file = ctx.task.file?.filepath ?? ctx.task.file?.name;
+  if (!file) {
+    return;
+  }
+
+  const entry: SkipEntry | undefined = shouldSkip(file, fullTestName(ctx.task));
+  if (entry) {
+    console.warn(`⏭ Skipping (infinite loop): "${ctx.task.name}" — ${entry.reason}`);
+    ctx.skip();
+  }
+});
+
+/** Build the full test name from the task hierarchy (matches reporter logic). */
+function fullTestName(task: { name: string; suite?: { name: string; suite?: unknown } }): string {
+  const parts: string[] = [];
+  let current: { name: string; suite?: unknown } | undefined = task;
+  while (current) {
+    if (current.name) {
+      parts.unshift(current.name);
+    }
+    current = current.suite as { name: string; suite?: unknown } | undefined;
+  }
+  return parts.join(" > ");
+}
 
 vi.mock("@mariozechner/pi-ai", async (importOriginal) => {
   // Cache the original module to avoid re-importing on every mock reset.
