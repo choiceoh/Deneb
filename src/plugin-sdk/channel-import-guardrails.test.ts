@@ -40,28 +40,7 @@ const SETUP_BARREL_GUARDS: GuardedSource[] = [
   },
 ];
 
-const LOCAL_EXTENSION_API_BARREL_GUARDS = [
-  "acpx",
-  "diagnostics-otel",
-  "diffs",
-  "google",
-  "llm-task",
-  "lobster",
-  "matrix",
-  "mattermost",
-  "memory-lancedb",
-  "msteams",
-  "open-prose",
-  "phone-control",
-  "copilot-proxy",
-  "zai",
-  "qwen-portal-auth",
-  "synology-chat",
-  "talk-voice",
-  "telegram",
-  "thread-ownership",
-  "voice-call",
-] as const;
+const LOCAL_EXTENSION_API_BARREL_GUARDS = ["acpx", "diagnostics-otel", "telegram"] as const;
 
 const LOCAL_EXTENSION_API_BARREL_EXCEPTIONS = [
   // Direct import avoids a circular init path:

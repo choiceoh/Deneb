@@ -4,7 +4,6 @@ import bravePlugin from "../../../extensions/brave/index.js";
 import byteplusPlugin from "../../../extensions/byteplus/index.js";
 import chutesPlugin from "../../../extensions/chutes/index.js";
 import cloudflareAiGatewayPlugin from "../../../extensions/cloudflare-ai-gateway/index.js";
-import copilotProxyPlugin from "../../../extensions/copilot-proxy/index.js";
 import elevenLabsPlugin from "../../../extensions/elevenlabs/index.js";
 import falPlugin from "../../../extensions/fal/index.js";
 import firecrawlPlugin from "../../../extensions/firecrawl/index.js";
@@ -355,7 +354,6 @@ const bundledProviderPlugins = dedupePlugins([
   byteplusPlugin,
   chutesPlugin,
   cloudflareAiGatewayPlugin,
-  copilotProxyPlugin,
   githubCopilotPlugin,
   falPlugin,
   googlePlugin,

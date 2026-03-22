@@ -50,11 +50,11 @@ describe("watch-node script", () => {
     expect(watchOptions.ignored("src/infra/watch-node.test.ts")).toBe(true);
     expect(watchOptions.ignored("src/infra/watch-node.test.tsx")).toBe(true);
     expect(watchOptions.ignored("src/infra/watch-node-test-helpers.ts")).toBe(true);
-    expect(watchOptions.ignored("extensions/voice-call/README.md")).toBe(true);
-    expect(watchOptions.ignored("extensions/voice-call/deneb.plugin.json")).toBe(false);
-    expect(watchOptions.ignored("extensions/voice-call/package.json")).toBe(false);
-    expect(watchOptions.ignored("extensions/voice-call/index.ts")).toBe(false);
-    expect(watchOptions.ignored("extensions/voice-call/src/runtime.ts")).toBe(false);
+    expect(watchOptions.ignored("extensions/telegram/README.md")).toBe(true);
+    expect(watchOptions.ignored("extensions/telegram/deneb.plugin.json")).toBe(false);
+    expect(watchOptions.ignored("extensions/telegram/package.json")).toBe(false);
+    expect(watchOptions.ignored("extensions/telegram/index.ts")).toBe(false);
+    expect(watchOptions.ignored("extensions/telegram/src/runtime.ts")).toBe(false);
     expect(watchOptions.ignored("src/infra/watch-node.ts")).toBe(false);
     expect(watchOptions.ignored("tsconfig.json")).toBe(false);
 
@@ -173,17 +173,17 @@ describe("watch-node script", () => {
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(childA.kill).not.toHaveBeenCalled();
 
-    watcher.emit("change", "extensions/voice-call/README.md");
+    watcher.emit("change", "extensions/telegram/README.md");
     await new Promise((resolve) => setImmediate(resolve));
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(childA.kill).not.toHaveBeenCalled();
 
-    watcher.emit("change", "extensions/voice-call/deneb.plugin.json");
+    watcher.emit("change", "extensions/telegram/deneb.plugin.json");
     await new Promise((resolve) => setImmediate(resolve));
     expect(childA.kill).toHaveBeenCalledWith("SIGTERM");
     expect(spawn).toHaveBeenCalledTimes(2);
 
-    watcher.emit("change", "extensions/voice-call/package.json");
+    watcher.emit("change", "extensions/telegram/package.json");
     await new Promise((resolve) => setImmediate(resolve));
     expect(childB.kill).toHaveBeenCalledWith("SIGTERM");
     expect(spawn).toHaveBeenCalledTimes(3);

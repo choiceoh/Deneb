@@ -84,10 +84,6 @@
       - any-glob-to-any-file:
           - "extensions/twitch/**"
           - "docs/channels/twitch.md"
-"channel: voice-call":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/voice-call/**"
 "channel: whatsapp-web":
   - changed-files:
       - any-glob-to-any-file:
@@ -174,42 +170,18 @@
           - "docs/cli/security.md"
           - "docs/gateway/security.md"
 
-"extensions: copilot-proxy":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/copilot-proxy/**"
 "extensions: diagnostics-otel":
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/diagnostics-otel/**"
-"extensions: llm-task":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/llm-task/**"
-"extensions: lobster":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/lobster/**"
 "extensions: memory-core":
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/memory-core/**"
-"extensions: memory-lancedb":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/memory-lancedb/**"
-"extensions: open-prose":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/open-prose/**"
 "extensions: qwen-portal-auth":
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/qwen-portal-auth/**"
-"extensions: device-pair":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/device-pair/**"
 "extensions: acpx":
   - changed-files:
       - any-glob-to-any-file:
@@ -262,10 +234,6 @@
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/nvidia/**"
-"extensions: phone-control":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/phone-control/**"
 "extensions: qianfan":
   - changed-files:
       - any-glob-to-any-file:
