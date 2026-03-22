@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import type { CompressionObserver } from "./compression-observer.js";
 import { estimateTokens } from "./engine-helpers.js";
 import { extractFileIdsFromContent } from "./large-files.js";
-import type { ConversationStore, CreateMessagePartInput } from "./store/conversation-store.js";
+import type {
+  ConversationStore,
+  CreateMessagePartInput,
+  MessageRecord,
+} from "./store/conversation-store.js";
 import type { SummaryStore, SummaryRecord, ContextItemRecord } from "./store/summary-store.js";
 
 // ── Public types ─────────────────────────────────────────────────────────────
@@ -151,6 +155,89 @@ function dedupeOrderedIds(ids: Iterable<string>): string[] {
     }
   }
   return ordered;
+}
+
+// ── Sweep-scoped cache ───────────────────────────────────────────────────────
+
+/**
+ * Transient cache that lives for the duration of a single compaction sweep.
+ *
+ * Eliminates redundant SQLite round-trips for data that does not change
+ * between iterations within the same sweep (context items are mutated only
+ * by the compaction engine itself, so we can invalidate precisely).
+ */
+class SweepCache {
+  private contextItems: ContextItemRecord[] | null = null;
+  private messages = new Map<number, MessageRecord | null>();
+  private summaries = new Map<string, SummaryRecord | null>();
+  private freshTailOrdinal: number | null = null;
+
+  constructor(
+    private conversationStore: ConversationStore,
+    private summaryStore: SummaryStore,
+    private conversationId: number,
+    private resolveFreshTailOrdinalFn: (items: ContextItemRecord[]) => number,
+  ) {}
+
+  /** Get context items, fetching once and caching. */
+  async getContextItems(): Promise<ContextItemRecord[]> {
+    if (this.contextItems === null) {
+      this.contextItems = await this.summaryStore.getContextItems(this.conversationId);
+    }
+    return this.contextItems;
+  }
+
+  /** Get the fresh tail ordinal, computed once from cached context items. */
+  async getFreshTailOrdinal(): Promise<number> {
+    if (this.freshTailOrdinal === null) {
+      const items = await this.getContextItems();
+      this.freshTailOrdinal = this.resolveFreshTailOrdinalFn(items);
+    }
+    return this.freshTailOrdinal;
+  }
+
+  /** Batch-prefetch messages for a set of context items. */
+  async prefetchMessages(items: ContextItemRecord[]): Promise<void> {
+    const missingIds: number[] = [];
+    for (const item of items) {
+      if (item.messageId != null && !this.messages.has(item.messageId)) {
+        missingIds.push(item.messageId);
+      }
+    }
+    if (missingIds.length === 0) {
+      return;
+    }
+    const fetched = await this.conversationStore.getMessagesByIds(missingIds);
+    for (const id of missingIds) {
+      this.messages.set(id, fetched.get(id) ?? null);
+    }
+  }
+
+  /** Get a single message from cache or DB. */
+  async getMessage(messageId: number): Promise<MessageRecord | null> {
+    if (this.messages.has(messageId)) {
+      return this.messages.get(messageId) ?? null;
+    }
+    const msg = await this.conversationStore.getMessageById(messageId);
+    this.messages.set(messageId, msg);
+    return msg;
+  }
+
+  /** Get a summary from cache or DB. */
+  async getSummary(summaryId: string): Promise<SummaryRecord | null> {
+    if (this.summaries.has(summaryId)) {
+      return this.summaries.get(summaryId) ?? null;
+    }
+    const summary = await this.summaryStore.getSummary(summaryId);
+    this.summaries.set(summaryId, summary);
+    return summary;
+  }
+
+  /** Invalidate cached context items after a mutation (insert/replace). */
+  invalidateContextItems(): void {
+    this.contextItems = null;
+    this.freshTailOrdinal = null;
+  }
 }
 
 // ── CompactionEngine ─────────────────────────────────────────────────────────
@@ -356,6 +443,9 @@ export class CompactionEngine {
    * Phase 1: repeatedly compact raw-message chunks outside the fresh tail.
    * Phase 2: repeatedly condense oldest summary chunks while chunk utilization
    *          remains high enough to be worthwhile.
+   *
+   * Uses a sweep-scoped cache to avoid redundant SQLite queries across
+   * iterations. The cache is invalidated after each pass mutates context.
    */
   async compactFullSweep(input: {
     conversationId: number;
@@ -379,7 +469,15 @@ export class CompactionEngine {
       };
     }
 
-    const contextItems = await this.summaryStore.getContextItems(conversationId);
+    // Create a sweep-scoped cache to reduce DB round-trips across iterations.
+    const cache = new SweepCache(
+      this.conversationStore,
+      this.summaryStore,
+      conversationId,
+      (items) => this.resolveFreshTailOrdinal(items),
+    );
+
+    const contextItems = await cache.getContextItems();
     if (contextItems.length === 0) {
       return {
         actionTaken: false,
@@ -388,6 +486,9 @@ export class CompactionEngine {
         condensed: false,
       };
     }
+
+    // Batch-prefetch all messages referenced by context items up front.
+    await cache.prefetchMessages(contextItems);
 
     let actionTaken = false;
     let condensed = false;
@@ -405,7 +506,7 @@ export class CompactionEngine {
     // Phase 1: leaf passes over oldest raw chunks outside the protected tail.
     const maxSweepIter = this.config.maxSweepIterations ?? 50;
     for (let leafIter = 0; leafIter < maxSweepIter; leafIter++) {
-      const leafChunk = await this.selectOldestLeafChunk(conversationId);
+      const leafChunk = await this.selectOldestLeafChunk(conversationId, cache);
       if (leafChunk.items.length === 0) {
         break;
       }
@@ -416,7 +517,11 @@ export class CompactionEngine {
         leafChunk.items,
         summarize,
         previousSummaryContent,
+        cache,
       );
+      // Context items changed — invalidate cached items (messages stay valid).
+      cache.invalidateContextItems();
+
       const passTokensAfter = await this.summaryStore.getContextTokenCount(conversationId);
       await this.persistCompactionEvents({
         conversationId,
@@ -443,6 +548,7 @@ export class CompactionEngine {
       const candidate = await this.selectShallowestCondensationCandidate({
         conversationId,
         hardTrigger: hardTrigger === true,
+        cache,
       });
       if (!candidate) {
         break;
@@ -454,7 +560,11 @@ export class CompactionEngine {
         candidate.chunk.items,
         candidate.targetDepth,
         summarize,
+        cache,
       );
+      // Context items changed — invalidate cached items.
+      cache.invalidateContextItems();
+
       const passTokensAfter = await this.summaryStore.getContextTokenCount(conversationId);
       await this.persistCompactionEvents({
         conversationId,
@@ -593,7 +703,6 @@ export class CompactionEngine {
     const contextItems = await this.summaryStore.getContextItems(conversationId);
     const freshTailOrdinal = this.resolveFreshTailOrdinal(contextItems);
     const rawMessageItems: ContextItemRecord[] = [];
-    const messageContents: { messageId: number; createdAt: Date; content: string }[] = [];
 
     for (const item of contextItems) {
       if (item.ordinal >= freshTailOrdinal) {
@@ -605,7 +714,20 @@ export class CompactionEngine {
         return null;
       }
       rawMessageItems.push(item);
-      const msg = await this.conversationStore.getMessageById(item.messageId);
+    }
+
+    // Batch-fetch all referenced messages in a single query.
+    const messageIds = rawMessageItems
+      .map((item) => item.messageId)
+      .filter((id): id is number => id != null);
+    const messagesMap = await this.conversationStore.getMessagesByIds(messageIds);
+    const messageContents: { messageId: number; createdAt: Date; content: string }[] = [];
+
+    for (const item of rawMessageItems) {
+      if (item.messageId == null) {
+        continue;
+      }
+      const msg = messagesMap.get(item.messageId);
       if (!msg) {
         // Missing message in DB → context is inconsistent, bail.
         this.observer.invalidate(conversationId);
@@ -767,8 +889,10 @@ export class CompactionEngine {
   }
 
   /** Resolve message token count with a content-length fallback. */
-  private async getMessageTokenCount(messageId: number): Promise<number> {
-    const message = await this.conversationStore.getMessageById(messageId);
+  private async getMessageTokenCount(messageId: number, cache?: SweepCache): Promise<number> {
+    const message = cache
+      ? await cache.getMessage(messageId)
+      : await this.conversationStore.getMessageById(messageId);
     if (!message) {
       return 0;
     }
@@ -807,9 +931,16 @@ export class CompactionEngine {
    * The selected chunk size is capped by `leafChunkTokens`, but we always pick
    * at least one message when any compactable message exists.
    */
-  private async selectOldestLeafChunk(conversationId: number): Promise<LeafChunkSelection> {
-    const contextItems = await this.summaryStore.getContextItems(conversationId);
-    const freshTailOrdinal = this.resolveFreshTailOrdinal(contextItems);
+  private async selectOldestLeafChunk(
+    conversationId: number,
+    cache?: SweepCache,
+  ): Promise<LeafChunkSelection> {
+    const contextItems = cache
+      ? await cache.getContextItems()
+      : await this.summaryStore.getContextItems(conversationId);
+    const freshTailOrdinal = cache
+      ? await cache.getFreshTailOrdinal()
+      : this.resolveFreshTailOrdinal(contextItems);
     const threshold = this.resolveLeafChunkTokens();
 
     let rawTokensOutsideTail = 0;
@@ -820,7 +951,7 @@ export class CompactionEngine {
       if (item.itemType !== "message" || item.messageId == null) {
         continue;
       }
-      rawTokensOutsideTail += await this.getMessageTokenCount(item.messageId);
+      rawTokensOutsideTail += await this.getMessageTokenCount(item.messageId, cache);
     }
 
     const chunk: ContextItemRecord[] = [];
@@ -843,7 +974,7 @@ export class CompactionEngine {
       if (item.messageId == null) {
         continue;
       }
-      const messageTokens = await this.getMessageTokenCount(item.messageId);
+      const messageTokens = await this.getMessageTokenCount(item.messageId, cache);
       if (chunk.length > 0 && chunkTokens + messageTokens > threshold) {
         break;
       }
@@ -867,13 +998,17 @@ export class CompactionEngine {
   private async resolvePriorLeafSummaryContext(
     conversationId: number,
     messageItems: ContextItemRecord[],
+    cache?: SweepCache,
   ): Promise<string | undefined> {
     if (messageItems.length === 0) {
       return undefined;
     }
 
     const startOrdinal = Math.min(...messageItems.map((item) => item.ordinal));
-    const priorSummaryItems = (await this.summaryStore.getContextItems(conversationId))
+    const allItems = cache
+      ? await cache.getContextItems()
+      : await this.summaryStore.getContextItems(conversationId);
+    const priorSummaryItems = allItems
       .filter(
         (item) =>
           item.ordinal < startOrdinal &&
@@ -891,7 +1026,9 @@ export class CompactionEngine {
       if (typeof item.summaryId !== "string") {
         continue;
       }
-      const summary = await this.summaryStore.getSummary(item.summaryId);
+      const summary = cache
+        ? await cache.getSummary(item.summaryId)
+        : await this.summaryStore.getSummary(item.summaryId);
       const content = summary?.content.trim();
       if (content) {
         summaryContents.push(content);
@@ -999,10 +1136,15 @@ export class CompactionEngine {
   private async selectShallowestCondensationCandidate(params: {
     conversationId: number;
     hardTrigger: boolean;
+    cache?: SweepCache;
   }): Promise<CondensedPhaseCandidate | null> {
-    const { conversationId, hardTrigger } = params;
-    const contextItems = await this.summaryStore.getContextItems(conversationId);
-    const freshTailOrdinal = this.resolveFreshTailOrdinal(contextItems);
+    const { conversationId, hardTrigger, cache } = params;
+    const contextItems = cache
+      ? await cache.getContextItems()
+      : await this.summaryStore.getContextItems(conversationId);
+    const freshTailOrdinal = cache
+      ? await cache.getFreshTailOrdinal()
+      : this.resolveFreshTailOrdinal(contextItems);
     const minChunkTokens = this.resolveCondensedMinChunkTokens();
     const depthLevels = await this.summaryStore.getDistinctDepthsInContext(conversationId, {
       maxOrdinalExclusive: freshTailOrdinal,
@@ -1014,6 +1156,7 @@ export class CompactionEngine {
         conversationId,
         targetDepth,
         freshTailOrdinal,
+        cache,
       );
       if (chunk.items.length < fanout) {
         continue;
@@ -1037,8 +1180,11 @@ export class CompactionEngine {
     conversationId: number,
     targetDepth: number,
     freshTailOrdinalOverride?: number,
+    cache?: SweepCache,
   ): Promise<CondensedChunkSelection> {
-    const contextItems = await this.summaryStore.getContextItems(conversationId);
+    const contextItems = cache
+      ? await cache.getContextItems()
+      : await this.summaryStore.getContextItems(conversationId);
     const freshTailOrdinal =
       typeof freshTailOrdinalOverride === "number"
         ? freshTailOrdinalOverride
@@ -1058,7 +1204,9 @@ export class CompactionEngine {
         continue;
       }
 
-      const summary = await this.summaryStore.getSummary(item.summaryId);
+      const summary = cache
+        ? await cache.getSummary(item.summaryId)
+        : await this.summaryStore.getSummary(item.summaryId);
       if (!summary) {
         if (chunk.length > 0) {
           break;
@@ -1091,13 +1239,17 @@ export class CompactionEngine {
     conversationId: number,
     summaryItems: ContextItemRecord[],
     targetDepth: number,
+    cache?: SweepCache,
   ): Promise<string | undefined> {
     if (summaryItems.length === 0) {
       return undefined;
     }
 
     const startOrdinal = Math.min(...summaryItems.map((item) => item.ordinal));
-    const priorSummaryItems = (await this.summaryStore.getContextItems(conversationId))
+    const allItems = cache
+      ? await cache.getContextItems()
+      : await this.summaryStore.getContextItems(conversationId);
+    const priorSummaryItems = allItems
       .filter(
         (item) =>
           item.ordinal < startOrdinal &&
@@ -1114,7 +1266,9 @@ export class CompactionEngine {
       if (typeof item.summaryId !== "string") {
         continue;
       }
-      const summary = await this.summaryStore.getSummary(item.summaryId);
+      const summary = cache
+        ? await cache.getSummary(item.summaryId)
+        : await this.summaryStore.getSummary(item.summaryId);
       if (!summary || summary.depth !== targetDepth) {
         continue;
       }
@@ -1178,7 +1332,13 @@ export class CompactionEngine {
     messageItems: ContextItemRecord[],
     summarize: CompactionSummarizeFn,
     previousSummaryContent?: string,
+    cache?: SweepCache,
   ): Promise<{ summaryId: string; level: CompactionLevel; content: string }> {
+    // Batch-prefetch messages when cache is available (avoids N sequential queries).
+    if (cache) {
+      await cache.prefetchMessages(messageItems);
+    }
+
     // Fetch full message content for each context item
     const messageContents: {
       messageId: number;
@@ -1190,7 +1350,9 @@ export class CompactionEngine {
       if (item.messageId == null) {
         continue;
       }
-      const msg = await this.conversationStore.getMessageById(item.messageId);
+      const msg = cache
+        ? await cache.getMessage(item.messageId)
+        : await this.conversationStore.getMessageById(item.messageId);
       if (msg) {
         messageContents.push({
           messageId: msg.messageId,
@@ -1276,14 +1438,17 @@ export class CompactionEngine {
     summaryItems: ContextItemRecord[],
     targetDepth: number,
     summarize: CompactionSummarizeFn,
+    cache?: SweepCache,
   ): Promise<PassResult> {
-    // Fetch full summary records
+    // Fetch full summary records (cache-aware to avoid redundant DB hits).
     const summaryRecords: SummaryRecord[] = [];
     for (const item of summaryItems) {
       if (item.summaryId == null) {
         continue;
       }
-      const rec = await this.summaryStore.getSummary(item.summaryId);
+      const rec = cache
+        ? await cache.getSummary(item.summaryId)
+        : await this.summaryStore.getSummary(item.summaryId);
       if (rec) {
         summaryRecords.push(rec);
       }
@@ -1306,7 +1471,12 @@ export class CompactionEngine {
     );
     const previousSummaryContent =
       targetDepth === 0
-        ? await this.resolvePriorSummaryContextAtDepth(conversationId, summaryItems, targetDepth)
+        ? await this.resolvePriorSummaryContextAtDepth(
+            conversationId,
+            summaryItems,
+            targetDepth,
+            cache,
+          )
         : undefined;
     const condensed = await this.summarizeWithEscalation({
       sourceText: concatenated,
