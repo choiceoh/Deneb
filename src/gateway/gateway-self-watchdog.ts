@@ -87,40 +87,46 @@ export function startGatewaySelfWatchdog(deps: GatewaySelfWatchdogDeps): Gateway
     if (stopped) {
       return;
     }
-    const now = Date.now();
 
-    // Skip checks during startup grace period so channels have time to connect.
-    if (now - createdAt < startupGraceMs) {
-      return;
-    }
+    try {
+      const now = Date.now();
 
-    // Check 1: server not listening
-    if (!isServerListening()) {
-      requestSelfRestart("server is not listening");
-      return;
-    }
+      // Skip checks during startup grace period so channels have time to connect.
+      if (now - createdAt < startupGraceMs) {
+        return;
+      }
 
-    // Check 2: all expected channels disconnected
-    const expected = getExpectedChannelCount();
-    const connected = getConnectedChannelCount();
-    if (expected > 0 && connected === 0) {
-      requestSelfRestart(`0/${expected} channels connected`);
-      return;
-    }
+      // Check 1: server not listening
+      if (!isServerListening()) {
+        requestSelfRestart("server is not listening");
+        return;
+      }
 
-    // Check 3: no activity for a long time (gateway might be stuck).
-    // Skip when no channels are configured (API-only / headless mode) since
-    // there is no expected inbound traffic and the gateway is legitimately idle.
-    if (expected === 0) {
-      return;
-    }
-    const lastActivity = Math.max(getLastActivityAt(), lastTouchAt);
-    const idleMs = now - lastActivity;
-    if (idleMs > staleThresholdMs) {
-      requestSelfRestart(
-        `no activity for ${Math.round(idleMs / 60_000)}m (threshold: ${Math.round(staleThresholdMs / 60_000)}m)`,
-      );
-      return;
+      // Check 2: all expected channels disconnected
+      const expected = getExpectedChannelCount();
+      const connected = getConnectedChannelCount();
+      if (expected > 0 && connected === 0) {
+        requestSelfRestart(`0/${expected} channels connected`);
+        return;
+      }
+
+      // Check 3: no activity for a long time (gateway might be stuck).
+      // Skip when no channels are configured (API-only / headless mode) since
+      // there is no expected inbound traffic and the gateway is legitimately idle.
+      if (expected === 0) {
+        return;
+      }
+      const lastActivity = Math.max(getLastActivityAt(), lastTouchAt);
+      const idleMs = now - lastActivity;
+      if (idleMs > staleThresholdMs) {
+        requestSelfRestart(
+          `no activity for ${Math.round(idleMs / 60_000)}m (threshold: ${Math.round(staleThresholdMs / 60_000)}m)`,
+        );
+        return;
+      }
+    } catch (err) {
+      // Never let the watchdog crash the gateway it is supposed to protect.
+      log.error(`self-watchdog check failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
