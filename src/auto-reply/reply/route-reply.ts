@@ -100,10 +100,6 @@ export async function routeReply(params: RouteReplyParams): Promise<RouteReplyRe
       : cfg.messages?.responsePrefix;
   const normalized = normalizeReplyPayload(payload, {
     responsePrefix,
-    enableSlackInteractiveReplies: plugin?.messaging?.enableInteractiveReplies?.({
-      cfg,
-      accountId,
-    }),
   });
   if (!normalized) {
     return { ok: true };

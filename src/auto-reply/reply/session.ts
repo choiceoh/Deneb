@@ -39,7 +39,6 @@ import { normalizeSessionDeliveryFields } from "../../utils/delivery-context.js"
 import { resolveCommandAuthorization } from "../command-auth.js";
 import type { MsgContext, TemplateContext } from "../templating.js";
 import { resolveEffectiveResetTargetSessionKey } from "./acp-reset-target.js";
-import { parseDiscordParentChannelFromSessionKey } from "./discord-parent-channel.js";
 import { normalizeInboundTextNewlines } from "./inbound-text.js";
 import { stripMentions, stripStructuralPrefixes } from "./mentions.js";
 import {
@@ -120,25 +119,7 @@ function resolveAcpResetBindingContext(ctx: MsgContext): {
   if (!conversationId) {
     return null;
   }
-  let parentConversationId: string | undefined;
-  if (channelRaw === "discord" && normalizedThreadId) {
-    const fromContext = normalizeConversationText(ctx.ThreadParentId);
-    if (fromContext && fromContext !== conversationId) {
-      parentConversationId = fromContext;
-    } else {
-      const fromParentSession = parseDiscordParentChannelFromSessionKey(ctx.ParentSessionKey);
-      if (fromParentSession && fromParentSession !== conversationId) {
-        parentConversationId = fromParentSession;
-      } else {
-        const fromTargets = resolveConversationIdFromTargets({
-          targets: [ctx.OriginatingTo, ctx.To],
-        });
-        if (fromTargets && fromTargets !== conversationId) {
-          parentConversationId = fromTargets;
-        }
-      }
-    }
-  }
+  const parentConversationId: string | undefined = undefined;
   return {
     channel: channelRaw,
     accountId,

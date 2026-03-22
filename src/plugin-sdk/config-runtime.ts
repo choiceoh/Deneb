@@ -13,7 +13,6 @@ export * from "../config/talk.js";
 export * from "../config/agent-limits.js";
 export * from "../cron/store.js";
 export * from "../sessions/model-overrides.js";
-export type * from "../config/types.slack.js";
 export {
   loadSessionStore,
   readSessionUpdatedAt,

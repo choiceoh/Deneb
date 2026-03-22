@@ -43,7 +43,6 @@ export * from "../channels/plugins/runtime-forwarders.js";
 export * from "../channels/plugins/target-resolvers.js";
 export * from "../channels/plugins/threading-helpers.js";
 export * from "../channels/plugins/status-issues/shared.js";
-export * from "../channels/plugins/whatsapp-heartbeat.js";
 export {
   buildComputedAccountStatusSnapshot,
   buildTokenChannelStatusSummary,
@@ -68,8 +67,3 @@ export {
   normalizeInteractiveReply,
   resolveInteractiveTextFallback,
 } from "../interactive/payload.js";
-
-/** Stub: Signal target normalization (original normalize/signal module removed). */
-export function normalizeSignalMessagingTarget(target: string): string {
-  return target;
-}
