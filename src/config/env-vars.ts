@@ -60,11 +60,6 @@ export function collectConfigServiceEnvVars(cfg?: DenebConfig): Record<string, s
   return collectConfigEnvVarsByTarget(cfg);
 }
 
-/** @deprecated Use `collectConfigRuntimeEnvVars` or `collectConfigServiceEnvVars`. */
-export function collectConfigEnvVars(cfg?: DenebConfig): Record<string, string> {
-  return collectConfigRuntimeEnvVars(cfg);
-}
-
 export function createConfigRuntimeEnv(
   cfg: DenebConfig,
   baseEnv: NodeJS.ProcessEnv = process.env,

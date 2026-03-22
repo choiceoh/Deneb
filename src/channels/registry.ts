@@ -43,7 +43,6 @@ export const CHAT_CHANNEL_ALIASES: Record<string, string> = {
 };
 
 // ── Helpers (기존 API 호환) ──
-const _WEBSITE_URL = "https://deneb.dev";
 
 export function listRegisteredChannelPluginEntries(): {
   plugin: { id?: string; meta?: { aliases?: string[] } };
