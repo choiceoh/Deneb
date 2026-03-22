@@ -72,6 +72,8 @@ export interface FinishedSession {
 
 const runningSessions = new Map<string, ProcessSession>();
 const finishedSessions = new Map<string, FinishedSession>();
+// Exit waiters: resolved when a session exits, avoiding busy-wait polling.
+const exitWaiters = new Map<string, Set<() => void>>();
 
 let sweeper: NodeJS.Timeout | null = null;
 
@@ -152,6 +154,44 @@ export function markExited(
   session.exitSignal = exitSignal;
   session.tail = tail(session.aggregated, 2000);
   moveToFinished(session, status);
+  // Notify any waiters that the session has exited.
+  const waiters = exitWaiters.get(session.id);
+  if (waiters) {
+    exitWaiters.delete(session.id);
+    for (const resolve of waiters) {
+      resolve();
+    }
+  }
+}
+
+/**
+ * Wait for a session to exit or timeout, using event-based notification
+ * instead of busy-wait polling. Returns immediately if already exited.
+ */
+export function waitForExit(session: ProcessSession, timeoutMs: number): Promise<void> {
+  if (session.exited || timeoutMs <= 0) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      const waiters = exitWaiters.get(session.id);
+      if (waiters) {
+        waiters.delete(onExit);
+        if (waiters.size === 0) {
+          exitWaiters.delete(session.id);
+        }
+      }
+      resolve();
+    }, timeoutMs);
+    timer.unref();
+    const onExit = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const waiters = exitWaiters.get(session.id) ?? new Set();
+    waiters.add(onExit);
+    exitWaiters.set(session.id, waiters);
+  });
 }
 
 export function markBackgrounded(session: ProcessSession) {

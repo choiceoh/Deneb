@@ -187,20 +187,20 @@ export function waitForEmbeddedPiRunEnd(sessionId: string, timeoutMs = 15_000): 
   diag.debug(`waiting for run end: sessionId=${sessionId} timeoutMs=${timeoutMs}`);
   return new Promise((resolve) => {
     const waiters = EMBEDDED_RUN_WAITERS.get(sessionId) ?? new Set();
-    const waiter: EmbeddedRunWaiter = {
-      resolve,
-      timer: setTimeout(
-        () => {
-          waiters.delete(waiter);
-          if (waiters.size === 0) {
-            EMBEDDED_RUN_WAITERS.delete(sessionId);
-          }
-          diag.warn(`wait timeout: sessionId=${sessionId} timeoutMs=${timeoutMs}`);
-          resolve(false);
-        },
-        Math.max(100, timeoutMs),
-      ),
-    };
+    const timer = setTimeout(
+      () => {
+        waiters.delete(waiter);
+        if (waiters.size === 0) {
+          EMBEDDED_RUN_WAITERS.delete(sessionId);
+        }
+        diag.warn(`wait timeout: sessionId=${sessionId} timeoutMs=${timeoutMs}`);
+        resolve(false);
+      },
+      Math.max(100, timeoutMs),
+    );
+    // Unref so this timer does not prevent graceful process shutdown.
+    timer.unref();
+    const waiter: EmbeddedRunWaiter = { resolve, timer };
     waiters.add(waiter);
     EMBEDDED_RUN_WAITERS.set(sessionId, waiters);
     if (!ACTIVE_EMBEDDED_RUNS.has(sessionId)) {

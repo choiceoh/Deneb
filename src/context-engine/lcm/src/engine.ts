@@ -1333,6 +1333,11 @@ export class LcmContextEngine implements ContextEngine {
     }
   }
 
+  /** Clear pending session operation queues to prevent stale Promise references on shutdown. */
+  clearSessionQueues(): void {
+    this.sessionOperationQueues.clear();
+  }
+
   // ── Public accessors for retrieval (used by subagent expansion) ─────────
 
   getRetrieval(): RetrievalEngine {

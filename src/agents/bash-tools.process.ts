@@ -14,6 +14,7 @@ import {
   listRunningSessions,
   markExited,
   setJobTtlMs,
+  waitForExit,
 } from "./bash-process-registry.js";
 import { deriveSessionName, pad, sliceLogLines, truncateMiddle } from "./bash-tools.shared.js";
 import { recordCommandPoll, resetCommandPollCount } from "./command-poll-backoff.js";
@@ -328,12 +329,8 @@ export function createProcessTool(
           }
           const pollWaitMs = resolvePollWaitMs(params.timeout);
           if (pollWaitMs > 0 && !scopedSession.exited) {
-            const deadline = Date.now() + pollWaitMs;
-            while (!scopedSession.exited && Date.now() < deadline) {
-              await new Promise((resolve) =>
-                setTimeout(resolve, Math.max(0, Math.min(250, deadline - Date.now()))),
-              );
-            }
+            // Wait for exit event instead of busy-polling with 250ms intervals.
+            await waitForExit(scopedSession, pollWaitMs);
           }
           const { stdout, stderr } = drainSession(scopedSession);
           const exited = scopedSession.exited;
