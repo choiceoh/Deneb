@@ -1240,6 +1240,8 @@ async function agentCommandInternal(
         });
       }
     } catch (err) {
+      const errorEndedAt = Date.now();
+      const errorDurationMs = errorEndedAt - startedAt;
       if (!lifecycleEnded) {
         emitAgentEvent({
           runId,
@@ -1247,10 +1249,48 @@ async function agentCommandInternal(
           data: {
             phase: "error",
             startedAt,
-            endedAt: Date.now(),
+            endedAt: errorEndedAt,
             error: String(err),
           },
         });
+      }
+      const isFailover = err instanceof FailoverError;
+      const failoverReason = isFailover ? err.reason : undefined;
+      log.error("agent run failed", {
+        event: "agent_run_failed",
+        runId,
+        sessionKey,
+        agentId: sessionAgentId,
+        provider,
+        model,
+        durationMs: errorDurationMs,
+        failoverReason,
+        error: err instanceof Error ? err.message : String(err),
+        consoleMessage: `agent run FAILED: runId=${runId} provider=${provider}/${model} duration=${errorDurationMs}ms error=${err instanceof Error ? err.message : String(err)}`,
+      });
+      // Send critical alert for severe failures (billing, auth, repeated errors).
+      if (
+        isFailover &&
+        (failoverReason === "billing" ||
+          failoverReason === "auth_permanent" ||
+          failoverReason === "auth")
+      ) {
+        void import("../infra/agent-critical-alert.js").then(({ deliverCriticalAlert }) =>
+          deliverCriticalAlert({
+            cfg,
+            sessionKey: sessionKey ?? runId,
+            entry: sessionEntry,
+            severity: failoverReason === "billing" ? "fatal" : "error",
+            title: failoverReason === "billing" ? "LLM Billing Error" : "LLM Authentication Error",
+            details: err instanceof Error ? err.message : String(err),
+            runId,
+            agentId: sessionAgentId,
+            provider,
+            model,
+          }).catch(() => {
+            // best-effort alert delivery
+          }),
+        );
       }
       throw err;
     }
@@ -1273,6 +1313,20 @@ async function agentCommandInternal(
     }
 
     const payloads = result.payloads ?? [];
+    const totalDurationMs = Date.now() - startedAt;
+    log.info("agent run completed", {
+      event: "agent_run_completed",
+      runId,
+      sessionKey,
+      agentId: sessionAgentId,
+      provider: fallbackProvider,
+      model: fallbackModel,
+      durationMs: totalDurationMs,
+      aborted: result.meta.aborted ?? false,
+      stopReason: result.meta.stopReason,
+      payloadCount: payloads.length,
+      consoleMessage: `agent run OK: runId=${runId} provider=${fallbackProvider}/${fallbackModel} duration=${totalDurationMs}ms payloads=${payloads.length}`,
+    });
     return await deliverAgentCommandResult({
       cfg,
       deps,

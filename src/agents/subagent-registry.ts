@@ -382,6 +382,37 @@ async function completeSubagentRun(params: {
     persistSubagentRuns();
   }
 
+  const runtimeMs = getSubagentSessionRuntimeMs(entry);
+  const outcomeStatus = params.outcome.status;
+  const outcomeError = params.outcome.status === "error" ? params.outcome.error : undefined;
+  if (outcomeStatus === "error" || outcomeStatus === "timeout" || outcomeStatus === "unknown") {
+    log.warn("subagent run completed with issue", {
+      event: "subagent_completed",
+      runId: params.runId,
+      childSessionKey: entry.childSessionKey,
+      requesterSessionKey: entry.requesterSessionKey,
+      label: entry.label,
+      model: entry.model,
+      outcome: outcomeStatus,
+      reason: params.reason,
+      error: outcomeError,
+      runtimeMs,
+      consoleMessage: `subagent ${outcomeStatus}: runId=${params.runId} label=${entry.label ?? "-"} reason=${params.reason}${outcomeError ? ` error=${outcomeError.slice(0, 150)}` : ""}${runtimeMs ? ` runtime=${runtimeMs}ms` : ""}`,
+    });
+  } else {
+    log.info("subagent run completed", {
+      event: "subagent_completed",
+      runId: params.runId,
+      childSessionKey: entry.childSessionKey,
+      label: entry.label,
+      model: entry.model,
+      outcome: outcomeStatus,
+      reason: params.reason,
+      runtimeMs,
+      consoleMessage: `subagent OK: runId=${params.runId} label=${entry.label ?? "-"} reason=${params.reason}${runtimeMs ? ` runtime=${runtimeMs}ms` : ""}`,
+    });
+  }
+
   try {
     await persistSubagentSessionTiming(entry);
   } catch (err) {
@@ -1154,6 +1185,19 @@ export function registerSubagentRun(params: {
     attachmentsDir: params.attachmentsDir,
     attachmentsRootDir: params.attachmentsRootDir,
     retainAttachmentsOnKeep: params.retainAttachmentsOnKeep,
+  });
+  log.info("subagent registered", {
+    event: "subagent_registered",
+    runId: params.runId,
+    childSessionKey: params.childSessionKey,
+    requesterSessionKey: params.requesterSessionKey,
+    label: params.label,
+    model: params.model,
+    spawnMode,
+    cleanup: params.cleanup,
+    task: params.task?.slice(0, 200),
+    timeoutSeconds: runTimeoutSeconds || undefined,
+    consoleMessage: `subagent registered: runId=${params.runId} child=${params.childSessionKey} label=${params.label ?? "-"} model=${params.model ?? "-"} mode=${spawnMode}`,
   });
   ensureListener();
   persistSubagentRuns();

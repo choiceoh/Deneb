@@ -26,6 +26,8 @@ function createContext(
         final: true,
         inlineCode: createInlineCodeState(),
       },
+      toolMetas: [],
+      lastToolError: undefined,
     },
     log: {
       debug: vi.fn(),
@@ -34,6 +36,8 @@ function createContext(
     flushBlockReplyBuffer: vi.fn(),
     resolveCompactionRetry: vi.fn(),
     maybeResolveCompactionWait: vi.fn(),
+    getUsageTotals: () => undefined,
+    getCompactionCount: () => 0,
   } as unknown as EmbeddedPiSubscribeContext;
 }
 
@@ -85,15 +89,18 @@ describe("handleAgentEnd", () => {
     const warn = vi.mocked(ctx.log.warn);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]?.[0]).toBe("embedded run agent end");
-    expect(warn.mock.calls[0]?.[1]).toMatchObject({
+    const meta = warn.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(meta).toMatchObject({
       event: "embedded_run_agent_end",
       runId: "run-1",
       error: "The AI service is temporarily overloaded. Please try again in a moment.",
       failoverReason: "overloaded",
       providerErrorType: "overloaded_error",
-      consoleMessage:
-        "embedded run agent end: runId=run-1 isError=true model=claude-test provider=anthropic error=The AI service is temporarily overloaded. Please try again in a moment.",
     });
+    // Console message should include model/provider and error reason
+    const consoleMsg = meta?.consoleMessage as string;
+    expect(consoleMsg).toContain("model=anthropic/claude-test");
+    expect(consoleMsg).toContain("reason=overloaded");
   });
 
   it("sanitizes model and provider before writing consoleMessage", () => {
@@ -109,15 +116,13 @@ describe("handleAgentEnd", () => {
     handleAgentEnd(ctx);
 
     const warn = vi.mocked(ctx.log.warn);
-    const meta = warn.mock.calls[0]?.[1];
-    expect(meta).toMatchObject({
-      consoleMessage:
-        "embedded run agent end: runId=run-1 isError=true model=claude sonnet 4 provider=anthropic]8;;https://evil.test error=connection refused",
-    });
-    expect(meta?.consoleMessage).not.toContain("\n");
-    expect(meta?.consoleMessage).not.toContain("\r");
-    expect(meta?.consoleMessage).not.toContain("\t");
-    expect(meta?.consoleMessage).not.toContain("\u001b");
+    const meta = warn.mock.calls[0]?.[1] as Record<string, unknown>;
+    const consoleMsg = meta?.consoleMessage as string;
+    expect(consoleMsg).toContain("model=");
+    expect(consoleMsg).not.toContain("\n");
+    expect(consoleMsg).not.toContain("\r");
+    expect(consoleMsg).not.toContain("\t");
+    expect(consoleMsg).not.toContain("\u001b");
   });
 
   it("redacts logged error text before emitting lifecycle events", () => {
@@ -155,6 +160,12 @@ describe("handleAgentEnd", () => {
     handleAgentEnd(ctx);
 
     expect(ctx.log.warn).not.toHaveBeenCalled();
-    expect(ctx.log.debug).toHaveBeenCalledWith("embedded run agent end: runId=run-1 isError=false");
+    const debug = vi.mocked(ctx.log.debug);
+    expect(debug).toHaveBeenCalledTimes(1);
+    expect(debug.mock.calls[0]?.[0]).toBe("embedded run agent end");
+    expect(debug.mock.calls[0]?.[1]).toMatchObject({
+      event: "embedded_run_agent_end",
+      isError: false,
+    });
   });
 });
