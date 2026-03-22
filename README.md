@@ -14,9 +14,9 @@
 
 ---
 
-**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. Starting from OpenClaw, Deneb intentionally shed mobile clients, unused channels, and enterprise plugins to create a lean 230K-line server engine — then built a custom Lossless Context Management (LCM) system with DAG-based compaction, proactive background summarization, and full memory recall across sessions.
+**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. Deneb is a lean 230K-line server engine with a custom Lossless Context Management (LCM) system — DAG-based compaction, proactive background summarization, and full memory recall across sessions.
 
-Deneb is actively diverging from OpenClaw. We're not maintaining a fork — we're building a different program with a different focus: **memory-first, local-first, lean-first.**
+**Memory-first, local-first, lean-first.**
 
 ## ⭐ Why Deneb
 
@@ -35,7 +35,7 @@ Most AI agent frameworks hit the same wall: when conversations grow long, contex
 
 ### Intentional Simplification
 
-We deliberately support fewer channels and architectures than OpenClaw — not because we can't, but because **a smaller surface lets us move faster and ship fewer bugs.**
+We deliberately support fewer channels and architectures — **a smaller surface lets us move faster and ship fewer bugs.**
 
 Rather than spreading thin across 20+ channels and a broad user base, we focus on delivering the best possible experience to a focused group of users. This means:
 
@@ -79,7 +79,7 @@ Spawn and manage sub-agents with bounded contexts for complex tasks.
 
 **Telegram** is the only channel with full, battle-tested production support — reactions, inline buttons, polls, topics, group policies, and all core features.
 
-Other channel configs (Discord, Signal, Slack, WhatsApp, iMessage, Google Chat, MS Teams) exist at the schema level as stubs inherited from OpenClaw. These are not actively maintained — enabling them will likely encounter bugs. They remain in the codebase as config-level scaffolding for future implementation, not as working features.
+Other channel configs (Discord, Signal, Slack, WhatsApp, iMessage, Google Chat, MS Teams) exist at the schema level as stubs. These are not actively maintained — enabling them will likely encounter bugs. They remain in the codebase as config-level scaffolding for future implementation, not as working features.
 
 We chose to ship one channel that works perfectly over eight that sort of work.
 
@@ -128,7 +128,7 @@ pnpm build
 node deneb.mjs onboard
 ```
 
-Or edit `~/.openclaw/openclaw.json` directly.
+Or edit `~/.deneb/deneb.json` directly.
 
 ### Run
 
@@ -171,7 +171,7 @@ pnpm format     # Format
 
 ## 📄 License
 
-MIT — Originally forked from [OpenClaw](https://github.com/openclaw/openclaw). Deneb is an independent project with its own roadmap and direction.
+MIT
 
 ---
 

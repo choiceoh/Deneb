@@ -472,7 +472,7 @@ export async function autoMigrateLegacyStateDir(params: {
   autoMigrateStateDirChecked = true;
 
   const env = params.env ?? process.env;
-  if (env.DENEB_STATE_DIR?.trim() || env.OPENCLAW_STATE_DIR?.trim()) {
+  if (env.DENEB_STATE_DIR?.trim()) {
     return { migrated: false, skipped: true, changes: [], warnings: [] };
   }
 
