@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Self-Hosted AI Agent with Lossless Memory</strong><br>
-  <a href="https://github.com/choiceoh/Deneb/releases"><img src="https://img.shields.io/badge/version-3.5.1-blue" alt="Version"></a>
+  <a href="https://github.com/choiceoh/Deneb/releases"><img src="https://img.shields.io/badge/version-3.5.2-blue" alt="Version"></a>
   <a href="https://github.com/choiceoh/Deneb/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.x-3178c6" alt="TypeScript"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22+-339933" alt="Node.js"></a>
