@@ -84,7 +84,7 @@ function toStr(value: unknown): string | undefined {
 /**
  * Resolve LCM configuration with three-tier precedence:
  *   1. Environment variables (highest)
- *   2. Config object (from plugins.entries.lcm.config, with lossless-claw fallback)
+ *   2. Config object (from plugins.entries.lcm.config)
  *   3. Hardcoded defaults (lowest)
  */
 export function resolveLcmConfig(

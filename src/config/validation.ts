@@ -491,8 +491,8 @@ function validateConfigObjectWithPluginsBase(
     opts?: { warnOnly?: boolean },
   ) => {
     if (LEGACY_REMOVED_PLUGIN_IDS.has(pluginId)) {
-      // Silently skip — these are known removed/built-in plugins whose config
-      // entries are still read by native code (e.g. lossless-claw → LCM).
+      // Silently skip — these are former plugins now inlined into core.
+      // Config entries may persist until `deneb doctor` migrates them.
       return;
     }
     if (opts?.warnOnly) {

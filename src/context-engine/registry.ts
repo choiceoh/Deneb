@@ -335,5 +335,12 @@ export async function resolveContextEngine(config?: DenebConfig): Promise<Contex
     );
   }
 
-  return wrapContextEngineWithSessionKeyCompat(await entry.factory());
+  const engine = await entry.factory();
+
+  // Skip the legacy sessionKey compat wrapper for engines that natively accept it.
+  if (engine.info.acceptsSessionKey) {
+    return engine;
+  }
+
+  return wrapContextEngineWithSessionKeyCompat(engine);
 }

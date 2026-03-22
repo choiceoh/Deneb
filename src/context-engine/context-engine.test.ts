@@ -376,16 +376,16 @@ describe("Registry tests", () => {
     expect(getContextEngineFactory("public-owner-guard")).toBe(ownedFactory);
   });
 
-  it("public registerContextEngine reserves the default legacy id", () => {
-    const legacyAttempt = (
+  it("public registerContextEngine reserves the default lcm id", () => {
+    const lcmAttempt = (
       registerContextEngine as unknown as (
         id: string,
         factory: ContextEngineFactory,
         opts?: { owner?: string },
       ) => ContextEngineRegistrationResult
-    )("legacy", () => new MockContextEngine(), { owner: "core" });
+    )("lcm", () => new MockContextEngine(), { owner: "core" });
 
-    expect(legacyAttempt).toEqual({
+    expect(lcmAttempt).toEqual({
       ok: false,
       existingOwner: "core",
     });
@@ -501,10 +501,28 @@ describe("Legacy sessionKey compatibility", () => {
 });
 
 describe("Default engine selection", () => {
-  // Ensure both legacy and a custom test engine are registered before these tests.
+  // Ensure legacy, lcm, and a custom test engine are registered before these tests.
   beforeEach(() => {
     // Registration is idempotent (Map.set), so calling again is safe.
     registerLegacyContextEngine();
+    // Register a lightweight LCM stub (default engine) so we don't need SQLite.
+    registerContextEngineForOwner(
+      "lcm",
+      () => ({
+        info: { id: "lcm", name: "LCM Stub", version: "0.0.0", ownsCompaction: true },
+        async ingest() {
+          return { ingested: true };
+        },
+        async assemble({ messages }) {
+          return { messages, estimatedTokens: 0 };
+        },
+        async compact() {
+          return { ok: true, compacted: false };
+        },
+      }),
+      "core",
+      { allowSameOwnerRefresh: true },
+    );
     // Register a lightweight custom stub so we don't need external resources.
     registerContextEngine("test-engine", () => {
       const engine: ContextEngine = {
@@ -523,9 +541,9 @@ describe("Default engine selection", () => {
     });
   });
 
-  it("resolveContextEngine() with no config returns the default ('legacy') engine", async () => {
+  it("resolveContextEngine() with no config returns the default ('lcm') engine", async () => {
     const engine = await resolveContextEngine();
-    expect(engine.info.id).toBe("legacy");
+    expect(engine.info.id).toBe("lcm");
   });
 
   it("resolveContextEngine() with config contextEngine='legacy' returns legacy engine", async () => {
@@ -610,7 +628,7 @@ describe("LegacyContextEngine parity", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("Initialization guard", () => {
-  it("ensureContextEnginesInitialized() is idempotent and registers legacy", async () => {
+  it("ensureContextEnginesInitialized() is idempotent and registers both engines", async () => {
     const { ensureContextEnginesInitialized } = await import("./init.js");
 
     expect(() => ensureContextEnginesInitialized()).not.toThrow();
@@ -618,6 +636,7 @@ describe("Initialization guard", () => {
 
     const ids = listContextEngineIds();
     expect(ids).toContain("legacy");
+    expect(ids).toContain("lcm");
   });
 });
 

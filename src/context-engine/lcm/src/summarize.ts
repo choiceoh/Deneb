@@ -13,7 +13,7 @@ export type LcmSummarizeFn = (
   options?: LcmSummarizeOptions,
 ) => Promise<string>;
 
-export type LcmSummarizerLegacyParams = {
+export type LcmSummarizerParams = {
   provider?: unknown;
   model?: unknown;
   config?: unknown;
@@ -44,7 +44,7 @@ function normalizeProviderId(provider: string): string {
  * When model ids are custom/forward-compat, this hint allows deps.complete to
  * construct a valid pi-ai Model object even if getModel(provider, model) misses.
  */
-function resolveProviderApiFromLegacyConfig(config: unknown, provider: string): string | undefined {
+function resolveProviderApiFromConfig(config: unknown, provider: string): string | undefined {
   if (!config || typeof config !== "object") {
     return undefined;
   }
@@ -625,14 +625,14 @@ function buildDeterministicFallbackSummary(text: string, targetTokens: number): 
 }
 
 /**
- * Builds a model-backed LCM summarize callback from runtime legacy params.
+ * Builds a model-backed LCM summarize callback from runtime params.
  *
  * Returns `undefined` when model/provider context is unavailable so callers can
  * choose a fallback summarizer.
  */
-export async function createLcmSummarizeFromLegacyParams(params: {
+export async function createLcmSummarize(params: {
   deps: LcmDependencies;
-  legacyParams: LcmSummarizerLegacyParams;
+  runtimeParams: LcmSummarizerParams;
   customInstructions?: string;
 }): Promise<LcmSummarizeFn | undefined> {
   const readModelRef = (value: unknown): string => {
@@ -644,8 +644,8 @@ export async function createLcmSummarizeFromLegacyParams(params: {
   };
 
   const runtimeConfig =
-    params.legacyParams.config && typeof params.legacyParams.config === "object"
-      ? (params.legacyParams.config as {
+    params.runtimeParams.config && typeof params.runtimeParams.config === "object"
+      ? (params.runtimeParams.config as {
           agents?: {
             defaults?: {
               compaction?: {
@@ -663,10 +663,7 @@ export async function createLcmSummarizeFromLegacyParams(params: {
         })
       : undefined;
 
-  // Read from canonical "lcm" entry, falling back to legacy "lossless-claw" for backward compat.
-  const lcmPluginConfig = runtimeConfig?.plugins?.entries?.["lcm"]?.config;
-  const legacyPluginConfig = runtimeConfig?.plugins?.entries?.["lossless-claw"]?.config;
-  const nestedPluginConfig = lcmPluginConfig ?? legacyPluginConfig;
+  const nestedPluginConfig = runtimeConfig?.plugins?.entries?.["lcm"]?.config;
 
   const summaryLevels = [
     {
@@ -710,9 +707,9 @@ export async function createLcmSummarizeFromLegacyParams(params: {
   }
 
   const providerHint =
-    typeof params.legacyParams.provider === "string" ? params.legacyParams.provider.trim() : "";
+    typeof params.runtimeParams.provider === "string" ? params.runtimeParams.provider.trim() : "";
   const modelHint =
-    typeof params.legacyParams.model === "string" ? params.legacyParams.model.trim() : "";
+    typeof params.runtimeParams.model === "string" ? params.runtimeParams.model.trim() : "";
   const modelRef = resolvedSummary?.model || modelHint || undefined;
 
   const resolveProviderHint =
@@ -738,15 +735,15 @@ export async function createLcmSummarizeFromLegacyParams(params: {
     return undefined;
   }
   const authProfileId =
-    typeof params.legacyParams.authProfileId === "string" &&
-    params.legacyParams.authProfileId.trim()
-      ? params.legacyParams.authProfileId.trim()
+    typeof params.runtimeParams.authProfileId === "string" &&
+    params.runtimeParams.authProfileId.trim()
+      ? params.runtimeParams.authProfileId.trim()
       : undefined;
   const agentDir =
-    typeof params.legacyParams.agentDir === "string" && params.legacyParams.agentDir.trim()
-      ? params.legacyParams.agentDir.trim()
+    typeof params.runtimeParams.agentDir === "string" && params.runtimeParams.agentDir.trim()
+      ? params.runtimeParams.agentDir.trim()
       : undefined;
-  const providerApi = resolveProviderApiFromLegacyConfig(params.legacyParams.config, provider);
+  const providerApi = resolveProviderApiFromConfig(params.runtimeParams.config, provider);
 
   const condensedTargetTokens =
     Number.isFinite(params.deps.config.condensedTargetTokens) &&
@@ -768,7 +765,7 @@ export async function createLcmSummarizeFromLegacyParams(params: {
     const apiKey = await params.deps.getApiKey(provider, model, {
       profileId: authProfileId,
       agentDir,
-      runtimeConfig: params.legacyParams.config,
+      runtimeConfig: params.runtimeParams.config,
     });
     const targetTokens = resolveTargetTokens({
       inputTokens: estimateTokens(text),
@@ -802,7 +799,7 @@ export async function createLcmSummarizeFromLegacyParams(params: {
       providerApi,
       authProfileId,
       agentDir,
-      runtimeConfig: params.legacyParams.config,
+      runtimeConfig: params.runtimeParams.config,
       system: LCM_SUMMARIZER_SYSTEM_PROMPT,
       messages: [
         {
@@ -860,7 +857,7 @@ export async function createLcmSummarizeFromLegacyParams(params: {
           providerApi,
           authProfileId,
           agentDir,
-          runtimeConfig: params.legacyParams.config,
+          runtimeConfig: params.runtimeParams.config,
           system: LCM_SUMMARIZER_SYSTEM_PROMPT,
           messages: [
             {

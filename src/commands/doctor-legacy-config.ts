@@ -413,9 +413,8 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
   normalizeBrowserSsrFPolicyAlias();
   normalizeLegacyNanoBananaSkill();
 
-  // Migrate lossless-claw plugin entry keys into config sub-object.
-  // After nativization (v3.150), these keys must live under
-  // plugins.entries.lossless-claw.config to pass PluginEntrySchema (.strict()).
+  // Migrate lossless-claw plugin entry: move top-level LCM keys into its
+  // .config sub-object so PluginEntrySchema (.strict()) passes.
   const LCM_CONFIG_KEYS = new Set([
     "leafTargetTokens",
     "condensedTargetTokens",
