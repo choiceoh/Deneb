@@ -5,3 +5,6 @@ export function formatExecCommandForDisplay(command: string): string {
 export function formatExecCommandPreview(command: string): string {
   return command;
 }
+export function sanitizeExecApprovalDisplayText(text: string): string {
+  return text;
+}

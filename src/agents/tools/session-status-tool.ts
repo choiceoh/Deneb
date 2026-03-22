@@ -387,6 +387,8 @@ export function createSessionStatusTool(opts?: {
         ? `🕒 Time: ${userTime} (${userTimezone})`
         : `🕒 Time zone: ${userTimezone}`;
 
+      const providerForCard = resolved.entry.providerOverride?.trim() || configured.provider;
+      const agentDir = resolveStorePath(cfg.session?.store, { agentId });
       const agentDefaults = cfg.agents?.defaults ?? {};
       const defaultLabel = `${configured.provider}/${configured.model}`;
       const agentModel =

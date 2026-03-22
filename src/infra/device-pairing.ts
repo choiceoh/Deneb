@@ -2,6 +2,7 @@
 export type PairedDevice = {
   deviceId: string;
   displayName?: string;
+  platform?: string;
   roles?: string[];
   scopes?: string[];
   tokens?: unknown[];
@@ -32,7 +33,9 @@ export function summarizeDeviceTokens(_tokens?: unknown[]): unknown[] {
   return [];
 }
 
-export async function requestDevicePairing(): Promise<unknown> {
+export async function requestDevicePairing(
+  _params?: unknown,
+): Promise<{ requestId?: string } | null> {
   return null;
 }
 
@@ -42,4 +45,8 @@ export async function rotateDeviceToken(): Promise<unknown> {
 
 export async function revokeDeviceToken(): Promise<unknown> {
   return null;
+}
+
+export function getPairedDevice(_deviceId: string): PairedDevice | undefined {
+  return undefined;
 }

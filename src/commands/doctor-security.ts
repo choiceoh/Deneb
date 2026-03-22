@@ -145,9 +145,9 @@ export async function noteSecurityWarnings(cfg: DenebConfig) {
   }) => {
     const dmPolicy = params.dmPolicy;
     const policyPath = params.policyPath ?? `${params.allowFromPath}policy`;
-    const hasWildcard = true;
-    const allowCount = 1;
-    const isMultiUserDm = false;
+    const hasWildcard = true as boolean;
+    const allowCount = 1 as number;
+    const isMultiUserDm = false as boolean;
     const dmScope = cfg.session?.dmScope ?? "main";
 
     if (dmPolicy === "open") {

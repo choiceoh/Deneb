@@ -51,15 +51,27 @@ export type { AnyAgentTool, DenebPluginApi } from "../plugins/types.js";
 export { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
 export type { RuntimeEnv } from "../runtime.js";
 export type { WizardPrompter } from "../wizard/prompts.js";
-export { formatAllowFromLowercase } from "./allow-from.js";
-export { resolveSenderCommandAuthorization } from "./command-auth.js";
+// Solo-dev stub for removed allow-from module.
+export function formatAllowFromLowercase(): unknown[] {
+  return [];
+}
+// Solo-dev stub for removed command-auth module.
+export function resolveSenderCommandAuthorization(): { authorized: true } {
+  return { authorized: true };
+}
 export { resolveChannelAccountConfigBasePath } from "./config-paths.js";
-export {
-  evaluateGroupRouteAccessForPolicy,
-  resolveSenderScopedGroupPolicy,
-} from "./group-access.js";
+// Solo-dev stubs for removed group-access module.
+export function evaluateGroupRouteAccessForPolicy(): { allowed: true } {
+  return { allowed: true };
+}
+export function resolveSenderScopedGroupPolicy(): unknown {
+  return { groupPolicy: "open" };
+}
 export { loadOutboundMediaFromUrl } from "./outbound-media.js";
-export { createChannelPairingController } from "./channel-pairing.js";
+// Solo-dev stub for removed channel-pairing module.
+export function createChannelPairingController(): unknown {
+  return {};
+}
 export { buildChannelSendResult } from "./channel-send-result.js";
 export type { OutboundReplyPayload } from "./reply-payload.js";
 export {

@@ -1,9 +1,29 @@
-import {
-  resolveChannelGroupRequireMention,
-  resolveChannelGroupToolsPolicy,
-  type GroupToolPolicyConfig,
-} from "deneb/plugin-sdk/channel-policy";
 import { type ChannelGroupContext } from "deneb/plugin-sdk/channel-runtime";
+// GroupToolPolicyConfig imported from the zalouser SDK surface which re-exports it.
+type GroupToolPolicyConfig = { allow?: string[]; alsoAllow?: string[]; deny?: string[] };
+
+// Inline stubs for removed channel-policy module.
+// Solo-dev: no channel-level group policy overrides.
+function resolveChannelGroupRequireMention(_params: {
+  cfg: unknown;
+  channel: string;
+  groupId: string | null | undefined;
+  accountId?: string | null;
+}): boolean | undefined {
+  return undefined;
+}
+function resolveChannelGroupToolsPolicy(_params: {
+  cfg: unknown;
+  channel: string;
+  groupId: string | null | undefined;
+  accountId?: string | null;
+  senderId?: string | null;
+  senderName?: string | null;
+  senderUsername?: string | null;
+  senderE164?: string | null;
+}): GroupToolPolicyConfig | undefined {
+  return undefined;
+}
 
 function parseTelegramGroupId(value?: string | null) {
   const raw = value?.trim() ?? "";

@@ -68,7 +68,7 @@ export type {
   ProviderUsageSnapshot,
   UsageProviderId,
   UsageWindow,
-} from "../infra/provider-usage.types.js";
+} from "../infra/provider-usage.js";
 export type { ChannelMessageActionContext } from "../channels/plugins/types.js";
 export type { ChannelPlugin } from "../channels/plugins/types.plugin.js";
 export type { DenebPluginApi } from "../plugins/types.js";

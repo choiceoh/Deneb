@@ -21,3 +21,7 @@ export {
 } from "../channels/plugins/config-helpers.js";
 
 export { getChatChannelMeta } from "../channels/registry.js";
+export { formatPairingApproveHint } from "../channels/plugins/helpers.js";
+
+// Solo-dev stub for removed pairing-message module.
+export const PAIRING_APPROVED_MESSAGE = "Pairing approved.";

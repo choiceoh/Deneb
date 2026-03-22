@@ -69,3 +69,16 @@ export {
 export function normalizeSignalMessagingTarget(target: string): string {
   return target;
 }
+
+// Solo-dev stubs for removed pairing system.
+export function createPairingPrefixStripper(_re: RegExp): (raw: string) => string {
+  return (raw: string) => raw;
+}
+export function createTextPairingAdapter(_opts: {
+  idLabel: string;
+  message: string;
+  normalizeAllowEntry: (raw: string) => string;
+  notify: (params: { cfg: unknown; id: string; message: string }) => Promise<void>;
+}): unknown {
+  return {};
+}

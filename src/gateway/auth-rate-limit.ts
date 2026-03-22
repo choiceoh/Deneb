@@ -25,6 +25,12 @@ export const AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET = "shared-secret";
 export const AUTH_RATE_LIMIT_SCOPE_DEVICE_TOKEN = "device-token";
 export const AUTH_RATE_LIMIT_SCOPE_HOOK_AUTH = "hook-auth";
 
+export type RateLimitCheckResult = { allowed: boolean; remaining: number; retryAfterMs: number };
+
+export function normalizeRateLimitClientIp(ip?: string | null): string {
+  return ip?.trim() || "127.0.0.1";
+}
+
 export function createAuthRateLimiter(_config?: RateLimitConfig): AuthRateLimiter {
   return {
     check: () => ({ allowed: true, remaining: 999, retryAfterMs: 0 }),

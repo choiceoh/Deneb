@@ -1,8 +1,6 @@
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-// Exec approval system removed for solo-dev simplification.
-// Inline type aliases and stub functions for removed module.
-type ExecAsk = string;
-type ExecSecurity = string;
+// Exec approval types imported from the retained stub.
+import type { ExecAsk, ExecSecurity } from "../infra/exec-approvals.js";
 function evaluateShellAllowlist(_params: Record<string, unknown>): {
   allowlistMatches: Array<{ pattern: string }>;
   analysisOk: boolean;
@@ -102,7 +100,7 @@ export async function processGatewayAllowlist(
   });
   const allowlistEval = evaluateShellAllowlist({
     command: params.command,
-    allowlist: approvals.allowlist,
+    allowlist: approvals.agent.allowlist,
     safeBins: params.safeBins,
     safeBinProfiles: params.safeBinProfiles,
     cwd: params.workdir,
@@ -141,7 +139,13 @@ export async function processGatewayAllowlist(
         continue;
       }
       seen.add(match.pattern);
-      recordAllowlistUse(approvals.file, params.agentId, match, params.command, resolvedPath);
+      recordAllowlistUse(
+        approvals.file as unknown,
+        params.agentId,
+        match,
+        params.command,
+        resolvedPath,
+      );
     }
   };
   const hasHeredocSegment = allowlistEval.segments.some((segment) =>

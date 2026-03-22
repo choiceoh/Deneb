@@ -1,4 +1,5 @@
 // Stub: exec approval forwarder removed for solo-dev simplification.
-export function createExecApprovalForwarder(_opts?: unknown): { stop: () => void } {
+export type ExecApprovalForwarder = { stop: () => void };
+export function createExecApprovalForwarder(_opts?: unknown): ExecApprovalForwarder {
   return { stop: () => {} };
 }

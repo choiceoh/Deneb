@@ -33,3 +33,5 @@ export * from "../infra/system-message.ts";
 export * from "../infra/tmp-deneb-dir.js";
 export * from "../infra/transport-ready.js";
 export * from "../infra/wsl.ts";
+export * from "../infra/exec-approvals.js";
+export * from "../infra/exec-approval-session-target.js";

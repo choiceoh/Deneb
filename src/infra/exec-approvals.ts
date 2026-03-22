@@ -48,32 +48,58 @@ export function maxAsk(a: ExecAsk, b: ExecAsk): ExecAsk {
   return order[Math.max(order.indexOf(a), order.indexOf(b))] ?? "on-miss";
 }
 
-export type SystemRunApprovalBinding = { boundTo?: string };
-export type SystemRunApprovalFileOperand = { path: string; action: string };
-export type SystemRunApprovalPlan = { steps?: unknown[] };
+export type SystemRunApprovalBinding = {
+  boundTo?: string;
+  argv: string[];
+  cwd: string | null;
+  agentId: string | null;
+  sessionKey: string | null;
+  envHash: string | null;
+};
+export type SystemRunApprovalFileOperand = {
+  argvIndex: number;
+  path: string;
+  sha256: string;
+  action?: string;
+};
+export type SystemRunApprovalPlan = {
+  argv: string[];
+  cwd?: string | null;
+  commandText: string;
+  commandPreview?: string | null;
+  agentId?: string | null;
+  sessionKey?: string | null;
+  mutableFileOperand?: SystemRunApprovalFileOperand;
+  steps?: unknown[];
+};
 
 export type ExecApprovalRequestPayload = {
   command: string;
-  commandPreview?: string;
-  commandArgv?: string[];
-  envKeys?: string[];
-  systemRunBinding?: SystemRunApprovalBinding;
-  systemRunPlan?: SystemRunApprovalPlan;
-  cwd?: string;
-  nodeId?: string;
-  host?: ExecHost;
-  security?: ExecSecurity;
-  ask?: ExecAsk;
-  agentId?: string;
-  resolvedPath?: string;
-  sessionKey?: string;
-  turnSourceChannel?: string;
-  turnSourceTo?: string;
-  turnSourceAccountId?: string;
-  turnSourceThreadId?: string;
+  commandPreview?: string | null;
+  commandArgv?: string[] | null;
+  envKeys?: string[] | null;
+  systemRunBinding?: SystemRunApprovalBinding | null;
+  systemRunPlan?: SystemRunApprovalPlan | null;
+  cwd?: string | null;
+  nodeId?: string | null;
+  host?: string | null;
+  security?: string | null;
+  ask?: string | null;
+  agentId?: string | null;
+  resolvedPath?: string | null;
+  sessionKey?: string | null;
+  turnSourceChannel?: string | null;
+  turnSourceTo?: string | null;
+  turnSourceAccountId?: string | null;
+  turnSourceThreadId?: string | number | null;
 };
 
-export type ExecApprovalRequest = ExecApprovalRequestPayload & { id: string; ts: number };
+export type ExecApprovalRequest = {
+  id: string;
+  ts: number;
+  expiresAtMs: number;
+  request: ExecApprovalRequestPayload;
+};
 
 export type ExecApprovalDecision = "allow-once" | "allow-always" | "deny";
 
@@ -88,7 +114,7 @@ export type ExecApprovalResolved = {
 export type ExecApprovalsDefaults = {
   security?: ExecSecurity;
   ask?: ExecAsk;
-  askFallback?: ExecApprovalDecision;
+  askFallback?: ExecApprovalDecision | "allowlist" | "full" | "deny";
   autoAllowSkills?: boolean;
 };
 
@@ -114,6 +140,8 @@ export type ExecApprovalsFile = {
 export type ExecApprovalsSnapshot = { file: ExecApprovalsFile; hash: string };
 
 export type ExecApprovalsResolved = ExecApprovalsDefaults & {
+  security: ExecSecurity;
+  ask: ExecAsk;
   allowlist: ExecAllowlistEntry[];
 };
 
@@ -157,16 +185,16 @@ export function ensureExecApprovals(): ExecApprovalsFile {
 export function resolveExecApprovals(
   _agentId?: string,
   _overrides?: ExecApprovalsDefaultOverrides,
-): ExecApprovalsResolved {
-  return { security: "full", ask: "off", allowlist: [] };
+): { file: ExecApprovalsFile; agent: ExecApprovalsResolved } {
+  return { file: { version: 1 }, agent: { security: "full", ask: "off", allowlist: [] } };
 }
 
 export function resolveExecApprovalsFromFile(_params: {
   file: ExecApprovalsFile;
   agentId?: string;
   overrides?: ExecApprovalsDefaultOverrides;
-}): ExecApprovalsResolved {
-  return { security: "full", ask: "off", allowlist: [] };
+}): { file: ExecApprovalsFile; agent: ExecApprovalsResolved } {
+  return { file: _params.file, agent: { security: "full", ask: "off", allowlist: [] } };
 }
 
 export function requiresExecApproval(): boolean {
@@ -180,3 +208,63 @@ export function recordAllowlistUse(): void {}
 export function matchAllowlist(): boolean {
   return true;
 }
+
+// Solo-dev stub types for exec approval reply/display/session-target.
+export type ExecApprovalReplyDecision = "allow-once" | "allow-always" | "deny";
+
+export type ExecApprovalPendingReplyParams = {
+  approvalId: string;
+  approvalSlug: string;
+  approvalCommandId: string;
+  command: string;
+  cwd?: string;
+  host: "gateway" | "node";
+  nodeId?: string;
+  expiresAtMs?: number;
+  nowMs?: number;
+};
+
+export function resolveExecApprovalCommandDisplay(request: Record<string, unknown>): {
+  commandText: string;
+} {
+  const command = typeof request.command === "string" ? request.command : "";
+  const commandPreview = typeof request.commandPreview === "string" ? request.commandPreview : "";
+  return { commandText: commandPreview || command };
+}
+
+export function buildExecApprovalPendingReplyPayload(params: ExecApprovalPendingReplyParams): {
+  text: string;
+  channelData?: Record<string, unknown>;
+} {
+  const text = `⏳ Exec approval pending [${params.approvalSlug}]: ${params.command}`;
+  return {
+    text,
+    channelData: {
+      execApproval: {
+        approvalId: params.approvalId,
+        command: params.command,
+        cwd: params.cwd,
+        host: params.host,
+        nodeId: params.nodeId,
+      },
+    },
+  };
+}
+
+export function getExecApprovalReplyMetadata(payload: unknown): { approvalId: string } | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const p = payload as Record<string, unknown>;
+  const channelData = p.channelData as Record<string, unknown> | undefined;
+  if (!channelData?.execApproval) {
+    return null;
+  }
+  const ea = channelData.execApproval as Record<string, unknown>;
+  return typeof ea.approvalId === "string" ? { approvalId: ea.approvalId } : null;
+}
+
+export type ExecApprovalInitiatingSurfaceState = {
+  kind: "enabled" | "available" | "disabled" | "unsupported";
+  channelLabel?: string;
+};
