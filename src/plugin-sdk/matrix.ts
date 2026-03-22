@@ -13,12 +13,19 @@ export {
 } from "../agents/tools/common.js";
 export type { ReplyPayload } from "../auto-reply/types.js";
 export { resolveAckReaction } from "../agents/identity.js";
-export {
-  compileAllowlist,
-  resolveCompiledAllowlistMatch,
-  resolveAllowlistCandidates,
-  resolveAllowlistMatchByCandidates,
-} from "../channels/allowlist-match.js";
+// Solo-dev stubs for removed allowlist-match module.
+export function compileAllowlist(): unknown {
+  return {};
+}
+export function resolveCompiledAllowlistMatch(): { allowed: true } {
+  return { allowed: true };
+}
+export function resolveAllowlistCandidates(): string[] {
+  return [];
+}
+export function resolveAllowlistMatchByCandidates(): { allowed: true } {
+  return { allowed: true };
+}
 export {
   addAllowlistUserEntriesFromConfigEntry,
   buildAllowlistResolutionSummary,
@@ -33,8 +40,15 @@ export { resolveControlCommandGate } from "../channels/command-gating.js";
 export type { NormalizedLocation } from "../channels/location.js";
 export { formatLocationText, toLocationContext } from "../channels/location.js";
 export { logInboundDrop, logTypingFailure } from "../channels/logging.js";
-export type { AllowlistMatch } from "../channels/plugins/allowlist-match.js";
-export { formatAllowlistMatchMeta } from "../channels/plugins/allowlist-match.js";
+// Solo-dev stubs for removed plugins/allowlist-match module.
+export type AllowlistMatch<T extends string = string> = {
+  allowed: boolean;
+  matchKey?: string;
+  matchSource?: T;
+};
+export function formatAllowlistMatchMeta(): string {
+  return "";
+}
 export {
   buildChannelKeyCandidates,
   resolveChannelEntryMatch,
@@ -55,7 +69,8 @@ export {
   setTopLevelChannelGroupPolicy,
 } from "../channels/plugins/setup-wizard-helpers.js";
 export { promptChannelAccessConfig } from "../channels/plugins/setup-group-access.js";
-export { PAIRING_APPROVED_MESSAGE } from "../channels/plugins/pairing-message.js";
+// Solo-dev stub for removed pairing-message module.
+export const PAIRING_APPROVED_MESSAGE = "Pairing approved.";
 export {
   applyAccountNameToChannelSection,
   moveSingleAccountChannelSectionToDefaultAccount,
@@ -137,11 +152,17 @@ export { normalizeStringEntries } from "../shared/string-normalization.js";
 export { formatDocsLink } from "../terminal/links.js";
 export { redactSensitiveText } from "../logging/redact.js";
 export type { WizardPrompter } from "../wizard/prompts.js";
-export {
-  evaluateGroupRouteAccessForPolicy,
-  resolveSenderScopedGroupPolicy,
-} from "./group-access.js";
-export { createChannelPairingController } from "./channel-pairing.js";
+// Solo-dev stubs for removed group-access module.
+export function evaluateGroupRouteAccessForPolicy(): { allowed: true } {
+  return { allowed: true };
+}
+export function resolveSenderScopedGroupPolicy(): unknown {
+  return { groupPolicy: "open" };
+}
+// Solo-dev stub for removed channel-pairing module.
+export function createChannelPairingController(): unknown {
+  return {};
+}
 export { readJsonFileWithFallback, writeJsonFileAtomically } from "./json-store.js";
 export { formatResolvedUnresolvedNote } from "./resolution-notes.js";
 export { runPluginCommandWithTimeout } from "./run-command.js";

@@ -1,6 +1,22 @@
 // Public binding helpers for both runtime plugin-owned bindings and
 // config-driven channel bindings.
 
+// Solo-dev stubs for removed pairing/allowlist store.
+export async function readChannelAllowFromStore(
+  _channel: string,
+  _env?: Record<string, string | undefined>,
+  _accountId?: string,
+): Promise<string[]> {
+  return [];
+}
+
+export async function upsertChannelPairingRequest(_params: {
+  channel: string;
+  id: string;
+  accountId?: string;
+  meta?: unknown;
+}): Promise<void> {}
+
 export {
   createConversationBindingRecord,
   getConversationBindingCapabilities,
@@ -56,9 +72,6 @@ export {
   registerSessionBindingAdapter,
   unregisterSessionBindingAdapter,
 } from "../infra/outbound/session-binding-service.js";
-export * from "../pairing/pairing-challenge.js";
-export * from "../pairing/pairing-messages.js";
-export * from "../pairing/pairing-store.js";
 export {
   buildPluginBindingApprovalCustomId,
   buildPluginBindingDeclinedText,

@@ -1,13 +1,20 @@
 import crypto from "node:crypto";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-import {
-  type ExecApprovalsFile,
-  type ExecAsk,
-  type ExecSecurity,
-  evaluateShellAllowlist,
-  requiresExecApproval,
-  resolveExecApprovalsFromFile,
-} from "../infra/exec-approvals.js";
+// Exec approval types imported from the retained stub.
+import type { ExecAsk, ExecSecurity, ExecApprovalsFile } from "../infra/exec-approvals.js";
+import { resolveExecApprovalsFromFile } from "../infra/exec-approvals.js";
+// Inline stub functions for removed exec analysis modules.
+function evaluateShellAllowlist(_params: Record<string, unknown>): {
+  allowlistMatches: Array<{ pattern: string }>;
+  analysisOk: boolean;
+  allowlistSatisfied: boolean;
+  segments: Array<{ argv: string[]; resolution?: { resolvedPath?: string } }>;
+} {
+  return { allowlistMatches: [], analysisOk: true, allowlistSatisfied: true, segments: [] };
+}
+function requiresExecApproval(_params: Record<string, unknown>): boolean {
+  return false;
+}
 import { detectCommandObfuscation } from "../infra/exec-obfuscation-detect.js";
 import { buildNodeShellCommand } from "../infra/node-shell.js";
 import { parsePreparedSystemRunPayload } from "../infra/system-run-approval-context.js";
@@ -149,7 +156,7 @@ export async function executeNodeHostCommand(
         // Allowlist-only precheck; safe bins are node-local and may diverge.
         const allowlistEval = evaluateShellAllowlist({
           command: params.command,
-          allowlist: resolved.allowlist,
+          allowlist: resolved.agent.allowlist,
           safeBins: new Set(),
           cwd: params.workdir,
           env: params.env,

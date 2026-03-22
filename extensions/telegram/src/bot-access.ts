@@ -1,10 +1,43 @@
-import {
-  firstDefined,
-  isSenderIdAllowed,
-  mergeDmAllowFromSources,
-} from "deneb/plugin-sdk/channel-runtime";
-import type { AllowlistMatch } from "deneb/plugin-sdk/channel-runtime";
 import { createSubsystemLogger } from "deneb/plugin-sdk/runtime-env";
+
+// Inline stubs for removed channel-runtime symbols.
+// Solo-dev: allowlists always allow.
+export type AllowlistMatch<T extends string = string> = {
+  allowed: boolean;
+  matchKey?: string;
+  matchSource?: T;
+};
+
+function firstDefined<T>(...values: Array<T | undefined>): T | undefined {
+  for (const v of values) {
+    if (v !== undefined) return v;
+  }
+  return undefined;
+}
+
+function isSenderIdAllowed(
+  allow: { entries: string[]; hasWildcard: boolean; hasEntries: boolean },
+  senderId?: string,
+  _strict?: boolean,
+): boolean {
+  if (allow.hasWildcard) return true;
+  if (!allow.hasEntries) return false;
+  return Boolean(senderId && allow.entries.includes(senderId));
+}
+
+function mergeDmAllowFromSources(params: {
+  allowFrom?: Array<string | number>;
+  storeAllowFrom?: string[];
+  dmPolicy?: string;
+}): Array<string | number> {
+  const entries: Array<string | number> = [...(params.allowFrom ?? [])];
+  if (params.storeAllowFrom) {
+    for (const s of params.storeAllowFrom) {
+      if (!entries.includes(s)) entries.push(s);
+    }
+  }
+  return entries;
+}
 
 export type NormalizedAllowFrom = {
   entries: string[];

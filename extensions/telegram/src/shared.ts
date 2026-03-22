@@ -1,5 +1,21 @@
-import { formatAllowFromLowercase } from "deneb/plugin-sdk/allow-from";
 import { createScopedChannelConfigAdapter } from "deneb/plugin-sdk/channel-config-helpers";
+
+// Inline stub for removed allow-from module.
+function formatAllowFromLowercase(params: {
+  allowFrom?: unknown;
+  stripPrefixRe?: RegExp;
+}): string[] {
+  const entries = Array.isArray(params.allowFrom) ? params.allowFrom : [];
+  return entries
+    .map((e: unknown) => {
+      let s = String(e).toLowerCase().trim();
+      if (params.stripPrefixRe) {
+        s = s.replace(params.stripPrefixRe, "");
+      }
+      return s;
+    })
+    .filter(Boolean) as string[];
+}
 import { createChannelPluginBase } from "deneb/plugin-sdk/core";
 import {
   buildChannelConfigSchema,

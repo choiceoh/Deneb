@@ -189,18 +189,6 @@
       "types": "./dist/plugin-sdk/account-resolution.d.ts",
       "default": "./dist/plugin-sdk/account-resolution.js"
     },
-    "./plugin-sdk/allow-from": {
-      "types": "./dist/plugin-sdk/allow-from.d.ts",
-      "default": "./dist/plugin-sdk/allow-from.js"
-    },
-    "./plugin-sdk/allowlist-resolution": {
-      "types": "./dist/plugin-sdk/allowlist-resolution.d.ts",
-      "default": "./dist/plugin-sdk/allowlist-resolution.js"
-    },
-    "./plugin-sdk/allowlist-config-edit": {
-      "types": "./dist/plugin-sdk/allowlist-config-edit.d.ts",
-      "default": "./dist/plugin-sdk/allowlist-config-edit.js"
-    },
     "./plugin-sdk/boolean-param": {
       "types": "./dist/plugin-sdk/boolean-param.d.ts",
       "default": "./dist/plugin-sdk/boolean-param.js"
@@ -229,21 +217,9 @@
       "types": "./dist/plugin-sdk/channel-lifecycle.d.ts",
       "default": "./dist/plugin-sdk/channel-lifecycle.js"
     },
-    "./plugin-sdk/channel-pairing": {
-      "types": "./dist/plugin-sdk/channel-pairing.d.ts",
-      "default": "./dist/plugin-sdk/channel-pairing.js"
-    },
-    "./plugin-sdk/channel-policy": {
-      "types": "./dist/plugin-sdk/channel-policy.d.ts",
-      "default": "./dist/plugin-sdk/channel-policy.js"
-    },
     "./plugin-sdk/channel-send-result": {
       "types": "./dist/plugin-sdk/channel-send-result.d.ts",
       "default": "./dist/plugin-sdk/channel-send-result.js"
-    },
-    "./plugin-sdk/group-access": {
-      "types": "./dist/plugin-sdk/group-access.d.ts",
-      "default": "./dist/plugin-sdk/group-access.js"
     },
     "./plugin-sdk/directory-runtime": {
       "types": "./dist/plugin-sdk/directory-runtime.d.ts",
@@ -292,10 +268,6 @@
     "./plugin-sdk/provider-stream": {
       "types": "./dist/plugin-sdk/provider-stream.d.ts",
       "default": "./dist/plugin-sdk/provider-stream.js"
-    },
-    "./plugin-sdk/provider-usage": {
-      "types": "./dist/plugin-sdk/provider-usage.d.ts",
-      "default": "./dist/plugin-sdk/provider-usage.js"
     },
     "./plugin-sdk/provider-web-search": {
       "types": "./dist/plugin-sdk/provider-web-search.d.ts",
@@ -356,10 +328,6 @@
     "./plugin-sdk/zai": {
       "types": "./dist/plugin-sdk/zai.d.ts",
       "default": "./dist/plugin-sdk/zai.js"
-    },
-    "./plugin-sdk/device-pair": {
-      "types": "./dist/plugin-sdk/device-pair.d.ts",
-      "default": "./dist/plugin-sdk/device-pair.js"
     },
     "./plugin-sdk/web-media": {
       "types": "./dist/plugin-sdk/web-media.d.ts",

@@ -127,9 +127,9 @@ export function resolveSystemRunApprovalRuntimeContext(params: {
       ok: true,
       plan: normalizedPlan,
       argv: [...normalizedPlan.argv],
-      cwd: normalizedPlan.cwd,
-      agentId: normalizedPlan.agentId,
-      sessionKey: normalizedPlan.sessionKey,
+      cwd: normalizedPlan.cwd ?? null,
+      agentId: normalizedPlan.agentId ?? null,
+      sessionKey: normalizedPlan.sessionKey ?? null,
       commandText: normalizedPlan.commandText,
     };
   }
