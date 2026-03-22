@@ -71,7 +71,7 @@ export type {
 } from "../infra/provider-usage.js";
 export type { ChannelMessageActionContext } from "../channels/plugins/types.js";
 export type { ChannelPlugin } from "../channels/plugins/types.plugin.js";
-export type { DenebPluginApi } from "../plugins/types.js";
+export type { DenebPluginApi, PluginCapability } from "../plugins/types.js";
 export type { PluginRuntime } from "../plugins/runtime/types.js";
 
 export { emptyPluginConfigSchema } from "../plugins/config-schema.js";
@@ -187,6 +187,8 @@ type DefinePluginEntryOptions = {
   name: string;
   description: string;
   kind?: DenebPluginDefinition["kind"];
+  /** Static capability hints for pre-registration discovery. */
+  capabilities?: DenebPluginDefinition["capabilities"];
   configSchema?: DenebPluginConfigSchema | (() => DenebPluginConfigSchema);
   register: (api: DenebPluginApi) => void;
 };
@@ -197,7 +199,7 @@ type DefinedPluginEntry = {
   description: string;
   configSchema: DenebPluginConfigSchema;
   register: NonNullable<DenebPluginDefinition["register"]>;
-} & Pick<DenebPluginDefinition, "kind">;
+} & Pick<DenebPluginDefinition, "kind" | "capabilities">;
 
 type CreateChannelPluginBaseOptions<TResolvedAccount> = {
   id: ChannelPlugin<TResolvedAccount>["id"];
@@ -247,6 +249,7 @@ export function definePluginEntry({
   name,
   description,
   kind,
+  capabilities,
   configSchema = emptyPluginConfigSchema,
   register,
 }: DefinePluginEntryOptions): DefinedPluginEntry {
@@ -255,6 +258,7 @@ export function definePluginEntry({
     name,
     description,
     ...(kind ? { kind } : {}),
+    ...(capabilities ? { capabilities } : {}),
     configSchema: resolvePluginConfigSchema(configSchema),
     register,
   };
@@ -274,6 +278,7 @@ export function defineChannelPluginEntry<TPlugin extends ChannelPlugin>({
     id,
     name,
     description,
+    capabilities: ["channel"],
     configSchema,
     register(api: DenebPluginApi) {
       setRuntime?.(api.runtime);

@@ -17,6 +17,7 @@ import {
 } from "../../media-understanding/runtime.js";
 import { listSpeechVoices, textToSpeech, textToSpeechTelephony } from "../../tts/runtime.js";
 import { listWebSearchProviders, runWebSearch } from "../../web-search/runtime.js";
+import { getPluginRuntimeGatewayRequestScope } from "./gateway-request-scope.js";
 import { createRuntimeAgent } from "./runtime-agent.js";
 import { createRuntimeChannel } from "./runtime-channel.js";
 import { createRuntimeConfig } from "./runtime-config.js";
@@ -57,56 +58,16 @@ function createUnavailableSubagentRuntime(): PluginRuntime["subagent"] {
   };
 }
 
-// ── Process-global gateway subagent runtime ─────────────────────────
-// The gateway creates a real subagent runtime during startup, but gateway-owned
-// plugin registries may be loaded (and cached) before the gateway path runs.
-// A process-global holder lets explicitly gateway-bindable runtimes resolve the
-// active gateway subagent dynamically without changing the default behavior for
-// ordinary plugin runtimes.
-
-const GATEWAY_SUBAGENT_SYMBOL: unique symbol = Symbol.for(
-  "deneb.plugin.gatewaySubagentRuntime",
-) as unknown as typeof GATEWAY_SUBAGENT_SYMBOL;
-
-type GatewaySubagentState = {
-  subagent: PluginRuntime["subagent"] | undefined;
-};
-
-const gatewaySubagentState: GatewaySubagentState = (() => {
-  const g = globalThis as typeof globalThis & {
-    [GATEWAY_SUBAGENT_SYMBOL]?: GatewaySubagentState;
-  };
-  const existing = g[GATEWAY_SUBAGENT_SYMBOL];
-  if (existing) {
-    return existing;
-  }
-  const created: GatewaySubagentState = { subagent: undefined };
-  g[GATEWAY_SUBAGENT_SYMBOL] = created;
-  return created;
-})();
-
-/**
- * Set the process-global gateway subagent runtime.
- * Called during gateway startup so that gateway-bindable plugin runtimes can
- * resolve subagent methods dynamically even when their registry was cached
- * before the gateway finished loading plugins.
- */
-export function setGatewaySubagentRuntime(subagent: PluginRuntime["subagent"]): void {
-  gatewaySubagentState.subagent = subagent;
-}
-
-/**
- * Reset the process-global gateway subagent runtime.
- * Used by tests to avoid leaking gateway state across module reloads.
- */
-export function clearGatewaySubagentRuntime(): void {
-  gatewaySubagentState.subagent = undefined;
-}
+// ── Scoped gateway subagent resolution ──────────────────────────────
+// Plugin runtimes that need the gateway subagent resolve it from the
+// request-scoped AsyncLocalStorage context (gateway-request-scope.ts).
+// This avoids process-global state and enables proper test isolation
+// and concurrent gateway instances.
 
 /**
  * Create a late-binding subagent that resolves to:
  * 1. An explicitly provided subagent (from runtimeOptions), OR
- * 2. The process-global gateway subagent when the caller explicitly opts in, OR
+ * 2. The gateway subagent from the current request scope when the caller opts in, OR
  * 3. The unavailable fallback (throws with a clear error message).
  */
 function createLateBindingSubagent(
@@ -123,8 +84,9 @@ function createLateBindingSubagent(
   }
 
   return new Proxy(unavailable, {
-    get(_target, prop, _receiver) {
-      const resolved = gatewaySubagentState.subagent ?? unavailable;
+    get(_target, prop) {
+      const scope = getPluginRuntimeGatewayRequestScope();
+      const resolved = scope?.subagent ?? unavailable;
       return Reflect.get(resolved, prop, resolved);
     },
   });

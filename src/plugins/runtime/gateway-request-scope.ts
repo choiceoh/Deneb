@@ -3,12 +3,15 @@ import type {
   GatewayRequestContext,
   GatewayRequestOptions,
 } from "../../gateway/server-methods/types.js";
+import type { PluginRuntime } from "./types.js";
 
 export type PluginRuntimeGatewayRequestScope = {
   context?: GatewayRequestContext;
   client?: GatewayRequestOptions["client"];
   isWebchatConnect: GatewayRequestOptions["isWebchatConnect"];
   pluginId?: string;
+  /** Gateway subagent runtime, resolved per-request instead of via process global. */
+  subagent?: PluginRuntime["subagent"];
 };
 
 const PLUGIN_RUNTIME_GATEWAY_REQUEST_SCOPE_KEY: unique symbol = Symbol.for(

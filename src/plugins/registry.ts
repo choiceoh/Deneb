@@ -46,6 +46,7 @@ import type {
   PluginFormat,
   PluginLogger,
   PluginOrigin,
+  PluginCapability,
   PluginKind,
   PluginRegistrationMode,
   PluginHookName,
@@ -167,6 +168,7 @@ export type PluginRecord = {
   bundleFormat?: PluginBundleFormat;
   bundleCapabilities?: string[];
   kind?: PluginKind;
+  capabilities?: PluginCapability[];
   source: string;
   rootDir?: string;
   origin: PluginOrigin;

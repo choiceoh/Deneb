@@ -1139,6 +1139,7 @@ export function loadDenebPlugins(options: PluginLoadOptions = {}): PluginRegistr
       });
     }
     record.kind = definition?.kind ?? record.kind;
+    record.capabilities = definition?.capabilities ?? record.capabilities;
 
     if (record.kind === "memory" && memorySlot === record.id) {
       memorySlotMatched = true;

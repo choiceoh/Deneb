@@ -410,8 +410,13 @@ export async function startGatewayServer(
   const emptyPluginRegistry = createEmptyPluginRegistry();
   let pluginRegistry = emptyPluginRegistry;
   let baseGatewayMethods = baseMethods;
+  let gatewaySubagent: ReturnType<typeof loadGatewayPlugins>["gatewaySubagent"] | undefined;
   if (!minimalTestGateway) {
-    ({ pluginRegistry, gatewayMethods: baseGatewayMethods } = loadGatewayPlugins({
+    ({
+      pluginRegistry,
+      gatewayMethods: baseGatewayMethods,
+      gatewaySubagent,
+    } = loadGatewayPlugins({
       cfg: cfgAtStart,
       workspaceDir: defaultWorkspaceDir,
       log,
@@ -806,6 +811,12 @@ export async function startGatewayServer(
     broadcastVoiceWakeChanged,
   });
 
+  // Attach the gateway subagent to the context so it flows into per-request
+  // AsyncLocalStorage scopes, replacing the former process-global holder.
+  if (gatewaySubagent) {
+    gatewayRequestContext.gatewaySubagent = gatewaySubagent;
+  }
+
   // Store the gateway context as a fallback for plugin subagent dispatch
   // in non-WS paths (Telegram polling, WhatsApp, etc.) where no per-request
   // scope is set via AsyncLocalStorage.
@@ -867,7 +878,7 @@ export async function startGatewayServer(
   let browserControl: Awaited<ReturnType<typeof startBrowserControlServerIfEnabled>> = null;
   if (!minimalTestGateway) {
     if (deferredConfiguredChannelPluginIds.length > 0) {
-      ({ pluginRegistry } = loadGatewayPlugins({
+      ({ pluginRegistry, gatewaySubagent } = loadGatewayPlugins({
         cfg: cfgAtStart,
         workspaceDir: defaultWorkspaceDir,
         log,
@@ -875,6 +886,7 @@ export async function startGatewayServer(
         baseMethods,
         logDiagnostics: false,
       }));
+      gatewayRequestContext.gatewaySubagent = gatewaySubagent;
     }
     ({ browserControl, pluginServices } = await startGatewaySidecars({
       cfg: cfgAtStart,

@@ -99,7 +99,7 @@ async function createSubagentRuntime(
     debug: vi.fn(),
   };
   loadDenebPlugins.mockReturnValue(createRegistry([]));
-  serverPlugins.loadGatewayPlugins({
+  const { gatewaySubagent } = serverPlugins.loadGatewayPlugins({
     cfg,
     workspaceDir: "/tmp",
     log,
@@ -112,16 +112,17 @@ async function createSubagentRuntime(
   if (call?.runtimeOptions?.allowGatewaySubagentBinding !== true) {
     throw new Error("Expected loadGatewayPlugins to opt into gateway subagent binding");
   }
-  const runtimeModule = await import("../plugins/runtime/index.js");
-  return runtimeModule.createPluginRuntime({ allowGatewaySubagentBinding: true }).subagent;
+  // The subagent returned by loadGatewayPlugins is used directly; no global state needed.
+  if (!gatewaySubagent) {
+    throw new Error("Expected subagent runtime from loadGatewayPlugins");
+  }
+  return gatewaySubagent;
 }
 
 beforeEach(async () => {
   loadDenebPlugins.mockReset();
   primeConfiguredBindingRegistry.mockClear().mockReturnValue({ bindingCount: 0, channelCount: 0 });
   handleGatewayRequest.mockReset();
-  const runtimeModule = await import("../plugins/runtime/index.js");
-  runtimeModule.clearGatewaySubagentRuntime();
   handleGatewayRequest.mockImplementation(async (opts: HandleGatewayRequestOptions) => {
     switch (opts.req.method) {
       case "agent":
@@ -143,8 +144,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  const runtimeModule = await import("../plugins/runtime/index.js");
-  runtimeModule.clearGatewaySubagentRuntime();
   vi.resetModules();
 });
 

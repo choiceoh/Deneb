@@ -77,6 +77,10 @@ export type PluginRuntimeCore = {
   events: {
     onAgentEvent: typeof import("../../infra/agent-events.js").onAgentEvent;
     onSessionTranscriptUpdate: typeof import("../../sessions/transcript-events.js").onSessionTranscriptUpdate;
+    /** Publish a named event to all subscribed plugins. */
+    publish: (event: string, payload: unknown) => void;
+    /** Subscribe to a named event. Returns an unsubscribe function. */
+    subscribe: (event: string, handler: (payload: unknown) => void) => () => void;
   };
   logging: {
     shouldLogVerbose: typeof import("../../globals.js").shouldLogVerbose;

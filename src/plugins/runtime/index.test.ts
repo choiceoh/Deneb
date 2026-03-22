@@ -4,16 +4,12 @@ import { onAgentEvent } from "../../infra/agent-events.js";
 import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
 import * as execModule from "../../process/exec.js";
 import { onSessionTranscriptUpdate } from "../../sessions/transcript-events.js";
-import {
-  clearGatewaySubagentRuntime,
-  createPluginRuntime,
-  setGatewaySubagentRuntime,
-} from "./index.js";
+import { withPluginRuntimeGatewayRequestScope } from "./gateway-request-scope.js";
+import { createPluginRuntime } from "./index.js";
 
 describe("plugin runtime command execution", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    clearGatewaySubagentRuntime();
   });
 
   it("exposes runtime.system.runCommandWithTimeout by default", async () => {
@@ -53,6 +49,42 @@ describe("plugin runtime command execution", () => {
     const runtime = createPluginRuntime();
     expect(runtime.events.onAgentEvent).toBe(onAgentEvent);
     expect(runtime.events.onSessionTranscriptUpdate).toBe(onSessionTranscriptUpdate);
+  });
+
+  it("exposes runtime.events pub/sub for cross-plugin communication", () => {
+    const runtime = createPluginRuntime();
+    expect(typeof runtime.events.publish).toBe("function");
+    expect(typeof runtime.events.subscribe).toBe("function");
+  });
+
+  it("delivers published events to subscribers", () => {
+    const runtimeA = createPluginRuntime();
+    const runtimeB = createPluginRuntime();
+    const received: unknown[] = [];
+
+    const unsubscribe = runtimeB.events.subscribe("test.event", (payload) => {
+      received.push(payload);
+    });
+
+    runtimeA.events.publish("test.event", { key: "value" });
+    expect(received).toEqual([{ key: "value" }]);
+
+    unsubscribe();
+    runtimeA.events.publish("test.event", { key: "second" });
+    expect(received).toEqual([{ key: "value" }]);
+  });
+
+  it("isolates events by name", () => {
+    const runtime = createPluginRuntime();
+    const received: string[] = [];
+
+    const unsub = runtime.events.subscribe("channel.a", () => received.push("a"));
+    runtime.events.publish("channel.b", {});
+    expect(received).toEqual([]);
+
+    runtime.events.publish("channel.a", {});
+    expect(received).toEqual(["a"]);
+    unsub();
   });
 
   it("exposes runtime.mediaUnderstanding helpers and keeps stt as an alias", () => {
@@ -109,36 +141,43 @@ describe("plugin runtime command execution", () => {
     expect(runtime.modelAuth.getApiKeyForModel).not.toBe(rawGetApiKey);
   });
 
-  it("keeps subagent unavailable by default even after gateway initialization", async () => {
+  it("keeps subagent unavailable by default even inside a gateway scope", () => {
     const runtime = createPluginRuntime();
-    setGatewaySubagentRuntime({
+    const subagent = {
       run: vi.fn(),
       waitForRun: vi.fn(),
       getSessionMessages: vi.fn(),
       getSession: vi.fn(),
       deleteSession: vi.fn(),
-    });
+    };
 
-    expect(() => runtime.subagent.run({ sessionKey: "s-1", message: "hello" })).toThrow(
-      "Plugin runtime subagent methods are only available during a gateway request.",
-    );
+    withPluginRuntimeGatewayRequestScope({ isWebchatConnect: () => false, subagent }, () => {
+      // Default runtime does NOT opt into gateway subagent binding.
+      expect(() => runtime.subagent.run({ sessionKey: "s-1", message: "hello" })).toThrow(
+        "Plugin runtime subagent methods are only available during a gateway request.",
+      );
+    });
   });
 
-  it("late-binds to the gateway subagent when explicitly enabled", async () => {
+  it("late-binds to the gateway subagent from the request scope when enabled", async () => {
     const run = vi.fn().mockResolvedValue({ runId: "run-1" });
     const runtime = createPluginRuntime({ allowGatewaySubagentBinding: true });
-
-    setGatewaySubagentRuntime({
+    const subagent = {
       run,
       waitForRun: vi.fn(),
       getSessionMessages: vi.fn(),
       getSession: vi.fn(),
       deleteSession: vi.fn(),
-    });
+    };
 
-    await expect(runtime.subagent.run({ sessionKey: "s-2", message: "hello" })).resolves.toEqual({
-      runId: "run-1",
-    });
-    expect(run).toHaveBeenCalledWith({ sessionKey: "s-2", message: "hello" });
+    await withPluginRuntimeGatewayRequestScope(
+      { isWebchatConnect: () => false, subagent },
+      async () => {
+        await expect(
+          runtime.subagent.run({ sessionKey: "s-2", message: "hello" }),
+        ).resolves.toEqual({ runId: "run-1" });
+        expect(run).toHaveBeenCalledWith({ sessionKey: "s-2", message: "hello" });
+      },
+    );
   });
 });

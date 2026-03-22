@@ -45,6 +45,22 @@
       "types": "./dist/plugin-sdk/core.d.ts",
       "default": "./dist/plugin-sdk/core.js"
     },
+    "./plugin-sdk/channel": {
+      "types": "./dist/plugin-sdk/channel.d.ts",
+      "default": "./dist/plugin-sdk/channel.js"
+    },
+    "./plugin-sdk/provider": {
+      "types": "./dist/plugin-sdk/provider.d.ts",
+      "default": "./dist/plugin-sdk/provider.js"
+    },
+    "./plugin-sdk/tool": {
+      "types": "./dist/plugin-sdk/tool.d.ts",
+      "default": "./dist/plugin-sdk/tool.js"
+    },
+    "./plugin-sdk/hook": {
+      "types": "./dist/plugin-sdk/hook.d.ts",
+      "default": "./dist/plugin-sdk/hook.js"
+    },
     "./plugin-sdk/provider-setup": {
       "types": "./dist/plugin-sdk/provider-setup.d.ts",
       "default": "./dist/plugin-sdk/provider-setup.js"

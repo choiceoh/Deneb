@@ -19,6 +19,7 @@ vi.mock("./server-plugins.js", async () => {
       return {
         pluginRegistry: registryState.registry,
         gatewayMethods: params.baseMethods ?? [],
+        gatewaySubagent: undefined,
       };
     },
     // server.impl.ts sets a fallback context before dispatch; tests only need the symbol to exist.

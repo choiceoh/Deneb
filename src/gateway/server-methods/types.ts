@@ -37,6 +37,8 @@ export type RespondFn = (
 
 export type GatewayRequestContext = {
   deps: ReturnType<typeof createDefaultDeps>;
+  /** Gateway subagent runtime, injected into request scopes for plugin subagent resolution. */
+  gatewaySubagent?: import("../../plugins/runtime/types.js").PluginRuntime["subagent"];
   cron: CronService;
   cronStorePath: string;
   execApprovalManager?: ExecApprovalManager;

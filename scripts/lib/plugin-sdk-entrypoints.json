@@ -1,6 +1,10 @@
 [
   "index",
   "core",
+  "channel",
+  "provider",
+  "tool",
+  "hook",
   "provider-setup",
   "sandbox",
   "routing",

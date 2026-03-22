@@ -5,7 +5,6 @@ import type { loadConfig } from "../config/config.js";
 import { normalizePluginsConfig } from "../plugins/config-state.js";
 import { loadDenebPlugins } from "../plugins/loader.js";
 import { getPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
-import { setGatewaySubagentRuntime } from "../plugins/runtime/index.js";
 import type { PluginRuntime } from "../plugins/runtime/types.js";
 import { ADMIN_SCOPE, WRITE_SCOPE } from "./method-scopes.js";
 import { GATEWAY_CLIENT_IDS, GATEWAY_CLIENT_MODES } from "./protocol/client-info.js";
@@ -398,12 +397,10 @@ export function loadGatewayPlugins(params: {
   logDiagnostics?: boolean;
 }) {
   setPluginSubagentOverridePolicies(params.cfg);
-  // Set the process-global gateway subagent runtime BEFORE loading plugins.
-  // Gateway-owned registries may already exist from schema loads, so the
-  // gateway path opts those runtimes into late binding rather than changing
-  // the default subagent behavior for every plugin runtime in the process.
+  // Create the gateway subagent runtime. It is returned alongside the
+  // plugin registry so the caller can attach it to GatewayRequestContext,
+  // which in turn injects it into per-request AsyncLocalStorage scopes.
   const gatewaySubagent = createGatewaySubagentRuntime();
-  setGatewaySubagentRuntime(gatewaySubagent);
 
   const pluginRegistry = loadDenebPlugins({
     config: params.cfg,
@@ -441,5 +438,5 @@ export function loadGatewayPlugins(params: {
       }
     }
   }
-  return { pluginRegistry, gatewayMethods };
+  return { pluginRegistry, gatewayMethods, gatewaySubagent };
 }

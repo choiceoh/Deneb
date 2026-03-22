@@ -73,6 +73,24 @@ export type PluginConfigUiHint = {
 
 export type PluginKind = "memory" | "context-engine";
 
+/**
+ * Static capability declaration for plugins.
+ * Allows the loader to know what a plugin provides before running register(),
+ * enabling selective loading and lazy initialization.
+ */
+export type PluginCapability =
+  | "channel"
+  | "provider"
+  | "tool"
+  | "hook"
+  | "speech"
+  | "media-understanding"
+  | "image-generation"
+  | "web-search"
+  | "context-engine"
+  | "service"
+  | "command";
+
 export type PluginConfigValidation =
   | { ok: true; value?: unknown }
   | { ok: false; errors: string[] };
@@ -1270,6 +1288,8 @@ export type DenebPluginDefinition = {
   description?: string;
   version?: string;
   kind?: PluginKind;
+  /** Static capability hints so the loader can reason about this plugin before running register(). */
+  capabilities?: PluginCapability[];
   configSchema?: DenebPluginConfigSchema;
   register?: (api: DenebPluginApi) => void | Promise<void>;
   activate?: (api: DenebPluginApi) => void | Promise<void>;

@@ -71,7 +71,7 @@ function createSubagentRuntimeRegistry() {
 async function createSubagentRuntime(): Promise<PluginRuntime["subagent"]> {
   const serverPlugins = await import("../server-plugins.js");
   loadDenebPlugins.mockReturnValue(createSubagentRuntimeRegistry());
-  serverPlugins.loadGatewayPlugins({
+  const { gatewaySubagent } = serverPlugins.loadGatewayPlugins({
     cfg: {},
     workspaceDir: "/tmp",
     log: {
@@ -84,13 +84,10 @@ async function createSubagentRuntime(): Promise<PluginRuntime["subagent"]> {
     baseMethods: [],
   });
   serverPlugins.setFallbackGatewayContext({} as GatewayRequestContext);
-  const call = loadDenebPlugins.mock.calls.at(-1)?.[0] as
-    | { runtimeOptions?: { subagent?: PluginRuntime["subagent"] } }
-    | undefined;
-  if (!call?.runtimeOptions?.subagent) {
+  if (!gatewaySubagent) {
     throw new Error("Expected subagent runtime from loadGatewayPlugins");
   }
-  return call.runtimeOptions.subagent;
+  return gatewaySubagent;
 }
 
 function createSecurePluginRouteHandler(params: {

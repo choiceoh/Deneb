@@ -56,6 +56,8 @@ type DefinePluginEntryOptions = {
   name: string;
   description: string;
   kind?: DenebPluginDefinition["kind"];
+  /** Static capability hints for pre-registration discovery. */
+  capabilities?: DenebPluginDefinition["capabilities"];
   configSchema?: DenebPluginConfigSchema | (() => DenebPluginConfigSchema);
   register: (api: DenebPluginApi) => void;
 };
@@ -66,7 +68,7 @@ type DefinedPluginEntry = {
   description: string;
   configSchema: DenebPluginConfigSchema;
   register: NonNullable<DenebPluginDefinition["register"]>;
-} & Pick<DenebPluginDefinition, "kind">;
+} & Pick<DenebPluginDefinition, "kind" | "capabilities">;
 
 function resolvePluginConfigSchema(
   configSchema: DefinePluginEntryOptions["configSchema"] = emptyPluginConfigSchema,
@@ -80,6 +82,7 @@ export function definePluginEntry({
   name,
   description,
   kind,
+  capabilities,
   configSchema = emptyPluginConfigSchema,
   register,
 }: DefinePluginEntryOptions): DefinedPluginEntry {
@@ -88,6 +91,7 @@ export function definePluginEntry({
     name,
     description,
     ...(kind ? { kind } : {}),
+    ...(capabilities ? { capabilities } : {}),
     configSchema: resolvePluginConfigSchema(configSchema),
     register,
   };
