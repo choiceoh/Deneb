@@ -8,14 +8,14 @@ import { type TelegramTransport } from "./fetch.js";
 import { isRecoverableTelegramNetworkError } from "./network-errors.js";
 
 const TELEGRAM_POLL_RESTART_POLICY = {
-  initialMs: 2000,
+  initialMs: 1000,
   maxMs: 30_000,
   factor: 1.8,
   jitter: 0.25,
 };
 
-const POLL_STALL_THRESHOLD_MS = 90_000;
-const POLL_WATCHDOG_INTERVAL_MS = 30_000;
+const POLL_STALL_THRESHOLD_MS = 60_000;
+const POLL_WATCHDOG_INTERVAL_MS = 15_000;
 const POLL_STOP_GRACE_MS = 15_000;
 
 const waitForGracefulStop = async (stop: () => Promise<void>) => {
@@ -186,9 +186,17 @@ export class TelegramPollingSession {
     await this.#confirmPersistedOffset(bot);
 
     let lastGetUpdatesAt = Date.now();
+    let hasReceivedUpdate = false;
     bot.api.config.use((prev, method, payload, signal) => {
       if (method === "getUpdates") {
         lastGetUpdatesAt = Date.now();
+        // Reset backoff after first successful poll round — transient errors
+        // after a healthy cycle should recover quickly instead of inheriting
+        // the accumulated attempt count from a previous outage.
+        if (!hasReceivedUpdate) {
+          hasReceivedUpdate = true;
+          this.#restartAttempts = 0;
+        }
       }
       return prev(method, payload, signal);
     });

@@ -16,7 +16,14 @@ import { getProxyUrlFromFetch } from "./proxy.js";
 
 const log = createSubsystemLogger("telegram/network");
 
-const TELEGRAM_AUTO_SELECT_FAMILY_ATTEMPT_TIMEOUT_MS = 300;
+const TELEGRAM_AUTO_SELECT_FAMILY_ATTEMPT_TIMEOUT_MS = 200;
+
+/** Keep idle sockets alive for 30s to reuse TCP connections across sequential API calls. */
+const TELEGRAM_KEEP_ALIVE_TIMEOUT_MS = 30_000;
+/** Cap the maximum keepalive lifetime to 10 minutes to avoid stale connections. */
+const TELEGRAM_KEEP_ALIVE_MAX_TIMEOUT_MS = 10 * 60_000;
+/** Pipeline up to 2 requests per socket for faster sequential sends. */
+const TELEGRAM_PIPELINING = 2;
 const TELEGRAM_API_HOSTNAME = "api.telegram.org";
 const TELEGRAM_FALLBACK_IPS: readonly string[] = ["149.154.167.220"];
 
@@ -300,11 +307,12 @@ function createTelegramDispatcher(policy: PinnedDispatcherPolicy): {
         ...(connectOptions ? { connect: connectOptions } : {}),
       };
       return {
-        dispatcher: new Agent(
-          directPolicy.connect
-            ? ({ connect: directPolicy.connect } satisfies ConstructorParameters<typeof Agent>[0])
-            : undefined,
-        ),
+        dispatcher: new Agent({
+          keepAliveTimeout: TELEGRAM_KEEP_ALIVE_TIMEOUT_MS,
+          keepAliveMaxTimeout: TELEGRAM_KEEP_ALIVE_MAX_TIMEOUT_MS,
+          pipelining: TELEGRAM_PIPELINING,
+          ...(directPolicy.connect ? { connect: directPolicy.connect } : {}),
+        }),
         mode: "direct",
         effectivePolicy: directPolicy,
       };
@@ -312,14 +320,14 @@ function createTelegramDispatcher(policy: PinnedDispatcherPolicy): {
   }
 
   const connectOptions = withPinnedLookup(policy.connect, policy.pinnedHostname);
+  const agentOptions: ConstructorParameters<typeof Agent>[0] = {
+    keepAliveTimeout: TELEGRAM_KEEP_ALIVE_TIMEOUT_MS,
+    keepAliveMaxTimeout: TELEGRAM_KEEP_ALIVE_MAX_TIMEOUT_MS,
+    pipelining: TELEGRAM_PIPELINING,
+    ...(connectOptions ? { connect: connectOptions } : {}),
+  };
   return {
-    dispatcher: new Agent(
-      connectOptions
-        ? ({
-            connect: connectOptions,
-          } satisfies ConstructorParameters<typeof Agent>[0])
-        : undefined,
-    ),
+    dispatcher: new Agent(agentOptions),
     mode: "direct",
     effectivePolicy: policy,
   };
