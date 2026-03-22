@@ -125,10 +125,12 @@ async function executeAction(
         cycleCount: state.cycleCount,
         lastCycleAt: safeIsoString(state.lastCycleAt),
         nextCycleAt: safeIsoString(state.nextCycleAt),
+        lastCycleOutcome: state.lastCycleOutcome ?? null,
         goals: { active: activeGoals.length, total: state.goals.length, items: activeGoals },
         plans: { active: activePlans.length, total: state.plans.length, items: activePlans },
         observations: { unprocessed: unprocessedObs.length, total: state.observations.length },
         socialContext: { count: state.socialContext.length },
+        pendingSignals: state.pendingSignals.length,
       });
     }
 

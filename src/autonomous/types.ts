@@ -9,6 +9,10 @@ export type AutonomousState = {
   observations: Observation[];
   plans: Plan[];
   socialContext: SocialEntry[];
+  /** Persisted attention signals that survive gateway restarts. */
+  pendingSignals: AttentionSignal[];
+  /** Outcome of the last completed cycle (for agent feedback). */
+  lastCycleOutcome?: CycleOutcome;
   lastCycleAt: number;
   nextCycleAt: number;
   cycleCount: number;
@@ -25,6 +29,10 @@ export type Goal = {
   createdAt: number;
   progress?: string;
   dueAt?: number;
+  /** Timestamp of last progress update. Used for stale goal detection. */
+  lastProgressAt?: number;
+  /** Cycle count when progress was last updated. Used for stale goal detection. */
+  lastProgressCycleCount?: number;
 };
 
 export type ObservationRelevance = "high" | "medium" | "low";
@@ -67,6 +75,8 @@ export type AttentionSignal = {
   content: string;
   urgency: number;
   timestamp: number;
+  /** How many cycles this signal was presented but not acted on. */
+  ignoredCount?: number;
 };
 
 // -- Cycle types --

@@ -60,11 +60,17 @@ export async function runAutonomousCycle(params: {
     };
   }
 
+  // Restore any persisted signals from the previous gateway session.
+  attention.restoreFromState(state);
+
   // Derive state-based attention signals.
   attention.deriveSignalsFromState(state);
 
   // Get top signals for the prompt.
   const signals = attention.getTopSignals(10);
+
+  // Snapshot pre-cycle state for ignore detection after the agent runs.
+  const preCycleSnapshot = snapshotStateForComparison(state);
 
   // Build prompt.
   const prompt = buildCyclePrompt(state, signals, {
@@ -122,6 +128,33 @@ export async function runAutonomousCycle(params: {
     if (!state.nextCycleAt || state.nextCycleAt <= finishedAt) {
       state.nextCycleAt = finishedAt + defaultInterval;
     }
+
+    // Detect ignored signals: re-load state (agent may have changed it via tool calls)
+    // and compare with pre-cycle snapshot to re-escalate unaddressed items.
+    try {
+      const postCycleState = await loadAutonomousState(storePath);
+      attention.reEscalateIgnoredSignals(preCycleSnapshot, postCycleState);
+      // Merge any state changes the agent made back into our state object.
+      state.goals = postCycleState.goals;
+      state.observations = postCycleState.observations;
+      state.plans = postCycleState.plans;
+      state.socialContext = postCycleState.socialContext;
+    } catch {
+      // Non-fatal: if re-load fails, just skip re-escalation.
+    }
+
+    // Drain unconsumed signals back to state so they survive restarts.
+    attention.drainToState(state);
+
+    // Persist cycle outcome so the agent can review previous results.
+    const outcome: CycleOutcome = {
+      cycleNumber: state.cycleCount,
+      startedAt,
+      finishedAt,
+      actionsTaken: outputText ? ["agent-turn"] : [],
+      error,
+    };
+    state.lastCycleOutcome = outcome;
 
     try {
       await saveAutonomousState(state, storePath);
@@ -212,4 +245,16 @@ export function resolveNextCycleDelay(state: AutonomousState, cfg?: AutonomousCo
   const remaining = state.nextCycleAt - Date.now();
   // Clamp the return value to a safe setTimeout range.
   return clampDelay(Math.max(0, remaining), 0, MAX_TIMEOUT_MS);
+}
+
+/** Shallow-copy state arrays for pre/post cycle comparison. */
+function snapshotStateForComparison(state: AutonomousState): AutonomousState {
+  return {
+    ...state,
+    goals: state.goals.map((g) => ({ ...g })),
+    observations: state.observations.map((o) => ({ ...o })),
+    plans: state.plans.map((p) => ({ ...p, steps: [...p.steps] })),
+    socialContext: state.socialContext.map((s) => ({ ...s })),
+    pendingSignals: [...state.pendingSignals],
+  };
 }
