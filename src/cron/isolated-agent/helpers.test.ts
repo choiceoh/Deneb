@@ -6,54 +6,43 @@ import {
   pickSummaryFromPayloads,
 } from "./helpers.js";
 
-describe("pickSummaryFromPayloads", () => {
+/**
+ * All three pickers share the same two-pass error-skipping pattern.
+ * Consolidate the common "prefers non-error → falls back to error → empty" tests.
+ */
+describe.each([
+  {
+    name: "pickSummaryFromPayloads",
+    pick: (p: Array<{ text?: string; isError?: boolean }>) => pickSummaryFromPayloads(p),
+    realText: "Here is your summary",
+    errorText: "Tool error: rate limited",
+  },
+  {
+    name: "pickLastNonEmptyTextFromPayloads",
+    pick: (p: Array<{ text?: string; isError?: boolean }>) => pickLastNonEmptyTextFromPayloads(p),
+    realText: "Real output",
+    errorText: "Service error",
+  },
+] as const)("$name – shared error-skipping behavior", ({ pick, realText, errorText }) => {
   it("picks real text over error payload", () => {
-    const payloads = [
-      { text: "Here is your summary" },
-      { text: "Tool error: rate limited", isError: true },
-    ];
-    expect(pickSummaryFromPayloads(payloads)).toBe("Here is your summary");
+    expect(pick([{ text: realText }, { text: errorText, isError: true }])).toBe(realText);
   });
 
   it("falls back to error payload when no real text exists", () => {
-    const payloads = [{ text: "Tool error: rate limited", isError: true }];
-    expect(pickSummaryFromPayloads(payloads)).toBe("Tool error: rate limited");
+    expect(pick([{ text: errorText, isError: true }])).toBe(errorText);
   });
 
   it("returns undefined for empty payloads", () => {
-    expect(pickSummaryFromPayloads([])).toBeUndefined();
+    expect(pick([])).toBeUndefined();
   });
 
   it("treats isError: undefined as non-error", () => {
-    const payloads = [
-      { text: "normal text", isError: undefined },
-      { text: "error text", isError: true },
-    ];
-    expect(pickSummaryFromPayloads(payloads)).toBe("normal text");
-  });
-});
-
-describe("pickLastNonEmptyTextFromPayloads", () => {
-  it("picks real text over error payload", () => {
-    const payloads = [{ text: "Real output" }, { text: "Service error", isError: true }];
-    expect(pickLastNonEmptyTextFromPayloads(payloads)).toBe("Real output");
-  });
-
-  it("falls back to error payload when no real text exists", () => {
-    const payloads = [{ text: "Service error", isError: true }];
-    expect(pickLastNonEmptyTextFromPayloads(payloads)).toBe("Service error");
-  });
-
-  it("returns undefined for empty payloads", () => {
-    expect(pickLastNonEmptyTextFromPayloads([])).toBeUndefined();
-  });
-
-  it("treats isError: undefined as non-error", () => {
-    const payloads = [
-      { text: "good", isError: undefined },
-      { text: "bad", isError: true },
-    ];
-    expect(pickLastNonEmptyTextFromPayloads(payloads)).toBe("good");
+    expect(
+      pick([
+        { text: "normal", isError: undefined },
+        { text: "error", isError: true },
+      ]),
+    ).toBe("normal");
   });
 });
 
