@@ -66,6 +66,7 @@ export async function startAutonomousService(params: {
   let timer: NodeJS.Timeout | null = null;
   let running = false;
   let consecutiveFailures = 0;
+  let scheduleGeneration = 0;
 
   function clearTimer(): void {
     if (timer) {
@@ -155,10 +156,12 @@ export async function startAutonomousService(params: {
       return;
     }
 
+    // Track generation so that a stale scheduleNext (whose loadAutonomousState
+    // was in flight when triggerNow cleared the timer) does not re-set a timer.
+    const gen = ++scheduleGeneration;
     loadAutonomousState(storePath)
       .then((state) => {
-        // Re-check after async load.
-        if (stopped || abortController.signal.aborted) {
+        if (stopped || abortController.signal.aborted || gen !== scheduleGeneration) {
           return;
         }
         const delay = resolveNextCycleDelay(state, autonomousCfg);
@@ -169,7 +172,7 @@ export async function startAutonomousService(params: {
         });
       })
       .catch((err) => {
-        if (stopped || abortController.signal.aborted) {
+        if (stopped || abortController.signal.aborted || gen !== scheduleGeneration) {
           return;
         }
         log.error(`failed to schedule next cycle: ${String(err)}`);
@@ -206,6 +209,7 @@ export async function startAutonomousService(params: {
         return;
       }
       clearTimer();
+      scheduleGeneration++; // Invalidate any in-flight scheduleNext callbacks.
       void executeCycle();
     },
     attention,

@@ -484,9 +484,13 @@ export function updateGoal(
     safePatch.progress = sanitizeText(patch.progress);
   }
   if (patch.dueAt !== undefined) {
-    const ts = validTimestampOrUndefined(patch.dueAt);
-    if (ts !== undefined) {
-      safePatch.dueAt = ts;
+    if (patch.dueAt === null) {
+      safePatch.dueAt = undefined;
+    } else {
+      const ts = validTimestampOrUndefined(patch.dueAt);
+      if (ts !== undefined) {
+        safePatch.dueAt = ts;
+      }
     }
   }
   Object.assign(goal, safePatch);
@@ -550,9 +554,13 @@ export function updateSocialEntry(
     safePatch.context = sanitizeText(patch.context);
   }
   if (patch.followUpAt !== undefined) {
-    const ts = validTimestampOrUndefined(patch.followUpAt);
-    if (ts !== undefined) {
-      safePatch.followUpAt = ts;
+    if (patch.followUpAt === null) {
+      safePatch.followUpAt = undefined;
+    } else {
+      const ts = validTimestampOrUndefined(patch.followUpAt);
+      if (ts !== undefined) {
+        safePatch.followUpAt = ts;
+      }
     }
   }
   if (patch.lastInteraction !== undefined) {
