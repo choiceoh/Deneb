@@ -409,7 +409,7 @@
     "deneb:rpc": "node scripts/run-node.mjs agent --mode rpc --json",
     "dev": "node scripts/run-node.mjs",
     "docs:bin": "node scripts/build-docs-list.mjs",
-    "docs:check-i18n-glossary": "node scripts/check-docs-i18n-glossary.mjs",
+    "docs:check-i18n-glossary": "python3 scripts/check_docs_i18n_glossary.py",
     "docs:check-links": "node scripts/docs-link-audit.mjs",
     "docs:dev": "cd docs && mint dev",
     "docs:list": "node scripts/docs-list.js",
