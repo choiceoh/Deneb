@@ -68,22 +68,7 @@ Spawn and manage sub-agents with bounded contexts for complex tasks.
 - **Bounded execution** — Token limits, timeouts, and tool policy per agent
 - **Result streaming** — Real-time progress from sub-agents to parent
 
-### 📡 Messaging Channels
 
-Battle-tested in production with the channels that matter most.
-
-| Channel         | Notes                                                               |
-| --------------- | ------------------------------------------------------------------- |
-| **Telegram**    | ✅ Primary — full feature support, reactions, polls, inline buttons |
-| **Discord**     | ✅ Bot Gateway                                                      |
-| **Signal**      | ✅ signal-cli integration                                           |
-| **WhatsApp**    | ✅ WhatsApp Bridge                                                  |
-| **Slack**       | ✅ Socket Mode                                                      |
-| **iMessage**    | ✅ BlueBubbles                                                      |
-| **Google Chat** | ✅ Service Account                                                  |
-| **MS Teams**    | ✅ Bot Framework                                                    |
-
-Additional channel schemas exist in the config layer (IRC, Matrix, LINE, Feishu, Mattermost, Nostr, Twitch) — these are inherited from OpenClaw and may require community extensions.
 
 ### 🧰 Tool System
 
@@ -101,11 +86,9 @@ Additional channel schemas exist in the config layer (IRC, Matrix, LINE, Feishu,
 
 ### 🤖 Model Providers
 
-**Cloud:** Anthropic · OpenAI · Google (Gemini) · Mistral · xAI (Grok) · Z.AI (GLM) · OpenRouter · Perplexity · Together AI · DeepSeek
+**Cloud:** Anthropic · OpenAI · Google ·  OpenRouter 
 
 **Self-Hosted:** Ollama · SGLang · vLLM · LiteLLM
-
-**Enterprise:** AWS Bedrock · Google Vertex AI · Azure OpenAI
 
 ## 🚀 Quick Start
 
