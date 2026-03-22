@@ -232,13 +232,20 @@ async function seedInitialGoals(
   }
 
   const state = await loadAutonomousState(storePath);
-  if (state.goals.length > 0) {
+  // Re-seed when there are no active goals (completed goals shouldn't block re-seeding).
+  const hasActiveGoals = state.goals.some((g) => g.status === "active");
+  if (hasActiveGoals) {
     return;
   }
 
+  // Avoid re-adding goals that already exist (even if completed).
+  const existingDescriptions = new Set(state.goals.map((g) => g.description.trim().toLowerCase()));
   let seededCount = 0;
   for (const goalDesc of cfg.goals) {
     if (typeof goalDesc === "string" && goalDesc.trim().length > 0) {
+      if (existingDescriptions.has(goalDesc.trim().toLowerCase())) {
+        continue;
+      }
       addGoal(state, goalDesc.trim(), "medium");
       seededCount++;
     }

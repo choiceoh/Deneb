@@ -50,7 +50,7 @@ const AutonomousToolSchema = Type.Object(
     action: stringEnum(ACTIONS),
     description: Type.Optional(Type.String()),
     priority: optionalStringEnum(PRIORITIES),
-    status: optionalStringEnum([...GOAL_STATUSES, ...PLAN_STATUSES]),
+    status: optionalStringEnum([...new Set([...GOAL_STATUSES, ...PLAN_STATUSES])]),
     progress: Type.Optional(Type.String()),
     dueAt: Type.Optional(Type.String()),
     goalId: Type.Optional(Type.String()),
