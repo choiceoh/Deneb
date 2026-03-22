@@ -37,6 +37,8 @@ export interface CachedSummary {
   tokenCount: number;
   /** Total source tokens of raw messages that were compressed (excluding fresh tail). */
   sourceTokenCount: number;
+  /** Total context tokens (all items) at the time the summary was computed. */
+  totalContextTokens: number;
   /** Number of raw messages that were compressed (excluding fresh tail). */
   messagesCovered: number;
   /** Timestamp of when this summary was last updated. */
@@ -126,7 +128,7 @@ export class CompressionObserver {
     if (Date.now() - cached.updatedAt > this.config.maxStalenessMs) {
       return false;
     }
-    if (currentTokens > cached.sourceTokenCount * TOKEN_DRIFT_FACTOR) {
+    if (currentTokens > cached.totalContextTokens * TOKEN_DRIFT_FACTOR) {
       return false;
     }
     return true;
@@ -228,6 +230,9 @@ export class CompressionObserver {
         return;
       }
 
+      // Capture total context tokens (all items) for staleness drift comparison.
+      const totalContextTokens = await this.summaryStore.getContextTokenCount(conversationId);
+
       let hasMixedContext = false;
       const allRawItems: Array<{
         messageId: number;
@@ -299,6 +304,7 @@ export class CompressionObserver {
         summary,
         tokenCount: summaryTokens,
         sourceTokenCount: totalSourceTokens,
+        totalContextTokens,
         messagesCovered: compactableItems.length,
         updatedAt: Date.now(),
         hasMixedContext,

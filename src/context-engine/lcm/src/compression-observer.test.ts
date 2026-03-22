@@ -53,6 +53,10 @@ function createMockSummaryStore(
     getContextItems: vi.fn(async (conversationId: number) => {
       return contextItems.filter((item) => item.conversationId === conversationId);
     }),
+    getContextTokenCount: vi.fn(async (_conversationId: number) => {
+      // Return a rough estimate: count of items * average token size.
+      return contextItems.length * 50;
+    }),
     _contextItems: contextItems,
   };
 }
@@ -219,7 +223,7 @@ describe("CompressionObserver", () => {
       );
 
       const cached = observer.getCachedSummary(conversationId)!;
-      expect(observer.isSummaryFresh(conversationId, cached.sourceTokenCount * 2)).toBe(false);
+      expect(observer.isSummaryFresh(conversationId, cached.totalContextTokens * 2)).toBe(false);
     });
 
     it("should report stale when no cached summary exists", () => {
