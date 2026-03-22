@@ -9,6 +9,10 @@ export type AutonomousState = {
   observations: Observation[];
   plans: Plan[];
   socialContext: SocialEntry[];
+  /** Persisted attention signals that survive gateway restarts. */
+  pendingSignals: AttentionSignal[];
+  /** Outcome of the last completed cycle (for agent feedback). */
+  lastCycleOutcome?: CycleOutcome;
   lastCycleAt: number;
   nextCycleAt: number;
   cycleCount: number;

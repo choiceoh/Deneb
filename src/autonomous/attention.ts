@@ -22,12 +22,29 @@ function safeDesc(a: number, b: number): number {
 }
 
 /**
- * In-memory attention signal collector. Accumulates signals from various
+ * Attention signal collector. Accumulates signals from various
  * sources (channel messages, system events, goal deadlines) and provides
  * prioritized access for the autonomous decision cycle.
+ *
+ * Signals are restored from persisted state on startup and drained back
+ * to state on save, so they survive gateway restarts.
  */
 export class AttentionManager {
   private signals: AttentionSignal[] = [];
+
+  /** Restore persisted signals from state (called on cycle start). */
+  restoreFromState(state: AutonomousState): void {
+    for (const signal of state.pendingSignals) {
+      this.addSignal(signal);
+    }
+    // Clear from state to avoid double-loading on next call.
+    state.pendingSignals = [];
+  }
+
+  /** Drain unconsumed signals back into state for persistence. */
+  drainToState(state: AutonomousState): void {
+    state.pendingSignals = [...this.signals];
+  }
 
   addSignal(signal: AttentionSignal): void {
     // Validate signal inputs.

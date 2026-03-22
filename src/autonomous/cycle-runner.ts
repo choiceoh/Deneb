@@ -60,6 +60,9 @@ export async function runAutonomousCycle(params: {
     };
   }
 
+  // Restore any persisted signals from the previous gateway session.
+  attention.restoreFromState(state);
+
   // Derive state-based attention signals.
   attention.deriveSignalsFromState(state);
 
@@ -122,6 +125,19 @@ export async function runAutonomousCycle(params: {
     if (!state.nextCycleAt || state.nextCycleAt <= finishedAt) {
       state.nextCycleAt = finishedAt + defaultInterval;
     }
+
+    // Drain unconsumed signals back to state so they survive restarts.
+    attention.drainToState(state);
+
+    // Persist cycle outcome so the agent can review previous results.
+    const outcome: CycleOutcome = {
+      cycleNumber: state.cycleCount,
+      startedAt,
+      finishedAt,
+      actionsTaken: outputText ? ["agent-turn"] : [],
+      error,
+    };
+    state.lastCycleOutcome = outcome;
 
     try {
       await saveAutonomousState(state, storePath);

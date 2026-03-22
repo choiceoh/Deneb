@@ -9,6 +9,7 @@ function createEmptyState(): AutonomousState {
     observations: [],
     plans: [],
     socialContext: [],
+    pendingSignals: [],
     lastCycleAt: 0,
     nextCycleAt: 0,
     cycleCount: 0,
@@ -137,5 +138,79 @@ describe("AttentionManager", () => {
 
     mgr.deriveSignalsFromState(state);
     expect(mgr.pendingCount).toBe(0);
+  });
+
+  it("restoreFromState loads persisted signals", () => {
+    const mgr = new AttentionManager();
+    const state = createEmptyState();
+    state.pendingSignals = [
+      {
+        source: "test",
+        type: "message",
+        content: "persisted signal",
+        urgency: 0.8,
+        timestamp: Date.now(),
+      },
+      {
+        source: "test2",
+        type: "event",
+        content: "another signal",
+        urgency: 0.3,
+        timestamp: Date.now(),
+      },
+    ];
+
+    mgr.restoreFromState(state);
+    expect(mgr.pendingCount).toBe(2);
+    // State should be cleared after restore.
+    expect(state.pendingSignals).toEqual([]);
+  });
+
+  it("drainToState persists unconsumed signals", () => {
+    const mgr = new AttentionManager();
+    mgr.addMessage("a", "msg1", 0.5);
+    mgr.addEvent("b", "evt1", 0.3);
+
+    const state = createEmptyState();
+    mgr.drainToState(state);
+    expect(state.pendingSignals.length).toBe(2);
+  });
+
+  it("restoreFromState does not duplicate signals when called twice", () => {
+    const mgr = new AttentionManager();
+    const state = createEmptyState();
+    state.pendingSignals = [
+      {
+        source: "test",
+        type: "message",
+        content: "signal",
+        urgency: 0.5,
+        timestamp: Date.now(),
+      },
+    ];
+
+    mgr.restoreFromState(state);
+    // Second call with empty pendingSignals should not add more.
+    mgr.restoreFromState(state);
+    expect(mgr.pendingCount).toBe(1);
+  });
+
+  it("round-trips signals through drain and restore", () => {
+    const mgr1 = new AttentionManager();
+    mgr1.addMessage("src", "important message", 0.9);
+    mgr1.addEvent("src2", "background event", 0.2);
+
+    const state = createEmptyState();
+    mgr1.drainToState(state);
+    expect(state.pendingSignals.length).toBe(2);
+
+    // Simulate restart: new manager restores from state.
+    const mgr2 = new AttentionManager();
+    mgr2.restoreFromState(state);
+    expect(mgr2.pendingCount).toBe(2);
+
+    const signals = mgr2.getTopSignals(10);
+    expect(signals[0]?.urgency).toBe(0.9);
+    expect(signals[1]?.urgency).toBe(0.2);
   });
 });

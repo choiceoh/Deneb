@@ -10,6 +10,21 @@ const MAX_PLANS_IN_PROMPT = 10;
 const FALLBACK_PROMPT = `You are an autonomous agent. Your state could not be fully loaded.
 Please use the autonomous tool to check your current state and take appropriate action.`;
 
+function formatLastCycleOutcome(state: AutonomousState): string {
+  const outcome = state.lastCycleOutcome;
+  if (!outcome) {
+    return "No previous cycle data available.";
+  }
+  const duration =
+    isFiniteNonNeg(outcome.finishedAt) && isFiniteNonNeg(outcome.startedAt)
+      ? `${Math.round((outcome.finishedAt - outcome.startedAt) / 1000)}s`
+      : "unknown";
+  const actions = outcome.actionsTaken.length > 0 ? outcome.actionsTaken.join(", ") : "none";
+  const status = outcome.error ? `Error: ${outcome.error}` : "Completed successfully";
+  const age = isFiniteNonNeg(outcome.finishedAt) ? formatAge(outcome.finishedAt) : "unknown";
+  return `Cycle #${outcome.cycleNumber} (${age} ago, duration: ${duration}) — ${status}. Actions: ${actions}.`;
+}
+
 function formatGoals(state: AutonomousState): string {
   const goals = state.goals ?? [];
   const active = goals.filter((g) => g.status === "active").slice(0, MAX_GOALS_IN_PROMPT);
@@ -177,11 +192,16 @@ export function buildCyclePrompt(
       ? `\nDefault channel: ${opts.defaultChannel}${opts.defaultTarget ? ` (target: ${opts.defaultTarget})` : ""}`
       : "";
 
+    const lastOutcome = formatLastCycleOutcome(state);
+
     return `You are an autonomous agent operating continuously, like a real person who is always present and engaged with the world. You think, plan, observe, and act on your own initiative.
 
 ${cycleNote}${dryRunNote}${channelNote}
 
 Current time: ${isoNow} (${localeNow})
+
+## Last Cycle Outcome
+${lastOutcome}
 
 ## Active Goals
 ${formatGoals(state)}
