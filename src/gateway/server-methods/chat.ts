@@ -5,6 +5,7 @@ import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
 import { createReplyDispatcher } from "../../auto-reply/reply/reply-dispatcher.js";
 import type { MsgContext } from "../../auto-reply/templating.js";
 import type { ReplyPayload } from "../../auto-reply/types.js";
+import { recordConversationObservation } from "../../autonomous/conversation-observer.js";
 import { createChannelReplyPipeline } from "../../plugin-sdk/channel-reply-pipeline.js";
 import { normalizeInputProvenance, type InputProvenance } from "../../sessions/input-provenance.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
@@ -774,6 +775,20 @@ export const chatHandlers: GatewayRequestHandlers = {
               });
             }
           }
+          // Feed conversation to autonomous state as an observation (fire-and-forget).
+          const replyText = deliveredReplies
+            .filter((entry) => entry.kind === "final")
+            .map((entry) => entry.payload.text?.trim() ?? "")
+            .filter(Boolean)
+            .join("\n\n")
+            .trim();
+          void recordConversationObservation({
+            channel: originatingChannel ?? INTERNAL_MESSAGE_CHANNEL,
+            senderId: ctx.SenderId ?? ctx.SenderName,
+            inboundMessage: parsedMessage,
+            outboundReply: replyText || undefined,
+          });
+
           setGatewayDedupeEntry({
             dedupe: context.dedupe,
             key: `chat:${clientRunId}`,
