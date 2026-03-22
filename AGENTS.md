@@ -75,6 +75,21 @@
 - Hard gate: if the change can affect build output, packaging, lazy-loading/module boundaries, or published surfaces, `pnpm build` MUST be run and MUST pass before pushing `main`.
 - Hard gate: do not commit or push with failing format, lint, type, build, or required test checks.
 
+## AI Developer Workflow (scripts for AI agents patching Deneb)
+
+When an AI agent is modifying the Deneb codebase, use these scripts to understand impact, run the right checks, and avoid breaking things. All scripts output JSON for easy parsing.
+
+- **Analyze impact of current changes:** `bun scripts/dev-patch-impact.ts` — categorizes changed files, suggests which gates to run (check/test/build), flags docs and channel updates needed. Use `--staged` for staged changes only.
+- **Find affected tests and dependents:** `bun scripts/dev-affected.ts [file...]` — given changed files (or auto-detected from git diff), traces the import graph to find test files and downstream dependents. Outputs a ready-to-run `testCommand`.
+- **Run all pre-commit gates:** `bun scripts/dev-commit-gate.ts` — runs `pnpm check` then affected tests in sequence, stops on first failure. Use `--full` to also run all tests + build. Use `--no-test` for check-only.
+
+Recommended workflow for AI agents:
+
+1. After making changes, run `bun scripts/dev-patch-impact.ts` to understand what needs verification.
+2. Run `bun scripts/dev-commit-gate.ts` before committing. Use `--full` if plugin-sdk, build config, or module boundaries were touched.
+3. If a gate fails, fix the issue and rerun. Do not commit with failing gates.
+4. Use `bun scripts/dev-affected.ts src/path/to/changed-file.ts` to find the specific tests and dependents for targeted debugging.
+
 ## Coding Style & Naming Conventions
 
 - Language: TypeScript (ESM). Prefer strict typing; avoid `any`.
