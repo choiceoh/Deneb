@@ -432,6 +432,30 @@ export class ConversationStore {
     return row ? toMessageRecord(row) : null;
   }
 
+  /** Batch-fetch multiple messages by ID in a single query. */
+  async getMessagesByIds(messageIds: MessageId[]): Promise<Map<MessageId, MessageRecord>> {
+    const result = new Map<MessageId, MessageRecord>();
+    if (messageIds.length === 0) {
+      return result;
+    }
+    // SQLite has a default variable limit of 999; batch in chunks.
+    const CHUNK_SIZE = 900;
+    for (let i = 0; i < messageIds.length; i += CHUNK_SIZE) {
+      const chunk = messageIds.slice(i, i + CHUNK_SIZE);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = this.db
+        .prepare(
+          `SELECT message_id, conversation_id, seq, role, content, token_count, created_at
+           FROM messages WHERE message_id IN (${placeholders})`,
+        )
+        .all(...chunk) as unknown as MessageRow[];
+      for (const row of rows) {
+        result.set(row.message_id, toMessageRecord(row));
+      }
+    }
+    return result;
+  }
+
   async createMessageParts(messageId: MessageId, parts: CreateMessagePartInput[]): Promise<void> {
     if (parts.length === 0) {
       return;
