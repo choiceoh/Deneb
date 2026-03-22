@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { pluginSdkSubpaths } from "./scripts/lib/plugin-sdk-entries.mjs";
+import DurationSequencer from "./test/duration-sequencer.ts";
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 const isCI = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
@@ -24,8 +25,8 @@ export default defineConfig({
     ],
   },
   test: {
-    testTimeout: 120_000,
-    hookTimeout: isWindows ? 180_000 : 120_000,
+    testTimeout: 30_000,
+    hookTimeout: isWindows ? 60_000 : 45_000,
     // Many suites rely on `vi.stubEnv(...)` and expect it to be scoped to the test.
     // This is especially important under `pool=vmForks` where env leaks cross-file.
     unstubEnvs: true,
@@ -33,6 +34,18 @@ export default defineConfig({
     unstubGlobals: true,
     pool: "forks",
     maxWorkers: isCI ? ciWorkers : localWorkers,
+    // Pre-bundle heavy node_modules dependencies to avoid repeated ESM transforms per worker.
+    deps: {
+      optimizer: {
+        ssr: {
+          enabled: true,
+        },
+      },
+    },
+    // Run slowest test files first so workers stay utilized until the end.
+    sequence: {
+      sequencer: DurationSequencer,
+    },
     include: [
       "src/**/*.test.ts",
       "extensions/**/*.test.ts",
