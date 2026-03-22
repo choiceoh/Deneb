@@ -170,18 +170,10 @@
           - "docs/cli/security.md"
           - "docs/gateway/security.md"
 
-"extensions: copilot-proxy":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/copilot-proxy/**"
 "extensions: diagnostics-otel":
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/diagnostics-otel/**"
-"extensions: lobster":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/lobster/**"
 "extensions: memory-core":
   - changed-files:
       - any-glob-to-any-file:
@@ -190,10 +182,6 @@
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/qwen-portal-auth/**"
-"extensions: device-pair":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/device-pair/**"
 "extensions: acpx":
   - changed-files:
       - any-glob-to-any-file:
@@ -246,10 +234,6 @@
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/nvidia/**"
-"extensions: phone-control":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/phone-control/**"
 "extensions: qianfan":
   - changed-files:
       - any-glob-to-any-file:

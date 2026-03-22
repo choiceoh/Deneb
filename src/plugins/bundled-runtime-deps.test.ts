@@ -26,10 +26,6 @@ describe("bundled plugin runtime dependencies", () => {
     expectPluginOwnsRuntimeDep("extensions/feishu/package.json", "@larksuiteoapi/node-sdk");
   });
 
-  it("keeps memory-lancedb runtime deps plugin-local so packaged installs fetch them on demand", () => {
-    expectPluginOwnsRuntimeDep("extensions/memory-lancedb/package.json", "@lancedb/lancedb");
-  });
-
   it("keeps bundled Discord runtime deps plugin-local instead of mirroring them into the root package", () => {
     expectPluginOwnsRuntimeDep("extensions/discord/package.json", "@buape/carbon");
   });
