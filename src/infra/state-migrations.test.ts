@@ -2,7 +2,19 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { DenebConfig } from "../config/config.js";
-import { resolveChannelAllowFromPath } from "../pairing/pairing-store.js";
+// Stub: pairing store removed. Return a path in the state dir so tests don't crash on empty string.
+function resolveChannelAllowFromPath(
+  channel: string,
+  env: NodeJS.ProcessEnv,
+  accountId?: string,
+): string {
+  const base = env.DENEB_STATE_DIR ?? env.HOME ?? "/tmp";
+  return path.join(
+    base,
+    "credentials",
+    `${channel}${accountId ? `-${accountId}` : ""}-allowFrom.json`,
+  );
+}
 import { createTrackedTempDirs } from "../test-utils/tracked-temp-dirs.js";
 import { detectLegacyStateMigrations, runLegacyStateMigrations } from "./state-migrations.js";
 
