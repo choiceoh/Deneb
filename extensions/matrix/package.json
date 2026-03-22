@@ -1,6 +1,6 @@
 {
   "name": "@deneb/matrix",
-  "version": "3.5.4",
+  "version": "3.5.7",
   "private": true,
   "description": "Deneb Matrix channel plugin",
   "type": "module",
