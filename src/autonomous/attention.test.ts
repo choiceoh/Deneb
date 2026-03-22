@@ -213,4 +213,194 @@ describe("AttentionManager", () => {
     expect(signals[0]?.urgency).toBe(0.9);
     expect(signals[1]?.urgency).toBe(0.2);
   });
+
+  it("getTopSignals records lastPresented", () => {
+    const mgr = new AttentionManager();
+    mgr.addMessage("a", "msg1", 0.8);
+    mgr.addMessage("b", "msg2", 0.3);
+
+    const signals = mgr.getTopSignals(2);
+    expect(signals.length).toBe(2);
+
+    const presented = mgr.getLastPresented();
+    expect(presented.length).toBe(2);
+    expect(presented[0]?.source).toBe("a");
+  });
+
+  it("reEscalateIgnoredSignals boosts urgency for unaddressed goal signals", () => {
+    const mgr = new AttentionManager();
+    mgr.addSignal({
+      source: "goal:g1",
+      type: "goal-deadline",
+      content: "Goal overdue: test",
+      urgency: 0.6,
+      timestamp: Date.now(),
+    });
+
+    // Present the signal.
+    mgr.getTopSignals(10);
+
+    // Pre/post state are identical — agent did nothing.
+    const preState = createEmptyState();
+    preState.goals.push({
+      id: "g1",
+      description: "test",
+      priority: "high",
+      status: "active",
+      createdAt: Date.now(),
+    });
+    const postState = { ...preState, goals: [...preState.goals] };
+
+    mgr.reEscalateIgnoredSignals(preState, postState);
+
+    // Signal should be re-queued with boosted urgency.
+    expect(mgr.pendingCount).toBe(1);
+    const reQueued = mgr.getTopSignals(1);
+    expect(reQueued[0]?.urgency).toBe(0.7); // 0.6 + 0.1 boost
+    expect(reQueued[0]?.ignoredCount).toBe(1);
+  });
+
+  it("reEscalateIgnoredSignals does not re-queue addressed signals", () => {
+    const mgr = new AttentionManager();
+    mgr.addSignal({
+      source: "goal:g1",
+      type: "goal-deadline",
+      content: "Goal overdue: test",
+      urgency: 0.6,
+      timestamp: Date.now(),
+    });
+    mgr.getTopSignals(10);
+
+    const preState = createEmptyState();
+    preState.goals.push({
+      id: "g1",
+      description: "test",
+      priority: "high",
+      status: "active",
+      createdAt: Date.now(),
+    });
+
+    // Post-state: goal progress was updated.
+    const postState = createEmptyState();
+    postState.goals.push({
+      id: "g1",
+      description: "test",
+      priority: "high",
+      status: "active",
+      createdAt: Date.now(),
+      progress: "50% done",
+    });
+
+    mgr.reEscalateIgnoredSignals(preState, postState);
+
+    // Signal was addressed, should NOT be re-queued.
+    expect(mgr.pendingCount).toBe(0);
+  });
+
+  it("ignoredCount accumulates across multiple cycles", () => {
+    const mgr = new AttentionManager();
+    mgr.addSignal({
+      source: "goal:g1",
+      type: "goal-deadline",
+      content: "Goal overdue: test",
+      urgency: 0.5,
+      timestamp: Date.now(),
+      ignoredCount: 2,
+    });
+    mgr.getTopSignals(10);
+
+    const state = createEmptyState();
+    state.goals.push({
+      id: "g1",
+      description: "test",
+      priority: "high",
+      status: "active",
+      createdAt: Date.now(),
+    });
+
+    mgr.reEscalateIgnoredSignals(state, state);
+
+    const reQueued = mgr.getTopSignals(1);
+    expect(reQueued[0]?.ignoredCount).toBe(3); // 2 + 1
+    expect(reQueued[0]?.urgency).toBe(0.6); // 0.5 + 0.1
+  });
+
+  it("urgency is capped at 1.0 during re-escalation", () => {
+    const mgr = new AttentionManager();
+    mgr.addSignal({
+      source: "goal:g1",
+      type: "goal-deadline",
+      content: "test",
+      urgency: 0.95,
+      timestamp: Date.now(),
+    });
+    mgr.getTopSignals(10);
+
+    const state = createEmptyState();
+    state.goals.push({
+      id: "g1",
+      description: "test",
+      priority: "high",
+      status: "active",
+      createdAt: Date.now(),
+    });
+
+    mgr.reEscalateIgnoredSignals(state, state);
+
+    const reQueued = mgr.getTopSignals(1);
+    expect(reQueued[0]?.urgency).toBe(1.0);
+  });
+
+  it("derives stale goal signals when lastProgressAt is old", () => {
+    const mgr = new AttentionManager();
+    const state = createEmptyState();
+    state.cycleCount = 20;
+    state.lastCycleAt = Date.now();
+    state.goals.push({
+      id: "stale-g1",
+      description: "Stale goal",
+      priority: "medium",
+      status: "active",
+      createdAt: Date.now() - 86400000 * 10, // 10 days ago
+      lastProgressAt: Date.now() - 86400000 * 10, // 10 days ago
+    });
+
+    mgr.deriveSignalsFromState(state);
+
+    const signals = mgr.getTopSignals(10);
+    const staleSignal = signals.find((s) => s.content.includes("Stale goal"));
+    expect(staleSignal).toBeDefined();
+    expect(staleSignal?.content).toContain("no progress for");
+  });
+
+  it("does not flag recent goals as stale", () => {
+    const mgr = new AttentionManager();
+    const state = createEmptyState();
+    state.cycleCount = 2;
+    state.lastCycleAt = Date.now();
+    state.goals.push({
+      id: "fresh-g1",
+      description: "Fresh goal",
+      priority: "medium",
+      status: "active",
+      createdAt: Date.now() - 60000, // 1 minute ago
+      lastProgressAt: Date.now() - 60000,
+    });
+
+    mgr.deriveSignalsFromState(state);
+
+    const signals = mgr.getTopSignals(10);
+    const staleSignal = signals.find((s) => s.content.includes("Stale goal"));
+    expect(staleSignal).toBeUndefined();
+  });
+
+  it("clear resets lastPresented", () => {
+    const mgr = new AttentionManager();
+    mgr.addMessage("a", "test", 0.5);
+    mgr.getTopSignals(1);
+    expect(mgr.getLastPresented().length).toBe(1);
+
+    mgr.clear();
+    expect(mgr.getLastPresented().length).toBe(0);
+  });
 });

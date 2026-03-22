@@ -29,6 +29,8 @@ export type Goal = {
   createdAt: number;
   progress?: string;
   dueAt?: number;
+  /** Timestamp of last progress update. Used for stale goal detection. */
+  lastProgressAt?: number;
 };
 
 export type ObservationRelevance = "high" | "medium" | "low";
@@ -71,6 +73,8 @@ export type AttentionSignal = {
   content: string;
   urgency: number;
   timestamp: number;
+  /** How many cycles this signal was presented but not acted on. */
+  ignoredCount?: number;
 };
 
 // -- Cycle types --

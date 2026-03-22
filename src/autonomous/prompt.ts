@@ -1,3 +1,4 @@
+import { CRITICAL_IGNORE_THRESHOLD } from "./attention.js";
 import type { AttentionSignal, AutonomousState } from "./types.js";
 import { isFinitePositive, safeIsoString } from "./validation.js";
 
@@ -74,9 +75,50 @@ function formatSignals(signals: AttentionSignal[]): string {
       const type = s.type ?? "unknown";
       const source = s.source ?? "unknown";
       const content = s.content ?? "";
-      return `- [urgency=${urgency}] (${type}, ${source}, ${age} ago) ${content}`;
+      const ignored = s.ignoredCount && s.ignoredCount > 0 ? ` ⚠️ IGNORED ${s.ignoredCount}x` : "";
+      return `- [urgency=${urgency}] (${type}, ${source}, ${age} ago) ${content}${ignored}`;
     })
     .join("\n");
+}
+
+function formatIgnoredWarning(signals: AttentionSignal[]): string {
+  const ignored = (signals ?? []).filter((s) => s.ignoredCount != null && s.ignoredCount > 0);
+  if (ignored.length === 0) {
+    return "";
+  }
+
+  const critical = ignored.filter((s) => (s.ignoredCount ?? 0) >= CRITICAL_IGNORE_THRESHOLD);
+  const nonCritical = ignored.filter((s) => (s.ignoredCount ?? 0) < CRITICAL_IGNORE_THRESHOLD);
+
+  const lines: string[] = [];
+
+  if (critical.length > 0) {
+    lines.push(
+      "🚨 **CRITICAL — These items have been repeatedly ignored and REQUIRE immediate action:**",
+    );
+    for (const s of critical) {
+      lines.push(`- [IGNORED ${s.ignoredCount}x] ${s.content} (source: ${s.source})`);
+    }
+  }
+
+  if (nonCritical.length > 0) {
+    lines.push(
+      "⚠️ **These items were presented before but not addressed. Please act on them or explicitly dismiss them:**",
+    );
+    for (const s of nonCritical) {
+      lines.push(`- [ignored ${s.ignoredCount}x] ${s.content} (source: ${s.source})`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function formatIgnoredWarningSection(signals: AttentionSignal[]): string {
+  const warning = formatIgnoredWarning(signals);
+  if (!warning) {
+    return "";
+  }
+  return `\n${warning}\n`;
 }
 
 function formatSocialContext(state: AutonomousState): string {
@@ -211,7 +253,7 @@ ${formatPlans(state)}
 
 ## Attention Signals (things demanding your attention right now)
 ${formatSignals(signals ?? [])}
-
+${formatIgnoredWarningSection(signals)}
 ## Recent Unprocessed Observations
 ${formatObservations(state)}
 
@@ -223,11 +265,14 @@ ${formatSocialContext(state)}
 Think about what a thoughtful, proactive person would do right now. Consider:
 
 1. **Urgent items first**: Are there any signals or deadlines that need immediate attention?
-2. **Goal progress**: Can you make progress on any active goals? Take concrete steps.
-3. **Social engagement**: Should you reach out to someone, follow up on a conversation, or share something interesting?
-4. **World monitoring**: Is there anything you should check on (news, web, APIs)?
-5. **Planning**: Do you need to create or update plans for your goals?
-6. **Waiting**: If there's nothing actionable right now, that's fine — use the autonomous tool to set when you'd like your next cycle.
+2. **Ignored items**: Items marked with ⚠️ IGNORED have been presented before. You MUST address them now or explicitly update their state (complete, pause, or dismiss with a reason).
+3. **Goal progress**: Can you make progress on any active goals? Take concrete steps and **always call update-goal with progress** so the system knows you acted.
+4. **Social engagement**: Should you reach out to someone, follow up on a conversation, or share something interesting?
+5. **World monitoring**: Is there anything you should check on (news, web, APIs)?
+6. **Planning**: Do you need to create or update plans for your goals?
+7. **Waiting**: If there's nothing actionable right now, that's fine — use the autonomous tool to set when you'd like your next cycle.
+
+**Accountability**: The system tracks whether you act on presented signals and goals. Items you ignore will reappear with escalating urgency. If you cannot act on something, explicitly update its status (pause the goal, dismiss the signal, or record why you're waiting).
 
 You have access to tools for:
 - **Sending messages** to channels and people
@@ -237,7 +282,7 @@ You have access to tools for:
 - **Memory** for long-term knowledge storage
 
 After taking actions, use the \`autonomous\` tool to:
-- Update goal progress
+- Update goal progress (this is how the system knows you addressed a goal)
 - Mark observations as processed
 - Record new observations
 - Update social context

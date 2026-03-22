@@ -179,6 +179,28 @@ describe("updateGoal", () => {
     expect(updated?.progress).toBe("Done!");
   });
 
+  it("sets lastProgressAt when progress is updated", () => {
+    const state = createEmptyState();
+    const goal = addGoal(state, "Track progress", "medium");
+    expect(goal.lastProgressAt).toBeUndefined();
+
+    const before = Date.now();
+    const updated = updateGoal(state, goal.id, { progress: "50% done" });
+    const after = Date.now();
+
+    expect(updated?.lastProgressAt).toBeTypeOf("number");
+    expect(updated?.lastProgressAt).toBeGreaterThanOrEqual(before);
+    expect(updated?.lastProgressAt).toBeLessThanOrEqual(after);
+  });
+
+  it("does not set lastProgressAt when only status changes", () => {
+    const state = createEmptyState();
+    const goal = addGoal(state, "Status only", "medium");
+    const updated = updateGoal(state, goal.id, { status: "paused" });
+
+    expect(updated?.lastProgressAt).toBeUndefined();
+  });
+
   it("returns null for missing goal", () => {
     const state = createEmptyState();
     expect(updateGoal(state, "nonexistent", { status: "completed" })).toBe(null);
