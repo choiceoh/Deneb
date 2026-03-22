@@ -257,12 +257,11 @@ export async function waitFor<T>(
 /**
  * EventEmitter의 단일 이벤트 대기
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function waitForEvent<T = any>(
+export function waitForEvent<T = unknown>(
   emitter: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Node EventEmitter compat requires any[]
     once: (event: string, fn: (...args: any[]) => void) => void;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Node EventEmitter compat requires any[]
     off: (event: string, fn: (...args: any[]) => void) => void;
   },
   event: string,
