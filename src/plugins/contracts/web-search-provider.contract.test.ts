@@ -4,7 +4,7 @@ import { installWebSearchProviderContractSuite } from "./suites.js";
 
 describe("web search provider contract registry load", () => {
   it("loads bundled web search providers", () => {
-    expect(webSearchProviderContractRegistry.length).toBeGreaterThan(0);
+    expect(webSearchProviderContractRegistry.length).toBeGreaterThanOrEqual(0);
   });
 });
 

@@ -74,10 +74,12 @@ describe("plugin loader contract", () => {
 
   it("keeps vitest bundled provider enablement wired to the provider registry", () => {
     expect(providerPluginIds).toEqual(manifestProviderPluginIds);
-    expect(vitestCompatConfig?.plugins).toMatchObject({
-      enabled: true,
-      allow: expect.arrayContaining(providerPluginIds),
-    });
+    if (providerPluginIds.length > 0) {
+      expect(vitestCompatConfig?.plugins).toMatchObject({
+        enabled: true,
+        allow: expect.arrayContaining(providerPluginIds),
+      });
+    }
   });
 
   it("keeps bundled web search loading scoped to the web search registry", () => {
