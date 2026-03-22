@@ -11,13 +11,26 @@ import {
 import { resolveApiKeyForProvider, resolveEnvApiKey } from "../agents/model-auth.js";
 import type { DenebConfig } from "../config/config.js";
 import { resolveAgentModelPrimaryValue } from "../config/model-input.js";
+import type { ModelDefinitionConfig } from "../config/types.models.js";
 import {
-  buildKilocodeModelDefinition,
   KILOCODE_DEFAULT_MODEL_ID,
+  KILOCODE_DEFAULT_MODEL_NAME,
   KILOCODE_DEFAULT_CONTEXT_WINDOW,
   KILOCODE_DEFAULT_MAX_TOKENS,
   KILOCODE_DEFAULT_COST,
-} from "../plugin-sdk/provider-models.js";
+} from "../providers/kilocode-shared.js";
+
+function buildKilocodeModelDefinition(): ModelDefinitionConfig {
+  return {
+    id: KILOCODE_DEFAULT_MODEL_ID,
+    name: KILOCODE_DEFAULT_MODEL_NAME,
+    reasoning: true,
+    input: ["text", "image"],
+    cost: { ...KILOCODE_DEFAULT_COST },
+    contextWindow: KILOCODE_DEFAULT_CONTEXT_WINDOW,
+    maxTokens: KILOCODE_DEFAULT_MAX_TOKENS,
+  };
+}
 import { captureEnv } from "../test-utils/env.js";
 
 const emptyCfg: DenebConfig = {};

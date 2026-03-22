@@ -1,5 +1,5 @@
 import { escapeRegExp } from "../../utils.js";
-import type { NoticeLevel, ReasoningLevel } from "../thinking.js";
+import type { ReasoningLevel } from "../thinking.js";
 import {
   type ElevatedLevel,
   normalizeFastMode,
@@ -188,5 +188,5 @@ export function extractStatusDirective(body?: string): {
   return extractSimpleDirective(body, ["status"]);
 }
 
-export type { ElevatedLevel, NoticeLevel, ReasoningLevel, ThinkLevel, VerboseLevel };
+export type { ElevatedLevel, ReasoningLevel, ThinkLevel, VerboseLevel };
 export { extractExecDirective } from "./exec/directive.js";
