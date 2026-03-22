@@ -10,7 +10,6 @@ import type {
 } from "deneb/plugin-sdk/core";
 import * as directoryRuntimeSdk from "deneb/plugin-sdk/directory-runtime";
 import * as lazyRuntimeSdk from "deneb/plugin-sdk/lazy-runtime";
-import * as providerModelsSdk from "deneb/plugin-sdk/provider-models";
 import * as providerSetupSdk from "deneb/plugin-sdk/provider-setup";
 import * as replyPayloadSdk from "deneb/plugin-sdk/reply-payload";
 import * as routingSdk from "deneb/plugin-sdk/routing";
@@ -114,16 +113,6 @@ describe("plugin-sdk subpath exports", () => {
 
   it("exports provider setup helpers from the dedicated subpath", () => {
     expect(typeof providerSetupSdk.discoverOpenAICompatibleSelfHostedProvider).toBe("function");
-  });
-
-  it("keeps provider models focused on shared provider primitives", () => {
-    expect(typeof providerModelsSdk.applyOpenAIConfig).toBe("function");
-    expect(typeof providerModelsSdk.buildKilocodeModelDefinition).toBe("function");
-    expect(typeof providerModelsSdk.discoverHuggingfaceModels).toBe("function");
-    expect("buildMinimaxModelDefinition" in asExports(providerModelsSdk)).toBe(false);
-    expect("buildMoonshotProvider" in asExports(providerModelsSdk)).toBe(false);
-    expect("QIANFAN_BASE_URL" in asExports(providerModelsSdk)).toBe(false);
-    expect("resolveZaiBaseUrl" in asExports(providerModelsSdk)).toBe(false);
   });
 
   it("exports shared setup helpers from the dedicated subpath", () => {

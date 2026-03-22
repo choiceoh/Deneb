@@ -1,8 +1,6 @@
 export type ThinkLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "adaptive";
 export type VerboseLevel = "off" | "on" | "full";
-export type NoticeLevel = "off" | "on" | "full";
 export type ElevatedLevel = "off" | "on" | "ask" | "full";
-export type ElevatedMode = "off" | "ask" | "full";
 export type ReasoningLevel = "off" | "on" | "stream";
 export type UsageDisplayLevel = "off" | "tokens" | "full";
 export type ThinkingCatalogEntry = {
@@ -183,10 +181,6 @@ export function normalizeVerboseLevel(raw?: string | null): VerboseLevel | undef
   return normalizeOnOffFullLevel(raw);
 }
 
-export function normalizeNoticeLevel(raw?: string | null): NoticeLevel | undefined {
-  return normalizeOnOffFullLevel(raw);
-}
-
 export function normalizeUsageDisplay(raw?: string | null): UsageDisplayLevel | undefined {
   if (!raw) {
     return undefined;
@@ -246,16 +240,6 @@ export function normalizeElevatedLevel(raw?: string | null): ElevatedLevel | und
     return "on";
   }
   return undefined;
-}
-
-export function resolveElevatedMode(level?: ElevatedLevel | null): ElevatedMode {
-  if (!level || level === "off") {
-    return "off";
-  }
-  if (level === "full") {
-    return "full";
-  }
-  return "ask";
 }
 
 export function normalizeReasoningLevel(raw?: string | null): ReasoningLevel | undefined {

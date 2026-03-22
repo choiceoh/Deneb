@@ -35,7 +35,7 @@ import {
 } from "../../extensions/xai/onboard.js";
 import { applyXiaomiConfig, applyXiaomiProviderConfig } from "../../extensions/xiaomi/onboard.js";
 import { applyZaiConfig, applyZaiProviderConfig } from "../../extensions/zai/onboard.js";
-import { SYNTHETIC_DEFAULT_MODEL_ID } from "../agents/synthetic-models.js";
+const SYNTHETIC_DEFAULT_MODEL_ID = "hf:MiniMaxAI/MiniMax-M2.5";
 import type { DenebConfig } from "../config/config.js";
 import {
   resolveAgentModelFallbackValues,

@@ -12,18 +12,14 @@ export {
   formatXHighModelHint,
   normalizeElevatedLevel,
   normalizeFastMode,
-  normalizeNoticeLevel,
   normalizeReasoningLevel,
   normalizeThinkLevel,
   normalizeUsageDisplay,
   normalizeVerboseLevel,
   resolveResponseUsageMode,
-  resolveElevatedMode,
 } from "./thinking.shared.js";
 export type {
   ElevatedLevel,
-  ElevatedMode,
-  NoticeLevel,
   ReasoningLevel,
   ThinkLevel,
   ThinkingCatalogEntry,

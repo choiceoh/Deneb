@@ -25,18 +25,6 @@ function resolveConfiguredFastModeRaw(params: {
   return modelConfig?.params?.fastMode ?? modelConfig?.params?.fast_mode;
 }
 
-export function resolveConfiguredFastMode(params: {
-  cfg: DenebConfig | undefined;
-  provider: string;
-  model: string;
-}): boolean {
-  return (
-    normalizeFastMode(
-      resolveConfiguredFastModeRaw(params) as string | boolean | null | undefined,
-    ) ?? false
-  );
-}
-
 export function resolveFastModeState(params: {
   cfg: DenebConfig | undefined;
   provider: string;
