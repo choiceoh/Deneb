@@ -2,6 +2,7 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 type PackageJson = {
@@ -281,7 +282,8 @@ export function collectReleaseTagErrors(params: {
 }
 
 function loadPackageJson(): PackageJson {
-  return JSON.parse(readFileSync("package.json", "utf8")) as PackageJson;
+  const packageJsonPath = path.resolve(import.meta.dirname, "..", "package.json");
+  return JSON.parse(readFileSync(packageJsonPath, "utf8")) as PackageJson;
 }
 
 function main(): number {

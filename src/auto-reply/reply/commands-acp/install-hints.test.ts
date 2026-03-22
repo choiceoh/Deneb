@@ -1,22 +1,15 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DenebConfig } from "../../../config/config.js";
 import { resolveAcpInstallCommandHint, resolveConfiguredAcpBackendId } from "./install-hints.js";
-
-const originalCwd = process.cwd();
-const tempDirs: string[] = [];
 
 function withAcpConfig(acp: DenebConfig["acp"]): DenebConfig {
   return { acp } as DenebConfig;
 }
 
 afterEach(() => {
-  process.chdir(originalCwd);
-  for (const dir of tempDirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  vi.restoreAllMocks();
 });
 
 describe("ACP install hints", () => {
@@ -28,10 +21,7 @@ describe("ACP install hints", () => {
   });
 
   it("uses local acpx extension path when present", () => {
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "acp-install-hint-"));
-    tempDirs.push(tempRoot);
-    fs.mkdirSync(path.join(tempRoot, "extensions", "acpx"), { recursive: true });
-    process.chdir(tempRoot);
+    vi.spyOn(fs, "existsSync").mockReturnValue(true);
 
     const cfg = withAcpConfig({ backend: "acpx" });
     const hint = resolveAcpInstallCommandHint(cfg);
@@ -40,9 +30,7 @@ describe("ACP install hints", () => {
   });
 
   it("falls back to npm install hint for acpx when local extension is absent", () => {
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "acp-install-hint-"));
-    tempDirs.push(tempRoot);
-    process.chdir(tempRoot);
+    vi.spyOn(fs, "existsSync").mockReturnValue(false);
 
     const cfg = withAcpConfig({ backend: "acpx" });
     expect(resolveAcpInstallCommandHint(cfg)).toBe("deneb plugins install acpx");

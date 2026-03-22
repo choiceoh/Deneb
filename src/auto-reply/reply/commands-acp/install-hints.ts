@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 import type { DenebConfig } from "../../../config/config.js";
 
@@ -13,8 +13,9 @@ export function resolveAcpInstallCommandHint(cfg: DenebConfig): string {
   }
   const backendId = resolveConfiguredAcpBackendId(cfg).toLowerCase();
   if (backendId === "acpx") {
-    const localPath = path.resolve(process.cwd(), "extensions/acpx");
-    if (existsSync(localPath)) {
+    // Resolve relative to repo root (four levels up from this file in src/auto-reply/reply/commands-acp/)
+    const localPath = path.resolve(import.meta.dirname, "../../../../extensions/acpx");
+    if (fs.existsSync(localPath)) {
       return `deneb plugins install ${localPath}`;
     }
     return "deneb plugins install acpx";
