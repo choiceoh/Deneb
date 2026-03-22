@@ -38,7 +38,7 @@ function stripWorkspaceDenebDevDependency(pkg: PackageJson): boolean {
   return true;
 }
 
-export function syncPluginVersions(rootDir = resolve(".")) {
+export function syncPluginVersions(rootDir = resolve(import.meta.dirname, "..")) {
   const rootPackagePath = join(rootDir, "package.json");
   const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8")) as PackageJson;
   const targetVersion = rootPackage.version;
