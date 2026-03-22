@@ -471,10 +471,6 @@ export async function summarizeText(params: {
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      if (resolved.model.api === "ollama") {
-        // Ollama TTS integration removed — skip custom API registration
-        // TODO: restore if ollama provider is re-added
-      }
       const res = await completeSimple(
         resolved.model,
         {

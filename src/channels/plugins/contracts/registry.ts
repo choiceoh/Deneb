@@ -343,10 +343,6 @@ export const directoryContractRegistry: DirectoryContractEntry[] = surfaceContra
     coverage: directoryPresenceOnlyIds.has(entry.id) ? "presence" : "lookups",
   }));
 
-const _baseSessionBindingCfg = {
-  session: { mainKey: "main", scope: "per-sender" },
-} satisfies DenebConfig;
-
 export const sessionBindingContractRegistry: SessionBindingContractEntry[] = [
   {
     id: "telegram",
