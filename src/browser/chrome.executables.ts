@@ -568,8 +568,6 @@ export function findGoogleChromeExecutableLinux(): BrowserExecutable | null {
 export function findChromeExecutableWindows(): BrowserExecutable | null {
   const localAppData = process.env.LOCALAPPDATA ?? "";
   const programFiles = process.env.ProgramFiles ?? "C:\\Program Files";
-  // Must use bracket notation: variable name contains parentheses
-  const programFilesX86 = process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)";
 
   const joinWin = path.win32.join;
   const candidates: Array<BrowserExecutable> = [];
@@ -602,35 +600,20 @@ export function findChromeExecutableWindows(): BrowserExecutable | null {
     });
   }
 
-  // Chrome (system install, 64-bit)
+  // Chrome (system install)
   candidates.push({
     kind: "chrome",
     path: joinWin(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
   });
-  // Chrome (system install, 32-bit on 64-bit Windows)
-  candidates.push({
-    kind: "chrome",
-    path: joinWin(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
-  });
-  // Brave (system install, 64-bit)
+  // Brave (system install)
   candidates.push({
     kind: "brave",
     path: joinWin(programFiles, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
   });
-  // Brave (system install, 32-bit on 64-bit Windows)
-  candidates.push({
-    kind: "brave",
-    path: joinWin(programFilesX86, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
-  });
-  // Edge (system install, 64-bit)
+  // Edge (system install)
   candidates.push({
     kind: "edge",
     path: joinWin(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
-  });
-  // Edge (system install, 32-bit on 64-bit Windows)
-  candidates.push({
-    kind: "edge",
-    path: joinWin(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
   });
 
   return findFirstExecutable(candidates);
@@ -639,7 +622,6 @@ export function findChromeExecutableWindows(): BrowserExecutable | null {
 export function findGoogleChromeExecutableWindows(): BrowserExecutable | null {
   const localAppData = process.env.LOCALAPPDATA ?? "";
   const programFiles = process.env.ProgramFiles ?? "C:\\Program Files";
-  const programFilesX86 = process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)";
   const joinWin = path.win32.join;
   const candidates: string[] = [];
 
@@ -649,7 +631,6 @@ export function findGoogleChromeExecutableWindows(): BrowserExecutable | null {
   }
 
   candidates.push(joinWin(programFiles, "Google", "Chrome", "Application", "chrome.exe"));
-  candidates.push(joinWin(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"));
 
   return findFirstChromeExecutable(candidates);
 }
