@@ -894,7 +894,7 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
     try {
       const loaded = await resolveGatewayService().isLoaded({ env: process.env });
       if (loaded) {
-        restartScriptPath = await prepareRestartScript(process.env, gatewayPort);
+        restartScriptPath = await prepareRestartScript(process.env);
         refreshGatewayServiceEnv = true;
       }
     } catch {

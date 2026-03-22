@@ -82,27 +82,11 @@ export function injectCanvasLiveReload(html: string): string {
   const snippet = `
 <script>
 (() => {
-  // Cross-platform action bridge helper.
-  // Works on:
-  // - iOS: window.webkit.messageHandlers.denebCanvasA2UIAction.postMessage(...)
-  // - Android: window.denebCanvasA2UIAction.postMessage(...)
-  const handlerNames = ["denebCanvasA2UIAction"];
+  // Action bridge helper.
   function postToNode(payload) {
     try {
       const raw = typeof payload === "string" ? payload : JSON.stringify(payload);
-      for (const name of handlerNames) {
-        const iosHandler = globalThis.webkit?.messageHandlers?.[name];
-        if (iosHandler && typeof iosHandler.postMessage === "function") {
-          iosHandler.postMessage(raw);
-          return true;
-        }
-        const androidHandler = globalThis[name];
-        if (androidHandler && typeof androidHandler.postMessage === "function") {
-          // Important: call as a method on the interface object (binding matters on Android WebView).
-          androidHandler.postMessage(raw);
-          return true;
-        }
-      }
+      // No native bridge available; return false so callers know delivery failed.
     } catch {}
     return false;
   }

@@ -5,7 +5,6 @@ import {
 import { formatCliCommand } from "../cli/command-format.js";
 import { collectConfigServiceEnvVars } from "../config/env-vars.js";
 import type { DenebConfig } from "../config/types.js";
-import { resolveGatewayLaunchAgentLabel } from "../daemon/constants.js";
 import { resolveGatewayProgramArguments } from "../daemon/program-args.js";
 import { buildServiceEnvironment } from "../daemon/service-env.js";
 import {
@@ -84,10 +83,6 @@ export async function buildGatewayInstallPlan(params: {
   const serviceEnvironment = buildServiceEnvironment({
     env: params.env,
     port: params.port,
-    launchdLabel:
-      process.platform === "darwin"
-        ? resolveGatewayLaunchAgentLabel(params.env.DENEB_PROFILE)
-        : undefined,
     // Keep npm/pnpm available to the service when the selected daemon node comes from
     // a version-manager bin directory that isn't covered by static PATH guesses.
     extraPathDirs: resolveDaemonNodeBinDir(nodePath),
@@ -107,8 +102,6 @@ export async function buildGatewayInstallPlan(params: {
   return { programArguments, workingDirectory, environment };
 }
 
-export function gatewayInstallErrorHint(platform = process.platform): string {
-  return platform === "win32"
-    ? "Tip: native Windows now falls back to a per-user Startup-folder login item when Scheduled Task creation is denied; if install still fails, rerun from an elevated PowerShell or skip service install."
-    : `Tip: rerun \`${formatCliCommand("deneb gateway install")}\` after fixing the error.`;
+export function gatewayInstallErrorHint(): string {
+  return `Tip: rerun \`${formatCliCommand("deneb gateway install")}\` after fixing the error.`;
 }
