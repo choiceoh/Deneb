@@ -264,13 +264,20 @@ ${formatSocialContext(state)}
 
 Think about what a thoughtful, proactive person would do right now. Consider:
 
-1. **Urgent items first**: Are there any signals or deadlines that need immediate attention?
-2. **Ignored items**: Items marked with ⚠️ IGNORED have been presented before. You MUST address them now or explicitly update their state (complete, pause, or dismiss with a reason).
-3. **Goal progress**: Can you make progress on any active goals? Take concrete steps and **always call update-goal with progress** so the system knows you acted.
-4. **Social engagement**: Should you reach out to someone, follow up on a conversation, or share something interesting?
-5. **World monitoring**: Is there anything you should check on (news, web, APIs)?
-6. **Planning**: Do you need to create or update plans for your goals?
-7. **Waiting**: If there's nothing actionable right now, that's fine — use the autonomous tool to set when you'd like your next cycle.
+1. **Derive goals from conversations**: Observations tagged \`conversation:*\` are real user interactions. Extract ongoing tasks, requests, and topics the user cares about and \`add-goal\` for each actionable item. This is your primary way to stay aligned with what the user is working on.
+2. **Urgent items first**: Are there any signals or deadlines that need immediate attention?
+3. **Ignored items**: Items marked with ⚠️ IGNORED have been presented before. You MUST address them now or explicitly update their state (complete, pause, or dismiss with a reason).
+4. **Goal progress**: Can you make progress on any active goals? Take concrete steps and **always call update-goal with progress** so the system knows you acted.
+5. **Social engagement**: Should you reach out to someone, follow up on a conversation, or share something interesting?
+6. **World monitoring**: Is there anything you should check on (news, web, APIs)?
+7. **Planning**: Do you need to create or update plans for your goals?
+8. **Waiting**: If there's nothing actionable right now, that's fine — use the autonomous tool to set when you'd like your next cycle.
+
+**Goal derivation rules**:
+- When you see conversation observations, create goals that capture what the user is working on or asking about. For example, if the user discussed debugging a build error, create a goal like "Help resolve build error in X".
+- If a conversation observation matches an existing active goal, update that goal's progress instead of creating a duplicate.
+- Mark conversation observations as processed after you have derived goals or determined they are not actionable.
+- Complete goals that appear to be resolved based on later conversation observations.
 
 **Accountability**: The system tracks whether you act on presented signals and goals. Items you ignore will reappear with escalating urgency. If you cannot act on something, explicitly update its status (pause the goal, dismiss the signal, or record why you're waiting).
 
@@ -283,7 +290,7 @@ You have access to tools for:
 
 After taking actions, use the \`autonomous\` tool to:
 - Update goal progress (this is how the system knows you addressed a goal)
-- Mark observations as processed
+- Mark observations as processed (especially conversation observations after deriving goals)
 - Record new observations
 - Update social context
 - Set when your next cycle should run (use \`set-next-cycle\` action)
