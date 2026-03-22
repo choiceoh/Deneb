@@ -49,6 +49,16 @@ function inferApiFromProvider(provider: string): string {
   return map[provider] ?? "openai-completions";
 }
 
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) {
+    return `${(n / 1_000_000).toFixed(1)}M`;
+  }
+  if (n >= 1_000) {
+    return `${(n / 1_000).toFixed(1)}K`;
+  }
+  return `${n}`;
+}
+
 /** Find provider-level config (baseUrl, headers, apiKey) from runtime config. */
 function findProviderConfig(cfg: DenebConfig, provider: string): Record<string, unknown> {
   if (!cfg?.models?.providers) {
@@ -388,6 +398,30 @@ export function createNativeLcmDependencies(): LcmDependencies {
       warn: (msg) => log.warn(msg),
       error: (msg) => log.error(msg),
       debug: (msg) => log.debug?.(msg) ?? (() => {}),
+    },
+    // Fire-and-forget notification callback for compaction events.
+    // Uses gateway RPC to inject a notification message into the main agent session.
+    onCompaction: (event) => {
+      if (!event.actionTaken) {
+        return;
+      }
+      const pct =
+        event.tokensBefore > 0
+          ? ((1 - event.tokensAfter / event.tokensBefore) * 100).toFixed(0)
+          : "?";
+      const engine = event.engine ?? "default";
+      const dur = event.durationMs != null ? `${event.durationMs}ms` : "";
+      const text = `📦 컴팩션 완료 (${engine}) ${formatTokens(event.tokensBefore)} → ${formatTokens(event.tokensAfter)} (-${pct}%${dur ? ` ${dur}` : ""})`;
+      // Best-effort via gateway RPC — never throw from this callback.
+      nativeCallGateway({
+        method: "agent",
+        params: {
+          sessionKey: process.env.LCM_NOTIFY_SESSION || "agent:main",
+          message: text,
+          silent: true,
+        },
+        timeoutMs: 5000,
+      }).catch(() => {});
     },
   };
 }

@@ -151,4 +151,14 @@ export interface LcmDependencies {
     error: (msg: string) => void;
     debug: (msg: string) => void;
   };
+
+  /** Optional callback fired after compaction completes (for user notifications). */
+  onCompaction?: (event: {
+    conversationId: number;
+    tokensBefore: number;
+    tokensAfter: number;
+    actionTaken: boolean;
+    engine?: string;
+    durationMs?: number;
+  }) => void;
 }
