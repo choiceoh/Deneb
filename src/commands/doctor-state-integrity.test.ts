@@ -99,36 +99,13 @@ describe("doctor state integrity oauth dir checks", () => {
     fs.rmSync(tempHome, { recursive: true, force: true });
   });
 
-  it("does not prompt for oauth dir when no whatsapp/pairing config is active", async () => {
+  it("does not prompt for oauth dir when DENEB_OAUTH_DIR is not set", async () => {
     const cfg: DenebConfig = {};
     const confirmSkipInNonInteractive = await runStateIntegrity(cfg);
     expect(confirmSkipInNonInteractive).not.toHaveBeenCalledWith(OAUTH_PROMPT_MATCHER);
     const text = stateIntegrityText();
     expect(text).toContain("OAuth dir not present");
     expect(text).not.toContain("CRITICAL: OAuth dir missing");
-  });
-
-  it("prompts for oauth dir when whatsapp is configured", async () => {
-    const cfg: DenebConfig = {
-      channels: {
-        whatsapp: {},
-      },
-    };
-    const confirmSkipInNonInteractive = await runStateIntegrity(cfg);
-    expect(confirmSkipInNonInteractive).toHaveBeenCalledWith(OAUTH_PROMPT_MATCHER);
-    expect(stateIntegrityText()).toContain("CRITICAL: OAuth dir missing");
-  });
-
-  it("prompts for oauth dir when a channel dmPolicy is pairing", async () => {
-    const cfg: DenebConfig = {
-      channels: {
-        telegram: {
-          dmPolicy: "pairing",
-        },
-      },
-    };
-    const confirmSkipInNonInteractive = await runStateIntegrity(cfg);
-    expect(confirmSkipInNonInteractive).toHaveBeenCalledWith(OAUTH_PROMPT_MATCHER);
   });
 
   it("prompts for oauth dir when DENEB_OAUTH_DIR is explicitly configured", async () => {

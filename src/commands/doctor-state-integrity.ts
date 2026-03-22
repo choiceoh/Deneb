@@ -119,8 +119,7 @@ function countJsonlLines(filePath: string): number {
 
 function findOtherStateDirs(stateDir: string): string[] {
   const resolvedState = path.resolve(stateDir);
-  const roots =
-    process.platform === "darwin" ? ["/Users"] : process.platform === "linux" ? ["/home"] : [];
+  const roots = process.platform === "linux" ? ["/home"] : [];
   const found: string[] = [];
   for (const root of roots) {
     let entries: fs.Dirent[] = [];
@@ -148,19 +147,6 @@ function findOtherStateDirs(stateDir: string): string[] {
     }
   }
   return found;
-}
-
-function isPathUnderRoot(targetPath: string, rootPath: string): boolean {
-  const normalizedTarget = path.resolve(targetPath);
-  const normalizedRoot = path.resolve(rootPath);
-  const rootToken = path.parse(normalizedRoot).root;
-  if (normalizedRoot === rootToken) {
-    return normalizedTarget.startsWith(rootToken);
-  }
-  return (
-    normalizedTarget === normalizedRoot ||
-    normalizedTarget.startsWith(`${normalizedRoot}${path.sep}`)
-  );
 }
 
 function tryResolveRealPath(targetPath: string): string | null {
@@ -373,80 +359,6 @@ export function formatLinuxSdBackedStateDirWarning(
   ].join("\n");
 }
 
-export function detectMacCloudSyncedStateDir(
-  stateDir: string,
-  deps?: {
-    platform?: NodeJS.Platform;
-    homedir?: string;
-    resolveRealPath?: (targetPath: string) => string | null;
-  },
-): {
-  path: string;
-  storage: "iCloud Drive" | "CloudStorage provider";
-} | null {
-  const platform = deps?.platform ?? process.platform;
-  if (platform !== "darwin") {
-    return null;
-  }
-
-  // Cloud-sync roots should always be anchored to the OS account home on macOS.
-  // DENEB_HOME can relocate app data defaults, but iCloud/CloudStorage remain under the OS home.
-  const homedir = deps?.homedir ?? os.homedir();
-  const roots = [
-    {
-      storage: "iCloud Drive" as const,
-      root: path.join(homedir, "Library", "Mobile Documents", "com~apple~CloudDocs"),
-    },
-    {
-      storage: "CloudStorage provider" as const,
-      root: path.join(homedir, "Library", "CloudStorage"),
-    },
-  ];
-  const realPath = (deps?.resolveRealPath ?? tryResolveRealPath)(stateDir);
-  // Prefer the resolved target path when available so symlink prefixes do not
-  // misclassify local state dirs as cloud-synced.
-  const candidates = realPath ? [path.resolve(realPath)] : [path.resolve(stateDir)];
-
-  for (const candidate of candidates) {
-    for (const { storage, root } of roots) {
-      if (isPathUnderRoot(candidate, root)) {
-        return { path: candidate, storage };
-      }
-    }
-  }
-
-  return null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isPairingPolicy(value: unknown): boolean {
-  return typeof value === "string" && value.trim().toLowerCase() === "pairing";
-}
-
-function hasPairingPolicy(value: unknown): boolean {
-  if (!isRecord(value)) {
-    return false;
-  }
-  if (isPairingPolicy(value.dmPolicy)) {
-    return true;
-  }
-  if (isRecord(value.dm) && isPairingPolicy(value.dm.policy)) {
-    return true;
-  }
-  if (!isRecord(value.accounts)) {
-    return false;
-  }
-  for (const accountCfg of Object.values(value.accounts)) {
-    if (hasPairingPolicy(accountCfg)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function isSlashRoutingSessionKey(sessionKey: string): boolean {
   const raw = sessionKey.trim().toLowerCase();
   if (!raw) {
@@ -456,28 +368,8 @@ function isSlashRoutingSessionKey(sessionKey: string): boolean {
   return /^[^:]+:slash:[^:]+(?:$|:)/.test(scoped);
 }
 
-function shouldRequireOAuthDir(cfg: DenebConfig, env: NodeJS.ProcessEnv): boolean {
-  if (env.DENEB_OAUTH_DIR?.trim()) {
-    return true;
-  }
-  const channels = cfg.channels;
-  if (!isRecord(channels)) {
-    return false;
-  }
-  // WhatsApp auth always uses the credentials tree.
-  if (isRecord(channels.whatsapp)) {
-    return true;
-  }
-  // Pairing allowlists are persisted under credentials/<channel>-allowFrom.json.
-  for (const [channelId, channelCfg] of Object.entries(channels)) {
-    if (channelId === "defaults" || channelId === "modelByChannel") {
-      continue;
-    }
-    if (hasPairingPolicy(channelCfg)) {
-      return true;
-    }
-  }
-  return false;
+function shouldRequireOAuthDir(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env.DENEB_OAUTH_DIR?.trim());
 }
 
 export async function noteStateIntegrity(
@@ -502,20 +394,9 @@ export async function noteStateIntegrity(
   const displaySessionsDir = shortenHomePath(sessionsDir);
   const displayStoreDir = shortenHomePath(storeDir);
   const displayConfigPath = configPath ? shortenHomePath(configPath) : undefined;
-  const requireOAuthDir = shouldRequireOAuthDir(cfg, env);
-  const cloudSyncedStateDir = detectMacCloudSyncedStateDir(stateDir);
+  const requireOAuthDir = shouldRequireOAuthDir(env);
   const linuxSdBackedStateDir = detectLinuxSdBackedStateDir(stateDir);
 
-  if (cloudSyncedStateDir) {
-    warnings.push(
-      [
-        `- State directory is under macOS cloud-synced storage (${displayStateDir}; ${cloudSyncedStateDir.storage}).`,
-        "- This can cause slow I/O and sync/lock races for sessions and credentials.",
-        "- Prefer a local non-synced state dir (for example: ~/.deneb).",
-        `  Set locally: DENEB_STATE_DIR=~/.deneb ${formatCliCommand("deneb doctor")}`,
-      ].join("\n"),
-    );
-  }
   if (linuxSdBackedStateDir) {
     warnings.push(formatLinuxSdBackedStateDirWarning(displayStateDir, linuxSdBackedStateDir));
   }
@@ -566,7 +447,7 @@ export async function noteStateIntegrity(
       }
     }
   }
-  if (stateDirExists && process.platform !== "win32") {
+  if (stateDirExists) {
     try {
       const dirLstat = fs.lstatSync(stateDir);
       const isDirSymlink = dirLstat.isSymbolicLink();
@@ -594,7 +475,7 @@ export async function noteStateIntegrity(
     }
   }
 
-  if (configPath && existsFile(configPath) && process.platform !== "win32") {
+  if (configPath && existsFile(configPath)) {
     try {
       const configLstat = fs.lstatSync(configPath);
       const isSymlink = configLstat.isSymbolicLink();
@@ -631,7 +512,7 @@ export async function noteStateIntegrity(
       dirCandidates.set(oauthDir, "OAuth dir");
     } else if (!existsDir(oauthDir)) {
       warnings.push(
-        `- OAuth dir not present (${displayOauthDir}). Skipping create because no WhatsApp/pairing channel config is active.`,
+        `- OAuth dir not present (${displayOauthDir}). Skipping create because DENEB_OAUTH_DIR is not set.`,
       );
     }
     const displayDirFor = (dir: string) => {

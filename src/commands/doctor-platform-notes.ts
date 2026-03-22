@@ -29,12 +29,7 @@ function isTruthyEnvValue(value: string | undefined): boolean {
 
 function isTmpCompileCachePath(cachePath: string): boolean {
   const normalized = cachePath.trim().replace(/\/+$/, "");
-  return (
-    normalized === "/tmp" ||
-    normalized.startsWith("/tmp/") ||
-    normalized === "/private/tmp" ||
-    normalized.startsWith("/private/tmp/")
-  );
+  return normalized === "/tmp" || normalized.startsWith("/tmp/");
 }
 
 export function noteStartupOptimizationHints(
