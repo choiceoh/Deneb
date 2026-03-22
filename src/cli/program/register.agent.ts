@@ -219,7 +219,7 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/agent", "docs.deneb.ai/cli/agent"
         `
 ${theme.heading("Examples:")}
 ${formatHelpExamples([
-  ['deneb agents set-identity --agent main --name "Deneb" --emoji "🦞"', "Set name + emoji."],
+  ['deneb agents set-identity --agent main --name "Deneb" --emoji "⭐"', "Set name + emoji."],
   ["deneb agents set-identity --agent main --avatar avatars/deneb.png", "Set avatar path."],
   [
     "deneb agents set-identity --workspace ~/.deneb/workspace --from-identity",

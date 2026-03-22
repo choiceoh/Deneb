@@ -359,7 +359,7 @@ export async function launchDenebChrome(
         name: profile.name,
         color: profile.color,
       });
-      log.info(`🦞 deneb browser profile decorated (${profile.color})`);
+      log.info(`⭐ deneb browser profile decorated (${profile.color})`);
     } catch (err) {
       log.warn(`deneb browser profile decoration failed: ${String(err)}`);
     }
@@ -416,7 +416,7 @@ export async function launchDenebChrome(
 
   const pid = proc.pid ?? -1;
   log.info(
-    `🦞 deneb browser started (${exe.kind}) profile "${profile.name}" on 127.0.0.1:${profile.cdpPort} (pid ${pid})`,
+    `⭐ deneb browser started (${exe.kind}) profile "${profile.name}" on 127.0.0.1:${profile.cdpPort} (pid ${pid})`,
   );
 
   return {
