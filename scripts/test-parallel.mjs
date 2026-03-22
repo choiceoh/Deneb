@@ -39,6 +39,9 @@ const hostMemoryGiB = Math.floor(os.totalmem() / 1024 ** 3);
 // Keep aggressive local defaults for high-memory workstations (Mac Studio class).
 const highMemLocalHost = !isCI && hostMemoryGiB >= 96;
 const lowMemLocalHost = !isCI && hostMemoryGiB < 64;
+// Very constrained hosts (≤4 cores or <32 GiB): avoid spawning too many
+// vitest processes in parallel since the per-process Node startup overhead dominates.
+const veryConstrainedHost = !isCI && (hostCpuCount <= 4 || hostMemoryGiB < 32);
 const nodeMajor = Number.parseInt(process.versions.node.split(".")[0] ?? "", 10);
 // vmForks is a big win for transform/import heavy suites. Node 24 is stable again
 // for the default unit-fast lane after moving the known flaky files to fork-only
@@ -242,9 +245,25 @@ const allKnownUnitFiles = allKnownTestFiles.filter((file) => {
   return isUnitConfigTestFile(file);
 });
 const defaultHeavyUnitFileLimit =
-  testProfile === "serial" ? 0 : testProfile === "low" ? 20 : highMemLocalHost ? 80 : 60;
+  testProfile === "serial"
+    ? 0
+    : testProfile === "low"
+      ? 20
+      : veryConstrainedHost
+        ? 10
+        : highMemLocalHost
+          ? 80
+          : 60;
 const defaultHeavyUnitLaneCount =
-  testProfile === "serial" ? 0 : testProfile === "low" ? 2 : highMemLocalHost ? 5 : 4;
+  testProfile === "serial"
+    ? 0
+    : testProfile === "low"
+      ? 2
+      : veryConstrainedHost
+        ? 1
+        : highMemLocalHost
+          ? 5
+          : 4;
 const heavyUnitFileLimit = parseEnvNumber(
   "DENEB_TEST_HEAVY_UNIT_FILE_LIMIT",
   defaultHeavyUnitFileLimit,
@@ -534,8 +553,14 @@ const targetedEntries = (() => {
 })();
 // Node 25 local runs still show cross-process worker shutdown contention even
 // after moving the known heavy files into singleton lanes.
+// On very constrained hosts (≤4 cores or <32 GiB) the overhead of spawning many
+// vitest processes in parallel outweighs the concurrency benefit; run lanes
+// sequentially so each gets full access to the limited CPU/memory budget.
 const topLevelParallelEnabled =
-  testProfile !== "low" && testProfile !== "serial" && !(!isCI && nodeMajor >= 25);
+  testProfile !== "low" &&
+  testProfile !== "serial" &&
+  !veryConstrainedHost &&
+  !(!isCI && nodeMajor >= 25);
 const overrideWorkers = Number.parseInt(process.env.DENEB_TEST_WORKERS ?? "", 10);
 const resolvedOverride =
   Number.isFinite(overrideWorkers) && overrideWorkers > 0 ? overrideWorkers : null;
@@ -591,21 +616,30 @@ const defaultWorkerBudget =
               extensions: Math.max(1, Math.min(4, Math.floor(localWorkers / 4))),
               gateway: Math.max(2, Math.min(6, Math.floor(localWorkers / 2))),
             }
-          : lowMemLocalHost
+          : veryConstrainedHost
             ? {
-                // Sub-64 GiB local hosts: vmForks import caching makes 3-4 workers viable.
-                unit: Math.max(2, Math.min(4, hostCpuCount)),
+                // Very constrained hosts (≤4 cores or <32 GiB): give each lane
+                // the full CPU budget since lanes now run sequentially.
+                unit: Math.max(2, hostCpuCount),
                 unitIsolated: 1,
-                extensions: Math.max(1, Math.min(3, Math.floor(hostCpuCount / 2))),
+                extensions: Math.max(1, Math.min(2, hostCpuCount)),
                 gateway: 1,
               }
-            : {
-                // 64-95 GiB local hosts: conservative split with some parallel headroom.
-                unit: Math.max(2, Math.min(8, Math.floor(localWorkers / 2))),
-                unitIsolated: 1,
-                extensions: Math.max(1, Math.min(4, Math.floor(localWorkers / 4))),
-                gateway: 1,
-              };
+            : lowMemLocalHost
+              ? {
+                  // Sub-64 GiB local hosts: vmForks import caching makes 3-4 workers viable.
+                  unit: Math.max(2, Math.min(4, hostCpuCount)),
+                  unitIsolated: 1,
+                  extensions: Math.max(1, Math.min(3, Math.floor(hostCpuCount / 2))),
+                  gateway: 1,
+                }
+              : {
+                  // 64-95 GiB local hosts: conservative split with some parallel headroom.
+                  unit: Math.max(2, Math.min(8, Math.floor(localWorkers / 2))),
+                  unitIsolated: 1,
+                  extensions: Math.max(1, Math.min(4, Math.floor(localWorkers / 4))),
+                  gateway: 1,
+                };
 
 // Keep worker counts predictable for local runs; trim macOS CI workers to avoid worker crashes/OOM.
 // In CI on linux/windows, prefer Vitest defaults to avoid cross-test interference from lower worker counts.
