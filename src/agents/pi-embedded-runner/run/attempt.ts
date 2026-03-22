@@ -1,5 +1,4 @@
 import fs from "node:fs/promises";
-import os from "node:os";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { streamSimple } from "@mariozechner/pi-ai";
 import {
@@ -7,12 +6,6 @@ import {
   DefaultResourceLoader,
   SessionManager,
 } from "@mariozechner/pi-coding-agent";
-import {
-  resolveTelegramInlineButtonsScope,
-  resolveTelegramReactionLevel,
-} from "deneb/plugin-sdk/telegram";
-import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
-import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import {
   ensureGlobalUndiciEnvProxyDispatcher,
@@ -21,44 +14,24 @@ import {
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import { isSubagentSessionKey } from "../../../routing/session-key.js";
-import { buildTtsSystemPromptHint } from "../../../tts/tts.js";
 import { resolveUserPath } from "../../../utils.js";
-import { normalizeMessageChannel } from "../../../utils/message-channel.js";
-import { isReasoningTagProvider } from "../../../utils/provider-utils.js";
 import { resolveDenebAgentDir } from "../../agent-paths.js";
 import { resolveSessionAgentIds } from "../../agent-scope.js";
 import { createAnthropicPayloadLogger } from "../../anthropic-payload-log.js";
-import {
-  analyzeBootstrapBudget,
-  buildBootstrapPromptWarning,
-  buildBootstrapTruncationReportMeta,
-  buildBootstrapInjectionStats,
-  prependBootstrapPromptWarning,
-} from "../../bootstrap-budget.js";
+import { prependBootstrapPromptWarning } from "../../bootstrap-budget.js";
 import { makeBootstrapWarn, resolveBootstrapContextForRun } from "../../bootstrap-files.js";
 import { createCacheTrace } from "../../cache-trace.js";
-import {
-  listChannelSupportedActions,
-  resolveChannelMessageToolHints,
-} from "../../channel-tools.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveDenebDocsPath } from "../../docs-path.js";
 import { isTimeoutError } from "../../failover-error.js";
 import { resolveImageSanitizationLimits } from "../../image-sanitization.js";
 import { resolveModelAuthMode } from "../../model-auth.js";
-import { resolveToolCallArgumentsEncoding } from "../../model-compat.js";
-import { resolveDefaultModelForAgent } from "../../model-selection.js";
 import { supportsModelTools } from "../../model-tool-support.js";
 import { createOpenAIWebSocketStreamFn, releaseWsSession } from "../../openai-ws-stream.js";
-import { resolveOwnerDisplaySetting } from "../../owner-display.js";
 import { createBundleLspToolRuntime } from "../../pi-bundle-lsp-runtime.js";
 import { createBundleMcpToolRuntime } from "../../pi-bundle-mcp-tools.js";
 import {
-  downgradeOpenAIFunctionCallReasoningPairs,
   isCloudCodeAssistFormatError,
-  resolveBootstrapMaxChars,
-  resolveBootstrapPromptTruncationWarningMode,
-  resolveBootstrapTotalMaxChars,
   validateAnthropicTurns,
   validateGeminiTurns,
 } from "../../pi-embedded-helpers.js";
@@ -68,7 +41,6 @@ import { applyPiAutoCompactionGuard } from "../../pi-settings.js";
 import { toClientToolDefinitions } from "../../pi-tool-definition-adapter.js";
 import { createDenebCodingTools, resolveToolLoopDetectionConfig } from "../../pi-tools.js";
 import { resolveSandboxContext } from "../../sandbox.js";
-import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
 import { repairSessionFileIfNeeded } from "../../session-file-repair.js";
 import { guardSessionManager } from "../../session-tool-result-guard-wrapper.js";
 import { sanitizeToolUseResultPairing } from "../../session-transcript-repair.js";
@@ -76,17 +48,12 @@ import {
   acquireSessionWriteLock,
   resolveSessionLockMaxHoldFromTimeout,
 } from "../../session-write-lock.js";
-import { detectRuntimeShell } from "../../shell-utils.js";
 import {
   applySkillEnvOverrides,
   applySkillEnvOverridesFromSnapshot,
   resolveSkillsPromptForRun,
 } from "../../skills.js";
-import { buildSystemPromptParams } from "../../system-prompt-params.js";
-import { buildSystemPromptReport } from "../../system-prompt-report.js";
-import { sanitizeToolCallIdsForCloudCodeAssist } from "../../tool-call-id.js";
 import { resolveTranscriptPolicy } from "../../transcript-policy.js";
-import { DEFAULT_BOOTSTRAP_FILENAME } from "../../workspace.js";
 import { isRunnerAbortError } from "../abort.js";
 import { appendCacheTtlTimestamp, isCacheTtlEligibleProvider } from "../cache-ttl.js";
 import { resolveCompactionTimeoutMs } from "../compaction-safety-timeout.js";
@@ -99,24 +66,16 @@ import {
 } from "../google.js";
 import { getDmHistoryLimitFromSessionKey, limitHistoryTurns } from "../history.js";
 import { log } from "../logger.js";
-import { buildEmbeddedMessageActionDiscoveryInput } from "../message-action-discovery-input.js";
-import { buildModelAliasLines } from "../model.js";
 import {
   clearActiveEmbeddedRun,
   type EmbeddedPiQueueHandle,
   setActiveEmbeddedRun,
   updateActiveEmbeddedRunSnapshot,
 } from "../runs.js";
-import { buildEmbeddedSandboxInfo } from "../sandbox-info.js";
 import { prewarmSessionFile, trackSessionManagerAccess } from "../session-manager-cache.js";
 import { prepareSessionManagerForRun } from "../session-manager-init.js";
 import { resolveEmbeddedRunSkillEntries } from "../skills-runtime.js";
-import {
-  applySystemPromptOverrideToSession,
-  buildEmbeddedSystemPrompt,
-  createSystemPromptOverride,
-} from "../system-prompt.js";
-import { dropThinkingBlocks } from "../thinking.js";
+import { applySystemPromptOverrideToSession } from "../system-prompt.js";
 import { collectAllowedToolNames } from "../tool-name-allowlist.js";
 import { installToolResultContextGuard } from "../tool-result-context-guard.js";
 import { truncateOversizedToolResultsInMessages } from "../tool-result-truncation.js";
@@ -142,20 +101,12 @@ import {
 } from "./prompt-hooks.js";
 import { summarizeSessionContext } from "./session-context-summary.js";
 import {
-  createYieldAbortedResponse,
   persistSessionsYieldContextMessage,
   queueSessionsYieldInterruptMessage,
   stripSessionsYieldArtifacts,
 } from "./sessions-yield.js";
-import {
-  shouldRepairMalformedAnthropicToolCallArguments,
-  wrapStreamFnRepairMalformedToolCallArguments,
-} from "./stream-tool-call-repair.js";
-import {
-  wrapStreamFnSanitizeMalformedToolCalls,
-  wrapStreamFnTrimToolCallNames,
-} from "./stream-tool-call-sanitize.js";
-import { wrapStreamFnDecodeXaiToolCallArguments } from "./stream-xai-decode.js";
+import { buildStreamPipeline } from "./stream-pipeline-setup.js";
+import { resolveSystemPromptContext } from "./system-prompt-context.js";
 import type { EmbeddedRunAttemptParams, EmbeddedRunAttemptResult } from "./types.js";
 
 // Re-export public API from extracted modules for backward compatibility
@@ -369,188 +320,47 @@ export async function runEmbeddedAttempt(
     logToolSchemasForGoogle({ tools: effectiveTools, provider: params.provider });
 
     const machineName = await machineNamePromise;
-    const runtimeChannel = normalizeMessageChannel(params.messageChannel ?? params.messageProvider);
-    let runtimeCapabilities = runtimeChannel
-      ? (resolveChannelCapabilities({
-          cfg: params.config,
-          channel: runtimeChannel,
-          accountId: params.agentAccountId,
-        }) ?? [])
-      : undefined;
-    if (runtimeChannel === "telegram" && params.config) {
-      const inlineButtonsScope = resolveTelegramInlineButtonsScope({
-        cfg: params.config,
-        accountId: params.agentAccountId ?? undefined,
-      });
-      if (inlineButtonsScope !== "off") {
-        if (!runtimeCapabilities) {
-          runtimeCapabilities = [];
-        }
-        if (
-          !runtimeCapabilities.some((cap) => String(cap).trim().toLowerCase() === "inlinebuttons")
-        ) {
-          runtimeCapabilities.push("inlineButtons");
-        }
-      }
-    }
-    const reactionGuidance =
-      runtimeChannel && params.config
-        ? (() => {
-            if (runtimeChannel === "telegram") {
-              const resolved = resolveTelegramReactionLevel({
-                cfg: params.config,
-                accountId: params.agentAccountId ?? undefined,
-              });
-              const level = resolved.agentReactionGuidance;
-              return level ? { level, channel: "Telegram" } : undefined;
-            }
-            return undefined;
-          })()
-        : undefined;
-    const sandboxInfo = buildEmbeddedSandboxInfo(sandbox, params.bashElevated);
-    const reasoningTagHint = isReasoningTagProvider(params.provider);
-    // Resolve channel-specific message actions for system prompt
-    const channelActions = runtimeChannel
-      ? listChannelSupportedActions(
-          buildEmbeddedMessageActionDiscoveryInput({
-            cfg: params.config,
-            channel: runtimeChannel,
-            currentChannelId: params.currentChannelId,
-            currentThreadTs: params.currentThreadTs,
-            currentMessageId: params.currentMessageId,
-            accountId: params.agentAccountId,
-            sessionKey: params.sessionKey,
-            sessionId: params.sessionId,
-            agentId: sessionAgentId,
-            senderId: params.senderId,
-          }),
-        )
-      : undefined;
-    const messageToolHints = runtimeChannel
-      ? resolveChannelMessageToolHints({
-          cfg: params.config,
-          channel: runtimeChannel,
-          accountId: params.agentAccountId,
-        })
-      : undefined;
-
-    const defaultModelRef = resolveDefaultModelForAgent({
-      cfg: params.config ?? {},
-      agentId: sessionAgentId,
-    });
-    const defaultModelLabel = `${defaultModelRef.provider}/${defaultModelRef.model}`;
-    const { runtimeInfo, userTimezone, userTime, userTimeFormat } = buildSystemPromptParams({
-      config: params.config,
-      agentId: sessionAgentId,
-      workspaceDir: effectiveWorkspace,
-      cwd: process.cwd(),
-      runtime: {
-        host: machineName,
-        os: `${os.type()} ${os.release()}`,
-        arch: os.arch(),
-        node: process.version,
-        model: `${params.provider}/${params.modelId}`,
-        defaultModel: defaultModelLabel,
-        shell: detectRuntimeShell(),
-        channel: runtimeChannel,
-        capabilities: runtimeCapabilities,
-        channelActions,
-      },
-    });
-    const isDefaultAgent = sessionAgentId === defaultAgentId;
-    const promptMode = resolvePromptModeForSession(params.sessionKey);
     const docsPath = await docsPathPromise;
 
     // Await bootstrap context that was kicked off in parallel with tool setup.
     const { bootstrapFiles: hookAdjustedBootstrapFiles, contextFiles } =
       await bootstrapContextPromise;
-    const bootstrapMaxChars = resolveBootstrapMaxChars(params.config);
-    const bootstrapTotalMaxChars = resolveBootstrapTotalMaxChars(params.config);
-    const bootstrapAnalysis = analyzeBootstrapBudget({
-      files: buildBootstrapInjectionStats({
-        bootstrapFiles: hookAdjustedBootstrapFiles,
-        injectedFiles: contextFiles,
-      }),
-      bootstrapMaxChars,
-      bootstrapTotalMaxChars,
-    });
-    const bootstrapPromptWarningMode = resolveBootstrapPromptTruncationWarningMode(params.config);
-    const bootstrapPromptWarning = buildBootstrapPromptWarning({
-      analysis: bootstrapAnalysis,
-      mode: bootstrapPromptWarningMode,
-      seenSignatures: params.bootstrapPromptWarningSignaturesSeen,
-      previousSignature: params.bootstrapPromptWarningSignature,
-    });
-    const workspaceNotes = hookAdjustedBootstrapFiles.some(
-      (file) => file.name === DEFAULT_BOOTSTRAP_FILENAME && !file.missing,
-    )
-      ? ["Reminder: commit your changes in this workspace after edits."]
-      : undefined;
 
-    const ttsHint = params.config ? buildTtsSystemPromptHint(params.config) : undefined;
-    const ownerDisplay = resolveOwnerDisplaySetting(params.config);
-    const heartbeatPrompt = isDefaultAgent
-      ? resolveHeartbeatPrompt(params.config?.agents?.defaults?.heartbeat?.prompt)
-      : undefined;
-
-    const appendPrompt = buildEmbeddedSystemPrompt({
-      workspaceDir: effectiveWorkspace,
-      defaultThinkLevel: params.thinkLevel,
-      reasoningLevel: params.reasoningLevel ?? "off",
+    // Resolve channel context, build system prompt, and generate prompt report.
+    const systemPromptContext = resolveSystemPromptContext({
+      config: params.config,
+      provider: params.provider,
+      modelId: params.modelId,
+      thinkLevel: params.thinkLevel,
+      reasoningLevel: params.reasoningLevel,
       extraSystemPrompt: params.extraSystemPrompt,
       ownerNumbers: params.ownerNumbers,
-      ownerDisplay: ownerDisplay.ownerDisplay,
-      ownerDisplaySecret: ownerDisplay.ownerDisplaySecret,
-      reasoningTagHint,
-      heartbeatPrompt,
-      skillsPrompt,
-      docsPath: docsPath ?? undefined,
-      ttsHint,
-      workspaceNotes,
-      reactionGuidance,
-      promptMode,
-      acpEnabled: params.config?.acp?.enabled !== false,
-      runtimeInfo,
-      messageToolHints,
-      sandboxInfo,
-      tools: effectiveTools,
-      modelAliasLines: buildModelAliasLines(params.config),
-      userTimezone,
-      userTime,
-      userTimeFormat,
-      contextFiles,
-      memoryCitationsMode: params.config?.memory?.citations,
-    });
-    const systemPromptReport = buildSystemPromptReport({
-      source: "run",
-      generatedAt: Date.now(),
-      sessionId: params.sessionId,
       sessionKey: params.sessionKey,
-      provider: params.provider,
-      model: params.modelId,
-      workspaceDir: effectiveWorkspace,
-      bootstrapMaxChars,
-      bootstrapTotalMaxChars,
-      bootstrapTruncation: buildBootstrapTruncationReportMeta({
-        analysis: bootstrapAnalysis,
-        warningMode: bootstrapPromptWarningMode,
-        warning: bootstrapPromptWarning,
-      }),
-      sandbox: (() => {
-        const runtime = resolveSandboxRuntimeStatus({
-          cfg: params.config,
-          sessionKey: sandboxSessionKey,
-        });
-        return { mode: runtime.mode, sandboxed: runtime.sandboxed };
-      })(),
-      systemPrompt: appendPrompt,
-      bootstrapFiles: hookAdjustedBootstrapFiles,
-      injectedFiles: contextFiles,
+      sessionId: params.sessionId,
+      agentAccountId: params.agentAccountId,
+      messageChannel: params.messageChannel,
+      messageProvider: params.messageProvider,
+      currentChannelId: params.currentChannelId,
+      currentThreadTs: params.currentThreadTs,
+      currentMessageId: params.currentMessageId,
+      senderId: params.senderId,
+      bashElevated: params.bashElevated,
+      bootstrapPromptWarningSignaturesSeen: params.bootstrapPromptWarningSignaturesSeen,
+      bootstrapPromptWarningSignature: params.bootstrapPromptWarningSignature,
+      machineName,
+      sessionAgentId,
+      defaultAgentId,
+      effectiveWorkspace,
+      sandboxSessionKey,
+      sandbox,
+      effectiveTools,
       skillsPrompt,
-      tools: effectiveTools,
+      bootstrapFiles: hookAdjustedBootstrapFiles,
+      contextFiles,
+      docsPath,
     });
-    const systemPromptOverride = createSystemPromptOverride(appendPrompt);
-    let systemPromptText = systemPromptOverride();
+    const { systemPromptReport, bootstrapPromptWarning, heartbeatPrompt } = systemPromptContext;
+    let { systemPromptText } = systemPromptContext;
 
     const sessionLock = await acquireSessionWriteLock({
       sessionFile: params.sessionFile,
@@ -789,126 +599,26 @@ export async function runEmbeddedAttempt(
           system: systemPromptText,
           note: "after session create",
         });
-        activeSession.agent.streamFn = cacheTrace.wrapStreamFn(activeSession.agent.streamFn);
       }
 
-      // Anthropic Claude endpoints can reject replayed `thinking` blocks
-      // (e.g. thinkingSignature:"reasoning_text") on any follow-up provider
-      // call, including tool continuations. Wrap the stream function so every
-      // outbound request sees sanitized messages.
-      if (transcriptPolicy.dropThinkingBlocks) {
-        const inner = activeSession.agent.streamFn;
-        activeSession.agent.streamFn = (model, context, options) => {
-          const ctx = context as unknown as { messages?: unknown };
-          const messages = ctx?.messages;
-          if (!Array.isArray(messages)) {
-            return inner(model, context, options);
-          }
-          const sanitized = dropThinkingBlocks(messages as unknown as AgentMessage[]) as unknown;
-          if (sanitized === messages) {
-            return inner(model, context, options);
-          }
-          const nextContext = {
-            ...(context as unknown as Record<string, unknown>),
-            messages: sanitized,
-          } as unknown;
-          return inner(model, nextContext as typeof context, options);
-        };
-      }
-
-      // Mistral (and other strict providers) reject tool call IDs that don't match their
-      // format requirements (e.g. [a-zA-Z0-9]{9}). sanitizeSessionHistory only processes
-      // historical messages at attempt start, but the agent loop's internal tool call →
-      // tool result cycles bypass that path. Wrap streamFn so every outbound request
-      // sees sanitized tool call IDs.
-      if (transcriptPolicy.sanitizeToolCallIds && transcriptPolicy.toolCallIdMode) {
-        const inner = activeSession.agent.streamFn;
-        const mode = transcriptPolicy.toolCallIdMode;
-        activeSession.agent.streamFn = (model, context, options) => {
-          const ctx = context as unknown as { messages?: unknown };
-          const messages = ctx?.messages;
-          if (!Array.isArray(messages)) {
-            return inner(model, context, options);
-          }
-          const sanitized = sanitizeToolCallIdsForCloudCodeAssist(messages as AgentMessage[], mode);
-          if (sanitized === messages) {
-            return inner(model, context, options);
-          }
-          const nextContext = {
-            ...(context as unknown as Record<string, unknown>),
-            messages: sanitized,
-          } as unknown;
-          return inner(model, nextContext as typeof context, options);
-        };
-      }
-
-      if (
-        params.model.api === "openai-responses" ||
-        params.model.api === "openai-codex-responses"
-      ) {
-        const inner = activeSession.agent.streamFn;
-        activeSession.agent.streamFn = (model, context, options) => {
-          const ctx = context as unknown as { messages?: unknown };
-          const messages = ctx?.messages;
-          if (!Array.isArray(messages)) {
-            return inner(model, context, options);
-          }
-          const sanitized = downgradeOpenAIFunctionCallReasoningPairs(messages as AgentMessage[]);
-          if (sanitized === messages) {
-            return inner(model, context, options);
-          }
-          const nextContext = {
-            ...(context as unknown as Record<string, unknown>),
-            messages: sanitized,
-          } as unknown;
-          return inner(model, nextContext as typeof context, options);
-        };
-      }
-
-      const innerStreamFn = activeSession.agent.streamFn;
-      activeSession.agent.streamFn = (model, context, options) => {
-        const signal = runAbortController.signal as AbortSignal & { reason?: unknown };
-        if (yieldDetected && signal.aborted && signal.reason === "sessions_yield") {
-          return createYieldAbortedResponse(model) as unknown as Awaited<
-            ReturnType<typeof innerStreamFn>
-          >;
-        }
-        return innerStreamFn(model, context, options);
+      // Apply all stream function wrappers (thinking block sanitization,
+      // tool call ID repair, yield interception, provider-specific fixups, etc.)
+      const yieldDetectedRef = {
+        get current() {
+          return yieldDetected;
+        },
       };
-
-      // Some models emit tool names with surrounding whitespace (e.g. " read ").
-      // pi-agent-core dispatches tool calls with exact string matching, so normalize
-      // names on the live response stream before tool execution.
-      activeSession.agent.streamFn = wrapStreamFnSanitizeMalformedToolCalls(
-        activeSession.agent.streamFn,
-        allowedToolNames,
+      activeSession.agent.streamFn = buildStreamPipeline(activeSession.agent.streamFn, {
+        provider: params.provider,
+        modelId: params.modelId,
+        model: params.model,
         transcriptPolicy,
-      );
-      activeSession.agent.streamFn = wrapStreamFnTrimToolCallNames(
-        activeSession.agent.streamFn,
         allowedToolNames,
-      );
-
-      if (
-        params.model.api === "anthropic-messages" &&
-        shouldRepairMalformedAnthropicToolCallArguments(params.provider)
-      ) {
-        activeSession.agent.streamFn = wrapStreamFnRepairMalformedToolCallArguments(
-          activeSession.agent.streamFn,
-        );
-      }
-
-      if (resolveToolCallArgumentsEncoding(params.model) === "html-entities") {
-        activeSession.agent.streamFn = wrapStreamFnDecodeXaiToolCallArguments(
-          activeSession.agent.streamFn,
-        );
-      }
-
-      if (anthropicPayloadLogger) {
-        activeSession.agent.streamFn = anthropicPayloadLogger.wrapStreamFn(
-          activeSession.agent.streamFn,
-        );
-      }
+        runAbortController,
+        yieldDetectedRef,
+        cacheTrace,
+        anthropicPayloadLogger,
+      });
 
       try {
         const prior = await sanitizeSessionHistory({

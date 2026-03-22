@@ -10,7 +10,6 @@ import type { GatewayRequestHandler } from "../gateway/server-methods/types.js";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveUserPath } from "../utils.js";
-import { inspectBundleMcpRuntimeSupport } from "./bundle-mcp.js";
 import { clearPluginCommands } from "./commands.js";
 import {
   applyTestPluginDefaults,
@@ -22,6 +21,8 @@ import {
 import { discoverDenebPlugins } from "./discovery.js";
 import { initializeGlobalHookRunner } from "./hook-runner-global.js";
 import { clearPluginInteractiveHandlers } from "./interactive.js";
+import { validateBundlePlugin } from "./loader-bundle-validation.js";
+import { createLazyRuntimeProxy } from "./loader-runtime-proxy.js";
 import { loadPluginManifestRegistry } from "./manifest-registry.js";
 import { isPathInside, safeStatSync } from "./path-safety.js";
 import { createPluginRegistry, type PluginRecord, type PluginRegistry } from "./registry.js";
@@ -76,22 +77,6 @@ export type PluginLoadOptions = {
 const MAX_PLUGIN_REGISTRY_CACHE_ENTRIES = 128;
 const registryCache = new Map<string, PluginRegistry>();
 const openAllowlistWarningCache = new Set<string>();
-const LAZY_RUNTIME_REFLECTION_KEYS = [
-  "version",
-  "config",
-  "agent",
-  "subagent",
-  "system",
-  "media",
-  "tts",
-  "stt",
-  "tools",
-  "channel",
-  "events",
-  "logging",
-  "state",
-  "modelAuth",
-] as const satisfies readonly (keyof PluginRuntime)[];
 
 export function clearPluginLoaderCache(): void {
   registryCache.clear();
@@ -750,55 +735,7 @@ export function loadDenebPlugins(options: PluginLoadOptions = {}): PluginRegistr
     return createPluginRuntimeFactory;
   };
 
-  // Lazily initialize the runtime so startup paths that discover/skip plugins do
-  // not eagerly load every channel/runtime dependency tree.
-  let resolvedRuntime: PluginRuntime | null = null;
-  const resolveRuntime = (): PluginRuntime => {
-    resolvedRuntime ??= resolveCreatePluginRuntime()(options.runtimeOptions);
-    return resolvedRuntime;
-  };
-  const lazyRuntimeReflectionKeySet = new Set<PropertyKey>(LAZY_RUNTIME_REFLECTION_KEYS);
-  const resolveLazyRuntimeDescriptor = (prop: PropertyKey): PropertyDescriptor | undefined => {
-    if (!lazyRuntimeReflectionKeySet.has(prop)) {
-      return Reflect.getOwnPropertyDescriptor(resolveRuntime() as object, prop);
-    }
-    return {
-      configurable: true,
-      enumerable: true,
-      get() {
-        return Reflect.get(resolveRuntime() as object, prop);
-      },
-      set(value: unknown) {
-        Reflect.set(resolveRuntime() as object, prop, value);
-      },
-    };
-  };
-  const runtime = new Proxy({} as PluginRuntime, {
-    get(_target, prop, receiver) {
-      return Reflect.get(resolveRuntime(), prop, receiver);
-    },
-    set(_target, prop, value, receiver) {
-      return Reflect.set(resolveRuntime(), prop, value, receiver);
-    },
-    has(_target, prop) {
-      return lazyRuntimeReflectionKeySet.has(prop) || Reflect.has(resolveRuntime(), prop);
-    },
-    ownKeys() {
-      return [...LAZY_RUNTIME_REFLECTION_KEYS];
-    },
-    getOwnPropertyDescriptor(_target, prop) {
-      return resolveLazyRuntimeDescriptor(prop);
-    },
-    defineProperty(_target, prop, attributes) {
-      return Reflect.defineProperty(resolveRuntime() as object, prop, attributes);
-    },
-    deleteProperty(_target, prop) {
-      return Reflect.deleteProperty(resolveRuntime() as object, prop);
-    },
-    getPrototypeOf() {
-      return Reflect.getPrototypeOf(resolveRuntime() as object);
-    },
-  });
+  const runtime = createLazyRuntimeProxy(resolveCreatePluginRuntime, options.runtimeOptions);
 
   const { registry, createApi } = createPluginRegistry({
     logger,
@@ -963,62 +900,13 @@ export function loadDenebPlugins(options: PluginLoadOptions = {}): PluginRegistr
       record.error = enableState.reason;
     }
 
-    if (record.format === "bundle") {
-      const unsupportedCapabilities = (record.bundleCapabilities ?? []).filter(
-        (capability) =>
-          capability !== "skills" &&
-          capability !== "mcpServers" &&
-          capability !== "settings" &&
-          !(
-            (capability === "commands" ||
-              capability === "agents" ||
-              capability === "outputStyles" ||
-              capability === "lspServers") &&
-            (record.bundleFormat === "claude" || record.bundleFormat === "cursor")
-          ) &&
-          !(
-            capability === "hooks" &&
-            (record.bundleFormat === "codex" || record.bundleFormat === "claude")
-          ),
-      );
-      for (const capability of unsupportedCapabilities) {
-        registry.diagnostics.push({
-          level: "warn",
-          pluginId: record.id,
-          source: record.source,
-          message: `bundle capability detected but not wired into Deneb yet: ${capability}`,
-        });
-      }
-      if (
-        enableState.enabled &&
-        record.rootDir &&
-        record.bundleFormat &&
-        (record.bundleCapabilities ?? []).includes("mcpServers")
-      ) {
-        const runtimeSupport = inspectBundleMcpRuntimeSupport({
-          pluginId: record.id,
-          rootDir: record.rootDir,
-          bundleFormat: record.bundleFormat,
-        });
-        for (const message of runtimeSupport.diagnostics) {
-          registry.diagnostics.push({
-            level: "warn",
-            pluginId: record.id,
-            source: record.source,
-            message,
-          });
-        }
-        if (runtimeSupport.unsupportedServerNames.length > 0) {
-          registry.diagnostics.push({
-            level: "warn",
-            pluginId: record.id,
-            source: record.source,
-            message:
-              "bundle MCP servers use unsupported transports or incomplete configs " +
-              `(stdio only today): ${runtimeSupport.unsupportedServerNames.join(", ")}`,
-          });
-        }
-      }
+    if (
+      validateBundlePlugin({
+        record,
+        enabled: enableState.enabled,
+        diagnostics: registry.diagnostics,
+      })
+    ) {
       registry.plugins.push(record);
       seenIds.set(pluginId, candidate.origin);
       continue;
