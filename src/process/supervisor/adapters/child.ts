@@ -1,16 +1,8 @@
 import type { ChildProcessWithoutNullStreams, SpawnOptions } from "node:child_process";
 import { killProcessTree } from "../../kill-tree.js";
 import { spawnWithFallback } from "../../spawn-utils.js";
-import { resolveWindowsCommandShim } from "../../windows-command.js";
 import type { ManagedRunStdin, SpawnProcessAdapter } from "../types.js";
 import { toStringEnv } from "./env.js";
-
-function resolveCommand(command: string): string {
-  return resolveWindowsCommandShim({
-    command,
-    cmdCommands: ["npm", "pnpm", "yarn", "npx"],
-  });
-}
 
 export type ChildAdapter = SpawnProcessAdapter<NodeJS.Signals | null>;
 
@@ -22,27 +14,22 @@ export async function createChildAdapter(params: {
   argv: string[];
   cwd?: string;
   env?: NodeJS.ProcessEnv;
-  windowsVerbatimArguments?: boolean;
   input?: string;
   stdinMode?: "inherit" | "pipe-open" | "pipe-closed";
 }): Promise<ChildAdapter> {
   const resolvedArgv = [...params.argv];
-  resolvedArgv[0] = resolveCommand(resolvedArgv[0] ?? "");
 
   const stdinMode = params.stdinMode ?? (params.input !== undefined ? "pipe-closed" : "inherit");
 
-  // In service-managed mode keep children attached so systemd/launchd can
-  // stop the full process tree reliably. Outside service mode preserve the
-  // existing POSIX detached behavior.
-  const useDetached = process.platform !== "win32" && !isServiceManagedRuntime();
+  // In service-managed mode keep children attached so systemd can stop the
+  // full process tree reliably. Outside service mode preserve detached behavior.
+  const useDetached = !isServiceManagedRuntime();
 
   const options: SpawnOptions = {
     cwd: params.cwd,
     env: params.env ? toStringEnv(params.env) : undefined,
     stdio: ["pipe", "pipe", "pipe"],
     detached: useDetached,
-    windowsHide: true,
-    windowsVerbatimArguments: params.windowsVerbatimArguments,
   };
   if (stdinMode === "inherit") {
     options.stdio = ["inherit", "pipe", "pipe"];

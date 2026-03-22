@@ -444,20 +444,6 @@ describe("splitArgsPreservingQuotes", () => {
       }),
     ).toEqual(["deneb", "--name", 'My "Bot"', "--foo", "bar"]);
   });
-
-  it("supports schtasks-style escaped quotes while preserving other backslashes", () => {
-    expect(
-      splitArgsPreservingQuotes('deneb --path "C:\\\\Program Files\\\\Deneb"', {
-        escapeMode: "backslash-quote-only",
-      }),
-    ).toEqual(["deneb", "--path", "C:\\\\Program Files\\\\Deneb"]);
-
-    expect(
-      splitArgsPreservingQuotes('deneb --label "My \\"Quoted\\" Name"', {
-        escapeMode: "backslash-quote-only",
-      }),
-    ).toEqual(["deneb", "--label", 'My "Quoted" Name']);
-  });
 });
 
 describe("parseSystemdExecStart", () => {

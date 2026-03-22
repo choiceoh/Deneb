@@ -15,7 +15,6 @@ import {
 import { loadCliDotEnv } from "./dotenv.js";
 import { applyCliProfileEnv, parseCliProfileArgs } from "./profile.js";
 import { tryRouteCli } from "./route.js";
-import { normalizeWindowsArgv } from "./windows-argv.js";
 
 async function closeCliMemoryManagers(): Promise<void> {
   try {
@@ -80,7 +79,7 @@ export function shouldUseRootHelpFastPath(argv: string[]): boolean {
 }
 
 export async function runCli(argv: string[] = process.argv) {
-  let normalizedArgv = normalizeWindowsArgv(argv);
+  let normalizedArgv = argv;
   const parsedProfile = parseCliProfileArgs(normalizedArgv);
   if (!parsedProfile.ok) {
     throw new Error(parsedProfile.error);

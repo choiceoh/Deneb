@@ -53,19 +53,6 @@ describe("noteStartupOptimizationHints", () => {
     expect(message).toContain("unset NODE_DISABLE_COMPILE_CACHE");
   });
 
-  it("skips startup optimization note on win32", () => {
-    const noteFn = vi.fn();
-
-    noteStartupOptimizationHints(
-      {
-        NODE_COMPILE_CACHE: "/tmp/deneb-compile-cache",
-      },
-      { platform: "win32", arch: "arm64", totalMemBytes: 4 * 1024 ** 3, noteFn },
-    );
-
-    expect(noteFn).not.toHaveBeenCalled();
-  });
-
   it("skips startup optimization note on non-target linux hosts", () => {
     const noteFn = vi.fn();
 

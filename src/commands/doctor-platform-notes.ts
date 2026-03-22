@@ -1,121 +1,5 @@
-import { execFile } from "node:child_process";
-import fs from "node:fs";
 import os from "node:os";
-import path from "node:path";
-import { promisify } from "node:util";
-import type { DenebConfig } from "../config/config.js";
-import { hasConfiguredSecretInput } from "../config/types.secrets.js";
 import { note } from "../terminal/note.js";
-import { shortenHomePath } from "../utils.js";
-
-const execFileAsync = promisify(execFile);
-
-function resolveHomeDir(): string {
-  return process.env.HOME ?? os.homedir();
-}
-
-export async function noteMacLaunchAgentOverrides() {
-  if (process.platform !== "darwin") {
-    return;
-  }
-  const home = resolveHomeDir();
-  const markerCandidates = [path.join(home, ".deneb", "disable-launchagent")];
-  const markerPath = markerCandidates.find((candidate) => fs.existsSync(candidate));
-  if (!markerPath) {
-    return;
-  }
-
-  const displayMarkerPath = shortenHomePath(markerPath);
-  const lines = [
-    `- LaunchAgent writes are disabled via ${displayMarkerPath}.`,
-    "- To restore default behavior:",
-    `  rm ${displayMarkerPath}`,
-  ].filter((line): line is string => Boolean(line));
-  note(lines.join("\n"), "Gateway (macOS)");
-}
-
-async function launchctlGetenv(name: string): Promise<string | undefined> {
-  try {
-    const result = await execFileAsync("/bin/launchctl", ["getenv", name], { encoding: "utf8" });
-    const value = String(result.stdout ?? "").trim();
-    return value.length > 0 ? value : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function hasConfigGatewayCreds(cfg: DenebConfig): boolean {
-  const localPassword = cfg.gateway?.auth?.password;
-  const remoteToken = cfg.gateway?.remote?.token;
-  const remotePassword = cfg.gateway?.remote?.password;
-  return Boolean(
-    hasConfiguredSecretInput(cfg.gateway?.auth?.token, cfg.secrets?.defaults) ||
-    hasConfiguredSecretInput(localPassword, cfg.secrets?.defaults) ||
-    hasConfiguredSecretInput(remoteToken, cfg.secrets?.defaults) ||
-    hasConfiguredSecretInput(remotePassword, cfg.secrets?.defaults),
-  );
-}
-
-export async function noteMacLaunchctlGatewayEnvOverrides(
-  cfg: DenebConfig,
-  deps?: {
-    platform?: NodeJS.Platform;
-    getenv?: (name: string) => Promise<string | undefined>;
-    noteFn?: typeof note;
-  },
-) {
-  const platform = deps?.platform ?? process.platform;
-  if (platform !== "darwin") {
-    return;
-  }
-  if (!hasConfigGatewayCreds(cfg)) {
-    return;
-  }
-
-  const getenv = deps?.getenv ?? launchctlGetenv;
-  const deprecatedLaunchctlEntries = [
-    ["CLAWDBOT_GATEWAY_TOKEN", await getenv("CLAWDBOT_GATEWAY_TOKEN")],
-    ["CLAWDBOT_GATEWAY_PASSWORD", await getenv("CLAWDBOT_GATEWAY_PASSWORD")],
-  ].filter((entry): entry is [string, string] => Boolean(entry[1]?.trim()));
-  if (deprecatedLaunchctlEntries.length > 0) {
-    const lines = [
-      "- Deprecated launchctl environment variables detected (ignored).",
-      ...deprecatedLaunchctlEntries.map(
-        ([key]) => `- \`${key}\` is set; use \`DENEB_${key.slice(key.indexOf("_") + 1)}\` instead.`,
-      ),
-    ];
-    (deps?.noteFn ?? note)(lines.join("\n"), "Gateway (macOS)");
-  }
-
-  const tokenEntries = [["DENEB_GATEWAY_TOKEN", await getenv("DENEB_GATEWAY_TOKEN")]] as const;
-  const passwordEntries = [
-    ["DENEB_GATEWAY_PASSWORD", await getenv("DENEB_GATEWAY_PASSWORD")],
-  ] as const;
-  const tokenEntry = tokenEntries.find(([, value]) => value?.trim());
-  const passwordEntry = passwordEntries.find(([, value]) => value?.trim());
-  const envToken = tokenEntry?.[1]?.trim() ?? "";
-  const envPassword = passwordEntry?.[1]?.trim() ?? "";
-  const envTokenKey = tokenEntry?.[0];
-  const envPasswordKey = passwordEntry?.[0];
-  if (!envToken && !envPassword) {
-    return;
-  }
-
-  const lines = [
-    "- launchctl environment overrides detected (can cause confusing unauthorized errors).",
-    envToken && envTokenKey
-      ? `- \`${envTokenKey}\` is set; it overrides config tokens.`
-      : undefined,
-    envPassword
-      ? `- \`${envPasswordKey ?? "DENEB_GATEWAY_PASSWORD"}\` is set; it overrides config passwords.`
-      : undefined,
-    "- Clear overrides and restart the app/gateway:",
-    envTokenKey ? `  launchctl unsetenv ${envTokenKey}` : undefined,
-    envPasswordKey ? `  launchctl unsetenv ${envPasswordKey}` : undefined,
-  ].filter((line): line is string => Boolean(line));
-
-  (deps?.noteFn ?? note)(lines.join("\n"), "Gateway (macOS)");
-}
 
 export function noteDeprecatedLegacyEnvVars(
   env: NodeJS.ProcessEnv = process.env,
@@ -162,16 +46,11 @@ export function noteStartupOptimizationHints(
     noteFn?: typeof note;
   },
 ) {
-  const platform = deps?.platform ?? process.platform;
-  if (platform === "win32") {
-    return;
-  }
   const arch = deps?.arch ?? os.arch();
   const totalMemBytes = deps?.totalMemBytes ?? os.totalmem();
-  const isArmHost = arch === "arm" || arch === "arm64";
-  const isLowMemoryLinux =
-    platform === "linux" && totalMemBytes > 0 && totalMemBytes <= 8 * 1024 ** 3;
-  const isStartupTuneTarget = platform === "linux" && (isArmHost || isLowMemoryLinux);
+  const isArmHost = arch === "arm64";
+  const isLowMemoryLinux = totalMemBytes > 0 && totalMemBytes <= 8 * 1024 ** 3;
+  const isStartupTuneTarget = isArmHost || isLowMemoryLinux;
   if (!isStartupTuneTarget) {
     return;
   }

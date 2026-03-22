@@ -118,15 +118,10 @@ export async function uninstallCommand(runtime: RuntimeEnv, opts: UninstallOptio
         {
           value: "service",
           label: "Gateway service",
-          hint: "launchd / systemd / schtasks",
+          hint: "systemd",
         },
         { value: "state", label: "State + config", hint: "~/.deneb" },
         { value: "workspace", label: "Workspace", hint: "agent files" },
-        {
-          value: "app",
-          label: "macOS app",
-          hint: "/Applications/Deneb.app",
-        },
       ],
       initialValues: ["service", "state", "workspace"],
     });

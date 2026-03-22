@@ -59,7 +59,7 @@ export function addGatewayServiceCommands(parent: Command, opts?: { statusDescri
 
   parent
     .command("install")
-    .description("Install the Gateway service (launchd/systemd/schtasks)")
+    .description("Install the Gateway service (systemd)")
     .option("--port <port>", "Gateway port")
     .option("--runtime <runtime>", "Daemon runtime (node|bun). Default: node")
     .option("--token <token>", "Gateway token (token auth)")
@@ -71,7 +71,7 @@ export function addGatewayServiceCommands(parent: Command, opts?: { statusDescri
 
   parent
     .command("uninstall")
-    .description("Uninstall the Gateway service (launchd/systemd/schtasks)")
+    .description("Uninstall the Gateway service (systemd)")
     .option("--json", "Output JSON", false)
     .action(async (cmdOpts) => {
       await runDaemonUninstall(cmdOpts);
@@ -79,7 +79,7 @@ export function addGatewayServiceCommands(parent: Command, opts?: { statusDescri
 
   parent
     .command("start")
-    .description("Start the Gateway service (launchd/systemd/schtasks)")
+    .description("Start the Gateway service (systemd)")
     .option("--json", "Output JSON", false)
     .action(async (cmdOpts) => {
       await runDaemonStart(cmdOpts);
@@ -87,7 +87,7 @@ export function addGatewayServiceCommands(parent: Command, opts?: { statusDescri
 
   parent
     .command("stop")
-    .description("Stop the Gateway service (launchd/systemd/schtasks)")
+    .description("Stop the Gateway service (systemd)")
     .option("--json", "Output JSON", false)
     .action(async (cmdOpts) => {
       await runDaemonStop(cmdOpts);
@@ -95,7 +95,7 @@ export function addGatewayServiceCommands(parent: Command, opts?: { statusDescri
 
   parent
     .command("restart")
-    .description("Restart the Gateway service (launchd/systemd/schtasks)")
+    .description("Restart the Gateway service (systemd)")
     .option("--json", "Output JSON", false)
     .action(async (cmdOpts) => {
       await runDaemonRestart(cmdOpts);

@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   runCommandWithTimeout: vi.fn<
     (
       argv: string[],
-      options?: { timeoutMs?: number; windowsVerbatimArguments?: boolean },
+      options?: { timeoutMs?: number },
     ) => Promise<{ stdout: string; stderr: string; code: number; signal: null; killed: boolean }>
   >(async () => ({
     stdout: "",
@@ -55,7 +55,6 @@ describe("openUrl", () => {
     expect(argv?.at(-1)).toBe(`"${url}"`);
     expect(options).toMatchObject({
       timeoutMs: 5_000,
-      windowsVerbatimArguments: true,
     });
 
     platformSpy.mockRestore();

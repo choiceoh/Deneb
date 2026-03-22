@@ -98,23 +98,10 @@ function defaultIndexHTML() {
   const statusEl = document.getElementById("status");
   const log = (msg) => { logEl.textContent = String(msg); };
 
-  const hasIOS = () =>
-    !!(
-      window.webkit &&
-      window.webkit.messageHandlers &&
-      window.webkit.messageHandlers.denebCanvasA2UIAction
-    );
-  const hasAndroid = () =>
-    !!(
-      (window.denebCanvasA2UIAction &&
-        typeof window.denebCanvasA2UIAction.postMessage === "function")
-    );
   const hasHelper = () => typeof window.denebSendUserAction === "function";
   statusEl.innerHTML =
     "Bridge: " +
-    (hasHelper() ? "<span class='ok'>ready</span>" : "<span class='bad'>missing</span>") +
-    " · iOS=" + (hasIOS() ? "yes" : "no") +
-    " · Android=" + (hasAndroid() ? "yes" : "no");
+    (hasHelper() ? "<span class='ok'>ready</span>" : "<span class='bad'>missing</span>");
 
   const onStatus = (ev) => {
     const d = ev && ev.detail || {};
@@ -124,7 +111,7 @@ function defaultIndexHTML() {
 
   function send(name, sourceComponentId) {
     if (!hasHelper()) {
-      log("No action bridge found. Ensure you're viewing this on an iOS/Android Deneb node canvas.");
+      log("No action bridge found.");
       return;
     }
     const sendUserAction =

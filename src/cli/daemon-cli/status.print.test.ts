@@ -25,13 +25,6 @@ vi.mock("../../daemon/inspect.js", () => ({
   renderGatewayServiceCleanupHints: () => [],
 }));
 
-vi.mock("../../daemon/launchd.js", () => ({
-  resolveGatewayLogPaths: () => ({
-    stdoutPath: "/tmp/gateway.out.log",
-    stderrPath: "/tmp/gateway.err.log",
-  }),
-}));
-
 vi.mock("../../daemon/systemd-hints.js", () => ({
   isSystemdUnavailableDetail: () => false,
   renderSystemdUnavailableHints: () => [],

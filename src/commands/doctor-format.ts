@@ -1,9 +1,5 @@
 import { formatCliCommand } from "../cli/command-format.js";
-import {
-  resolveGatewayLaunchAgentLabel,
-  resolveGatewaySystemdServiceName,
-  resolveGatewayWindowsTaskName,
-} from "../daemon/constants.js";
+import { resolveGatewaySystemdServiceName } from "../daemon/constants.js";
 import { formatRuntimeStatus } from "../daemon/runtime-format.js";
 import { buildPlatformRuntimeLogHints } from "../daemon/runtime-hints.js";
 import type { GatewayServiceRuntime } from "../daemon/service-runtime.js";
@@ -49,13 +45,6 @@ export function buildGatewayRuntimeHints(
     }
     return hints;
   }
-  if (runtime.cachedLabel && platform === "darwin") {
-    const label = resolveGatewayLaunchAgentLabel(env.DENEB_PROFILE);
-    hints.push(
-      `LaunchAgent label cached but plist missing. Clear with: launchctl bootout gui/$UID/${label}`,
-    );
-    hints.push(`Then reinstall: ${formatCliCommand("deneb gateway install", env)}`);
-  }
   if (runtime.missingUnit) {
     hints.push(`Service not installed. Run: ${formatCliCommand("deneb gateway install", env)}`);
     if (fileLog) {
@@ -73,7 +62,6 @@ export function buildGatewayRuntimeHints(
         platform,
         env,
         systemdServiceName: resolveGatewaySystemdServiceName(env.DENEB_PROFILE),
-        windowsTaskName: resolveGatewayWindowsTaskName(env.DENEB_PROFILE),
       }),
     );
   }
