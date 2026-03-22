@@ -34,10 +34,6 @@ import {
   stripUnknownConfigKeys,
 } from "./doctor-config-analysis.js";
 import { runDoctorConfigPreflight } from "./doctor-config-preflight.js";
-import {
-  maybeRepairDiscordNumericIds,
-  scanDiscordNumericIdEntries,
-} from "./doctor-discord-repair.js";
 import { normalizeCompatibilityConfigValues } from "./doctor-legacy-config.js";
 import type { DoctorOptions } from "./doctor-prompter.js";
 import {
@@ -511,7 +507,7 @@ export async function loadAndMaybeMigrateDoctorConfig(params: {
       pendingChanges = pendingChanges || changes.length > 0;
     }
     if (shouldRepair) {
-      // Compatibility migration (2026-01-02, commit: 16420e5b) — normalize per-provider allowlists; move WhatsApp gating into channels.whatsapp.allowFrom.
+      // Compatibility migration (2026-01-02, commit: 16420e5b) — normalize per-provider allowlists.
       if (migrated) {
         cfg = migrated;
       }
@@ -565,14 +561,6 @@ export async function loadAndMaybeMigrateDoctorConfig(params: {
       cfg = repair.config;
     }
 
-    const discordRepair = maybeRepairDiscordNumericIds(candidate);
-    if (discordRepair.changes.length > 0) {
-      note(discordRepair.changes.join("\n"), "Doctor changes");
-      candidate = discordRepair.config;
-      pendingChanges = true;
-      cfg = discordRepair.config;
-    }
-
     const toolsBySenderRepair = maybeRepairLegacyToolsBySenderKeys(candidate);
     if (toolsBySenderRepair.changes.length > 0) {
       note(toolsBySenderRepair.changes.join("\n"), "Doctor changes");
@@ -598,17 +586,6 @@ export async function loadAndMaybeMigrateDoctorConfig(params: {
         [
           `- Telegram allowFrom contains ${hits.length} non-numeric entries (e.g. ${hits[0]?.entry ?? "@"}); Telegram authorization requires numeric sender IDs.`,
           `- Run "${formatCliCommand("deneb doctor --fix")}" to auto-resolve @username entries to numeric IDs (requires a Telegram bot token).`,
-        ].join("\n"),
-        "Doctor warnings",
-      );
-    }
-
-    const discordHits = scanDiscordNumericIdEntries(candidate);
-    if (discordHits.length > 0) {
-      note(
-        [
-          `- Discord allowlists contain ${discordHits.length} numeric entries (e.g. ${discordHits[0]?.path}=${discordHits[0]?.entry}).`,
-          `- Discord IDs must be strings; run "${formatCliCommand("deneb doctor --fix")}" to convert numeric IDs to quoted strings.`,
         ].join("\n"),
         "Doctor warnings",
       );

@@ -29,7 +29,7 @@ describe("doctor browser readiness", () => {
       },
       {
         noteFn,
-        platform: "darwin",
+        platform: "linux",
         resolveChromeExecutable: () => null,
       },
     );
@@ -80,9 +80,9 @@ describe("doctor browser readiness", () => {
       },
       {
         noteFn,
-        platform: "win32",
+        platform: "linux",
         resolveChromeExecutable: () => ({
-          path: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+          path: "/usr/bin/google-chrome",
         }),
         readVersion: () => "Google Chrome 144.0.7534.0",
       },

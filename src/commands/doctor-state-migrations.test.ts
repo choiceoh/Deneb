@@ -116,7 +116,7 @@ async function runAndReadSessionsStore(params: {
 
 type StateDirMigrationResult = Awaited<ReturnType<typeof autoMigrateLegacyStateDir>>;
 
-const DIR_LINK_TYPE = process.platform === "win32" ? "junction" : "dir";
+const DIR_LINK_TYPE = "dir";
 
 function getStateDirMigrationPaths(root: string) {
   return {

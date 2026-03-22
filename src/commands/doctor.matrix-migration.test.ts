@@ -10,7 +10,7 @@ vi.mock("../plugins/providers.js", () => ({
   resolvePluginProviders: vi.fn(() => []),
 }));
 
-const DOCTOR_MIGRATION_TIMEOUT_MS = process.platform === "win32" ? 60_000 : 45_000;
+const DOCTOR_MIGRATION_TIMEOUT_MS = 45_000;
 let doctorCommand: typeof import("./doctor.js").doctorCommand;
 
 describe("doctor command", () => {

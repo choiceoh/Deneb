@@ -91,9 +91,6 @@ describe("doctor config flow safe bins", () => {
   });
 
   it("hints safeBinTrustedDirs when safeBins resolve outside default trusted dirs", async () => {
-    if (process.platform === "win32") {
-      return;
-    }
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-doctor-safe-bins-"));
     const binPath = path.join(dir, "mydoctorbin");
     try {

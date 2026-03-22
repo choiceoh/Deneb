@@ -276,11 +276,7 @@ export async function doctorCommand(
     }
   }
 
-  if (
-    options.nonInteractive !== true &&
-    process.platform === "linux" &&
-    resolveMode(cfg) === "local"
-  ) {
+  if (options.nonInteractive !== true && resolveMode(cfg) === "local") {
     const service = resolveGatewayService();
     let loaded = false;
     try {
