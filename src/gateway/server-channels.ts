@@ -131,6 +131,12 @@ export type ChannelManager = {
   isManuallyStopped: (channelId: ChannelId, accountId: string) => boolean;
   resetRestartAttempts: (channelId: ChannelId, accountId: string) => void;
   isHealthMonitorEnabled: (channelId: ChannelId, accountId: string) => boolean;
+  /** Count of channel accounts expected to be running (enabled + configured). */
+  getExpectedRunningCount: () => number;
+  /** Count of channel accounts currently running. */
+  getConnectedCount: () => number;
+  /** Most recent event timestamp across all channels. */
+  getLastEventAt: () => number;
 };
 
 // Channel docking: lifecycle hooks (`plugin.gateway`) flow through this manager.
@@ -572,6 +578,53 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
     restartAttempts.delete(restartKey(channelId, accountId));
   };
 
+  /** Count of channel accounts that are enabled, configured, and expected to be running. */
+  const getExpectedRunningCount = (): number => {
+    const snapshot = getRuntimeSnapshot();
+    let count = 0;
+    for (const accounts of Object.values(snapshot.channelAccounts)) {
+      if (!accounts) {
+        continue;
+      }
+      for (const status of Object.values(accounts)) {
+        if (status?.enabled && status.configured !== false) {
+          count++;
+        }
+      }
+    }
+    return count;
+  };
+
+  /** Count of channel accounts currently marked as running and connected. */
+  const getConnectedCount = (): number => {
+    const snapshot = getRuntimeSnapshot();
+    let count = 0;
+    for (const accounts of Object.values(snapshot.channelAccounts)) {
+      if (!accounts) {
+        continue;
+      }
+      for (const status of Object.values(accounts)) {
+        if (status?.running) {
+          count++;
+        }
+      }
+    }
+    return count;
+  };
+
+  /** Timestamp of the most recent event across all channel accounts. */
+  const getLastEventAt = (): number => {
+    let latest = 0;
+    for (const store of channelStores.values()) {
+      for (const rt of store.runtimes.values()) {
+        if (rt.lastEventAt && rt.lastEventAt > latest) {
+          latest = rt.lastEventAt;
+        }
+      }
+    }
+    return latest;
+  };
+
   return {
     getRuntimeSnapshot,
     startChannels,
@@ -581,5 +634,8 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
     isManuallyStopped: isManuallyStopped_,
     resetRestartAttempts: resetRestartAttempts_,
     isHealthMonitorEnabled,
+    getExpectedRunningCount,
+    getConnectedCount,
+    getLastEventAt,
   };
 }
