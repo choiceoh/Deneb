@@ -1,0 +1,8 @@
+{
+  "id": "ai-dev-tools",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

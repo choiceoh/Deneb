@@ -1,0 +1,20 @@
+{
+  "name": "@deneb/ai-dev-tools",
+  "version": "3.5.4",
+  "private": true,
+  "description": "Built-in developer tools for AI agents patching and modifying the Deneb codebase",
+  "type": "module",
+  "peerDependencies": {
+    "deneb": ">=2026.3.11"
+  },
+  "peerDependenciesMeta": {
+    "deneb": {
+      "optional": true
+    }
+  },
+  "deneb": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
