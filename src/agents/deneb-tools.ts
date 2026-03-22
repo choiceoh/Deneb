@@ -6,6 +6,7 @@ import { resolveSessionAgentId } from "./agent-scope.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import type { SpawnedToolContext } from "./spawned-context.js";
 import type { ToolFsPolicy } from "./tool-fs-policy.js";
+import { createAutoMaintenanceTool } from "./tools/auto-maintenance-tool.js";
 import { createAutonomousTool } from "./tools/autonomous-tool.js";
 import { createBrowserTool } from "./tools/browser-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
@@ -158,6 +159,7 @@ export function createDenebTools(
       agentSessionKey: options?.agentSessionKey,
     }),
     createAutonomousTool(),
+    createAutoMaintenanceTool(),
     ...(messageTool ? [messageTool] : []),
     createGatewayTool({
       agentSessionKey: options?.agentSessionKey,

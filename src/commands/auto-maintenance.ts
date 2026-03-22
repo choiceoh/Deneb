@@ -595,56 +595,154 @@ function renderReport(params: {
   }
 }
 
+// -- Headless runner (used by gateway timer + agent tool) -------------------
+
+export type AutoMaintenanceRunOptions = {
+  cfg?: DenebConfig;
+  dryRun?: boolean;
+  /** Skip gateway/channel connectivity probes (used when running inside the gateway). */
+  skipConnectivityCheck?: boolean;
+  timeoutMs?: number;
+};
+
+/**
+ * Run auto-maintenance headlessly (no TTY output).
+ * Returns a structured report suitable for JSON serialization or AI consumption.
+ */
+export async function runAutoMaintenance(
+  opts: AutoMaintenanceRunOptions = {},
+): Promise<AutoMaintenanceReport> {
+  const cfg = opts.cfg ?? loadConfig();
+  const stateDir = resolveStateDir();
+  const dryRun = Boolean(opts.dryRun);
+  const timeoutMs = opts.timeoutMs ?? 10_000;
+  const diagnostics: DiagnosticEntry[] = [];
+
+  checkStateIntegrity({ stateDir, cfg, diagnostics });
+
+  const sessionCleanup = await cleanupSessions({ cfg, dryRun, diagnostics });
+  const logCleanup = await cleanupLogs({ stateDir, dryRun, diagnostics });
+
+  let channelIssues: ChannelIssue[] = [];
+  let gatewayReachable: boolean | null = null;
+
+  if (!opts.skipConnectivityCheck) {
+    const result = await checkChannelConnectivity({ cfg, diagnostics, timeoutMs });
+    channelIssues = result.issues;
+    gatewayReachable = result.gatewayReachable;
+  } else {
+    // When running inside the gateway, mark as reachable.
+    gatewayReachable = true;
+    // Still check channel plugin config integrity.
+    const plugins = listChannelPlugins();
+    for (const plugin of plugins) {
+      const accountIds = plugin.config.listAccountIds(cfg);
+      if (accountIds.length === 0) {
+        continue;
+      }
+      for (const accountId of accountIds) {
+        try {
+          const account = plugin.config.resolveAccount(cfg, accountId);
+          if (!account) {
+            diagnostics.push({
+              category: "Channels",
+              severity: "warn",
+              message: `${plugin.meta.label ?? plugin.id}:${accountId}: account configured but could not resolve.`,
+              action: `Run "deneb configure" to fix.`,
+            });
+          } else if (plugin.config.isConfigured) {
+            const configured = await plugin.config.isConfigured(account, cfg);
+            if (!configured) {
+              diagnostics.push({
+                category: "Channels",
+                severity: "warn",
+                message: `${plugin.meta.label ?? plugin.id}:${accountId}: incomplete configuration.`,
+                action: `Run "deneb configure" to complete setup.`,
+              });
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  return {
+    ts: Date.now(),
+    diagnostics,
+    sessionCleanup,
+    logCleanup,
+    channelIssues,
+    gatewayReachable,
+  };
+}
+
+/**
+ * Summarize a report into a single human-readable string for AI agents.
+ */
+export function summarizeReport(report: AutoMaintenanceReport): string {
+  const errors = report.diagnostics.filter((d) => d.severity === "error");
+  const warnings = report.diagnostics.filter((d) => d.severity === "warn");
+  const applied = report.diagnostics.filter((d) => d.applied);
+
+  const lines: string[] = [];
+  if (errors.length === 0 && warnings.length === 0) {
+    lines.push("System is healthy. No issues detected.");
+  } else {
+    if (errors.length > 0) {
+      lines.push(`Errors (${errors.length}):`);
+      for (const e of errors) {
+        lines.push(`  - [${e.category}] ${e.message}${e.action ? ` Fix: ${e.action}` : ""}`);
+      }
+    }
+    if (warnings.length > 0) {
+      lines.push(`Warnings (${warnings.length}):`);
+      for (const w of warnings) {
+        lines.push(`  - [${w.category}] ${w.message}${w.action ? ` Fix: ${w.action}` : ""}`);
+      }
+    }
+  }
+
+  if (applied.length > 0) {
+    lines.push(`Auto-fixed (${applied.length}):`);
+    for (const a of applied) {
+      lines.push(`  - [${a.category}] ${a.message}`);
+    }
+  }
+
+  if (report.sessionCleanup) {
+    const sc = report.sessionCleanup;
+    lines.push(
+      `Sessions: ${sc.beforeCount} -> ${sc.afterCount} entries (pruned ${sc.pruned}, capped ${sc.capped}).`,
+    );
+  }
+  if (report.logCleanup && report.logCleanup.removedFiles > 0) {
+    lines.push(
+      `Logs: removed ${report.logCleanup.removedFiles} files, freed ${formatBytes(report.logCleanup.freedBytes)}.`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
 // -- Main command -----------------------------------------------------------
 
 export async function autoMaintenanceCommand(
   opts: AutoMaintenanceOptions,
   runtime: RuntimeEnv,
 ): Promise<void> {
-  const cfg = loadConfig();
-  const stateDir = resolveStateDir();
   const dryRun = Boolean(opts.dryRun);
   const verbose = Boolean(opts.verbose);
-  const timeoutMs = 10_000;
 
-  const diagnostics: DiagnosticEntry[] = [];
-
-  // Run all checks with progress
   const report = await withProgress(
     {
       label: "Running auto-maintenance...",
       indeterminate: true,
       enabled: opts.json !== true,
     },
-    async (progress) => {
-      // 1. State integrity
-      progress.setLabel("Checking state integrity...");
-      checkStateIntegrity({ stateDir, cfg, diagnostics });
-
-      // 2. Session cleanup
-      progress.setLabel("Cleaning up sessions...");
-      const sessionCleanup = await cleanupSessions({ cfg, dryRun, diagnostics });
-
-      // 3. Log cleanup
-      progress.setLabel("Cleaning up logs...");
-      const logCleanup = await cleanupLogs({ stateDir, dryRun, diagnostics });
-
-      // 4. Channel + gateway connectivity
-      progress.setLabel("Checking channel connectivity...");
-      const { issues: channelIssues, gatewayReachable } = await checkChannelConnectivity({
-        cfg,
-        diagnostics,
-        timeoutMs,
-      });
-
-      return {
-        ts: Date.now(),
-        diagnostics,
-        sessionCleanup,
-        logCleanup,
-        channelIssues,
-        gatewayReachable,
-      } satisfies AutoMaintenanceReport;
+    async () => {
+      return await runAutoMaintenance({ dryRun });
     },
   );
 

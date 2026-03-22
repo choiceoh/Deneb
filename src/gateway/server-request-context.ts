@@ -12,6 +12,7 @@ import type { WizardSession } from "../wizard/session.js";
 import type { ChatAbortControllerEntry } from "./chat-abort.js";
 import type { ExecApprovalManager } from "./exec-approval-manager.js";
 import type { NodeRegistry } from "./node-registry.js";
+import type { AutoMaintenanceServiceHandle } from "./server-auto-maintenance.js";
 import type { GatewayBroadcastFn, GatewayBroadcastToConnIdsFn } from "./server-broadcast.js";
 import type { ChannelRuntimeSnapshot } from "./server-channels.js";
 import type { GatewayRequestContext, GatewayClient } from "./server-methods/types.js";
@@ -76,6 +77,7 @@ export type BuildGatewayRequestContextParams = {
   markChannelLoggedOut: (channelId: ChannelId, cleared: boolean, accountId?: string) => void;
   wizardRunner: GatewayRequestContext["wizardRunner"];
   broadcastVoiceWakeChanged: (triggers: string[]) => void;
+  autoMaintenance?: AutoMaintenanceServiceHandle;
 };
 
 export function buildGatewayRequestContext(
@@ -121,6 +123,7 @@ export function buildGatewayRequestContext(
     markChannelLoggedOut,
     wizardRunner,
     broadcastVoiceWakeChanged,
+    autoMaintenance,
   } = params;
 
   return {
@@ -182,5 +185,6 @@ export function buildGatewayRequestContext(
     markChannelLoggedOut,
     wizardRunner,
     broadcastVoiceWakeChanged,
+    autoMaintenance,
   };
 }
