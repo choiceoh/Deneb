@@ -205,7 +205,7 @@ describe("CompressionObserver", () => {
       );
 
       const cached = observer.getCachedSummary(conversationId)!;
-      expect(observer.isSummaryFresh(conversationId, cached.sourceTokenCount)).toBe(true);
+      expect(observer.isSummaryFresh(conversationId, cached.totalContextTokens)).toBe(true);
     });
 
     it("should report stale when tokens have drifted significantly", async () => {

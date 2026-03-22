@@ -151,10 +151,14 @@ export function resolveLcmConfig(
         0.05,
         0.5,
       ),
-      messageInterval:
-        toNumber(env.LCM_OBSERVER_MESSAGE_INTERVAL) ??
-        toNumber((pc.observer as Record<string, unknown> | undefined)?.messageInterval) ??
-        5,
+      messageInterval: Math.max(
+        1,
+        Math.floor(
+          toNumber(env.LCM_OBSERVER_MESSAGE_INTERVAL) ??
+            toNumber((pc.observer as Record<string, unknown> | undefined)?.messageInterval) ??
+            5,
+        ),
+      ),
       model:
         env.LCM_OBSERVER_MODEL?.trim() ??
         toStr((pc.observer as Record<string, unknown> | undefined)?.model) ??
@@ -163,10 +167,12 @@ export function resolveLcmConfig(
         env.LCM_OBSERVER_PROVIDER?.trim() ??
         toStr((pc.observer as Record<string, unknown> | undefined)?.provider) ??
         "",
-      maxStalenessMs:
+      maxStalenessMs: Math.max(
+        1_000,
         toNumber(env.LCM_OBSERVER_MAX_STALENESS_MS) ??
-        toNumber((pc.observer as Record<string, unknown> | undefined)?.maxStalenessMs) ??
-        60_000,
+          toNumber((pc.observer as Record<string, unknown> | undefined)?.maxStalenessMs) ??
+          60_000,
+      ),
     },
   };
 }

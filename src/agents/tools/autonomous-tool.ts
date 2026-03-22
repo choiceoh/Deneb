@@ -268,7 +268,10 @@ async function executeAction(
       if (followUpAt !== undefined) {
         patch.followUpAt = followUpAt;
       }
-      patch.lastInteraction = Date.now();
+      // Only update lastInteraction when meaningful fields are changed.
+      if (context || followUpAt !== undefined) {
+        patch.lastInteraction = Date.now();
+      }
       const entry = updateSocialEntry(state, entryId, patch);
       if (!entry) {
         return jsonResult({ ok: false, error: `Social entry ${entryId} not found` });
