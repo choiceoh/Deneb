@@ -1,5 +1,5 @@
 /**
- * Native bridge — replaces createLcmDependencies from the lossless-claw plugin.
+ * Native bridge for the LCM context engine.
  *
  * Instead of going through the plugin API (api.config, api.runtime.subagent, etc.),
  * this module imports core modules directly, eliminating ~450 lines of glue code.
@@ -336,18 +336,24 @@ async function nativeResolveSessionIdFromSessionKey(
 
 export function createNativeLcmDependencies(): LcmDependencies {
   const cfg = loadConfig();
-  const lcmEntry = cfg.plugins?.entries?.["lossless-claw"] as Record<string, unknown> | undefined;
-  const pluginConfig = (lcmEntry?.config as Record<string, unknown> | undefined) ?? {};
+
+  // Read LCM config from the canonical "lcm" entry, falling back to the
+  // legacy "lossless-claw" entry for backward compatibility.
+  const entries = cfg.plugins?.entries as Record<string, Record<string, unknown>> | undefined;
+  const lcmEntry = entries?.["lcm"];
+  const legacyEntry = entries?.["lossless-claw"];
+  const lcmConfig = (lcmEntry?.config as Record<string, unknown> | undefined) ?? {};
+  const legacyConfig = (legacyEntry?.config as Record<string, unknown> | undefined) ?? {};
+  // Merge: lcm config takes precedence over legacy lossless-claw config.
+  const pluginConfig = { ...legacyConfig, ...lcmConfig };
   const config = resolveLcmConfig(process.env, pluginConfig);
 
-  // Apply model overrides from plugin config
-  if (pluginConfig) {
-    if (typeof pluginConfig.summaryModel === "string") {
-      (config as Record<string, unknown>).summaryModel = pluginConfig.summaryModel.trim();
-    }
-    if (typeof pluginConfig.summaryProvider === "string") {
-      (config as Record<string, unknown>).summaryProvider = pluginConfig.summaryProvider.trim();
-    }
+  // Apply model overrides from merged config
+  if (typeof pluginConfig.summaryModel === "string") {
+    (config as Record<string, unknown>).summaryModel = pluginConfig.summaryModel.trim();
+  }
+  if (typeof pluginConfig.summaryProvider === "string") {
+    (config as Record<string, unknown>).summaryProvider = pluginConfig.summaryProvider.trim();
   }
 
   return {

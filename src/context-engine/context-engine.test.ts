@@ -630,7 +630,7 @@ describe("Initialization guard", () => {
 // resolveContextEngine() imported from chunk B.
 //
 // These tests exercise the invariant that failed in 2026.3.7 when
-// lossless-claw registered successfully but resolution could not find it.
+// the LCM engine registered successfully but resolution could not find it.
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("Bundle chunk isolation (#40096)", () => {

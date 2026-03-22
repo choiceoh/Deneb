@@ -663,11 +663,14 @@ export async function createLcmSummarizeFromLegacyParams(params: {
         })
       : undefined;
 
-  const nestedPluginConfig = runtimeConfig?.plugins?.entries?.["lossless-claw"]?.config;
+  // Read from canonical "lcm" entry, falling back to legacy "lossless-claw" for backward compat.
+  const lcmPluginConfig = runtimeConfig?.plugins?.entries?.["lcm"]?.config;
+  const legacyPluginConfig = runtimeConfig?.plugins?.entries?.["lossless-claw"]?.config;
+  const nestedPluginConfig = lcmPluginConfig ?? legacyPluginConfig;
 
   const summaryLevels = [
     {
-      levelName: "plugin config (lossless-claw)",
+      levelName: "lcm config",
       model: readModelRef(nestedPluginConfig?.summaryModel),
       provider:
         typeof nestedPluginConfig?.summaryProvider === "string"
