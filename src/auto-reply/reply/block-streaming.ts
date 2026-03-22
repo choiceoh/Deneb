@@ -6,9 +6,9 @@ import { normalizeAccountId } from "../../routing/session-key.js";
 import { normalizeMessageChannel } from "../../utils/message-channel.js";
 import { resolveChunkMode, resolveTextChunkLimit, type TextChunkProvider } from "../chunk.js";
 
-const DEFAULT_BLOCK_STREAM_MIN = 800;
+const DEFAULT_BLOCK_STREAM_MIN = 400;
 const DEFAULT_BLOCK_STREAM_MAX = 1200;
-const DEFAULT_BLOCK_STREAM_COALESCE_IDLE_MS = 1000;
+const DEFAULT_BLOCK_STREAM_COALESCE_IDLE_MS = 300;
 
 function normalizeChunkProvider(provider?: string): TextChunkProvider | undefined {
   if (!provider) {

@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer";
 import fs from "node:fs/promises";
 import { isCacheEnabled, resolveCacheTtlMs } from "../../config/cache-utils.js";
 
@@ -54,14 +53,11 @@ export async function prewarmSessionFile(sessionFile: string): Promise<void> {
   }
 
   try {
-    // Read a small chunk to encourage OS page cache warmup.
-    const handle = await fs.open(sessionFile, "r");
-    try {
-      const buffer = Buffer.alloc(4096);
-      await handle.read(buffer, 0, buffer.length, 0);
-    } finally {
-      await handle.close();
-    }
+    // Read the full file to pull it into the OS page cache so SessionManager.open
+    // doesn't block on disk I/O. For typical session files (< 2 MB) this is cheap;
+    // for very large files, readFile still beats a 4 KB partial read that leaves most
+    // pages uncached.
+    await fs.readFile(sessionFile);
     trackSessionManagerAccess(sessionFile);
   } catch {
     // File doesn't exist yet, SessionManager will create it
