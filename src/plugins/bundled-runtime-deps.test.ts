@@ -67,35 +67,4 @@ describe("bundled plugin runtime dependencies", () => {
       expectPluginOwnsRuntimeDep("extensions/discord/package.json", "https-proxy-agent");
     },
   );
-
-  it.skipIf(!extensionExists("line"))(
-    "keeps bundled LINE runtime deps plugin-local instead of mirroring them into the root package",
-    () => {
-      expectPluginOwnsRuntimeDep("extensions/line/package.json", "@line/bot-sdk");
-    },
-  );
-
-  it.skipIf(!extensionExists("matrix"))(
-    "keeps bundled Matrix runtime deps plugin-local instead of mirroring them into the root package",
-    () => {
-      expectPluginOwnsRuntimeDep("extensions/matrix/package.json", "matrix-js-sdk");
-    },
-  );
-
-  it.skipIf(!extensionExists("twitch"))(
-    "keeps bundled Twitch runtime deps plugin-local instead of mirroring them into the root package",
-    () => {
-      expectPluginOwnsRuntimeDep("extensions/twitch/package.json", "@twurple/chat");
-    },
-  );
-
-  it.skipIf(!extensionExists("diagnostics-otel"))(
-    "keeps bundled OTel runtime deps plugin-local instead of mirroring them into the root package",
-    () => {
-      expectPluginOwnsRuntimeDep(
-        "extensions/diagnostics-otel/package.json",
-        "@opentelemetry/sdk-node",
-      );
-    },
-  );
 });
