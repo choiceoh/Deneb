@@ -46,4 +46,5 @@ if [ "${#format_files[@]}" -gt 0 ]; then
   "$RUN_NODE_TOOL" oxfmt --write --no-error-on-unmatched-pattern "${format_files[@]}"
 fi
 
-git add -- "${files[@]}"
+# Use -f so tracked files inside .gitignore'd directories (e.g. dist-runtime/) can be re-staged after lint/format fixes.
+git add -f -- "${files[@]}"

@@ -1,7 +1,13 @@
 {
   "name": "@deneb/diagnostics-otel",
-  "version": "2026.3.14",
+  "version": "3.5.2",
   "description": "Deneb diagnostics OpenTelemetry exporter",
+  "files": [
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "deneb.plugin.json",
+    "package.json"
+  ],
   "type": "module",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
