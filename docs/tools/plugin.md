@@ -25,10 +25,10 @@ runtime code in-process.
 deneb plugins list
 ```
 
-2. Install an official plugin (example: Voice Call):
+2. Install an official plugin (example: Matrix):
 
 ```bash
-deneb plugins install @deneb/voice-call
+deneb plugins install @deneb/matrix
 ```
 
 Npm specs are registry-only. See [install rules](/cli/plugins#install) for
@@ -36,7 +36,6 @@ details on pinning, prerelease gating, and supported spec formats.
 
 3. Restart the Gateway, then configure under `plugins.entries.<id>.config`.
 
-See [Voice Call](/plugins/voice-call) for a concrete example plugin.
 Looking for third-party listings? See [Community plugins](/plugins/community).
 Need the bundle compatibility details? See [Plugin bundles](/plugins/bundles).
 
@@ -65,14 +64,13 @@ marketplace source with `--marketplace`.
 
 These are published to npm and installed with `deneb plugins install`:
 
-| Plugin          | Package             | Docs                               |
-| --------------- | ------------------- | ---------------------------------- |
-| Matrix          | `@deneb/matrix`     | [Matrix](/channels/matrix)         |
-| Microsoft Teams | `@deneb/msteams`    | [MS Teams](/channels/msteams)      |
-| Nostr           | `@deneb/nostr`      | [Nostr](/channels/nostr)           |
-| Voice Call      | `@deneb/voice-call` | [Voice Call](/plugins/voice-call)  |
-| Zalo            | `@deneb/zalo`       | [Zalo](/channels/zalo)             |
-| Zalo Personal   | `@deneb/zalouser`   | [Zalo Personal](/plugins/zalouser) |
+| Plugin          | Package           | Docs                               |
+| --------------- | ----------------- | ---------------------------------- |
+| Matrix          | `@deneb/matrix`   | [Matrix](/channels/matrix)         |
+| Microsoft Teams | `@deneb/msteams`  | [MS Teams](/channels/msteams)      |
+| Nostr           | `@deneb/nostr`    | [Nostr](/channels/nostr)           |
+| Zalo            | `@deneb/zalo`     | [Zalo](/channels/zalo)             |
+| Zalo Personal   | `@deneb/zalouser` | [Zalo Personal](/plugins/zalouser) |
 
 Microsoft Teams is plugin-only as of 2026.1.15.
 
@@ -124,11 +122,11 @@ behavior, and current support matrix.
 {
   plugins: {
     enabled: true,
-    allow: ["voice-call"],
+    allow: ["matrix"],
     deny: ["untrusted-plugin"],
-    load: { paths: ["~/Projects/oss/voice-call-extension"] },
+    load: { paths: ["~/Projects/oss/my-extension"] },
     entries: {
-      "voice-call": { enabled: true, config: { provider: "twilio" } },
+      matrix: { enabled: true, config: {} },
     },
   },
 }
@@ -259,7 +257,7 @@ Declare `kind` in your [plugin manifest](/plugins/manifest).
 Default plugin ids:
 
 - Package packs: `package.json` `name`
-- Standalone file: file base name (`~/.../voice-call.ts` -> `voice-call`)
+- Standalone file: file base name (`~/.../my-plugin.ts` -> `my-plugin`)
 
 If a plugin exports `id`, Deneb uses it but warns when it does not match the
 configured id.
@@ -280,12 +278,12 @@ deneb plugins doctor                # issue-focused diagnostics
 deneb plugins list
 deneb plugins inspect <id>
 deneb plugins install <path>                 # copy a local file/dir into ~/.deneb/extensions/<id>
-deneb plugins install ./extensions/voice-call # relative path ok
+deneb plugins install ./extensions/my-plugin  # relative path ok
 deneb plugins install ./plugin.tgz           # install from a local tarball
 deneb plugins install ./plugin.zip           # install from a local zip
-deneb plugins install -l ./extensions/voice-call # link (no copy) for dev
-deneb plugins install @deneb/voice-call   # install from npm
-deneb plugins install @deneb/voice-call --pin # store exact resolved name@version
+deneb plugins install -l ./extensions/my-plugin # link (no copy) for dev
+deneb plugins install @deneb/matrix          # install from npm
+deneb plugins install @deneb/matrix --pin    # store exact resolved name@version
 deneb plugins update <id>
 deneb plugins update --all
 deneb plugins enable <id>
@@ -296,8 +294,7 @@ deneb plugins doctor
 See [`deneb plugins` CLI reference](/cli/plugins) for full details on each
 command (install rules, inspect output, marketplace installs, uninstall).
 
-Plugins may also register their own top-level commands (example:
-`deneb voicecall`).
+Plugins may also register their own top-level commands.
 
 ## Plugin API (overview)
 

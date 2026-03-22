@@ -996,7 +996,6 @@
                   "tools/exec",
                   "tools/exec-approvals",
                   "tools/firecrawl",
-                  "tools/llm-task",
                   "tools/lobster",
                   "tools/loop-detection",
                   "tools/pdf",
@@ -1041,7 +1040,6 @@
                   "plugins/architecture",
                   "plugins/community",
                   "plugins/bundles",
-                  "plugins/voice-call",
                   "plugins/zalouser",
                   "plugins/manifest",
                   "plugins/agent-tools",
@@ -1304,7 +1302,6 @@
                   "cli/tui",
                   "cli/uninstall",
                   "cli/update",
-                  "cli/voicecall",
                   "cli/webhooks"
                 ]
               },
@@ -1344,7 +1341,6 @@
                   "concepts/typebox",
                   "concepts/markdown-formatting",
                   "concepts/typing-indicators",
-                  "concepts/usage-tracking",
                   "concepts/timezone"
                 ]
               },
@@ -1587,7 +1583,6 @@
                   "zh-CN/tools/exec",
                   "zh-CN/tools/exec-approvals",
                   "zh-CN/tools/firecrawl",
-                  "zh-CN/tools/llm-task",
                   "zh-CN/tools/lobster",
                   "zh-CN/perplexity",
                   "zh-CN/tools/reactions",
@@ -1626,7 +1621,6 @@
                 "group": "扩展",
                 "pages": [
                   "zh-CN/plugins/architecture",
-                  "zh-CN/plugins/voice-call",
                   "zh-CN/plugins/zalouser",
                   "zh-CN/plugins/manifest",
                   "zh-CN/plugins/agent-tools",
@@ -1872,7 +1866,6 @@
                   "zh-CN/cli/tui",
                   "zh-CN/cli/uninstall",
                   "zh-CN/cli/update",
-                  "zh-CN/cli/voicecall",
                   "zh-CN/cli/webhooks"
                 ]
               },
@@ -1910,7 +1903,6 @@
                   "zh-CN/concepts/typebox",
                   "zh-CN/concepts/markdown-formatting",
                   "zh-CN/concepts/typing-indicators",
-                  "zh-CN/concepts/usage-tracking",
                   "zh-CN/concepts/timezone"
                 ]
               },

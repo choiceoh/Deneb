@@ -64,7 +64,6 @@ x-i18n:
 - [`skills`](/cli/skills)
 - [`daemon`](/cli/daemon)（Gateway 网关服务命令的旧别名）
 - [`clawbot`](/cli/clawbot)（旧别名命名空间）
-- [`voicecall`](/cli/voicecall)（插件；如已安装）
 
 ## 全局标志
 
@@ -685,7 +684,7 @@ Gmail Pub/Sub hook 设置 + 运行器。参见 [/automation/gmail-pubsub](/autom
 - 数据直接来自提供商用量端点（不是估算值）。
 - 提供商：Anthropic、GitHub Copilot、OpenAI Codex OAuth，以及打包的 `google` 插件所提供的 Gemini CLI 和在已配置情况下的 Antigravity。
 - 如果不存在匹配的凭据，则不会显示用量。
-- 详情：参见 [用量跟踪](/concepts/usage-tracking)。
+- 使用 `deneb status --usage` 查看完整的按提供商分类的用量明细。
 
 ### `health`
 

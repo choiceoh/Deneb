@@ -57,7 +57,6 @@ This page describes the current CLI behavior. If commands change, update this do
 - [`skills`](/cli/skills)
 - [`daemon`](/cli/daemon) (legacy alias for gateway service commands)
 - [`clawbot`](/cli/clawbot) (legacy alias namespace)
-- [`voicecall`](/cli/voicecall) (plugin; if installed)
 
 ## Global flags
 
@@ -265,7 +264,7 @@ deneb [--dev] [--profile <name>] <command>
   tui
 ```
 
-Note: plugins can add additional top-level commands (for example `deneb voicecall`).
+Note: plugins can add additional top-level commands.
 
 ## Security
 
@@ -689,7 +688,7 @@ Notes:
 - Data comes directly from provider usage endpoints (no estimates).
 - Providers: Anthropic, GitHub Copilot, OpenAI Codex OAuth, plus Gemini CLI via the bundled `google` plugin and Antigravity where configured.
 - If no matching credentials exist, usage is hidden.
-- Details: see [Usage tracking](/concepts/usage-tracking).
+- See `deneb status --usage` for a full per-provider breakdown.
 
 ### `health`
 

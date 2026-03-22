@@ -82,52 +82,6 @@ gog.gmail.search --query 'newer_than:1d' \
   | deneb.invoke --tool message --action send --each --item-key message --args-json '{"provider":"telegram","to":"..."}'
 ```
 
-## 纯 JSON 的 LLM 步骤（llm-task）
-
-对于需要**结构化 LLM 步骤**的工作流，启用可选的
-`llm-task` 插件工具并从 Lobster 调用它。这保持了工作流的
-确定性，同时仍然允许你使用模型进行分类/摘要/起草。
-
-启用工具：
-
-```json
-{
-  "plugins": {
-    "entries": {
-      "llm-task": { "enabled": true }
-    }
-  },
-  "agents": {
-    "list": [
-      {
-        "id": "main",
-        "tools": { "allow": ["llm-task"] }
-      }
-    ]
-  }
-}
-```
-
-在管道中使用它：
-
-```lobster
-deneb.invoke --tool llm-task --action json --args-json '{
-  "prompt": "Given the input email, return intent and draft.",
-  "input": { "subject": "Hello", "body": "Can you help?" },
-  "schema": {
-    "type": "object",
-    "properties": {
-      "intent": { "type": "string" },
-      "draft": { "type": "string" }
-    },
-    "required": ["intent", "draft"],
-    "additionalProperties": false
-  }
-}'
-```
-
-参见 [LLM Task](/tools/llm-task) 了解详情和配置选项。
-
 ## 工作流文件（.lobster）
 
 Lobster 可以运行包含 `name`、`args`、`steps`、`env`、`condition` 和 `approval` 字段的 YAML/JSON 工作流文件。在 Deneb 工具调用中，将 `pipeline` 设置为文件路径。

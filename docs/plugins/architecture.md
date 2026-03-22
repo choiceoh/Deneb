@@ -212,11 +212,7 @@ Examples:
   media-understanding + image-generation + web-search behavior
 - the bundled `minimax`, `mistral`, `moonshot`, and `zai` plugins own their
   media-understanding backends
-- the `voice-call` plugin is a feature plugin: it owns call transport, tools,
-  CLI, routes, and runtime, but it consumes core TTS/STT capability instead of
-  inventing a second speech stack
-
-The intended end state is:
+  The intended end state is:
 
 - OpenAI lives in one plugin even if it spans text models, speech, images, and
   future video
@@ -252,14 +248,13 @@ Use this mental model when deciding where code belongs:
   merge rules, delivery semantics, and typed contracts
 - **vendor plugin layer**: vendor-specific APIs, auth, model catalogs, speech
   synthesis, image generation, future video backends, usage endpoints
-- **channel/feature plugin layer**: Slack/Discord/voice-call/etc. integration
+- **channel/feature plugin layer**: Slack/Discord/MS Teams/etc. integration
   that consumes core capabilities and presents them on a surface
 
 For example, TTS follows this shape:
 
 - core owns reply-time TTS policy, fallback order, prefs, and channel delivery
 - `openai`, `elevenlabs`, and `microsoft` own synthesis implementations
-- `voice-call` consumes the telephony TTS runtime helper
 
 That same pattern should be preferred for future capabilities.
 
