@@ -32,6 +32,16 @@ export type ModelRef = {
 
 export type ThinkLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "adaptive";
 
+const THINK_LEVELS: ReadonlySet<string> = new Set<ThinkLevel>([
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "adaptive",
+]);
+
 export type ModelAliasIndex = {
   byAlias: Map<string, { alias: string; ref: ModelRef }>;
   byKey: Map<string, string[]>;
@@ -417,10 +427,7 @@ export function buildAllowedModelSet(params: {
   allowedCatalog: ModelCatalogEntry[];
   allowedKeys: Set<string>;
 } {
-  const rawAllowlist = (() => {
-    const modelMap = params.cfg.agents?.defaults?.models ?? {};
-    return Object.keys(modelMap);
-  })();
+  const rawAllowlist = Object.keys(params.cfg.agents?.defaults?.models ?? {});
   const allowAny = rawAllowlist.length === 0;
   const defaultModel = params.defaultModel?.trim();
   const defaultRef =
@@ -590,16 +597,8 @@ export function resolveThinkingDefault(params: {
   const perModelThinking =
     configuredModels?.[canonicalKey]?.params?.thinking ??
     (legacyKey ? configuredModels?.[legacyKey]?.params?.thinking : undefined);
-  if (
-    perModelThinking === "off" ||
-    perModelThinking === "minimal" ||
-    perModelThinking === "low" ||
-    perModelThinking === "medium" ||
-    perModelThinking === "high" ||
-    perModelThinking === "xhigh" ||
-    perModelThinking === "adaptive"
-  ) {
-    return perModelThinking;
+  if (typeof perModelThinking === "string" && THINK_LEVELS.has(perModelThinking)) {
+    return perModelThinking as ThinkLevel;
   }
   const configured = params.cfg.agents?.defaults?.thinkingDefault;
   if (configured) {

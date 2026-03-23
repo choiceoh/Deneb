@@ -6,6 +6,12 @@ import { stripEnvelope, stripMessageIdHints } from "../shared/chat-envelope.js";
 
 export { stripEnvelope };
 
+/** Strip inbound metadata, and optionally envelope + message-id hints for user messages. */
+function stripText(text: string, stripUserEnvelope: boolean): string {
+  const inboundStripped = stripInboundMetadata(text);
+  return stripUserEnvelope ? stripMessageIdHints(stripEnvelope(inboundStripped)) : inboundStripped;
+}
+
 function extractMessageSenderLabel(entry: Record<string, unknown>): string | null {
   if (typeof entry.senderLabel === "string" && entry.senderLabel.trim()) {
     return entry.senderLabel.trim();
@@ -47,10 +53,7 @@ function stripEnvelopeFromContentWithRole(
     if (entry.type !== "text" || typeof entry.text !== "string") {
       return item;
     }
-    const inboundStripped = stripInboundMetadata(entry.text);
-    const stripped = stripUserEnvelope
-      ? stripMessageIdHints(stripEnvelope(inboundStripped))
-      : inboundStripped;
+    const stripped = stripText(entry.text, stripUserEnvelope);
     if (stripped === entry.text) {
       return item;
     }
@@ -80,10 +83,7 @@ export function stripEnvelopeFromMessage(message: unknown): unknown {
   }
 
   if (typeof entry.content === "string") {
-    const inboundStripped = stripInboundMetadata(entry.content);
-    const stripped = stripUserEnvelope
-      ? stripMessageIdHints(stripEnvelope(inboundStripped))
-      : inboundStripped;
+    const stripped = stripText(entry.content, stripUserEnvelope);
     if (stripped !== entry.content) {
       next.content = stripped;
       changed = true;
@@ -95,10 +95,7 @@ export function stripEnvelopeFromMessage(message: unknown): unknown {
       changed = true;
     }
   } else if (typeof entry.text === "string") {
-    const inboundStripped = stripInboundMetadata(entry.text);
-    const stripped = stripUserEnvelope
-      ? stripMessageIdHints(stripEnvelope(inboundStripped))
-      : inboundStripped;
+    const stripped = stripText(entry.text, stripUserEnvelope);
     if (stripped !== entry.text) {
       next.text = stripped;
       changed = true;
