@@ -109,6 +109,10 @@ export function validatePluginConfig(params: {
 }): { ok: boolean; value?: Record<string, unknown>; errors?: string[] } {
   const schema = params.schema;
   if (!schema) {
+    // No schema means no validation; pass through undefined or valid objects.
+    if (params.value !== undefined && (typeof params.value !== "object" || params.value === null)) {
+      return { ok: false, errors: ["plugin config must be an object or undefined"] };
+    }
     return { ok: true, value: params.value as Record<string, unknown> | undefined };
   }
   const cacheKey = params.cacheKey ?? JSON.stringify(schema);
@@ -118,6 +122,10 @@ export function validatePluginConfig(params: {
     value: params.value ?? {},
   });
   if (result.ok) {
+    // Validated value may be coerced by the schema validator; ensure it is an object.
+    if (params.value !== undefined && (typeof params.value !== "object" || params.value === null)) {
+      return { ok: false, errors: ["plugin config must be an object"] };
+    }
     return { ok: true, value: params.value as Record<string, unknown> | undefined };
   }
   return { ok: false, errors: result.errors.map((error) => error.text) };

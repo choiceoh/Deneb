@@ -117,8 +117,9 @@ function resolvePluginRuntimeModulePath(params: LoaderModuleResolveParams = {}):
         return candidate;
       }
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    const log = defaultLogger();
+    log.warn(`[plugins] failed to resolve plugin runtime module path: ${String(err)}`);
   }
   return null;
 }
