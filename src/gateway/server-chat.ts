@@ -5,6 +5,7 @@ import { loadConfig } from "../config/config.js";
 import { type AgentEventPayload, getAgentRunContext } from "../infra/agent-events.js";
 import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
 import { stripInlineDirectiveTagsForDisplay } from "../utils/directive-tags.js";
+import { classifyChatErrorKind } from "./chat-error-kind.js";
 import {
   deriveGatewaySessionLifecycleSnapshot,
   persistGatewaySessionLifecycleEvent,
@@ -648,12 +649,14 @@ export function createAgentEventHandler({
       nodeSendToSession(sessionKey, "chat", payload);
       return;
     }
+    const errorMessage = error ? formatForLog(error) : undefined;
     const payload = {
       runId: clientRunId,
       sessionKey,
       seq,
       state: "error" as const,
-      errorMessage: error ? formatForLog(error) : undefined,
+      errorMessage,
+      errorKind: classifyChatErrorKind(errorMessage),
     };
     broadcast("chat", payload);
     nodeSendToSession(sessionKey, "chat", payload);

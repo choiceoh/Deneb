@@ -1,13 +1,13 @@
 /**
- * channel-bootstrap.ts — Deneb: 데네브가 지원하는 채널만 등록
+ * channel-bootstrap.ts — Register Deneb-supported channels
  *
- * 업스트림에는 채널이 많지만 데네브는 Telegram만 지원.
- * 필요한 채널은 여기서만 추가하면 됨.
+ * Upstream supports many channels, but Deneb only supports Telegram.
+ * Add new channels here as needed.
  */
 
 import { registerChannel } from "./dynamic-registry.js";
 
-// ── Telegram (데네브 유일 채널) ──
+// ── Telegram (only channel in Deneb) ──
 registerChannel({
   id: "telegram",
   label: "Telegram",
@@ -21,5 +21,5 @@ registerChannel({
   selectionDocsOmitLabel: true,
 });
 
-// ── 별칭 ──
-// 필요한 별칭만 등록 (데네브에서 사용하는 것만)
+// ── Aliases ──
+// Register only aliases used in Deneb (none currently).

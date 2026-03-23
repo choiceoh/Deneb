@@ -76,6 +76,7 @@ export const ChatEventSchema = Type.Object(
     ]),
     message: Type.Optional(Type.Unknown()),
     errorMessage: Type.Optional(Type.String()),
+    errorKind: Type.Optional(Type.String()),
     usage: Type.Optional(Type.Unknown()),
     stopReason: Type.Optional(Type.String()),
   },
