@@ -8,11 +8,15 @@ vi.mock("../gateway/call.js", () => ({
 }));
 
 let resolveCommandSecretRefsViaGateway: typeof import("./command-secret-gateway.js").resolveCommandSecretRefsViaGateway;
+let _modulesLoaded = false;
 
 beforeEach(async () => {
-  vi.resetModules();
+  if (!_modulesLoaded) {
+    vi.resetModules();
+    ({ resolveCommandSecretRefsViaGateway } = await import("./command-secret-gateway.js"));
+    _modulesLoaded = true;
+  }
   callGateway.mockReset();
-  ({ resolveCommandSecretRefsViaGateway } = await import("./command-secret-gateway.js"));
 });
 
 describe("resolveCommandSecretRefsViaGateway", () => {

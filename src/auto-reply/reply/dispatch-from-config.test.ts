@@ -256,14 +256,19 @@ async function dispatchTwiceWithFreshDispatchers(params: Omit<DispatchReplyArgs,
   });
 }
 
+let _dispatchModulesLoaded = false;
+
 describe("dispatchReplyFromConfig", () => {
   beforeEach(async () => {
-    vi.resetModules();
-    ({ dispatchReplyFromConfig } = await import("./dispatch-from-config.js"));
-    ({ resetInboundDedupe } = await import("./inbound-dedupe.js"));
-    ({ __testing: acpManagerTesting } = await import("../../acp/control-plane/manager.js"));
-    ({ __testing: pluginBindingTesting } = await import("../../plugins/conversation-binding.js"));
-    ({ AcpRuntimeError: AcpRuntimeErrorClass } = await import("../../acp/runtime/errors.js"));
+    if (!_dispatchModulesLoaded) {
+      vi.resetModules();
+      ({ dispatchReplyFromConfig } = await import("./dispatch-from-config.js"));
+      ({ resetInboundDedupe } = await import("./inbound-dedupe.js"));
+      ({ __testing: acpManagerTesting } = await import("../../acp/control-plane/manager.js"));
+      ({ __testing: pluginBindingTesting } = await import("../../plugins/conversation-binding.js"));
+      ({ AcpRuntimeError: AcpRuntimeErrorClass } = await import("../../acp/runtime/errors.js"));
+      _dispatchModulesLoaded = true;
+    }
     const discordTestPlugin = {
       ...createChannelTestPluginBase({
         id: "discord",

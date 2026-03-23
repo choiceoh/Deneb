@@ -145,7 +145,6 @@ beforeEach(async () => {
 afterEach(async () => {
   const runtimeModule = await import("../plugins/runtime/index.js");
   runtimeModule.clearGatewaySubagentRuntime();
-  vi.resetModules();
 });
 
 describe("loadGatewayPlugins", () => {
