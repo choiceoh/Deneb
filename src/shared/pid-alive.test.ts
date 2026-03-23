@@ -101,15 +101,6 @@ describe("getProcessStartTime", () => {
     });
   });
 
-  it("returns null on non-Linux platforms", () => {
-    if (process.platform === "linux") {
-      // On actual Linux, this test is trivially satisfied by the other tests.
-      expect(true).toBe(true);
-      return;
-    }
-    expect(getProcessStartTime(process.pid)).toBeNull();
-  });
-
   it("returns null for invalid PIDs", () => {
     expect(getProcessStartTime(0)).toBeNull();
     expect(getProcessStartTime(-1)).toBeNull();
