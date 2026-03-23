@@ -107,28 +107,67 @@ function findTestFiles(filePath: string): string[] {
 // Find dependents (files that import the changed file) via grep
 // -------------------------------------------------------------------------
 
-function findDependents(filePath: string): string[] {
-  const basename = path.parse(filePath).name;
-  // Search for imports referencing this file's basename
-  try {
-    const result = execSync(
-      `grep -rl --include='*.ts' --include='*.tsx' '${basename}' src/ extensions/ 2>/dev/null || true`,
-      { cwd: ROOT, encoding: "utf8", timeout: 15_000 },
-    );
-    return result
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(
-        (l) =>
-          l &&
-          l !== filePath &&
-          !l.endsWith(".test.ts") &&
-          !l.endsWith(".e2e.test.ts") &&
-          !l.includes("node_modules"),
-      );
-  } catch {
-    return [];
+/** Batch-find dependents for all changed files in a single grep call. */
+function findAllDependents(changedFiles: string[]): Map<string, string[]> {
+  const result = new Map<string, string[]>();
+  if (changedFiles.length === 0) {
+    return result;
   }
+
+  // Deduplicate basenames and map back to files
+  const basenameToFiles = new Map<string, string[]>();
+  for (const f of changedFiles) {
+    const name = path.parse(f).name;
+    const existing = basenameToFiles.get(name);
+    if (existing) {
+      existing.push(f);
+    } else {
+      basenameToFiles.set(name, [f]);
+    }
+    result.set(f, []);
+  }
+
+  // Single grep call with alternation pattern for all basenames
+  const basenames = [...basenameToFiles.keys()];
+  // Escape regex special chars in basenames
+  const escaped = basenames.map((b) => b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = escaped.length === 1 ? escaped[0] : `(${escaped.join("|")})`;
+
+  try {
+    const grepResult = execSync(
+      `grep -rln --include='*.ts' --include='*.tsx' -E '${pattern}' src/ extensions/ 2>/dev/null || true`,
+      { cwd: ROOT, encoding: "utf8", timeout: 30_000 },
+    );
+
+    // Parse grep -n output (file:line:content) and match basenames
+    const matchedFiles = new Set<string>();
+    for (const line of grepResult.split("\n")) {
+      const filePath = line.split(":")[0]?.trim();
+      if (
+        filePath &&
+        !filePath.endsWith(".test.ts") &&
+        !filePath.endsWith(".e2e.test.ts") &&
+        !filePath.includes("node_modules")
+      ) {
+        matchedFiles.add(filePath);
+      }
+    }
+
+    // Assign matched files to their source changed files
+    for (const matchedFile of matchedFiles) {
+      for (const [_basename, sourceFiles] of basenameToFiles) {
+        for (const sourceFile of sourceFiles) {
+          if (matchedFile !== sourceFile) {
+            result.get(sourceFile)!.push(matchedFile);
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return result;
 }
 
 // -------------------------------------------------------------------------
@@ -154,9 +193,12 @@ function main() {
   const allDependents = new Set<string>();
   const details: Record<string, { tests: string[]; dependents: string[]; imports: string[] }> = {};
 
+  // Batch-find dependents for all changed files in a single grep call
+  const dependentsMap = findAllDependents(changed);
+
   for (const file of changed) {
     const tests = findTestFiles(file);
-    const dependents = findDependents(file);
+    const dependents = dependentsMap.get(file) ?? [];
     const imports = extractImports(file)
       .map((spec) => resolveRelativeImport(file, spec))
       .filter((r): r is string => r !== null);
