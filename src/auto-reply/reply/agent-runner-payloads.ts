@@ -200,13 +200,23 @@ export async function buildReplyPayloads(params: {
       })
     : dedupedPayloads;
   // Filter out payloads already sent via pipeline or directly during tool flush.
-  // When block streaming completed cleanly, use per-payload dedup (hasSentPayload)
-  // instead of a blanket drop so that payloads generated after the stream ended
-  // are still delivered to the user.
-  const filteredPayloads =
-    blockStreamCompletedCleanly || params.blockStreamingEnabled
+  //
+  // Three cases:
+  // 1. Block streaming completed cleanly (streamed + not aborted): use
+  //    per-payload dedup via hasSentPayload so payloads generated after the
+  //    stream ended are still delivered.
+  // 2. Block streaming enabled but did NOT complete cleanly (aborted or never
+  //    streamed): fall through to directlySentBlockKeys / no-filter paths so
+  //    final payloads are not incorrectly suppressed.
+  // 3. Block streaming disabled: use directlySentBlockKeys if available,
+  //    otherwise pass all payloads through.
+  const filteredPayloads = blockStreamCompletedCleanly
+    ? mediaFilteredPayloads.filter((payload) => !params.blockReplyPipeline?.hasSentPayload(payload))
+    : params.blockStreamingEnabled &&
+        params.blockReplyPipeline &&
+        !params.blockReplyPipeline.isAborted()
       ? mediaFilteredPayloads.filter(
-          (payload) => !params.blockReplyPipeline?.hasSentPayload(payload),
+          (payload) => !params.blockReplyPipeline!.hasSentPayload(payload),
         )
       : params.directlySentBlockKeys?.size
         ? mediaFilteredPayloads.filter(
