@@ -181,7 +181,9 @@ export async function listMemoryFiles(
     let key = entry;
     try {
       key = await fs.realpath(entry);
-    } catch {}
+    } catch {
+      // realpath fails for non-existent paths; use the original entry as the dedup key.
+    }
     if (seen.has(key)) {
       continue;
     }

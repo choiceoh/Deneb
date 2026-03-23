@@ -317,7 +317,9 @@ export abstract class MemoryManagerSyncOps {
     } catch (err) {
       try {
         this.db.exec("ROLLBACK");
-      } catch {}
+      } catch {
+        // ROLLBACK may fail if the connection is already broken; the original error is rethrown below.
+      }
       throw err;
     }
   }
@@ -1241,7 +1243,9 @@ export abstract class MemoryManagerSyncOps {
     } catch (err) {
       try {
         this.db.close();
-      } catch {}
+      } catch {
+        // Best-effort close before restoring the original DB; the primary error is rethrown.
+      }
       await this.removeIndexFiles(tempDbPath);
       restoreOriginalState();
       throw err;

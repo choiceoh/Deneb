@@ -148,7 +148,9 @@ export async function resolveSharedMemoryStatusSnapshot(params: {
   }
   try {
     await manager.probeVectorAvailability();
-  } catch {}
+  } catch {
+    // Probe failure is non-fatal for status display; vector availability will show as unknown.
+  }
   const status = manager.status();
   await manager.close?.().catch(() => {});
   return { agentId, ...status };

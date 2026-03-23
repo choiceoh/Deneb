@@ -27,7 +27,7 @@ type PendingEntry = {
   record: ExecApprovalRecord;
   resolve: (decision: ExecApprovalDecision | null) => void;
   reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
+  timer: ReturnType<typeof setTimeout> | null;
   promise: Promise<ExecApprovalDecision | null>;
 };
 
@@ -81,7 +81,7 @@ export class ExecApprovalManager {
       record,
       resolve: resolvePromise!,
       reject: rejectPromise!,
-      timer: null as unknown as ReturnType<typeof setTimeout>,
+      timer: null,
       promise,
     };
     entry.timer = setTimeout(() => {
@@ -110,7 +110,9 @@ export class ExecApprovalManager {
     if (pending.record.resolvedAtMs !== undefined) {
       return false;
     }
-    clearTimeout(pending.timer);
+    if (pending.timer) {
+      clearTimeout(pending.timer);
+    }
     pending.record.resolvedAtMs = Date.now();
     pending.record.decision = decision;
     pending.record.resolvedBy = resolvedBy ?? null;
@@ -134,7 +136,9 @@ export class ExecApprovalManager {
     if (pending.record.resolvedAtMs !== undefined) {
       return false;
     }
-    clearTimeout(pending.timer);
+    if (pending.timer) {
+      clearTimeout(pending.timer);
+    }
     pending.record.resolvedAtMs = Date.now();
     pending.record.decision = undefined;
     pending.record.resolvedBy = resolvedBy ?? null;
