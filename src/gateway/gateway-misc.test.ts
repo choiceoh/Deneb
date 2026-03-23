@@ -10,7 +10,7 @@ import { resolveNodeCommandAllowlist } from "./node-command-policy.js";
 import type { RequestFrame } from "./protocol/index.js";
 import { createGatewayBroadcaster } from "./server-broadcast.js";
 import { createChatRunRegistry } from "./server-chat.js";
-import { handleNodeInvokeResult } from "./server-methods/nodes.handlers.invoke-result.js";
+import { handleNodeInvokeResult } from "./server-methods/nodes/nodes.handlers.invoke-result.js";
 import type { GatewayClient as GatewayMethodClient } from "./server-methods/types.js";
 import type { GatewayRequestContext, RespondFn } from "./server-methods/types.js";
 import { createNodeSubscriptionManager } from "./server-node-subscriptions.js";

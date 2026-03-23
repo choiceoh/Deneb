@@ -264,249 +264,249 @@
 
 ### Development
 
-| Command | Description |
-|---|---|
-| `pnpm dev` | Run CLI in dev mode |
-| `pnpm deneb ...` | Run CLI in dev mode (alias) |
-| `pnpm deneb:rpc` | Run agent in RPC/JSON mode |
-| `pnpm start` | Run CLI (alias) |
-| `pnpm gateway:dev` | Run gateway in dev mode (channels skipped) |
-| `pnpm gateway:dev:reset` | Run gateway in dev mode with reset |
-| `pnpm gateway:watch` | Watch mode for gateway |
-| `pnpm ui:dev` | Run control UI dev server |
-| `pnpm ui:install` | Install control UI dependencies |
+| Command                  | Description                                |
+| ------------------------ | ------------------------------------------ |
+| `pnpm dev`               | Run CLI in dev mode                        |
+| `pnpm deneb ...`         | Run CLI in dev mode (alias)                |
+| `pnpm deneb:rpc`         | Run agent in RPC/JSON mode                 |
+| `pnpm start`             | Run CLI (alias)                            |
+| `pnpm gateway:dev`       | Run gateway in dev mode (channels skipped) |
+| `pnpm gateway:dev:reset` | Run gateway in dev mode with reset         |
+| `pnpm gateway:watch`     | Watch mode for gateway                     |
+| `pnpm ui:dev`            | Run control UI dev server                  |
+| `pnpm ui:install`        | Install control UI dependencies            |
 
 ### Build
 
-| Command | Description |
-|---|---|
-| `pnpm build` | Full production build (A2UI bundle + tsdown + DTS + postbuild) |
-| `pnpm build:docker` | Docker-optimized build (skips A2UI bundle and DTS) |
-| `pnpm build:plugin-sdk:dts` | Generate plugin-sdk type declarations only |
-| `pnpm build:strict-smoke` | Strict smoke build (A2UI + tsdown + DTS, no postbuild scripts) |
-| `pnpm ui:build` | Build control UI |
-| `pnpm canvas:a2ui:bundle` | Bundle A2UI canvas assets |
-| `pnpm prepack` | Pre-publish build (`pnpm build` + `pnpm ui:build`) |
+| Command                     | Description                                                    |
+| --------------------------- | -------------------------------------------------------------- |
+| `pnpm build`                | Full production build (A2UI bundle + tsdown + DTS + postbuild) |
+| `pnpm build:docker`         | Docker-optimized build (skips A2UI bundle and DTS)             |
+| `pnpm build:plugin-sdk:dts` | Generate plugin-sdk type declarations only                     |
+| `pnpm build:strict-smoke`   | Strict smoke build (A2UI + tsdown + DTS, no postbuild scripts) |
+| `pnpm ui:build`             | Build control UI                                               |
+| `pnpm canvas:a2ui:bundle`   | Bundle A2UI canvas assets                                      |
+| `pnpm prepack`              | Pre-publish build (`pnpm build` + `pnpm ui:build`)             |
 
 ### TypeScript / Type Checking
 
-| Command | Description |
-|---|---|
+| Command     | Description                  |
+| ----------- | ---------------------------- |
 | `pnpm tsgo` | Run TypeScript type checking |
 
 ### Formatting
 
-| Command | Description |
-|---|---|
-| `pnpm format` | Format all files (oxfmt --write) |
-| `pnpm format:check` | Check formatting without writing (oxfmt --check) |
-| `pnpm format:fix` | Fix formatting (alias for `pnpm format`) |
-| `pnpm format:diff` | Format and show git diff |
-| `pnpm format:all` | Format TypeScript + Swift |
-| `pnpm format:swift` | Lint Swift formatting (swiftformat) |
-| `pnpm format:docs` | Format docs markdown files |
-| `pnpm format:docs:check` | Check docs markdown formatting |
+| Command                  | Description                                      |
+| ------------------------ | ------------------------------------------------ |
+| `pnpm format`            | Format all files (oxfmt --write)                 |
+| `pnpm format:check`      | Check formatting without writing (oxfmt --check) |
+| `pnpm format:fix`        | Fix formatting (alias for `pnpm format`)         |
+| `pnpm format:diff`       | Format and show git diff                         |
+| `pnpm format:all`        | Format TypeScript + Swift                        |
+| `pnpm format:swift`      | Lint Swift formatting (swiftformat)              |
+| `pnpm format:docs`       | Format docs markdown files                       |
+| `pnpm format:docs:check` | Check docs markdown formatting                   |
 
 ### Linting
 
-| Command | Description |
-|---|---|
-| `pnpm check` | Full pre-commit check (format + tsgo + lint + all boundary checks) |
-| `pnpm lint` | Run oxlint with type-aware rules |
-| `pnpm lint:fix` | Auto-fix lint issues + reformat |
-| `pnpm lint:all` | Lint TypeScript + Swift |
-| `pnpm lint:swift` | Lint Swift code (swiftlint) |
-| `pnpm lint:docs` | Lint documentation markdown |
-| `pnpm lint:docs:fix` | Auto-fix documentation lint issues |
-| `pnpm check:loc` | Check TypeScript files max LOC (default 500) |
+| Command              | Description                                                        |
+| -------------------- | ------------------------------------------------------------------ |
+| `pnpm check`         | Full pre-commit check (format + tsgo + lint + all boundary checks) |
+| `pnpm lint`          | Run oxlint with type-aware rules                                   |
+| `pnpm lint:fix`      | Auto-fix lint issues + reformat                                    |
+| `pnpm lint:all`      | Lint TypeScript + Swift                                            |
+| `pnpm lint:swift`    | Lint Swift code (swiftlint)                                        |
+| `pnpm lint:docs`     | Lint documentation markdown                                        |
+| `pnpm lint:docs:fix` | Auto-fix documentation lint issues                                 |
+| `pnpm check:loc`     | Check TypeScript files max LOC (default 500)                       |
 
 ### Lint: Boundary Checks (run as part of `pnpm check`)
 
-| Command | Description |
-|---|---|
-| `pnpm lint:tmp:no-random-messaging` | No random messaging patterns |
-| `pnpm lint:tmp:channel-agnostic-boundaries` | Channel-agnostic boundary enforcement |
-| `pnpm lint:tmp:no-raw-channel-fetch` | No raw channel fetch usage |
-| `pnpm lint:agent:ingress-owner` | Agent ingress owner context check |
-| `pnpm lint:plugins:no-register-http-handler` | No direct HTTP handler registration in plugins |
-| `pnpm lint:plugins:no-monolithic-plugin-sdk-entry-imports` | No monolithic plugin-sdk entry imports |
-| `pnpm lint:plugins:no-extension-src-imports` | No extension src imports from core |
-| `pnpm lint:plugins:no-extension-test-core-imports` | No core imports from extension tests |
-| `pnpm lint:plugins:no-extension-imports` | Plugin extension import boundary |
-| `pnpm lint:plugins:plugin-sdk-subpaths-exported` | All plugin-sdk subpaths are exported |
-| `pnpm lint:extensions:no-src-outside-plugin-sdk` | Extensions must not import src outside plugin-sdk |
-| `pnpm lint:extensions:no-plugin-sdk-internal` | Extensions must not import plugin-sdk internals |
-| `pnpm lint:extensions:no-relative-outside-package` | Extensions must not use relative imports outside package |
-| `pnpm lint:web-search-provider-boundaries` | Web search provider boundary check |
-| `pnpm lint:webhook:no-low-level-body-read` | Webhook auth body order check |
-| `pnpm lint:auth:no-pairing-store-group` | No pairing store group in auth |
-| `pnpm lint:auth:pairing-account-scope` | Pairing account scope check |
-| `pnpm lint:ui:no-raw-window-open` | No raw window.open in UI |
-| `pnpm plugin-sdk:check-exports` | Verify plugin-sdk exports are in sync |
-| `pnpm check:bundled-provider-auth-env-vars` | Check bundled provider auth env vars |
-| `pnpm check:host-env-policy:swift` | Check Swift host env security policy |
+| Command                                                    | Description                                              |
+| ---------------------------------------------------------- | -------------------------------------------------------- |
+| `pnpm lint:tmp:no-random-messaging`                        | No random messaging patterns                             |
+| `pnpm lint:tmp:channel-agnostic-boundaries`                | Channel-agnostic boundary enforcement                    |
+| `pnpm lint:tmp:no-raw-channel-fetch`                       | No raw channel fetch usage                               |
+| `pnpm lint:agent:ingress-owner`                            | Agent ingress owner context check                        |
+| `pnpm lint:plugins:no-register-http-handler`               | No direct HTTP handler registration in plugins           |
+| `pnpm lint:plugins:no-monolithic-plugin-sdk-entry-imports` | No monolithic plugin-sdk entry imports                   |
+| `pnpm lint:plugins:no-extension-src-imports`               | No extension src imports from core                       |
+| `pnpm lint:plugins:no-extension-test-core-imports`         | No core imports from extension tests                     |
+| `pnpm lint:plugins:no-extension-imports`                   | Plugin extension import boundary                         |
+| `pnpm lint:plugins:plugin-sdk-subpaths-exported`           | All plugin-sdk subpaths are exported                     |
+| `pnpm lint:extensions:no-src-outside-plugin-sdk`           | Extensions must not import src outside plugin-sdk        |
+| `pnpm lint:extensions:no-plugin-sdk-internal`              | Extensions must not import plugin-sdk internals          |
+| `pnpm lint:extensions:no-relative-outside-package`         | Extensions must not use relative imports outside package |
+| `pnpm lint:web-search-provider-boundaries`                 | Web search provider boundary check                       |
+| `pnpm lint:webhook:no-low-level-body-read`                 | Webhook auth body order check                            |
+| `pnpm lint:auth:no-pairing-store-group`                    | No pairing store group in auth                           |
+| `pnpm lint:auth:pairing-account-scope`                     | Pairing account scope check                              |
+| `pnpm lint:ui:no-raw-window-open`                          | No raw window.open in UI                                 |
+| `pnpm plugin-sdk:check-exports`                            | Verify plugin-sdk exports are in sync                    |
+| `pnpm check:bundled-provider-auth-env-vars`                | Check bundled provider auth env vars                     |
+| `pnpm check:host-env-policy:swift`                         | Check Swift host env security policy                     |
 
 ### Tests
 
-| Command | Description |
-|---|---|
-| `pnpm test` | Run all tests (vitest, parallel) |
-| `pnpm test:fast` | Run unit tests only (vitest, no coverage) |
-| `pnpm test:coverage` | Run unit tests with V8 coverage |
-| `pnpm test:watch` | Run tests in watch mode |
-| `pnpm test:gateway` | Run gateway tests (forked pool) |
-| `pnpm test:channels` | Run channel tests |
-| `pnpm test:extensions` | Run extension tests |
-| `pnpm test:extension` | Run a single extension’s tests |
-| `pnpm test:e2e` | Run end-to-end tests |
-| `pnpm test:ui` | Lint UI + run UI tests |
-| `pnpm test:contracts` | Run channel + plugin contract tests |
-| `pnpm test:contracts:channels` | Run channel contract tests |
-| `pnpm test:contracts:plugins` | Run plugin contract tests |
-| `pnpm test:auth:compat` | Run auth compatibility baseline tests |
-| `pnpm test:all` | Full test suite (lint + build + test + e2e + live + Docker) |
-| `pnpm test:build:singleton` | Verify built plugin singleton invariant |
-| `pnpm test:resume` | Resume a previously interrupted test run |
-| `pnpm test:force` | Force-run tests ignoring cache |
-| `pnpm test:macmini` | Serial test run optimized for Mac mini (low fork/serial profile) |
-| `pnpm test -- <path> [vitest args]` | Run specific tests (prefer over raw `vitest`) |
+| Command                             | Description                                                      |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| `pnpm test`                         | Run all tests (vitest, parallel)                                 |
+| `pnpm test:fast`                    | Run unit tests only (vitest, no coverage)                        |
+| `pnpm test:coverage`                | Run unit tests with V8 coverage                                  |
+| `pnpm test:watch`                   | Run tests in watch mode                                          |
+| `pnpm test:gateway`                 | Run gateway tests (forked pool)                                  |
+| `pnpm test:channels`                | Run channel tests                                                |
+| `pnpm test:extensions`              | Run extension tests                                              |
+| `pnpm test:extension`               | Run a single extension’s tests                                   |
+| `pnpm test:e2e`                     | Run end-to-end tests                                             |
+| `pnpm test:ui`                      | Lint UI + run UI tests                                           |
+| `pnpm test:contracts`               | Run channel + plugin contract tests                              |
+| `pnpm test:contracts:channels`      | Run channel contract tests                                       |
+| `pnpm test:contracts:plugins`       | Run plugin contract tests                                        |
+| `pnpm test:auth:compat`             | Run auth compatibility baseline tests                            |
+| `pnpm test:all`                     | Full test suite (lint + build + test + e2e + live + Docker)      |
+| `pnpm test:build:singleton`         | Verify built plugin singleton invariant                          |
+| `pnpm test:resume`                  | Resume a previously interrupted test run                         |
+| `pnpm test:force`                   | Force-run tests ignoring cache                                   |
+| `pnpm test:macmini`                 | Serial test run optimized for Mac mini (low fork/serial profile) |
+| `pnpm test -- <path> [vitest args]` | Run specific tests (prefer over raw `vitest`)                    |
 
 ### Tests: Live (require real API keys)
 
-| Command | Description |
-|---|---|
-| `CLAWDBOT_LIVE_TEST=1 pnpm test:live` | Live tests (Deneb-only) |
-| `LIVE=1 pnpm test:live` | Live tests (includes provider live tests) |
+| Command                               | Description                               |
+| ------------------------------------- | ----------------------------------------- |
+| `CLAWDBOT_LIVE_TEST=1 pnpm test:live` | Live tests (Deneb-only)                   |
+| `LIVE=1 pnpm test:live`               | Live tests (includes provider live tests) |
 
 ### Tests: Docker
 
-| Command | Description |
-|---|---|
-| `pnpm test:docker:all` | Run all Docker test suites |
-| `pnpm test:docker:live-models` | Docker live model tests |
-| `pnpm test:docker:live-gateway` | Docker live gateway tests |
-| `pnpm test:docker:onboard` | Docker onboarding E2E |
-| `pnpm test:docker:gateway-network` | Docker gateway network tests |
-| `pnpm test:docker:qr` | Docker QR import tests |
-| `pnpm test:docker:doctor-switch` | Docker doctor/install switch tests |
-| `pnpm test:docker:plugins` | Docker plugin tests |
-| `pnpm test:docker:cleanup` | Clean up Docker test containers |
+| Command                            | Description                        |
+| ---------------------------------- | ---------------------------------- |
+| `pnpm test:docker:all`             | Run all Docker test suites         |
+| `pnpm test:docker:live-models`     | Docker live model tests            |
+| `pnpm test:docker:live-gateway`    | Docker live gateway tests          |
+| `pnpm test:docker:onboard`         | Docker onboarding E2E              |
+| `pnpm test:docker:gateway-network` | Docker gateway network tests       |
+| `pnpm test:docker:qr`              | Docker QR import tests             |
+| `pnpm test:docker:doctor-switch`   | Docker doctor/install switch tests |
+| `pnpm test:docker:plugins`         | Docker plugin tests                |
+| `pnpm test:docker:cleanup`         | Clean up Docker test containers    |
 
 ### Tests: Install
 
-| Command | Description |
-|---|---|
-| `pnpm test:install:smoke` | Smoke test install script in Docker |
-| `pnpm test:install:e2e` | Full E2E install test in Docker |
+| Command                           | Description                         |
+| --------------------------------- | ----------------------------------- |
+| `pnpm test:install:smoke`         | Smoke test install script in Docker |
+| `pnpm test:install:e2e`           | Full E2E install test in Docker     |
 | `pnpm test:install:e2e:anthropic` | E2E install test (Anthropic models) |
-| `pnpm test:install:e2e:openai` | E2E install test (OpenAI models) |
+| `pnpm test:install:e2e:openai`    | E2E install test (OpenAI models)    |
 
 ### Tests: Parallels VM
 
-| Command | Description |
-|---|---|
-| `pnpm test:parallels:linux` | Parallels Linux smoke test |
-| `pnpm test:parallels:macos` | Parallels macOS smoke test |
+| Command                       | Description                  |
+| ----------------------------- | ---------------------------- |
+| `pnpm test:parallels:linux`   | Parallels Linux smoke test   |
+| `pnpm test:parallels:macos`   | Parallels macOS smoke test   |
 | `pnpm test:parallels:windows` | Parallels Windows smoke test |
 
 ### Tests: Performance
 
-| Command | Description |
-|---|---|
-| `pnpm test:perf:budget` | Run performance budget checks |
-| `pnpm test:perf:hotspots` | Detect test hotspots |
-| `pnpm test:perf:update-timings` | Update test timing baselines |
-| `pnpm test:startup:memory` | Check CLI startup memory usage |
-| `pnpm test:extensions:memory` | Profile extension memory usage |
+| Command                              | Description                         |
+| ------------------------------------ | ----------------------------------- |
+| `pnpm test:perf:budget`              | Run performance budget checks       |
+| `pnpm test:perf:hotspots`            | Detect test hotspots                |
+| `pnpm test:perf:update-timings`      | Update test timing baselines        |
+| `pnpm test:startup:memory`           | Check CLI startup memory usage      |
+| `pnpm test:extensions:memory`        | Profile extension memory usage      |
 | `pnpm test:gateway:watch-regression` | Check gateway watch for regressions |
 
 ### Documentation
 
-| Command | Description |
-|---|---|
-| `pnpm docs:dev` | Run Mintlify local preview |
-| `pnpm docs:check-links` | Audit documentation links |
-| `pnpm docs:spellcheck` | Spell check docs |
-| `pnpm docs:spellcheck:fix` | Auto-fix doc spelling |
-| `pnpm docs:check-i18n-glossary` | Check i18n glossary coverage |
-| `pnpm check:docs` | Full docs check (format + lint + i18n glossary + links) |
-| `pnpm config:docs:gen` | Generate config doc baseline |
-| `pnpm config:docs:check` | Check config doc baseline is up to date |
-| `pnpm docs:bin` | Build docs list for CLI |
-| `pnpm docs:list` | List all doc pages |
+| Command                         | Description                                             |
+| ------------------------------- | ------------------------------------------------------- |
+| `pnpm docs:dev`                 | Run Mintlify local preview                              |
+| `pnpm docs:check-links`         | Audit documentation links                               |
+| `pnpm docs:spellcheck`          | Spell check docs                                        |
+| `pnpm docs:spellcheck:fix`      | Auto-fix doc spelling                                   |
+| `pnpm docs:check-i18n-glossary` | Check i18n glossary coverage                            |
+| `pnpm check:docs`               | Full docs check (format + lint + i18n glossary + links) |
+| `pnpm config:docs:gen`          | Generate config doc baseline                            |
+| `pnpm config:docs:check`        | Check config doc baseline is up to date                 |
+| `pnpm docs:bin`                 | Build docs list for CLI                                 |
+| `pnpm docs:list`                | List all doc pages                                      |
 
 ### Code Generation / Sync
 
-| Command | Description |
-|---|---|
-| `pnpm plugin-sdk:sync-exports` | Sync plugin-sdk subpath exports in package.json |
-| `pnpm plugins:sync` | Sync plugin versions |
-| `pnpm protocol:gen` | Generate protocol schema (JSON) |
-| `pnpm protocol:gen:swift` | Generate protocol Swift models |
-| `pnpm protocol:check` | Generate protocol + check for uncommitted diffs |
-| `pnpm gen:host-env-policy:swift` | Generate Swift host env security policy |
-| `pnpm stage:bundled-plugin-runtime-deps` | Stage bundled plugin runtime deps |
+| Command                                  | Description                                     |
+| ---------------------------------------- | ----------------------------------------------- |
+| `pnpm plugin-sdk:sync-exports`           | Sync plugin-sdk subpath exports in package.json |
+| `pnpm plugins:sync`                      | Sync plugin versions                            |
+| `pnpm protocol:gen`                      | Generate protocol schema (JSON)                 |
+| `pnpm protocol:gen:swift`                | Generate protocol Swift models                  |
+| `pnpm protocol:check`                    | Generate protocol + check for uncommitted diffs |
+| `pnpm gen:host-env-policy:swift`         | Generate Swift host env security policy         |
+| `pnpm stage:bundled-plugin-runtime-deps` | Stage bundled plugin runtime deps               |
 
 ### Dead Code Analysis
 
-| Command | Description |
-|---|---|
-| `pnpm deadcode:knip` | Run Knip dead code analysis |
-| `pnpm deadcode:report` | Full dead code report (Knip + ts-prune + ts-unused) |
-| `pnpm deadcode:ci` | CI dead code report (Knip, outputs to `.artifacts/`) |
-| `pnpm dup:check` | Check for code duplication (jscpd) |
-| `pnpm dup:check:json` | Code duplication report as JSON |
+| Command                | Description                                          |
+| ---------------------- | ---------------------------------------------------- |
+| `pnpm deadcode:knip`   | Run Knip dead code analysis                          |
+| `pnpm deadcode:report` | Full dead code report (Knip + ts-prune + ts-unused)  |
+| `pnpm deadcode:ci`     | CI dead code report (Knip, outputs to `.artifacts/`) |
+| `pnpm dup:check`       | Check for code duplication (jscpd)                   |
+| `pnpm dup:check:json`  | Code duplication report as JSON                      |
 
 ### Changelog / Version
 
-| Command | Description |
-|---|---|
-| `pnpm changelog:generate` | Generate changelog from commits |
-| `pnpm changelog:check` | Check changelog is up to date |
-| `pnpm version:bump` | Bump version across all version locations |
-| `pnpm version:check` | Check version consistency |
+| Command                   | Description                               |
+| ------------------------- | ----------------------------------------- |
+| `pnpm changelog:generate` | Generate changelog from commits           |
+| `pnpm changelog:check`    | Check changelog is up to date             |
+| `pnpm version:bump`       | Bump version across all version locations |
+| `pnpm version:check`      | Check version consistency                 |
 
 ### Release
 
-| Command | Description |
-|---|---|
-| `pnpm release:check` | Run release readiness checks |
-| `pnpm release:deneb:npm:check` | Check Deneb npm release readiness |
+| Command                          | Description                        |
+| -------------------------------- | ---------------------------------- |
+| `pnpm release:check`             | Run release readiness checks       |
+| `pnpm release:deneb:npm:check`   | Check Deneb npm release readiness  |
 | `pnpm release:plugins:npm:check` | Check plugin npm release readiness |
-| `pnpm release:plugins:npm:plan` | Plan plugin npm releases |
+| `pnpm release:plugins:npm:plan`  | Plan plugin npm releases           |
 
 ### iOS
 
-| Command | Description |
-|---|---|
-| `pnpm ios:build` | Build iOS app (configure signing + xcodegen + xcodebuild) |
-| `pnpm ios:run` | Build and run iOS app in simulator |
-| `pnpm ios:open` | Generate and open iOS Xcode project |
-| `pnpm ios:gen` | Generate iOS Xcode project only |
-| `pnpm ios:beta` | Full iOS beta release |
-| `pnpm ios:beta:archive` | Archive iOS beta build |
-| `pnpm ios:beta:prepare` | Prepare iOS beta release |
+| Command                 | Description                                               |
+| ----------------------- | --------------------------------------------------------- |
+| `pnpm ios:build`        | Build iOS app (configure signing + xcodegen + xcodebuild) |
+| `pnpm ios:run`          | Build and run iOS app in simulator                        |
+| `pnpm ios:open`         | Generate and open iOS Xcode project                       |
+| `pnpm ios:gen`          | Generate iOS Xcode project only                           |
+| `pnpm ios:beta`         | Full iOS beta release                                     |
+| `pnpm ios:beta:archive` | Archive iOS beta build                                    |
+| `pnpm ios:beta:prepare` | Prepare iOS beta release                                  |
 
 ### Android
 
-| Command | Description |
-|---|---|
-| `pnpm android:run` | Build, install, and launch Android app |
-| `pnpm android:install` | Install Android debug APK |
-| `pnpm android:assemble` | Assemble Android debug APK |
-| `pnpm android:bundle:release` | Build Android release AAB |
-| `pnpm android:test` | Run Android unit tests |
-| `pnpm android:test:integration` | Run Android integration tests (live) |
-| `pnpm android:lint` | Run Android ktlint check |
-| `pnpm android:lint:android` | Run Android lint (Gradle) |
-| `pnpm android:format` | Format Android Kotlin code |
+| Command                         | Description                            |
+| ------------------------------- | -------------------------------------- |
+| `pnpm android:run`              | Build, install, and launch Android app |
+| `pnpm android:install`          | Install Android debug APK              |
+| `pnpm android:assemble`         | Assemble Android debug APK             |
+| `pnpm android:bundle:release`   | Build Android release AAB              |
+| `pnpm android:test`             | Run Android unit tests                 |
+| `pnpm android:test:integration` | Run Android integration tests (live)   |
+| `pnpm android:lint`             | Run Android ktlint check               |
+| `pnpm android:lint:android`     | Run Android lint (Gradle)              |
+| `pnpm android:format`           | Format Android Kotlin code             |
 
 ### macOS
 
-| Command | Description |
-|---|---|
-| `pnpm mac:package` | Package macOS app |
-| `pnpm mac:open` | Open built macOS app |
+| Command            | Description               |
+| ------------------ | ------------------------- |
+| `pnpm mac:package` | Package macOS app         |
+| `pnpm mac:open`    | Open built macOS app      |
 | `pnpm mac:restart` | Restart macOS gateway app |
 
 ## AI Developer Workflow (scripts for AI agents patching Deneb)
