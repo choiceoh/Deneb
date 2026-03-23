@@ -223,7 +223,26 @@ export async function buildReplyPayloads(params: {
             (payload) => !params.directlySentBlockKeys!.has(createBlockReplyContentKey(payload)),
           )
         : mediaFilteredPayloads;
+
+  // Log when filtering removed payloads so message drops leave a trace.
+  const blockFilteredCount = mediaFilteredPayloads.length - filteredPayloads.length;
+  if (blockFilteredCount > 0) {
+    const reason = blockStreamCompletedCleanly
+      ? "already streamed via pipeline"
+      : params.blockReplyPipeline?.isAborted()
+        ? "pipeline aborted, deduped via sent keys"
+        : "matched directlySentBlockKeys";
+    logVerbose(
+      `buildReplyPayloads: filtered ${blockFilteredCount}/${mediaFilteredPayloads.length} payload(s) (${reason})`,
+    );
+  }
+
   const replyPayloads = suppressMessagingToolReplies ? [] : filteredPayloads;
+  if (suppressMessagingToolReplies && filteredPayloads.length > 0) {
+    logVerbose(
+      `buildReplyPayloads: suppressed ${filteredPayloads.length} payload(s) — messaging tool already sent to same target`,
+    );
+  }
 
   return {
     replyPayloads,

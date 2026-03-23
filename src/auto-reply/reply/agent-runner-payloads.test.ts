@@ -169,6 +169,7 @@ describe("buildReplyPayloads media filter integration", () => {
       isAborted: () => false,
       // Only the first payload was streamed by the pipeline.
       hasSentPayload: (p) => p.text === "streamed",
+      droppedAfterAbort: () => 0,
       enqueue: () => {},
       flush: async () => {},
       stop: () => {},
@@ -216,6 +217,7 @@ describe("buildReplyPayloads media filter integration", () => {
       didStream: () => true,
       isAborted: () => true,
       hasSentPayload: () => false,
+      droppedAfterAbort: () => 0,
       enqueue: () => {},
       flush: async () => {},
       stop: () => {},
