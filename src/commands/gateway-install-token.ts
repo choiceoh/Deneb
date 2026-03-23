@@ -1,6 +1,6 @@
 import { type DenebConfig } from "../config/config.js";
 import { resolveSecretInputRef } from "../config/types.secrets.js";
-import { readGatewayTokenEnv } from "../gateway/credentials.js";
+import { readGatewayTokenEnv } from "../gateway/auth/credentials.js";
 
 type GatewayInstallTokenOptions = {
   config: DenebConfig;

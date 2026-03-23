@@ -1,8 +1,8 @@
 import type { DenebConfig } from "../config/config.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
+import { resolveGatewayConnectionAuth } from "./auth/connection-auth.js";
 import { buildGatewayConnectionDetails } from "./call.js";
 import { GatewayClient, type GatewayClientOptions } from "./client.js";
-import { resolveGatewayConnectionAuth } from "./connection-auth.js";
 
 export async function createOperatorApprovalsGatewayClient(
   params: Pick<

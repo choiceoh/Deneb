@@ -35,7 +35,7 @@ import {
 } from "../../utils/message-channel.js";
 import { resolveAssistantIdentity } from "../assistant-identity.js";
 import { parseMessageWithAttachments } from "../chat-attachments.js";
-import { resolveAssistantAvatarUrl } from "../control-ui-shared.js";
+import { resolveAssistantAvatarUrl } from "../dashboard/control-ui-shared.js";
 import { ADMIN_SCOPE } from "../method-scopes.js";
 import { GATEWAY_CLIENT_CAPS, hasGatewayClientCap } from "../protocol/client-info.js";
 import {
@@ -46,15 +46,15 @@ import {
   validateAgentParams,
   validateAgentWaitParams,
 } from "../protocol/index.js";
-import { performGatewaySessionReset } from "../session-reset-service.js";
-import { reactivateCompletedSubagentSession } from "../session-subagent-reactivation.js";
+import { performGatewaySessionReset } from "../session/session-reset-service.js";
+import { reactivateCompletedSubagentSession } from "../session/session-subagent-reactivation.js";
 import {
   canonicalizeSpawnedByForAgent,
   loadGatewaySessionRow,
   loadSessionEntry,
   migrateAndPruneGatewaySessionStoreKey,
-} from "../session-utils.js";
-import { formatForLog } from "../ws-log.js";
+} from "../session/session-utils.js";
+import { formatForLog } from "../ws/ws-log.js";
 import { waitForAgentJob } from "./agent-job.js";
 import { injectTimestamp, timestampOptsFromConfig } from "./agent-timestamp.js";
 import {

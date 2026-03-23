@@ -45,8 +45,8 @@ import {
   cleanupSessionBeforeMutation,
   emitSessionUnboundLifecycleEvent,
   performGatewaySessionReset,
-} from "../session-reset-service.js";
-import { reactivateCompletedSubagentSession } from "../session-subagent-reactivation.js";
+} from "../session/session-reset-service.js";
+import { reactivateCompletedSubagentSession } from "../session/session-subagent-reactivation.js";
 import {
   archiveFileOnDisk,
   listSessionsFromStore,
@@ -62,9 +62,9 @@ import {
   type SessionsPreviewEntry,
   type SessionsPreviewResult,
   readSessionMessages,
-} from "../session-utils.js";
-import { applySessionsPatchToStore } from "../sessions-patch.js";
-import { resolveSessionKeyFromResolveParams } from "../sessions-resolve.js";
+} from "../session/session-utils.js";
+import { applySessionsPatchToStore } from "../session/sessions-patch.js";
+import { resolveSessionKeyFromResolveParams } from "../session/sessions-resolve.js";
 import { chatHandlers } from "./chat.js";
 import type {
   GatewayClient,

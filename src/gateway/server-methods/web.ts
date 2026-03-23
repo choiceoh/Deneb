@@ -6,7 +6,7 @@ import {
   validateWebLoginStartParams,
   validateWebLoginWaitParams,
 } from "../protocol/index.js";
-import { formatForLog } from "../ws-log.js";
+import { formatForLog } from "../ws/ws-log.js";
 import type { GatewayRequestHandlers, RespondFn } from "./types.js";
 
 const WEB_LOGIN_METHODS = new Set(["web.login.start", "web.login.wait"]);

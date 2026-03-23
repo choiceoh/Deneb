@@ -1,6 +1,6 @@
 import type { GatewayServiceRuntime } from "../../daemon/service-runtime.js";
 import type { GatewayService } from "../../daemon/service.js";
-import { probeGateway } from "../../gateway/probe.js";
+import { probeGateway } from "../../gateway/monitoring/probe.js";
 import {
   classifyPortListener,
   formatPortDiagnostics,

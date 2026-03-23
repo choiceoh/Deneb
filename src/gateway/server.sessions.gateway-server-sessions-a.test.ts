@@ -7,7 +7,7 @@ import { DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { GATEWAY_CLIENT_IDS, GATEWAY_CLIENT_MODES } from "./protocol/client-info.js";
 import { sessionsHandlers } from "./server-methods/sessions.js";
 import { startGatewayServerHarness, type GatewayServerHarness } from "./server.e2e-ws-harness.js";
-import { createToolSummaryPreviewTranscriptLines } from "./session-preview.test-helpers.js";
+import { createToolSummaryPreviewTranscriptLines } from "./session/session-preview.test-helpers.js";
 import {
   connectOk,
   embeddedRunMock,

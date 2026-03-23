@@ -294,7 +294,7 @@ vi.mock("../../extensions/whatsapp/src/session.js", () => ({
   readWebSelfId: mocks.readWebSelfId,
   logWebSelfId: mocks.logWebSelfId,
 }));
-vi.mock("../gateway/probe.js", () => ({
+vi.mock("../gateway/monitoring/probe.js", () => ({
   probeGateway: mocks.probeGateway,
 }));
 vi.mock("../gateway/call.js", async (importOriginal) => {
@@ -309,8 +309,8 @@ vi.mock("../gateway/agent-list.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../gateway/session-utils.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../gateway/session-utils.js")>();
+vi.mock("../gateway/session/session-utils.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../gateway/session/session-utils.js")>();
   return {
     ...actual,
   };

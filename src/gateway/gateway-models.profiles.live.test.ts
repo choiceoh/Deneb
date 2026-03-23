@@ -30,15 +30,15 @@ import { isTruthyEnvValue } from "../infra/env.js";
 import { DEFAULT_AGENT_ID } from "../routing/session-key.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
 import { GatewayClient } from "./client.js";
-import { renderCatNoncePngBase64 } from "./live-image-probe.js";
+import { renderCatNoncePngBase64 } from "./monitoring/live-image-probe.js";
 import {
   hasExpectedSingleNonce,
   hasExpectedToolNonce,
   shouldRetryExecReadProbe,
   shouldRetryToolReadProbe,
-} from "./live-tool-probe-utils.js";
+} from "./monitoring/live-tool-probe-utils.js";
 import { startGatewayServer } from "./server.js";
-import { loadSessionEntry, readSessionMessages } from "./session-utils.js";
+import { loadSessionEntry, readSessionMessages } from "./session/session-utils.js";
 
 const LIVE = isTruthyEnvValue(process.env.LIVE) || isTruthyEnvValue(process.env.DENEB_LIVE_TEST);
 const GATEWAY_LIVE = isTruthyEnvValue(process.env.DENEB_LIVE_GATEWAY);

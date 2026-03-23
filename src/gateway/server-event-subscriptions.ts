@@ -15,13 +15,13 @@ import {
   type ToolEventRecipientRegistry,
 } from "./server-chat.js";
 import { resolveSessionKeyForRun } from "./server-session-key.js";
-import { resolveSessionKeyForTranscriptFile } from "./session-transcript-key.js";
+import { resolveSessionKeyForTranscriptFile } from "./session/session-transcript-key.js";
 import {
   attachDenebTranscriptMeta,
   loadGatewaySessionRow,
   loadSessionEntry,
   readSessionMessages,
-} from "./session-utils.js";
+} from "./session/session-utils.js";
 
 type Broadcast = (event: string, payload: unknown, opts?: { dropIfSlow?: boolean }) => void;
 type BroadcastToConnIds = (

@@ -47,8 +47,8 @@ import {
   loadSessionEntry,
   readSessionMessages,
   resolveSessionModelRef,
-} from "../session-utils.js";
-import { formatForLog } from "../ws-log.js";
+} from "../session/session-utils.js";
+import { formatForLog } from "../ws/ws-log.js";
 import { injectTimestamp, timestampOptsFromConfig } from "./agent-timestamp.js";
 import { setGatewayDedupeEntry } from "./agent-wait-dedupe.js";
 import { normalizeRpcAttachmentsToChatAttachments } from "./attachment-normalize.js";

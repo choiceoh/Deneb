@@ -45,7 +45,7 @@ import {
   validateAgentsListParams,
   validateAgentsUpdateParams,
 } from "../protocol/index.js";
-import { listAgentsForGateway } from "../session-utils.js";
+import { listAgentsForGateway } from "../session/session-utils.js";
 import type { GatewayRequestHandlers, RespondFn } from "./types.js";
 
 const BOOTSTRAP_FILE_NAMES = [

@@ -19,7 +19,7 @@ import {
   type SessionEntry,
 } from "../config/sessions.js";
 import { callGateway } from "../gateway/call.js";
-import { readSessionMessages } from "../gateway/session-utils.fs.js";
+import { readSessionMessages } from "../gateway/session/session-utils.fs.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { replaceSubagentRunAfterSteer } from "./subagent-registry.js";
 import type { SubagentRunRecord } from "./subagent-registry.types.js";

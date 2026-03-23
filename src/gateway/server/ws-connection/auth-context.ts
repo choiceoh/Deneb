@@ -4,13 +4,13 @@ import {
   AUTH_RATE_LIMIT_SCOPE_SHARED_SECRET,
   type AuthRateLimiter,
   type RateLimitCheckResult,
-} from "../../auth-rate-limit.js";
+} from "../../auth/auth-rate-limit.js";
 import {
   authorizeHttpGatewayConnect,
   authorizeWsControlUiGatewayConnect,
   type GatewayAuthResult,
   type ResolvedGatewayAuth,
-} from "../../auth.js";
+} from "../../auth/auth.js";
 
 type HandshakeConnectAuth = {
   token?: string;

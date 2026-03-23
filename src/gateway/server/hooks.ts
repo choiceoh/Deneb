@@ -12,7 +12,7 @@ import {
   type HookAgentDispatchPayload,
   type HooksConfigResolved,
 } from "../hooks.js";
-import { createHooksRequestHandler, type HookClientIpConfig } from "../server-http.js";
+import { createHooksRequestHandler, type HookClientIpConfig } from "../http/server-http.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 

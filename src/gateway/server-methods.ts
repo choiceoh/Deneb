@@ -1,6 +1,6 @@
 import { withPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
+import { parseGatewayRole } from "./auth/role-policy.js";
 import { ErrorCodes, errorShape } from "./protocol/index.js";
-import { parseGatewayRole } from "./role-policy.js";
 import { agentHandlers } from "./server-methods/agent.js";
 import { agentsHandlers } from "./server-methods/agents.js";
 import { autoMaintenanceHandlers } from "./server-methods/auto-maintenance.js";

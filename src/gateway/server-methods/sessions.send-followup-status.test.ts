@@ -9,7 +9,7 @@ const replaceSubagentRunAfterSteerMock = vi.fn();
 const chatSendMock = vi.fn();
 
 vi.mock("../session-utils.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../session-utils.js")>();
+  const actual = await importOriginal<typeof import("../session/session-utils.js")>();
   return {
     ...actual,
     loadSessionEntry: (...args: unknown[]) => loadSessionEntryMock(...args),

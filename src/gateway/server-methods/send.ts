@@ -22,7 +22,7 @@ import {
   validatePollParams,
   validateSendParams,
 } from "../protocol/index.js";
-import { formatForLog } from "../ws-log.js";
+import { formatForLog } from "../ws/ws-log.js";
 import type { GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
 
 type InflightResult = {

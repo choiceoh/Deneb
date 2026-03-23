@@ -16,12 +16,12 @@ import {
   GATEWAY_AUTH_SURFACE_PATHS,
   evaluateGatewayAuthSurfaceStates,
 } from "../secrets/runtime-gateway-auth-surfaces.js";
-import { createAuthRateLimiter, type AuthRateLimiter } from "./auth-rate-limit.js";
+import { createAuthRateLimiter, type AuthRateLimiter } from "./auth/auth-rate-limit.js";
 import {
   ensureGatewayStartupAuth,
   mergeGatewayAuthConfig,
   mergeGatewayTailscaleConfig,
-} from "./startup-auth.js";
+} from "./auth/startup-auth.js";
 
 // ── Media cleanup ───────────────────────────────────────────────────
 

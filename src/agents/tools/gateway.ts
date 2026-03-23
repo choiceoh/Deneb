@@ -1,6 +1,9 @@
 import { loadConfig, resolveGatewayPort } from "../../config/config.js";
+import {
+  resolveGatewayCredentialsFromConfig,
+  trimToUndefined,
+} from "../../gateway/auth/credentials.js";
 import { callGateway } from "../../gateway/call.js";
-import { resolveGatewayCredentialsFromConfig, trimToUndefined } from "../../gateway/credentials.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../utils/message-channel.js";
 import { readStringParam } from "./common.js";
 

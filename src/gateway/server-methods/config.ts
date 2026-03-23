@@ -38,7 +38,7 @@ import {
   formatControlPlaneActor,
   resolveControlPlaneActor,
   summarizeChangedPaths,
-} from "../control-plane-audit.js";
+} from "../dashboard/control-plane-audit.js";
 import {
   ErrorCodes,
   errorShape,

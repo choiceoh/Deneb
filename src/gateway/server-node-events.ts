@@ -14,8 +14,11 @@ import { defaultRuntime } from "../runtime.js";
 import { parseMessageWithAttachments } from "./chat-attachments.js";
 import { normalizeRpcAttachmentsToChatAttachments } from "./server-methods/attachment-normalize.js";
 import type { NodeEvent, NodeEventContext } from "./server-node-events-types.js";
-import { loadSessionEntry, migrateAndPruneGatewaySessionStoreKey } from "./session-utils.js";
-import { formatForLog } from "./ws-log.js";
+import {
+  loadSessionEntry,
+  migrateAndPruneGatewaySessionStoreKey,
+} from "./session/session-utils.js";
+import { formatForLog } from "./ws/ws-log.js";
 
 const MAX_EXEC_EVENT_OUTPUT_CHARS = 180;
 const MAX_NOTIFICATION_EVENT_TEXT_CHARS = 120;

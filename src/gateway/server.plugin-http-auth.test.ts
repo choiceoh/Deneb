@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, test, vi } from "vitest";
-import { canonicalizePathVariant, isProtectedPluginRoutePath } from "./security-path.js";
+import { canonicalizePathVariant, isProtectedPluginRoutePath } from "./auth/security-path.js";
 import {
   AUTH_NONE,
   AUTH_TOKEN,
@@ -16,7 +16,7 @@ import {
   sendRequest,
   withGatewayServer,
   withGatewayTempConfig,
-} from "./server-http.test-harness.js";
+} from "./http/server-http.test-harness.js";
 import { withTempConfig } from "./test-temp-config.js";
 
 type PluginRequestHandler = (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;

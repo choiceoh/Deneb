@@ -1,7 +1,7 @@
 import {
   PROTECTED_PLUGIN_ROUTE_PREFIXES,
   canonicalizePathForSecurity,
-} from "../../security-path.js";
+} from "../../auth/security-path.js";
 
 export type PluginRoutePathContext = {
   pathname: string;

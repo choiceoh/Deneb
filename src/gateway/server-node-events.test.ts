@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DenebConfig } from "../config/config.js";
-import type { loadSessionEntry as loadSessionEntryType } from "./session-utils.js";
+import type { loadSessionEntry as loadSessionEntryType } from "./session/session-utils.js";
 
 const buildSessionLookup = (
   sessionKey: string,
@@ -43,7 +43,7 @@ vi.mock("../config/config.js", () => ({
 vi.mock("../config/sessions.js", () => ({
   updateSessionStore: vi.fn(),
 }));
-vi.mock("./session-utils.js", () => ({
+vi.mock("./session/session-utils.js", () => ({
   loadSessionEntry: vi.fn((sessionKey: string) => buildSessionLookup(sessionKey)),
   migrateAndPruneGatewaySessionStoreKey: vi.fn(
     ({ key, store }: { key: string; store: Record<string, unknown> }) => ({
@@ -68,7 +68,7 @@ import { requestHeartbeatNow } from "../infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
 import type { NodeEventContext } from "./server-node-events-types.js";
 import { handleNodeEvent } from "./server-node-events.js";
-import { loadSessionEntry } from "./session-utils.js";
+import { loadSessionEntry } from "./session/session-utils.js";
 
 const enqueueSystemEventMock = vi.mocked(enqueueSystemEvent);
 const requestHeartbeatNowMock = vi.mocked(requestHeartbeatNow);

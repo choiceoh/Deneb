@@ -11,10 +11,10 @@ import {
 import { readLastGatewayErrorLine } from "../daemon/diagnostics.js";
 import type { GatewayService } from "../daemon/service.js";
 import { resolveGatewayService } from "../daemon/service.js";
+import { resolveGatewayProbeAuthSafe } from "../gateway/auth/probe-auth.js";
 import { buildGatewayConnectionDetails, callGateway } from "../gateway/call.js";
-import { normalizeControlUiBasePath } from "../gateway/control-ui-shared.js";
-import { resolveGatewayProbeAuthSafe } from "../gateway/probe-auth.js";
-import { probeGateway } from "../gateway/probe.js";
+import { normalizeControlUiBasePath } from "../gateway/dashboard/control-ui-shared.js";
+import { probeGateway } from "../gateway/monitoring/probe.js";
 import { collectChannelStatusIssues } from "../infra/channels-status-issues.js";
 import { resolveDenebPackageRoot } from "../infra/deneb-root.js";
 import { resolveOsSummary } from "../infra/os-summary.js";
