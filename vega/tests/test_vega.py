@@ -18,7 +18,7 @@ import shutil
 from pathlib import Path
 from datetime import datetime, timedelta
 
-SELF_DIR = Path(__file__).parent
+SELF_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SELF_DIR))
 
 import config

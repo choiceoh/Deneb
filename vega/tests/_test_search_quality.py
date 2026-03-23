@@ -3,7 +3,7 @@
 import sys, os, json, tempfile, shutil
 from pathlib import Path
 
-SELF_DIR = Path(__file__).parent
+SELF_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SELF_DIR))
 
 # --- Fixture DB 생성 (test_vega.py와 동일) ---
