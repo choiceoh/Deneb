@@ -45,30 +45,36 @@ export function resolveConfiguredBindingRecord(params: {
   });
 }
 
-export function resolveConfiguredBindingRecordForConversation(params: {
-  cfg: DenebConfig;
-  conversation: ConversationRef;
-}): ConfiguredBindingRecordResolution | null {
-  const conversation = toConfiguredBindingConversationRef(params.conversation);
+/** Shared lookup: normalize conversation, resolve registry, find matching binding. */
+function findMatchingBinding(cfg: DenebConfig, conversationRef: ConversationRef) {
+  const conversation = toConfiguredBindingConversationRef(conversationRef);
   if (!conversation) {
     return null;
   }
-  const registry = resolveCompiledBindingRegistry(params.cfg);
+  const registry = resolveCompiledBindingRegistry(cfg);
   const rules = registry.rulesByChannel.get(conversation.channel);
   if (!rules || rules.length === 0) {
     return null;
   }
-  const resolved = resolveMatchingConfiguredBinding({
-    rules,
-    conversation,
-  });
+  const resolved = resolveMatchingConfiguredBinding({ rules, conversation });
   if (!resolved) {
     return null;
   }
+  return { conversation, resolved };
+}
+
+export function resolveConfiguredBindingRecordForConversation(params: {
+  cfg: DenebConfig;
+  conversation: ConversationRef;
+}): ConfiguredBindingRecordResolution | null {
+  const match = findMatchingBinding(params.cfg, params.conversation);
+  if (!match) {
+    return null;
+  }
   return materializeConfiguredBindingRecord({
-    rule: resolved.rule,
-    accountId: conversation.accountId,
-    conversation: resolved.match,
+    rule: match.resolved.rule,
+    accountId: match.conversation.accountId,
+    conversation: match.resolved.match,
   });
 }
 
@@ -76,32 +82,19 @@ export function resolveConfiguredBinding(params: {
   cfg: DenebConfig;
   conversation: ConversationRef;
 }): ConfiguredBindingResolution | null {
-  const conversation = toConfiguredBindingConversationRef(params.conversation);
-  if (!conversation) {
+  const match = findMatchingBinding(params.cfg, params.conversation);
+  if (!match) {
     return null;
   }
-  const registry = resolveCompiledBindingRegistry(params.cfg);
-  const rules = registry.rulesByChannel.get(conversation.channel);
-  if (!rules || rules.length === 0) {
-    return null;
-  }
-  const resolved = resolveMatchingConfiguredBinding({
-    rules,
-    conversation,
-  });
-  if (!resolved) {
-    return null;
-  }
-  const materializedTarget = materializeConfiguredBindingRecord({
-    rule: resolved.rule,
-    accountId: conversation.accountId,
-    conversation: resolved.match,
-  });
   return {
-    conversation,
-    compiledBinding: resolved.rule,
-    match: resolved.match,
-    ...materializedTarget,
+    conversation: match.conversation,
+    compiledBinding: match.resolved.rule,
+    match: match.resolved.match,
+    ...materializeConfiguredBindingRecord({
+      rule: match.resolved.rule,
+      accountId: match.conversation.accountId,
+      conversation: match.resolved.match,
+    }),
   };
 }
 

@@ -6,36 +6,11 @@ import {
 import { resolveBundledWebSearchPluginIds } from "./bundled-web-search.js";
 import { loadDenebPlugins, type PluginLoadOptions } from "./loader.js";
 import { createPluginLoaderLogger } from "./logger.js";
+import { hasExplicitPluginConfig } from "./providers.js";
 import { getActivePluginRegistry } from "./runtime.js";
 import type { PluginWebSearchProviderEntry } from "./types.js";
 
 const log = createSubsystemLogger("plugins");
-
-function hasExplicitPluginConfig(config: PluginLoadOptions["config"]): boolean {
-  const plugins = config?.plugins;
-  if (!plugins) {
-    return false;
-  }
-  if (typeof plugins.enabled === "boolean") {
-    return true;
-  }
-  if (Array.isArray(plugins.allow) && plugins.allow.length > 0) {
-    return true;
-  }
-  if (Array.isArray(plugins.deny) && plugins.deny.length > 0) {
-    return true;
-  }
-  if (Array.isArray(plugins.load?.paths) && plugins.load.paths.length > 0) {
-    return true;
-  }
-  if (plugins.entries && Object.keys(plugins.entries).length > 0) {
-    return true;
-  }
-  if (plugins.slots && Object.keys(plugins.slots).length > 0) {
-    return true;
-  }
-  return false;
-}
 
 function resolveBundledWebSearchCompatPluginIds(params: {
   config?: PluginLoadOptions["config"];

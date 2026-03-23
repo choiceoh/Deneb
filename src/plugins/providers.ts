@@ -12,7 +12,7 @@ import type { ProviderPlugin } from "./types.js";
 
 const log = createSubsystemLogger("plugins");
 
-function hasExplicitPluginConfig(config: PluginLoadOptions["config"]): boolean {
+export function hasExplicitPluginConfig(config: PluginLoadOptions["config"]): boolean {
   const plugins = config?.plugins;
   if (!plugins) {
     return false;

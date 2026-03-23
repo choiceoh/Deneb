@@ -31,6 +31,42 @@ type BroadcastToConnIds = (
   opts?: { dropIfSlow?: boolean },
 ) => void;
 
+type GatewaySessionRow = NonNullable<ReturnType<typeof loadGatewaySessionRow>>;
+
+/** Extract the common session snapshot fields from a gateway session row for event broadcasting. */
+function buildSessionRowSnapshot(
+  sessionRow: GatewaySessionRow,
+  overrides?: { label?: string; displayName?: string; parentSessionKey?: string },
+) {
+  return {
+    updatedAt: sessionRow.updatedAt ?? undefined,
+    sessionId: sessionRow.sessionId,
+    kind: sessionRow.kind,
+    channel: sessionRow.channel,
+    label: overrides?.label ?? sessionRow.label,
+    displayName: overrides?.displayName ?? sessionRow.displayName,
+    deliveryContext: sessionRow.deliveryContext,
+    parentSessionKey: overrides?.parentSessionKey ?? sessionRow.parentSessionKey,
+    childSessions: sessionRow.childSessions,
+    thinkingLevel: sessionRow.thinkingLevel,
+    systemSent: sessionRow.systemSent,
+    abortedLastRun: sessionRow.abortedLastRun,
+    lastChannel: sessionRow.lastChannel,
+    lastTo: sessionRow.lastTo,
+    lastAccountId: sessionRow.lastAccountId,
+    totalTokens: sessionRow.totalTokens,
+    totalTokensFresh: sessionRow.totalTokensFresh,
+    contextTokens: sessionRow.contextTokens,
+    estimatedCostUsd: sessionRow.estimatedCostUsd,
+    modelProvider: sessionRow.modelProvider,
+    model: sessionRow.model,
+    status: sessionRow.status,
+    startedAt: sessionRow.startedAt,
+    endedAt: sessionRow.endedAt,
+    runtimeMs: sessionRow.runtimeMs,
+  };
+}
+
 export type GatewayEventSubscriptionParams = {
   minimalTestGateway: boolean;
   broadcast: Broadcast;
@@ -111,34 +147,7 @@ export function createGatewayEventSubscriptions(
           : undefined;
         const sessionRow = loadGatewaySessionRow(sessionKey);
         const sessionSnapshot = sessionRow
-          ? {
-              session: sessionRow,
-              updatedAt: sessionRow.updatedAt ?? undefined,
-              sessionId: sessionRow.sessionId,
-              kind: sessionRow.kind,
-              channel: sessionRow.channel,
-              label: sessionRow.label,
-              displayName: sessionRow.displayName,
-              deliveryContext: sessionRow.deliveryContext,
-              parentSessionKey: sessionRow.parentSessionKey,
-              childSessions: sessionRow.childSessions,
-              thinkingLevel: sessionRow.thinkingLevel,
-              systemSent: sessionRow.systemSent,
-              abortedLastRun: sessionRow.abortedLastRun,
-              lastChannel: sessionRow.lastChannel,
-              lastTo: sessionRow.lastTo,
-              lastAccountId: sessionRow.lastAccountId,
-              totalTokens: sessionRow.totalTokens,
-              totalTokensFresh: sessionRow.totalTokensFresh,
-              contextTokens: sessionRow.contextTokens,
-              estimatedCostUsd: sessionRow.estimatedCostUsd,
-              modelProvider: sessionRow.modelProvider,
-              model: sessionRow.model,
-              status: sessionRow.status,
-              startedAt: sessionRow.startedAt,
-              endedAt: sessionRow.endedAt,
-              runtimeMs: sessionRow.runtimeMs,
-            }
+          ? { session: sessionRow, ...buildSessionRowSnapshot(sessionRow) }
           : {};
         const message = attachDenebTranscriptMeta(update.message, {
           ...(typeof update.messageId === "string" ? { id: update.messageId } : {}),
@@ -193,33 +202,11 @@ export function createGatewayEventSubscriptions(
             displayName: event.displayName,
             ts: Date.now(),
             ...(sessionRow
-              ? {
-                  updatedAt: sessionRow.updatedAt ?? undefined,
-                  sessionId: sessionRow.sessionId,
-                  kind: sessionRow.kind,
-                  channel: sessionRow.channel,
-                  label: event.label ?? sessionRow.label,
-                  displayName: event.displayName ?? sessionRow.displayName,
-                  deliveryContext: sessionRow.deliveryContext,
-                  parentSessionKey: event.parentSessionKey ?? sessionRow.parentSessionKey,
-                  childSessions: sessionRow.childSessions,
-                  thinkingLevel: sessionRow.thinkingLevel,
-                  systemSent: sessionRow.systemSent,
-                  abortedLastRun: sessionRow.abortedLastRun,
-                  lastChannel: sessionRow.lastChannel,
-                  lastTo: sessionRow.lastTo,
-                  lastAccountId: sessionRow.lastAccountId,
-                  totalTokens: sessionRow.totalTokens,
-                  totalTokensFresh: sessionRow.totalTokensFresh,
-                  contextTokens: sessionRow.contextTokens,
-                  estimatedCostUsd: sessionRow.estimatedCostUsd,
-                  modelProvider: sessionRow.modelProvider,
-                  model: sessionRow.model,
-                  status: sessionRow.status,
-                  startedAt: sessionRow.startedAt,
-                  endedAt: sessionRow.endedAt,
-                  runtimeMs: sessionRow.runtimeMs,
-                }
+              ? buildSessionRowSnapshot(sessionRow, {
+                  label: event.label,
+                  displayName: event.displayName,
+                  parentSessionKey: event.parentSessionKey,
+                })
               : {}),
           },
           connIds,

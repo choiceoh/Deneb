@@ -11,7 +11,7 @@ export type GatewayAgentListRow = {
   name?: string;
 };
 
-function listExistingAgentIdsFromDisk(): string[] {
+export function listExistingAgentIdsFromDisk(): string[] {
   const root = resolveStateDir();
   const agentsDir = path.join(root, "agents");
   try {
@@ -25,7 +25,7 @@ function listExistingAgentIdsFromDisk(): string[] {
   }
 }
 
-function listConfiguredAgentIds(cfg: DenebConfig): string[] {
+export function listConfiguredAgentIds(cfg: DenebConfig): string[] {
   const ids = new Set<string>();
   const defaultId = normalizeAgentId(resolveDefaultAgentId(cfg));
   ids.add(defaultId);
