@@ -58,16 +58,27 @@ export function makeSimpleUserMessages(): AgentMessage[] {
   return messages as unknown as AgentMessage[];
 }
 
+let _cachedHarness: SanitizeSessionHistoryHarness | undefined;
+
 export async function loadSanitizeSessionHistoryWithCleanMocks(): Promise<SanitizeSessionHistoryHarness> {
-  vi.resetModules();
-  vi.resetAllMocks();
-  const mockedHelpers = await import("./pi-embedded-helpers.js");
-  vi.mocked(mockedHelpers.sanitizeSessionMessagesImages).mockImplementation(async (msgs) => msgs);
-  const mod = await import("./pi-embedded-runner/google.js");
-  return {
-    sanitizeSessionHistory: mod.sanitizeSessionHistory,
-    mockedHelpers,
-  };
+  if (!_cachedHarness) {
+    vi.resetModules();
+    vi.resetAllMocks();
+    const mockedHelpers = await import("./pi-embedded-helpers.js");
+    vi.mocked(mockedHelpers.sanitizeSessionMessagesImages).mockImplementation(async (msgs) => msgs);
+    const mod = await import("./pi-embedded-runner/google.js");
+    _cachedHarness = {
+      sanitizeSessionHistory: mod.sanitizeSessionHistory,
+      mockedHelpers,
+    };
+  } else {
+    // Reset mock state without destroying the vi.mock() wiring
+    vi.mocked(_cachedHarness.mockedHelpers.isGoogleModelApi).mockReset();
+    vi.mocked(_cachedHarness.mockedHelpers.sanitizeSessionMessagesImages)
+      .mockReset()
+      .mockImplementation(async (msgs) => msgs);
+  }
+  return _cachedHarness;
 }
 
 export function makeReasoningAssistantMessages(opts?: {
