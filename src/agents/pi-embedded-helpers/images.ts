@@ -7,6 +7,14 @@ import { stripThoughtSignatures } from "./bootstrap.js";
 
 type ContentBlock = AgentToolResult<unknown>["content"][number];
 
+function isThinkingOrRedactedBlock(block: unknown): boolean {
+  if (!block || typeof block !== "object") {
+    return false;
+  }
+  const type = (block as { type?: unknown }).type;
+  return type === "thinking" || type === "redacted_thinking";
+}
+
 export function isEmptyAssistantMessageContent(
   message: Extract<AgentMessage, { role: "assistant" }>,
 ): boolean {
@@ -125,16 +133,24 @@ export async function sanitizeSessionMessagesImages(
           ? content // Keep signatures for Antigravity Claude
           : stripThoughtSignatures(content, options?.sanitizeThoughtSignatures); // Strip for Gemini
 
-        const filteredContent = strippedContent.filter((block) => {
-          if (!block || typeof block !== "object") {
-            return true;
-          }
-          const rec = block as { type?: unknown; text?: unknown };
-          if (rec.type !== "text" || typeof rec.text !== "string") {
-            return true;
-          }
-          return rec.text.trim().length > 0;
-        });
+        // When preserving signatures for Anthropic, skip empty-text filtering
+        // entirely if thinking blocks are present — removing empty text blocks
+        // between thinking/redacted_thinking blocks shifts their positions and
+        // breaks Anthropic's signature validation on follow-up turns.
+        const hasThinkingBlocks =
+          options?.preserveSignatures && strippedContent.some(isThinkingOrRedactedBlock);
+        const filteredContent = hasThinkingBlocks
+          ? strippedContent
+          : strippedContent.filter((block) => {
+              if (!block || typeof block !== "object") {
+                return true;
+              }
+              const rec = block as { type?: unknown; text?: unknown };
+              if (rec.type !== "text" || typeof rec.text !== "string") {
+                return true;
+              }
+              return rec.text.trim().length > 0;
+            });
         const finalContent = (await sanitizeContentBlocksImages(
           filteredContent as unknown as ContentBlock[],
           label,

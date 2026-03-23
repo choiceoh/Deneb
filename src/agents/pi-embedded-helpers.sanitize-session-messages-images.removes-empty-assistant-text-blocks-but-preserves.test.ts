@@ -288,6 +288,51 @@ describe("sanitizeSessionMessagesImages", () => {
     expect(out[1]?.role).toBe("toolResult");
   });
 
+  it("preserves empty text blocks between thinking blocks when preserveSignatures is true", async () => {
+    const input = castAgentMessages([
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "step 1" },
+          { type: "text", text: "" },
+          { type: "redacted_thinking", data: "opaque" },
+          { type: "text", text: "final answer" },
+        ],
+      },
+    ]);
+
+    const out = await sanitizeSessionMessagesImages(input, "test", {
+      preserveSignatures: true,
+    });
+
+    expect(out).toHaveLength(1);
+    const content = (out[0] as { content?: unknown[] }).content;
+    // All 4 blocks preserved — empty text between thinking blocks is kept
+    expect(content).toHaveLength(4);
+  });
+
+  it("still filters empty text blocks when preserveSignatures is false with thinking blocks", async () => {
+    const input = castAgentMessages([
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "step 1" },
+          { type: "text", text: "" },
+          { type: "text", text: "final answer" },
+        ],
+      },
+    ]);
+
+    const out = await sanitizeSessionMessagesImages(input, "test", {
+      preserveSignatures: false,
+    });
+
+    expect(out).toHaveLength(1);
+    const content = (out[0] as { content?: unknown[] }).content;
+    // Empty text block filtered out, thinking kept (non-text type)
+    expect(content).toHaveLength(2);
+  });
+
   describe("thought_signature stripping", () => {
     it("strips msg_-prefixed thought_signature from assistant message content blocks", async () => {
       const input = castAgentMessages([
