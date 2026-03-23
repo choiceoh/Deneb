@@ -104,6 +104,9 @@ export function resolvePluginTools(params: {
       continue;
     }
     if (!resolved) {
+      log.debug(
+        `plugin tool factory returned null (${entry.pluginId}): ${entry.names?.join(", ") ?? "unknown"}`,
+      );
       continue;
     }
     const listRaw = Array.isArray(resolved) ? resolved : [resolved];
