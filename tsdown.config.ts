@@ -201,6 +201,7 @@ function buildCoreDistEntries(): Record<string, string> {
     "telegram/audit": "extensions/telegram/src/audit.ts",
     "telegram/token": "extensions/telegram/src/token.ts",
 
+    "agents/auth-profiles.runtime": "src/agents/auth-profiles.runtime.ts",
     "plugins/build-smoke-entry": "src/plugins/build-smoke-entry.ts",
     "plugins/runtime/index": "src/plugins/runtime/index.ts",
     "llm-slug-generator": "src/hooks/llm-slug-generator.ts",
