@@ -801,7 +801,7 @@
     },
     {
       "source": "/gateway/trusted-proxy",
-      "destination": "/gateway/trusted-proxy-auth"
+      "destination": "/gateway/authentication"
     }
   ],
   "navigation": {
@@ -868,7 +868,6 @@
                 "group": "Hosting and deployment",
                 "pages": [
                   "vps",
-                  "install/kubernetes",
                   "install/fly",
                   "install/hetzner",
                   "install/gcp",
@@ -1191,7 +1190,6 @@
                       "auth-credential-semantics",
                       "gateway/secrets",
                       "gateway/secrets-plan-contract",
-                      "gateway/trusted-proxy-auth",
                       "gateway/health",
                       "gateway/heartbeat",
                       "gateway/doctor",

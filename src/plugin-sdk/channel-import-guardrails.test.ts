@@ -40,13 +40,9 @@ const SETUP_BARREL_GUARDS: GuardedSource[] = [
   },
 ];
 
-const LOCAL_EXTENSION_API_BARREL_GUARDS = ["acpx", "diagnostics-otel", "telegram"] as const;
+const LOCAL_EXTENSION_API_BARREL_GUARDS = ["telegram"] as const;
 
-const LOCAL_EXTENSION_API_BARREL_EXCEPTIONS = [
-  // Direct import avoids a circular init path:
-  // accounts.ts -> runtime-api.ts -> src/plugin-sdk/matrix -> extensions/matrix/api.ts -> accounts.ts
-  "extensions/matrix/src/matrix/accounts.ts",
-] as const;
+const LOCAL_EXTENSION_API_BARREL_EXCEPTIONS = [] as const;
 
 function readSource(path: string): string {
   return readFileSync(resolve(ROOT_DIR, "..", path), "utf8");

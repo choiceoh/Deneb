@@ -356,7 +356,7 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 
 - Deneb gateway is local/loopback first. If you terminate TLS at a reverse proxy, set HSTS on the proxy-facing HTTPS domain there.
 - If the gateway itself terminates HTTPS, you can set `gateway.http.securityHeaders.strictTransportSecurity` to emit the HSTS header from Deneb responses.
-- Detailed deployment guidance is in [Trusted Proxy Auth](/gateway/trusted-proxy-auth#tls-termination-and-hsts).
+- Detailed deployment guidance is in [Authentication](/gateway/authentication).
 - For non-loopback Control UI deployments, `gateway.controlUi.allowedOrigins` is required by default.
 - `gateway.controlUi.allowedOrigins: ["*"]` is an explicit allow-all browser-origin policy, not a hardened default. Avoid it outside tightly controlled local testing.
 - `gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback=true` enables Host-header origin fallback mode; treat it as a dangerous operator-selected policy.
@@ -780,7 +780,7 @@ Auth modes:
 
 - `gateway.auth.mode: "token"`: shared bearer token (recommended for most setups).
 - `gateway.auth.mode: "password"`: password auth (prefer setting via env: `DENEB_GATEWAY_PASSWORD`).
-- `gateway.auth.mode: "trusted-proxy"`: trust an identity-aware reverse proxy to authenticate users and pass identity via headers (see [Trusted Proxy Auth](/gateway/trusted-proxy-auth)).
+- `gateway.auth.mode: "trusted-proxy"`: trust an identity-aware reverse proxy to authenticate users and pass identity via headers.
 
 Rotation checklist (token/password):
 
@@ -814,7 +814,7 @@ and require token/password auth.
 
 **Security rule:** do not forward these headers from your own reverse proxy. If
 you terminate TLS or proxy in front of the gateway, disable
-`gateway.auth.allowTailscale` and use token/password auth (or [Trusted Proxy Auth](/gateway/trusted-proxy-auth)) instead.
+`gateway.auth.allowTailscale` and use token/password auth instead.
 
 Trusted proxies:
 

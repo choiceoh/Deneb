@@ -112,22 +112,18 @@ import { loadGatewayTlsRuntime } from "./server/tls.js";
 import { maybeSeedControlUiAllowedOriginsAtStartup } from "./startup-control-ui-origins.js";
 
 // Deferred imports: these modules are only needed for non-minimal gateway startup.
-// Lazy-loading them avoids pulling in discovery, tailscale, skills, machine-name,
+// Lazy-loading them avoids pulling in tailscale, skills,
 // and update-check subsystems when they are not used (e.g. test gateways, CLI).
 async function loadDeferredGatewayModules() {
-  const [discovery, skillsRemote, machineName, updateStartup, registerSkills] = await Promise.all([
-    import("./server-discovery-runtime.js"),
+  const [skillsRemote, updateStartup, registerSkills] = await Promise.all([
     import("../infra/skills-remote.js"),
-    import("../infra/machine-name.js"),
     import("../infra/update-startup.js"),
     import("../agents/skills/refresh.js"),
   ]);
   return {
-    startGatewayDiscovery: discovery.startGatewayDiscovery,
     primeRemoteSkillsCache: skillsRemote.primeRemoteSkillsCache,
     refreshRemoteBinsForConnectedNodes: skillsRemote.refreshRemoteBinsForConnectedNodes,
     setSkillsRemoteRegistry: skillsRemote.setSkillsRemoteRegistry,
-    getMachineDisplayName: machineName.getMachineDisplayName,
     scheduleGatewayUpdateCheck: updateStartup.scheduleGatewayUpdateCheck,
     registerSkillsChangeListener: registerSkills.registerSkillsChangeListener,
   };
@@ -139,7 +135,6 @@ ensureDenebCliOnPath();
 
 const log = createSubsystemLogger("gateway");
 const logCanvas = log.child("canvas");
-const logDiscovery = log.child("discovery");
 const logTailscale = log.child("tailscale");
 const logChannels = log.child("channels");
 const logBrowser = log.child("browser");
@@ -594,24 +589,6 @@ export async function startGatewayServer(
 
   const { getRuntimeSnapshot, startChannels, startChannel, stopChannel, markChannelLoggedOut } =
     channelManager;
-
-  if (!minimalTestGateway) {
-    const deferred = await deferredModsPromise!;
-    const machineDisplayName = await deferred.getMachineDisplayName();
-    const discovery = await deferred.startGatewayDiscovery({
-      machineDisplayName,
-      port,
-      gatewayTls: gatewayTls.enabled
-        ? { enabled: true, fingerprintSha256: gatewayTls.fingerprintSha256 }
-        : undefined,
-      wideAreaDiscoveryEnabled: cfgAtStart.discovery?.wideArea?.enabled === true,
-      wideAreaDiscoveryDomain: cfgAtStart.discovery?.wideArea?.domain,
-      tailscaleMode,
-      mdnsMode: cfgAtStart.discovery?.mdns?.mode,
-      logDiscovery,
-    });
-    bonjourStop = discovery.bonjourStop;
-  }
 
   if (!minimalTestGateway) {
     const deferred = await deferredModsPromise!;
