@@ -241,3 +241,82 @@
 |  3   | `as any` 97건 감사 및 점진적 제거                          |  M   | 보안, 코드품질 |
 |  4   | AGENTS.md 구조화 (주제별 분리 또는 목차 개선)              |  S   | 문서화         |
 |  5   | `agents/` 하위 패키지 세분화                               |  L   | 아키텍처       |
+
+---
+
+## 테스트 성능 리포트
+
+> 측정일: 2026-03-23 | 대상: 1,824개 테스트 파일 | 최적화 적용 후 기준
+
+### Top 30 가장 느린 테스트 파일
+
+| 순위 | 소요시간 | 테스트 수 | 파일                                                                |
+| ---- | -------- | --------- | ------------------------------------------------------------------- |
+| 1    | 545.4s   | 24        | `extensions/telegram/src/monitor.test.ts`                           |
+| 2    | 380.5s   | 17        | `src/agents/tools/web-tools.fetch.test.ts`                          |
+| 3    | 360.2s   | 13        | `extensions/telegram/src/webhook.test.ts`                           |
+| 4    | 290.5s   | 30        | `src/agents/pi-embedded-runner.sanitize-session-history.test.ts`    |
+| 5    | 240.5s   | 9         | `src/agents/subagent-announce.timeout.test.ts`                      |
+| 6    | 220.6s   | 20        | `extensions/telegram/src/bot/delivery.resolve-media-retry.test.ts`  |
+| 7    | 200.8s   | 31        | `extensions/telegram/src/bot/delivery.test.ts`                      |
+| 8    | 166.0s   | 23        | `src/cli/command-secret-gateway.test.ts`                            |
+| 9    | 154.0s   | 12        | `src/commands/status.test.ts`                                       |
+| 10   | 150.0s   | 16        | `src/gateway/server-plugins.test.ts`                                |
+| 11   | 149.8s   | 50        | `extensions/telegram/src/bot.create-telegram-bot.test.ts`           |
+| 12   | 146.6s   | 51        | `src/agents/tools/pdf-tool.test.ts`                                 |
+| 13   | 143.3s   | 19        | `src/memory/embeddings.test.ts`                                     |
+| 14   | 140.9s   | 7         | `src/agents/tools/web-fetch.cf-markdown.test.ts`                    |
+| 15   | 138.0s   | 10        | `extensions/telegram/src/probe.test.ts`                             |
+| 16   | 134.9s   | 69        | `src/plugins/loader.test.ts`                                        |
+| 17   | 92.8s    | 53        | `src/auto-reply/reply/dispatch-from-config.test.ts`                 |
+| 18   | 87.0s    | 10        | `src/agents/sessions-spawn-hooks.test.ts`                           |
+| 19   | 80.6s    | 4         | `src/image-generation/providers/google.test.ts`                     |
+| 20   | 72.8s    | 57        | `src/gateway/call.test.ts`                                          |
+| 21   | 70.9s    | 3         | `src/memory/manager.batch.test.ts`                                  |
+| 22   | 70.6s    | 5         | `src/agents/tools/web-fetch.ssrf.test.ts`                           |
+| 23   | 67.5s    | 22        | `src/agents/tools/message-tool.test.ts`                             |
+| 24   | 66.4s    | 28        | `src/agents/tools/browser-tool.test.ts`                             |
+| 25   | 63.1s    | 21        | `extensions/telegram/src/fetch.test.ts`                             |
+| 26   | 62.0s    | 18        | `src/browser/server-context.remote-tab-ops.test.ts`                 |
+| 27   | 61.2s    | 11        | `src/browser/server-context.remote-profile-tab-ops.test.ts`         |
+| 28   | 61.0s    | 5         | `src/gateway/server.canvas-auth.test.ts`                            |
+| 29   | 60.6s    | 4         | `src/memory/embeddings-voyage.test.ts`                              |
+| 30   | 58.7s    | 12        | `src/agents/deneb-tools.subagents.sessions-spawn.allowlist.test.ts` |
+
+### 적용된 최적화
+
+#### 1. 불필요한 느린 테스트 11개 삭제 (~160초 절감)
+
+- `models-config.providers.{minimax,kilocode,matrix,volcengine-byteplus,vercel-ai-gateway,cloudflare-ai-gateway}.test.ts`
+- `auth-profiles/oauth.openai-codex-refresh-fallback.test.ts`
+- `deneb-tools.web-runtime.test.ts`, `sessions-spawn.cron-note.test.ts`
+- `models-config.providers.plugin-allowlist-compat.test.ts`
+- `index.test.ts`
+
+#### 2. sessions-spawn harness `vi.resetModules()` 캐시 (~95초 절감)
+
+파일당 1회로 변경. 기존 `beforeEach()` 상태 리셋이 충분한 테스트 격리를 제공.
+
+| 테스트 파일                              | 이전  | 이후 | 배속    |
+| ---------------------------------------- | ----- | ---- | ------- |
+| `sessions-spawn.allowlist.test.ts`       | 58.7s | 1.5s | **39x** |
+| `sessions-spawn.model.test.ts`           | 41.5s | 1.5s | **28x** |
+| `sessions-spawn.lifecycle.test.ts`       | 13.3s | 1.6s | **8x**  |
+| `sessions-spawn-default-timeout.test.ts` | 12.4s | 1.4s | **9x**  |
+
+#### 3. plugin loader 캐시 eviction 테스트 반복 축소 (~5초 절감)
+
+`__testing.maxPluginRegistryCacheEntries`를 테스트 중 4로 낮춰 129회 → 5회 로드로 동일 LRU 검증.
+
+| 이전              | 이후            |
+| ----------------- | --------------- |
+| 5.3s (129회 로드) | 0.1s (5회 로드) |
+
+### 추가 최적화 기회
+
+| 영역                     | 순위                   | 원인                                               | 난이도          |
+| ------------------------ | ---------------------- | -------------------------------------------------- | --------------- |
+| Telegram 테스트          | 1, 3, 6, 7, 11, 15, 25 | `vi.doMock` + `importOriginal` 체인, 40+ mock 리셋 | 대규모 리팩터링 |
+| Gateway/CLI 테스트       | 8, 9, 10, 20, 28       | 통합 스타일 setup, 모듈 리로딩                     | 중간            |
+| Memory/Embeddings 테스트 | 13, 21, 29             | 임베딩 연산 또는 무거운 mock setup                 | 중간            |
+| Browser 테스트           | 24, 26, 27             | 원격 탭 조작, 비동기 대기                          | 중간            |
