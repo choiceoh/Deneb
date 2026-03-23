@@ -25,11 +25,12 @@ type DiscoveredModel = {
   input?: ModelInputType[];
 };
 
-type PiSdkModule = typeof import("../pi-model-discovery.js");
+type PiSdkModule = (typeof import("../pi-model-discovery-runtime.js"))["piModelDiscoveryRuntime"];
 
 let modelCatalogPromise: Promise<ModelCatalogEntry[]> | null = null;
 let hasLoggedModelCatalogError = false;
-const defaultImportPiSdk = () => import("../pi-model-discovery-runtime.js");
+const defaultImportPiSdk = () =>
+  import("../pi-model-discovery-runtime.js").then((m) => m.piModelDiscoveryRuntime);
 let importPiSdk = defaultImportPiSdk;
 let providerRuntimePromise:
   | Promise<typeof import("../../plugins/provider-runtime.runtime.js")>

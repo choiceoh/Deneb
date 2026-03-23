@@ -47,10 +47,12 @@ describe("describeImageWithModel", () => {
       requireApiKey: requireApiKeyMock,
     }));
     vi.doMock("../../agents/pi-model-discovery-runtime.js", () => ({
-      discoverAuthStorage: () => ({
-        setRuntimeApiKey: setRuntimeApiKeyMock,
-      }),
-      discoverModels: discoverModelsMock,
+      piModelDiscoveryRuntime: {
+        discoverAuthStorage: () => ({
+          setRuntimeApiKey: setRuntimeApiKeyMock,
+        }),
+        discoverModels: discoverModelsMock,
+      },
     }));
     ({ describeImageWithModel } = await import("./image.js"));
     minimaxUnderstandImageMock.mockResolvedValue("portal ok");
