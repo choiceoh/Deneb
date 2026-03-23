@@ -7,7 +7,10 @@ import {
   signDevicePayload,
 } from "../infra/device-identity.js";
 import { withEnvAsync } from "../test-utils/env.js";
-import { buildDeviceAuthPayload } from "./device-auth.js";
+// Device auth payload stub (device auth removed for solo-dev simplification).
+function buildDeviceAuthPayload(_params: Record<string, unknown>): string {
+  return "";
+}
 import { validateTalkConfigResult } from "./protocol/index.js";
 import {
   connectOk,

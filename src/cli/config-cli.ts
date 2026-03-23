@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import JSON5 from "json5";
-import { OLLAMA_DEFAULT_BASE_URL } from "../agents/ollama-defaults.js";
+const OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434";
 import type { DenebConfig } from "../config/config.js";
 import { readConfigFileSnapshot, writeConfigFile } from "../config/config.js";
 import { formatConfigIssueLines, normalizeConfigIssues } from "../config/issue-format.js";

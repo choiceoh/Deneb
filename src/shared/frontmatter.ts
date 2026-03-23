@@ -1,5 +1,5 @@
 import JSON5 from "json5";
-import { LEGACY_MANIFEST_KEYS, MANIFEST_KEY } from "../compat/legacy-names.js";
+import { MANIFEST_KEY } from "../compat/legacy-names.js";
 import { parseBooleanValue } from "../utils/boolean.js";
 
 export function normalizeStringList(input: unknown): string[] {
@@ -46,7 +46,7 @@ export function resolveDenebManifestBlock(params: {
       return undefined;
     }
 
-    const manifestKeys = [MANIFEST_KEY, ...LEGACY_MANIFEST_KEYS];
+    const manifestKeys = [MANIFEST_KEY];
     for (const key of manifestKeys) {
       const candidate = (parsed as Record<string, unknown>)[key];
       if (candidate && typeof candidate === "object") {
