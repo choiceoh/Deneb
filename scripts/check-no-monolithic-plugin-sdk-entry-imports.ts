@@ -7,11 +7,11 @@ import { discoverDenebPlugins } from "../src/plugins/discovery.js";
 const ROOT_IMPORT_PATTERN = /["']deneb\/plugin-sdk["']/;
 const LEGACY_COMPAT_IMPORT_PATTERN = /["']deneb\/plugin-sdk\/compat["']/;
 
-function hasMonolithicRootImport(content: string): boolean {
+export function hasMonolithicRootImport(content: string): boolean {
   return ROOT_IMPORT_PATTERN.test(content);
 }
 
-function hasLegacyCompatImport(content: string): boolean {
+export function hasLegacyCompatImport(content: string): boolean {
   return LEGACY_COMPAT_IMPORT_PATTERN.test(content);
 }
 
