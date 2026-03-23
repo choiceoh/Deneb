@@ -32,6 +32,30 @@
 - README (GitHub): keep absolute docs URLs (`https://docs.deneb.ai/...`) so links work on GitHub.
 - Docs content must be generic: no personal device names/hostnames/paths; use placeholders like `user@gateway-host` and “gateway host”.
 
+## Docs Syntax Rules (Mintlify)
+
+- Frontmatter (YAML) is required on every doc file with these fields:
+  - `title` (required): matches the page H1 heading; 2-5 words.
+  - `summary` (required): 1-2 sentences, max ~100 chars.
+  - `read_when` (required): array of 2-3 user scenarios/intents describing when to read this page.
+  - `sidebarTitle` (optional): shorter label for the sidebar.
+- Heading structure: one H1 (`#`) per page matching frontmatter `title`; H2 (`##`) for major sections (3-5 per page typical); H3 (`###`) for subsections; H4 (`####`) rarely.
+- Code blocks: always use language tags (`bash`, `json5`, `python`, `typescript`, `powershell`, `swift`, `mermaid`). Use `json5` (not `json`) for config examples (supports comments and trailing commas). Use inline code (single backticks) for file paths, commands, config keys, and JSON fields.
+- Mintlify components are globally available (no imports needed):
+  - `<Steps>` / `<Step title=”...”>`: numbered procedures, quick starts.
+  - `<Tabs>` / `<Tab title=”...”>`: platform/OS variants, mutually exclusive content.
+  - `<Info>`, `<Tip>`, `<Warning>`, `<Note>`, `<Check>`: callout boxes.
+  - `<AccordionGroup>` / `<Accordion title=”...”>`: collapsible optional/advanced content.
+  - `<CardGroup cols={N}>` / `<Card title=”...” icon=”...” href=”...”>`: feature grids, navigation.
+  - `<Columns>` / `<Card>`: responsive card layouts (alternative to CardGroup).
+  - `<Tooltip headline=”...” tip=”...”>`: hover definitions.
+  - `<Frame caption=”...”>`: image wrapper with caption.
+  - Icons use the Lucide library (e.g. `icon=”rocket”`, `icon=”settings”`, `icon=”message-square”`).
+- Images: use root-relative paths (`/assets/...`). For light/dark mode, use paired `<img>` tags with `class=”dark:hidden”` and `class=”hidden dark:block”`.
+- Tables: standard Markdown tables for feature matrices, mode mappings, option lists. Use `✅` / `❌` for yes/no cells.
+- File conventions: all doc files are `.md` (Mintlify processes MDX syntax transparently). File naming: lowercase, hyphenated (`getting-started.md`, `voice-wake.md`).
+- Validation scripts: `pnpm docs:dev` (local preview), `pnpm docs:check-links` (link audit), `pnpm docs:spellcheck` (spell check; `pnpm docs:spellcheck:fix` to auto-fix), `pnpm format:docs` (format check; `pnpm format:docs:fix` to auto-fix).
+
 ## Docs i18n (zh-CN)
 
 - `docs/zh-CN/**` is generated; do not edit unless the user explicitly asks.
