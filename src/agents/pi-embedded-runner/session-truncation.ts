@@ -150,7 +150,16 @@ export async function truncateSessionAfterCompaction(params: {
     let newParentId = entry.parentId;
     while (newParentId !== null && removedIds.has(newParentId)) {
       const parent = entryById.get(newParentId);
-      newParentId = parent?.parentId ?? null;
+      if (!parent) {
+        // Parent referenced by ID but missing from transcript — log and root the entry
+        // instead of silently orphaning the subtree.
+        log.warn(
+          `[session-truncation] entry ${entry.id} references missing parent ${newParentId}; re-parenting to root`,
+        );
+        newParentId = null;
+        break;
+      }
+      newParentId = parent.parentId;
     }
 
     if (newParentId !== entry.parentId) {

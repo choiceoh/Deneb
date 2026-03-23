@@ -9,7 +9,13 @@ export function loadJsonFile(pathname: string): unknown {
     }
     const raw = fs.readFileSync(pathname, "utf8");
     return JSON.parse(raw) as unknown;
-  } catch {
+  } catch (err) {
+    // Log corrupt/unreadable files so the issue is visible instead of silently returning undefined.
+    // Avoid importing the full subsystem logger to keep this low-level utility dependency-light.
+    const message = err instanceof Error ? err.message : String(err);
+    if (typeof process !== "undefined" && process.stderr) {
+      process.stderr.write(`[json-file] failed to load ${pathname}: ${message}\n`);
+    }
     return undefined;
   }
 }
