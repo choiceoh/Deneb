@@ -18,8 +18,9 @@ vi.mock("../../session/session-utils.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../../../agents/subagent-registry.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../agents/subagent-registry.js")>();
+vi.mock("../../../agents/subagent/subagent-registry.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../../agents/subagent/subagent-registry.js")>();
   return {
     ...actual,
     getSubagentRunByChildSessionKey: (...args: unknown[]) =>

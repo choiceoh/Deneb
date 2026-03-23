@@ -22,7 +22,7 @@ vi.mock("../agents/models/model-selection.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../agents/subagent-announce.js", () => ({
+vi.mock("../agents/subagent/subagent-announce.js", () => ({
   runSubagentAnnounceFlow: vi.fn(),
 }));
 

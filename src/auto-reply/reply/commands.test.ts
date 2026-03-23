@@ -108,7 +108,7 @@ vi.mock("./commands-context-report.js", () => ({
 vi.resetModules();
 
 const { addSubagentRunForTests, listSubagentRunsForRequester, resetSubagentRegistryForTests } =
-  await import("../../agents/subagent-registry.js");
+  await import("../../agents/subagent/subagent-registry.js");
 const { setDefaultChannelPluginRegistryForTests } =
   await import("../../commands/channel-test-helpers.js");
 const internalHooks = await import("../../hooks/internal-hooks.js");
