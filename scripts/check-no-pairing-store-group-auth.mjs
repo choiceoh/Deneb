@@ -111,7 +111,7 @@ function isSuspiciousNormalizeWithStoreCall(node) {
   return hasStoreProp && hasGroupAllowProp;
 }
 
-function findViolations(content, filePath) {
+export function findViolations(content, filePath) {
   const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
   const violations = [];
 

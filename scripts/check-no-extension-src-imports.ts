@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const FORBIDDEN_REPO_SRC_IMPORT = /["'](?:\.\.\/)+(?:src\/)[^"']+["']/;
+export const FORBIDDEN_REPO_SRC_IMPORT = /["'](?:\.\.\/)+(?:src\/)[^"']+["']/;
 
 function isSourceFile(filePath: string): boolean {
   if (filePath.endsWith(".d.ts")) {
@@ -10,7 +10,7 @@ function isSourceFile(filePath: string): boolean {
   return /\.(?:[cm]?ts|[cm]?js|tsx|jsx)$/u.test(filePath);
 }
 
-function isProductionExtensionFile(filePath: string): boolean {
+export function isProductionExtensionFile(filePath: string): boolean {
   return !(
     filePath.endsWith("/runtime-api.ts") ||
     filePath.endsWith("\\runtime-api.ts") ||

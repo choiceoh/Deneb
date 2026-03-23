@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const FORBIDDEN_PATTERNS: Array<{ pattern: RegExp; hint: string }> = [
+export const FORBIDDEN_PATTERNS: Array<{ pattern: RegExp; hint: string }> = [
   {
     pattern: /["']deneb\/plugin-sdk["']/,
     hint: "Use deneb/plugin-sdk/<subpath> instead of the monolithic root entry.",
@@ -28,7 +28,7 @@ const FORBIDDEN_PATTERNS: Array<{ pattern: RegExp; hint: string }> = [
   },
 ];
 
-function isExtensionTestFile(filePath: string): boolean {
+export function isExtensionTestFile(filePath: string): boolean {
   return /\.test\.[cm]?[jt]sx?$/u.test(filePath) || /\.e2e\.test\.[cm]?[jt]sx?$/u.test(filePath);
 }
 
