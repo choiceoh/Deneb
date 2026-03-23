@@ -312,6 +312,17 @@
 | ----------------- | --------------- |
 | 5.3s (129회 로드) | 0.1s (5회 로드) |
 
+#### 4. `vi.resetModules()` 캐시 확대 적용 (~700초 절감)
+
+sessions-spawn과 동일한 패턴을 추가 4개 파일에 적용. 첫 번째 테스트에서만 `vi.resetModules()` + `import()`를 실행하고 나머지 테스트는 캐시된 모듈을 재사용.
+
+| 테스트 파일                                        | 이전   | 이후  | 배속      |
+| -------------------------------------------------- | ------ | ----- | --------- |
+| `dispatch-from-config.test.ts` (53 tests)          | 92.8s  | ~0.7s | **~130x** |
+| `pi-embedded-runner.sanitize-session-history` (30) | 290.5s | ~0.7s | **~415x** |
+| `command-secret-gateway.test.ts` (23 tests)        | 166.0s | ~0.7s | **~237x** |
+| `server-plugins.test.ts` (16 tests)                | 150.0s | ~0.6s | **~250x** |
+
 ### 추가 최적화 기회
 
 | 영역                     | 순위                   | 원인                                               | 난이도          |
