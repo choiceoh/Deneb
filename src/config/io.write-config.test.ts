@@ -339,7 +339,8 @@ describe("config io write", () => {
     });
   });
 
-  it("does not reintroduce Slack/Discord legacy dm.policy defaults when writing", async () => {
+  // Skip: Discord/Slack schemas not registered in Telegram-only build
+  it.skip("does not reintroduce Slack/Discord legacy dm.policy defaults when writing", async () => {
     await withSuiteHome(async (home) => {
       const { configPath, io, snapshot } = await writeConfigAndCreateIo({
         home,

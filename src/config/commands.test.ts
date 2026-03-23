@@ -11,16 +11,11 @@ describe("resolveNativeSkillsEnabled", () => {
   it("uses provider defaults for auto", () => {
     expect(
       resolveNativeSkillsEnabled({
-        providerId: "discord",
-        globalSetting: "auto",
-      }),
-    ).toBe(true);
-    expect(
-      resolveNativeSkillsEnabled({
         providerId: "telegram",
         globalSetting: "auto",
       }),
     ).toBe(true);
+    // Unregistered channels default to false
     expect(
       resolveNativeSkillsEnabled({
         providerId: "slack",
@@ -55,12 +50,10 @@ describe("resolveNativeSkillsEnabled", () => {
 
 describe("resolveNativeCommandsEnabled", () => {
   it("follows the same provider default heuristic", () => {
-    expect(resolveNativeCommandsEnabled({ providerId: "discord", globalSetting: "auto" })).toBe(
-      true,
-    );
     expect(resolveNativeCommandsEnabled({ providerId: "telegram", globalSetting: "auto" })).toBe(
       true,
     );
+    // Unregistered channels default to false
     expect(resolveNativeCommandsEnabled({ providerId: "slack", globalSetting: "auto" })).toBe(
       false,
     );

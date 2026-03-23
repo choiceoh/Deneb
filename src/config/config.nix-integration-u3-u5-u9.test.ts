@@ -163,10 +163,10 @@ describe("Nix integration (U3, U5, U9)", () => {
                 ],
               },
               channels: {
-                whatsapp: {
+                telegram: {
                   accounts: {
                     personal: {
-                      authDir: "~/.deneb/credentials/wa-personal",
+                      authDir: "~/.deneb/credentials/tg-personal",
                     },
                   },
                 },
@@ -185,8 +185,8 @@ describe("Nix integration (U3, U5, U9)", () => {
         expect(cfg.agents?.list?.[0]?.workspace).toBe(path.join(home, "ws-agent"));
         expect(cfg.agents?.list?.[0]?.agentDir).toBe(path.join(home, ".deneb", "agents", "main"));
         expect(cfg.agents?.list?.[0]?.sandbox?.workspaceRoot).toBe(path.join(home, "sandbox-root"));
-        expect(cfg.channels?.whatsapp?.accounts?.personal?.authDir).toBe(
-          path.join(home, ".deneb", "credentials", "wa-personal"),
+        expect(cfg.channels?.telegram?.accounts?.personal?.authDir).toBe(
+          path.join(home, ".deneb", "credentials", "tg-personal"),
         );
       });
     });

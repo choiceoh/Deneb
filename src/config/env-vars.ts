@@ -3,6 +3,20 @@ import type { DenebConfig } from "./types.js";
 
 const PORTABLE_ENV_VAR_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+// Env vars that must never be set from user config — they control shell startup
+// and could be abused for arbitrary code execution.
+const BLOCKED_ENV_KEYS = new Set([
+  "BASH_ENV",
+  "ENV",
+  "SHELL",
+  "HOME",
+  "ZDOTDIR",
+  "LD_PRELOAD",
+  "LD_LIBRARY_PATH",
+  "DYLD_INSERT_LIBRARIES",
+  "DYLD_LIBRARY_PATH",
+]);
+
 function normalizeEnvVarKey(rawKey: string, options?: { portable?: boolean }): string | null {
   const key = rawKey.trim();
   if (!key) {
@@ -53,7 +67,13 @@ function collectConfigEnvVarsByTarget(cfg?: DenebConfig): Record<string, string>
 }
 
 export function collectConfigRuntimeEnvVars(cfg?: DenebConfig): Record<string, string> {
-  return collectConfigEnvVarsByTarget(cfg);
+  const entries = collectConfigEnvVarsByTarget(cfg);
+  for (const key of Object.keys(entries)) {
+    if (BLOCKED_ENV_KEYS.has(key)) {
+      delete entries[key];
+    }
+  }
+  return entries;
 }
 
 export function collectConfigServiceEnvVars(cfg?: DenebConfig): Record<string, string> {
