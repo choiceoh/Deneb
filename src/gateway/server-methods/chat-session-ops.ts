@@ -9,6 +9,7 @@ import {
   type ChatAbortControllerEntry,
   type ChatAbortOps,
 } from "../chat-abort.js";
+import { classifyChatErrorKind } from "../chat-error-kind.js";
 import { stripEnvelopeFromMessage } from "../chat-sanitize.js";
 import { ADMIN_SCOPE } from "../method-scopes.js";
 import { loadSessionEntry } from "../session-utils.js";
@@ -429,6 +430,7 @@ export function broadcastChatError(params: {
     seq,
     state: "error" as const,
     errorMessage: params.errorMessage,
+    errorKind: classifyChatErrorKind(params.errorMessage),
   };
   params.context.broadcast("chat", payload);
   params.context.nodeSendToSession(params.sessionKey, "chat", payload);

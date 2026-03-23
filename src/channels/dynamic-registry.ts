@@ -1,9 +1,8 @@
 /**
- * dynamic-registry.ts — Deneb: 런타임 채널 등록 시스템
+ * dynamic-registry.ts — Runtime channel registration system
  *
- * 기존 Deneb은 빌드 시점에 채널 목록을 결정(ids.ts, registry.ts, entrypoints.json).
- * 데네브는 채널이 런타임에 자신을 등록하는 구조로 변경.
- * 코어는 등록된 채널만 알고, 나머지는 모름.
+ * Previously Deneb determined the channel list at build time (ids.ts, registry.ts, entrypoints.json).
+ * Now channels register themselves at runtime; core only knows about registered channels.
  */
 
 export interface ChannelRegistration {
@@ -27,10 +26,7 @@ const registry = new Map<string, ChannelRegistration>();
 const aliasMap = new Map<string, string>(); // alias → canonical id
 const hooks: RegistrationHook[] = [];
 
-/**
- * 채널이 자신을 등록.
- * 각 채널 확장의 최상단(top-level import)에서 호출.
- */
+/** Register a channel. Called at the top level of each channel extension's import. */
 export function registerChannel(entry: ChannelRegistration): void {
   if (registry.has(entry.id)) {
     throw new Error(`Channel "${entry.id}" already registered`);
@@ -41,42 +37,42 @@ export function registerChannel(entry: ChannelRegistration): void {
   }
 }
 
-/** 채널 별칭 등록 */
+/** Register a channel alias. */
 export function registerChannelAlias(alias: string, canonicalId: string): void {
   aliasMap.set(alias.trim().toLowerCase(), canonicalId);
 }
 
-/** 등록된 모든 채널 */
+/** List all registered channels. */
 export function listChannels(): ChannelRegistration[] {
   return [...registry.values()];
 }
 
-/** 채널 메타 조회 */
+/** Look up channel metadata by ID. */
 export function getChannelMeta(id: string): ChannelRegistration | undefined {
   return registry.get(id);
 }
 
-/** ID 정규화 — alias 해결 포함 */
+/** Normalize a raw channel ID — resolves aliases. */
 export function normalizeChannelId(raw?: string | null): string | null {
   const key = raw?.trim().toLowerCase();
   if (!key) {
     return null;
   }
 
-  // 별칭 먼저 확인
+  // Check aliases first
   const canonical = aliasMap.get(key);
   if (canonical && registry.has(canonical)) {
     return canonical;
   }
 
-  // 직접 확인
+  // Direct lookup
   if (registry.has(key)) {
     return key;
   }
   return null;
 }
 
-/** 새 채널 등록 시 알림 */
+/** Subscribe to new channel registrations. Returns an unsubscribe function. */
 export function onChannelRegistered(hook: RegistrationHook): () => void {
   hooks.push(hook);
   return () => {
@@ -87,9 +83,9 @@ export function onChannelRegistered(hook: RegistrationHook): () => void {
   };
 }
 
-// ── 하위 호환 shim ──
+// ── Backward-compatible shims ──
 
-/** listChatChannels — 기존 API 호환 */
+/** @deprecated Use listChannels() instead. */
 export function listChatChannels() {
   return listChannels().map((entry) => ({
     id: entry.id,
@@ -100,17 +96,17 @@ export function listChatChannels() {
   }));
 }
 
-/** getChatChannelMeta — 기존 API 호환 */
+/** @deprecated Use getChannelMeta() instead. */
 export function getChatChannelMeta(id: string) {
   return getChannelMeta(id) ?? null;
 }
 
-/** listChatChannelAliases — 기존 API 호환 */
+/** @deprecated Use [...aliasMap.keys()] via listChannels() instead. */
 export function listChatChannelAliases(): string[] {
   return [...aliasMap.keys()];
 }
 
-/** CHAT_CHANNEL_ORDER — 기존 API 호환 (동적) */
+/** @deprecated Use getChatChannelOrder() from registry.ts instead. */
 export function getChatChannelOrder(): string[] {
   return [...registry.keys()];
 }
