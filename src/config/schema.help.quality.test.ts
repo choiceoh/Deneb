@@ -515,21 +515,6 @@ const CHANNELS_AGENTS_TARGET_KEYS = [
   "agents.list[].tools.alsoAllow",
   "agents.list[].tools.byProvider",
   "agents.list[].tools.profile",
-  "channels.bluebubbles",
-  "channels.discord",
-  "channels.discord.token",
-  "channels.imessage",
-  "channels.imessage.cliPath",
-  "channels.irc",
-  "channels.mattermost",
-  "channels.msteams",
-  "channels.signal",
-  "channels.signal.account",
-  "channels.slack",
-  "channels.slack.appToken",
-  "channels.slack.botToken",
-  "channels.slack.userToken",
-  "channels.slack.userTokenReadOnly",
   "channels.telegram",
   "channels.telegram.botToken",
   "channels.telegram.capabilities.inlineButtons",
@@ -539,7 +524,6 @@ const CHANNELS_AGENTS_TARGET_KEYS = [
   "channels.telegram.execApprovals.agentFilter",
   "channels.telegram.execApprovals.sessionFilter",
   "channels.telegram.execApprovals.target",
-  "channels.whatsapp",
 ] as const;
 
 const FINAL_BACKLOG_TARGET_KEYS = [
@@ -680,7 +664,7 @@ describe("config help copy quality", () => {
     const rules = FIELD_HELP["session.sendPolicy.rules"];
     expect(rules.includes("{ action:")).toBe(true);
     expect(rules.includes('"deny"')).toBe(true);
-    expect(rules.includes('"discord"')).toBe(true);
+    expect(rules.includes('"telegram"')).toBe(true);
 
     const keyPrefix = FIELD_HELP["session.sendPolicy.rules[].match.keyPrefix"];
     expect(/normalized/i.test(keyPrefix)).toBe(true);

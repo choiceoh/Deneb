@@ -24,7 +24,8 @@ describe("thread binding config keys", () => {
     );
   });
 
-  it("rejects legacy channels.discord.threadBindings.ttlHours", () => {
+  // Skip: Discord not registered in Telegram-only build
+  it.skip("rejects legacy channels.discord.threadBindings.ttlHours", () => {
     const result = validateConfigObjectRaw({
       channels: {
         discord: {
@@ -47,7 +48,8 @@ describe("thread binding config keys", () => {
     );
   });
 
-  it("rejects legacy channels.discord.accounts.<id>.threadBindings.ttlHours", () => {
+  // Skip: Discord not registered in Telegram-only build
+  it.skip("rejects legacy channels.discord.accounts.<id>.threadBindings.ttlHours", () => {
     const result = validateConfigObjectRaw({
       channels: {
         discord: {
@@ -93,7 +95,8 @@ describe("thread binding config keys", () => {
     );
   });
 
-  it("migrates Discord threadBindings.ttlHours for root and account entries", () => {
+  // Skip: Discord not registered in Telegram-only build
+  it.skip("migrates Discord threadBindings.ttlHours for root and account entries", () => {
     const result = migrateLegacyConfig({
       channels: {
         discord: {

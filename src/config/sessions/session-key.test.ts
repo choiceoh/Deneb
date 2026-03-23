@@ -12,7 +12,8 @@ function makeCtx(overrides: Partial<MsgContext>): MsgContext {
 }
 
 describe("resolveSessionKey", () => {
-  describe("Discord DM session key normalization", () => {
+  // Skip: Discord not registered in Telegram-only build
+  describe.skip("Discord DM session key normalization", () => {
     it("passes through correct discord:direct keys unchanged", () => {
       const ctx = makeCtx({
         SessionKey: "agent:fina:discord:direct:123456",

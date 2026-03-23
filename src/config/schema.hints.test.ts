@@ -27,7 +27,7 @@ describe("isSensitiveConfigPath", () => {
   });
 
   it("keeps true sensitive keys redacted", () => {
-    expect(isSensitiveConfigPath("channels.slack.token")).toBe(true);
+    expect(isSensitiveConfigPath("channels.telegram.botToken")).toBe(true);
     expect(isSensitiveConfigPath("models.providers.openai.apiKey")).toBe(true);
     expect(isSensitiveConfigPath("channels.irc.nickserv.password")).toBe(true);
   });
@@ -132,8 +132,7 @@ describe("mapSensitivePaths", () => {
 
     expect(hints["agents.defaults.memorySearch.remote.apiKey"]?.sensitive).toBe(true);
     expect(hints["agents.list[].memorySearch.remote.apiKey"]?.sensitive).toBe(true);
-    expect(hints["channels.discord.accounts.*.token"]?.sensitive).toBe(true);
-    expect(hints["channels.googlechat.serviceAccount"]?.sensitive).toBe(true);
+    expect(hints["channels.telegram.botToken"]?.sensitive).toBe(true);
     expect(hints["gateway.auth.token"]?.sensitive).toBe(true);
     expect(hints["models.providers.*.headers.*"]?.sensitive).toBe(true);
     expect(hints["skills.entries.*.apiKey"]?.sensitive).toBe(true);

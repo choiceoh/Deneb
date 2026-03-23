@@ -69,11 +69,7 @@ describe("legacy migrate mention routing", () => {
     expect(res.changes).toContain(
       'Moved routing.groupChat.requireMention → channels.telegram.groups."*".requireMention.',
     );
-    expect(res.changes).toContain(
-      'Moved routing.groupChat.requireMention → channels.imessage.groups."*".requireMention.',
-    );
     expect(res.config?.channels?.telegram?.groups?.["*"]?.requireMention).toBe(true);
-    expect(res.config?.channels?.imessage?.groups?.["*"]?.requireMention).toBe(true);
     expect((res.config as { routing?: unknown } | null)?.routing).toBeUndefined();
   });
 
