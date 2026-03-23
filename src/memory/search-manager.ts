@@ -23,6 +23,56 @@ export type MemorySearchManagerResult = {
   error?: string;
 };
 
+/** Shared logic for creating a cached backend manager with fallback wrapping. */
+async function tryCreateBackendManager(params: {
+  cfg: DenebConfig;
+  agentId: string;
+  purpose?: "default" | "status";
+  cacheKey: string | undefined;
+  backendLabel: string;
+  createPrimary: () => Promise<MemorySearchManager | null>;
+  fallbackParams: { cfg: DenebConfig; agentId: string };
+}): Promise<MemorySearchManagerResult | null> {
+  const statusOnly = params.purpose === "status";
+  if (!statusOnly && params.cacheKey) {
+    const cached = QMD_MANAGER_CACHE.get(params.cacheKey);
+    if (cached) {
+      return { manager: cached };
+    }
+  }
+  try {
+    const primary = await params.createPrimary();
+    if (primary) {
+      if (statusOnly) {
+        return { manager: primary };
+      }
+      const cacheKey = params.cacheKey;
+      const wrapper = new FallbackMemoryManager(
+        {
+          primary,
+          fallbackFactory: async () => {
+            const { MemoryIndexManager } = await loadManagerRuntime();
+            return await MemoryIndexManager.get(params.fallbackParams);
+          },
+        },
+        () => {
+          if (cacheKey) {
+            QMD_MANAGER_CACHE.delete(cacheKey);
+          }
+        },
+      );
+      if (cacheKey) {
+        QMD_MANAGER_CACHE.set(cacheKey, wrapper);
+      }
+      return { manager: wrapper };
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn(`${params.backendLabel} memory unavailable; falling back to builtin: ${message}`);
+  }
+  return null;
+}
+
 export async function getMemorySearchManager(params: {
   cfg: DenebConfig;
   agentId: string;
@@ -32,95 +82,51 @@ export async function getMemorySearchManager(params: {
 
   // ── Vega backend ──
   if (resolved.backend === "vega" && resolved.vega) {
-    let cacheKey: string | undefined;
-    if (params.purpose !== "status") {
-      cacheKey = buildVegaCacheKey(params.agentId, resolved.vega);
-      const cached = QMD_MANAGER_CACHE.get(cacheKey);
-      if (cached) {
-        return { manager: cached };
-      }
-    }
-    try {
-      const { VegaMemoryManager } = await import("./vega-manager.js");
-      const workspaceDir = resolveAgentWorkspaceDir(params.cfg, params.agentId);
-      const primary = await VegaMemoryManager.create({
-        cfg: { workspaceDir },
-        agentId: params.agentId,
-        resolved: resolved.vega,
-      });
-      if (primary) {
-        if (params.purpose === "status") {
-          return { manager: primary };
-        }
-        const wrapper = new FallbackMemoryManager(
-          {
-            primary,
-            fallbackFactory: async () => {
-              const { MemoryIndexManager } = await loadManagerRuntime();
-              return await MemoryIndexManager.get(params);
-            },
-          },
-          () => {
-            if (cacheKey) {
-              QMD_MANAGER_CACHE.delete(cacheKey);
-            }
-          },
-        );
-        if (cacheKey) {
-          QMD_MANAGER_CACHE.set(cacheKey, wrapper);
-        }
-        return { manager: wrapper };
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      log.warn(`vega memory unavailable; falling back to builtin: ${message}`);
+    const vegaConfig = resolved.vega;
+    const result = await tryCreateBackendManager({
+      cfg: params.cfg,
+      agentId: params.agentId,
+      purpose: params.purpose,
+      cacheKey:
+        params.purpose !== "status" ? buildVegaCacheKey(params.agentId, vegaConfig) : undefined,
+      backendLabel: "vega",
+      createPrimary: async () => {
+        const { VegaMemoryManager } = await import("./vega-manager.js");
+        const workspaceDir = resolveAgentWorkspaceDir(params.cfg, params.agentId);
+        return await VegaMemoryManager.create({
+          cfg: { workspaceDir },
+          agentId: params.agentId,
+          resolved: vegaConfig,
+        });
+      },
+      fallbackParams: params,
+    });
+    if (result) {
+      return result;
     }
   }
 
   if (resolved.backend === "qmd" && resolved.qmd) {
     const statusOnly = params.purpose === "status";
-    let cacheKey: string | undefined;
-    if (!statusOnly) {
-      cacheKey = buildQmdCacheKey(params.agentId, resolved.qmd);
-      const cached = QMD_MANAGER_CACHE.get(cacheKey);
-      if (cached) {
-        return { manager: cached };
-      }
-    }
-    try {
-      const { QmdMemoryManager } = await import("./qmd-manager.js");
-      const primary = await QmdMemoryManager.create({
-        cfg: params.cfg,
-        agentId: params.agentId,
-        resolved,
-        mode: statusOnly ? "status" : "full",
-      });
-      if (primary) {
-        if (statusOnly) {
-          return { manager: primary };
-        }
-        const wrapper = new FallbackMemoryManager(
-          {
-            primary,
-            fallbackFactory: async () => {
-              const { MemoryIndexManager } = await loadManagerRuntime();
-              return await MemoryIndexManager.get(params);
-            },
-          },
-          () => {
-            if (cacheKey) {
-              QMD_MANAGER_CACHE.delete(cacheKey);
-            }
-          },
-        );
-        if (cacheKey) {
-          QMD_MANAGER_CACHE.set(cacheKey, wrapper);
-        }
-        return { manager: wrapper };
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      log.warn(`qmd memory unavailable; falling back to builtin: ${message}`);
+    const result = await tryCreateBackendManager({
+      cfg: params.cfg,
+      agentId: params.agentId,
+      purpose: params.purpose,
+      cacheKey: !statusOnly ? buildQmdCacheKey(params.agentId, resolved.qmd) : undefined,
+      backendLabel: "qmd",
+      createPrimary: async () => {
+        const { QmdMemoryManager } = await import("./qmd-manager.js");
+        return await QmdMemoryManager.create({
+          cfg: params.cfg,
+          agentId: params.agentId,
+          resolved,
+          mode: statusOnly ? "status" : "full",
+        });
+      },
+      fallbackParams: params,
+    });
+    if (result) {
+      return result;
     }
   }
 

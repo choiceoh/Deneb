@@ -10,7 +10,6 @@ import {
   resolveSubagentSessionStatus,
 } from "../../agents/subagent/subagent-registry.js";
 import type { DenebConfig } from "../../config/config.js";
-import { resolveStateDir } from "../../config/paths.js";
 import {
   buildGroupDisplayName,
   resolveFreshSessionTotalTokens,
@@ -33,6 +32,7 @@ import {
   resolveAvatarMime,
 } from "../../shared/avatar-policy.js";
 import { normalizeSessionDeliveryFields } from "../../utils/delivery-context.js";
+import { listConfiguredAgentIds } from "../agent-list.js";
 import { readSessionTitleFieldsFromTranscript } from "./session-utils.fs.js";
 
 // Re-export from sub-modules for backward compatibility.
@@ -231,41 +231,7 @@ function resolveChildSessionKeys(
   return childSessions.length > 0 ? childSessions : undefined;
 }
 
-function listExistingAgentIdsFromDisk(): string[] {
-  const root = resolveStateDir();
-  const agentsDir = path.join(root, "agents");
-  try {
-    const entries = fs.readdirSync(agentsDir, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => normalizeAgentId(entry.name))
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-function listConfiguredAgentIds(cfg: DenebConfig): string[] {
-  const ids = new Set<string>();
-  const defaultId = normalizeAgentId(resolveDefaultAgentId(cfg));
-  ids.add(defaultId);
-
-  for (const entry of cfg.agents?.list ?? []) {
-    if (entry?.id) {
-      ids.add(normalizeAgentId(entry.id));
-    }
-  }
-
-  for (const id of listExistingAgentIdsFromDisk()) {
-    ids.add(id);
-  }
-
-  const sorted = Array.from(ids).filter(Boolean);
-  sorted.sort((a, b) => a.localeCompare(b));
-  return sorted.includes(defaultId)
-    ? [defaultId, ...sorted.filter((id) => id !== defaultId)]
-    : sorted;
-}
+// listExistingAgentIdsFromDisk and listConfiguredAgentIds live in ../agent-list.ts
 
 export function listAgentsForGateway(cfg: DenebConfig): {
   defaultId: string;
