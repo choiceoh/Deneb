@@ -152,7 +152,7 @@ function setCachedPluginRegistry(cacheKey: string, registry: PluginRegistry): vo
     registryCache.delete(cacheKey);
   }
   registryCache.set(cacheKey, registry);
-  while (registryCache.size > MAX_PLUGIN_REGISTRY_CACHE_ENTRIES) {
+  while (registryCache.size > __testing.maxPluginRegistryCacheEntries) {
     const oldestKey = registryCache.keys().next().value;
     if (!oldestKey) {
       break;

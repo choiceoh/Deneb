@@ -1451,6 +1451,9 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
       filename: "cache-eviction.cjs",
       body: `module.exports = { id: "cache-eviction", register() {} };`,
     });
+    // Temporarily lower the cache cap so eviction triggers with fewer loads.
+    const originalCap = __testing.maxPluginRegistryCacheEntries;
+    __testing.maxPluginRegistryCacheEntries = 4;
     const stateDirs = Array.from({ length: __testing.maxPluginRegistryCacheEntries + 1 }, () =>
       makeTempDir(),
     );
@@ -1483,6 +1486,7 @@ module.exports = { id: "skipped-scoped-only", register() { throw new Error("skip
 
     expect(loadWithStateDir(stateDirs[0] ?? makeTempDir())).toBe(first);
     expect(loadWithStateDir(stateDirs[1] ?? makeTempDir())).not.toBe(second);
+    __testing.maxPluginRegistryCacheEntries = originalCap;
   });
 
   it("normalizes bundled plugin env overrides against the provided env", () => {

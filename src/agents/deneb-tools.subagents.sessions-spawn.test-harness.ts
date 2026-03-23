@@ -52,11 +52,16 @@ export function setSessionsSpawnConfigOverride(next: SessionsSpawnTestConfig): v
   hoisted.state.configOverride = next;
 }
 
+let cachedCreateSessionsSpawnTool: CreateSessionsSpawnTool | undefined;
+
 export async function getSessionsSpawnTool(opts: CreateDenebToolsOpts) {
-  // Dynamic import: ensure harness mocks are installed before tool modules load.
-  vi.resetModules();
-  const { createSessionsSpawnTool } = await import("./tools/sessions-spawn-tool.js");
-  return createSessionsSpawnTool(opts);
+  // Reset modules only once per test file to install harness mocks, then cache the import.
+  if (!cachedCreateSessionsSpawnTool) {
+    vi.resetModules();
+    cachedCreateSessionsSpawnTool = (await import("./tools/sessions-spawn-tool.js"))
+      .createSessionsSpawnTool;
+  }
+  return cachedCreateSessionsSpawnTool(opts);
 }
 
 export function setupSessionsSpawnGatewayMock(setupOpts: SessionsSpawnGatewayMockOptions): {
