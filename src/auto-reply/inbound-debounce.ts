@@ -72,6 +72,20 @@ export function createInboundDebouncer<T>(params: InboundDebounceCreateParams<T>
     try {
       await params.onFlush(buffer.items);
     } catch (err) {
+      // Re-enqueue items so they are not silently lost when onFlush fails.
+      // A new buffer is created only if no concurrent enqueue recreated one.
+      const existing = buffers.get(key);
+      if (existing) {
+        existing.items.unshift(...buffer.items);
+      } else {
+        const retry: DebounceBuffer<T> = {
+          items: buffer.items,
+          timeout: null,
+          debounceMs: buffer.debounceMs,
+        };
+        buffers.set(key, retry);
+        scheduleFlush(key, retry);
+      }
       params.onError?.(err, buffer.items);
     }
   };

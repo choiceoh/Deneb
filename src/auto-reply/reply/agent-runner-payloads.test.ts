@@ -163,27 +163,31 @@ describe("buildReplyPayloads media filter integration", () => {
     await expectSameTargetRepliesSuppressed({ provider: "lark", to: "ou_abc123" });
   });
 
-  it("drops all final payloads when block pipeline streamed successfully", async () => {
+  it("drops only sent payloads when block pipeline streamed successfully", async () => {
     const pipeline: Parameters<typeof buildReplyPayloads>[0]["blockReplyPipeline"] = {
       didStream: () => true,
       isAborted: () => false,
-      hasSentPayload: () => false,
+      // Only the first payload was streamed by the pipeline.
+      hasSentPayload: (p) => p.text === "streamed",
       enqueue: () => {},
       flush: async () => {},
       stop: () => {},
       hasBuffered: () => false,
     };
-    // shouldDropFinalPayloads short-circuits to [] when the pipeline streamed
-    // without aborting, so hasSentPayload is never reached.
     const { replyPayloads } = await buildReplyPayloads({
       ...baseParams,
       blockStreamingEnabled: true,
       blockReplyPipeline: pipeline,
       replyToMode: "all",
-      payloads: [{ text: "response", replyToId: "post-123" }],
+      payloads: [
+        { text: "streamed", replyToId: "post-1" },
+        { text: "not-streamed", replyToId: "post-2" },
+      ],
     });
 
-    expect(replyPayloads).toHaveLength(0);
+    // Only the un-streamed payload survives.
+    expect(replyPayloads).toHaveLength(1);
+    expect(replyPayloads[0].text).toBe("not-streamed");
   });
 
   it("deduplicates final payloads against directly sent block keys regardless of replyToId", async () => {
