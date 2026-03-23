@@ -178,7 +178,12 @@ function mapContainerWorkspacePath(params: {
   if (!rel) {
     return path.resolve(params.sandboxRoot);
   }
-  return path.resolve(params.sandboxRoot, ...rel.split("/").filter(Boolean));
+  const segments = rel.split("/").filter(Boolean);
+  // Reject ".." segments to prevent path traversal before downstream guards.
+  if (segments.some((s) => s === "..")) {
+    return undefined;
+  }
+  return path.resolve(params.sandboxRoot, ...segments);
 }
 
 async function resolveAllowedTmpMediaPath(params: {

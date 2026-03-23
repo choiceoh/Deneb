@@ -199,9 +199,15 @@ async function runPinnedWriteFallback(params: {
   mode: number;
   input: PinnedWriteInput;
 }): Promise<FileIdentityStat> {
-  const parentPath = params.relativeParentPath
-    ? path.join(params.rootPath, ...params.relativeParentPath.split("/"))
-    : params.rootPath;
+  const parentSegments = params.relativeParentPath
+    ? params.relativeParentPath.split("/").filter((s) => s && s !== ".")
+    : [];
+  // Block ".." traversal to match the pinned Python helper's safety check.
+  if (parentSegments.some((s) => s === "..")) {
+    throw new Error("path traversal is not allowed in relativeParentPath");
+  }
+  const parentPath =
+    parentSegments.length > 0 ? path.join(params.rootPath, ...parentSegments) : params.rootPath;
   if (params.mkdir) {
     await fs.mkdir(parentPath, { recursive: true });
   }
