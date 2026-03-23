@@ -16,7 +16,7 @@ import {
   textToSpeech,
 } from "../../tts/tts.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
-import { formatForLog } from "../ws-log.js";
+import { formatForLog } from "../ws/ws-log.js";
 import type { GatewayRequestHandlers } from "./types.js";
 
 export const ttsHandlers: GatewayRequestHandlers = {

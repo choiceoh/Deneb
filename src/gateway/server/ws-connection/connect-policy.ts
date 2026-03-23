@@ -1,5 +1,5 @@
+import type { GatewayRole } from "../../auth/role-policy.js";
 import type { ConnectParams } from "../../protocol/index.js";
-import type { GatewayRole } from "../../role-policy.js";
 
 export type ControlUiAuthPolicy = {
   isControlUi: boolean;

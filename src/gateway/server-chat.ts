@@ -9,9 +9,9 @@ import { classifyChatErrorKind } from "./chat-error-kind.js";
 import {
   deriveGatewaySessionLifecycleSnapshot,
   persistGatewaySessionLifecycleEvent,
-} from "./session-lifecycle-state.js";
-import { loadGatewaySessionRow, loadSessionEntry } from "./session-utils.js";
-import { formatForLog } from "./ws-log.js";
+} from "./session/session-lifecycle-state.js";
+import { loadGatewaySessionRow, loadSessionEntry } from "./session/session-utils.js";
+import { formatForLog } from "./ws/ws-log.js";
 
 function resolveHeartbeatAckMaxChars(): number {
   try {

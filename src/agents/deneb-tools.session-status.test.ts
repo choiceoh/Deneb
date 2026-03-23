@@ -43,8 +43,8 @@ vi.mock("../gateway/call.js", () => ({
   callGateway: (opts: unknown) => callGatewayMock(opts),
 }));
 
-vi.mock("../gateway/session-utils.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../gateway/session-utils.js")>();
+vi.mock("../gateway/session/session-utils.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../gateway/session/session-utils.js")>();
   return {
     ...actual,
     loadCombinedSessionStoreForGateway: (cfg: unknown) =>

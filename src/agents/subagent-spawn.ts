@@ -8,7 +8,7 @@ import { callGateway } from "../gateway/call.js";
 import {
   pruneLegacyStoreKeys,
   resolveGatewaySessionStoreTarget,
-} from "../gateway/session-utils.js";
+} from "../gateway/session/session-utils.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import {
   isValidAgentId,

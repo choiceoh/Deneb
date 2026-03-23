@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AuthRateLimiter } from "../../auth-rate-limit.js";
+import type { AuthRateLimiter } from "../../auth/auth-rate-limit.js";
 import { GATEWAY_CLIENT_IDS, GATEWAY_CLIENT_MODES } from "../../protocol/client-info.js";
 import type { ConnectParams } from "../../protocol/index.js";
 import {

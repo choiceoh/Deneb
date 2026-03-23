@@ -1,6 +1,6 @@
 import type { ErrorObject } from "ajv";
 import { ErrorCodes, errorShape, formatValidationErrors } from "../protocol/index.js";
-import { formatForLog } from "../ws-log.js";
+import { formatForLog } from "../ws/ws-log.js";
 import type { RespondFn } from "./types.js";
 
 type ValidatorFn = ((value: unknown) => boolean) & {

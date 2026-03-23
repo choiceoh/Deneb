@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { describe, expect, it, test, vi } from "vitest";
 import { defaultVoiceWakeTriggers } from "../infra/voicewake.js";
 import { GatewayClient } from "./client.js";
-import { handleControlUiHttpRequest } from "./control-ui.js";
+import { handleControlUiHttpRequest } from "./dashboard/control-ui.js";
 import { resolveNodeCommandAllowlist } from "./node-command-policy.js";
 import type { RequestFrame } from "./protocol/index.js";
 import { createGatewayBroadcaster } from "./server-broadcast.js";

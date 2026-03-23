@@ -75,7 +75,7 @@ vi.mock("../gateway/call.js", () => ({
   callGateway: mocks.callGateway,
 }));
 
-vi.mock("../gateway/probe.js", () => ({
+vi.mock("../gateway/monitoring/probe.js", () => ({
   probeGateway: mocks.probeGateway,
 }));
 

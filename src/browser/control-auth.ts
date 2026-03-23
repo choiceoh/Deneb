@@ -1,7 +1,7 @@
 import type { DenebConfig } from "../config/config.js";
 import { loadConfig } from "../config/config.js";
-import { resolveGatewayAuth } from "../gateway/auth.js";
-import { ensureGatewayStartupAuth } from "../gateway/startup-auth.js";
+import { resolveGatewayAuth } from "../gateway/auth/auth.js";
+import { ensureGatewayStartupAuth } from "../gateway/auth/startup-auth.js";
 
 export type BrowserControlAuth = {
   token?: string;

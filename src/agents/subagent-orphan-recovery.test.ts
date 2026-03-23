@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as sessions from "../config/sessions.js";
 import * as gateway from "../gateway/call.js";
-import * as sessionUtils from "../gateway/session-utils.fs.js";
+import * as sessionUtils from "../gateway/session/session-utils.fs.js";
 import { recoverOrphanedSubagentSessions } from "./subagent-orphan-recovery.js";
 import * as subagentRegistry from "./subagent-registry.js";
 import type { SubagentRunRecord } from "./subagent-registry.types.js";
@@ -24,7 +24,7 @@ vi.mock("../gateway/call.js", () => ({
   callGateway: vi.fn(async () => ({ runId: "test-run-id" })),
 }));
 
-vi.mock("../gateway/session-utils.fs.js", () => ({
+vi.mock("../gateway/session/session-utils.fs.js", () => ({
   readSessionMessages: vi.fn(() => []),
 }));
 

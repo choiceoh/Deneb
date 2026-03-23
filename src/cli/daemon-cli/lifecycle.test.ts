@@ -62,7 +62,7 @@ vi.mock("../../infra/gateway-processes.js", () => ({
   formatGatewayPidList: (pids: number[]) => formatGatewayPidList(pids),
 }));
 
-vi.mock("../../gateway/probe.js", () => ({
+vi.mock("../../gateway/monitoring/probe.js", () => ({
   probeGateway: (opts: {
     url: string;
     auth?: { token?: string; password?: string };

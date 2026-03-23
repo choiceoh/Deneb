@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { GatewayProbeResult } from "../gateway/probe.js";
+import type { GatewayProbeResult } from "../gateway/monitoring/probe.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { withEnvAsync } from "../test-utils/env.js";
 
@@ -137,7 +137,7 @@ vi.mock("../infra/ssh-config.js", () => ({
   resolveSshConfig,
 }));
 
-vi.mock("../gateway/probe.js", () => ({
+vi.mock("../gateway/monitoring/probe.js", () => ({
   probeGateway,
 }));
 

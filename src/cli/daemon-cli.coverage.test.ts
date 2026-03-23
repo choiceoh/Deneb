@@ -39,7 +39,7 @@ vi.mock("../gateway/call.js", () => ({
   callGateway: (opts: unknown) => callGateway(opts),
 }));
 
-vi.mock("../gateway/probe-auth.js", () => ({
+vi.mock("../gateway/auth/probe-auth.js", () => ({
   resolveGatewayProbeAuthWithSecretInputs: (opts: unknown) =>
     resolveGatewayProbeAuthWithSecretInputs(opts),
 }));

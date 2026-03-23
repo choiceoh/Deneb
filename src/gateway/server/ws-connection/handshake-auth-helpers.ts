@@ -1,6 +1,6 @@
 import { verifyDeviceSignature } from "../../../infra/device-identity.js";
-import type { AuthRateLimiter } from "../../auth-rate-limit.js";
-import type { GatewayAuthResult } from "../../auth.js";
+import type { AuthRateLimiter } from "../../auth/auth-rate-limit.js";
+import type { GatewayAuthResult } from "../../auth/auth.js";
 // Device auth payload stubs (device auth removed for solo-dev simplification).
 function buildDeviceAuthPayload(_params: Record<string, unknown>): string {
   return "";

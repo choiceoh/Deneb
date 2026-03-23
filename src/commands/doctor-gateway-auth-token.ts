@@ -1,5 +1,5 @@
 import type { DenebConfig } from "../config/config.js";
-import { readGatewayTokenEnv } from "../gateway/credentials.js";
+import { readGatewayTokenEnv } from "../gateway/auth/credentials.js";
 import { resolveConfiguredSecretInputWithFallback } from "../gateway/resolve-configured-secret-input-string.js";
 
 export async function resolveGatewayAuthTokenForService(

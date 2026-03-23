@@ -1,5 +1,5 @@
 import type { DenebConfig } from "../config/config.js";
-import { createGatewayCredentialPlan } from "../gateway/credential-planner.js";
+import { createGatewayCredentialPlan } from "../gateway/auth/credential-planner.js";
 import type { SecretDefaults } from "./runtime-shared.js";
 import { isRecord } from "./shared.js";
 

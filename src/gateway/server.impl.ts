@@ -49,16 +49,20 @@ import {
   resolveCommandSecretsFromActiveRuntimeSnapshot,
 } from "../secrets/runtime.js";
 import { runSetupWizard } from "../wizard/setup.js";
-import { startChannelHealthMonitor } from "./channel-health-monitor.js";
+import { maybeSeedControlUiAllowedOriginsAtStartup } from "./auth/startup-control-ui-origins.js";
 import { startGatewayConfigReloader } from "./config-reload.js";
-import type { ControlUiRootState } from "./control-ui.js";
+import type { ControlUiRootState } from "./dashboard/control-ui.js";
 import {
   GATEWAY_EVENT_UPDATE_AVAILABLE,
   type GatewayUpdateAvailableEventPayload,
 } from "./events.js";
 import { ExecApprovalManager } from "./exec-approval-manager.js";
-import { startGatewaySelfWatchdog, type GatewaySelfWatchdog } from "./gateway-self-watchdog.js";
 import { startGatewayModelPricingRefresh } from "./model-pricing-cache.js";
+import { startChannelHealthMonitor } from "./monitoring/channel-health-monitor.js";
+import {
+  startGatewaySelfWatchdog,
+  type GatewaySelfWatchdog,
+} from "./monitoring/gateway-self-watchdog.js";
 import { NodeRegistry } from "./node-registry.js";
 import {
   type AutoMaintenanceServiceHandle,
@@ -98,7 +102,6 @@ import { logGatewayStartup } from "./server-startup-log.js";
 import { startGatewaySidecars } from "./server-startup.js";
 import { startGatewayTailscaleExposure } from "./server-tailscale.js";
 import { createWizardSessionTracker } from "./server-wizard-sessions.js";
-import { attachGatewayWsHandlers } from "./server-ws-runtime.js";
 import {
   getHealthCache,
   getHealthVersion,
@@ -109,7 +112,7 @@ import {
 import { resolveHookClientIpConfig } from "./server/hooks.js";
 import { createReadinessChecker } from "./server/readiness.js";
 import { loadGatewayTlsRuntime } from "./server/tls.js";
-import { maybeSeedControlUiAllowedOriginsAtStartup } from "./startup-control-ui-origins.js";
+import { attachGatewayWsHandlers } from "./ws/server-ws-runtime.js";
 
 // Deferred imports: these modules are only needed for non-minimal gateway startup.
 // Lazy-loading them avoids pulling in tailscale, skills,

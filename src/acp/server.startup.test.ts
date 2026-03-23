@@ -65,7 +65,7 @@ vi.mock("../config/config.js", () => ({
   }),
 }));
 
-vi.mock("../gateway/auth.js", () => ({
+vi.mock("../gateway/auth/auth.js", () => ({
   resolveGatewayAuth: () => ({}),
 }));
 
@@ -84,7 +84,7 @@ vi.mock("../gateway/call.js", () => ({
   },
 }));
 
-vi.mock("../gateway/connection-auth.js", () => ({
+vi.mock("../gateway/auth/connection-auth.js", () => ({
   resolveGatewayConnectionAuth: (params: unknown) => mockState.resolveGatewayConnectionAuth(params),
 }));
 

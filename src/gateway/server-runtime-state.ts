@@ -11,11 +11,16 @@ import {
   resolveActivePluginHttpRouteRegistry,
 } from "../plugins/runtime.js";
 import type { RuntimeEnv } from "../runtime.js";
-import type { AuthRateLimiter } from "./auth-rate-limit.js";
-import type { ResolvedGatewayAuth } from "./auth.js";
+import type { AuthRateLimiter } from "./auth/auth-rate-limit.js";
+import type { ResolvedGatewayAuth } from "./auth/auth.js";
 import type { ChatAbortControllerEntry } from "./chat-abort.js";
-import type { ControlUiRootState } from "./control-ui.js";
+import type { ControlUiRootState } from "./dashboard/control-ui.js";
 import type { HooksConfigResolved } from "./hooks.js";
+import {
+  attachGatewayUpgradeHandler,
+  createGatewayHttpServer,
+  type HookClientIpConfig,
+} from "./http/server-http.js";
 import { isLoopbackHost, resolveGatewayListenHosts } from "./net.js";
 import {
   createGatewayBroadcaster,
@@ -28,11 +33,6 @@ import {
   createToolEventRecipientRegistry,
 } from "./server-chat.js";
 import { MAX_PREAUTH_PAYLOAD_BYTES } from "./server-constants.js";
-import {
-  attachGatewayUpgradeHandler,
-  createGatewayHttpServer,
-  type HookClientIpConfig,
-} from "./server-http.js";
 import type { DedupeEntry } from "./server-shared.js";
 import { createGatewayHooksRequestHandler } from "./server/hooks.js";
 import { listenGatewayHttpServer } from "./server/http-listen.js";

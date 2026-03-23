@@ -6,7 +6,7 @@ import { AcpRuntimeError } from "../acp/runtime/errors.js";
 import * as embeddedModule from "../agents/pi-embedded.js";
 import type { DenebConfig } from "../config/config.js";
 import * as configModule from "../config/config.js";
-import { readSessionMessages } from "../gateway/session-utils.fs.js";
+import { readSessionMessages } from "../gateway/session/session-utils.fs.js";
 import { onAgentEvent } from "../infra/agent-events.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { withTempHome as withTempHomeBase } from "../test-utils/temp-home.js";

@@ -1495,7 +1495,7 @@ describe("initSessionState preserves behavior overrides across /new and /reset",
       sessionId: existingSessionId,
       overrides: { verboseLevel: "on" },
     });
-    const sessionUtils = await import("../../gateway/session-utils.fs.js");
+    const sessionUtils = await import("../../gateway/session/session-utils.fs.js");
     const archiveSpy = vi.spyOn(sessionUtils, "archiveSessionTranscripts");
 
     const cfg = {
@@ -1549,7 +1549,7 @@ describe("initSessionState preserves behavior overrides across /new and /reset",
         },
       });
 
-      const sessionUtils = await import("../../gateway/session-utils.fs.js");
+      const sessionUtils = await import("../../gateway/session/session-utils.fs.js");
       const archiveSpy = vi.spyOn(sessionUtils, "archiveSessionTranscripts");
 
       const cfg = { session: { store: storePath } } as DenebConfig;

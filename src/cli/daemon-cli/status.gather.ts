@@ -12,9 +12,12 @@ import type { ServiceConfigAudit } from "../../daemon/service-audit.js";
 import { auditGatewayServiceConfig } from "../../daemon/service-audit.js";
 import type { GatewayServiceRuntime } from "../../daemon/service-runtime.js";
 import { resolveGatewayService } from "../../daemon/service.js";
-import { isGatewaySecretRefUnavailableError, trimToUndefined } from "../../gateway/credentials.js";
+import {
+  isGatewaySecretRefUnavailableError,
+  trimToUndefined,
+} from "../../gateway/auth/credentials.js";
+import { resolveGatewayProbeAuthWithSecretInputs } from "../../gateway/auth/probe-auth.js";
 import { resolveGatewayBindHost } from "../../gateway/net.js";
-import { resolveGatewayProbeAuthWithSecretInputs } from "../../gateway/probe-auth.js";
 import { parseStrictPositiveInteger } from "../../infra/parse-finite-number.js";
 import {
   formatPortDiagnostics,

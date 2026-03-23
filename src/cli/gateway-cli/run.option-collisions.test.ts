@@ -33,7 +33,7 @@ vi.mock("../../config/config.js", () => ({
   resolveGatewayPort: () => 18789,
 }));
 
-vi.mock("../../gateway/auth.js", () => ({
+vi.mock("../../gateway/auth/auth.js", () => ({
   resolveGatewayAuth: (params: {
     authConfig?: { mode?: string; token?: unknown; password?: unknown };
     authOverride?: { mode?: string; token?: unknown; password?: unknown };
@@ -63,7 +63,7 @@ vi.mock("../../gateway/server.js", () => ({
   startGatewayServer: (port: number, opts?: unknown) => startGatewayServer(port, opts),
 }));
 
-vi.mock("../../gateway/ws-logging.js", () => ({
+vi.mock("../../gateway/ws/ws-logging.js", () => ({
   setGatewayWsLogStyle: (style: string) => setGatewayWsLogStyle(style),
 }));
 

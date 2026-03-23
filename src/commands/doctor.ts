@@ -14,7 +14,7 @@ import { CONFIG_PATH, readConfigFileSnapshot, writeConfigFile } from "../config/
 import { logConfigUpdated } from "../config/logging.js";
 import { resolveSecretInputRef } from "../config/types.secrets.js";
 import { resolveGatewayService } from "../daemon/service.js";
-import { resolveGatewayAuth } from "../gateway/auth.js";
+import { resolveGatewayAuth } from "../gateway/auth/auth.js";
 import { buildGatewayConnectionDetails } from "../gateway/call.js";
 import { resolveDenebPackageRoot } from "../infra/deneb-root.js";
 import type { RuntimeEnv } from "../runtime.js";

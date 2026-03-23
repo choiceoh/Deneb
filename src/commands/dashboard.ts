@@ -1,6 +1,6 @@
 import { readConfigFileSnapshot, resolveGatewayPort } from "../config/config.js";
 import type { DenebConfig } from "../config/types.js";
-import { readGatewayTokenEnv } from "../gateway/credentials.js";
+import { readGatewayTokenEnv } from "../gateway/auth/credentials.js";
 import { resolveConfiguredSecretInputWithFallback } from "../gateway/resolve-configured-secret-input-string.js";
 import { copyToClipboard } from "../infra/clipboard.js";
 import type { RuntimeEnv } from "../runtime.js";

@@ -1,5 +1,5 @@
 import type { DenebConfig } from "../../config/config.js";
-import { resolveGatewayDriftCheckCredentialsFromConfig } from "../../gateway/credentials.js";
+import { resolveGatewayDriftCheckCredentialsFromConfig } from "../../gateway/auth/credentials.js";
 
 export function resolveGatewayTokenForDriftCheck(params: {
   cfg: DenebConfig;

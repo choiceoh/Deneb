@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import type { DenebConfig } from "../config/types.js";
 import { buildGatewayConnectionDetails } from "../gateway/call.js";
-import { normalizeControlUiBasePath } from "../gateway/control-ui-shared.js";
-import { probeGateway } from "../gateway/probe.js";
+import { normalizeControlUiBasePath } from "../gateway/dashboard/control-ui-shared.js";
+import { probeGateway } from "../gateway/monitoring/probe.js";
 import type { MemoryProviderStatus } from "../memory/types.js";
 import {
   pickGatewaySelfPresence,

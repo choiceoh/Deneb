@@ -23,12 +23,12 @@ import {
   buildAgentMessageFromConversationEntries,
   type ConversationEntry,
 } from "./agent-prompt.js";
-import type { AuthRateLimiter } from "./auth-rate-limit.js";
-import type { ResolvedGatewayAuth } from "./auth.js";
-import { sendJson, setSseHeaders, writeDone } from "./http-common.js";
-import { handleGatewayPostJsonEndpoint } from "./http-endpoint-helpers.js";
-import { resolveGatewayRequestContext } from "./http-utils.js";
-import { normalizeInputHostnameAllowlist } from "./input-allowlist.js";
+import type { AuthRateLimiter } from "./auth/auth-rate-limit.js";
+import type { ResolvedGatewayAuth } from "./auth/auth.js";
+import { normalizeInputHostnameAllowlist } from "./auth/input-allowlist.js";
+import { sendJson, setSseHeaders, writeDone } from "./http/http-common.js";
+import { handleGatewayPostJsonEndpoint } from "./http/http-endpoint-helpers.js";
+import { resolveGatewayRequestContext } from "./http/http-utils.js";
 
 type OpenAiHttpOptions = {
   auth: ResolvedGatewayAuth;

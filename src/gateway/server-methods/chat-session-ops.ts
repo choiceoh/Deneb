@@ -12,7 +12,7 @@ import {
 import { classifyChatErrorKind } from "../chat-error-kind.js";
 import { stripEnvelopeFromMessage } from "../chat-sanitize.js";
 import { ADMIN_SCOPE } from "../method-scopes.js";
-import { loadSessionEntry } from "../session-utils.js";
+import { loadSessionEntry } from "../session/session-utils.js";
 import { appendInjectedAssistantMessageToTranscript } from "./chat-transcript-inject.js";
 import type { GatewayRequestContext, GatewayRequestHandlerOptions } from "./types.js";
 

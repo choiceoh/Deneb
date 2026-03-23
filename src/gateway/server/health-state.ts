@@ -5,7 +5,7 @@ import { resolveMainSessionKey } from "../../config/sessions.js";
 import { listSystemPresence } from "../../infra/system-presence.js";
 import { getUpdateAvailable } from "../../infra/update-startup.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
-import { resolveGatewayAuth } from "../auth.js";
+import { resolveGatewayAuth } from "../auth/auth.js";
 import type { Snapshot } from "../protocol/index.js";
 
 let presenceVersion = 1;

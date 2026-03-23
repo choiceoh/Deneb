@@ -1,5 +1,5 @@
 import type { PluginRegistry } from "../../../plugins/registry.js";
-import { canonicalizePathVariant } from "../../security-path.js";
+import { canonicalizePathVariant } from "../../auth/security-path.js";
 import {
   prefixMatchPath,
   resolvePluginRoutePathContext,

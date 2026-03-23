@@ -16,7 +16,6 @@ import {
   type GatewayClientName,
 } from "../utils/message-channel.js";
 import { VERSION } from "../version.js";
-import { GatewayClient } from "./client.js";
 import {
   GatewaySecretRefUnavailableError,
   resolveGatewayCredentialsFromConfig,
@@ -25,7 +24,8 @@ import {
   type GatewayCredentialPrecedence,
   type GatewayRemoteCredentialFallback,
   type GatewayRemoteCredentialPrecedence,
-} from "./credentials.js";
+} from "./auth/credentials.js";
+import { GatewayClient } from "./client.js";
 import { CLI_DEFAULT_OPERATOR_SCOPES, type OperatorScope } from "./method-scopes.js";
 import { isSecureWebSocketUrl } from "./net.js";
 import { PROTOCOL_VERSION } from "./protocol/index.js";
