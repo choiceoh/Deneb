@@ -94,3 +94,36 @@ export function formatUncaughtError(err: unknown): string {
   }
   return formatErrorMessage(err);
 }
+
+/**
+ * Error의 cause 체인을 "원인 → 원인의 원인 → ..." 형태로 포맷.
+ * 에러 발생 원인의 원인까지 한눈에 파악할 수 있도록.
+ */
+export function formatErrorCauseChain(err: unknown, maxDepth = 10): string | undefined {
+  if (!err || !(err instanceof Error) || !err.cause) {
+    return undefined;
+  }
+  const causes: string[] = [];
+  let current: unknown = err.cause;
+  let depth = 0;
+  while (current && depth < maxDepth) {
+    depth++;
+    if (current instanceof Error) {
+      const code = extractErrorCode(current);
+      const prefix = code ? `[${code}] ` : "";
+      causes.push(`${prefix}${current.message}`);
+      current = current.cause;
+    } else if (typeof current === "string") {
+      causes.push(current);
+      break;
+    } else {
+      try {
+        causes.push(JSON.stringify(current));
+      } catch {
+        causes.push(Object.prototype.toString.call(current));
+      }
+      break;
+    }
+  }
+  return causes.length > 0 ? causes.join(" ← ") : undefined;
+}

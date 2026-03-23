@@ -86,7 +86,7 @@ function requireSessionKey(key: unknown, respond: RespondFn): string | null {
           : "";
   const normalized = raw.trim();
   if (!normalized) {
-    respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "key required"));
+    respond(false, undefined, errorShape(ErrorCodes.MISSING_PARAM, "key required"));
     return null;
   }
   return normalized;
@@ -187,7 +187,7 @@ function rejectWebchatSessionMutation(params: {
     false,
     undefined,
     errorShape(
-      ErrorCodes.INVALID_REQUEST,
+      ErrorCodes.FORBIDDEN,
       `webchat clients cannot ${params.action} sessions; use chat.send for session-scoped updates`,
     ),
   );
@@ -323,7 +323,8 @@ async function interruptSessionRunIfActive(params: {
       return {
         interrupted: true,
         error:
-          abortError ?? errorShape(ErrorCodes.UNAVAILABLE, "failed to interrupt active session"),
+          abortError ??
+          errorShape(ErrorCodes.DEPENDENCY_FAILED, "failed to interrupt active session"),
       };
     }
   }
@@ -340,7 +341,7 @@ async function interruptSessionRunIfActive(params: {
       return {
         interrupted: true,
         error: errorShape(
-          ErrorCodes.UNAVAILABLE,
+          ErrorCodes.CONFLICT,
           `Session ${params.requestedKey} is still active; try again in a moment.`,
         ),
       };
@@ -372,11 +373,7 @@ async function handleSessionSend(params: {
   }
   const { entry, canonicalKey, storePath } = loadSessionEntry(key);
   if (!entry?.sessionId) {
-    params.respond(
-      false,
-      undefined,
-      errorShape(ErrorCodes.INVALID_REQUEST, `session not found: ${key}`),
-    );
+    params.respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `session not found: ${key}`));
     return;
   }
 
@@ -644,7 +641,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
           false,
           undefined,
           errorShape(
-            ErrorCodes.INVALID_REQUEST,
+            ErrorCodes.CONFLICT,
             `sessions.create key agent (${requestedAgentId}) does not match agentId (${agentId})`,
           ),
         );
@@ -662,7 +659,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `unknown parent session: ${parentSessionKey}`),
+          errorShape(ErrorCodes.NOT_FOUND, `unknown parent session: ${parentSessionKey}`),
         );
         return;
       }
@@ -713,7 +710,10 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, `failed to create session transcript: ${ensured.error}`),
+        errorShape(
+          ErrorCodes.DEPENDENCY_FAILED,
+          `failed to create session transcript: ${ensured.error}`,
+        ),
       );
       return;
     }
@@ -956,7 +956,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `Cannot delete the main session (${mainKey}).`),
+        errorShape(ErrorCodes.FORBIDDEN, `Cannot delete the main session (${mainKey}).`),
       );
       return;
     }

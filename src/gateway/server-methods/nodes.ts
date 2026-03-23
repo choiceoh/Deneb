@@ -323,7 +323,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
     await respondUnavailableOnThrow(respond, async () => {
       const approved = await approveNodePairing(requestId);
       if (!approved) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown requestId"));
+        respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, "unknown requestId"));
         return;
       }
       context.broadcast(
@@ -352,7 +352,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
     await respondUnavailableOnThrow(respond, async () => {
       const rejected = await rejectNodePairing(requestId);
       if (!rejected) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown requestId"));
+        respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, "unknown requestId"));
         return;
       }
       context.broadcast(
@@ -402,7 +402,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
     await respondUnavailableOnThrow(respond, async () => {
       const trimmed = displayName.trim();
       if (!trimmed) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "displayName required"));
+        respond(false, undefined, errorShape(ErrorCodes.MISSING_PARAM, "displayName required"));
         return;
       }
       await renamePairedNode(nodeId, trimmed);
@@ -502,7 +502,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
     const { nodeId } = params as { nodeId: string };
     const id = String(nodeId ?? "").trim();
     if (!id) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "nodeId required"));
+      respond(false, undefined, errorShape(ErrorCodes.MISSING_PARAM, "nodeId required"));
       return;
     }
     await respondUnavailableOnThrow(respond, async () => {
@@ -512,7 +512,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
       const live = connected.find((n) => n.nodeId === id);
 
       if (!paired && !live) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown nodeId"));
+        respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, "unknown nodeId"));
         return;
       }
 
@@ -558,7 +558,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, "canvas host unavailable for this node session"),
+        errorShape(ErrorCodes.NODE_DISCONNECTED, "canvas host unavailable for this node session"),
       );
       return;
     }
@@ -570,7 +570,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, "failed to mint scoped canvas host URL"),
+        errorShape(ErrorCodes.NODE_DISCONNECTED, "failed to mint scoped canvas host URL"),
       );
       return;
     }
@@ -601,7 +601,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
     const nodeId = client?.connect?.device?.id ?? client?.connect?.client?.id;
     const trimmedNodeId = String(nodeId ?? "").trim();
     if (!trimmedNodeId) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "nodeId required"));
+      respond(false, undefined, errorShape(ErrorCodes.MISSING_PARAM, "nodeId required"));
       return;
     }
 
@@ -632,7 +632,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
     const nodeId = client?.connect?.device?.id ?? client?.connect?.client?.id;
     const trimmedNodeId = String(nodeId ?? "").trim();
     if (!trimmedNodeId) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "nodeId required"));
+      respond(false, undefined, errorShape(ErrorCodes.MISSING_PARAM, "nodeId required"));
       return;
     }
     const rawIds = Array.isArray(params.ids) ? params.ids : [];
@@ -676,7 +676,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "nodeId and command required"),
+        errorShape(ErrorCodes.MISSING_PARAM, "nodeId and command required"),
       );
       return;
     }
@@ -685,7 +685,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.FORBIDDEN,
           "node.invoke does not allow system.execApprovals.*; use exec.approvals.node.*",
           { details: { command } },
         ),
@@ -763,7 +763,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.UNAVAILABLE, "node not connected", {
+            errorShape(ErrorCodes.NODE_DISCONNECTED, "node not connected", {
               details: { code: "NOT_CONNECTED" },
             }),
           );
@@ -787,7 +787,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, hint, {
+          errorShape(ErrorCodes.VALIDATION_FAILED, hint, {
             details: { reason: allowed.reason, command },
           }),
         );
@@ -804,7 +804,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, forwardedParams.message, {
+          errorShape(ErrorCodes.VALIDATION_FAILED, forwardedParams.message, {
             details: forwardedParams.details ?? null,
           }),
         );
@@ -841,7 +841,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
             false,
             undefined,
             errorShape(
-              ErrorCodes.UNAVAILABLE,
+              ErrorCodes.NODE_DISCONNECTED,
               "node command queued until iOS returns to foreground",
               {
                 retryable: true,

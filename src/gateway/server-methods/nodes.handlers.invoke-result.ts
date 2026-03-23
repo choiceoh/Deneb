@@ -47,7 +47,7 @@ export const handleNodeInvokeResult: GatewayRequestHandler = async ({
   };
   const callerNodeId = client?.connect?.device?.id ?? client?.connect?.client?.id;
   if (callerNodeId && callerNodeId !== p.nodeId) {
-    respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "nodeId mismatch"));
+    respond(false, undefined, errorShape(ErrorCodes.CONFLICT, "nodeId mismatch"));
     return;
   }
 

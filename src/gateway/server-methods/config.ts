@@ -71,10 +71,7 @@ function requireConfigBaseHash(
     respond(
       false,
       undefined,
-      errorShape(
-        ErrorCodes.INVALID_REQUEST,
-        "config base hash unavailable; re-run config.get and retry",
-      ),
+      errorShape(ErrorCodes.CONFLICT, "config base hash unavailable; re-run config.get and retry"),
     );
     return false;
   }
@@ -83,10 +80,7 @@ function requireConfigBaseHash(
     respond(
       false,
       undefined,
-      errorShape(
-        ErrorCodes.INVALID_REQUEST,
-        "config base hash required; re-run config.get and retry",
-      ),
+      errorShape(ErrorCodes.MISSING_PARAM, "required; re-run config.get and retry"),
     );
     return false;
   }
@@ -95,7 +89,7 @@ function requireConfigBaseHash(
       false,
       undefined,
       errorShape(
-        ErrorCodes.INVALID_REQUEST,
+        ErrorCodes.CONFLICT,
         "config changed since last load; re-run config.get and retry",
       ),
     );
@@ -115,7 +109,7 @@ function parseRawConfigOrRespond(
       false,
       undefined,
       errorShape(
-        ErrorCodes.INVALID_REQUEST,
+        ErrorCodes.VALIDATION_FAILED,
         `invalid ${requestName} params: raw (string) required`,
       ),
     );
@@ -144,7 +138,7 @@ function parseValidateConfigFromRawOrRespond(
   }
   const parsedRes = parseConfigJson5(rawValue);
   if (!parsedRes.ok) {
-    respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, parsedRes.error));
+    respond(false, undefined, errorShape(ErrorCodes.VALIDATION_FAILED, parsedRes.error));
     return null;
   }
   const schema = loadSchemaWithPlugins();
@@ -153,7 +147,7 @@ function parseValidateConfigFromRawOrRespond(
     respond(
       false,
       undefined,
-      errorShape(ErrorCodes.INVALID_REQUEST, restored.humanReadableMessage ?? "invalid config"),
+      errorShape(ErrorCodes.VALIDATION_FAILED, restored.humanReadableMessage ?? "invalid config"),
     );
     return null;
   }
@@ -162,7 +156,7 @@ function parseValidateConfigFromRawOrRespond(
     respond(
       false,
       undefined,
-      errorShape(ErrorCodes.INVALID_REQUEST, summarizeConfigValidationIssues(validated.issues), {
+      errorShape(ErrorCodes.VALIDATION_FAILED, summarizeConfigValidationIssues(validated.issues), {
         details: { issues: validated.issues },
       }),
     );
@@ -305,11 +299,7 @@ export const configHandlers: GatewayRequestHandlers = {
     const schema = loadSchemaWithPlugins();
     const result = lookupConfigSchema(schema, path);
     if (!result) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "config schema path not found"),
-      );
+      respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, "config schema path not found"));
       return;
     }
     if (!validateConfigSchemaLookupResult(result)) {
@@ -320,7 +310,7 @@ export const configHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, "config.schema.lookup returned invalid payload", {
+        errorShape(ErrorCodes.DEPENDENCY_FAILED, "config.schema.lookup returned invalid payload", {
           details: { errors },
         }),
       );
@@ -363,7 +353,7 @@ export const configHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "invalid config; fix before patching"),
+        errorShape(ErrorCodes.VALIDATION_FAILED, "invalid config; fix before patching"),
       );
       return;
     }
@@ -373,7 +363,7 @@ export const configHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           "invalid config.patch params: raw (string) required",
         ),
       );
@@ -381,7 +371,7 @@ export const configHandlers: GatewayRequestHandlers = {
     }
     const parsedRes = parseConfigJson5(rawValue);
     if (!parsedRes.ok) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, parsedRes.error));
+      respond(false, undefined, errorShape(ErrorCodes.VALIDATION_FAILED, parsedRes.error));
       return;
     }
     if (
@@ -392,7 +382,7 @@ export const configHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "config.patch raw must be an object"),
+        errorShape(ErrorCodes.VALIDATION_FAILED, "config.patch raw must be an object"),
       );
       return;
     }
@@ -406,7 +396,7 @@ export const configHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           restoredMerge.humanReadableMessage ?? "invalid config",
         ),
       );
@@ -419,9 +409,13 @@ export const configHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, summarizeConfigValidationIssues(validated.issues), {
-          details: { issues: validated.issues },
-        }),
+        errorShape(
+          ErrorCodes.VALIDATION_FAILED,
+          summarizeConfigValidationIssues(validated.issues),
+          {
+            details: { issues: validated.issues },
+          },
+        ),
       );
       return;
     }

@@ -80,7 +80,7 @@ describe("secrets handlers", () => {
       false,
       undefined,
       expect.objectContaining({
-        code: "UNAVAILABLE",
+        code: "DEPENDENCY_FAILED",
         message: "Error: reload failed",
       }),
     );
@@ -125,7 +125,7 @@ describe("secrets handlers", () => {
       false,
       undefined,
       expect.objectContaining({
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
       }),
     );
   });
@@ -145,7 +145,7 @@ describe("secrets handlers", () => {
       false,
       undefined,
       expect.objectContaining({
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "invalid secrets.resolve params: targetIds",
       }),
     );
@@ -166,7 +166,7 @@ describe("secrets handlers", () => {
       false,
       undefined,
       expect.objectContaining({
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: 'invalid secrets.resolve params: unknown target id "unknown.target"',
       }),
     );
@@ -190,7 +190,7 @@ describe("secrets handlers", () => {
       false,
       undefined,
       expect.objectContaining({
-        code: "UNAVAILABLE",
+        code: "DEPENDENCY_FAILED",
       }),
     );
   });

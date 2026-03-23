@@ -54,7 +54,7 @@ describe("tools.catalog handler", () => {
     await invoke();
     const call = respond.mock.calls[0] as RespondCall | undefined;
     expect(call?.[0]).toBe(false);
-    expect(call?.[2]?.code).toBe(ErrorCodes.INVALID_REQUEST);
+    expect(call?.[2]?.code).toBe(ErrorCodes.NOT_FOUND);
     expect(call?.[2]?.message).toContain("invalid tools.catalog params");
   });
 
@@ -63,7 +63,7 @@ describe("tools.catalog handler", () => {
     await invoke();
     const call = respond.mock.calls[0] as RespondCall | undefined;
     expect(call?.[0]).toBe(false);
-    expect(call?.[2]?.code).toBe(ErrorCodes.INVALID_REQUEST);
+    expect(call?.[2]?.code).toBe(ErrorCodes.NOT_FOUND);
     expect(call?.[2]?.message).toContain("unknown agent id");
   });
 

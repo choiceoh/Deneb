@@ -9,7 +9,7 @@ export const autoMaintenanceHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, "auto-maintenance service not available"),
+        errorShape(ErrorCodes.FEATURE_DISABLED, "auto-maintenance service not available"),
       );
       return;
     }
@@ -27,7 +27,7 @@ export const autoMaintenanceHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, "auto-maintenance service not available"),
+        errorShape(ErrorCodes.FEATURE_DISABLED, "auto-maintenance service not available"),
       );
       return;
     }
@@ -51,7 +51,7 @@ export const autoMaintenanceHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, "auto-maintenance service not available"),
+        errorShape(ErrorCodes.FEATURE_DISABLED, "auto-maintenance service not available"),
       );
       return;
     }

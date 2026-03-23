@@ -46,7 +46,7 @@ function resolveAgentIdOrRespondError(rawAgentId: unknown, respond: RespondFn) {
     respond(
       false,
       undefined,
-      errorShape(ErrorCodes.INVALID_REQUEST, `unknown agent id "${requestedAgentId}"`),
+      errorShape(ErrorCodes.NOT_FOUND, `unknown agent id "${requestedAgentId}"`),
     );
     return null;
   }
@@ -130,7 +130,7 @@ export const toolsCatalogHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid tools.catalog params: ${formatValidationErrors(validateToolsCatalogParams.errors)}`,
         ),
       );

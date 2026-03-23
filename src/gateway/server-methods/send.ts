@@ -67,13 +67,13 @@ async function resolveRequestedChannel(params: {
     if (params.rejectWebchatAsInternalOnly && normalizedInput === "webchat") {
       return {
         error: errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.FORBIDDEN,
           "unsupported channel: webchat (internal-only). Use `chat.send` for WebChat UI messages or choose a deliverable channel.",
         ),
       };
     }
     return {
-      error: errorShape(ErrorCodes.INVALID_REQUEST, params.unsupportedMessage(channelInput)),
+      error: errorShape(ErrorCodes.VALIDATION_FAILED, params.unsupportedMessage(channelInput)),
     };
   }
   const cfg = loadConfig();
@@ -82,7 +82,7 @@ async function resolveRequestedChannel(params: {
     try {
       channel = (await resolveMessageChannelSelection({ cfg })).channel;
     } catch (err) {
-      return { error: errorShape(ErrorCodes.INVALID_REQUEST, String(err)) };
+      return { error: errorShape(ErrorCodes.VALIDATION_FAILED, String(err)) };
     }
   }
   return { cfg, channel };
@@ -96,7 +96,7 @@ export const sendHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid send params: ${formatValidationErrors(validateSendParams.errors)}`,
         ),
       );
@@ -147,7 +147,7 @@ export const sendHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "invalid send params: text or media is required"),
+        errorShape(ErrorCodes.MISSING_PARAM, "invalid send params: text or media is required"),
       );
       return;
     }
@@ -175,7 +175,7 @@ export const sendHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `unsupported channel: ${channel}`),
+        errorShape(ErrorCodes.VALIDATION_FAILED, `unsupported channel: ${channel}`),
       );
       return;
     }
@@ -192,7 +192,7 @@ export const sendHandlers: GatewayRequestHandlers = {
         if (!resolved.ok) {
           return {
             ok: false,
-            error: errorShape(ErrorCodes.INVALID_REQUEST, String(resolved.error)),
+            error: errorShape(ErrorCodes.VALIDATION_FAILED, String(resolved.error)),
             meta: { channel },
           };
         }
@@ -314,7 +314,7 @@ export const sendHandlers: GatewayRequestHandlers = {
           meta: { channel },
         };
       } catch (err) {
-        const error = errorShape(ErrorCodes.UNAVAILABLE, String(err));
+        const error = errorShape(ErrorCodes.DEPENDENCY_FAILED, String(err));
         context.dedupe.set(dedupeKey, {
           ts: Date.now(),
           ok: false,
@@ -339,7 +339,7 @@ export const sendHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid poll params: ${formatValidationErrors(validatePollParams.errors)}`,
         ),
       );
@@ -382,7 +382,7 @@ export const sendHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           "durationSeconds is only supported for Telegram polls",
         ),
       );
@@ -392,7 +392,10 @@ export const sendHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "isAnonymous is only supported for Telegram polls"),
+        errorShape(
+          ErrorCodes.VALIDATION_FAILED,
+          "isAnonymous is only supported for Telegram polls",
+        ),
       );
       return;
     }
@@ -418,7 +421,7 @@ export const sendHandlers: GatewayRequestHandlers = {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `unsupported poll channel: ${channel}`),
+          errorShape(ErrorCodes.VALIDATION_FAILED, `unsupported poll channel: ${channel}`),
         );
         return;
       }
@@ -430,7 +433,7 @@ export const sendHandlers: GatewayRequestHandlers = {
         mode: "explicit",
       });
       if (!resolved.ok) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, String(resolved.error)));
+        respond(false, undefined, errorShape(ErrorCodes.VALIDATION_FAILED, String(resolved.error)));
         return;
       }
       const normalized = outbound.pollMaxOptions
@@ -469,7 +472,7 @@ export const sendHandlers: GatewayRequestHandlers = {
       });
       respond(true, payload, undefined, { channel });
     } catch (err) {
-      const error = errorShape(ErrorCodes.UNAVAILABLE, String(err));
+      const error = errorShape(ErrorCodes.DEPENDENCY_FAILED, String(err));
       context.dedupe.set(`poll:${idem}`, {
         ts: Date.now(),
         ok: false,

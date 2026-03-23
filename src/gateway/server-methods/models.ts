@@ -16,7 +16,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid models.list params: ${formatValidationErrors(validateModelsListParams.errors)}`,
         ),
       );
@@ -33,7 +33,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
       const models = allowedCatalog.length > 0 ? allowedCatalog : catalog;
       respond(true, { models }, undefined);
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, String(err)));
     }
   },
 };

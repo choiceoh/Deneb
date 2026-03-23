@@ -25,7 +25,7 @@ export const talkHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid talk.config params: ${formatValidationErrors(validateTalkConfigParams.errors)}`,
         ),
       );
@@ -37,7 +37,7 @@ export const talkHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `missing scope: ${TALK_SECRETS_SCOPE}`),
+        errorShape(ErrorCodes.UNAUTHORIZED, `missing scope: ${TALK_SECRETS_SCOPE}`),
       );
       return;
     }
@@ -70,7 +70,7 @@ export const talkHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, "talk disabled: no connected iOS/Android nodes"),
+        errorShape(ErrorCodes.NODE_DISCONNECTED, "talk disabled: no connected iOS/Android nodes"),
       );
       return;
     }
@@ -79,7 +79,7 @@ export const talkHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid talk.mode params: ${formatValidationErrors(validateTalkModeParams.errors)}`,
         ),
       );

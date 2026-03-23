@@ -28,7 +28,7 @@ export const cronHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid wake params: ${formatValidationErrors(validateWakeParams.errors)}`,
         ),
       );
@@ -47,7 +47,7 @@ export const cronHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid cron.list params: ${formatValidationErrors(validateCronListParams.errors)}`,
         ),
       );
@@ -79,7 +79,7 @@ export const cronHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid cron.status params: ${formatValidationErrors(validateCronStatusParams.errors)}`,
         ),
       );
@@ -102,7 +102,7 @@ export const cronHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid cron.add params: ${formatValidationErrors(validateCronAddParams.errors)}`,
         ),
       );
@@ -114,7 +114,7 @@ export const cronHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, timestampValidation.message),
+        errorShape(ErrorCodes.VALIDATION_FAILED, timestampValidation.message),
       );
       return;
     }
@@ -133,7 +133,7 @@ export const cronHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid cron.update params: ${formatValidationErrors(validateCronUpdateParams.errors)}`,
         ),
       );
@@ -149,7 +149,7 @@ export const cronHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "invalid cron.update params: missing id"),
+        errorShape(ErrorCodes.VALIDATION_FAILED, "invalid cron.update params: missing id"),
       );
       return;
     }
@@ -160,7 +160,7 @@ export const cronHandlers: GatewayRequestHandlers = {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, timestampValidation.message),
+          errorShape(ErrorCodes.VALIDATION_FAILED, timestampValidation.message),
         );
         return;
       }
@@ -175,7 +175,7 @@ export const cronHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid cron.remove params: ${formatValidationErrors(validateCronRemoveParams.errors)}`,
         ),
       );
@@ -187,7 +187,7 @@ export const cronHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "invalid cron.remove params: missing id"),
+        errorShape(ErrorCodes.VALIDATION_FAILED, "invalid cron.remove params: missing id"),
       );
       return;
     }
@@ -203,7 +203,7 @@ export const cronHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid cron.run params: ${formatValidationErrors(validateCronRunParams.errors)}`,
         ),
       );
@@ -215,7 +215,7 @@ export const cronHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "invalid cron.run params: missing id"),
+        errorShape(ErrorCodes.VALIDATION_FAILED, "invalid cron.run params: missing id"),
       );
       return;
     }
@@ -228,7 +228,7 @@ export const cronHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid cron.runs params: ${formatValidationErrors(validateCronRunsParams.errors)}`,
         ),
       );
@@ -254,7 +254,7 @@ export const cronHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "invalid cron.runs params: missing id"),
+        errorShape(ErrorCodes.VALIDATION_FAILED, "invalid cron.runs params: missing id"),
       );
       return;
     }
@@ -290,7 +290,7 @@ export const cronHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "invalid cron.runs params: invalid id"),
+        errorShape(ErrorCodes.VALIDATION_FAILED, "invalid cron.runs params: invalid id"),
       );
       return;
     }

@@ -58,6 +58,6 @@ describe("node.canvas.capability.refresh", () => {
       | [boolean, unknown, { code?: number; message?: string }]
       | undefined;
     expect(call?.[0]).toBe(false);
-    expect(call?.[2]?.code).toBe(ErrorCodes.UNAVAILABLE);
+    expect(call?.[2]?.code).toBe(ErrorCodes.NODE_DISCONNECTED);
   });
 });

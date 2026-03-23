@@ -24,7 +24,7 @@ export const healthHandlers: GatewayRequestHandlers = {
       const snap = await refreshHealthSnapshot({ probe: wantsProbe });
       respond(true, snap, undefined);
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
     }
   },
   status: async ({ respond, client }) => {

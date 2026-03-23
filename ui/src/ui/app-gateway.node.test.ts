@@ -253,7 +253,7 @@ describe("connectGateway", () => {
       code: 4008,
       reason: "connect failed",
       error: {
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "Fetch failed",
         details: { code: ConnectErrorDetailCodes.AUTH_TOKEN_MISMATCH },
       },
@@ -274,7 +274,7 @@ describe("connectGateway", () => {
       code: 4008,
       reason: "connect failed",
       error: {
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "TypeError: Failed to fetch",
         details: { code: ConnectErrorDetailCodes.AUTH_RATE_LIMITED },
       },
@@ -295,7 +295,7 @@ describe("connectGateway", () => {
       code: 4008,
       reason: "connect failed",
       error: {
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "Fetch failed",
         details: { code: ConnectErrorDetailCodes.CONTROL_UI_DEVICE_IDENTITY_REQUIRED },
       },
@@ -316,7 +316,7 @@ describe("connectGateway", () => {
       code: 4008,
       reason: "connect failed",
       error: {
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "Fetch failed",
         details: { code: ConnectErrorDetailCodes.CONTROL_UI_ORIGIN_NOT_ALLOWED },
       },
@@ -337,7 +337,7 @@ describe("connectGateway", () => {
       code: 4008,
       reason: "connect failed",
       error: {
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "Failed to fetch gateway metadata from ws://127.0.0.1:18789",
         details: { code: ConnectErrorDetailCodes.AUTH_TOKEN_MISMATCH },
       },
@@ -358,7 +358,7 @@ describe("connectGateway", () => {
       code: 4008,
       reason: "connect failed",
       error: {
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message:
           "unauthorized: gateway token mismatch (open the dashboard URL and paste the token in Control UI settings)",
         details: { code: "AUTH_TOKEN_MISMATCH" },

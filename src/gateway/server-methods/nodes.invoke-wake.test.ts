@@ -299,7 +299,7 @@ describe("node.invoke APNs wake path", () => {
     const respond = await invokeNode({ nodeRegistry });
     const call = respond.mock.calls[0] as RespondCall | undefined;
     expect(call?.[0]).toBe(false);
-    expect(call?.[2]?.code).toBe(ErrorCodes.UNAVAILABLE);
+    expect(call?.[2]?.code).toBe(ErrorCodes.NODE_DISCONNECTED);
     expect(call?.[2]?.message).toBe("node not connected");
     expect(mocks.sendApnsBackgroundWake).not.toHaveBeenCalled();
     expect(nodeRegistry.invoke).not.toHaveBeenCalled();
@@ -475,7 +475,7 @@ describe("node.invoke APNs wake path", () => {
     });
     const call = respond.mock.calls[0] as RespondCall | undefined;
     expect(call?.[0]).toBe(false);
-    expect(call?.[2]?.code).toBe(ErrorCodes.UNAVAILABLE);
+    expect(call?.[2]?.code).toBe(ErrorCodes.NODE_DISCONNECTED);
     expect(call?.[2]?.message).toBe("node command queued until iOS returns to foreground");
     expect(mocks.sendApnsBackgroundWake).not.toHaveBeenCalled();
 

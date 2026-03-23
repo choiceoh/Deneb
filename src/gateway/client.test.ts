@@ -454,7 +454,7 @@ describe("GatewayClient connect auth payload", () => {
         id: connectId,
         ok: false,
         error: {
-          code: "INVALID_REQUEST",
+          code: "VALIDATION_FAILED",
           message: "unauthorized",
           details,
         },

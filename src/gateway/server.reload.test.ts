@@ -744,7 +744,7 @@ describe("gateway hot reload", () => {
       delete process.env[refId];
       const reload = await rpcReq<{ warningCount?: number }>(ws, "secrets.reload", {});
       expect(reload.ok).toBe(false);
-      expect(reload.error?.code).toBe("UNAVAILABLE");
+      expect(reload.error?.code).toBe("DEPENDENCY_FAILED");
       expect(reload.error?.message ?? "").toContain(refId);
 
       const postResolve = await rpcReq<{
@@ -845,7 +845,7 @@ process.stdin.on("end", () => {
       await fs.writeFile(modePath, "fail\n", "utf8");
       const reload = await rpcReq<{ warningCount?: number }>(ws, "secrets.reload", {});
       expect(reload.ok).toBe(false);
-      expect(reload.error?.code).toBe("UNAVAILABLE");
+      expect(reload.error?.code).toBe("DEPENDENCY_FAILED");
       expect(reload.error?.message ?? "").toContain("forced failure");
 
       const postResolve = await rpcReq<{

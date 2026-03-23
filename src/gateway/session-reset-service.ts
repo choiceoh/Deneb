@@ -130,7 +130,7 @@ async function ensureSessionRuntimeCleanup(params: {
     return undefined;
   }
   return errorShape(
-    ErrorCodes.UNAVAILABLE,
+    ErrorCodes.CONFLICT,
     `Session ${params.key} is still active; try again in a moment.`,
   );
 }
@@ -174,7 +174,7 @@ async function closeAcpRuntimeForSession(params: {
   });
   if (cancelOutcome.status === "timeout") {
     return errorShape(
-      ErrorCodes.UNAVAILABLE,
+      ErrorCodes.CONFLICT,
       `Session ${params.sessionKey} is still active; try again in a moment.`,
     );
   }
@@ -197,7 +197,7 @@ async function closeAcpRuntimeForSession(params: {
   });
   if (closeOutcome.status === "timeout") {
     return errorShape(
-      ErrorCodes.UNAVAILABLE,
+      ErrorCodes.CONFLICT,
       `Session ${params.sessionKey} is still active; try again in a moment.`,
     );
   }

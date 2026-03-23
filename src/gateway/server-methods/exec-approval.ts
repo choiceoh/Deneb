@@ -34,7 +34,7 @@ export function createExecApprovalHandlers(
           false,
           undefined,
           errorShape(
-            ErrorCodes.INVALID_REQUEST,
+            ErrorCodes.VALIDATION_FAILED,
             `invalid exec.approval.request params: ${formatValidationErrors(
               validateExecApprovalRequestParams.errors,
             )}`,
@@ -87,7 +87,7 @@ export function createExecApprovalHandlers(
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "nodeId is required for host=node"),
+          errorShape(ErrorCodes.MISSING_PARAM, "nodeId is required for host=node"),
         );
         return;
       }
@@ -95,12 +95,12 @@ export function createExecApprovalHandlers(
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "systemRunPlan is required for host=node"),
+          errorShape(ErrorCodes.MISSING_PARAM, "systemRunPlan is required for host=node"),
         );
         return;
       }
       if (!effectiveCommandText) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "command is required"));
+        respond(false, undefined, errorShape(ErrorCodes.MISSING_PARAM, "command is required"));
         return;
       }
       if (
@@ -110,7 +110,7 @@ export function createExecApprovalHandlers(
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "commandArgv is required for host=node"),
+          errorShape(ErrorCodes.MISSING_PARAM, "commandArgv is required for host=node"),
         );
         return;
       }
@@ -126,11 +126,7 @@ export function createExecApprovalHandlers(
             })
           : null;
       if (explicitId && manager.getSnapshot(explicitId)) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "approval id already pending"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.CONFLICT, "approval id already pending"));
         return;
       }
       const request = {
@@ -173,7 +169,7 @@ export function createExecApprovalHandlers(
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `registration failed: ${String(err)}`),
+          errorShape(ErrorCodes.DEPENDENCY_FAILED, `registration failed: ${String(err)}`),
         );
         return;
       }
@@ -249,7 +245,7 @@ export function createExecApprovalHandlers(
       const p = params as { id?: string };
       const id = typeof p.id === "string" ? p.id.trim() : "";
       if (!id) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
+        respond(false, undefined, errorShape(ErrorCodes.MISSING_PARAM, "id is required"));
         return;
       }
       const decisionPromise = manager.awaitDecision(id);
@@ -257,7 +253,7 @@ export function createExecApprovalHandlers(
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "approval expired or not found"),
+          errorShape(ErrorCodes.NOT_FOUND, "approval expired or not found"),
         );
         return;
       }
@@ -282,7 +278,7 @@ export function createExecApprovalHandlers(
           false,
           undefined,
           errorShape(
-            ErrorCodes.INVALID_REQUEST,
+            ErrorCodes.VALIDATION_FAILED,
             `invalid exec.approval.resolve params: ${formatValidationErrors(
               validateExecApprovalResolveParams.errors,
             )}`,
@@ -293,7 +289,7 @@ export function createExecApprovalHandlers(
       const p = params as { id: string; decision: string };
       const decision = p.decision as ExecApprovalDecision;
       if (decision !== "allow-once" && decision !== "allow-always" && decision !== "deny") {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "invalid decision"));
+        respond(false, undefined, errorShape(ErrorCodes.VALIDATION_FAILED, "invalid decision"));
         return;
       }
       const resolvedId = manager.lookupPendingId(p.id);
@@ -301,7 +297,7 @@ export function createExecApprovalHandlers(
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "unknown or expired approval id"),
+          errorShape(ErrorCodes.NOT_FOUND, "unknown or expired approval id"),
         );
         return;
       }
@@ -312,7 +308,7 @@ export function createExecApprovalHandlers(
           false,
           undefined,
           errorShape(
-            ErrorCodes.INVALID_REQUEST,
+            ErrorCodes.CONFLICT,
             `ambiguous approval id prefix; matches: ${candidates}${remainder}. Use the full id.`,
           ),
         );
@@ -326,7 +322,7 @@ export function createExecApprovalHandlers(
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "unknown or expired approval id"),
+          errorShape(ErrorCodes.NOT_FOUND, "unknown or expired approval id"),
         );
         return;
       }

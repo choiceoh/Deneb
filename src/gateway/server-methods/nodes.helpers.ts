@@ -16,7 +16,7 @@ export function respondInvalidParams(params: {
     false,
     undefined,
     errorShape(
-      ErrorCodes.INVALID_REQUEST,
+      ErrorCodes.VALIDATION_FAILED,
       `invalid ${params.method} params: ${formatValidationErrors(params.validator.errors)}`,
     ),
   );
@@ -26,7 +26,7 @@ export async function respondUnavailableOnThrow(respond: RespondFn, fn: () => Pr
   try {
     await fn();
   } catch (err) {
-    respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+    respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
   }
 }
 
@@ -72,7 +72,7 @@ export function respondUnavailableOnNodeInvokeError<T extends { ok: boolean; err
   respond(
     false,
     undefined,
-    errorShape(ErrorCodes.UNAVAILABLE, message, {
+    errorShape(ErrorCodes.NODE_DISCONNECTED, message, {
       details: { nodeError: res.error ?? null },
     }),
   );

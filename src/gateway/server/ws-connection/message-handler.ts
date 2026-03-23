@@ -319,7 +319,7 @@ export function attachGatewayWsMessageHandler(params: {
               type: "res",
               id: req.id,
               ok: false,
-              error: errorShape(ErrorCodes.INVALID_REQUEST, handshakeError),
+              error: errorShape(ErrorCodes.VALIDATION_FAILED, handshakeError),
             });
           } else {
             logWsControl.warn(
@@ -372,7 +372,7 @@ export function attachGatewayWsMessageHandler(params: {
           logWsControl.warn(
             `protocol mismatch conn=${connId} remote=${remoteAddr ?? "?"} client=${clientLabel} ${connectParams.client.mode} v${connectParams.client.version}`,
           );
-          sendHandshakeErrorResponse(ErrorCodes.INVALID_REQUEST, "protocol mismatch", {
+          sendHandshakeErrorResponse(ErrorCodes.VALIDATION_FAILED, "protocol mismatch", {
             details: { expectedProtocol: PROTOCOL_VERSION },
           });
           close(1002, "protocol mismatch");
@@ -385,7 +385,7 @@ export function attachGatewayWsMessageHandler(params: {
           markHandshakeFailure("invalid-role", {
             role: roleRaw,
           });
-          sendHandshakeErrorResponse(ErrorCodes.INVALID_REQUEST, "invalid role");
+          sendHandshakeErrorResponse(ErrorCodes.VALIDATION_FAILED, "invalid role");
           close(1008, "invalid role");
           return;
         }
@@ -416,7 +416,7 @@ export function attachGatewayWsMessageHandler(params: {
               host: requestHost ?? "n/a",
               reason: originCheck.reason,
             });
-            sendHandshakeErrorResponse(ErrorCodes.INVALID_REQUEST, errorMessage, {
+            sendHandshakeErrorResponse(ErrorCodes.VALIDATION_FAILED, errorMessage, {
               details: {
                 code: ConnectErrorDetailCodes.CONTROL_UI_ORIGIN_NOT_ALLOWED,
                 reason: originCheck.reason,
@@ -491,7 +491,7 @@ export function attachGatewayWsMessageHandler(params: {
             reason: failedAuth.reason,
             client: connectParams.client,
           });
-          sendHandshakeErrorResponse(ErrorCodes.INVALID_REQUEST, authMessage, {
+          sendHandshakeErrorResponse(ErrorCodes.UNAUTHORIZED, authMessage, {
             details: {
               code: resolveAuthConnectErrorDetailCode(failedAuth.reason),
               authReason: failedAuth.reason,
@@ -542,7 +542,7 @@ export function attachGatewayWsMessageHandler(params: {
             markHandshakeFailure("control-ui-insecure-auth", {
               insecureAuthConfigured: controlUiAuthPolicy.allowInsecureAuthConfigured,
             });
-            sendHandshakeErrorResponse(ErrorCodes.INVALID_REQUEST, errorMessage, {
+            sendHandshakeErrorResponse(ErrorCodes.VALIDATION_FAILED, errorMessage, {
               details: { code: ConnectErrorDetailCodes.CONTROL_UI_DEVICE_IDENTITY_REQUIRED },
             });
             close(1008, errorMessage);
@@ -576,7 +576,7 @@ export function attachGatewayWsMessageHandler(params: {
               type: "res",
               id: frame.id,
               ok: false,
-              error: errorShape(ErrorCodes.INVALID_REQUEST, message, {
+              error: errorShape(ErrorCodes.VALIDATION_FAILED, message, {
                 details: {
                   code: resolveDeviceAuthConnectErrorDetailCode(reason),
                   reason,
@@ -1044,7 +1044,7 @@ export function attachGatewayWsMessageHandler(params: {
           id: (parsed as { id?: unknown })?.id ?? "invalid",
           ok: false,
           error: errorShape(
-            ErrorCodes.INVALID_REQUEST,
+            ErrorCodes.VALIDATION_FAILED,
             `invalid request frame: ${formatValidationErrors(validateRequestFrame.errors)}`,
           ),
         });
@@ -1081,7 +1081,7 @@ export function attachGatewayWsMessageHandler(params: {
         });
       })().catch((err) => {
         logGateway.error(`request handler failed: ${formatForLog(err)}`);
-        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+        respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
       });
     } catch (err) {
       logGateway.error(`parse/handle error: ${String(err)}`);

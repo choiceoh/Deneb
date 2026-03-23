@@ -109,7 +109,7 @@ class GatewayClientRequestError extends Error {
   constructor(error: GatewayClientErrorShape) {
     super(error.message ?? "gateway request failed");
     this.name = "GatewayClientRequestError";
-    this.gatewayCode = error.code ?? "UNAVAILABLE";
+    this.gatewayCode = error.code ?? "DEPENDENCY_FAILED";
     this.details = error.details;
   }
 }

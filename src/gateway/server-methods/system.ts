@@ -35,7 +35,7 @@ export const systemHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           "invalid set-heartbeats params: enabled (boolean) required",
         ),
       );
@@ -51,7 +51,7 @@ export const systemHandlers: GatewayRequestHandlers = {
   "system-event": ({ params, respond, context }) => {
     const text = typeof params.text === "string" ? params.text.trim() : "";
     if (!text) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "text required"));
+      respond(false, undefined, errorShape(ErrorCodes.MISSING_PARAM, "text required"));
       return;
     }
     const sessionKey = resolveMainSessionKeyFromConfig();

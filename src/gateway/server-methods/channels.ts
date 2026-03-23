@@ -73,7 +73,7 @@ export const channelsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid channels.status params: ${formatValidationErrors(validateChannelsStatusParams.errors)}`,
         ),
       );
@@ -275,7 +275,7 @@ export const channelsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid channels.logout params: ${formatValidationErrors(validateChannelsLogoutParams.errors)}`,
         ),
       );
@@ -287,7 +287,7 @@ export const channelsHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "invalid channels.logout channel"),
+        errorShape(ErrorCodes.VALIDATION_FAILED, "invalid channels.logout channel"),
       );
       return;
     }
@@ -296,7 +296,7 @@ export const channelsHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `channel ${channelId} does not support logout`),
+        errorShape(ErrorCodes.FORBIDDEN, `channel ${channelId} does not support logout`),
       );
       return;
     }
@@ -307,7 +307,7 @@ export const channelsHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "config invalid; fix it before logging out"),
+        errorShape(ErrorCodes.VALIDATION_FAILED, "config invalid; fix it before logging out"),
       );
       return;
     }
@@ -321,7 +321,7 @@ export const channelsHandlers: GatewayRequestHandlers = {
       });
       respond(true, payload, undefined);
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
     }
   },
 };

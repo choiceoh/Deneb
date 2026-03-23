@@ -151,7 +151,7 @@ export const logsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid logs.tail params: ${formatValidationErrors(validateLogsTailParams.errors)}`,
         ),
       );
@@ -173,7 +173,7 @@ export const logsHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, `log read failed: ${String(err)}`),
+        errorShape(ErrorCodes.DEPENDENCY_FAILED, `log read failed: ${String(err)}`),
       );
     }
   },
