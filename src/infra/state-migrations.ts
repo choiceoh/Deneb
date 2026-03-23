@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { listTelegramAccountIds } from "deneb/plugin-sdk/telegram";
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import type { DenebConfig } from "../config/config.js";
 import {
@@ -15,14 +14,6 @@ import { saveSessionStore } from "../config/sessions.js";
 import { canonicalizeMainSessionAlias } from "../config/sessions/main-session.js";
 import type { SessionScope } from "../config/sessions/types.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-// Stub: pairing store removed.
-function resolveChannelAllowFromPath(
-  _channel: string,
-  _env: NodeJS.ProcessEnv,
-  _accountId?: string,
-): string {
-  return "";
-}
 import {
   buildAgentMainSessionKey,
   DEFAULT_ACCOUNT_ID,
@@ -655,25 +646,9 @@ export async function detectLegacyStateMigrations(params: {
   const hasLegacyWhatsAppAuth =
     fileExists(path.join(oauthDir, "creds.json")) &&
     !fileExists(path.join(targetWhatsAppAuthDir, "creds.json"));
-  const legacyTelegramAllowFromPath = resolveChannelAllowFromPath("telegram", env);
-  const telegramPairingAllowFromPlans = fileExists(legacyTelegramAllowFromPath)
-    ? Array.from(
-        new Set(
-          listTelegramAccountIds(params.cfg).map((accountId) =>
-            resolveChannelAllowFromPath("telegram", env, accountId),
-          ),
-        ),
-      )
-        .filter((targetPath) => !fileExists(targetPath))
-        .map(
-          (targetPath): FileCopyPlan => ({
-            label: "Telegram pairing allowFrom",
-            sourcePath: legacyTelegramAllowFromPath,
-            targetPath,
-          }),
-        )
-    : [];
-  const hasLegacyTelegramAllowFrom = telegramPairingAllowFromPlans.length > 0;
+  // Pairing store removed — telegram pairing allowFrom migration is dead code.
+  const telegramPairingAllowFromPlans: FileCopyPlan[] = [];
+  const hasLegacyTelegramAllowFrom = false;
 
   const preview: string[] = [];
   if (hasLegacySessions) {
