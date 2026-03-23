@@ -14,10 +14,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Vega 소스 복사
 if [ -d "$SCRIPT_DIR" ]; then
-  # Python 소스 + commands/ 복사
+  # Python 소스 + 패키지 디렉토리 복사
   cp "$SCRIPT_DIR"/*.py "$INSTALL_DIR/vega/" 2>/dev/null || true
-  cp -r "$SCRIPT_DIR/commands" "$INSTALL_DIR/vega/" 2>/dev/null || true
-  cp "$SCRIPT_DIR/router.py" "$INSTALL_DIR/vega/" 2>/dev/null || true
+  for subdir in commands addons db ml search mail editor; do
+    if [ -d "$SCRIPT_DIR/$subdir" ]; then
+      cp -r "$SCRIPT_DIR/$subdir" "$INSTALL_DIR/vega/" 2>/dev/null || true
+    fi
+  done
   echo "✅ Vega 소스 복사됨"
 fi
 
