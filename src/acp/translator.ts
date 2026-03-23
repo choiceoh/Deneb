@@ -30,7 +30,7 @@ import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import { listThinkingLevels } from "../auto-reply/thinking.js";
 import type { GatewayClient } from "../gateway/client.js";
 import type { EventFrame } from "../gateway/protocol/index.js";
-import type { GatewaySessionRow, SessionsListResult } from "../gateway/session-utils.js";
+import type { GatewaySessionRow, SessionsListResult } from "../gateway/session/session-utils.js";
 import {
   createFixedWindowRateLimiter,
   type FixedWindowRateLimiter,

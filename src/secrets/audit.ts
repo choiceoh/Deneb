@@ -4,8 +4,8 @@ import path from "node:path";
 import {
   isNonSecretApiKeyMarker,
   isSecretRefHeaderValueMarker,
-} from "../agents/model-auth-markers.js";
-import { normalizeProviderId } from "../agents/model-selection.js";
+} from "../agents/models/model-auth-markers.js";
+import { normalizeProviderId } from "../agents/models/model-selection.js";
 import { resolveStateDir, type DenebConfig } from "../config/config.js";
 import { coerceSecretRef } from "../config/types.secrets.js";
 import { resolveSecretInputRef, type SecretRef } from "../config/types.secrets.js";

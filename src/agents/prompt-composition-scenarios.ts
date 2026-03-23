@@ -17,7 +17,7 @@ import {
 } from "./bootstrap-budget.js";
 import { resolveBootstrapContextForRun } from "./bootstrap-files.js";
 import { buildEmbeddedSystemPrompt } from "./pi-embedded-runner/system-prompt.js";
-import { buildAgentSystemPrompt } from "./system-prompt.js";
+import { buildAgentSystemPrompt } from "./system-prompt/system-prompt.js";
 import { createStubTool } from "./test-helpers/pi-tool-stubs.js";
 import { buildToolSummaryMap } from "./tool-summaries.js";
 

@@ -13,12 +13,12 @@ import {
 import { resetLogger, setLoggerOverride } from "../../logging.js";
 import { ExecApprovalManager } from "../exec-approval-manager.js";
 import { validateExecApprovalRequestParams } from "../protocol/index.js";
-import { waitForAgentJob } from "./agent-job.js";
-import { injectTimestamp, timestampOptsFromConfig } from "./agent-timestamp.js";
-import { normalizeRpcAttachmentsToChatAttachments } from "./attachment-normalize.js";
-import { sanitizeChatSendMessageInput } from "./chat.js";
-import { createExecApprovalHandlers } from "./exec-approval.js";
-import { logsHandlers } from "./logs.js";
+import { waitForAgentJob } from "./agents/agent-job.js";
+import { injectTimestamp, timestampOptsFromConfig } from "./agents/agent-timestamp.js";
+import { normalizeRpcAttachmentsToChatAttachments } from "./chat/attachment-normalize.js";
+import { sanitizeChatSendMessageInput } from "./chat/chat.js";
+import { createExecApprovalHandlers } from "./exec/exec-approval.js";
+import { logsHandlers } from "./system/logs.js";
 
 vi.mock("../../commands/status.js", () => ({
   getStatusSummary: vi.fn().mockResolvedValue({ ok: true }),
@@ -314,9 +314,9 @@ describe("sanitizeChatSendMessageInput", () => {
 
 describe("gateway chat transcript writes (guardrail)", () => {
   it("routes transcript writes through helper and SessionManager parentId append", () => {
-    const chatTs = fileURLToPath(new URL("./chat.ts", import.meta.url));
+    const chatTs = fileURLToPath(new URL("./chat/chat.ts", import.meta.url));
     const chatSrc = fs.readFileSync(chatTs, "utf-8");
-    const helperTs = fileURLToPath(new URL("./chat-transcript-inject.ts", import.meta.url));
+    const helperTs = fileURLToPath(new URL("./chat/chat-transcript-inject.ts", import.meta.url));
     const helperSrc = fs.readFileSync(helperTs, "utf-8");
 
     expect(chatSrc.includes("fs.appendFileSync(transcriptPath")).toBe(false);
@@ -1022,11 +1022,11 @@ describe("exec approval handlers", () => {
 
 describe("gateway healthHandlers.status scope handling", () => {
   let statusModule: typeof import("../../commands/status.js");
-  let healthHandlers: typeof import("./health.js").healthHandlers;
+  let healthHandlers: typeof import("./system/health.js").healthHandlers;
 
   beforeAll(async () => {
     statusModule = await import("../../commands/status.js");
-    ({ healthHandlers } = await import("./health.js"));
+    ({ healthHandlers } = await import("./system/health.js"));
   });
 
   beforeEach(() => {

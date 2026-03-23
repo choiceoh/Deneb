@@ -9,7 +9,8 @@ import { withEnvAsync } from "../test-utils/env.js";
 import { createSafeAudioFixtureBuffer } from "./runner.test-utils.js";
 import type { MediaUnderstandingProvider } from "./types.js";
 
-type ResolveApiKeyForProvider = typeof import("../agents/model-auth.js").resolveApiKeyForProvider;
+type ResolveApiKeyForProvider =
+  typeof import("../agents/models/model-auth.js").resolveApiKeyForProvider;
 
 const resolveApiKeyForProviderMock = vi.hoisted(() =>
   vi.fn<ResolveApiKeyForProvider>(async () => ({
@@ -228,7 +229,7 @@ function expectFileNotApplied(params: {
 describe("applyMediaUnderstanding", () => {
   beforeAll(async () => {
     vi.resetModules();
-    vi.doMock("../agents/model-auth.js", () => ({
+    vi.doMock("../agents/models/model-auth.js", () => ({
       resolveApiKeyForProvider: resolveApiKeyForProviderMock,
       hasAvailableAuthForProvider: hasAvailableAuthForProviderMock,
       requireApiKey: (auth: { apiKey?: string; mode?: string }, provider: string) => {

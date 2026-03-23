@@ -1,4 +1,4 @@
-import { normalizeProviderId } from "./model-selection.js";
+import { normalizeProviderId } from "./models/model-selection.js";
 import { isGoogleModelApi } from "./pi-embedded-helpers/google.js";
 import {
   isAnthropicProviderFamily,

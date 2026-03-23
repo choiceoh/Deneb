@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DenebConfig } from "../../../config/config.js";
 import { appendBootstrapPromptWarning } from "../../bootstrap-budget.js";
-import { buildAgentSystemPrompt } from "../../system-prompt.js";
+import { buildAgentSystemPrompt } from "../../system-prompt/system-prompt.js";
 import {
   buildAfterTurnRuntimeContext,
   composeSystemPromptWithHookContext,

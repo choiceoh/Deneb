@@ -6,15 +6,15 @@ import {
   type ProviderInfo,
 } from "deneb/plugin-sdk/telegram";
 import { resolveAgentDir, resolveSessionAgentId } from "../../agents/agent-scope.js";
-import { resolveModelAuthLabel } from "../../agents/model-auth-label.js";
-import { loadModelCatalog } from "../../agents/model-catalog.js";
+import { resolveModelAuthLabel } from "../../agents/models/model-auth-label.js";
+import { loadModelCatalog } from "../../agents/models/model-catalog.js";
 import {
   buildAllowedModelSet,
   buildModelAliasIndex,
   normalizeProviderId,
   resolveDefaultModelForAgent,
   resolveModelRefFromString,
-} from "../../agents/model-selection.js";
+} from "../../agents/models/model-selection.js";
 import type { DenebConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import type { ReplyPayload } from "../types.js";

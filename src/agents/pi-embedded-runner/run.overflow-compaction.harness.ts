@@ -271,7 +271,7 @@ export async function loadRunOverflowCompactionHarness(): Promise<{
     ),
   }));
 
-  vi.doMock("../workspace-run.js", () => ({
+  vi.doMock("../workspace/workspace-run.js", () => ({
     resolveRunWorkspaceDir: vi.fn((params: { workspaceDir: string }) => ({
       workspaceDir: params.workspaceDir,
       usedFallback: false,
@@ -319,7 +319,7 @@ export async function loadRunOverflowCompactionHarness(): Promise<{
     })),
   }));
 
-  vi.doMock("../model-auth.js", () => ({
+  vi.doMock("../models/model-auth.js", () => ({
     applyLocalNoAuthHeaderOverride: vi.fn((model: unknown) => model),
     ensureAuthProfileStore: vi.fn(() => ({})),
     getApiKeyForModel: vi.fn(async () => ({
@@ -330,7 +330,7 @@ export async function loadRunOverflowCompactionHarness(): Promise<{
     resolveAuthProfileOrder: vi.fn(() => []),
   }));
 
-  vi.doMock("../models-config.js", () => ({
+  vi.doMock("../models/models-config.js", () => ({
     ensureDenebModelsJson: vi.fn(async () => {}),
   }));
 

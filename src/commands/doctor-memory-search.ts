@@ -1,7 +1,7 @@
 import fsSync from "node:fs";
 import { resolveAgentDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { resolveMemorySearchConfig } from "../agents/memory-search.js";
-import { resolveApiKeyForProvider } from "../agents/model-auth.js";
+import { resolveApiKeyForProvider } from "../agents/models/model-auth.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { DenebConfig } from "../config/config.js";
 import { resolveMemoryBackendConfig } from "../memory/backend-config.js";

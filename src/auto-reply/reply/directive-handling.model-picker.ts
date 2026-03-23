@@ -1,4 +1,4 @@
-import { type ModelRef, normalizeProviderId } from "../../agents/model-selection.js";
+import { type ModelRef, normalizeProviderId } from "../../agents/models/model-selection.js";
 import type { DenebConfig } from "../../config/config.js";
 
 export type ModelPickerCatalogEntry = {

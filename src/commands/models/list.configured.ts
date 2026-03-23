@@ -3,7 +3,7 @@ import {
   parseModelRef,
   resolveConfiguredModelRef,
   resolveModelRefFromString,
-} from "../../agents/model-selection.js";
+} from "../../agents/models/model-selection.js";
 import type { DenebConfig } from "../../config/config.js";
 import {
   resolveAgentModelFallbackValues,

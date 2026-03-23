@@ -1,6 +1,6 @@
 import { withProgress } from "../cli/progress.js";
 import { readBestEffortConfig, resolveGatewayPort } from "../config/config.js";
-import { probeGateway } from "../gateway/probe.js";
+import { probeGateway } from "../gateway/monitoring/probe.js";
 import { discoverGatewayBeacons } from "../infra/bonjour-discovery.js";
 import { resolveWideAreaDiscoveryDomain } from "../infra/widearea-dns.js";
 import type { RuntimeEnv } from "../runtime.js";

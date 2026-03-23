@@ -16,9 +16,9 @@ import {
   ensureAuthProfileStore,
   saveAuthProfileStore,
 } from "./auth-profiles.js";
-import { getApiKeyForModel, requireApiKey } from "./model-auth.js";
-import { normalizeProviderId, parseModelRef } from "./model-selection.js";
-import { ensureDenebModelsJson } from "./models-config.js";
+import { getApiKeyForModel, requireApiKey } from "./models/model-auth.js";
+import { normalizeProviderId, parseModelRef } from "./models/model-selection.js";
+import { ensureDenebModelsJson } from "./models/models-config.js";
 import { discoverAuthStorage, discoverModels } from "./pi-model-discovery.js";
 
 const LIVE = isTruthyEnvValue(process.env.LIVE) || isTruthyEnvValue(process.env.DENEB_LIVE_TEST);

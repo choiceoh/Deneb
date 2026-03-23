@@ -6,12 +6,12 @@ import {
   resolveAuthStorePathForDisplay,
   resolveProfileUnusableUntilForDisplay,
 } from "../../agents/auth-profiles.js";
-import { isNonSecretApiKeyMarker } from "../../agents/model-auth-markers.js";
+import { isNonSecretApiKeyMarker } from "../../agents/models/model-auth-markers.js";
 import {
   getCustomProviderApiKey,
   resolveEnvApiKey,
   resolveUsableCustomProviderApiKey,
-} from "../../agents/model-auth.js";
+} from "../../agents/models/model-auth.js";
 import type { DenebConfig } from "../../config/config.js";
 import { shortenHomePath } from "../../utils.js";
 import { maskApiKey } from "./list.format.js";

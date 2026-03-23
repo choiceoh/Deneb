@@ -13,7 +13,7 @@ vi.mock("../plugins/tools.js", () => ({
 }));
 
 import { createDenebTools } from "./deneb-tools.js";
-import { createDenebCodingTools } from "./pi-tools.js";
+import { createDenebCodingTools } from "./pi-tools/pi-tools.js";
 
 describe("createDenebTools plugin context", () => {
   beforeEach(() => {

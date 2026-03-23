@@ -21,10 +21,10 @@ export type PluginRuntimeCore = {
     resolveAgentDir: typeof import("../../agents/agent-scope.js").resolveAgentDir;
     resolveAgentWorkspaceDir: typeof import("../../agents/agent-scope.js").resolveAgentWorkspaceDir;
     resolveAgentIdentity: typeof import("../../agents/identity.js").resolveAgentIdentity;
-    resolveThinkingDefault: typeof import("../../agents/model-selection.js").resolveThinkingDefault;
+    resolveThinkingDefault: typeof import("../../agents/models/model-selection.js").resolveThinkingDefault;
     runEmbeddedPiAgent: typeof import("../../agents/pi-embedded.js").runEmbeddedPiAgent;
     resolveAgentTimeoutMs: typeof import("../../agents/timeout.js").resolveAgentTimeoutMs;
-    ensureAgentWorkspace: typeof import("../../agents/workspace.js").ensureAgentWorkspace;
+    ensureAgentWorkspace: typeof import("../../agents/workspace/workspace.js").ensureAgentWorkspace;
     session: {
       resolveStorePath: typeof import("../../config/sessions.js").resolveStorePath;
       loadSessionStore: typeof import("../../config/sessions.js").loadSessionStore;
@@ -93,11 +93,11 @@ export type PluginRuntimeCore = {
     getApiKeyForModel: (params: {
       model: import("@mariozechner/pi-ai").Model<import("@mariozechner/pi-ai").Api>;
       cfg?: import("../../config/config.js").DenebConfig;
-    }) => Promise<import("../../agents/model-auth.js").ResolvedProviderAuth>;
+    }) => Promise<import("../../agents/models/model-auth.js").ResolvedProviderAuth>;
     /** Resolve auth for a provider by name. Only provider and optional cfg are used. */
     resolveApiKeyForProvider: (params: {
       provider: string;
       cfg?: import("../../config/config.js").DenebConfig;
-    }) => Promise<import("../../agents/model-auth.js").ResolvedProviderAuth>;
+    }) => Promise<import("../../agents/models/model-auth.js").ResolvedProviderAuth>;
   };
 };

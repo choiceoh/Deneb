@@ -12,11 +12,11 @@ import {
 } from "../../context-window-guard.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../../defaults.js";
 import { FailoverError } from "../../failover-error.js";
-import { ensureAuthProfileStore, resolveAuthProfileOrder } from "../../model-auth.js";
-import { normalizeProviderId } from "../../model-selection.js";
-import { ensureDenebModelsJson } from "../../models-config.js";
+import { ensureAuthProfileStore, resolveAuthProfileOrder } from "../../models/model-auth.js";
+import { normalizeProviderId } from "../../models/model-selection.js";
+import { ensureDenebModelsJson } from "../../models/models-config.js";
 import { ensureRuntimePluginsLoaded } from "../../runtime-plugins.js";
-import { redactRunIdentifier, resolveRunWorkspaceDir } from "../../workspace-run.js";
+import { redactRunIdentifier, resolveRunWorkspaceDir } from "../../workspace/workspace-run.js";
 import { log } from "../logger.js";
 import { resolveModelAsync } from "../model.js";
 import type { RunEmbeddedPiAgentParams } from "./params.js";

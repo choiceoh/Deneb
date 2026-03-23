@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { DenebConfig } from "../../config/config.js";
 import { createModelSelectionState } from "./model-selection.js";
 
-vi.mock("../../agents/model-catalog.js", () => ({
+vi.mock("../../agents/models/model-catalog.js", () => ({
   loadModelCatalog: vi.fn(async () => [
     { provider: "anthropic", id: "claude-opus-4-5", name: "Claude Opus 4.5" },
     { provider: "inferencer", id: "deepseek-v3-4bit-mlx", name: "DeepSeek V3" },
@@ -267,7 +267,7 @@ describe("createModelSelectionState respects session model override", () => {
 
 describe("createModelSelectionState resolveDefaultReasoningLevel", () => {
   it("returns on when catalog model has reasoning true", async () => {
-    const { loadModelCatalog } = await import("../../agents/model-catalog.js");
+    const { loadModelCatalog } = await import("../../agents/models/model-catalog.js");
     vi.mocked(loadModelCatalog).mockResolvedValueOnce([
       { provider: "openrouter", id: "x-ai/grok-4.1-fast", name: "Grok", reasoning: true },
     ]);

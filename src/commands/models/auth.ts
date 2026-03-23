@@ -17,8 +17,8 @@ import {
   upsertAuthProfile,
 } from "../../agents/auth-profiles.js";
 import type { AuthProfileCredential } from "../../agents/auth-profiles/types.js";
-import { normalizeProviderId } from "../../agents/model-selection.js";
-import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
+import { normalizeProviderId } from "../../agents/models/model-selection.js";
+import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace/workspace.js";
 import { formatCliCommand } from "../../cli/command-format.js";
 import { parseDurationMs } from "../../cli/parse-duration.js";
 import type { DenebConfig } from "../../config/config.js";

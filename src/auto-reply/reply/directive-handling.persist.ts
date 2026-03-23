@@ -9,7 +9,7 @@ import {
   buildModelAliasIndex,
   type ModelAliasIndex,
   resolveDefaultModelForAgent,
-} from "../../agents/model-selection.js";
+} from "../../agents/models/model-selection.js";
 import type { DenebConfig } from "../../config/config.js";
 import { type SessionEntry, updateSessionStore } from "../../config/sessions.js";
 import { enqueueSystemEvent } from "../../infra/system-events.js";

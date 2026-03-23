@@ -1,12 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createDenebTools } from "../agents/deneb-tools.js";
-import { runBeforeToolCallHook } from "../agents/pi-tools.before-tool-call.js";
-import { resolveToolLoopDetectionConfig } from "../agents/pi-tools.js";
+import { runBeforeToolCallHook } from "../agents/pi-tools/pi-tools.before-tool-call.js";
+import { resolveToolLoopDetectionConfig } from "../agents/pi-tools/pi-tools.js";
 import {
   resolveEffectiveToolPolicy,
   resolveGroupToolPolicy,
   resolveSubagentToolPolicy,
-} from "../agents/pi-tools.policy.js";
+} from "../agents/pi-tools/pi-tools.policy.js";
 import {
   applyToolPolicyPipeline,
   buildDefaultToolPolicyPipelineSteps,
@@ -25,16 +25,16 @@ import { getPluginToolMeta } from "../plugins/tools.js";
 import { isSubagentSessionKey } from "../routing/session-key.js";
 import { DEFAULT_GATEWAY_HTTP_TOOL_DENY } from "../security/dangerous-tools.js";
 import { normalizeMessageChannel } from "../utils/message-channel.js";
-import type { AuthRateLimiter } from "./auth-rate-limit.js";
-import { authorizeHttpGatewayConnect, type ResolvedGatewayAuth } from "./auth.js";
+import type { AuthRateLimiter } from "./auth/auth-rate-limit.js";
+import { authorizeHttpGatewayConnect, type ResolvedGatewayAuth } from "./auth/auth.js";
 import {
   readJsonBodyOrError,
   sendGatewayAuthFailure,
   sendInvalidRequest,
   sendJson,
   sendMethodNotAllowed,
-} from "./http-common.js";
-import { getBearerToken, getHeader } from "./http-utils.js";
+} from "./http/http-common.js";
+import { getBearerToken, getHeader } from "./http/http-utils.js";
 
 const DEFAULT_BODY_BYTES = 2 * 1024 * 1024;
 const MEMORY_TOOL_NAMES = new Set(["memory_search", "memory_get"]);

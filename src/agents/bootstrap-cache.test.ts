@@ -4,13 +4,13 @@ import {
   clearBootstrapSnapshot,
   getOrLoadBootstrapFiles,
 } from "./bootstrap-cache.js";
-import type { WorkspaceBootstrapFile } from "./workspace.js";
+import type { WorkspaceBootstrapFile } from "./workspace/workspace.js";
 
-vi.mock("./workspace.js", () => ({
+vi.mock("./workspace/workspace.js", () => ({
   loadWorkspaceBootstrapFiles: vi.fn(),
 }));
 
-import { loadWorkspaceBootstrapFiles } from "./workspace.js";
+import { loadWorkspaceBootstrapFiles } from "./workspace/workspace.js";
 
 const mockLoad = vi.mocked(loadWorkspaceBootstrapFiles);
 

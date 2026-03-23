@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as bootstrapCache from "../../agents/bootstrap-cache.js";
-import { buildModelAliasIndex } from "../../agents/model-selection.js";
+import { buildModelAliasIndex } from "../../agents/models/model-selection.js";
 import type { DenebConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { formatZonedTimestamp } from "../../infra/format-time/format-datetime.ts";
@@ -22,7 +22,7 @@ vi.mock("../../agents/session-write-lock.js", () => ({
   acquireSessionWriteLock: async () => ({ release: async () => {} }),
 }));
 
-vi.mock("../../agents/model-catalog.js", () => ({
+vi.mock("../../agents/models/model-catalog.js", () => ({
   loadModelCatalog: vi.fn(async () => [
     { provider: "minimax", id: "m2.7", name: "M2.7" },
     { provider: "openai", id: "gpt-4o-mini", name: "GPT-4o mini" },
@@ -1495,7 +1495,7 @@ describe("initSessionState preserves behavior overrides across /new and /reset",
       sessionId: existingSessionId,
       overrides: { verboseLevel: "on" },
     });
-    const sessionUtils = await import("../../gateway/session-utils.fs.js");
+    const sessionUtils = await import("../../gateway/session/session-utils.fs.js");
     const archiveSpy = vi.spyOn(sessionUtils, "archiveSessionTranscripts");
 
     const cfg = {
@@ -1549,7 +1549,7 @@ describe("initSessionState preserves behavior overrides across /new and /reset",
         },
       });
 
-      const sessionUtils = await import("../../gateway/session-utils.fs.js");
+      const sessionUtils = await import("../../gateway/session/session-utils.fs.js");
       const archiveSpy = vi.spyOn(sessionUtils, "archiveSessionTranscripts");
 
       const cfg = { session: { store: storePath } } as DenebConfig;

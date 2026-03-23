@@ -11,7 +11,8 @@ import type { MediaUnderstandingProvider } from "./types.js";
 // Module mocks
 // ---------------------------------------------------------------------------
 
-type ResolveApiKeyForProvider = typeof import("../agents/model-auth.js").resolveApiKeyForProvider;
+type ResolveApiKeyForProvider =
+  typeof import("../agents/models/model-auth.js").resolveApiKeyForProvider;
 
 const resolveApiKeyForProviderMock = vi.hoisted(() =>
   vi.fn<ResolveApiKeyForProvider>(async () => ({
@@ -133,7 +134,7 @@ function createAudioConfigWithoutEchoFlag() {
 describe("applyMediaUnderstanding – echo transcript", () => {
   beforeAll(async () => {
     vi.resetModules();
-    vi.doMock("../agents/model-auth.js", () => ({
+    vi.doMock("../agents/models/model-auth.js", () => ({
       resolveApiKeyForProvider: resolveApiKeyForProviderMock,
       hasAvailableAuthForProvider: hasAvailableAuthForProviderMock,
       requireApiKey: (auth: { apiKey?: string; mode?: string }, provider: string) => {

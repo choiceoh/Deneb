@@ -2,19 +2,19 @@ import fs from "node:fs";
 import { intro as clackIntro, outro as clackOutro } from "@clack/prompts";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
-import { loadModelCatalog } from "../agents/model-catalog.js";
+import { loadModelCatalog } from "../agents/models/model-catalog.js";
 import {
   getModelRefStatus,
   resolveConfiguredModelRef,
   resolveHooksGmailModel,
-} from "../agents/model-selection.js";
+} from "../agents/models/model-selection.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { DenebConfig } from "../config/config.js";
 import { CONFIG_PATH, readConfigFileSnapshot, writeConfigFile } from "../config/config.js";
 import { logConfigUpdated } from "../config/logging.js";
 import { resolveSecretInputRef } from "../config/types.secrets.js";
 import { resolveGatewayService } from "../daemon/service.js";
-import { resolveGatewayAuth } from "../gateway/auth.js";
+import { resolveGatewayAuth } from "../gateway/auth/auth.js";
 import { buildGatewayConnectionDetails } from "../gateway/call.js";
 import { resolveDenebPackageRoot } from "../infra/deneb-root.js";
 import type { RuntimeEnv } from "../runtime.js";

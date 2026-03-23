@@ -1,7 +1,7 @@
 import path from "node:path";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { getActiveEmbeddedRunCount } from "../agents/pi-embedded-runner/runs.js";
-import { initSubagentRegistry } from "../agents/subagent-registry.js";
+import { initSubagentRegistry } from "../agents/subagent/subagent-registry.js";
 import { getTotalPendingReplies } from "../auto-reply/reply/dispatcher-registry.js";
 import { type AutonomousServiceHandle, startAutonomousService } from "../autonomous/service.js";
 import type { CanvasHostServer } from "../canvas-host/server.js";
@@ -49,16 +49,20 @@ import {
   resolveCommandSecretsFromActiveRuntimeSnapshot,
 } from "../secrets/runtime.js";
 import { runSetupWizard } from "../wizard/setup.js";
-import { startChannelHealthMonitor } from "./channel-health-monitor.js";
+import { maybeSeedControlUiAllowedOriginsAtStartup } from "./auth/startup-control-ui-origins.js";
 import { startGatewayConfigReloader } from "./config-reload.js";
-import type { ControlUiRootState } from "./control-ui.js";
+import type { ControlUiRootState } from "./dashboard/control-ui.js";
 import {
   GATEWAY_EVENT_UPDATE_AVAILABLE,
   type GatewayUpdateAvailableEventPayload,
 } from "./events.js";
 import { ExecApprovalManager } from "./exec-approval-manager.js";
-import { startGatewaySelfWatchdog, type GatewaySelfWatchdog } from "./gateway-self-watchdog.js";
 import { startGatewayModelPricingRefresh } from "./model-pricing-cache.js";
+import { startChannelHealthMonitor } from "./monitoring/channel-health-monitor.js";
+import {
+  startGatewaySelfWatchdog,
+  type GatewaySelfWatchdog,
+} from "./monitoring/gateway-self-watchdog.js";
 import { NodeRegistry } from "./node-registry.js";
 import {
   type AutoMaintenanceServiceHandle,
@@ -84,9 +88,9 @@ import { applyGatewayLaneConcurrency } from "./server-lanes.js";
 import { startGatewayMaintenanceTimers } from "./server-maintenance.js";
 import { GATEWAY_EVENTS, listGatewayMethods } from "./server-methods-list.js";
 import { coreGatewayHandlers } from "./server-methods.js";
-import { createExecApprovalHandlers } from "./server-methods/exec-approval.js";
-import { safeParseJson } from "./server-methods/nodes.helpers.js";
-import { createSecretsHandlers } from "./server-methods/secrets.js";
+import { createSecretsHandlers } from "./server-methods/admin/secrets.js";
+import { createExecApprovalHandlers } from "./server-methods/exec/exec-approval.js";
+import { safeParseJson } from "./server-methods/nodes/nodes.helpers.js";
 import { loadGatewayModelCatalog } from "./server-model-catalog.js";
 import { createNodeSubscriptionManager } from "./server-node-subscriptions.js";
 import { loadGatewayPlugins, setFallbackGatewayContext } from "./server-plugins.js";
@@ -98,7 +102,6 @@ import { logGatewayStartup } from "./server-startup-log.js";
 import { startGatewaySidecars } from "./server-startup.js";
 import { startGatewayTailscaleExposure } from "./server-tailscale.js";
 import { createWizardSessionTracker } from "./server-wizard-sessions.js";
-import { attachGatewayWsHandlers } from "./server-ws-runtime.js";
 import {
   getHealthCache,
   getHealthVersion,
@@ -109,7 +112,7 @@ import {
 import { resolveHookClientIpConfig } from "./server/hooks.js";
 import { createReadinessChecker } from "./server/readiness.js";
 import { loadGatewayTlsRuntime } from "./server/tls.js";
-import { maybeSeedControlUiAllowedOriginsAtStartup } from "./startup-control-ui-origins.js";
+import { attachGatewayWsHandlers } from "./ws/server-ws-runtime.js";
 
 // Deferred imports: these modules are only needed for non-minimal gateway startup.
 // Lazy-loading them avoids pulling in tailscale, skills,

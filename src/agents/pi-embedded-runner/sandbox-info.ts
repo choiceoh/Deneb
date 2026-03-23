@@ -1,4 +1,4 @@
-import type { ExecElevatedDefaults } from "../bash-tools.js";
+import type { ExecElevatedDefaults } from "../bash-tools/bash-tools.js";
 import type { resolveSandboxContext } from "../sandbox.js";
 import type { EmbeddedSandboxInfo } from "./types.js";
 

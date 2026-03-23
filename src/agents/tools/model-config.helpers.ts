@@ -6,8 +6,8 @@ import {
 import type { AgentModelConfig } from "../../config/types.agents-shared.js";
 import { ensureAuthProfileStore, listProfilesForProvider } from "../auth-profiles.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defaults.js";
-import { resolveEnvApiKey } from "../model-auth.js";
-import { resolveConfiguredModelRef } from "../model-selection.js";
+import { resolveEnvApiKey } from "../models/model-auth.js";
+import { resolveConfiguredModelRef } from "../models/model-selection.js";
 
 export type ToolModelConfig = { primary?: string; fallbacks?: string[] };
 

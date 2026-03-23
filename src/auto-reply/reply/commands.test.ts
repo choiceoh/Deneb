@@ -49,7 +49,7 @@ vi.mock("../../channels/plugins/pairing.js", async () => {
   };
 });
 
-vi.mock("../../agents/model-catalog.js", () => ({
+vi.mock("../../agents/models/model-catalog.js", () => ({
   loadModelCatalog: vi.fn(async () => [
     { provider: "anthropic", id: "claude-opus-4-5", name: "Claude Opus" },
     { provider: "anthropic", id: "claude-sonnet-4-5", name: "Claude Sonnet" },
@@ -108,7 +108,7 @@ vi.mock("./commands-context-report.js", () => ({
 vi.resetModules();
 
 const { addSubagentRunForTests, listSubagentRunsForRequester, resetSubagentRegistryForTests } =
-  await import("../../agents/subagent-registry.js");
+  await import("../../agents/subagent/subagent-registry.js");
 const { setDefaultChannelPluginRegistryForTests } =
   await import("../../commands/channel-test-helpers.js");
 const internalHooks = await import("../../hooks/internal-hooks.js");

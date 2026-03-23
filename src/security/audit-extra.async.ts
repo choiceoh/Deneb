@@ -11,7 +11,7 @@ import { SANDBOX_BROWSER_SECURITY_HASH_EPOCH } from "../agents/sandbox/constants
 import { execDockerRaw, type ExecDockerRawResult } from "../agents/sandbox/docker.js";
 import { isToolAllowedByPolicies } from "../agents/tool-policy-match.js";
 import { resolveToolProfilePolicy } from "../agents/tool-policy.js";
-import { listAgentWorkspaceDirs } from "../agents/workspace-dirs.js";
+import { listAgentWorkspaceDirs } from "../agents/workspace/workspace-dirs.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import { MANIFEST_KEY } from "../compat/legacy-names.js";
 import { resolveNativeSkillsEnabled } from "../config/commands.js";

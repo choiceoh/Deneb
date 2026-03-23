@@ -6,13 +6,13 @@ import { upsertPresence } from "../../infra/system-presence.js";
 import type { createSubsystemLogger } from "../../logging/subsystem.js";
 import { truncateUtf16Safe } from "../../utils.js";
 import { isWebchatClient } from "../../utils/message-channel.js";
-import type { AuthRateLimiter } from "../auth-rate-limit.js";
-import type { ResolvedGatewayAuth } from "../auth.js";
+import type { AuthRateLimiter } from "../auth/auth-rate-limit.js";
+import type { ResolvedGatewayAuth } from "../auth/auth.js";
 import { isLoopbackAddress } from "../net.js";
 import { getHandshakeTimeoutMs } from "../server-constants.js";
 import type { GatewayRequestContext, GatewayRequestHandlers } from "../server-methods/types.js";
 import { formatError } from "../server-utils.js";
-import { logWs } from "../ws-log.js";
+import { logWs } from "../ws/ws-log.js";
 import { getHealthVersion, incrementPresenceVersion } from "./health-state.js";
 import { broadcastPresenceSnapshot } from "./presence-events.js";
 import {
@@ -166,8 +166,10 @@ export function attachGatewayWsConnectionHandler(params: AttachGatewayWsConnecti
     const send = (obj: unknown) => {
       try {
         socket.send(JSON.stringify(obj));
-      } catch {
-        /* ignore */
+      } catch (err) {
+        logWsControl.warn(
+          `send failed conn=${connId} remote=${remoteAddr ?? "?"}: ${formatError(err)}`,
+        );
       }
     };
 
@@ -189,8 +191,10 @@ export function attachGatewayWsConnectionHandler(params: AttachGatewayWsConnecti
       }
       try {
         socket.close(code, reason);
-      } catch {
-        /* ignore */
+      } catch (err) {
+        logWsControl.debug(
+          `close failed conn=${connId} remote=${remoteAddr ?? "?"}: ${formatError(err)}`,
+        );
       }
     };
 

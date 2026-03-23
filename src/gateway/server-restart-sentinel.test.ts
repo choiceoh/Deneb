@@ -47,7 +47,7 @@ vi.mock("../config/sessions/delivery-info.js", () => ({
   parseSessionThreadInfo: mocks.parseSessionThreadInfo,
 }));
 
-vi.mock("./session-utils.js", () => ({
+vi.mock("./session/session-utils.js", () => ({
   loadSessionEntry: mocks.loadSessionEntry,
 }));
 

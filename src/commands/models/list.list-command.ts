@@ -1,5 +1,5 @@
 import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
-import { parseModelRef } from "../../agents/model-selection.js";
+import { parseModelRef } from "../../agents/models/model-selection.js";
 import type { RuntimeEnv } from "../../runtime.js";
 import { resolveConfiguredEntries } from "./list.configured.js";
 import { formatErrorWithStack } from "./list.errors.js";
@@ -26,7 +26,7 @@ export async function modelsListCommand(
 ) {
   ensureFlagCompatibility(opts);
   const { ensureAuthProfileStore } = await import("../../agents/auth-profiles.runtime.js");
-  const { ensureDenebModelsJson } = await import("../../agents/models-config.js");
+  const { ensureDenebModelsJson } = await import("../../agents/models/models-config.js");
   const { sourceConfig, resolvedConfig: cfg } = await loadModelsConfigWithSource({
     commandName: "models list",
     runtime,

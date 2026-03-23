@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import { resolveContextTokensForModel } from "../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
-import { resolveModelAuthMode } from "../agents/model-auth.js";
+import { resolveModelAuthMode } from "../agents/models/model-auth.js";
 import {
   buildModelAliasIndex,
   resolveConfiguredModelRef,
   resolveModelRefFromString,
-} from "../agents/model-selection.js";
+} from "../agents/models/model-selection.js";
 import { resolveSandboxRuntimeStatus } from "../agents/sandbox.js";
 import type { SkillCommandSpec } from "../agents/skills.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../agents/usage.js";

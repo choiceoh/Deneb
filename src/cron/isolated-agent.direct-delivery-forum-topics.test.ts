@@ -1,6 +1,6 @@
 import "./isolated-agent.mocks.js";
 import { beforeEach, describe, expect, it } from "vitest";
-import { runSubagentAnnounceFlow } from "../agents/subagent-announce.js";
+import { runSubagentAnnounceFlow } from "../agents/subagent/subagent-announce.js";
 import {
   createCliDeps,
   expectDirectTelegramDelivery,

@@ -23,12 +23,15 @@ type CachedChannelPlugins = {
   registryVersion: number;
   sorted: ChannelPlugin[];
   byId: Map<string, ChannelPlugin>;
+  /** Fast-path: cached reference when exactly one channel is registered. */
+  singletonPlugin: ChannelPlugin | null;
 };
 
 const EMPTY_CHANNEL_PLUGIN_CACHE: CachedChannelPlugins = {
   registryVersion: -1,
   sorted: [],
   byId: new Map(),
+  singletonPlugin: null,
 };
 
 let cachedChannelPlugins = EMPTY_CHANNEL_PLUGIN_CACHE;
@@ -67,13 +70,21 @@ function resolveCachedChannelPlugins(): CachedChannelPlugins {
     registryVersion,
     sorted,
     byId,
+    // Single-channel fast path: cache the lone plugin for O(1) access.
+    singletonPlugin: sorted.length === 1 ? sorted[0] : null,
   };
   cachedChannelPlugins = next;
   return next;
 }
 
 export function listChannelPlugins(): ChannelPlugin[] {
-  return resolveCachedChannelPlugins().sorted.slice();
+  const cache = resolveCachedChannelPlugins();
+  // Single-channel fast path: return a fresh single-element array directly,
+  // avoiding the generic .slice() copy.
+  if (cache.singletonPlugin) {
+    return [cache.singletonPlugin];
+  }
+  return cache.sorted.slice();
 }
 
 export function getChannelPlugin(id: ChannelId): ChannelPlugin | undefined {
@@ -81,7 +92,12 @@ export function getChannelPlugin(id: ChannelId): ChannelPlugin | undefined {
   if (!resolvedId) {
     return undefined;
   }
-  return resolveCachedChannelPlugins().byId.get(resolvedId);
+  const cache = resolveCachedChannelPlugins();
+  // Single-channel fast path: direct identity check avoids Map hash lookup.
+  if (cache.singletonPlugin && cache.singletonPlugin.id === resolvedId) {
+    return cache.singletonPlugin;
+  }
+  return cache.byId.get(resolvedId);
 }
 
 export function normalizeChannelId(raw?: string | null): ChannelId | null {

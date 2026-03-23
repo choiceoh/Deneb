@@ -5,8 +5,8 @@ import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
 
 const persistGatewaySessionLifecycleEventMock = vi.fn();
 
-vi.mock("./session-lifecycle-state.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./session-lifecycle-state.js")>();
+vi.mock("./session/session-lifecycle-state.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./session/session-lifecycle-state.js")>();
   return {
     ...actual,
     persistGatewaySessionLifecycleEvent: (...args: unknown[]) =>

@@ -19,9 +19,9 @@ import {
   isAnthropicRateLimitError,
 } from "../agents/live-auth-keys.js";
 import { isModernModelRef } from "../agents/live-model-filter.js";
-import { getApiKeyForModel } from "../agents/model-auth.js";
-import { shouldSuppressBuiltInModel } from "../agents/model-suppression.js";
-import { ensureDenebModelsJson } from "../agents/models-config.js";
+import { getApiKeyForModel } from "../agents/models/model-auth.js";
+import { shouldSuppressBuiltInModel } from "../agents/models/model-suppression.js";
+import { ensureDenebModelsJson } from "../agents/models/models-config.js";
 import { isRateLimitErrorMessage } from "../agents/pi-embedded-helpers/errors.js";
 import { discoverAuthStorage, discoverModels } from "../agents/pi-model-discovery.js";
 import { clearRuntimeConfigSnapshot, loadConfig } from "../config/config.js";
@@ -30,15 +30,15 @@ import { isTruthyEnvValue } from "../infra/env.js";
 import { DEFAULT_AGENT_ID } from "../routing/session-key.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
 import { GatewayClient } from "./client.js";
-import { renderCatNoncePngBase64 } from "./live-image-probe.js";
+import { renderCatNoncePngBase64 } from "./monitoring/live-image-probe.js";
 import {
   hasExpectedSingleNonce,
   hasExpectedToolNonce,
   shouldRetryExecReadProbe,
   shouldRetryToolReadProbe,
-} from "./live-tool-probe-utils.js";
+} from "./monitoring/live-tool-probe-utils.js";
 import { startGatewayServer } from "./server.js";
-import { loadSessionEntry, readSessionMessages } from "./session-utils.js";
+import { loadSessionEntry, readSessionMessages } from "./session/session-utils.js";
 
 const LIVE = isTruthyEnvValue(process.env.LIVE) || isTruthyEnvValue(process.env.DENEB_LIVE_TEST);
 const GATEWAY_LIVE = isTruthyEnvValue(process.env.DENEB_LIVE_GATEWAY);

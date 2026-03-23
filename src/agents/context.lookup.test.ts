@@ -9,7 +9,7 @@ function mockContextDeps(params: {
   vi.doMock("../config/config.js", () => ({
     loadConfig: params.loadConfig,
   }));
-  vi.doMock("./models-config.js", () => ({
+  vi.doMock("./models/models-config.js", () => ({
     ensureDenebModelsJson: vi.fn(async () => {}),
   }));
   vi.doMock("./agent-paths.js", () => ({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NON_ENV_SECRETREF_MARKER } from "../../agents/model-auth-markers.js";
+import { NON_ENV_SECRETREF_MARKER } from "../../agents/models/model-auth-markers.js";
 import { withEnv } from "../../test-utils/env.js";
 import { resolveProviderAuthOverview } from "./list.auth-overview.js";
 

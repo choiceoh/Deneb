@@ -6,8 +6,8 @@ import {
   parseModelRef,
   resolveModelRefFromString,
   type ModelRef,
-} from "../agents/model-selection.js";
-import { normalizeGoogleModelId } from "../agents/models-config.providers.js";
+} from "../agents/models/model-selection.js";
+import { normalizeGoogleModelId } from "../agents/models/models-config.providers.js";
 import type { DenebConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 

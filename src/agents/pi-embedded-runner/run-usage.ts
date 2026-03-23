@@ -1,6 +1,6 @@
 import type { BackoffPolicy } from "../../infra/backoff.js";
 import { generateSecureToken } from "../../infra/secure-random.js";
-import type { ResolvedProviderAuth } from "../model-auth.js";
+import type { ResolvedProviderAuth } from "../models/model-auth.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import type { EmbeddedPiAgentMeta } from "./types.js";
 

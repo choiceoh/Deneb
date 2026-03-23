@@ -14,7 +14,7 @@ vi.mock("../../infra/ports.js", () => ({
   inspectPortUsage: (port: number) => inspectPortUsage(port),
 }));
 
-vi.mock("../../gateway/probe.js", () => ({
+vi.mock("../../gateway/monitoring/probe.js", () => ({
   probeGateway: (opts: unknown) => probeGateway(opts),
 }));
 

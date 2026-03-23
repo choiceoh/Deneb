@@ -58,15 +58,32 @@ function listConfiguredAccountIds(cfg: DenebConfig): string[] {
   });
 }
 
+/** Singleton result for the common single-account (default) setup. */
+const SINGLE_DEFAULT_ACCOUNT_IDS: readonly string[] = [DEFAULT_ACCOUNT_ID];
+
 export function listTelegramAccountIds(cfg: DenebConfig): string[] {
-  const ids = Array.from(
-    new Set([...listConfiguredAccountIds(cfg), ...listBoundAccountIds(cfg, "telegram")]),
-  );
+  const configuredIds = listConfiguredAccountIds(cfg);
+  const boundIds = listBoundAccountIds(cfg, "telegram");
+
+  // Single-account fast path: no configured accounts and no bound accounts
+  // → return the cached singleton array without Set/sort overhead.
+  if (configuredIds.length === 0 && boundIds.length === 0) {
+    debugAccounts("listTelegramAccountIds", SINGLE_DEFAULT_ACCOUNT_IDS);
+    return SINGLE_DEFAULT_ACCOUNT_IDS as string[];
+  }
+
+  // Single-account fast path: exactly one configured account, no bound accounts.
+  if (configuredIds.length === 1 && boundIds.length === 0) {
+    debugAccounts("listTelegramAccountIds", configuredIds);
+    return configuredIds;
+  }
+
+  const ids = Array.from(new Set([...configuredIds, ...boundIds]));
   debugAccounts("listTelegramAccountIds", ids);
   if (ids.length === 0) {
-    return [DEFAULT_ACCOUNT_ID];
+    return SINGLE_DEFAULT_ACCOUNT_IDS as string[];
   }
-  return ids.toSorted((a, b) => a.localeCompare(b));
+  return ids.length === 1 ? ids : ids.toSorted((a, b) => a.localeCompare(b));
 }
 
 let emittedMissingDefaultWarn = false;
@@ -77,6 +94,24 @@ export function resetMissingDefaultWarnFlag(): void {
 }
 
 export function resolveDefaultTelegramAccountId(cfg: DenebConfig): string {
+  // Single-account fast path: no accounts section and no bound default
+  // → skip all resolution and return the default immediately.
+  const accountsSection = cfg.channels?.telegram?.accounts;
+  if (!accountsSection || Object.keys(accountsSection).length <= 1) {
+    const boundDefault = resolveDefaultAgentBoundAccountId(cfg, "telegram");
+    if (boundDefault) {
+      return boundDefault;
+    }
+    // Single or zero accounts: DEFAULT_ACCOUNT_ID is always correct.
+    if (!accountsSection || Object.keys(accountsSection).length === 0) {
+      return DEFAULT_ACCOUNT_ID;
+    }
+    // Exactly one account configured: return it directly.
+    const soleId = Object.keys(accountsSection)[0];
+    return normalizeAccountId(soleId);
+  }
+
+  // Multi-account path
   const boundDefault = resolveDefaultAgentBoundAccountId(cfg, "telegram");
   if (boundDefault) {
     return boundDefault;
@@ -114,27 +149,36 @@ export function mergeTelegramAccountConfig(
   cfg: DenebConfig,
   accountId: string,
 ): TelegramAccountConfig {
+  const telegramCfg = cfg.channels?.telegram;
+  if (!telegramCfg) {
+    return {} as TelegramAccountConfig;
+  }
+
   const {
     accounts: _ignored,
     defaultAccount: _ignoredDefaultAccount,
     groups: channelGroups,
     ...base
-  } = (cfg.channels?.telegram ?? {}) as TelegramAccountConfig & {
+  } = telegramCfg as TelegramAccountConfig & {
     accounts?: unknown;
     defaultAccount?: unknown;
   };
+
   const account = resolveTelegramAccountConfig(cfg, accountId) ?? {};
 
-  // In multi-account setups, channel-level `groups` must NOT be inherited by
-  // accounts that don't have their own `groups` config.  A bot that is not a
-  // member of a configured group will fail when handling group messages, and
-  // this failure disrupts message delivery for *all* accounts.
-  // Single-account setups keep backward compat: channel-level groups still
-  // applies when the account has no override.
+  // Single-account fast path: when no explicit accounts section exists, skip
+  // the multi-account group-inheritance check entirely — channel-level groups
+  // always apply.
+  const accountsSection = telegramCfg.accounts;
+  if (!accountsSection || Object.keys(accountsSection).length <= 1) {
+    return { ...base, ...account, groups: account.groups ?? channelGroups };
+  }
+
+  // Multi-account: channel-level `groups` must NOT be inherited by accounts
+  // that don't have their own `groups` config. A bot that is not a member of
+  // a configured group will fail, disrupting delivery for *all* accounts.
   // See: https://github.com/deneb/deneb/issues/30673
-  const configuredAccountIds = Object.keys(cfg.channels?.telegram?.accounts ?? {});
-  const isMultiAccount = configuredAccountIds.length > 1;
-  const groups = account.groups ?? (isMultiAccount ? undefined : channelGroups);
+  const groups = account.groups ?? undefined;
 
   return { ...base, ...account, groups };
 }
@@ -168,42 +212,70 @@ export function resolveTelegramPollActionGateState(
   };
 }
 
+// Per-config-snapshot cache for single-account resolution.
+// Avoids re-resolving account config, token, and merging on every message send
+// when the config has not changed (the common hot path).
+let resolvedAccountCache: {
+  cfgRef: WeakRef<DenebConfig>;
+  accountId: string;
+  result: ResolvedTelegramAccount;
+} | null = null;
+
+function resolveAccountUncached(cfg: DenebConfig, accountId: string): ResolvedTelegramAccount {
+  const baseEnabled = cfg.channels?.telegram?.enabled !== false;
+  const merged = mergeTelegramAccountConfig(cfg, accountId);
+  const accountEnabled = merged.enabled !== false;
+  const enabled = baseEnabled && accountEnabled;
+  const tokenResolution = resolveTelegramToken(cfg, { accountId });
+  debugAccounts("resolve", {
+    accountId,
+    enabled,
+    tokenSource: tokenResolution.source,
+  });
+  return {
+    accountId,
+    enabled,
+    name: merged.name?.trim() || undefined,
+    token: tokenResolution.token,
+    tokenSource: tokenResolution.source,
+    config: merged,
+  };
+}
+
 export function resolveTelegramAccount(params: {
   cfg: DenebConfig;
   accountId?: string | null;
 }): ResolvedTelegramAccount {
-  const baseEnabled = params.cfg.channels?.telegram?.enabled !== false;
-
-  const resolve = (accountId: string) => {
-    const merged = mergeTelegramAccountConfig(params.cfg, accountId);
-    const accountEnabled = merged.enabled !== false;
-    const enabled = baseEnabled && accountEnabled;
-    const tokenResolution = resolveTelegramToken(params.cfg, { accountId });
-    debugAccounts("resolve", {
-      accountId,
-      enabled,
-      tokenSource: tokenResolution.source,
-    });
-    return {
-      accountId,
-      enabled,
-      name: merged.name?.trim() || undefined,
-      token: tokenResolution.token,
-      tokenSource: tokenResolution.source,
-      config: merged,
-    } satisfies ResolvedTelegramAccount;
-  };
-
   // If accountId is omitted, prefer a configured account token over failing on
   // the implicit "default" account. This keeps env-based setups working while
   // making config-only tokens work for things like heartbeats.
   return resolveAccountWithDefaultFallback({
     accountId: params.accountId,
     normalizeAccountId,
-    resolvePrimary: resolve,
+    resolvePrimary: (accountId) => {
+      // Hot-path cache: when the same config object + accountId is resolved
+      // repeatedly (e.g., per-message sends with a single account), return
+      // the cached result without re-merging config or re-resolving tokens.
+      const cached = resolvedAccountCache;
+      if (cached && cached.accountId === accountId && cached.cfgRef.deref() === params.cfg) {
+        return cached.result;
+      }
+      const result = resolveAccountUncached(params.cfg, accountId);
+      resolvedAccountCache = {
+        cfgRef: new WeakRef(params.cfg),
+        accountId,
+        result,
+      };
+      return result;
+    },
     hasCredential: (account) => account.tokenSource !== "none",
     resolveDefaultAccountId: () => resolveDefaultTelegramAccountId(params.cfg),
   });
+}
+
+/** Invalidate the per-config account cache (e.g., after config reload). */
+export function invalidateTelegramAccountCache(): void {
+  resolvedAccountCache = null;
 }
 
 export function listEnabledTelegramAccounts(cfg: DenebConfig): ResolvedTelegramAccount[] {

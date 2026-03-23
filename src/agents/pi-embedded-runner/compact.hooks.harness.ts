@@ -224,11 +224,11 @@ export async function loadCompactHooksHarness(): Promise<{
     resolveCompactionReserveTokensFloor: vi.fn(() => 0),
   }));
 
-  vi.doMock("../models-config.js", () => ({
+  vi.doMock("../models/models-config.js", () => ({
     ensureDenebModelsJson: vi.fn(async () => {}),
   }));
 
-  vi.doMock("../model-auth.js", () => ({
+  vi.doMock("../models/model-auth.js", () => ({
     applyLocalNoAuthHeaderOverride: vi.fn((model: unknown) => model),
     getApiKeyForModel: vi.fn(async () => ({ apiKey: "test", mode: "env" })),
     resolveModelAuthMode: vi.fn(() => "env"),
@@ -279,7 +279,7 @@ export async function loadCompactHooksHarness(): Promise<{
     resolveChannelMessageToolHints: vi.fn(() => undefined),
   }));
 
-  vi.doMock("../pi-tools.js", () => ({
+  vi.doMock("../pi-tools/pi-tools.js", () => ({
     createDenebCodingTools: createDenebCodingToolsMock,
   }));
 

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { MANIFEST_KEY } from "../../compat/legacy-names.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { resolveBundledPluginsDir } from "../../plugins/bundled-dir.js";
 import { discoverDenebPlugins } from "../../plugins/discovery.js";
 import { loadPluginManifest } from "../../plugins/manifest.js";
@@ -9,6 +10,8 @@ import type { PackageManifest as PluginPackageManifest } from "../../plugins/man
 import type { PluginOrigin } from "../../plugins/types.js";
 import { isRecord, resolveConfigDir, resolveUserPath } from "../../utils.js";
 import type { ChannelMeta } from "./types.js";
+
+const log = createSubsystemLogger("channels");
 
 export type ChannelUiMetaEntry = {
   id: string;
@@ -121,8 +124,8 @@ function loadExternalCatalogEntries(options: CatalogOptions): ExternalCatalogEnt
     try {
       const payload = JSON.parse(fs.readFileSync(resolved, "utf-8")) as unknown;
       entries.push(...parseCatalogEntries(payload));
-    } catch {
-      // Ignore invalid catalog files.
+    } catch (err) {
+      log.warn(`failed to load catalog file ${resolved}: ${String(err)}`);
     }
   }
   return entries;
@@ -285,7 +288,8 @@ function loadBundledMetadataCatalogEntries(options: CatalogOptions): ChannelPlug
     let packageJson: PluginPackageManifest;
     try {
       packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as PluginPackageManifest;
-    } catch {
+    } catch (err) {
+      log.warn(`failed to parse bundled plugin package.json at ${packageJsonPath}: ${String(err)}`);
       continue;
     }
 

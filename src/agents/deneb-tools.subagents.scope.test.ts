@@ -7,7 +7,10 @@ import {
   resetSubagentsConfigOverride,
   setSubagentsConfigOverride,
 } from "./deneb-tools.subagents.test-harness.js";
-import { addSubagentRunForTests, resetSubagentRegistryForTests } from "./subagent-registry.js";
+import {
+  addSubagentRunForTests,
+  resetSubagentRegistryForTests,
+} from "./subagent/subagent-registry.js";
 import "./test-helpers/fast-core-tools.js";
 import { createPerSenderSessionConfig } from "./test-helpers/session-config.js";
 import { createSubagentsTool } from "./tools/subagents-tool.js";

@@ -31,7 +31,7 @@ vi.mock("@mariozechner/pi-coding-agent", () => ({
   },
 }));
 
-vi.mock("./models-config.js", () => ({
+vi.mock("./models/models-config.js", () => ({
   ensureDenebModelsJson: (...args: unknown[]) => ensureDenebModelsJsonMock(...args),
 }));
 
@@ -44,7 +44,7 @@ vi.mock("./pi-embedded-runner/model.js", () => ({
   resolveModelWithRegistry: (...args: unknown[]) => resolveModelWithRegistryMock(...args),
 }));
 
-vi.mock("./model-auth.js", () => ({
+vi.mock("./models/model-auth.js", () => ({
   getApiKeyForModel: (...args: unknown[]) => getApiKeyForModelMock(...args),
   requireApiKey: (...args: unknown[]) => requireApiKeyMock(...args),
 }));

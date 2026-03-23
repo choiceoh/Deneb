@@ -10,7 +10,7 @@ import { formatCliCommand } from "../cli/command-format.js";
 import type { ConfigFileSnapshot, DenebConfig } from "../config/config.js";
 import { resolveConfigPath, resolveStateDir } from "../config/paths.js";
 import { hasConfiguredSecretInput } from "../config/types.secrets.js";
-import { resolveGatewayAuth } from "../gateway/auth.js";
+import { resolveGatewayAuth } from "../gateway/auth/auth.js";
 import {
   listInterpreterLikeSafeBins,
   resolveMergedSafeBinProfileFixtures,
@@ -25,7 +25,7 @@ import {
 import { DEFAULT_GATEWAY_HTTP_TOOL_DENY } from "./dangerous-tools.js";
 
 type ExecDockerRawFn = typeof import("../agents/sandbox/docker.js").execDockerRaw;
-type ProbeGatewayFn = typeof import("../gateway/probe.js").probeGateway;
+type ProbeGatewayFn = typeof import("../gateway/monitoring/probe.js").probeGateway;
 
 export type SecurityAuditSeverity = "info" | "warn" | "critical";
 
@@ -113,8 +113,8 @@ let auditChannelModulePromise: Promise<typeof import("./audit-channel.js")> | un
 let gatewayProbeDepsPromise:
   | Promise<{
       buildGatewayConnectionDetails: typeof import("../gateway/call.js").buildGatewayConnectionDetails;
-      resolveGatewayProbeAuthSafe: typeof import("../gateway/probe-auth.js").resolveGatewayProbeAuthSafe;
-      probeGateway: typeof import("../gateway/probe.js").probeGateway;
+      resolveGatewayProbeAuthSafe: typeof import("../gateway/auth/probe-auth.js").resolveGatewayProbeAuthSafe;
+      probeGateway: typeof import("../gateway/monitoring/probe.js").probeGateway;
     }>
   | undefined;
 
@@ -141,8 +141,8 @@ async function loadAuditChannelModule() {
 async function loadGatewayProbeDeps() {
   gatewayProbeDepsPromise ??= Promise.all([
     import("../gateway/call.js"),
-    import("../gateway/probe-auth.js"),
-    import("../gateway/probe.js"),
+    import("../gateway/auth/probe-auth.js"),
+    import("../gateway/monitoring/probe.js"),
   ]).then(([callModule, probeAuthModule, probeModule]) => ({
     buildGatewayConnectionDetails: callModule.buildGatewayConnectionDetails,
     resolveGatewayProbeAuthSafe: probeAuthModule.resolveGatewayProbeAuthSafe,

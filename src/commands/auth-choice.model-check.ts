@@ -1,7 +1,7 @@
 import { ensureAuthProfileStore, listProfilesForProvider } from "../agents/auth-profiles.js";
-import { hasUsableCustomProviderApiKey, resolveEnvApiKey } from "../agents/model-auth.js";
-import { loadModelCatalog } from "../agents/model-catalog.js";
-import { resolveDefaultModelForAgent } from "../agents/model-selection.js";
+import { hasUsableCustomProviderApiKey, resolveEnvApiKey } from "../agents/models/model-auth.js";
+import { loadModelCatalog } from "../agents/models/model-catalog.js";
+import { resolveDefaultModelForAgent } from "../agents/models/model-selection.js";
 import type { DenebConfig } from "../config/config.js";
 import type { WizardPrompter } from "../wizard/prompts.js";
 import { buildProviderAuthRecoveryHint } from "./provider-auth-guidance.js";

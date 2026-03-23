@@ -66,7 +66,7 @@ vi.mock("../../config/types.secrets.js", () => ({
   resolveSecretInputRef: resolveSecretInputRefMock,
 }));
 
-vi.mock("../../gateway/auth.js", () => ({
+vi.mock("../../gateway/auth/auth.js", () => ({
   resolveGatewayAuth: resolveGatewayAuthMock,
 }));
 

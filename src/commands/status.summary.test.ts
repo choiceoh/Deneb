@@ -14,7 +14,7 @@ vi.mock("../agents/defaults.js", () => ({
   DEFAULT_PROVIDER: "openai",
 }));
 
-vi.mock("../agents/model-selection.js", () => ({
+vi.mock("../agents/models/model-selection.js", () => ({
   resolveConfiguredModelRef: vi.fn(() => ({
     provider: "openai",
     model: "gpt-5.2",
@@ -39,7 +39,7 @@ vi.mock("../gateway/agent-list.js", () => ({
   })),
 }));
 
-vi.mock("../gateway/session-utils.js", () => ({
+vi.mock("../gateway/session/session-utils.js", () => ({
   classifySessionKey: vi.fn(() => "direct"),
   resolveSessionModelRef: vi.fn(() => ({
     provider: "openai",

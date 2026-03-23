@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveDenebAgentDir } from "../agents/agent-paths.js";
 import { collectProviderApiKeys } from "../agents/live-auth-keys.js";
-import { resolveApiKeyForProvider } from "../agents/model-auth.js";
+import { resolveApiKeyForProvider } from "../agents/models/model-auth.js";
 import type { DenebConfig } from "../config/config.js";
 import { loadConfig } from "../config/config.js";
 import { isTruthyEnvValue } from "../infra/env.js";

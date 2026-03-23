@@ -6,7 +6,7 @@ import {
 } from "../../context-engine/index.js";
 import { enqueueCommandInLane } from "../../process/command-queue.js";
 import { markAuthProfileGood, markAuthProfileUsed } from "../auth-profiles.js";
-import { applyLocalNoAuthHeaderOverride } from "../model-auth.js";
+import { applyLocalNoAuthHeaderOverride } from "../models/model-auth.js";
 import { formatAssistantErrorText } from "../pi-embedded-helpers.js";
 import { normalizeUsage, derivePromptTokens, type UsageLike } from "../usage.js";
 import { resolveSessionLane, resolveGlobalLane } from "./lanes.js";

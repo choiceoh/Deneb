@@ -38,10 +38,10 @@ describe("describeImageWithModel", () => {
         (provider === "minimax" || provider === "minimax-portal") && modelId === "MiniMax-VL-01",
       minimaxUnderstandImage: minimaxUnderstandImageMock,
     }));
-    vi.doMock("../../agents/models-config.js", () => ({
+    vi.doMock("../../agents/models/models-config.js", () => ({
       ensureDenebModelsJson: ensureDenebModelsJsonMock,
     }));
-    vi.doMock("../../agents/model-auth.js", () => ({
+    vi.doMock("../../agents/models/model-auth.js", () => ({
       getApiKeyForModel: getApiKeyForModelMock,
       resolveApiKeyForProvider: resolveApiKeyForProviderMock,
       requireApiKey: requireApiKeyMock,

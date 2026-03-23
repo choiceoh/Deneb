@@ -3,7 +3,7 @@ import type { SessionEntry } from "../config/sessions.js";
 import { getAgentRunContext, registerAgentRunContext } from "../infra/agent-events.js";
 import { toAgentRequestSessionKey } from "../routing/session-key.js";
 import { resolvePreferredSessionKeyForSessionIdMatches } from "../sessions/session-id-resolution.js";
-import { loadCombinedSessionStoreForGateway } from "./session-utils.js";
+import { loadCombinedSessionStoreForGateway } from "./session/session-utils.js";
 
 const RUN_LOOKUP_CACHE_LIMIT = 256;
 const RUN_LOOKUP_MISS_TTL_MS = 1_000;

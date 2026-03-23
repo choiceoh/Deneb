@@ -2,7 +2,7 @@ import type { DenebConfig } from "../config/config.js";
 import type { AgentBootstrapHookContext } from "../hooks/internal-hooks.js";
 import { createInternalHookEvent, triggerInternalHook } from "../hooks/internal-hooks.js";
 import { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
-import type { WorkspaceBootstrapFile } from "./workspace.js";
+import type { WorkspaceBootstrapFile } from "./workspace/workspace.js";
 
 export async function applyBootstrapHookOverrides(params: {
   files: WorkspaceBootstrapFile[];

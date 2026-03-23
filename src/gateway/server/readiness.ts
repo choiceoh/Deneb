@@ -5,7 +5,7 @@ import {
   evaluateChannelHealth,
   type ChannelHealthPolicy,
   type ChannelHealthEvaluation,
-} from "../channel-health-policy.js";
+} from "../monitoring/channel-health-policy.js";
 import type { ChannelManager } from "../server-channels.js";
 
 export type ReadinessResult = {

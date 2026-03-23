@@ -1,7 +1,7 @@
 import {
   filterBootstrapFilesForSession,
   loadExtraBootstrapFilesWithDiagnostics,
-} from "../../../agents/workspace.js";
+} from "../../../agents/workspace/workspace.js";
 import { createSubsystemLogger } from "../../../logging/subsystem.js";
 import { resolveHookConfig } from "../../config.js";
 import { isAgentBootstrapEvent, type HookHandler } from "../../hooks.js";

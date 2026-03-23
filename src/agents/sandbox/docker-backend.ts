@@ -1,4 +1,4 @@
-import { buildDockerExecArgs } from "../bash-tools.shared.js";
+import { buildDockerExecArgs } from "../bash-tools/bash-tools.shared.js";
 import type {
   CreateSandboxBackendParams,
   SandboxBackendManager,

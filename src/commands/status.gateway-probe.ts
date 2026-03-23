@@ -1,5 +1,5 @@
 import type { loadConfig } from "../config/config.js";
-import { resolveGatewayProbeAuthSafe } from "../gateway/probe-auth.js";
+import { resolveGatewayProbeAuthSafe } from "../gateway/auth/probe-auth.js";
 export { pickGatewaySelfPresence } from "./gateway-presence.js";
 
 export function resolveGatewayProbeAuthResolution(cfg: ReturnType<typeof loadConfig>): {

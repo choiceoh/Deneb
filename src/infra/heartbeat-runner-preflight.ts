@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveSendableOutboundReplyParts } from "deneb/plugin-sdk/reply-payload";
 import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
-import { DEFAULT_HEARTBEAT_FILENAME } from "../agents/workspace.js";
+import { DEFAULT_HEARTBEAT_FILENAME } from "../agents/workspace/workspace.js";
 import {
   isHeartbeatContentEffectivelyEmpty,
   stripHeartbeatToken,

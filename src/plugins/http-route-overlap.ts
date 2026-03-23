@@ -1,4 +1,4 @@
-import { canonicalizePathVariant } from "../gateway/security-path.js";
+import { canonicalizePathVariant } from "../gateway/auth/security-path.js";
 import type { DenebPluginHttpRouteMatch } from "./types.js";
 
 type PluginHttpRouteLike = {

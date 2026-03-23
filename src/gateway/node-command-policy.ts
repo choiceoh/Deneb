@@ -4,7 +4,7 @@ import {
   NODE_SYSTEM_NOTIFY_COMMAND,
   NODE_SYSTEM_RUN_COMMANDS,
 } from "../infra/node-commands.js";
-import { normalizeDeviceMetadataForPolicy } from "./device-metadata-normalization.js";
+import { normalizeDeviceMetadataForPolicy } from "./auth/device-metadata-normalization.js";
 import type { NodeSession } from "./node-registry.js";
 
 const CANVAS_COMMANDS = [

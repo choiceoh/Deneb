@@ -68,8 +68,8 @@ vi.mock("./pi-embedded-runner/compact.js", () => ({
   }),
 }));
 
-vi.mock("./models-config.js", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("./models-config.js")>();
+vi.mock("./models/models-config.js", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("./models/models-config.js")>();
   return {
     ...mod,
     ensureDenebModelsJson: vi.fn(async () => ({ wrote: false })),

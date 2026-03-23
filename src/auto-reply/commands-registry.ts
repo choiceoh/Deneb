@@ -1,5 +1,5 @@
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
-import { resolveConfiguredModelRef } from "../agents/model-selection.js";
+import { resolveConfiguredModelRef } from "../agents/models/model-selection.js";
 import type { SkillCommandSpec } from "../agents/skills.js";
 import { isCommandFlagEnabled } from "../config/commands.js";
 import type { DenebConfig } from "../config/types.js";

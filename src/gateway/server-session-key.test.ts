@@ -11,8 +11,9 @@ vi.mock("../config/config.js", () => ({
   loadConfig: () => hoisted.loadConfigMock(),
 }));
 
-vi.mock("./session-utils.js", async () => {
-  const actual = await vi.importActual<typeof import("./session-utils.js")>("./session-utils.js");
+vi.mock("./session/session-utils.js", async () => {
+  const actual =
+    await vi.importActual<typeof import("./session/session-utils.js")>("./session-utils.js");
   return {
     ...actual,
     loadCombinedSessionStoreForGateway: (cfg: DenebConfig) =>
