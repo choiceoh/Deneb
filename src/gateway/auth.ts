@@ -253,30 +253,19 @@ export function resolveGatewayAuth(params: {
   });
   const token = resolvedCredentials.token;
   const password = resolvedCredentials.password;
-  const trustedProxy = authConfig.trustedProxy;
 
-  let mode: ResolvedGatewayAuth["mode"];
-  let modeSource: ResolvedGatewayAuth["modeSource"];
-  if (authOverride?.mode !== undefined) {
-    mode = authOverride.mode;
-    modeSource = "override";
-  } else if (authConfig.mode) {
-    mode = authConfig.mode;
-    modeSource = "config";
-  } else if (password) {
-    mode = "password";
-    modeSource = "password";
-  } else if (token) {
-    mode = "token";
-    modeSource = "token";
-  } else {
-    mode = "token";
-    modeSource = "default";
-  }
+  // Simplified: token-only auth (enterprise modes removed)
+  const mode: ResolvedGatewayAuth["mode"] = authOverride?.mode === "none" ? "none" : "token";
+  const modeSource: ResolvedGatewayAuth["modeSource"] =
+    authOverride?.mode !== undefined
+      ? "override"
+      : authConfig.mode
+        ? "config"
+        : token
+          ? "token"
+          : "default";
 
-  const allowTailscale =
-    authConfig.allowTailscale ??
-    (params.tailscaleMode === "serve" && mode !== "password" && mode !== "trusted-proxy");
+  const allowTailscale = authConfig.allowTailscale ?? params.tailscaleMode === "serve";
 
   return {
     mode,
@@ -284,13 +273,12 @@ export function resolveGatewayAuth(params: {
     token,
     password,
     allowTailscale,
-    trustedProxy,
   };
 }
 
 export function assertGatewayAuthConfigured(
   auth: ResolvedGatewayAuth,
-  rawAuthConfig?: GatewayAuthConfig | null,
+  _rawAuthConfig?: GatewayAuthConfig | null,
 ): void {
   if (auth.mode === "token" && !auth.token) {
     if (auth.allowTailscale) {
@@ -300,72 +288,6 @@ export function assertGatewayAuthConfigured(
       "gateway auth mode is token, but no token was configured (set gateway.auth.token or DENEB_GATEWAY_TOKEN)",
     );
   }
-  if (auth.mode === "password" && !auth.password) {
-    if (
-      rawAuthConfig?.password != null && // pragma: allowlist secret
-      typeof rawAuthConfig.password !== "string" // pragma: allowlist secret
-    ) {
-      throw new Error(
-        "gateway auth mode is password, but gateway.auth.password contains a provider reference object instead of a resolved string — bootstrap secrets (gateway.auth.password) must be plaintext strings or set via the DENEB_GATEWAY_PASSWORD environment variable because the secrets provider system has not initialised yet at gateway startup", // pragma: allowlist secret
-      );
-    }
-    throw new Error("gateway auth mode is password, but no password was configured");
-  }
-  if (auth.mode === "trusted-proxy") {
-    if (!auth.trustedProxy) {
-      throw new Error(
-        "gateway auth mode is trusted-proxy, but no trustedProxy config was provided (set gateway.auth.trustedProxy)",
-      );
-    }
-    if (!auth.trustedProxy.userHeader || auth.trustedProxy.userHeader.trim() === "") {
-      throw new Error(
-        "gateway auth mode is trusted-proxy, but trustedProxy.userHeader is empty (set gateway.auth.trustedProxy.userHeader)",
-      );
-    }
-  }
-}
-
-/**
- * Check if the request came from a trusted proxy and extract user identity.
- * Returns the user identity if valid, or null with a reason if not.
- */
-function authorizeTrustedProxy(params: {
-  req?: IncomingMessage;
-  trustedProxies?: string[];
-  trustedProxyConfig: GatewayTrustedProxyConfig;
-}): { user: string } | { reason: string } {
-  const { req, trustedProxies, trustedProxyConfig } = params;
-
-  if (!req) {
-    return { reason: "trusted_proxy_no_request" };
-  }
-
-  const remoteAddr = req.socket?.remoteAddress;
-  if (!remoteAddr || !isTrustedProxyAddress(remoteAddr, trustedProxies)) {
-    return { reason: "trusted_proxy_untrusted_source" };
-  }
-
-  const requiredHeaders = trustedProxyConfig.requiredHeaders ?? [];
-  for (const header of requiredHeaders) {
-    const value = headerValue(req.headers[header.toLowerCase()]);
-    if (!value || value.trim() === "") {
-      return { reason: `trusted_proxy_missing_header_${header}` };
-    }
-  }
-
-  const userHeaderValue = headerValue(req.headers[trustedProxyConfig.userHeader.toLowerCase()]);
-  if (!userHeaderValue || userHeaderValue.trim() === "") {
-    return { reason: "trusted_proxy_user_missing" };
-  }
-
-  const user = userHeaderValue.trim();
-
-  const allowUsers = trustedProxyConfig.allowUsers ?? [];
-  if (allowUsers.length > 0 && !allowUsers.includes(user)) {
-    return { reason: "trusted_proxy_user_not_allowed" };
-  }
-
-  return { user };
 }
 
 function shouldAllowTailscaleHeaderAuth(authSurface: GatewayAuthSurface): boolean {
@@ -384,26 +306,6 @@ export async function authorizeGatewayConnect(
     trustedProxies,
     params.allowRealIpFallback === true,
   );
-
-  if (auth.mode === "trusted-proxy") {
-    if (!auth.trustedProxy) {
-      return { ok: false, reason: "trusted_proxy_config_missing" };
-    }
-    if (!trustedProxies || trustedProxies.length === 0) {
-      return { ok: false, reason: "trusted_proxy_no_proxies_configured" };
-    }
-
-    const result = authorizeTrustedProxy({
-      req,
-      trustedProxies,
-      trustedProxyConfig: auth.trustedProxy,
-    });
-
-    if ("user" in result) {
-      return { ok: true, method: "trusted-proxy", user: result.user };
-    }
-    return { ok: false, reason: result.reason };
-  }
 
   if (auth.mode === "none") {
     return { ok: true, method: "none" };
@@ -458,23 +360,6 @@ export async function authorizeGatewayConnect(
     }
     limiter?.reset(ip, rateLimitScope);
     return { ok: true, method: "token" };
-  }
-
-  if (auth.mode === "password") {
-    const password = connectAuth?.password;
-    if (!auth.password) {
-      return { ok: false, reason: "password_missing_config" };
-    }
-    if (!password) {
-      // Same as token_missing — don't penalize absent credentials.
-      return { ok: false, reason: "password_missing" };
-    }
-    if (!safeEqualSecret(password, auth.password)) {
-      limiter?.recordFailure(ip, rateLimitScope);
-      return { ok: false, reason: "password_mismatch" };
-    }
-    limiter?.reset(ip, rateLimitScope);
-    return { ok: true, method: "password" };
   }
 
   limiter?.recordFailure(ip, rateLimitScope);

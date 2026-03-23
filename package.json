@@ -157,10 +157,6 @@
       "types": "./dist/plugin-sdk/acp-runtime.d.ts",
       "default": "./dist/plugin-sdk/acp-runtime.js"
     },
-    "./plugin-sdk/acpx": {
-      "types": "./dist/plugin-sdk/acpx.d.ts",
-      "default": "./dist/plugin-sdk/acpx.js"
-    },
     "./plugin-sdk/telegram": {
       "types": "./dist/plugin-sdk/telegram.d.ts",
       "default": "./dist/plugin-sdk/telegram.js"
@@ -192,10 +188,6 @@
     "./plugin-sdk/boolean-param": {
       "types": "./dist/plugin-sdk/boolean-param.d.ts",
       "default": "./dist/plugin-sdk/boolean-param.js"
-    },
-    "./plugin-sdk/diagnostics-otel": {
-      "types": "./dist/plugin-sdk/diagnostics-otel.d.ts",
-      "default": "./dist/plugin-sdk/diagnostics-otel.js"
     },
     "./plugin-sdk/diffs": {
       "types": "./dist/plugin-sdk/diffs.d.ts",
