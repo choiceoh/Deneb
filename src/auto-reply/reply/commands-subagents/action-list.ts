@@ -1,4 +1,4 @@
-import { buildSubagentList } from "../../../agents/subagent-control.js";
+import { buildSubagentList } from "../../../agents/subagent/subagent-control.js";
 import type { CommandHandlerResult } from "../commands-types.js";
 import { type SubagentsCommandContext, RECENT_WINDOW_MINUTES, stopWithText } from "./shared.js";
 

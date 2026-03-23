@@ -4,7 +4,7 @@ import { abortEmbeddedPiRun } from "../../agents/pi-embedded.js";
 import {
   listSubagentRunsForController,
   markSubagentRunTerminated,
-} from "../../agents/subagent-registry.js";
+} from "../../agents/subagent/subagent-registry.js";
 import {
   resolveInternalSessionKey,
   resolveMainSessionAlias,

@@ -3,7 +3,7 @@ import { parseTelegramTarget } from "../../extensions/telegram/api.js";
 import { signalOutbound, telegramOutbound } from "../../test/channel-outbounds.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
 import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
-import { runSubagentAnnounceFlow } from "../agents/subagent-announce.js";
+import { runSubagentAnnounceFlow } from "../agents/subagent/subagent-announce.js";
 import { callGateway } from "../gateway/call.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
 import { createOutboundTestPlugin, createTestRegistry } from "../test-utils/channel-plugins.js";

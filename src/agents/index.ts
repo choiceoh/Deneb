@@ -55,7 +55,7 @@ export {
   releaseSubagentRun,
   resolveRequesterForChildSession,
   shouldIgnorePostCompletionAnnounceForSession,
-} from "./subagent-registry.js";
+} from "./subagent/subagent-registry.js";
 
 // Identity / avatar
 export { resolveAgentAvatar } from "./identity-avatar.js";

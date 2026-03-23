@@ -1,9 +1,9 @@
-import { resolveStoredSubagentCapabilities } from "../../../agents/subagent-capabilities.js";
-import type { ResolvedSubagentController } from "../../../agents/subagent-control.js";
+import { resolveStoredSubagentCapabilities } from "../../../agents/subagent/subagent-capabilities.js";
+import type { ResolvedSubagentController } from "../../../agents/subagent/subagent-control.js";
 import {
   countPendingDescendantRuns,
   type SubagentRunRecord,
-} from "../../../agents/subagent-registry.js";
+} from "../../../agents/subagent/subagent-registry.js";
 import {
   extractAssistantText,
   resolveInternalSessionKey,

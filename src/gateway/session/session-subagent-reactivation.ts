@@ -1,7 +1,7 @@
 import {
   getSubagentRunByChildSessionKey,
   replaceSubagentRunAfterSteer,
-} from "../../agents/subagent-registry.js";
+} from "../../agents/subagent/subagent-registry.js";
 
 export function reactivateCompletedSubagentSession(params: {
   sessionKey: string;

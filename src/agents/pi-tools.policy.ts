@@ -13,7 +13,7 @@ import type { SandboxToolPolicy } from "./sandbox.js";
 import {
   resolveStoredSubagentCapabilities,
   type SubagentSessionRole,
-} from "./subagent-capabilities.js";
+} from "./subagent/subagent-capabilities.js";
 import { isToolAllowedByPolicies, isToolAllowedByPolicyName } from "./tool-policy-match.js";
 import { normalizeToolName } from "./tool-policy.js";
 

@@ -1,4 +1,4 @@
-import type { SubagentRunRecord } from "../../agents/subagent-registry.js";
+import type { SubagentRunRecord } from "../../agents/subagent/subagent-registry.js";
 import { truncateUtf16Safe } from "../../utils.js";
 
 export function resolveSubagentLabel(entry: SubagentRunRecord, fallback = "subagent") {

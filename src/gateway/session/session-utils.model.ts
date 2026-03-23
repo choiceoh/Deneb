@@ -6,8 +6,8 @@ import {
   parseModelRef,
   resolveConfiguredModelRef,
   resolveDefaultModelForAgent,
-} from "../../agents/model-selection.js";
-import { getSubagentSessionRuntimeMs } from "../../agents/subagent-registry.js";
+} from "../../agents/models/model-selection.js";
+import { getSubagentSessionRuntimeMs } from "../../agents/subagent/subagent-registry.js";
 import type { DenebConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { normalizeAgentId, parseAgentSessionKey } from "../../routing/session-key.js";

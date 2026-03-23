@@ -30,7 +30,7 @@ import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
 import {
   countActiveDescendantRuns,
   listDescendantRunsForRequester,
-} from "../../agents/subagent-registry.js";
+} from "../../agents/subagent/subagent-registry.js";
 import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
 import { deriveSessionTotalTokens, hasNonzeroUsage } from "../../agents/usage.js";
 import { ensureAgentWorkspace } from "../../agents/workspace.js";

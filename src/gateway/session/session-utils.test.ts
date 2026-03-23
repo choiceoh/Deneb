@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   addSubagentRunForTests,
   resetSubagentRegistryForTests,
-} from "../../agents/subagent-registry.js";
+} from "../../agents/subagent/subagent-registry.js";
 import { clearConfigCache, writeConfigFile } from "../../config/config.js";
 import type { DenebConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
