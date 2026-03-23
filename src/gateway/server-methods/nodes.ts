@@ -1,15 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { loadConfig } from "../../config/config.js";
-import { listDevicePairing } from "../../infra/device-pairing.js";
-// Inlined stubs (node pairing removed for solo-dev simplification).
+// Inlined stubs (node/device pairing removed for solo-dev simplification).
 type PairedNode = {
   nodeId: string;
+  deviceId: string;
   displayName?: string;
   platform?: string;
   deviceFamily?: string;
   commands?: string[];
   remoteIp?: string;
   bins?: string[];
+  role?: string;
+  roles?: string[];
 };
 
 async function listNodePairing(): Promise<{ pending: unknown[]; paired: PairedNode[] }> {
@@ -417,7 +419,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
       return;
     }
     await respondUnavailableOnThrow(respond, async () => {
-      const list = await listDevicePairing();
+      const list = { pending: [] as PairedNode[], paired: [] as PairedNode[] };
       const pairedById = new Map(
         list.paired
           .filter((entry) => isNodeEntry(entry))
@@ -504,7 +506,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
       return;
     }
     await respondUnavailableOnThrow(respond, async () => {
-      const list = await listDevicePairing();
+      const list = { pending: [] as PairedNode[], paired: [] as PairedNode[] };
       const paired = list.paired.find((n) => n.deviceId === id && isNodeEntry(n));
       const connected = context.nodeRegistry.listConnected();
       const live = connected.find((n) => n.nodeId === id);

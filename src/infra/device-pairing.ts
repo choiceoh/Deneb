@@ -50,20 +50,8 @@ export async function rejectDevicePairing(_requestId: string): Promise<boolean> 
   return false;
 }
 
-export async function removePairedDevice(_deviceId: string): Promise<boolean> {
-  return false;
-}
-
-export function summarizeDeviceTokens(_tokens?: unknown[]): unknown[] {
-  return [];
-}
-
 export async function requestDevicePairing(_params?: unknown): Promise<PairingResult> {
   return { request: { requestId: "", silent: true }, created: false };
-}
-
-export async function rotateDeviceToken(): Promise<unknown> {
-  return null;
 }
 
 export async function revokeDeviceToken(_params?: {

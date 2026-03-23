@@ -16,17 +16,11 @@ const whatsappChannelPlugin = {
   meta: { id: "whatsapp", label: "WhatsApp" },
 } as unknown as ChannelPlugin;
 
-// Stubs for removed runtime setters — these are no-ops now.
-function setSlackRuntime(_runtime: unknown) {}
-function setWhatsAppRuntime(_runtime: unknown) {}
-
 export function installHeartbeatRunnerTestRuntime(params?: { includeSlack?: boolean }): void {
   beforeEach(() => {
     const runtime = createPluginRuntime();
     setTelegramRuntime(runtime);
-    setWhatsAppRuntime(runtime);
     if (params?.includeSlack) {
-      setSlackRuntime(runtime);
       setActivePluginRegistry(
         createTestRegistry([
           { pluginId: "slack", plugin: slackChannelPlugin, source: "test" },

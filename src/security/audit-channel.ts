@@ -14,16 +14,6 @@ import { formatErrorMessage } from "../infra/errors.js";
 import { createLazyRuntimeSurface } from "../shared/lazy-runtime.js";
 import { normalizeStringEntries } from "../shared/string-normalization.js";
 import type { SecurityAuditFinding, SecurityAuditSeverity } from "./audit.js";
-// DM policy system removed for solo-dev simplification.
-// Stub: all senders are allowed, DM policy is always "open".
-async function resolveDmAllowState(_params: {
-  provider: ChannelId;
-  accountId: string;
-  allowFrom?: Array<string | number> | null;
-  normalizeEntry?: (raw: string) => string;
-}): Promise<{ hasWildcard: boolean; isMultiUserDm: boolean }> {
-  return { hasWildcard: true, isMultiUserDm: false };
-}
 
 const loadAuditChannelRuntimeModule = createLazyRuntimeSurface(
   () => import("./audit-channel.runtime.js"),
@@ -718,12 +708,9 @@ export async function collectChannelSecurityFindings(params: {
     normalizeEntry?: (raw: string) => string;
   }) => {
     const policyPath = input.policyPath ?? `${input.allowFromPath}policy`;
-    const { hasWildcard, isMultiUserDm } = await resolveDmAllowState({
-      provider: input.provider,
-      accountId: input.accountId,
-      allowFrom: input.allowFrom,
-      normalizeEntry: input.normalizeEntry,
-    });
+    // DM policy disabled (solo-dev): all senders allowed, no multi-user DMs.
+    const hasWildcard = true;
+    const isMultiUserDm = false;
     const dmScope = params.cfg.session?.dmScope ?? "main";
 
     if (input.dmPolicy === "open") {
