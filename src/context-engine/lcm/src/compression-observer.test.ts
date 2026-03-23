@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CompactionSummarizeFn } from "./compaction.js";
 import {
   CompressionObserver,
@@ -88,6 +88,11 @@ function addMessagesForCompaction(
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
+/** Flush all pending timers and microtasks so background updates complete. */
+async function flushUpdates() {
+  await vi.runAllTimersAsync();
+}
+
 describe("CompressionObserver", () => {
   let conversationStore: ReturnType<typeof createMockConversationStore>;
   let summaryStore: ReturnType<typeof createMockSummaryStore>;
@@ -95,6 +100,7 @@ describe("CompressionObserver", () => {
   let config: CompressionObserverConfig;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     conversationStore = createMockConversationStore();
     summaryStore = createMockSummaryStore(conversationStore);
     mockSummarize = createMockSummarize();
@@ -106,6 +112,10 @@ describe("CompressionObserver", () => {
       // Use a small tail for tests so we don't need 40+ messages.
       freshTailCount: 8,
     };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   function createObserver(overrides?: Partial<CompressionObserverConfig>) {
@@ -137,15 +147,10 @@ describe("CompressionObserver", () => {
       observer.onMessage(conversationId);
       observer.onMessage(conversationId);
 
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
 
       const cached = observer.getCachedSummary(conversationId);
-      expect(cached).toBeDefined();
+      expect(cached).not.toBeNull();
       expect(cached!.summary.length).toBeGreaterThan(0);
       expect(cached!.messagesCovered).toBe(4); // 12 - 8 tail
       expect(cached!.tokenCount).toBeGreaterThan(0);
@@ -160,7 +165,7 @@ describe("CompressionObserver", () => {
       const observer = createObserver();
       observer.triggerUpdate(conversationId);
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushUpdates();
 
       expect(observer.getCachedSummary(conversationId)).toBeNull();
     });
@@ -175,12 +180,7 @@ describe("CompressionObserver", () => {
       observer.onMessage(conversationId);
       observer.onMessage(conversationId);
 
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
 
       observer.invalidate(conversationId);
       observer.onMessage(conversationId);
@@ -197,14 +197,10 @@ describe("CompressionObserver", () => {
       const observer = createObserver();
       observer.triggerUpdate(conversationId);
 
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
 
       const cached = observer.getCachedSummary(conversationId)!;
+      expect(cached).not.toBeNull();
       expect(observer.isSummaryFresh(conversationId, cached.totalContextTokens)).toBe(true);
     });
 
@@ -215,14 +211,10 @@ describe("CompressionObserver", () => {
       const observer = createObserver();
       observer.triggerUpdate(conversationId);
 
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
 
       const cached = observer.getCachedSummary(conversationId)!;
+      expect(cached).not.toBeNull();
       expect(observer.isSummaryFresh(conversationId, cached.totalContextTokens * 2)).toBe(false);
     });
 
@@ -240,13 +232,9 @@ describe("CompressionObserver", () => {
       const observer = createObserver();
       observer.triggerUpdate(conversationId);
 
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
 
+      expect(observer.getCachedSummary(conversationId)).not.toBeNull();
       observer.invalidate(conversationId);
       expect(observer.getCachedSummary(conversationId)).toBeNull();
     });
@@ -263,20 +251,12 @@ describe("CompressionObserver", () => {
       const observer = createObserver();
 
       observer.triggerUpdate(conv1);
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conv1)).not.toBeNull();
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
+      expect(observer.getCachedSummary(conv1)).not.toBeNull();
 
       observer.triggerUpdate(conv2);
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conv2)).not.toBeNull();
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
+      expect(observer.getCachedSummary(conv2)).not.toBeNull();
 
       observer.invalidate(conv1);
       expect(observer.getCachedSummary(conv1)).toBeNull();
@@ -302,13 +282,9 @@ describe("CompressionObserver", () => {
       const observer = createObserver();
       observer.triggerUpdate(conversationId);
 
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
 
+      expect(observer.getCachedSummary(conversationId)).not.toBeNull();
       observer.dispose();
       expect(observer.getCachedSummary(conversationId)).toBeNull();
 
@@ -327,13 +303,9 @@ describe("CompressionObserver", () => {
       const observer = createObserver();
       observer.triggerUpdate(conversationId);
 
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
 
+      expect(observer.getCachedSummary(conversationId)).not.toBeNull();
       expect(observer.getCachedSummary(conversationId)!.messagesCovered).toBe(4);
     });
   });
@@ -362,13 +334,10 @@ describe("CompressionObserver", () => {
 
       observer.triggerUpdate(conversationId);
 
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
-        },
-        { timeout: 8000, interval: 50 },
-      );
+      // Flush all timers — the retry delay (2s) resolves instantly with fake timers.
+      await flushUpdates();
 
+      expect(observer.getCachedSummary(conversationId)).not.toBeNull();
       // First call failed, retry succeeded
       expect(callCount).toBeGreaterThanOrEqual(2);
     });
@@ -391,26 +360,23 @@ describe("CompressionObserver", () => {
       // Trigger an update that will fail (after retries)
       observer.triggerUpdate(conversationId);
 
-      // Wait for retries to exhaust (MAX_CALL_RETRIES=2, delays=2s+4s)
-      await vi.waitFor(
-        () => {
-          // Should have tried (1 initial + 2 retries = 3 calls)
-          expect(alwaysFail.mock.calls.length).toBeGreaterThanOrEqual(3);
-        },
-        { timeout: 10_000, interval: 100 },
-      );
+      // Flush all timers — retry delays (2s + 4s) resolve instantly with fake timers.
+      await flushUpdates();
+
+      // Should have tried (1 initial + 2 retries = 3 calls)
+      expect(alwaysFail.mock.calls.length).toBeGreaterThanOrEqual(3);
 
       // No cached summary
       expect(observer.getCachedSummary(conversationId)).toBeNull();
 
       // Observer should still be operational (not crashed)
       observer.dispose();
-    }, 12_000);
+    });
 
     it("should handle empty conversation gracefully", async () => {
       const observer = createObserver();
       observer.triggerUpdate(999);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushUpdates();
       expect(observer.getCachedSummary(999)).toBeNull();
     });
 
@@ -430,7 +396,7 @@ describe("CompressionObserver", () => {
       );
 
       observer.triggerUpdate(conversationId);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushUpdates();
       expect(observer.getCachedSummary(conversationId)).toBeNull();
     });
   });
@@ -458,15 +424,10 @@ describe("CompressionObserver", () => {
       );
 
       observer.onMessage(conversationId);
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await vi.advanceTimersByTimeAsync(30);
       observer.onMessage(conversationId);
 
-      await vi.waitFor(
-        () => {
-          expect(callCount).toBeGreaterThanOrEqual(2);
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
 
       expect(observer.getCachedSummary(conversationId)).not.toBeNull();
     });
@@ -500,13 +461,9 @@ describe("CompressionObserver", () => {
 
       observer.triggerUpdate(conversationId);
 
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
 
+      expect(observer.getCachedSummary(conversationId)).not.toBeNull();
       // 50 messages - 8 fresh tail = 42 compactable, each 200 tokens = 8400 source tokens
       // TARGET_RATIO = 0.1 → targetTokens ≈ 840
       expect(receivedOptions).toBeDefined();
@@ -532,13 +489,9 @@ describe("CompressionObserver", () => {
       const observer = createObserver();
       observer.triggerUpdate(conversationId);
 
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
 
+      expect(observer.getCachedSummary(conversationId)).not.toBeNull();
       expect(observer.getCachedSummary(conversationId)!.hasMixedContext).toBe(true);
     });
 
@@ -558,14 +511,10 @@ describe("CompressionObserver", () => {
       const observer = createObserver();
       observer.triggerUpdate(conversationId);
 
-      await vi.waitFor(
-        () => {
-          expect(observer.getCachedSummary(conversationId)).not.toBeNull();
-        },
-        { timeout: 500 },
-      );
+      await flushUpdates();
 
       const cached = observer.getCachedSummary(conversationId)!;
+      expect(cached).not.toBeNull();
       expect(observer.isSummaryFresh(conversationId, cached.sourceTokenCount)).toBe(false);
     });
   });
