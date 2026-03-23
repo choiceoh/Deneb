@@ -108,6 +108,13 @@ export function createGatewayBroadcaster(params: { clients: Set<GatewayWsClient>
       }
       const slow = c.socket.bufferedAmount > MAX_BUFFERED_BYTES;
       if (slow && opts?.dropIfSlow) {
+        if (shouldLogWs()) {
+          logWs("out", "drop-slow", {
+            event,
+            connId: c.connId,
+            bufferedAmount: c.socket.bufferedAmount,
+          });
+        }
         continue;
       }
       if (slow) {

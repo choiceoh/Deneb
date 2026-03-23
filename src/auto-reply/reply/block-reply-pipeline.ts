@@ -102,6 +102,9 @@ export function createBlockReplyPipeline(params: {
   const sendPayload = (payload: ReplyPayload, bypassSeenCheck: boolean = false) => {
     if (aborted) {
       droppedAfterAbort += 1;
+      logVerbose(
+        `block reply pipeline: dropped payload after abort (total dropped: ${droppedAfterAbort}, text: ${String(payload.text).slice(0, 80)}...)`,
+      );
       return;
     }
     const payloadKey = createBlockReplyPayloadKey(payload);

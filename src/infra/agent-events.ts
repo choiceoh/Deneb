@@ -1,4 +1,7 @@
 import type { VerboseLevel } from "../auto-reply/thinking.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
+
+const log = createSubsystemLogger("agent/events");
 
 export type AgentEventStream = "lifecycle" | "tool" | "assistant" | "error" | (string & {});
 
@@ -76,8 +79,10 @@ export function emitAgentEvent(event: Omit<AgentEventPayload, "seq" | "ts">) {
   for (const listener of listeners) {
     try {
       listener(enriched);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      log.error(
+        `agent event listener threw during ${event.stream} event (runId=${event.runId}): ${String(err)}`,
+      );
     }
   }
 }
