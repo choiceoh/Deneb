@@ -1,5 +1,5 @@
 import { ensureAuthProfileStore } from "../agents/auth-profiles.js";
-import { resolveDefaultAgentWorkspaceDir } from "../agents/workspace.js";
+import { resolveDefaultAgentWorkspaceDir } from "../agents/workspace/workspace.js";
 import type { DenebConfig, GatewayAuthConfig } from "../config/config.js";
 import { isSecretRef, type SecretInput } from "../config/types.secrets.js";
 import { resolveProviderPluginChoice } from "../plugins/provider-wizard.js";

@@ -12,7 +12,7 @@ import {
 } from "../routing/session-key.js";
 import { resolveUserPath } from "../utils.js";
 import { normalizeSkillFilter } from "./skills/filter.js";
-import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
+import { resolveDefaultAgentWorkspaceDir } from "./workspace/workspace.js";
 const log = createSubsystemLogger("agent-scope");
 
 /** Strip null bytes from paths to prevent ENOTDIR errors. */

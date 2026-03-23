@@ -52,9 +52,9 @@ vi.mock("../../../agents/agent-scope.js", () => ({
   resolveAgentWorkspaceDir: mocks.resolveAgentWorkspaceDir,
 }));
 
-vi.mock("../../../agents/workspace.js", async () => {
-  const actual = await vi.importActual<typeof import("../../../agents/workspace.js")>(
-    "../../../agents/workspace.js",
+vi.mock("../../../agents/workspace/workspace.js", async () => {
+  const actual = await vi.importActual<typeof import("../../../agents/workspace/workspace.js")>(
+    "../../../agents/workspace/workspace.js",
   );
   return {
     ...actual,

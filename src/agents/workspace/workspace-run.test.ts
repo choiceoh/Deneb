@@ -1,7 +1,7 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { DenebConfig } from "../config/config.js";
-import { resolveStateDir } from "../config/paths.js";
+import type { DenebConfig } from "../../config/config.js";
+import { resolveStateDir } from "../../config/paths.js";
 import { resolveRunWorkspaceDir } from "./workspace-run.js";
 import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
 

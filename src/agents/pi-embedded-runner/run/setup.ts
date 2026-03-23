@@ -16,7 +16,7 @@ import { ensureAuthProfileStore, resolveAuthProfileOrder } from "../../model-aut
 import { normalizeProviderId } from "../../model-selection.js";
 import { ensureDenebModelsJson } from "../../models-config.js";
 import { ensureRuntimePluginsLoaded } from "../../runtime-plugins.js";
-import { redactRunIdentifier, resolveRunWorkspaceDir } from "../../workspace-run.js";
+import { redactRunIdentifier, resolveRunWorkspaceDir } from "../../workspace/workspace-run.js";
 import { log } from "../logger.js";
 import { resolveModelAsync } from "../model.js";
 import type { RunEmbeddedPiAgentParams } from "./params.js";

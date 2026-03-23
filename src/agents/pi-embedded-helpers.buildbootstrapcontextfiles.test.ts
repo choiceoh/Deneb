@@ -9,8 +9,8 @@ import {
   resolveBootstrapPromptTruncationWarningMode,
   resolveBootstrapTotalMaxChars,
 } from "./pi-embedded-helpers.js";
-import type { WorkspaceBootstrapFile } from "./workspace.js";
-import { DEFAULT_AGENTS_FILENAME } from "./workspace.js";
+import type { WorkspaceBootstrapFile } from "./workspace/workspace.js";
+import { DEFAULT_AGENTS_FILENAME } from "./workspace/workspace.js";
 
 const makeFile = (overrides: Partial<WorkspaceBootstrapFile>): WorkspaceBootstrapFile => ({
   name: DEFAULT_AGENTS_FILENAME,

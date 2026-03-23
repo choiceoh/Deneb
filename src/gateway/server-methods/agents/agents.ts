@@ -17,7 +17,7 @@ import {
   DEFAULT_USER_FILENAME,
   ensureAgentWorkspace,
   isWorkspaceSetupCompleted,
-} from "../../../agents/workspace.js";
+} from "../../../agents/workspace/workspace.js";
 import { movePathToTrash } from "../../../browser/trash.js";
 import {
   applyAgentConfig,

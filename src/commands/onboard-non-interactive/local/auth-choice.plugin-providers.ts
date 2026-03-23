@@ -4,7 +4,7 @@ import {
   resolveAgentWorkspaceDir,
 } from "../../../agents/agent-scope.js";
 import type { ApiKeyCredential } from "../../../agents/auth-profiles/types.js";
-import { resolveDefaultAgentWorkspaceDir } from "../../../agents/workspace.js";
+import { resolveDefaultAgentWorkspaceDir } from "../../../agents/workspace/workspace.js";
 import type { DenebConfig } from "../../../config/config.js";
 import { enablePluginInConfig } from "../../../plugins/enable.js";
 import { resolvePreferredProviderForAuthChoice } from "../../../plugins/provider-auth-choice-preference.js";

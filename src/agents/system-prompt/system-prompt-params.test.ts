@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { DenebConfig } from "../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import { buildSystemPromptParams } from "./system-prompt-params.js";
 
 async function makeTempDir(label: string): Promise<string> {

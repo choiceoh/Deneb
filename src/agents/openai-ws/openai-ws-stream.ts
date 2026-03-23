@@ -32,6 +32,13 @@ import type {
   ToolCall,
 } from "@mariozechner/pi-ai";
 import { createAssistantMessageEventStream, streamSimple } from "@mariozechner/pi-ai";
+import { log } from "../pi-embedded-runner/logger.js";
+import {
+  buildAssistantMessage,
+  buildAssistantMessageWithZeroUsage,
+  buildUsageWithNoCost,
+  buildStreamErrorAssistantMessage,
+} from "../stream-message-shared.js";
 import {
   OpenAIWebSocketManager,
   type ContentPart,
@@ -41,13 +48,6 @@ import {
   type OpenAIWebSocketManagerOptions,
   type ResponseObject,
 } from "./openai-ws-connection.js";
-import { log } from "./pi-embedded-runner/logger.js";
-import {
-  buildAssistantMessage,
-  buildAssistantMessageWithZeroUsage,
-  buildUsageWithNoCost,
-  buildStreamErrorAssistantMessage,
-} from "./stream-message-shared.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-session state

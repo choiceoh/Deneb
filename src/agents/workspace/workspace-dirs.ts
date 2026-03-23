@@ -1,5 +1,5 @@
-import type { DenebConfig } from "../config/config.js";
-import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "./agent-scope.js";
+import type { DenebConfig } from "../../config/config.js";
+import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agent-scope.js";
 
 export function listAgentWorkspaceDirs(cfg: DenebConfig): string[] {
   const dirs = new Set<string>();

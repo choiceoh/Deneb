@@ -1,15 +1,15 @@
-import type { DenebConfig } from "../config/config.js";
-import { logWarn } from "../logger.js";
-import { redactIdentifier } from "../logging/redact-identifier.js";
+import type { DenebConfig } from "../../config/config.js";
+import { logWarn } from "../../logger.js";
+import { redactIdentifier } from "../../logging/redact-identifier.js";
 import {
   classifySessionKeyShape,
   DEFAULT_AGENT_ID,
   normalizeAgentId,
   parseAgentSessionKey,
-} from "../routing/session-key.js";
-import { resolveUserPath } from "../utils.js";
-import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "./agent-scope.js";
-import { sanitizeForPromptLiteral } from "./sanitize-for-prompt.js";
+} from "../../routing/session-key.js";
+import { resolveUserPath } from "../../utils.js";
+import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agent-scope.js";
+import { sanitizeForPromptLiteral } from "../sanitize-for-prompt.js";
 
 export type WorkspaceFallbackReason = "missing" | "blank" | "invalid_type";
 type AgentIdSource = "explicit" | "session_key" | "default";

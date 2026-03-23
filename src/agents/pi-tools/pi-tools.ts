@@ -32,7 +32,7 @@ import {
   mergeAlsoAllowPolicy,
   resolveToolProfilePolicy,
 } from "../tool-policy.js";
-import { resolveWorkspaceRoot } from "../workspace-dir.js";
+import { resolveWorkspaceRoot } from "../workspace/workspace-dir.js";
 import { wrapToolWithAbortSignal } from "./pi-tools.abort.js";
 import { wrapToolWithBeforeToolCallHook } from "./pi-tools.before-tool-call.js";
 import {

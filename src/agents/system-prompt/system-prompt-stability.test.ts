@@ -5,7 +5,7 @@ import {
   DEFAULT_AGENTS_FILENAME,
   DEFAULT_TOOLS_FILENAME,
   DEFAULT_SOUL_FILENAME,
-} from "./workspace.js";
+} from "../workspace/workspace.js";
 
 describe("system prompt stability for cache hits", () => {
   let workspaceDir: string;

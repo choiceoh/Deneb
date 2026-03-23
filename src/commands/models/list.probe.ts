@@ -20,7 +20,7 @@ import {
   parseModelRef,
 } from "../../agents/model-selection.js";
 import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
-import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
+import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace/workspace.js";
 import type { DenebConfig } from "../../config/config.js";
 import {
   resolveSessionTranscriptPath,

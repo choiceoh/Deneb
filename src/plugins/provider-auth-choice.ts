@@ -5,7 +5,7 @@ import {
   resolveAgentWorkspaceDir,
 } from "../agents/agent-scope.js";
 import { upsertAuthProfile } from "../agents/auth-profiles.js";
-import { resolveDefaultAgentWorkspaceDir } from "../agents/workspace.js";
+import { resolveDefaultAgentWorkspaceDir } from "../agents/workspace/workspace.js";
 import type { DenebConfig } from "../config/config.js";
 import type { RuntimeEnv } from "../runtime.js";
 import type { WizardPrompter } from "../wizard/prompts.js";

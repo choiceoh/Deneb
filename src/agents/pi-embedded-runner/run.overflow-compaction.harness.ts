@@ -271,7 +271,7 @@ export async function loadRunOverflowCompactionHarness(): Promise<{
     ),
   }));
 
-  vi.doMock("../workspace-run.js", () => ({
+  vi.doMock("../workspace/workspace-run.js", () => ({
     resolveRunWorkspaceDir: vi.fn((params: { workspaceDir: string }) => ({
       workspaceDir: params.workspaceDir,
       usedFallback: false,

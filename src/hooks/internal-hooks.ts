@@ -5,7 +5,7 @@
  * like command processing, session lifecycle, etc.
  */
 
-import type { WorkspaceBootstrapFile } from "../agents/workspace.js";
+import type { WorkspaceBootstrapFile } from "../agents/workspace/workspace.js";
 import type { CliDeps } from "../cli/deps.js";
 import type { DenebConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";

@@ -94,7 +94,7 @@ import { buildWorkspaceSkillSnapshot } from "./skills.js";
 import { getSkillsSnapshotVersion } from "./skills/refresh.js";
 import { normalizeSpawnedRunMetadata } from "./spawned-context.js";
 import { resolveAgentTimeoutMs } from "./timeout.js";
-import { ensureAgentWorkspace } from "./workspace.js";
+import { ensureAgentWorkspace } from "./workspace/workspace.js";
 
 type PersistSessionEntryParams = {
   sessionStore: Record<string, SessionEntry>;

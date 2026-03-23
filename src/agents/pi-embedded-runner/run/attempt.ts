@@ -25,9 +25,12 @@ import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveDenebDocsPath } from "../../docs-path.js";
 import { isTimeoutError } from "../../failover-error.js";
 import { resolveImageSanitizationLimits } from "../../image-sanitization.js";
-import { resolveModelAuthMode } from "../../model-auth.js";
-import { supportsModelTools } from "../../model-tool-support.js";
-import { createOpenAIWebSocketStreamFn, releaseWsSession } from "../../openai-ws-stream.js";
+import { resolveModelAuthMode } from "../../models/model-auth.js";
+import { supportsModelTools } from "../../models/model-tool-support.js";
+import {
+  createOpenAIWebSocketStreamFn,
+  releaseWsSession,
+} from "../../openai-ws/openai-ws-stream.js";
 import { createBundleLspToolRuntime } from "../../pi-bundle-lsp-runtime.js";
 import { createBundleMcpToolRuntime } from "../../pi-bundle-mcp-tools.js";
 import {

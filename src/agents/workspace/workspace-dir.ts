@@ -1,5 +1,5 @@
 import path from "node:path";
-import { resolveUserPath } from "../utils.js";
+import { resolveUserPath } from "../../utils.js";
 
 export function normalizeWorkspaceDir(workspaceDir?: string): string | null {
   const trimmed = workspaceDir?.trim();

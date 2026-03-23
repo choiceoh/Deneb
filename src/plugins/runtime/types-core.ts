@@ -24,7 +24,7 @@ export type PluginRuntimeCore = {
     resolveThinkingDefault: typeof import("../../agents/model-selection.js").resolveThinkingDefault;
     runEmbeddedPiAgent: typeof import("../../agents/pi-embedded.js").runEmbeddedPiAgent;
     resolveAgentTimeoutMs: typeof import("../../agents/timeout.js").resolveAgentTimeoutMs;
-    ensureAgentWorkspace: typeof import("../../agents/workspace.js").ensureAgentWorkspace;
+    ensureAgentWorkspace: typeof import("../../agents/workspace/workspace.js").ensureAgentWorkspace;
     session: {
       resolveStorePath: typeof import("../../config/sessions.js").resolveStorePath;
       loadSessionStore: typeof import("../../config/sessions.js").loadSessionStore;

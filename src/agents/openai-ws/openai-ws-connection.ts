@@ -15,7 +15,7 @@
 
 import { EventEmitter } from "node:events";
 import WebSocket, { type ClientOptions } from "ws";
-import { resolveProviderAttributionHeaders } from "./provider-attribution.js";
+import { resolveProviderAttributionHeaders } from "../provider-attribution.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WebSocket Event Types (Server → Client)

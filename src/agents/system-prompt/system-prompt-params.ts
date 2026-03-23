@@ -1,13 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { DenebConfig } from "../config/config.js";
-import { findGitRoot } from "../infra/git-root.js";
+import type { DenebConfig } from "../../config/config.js";
+import { findGitRoot } from "../../infra/git-root.js";
 import {
   formatUserTime,
   resolveUserTimeFormat,
   resolveUserTimezone,
   type ResolvedTimeFormat,
-} from "./date-time.js";
+} from "../date-time.js";
 
 export type RuntimeInfoInput = {
   agentId?: string;

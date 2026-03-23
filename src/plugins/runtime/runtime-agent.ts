@@ -4,7 +4,7 @@ import { resolveAgentIdentity } from "../../agents/identity.js";
 import { resolveThinkingDefault } from "../../agents/model-selection.js";
 import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
 import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
-import { ensureAgentWorkspace } from "../../agents/workspace.js";
+import { ensureAgentWorkspace } from "../../agents/workspace/workspace.js";
 import {
   loadSessionStore,
   resolveSessionFilePath,

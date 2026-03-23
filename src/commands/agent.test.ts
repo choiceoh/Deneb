@@ -46,7 +46,7 @@ vi.mock("../agents/auth-profiles.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../agents/workspace.js", () => {
+vi.mock("../agents/workspace/workspace.js", () => {
   const resolveDefaultAgentWorkspaceDir = () => "/tmp/deneb-workspace";
   return {
     DEFAULT_AGENT_WORKSPACE_DIR: "/tmp/deneb-workspace",

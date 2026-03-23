@@ -3,7 +3,7 @@ import {
   resolveBootstrapMaxChars,
   resolveBootstrapTotalMaxChars,
 } from "../../agents/pi-embedded-helpers.js";
-import { buildSystemPromptReport } from "../../agents/system-prompt-report.js";
+import { buildSystemPromptReport } from "../../agents/system-prompt/system-prompt-report.js";
 import type { SessionSystemPromptReport } from "../../config/sessions/types.js";
 import type { ReplyPayload } from "../types.js";
 import { resolveCommandsSystemPromptBundle } from "./commands-system-prompt.js";

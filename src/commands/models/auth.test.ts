@@ -46,7 +46,7 @@ vi.mock("../../agents/agent-scope.js", () => ({
   resolveAgentWorkspaceDir: mocks.resolveAgentWorkspaceDir,
 }));
 
-vi.mock("../../agents/workspace.js", () => ({
+vi.mock("../../agents/workspace/workspace.js", () => ({
   resolveDefaultAgentWorkspaceDir: mocks.resolveDefaultAgentWorkspaceDir,
 }));
 

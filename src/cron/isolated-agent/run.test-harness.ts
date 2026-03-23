@@ -75,8 +75,8 @@ vi.mock("../../agents/skills/refresh.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../../agents/workspace.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../agents/workspace.js")>();
+vi.mock("../../agents/workspace/workspace.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../agents/workspace/workspace.js")>();
   return {
     ...actual,
     DEFAULT_IDENTITY_FILENAME: "IDENTITY.md",
