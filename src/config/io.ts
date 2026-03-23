@@ -435,7 +435,12 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
       }
       warnOnConfigMiskeys(resolvedConfig, deps.logger);
       if (typeof resolvedConfig !== "object" || resolvedConfig === null) {
-        return {};
+        const typeLabel = resolvedConfig === null ? "null" : typeof resolvedConfig;
+        const error = new Error(
+          `Invalid config at ${configPath}: expected an object at the root, got ${typeLabel}`,
+        );
+        (error as { code?: string }).code = "INVALID_CONFIG";
+        throw error;
       }
       const preValidationDuplicates = findDuplicateAgentDirs(resolvedConfig as DenebConfig, {
         env: deps.env,
@@ -650,6 +655,31 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
       }));
 
       const resolvedConfigRaw = readResolution.resolvedConfigRaw;
+
+      if (typeof resolvedConfigRaw !== "object" || resolvedConfigRaw === null) {
+        const typeLabel = resolvedConfigRaw === null ? "null" : typeof resolvedConfigRaw;
+        return {
+          snapshot: {
+            path: configPath,
+            exists: true,
+            raw,
+            parsed: parsedRes.parsed,
+            resolved: {},
+            valid: false,
+            config: {},
+            hash,
+            issues: [
+              {
+                path: "",
+                message: `Expected an object at the root, got ${typeLabel}`,
+              },
+            ],
+            warnings: [...envVarWarnings],
+            legacyIssues: [],
+          },
+        };
+      }
+
       // Detect legacy keys on resolved config, but only mark source-literal legacy
       // entries (for auto-migration) when they are present in the parsed source.
       const legacyIssues = findLegacyConfigIssues(resolvedConfigRaw, parsedRes.parsed);
