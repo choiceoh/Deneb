@@ -293,40 +293,158 @@
 
 ---
 
-| 순위 | 소요시간 | 테스트 수 | 파일                                                                |
-| ---- | -------- | --------- | ------------------------------------------------------------------- |
-| 1    | 545.4s   | 24        | `extensions/telegram/src/monitor.test.ts`                           |
-| 2    | 380.5s   | 17        | `src/agents/tools/web-tools.fetch.test.ts`                          |
-| 3    | 360.2s   | 13        | `extensions/telegram/src/webhook.test.ts`                           |
-| 4    | 290.5s   | 30        | `src/agents/pi-embedded-runner.sanitize-session-history.test.ts`    |
-| 5    | 240.5s   | 9         | `src/agents/subagent-announce.timeout.test.ts`                      |
-| 6    | 220.6s   | 20        | `extensions/telegram/src/bot/delivery.resolve-media-retry.test.ts`  |
-| 7    | 200.8s   | 31        | `extensions/telegram/src/bot/delivery.test.ts`                      |
-| 8    | 166.0s   | 23        | `src/cli/command-secret-gateway.test.ts`                            |
-| 9    | 154.0s   | 12        | `src/commands/status.test.ts`                                       |
-| 10   | 150.0s   | 16        | `src/gateway/server-plugins.test.ts`                                |
-| 11   | 149.8s   | 50        | `extensions/telegram/src/bot.create-telegram-bot.test.ts`           |
-| 12   | 146.6s   | 51        | `src/agents/tools/pdf-tool.test.ts`                                 |
-| 13   | 143.3s   | 19        | `src/memory/embeddings.test.ts`                                     |
-| 14   | 140.9s   | 7         | `src/agents/tools/web-fetch.cf-markdown.test.ts`                    |
-| 15   | 138.0s   | 10        | `extensions/telegram/src/probe.test.ts`                             |
-| 16   | 134.9s   | 69        | `src/plugins/loader.test.ts`                                        |
-| 17   | 92.8s    | 53        | `src/auto-reply/reply/dispatch-from-config.test.ts`                 |
-| 18   | 87.0s    | 10        | `src/agents/sessions-spawn-hooks.test.ts`                           |
-| 19   | 80.6s    | 4         | `src/image-generation/providers/google.test.ts`                     |
-| 20   | 72.8s    | 57        | `src/gateway/call.test.ts`                                          |
-| 21   | 70.9s    | 3         | `src/memory/manager.batch.test.ts`                                  |
-| 22   | 70.6s    | 5         | `src/agents/tools/web-fetch.ssrf.test.ts`                           |
-| 23   | 67.5s    | 22        | `src/agents/tools/message-tool.test.ts`                             |
-| 24   | 66.4s    | 28        | `src/agents/tools/browser-tool.test.ts`                             |
-| 25   | 63.1s    | 21        | `extensions/telegram/src/fetch.test.ts`                             |
-| 26   | 62.0s    | 18        | `src/browser/server-context.remote-tab-ops.test.ts`                 |
-| 27   | 61.2s    | 11        | `src/browser/server-context.remote-profile-tab-ops.test.ts`         |
-| 28   | 61.0s    | 5         | `src/gateway/server.canvas-auth.test.ts`                            |
-| 29   | 60.6s    | 4         | `src/memory/embeddings-voyage.test.ts`                              |
-| 30   | 58.7s    | 12        | `src/agents/deneb-tools.subagents.sessions-spawn.allowlist.test.ts` |
+## 느린 세부 테스트 Top 30 (개별 테스트 단위)
 
-### 적용된 최적화
+> **측정 일자**: 2026-03-23 | **측정 방법**: `npx vitest run <file> --reporter=json` 배치 실행
+> **총 수집 테스트**: 654개 (통과 393, 실패 261) | **대상 파일**: 느린 파일 Top 30 + 분할된 후속 파일
+
+### A. 가장 느린 개별 테스트 Top 30
+
+60s 타임아웃(hookTimeout) 1건과 30s 타임아웃(testTimeout) 29건으로, 전부 실패한 테스트입니다.
+
+| 순위 | 소요시간 | 파일                                                           | 테스트명                                                                       |
+| :--: | :------: | -------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+|  1   |  60.0s   | `src/gateway/server.canvas-auth.test.ts`                       | accepts capability-scoped paths over IPv6 loopback                             |
+|  2   |  30.0s   | `extensions/telegram/src/probe.test.ts`                        | retry logic succeeds after retry pattern 0                                     |
+|  3   |  30.0s   | `extensions/telegram/src/probe.test.ts`                        | retry logic succeeds after retry pattern 1                                     |
+|  4   |  30.0s   | `extensions/telegram/src/probe.test.ts`                        | should fail after 3 unsuccessful attempts                                      |
+|  5   |  30.0s   | `src/agents/subagent/subagent-announce.timeout.test.ts`        | falls back to grandparent only when parent subagent session is missing         |
+|  6   |  30.0s   | `src/agents/subagent/subagent-announce.timeout.test.ts`        | keeps child announce internal when requester is a cron run session             |
+|  7   |  30.0s   | `src/agents/subagent/subagent-announce.timeout.test.ts`        | honors configured announce timeout for direct announce agent call              |
+|  8   |  30.0s   | `src/agents/subagent/subagent-announce.timeout.test.ts`        | does not retry gateway timeout for externally delivered completion announces   |
+|  9   |  30.0s   | `src/agents/subagent/subagent-announce.timeout.test.ts`        | routes child announce to parent session instead of grandparent                 |
+|  10  |  30.0s   | `src/agents/subagent/subagent-announce.timeout.test.ts`        | honors configured announce timeout for completion direct agent call            |
+|  11  |  30.0s   | `extensions/telegram/src/webhook.test.ts`                      | starts server, registers webhook, and serves health                            |
+|  12  |  30.0s   | `src/agents/subagent/subagent-announce.timeout.test.ts`        | uses 90s timeout by default for direct announce agent call                     |
+|  13  |  30.0s   | `src/agents/subagent/subagent-announce.timeout.test.ts`        | supports cron announceType without declaration order errors                    |
+|  14  |  30.0s   | `extensions/telegram/src/probe.test.ts`                        | retry logic succeeds after retry pattern 2                                     |
+|  15  |  30.0s   | `src/agents/tools/web-tools.fetch.test.ts`                     | uses guarded endpoint fetch for firecrawl requests                             |
+|  16  |  30.0s   | `src/agents/tools/web-tools.fetch.test.ts`                     | wraps firecrawl error details                                                  |
+|  17  |  30.0s   | `src/memory/manager.batch.test.ts`                             | tracks batch failures, resets on success, and disables after repeated failures |
+|  18  |  30.0s   | `src/agents/tools/web-fetch.ssrf.test.ts`                      | blocks redirects to private hosts                                              |
+|  19  |  30.0s   | `src/agents/tools/web-tools.fetch.test.ts`                     | falls back to firecrawl when readability returns no content                    |
+|  20  |  30.0s   | `src/agents/tools/web-tools.fetch.test.ts`                     | uses firecrawl when direct fetch fails                                         |
+|  21  |  30.0s   | `src/agents/tools/web-tools.fetch.test.ts`                     | normalizes firecrawl Authorization header values                               |
+|  22  |  30.0s   | `src/agents/tools/web-tools.fetch.test.ts`                     | throws when readability is empty and firecrawl fails                           |
+|  23  |  30.0s   | `extensions/telegram/src/monitor.test.ts`                      | processes a DM and sends reply                                                 |
+|  24  |  30.0s   | `extensions/telegram/src/monitor.test.ts`                      | stops bot instance when polling cycle exits                                    |
+|  25  |  30.0s   | `extensions/telegram/src/bot.create-telegram-bot.topics-media` | processes remaining media group photos when one photo download fails           |
+|  26  |  30.0s   | `extensions/telegram/src/monitor.test.ts`                      | skips offset confirmation when persisted offset is invalid                     |
+|  27  |  30.0s   | `extensions/telegram/src/fetch.test.ts`                        | uses no_proxy over NO_PROXY when deciding env-proxy bypass                     |
+|  28  |  30.0s   | `extensions/telegram/src/monitor.test.ts`                      | uses agent maxConcurrent for runner concurrency                                |
+|  29  |  30.0s   | `extensions/telegram/src/monitor.test.ts`                      | retries on recoverable undici fetch errors                                     |
+|  30  |  30.0s   | `extensions/telegram/src/webhook.test.ts`                      | registers webhook with certificate when webhookCertPath is provided            |
+
+#### 타임아웃 실패 파일별 분포 (전체 55건)
+
+| 파일                                                                   | 30s 타임아웃 | 합계 |
+| ---------------------------------------------------------------------- | :----------: | :--: |
+| `extensions/telegram/src/monitor.test.ts`                              |      18      |  18  |
+| `extensions/telegram/src/webhook.test.ts`                              |      12      |  12  |
+| `src/agents/subagent/subagent-announce.timeout.test.ts`                |      8       |  8   |
+| `src/agents/tools/web-tools.fetch.test.ts`                             |      6       |  6   |
+| `extensions/telegram/src/probe.test.ts`                                |      4       |  4   |
+| `extensions/telegram/src/bot.create-telegram-bot.topics-media.test.ts` |      2       |  2   |
+| `extensions/telegram/src/fetch.test.ts`                                |      2       |  2   |
+| `src/gateway/server.canvas-auth.test.ts`                               |      1       |  1   |
+| `src/memory/manager.batch.test.ts`                                     |      1       |  1   |
+| `src/agents/tools/web-fetch.ssrf.test.ts`                              |      1       |  1   |
+
+### B. 통과한 느린 테스트 Top 30
+
+실제 실행 후 통과한 테스트 중 가장 오래 걸린 30개입니다.
+
+| 순위 | 소요시간 | 파일                                                                | 테스트명                                                                          |
+| :--: | :------: | ------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+|  1   |  20.0s   | `extensions/telegram/src/bot.create-telegram-bot.topics-media`      | notifies users when media download fails for direct messages                      |
+|  2   |  20.0s   | `src/agents/tools/web-fetch.ssrf.test.ts`                           | blocks when DNS resolves to private addresses                                     |
+|  3   |   4.8s   | `src/plugins/loader.test.ts`                                        | supports legacy plugins importing monolithic plugin-sdk root                      |
+|  4   |   0.7s   | `src/agents/pi-embedded-runner.sanitize-session-history.test.ts`    | passes simple user-only history through for Google model APIs                     |
+|  5   |   0.7s   | `src/agents/tools/pdf-tool.test.ts`                                 | resolvePdfModelConfigForTool returns null without any auth                        |
+|  6   |   0.7s   | `src/agents/tools/pdf-tool.test.ts`                                 | createPdfTool uses native PDF path without eager extraction                       |
+|  7   |   0.7s   | `src/agents/tools/pdf-tool.test.ts`                                 | createPdfTool throws when agentDir missing but explicit config present            |
+|  8   |   0.6s   | `src/cli/command-secret-gateway.test.ts`                            | returns config unchanged when no target SecretRefs are configured                 |
+|  9   |   0.6s   | `src/auto-reply/reply/dispatch-from-config.test.ts`                 | does not route when Provider matches OriginatingChannel (even if Surface missing) |
+|  10  |   0.6s   | `src/agents/tools/pdf-tool.test.ts`                                 | createPdfTool returns null without any auth configured                            |
+|  11  |   0.6s   | `src/gateway/server-plugins.test.ts`                                | shares fallback context across module reloads for existing runtimes               |
+|  12  |   0.6s   | `src/agents/tools/pdf-tool.test.ts`                                 | resolvePdfModelConfigForTool prefers explicit pdfModel config                     |
+|  13  |   0.5s   | `src/agents/tools/pdf-tool.test.ts`                                 | createPdfTool rejects pages parameter for native PDF providers                    |
+|  14  |   0.5s   | `src/agents/tools/pdf-tool.test.ts`                                 | createPdfTool deduplicates pdf inputs before loading                              |
+|  15  |   0.5s   | `src/agents/tools/pdf-tool.test.ts`                                 | createPdfTool uses extraction fallback for non-native models                      |
+|  16  |   0.5s   | `src/agents/tools/pdf-tool.test.ts`                                 | resolvePdfModelConfigForTool falls back to imageModel config when no pdfModel set |
+|  17  |   0.5s   | `src/agents/sessions-spawn-hooks.test.ts`                           | runs subagent_spawning and emits subagent_spawned with requester metadata         |
+|  18  |   0.5s   | `src/agents/tools/pdf-tool.test.ts`                                 | createPdfTool returns null without agentDir and no explicit config                |
+|  19  |   0.4s   | `src/agents/deneb-tools.subagents.sessions-spawn.allowlist.test.ts` | sessions_spawn only allows same-agent by default                                  |
+|  20  |   0.1s   | `src/agents/tools/message-tool.test.ts`                             | agent routing derives agentId from the session key                                |
+|  21  |   0.1s   | `src/agents/tools/message-tool.test.ts`                             | path passthrough does not convert 'path' to media for send                        |
+|  22  |   0.1s   | `src/agents/tools/message-tool.test.ts`                             | schema scoping scopes schema fields for 'telegram'                                |
+|  23  |   0.1s   | `src/memory/embeddings.test.ts`                                     | loads the model only once when embedBatch is called concurrently                  |
+|  24  |   0.1s   | `src/memory/embeddings.test.ts`                                     | shares initialization when embedQuery and embedBatch start concurrently           |
+|  25  |   0.1s   | `src/agents/tools/message-tool.test.ts`                             | does not include 'Other configured channels' when only one configured             |
+|  26  |   0.1s   | `src/agents/tools/message-tool.test.ts`                             | sanitizes reasoning tags in 'text' before sending                                 |
+|  27  |   0.1s   | `src/agents/tools/message-tool.test.ts`                             | normalizes channel aliases before building current channel desc                   |
+|  28  |   0.1s   | `src/agents/tools/message-tool.test.ts`                             | path passthrough does not convert 'filePath' to media for send                    |
+|  29  |   0.1s   | `src/agents/tools/message-tool.test.ts`                             | schema scoping hides telegram poll extras when polls disabled in scoped mode      |
+|  30  |   0.1s   | `src/agents/tools/message-tool.test.ts`                             | schema scoping scopes schema fields for 'slack'                                   |
+
+### 파일 단위 소요시간 (이전 대비)
+
+| 순위 |  현재  |  이전  |   변화    | 파일                                                               |
+| :--: | :----: | :----: | :-------: | ------------------------------------------------------------------ |
+|  1   | 545.1s | 545.4s |     =     | `extensions/telegram/src/monitor.test.ts`                          |
+|  2   | 380.3s | 380.5s |     =     | `src/agents/tools/web-tools.fetch.test.ts`                         |
+|  3   | 360.0s | 360.2s |     =     | `extensions/telegram/src/webhook.test.ts`                          |
+|  4   | 240.0s | 240.5s |     =     | `src/agents/subagent/subagent-announce.timeout.test.ts`            |
+|  5   | 220.3s | 220.6s |     =     | `extensions/telegram/src/bot/delivery.resolve-media-retry.test.ts` |
+|  6   | 200.4s | 200.8s |     =     | `extensions/telegram/src/bot/delivery.test.ts`                     |
+|  7   | 140.2s | 140.9s |     =     | `src/agents/tools/web-fetch.cf-markdown.test.ts`                   |
+|  8   | 136.0s | 138.0s |     =     | `extensions/telegram/src/probe.test.ts`                            |
+|  9   | 120.0s |   —    |   신규    | `extensions/telegram/src/bot.create-telegram-bot.topics-media`     |
+|  10  | 80.6s  | 66.4s  |   +21%    | `src/agents/tools/browser-tool.test.ts`                            |
+|  11  | 80.0s  | 80.6s  |     =     | `src/image-generation/providers/google.test.ts`                    |
+|  12  | 70.1s  | 70.6s  |     =     | `src/agents/tools/web-fetch.ssrf.test.ts`                          |
+|  13  | 70.0s  | 72.8s  |     =     | `src/gateway/call.test.ts`                                         |
+|  14  | 70.0s  | 70.9s  |     =     | `src/memory/manager.batch.test.ts`                                 |
+|  15  | 60.0s  | 61.0s  |     =     | `src/gateway/server.canvas-auth.test.ts`                           |
+|  16  | 60.0s  | 62.0s  |     =     | `src/browser/server-context.remote-tab-ops.test.ts`                |
+|  17  | 60.0s  | 61.2s  |     =     | `src/browser/server-context.remote-profile-tab-ops.test.ts`        |
+|  18  | 60.0s  | 63.1s  |     =     | `extensions/telegram/src/fetch.test.ts`                            |
+|  19  | 21.5s  | 154.0s | **-86%**  | `src/commands/status.test.ts`                                      |
+|  20  | 20.0s  |   —    |   신규    | `extensions/telegram/src/bot.create-telegram-bot.routing.test.ts`  |
+|  21  | 10.0s  | 146.6s | **-93%**  | `src/agents/tools/pdf-tool.test.ts`                                |
+|  22  |  5.6s  | 134.9s | **-96%**  | `src/plugins/loader.test.ts`                                       |
+|  23  |  2.5s  | 67.5s  | **-96%**  | `src/agents/tools/message-tool.test.ts`                            |
+|  24  |  1.0s  | 150.0s | **-99%**  | `src/gateway/server-plugins.test.ts`                               |
+|  25  |  1.0s  | 166.0s | **-99%**  | `src/cli/command-secret-gateway.test.ts`                           |
+|  26  |  1.0s  | 92.8s  | **-99%**  | `src/auto-reply/reply/dispatch-from-config.test.ts`                |
+|  27  |  1.0s  | 87.0s  | **-99%**  | `src/agents/sessions-spawn-hooks.test.ts`                          |
+|  28  |  0.8s  | 290.5s | **-100%** | `src/agents/pi-embedded-runner.sanitize-session-history.test.ts`   |
+|  29  |  0.5s  | 58.7s  | **-99%**  | `src/agents/deneb-tools.subagents.sessions-spawn.allowlist`        |
+|  30  |  0.3s  | 143.3s | **-100%** | `src/memory/embeddings.test.ts`                                    |
+|  —   |  0.0s  | 60.6s  | **-100%** | `src/memory/embeddings-voyage.test.ts`                             |
+|  —   |  0.0s  | 149.8s |   분할    | `extensions/telegram/src/bot.create-telegram-bot.test.ts`          |
+
+### 분석 요약
+
+- **타임아웃 실패 55건** (30s testTimeout 도달) — Telegram 확장 (38건), subagent-announce (8건), web-fetch (7건), 기타 (2건)
+- **통과 테스트 중 진짜 느린 것은 3건**: Telegram topics-media DM (20s), SSRF DNS 해석 (20s), plugin-sdk 레거시 로드 (4.8s)
+- **나머지 통과 테스트는 1초 미만** — `vi.resetModules()` 캐시 최적화 효과 유지 확인
+- **이전 대비 12개 파일이 86~100% 단축** — 캐시 최적화가 안정적으로 유지됨
+
+### 핵심 최적화 대상
+
+| 우선순위 | 영역                        | 대상 테스트 수 | 원인                                                  | 난이도 |
+| :------: | --------------------------- | :------------: | ----------------------------------------------------- | :----: |
+|    1     | Telegram monitor/webhook    |     30건+      | `vi.doMock` + `importOriginal` 체인, 비동기 mock 누락 |   L    |
+|    2     | subagent-announce timeout   |      8건       | mock setup 결함으로 전체 타임아웃                     |   M    |
+|    3     | web-tools.fetch firecrawl   |      6건+      | firecrawl/readability mock 미해결 Promise 대기        |   M    |
+|    4     | web-fetch SSRF DNS (20s)    |      1건       | 실제 DNS 해석 대기 — mock DNS resolver 적용 필요      |   S    |
+|    5     | plugin loader legacy (4.8s) |      1건       | 모놀리식 plugin-sdk 전체 import — lazy load 분할 가능 |   M    |
+|    6     | Telegram bot delivery       |     21건+      | `vi.doMock` 체인 + 40+ mock 리셋 비용                 |   L    |
+|    7     | Browser remote tab ops      |      10건      | 원격 탭 조작 비동기 대기 타임아웃                     |   M    |
+|    8     | web-fetch cf-markdown       |      7건       | Cloudflare markdown mock 설정 결함                    |   S    |
+
+### 이전 적용된 최적화 (유지 중)
 
 #### 1. 불필요한 느린 테스트 11개 삭제 (~160초 절감)
 
@@ -365,15 +483,6 @@ sessions-spawn과 동일한 패턴을 추가 4개 파일에 적용. 첫 번째 �
 | `pi-embedded-runner.sanitize-session-history` (30) | 290.5s | ~0.7s | **~415x** |
 | `command-secret-gateway.test.ts` (23 tests)        | 166.0s | ~0.7s | **~237x** |
 | `server-plugins.test.ts` (16 tests)                | 150.0s | ~0.6s | **~250x** |
-
-### 추가 최적화 기회
-
-| 영역                     | 순위                   | 원인                                               | 난이도          |
-| ------------------------ | ---------------------- | -------------------------------------------------- | --------------- |
-| Telegram 테스트          | 1, 3, 6, 7, 11, 15, 25 | `vi.doMock` + `importOriginal` 체인, 40+ mock 리셋 | 대규모 리팩터링 |
-| Gateway/CLI 테스트       | 8, 9, 10, 20, 28       | 통합 스타일 setup, 모듈 리로딩                     | 중간            |
-| Memory/Embeddings 테스트 | 13, 21, 29             | 임베딩 연산 또는 무거운 mock setup                 | 중간            |
-| Browser 테스트           | 24, 26, 27             | 원격 탭 조작, 비동기 대기                          | 중간            |
 
 ---
 
