@@ -12,11 +12,14 @@ import {
 } from "../config/sessions.js";
 import { resolveRequiredHomeDir } from "../infra/home-dir.js";
 import { jsonUtf8Bytes } from "../infra/json-utf8-bytes.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 import { hasInterSessionUserProvenance } from "../sessions/input-provenance.js";
 import { stripInlineDirectiveTagsForDisplay } from "../utils/directive-tags.js";
 import { extractToolCallNames, hasToolCall } from "../utils/transcript-tools.js";
 import { stripEnvelope } from "./chat-sanitize.js";
 import type { SessionPreviewItem } from "./session-utils.types.js";
+
+const log = createSubsystemLogger("sessions");
 
 type SessionTitleFields = {
   firstUserMessage: string | null;
@@ -142,8 +145,8 @@ export function readSessionMessages(
           },
         });
       }
-    } catch {
-      // ignore bad lines
+    } catch (err) {
+      log.debug(`[sessions] skipping malformed JSONL line in ${filePath}: ${String(err)}`);
     }
   }
   return messages;
