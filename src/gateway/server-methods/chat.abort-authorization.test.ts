@@ -55,7 +55,7 @@ describe("chat.abort authorization", () => {
     const [ok, payload, error] = respond.mock.calls.at(-1) ?? [];
     expect(ok).toBe(false);
     expect(payload).toBeUndefined();
-    expect(error).toMatchObject({ code: "INVALID_REQUEST", message: "unauthorized" });
+    expect(error).toMatchObject({ code: "UNAUTHORIZED", message: "unauthorized" });
     expect(context.chatAbortControllers.has("run-1")).toBe(true);
   });
 

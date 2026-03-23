@@ -420,7 +420,7 @@ export class GatewayBrowserClient {
       } else {
         pending.reject(
           new GatewayRequestError({
-            code: res.error?.code ?? "UNAVAILABLE",
+            code: res.error?.code ?? "DEPENDENCY_FAILED",
             message: res.error?.message ?? "request failed",
             details: res.error?.details,
           }),

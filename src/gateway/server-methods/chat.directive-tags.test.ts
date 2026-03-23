@@ -394,7 +394,7 @@ describe("chat directive tag stripping for non-streaming final payloads", () => 
       false,
       undefined,
       expect.objectContaining({
-        code: ErrorCodes.INVALID_REQUEST,
+        code: ErrorCodes.VALIDATION_FAILED,
       }),
     );
     expect(context.broadcast).not.toHaveBeenCalled();

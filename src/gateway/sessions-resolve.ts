@@ -32,7 +32,7 @@ export async function resolveSessionKeyFromResolveParams(params: {
     return {
       ok: false,
       error: errorShape(
-        ErrorCodes.INVALID_REQUEST,
+        ErrorCodes.VALIDATION_FAILED,
         "Provide either key, sessionId, or label (not multiple)",
       ),
     };
@@ -40,7 +40,7 @@ export async function resolveSessionKeyFromResolveParams(params: {
   if (selectionCount === 0) {
     return {
       ok: false,
-      error: errorShape(ErrorCodes.INVALID_REQUEST, "Either key, sessionId, or label is required"),
+      error: errorShape(ErrorCodes.MISSING_PARAM, "Either key, sessionId, or label is required"),
     };
   }
 
@@ -54,7 +54,7 @@ export async function resolveSessionKeyFromResolveParams(params: {
     if (!legacyKey) {
       return {
         ok: false,
-        error: errorShape(ErrorCodes.INVALID_REQUEST, `No session found: ${key}`),
+        error: errorShape(ErrorCodes.NOT_FOUND, `No session found: ${key}`),
       };
     }
     await updateSessionStore(target.storePath, (s) => {
@@ -87,7 +87,7 @@ export async function resolveSessionKeyFromResolveParams(params: {
     if (matches.length === 0) {
       return {
         ok: false,
-        error: errorShape(ErrorCodes.INVALID_REQUEST, `No session found: ${sessionId}`),
+        error: errorShape(ErrorCodes.NOT_FOUND, `No session found: ${sessionId}`),
       };
     }
     if (matches.length > 1) {
@@ -95,7 +95,7 @@ export async function resolveSessionKeyFromResolveParams(params: {
       return {
         ok: false,
         error: errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.CONFLICT,
           `Multiple sessions found for sessionId: ${sessionId} (${keys})`,
         ),
       };
@@ -107,7 +107,7 @@ export async function resolveSessionKeyFromResolveParams(params: {
   if (!parsedLabel.ok) {
     return {
       ok: false,
-      error: errorShape(ErrorCodes.INVALID_REQUEST, parsedLabel.error),
+      error: errorShape(ErrorCodes.VALIDATION_FAILED, parsedLabel.error),
     };
   }
 
@@ -128,10 +128,7 @@ export async function resolveSessionKeyFromResolveParams(params: {
   if (list.sessions.length === 0) {
     return {
       ok: false,
-      error: errorShape(
-        ErrorCodes.INVALID_REQUEST,
-        `No session found with label: ${parsedLabel.label}`,
-      ),
+      error: errorShape(ErrorCodes.NOT_FOUND, `No session found with label: ${parsedLabel.label}`),
     };
   }
   if (list.sessions.length > 1) {
@@ -139,7 +136,7 @@ export async function resolveSessionKeyFromResolveParams(params: {
     return {
       ok: false,
       error: errorShape(
-        ErrorCodes.INVALID_REQUEST,
+        ErrorCodes.CONFLICT,
         `Multiple sessions found with label: ${parsedLabel.label} (${keys})`,
       ),
     };

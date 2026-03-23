@@ -10,7 +10,7 @@ export const voicewakeHandlers: GatewayRequestHandlers = {
       const cfg = await loadVoiceWakeConfig();
       respond(true, { triggers: cfg.triggers });
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
     }
   },
   "voicewake.set": async ({ params, respond, context }) => {
@@ -18,7 +18,7 @@ export const voicewakeHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "voicewake.set requires triggers: string[]"),
+        errorShape(ErrorCodes.MISSING_PARAM, "voicewake.set requires triggers: string[]"),
       );
       return;
     }
@@ -28,7 +28,7 @@ export const voicewakeHandlers: GatewayRequestHandlers = {
       context.broadcastVoiceWakeChanged(cfg.triggers);
       respond(true, { triggers: cfg.triggers });
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
     }
   },
 };

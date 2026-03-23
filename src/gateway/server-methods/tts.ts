@@ -42,7 +42,7 @@ export const ttsHandlers: GatewayRequestHandlers = {
         microsoftEnabled: isTtsProviderConfigured(config, "microsoft", cfg),
       });
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
     }
   },
   "tts.enable": async ({ respond }) => {
@@ -53,7 +53,7 @@ export const ttsHandlers: GatewayRequestHandlers = {
       setTtsEnabled(prefsPath, true);
       respond(true, { enabled: true });
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
     }
   },
   "tts.disable": async ({ respond }) => {
@@ -64,17 +64,13 @@ export const ttsHandlers: GatewayRequestHandlers = {
       setTtsEnabled(prefsPath, false);
       respond(true, { enabled: false });
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
     }
   },
   "tts.convert": async ({ params, respond }) => {
     const text = typeof params.text === "string" ? params.text.trim() : "";
     if (!text) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "tts.convert requires text"),
-      );
+      respond(false, undefined, errorShape(ErrorCodes.MISSING_PARAM, "tts.convert requires text"));
       return;
     }
     try {
@@ -93,10 +89,10 @@ export const ttsHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, result.error ?? "TTS conversion failed"),
+        errorShape(ErrorCodes.DEPENDENCY_FAILED, result.error ?? "TTS conversion failed"),
       );
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
     }
   },
   "tts.setProvider": async ({ params, respond }) => {
@@ -110,7 +106,7 @@ export const ttsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.NOT_FOUND,
           "Invalid provider. Use a registered TTS provider id such as openai, elevenlabs, or microsoft.",
         ),
       );
@@ -122,7 +118,7 @@ export const ttsHandlers: GatewayRequestHandlers = {
       setTtsProvider(prefsPath, provider);
       respond(true, { provider });
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
     }
   },
   "tts.providers": async ({ respond }) => {
@@ -147,7 +143,7 @@ export const ttsHandlers: GatewayRequestHandlers = {
         active: getTtsProvider(config, prefsPath),
       });
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
     }
   },
 };

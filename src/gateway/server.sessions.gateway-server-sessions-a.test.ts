@@ -1589,7 +1589,7 @@ describe("gateway server sessions", () => {
       key: "main",
     });
     expect(reset.ok).toBe(false);
-    expect(reset.error?.code).toBe("UNAVAILABLE");
+    expect(reset.error?.code).toBe("CONFLICT");
     expect(reset.error?.message ?? "").toMatch(/still active/i);
     expectActiveRunCleanup(
       "agent:main:main",
@@ -1632,7 +1632,7 @@ describe("gateway server sessions", () => {
       key: "discord:group:dev",
     });
     expect(deleted.ok).toBe(false);
-    expect(deleted.error?.code).toBe("UNAVAILABLE");
+    expect(deleted.error?.code).toBe("CONFLICT");
     expect(deleted.error?.message ?? "").toMatch(/still active/i);
     expectActiveRunCleanup(
       "agent:main:discord:group:dev",

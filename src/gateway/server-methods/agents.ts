@@ -81,7 +81,7 @@ function resolveAgentWorkspaceFileOrRespondError(
     cfg,
   );
   if (!agentId) {
-    respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
+    respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, "unknown agent id"));
     return null;
   }
   const rawName = params.name;
@@ -89,7 +89,11 @@ function resolveAgentWorkspaceFileOrRespondError(
     typeof rawName === "string" || typeof rawName === "number" ? String(rawName) : ""
   ).trim();
   if (!ALLOWED_FILE_NAMES.has(name)) {
-    respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `unsupported file "${name}"`));
+    respond(
+      false,
+      undefined,
+      errorShape(ErrorCodes.VALIDATION_FAILED, `unsupported file "${name}"`),
+    );
     return null;
   }
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
@@ -374,7 +378,7 @@ function respondInvalidMethodParams(
     false,
     undefined,
     errorShape(
-      ErrorCodes.INVALID_REQUEST,
+      ErrorCodes.VALIDATION_FAILED,
       `invalid ${method} params: ${formatValidationErrors(errors)}`,
     ),
   );
@@ -385,7 +389,7 @@ function isConfiguredAgent(cfg: ReturnType<typeof loadConfig>, agentId: string):
 }
 
 function respondAgentNotFound(respond: RespondFn, agentId: string): void {
-  respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `agent "${agentId}" not found`));
+  respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `agent "${agentId}" not found`));
 }
 
 async function moveToTrashBestEffort(pathname: string): Promise<void> {
@@ -408,7 +412,7 @@ function respondWorkspaceFileInvalid(respond: RespondFn, name: string, reason: s
   respond(
     false,
     undefined,
-    errorShape(ErrorCodes.INVALID_REQUEST, `unsafe workspace file "${name}" (${reason})`),
+    errorShape(ErrorCodes.VALIDATION_FAILED, `unsafe workspace file "${name}" (${reason})`),
   );
 }
 
@@ -433,7 +437,7 @@ function respondWorkspaceFileUnsafe(respond: RespondFn, name: string): void {
   respond(
     false,
     undefined,
-    errorShape(ErrorCodes.INVALID_REQUEST, `unsafe workspace file "${name}"`),
+    errorShape(ErrorCodes.VALIDATION_FAILED, `unsafe workspace file "${name}"`),
   );
 }
 
@@ -462,7 +466,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid agents.list params: ${formatValidationErrors(validateAgentsListParams.errors)}`,
         ),
       );
@@ -479,7 +483,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid agents.create params: ${formatValidationErrors(
             validateAgentsCreateParams.errors,
           )}`,
@@ -495,7 +499,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `"${DEFAULT_AGENT_ID}" is reserved`),
+        errorShape(ErrorCodes.FORBIDDEN, `"${DEFAULT_AGENT_ID}" is reserved`),
       );
       return;
     }
@@ -504,7 +508,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `agent "${agentId}" already exists`),
+        errorShape(ErrorCodes.CONFLICT, `agent "${agentId}" already exists`),
       );
       return;
     }
@@ -603,7 +607,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `"${DEFAULT_AGENT_ID}" cannot be deleted`),
+        errorShape(ErrorCodes.FORBIDDEN, `"${DEFAULT_AGENT_ID}" cannot be deleted`),
       );
       return;
     }
@@ -636,7 +640,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid agents.files.list params: ${formatValidationErrors(
             validateAgentsFilesListParams.errors,
           )}`,
@@ -647,7 +651,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     const cfg = loadConfig();
     const agentId = resolveAgentIdOrError(String(params.agentId ?? ""), cfg);
     if (!agentId) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
+      respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, "unknown agent id"));
       return;
     }
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);

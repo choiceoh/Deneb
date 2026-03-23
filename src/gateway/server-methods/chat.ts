@@ -264,7 +264,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid chat.history params: ${formatValidationErrors(validateChatHistoryParams.errors)}`,
         ),
       );
@@ -328,7 +328,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid chat.abort params: ${formatValidationErrors(validateChatAbortParams.errors)}`,
         ),
       );
@@ -352,7 +352,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         requester,
       });
       if (res.unauthorized) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unauthorized"));
+        respond(false, undefined, errorShape(ErrorCodes.UNAUTHORIZED, "unauthorized"));
         return;
       }
       respond(true, { ok: true, aborted: res.aborted, runIds: res.runIds });
@@ -365,15 +365,11 @@ export const chatHandlers: GatewayRequestHandlers = {
       return;
     }
     if (active.sessionKey !== rawSessionKey) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "runId does not match sessionKey"),
-      );
+      respond(false, undefined, errorShape(ErrorCodes.CONFLICT, "runId does not match sessionKey"));
       return;
     }
     if (!canRequesterAbortChatRun(active, requester)) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unauthorized"));
+      respond(false, undefined, errorShape(ErrorCodes.UNAUTHORIZED, "unauthorized"));
       return;
     }
 
@@ -409,7 +405,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid chat.send params: ${formatValidationErrors(validateChatSendParams.errors)}`,
         ),
       );
@@ -436,7 +432,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.FORBIDDEN,
           "system provenance fields are reserved for the ACP bridge",
         ),
       );
@@ -447,13 +443,17 @@ export const chatHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, sanitizedMessageResult.error),
+        errorShape(ErrorCodes.VALIDATION_FAILED, sanitizedMessageResult.error),
       );
       return;
     }
     const systemReceiptResult = normalizeOptionalChatSystemReceipt(p.systemProvenanceReceipt);
     if (!systemReceiptResult.ok) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, systemReceiptResult.error));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.VALIDATION_FAILED, systemReceiptResult.error),
+      );
       return;
     }
     const inboundMessage = sanitizedMessageResult.message;
@@ -466,7 +466,7 @@ export const chatHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "message or attachment required"),
+        errorShape(ErrorCodes.MISSING_PARAM, "message or attachment required"),
       );
       return;
     }
@@ -481,7 +481,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         parsedMessage = parsed.message;
         parsedImages = parsed.images;
       } catch (err) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, String(err)));
+        respond(false, undefined, errorShape(ErrorCodes.VALIDATION_FAILED, String(err)));
         return;
       }
     }
@@ -502,11 +502,7 @@ export const chatHandlers: GatewayRequestHandlers = {
       chatType: entry?.chatType,
     });
     if (sendPolicy === "deny") {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "send blocked by session policy"),
-      );
+      respond(false, undefined, errorShape(ErrorCodes.FORBIDDEN, "send blocked by session policy"));
       return;
     }
 
@@ -520,7 +516,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         requester: resolveChatAbortRequester(client),
       });
       if (res.unauthorized) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unauthorized"));
+        respond(false, undefined, errorShape(ErrorCodes.UNAUTHORIZED, "unauthorized"));
         return;
       }
       respond(true, { ok: true, aborted: res.aborted, runIds: res.runIds });
@@ -800,7 +796,7 @@ export const chatHandlers: GatewayRequestHandlers = {
           });
         })
         .catch((err) => {
-          const error = errorShape(ErrorCodes.UNAVAILABLE, String(err));
+          const error = errorShape(ErrorCodes.DEPENDENCY_FAILED, String(err));
           setGatewayDedupeEntry({
             dedupe: context.dedupe,
             key: `chat:${clientRunId}`,
@@ -826,7 +822,7 @@ export const chatHandlers: GatewayRequestHandlers = {
           context.chatAbortControllers.delete(clientRunId);
         });
     } catch (err) {
-      const error = errorShape(ErrorCodes.UNAVAILABLE, String(err));
+      const error = errorShape(ErrorCodes.DEPENDENCY_FAILED, String(err));
       const payload = {
         runId: clientRunId,
         status: "error" as const,
@@ -854,7 +850,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid chat.inject params: ${formatValidationErrors(validateChatInjectParams.errors)}`,
         ),
       );
@@ -871,7 +867,7 @@ export const chatHandlers: GatewayRequestHandlers = {
     const { cfg, storePath, entry } = loadSessionEntry(rawSessionKey);
     const sessionId = entry?.sessionId;
     if (!sessionId || !storePath) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "session not found"));
+      respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, "session not found"));
       return;
     }
 
@@ -889,7 +885,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.UNAVAILABLE,
+          ErrorCodes.DEPENDENCY_FAILED,
           `failed to write transcript: ${appended.error ?? "unknown error"}`,
         ),
       );

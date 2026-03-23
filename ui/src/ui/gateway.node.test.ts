@@ -304,7 +304,7 @@ describe("GatewayBrowserClient", () => {
       id: firstConnect.id,
       ok: false,
       error: {
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "unauthorized",
         details: { code: "AUTH_TOKEN_MISMATCH", canRetryWithDeviceToken: true },
       },
@@ -334,7 +334,7 @@ describe("GatewayBrowserClient", () => {
       id: secondConnect.id,
       ok: false,
       error: {
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "unauthorized",
         details: { code: "AUTH_TOKEN_MISMATCH" },
       },
@@ -378,7 +378,7 @@ describe("GatewayBrowserClient", () => {
       id: firstConnect.id,
       ok: false,
       error: {
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "unauthorized",
         details: { code: "AUTH_TOKEN_MISMATCH", canRetryWithDeviceToken: true },
       },
@@ -431,7 +431,7 @@ describe("GatewayBrowserClient", () => {
       id: firstConnect.id,
       ok: false,
       error: {
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "unauthorized",
         details: { code: "AUTH_TOKEN_MISMATCH" },
       },
@@ -470,7 +470,7 @@ describe("GatewayBrowserClient", () => {
       id: connect.id,
       ok: false,
       error: {
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "unauthorized",
         details: { code: "AUTH_TOKEN_MISSING" },
       },

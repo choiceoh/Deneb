@@ -119,6 +119,7 @@ export const ErrorShapeSchema = Type.Object(
     details: Type.Optional(Type.Unknown()),
     retryable: Type.Optional(Type.Boolean()),
     retryAfterMs: Type.Optional(Type.Integer({ minimum: 0 })),
+    cause: Type.Optional(NonEmptyString),
   },
   { additionalProperties: false },
 );

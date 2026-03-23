@@ -26,7 +26,7 @@ function respondProviderUnavailable(respond: RespondFn) {
   respond(
     false,
     undefined,
-    errorShape(ErrorCodes.INVALID_REQUEST, "web login provider is not available"),
+    errorShape(ErrorCodes.FORBIDDEN, "web login provider is not available"),
   );
 }
 
@@ -34,7 +34,7 @@ function respondProviderUnsupported(respond: RespondFn, providerId: string) {
   respond(
     false,
     undefined,
-    errorShape(ErrorCodes.INVALID_REQUEST, `web login is not supported by provider ${providerId}`),
+    errorShape(ErrorCodes.FORBIDDEN, `web login is not supported by provider ${providerId}`),
   );
 }
 
@@ -45,7 +45,7 @@ export const webHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid web.login.start params: ${formatValidationErrors(validateWebLoginStartParams.errors)}`,
         ),
       );
@@ -74,7 +74,7 @@ export const webHandlers: GatewayRequestHandlers = {
       });
       respond(true, result, undefined);
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
     }
   },
   "web.login.wait": async ({ params, respond, context }) => {
@@ -83,7 +83,7 @@ export const webHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid web.login.wait params: ${formatValidationErrors(validateWebLoginWaitParams.errors)}`,
         ),
       );
@@ -112,7 +112,7 @@ export const webHandlers: GatewayRequestHandlers = {
       }
       respond(true, result, undefined);
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, formatForLog(err)));
     }
   },
 };

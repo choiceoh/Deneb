@@ -548,7 +548,7 @@ describe("sendChatMessage", () => {
   it("formats structured non-auth connect failures for chat send", async () => {
     const request = vi.fn().mockRejectedValue(
       new GatewayRequestError({
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "Fetch failed",
         details: { code: "CONTROL_UI_ORIGIN_NOT_ALLOWED" },
       }),
@@ -579,7 +579,7 @@ describe("abortChatRun", () => {
     // Abort now shares the same structured connect-error formatter as send.
     const request = vi.fn().mockRejectedValue(
       new GatewayRequestError({
-        code: "INVALID_REQUEST",
+        code: "VALIDATION_FAILED",
         message: "Fetch failed",
         details: { code: "CONTROL_UI_DEVICE_IDENTITY_REQUIRED" },
       }),

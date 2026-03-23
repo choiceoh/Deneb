@@ -27,7 +27,7 @@ function findWizardSessionOrRespond(params: {
 }): WizardSession | null {
   const session = params.context.wizardSessions.get(params.sessionId);
   if (!session) {
-    params.respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "wizard not found"));
+    params.respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, "wizard not found"));
     return null;
   }
   return session;
@@ -40,7 +40,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
     }
     const running = context.findRunningWizard();
     if (running) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "wizard already running"));
+      respond(false, undefined, errorShape(ErrorCodes.CONFLICT, "wizard already running"));
       return;
     }
     const sessionId = randomUUID();
@@ -70,13 +70,13 @@ export const wizardHandlers: GatewayRequestHandlers = {
     const answer = params.answer as { stepId?: string; value?: unknown } | undefined;
     if (answer) {
       if (session.getStatus() !== "running") {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "wizard not running"));
+        respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, "wizard not running"));
         return;
       }
       try {
         await session.answer(String(answer.stepId ?? ""), answer.value);
       } catch (err) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, formatForLog(err)));
+        respond(false, undefined, errorShape(ErrorCodes.VALIDATION_FAILED, formatForLog(err)));
         return;
       }
     }

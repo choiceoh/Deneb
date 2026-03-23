@@ -167,7 +167,7 @@ function dispatchAgentRunFromGateway(params: {
       params.respond(true, payload, undefined, { runId: params.runId });
     })
     .catch((err) => {
-      const error = errorShape(ErrorCodes.UNAVAILABLE, String(err));
+      const error = errorShape(ErrorCodes.DEPENDENCY_FAILED, String(err));
       const payload = {
         runId: params.runId,
         status: "error" as const,
@@ -198,7 +198,7 @@ export const agentHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid agent params: ${formatValidationErrors(validateAgentParams.errors)}`,
         ),
       );
@@ -246,7 +246,7 @@ export const agentHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.UNAUTHORIZED,
           "provider/model overrides are not authorized for this caller.",
         ),
       );
@@ -288,7 +288,7 @@ export const agentHandlers: GatewayRequestHandlers = {
         message = parsed.message.trim();
         images = parsed.images;
       } catch (err) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, String(err)));
+        respond(false, undefined, errorShape(ErrorCodes.VALIDATION_FAILED, String(err)));
         return;
       }
     }
@@ -305,7 +305,7 @@ export const agentHandlers: GatewayRequestHandlers = {
           false,
           undefined,
           errorShape(
-            ErrorCodes.INVALID_REQUEST,
+            ErrorCodes.VALIDATION_FAILED,
             `invalid agent params: unknown channel: ${String(normalized)}`,
           ),
         );
@@ -322,7 +322,7 @@ export const agentHandlers: GatewayRequestHandlers = {
           false,
           undefined,
           errorShape(
-            ErrorCodes.INVALID_REQUEST,
+            ErrorCodes.VALIDATION_FAILED,
             `invalid agent params: unknown agent id "${request.agentId}"`,
           ),
         );
@@ -342,7 +342,7 @@ export const agentHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid agent params: malformed session key "${requestedSessionKeyRaw}"`,
         ),
       );
@@ -361,7 +361,7 @@ export const agentHandlers: GatewayRequestHandlers = {
           false,
           undefined,
           errorShape(
-            ErrorCodes.INVALID_REQUEST,
+            ErrorCodes.VALIDATION_FAILED,
             `invalid agent params: agent "${request.agentId}" does not match session key agent "${sessionAgentId}"`,
           ),
         );
@@ -477,7 +477,7 @@ export const agentHandlers: GatewayRequestHandlers = {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "send blocked by session policy"),
+          errorShape(ErrorCodes.FORBIDDEN, "send blocked by session policy"),
         );
         return;
       }
@@ -582,7 +582,7 @@ export const agentHandlers: GatewayRequestHandlers = {
           resolvedAccountId,
         };
       } catch (err) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, String(err)));
+        respond(false, undefined, errorShape(ErrorCodes.VALIDATION_FAILED, String(err)));
         return;
       }
     }
@@ -605,8 +605,8 @@ export const agentHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          "delivery channel is required: pass --channel/--reply-channel or use a main session with a previous channel",
+          ErrorCodes.MISSING_PARAM,
+          "required: pass --channel/--reply-channel or use a main session with a previous channel",
         ),
       );
       return;
@@ -719,7 +719,7 @@ export const agentHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid agent.identity.get params: ${formatValidationErrors(
             validateAgentIdentityParams.errors,
           )}`,
@@ -737,7 +737,7 @@ export const agentHandlers: GatewayRequestHandlers = {
           false,
           undefined,
           errorShape(
-            ErrorCodes.INVALID_REQUEST,
+            ErrorCodes.VALIDATION_FAILED,
             `invalid agent.identity.get params: malformed session key "${sessionKeyRaw}"`,
           ),
         );
@@ -749,7 +749,7 @@ export const agentHandlers: GatewayRequestHandlers = {
           false,
           undefined,
           errorShape(
-            ErrorCodes.INVALID_REQUEST,
+            ErrorCodes.VALIDATION_FAILED,
             `invalid agent.identity.get params: agent "${agentIdRaw}" does not match session key agent "${resolved}"`,
           ),
         );
@@ -773,7 +773,7 @@ export const agentHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid agent.wait params: ${formatValidationErrors(validateAgentWaitParams.errors)}`,
         ),
       );

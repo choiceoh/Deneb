@@ -61,7 +61,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid skills.status params: ${formatValidationErrors(validateSkillsStatusParams.errors)}`,
         ),
       );
@@ -76,7 +76,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `unknown agent id "${agentIdRaw}"`),
+          errorShape(ErrorCodes.NOT_FOUND, `unknown agent id "${agentIdRaw}"`),
         );
         return;
       }
@@ -94,7 +94,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid skills.bins params: ${formatValidationErrors(validateSkillsBinsParams.errors)}`,
         ),
       );
@@ -117,7 +117,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid skills.install params: ${formatValidationErrors(validateSkillsInstallParams.errors)}`,
         ),
       );
@@ -140,7 +140,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
     respond(
       result.ok,
       result,
-      result.ok ? undefined : errorShape(ErrorCodes.UNAVAILABLE, result.message),
+      result.ok ? undefined : errorShape(ErrorCodes.DEPENDENCY_FAILED, result.message),
     );
   },
   "skills.update": async ({ params, respond }) => {
@@ -149,7 +149,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.VALIDATION_FAILED,
           `invalid skills.update params: ${formatValidationErrors(validateSkillsUpdateParams.errors)}`,
         ),
       );

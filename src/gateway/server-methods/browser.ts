@@ -175,7 +175,7 @@ export const browserHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "method and path are required"),
+        errorShape(ErrorCodes.MISSING_PARAM, "method and path are required"),
       );
       return;
     }
@@ -183,7 +183,7 @@ export const browserHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "method must be GET, POST, or DELETE"),
+        errorShape(ErrorCodes.VALIDATION_FAILED, "method must be GET, POST, or DELETE"),
       );
       return;
     }
@@ -192,7 +192,7 @@ export const browserHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INVALID_REQUEST,
+          ErrorCodes.FORBIDDEN,
           "browser.request cannot create or delete persistent browser profiles",
         ),
       );
@@ -207,7 +207,7 @@ export const browserHandlers: GatewayRequestHandlers = {
         nodes: context.nodeRegistry.listConnected(),
       });
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, String(err)));
       return;
     }
 
@@ -224,7 +224,7 @@ export const browserHandlers: GatewayRequestHandlers = {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, hint, {
+          errorShape(ErrorCodes.VALIDATION_FAILED, hint, {
             details: { reason: allowed.reason, command: "browser.proxy" },
           }),
         );
@@ -252,7 +252,7 @@ export const browserHandlers: GatewayRequestHandlers = {
       const payload = res.payloadJSON ? safeParseJson(res.payloadJSON) : res.payload;
       const proxy = payload && typeof payload === "object" ? (payload as BrowserProxyResult) : null;
       if (!proxy || !("result" in proxy)) {
-        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "browser proxy failed"));
+        respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, "browser proxy failed"));
         return;
       }
       const mapping = await persistProxyFiles(proxy.files);
@@ -263,7 +263,11 @@ export const browserHandlers: GatewayRequestHandlers = {
 
     const ready = await startBrowserControlServiceFromConfig();
     if (!ready) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "browser control is disabled"));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.FEATURE_DISABLED, "browser control is disabled"),
+      );
       return;
     }
 
@@ -271,7 +275,7 @@ export const browserHandlers: GatewayRequestHandlers = {
     try {
       dispatcher = createBrowserRouteDispatcher(createBrowserControlContext());
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+      respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, String(err)));
       return;
     }
 
@@ -287,7 +291,8 @@ export const browserHandlers: GatewayRequestHandlers = {
         result.body && typeof result.body === "object" && "error" in result.body
           ? String((result.body as { error?: unknown }).error)
           : `browser request failed (${result.status})`;
-      const code = result.status >= 500 ? ErrorCodes.UNAVAILABLE : ErrorCodes.INVALID_REQUEST;
+      const code =
+        result.status >= 500 ? ErrorCodes.DEPENDENCY_FAILED : ErrorCodes.VALIDATION_FAILED;
       respond(false, undefined, errorShape(code, message, { details: result.body }));
       return;
     }

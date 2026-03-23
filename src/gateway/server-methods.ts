@@ -38,7 +38,7 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
   const roleRaw = client.connect.role ?? "operator";
   const role = parseGatewayRole(roleRaw);
   if (!role) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, `unauthorized role: ${roleRaw}`);
+    return errorShape(ErrorCodes.UNAUTHORIZED, `unauthorized role: ${roleRaw}`);
   }
   return null;
 }
@@ -82,11 +82,7 @@ export async function handleGatewayRequest(
   }
   const handler = opts.extraHandlers?.[req.method] ?? coreGatewayHandlers[req.method];
   if (!handler) {
-    respond(
-      false,
-      undefined,
-      errorShape(ErrorCodes.INVALID_REQUEST, `unknown method: ${req.method}`),
-    );
+    respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `unknown method: ${req.method}`));
     return;
   }
   const invokeHandler = () =>

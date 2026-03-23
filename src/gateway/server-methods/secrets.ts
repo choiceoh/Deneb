@@ -41,7 +41,7 @@ export function createSecretsHandlers(params: {
         const result = await params.reloadSecrets();
         respond(true, { ok: true, warningCount: result.warningCount });
       } catch (err) {
-        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+        respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, String(err)));
       }
     },
     "secrets.resolve": async ({ params: requestParams, respond }) => {
@@ -50,7 +50,7 @@ export function createSecretsHandlers(params: {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `invalid secrets.resolve params: ${field}`),
+          errorShape(ErrorCodes.VALIDATION_FAILED, `invalid secrets.resolve params: ${field}`),
         );
         return;
       }
@@ -59,7 +59,7 @@ export function createSecretsHandlers(params: {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "invalid secrets.resolve params: commandName"),
+          errorShape(ErrorCodes.VALIDATION_FAILED, "invalid secrets.resolve params: commandName"),
         );
         return;
       }
@@ -73,7 +73,7 @@ export function createSecretsHandlers(params: {
             false,
             undefined,
             errorShape(
-              ErrorCodes.INVALID_REQUEST,
+              ErrorCodes.VALIDATION_FAILED,
               `invalid secrets.resolve params: unknown target id "${String(targetId)}"`,
             ),
           );
@@ -97,7 +97,7 @@ export function createSecretsHandlers(params: {
         }
         respond(true, payload);
       } catch (err) {
-        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+        respond(false, undefined, errorShape(ErrorCodes.DEPENDENCY_FAILED, String(err)));
       }
     },
   };

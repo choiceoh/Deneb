@@ -37,7 +37,7 @@ import {
 } from "./protocol/index.js";
 
 function invalid(message: string): { ok: false; error: ErrorShape } {
-  return { ok: false, error: errorShape(ErrorCodes.INVALID_REQUEST, message) };
+  return { ok: false, error: errorShape(ErrorCodes.VALIDATION_FAILED, message) };
 }
 
 function normalizeExecHost(raw: string): "sandbox" | "gateway" | "node" | undefined {
@@ -392,7 +392,7 @@ export async function applySessionsPatchToStore(params: {
       if (!params.loadGatewayModelCatalog) {
         return {
           ok: false,
-          error: errorShape(ErrorCodes.UNAVAILABLE, "model catalog unavailable"),
+          error: errorShape(ErrorCodes.DEPENDENCY_FAILED, "model catalog unavailable"),
         };
       }
       const catalog = await params.loadGatewayModelCatalog();
