@@ -141,7 +141,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conversationId)).not.toBeNull();
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       const cached = observer.getCachedSummary(conversationId);
@@ -160,7 +160,7 @@ describe("CompressionObserver", () => {
       const observer = createObserver();
       observer.triggerUpdate(conversationId);
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(observer.getCachedSummary(conversationId)).toBeNull();
     });
@@ -179,7 +179,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conversationId)).not.toBeNull();
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       observer.invalidate(conversationId);
@@ -201,7 +201,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conversationId)).not.toBeNull();
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       const cached = observer.getCachedSummary(conversationId)!;
@@ -219,7 +219,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conversationId)).not.toBeNull();
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       const cached = observer.getCachedSummary(conversationId)!;
@@ -244,7 +244,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conversationId)).not.toBeNull();
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       observer.invalidate(conversationId);
@@ -267,7 +267,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conv1)).not.toBeNull();
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       observer.triggerUpdate(conv2);
@@ -275,7 +275,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conv2)).not.toBeNull();
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       observer.invalidate(conv1);
@@ -306,7 +306,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conversationId)).not.toBeNull();
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       observer.dispose();
@@ -331,7 +331,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conversationId)).not.toBeNull();
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       expect(observer.getCachedSummary(conversationId)!.messagesCovered).toBe(4);
@@ -366,7 +366,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conversationId)).not.toBeNull();
         },
-        { timeout: 10000 },
+        { timeout: 8000, interval: 50 },
       );
 
       // First call failed, retry succeeded
@@ -392,22 +392,25 @@ describe("CompressionObserver", () => {
       observer.triggerUpdate(conversationId);
 
       // Wait for retries to exhaust (MAX_CALL_RETRIES=2, delays=2s+4s)
-      await new Promise((resolve) => setTimeout(resolve, 8000));
-
-      // Should have tried (1 initial + 2 retries = 3 calls)
-      expect(alwaysFail.mock.calls.length).toBeGreaterThanOrEqual(3);
+      await vi.waitFor(
+        () => {
+          // Should have tried (1 initial + 2 retries = 3 calls)
+          expect(alwaysFail.mock.calls.length).toBeGreaterThanOrEqual(3);
+        },
+        { timeout: 10_000, interval: 100 },
+      );
 
       // No cached summary
       expect(observer.getCachedSummary(conversationId)).toBeNull();
 
       // Observer should still be operational (not crashed)
       observer.dispose();
-    }, 15000);
+    }, 12_000);
 
     it("should handle empty conversation gracefully", async () => {
       const observer = createObserver();
       observer.triggerUpdate(999);
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 50));
       expect(observer.getCachedSummary(999)).toBeNull();
     });
 
@@ -427,7 +430,7 @@ describe("CompressionObserver", () => {
       );
 
       observer.triggerUpdate(conversationId);
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 50));
       expect(observer.getCachedSummary(conversationId)).toBeNull();
     });
   });
@@ -441,7 +444,7 @@ describe("CompressionObserver", () => {
       const slowFn = vi.fn(async (text: string) => {
         callCount++;
         if (callCount === 1) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 30));
         }
         const targetLen = Math.max(4, Math.floor(text.length * 0.1));
         return text.slice(0, targetLen);
@@ -462,7 +465,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(callCount).toBeGreaterThanOrEqual(2);
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       expect(observer.getCachedSummary(conversationId)).not.toBeNull();
@@ -501,7 +504,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conversationId)).not.toBeNull();
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       // 50 messages - 8 fresh tail = 42 compactable, each 200 tokens = 8400 source tokens
@@ -533,7 +536,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conversationId)).not.toBeNull();
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       expect(observer.getCachedSummary(conversationId)!.hasMixedContext).toBe(true);
@@ -559,7 +562,7 @@ describe("CompressionObserver", () => {
         () => {
           expect(observer.getCachedSummary(conversationId)).not.toBeNull();
         },
-        { timeout: 2000 },
+        { timeout: 500 },
       );
 
       const cached = observer.getCachedSummary(conversationId)!;
