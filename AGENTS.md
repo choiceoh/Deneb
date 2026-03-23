@@ -274,16 +274,31 @@
 
 When an AI agent is modifying the Deneb codebase, use these scripts to understand impact, run the right checks, and avoid breaking things. All scripts output JSON for easy parsing.
 
-- **Analyze impact of current changes:** `bun scripts/dev-patch-impact.ts` — categorizes changed files, suggests which gates to run (check/test/build), flags docs and channel updates needed. Use `--staged` for staged changes only.
-- **Find affected tests and dependents:** `bun scripts/dev-affected.ts [file...]` — given changed files (or auto-detected from git diff), traces the import graph to find test files and downstream dependents. Outputs a ready-to-run `testCommand`.
-- **Run all pre-commit gates:** `bun scripts/dev-commit-gate.ts` — runs `pnpm check` then affected tests in sequence, stops on first failure. Use `--full` to also run all tests + build. Use `--no-test` for check-only.
+### Quick path: single-command PR (recommended)
 
-Recommended workflow for AI agents:
+After committing your changes, create a PR in one step:
 
-1. After making changes, run `bun scripts/dev-patch-impact.ts` to understand what needs verification.
-2. Run `bun scripts/dev-commit-gate.ts` before committing. Use `--full` if plugin-sdk, build config, or module boundaries were touched.
-3. If a gate fails, fix the issue and rerun. Do not commit with failing gates.
-4. Use `bun scripts/dev-affected.ts src/path/to/changed-file.ts` to find the specific tests and dependents for targeted debugging.
+```bash
+bun scripts/dev-create-pr.ts --title "fix: description"
+```
+
+This runs the smart gate, pushes, and creates the PR automatically. Options: `--skip-gate` (already ran), `--draft`, `--base <branch>`, `--issue <num>`, `--full-gate`.
+
+### Individual scripts (for debugging or manual control)
+
+- **Analyze impact:** `bun scripts/dev-patch-impact.ts` — categorizes changed files, suggests which gates to run. Use `--staged` for staged changes only.
+- **Find affected tests:** `bun scripts/dev-affected.ts [file...]` — traces the import graph to find test files and downstream dependents. Uses batched grep (single pass) for speed.
+- **Run commit gates:** `bun scripts/dev-commit-gate.ts` — smart gate that auto-detects scope:
+  - **Docs/config-only changes**: skips all gates (instant).
+  - **Source changes**: runs `pnpm check` + affected tests in parallel discovery mode.
+  - **Plugin-sdk/build-config changes**: runs full gate (check + all tests + build).
+  - Use `--full` to force all gates, `--no-test` to skip tests.
+
+### Recommended workflow
+
+1. Make changes, commit via `scripts/committer "msg" file1 file2`.
+2. Run `bun scripts/dev-create-pr.ts --title "verb: description"` — handles everything.
+3. If gate fails, fix and rerun. Use `bun scripts/dev-affected.ts src/path/to/file.ts` for targeted debugging.
 
 ## Coding Style & Naming Conventions
 
