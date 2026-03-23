@@ -9,12 +9,12 @@
   <a href="https://github.com/choiceoh/Deneb/releases"><img src="https://img.shields.io/badge/version-3.5.7-blue" alt="Version"></a>
   <a href="https://github.com/choiceoh/Deneb/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.x-3178c6" alt="TypeScript"></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22+-339933" alt="Node.js"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22.16+-339933" alt="Node.js"></a>
 </p>
 
 ---
 
-**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. Deneb is a lean 230K-line server engine with a custom Lossless Context Management (LCM) system — DAG-based compaction, proactive background summarization, and full memory recall across sessions.
+**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. Deneb is a lean ~440K-line server engine with a custom Lossless Context Management (LCM) system — DAG-based compaction, proactive background summarization, and full memory recall across sessions.
 
 **Memory-first, local-first, lean-first.**
 
@@ -30,21 +30,21 @@ Most AI agent frameworks hit the same wall: when conversations grow long, contex
 | **Context recall**     | Vector search only       | Semantic search + DAG expansion + memory files |
 | **Compaction latency** | Blocks on LLM call       | Background observer pre-computes summaries     |
 | **Memory persistence** | Session-scoped           | Workspace files + JSONL transcripts + LCM DAG  |
-| **Codebase size**      | 500K–1M+ lines           | 230K lines — lean and auditable                |
+| **Codebase size**      | 500K–1M+ lines           | ~440K lines — lean and auditable               |
 | **Local LLM**          | Optional                 | First-class: SGLang, Ollama, vLLM support      |
 
 ### Intentional Simplification
 
 We deliberately support fewer channels and architectures — **a smaller surface lets us move faster and ship fewer bugs.**
 
-Rather than spreading thin across 20+ channels and a broad user base, we focus on delivering the best possible experience to a focused group of users. This means:
+Rather than spreading thin across many channels and a broad user base, we focus on delivering the best possible experience to a focused group of users. This means:
 
 - **One channel done right** (Telegram) > eight channels done halfway
-- **230K lines of auditable code** > 1M+ lines nobody can fully understand
+- **~440K lines of auditable code** > 1M+ lines nobody can fully understand
 - **Every feature battle-tested in production** before landing in the repo
 - **Faster iteration** — fewer platforms to test, fewer edge cases to chase
 
-What's gone: mobile apps, desktop companions, 12+ niche channels, enterprise multi-tenant plugins. What remains: a focused agent engine that remembers everything and runs on a single GPU.
+Deneb is a focused agent engine that remembers everything and runs on a single GPU.
 
 ## ⭐ Key Features
 
@@ -109,7 +109,7 @@ We chose to ship one channel that works perfectly over eight that sort of work.
 
 ### Prerequisites
 
-- Node.js 22+
+- Node.js 22.16+ (Node 24 recommended)
 - An LLM API key (or a local model server)
 
 ### Install
@@ -140,7 +140,7 @@ node deneb.mjs gateway
 ## 📁 Architecture
 
 ```
-Deneb/                          (~230K lines TypeScript)
+Deneb/                          (~440K lines TypeScript)
 ├── src/
 │   ├── context-engine/lcm/     # LCM engine — compaction, observer, DAG
 │   ├── autonomous/             # Autonomous loop engine
@@ -150,11 +150,14 @@ Deneb/                          (~230K lines TypeScript)
 │   ├── channels/               # Channel plugin framework
 │   ├── config/                 # Config schema & validation
 │   ├── gateway/                # Gateway server & daemon
-│   ├── plugins/                # Plugin SDK
+│   ├── plugin-sdk/             # Plugin SDK
 │   ├── secrets/                # Credential management
 │   ├── infra/outbound/         # LLM provider adapters
-│   └── auto-reply/             # Message routing
-├── extensions/                 # Channel extensions (Telegram, Discord, etc.)
+│   ├── routing/                # Message routing
+│   ├── tts/                    # Text-to-speech
+│   └── web-search/             # Web search integration
+├── extensions/                 # Channel extensions (Telegram, Discord, Slack, etc.)
+├── vega/                       # Vega QMD backend
 └── ui/                         # Web dashboard
 ```
 
@@ -164,9 +167,9 @@ Deneb/                          (~230K lines TypeScript)
 pnpm install
 pnpm build
 pnpm dev        # Development mode
-pnpm test       # Run tests
-pnpm lint       # Lint
-pnpm format     # Format
+pnpm test       # Run tests (vitest)
+pnpm check      # Lint + format check (oxlint + oxfmt)
+pnpm format:fix # Auto-format (oxfmt --write)
 ```
 
 ## 📄 License

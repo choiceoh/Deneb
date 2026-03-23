@@ -252,7 +252,7 @@ Deneb's web interface (Gateway Control UI + HTTP endpoints) is intended for **lo
 
 ### Node.js Version
 
-Deneb requires **Node.js 22.12.0 or later** (LTS). This version includes important security patches:
+Deneb requires **Node.js 22.16.0 or later** (LTS). Node 24 is recommended. This version includes important security patches:
 
 - CVE-2025-59466: async_hooks DoS vulnerability
 - CVE-2026-21636: Permission model bypass vulnerability
@@ -260,7 +260,7 @@ Deneb requires **Node.js 22.12.0 or later** (LTS). This version includes importa
 Verify your Node.js version:
 
 ```bash
-node --version  # Should be v22.12.0 or later
+node --version  # Should be v22.16.0 or later (v24.x recommended)
 ```
 
 ### Docker Security
