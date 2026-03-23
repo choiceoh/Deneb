@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { makeTempWorkspace, writeWorkspaceFile } from "../test-helpers/workspace.js";
+import { makeTempWorkspace, writeWorkspaceFile } from "../../../test-helpers/workspace.js";
 import {
   loadWorkspaceBootstrapFiles,
   DEFAULT_AGENTS_FILENAME,
