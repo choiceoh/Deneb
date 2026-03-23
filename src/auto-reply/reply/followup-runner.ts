@@ -266,9 +266,10 @@ export function createFollowupRunner(params: {
         };
         try {
           await sendFollowupPayloads([errorPayload], queued);
-        } catch {
-          // Best-effort: if sending the error also fails, the error log above
-          // is the only trace.
+        } catch (sendErr) {
+          defaultRuntime.error?.(
+            `followup queue: failed to deliver error notification to user: ${sendErr instanceof Error ? sendErr.message : String(sendErr)}`,
+          );
         }
         return;
       }
@@ -354,6 +355,11 @@ export function createFollowupRunner(params: {
         }),
       });
       const finalPayloads = suppressMessagingToolReplies ? [] : mediaFilteredPayloads;
+      if (suppressMessagingToolReplies && mediaFilteredPayloads.length > 0) {
+        logVerbose(
+          `followup runner: suppressed ${mediaFilteredPayloads.length} payload(s) — messaging tool already sent to same target`,
+        );
+      }
 
       if (finalPayloads.length === 0) {
         return;

@@ -200,20 +200,49 @@ export async function buildReplyPayloads(params: {
       })
     : dedupedPayloads;
   // Filter out payloads already sent via pipeline or directly during tool flush.
-  // When block streaming completed cleanly, use per-payload dedup (hasSentPayload)
-  // instead of a blanket drop so that payloads generated after the stream ended
-  // are still delivered to the user.
-  const filteredPayloads =
-    blockStreamCompletedCleanly || params.blockStreamingEnabled
+  //
+  // Three cases:
+  // 1. Block streaming completed cleanly (streamed + not aborted): use
+  //    per-payload dedup via hasSentPayload so payloads generated after the
+  //    stream ended are still delivered.
+  // 2. Block streaming enabled but did NOT complete cleanly (aborted or never
+  //    streamed): fall through to directlySentBlockKeys / no-filter paths so
+  //    final payloads are not incorrectly suppressed.
+  // 3. Block streaming disabled: use directlySentBlockKeys if available,
+  //    otherwise pass all payloads through.
+  const filteredPayloads = blockStreamCompletedCleanly
+    ? mediaFilteredPayloads.filter((payload) => !params.blockReplyPipeline?.hasSentPayload(payload))
+    : params.blockStreamingEnabled &&
+        params.blockReplyPipeline &&
+        !params.blockReplyPipeline.isAborted()
       ? mediaFilteredPayloads.filter(
-          (payload) => !params.blockReplyPipeline?.hasSentPayload(payload),
+          (payload) => !params.blockReplyPipeline!.hasSentPayload(payload),
         )
       : params.directlySentBlockKeys?.size
         ? mediaFilteredPayloads.filter(
             (payload) => !params.directlySentBlockKeys!.has(createBlockReplyContentKey(payload)),
           )
         : mediaFilteredPayloads;
+
+  // Log when filtering removed payloads so message drops leave a trace.
+  const blockFilteredCount = mediaFilteredPayloads.length - filteredPayloads.length;
+  if (blockFilteredCount > 0) {
+    const reason = blockStreamCompletedCleanly
+      ? "already streamed via pipeline"
+      : params.blockReplyPipeline?.isAborted()
+        ? "pipeline aborted, deduped via sent keys"
+        : "matched directlySentBlockKeys";
+    logVerbose(
+      `buildReplyPayloads: filtered ${blockFilteredCount}/${mediaFilteredPayloads.length} payload(s) (${reason})`,
+    );
+  }
+
   const replyPayloads = suppressMessagingToolReplies ? [] : filteredPayloads;
+  if (suppressMessagingToolReplies && filteredPayloads.length > 0) {
+    logVerbose(
+      `buildReplyPayloads: suppressed ${filteredPayloads.length} payload(s) — messaging tool already sent to same target`,
+    );
+  }
 
   return {
     replyPayloads,

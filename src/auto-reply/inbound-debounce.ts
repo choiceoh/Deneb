@@ -37,6 +37,8 @@ type DebounceBuffer<T> = {
   items: T[];
   timeout: ReturnType<typeof setTimeout> | null;
   debounceMs: number;
+  /** Number of consecutive flush failures for this buffer. */
+  retryCount: number;
 };
 
 export type InboundDebounceCreateParams<T> = {
@@ -73,18 +75,25 @@ export function createInboundDebouncer<T>(params: InboundDebounceCreateParams<T>
       await params.onFlush(buffer.items);
     } catch (err) {
       // Re-enqueue items so they are not silently lost when onFlush fails.
-      // A new buffer is created only if no concurrent enqueue recreated one.
-      const existing = buffers.get(key);
-      if (existing) {
-        existing.items.unshift(...buffer.items);
-      } else {
-        const retry: DebounceBuffer<T> = {
-          items: buffer.items,
-          timeout: null,
-          debounceMs: buffer.debounceMs,
-        };
-        buffers.set(key, retry);
-        scheduleFlush(key, retry);
+      // Cap retries at 3 to prevent infinite retry loops when onFlush is
+      // persistently failing (e.g. channel is down).
+      const MAX_RETRIES = 3;
+      const nextRetryCount = buffer.retryCount + 1;
+      if (nextRetryCount <= MAX_RETRIES) {
+        const existing = buffers.get(key);
+        if (existing) {
+          existing.items.unshift(...buffer.items);
+          existing.retryCount = Math.max(existing.retryCount, nextRetryCount);
+        } else {
+          const retry: DebounceBuffer<T> = {
+            items: buffer.items,
+            timeout: null,
+            debounceMs: buffer.debounceMs,
+            retryCount: nextRetryCount,
+          };
+          buffers.set(key, retry);
+          scheduleFlush(key, retry);
+        }
       }
       params.onError?.(err, buffer.items);
     }
@@ -133,7 +142,7 @@ export function createInboundDebouncer<T>(params: InboundDebounceCreateParams<T>
       return;
     }
 
-    const buffer: DebounceBuffer<T> = { items: [item], timeout: null, debounceMs };
+    const buffer: DebounceBuffer<T> = { items: [item], timeout: null, debounceMs, retryCount: 0 };
     buffers.set(key, buffer);
     scheduleFlush(key, buffer);
   };

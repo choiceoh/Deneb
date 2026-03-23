@@ -152,8 +152,16 @@ export async function drainNextQueueItem<T>(
   if (!next) {
     return false;
   }
-  await run(next);
+  // Remove the item before running so it is not processed twice if run()
+  // triggers a concurrent drain.  If run() throws, re-insert the item at
+  // the front so it is not silently lost.
   items.shift();
+  try {
+    await run(next);
+  } catch (err) {
+    items.unshift(next);
+    throw err;
+  }
   return true;
 }
 

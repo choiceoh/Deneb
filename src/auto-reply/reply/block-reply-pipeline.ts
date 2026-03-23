@@ -11,6 +11,8 @@ export type BlockReplyPipeline = {
   hasBuffered: () => boolean;
   didStream: () => boolean;
   isAborted: () => boolean;
+  /** Number of payloads dropped because the pipeline was already aborted. */
+  droppedAfterAbort: () => number;
   hasSentPayload: (payload: ReplyPayload) => boolean;
 };
 
@@ -95,8 +97,11 @@ export function createBlockReplyPipeline(params: {
   let didStream = false;
   let didLogTimeout = false;
 
+  let droppedAfterAbort = 0;
+
   const sendPayload = (payload: ReplyPayload, bypassSeenCheck: boolean = false) => {
     if (aborted) {
+      droppedAfterAbort += 1;
       return;
     }
     const payloadKey = createBlockReplyPayloadKey(payload);
@@ -146,7 +151,7 @@ export function createBlockReplyPipeline(params: {
           if (!didLogTimeout) {
             didLogTimeout = true;
             logVerbose(
-              `block reply delivery timed out after ${timeoutMs}ms; skipping remaining block replies to preserve ordering`,
+              `block reply pipeline aborted: delivery timed out after ${timeoutMs}ms; remaining enqueued payloads will fall through to final delivery`,
             );
           }
           return;
@@ -244,6 +249,7 @@ export function createBlockReplyPipeline(params: {
     hasBuffered: () => Boolean(coalescer?.hasBuffered() || bufferedPayloads.length > 0),
     didStream: () => didStream,
     isAborted: () => aborted,
+    droppedAfterAbort: () => droppedAfterAbort,
     hasSentPayload: (payload) => {
       const payloadKey = createBlockReplyContentKey(payload);
       return sentContentKeys.has(payloadKey);
