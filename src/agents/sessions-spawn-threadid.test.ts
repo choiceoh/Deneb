@@ -8,7 +8,7 @@ import {
 import {
   listSubagentRunsForRequester,
   resetSubagentRegistryForTests,
-} from "./subagent-registry.js";
+} from "./subagent/subagent-registry.js";
 
 describe("sessions_spawn requesterOrigin threading", () => {
   const spawnAndReadRequesterRun = async (opts?: { agentThreadId?: number }) => {

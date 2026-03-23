@@ -1,4 +1,4 @@
-import { normalizeProviderIdForAuth } from "../agents/model-selection.js";
+import { normalizeProviderIdForAuth } from "../agents/models/model-selection.js";
 import type { DenebConfig } from "../config/config.js";
 import { loadPluginManifestRegistry } from "./manifest-registry.js";
 

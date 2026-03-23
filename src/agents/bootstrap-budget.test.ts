@@ -9,8 +9,8 @@ import {
   formatBootstrapTruncationWarningLines,
   resolveBootstrapWarningSignaturesSeen,
 } from "./bootstrap-budget.js";
-import { buildAgentSystemPrompt } from "./system-prompt.js";
-import type { WorkspaceBootstrapFile } from "./workspace.js";
+import { buildAgentSystemPrompt } from "./system-prompt/system-prompt.js";
+import type { WorkspaceBootstrapFile } from "./workspace/workspace.js";
 
 describe("buildBootstrapInjectionStats", () => {
   it("maps raw and injected sizes and marks truncation", () => {

@@ -1,5 +1,5 @@
 import { DEFAULT_PROVIDER } from "../../../agents/defaults.js";
-import { buildAllowedModelSet } from "../../../agents/model-selection.js";
+import { buildAllowedModelSet } from "../../../agents/models/model-selection.js";
 import { loadConfig } from "../../../config/config.js";
 import {
   ErrorCodes,

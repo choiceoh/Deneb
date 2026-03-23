@@ -14,7 +14,7 @@ import {
   resolveSubagentController,
   steerControlledSubagentRun,
   createPendingDescendantCounter,
-} from "../subagent-control.js";
+} from "../subagent/subagent-control.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readNumberParam, readStringParam } from "./common.js";
 

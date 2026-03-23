@@ -6,7 +6,7 @@ import { loadConfig } from "../../config/config.js";
 import { defaultRuntime } from "../../runtime.js";
 import { resolveUserPath } from "../../utils.js";
 import { syncSkillsToWorkspace } from "../skills.js";
-import { DEFAULT_AGENT_WORKSPACE_DIR } from "../workspace.js";
+import { DEFAULT_AGENT_WORKSPACE_DIR } from "../workspace/workspace.js";
 import { requireSandboxBackendFactory } from "./backend.js";
 import { ensureSandboxBrowser } from "./browser.js";
 import { resolveSandboxConfigForAgent } from "./config.js";

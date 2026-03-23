@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_GEMINI_EMBEDDING_MODEL } from "./embeddings-gemini.js";
 import { mockPublicPinnedHostname } from "./test-helpers/ssrf.js";
 
-vi.mock("../agents/model-auth.js", async () => {
+vi.mock("../agents/models/model-auth.js", async () => {
   const { createModelAuthMockModule } = await import("../test-utils/model-auth-mock.js");
   return createModelAuthMockModule();
 });
@@ -32,7 +32,7 @@ function readFirstFetchRequest(fetchMock: { mock: { calls: unknown[][] } }) {
 }
 
 type EmbeddingsModule = typeof import("./embeddings.js");
-type AuthModule = typeof import("../agents/model-auth.js");
+type AuthModule = typeof import("../agents/models/model-auth.js");
 type ResolvedProviderAuth = Awaited<ReturnType<AuthModule["resolveApiKeyForProvider"]>>;
 
 let authModule: AuthModule;
@@ -41,7 +41,7 @@ let DEFAULT_LOCAL_MODEL: EmbeddingsModule["DEFAULT_LOCAL_MODEL"];
 
 beforeEach(async () => {
   vi.resetModules();
-  authModule = await import("../agents/model-auth.js");
+  authModule = await import("../agents/models/model-auth.js");
   ({ createEmbeddingProvider, DEFAULT_LOCAL_MODEL } = await import("./embeddings.js"));
 });
 

@@ -4,7 +4,7 @@ import {
   ensureAuthProfileStore,
   setAuthProfileOrder,
 } from "../../agents/auth-profiles.js";
-import { normalizeProviderId } from "../../agents/model-selection.js";
+import { normalizeProviderId } from "../../agents/models/model-selection.js";
 import type { RuntimeEnv } from "../../runtime.js";
 import { normalizeStringEntries } from "../../shared/string-normalization.js";
 import { shortenHomePath } from "../../utils.js";

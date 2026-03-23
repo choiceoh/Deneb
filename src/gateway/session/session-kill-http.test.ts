@@ -26,11 +26,11 @@ vi.mock("./session-utils.js", () => ({
   loadSessionEntry: loadSessionEntryMock,
 }));
 
-vi.mock("../agents/subagent-registry.js", () => ({
+vi.mock("../agents/subagent/subagent-registry.js", () => ({
   getSubagentRunByChildSessionKey: getSubagentRunByChildSessionKeyMock,
 }));
 
-vi.mock("../agents/subagent-control.js", () => ({
+vi.mock("../agents/subagent/subagent-control.js", () => ({
   killControlledSubagentRun: killControlledSubagentRunMock,
   killSubagentRunAdmin: killSubagentRunAdminMock,
   resolveSubagentController: resolveSubagentControllerMock,

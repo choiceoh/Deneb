@@ -4,8 +4,8 @@ import { resolveSendableOutboundReplyParts } from "deneb/plugin-sdk/reply-payloa
 import { resolveBootstrapWarningSignaturesSeen } from "../../agents/bootstrap-budget.js";
 import { runCliAgent } from "../../agents/cli-runner.js";
 import { getCliSessionId } from "../../agents/cli-session.js";
-import { runWithModelFallback } from "../../agents/model-fallback.js";
-import { isCliProvider } from "../../agents/model-selection.js";
+import { runWithModelFallback } from "../../agents/models/model-fallback.js";
+import { isCliProvider } from "../../agents/models/model-selection.js";
 import {
   BILLING_ERROR_USER_MESSAGE,
   isCompactionFailureError,

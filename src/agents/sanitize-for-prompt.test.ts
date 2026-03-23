@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sanitizeForPromptLiteral, wrapUntrustedPromptDataBlock } from "./sanitize-for-prompt.js";
-import { buildAgentSystemPrompt } from "./system-prompt.js";
+import { buildAgentSystemPrompt } from "./system-prompt/system-prompt.js";
 
 describe("sanitizeForPromptLiteral (OC-19 hardening)", () => {
   it("strips ASCII control chars (CR/LF/NUL/tab)", () => {

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { DEFAULT_AGENTS_FILENAME } from "../workspace.js";
+import { DEFAULT_AGENTS_FILENAME } from "../workspace/workspace.js";
 import { ensureSandboxWorkspace } from "./workspace.js";
 
 const tempRoots: string[] = [];

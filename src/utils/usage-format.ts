@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveDenebAgentDir } from "../agents/agent-paths.js";
-import { modelKey, normalizeModelRef, normalizeProviderId } from "../agents/model-selection.js";
+import {
+  modelKey,
+  normalizeModelRef,
+  normalizeProviderId,
+} from "../agents/models/model-selection.js";
 import type { NormalizedUsage } from "../agents/usage.js";
 import type { DenebConfig } from "../config/config.js";
 import type { ModelProviderConfig } from "../config/types.models.js";

@@ -1,8 +1,8 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
 import type { AuthProfileStore } from "../../agents/auth-profiles.js";
-import { loadModelCatalog } from "../../agents/model-catalog.js";
-import { shouldSuppressBuiltInModel } from "../../agents/model-suppression.js";
+import { loadModelCatalog } from "../../agents/models/model-catalog.js";
+import { shouldSuppressBuiltInModel } from "../../agents/models/model-suppression.js";
 import { resolveModelWithRegistry } from "../../agents/pi-embedded-runner/model.js";
 import type { DenebConfig } from "../../config/config.js";
 import { loadModelRegistry, toModelRow } from "./list.registry.js";

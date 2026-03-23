@@ -9,7 +9,7 @@ const hoisted = vi.hoisted(() => {
   };
 });
 
-vi.mock("../subagent-spawn.js", () => ({
+vi.mock("../subagent/subagent-spawn.js", () => ({
   SUBAGENT_SPAWN_MODES: ["run", "session"],
   spawnSubagentDirect: (...args: unknown[]) => hoisted.spawnSubagentDirectMock(...args),
 }));

@@ -2,7 +2,7 @@ import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { AnthropicPayloadLogger } from "../../anthropic-payload-log.js";
 import type { CacheTrace } from "../../cache-trace.js";
-import { resolveToolCallArgumentsEncoding } from "../../model-compat.js";
+import { resolveToolCallArgumentsEncoding } from "../../models/model-compat.js";
 import { downgradeOpenAIFunctionCallReasoningPairs } from "../../pi-embedded-helpers.js";
 import { sanitizeToolCallIdsForCloudCodeAssist } from "../../tool-call-id.js";
 import type { TranscriptPolicy } from "../../transcript-policy.js";

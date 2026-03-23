@@ -1,4 +1,4 @@
-import { listSubagentRunsForController } from "../../agents/subagent-registry.js";
+import { listSubagentRunsForController } from "../../agents/subagent/subagent-registry.js";
 import { logVerbose } from "../../globals.js";
 import { handleSubagentsAgentsAction } from "./commands-subagents/action-agents.js";
 import { handleSubagentsFocusAction } from "./commands-subagents/action-focus.js";

@@ -12,7 +12,7 @@ import {
   resolveAgentEffectiveModelPrimary,
 } from "../agents/agent-scope.js";
 import { DEFAULT_PROVIDER, DEFAULT_MODEL } from "../agents/defaults.js";
-import { parseModelRef } from "../agents/model-selection.js";
+import { parseModelRef } from "../agents/models/model-selection.js";
 import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
 import type { DenebConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";

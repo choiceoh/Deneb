@@ -2,7 +2,7 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ThinkLevel, ReasoningLevel } from "../../../auto-reply/thinking.js";
 import type { DenebConfig } from "../../../config/config.js";
 import type { ContextEngine } from "../../../context-engine/types.js";
-import type { ExecElevatedDefaults } from "../../bash-tools.js";
+import type { ExecElevatedDefaults } from "../../bash-tools/bash-tools.js";
 import type { ContextWindowInfo } from "../../context-window-guard.js";
 import {
   extractObservedOverflowTokenCount,

@@ -14,7 +14,7 @@ vi.mock("../agents/defaults.js", () => ({
   DEFAULT_PROVIDER: "openai",
 }));
 
-vi.mock("../agents/model-selection.js", () => ({
+vi.mock("../agents/models/model-selection.js", () => ({
   resolveConfiguredModelRef: vi.fn(() => ({
     provider: "openai",
     model: "gpt-5.2",

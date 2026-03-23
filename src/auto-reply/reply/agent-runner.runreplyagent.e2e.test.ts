@@ -39,7 +39,7 @@ const state = vi.hoisted(() => ({
   runCliAgentMock: vi.fn(),
 }));
 
-let modelFallbackModule: typeof import("../../agents/model-fallback.js");
+let modelFallbackModule: typeof import("../../agents/models/model-fallback.js");
 let onAgentEvent: typeof import("../../infra/agent-events.js").onAgentEvent;
 
 let runReplyAgentPromise:
@@ -53,7 +53,7 @@ async function getRunReplyAgent() {
   return await runReplyAgentPromise;
 }
 
-vi.mock("../../agents/model-fallback.js", () => ({
+vi.mock("../../agents/models/model-fallback.js", () => ({
   runWithModelFallback: async ({
     provider,
     model,
@@ -86,7 +86,7 @@ vi.mock("./queue.js", () => ({
 
 beforeAll(async () => {
   // Avoid attributing the initial agent-runner import cost to the first test case.
-  modelFallbackModule = await import("../../agents/model-fallback.js");
+  modelFallbackModule = await import("../../agents/models/model-fallback.js");
   ({ onAgentEvent } = await import("../../infra/agent-events.js"));
   await getRunReplyAgent();
 });

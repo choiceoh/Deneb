@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthProfileStore } from "../../agents/auth-profiles.js";
-import { OLLAMA_LOCAL_AUTH_MARKER } from "../../agents/model-auth-markers.js";
+import { OLLAMA_LOCAL_AUTH_MARKER } from "../../agents/models/model-auth-markers.js";
 import type { DenebConfig } from "../../config/config.js";
 
 let mockStore: AuthProfileStore;
@@ -13,7 +13,7 @@ const resolveAuthProfileEligibilityMock = vi.fn(() => ({
 }));
 const resolveSecretRefStringMock = vi.fn(async () => "resolved-secret");
 
-vi.mock("../../agents/model-catalog.js", () => ({
+vi.mock("../../agents/models/model-catalog.js", () => ({
   loadModelCatalog: vi.fn(async () => []),
 }));
 vi.mock("../../secrets/resolve.js", () => ({

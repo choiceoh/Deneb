@@ -104,7 +104,7 @@ vi.mock("../../agents/auth-profiles.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../../agents/model-auth.js", () => ({
+vi.mock("../../agents/models/model-auth.js", () => ({
   resolveEnvApiKey: mocks.resolveEnvApiKey,
   hasUsableCustomProviderApiKey: mocks.hasUsableCustomProviderApiKey,
   resolveUsableCustomProviderApiKey: mocks.resolveUsableCustomProviderApiKey,

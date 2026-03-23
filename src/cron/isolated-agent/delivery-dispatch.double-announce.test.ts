@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // --- Module mocks (must be hoisted before imports) ---
 
-vi.mock("../../agents/subagent-registry.js", () => ({
+vi.mock("../../agents/subagent/subagent-registry.js", () => ({
   countActiveDescendantRuns: vi.fn().mockReturnValue(0),
 }));
 
@@ -46,7 +46,7 @@ vi.mock("./subagent-followup.js", () => ({
 }));
 
 // Import after mocks
-import { countActiveDescendantRuns } from "../../agents/subagent-registry.js";
+import { countActiveDescendantRuns } from "../../agents/subagent/subagent-registry.js";
 import { deliverOutboundPayloads } from "../../infra/outbound/deliver.js";
 import { shouldEnqueueCronMainSummary } from "../heartbeat-policy.js";
 import {

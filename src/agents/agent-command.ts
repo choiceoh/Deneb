@@ -75,8 +75,8 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
 import { FailoverError } from "./failover-error.js";
 import { formatAgentInternalEventsForPrompt } from "./internal-events.js";
 import { AGENT_LANE_SUBAGENT } from "./lanes.js";
-import { loadModelCatalog } from "./model-catalog.js";
-import { runWithModelFallback } from "./model-fallback.js";
+import { loadModelCatalog } from "./models/model-catalog.js";
+import { runWithModelFallback } from "./models/model-fallback.js";
 import {
   buildAllowedModelSet,
   isCliProvider,
@@ -87,14 +87,14 @@ import {
   resolveConfiguredModelRef,
   resolveDefaultModelForAgent,
   resolveThinkingDefault,
-} from "./model-selection.js";
+} from "./models/model-selection.js";
 import { prepareSessionManagerForRun } from "./pi-embedded-runner/session-manager-init.js";
 import { runEmbeddedPiAgent } from "./pi-embedded.js";
 import { buildWorkspaceSkillSnapshot } from "./skills.js";
 import { getSkillsSnapshotVersion } from "./skills/refresh.js";
 import { normalizeSpawnedRunMetadata } from "./spawned-context.js";
 import { resolveAgentTimeoutMs } from "./timeout.js";
-import { ensureAgentWorkspace } from "./workspace.js";
+import { ensureAgentWorkspace } from "./workspace/workspace.js";
 
 type PersistSessionEntryParams = {
   sessionStore: Record<string, SessionEntry>;

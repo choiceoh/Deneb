@@ -6,7 +6,7 @@ import {
   modelKey,
   parseModelRef,
   resolveModelRefFromString,
-} from "../../agents/model-selection.js";
+} from "../../agents/models/model-selection.js";
 import { formatCliCommand } from "../../cli/command-format.js";
 import { type DenebConfig, readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
 import { formatConfigIssueLines } from "../../config/issue-format.js";

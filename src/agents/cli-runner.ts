@@ -45,8 +45,8 @@ import {
   resolveBootstrapTotalMaxChars,
 } from "./pi-embedded-helpers.js";
 import type { EmbeddedPiRunResult } from "./pi-embedded-runner.js";
-import { buildSystemPromptReport } from "./system-prompt-report.js";
-import { redactRunIdentifier, resolveRunWorkspaceDir } from "./workspace-run.js";
+import { buildSystemPromptReport } from "./system-prompt/system-prompt-report.js";
+import { redactRunIdentifier, resolveRunWorkspaceDir } from "./workspace/workspace-run.js";
 
 const log = createSubsystemLogger("agent/claude-cli");
 

@@ -1,6 +1,6 @@
 import { cancel, multiselect as clackMultiselect, isCancel } from "@clack/prompts";
-import { resolveApiKeyForProvider } from "../../agents/model-auth.js";
-import { type ModelScanResult, scanOpenRouterModels } from "../../agents/model-scan.js";
+import { resolveApiKeyForProvider } from "../../agents/models/model-auth.js";
+import { type ModelScanResult, scanOpenRouterModels } from "../../agents/models/model-scan.js";
 import { withProgressTotals } from "../../cli/progress.js";
 import { logConfigUpdated } from "../../config/logging.js";
 import { toAgentModelListLike } from "../../config/model-input.js";

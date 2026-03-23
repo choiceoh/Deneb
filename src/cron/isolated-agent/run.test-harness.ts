@@ -75,8 +75,8 @@ vi.mock("../../agents/skills/refresh.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../../agents/workspace.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../agents/workspace.js")>();
+vi.mock("../../agents/workspace/workspace.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../agents/workspace/workspace.js")>();
   return {
     ...actual,
     DEFAULT_IDENTITY_FILENAME: "IDENTITY.md",
@@ -84,16 +84,16 @@ vi.mock("../../agents/workspace.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../../agents/model-catalog.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../agents/model-catalog.js")>();
+vi.mock("../../agents/models/model-catalog.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../agents/models/model-catalog.js")>();
   return {
     ...actual,
     loadModelCatalog: vi.fn().mockResolvedValue({ models: [] }),
   };
 });
 
-vi.mock("../../agents/model-selection.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../agents/model-selection.js")>();
+vi.mock("../../agents/models/model-selection.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../agents/models/model-selection.js")>();
   return {
     ...actual,
     getModelRefStatus: getModelRefStatusMock,
@@ -105,8 +105,8 @@ vi.mock("../../agents/model-selection.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../../agents/model-fallback.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../agents/model-fallback.js")>();
+vi.mock("../../agents/models/model-fallback.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../agents/models/model-fallback.js")>();
   return {
     ...actual,
     runWithModelFallback: runWithModelFallbackMock,
@@ -156,16 +156,18 @@ vi.mock("../../agents/usage.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../../agents/subagent-announce.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../agents/subagent-announce.js")>();
+vi.mock("../../agents/subagent/subagent-announce.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../agents/subagent/subagent-announce.js")>();
   return {
     ...actual,
     runSubagentAnnounceFlow: vi.fn().mockResolvedValue(true),
   };
 });
 
-vi.mock("../../agents/subagent-registry.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../agents/subagent-registry.js")>();
+vi.mock("../../agents/subagent/subagent-registry.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../agents/subagent/subagent-registry.js")>();
   return {
     ...actual,
     countActiveDescendantRuns: countActiveDescendantRunsMock,

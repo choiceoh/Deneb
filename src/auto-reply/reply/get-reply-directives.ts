@@ -1,6 +1,6 @@
-import type { ExecToolDefaults } from "../../agents/bash-tools.js";
+import type { ExecToolDefaults } from "../../agents/bash-tools/bash-tools.js";
 import { resolveFastModeState } from "../../agents/fast-mode.js";
-import type { ModelAliasIndex } from "../../agents/model-selection.js";
+import type { ModelAliasIndex } from "../../agents/models/model-selection.js";
 import { resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
 import type { SkillCommandSpec } from "../../agents/skills.js";
 import type { DenebConfig } from "../../config/config.js";

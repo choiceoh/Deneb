@@ -9,7 +9,7 @@ import { estimateUsageCost, resolveModelCostConfig } from "../../utils/usage-for
 import { setCliSessionId } from "../cli-session.js";
 import { resolveContextTokensForModel } from "../context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../defaults.js";
-import { isCliProvider } from "../model-selection.js";
+import { isCliProvider } from "../models/model-selection.js";
 import { deriveSessionTotalTokens, hasNonzeroUsage } from "../usage.js";
 
 type RunResult = Awaited<ReturnType<(typeof import("../pi-embedded.js"))["runEmbeddedPiAgent"]>>;

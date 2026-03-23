@@ -19,9 +19,9 @@ import {
   isAnthropicRateLimitError,
 } from "../agents/live-auth-keys.js";
 import { isModernModelRef } from "../agents/live-model-filter.js";
-import { getApiKeyForModel } from "../agents/model-auth.js";
-import { shouldSuppressBuiltInModel } from "../agents/model-suppression.js";
-import { ensureDenebModelsJson } from "../agents/models-config.js";
+import { getApiKeyForModel } from "../agents/models/model-auth.js";
+import { shouldSuppressBuiltInModel } from "../agents/models/model-suppression.js";
+import { ensureDenebModelsJson } from "../agents/models/models-config.js";
 import { isRateLimitErrorMessage } from "../agents/pi-embedded-helpers/errors.js";
 import { discoverAuthStorage, discoverModels } from "../agents/pi-model-discovery.js";
 import { clearRuntimeConfigSnapshot, loadConfig } from "../config/config.js";

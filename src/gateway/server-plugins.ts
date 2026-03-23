@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { normalizeModelRef, parseModelRef } from "../agents/model-selection.js";
+import { normalizeModelRef, parseModelRef } from "../agents/models/model-selection.js";
 import { primeConfiguredBindingRegistry } from "../channels/plugins/binding-registry.js";
 import type { loadConfig } from "../config/config.js";
 import { normalizePluginsConfig } from "../plugins/config-state.js";

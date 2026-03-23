@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resolveWorkspaceTemplateDir } from "../../agents/workspace-templates.js";
-import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
+import { resolveWorkspaceTemplateDir } from "../../agents/workspace/workspace-templates.js";
+import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace/workspace.js";
 import { handleReset } from "../../commands/onboard-helpers.js";
 import { createConfigIO, writeConfigFile } from "../../config/config.js";
 import { defaultRuntime } from "../../runtime.js";

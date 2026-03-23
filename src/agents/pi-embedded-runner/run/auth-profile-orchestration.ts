@@ -9,7 +9,7 @@ import {
 } from "../../auth-profiles.js";
 import type { AuthProfileStore } from "../../auth-profiles/types.js";
 import { FailoverError, resolveFailoverStatus } from "../../failover-error.js";
-import { getApiKeyForModel } from "../../model-auth.js";
+import { getApiKeyForModel } from "../../models/model-auth.js";
 import { classifyFailoverReason, type FailoverReason } from "../../pi-embedded-helpers.js";
 import { log } from "../logger.js";
 import { type ApiKeyInfo } from "../run-usage.js";

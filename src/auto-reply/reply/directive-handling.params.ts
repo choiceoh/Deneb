@@ -1,4 +1,4 @@
-import type { ModelAliasIndex } from "../../agents/model-selection.js";
+import type { ModelAliasIndex } from "../../agents/models/model-selection.js";
 import type { DenebConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import type { MsgContext } from "../templating.js";
@@ -21,7 +21,7 @@ export type HandleDirectiveOnlyCoreParams = {
   aliasIndex: ModelAliasIndex;
   allowedModelKeys: Set<string>;
   allowedModelCatalog: Awaited<
-    ReturnType<typeof import("../../agents/model-catalog.js").loadModelCatalog>
+    ReturnType<typeof import("../../agents/models/model-catalog.js").loadModelCatalog>
   >;
   resetModelOverride: boolean;
   provider: string;
@@ -49,7 +49,7 @@ export type ApplyInlineDirectivesFastLaneParams = HandleDirectiveOnlyCoreParams 
     resolveDefaultThinkingLevel: () => Promise<ThinkLevel | undefined>;
     allowedModelKeys: Set<string>;
     allowedModelCatalog: Awaited<
-      ReturnType<typeof import("../../agents/model-catalog.js").loadModelCatalog>
+      ReturnType<typeof import("../../agents/models/model-catalog.js").loadModelCatalog>
     >;
     resetModelOverride: boolean;
   };

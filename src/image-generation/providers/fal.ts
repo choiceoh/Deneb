@@ -1,4 +1,4 @@
-import { resolveApiKeyForProvider } from "../../agents/model-auth.js";
+import { resolveApiKeyForProvider } from "../../agents/models/model-auth.js";
 import type { ImageGenerationProviderPlugin } from "../../plugins/types.js";
 import type { GeneratedImageAsset } from "../types.js";
 

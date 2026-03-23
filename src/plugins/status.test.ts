@@ -23,7 +23,7 @@ vi.mock("../agents/agent-scope.js", () => ({
   resolveDefaultAgentId: () => "default",
 }));
 
-vi.mock("../agents/workspace.js", () => ({
+vi.mock("../agents/workspace/workspace.js", () => ({
   resolveDefaultAgentWorkspaceDir: () => "/default-workspace",
 }));
 

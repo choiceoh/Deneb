@@ -25,9 +25,12 @@ import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveDenebDocsPath } from "../../docs-path.js";
 import { isTimeoutError } from "../../failover-error.js";
 import { resolveImageSanitizationLimits } from "../../image-sanitization.js";
-import { resolveModelAuthMode } from "../../model-auth.js";
-import { supportsModelTools } from "../../model-tool-support.js";
-import { createOpenAIWebSocketStreamFn, releaseWsSession } from "../../openai-ws-stream.js";
+import { resolveModelAuthMode } from "../../models/model-auth.js";
+import { supportsModelTools } from "../../models/model-tool-support.js";
+import {
+  createOpenAIWebSocketStreamFn,
+  releaseWsSession,
+} from "../../openai-ws/openai-ws-stream.js";
 import { createBundleLspToolRuntime } from "../../pi-bundle-lsp-runtime.js";
 import { createBundleMcpToolRuntime } from "../../pi-bundle-mcp-tools.js";
 import {
@@ -39,7 +42,7 @@ import { subscribeEmbeddedPiSession } from "../../pi-embedded-subscribe.js";
 import { createPreparedEmbeddedPiSettingsManager } from "../../pi-project-settings.js";
 import { applyPiAutoCompactionGuard } from "../../pi-settings.js";
 import { toClientToolDefinitions } from "../../pi-tool-definition-adapter.js";
-import { createDenebCodingTools, resolveToolLoopDetectionConfig } from "../../pi-tools.js";
+import { createDenebCodingTools, resolveToolLoopDetectionConfig } from "../../pi-tools/pi-tools.js";
 import { resolveSandboxContext } from "../../sandbox.js";
 import { repairSessionFileIfNeeded } from "../../session-file-repair.js";
 import { guardSessionManager } from "../../session-tool-result-guard-wrapper.js";

@@ -36,7 +36,7 @@ vi.mock("../infra/agent-events.js", () => ({
   emitAgentEvent: vi.fn(),
 }));
 
-vi.mock("./pi-tools.before-tool-call.js", () => ({
+vi.mock("./pi-tools/pi-tools.before-tool-call.js", () => ({
   consumeAdjustedParamsForToolCall: beforeToolCallMocks.consumeAdjustedParamsForToolCall,
   isToolWrappedWithBeforeToolCallHook: beforeToolCallMocks.isToolWrappedWithBeforeToolCallHook,
   runBeforeToolCallHook: beforeToolCallMocks.runBeforeToolCallHook,

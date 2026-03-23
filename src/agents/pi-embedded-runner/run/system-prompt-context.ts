@@ -13,7 +13,7 @@ import type { SessionSystemPromptReport } from "../../../config/sessions/types.j
 import { buildTtsSystemPromptHint } from "../../../tts/tts.js";
 import { normalizeMessageChannel } from "../../../utils/message-channel.js";
 import { isReasoningTagProvider } from "../../../utils/provider-utils.js";
-import type { ExecElevatedDefaults } from "../../bash-tools.exec-types.js";
+import type { ExecElevatedDefaults } from "../../bash-tools/bash-tools.exec-types.js";
 import {
   analyzeBootstrapBudget,
   buildBootstrapPromptWarning,
@@ -25,7 +25,7 @@ import {
   listChannelSupportedActions,
   resolveChannelMessageToolHints,
 } from "../../channel-tools.js";
-import { resolveDefaultModelForAgent } from "../../model-selection.js";
+import { resolveDefaultModelForAgent } from "../../models/model-selection.js";
 import { resolveOwnerDisplaySetting } from "../../owner-display.js";
 import {
   resolveBootstrapMaxChars,
@@ -36,10 +36,10 @@ import type { EmbeddedContextFile } from "../../pi-embedded-helpers/types.js";
 import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
 import type { SandboxContext } from "../../sandbox/types.js";
 import { detectRuntimeShell } from "../../shell-utils.js";
-import { buildSystemPromptParams } from "../../system-prompt-params.js";
-import { buildSystemPromptReport } from "../../system-prompt-report.js";
-import type { WorkspaceBootstrapFile } from "../../workspace.js";
-import { DEFAULT_BOOTSTRAP_FILENAME } from "../../workspace.js";
+import { buildSystemPromptParams } from "../../system-prompt/system-prompt-params.js";
+import { buildSystemPromptReport } from "../../system-prompt/system-prompt-report.js";
+import type { WorkspaceBootstrapFile } from "../../workspace/workspace.js";
+import { DEFAULT_BOOTSTRAP_FILENAME } from "../../workspace/workspace.js";
 import { buildEmbeddedMessageActionDiscoveryInput } from "../message-action-discovery-input.js";
 import { buildModelAliasLines } from "../model.js";
 import { buildEmbeddedSandboxInfo } from "../sandbox-info.js";

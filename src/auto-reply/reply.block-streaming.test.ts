@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { loadModelCatalog } from "../agents/model-catalog.js";
+import { loadModelCatalog } from "../agents/models/model-catalog.js";
 import type { DenebConfig } from "../config/config.js";
 import { withTempHome as withTempHomeHarness } from "../config/home-env.test-harness.js";
 import { getReplyFromConfig } from "./reply.js";
@@ -21,7 +21,7 @@ const piEmbeddedMock = vi.hoisted(() => ({
 
 vi.mock("/src/agents/pi-embedded.js", () => piEmbeddedMock);
 vi.mock("../agents/pi-embedded.js", () => piEmbeddedMock);
-vi.mock("../agents/model-catalog.js", () => ({
+vi.mock("../agents/models/model-catalog.js", () => ({
   loadModelCatalog: vi.fn(),
 }));
 

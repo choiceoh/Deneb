@@ -89,7 +89,7 @@ export function getModelCatalogMocks(): AnyMocks {
   return modelCatalogMocks;
 }
 
-vi.mock("../agents/model-catalog.js", () => modelCatalogMocks);
+vi.mock("../agents/models/model-catalog.js", () => modelCatalogMocks);
 
 const webSessionMocks = vi.hoisted(() => ({
   webAuthExists: vi.fn().mockResolvedValue(true),

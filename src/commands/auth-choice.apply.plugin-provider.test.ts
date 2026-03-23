@@ -34,7 +34,7 @@ vi.mock("../agents/agent-scope.js", () => ({
 }));
 
 const resolveDefaultAgentWorkspaceDir = vi.hoisted(() => vi.fn(() => "/tmp/workspace"));
-vi.mock("../agents/workspace.js", () => ({
+vi.mock("../agents/workspace/workspace.js", () => ({
   resolveDefaultAgentWorkspaceDir,
 }));
 

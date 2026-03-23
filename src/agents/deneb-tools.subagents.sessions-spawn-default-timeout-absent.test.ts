@@ -7,7 +7,7 @@ import {
   setSessionsSpawnConfigOverride,
   setupSessionsSpawnGatewayMock,
 } from "./deneb-tools.subagents.sessions-spawn.test-harness.js";
-import { resetSubagentRegistryForTests } from "./subagent-registry.js";
+import { resetSubagentRegistryForTests } from "./subagent/subagent-registry.js";
 
 const MAIN_SESSION_KEY = "agent:test:main";
 

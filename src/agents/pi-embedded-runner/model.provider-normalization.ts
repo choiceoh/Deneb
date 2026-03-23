@@ -1,6 +1,6 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
-import { normalizeModelCompat } from "../model-compat.js";
-import { normalizeProviderId } from "../model-selection.js";
+import { normalizeModelCompat } from "../models/model-compat.js";
+import { normalizeProviderId } from "../models/model-selection.js";
 
 function isOpenAIApiBaseUrl(baseUrl?: string): boolean {
   const trimmed = baseUrl?.trim();

@@ -6,7 +6,7 @@ import {
   resetSessionsSpawnConfigOverride,
   setSessionsSpawnConfigOverride,
 } from "./deneb-tools.subagents.sessions-spawn.test-harness.js";
-import { resetSubagentRegistryForTests } from "./subagent-registry.js";
+import { resetSubagentRegistryForTests } from "./subagent/subagent-registry.js";
 
 const callGatewayMock = getCallGatewayMock();
 

@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { matchesMessagingToolDeliveryTarget } from "./delivery-dispatch.js";
 
 // Mock the announce flow dependencies to test the fallback behavior.
-vi.mock("../../agents/subagent-announce.js", () => ({
+vi.mock("../../agents/subagent/subagent-announce.js", () => ({
   runSubagentAnnounceFlow: vi.fn(),
 }));
-vi.mock("../../agents/subagent-registry.js", () => ({
+vi.mock("../../agents/subagent/subagent-registry.js", () => ({
   countActiveDescendantRuns: vi.fn().mockReturnValue(0),
 }));
 

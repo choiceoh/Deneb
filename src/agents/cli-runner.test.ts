@@ -6,7 +6,7 @@ import type { DenebConfig } from "../config/config.js";
 import { runCliAgent } from "./cli-runner.js";
 import { resolveCliNoOutputTimeoutMs } from "./cli-runner/helpers.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
-import type { WorkspaceBootstrapFile } from "./workspace.js";
+import type { WorkspaceBootstrapFile } from "./workspace/workspace.js";
 
 const supervisorSpawnMock = vi.fn();
 const enqueueSystemEventMock = vi.fn();

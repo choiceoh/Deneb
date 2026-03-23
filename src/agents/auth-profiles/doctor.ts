@@ -1,5 +1,5 @@
 import type { DenebConfig } from "../../config/config.js";
-import { normalizeProviderId } from "../model-selection.js";
+import { normalizeProviderId } from "../models/model-selection.js";
 import type { AuthProfileStore } from "./types.js";
 
 let providerRuntimePromise:

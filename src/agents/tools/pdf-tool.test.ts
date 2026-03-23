@@ -158,13 +158,13 @@ async function stubPdfToolInfra(
           }) as never;
   vi.spyOn(modelDiscovery, "discoverModels").mockReturnValue({ find } as never);
 
-  const modelsConfig = await import("../models-config.js");
+  const modelsConfig = await import("../models/models-config.js");
   vi.spyOn(modelsConfig, "ensureDenebModelsJson").mockResolvedValue({
     agentDir,
     wrote: false,
   });
 
-  const modelAuth = await import("../model-auth.js");
+  const modelAuth = await import("../models/model-auth.js");
   vi.spyOn(modelAuth, "getApiKeyForModel").mockResolvedValue({ apiKey: "test-key" } as never); // pragma: allowlist secret
   vi.spyOn(modelAuth, "requireApiKey").mockReturnValue("test-key");
 
@@ -808,7 +808,7 @@ describe("pdf-tool.helpers", () => {
 
 describe("model catalog document support", () => {
   it("modelSupportsDocument returns true when input includes document", async () => {
-    const { modelSupportsDocument } = await import("../model-catalog.js");
+    const { modelSupportsDocument } = await import("../models/model-catalog.js");
     expect(
       modelSupportsDocument({
         id: "test",
@@ -820,7 +820,7 @@ describe("model catalog document support", () => {
   });
 
   it("modelSupportsDocument returns false when input lacks document", async () => {
-    const { modelSupportsDocument } = await import("../model-catalog.js");
+    const { modelSupportsDocument } = await import("../models/model-catalog.js");
     expect(
       modelSupportsDocument({
         id: "test",
@@ -832,7 +832,7 @@ describe("model catalog document support", () => {
   });
 
   it("modelSupportsDocument returns false for undefined entry", async () => {
-    const { modelSupportsDocument } = await import("../model-catalog.js");
+    const { modelSupportsDocument } = await import("../models/model-catalog.js");
     expect(modelSupportsDocument(undefined)).toBe(false);
   });
 });

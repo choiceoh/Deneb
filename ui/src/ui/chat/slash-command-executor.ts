@@ -3,7 +3,7 @@
  * Calls gateway RPC methods and returns formatted results.
  */
 
-import type { ModelCatalogEntry } from "../../../../src/agents/model-catalog.js";
+import type { ModelCatalogEntry } from "../../../../src/agents/models/model-catalog.js";
 import {
   formatThinkingLevels,
   normalizeThinkLevel,

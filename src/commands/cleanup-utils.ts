@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { resolveDefaultAgentWorkspaceDir } from "../agents/workspace.js";
+import { resolveDefaultAgentWorkspaceDir } from "../agents/workspace/workspace.js";
 import type { DenebConfig } from "../config/config.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { resolveHomeDir, resolveUserPath, shortenHomeInString } from "../utils.js";

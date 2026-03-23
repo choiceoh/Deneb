@@ -8,7 +8,7 @@ import {
   getSubagentSessionStartedAt,
   listSubagentRunsForController,
   resolveSubagentSessionStatus,
-} from "../../agents/subagent-registry.js";
+} from "../../agents/subagent/subagent-registry.js";
 import type { DenebConfig } from "../../config/config.js";
 import { resolveStateDir } from "../../config/paths.js";
 import {

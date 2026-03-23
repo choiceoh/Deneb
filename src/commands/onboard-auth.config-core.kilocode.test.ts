@@ -8,7 +8,7 @@ import {
   KILOCODE_BASE_URL,
   KILOCODE_DEFAULT_MODEL_REF,
 } from "../../extensions/kilocode/onboard.js";
-import { resolveApiKeyForProvider, resolveEnvApiKey } from "../agents/model-auth.js";
+import { resolveApiKeyForProvider, resolveEnvApiKey } from "../agents/models/model-auth.js";
 import type { DenebConfig } from "../config/config.js";
 import { resolveAgentModelPrimaryValue } from "../config/model-input.js";
 import type { ModelDefinitionConfig } from "../config/types.models.js";

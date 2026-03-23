@@ -1,11 +1,11 @@
-import { loadModelCatalog } from "../../agents/model-catalog.js";
+import { loadModelCatalog } from "../../agents/models/model-catalog.js";
 import {
   buildAllowedModelSet,
   modelKey,
   normalizeProviderId,
   resolveModelRefFromString,
   type ModelAliasIndex,
-} from "../../agents/model-selection.js";
+} from "../../agents/models/model-selection.js";
 import type { DenebConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { updateSessionStore } from "../../config/sessions.js";

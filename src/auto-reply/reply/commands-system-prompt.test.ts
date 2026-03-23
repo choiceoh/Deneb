@@ -12,7 +12,7 @@ vi.mock("../../agents/bootstrap-files.js", () => ({
   })),
 }));
 
-vi.mock("../../agents/pi-tools.js", () => ({
+vi.mock("../../agents/pi-tools/pi-tools.js", () => ({
   createDenebCodingTools: createDenebCodingToolsMock,
 }));
 
@@ -32,11 +32,11 @@ vi.mock("../../agents/agent-scope.js", () => ({
   resolveSessionAgentIds: vi.fn(() => ({ sessionAgentId: "main" })),
 }));
 
-vi.mock("../../agents/model-selection.js", () => ({
+vi.mock("../../agents/models/model-selection.js", () => ({
   resolveDefaultModelForAgent: vi.fn(() => ({ provider: "openai", model: "gpt-5" })),
 }));
 
-vi.mock("../../agents/system-prompt-params.js", () => ({
+vi.mock("../../agents/system-prompt/system-prompt-params.js", () => ({
   buildSystemPromptParams: vi.fn(() => ({
     runtimeInfo: { host: "unknown", os: "unknown", arch: "unknown", node: process.version },
     userTimezone: "UTC",
@@ -45,7 +45,7 @@ vi.mock("../../agents/system-prompt-params.js", () => ({
   })),
 }));
 
-vi.mock("../../agents/system-prompt.js", () => ({
+vi.mock("../../agents/system-prompt/system-prompt.js", () => ({
   buildAgentSystemPrompt: vi.fn(() => "system prompt"),
 }));
 

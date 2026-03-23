@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetSubagentRegistryForTests } from "../../agents/subagent-registry.js";
-import type { SpawnSubagentResult } from "../../agents/subagent-spawn.js";
+import { resetSubagentRegistryForTests } from "../../agents/subagent/subagent-registry.js";
+import type { SpawnSubagentResult } from "../../agents/subagent/subagent-spawn.js";
 import type { DenebConfig } from "../../config/config.js";
 import { installSubagentsCommandCoreMocks } from "./commands-subagents.test-mocks.js";
 
@@ -10,7 +10,7 @@ const hoisted = vi.hoisted(() => {
   return { spawnSubagentDirectMock, callGatewayMock };
 });
 
-vi.mock("../../agents/subagent-spawn.js", () => ({
+vi.mock("../../agents/subagent/subagent-spawn.js", () => ({
   spawnSubagentDirect: (...args: unknown[]) => hoisted.spawnSubagentDirectMock(...args),
   SUBAGENT_SPAWN_MODES: ["run", "session"],
 }));

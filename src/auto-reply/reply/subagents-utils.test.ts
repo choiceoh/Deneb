@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SubagentRunRecord } from "../../agents/subagent-registry.js";
+import type { SubagentRunRecord } from "../../agents/subagent/subagent-registry.js";
 import {
   resolveSubagentLabel,
   resolveSubagentTargetFromRuns,

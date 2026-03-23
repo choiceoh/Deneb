@@ -21,7 +21,7 @@ import type {
 import type { EmbeddedContextFile } from "../../pi-embedded-helpers.js";
 import { createHostSandboxFsBridge } from "../../test-helpers/host-sandbox-fs-bridge.js";
 import { createPiToolsSandboxContext } from "../../test-helpers/pi-tools-sandbox-context.js";
-import type { WorkspaceBootstrapFile } from "../../workspace.js";
+import type { WorkspaceBootstrapFile } from "../../workspace/workspace.js";
 
 const hoisted = vi.hoisted(() => {
   type BootstrapContext = {
@@ -180,7 +180,7 @@ vi.mock("./images.js", () => ({
   detectAndLoadPromptImages: async () => ({ images: [] }),
 }));
 
-vi.mock("../../system-prompt-params.js", () => ({
+vi.mock("../../system-prompt/system-prompt-params.js", () => ({
   buildSystemPromptParams: () => ({
     runtimeInfo: {},
     userTimezone: "UTC",
@@ -189,11 +189,11 @@ vi.mock("../../system-prompt-params.js", () => ({
   }),
 }));
 
-vi.mock("../../system-prompt-report.js", () => ({
+vi.mock("../../system-prompt/system-prompt-report.js", () => ({
   buildSystemPromptReport: () => undefined,
 }));
 
-vi.mock("../system-prompt.js", () => ({
+vi.mock("../system-prompt/system-prompt.js", () => ({
   applySystemPromptOverrideToSession: () => {},
   buildEmbeddedSystemPrompt: () => "system prompt",
   createSystemPromptOverride: (prompt: string) => () => prompt,
@@ -203,7 +203,7 @@ vi.mock("../extra-params.js", () => ({
   applyExtraParamsToAgent: () => {},
 }));
 
-vi.mock("../../openai-ws-stream.js", () => ({
+vi.mock("../../openai-ws/openai-ws-stream.js", () => ({
   createOpenAIWebSocketStreamFn: vi.fn(),
   releaseWsSession: () => {},
 }));
@@ -216,8 +216,8 @@ vi.mock("../../cache-trace.js", () => ({
   createCacheTrace: () => undefined,
 }));
 
-vi.mock("../../model-selection.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../model-selection.js")>();
+vi.mock("../../models/model-selection.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../models/model-selection.js")>();
 
   return {
     ...actual,

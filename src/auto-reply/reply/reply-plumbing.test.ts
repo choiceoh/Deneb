@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SubagentRunRecord } from "../../agents/subagent-registry.js";
+import type { SubagentRunRecord } from "../../agents/subagent/subagent-registry.js";
 import type { DenebConfig } from "../../config/config.js";
 import { formatDurationCompact } from "../../infra/format-time/format-duration.js";
 import type { TemplateContext } from "../templating.js";

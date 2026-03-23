@@ -3,8 +3,8 @@ import {
   killControlledSubagentRun,
   killSubagentRunAdmin,
   resolveSubagentController,
-} from "../../agents/subagent-control.js";
-import { getSubagentRunByChildSessionKey } from "../../agents/subagent-registry.js";
+} from "../../agents/subagent/subagent-control.js";
+import { getSubagentRunByChildSessionKey } from "../../agents/subagent/subagent-registry.js";
 import { loadConfig } from "../../config/config.js";
 import type { AuthRateLimiter } from "../auth/auth-rate-limit.js";
 import {

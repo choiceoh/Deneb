@@ -1,7 +1,7 @@
 import type { SkillEligibilityContext, SkillEntry } from "../agents/skills.js";
 import { loadWorkspaceSkillEntries } from "../agents/skills.js";
 import { bumpSkillsSnapshotVersion } from "../agents/skills/refresh.js";
-import { listAgentWorkspaceDirs } from "../agents/workspace-dirs.js";
+import { listAgentWorkspaceDirs } from "../agents/workspace/workspace-dirs.js";
 import type { DenebConfig } from "../config/config.js";
 import type { NodeRegistry } from "../gateway/node-registry.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";

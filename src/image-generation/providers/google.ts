@@ -1,5 +1,5 @@
-import { resolveApiKeyForProvider } from "../../agents/model-auth.js";
-import { normalizeGoogleModelId } from "../../agents/model-id-normalization.js";
+import { resolveApiKeyForProvider } from "../../agents/models/model-auth.js";
+import { normalizeGoogleModelId } from "../../agents/models/model-id-normalization.js";
 import { parseGeminiAuth } from "../../infra/gemini-auth.js";
 import {
   assertOkOrThrowHttpError,
