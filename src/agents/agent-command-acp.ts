@@ -1,4 +1,5 @@
 import { getAcpSessionManager } from "../acp/control-plane/manager.js";
+import type { AcpSessionResolution } from "../acp/control-plane/manager.types.js";
 import { resolveAcpAgentPolicyError, resolveAcpDispatchPolicyError } from "../acp/policy.js";
 import { toAcpRuntimeError } from "../acp/runtime/errors.js";
 import { resolveAcpSessionCwd } from "../acp/runtime/session-identifiers.js";
@@ -34,9 +35,7 @@ export type AcpTurnParams = {
   workspaceDir: string;
   body: string;
   runId: string;
-  acpResolution: NonNullable<ReturnType<typeof getAcpSessionManager>["resolveSession"]> & {
-    kind: "ready";
-  };
+  acpResolution: AcpSessionResolution & { kind: "ready" };
   outboundSession: ReturnType<typeof buildOutboundSessionContext>;
 };
 

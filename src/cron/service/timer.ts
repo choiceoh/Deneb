@@ -12,13 +12,8 @@ export { DEFAULT_JOB_TIMEOUT_MS } from "./timeout-policy.js";
 
 // Re-exports for backwards compatibility with external callers.
 export { applyJobResult, emit } from "./job-result.js";
-export {
-  executeJobCore,
-  executeJobCoreWithTimeout,
-  executeJob,
-  runDueJobs,
-} from "./execute-job.js";
-export { runMissedJobs } from "./job-runner.js";
+export { executeJobCore, executeJobCoreWithTimeout, executeJob } from "./execute-job.js";
+export { runDueJobs, runMissedJobs } from "./job-runner.js";
 
 const MAX_TIMER_DELAY_MS = 60_000;
 
