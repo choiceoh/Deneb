@@ -25,7 +25,9 @@ export async function modelsListCommand(
   runtime: RuntimeEnv,
 ) {
   ensureFlagCompatibility(opts);
-  const { ensureAuthProfileStore } = await import("../../agents/auth-profiles.runtime.js");
+  const {
+    authProfilesRuntime: { ensureAuthProfileStore },
+  } = await import("../../agents/auth-profiles.runtime.js");
   const { ensureDenebModelsJson } = await import("../../agents/models/models-config.js");
   const { sourceConfig, resolvedConfig: cfg } = await loadModelsConfigWithSource({
     commandName: "models list",

@@ -17,11 +17,13 @@ import type {
 } from "../types.js";
 
 let piModelDiscoveryRuntimePromise: Promise<
-  typeof import("../../agents/pi-model-discovery-runtime.js")
+  (typeof import("../../agents/pi-model-discovery-runtime.js"))["piModelDiscoveryRuntime"]
 > | null = null;
 
 function loadPiModelDiscoveryRuntime() {
-  piModelDiscoveryRuntimePromise ??= import("../../agents/pi-model-discovery-runtime.js");
+  piModelDiscoveryRuntimePromise ??= import("../../agents/pi-model-discovery-runtime.js").then(
+    (m) => m.piModelDiscoveryRuntime,
+  );
   return piModelDiscoveryRuntimePromise;
 }
 
