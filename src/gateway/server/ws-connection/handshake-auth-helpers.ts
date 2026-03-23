@@ -1,7 +1,13 @@
 import { verifyDeviceSignature } from "../../../infra/device-identity.js";
 import type { AuthRateLimiter } from "../../auth-rate-limit.js";
 import type { GatewayAuthResult } from "../../auth.js";
-import { buildDeviceAuthPayload, buildDeviceAuthPayloadV3 } from "../../device-auth.js";
+// Device auth payload stubs (device auth removed for solo-dev simplification).
+function buildDeviceAuthPayload(_params: Record<string, unknown>): string {
+  return "";
+}
+function buildDeviceAuthPayloadV3(_params: Record<string, unknown>): string {
+  return "";
+}
 import { isLoopbackAddress } from "../../net.js";
 import { GATEWAY_CLIENT_IDS, GATEWAY_CLIENT_MODES } from "../../protocol/client-info.js";
 import type { ConnectParams } from "../../protocol/index.js";

@@ -28,19 +28,23 @@
 ### Core Source (`src/`) Architecture
 
 **Entry & exports:**
+
 - `entry.ts` — primary binary entry point; environment validation, process respawn.
 - `index.ts` — main exports barrel (CLI surface + library).
 - `library.ts` — public library API (config loading, session management, port utilities).
 
 **CLI system** (`src/cli/`):
+
 - `program/` — command tree builder, command registry, registration modules per domain.
 - Subcli modules: `gateway-cli/`, `daemon-cli/`, `autonomous-cli/`, `cron-cli/`, `browser-cli*.ts`, `nodes-cli/`, `update-cli/`, `send-runtime/`.
 - Core utilities: argv parsing, channel auth/options, config CLI, shell completions, progress output.
 
 **Commands** (`src/commands/`):
+
 - Command handlers organized by feature: agent CRUD, channels setup/status, configure wizards, onboarding flows, status/health/doctor diagnostics, backup, auth/OAuth, models, sessions, dashboard.
 
 **Gateway** (`src/gateway/`):
+
 - Central message broker and execution engine (~150 files).
 - Server core: HTTP routing, WebSocket runtime, RPC method registry.
 - Session management: lifecycle state machine, history, patching, reset, kill.
@@ -51,6 +55,7 @@
 - Monitoring: channel health, live image probe, reconnect gating, self-watchdog.
 
 **Channels framework** (`src/channels/`):
+
 - Channel-agnostic core: plugin registry, session envelope, targeting, config schema loading.
 - Message flow: state machine, typing indicators/lifecycle, reply formatting.
 - Access control: mention gating, command gating, allowlists (`allowlists/`).
@@ -58,9 +63,11 @@
 - Thread bindings: conversation binding policies.
 
 **Built-in channels:**
+
 - `src/telegram/`, `src/discord/`, `src/slack/`, `src/signal/`, `src/imessage/`, `src/web/` (WhatsApp web).
 
 **Agents** (`src/agents/`):
+
 - Agent runtime, command routing, scoping, file paths.
 - Bash/exec tools: execution with approval workflow, host isolation, process management.
 - Spawning: ACP spawn protocol for sub-agents, CLI runner, embedded Pi runtime.
@@ -68,6 +75,7 @@
 - Schema definitions, skill execution, command handling.
 
 **Plugins** (`src/plugins/`):
+
 - Plugin loading, discovery, manifest registry.
 - Provider system: catalog, runtime, auth (OAuth/API key), model definitions, discovery, validation.
 - Hooks: execution, wiring, integration points.
@@ -75,6 +83,7 @@
 - Config schema, schema validation, feature toggles.
 
 **Plugin SDK** (`src/plugin-sdk/`):
+
 - Public extension API surface (~130 files, 160+ subpath exports in `package.json`).
 - Channel SDK: lifecycle, config, runtime, reply pipeline, setup.
 - Provider SDK: auth, setup, runtime, catalog.
@@ -83,6 +92,7 @@
 - Utilities: secret input, webhook processing, JSON store, SSRF policy, testing helpers.
 
 **Infrastructure** (`src/infra/`):
+
 - Environment: env vars, OS detection, machine ID, hardware profile, WSL/Tailscale detection.
 - Process: command execution (with approvals/safety), safe binary policies, shell integration, process respawn/tracking.
 - File system: file ops, boundary checking, path utilities, gitignore, archives, backups.
@@ -98,6 +108,7 @@
 **Media** (`src/media/`): media fetch/parse, MIME detection, FFmpeg execution, image ops, audio processing, PDF extraction, base64 encoding, input validation, outbound attachments.
 
 **Other subsystems:**
+
 - `src/memory/` — conversation memory storage and retrieval.
 - `src/context-engine/` — LLM context management.
 - `src/autonomous/` — agent autonomy features.
@@ -130,6 +141,7 @@
 ### Extensions
 
 **Channel extensions** (each implements `ChannelPlugin` from plugin-sdk):
+
 - `extensions/discord/` — Discord Bot API (discord.js).
 - `extensions/telegram/` — Telegram Bot API (grammy).
 - `extensions/slack/` — Slack workspace messaging (@slack/bolt).
@@ -140,6 +152,7 @@
 - `extensions/feishu/` — Feishu/Lark (ByteDance SDK).
 
 **Feature extensions:**
+
 - `extensions/memory-core/` — core memory search plugin.
 - `extensions/acpx/` — ACP runtime backend.
 - `extensions/diagnostics-otel/` — OpenTelemetry diagnostics exporters.
@@ -147,6 +160,7 @@
 **Shared:** `extensions/shared/` — shared utilities for extensions.
 
 **Extension rules:**
+
 - Plugins/extensions: live under `extensions/*` (workspace packages). Keep plugin-only deps in the extension `package.json`; do not add them to the root `package.json` unless core uses them.
 - Plugins: install runs `npm install --omit=dev` in plugin dir; runtime deps must live in `dependencies`. Avoid `workspace:*` in `dependencies` (npm install breaks); put `deneb` in `devDependencies` or `peerDependencies` instead (runtime resolves `deneb/plugin-sdk` via jiti alias).
 - Import boundaries: extension production code should treat `deneb/plugin-sdk/*` plus local `api.ts` / `runtime-api.ts` barrels as the public surface. Do not import core `src/**`, `src/plugin-sdk-internal/**`, or another extension's `src/**` directly.

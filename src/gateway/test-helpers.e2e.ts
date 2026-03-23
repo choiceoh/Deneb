@@ -17,7 +17,10 @@ import {
   type GatewayClientName,
 } from "../utils/message-channel.js";
 import { GatewayClient } from "./client.js";
-import { buildDeviceAuthPayloadV3 } from "./device-auth.js";
+// Device auth payload stub (device auth removed for solo-dev simplification).
+function buildDeviceAuthPayloadV3(_params: Record<string, unknown>): string {
+  return "";
+}
 import { PROTOCOL_VERSION } from "./protocol/index.js";
 import { startGatewayServer } from "./server.js";
 
