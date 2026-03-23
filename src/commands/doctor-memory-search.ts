@@ -187,7 +187,7 @@ function hasLocalEmbeddings(local: { modelPath?: string }, useDefaultFallback = 
 }
 
 async function hasApiKeyForProvider(
-  provider: "openai" | "gemini" | "voyage" | "mistral" | "ollama",
+  provider: "openai" | "gemini" | "voyage" | "mistral",
   cfg: DenebConfig,
   agentDir: string,
 ): Promise<boolean> {

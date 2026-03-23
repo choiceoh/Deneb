@@ -140,10 +140,6 @@ function createLegacyStateMigrationDetectionResult(params?: {
       targetDir: "/tmp/oauth/whatsapp/default",
       hasLegacy: false,
     },
-    pairingAllowFrom: {
-      hasLegacyTelegram: false,
-      copyPlans: [],
-    },
     preview: params?.preview ?? [],
   };
 }

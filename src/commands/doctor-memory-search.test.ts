@@ -266,22 +266,13 @@ describe("noteMemorySearchHealth", () => {
     expect(message).toContain("deneb configure --section model");
   });
 
-  it("still warns in auto mode when only ollama credentials exist", async () => {
+  it("warns in auto mode when no remote API keys are available", async () => {
     resolveMemorySearchConfig.mockReturnValue({
       provider: "auto",
       local: {},
       remote: {},
     });
-    resolveApiKeyForProvider.mockImplementation(async ({ provider }: { provider: string }) => {
-      if (provider === "ollama") {
-        return {
-          apiKey: "ollama-local", // pragma: allowlist secret
-          source: "env: OLLAMA_API_KEY",
-          mode: "api-key",
-        };
-      }
-      throw new Error("missing key");
-    });
+    resolveApiKeyForProvider.mockRejectedValue(new Error("missing key"));
 
     await noteMemorySearchHealth(cfg);
 

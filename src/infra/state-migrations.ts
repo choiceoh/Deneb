@@ -55,17 +55,7 @@ export type LegacyStateDetection = {
     targetDir: string;
     hasLegacy: boolean;
   };
-  pairingAllowFrom: {
-    hasLegacyTelegram: boolean;
-    copyPlans: FileCopyPlan[];
-  };
   preview: string[];
-};
-
-type FileCopyPlan = {
-  label: string;
-  sourcePath: string;
-  targetPath: string;
 };
 
 type MigrationLogger = {
@@ -100,30 +90,6 @@ function isLegacyGroupKey(key: string): boolean {
     return true;
   }
   return false;
-}
-
-function buildFileCopyPreview(plan: FileCopyPlan): string {
-  return `- ${plan.label}: ${plan.sourcePath} → ${plan.targetPath}`;
-}
-
-async function runFileCopyPlans(
-  plans: FileCopyPlan[],
-): Promise<{ changes: string[]; warnings: string[] }> {
-  const changes: string[] = [];
-  const warnings: string[] = [];
-  for (const plan of plans) {
-    if (fileExists(plan.targetPath)) {
-      continue;
-    }
-    try {
-      ensureDir(path.dirname(plan.targetPath));
-      fs.copyFileSync(plan.sourcePath, plan.targetPath);
-      changes.push(`Copied ${plan.label} → ${plan.targetPath}`);
-    } catch (err) {
-      warnings.push(`Failed migrating ${plan.label} (${plan.sourcePath}): ${String(err)}`);
-    }
-  }
-  return { changes, warnings };
 }
 
 function canonicalizeSessionKeyForAgent(params: {
@@ -646,10 +612,6 @@ export async function detectLegacyStateMigrations(params: {
   const hasLegacyWhatsAppAuth =
     fileExists(path.join(oauthDir, "creds.json")) &&
     !fileExists(path.join(targetWhatsAppAuthDir, "creds.json"));
-  // Pairing store removed — telegram pairing allowFrom migration is dead code.
-  const telegramPairingAllowFromPlans: FileCopyPlan[] = [];
-  const hasLegacyTelegramAllowFrom = false;
-
   const preview: string[] = [];
   if (hasLegacySessions) {
     preview.push(`- Sessions: ${sessionsLegacyDir} → ${sessionsTargetDir}`);
@@ -662,9 +624,6 @@ export async function detectLegacyStateMigrations(params: {
   }
   if (hasLegacyWhatsAppAuth) {
     preview.push(`- WhatsApp auth: ${oauthDir} → ${targetWhatsAppAuthDir} (keep oauth.json)`);
-  }
-  if (hasLegacyTelegramAllowFrom) {
-    preview.push(...telegramPairingAllowFromPlans.map(buildFileCopyPreview));
   }
 
   return {
@@ -690,10 +649,6 @@ export async function detectLegacyStateMigrations(params: {
       legacyDir: oauthDir,
       targetDir: targetWhatsAppAuthDir,
       hasLegacy: hasLegacyWhatsAppAuth,
-    },
-    pairingAllowFrom: {
-      hasLegacyTelegram: hasLegacyTelegramAllowFrom,
-      copyPlans: telegramPairingAllowFromPlans,
     },
     preview,
   };
@@ -911,17 +866,6 @@ async function migrateLegacyWhatsAppAuth(
   return { changes, warnings };
 }
 
-async function migrateLegacyTelegramPairingAllowFrom(
-  detected: LegacyStateDetection,
-): Promise<{ changes: string[]; warnings: string[] }> {
-  const changes: string[] = [];
-  const warnings: string[] = [];
-  if (!detected.pairingAllowFrom.hasLegacyTelegram) {
-    return { changes, warnings };
-  }
-  return await runFileCopyPlans(detected.pairingAllowFrom.copyPlans);
-}
-
 export async function runLegacyStateMigrations(params: {
   detected: LegacyStateDetection;
   now?: () => number;
@@ -931,20 +875,9 @@ export async function runLegacyStateMigrations(params: {
   const sessions = await migrateLegacySessions(detected, now);
   const agentDir = await migrateLegacyAgentDir(detected, now);
   const whatsappAuth = await migrateLegacyWhatsAppAuth(detected);
-  const telegramPairingAllowFrom = await migrateLegacyTelegramPairingAllowFrom(detected);
   return {
-    changes: [
-      ...sessions.changes,
-      ...agentDir.changes,
-      ...whatsappAuth.changes,
-      ...telegramPairingAllowFrom.changes,
-    ],
-    warnings: [
-      ...sessions.warnings,
-      ...agentDir.warnings,
-      ...whatsappAuth.warnings,
-      ...telegramPairingAllowFrom.warnings,
-    ],
+    changes: [...sessions.changes, ...agentDir.changes, ...whatsappAuth.changes],
+    warnings: [...sessions.warnings, ...agentDir.warnings, ...whatsappAuth.warnings],
   };
 }
 
