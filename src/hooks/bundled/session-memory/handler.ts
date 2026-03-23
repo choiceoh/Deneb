@@ -73,8 +73,8 @@ async function getRecentSessionContent(
             }
             // Extract text content
             const text = Array.isArray(msg.content)
-              ? // oxlint-disable-next-line typescript/no-explicit-any
-                msg.content.find((c: any) => c.type === "text")?.text
+              ? (msg.content as { type: string; text?: string }[]).find((c) => c.type === "text")
+                  ?.text
               : msg.content;
             if (text && !text.startsWith("/")) {
               allMessages.push(`${role}: ${text}`);
