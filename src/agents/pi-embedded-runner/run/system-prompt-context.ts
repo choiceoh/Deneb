@@ -13,7 +13,7 @@ import type { SessionSystemPromptReport } from "../../../config/sessions/types.j
 import { buildTtsSystemPromptHint } from "../../../tts/tts.js";
 import { normalizeMessageChannel } from "../../../utils/message-channel.js";
 import { isReasoningTagProvider } from "../../../utils/provider-utils.js";
-import type { ExecElevatedDefaults } from "../../bash-tools.exec-types.js";
+import type { ExecElevatedDefaults } from "../../bash-tools/bash-tools.exec-types.js";
 import {
   analyzeBootstrapBudget,
   buildBootstrapPromptWarning,

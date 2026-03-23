@@ -2,14 +2,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ExecApprovalsResolved } from "../infra/exec-approvals.js";
-import { captureEnv } from "../test-utils/env.js";
-import { sanitizeBinaryOutput } from "./shell-utils.js";
+import type { ExecApprovalsResolved } from "../../infra/exec-approvals.js";
+import { captureEnv } from "../../test-utils/env.js";
+import { sanitizeBinaryOutput } from "../shell-utils.js";
 
 const isWin = process.platform === "win32";
 
-vi.mock("../infra/shell-env.js", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("../infra/shell-env.js")>();
+vi.mock("../../infra/shell-env.js", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../../infra/shell-env.js")>();
   return {
     ...mod,
     getShellPathFromLoginShell: vi.fn(() => "/custom/bin:/opt/bin"),
@@ -17,8 +17,8 @@ vi.mock("../infra/shell-env.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../infra/exec-approvals.js", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("../infra/exec-approvals.js")>();
+vi.mock("../../infra/exec-approvals.js", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../../infra/exec-approvals.js")>();
   const approvals: ExecApprovalsResolved = {
     path: "/tmp/exec-approvals.json",
     socketPath: "/tmp/exec-approvals.sock",
@@ -52,7 +52,7 @@ vi.mock("../infra/exec-approvals.js", async (importOriginal) => {
 });
 
 const { createExecTool } = await import("./bash-tools.exec.js");
-const { getShellPathFromLoginShell } = await import("../infra/shell-env.js");
+const { getShellPathFromLoginShell } = await import("../../infra/shell-env.js");
 
 const normalizeText = (value?: string) =>
   sanitizeBinaryOutput(value ?? "")

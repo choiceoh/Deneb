@@ -17,7 +17,7 @@ const makeSupervisor = () => {
   };
 };
 
-vi.mock("../process/supervisor/index.js", () => ({
+vi.mock("../../process/supervisor/index.js", () => ({
   getProcessSupervisor: () => makeSupervisor(),
 }));
 

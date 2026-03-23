@@ -1,6 +1,6 @@
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 // Exec approval types imported from the retained stub.
-import type { ExecAsk, ExecSecurity } from "../infra/exec-approvals.js";
+import type { ExecAsk, ExecSecurity } from "../../infra/exec-approvals.js";
 function evaluateShellAllowlist(_params: Record<string, unknown>): {
   allowlistMatches: Array<{ pattern: string }>;
   analysisOk: boolean;
@@ -30,9 +30,9 @@ function resolveAllowAlwaysPatterns(_params: Record<string, unknown>): string[] 
   return [];
 }
 function addAllowlistEntry(_file: unknown, _agentId: unknown, _pattern: unknown): void {}
-import { detectCommandObfuscation } from "../infra/exec-obfuscation-detect.js";
-import type { SafeBinProfile } from "../infra/exec-safe-bin-policy.js";
-import { logInfo } from "../logger.js";
+import { detectCommandObfuscation } from "../../infra/exec-obfuscation-detect.js";
+import type { SafeBinProfile } from "../../infra/exec-safe-bin-policy.js";
+import { logInfo } from "../../logger.js";
 import { markBackgrounded, tail } from "./bash-process-registry.js";
 import {
   buildExecApprovalRequesterContext,

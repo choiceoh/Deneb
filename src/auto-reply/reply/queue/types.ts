@@ -1,4 +1,4 @@
-import type { ExecToolDefaults } from "../../../agents/bash-tools.js";
+import type { ExecToolDefaults } from "../../../agents/bash-tools/bash-tools.js";
 import type { SkillSnapshot } from "../../../agents/skills.js";
 import type { DenebConfig } from "../../../config/config.js";
 import type { SessionEntry } from "../../../config/sessions.js";

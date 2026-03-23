@@ -3,13 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   resetHeartbeatWakeStateForTests,
   setHeartbeatWakeHandler,
-} from "../infra/heartbeat-wake.js";
-import { applyPathPrepend, findPathKey } from "../infra/path-prepend.js";
-import { peekSystemEvents, resetSystemEventsForTest } from "../infra/system-events.js";
-import { captureEnv } from "../test-utils/env.js";
+} from "../../infra/heartbeat-wake.js";
+import { applyPathPrepend, findPathKey } from "../../infra/path-prepend.js";
+import { peekSystemEvents, resetSystemEventsForTest } from "../../infra/system-events.js";
+import { captureEnv } from "../../test-utils/env.js";
+import { resolveShellFromPath, sanitizeBinaryOutput } from "../shell-utils.js";
 import { getFinishedSession, resetProcessRegistryForTests } from "./bash-process-registry.js";
 import { createExecTool, createProcessTool } from "./bash-tools.js";
-import { resolveShellFromPath, sanitizeBinaryOutput } from "./shell-utils.js";
 
 const isWin = process.platform === "win32";
 const defaultShell = isWin

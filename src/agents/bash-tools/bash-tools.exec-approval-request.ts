@@ -1,9 +1,9 @@
-import type { ExecAsk, ExecSecurity, SystemRunApprovalPlan } from "../infra/exec-approvals.js";
+import type { ExecAsk, ExecSecurity, SystemRunApprovalPlan } from "../../infra/exec-approvals.js";
+import { callGatewayTool } from "../tools/gateway.js";
 import {
   DEFAULT_APPROVAL_REQUEST_TIMEOUT_MS,
   DEFAULT_APPROVAL_TIMEOUT_MS,
 } from "./bash-tools.exec-runtime.js";
-import { callGatewayTool } from "./tools/gateway.js";
 
 export type RequestExecApprovalDecisionParams = {
   id: string;

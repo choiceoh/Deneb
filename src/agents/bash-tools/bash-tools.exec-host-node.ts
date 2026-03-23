@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 // Exec approval types imported from the retained stub.
-import type { ExecAsk, ExecSecurity, ExecApprovalsFile } from "../infra/exec-approvals.js";
-import { resolveExecApprovalsFromFile } from "../infra/exec-approvals.js";
+import type { ExecAsk, ExecSecurity, ExecApprovalsFile } from "../../infra/exec-approvals.js";
+import { resolveExecApprovalsFromFile } from "../../infra/exec-approvals.js";
 // Inline stub functions for removed exec analysis modules.
 function evaluateShellAllowlist(_params: Record<string, unknown>): {
   allowlistMatches: Array<{ pattern: string }>;
@@ -15,10 +15,12 @@ function evaluateShellAllowlist(_params: Record<string, unknown>): {
 function requiresExecApproval(_params: Record<string, unknown>): boolean {
   return false;
 }
-import { detectCommandObfuscation } from "../infra/exec-obfuscation-detect.js";
-import { buildNodeShellCommand } from "../infra/node-shell.js";
-import { parsePreparedSystemRunPayload } from "../infra/system-run-approval-context.js";
-import { logInfo } from "../logger.js";
+import { detectCommandObfuscation } from "../../infra/exec-obfuscation-detect.js";
+import { buildNodeShellCommand } from "../../infra/node-shell.js";
+import { parsePreparedSystemRunPayload } from "../../infra/system-run-approval-context.js";
+import { logInfo } from "../../logger.js";
+import { callGatewayTool } from "../tools/gateway.js";
+import { listNodes, resolveNodeIdFromList } from "../tools/nodes-utils.js";
 import {
   buildExecApprovalRequesterContext,
   buildExecApprovalTurnSourceContext,
@@ -31,8 +33,6 @@ import {
   normalizeNotifyOutput,
 } from "./bash-tools.exec-runtime.js";
 import type { ExecToolDetails } from "./bash-tools.exec-types.js";
-import { callGatewayTool } from "./tools/gateway.js";
-import { listNodes, resolveNodeIdFromList } from "./tools/nodes-utils.js";
 
 export type ExecuteNodeHostCommandParams = {
   command: string;

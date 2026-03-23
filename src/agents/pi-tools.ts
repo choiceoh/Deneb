@@ -14,7 +14,7 @@ import {
   createProcessTool,
   type ExecToolDefaults,
   type ProcessToolDefaults,
-} from "./bash-tools.js";
+} from "./bash-tools/bash-tools.js";
 import { listChannelAgentTools } from "./channel-tools.js";
 import { createDenebTools } from "./deneb-tools.js";
 import { resolveImageSanitizationLimits } from "./image-sanitization.js";

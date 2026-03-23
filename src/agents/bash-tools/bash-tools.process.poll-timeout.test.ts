@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { resetDiagnosticSessionStateForTest } from "../logging/diagnostic-session-state.js";
+import { resetDiagnosticSessionStateForTest } from "../../logging/diagnostic-session-state.js";
 import {
   addSession,
   appendOutput,

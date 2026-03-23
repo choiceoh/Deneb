@@ -1,4 +1,4 @@
-import { callGatewayTool } from "./tools/gateway.js";
+import { callGatewayTool } from "../tools/gateway.js";
 
 type ExecApprovalFollowupParams = {
   approvalId: string;

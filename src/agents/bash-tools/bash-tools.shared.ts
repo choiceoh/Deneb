@@ -2,9 +2,9 @@ import { existsSync, statSync } from "node:fs";
 import fs from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { sliceUtf16Safe } from "../utils.js";
-import { assertSandboxPath } from "./sandbox-paths.js";
-import type { SandboxBackendExecSpec } from "./sandbox/backend.js";
+import { sliceUtf16Safe } from "../../utils.js";
+import { assertSandboxPath } from "../sandbox-paths.js";
+import type { SandboxBackendExecSpec } from "../sandbox/backend.js";
 
 const CHUNK_LIMIT = 8 * 1024;
 

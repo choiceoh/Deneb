@@ -32,7 +32,7 @@ import { normalizeMessageChannel } from "../../utils/message-channel.js";
 import { isReasoningTagProvider } from "../../utils/provider-utils.js";
 import { resolveDenebAgentDir } from "../agent-paths.js";
 import { resolveSessionAgentId, resolveSessionAgentIds } from "../agent-scope.js";
-import type { ExecElevatedDefaults } from "../bash-tools.js";
+import type { ExecElevatedDefaults } from "../bash-tools/bash-tools.js";
 import { makeBootstrapWarn, resolveBootstrapContextForRun } from "../bootstrap-files.js";
 import { listChannelSupportedActions, resolveChannelMessageToolHints } from "../channel-tools.js";
 import { resolveContextWindowInfo } from "../context-window-guard.js";

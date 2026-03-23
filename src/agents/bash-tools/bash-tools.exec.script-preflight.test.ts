@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { withTempDir } from "../test-utils/temp-dir.js";
+import { withTempDir } from "../../test-utils/temp-dir.js";
 import { createExecTool } from "./bash-tools.exec.js";
 
 const isWin = process.platform === "win32";

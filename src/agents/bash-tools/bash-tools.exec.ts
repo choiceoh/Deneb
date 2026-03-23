@@ -1,14 +1,15 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
-import { type ExecHost, maxAsk, minSecurity } from "../infra/exec-approvals.js";
-import { resolveExecSafeBinRuntimePolicy } from "../infra/exec-safe-bin-runtime-policy.js";
+import { type ExecHost, maxAsk, minSecurity } from "../../infra/exec-approvals.js";
+import { resolveExecSafeBinRuntimePolicy } from "../../infra/exec-safe-bin-runtime-policy.js";
 import {
   getShellPathFromLoginShell,
   resolveShellEnvFallbackTimeoutMs,
-} from "../infra/shell-env.js";
-import { logInfo } from "../logger.js";
-import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
+} from "../../infra/shell-env.js";
+import { logInfo } from "../../logger.js";
+import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
+import { assertSandboxPath } from "../sandbox-paths.js";
 import { markBackgrounded } from "./bash-process-registry.js";
 import { processGatewayAllowlist } from "./bash-tools.exec-host-gateway.js";
 import { executeNodeHostCommand } from "./bash-tools.exec-host-node.js";
@@ -43,7 +44,6 @@ import {
   resolveWorkdir,
   truncateMiddle,
 } from "./bash-tools.shared.js";
-import { assertSandboxPath } from "./sandbox-paths.js";
 
 export type { BashSandboxConfig } from "./bash-tools.shared.js";
 export type {

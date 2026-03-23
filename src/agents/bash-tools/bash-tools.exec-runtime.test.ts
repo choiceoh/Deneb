@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../infra/heartbeat-wake.js", () => ({
+vi.mock("../../infra/heartbeat-wake.js", () => ({
   requestHeartbeatNow: vi.fn(),
 }));
 
-vi.mock("../infra/system-events.js", () => ({
+vi.mock("../../infra/system-events.js", () => ({
   enqueueSystemEvent: vi.fn(),
 }));
 
-import { requestHeartbeatNow } from "../infra/heartbeat-wake.js";
-import { enqueueSystemEvent } from "../infra/system-events.js";
+import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
+import { enqueueSystemEvent } from "../../infra/system-events.js";
 import { emitExecSystemEvent } from "./bash-tools.exec-runtime.js";
 
 const requestHeartbeatNowMock = vi.mocked(requestHeartbeatNow);

@@ -7,7 +7,7 @@ import {
   type ExecAsk,
   type ExecApprovalInitiatingSurfaceState,
   type ExecSecurity,
-} from "../infra/exec-approvals.js";
+} from "../../infra/exec-approvals.js";
 import { sendExecApprovalFollowup } from "./bash-tools.exec-approval-followup.js";
 import {
   type ExecApprovalRegistration,
