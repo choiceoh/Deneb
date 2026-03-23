@@ -12,7 +12,7 @@ import { enqueueSystemEvent } from "../infra/system-events.js";
 import { normalizeMainKey, scopedHeartbeatWakeOptions } from "../routing/session-key.js";
 import { defaultRuntime } from "../runtime.js";
 import { parseMessageWithAttachments } from "./chat-attachments.js";
-import { normalizeRpcAttachmentsToChatAttachments } from "./server-methods/attachment-normalize.js";
+import { normalizeRpcAttachmentsToChatAttachments } from "./server-methods/chat/attachment-normalize.js";
 import type { NodeEvent, NodeEventContext } from "./server-node-events-types.js";
 import {
   loadSessionEntry,
