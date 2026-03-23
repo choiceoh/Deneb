@@ -44,8 +44,22 @@ export function ensureDirForFile(filePath: string): void {
 
 export function writeJsonFileSecure(pathname: string, value: unknown): void {
   ensureDirForFile(pathname);
-  fs.writeFileSync(pathname, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  fs.chmodSync(pathname, 0o600);
+  // Atomic write: write to temp file first, then rename to avoid partial/corrupt writes on crash.
+  const tempPath = `${pathname}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    fs.writeFileSync(tempPath, `${JSON.stringify(value, null, 2)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    fs.renameSync(tempPath, pathname);
+  } catch (err) {
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {
+      // best-effort cleanup
+    }
+    throw err;
+  }
 }
 
 export function readTextFileIfExists(pathname: string): string | null {
