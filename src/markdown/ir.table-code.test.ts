@@ -19,9 +19,7 @@ describe("markdownToIR tableMode code - style overlap", () => {
     // 1. There should be no bold spans in code mode (inner styles stripped), OR
     // 2. If bold spans exist, they should not overlap with code_block span
     if (codeBlockSpan && boldSpan) {
-      // Check for overlap
       const overlaps = boldSpan.start < codeBlockSpan.end && boldSpan.end > codeBlockSpan.start;
-      // Overlapping styles are the bug - this should fail until fixed
       expect(overlaps).toBe(false);
     }
   });

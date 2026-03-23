@@ -36,6 +36,22 @@ describe("completion-cli", () => {
     expect(script).toContain("$completions = @('status','restart','--force')");
   });
 
+  it("generates bash completion with recursive subcommand support", () => {
+    const script = getCompletionScript("bash", createCompletionProgram());
+
+    // Should walk COMP_WORDS to find deepest matching subcommand
+    expect(script).toContain("cmd_path=");
+    // Root level completions
+    expect(script).toContain('"deneb")\n      opts="gateway -v"');
+    // Nested gateway level with subcommands and options
+    expect(script).toContain('"deneb gateway")\n      opts="status restart --force"');
+    // Leaf command with its own options
+    expect(script).toContain('"deneb gateway status")\n      opts="--json"');
+    // Candidate matching for deep subcommand traversal
+    expect(script).toContain('"deneb gateway") cmd_path="$candidate"');
+    expect(script).toContain('"deneb gateway status") cmd_path="$candidate"');
+  });
+
   it("generates fish completions for root and nested command contexts", () => {
     const script = getCompletionScript("fish", createCompletionProgram());
 

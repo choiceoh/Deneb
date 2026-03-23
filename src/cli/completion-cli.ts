@@ -487,46 +487,71 @@ ${funcName}() {
 }
 
 function generateBashCompletion(program: Command): string {
-  // Simplified Bash completion using dynamic iteration logic (often hardcoded in static scripts)
-  // For a robust implementation, usually one maps out the tree.
-  // This assumes a simple structure.
   const rootCmd = program.name();
 
-  // We can use a recursive function to build the case statements
+  // Build a lookup table mapping command paths to their completions.
+  // Each entry maps "rootCmd subcmd ..." → "sub1 sub2 --opt1 --opt2".
+  const entries: { path: string; completions: string }[] = [];
+
+  const visit = (cmd: Command, pathSegments: string[]) => {
+    const subCommands = cmd.commands.map((c) => c.name());
+    const options = cmd.options.map((o) => o.flags.split(/[ ,|]+/)[0]);
+    const completions = [...subCommands, ...options].join(" ");
+    entries.push({ path: pathSegments.join(" "), completions });
+
+    for (const sub of cmd.commands) {
+      visit(sub, [...pathSegments, sub.name()]);
+    }
+  };
+  visit(program, [rootCmd]);
+
+  // Generate case statements for each command path
+  const caseStatements = entries
+    .map((entry) => {
+      return `    "${entry.path}")
+      opts="${entry.completions}"
+      ;;`;
+    })
+    .join("\n");
+
   return `
 _${rootCmd}_completion() {
-    local cur prev opts
+    local cur opts cmd_path
     COMPREPLY=()
     cur="\${COMP_WORDS[COMP_CWORD]}"
-    prev="\${COMP_WORDS[COMP_CWORD-1]}"
-    
-    # Simple top-level completion for now
-    opts="${program.commands.map((c) => c.name()).join(" ")} ${program.options.map((o) => o.flags.split(" ")[0]).join(" ")}"
-    
-    case "\${prev}" in
-      ${program.commands.map((cmd) => generateBashSubcommand(cmd)).join("\n      ")}
+
+    # Walk COMP_WORDS to find the deepest matching subcommand path
+    cmd_path="${rootCmd}"
+    local i=1
+    while [[ $i -lt $COMP_CWORD ]]; do
+        local word="\${COMP_WORDS[$i]}"
+        case "$word" in
+            -*) ;;
+            *)
+                local candidate="\${cmd_path} \${word}"
+                # Check if candidate is a known command path
+                case "$candidate" in
+${entries
+  .filter((e) => e.path !== rootCmd)
+  .map((e) => `                    "${e.path}") cmd_path="$candidate" ;;`)
+  .join("\n")}
+                    *) ;;
+                esac
+                ;;
+        esac
+        i=$((i + 1))
+    done
+
+    opts=""
+    case "$cmd_path" in
+${caseStatements}
     esac
 
-    if [[ \${cur} == -* ]] ; then
-        COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
-        return 0
-    fi
-    
-    COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
+    COMPREPLY=( $(compgen -W "\${opts}" -- "\${cur}") )
 }
 
 complete -F _${rootCmd}_completion ${rootCmd}
 `;
-}
-
-function generateBashSubcommand(cmd: Command): string {
-  // This is a naive implementation; fully recursive bash completion is complex to generate as a single string without improved state tracking.
-  // For now, let's provide top-level command recognition.
-  return `${cmd.name()})
-        opts="${cmd.commands.map((c) => c.name()).join(" ")} ${cmd.options.map((o) => o.flags.split(" ")[0]).join(" ")}"
-        COMPREPLY=( $(compgen -W "\${opts}" -- \${cur}) )
-        return 0
-        ;;`;
 }
 
 function generatePowerShellCompletion(program: Command): string {
