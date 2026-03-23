@@ -152,9 +152,11 @@ export async function buildReplyPayloads(params: {
     )
   ).filter(isRenderablePayload);
 
-  // Drop final payloads only when block streaming succeeded end-to-end.
-  // If streaming aborted (e.g., timeout), fall back to final payloads.
-  const shouldDropFinalPayloads =
+  // When block streaming succeeded end-to-end, filter out only the payloads
+  // that were actually sent via the pipeline rather than dropping all of them.
+  // Previously a blanket drop was used, which could discard payloads that the
+  // pipeline never streamed (e.g. payloads generated after the stream ended).
+  const blockStreamCompletedCleanly =
     params.blockStreamingEnabled &&
     Boolean(params.blockReplyPipeline?.didStream()) &&
     !params.blockReplyPipeline?.isAborted();
@@ -198,9 +200,11 @@ export async function buildReplyPayloads(params: {
       })
     : dedupedPayloads;
   // Filter out payloads already sent via pipeline or directly during tool flush.
-  const filteredPayloads = shouldDropFinalPayloads
-    ? []
-    : params.blockStreamingEnabled
+  // When block streaming completed cleanly, use per-payload dedup (hasSentPayload)
+  // instead of a blanket drop so that payloads generated after the stream ended
+  // are still delivered to the user.
+  const filteredPayloads =
+    blockStreamCompletedCleanly || params.blockStreamingEnabled
       ? mediaFilteredPayloads.filter(
           (payload) => !params.blockReplyPipeline?.hasSentPayload(payload),
         )

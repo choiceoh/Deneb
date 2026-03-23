@@ -80,7 +80,9 @@ export function createFollowupRunner(params: {
     const shouldRouteToOriginating = isRoutableChannel(originatingChannel) && originatingTo;
 
     if (!shouldRouteToOriginating && !opts?.onBlockReply) {
-      logVerbose("followup queue: no onBlockReply handler; dropping payloads");
+      defaultRuntime.error?.(
+        `followup queue: no delivery handler available; ${payloads.length} payload(s) dropped (sessionKey=${queued.run.sessionKey ?? "unknown"})`,
+      );
       return;
     }
 
@@ -255,6 +257,19 @@ export function createFollowupRunner(params: {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         defaultRuntime.error?.(`Followup agent failed before reply: ${message}`);
+        // Surface the error to the user instead of silently swallowing the
+        // queued message.  Without this, messages enqueued during compaction
+        // or active runs disappear when the followup agent fails.
+        const errorPayload: ReplyPayload = {
+          text: `⚠️ Failed to process queued message: ${message.replace(/\.\s*$/, "")}.\nLogs: deneb logs --follow`,
+          isError: true,
+        };
+        try {
+          await sendFollowupPayloads([errorPayload], queued);
+        } catch {
+          // Best-effort: if sending the error also fails, the error log above
+          // is the only trace.
+        }
         return;
       }
 
