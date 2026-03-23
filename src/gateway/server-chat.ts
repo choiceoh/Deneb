@@ -4,6 +4,7 @@ import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { loadConfig } from "../config/config.js";
 import { type AgentEventPayload, getAgentRunContext } from "../infra/agent-events.js";
 import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 import { stripInlineDirectiveTagsForDisplay } from "../utils/directive-tags.js";
 import { classifyChatErrorKind } from "./chat-error-kind.js";
 import {
@@ -12,6 +13,8 @@ import {
 } from "./session/session-lifecycle-state.js";
 import { loadGatewaySessionRow, loadSessionEntry } from "./session/session-utils.js";
 import { formatForLog } from "./ws/ws-log.js";
+
+const chatLog = createSubsystemLogger("gateway/chat");
 
 function resolveHeartbeatAckMaxChars(): number {
   try {
@@ -685,6 +688,13 @@ export function createAgentEventHandler({
   };
 
   return (evt: AgentEventPayload) => {
+    const lifecyclePhase =
+      evt.stream === "lifecycle" && typeof evt.data?.phase === "string" ? evt.data.phase : null;
+    const isLifecycleEnd = lifecyclePhase === "end" || lifecyclePhase === "error";
+
+    // Resolve chat link and session context early — needed by both the main
+    // handler path and the safety-net that ensures emitChatFinal fires even
+    // when an exception occurs.
     const chatLink = chatRunState.registry.peek(evt.runId);
     const eventSessionKey =
       typeof evt.sessionKey === "string" && evt.sessionKey.trim() ? evt.sessionKey : undefined;
@@ -693,147 +703,176 @@ export function createAgentEventHandler({
       chatLink?.sessionKey ?? eventSessionKey ?? resolveSessionKeyForRun(evt.runId);
     const clientRunId = chatLink?.clientRunId ?? evt.runId;
     const eventRunId = chatLink?.clientRunId ?? evt.runId;
-    const eventForClients = chatLink ? { ...evt, runId: eventRunId } : evt;
-    const isAborted =
-      chatRunState.abortedRuns.has(clientRunId) || chatRunState.abortedRuns.has(evt.runId);
-    // Include sessionKey so Control UI can filter tool streams per session.
-    const agentPayload = sessionKey ? { ...eventForClients, sessionKey } : eventForClients;
-    const last = agentRunSeq.get(evt.runId) ?? 0;
-    const isToolEvent = evt.stream === "tool";
-    const toolVerbose = isToolEvent ? resolveToolVerboseLevel(evt.runId, sessionKey) : "off";
-    // Build tool payload: strip result/partialResult unless verbose=full
-    const toolPayload =
-      isToolEvent && toolVerbose !== "full"
-        ? (() => {
-            const data = evt.data ? { ...evt.data } : {};
-            delete data.result;
-            delete data.partialResult;
-            return sessionKey
-              ? { ...eventForClients, sessionKey, data }
-              : { ...eventForClients, data };
-          })()
-        : agentPayload;
-    if (last > 0 && evt.seq !== last + 1) {
-      broadcast("agent", {
-        runId: eventRunId,
-        stream: "error",
-        ts: Date.now(),
-        sessionKey,
-        data: {
-          reason: "seq gap",
-          expected: last + 1,
-          received: evt.seq,
-        },
-      });
-    }
-    agentRunSeq.set(evt.runId, evt.seq);
-    if (isToolEvent) {
-      const toolPhase = typeof evt.data?.phase === "string" ? evt.data.phase : "";
-      // Flush pending assistant text before tool-start events so clients can
-      // render complete pre-tool text above tool cards (not truncated by delta throttle).
-      if (toolPhase === "start" && isControlUiVisible && sessionKey && !isAborted) {
-        flushBufferedChatDeltaIfNeeded(sessionKey, clientRunId, evt.runId, evt.seq);
-      }
-      // Always broadcast tool events to registered WS recipients with
-      // tool-events capability, regardless of verboseLevel. The verbose
-      // setting only controls whether tool details are sent as channel
-      // messages to messaging surfaces (Telegram, Discord, etc.).
-      const recipients = toolEventRecipients.get(evt.runId);
-      if (recipients && recipients.size > 0) {
-        broadcastToConnIds("agent", toolPayload, recipients);
-      }
-      // Session subscribers power operator UIs that attach to an existing
-      // in-flight session after the run has already started. Those clients do
-      // not know the runId in advance, so they cannot register as run-scoped
-      // tool recipients. Mirror tool lifecycle onto a session-scoped event so
-      // they can render live pending tool cards without polling history.
-      if (sessionKey) {
-        const sessionSubscribers = sessionEventSubscribers.getAll();
-        if (sessionSubscribers.size > 0) {
-          broadcastToConnIds("session.tool", toolPayload, sessionSubscribers, { dropIfSlow: true });
-        }
-      }
-    } else {
-      broadcast("agent", agentPayload);
-    }
+    let didEmitChatFinal = false;
 
-    const lifecyclePhase =
-      evt.stream === "lifecycle" && typeof evt.data?.phase === "string" ? evt.data.phase : null;
-
-    if (isControlUiVisible && sessionKey) {
-      // Send tool events to node/channel subscribers only when verbose is enabled;
-      // WS clients already received the event above via broadcastToConnIds.
-      if (!isToolEvent || toolVerbose !== "off") {
-        nodeSendToSession(sessionKey, "agent", isToolEvent ? toolPayload : agentPayload);
-      }
-      if (!isAborted && evt.stream === "assistant" && typeof evt.data?.text === "string") {
-        emitChatDelta(sessionKey, clientRunId, evt.runId, evt.seq, evt.data.text, evt.data.delta);
-      } else if (!isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
-        const evtStopReason =
-          typeof evt.data?.stopReason === "string" ? evt.data.stopReason : undefined;
-        if (chatLink) {
-          const finished = chatRunState.registry.shift(evt.runId);
-          if (!finished) {
-            clearAgentRunContext(evt.runId);
-            return;
-          }
-          emitChatFinal(
-            finished.sessionKey,
-            finished.clientRunId,
-            evt.runId,
-            evt.seq,
-            lifecyclePhase === "error" ? "error" : "done",
-            evt.data?.error,
-            evtStopReason,
-          );
-        } else {
-          emitChatFinal(
-            sessionKey,
-            eventRunId,
-            evt.runId,
-            evt.seq,
-            lifecyclePhase === "error" ? "error" : "done",
-            evt.data?.error,
-            evtStopReason,
-          );
-        }
-      } else if (isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
-        chatRunState.abortedRuns.delete(clientRunId);
-        chatRunState.abortedRuns.delete(evt.runId);
-        chatRunState.buffers.delete(clientRunId);
-        chatRunState.deltaSentAt.delete(clientRunId);
-        if (chatLink) {
-          chatRunState.registry.remove(evt.runId, clientRunId, sessionKey);
-        }
-      }
-    }
-
-    if (lifecyclePhase === "end" || lifecyclePhase === "error") {
-      toolEventRecipients.markFinal(evt.runId);
-      clearAgentRunContext(evt.runId);
-      agentRunSeq.delete(evt.runId);
-      agentRunSeq.delete(clientRunId);
-    }
-
-    if (
-      sessionKey &&
-      (lifecyclePhase === "start" || lifecyclePhase === "end" || lifecyclePhase === "error")
-    ) {
-      void persistGatewaySessionLifecycleEvent({ sessionKey, event: evt }).catch(() => undefined);
-      const sessionEventConnIds = sessionEventSubscribers.getAll();
-      if (sessionEventConnIds.size > 0) {
-        broadcastToConnIds(
-          "sessions.changed",
-          {
-            sessionKey,
-            phase: lifecyclePhase,
-            runId: evt.runId,
-            ts: evt.ts,
-            ...buildSessionEventSnapshot(sessionKey, evt),
+    try {
+      const eventForClients = chatLink ? { ...evt, runId: eventRunId } : evt;
+      const isAborted =
+        chatRunState.abortedRuns.has(clientRunId) || chatRunState.abortedRuns.has(evt.runId);
+      // Include sessionKey so Control UI can filter tool streams per session.
+      const agentPayload = sessionKey ? { ...eventForClients, sessionKey } : eventForClients;
+      const last = agentRunSeq.get(evt.runId) ?? 0;
+      const isToolEvent = evt.stream === "tool";
+      const toolVerbose = isToolEvent ? resolveToolVerboseLevel(evt.runId, sessionKey) : "off";
+      // Build tool payload: strip result/partialResult unless verbose=full
+      const toolPayload =
+        isToolEvent && toolVerbose !== "full"
+          ? (() => {
+              const data = evt.data ? { ...evt.data } : {};
+              delete data.result;
+              delete data.partialResult;
+              return sessionKey
+                ? { ...eventForClients, sessionKey, data }
+                : { ...eventForClients, data };
+            })()
+          : agentPayload;
+      if (last > 0 && evt.seq !== last + 1) {
+        broadcast("agent", {
+          runId: eventRunId,
+          stream: "error",
+          ts: Date.now(),
+          sessionKey,
+          data: {
+            reason: "seq gap",
+            expected: last + 1,
+            received: evt.seq,
           },
-          sessionEventConnIds,
-          { dropIfSlow: true },
-        );
+        });
+      }
+      agentRunSeq.set(evt.runId, evt.seq);
+      if (isToolEvent) {
+        const toolPhase = typeof evt.data?.phase === "string" ? evt.data.phase : "";
+        // Flush pending assistant text before tool-start events so clients can
+        // render complete pre-tool text above tool cards (not truncated by delta throttle).
+        if (toolPhase === "start" && isControlUiVisible && sessionKey && !isAborted) {
+          flushBufferedChatDeltaIfNeeded(sessionKey, clientRunId, evt.runId, evt.seq);
+        }
+        // Always broadcast tool events to registered WS recipients with
+        // tool-events capability, regardless of verboseLevel. The verbose
+        // setting only controls whether tool details are sent as channel
+        // messages to messaging surfaces (Telegram, Discord, etc.).
+        const recipients = toolEventRecipients.get(evt.runId);
+        if (recipients && recipients.size > 0) {
+          broadcastToConnIds("agent", toolPayload, recipients);
+        }
+        // Session subscribers power operator UIs that attach to an existing
+        // in-flight session after the run has already started. Those clients do
+        // not know the runId in advance, so they cannot register as run-scoped
+        // tool recipients. Mirror tool lifecycle onto a session-scoped event so
+        // they can render live pending tool cards without polling history.
+        if (sessionKey) {
+          const sessionSubscribers = sessionEventSubscribers.getAll();
+          if (sessionSubscribers.size > 0) {
+            broadcastToConnIds("session.tool", toolPayload, sessionSubscribers, {
+              dropIfSlow: true,
+            });
+          }
+        }
+      } else {
+        broadcast("agent", agentPayload);
+      }
+
+      if (isControlUiVisible && sessionKey) {
+        // Send tool events to node/channel subscribers only when verbose is enabled;
+        // WS clients already received the event above via broadcastToConnIds.
+        if (!isToolEvent || toolVerbose !== "off") {
+          nodeSendToSession(sessionKey, "agent", isToolEvent ? toolPayload : agentPayload);
+        }
+        if (!isAborted && evt.stream === "assistant" && typeof evt.data?.text === "string") {
+          emitChatDelta(sessionKey, clientRunId, evt.runId, evt.seq, evt.data.text, evt.data.delta);
+        } else if (!isAborted && isLifecycleEnd) {
+          const evtStopReason =
+            typeof evt.data?.stopReason === "string" ? evt.data.stopReason : undefined;
+          if (chatLink) {
+            const finished = chatRunState.registry.shift(evt.runId);
+            if (!finished) {
+              clearAgentRunContext(evt.runId);
+              return;
+            }
+            emitChatFinal(
+              finished.sessionKey,
+              finished.clientRunId,
+              evt.runId,
+              evt.seq,
+              lifecyclePhase === "error" ? "error" : "done",
+              evt.data?.error,
+              evtStopReason,
+            );
+          } else {
+            emitChatFinal(
+              sessionKey,
+              eventRunId,
+              evt.runId,
+              evt.seq,
+              lifecyclePhase === "error" ? "error" : "done",
+              evt.data?.error,
+              evtStopReason,
+            );
+          }
+          didEmitChatFinal = true;
+        } else if (isAborted && isLifecycleEnd) {
+          chatRunState.abortedRuns.delete(clientRunId);
+          chatRunState.abortedRuns.delete(evt.runId);
+          chatRunState.buffers.delete(clientRunId);
+          chatRunState.deltaSentAt.delete(clientRunId);
+          if (chatLink) {
+            chatRunState.registry.remove(evt.runId, clientRunId, sessionKey);
+          }
+        }
+      }
+
+      if (isLifecycleEnd) {
+        toolEventRecipients.markFinal(evt.runId);
+        clearAgentRunContext(evt.runId);
+        agentRunSeq.delete(evt.runId);
+        agentRunSeq.delete(clientRunId);
+      }
+
+      if (sessionKey && (lifecyclePhase === "start" || isLifecycleEnd)) {
+        void persistGatewaySessionLifecycleEvent({ sessionKey, event: evt }).catch(() => undefined);
+        const sessionEventConnIds = sessionEventSubscribers.getAll();
+        if (sessionEventConnIds.size > 0) {
+          broadcastToConnIds(
+            "sessions.changed",
+            {
+              sessionKey,
+              phase: lifecyclePhase,
+              runId: evt.runId,
+              ts: evt.ts,
+              ...buildSessionEventSnapshot(sessionKey, evt),
+            },
+            sessionEventConnIds,
+            { dropIfSlow: true },
+          );
+        }
+      }
+    } catch (err) {
+      chatLog.error(
+        `agent event handler threw for ${evt.stream}/${lifecyclePhase ?? "n/a"} (runId=${evt.runId}): ${String(err)}`,
+      );
+      // Safety net: if we failed to emit the chat final for a lifecycle end
+      // event, emit an error final so clients don't hang forever waiting for a
+      // response that will never arrive.
+      if (isLifecycleEnd && !didEmitChatFinal && isControlUiVisible && sessionKey) {
+        try {
+          emitChatFinal(
+            sessionKey,
+            clientRunId,
+            evt.runId,
+            evt.seq,
+            "error",
+            "Internal error processing agent response",
+          );
+        } catch (innerErr) {
+          chatLog.error(`safety-net emitChatFinal also failed: ${String(innerErr)}`);
+        }
+      }
+      // Still clean up lifecycle state to prevent resource leaks.
+      if (isLifecycleEnd) {
+        toolEventRecipients.markFinal(evt.runId);
+        clearAgentRunContext(evt.runId);
+        agentRunSeq.delete(evt.runId);
+        agentRunSeq.delete(clientRunId);
       }
     }
   };
