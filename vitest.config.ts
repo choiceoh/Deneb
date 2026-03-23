@@ -10,6 +10,10 @@ const isCI = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
 const isWindows = process.platform === "win32";
 const localWorkers = Math.max(4, Math.min(16, os.cpus().length));
 const ciWorkers = isWindows ? 2 : 3;
+// Scale timeouts for constrained environments to avoid false timeout failures
+// during full-suite runs where CPU contention slows individual tests.
+const testProfile = process.env.DENEB_TEST_PROFILE?.trim().toLowerCase();
+const timeoutScale = testProfile === "low" ? 2.5 : testProfile === "serial" ? 3 : isCI ? 1.5 : 1;
 export default defineConfig({
   resolve: {
     // Keep this ordered: the base `deneb/plugin-sdk` alias is a prefix match.
@@ -25,9 +29,9 @@ export default defineConfig({
     ],
   },
   test: {
-    reporters: ["default", "./test/infinite-loop-reporter.ts"],
-    testTimeout: 30_000,
-    hookTimeout: isWindows ? 60_000 : 45_000,
+    reporters: ["default", "./test/infinite-loop-reporter.ts", "./test/failed-tests-reporter.ts"],
+    testTimeout: Math.round(30_000 * timeoutScale),
+    hookTimeout: Math.round((isWindows ? 60_000 : 45_000) * timeoutScale),
     // Many suites rely on `vi.stubEnv(...)` and expect it to be scoped to the test.
     // This is especially important under `pool=vmForks` where env leaks cross-file.
     unstubEnvs: true,

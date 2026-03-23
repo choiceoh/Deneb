@@ -49,6 +49,7 @@ __pycache__/
 # Vitest test artifacts
 __deneb_vitest__/
 test/reports/
+test/fixtures/failed-tests.json
 
 # Temp
 /tmp/

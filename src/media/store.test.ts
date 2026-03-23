@@ -6,6 +6,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { isPathWithinBase } from "../../test/helpers/paths.js";
 import { createTempHomeEnv, type TempHomeEnv } from "../test-utils/temp-home.js";
 
+// Pre-generate image buffers once to avoid repeated sharp() calls in tests.
+let cachedJpegBuffer: Buffer;
+let cachedPngBuffer: Buffer;
+
 describe("media store", () => {
   let store: typeof import("./store.js");
   let home = "";
@@ -15,6 +19,14 @@ describe("media store", () => {
     tempHome = await createTempHomeEnv("deneb-test-home-");
     home = tempHome.home;
     store = await import("./store.js");
+    [cachedJpegBuffer, cachedPngBuffer] = await Promise.all([
+      sharp({ create: { width: 2, height: 2, channels: 3, background: "#123456" } })
+        .jpeg({ quality: 80 })
+        .toBuffer(),
+      sharp({ create: { width: 2, height: 2, channels: 3, background: "#00ff00" } })
+        .png()
+        .toBuffer(),
+    ]);
   });
 
   afterAll(async () => {
@@ -54,12 +66,7 @@ describe("media store", () => {
       expect(saved.contentType).toBe("text/plain");
       expect(saved.path.endsWith(".txt")).toBe(true);
 
-      const jpeg = await sharp({
-        create: { width: 2, height: 2, channels: 3, background: "#123456" },
-      })
-        .jpeg({ quality: 80 })
-        .toBuffer();
-      const savedJpeg = await store.saveMediaBuffer(jpeg, "image/jpeg");
+      const savedJpeg = await store.saveMediaBuffer(cachedJpegBuffer, "image/jpeg");
       expect(savedJpeg.contentType).toBe("image/jpeg");
       expect(savedJpeg.path.endsWith(".jpg")).toBe(true);
 
@@ -284,20 +291,15 @@ describe("media store", () => {
 
   it("renames media based on detected mime even when extension is wrong", async () => {
     await withTempStore(async (store, home) => {
-      const pngBytes = await sharp({
-        create: { width: 2, height: 2, channels: 3, background: "#00ff00" },
-      })
-        .png()
-        .toBuffer();
       const bogusExt = path.join(home, "image-wrong.bin");
-      await fs.writeFile(bogusExt, pngBytes);
+      await fs.writeFile(bogusExt, cachedPngBuffer);
 
       const saved = await store.saveMediaSource(bogusExt);
       expect(saved.contentType).toBe("image/png");
       expect(path.extname(saved.path)).toBe(".png");
 
       const buf = await fs.readFile(saved.path);
-      expect(buf.equals(pngBytes)).toBe(true);
+      expect(buf.equals(cachedPngBuffer)).toBe(true);
     });
   });
 

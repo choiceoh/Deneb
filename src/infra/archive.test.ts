@@ -67,7 +67,7 @@ async function expectExtractedSizeBudgetExceeded(params: {
     extractArchive({
       archivePath: params.archivePath,
       destDir: params.destDir,
-      timeoutMs: params.timeoutMs ?? 5_000,
+      timeoutMs: params.timeoutMs ?? 2_000,
       limits: { maxExtractedBytes: params.maxExtractedBytes },
     }),
   ).rejects.toThrow("archive extracted size exceeds limit");
@@ -93,7 +93,7 @@ describe("archive utils", () => {
           fileName: "hello.txt",
           content: "hi",
         });
-        await extractArchive({ archivePath, destDir: extractDir, timeoutMs: 5_000 });
+        await extractArchive({ archivePath, destDir: extractDir, timeoutMs: 2_000 });
         const rootDir = await resolvePackedRootDir(extractDir);
         const content = await fs.readFile(path.join(rootDir, "hello.txt"), "utf-8");
         expect(content).toBe("hi");
@@ -118,7 +118,7 @@ describe("archive utils", () => {
         await createDirectorySymlink(realExtractDir, extractDir);
 
         await expect(
-          extractArchive({ archivePath, destDir: extractDir, timeoutMs: 5_000 }),
+          extractArchive({ archivePath, destDir: extractDir, timeoutMs: 2_000 }),
         ).rejects.toMatchObject({
           code: "destination-symlink",
         } satisfies Partial<ArchiveSecurityError>);
@@ -135,7 +135,7 @@ describe("archive utils", () => {
       await fs.writeFile(archivePath, await zip.generateAsync({ type: "nodebuffer" }));
 
       await expect(
-        extractArchive({ archivePath, destDir: extractDir, timeoutMs: 5_000 }),
+        extractArchive({ archivePath, destDir: extractDir, timeoutMs: 2_000 }),
       ).rejects.toThrow(/(escapes destination|absolute)/i);
     });
   });
@@ -151,7 +151,7 @@ describe("archive utils", () => {
       await fs.writeFile(archivePath, await zip.generateAsync({ type: "nodebuffer" }));
 
       await expect(
-        extractArchive({ archivePath, destDir: extractDir, timeoutMs: 5_000 }),
+        extractArchive({ archivePath, destDir: extractDir, timeoutMs: 2_000 }),
       ).rejects.toMatchObject({
         code: "destination-symlink-traversal",
       } satisfies Partial<ArchiveSecurityError>);
@@ -186,7 +186,7 @@ describe("archive utils", () => {
         timing: "after-realpath",
         run: async () => {
           await expect(
-            extractArchive({ archivePath, destDir: extractDir, timeoutMs: 5_000 }),
+            extractArchive({ archivePath, destDir: extractDir, timeoutMs: 2_000 }),
           ).rejects.toMatchObject({
             code: "destination-symlink-traversal",
           } satisfies Partial<ArchiveSecurityError>);
@@ -222,7 +222,7 @@ describe("archive utils", () => {
 
         try {
           await expect(
-            extractArchive({ archivePath, destDir: extractDir, timeoutMs: 5_000 }),
+            extractArchive({ archivePath, destDir: extractDir, timeoutMs: 2_000 }),
           ).rejects.toMatchObject({
             code: "destination-symlink-traversal",
           } satisfies Partial<ArchiveSecurityError>);
@@ -245,7 +245,7 @@ describe("archive utils", () => {
       await tar.c({ cwd: insideDir, file: archivePath }, ["../outside.txt"]);
 
       await expect(
-        extractArchive({ archivePath, destDir: extractDir, timeoutMs: 5_000 }),
+        extractArchive({ archivePath, destDir: extractDir, timeoutMs: 2_000 }),
       ).rejects.toThrow(/escapes destination/i);
     });
   });
@@ -261,7 +261,7 @@ describe("archive utils", () => {
       await tar.c({ cwd: archiveRoot, file: archivePath }, ["escape"]);
 
       await expect(
-        extractArchive({ archivePath, destDir: extractDir, timeoutMs: 5_000 }),
+        extractArchive({ archivePath, destDir: extractDir, timeoutMs: 2_000 }),
       ).rejects.toMatchObject({
         code: "destination-symlink-traversal",
       } satisfies Partial<ArchiveSecurityError>);
@@ -308,7 +308,7 @@ describe("archive utils", () => {
           extractArchive({
             archivePath,
             destDir: extractDir,
-            timeoutMs: 5_000,
+            timeoutMs: 2_000,
             limits: { maxArchiveBytes: Math.max(1, stat.size - 1) },
           }),
         ).rejects.toThrow("archive size exceeds limit");
@@ -328,7 +328,7 @@ describe("archive utils", () => {
         extractArchive({
           archivePath,
           destDir: extractDir,
-          timeoutMs: 5_000,
+          timeoutMs: 2_000,
         }),
       ).rejects.toThrow(/absolute|drive path|escapes destination/i);
     });

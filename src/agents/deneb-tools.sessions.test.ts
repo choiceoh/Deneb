@@ -33,12 +33,12 @@ vi.mock("../config/config.js", async (importOriginal) => {
 import "./test-helpers/fast-core-tools.js";
 import { createDenebTools } from "./deneb-tools.js";
 
-const waitForCalls = async (getCount: () => number, count: number, timeoutMs = 2000) => {
+const waitForCalls = async (getCount: () => number, count: number, timeoutMs = 500) => {
   await vi.waitFor(
     () => {
       expect(getCount()).toBeGreaterThanOrEqual(count);
     },
-    { timeout: timeoutMs, interval: 5 },
+    { timeout: timeoutMs, interval: 3 },
   );
 };
 
@@ -805,7 +805,7 @@ describe("sessions tools", () => {
       () => {
         expect(calls.filter((call) => call.method === "agent")).toHaveLength(4);
       },
-      { timeout: 2_000, interval: 5 },
+      { timeout: 500, interval: 3 },
     );
 
     const agentCalls = calls.filter((call) => call.method === "agent");

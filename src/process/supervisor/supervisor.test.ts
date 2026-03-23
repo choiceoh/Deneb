@@ -39,7 +39,7 @@ describe("process supervisor", () => {
     const supervisor = createProcessSupervisor();
     const run = await spawnChild(supervisor, {
       sessionId: "s1",
-      argv: [process.execPath, "-e", "setTimeout(() => {}, 14)"],
+      argv: [process.execPath, "-e", "setTimeout(() => {}, 8)"],
       timeoutMs: 300,
       noOutputTimeoutMs: 5,
       stdinMode: "pipe-closed",
@@ -55,7 +55,7 @@ describe("process supervisor", () => {
     const first = await spawnChild(supervisor, {
       sessionId: "s1",
       scopeKey: "scope:a",
-      argv: [process.execPath, "-e", "setTimeout(() => {}, 80)"],
+      argv: [process.execPath, "-e", "setTimeout(() => {}, 30)"],
       timeoutMs: 1_000,
       stdinMode: "pipe-open",
     });
@@ -80,7 +80,7 @@ describe("process supervisor", () => {
     const supervisor = createProcessSupervisor();
     const run = await spawnChild(supervisor, {
       sessionId: "s-timeout",
-      argv: [process.execPath, "-e", "setTimeout(() => {}, 12)"],
+      argv: [process.execPath, "-e", "setTimeout(() => {}, 6)"],
       timeoutMs: 1,
       stdinMode: "pipe-closed",
     });
