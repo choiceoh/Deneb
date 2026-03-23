@@ -591,16 +591,26 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
 
   /** Count of channel accounts that are enabled, configured, and expected to be running. */
   const getExpectedRunningCount = (): number => {
-    const snapshot = getRuntimeSnapshot();
+    // Fast path: iterate channel stores directly instead of building a full
+    // snapshot object. For single-channel (Telegram) this avoids allocating
+    // the intermediate snapshot and iterating Object.values().
+    const cfg = loadConfig();
     let count = 0;
-    for (const accounts of Object.values(snapshot.channelAccounts)) {
-      if (!accounts) {
-        continue;
-      }
-      for (const status of Object.values(accounts)) {
-        if (status?.enabled && status.configured !== false) {
-          count++;
+    for (const plugin of listChannelPlugins()) {
+      const accountIds = plugin.config.listAccountIds(cfg);
+      for (const id of accountIds) {
+        const account = plugin.config.resolveAccount(cfg, id);
+        const enabled = plugin.config.isEnabled
+          ? plugin.config.isEnabled(account, cfg)
+          : isAccountEnabled(account);
+        if (!enabled) {
+          continue;
         }
+        const described = plugin.config.describeAccount?.(account, cfg);
+        if (described && described.configured === false) {
+          continue;
+        }
+        count++;
       }
     }
     return count;
@@ -608,14 +618,12 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
 
   /** Count of channel accounts currently marked as running and connected. */
   const getConnectedCount = (): number => {
-    const snapshot = getRuntimeSnapshot();
+    // Fast path: read running state directly from channel stores without
+    // building a full runtime snapshot.
     let count = 0;
-    for (const accounts of Object.values(snapshot.channelAccounts)) {
-      if (!accounts) {
-        continue;
-      }
-      for (const status of Object.values(accounts)) {
-        if (status?.running) {
+    for (const store of channelStores.values()) {
+      for (const rt of store.runtimes.values()) {
+        if (rt.running) {
           count++;
         }
       }

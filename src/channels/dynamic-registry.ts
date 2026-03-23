@@ -26,12 +26,18 @@ const registry = new Map<string, ChannelRegistration>();
 const aliasMap = new Map<string, string>(); // alias → canonical id
 const hooks: RegistrationHook[] = [];
 
+/** Cached reference to the Telegram channel registration for O(1) access. */
+let telegramChannelCache: ChannelRegistration | null = null;
+
 /** Register a channel. Called at the top level of each channel extension's import. */
 export function registerChannel(entry: ChannelRegistration): void {
   if (registry.has(entry.id)) {
     throw new Error(`Channel "${entry.id}" already registered`);
   }
   registry.set(entry.id, entry);
+  if (entry.id === "telegram") {
+    telegramChannelCache = entry;
+  }
   for (const hook of hooks) {
     hook(entry);
   }
@@ -49,7 +55,16 @@ export function listChannels(): ChannelRegistration[] {
 
 /** Look up channel metadata by ID. */
 export function getChannelMeta(id: string): ChannelRegistration | undefined {
+  // Fast path for the single-channel (Telegram) setup.
+  if (id === "telegram" && telegramChannelCache) {
+    return telegramChannelCache;
+  }
   return registry.get(id);
+}
+
+/** Direct accessor for the Telegram channel registration (O(1), no Map lookup). */
+export function getTelegramChannelMeta(): ChannelRegistration | undefined {
+  return telegramChannelCache ?? registry.get("telegram");
 }
 
 /** Normalize a raw channel ID — resolves aliases. */
@@ -57,6 +72,11 @@ export function normalizeChannelId(raw?: string | null): string | null {
   const key = raw?.trim().toLowerCase();
   if (!key) {
     return null;
+  }
+
+  // Single-channel fast path: most calls resolve "telegram" directly.
+  if (key === "telegram" && telegramChannelCache) {
+    return "telegram";
   }
 
   // Check aliases first
