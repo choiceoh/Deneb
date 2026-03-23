@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type FetchMock, withFetchPreconnect } from "../test-utils/fetch-mock.js";
-import { mockPublicPinnedHostname } from "./test-helpers/ssrf.js";
 
 vi.mock("../agents/models/model-auth.js", async () => {
   const { createModelAuthMockModule } = await import("../test-utils/model-auth-mock.js");
@@ -18,16 +17,38 @@ const createFetchMock = () => {
   return withFetchPreconnect(fetchMock);
 };
 
-let authModule: typeof import("../agents/models/model-auth.js");
+type AuthModule = typeof import("../agents/models/model-auth.js");
+type SsrfModule = typeof import("../infra/net/ssrf.js");
+
+let authModule: AuthModule;
+let ssrfModule: SsrfModule;
 let createVoyageEmbeddingProvider: typeof import("./embeddings-voyage.js").createVoyageEmbeddingProvider;
 let normalizeVoyageModel: typeof import("./embeddings-voyage.js").normalizeVoyageModel;
 
 beforeEach(async () => {
-  vi.resetModules();
-  authModule = await import("../agents/models/model-auth.js");
-  ({ createVoyageEmbeddingProvider, normalizeVoyageModel } =
-    await import("./embeddings-voyage.js"));
+  if (!authModule) {
+    vi.resetModules();
+    authModule = await import("../agents/models/model-auth.js");
+    ssrfModule = await import("../infra/net/ssrf.js");
+    ({ createVoyageEmbeddingProvider, normalizeVoyageModel } =
+      await import("./embeddings-voyage.js"));
+  }
+  vi.mocked(authModule.resolveApiKeyForProvider).mockReset();
 });
+
+function mockPublicPinnedHostname() {
+  return vi
+    .spyOn(ssrfModule, "resolvePinnedHostnameWithPolicy")
+    .mockImplementation(async (hostname) => {
+      const normalized = hostname.trim().toLowerCase().replace(/\.$/, "");
+      const addresses = ["93.184.216.34"];
+      return {
+        hostname: normalized,
+        addresses,
+        lookup: ssrfModule.createPinnedLookup({ hostname: normalized, addresses }),
+      };
+    });
+}
 
 function mockVoyageApiKey() {
   vi.mocked(authModule.resolveApiKeyForProvider).mockResolvedValue({

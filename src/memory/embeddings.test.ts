@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_GEMINI_EMBEDDING_MODEL } from "./embeddings-gemini.js";
-import { mockPublicPinnedHostname } from "./test-helpers/ssrf.js";
 
 vi.mock("../agents/models/model-auth.js", async () => {
   const { createModelAuthMockModule } = await import("../test-utils/model-auth-mock.js");
@@ -33,22 +32,46 @@ function readFirstFetchRequest(fetchMock: { mock: { calls: unknown[][] } }) {
 
 type EmbeddingsModule = typeof import("./embeddings.js");
 type AuthModule = typeof import("../agents/models/model-auth.js");
+type SsrfModule = typeof import("../infra/net/ssrf.js");
 type ResolvedProviderAuth = Awaited<ReturnType<AuthModule["resolveApiKeyForProvider"]>>;
 
 let authModule: AuthModule;
+let ssrfModule: SsrfModule;
 let createEmbeddingProvider: EmbeddingsModule["createEmbeddingProvider"];
 let DEFAULT_LOCAL_MODEL: EmbeddingsModule["DEFAULT_LOCAL_MODEL"];
 
 beforeEach(async () => {
-  vi.resetModules();
-  authModule = await import("../agents/models/model-auth.js");
-  ({ createEmbeddingProvider, DEFAULT_LOCAL_MODEL } = await import("./embeddings.js"));
+  if (!authModule) {
+    // First test: reset modules and import fresh instances.
+    vi.resetModules();
+    authModule = await import("../agents/models/model-auth.js");
+    ssrfModule = await import("../infra/net/ssrf.js");
+    ({ createEmbeddingProvider, DEFAULT_LOCAL_MODEL } = await import("./embeddings.js"));
+  }
+  // Reset mock state for each test.
+  vi.mocked(authModule.resolveApiKeyForProvider).mockReset();
+  importNodeLlamaCppMock.mockReset();
 });
 
 afterEach(() => {
   vi.resetAllMocks();
   vi.unstubAllGlobals();
 });
+
+/** Mock DNS resolution to avoid real network calls in tests. */
+function mockPublicPinnedHostname() {
+  return vi
+    .spyOn(ssrfModule, "resolvePinnedHostnameWithPolicy")
+    .mockImplementation(async (hostname) => {
+      const normalized = hostname.trim().toLowerCase().replace(/\.$/, "");
+      const addresses = ["93.184.216.34"];
+      return {
+        hostname: normalized,
+        addresses,
+        lookup: ssrfModule.createPinnedLookup({ hostname: normalized, addresses }),
+      };
+    });
+}
 
 function requireProvider(result: Awaited<ReturnType<EmbeddingsModule["createEmbeddingProvider"]>>) {
   if (!result.provider) {
@@ -552,13 +575,6 @@ describe("local embedding normalization", () => {
 });
 
 describe("local embedding ensureContext concurrency", () => {
-  afterEach(() => {
-    vi.resetAllMocks();
-    vi.resetModules();
-    vi.unstubAllGlobals();
-    vi.doUnmock("./node-llama.js");
-  });
-
   async function setupLocalProviderWithMockedInit(params?: {
     initializationDelayMs?: number;
     failFirstGetLlama?: boolean;
@@ -568,8 +584,7 @@ describe("local embedding ensureContext concurrency", () => {
     const createContextSpy = vi.fn();
     let shouldFail = params?.failFirstGetLlama ?? false;
 
-    const nodeLlamaModule = await import("./node-llama.js");
-    vi.spyOn(nodeLlamaModule, "importNodeLlamaCpp").mockResolvedValue({
+    importNodeLlamaCppMock.mockResolvedValue({
       getLlama: async (...args: unknown[]) => {
         getLlamaSpy(...args);
         if (shouldFail) {
@@ -602,7 +617,6 @@ describe("local embedding ensureContext concurrency", () => {
       LlamaLogLevel: { error: 0 },
     } as never);
 
-    const { createEmbeddingProvider } = await import("./embeddings.js");
     const result = await createEmbeddingProvider({
       config: {} as never,
       provider: "local",
