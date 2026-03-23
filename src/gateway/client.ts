@@ -242,7 +242,9 @@ export class GatewayClient {
     };
     if (url.startsWith("wss://") && this.opts.tlsFingerprint) {
       wsOptions.rejectUnauthorized = false;
-      wsOptions.checkServerIdentity = ((_host: string, cert: CertMeta) => {
+      // Node.js tls.checkServerIdentity returns Error | undefined, but @types/ws
+      // incorrectly declares the return type as boolean. Cast through unknown.
+      wsOptions.checkServerIdentity = ((_host: string, cert: CertMeta): Error | undefined => {
         const fingerprintValue =
           typeof cert === "object" && cert && "fingerprint256" in cert
             ? ((cert as { fingerprint256?: string }).fingerprint256 ?? "")
@@ -261,8 +263,7 @@ export class GatewayClient {
           return new Error("gateway tls fingerprint mismatch");
         }
         return undefined;
-        // oxlint-disable-next-line typescript/no-explicit-any
-      }) as any;
+      }) as unknown as NonNullable<ClientOptions["checkServerIdentity"]>;
     }
     const ws = new WebSocket(url, wsOptions);
     this.ws = ws;
