@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import "../../agents/test-helpers/fast-coding-tools.js";
-import { createDenebCodingTools } from "../../agents/pi-tools.js";
+import { createDenebCodingTools } from "../../agents/pi-tools/pi-tools.js";
 import {
   clearFastTestEnv,
   loadRunCronIsolatedAgentTurn,

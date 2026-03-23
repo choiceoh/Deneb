@@ -7,11 +7,11 @@ import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { logDebug, logError } from "../logger.js";
 import { isPlainObject } from "../utils.js";
 import type { ClientToolDefinition } from "./pi-embedded-runner/run/params.js";
-import type { HookContext } from "./pi-tools.before-tool-call.js";
+import type { HookContext } from "./pi-tools/pi-tools.before-tool-call.js";
 import {
   isToolWrappedWithBeforeToolCallHook,
   runBeforeToolCallHook,
-} from "./pi-tools.before-tool-call.js";
+} from "./pi-tools/pi-tools.before-tool-call.js";
 import { normalizeToolName } from "./tool-policy.js";
 import { jsonResult } from "./tools/common.js";
 

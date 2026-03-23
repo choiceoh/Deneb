@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DenebConfig } from "../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
 import "./test-helpers/fast-coding-tools.js";
 import { createDenebCodingTools } from "./pi-tools.js";
 

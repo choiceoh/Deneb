@@ -17,7 +17,7 @@ import {
   sanitizeGoogleTurnOrdering,
   sanitizeSessionMessagesImages,
 } from "../pi-embedded-helpers.js";
-import { cleanToolSchemaForGemini } from "../pi-tools.schema.js";
+import { cleanToolSchemaForGemini } from "../pi-tools/pi-tools.schema.js";
 import {
   sanitizeToolCallInputs,
   stripToolResultDetails,

@@ -2,10 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { DenebConfig } from "../config/config.js";
-import type { ExecApprovalsResolved } from "../infra/exec-approvals.js";
-import type { SafeBinProfileFixture } from "../infra/exec-safe-bin-policy.js";
-import { captureEnv } from "../test-utils/env.js";
+import type { DenebConfig } from "../../config/config.js";
+import type { ExecApprovalsResolved } from "../../infra/exec-approvals.js";
+import type { SafeBinProfileFixture } from "../../infra/exec-safe-bin-policy.js";
+import { captureEnv } from "../../test-utils/env.js";
 
 const bundledPluginsDirSnapshot = captureEnv(["DENEB_BUNDLED_PLUGINS_DIR"]);
 
@@ -20,8 +20,8 @@ afterAll(() => {
   bundledPluginsDirSnapshot.restore();
 });
 
-vi.mock("../infra/shell-env.js", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("../infra/shell-env.js")>();
+vi.mock("../../infra/shell-env.js", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../../infra/shell-env.js")>();
   return {
     ...mod,
     getShellPathFromLoginShell: vi.fn(() => null),
@@ -29,13 +29,13 @@ vi.mock("../infra/shell-env.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../plugins/tools.js", () => ({
+vi.mock("../../plugins/tools.js", () => ({
   resolvePluginTools: () => [],
   getPluginToolMeta: () => undefined,
 }));
 
-vi.mock("../infra/exec-approvals.js", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("../infra/exec-approvals.js")>();
+vi.mock("../../infra/exec-approvals.js", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../../infra/exec-approvals.js")>();
   const approvals: ExecApprovalsResolved = {
     path: "/tmp/exec-approvals.json",
     socketPath: "/tmp/exec-approvals.sock",

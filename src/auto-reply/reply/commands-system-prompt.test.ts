@@ -12,7 +12,7 @@ vi.mock("../../agents/bootstrap-files.js", () => ({
   })),
 }));
 
-vi.mock("../../agents/pi-tools.js", () => ({
+vi.mock("../../agents/pi-tools/pi-tools.js", () => ({
   createDenebCodingTools: createDenebCodingToolsMock,
 }));
 

@@ -1,4 +1,4 @@
-import { bindAbortRelay } from "../utils/fetch-timeout.js";
+import { bindAbortRelay } from "../../utils/fetch-timeout.js";
 import type { AnyAgentTool } from "./pi-tools.types.js";
 
 function throwAbortError(): never {

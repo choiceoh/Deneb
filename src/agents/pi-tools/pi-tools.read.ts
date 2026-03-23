@@ -9,11 +9,14 @@ import {
   openFileWithinRoot,
   readFileWithinRoot,
   writeFileWithinRoot,
-} from "../infra/fs-safe.js";
-import { detectMime } from "../media/mime.js";
-import { sniffMimeFromBase64 } from "../media/sniff-mime-from-base64.js";
-import type { ImageSanitizationLimits } from "./image-sanitization.js";
-import { toRelativeWorkspacePath } from "./path-policy.js";
+} from "../../infra/fs-safe.js";
+import { detectMime } from "../../media/mime.js";
+import { sniffMimeFromBase64 } from "../../media/sniff-mime-from-base64.js";
+import type { ImageSanitizationLimits } from "../image-sanitization.js";
+import { toRelativeWorkspacePath } from "../path-policy.js";
+import { assertSandboxPath } from "../sandbox-paths.js";
+import type { SandboxFsBridge } from "../sandbox/fs-bridge.js";
+import { sanitizeToolResultImages } from "../tool-images.js";
 import { wrapHostEditToolWithPostWriteRecovery } from "./pi-tools.host-edit.js";
 import {
   CLAUDE_PARAM_GROUPS,
@@ -23,9 +26,6 @@ import {
   wrapToolParamNormalization,
 } from "./pi-tools.params.js";
 import type { AnyAgentTool } from "./pi-tools.types.js";
-import { assertSandboxPath } from "./sandbox-paths.js";
-import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
-import { sanitizeToolResultImages } from "./tool-images.js";
 
 export {
   CLAUDE_PARAM_GROUPS,

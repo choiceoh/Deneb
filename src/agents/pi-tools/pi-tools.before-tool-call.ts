@@ -1,11 +1,11 @@
-import type { ToolLoopDetectionConfig } from "../config/types.tools.js";
-import type { SessionState } from "../logging/diagnostic-session-state.js";
-import { createSubsystemLogger } from "../logging/subsystem.js";
-import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
-import { createLazyRuntimeSurface } from "../shared/lazy-runtime.js";
-import { isPlainObject } from "../utils.js";
-import { normalizeToolName } from "./tool-policy.js";
-import type { AnyAgentTool } from "./tools/common.js";
+import type { ToolLoopDetectionConfig } from "../../config/types.tools.js";
+import type { SessionState } from "../../logging/diagnostic-session-state.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
+import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
+import { createLazyRuntimeSurface } from "../../shared/lazy-runtime.js";
+import { isPlainObject } from "../../utils.js";
+import { normalizeToolName } from "../tool-policy.js";
+import type { AnyAgentTool } from "../tools/common.js";
 
 export type HookContext = {
   agentId?: string;

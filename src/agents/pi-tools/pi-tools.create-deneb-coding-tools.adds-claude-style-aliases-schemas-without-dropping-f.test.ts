@@ -3,8 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import "./test-helpers/fast-coding-tools.js";
+import { expectReadWriteEditTools } from "../test-helpers/pi-tools-fs-helpers.js";
 import { createDenebCodingTools } from "./pi-tools.js";
-import { expectReadWriteEditTools } from "./test-helpers/pi-tools-fs-helpers.js";
 
 describe("createDenebCodingTools", () => {
   it("accepts Claude Code parameter aliases for read/write/edit", async () => {

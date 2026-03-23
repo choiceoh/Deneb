@@ -5,13 +5,13 @@ import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it, vi } from "vitest";
 import "./test-helpers/fast-coding-tools.js";
-import { createDenebTools } from "./deneb-tools.js";
-import { applyXaiModelCompat } from "./model-compat.js";
-import { findUnsupportedSchemaKeywords } from "./pi-embedded-runner/google.js";
+import { createDenebTools } from "../deneb-tools.js";
+import { applyXaiModelCompat } from "../models/model-compat.js";
+import { findUnsupportedSchemaKeywords } from "../pi-embedded-runner/google.js";
+import { createHostSandboxFsBridge } from "../test-helpers/host-sandbox-fs-bridge.js";
+import { createBrowserTool } from "../tools/browser-tool.js";
 import { __testing, createDenebCodingTools } from "./pi-tools.js";
 import { createDenebReadTool, createSandboxedReadTool } from "./pi-tools.read.js";
-import { createHostSandboxFsBridge } from "./test-helpers/host-sandbox-fs-bridge.js";
-import { createBrowserTool } from "./tools/browser-tool.js";
 
 const defaultTools = createDenebCodingTools();
 

@@ -1,21 +1,21 @@
-import { getChannelPlugin } from "../channels/plugins/index.js";
-import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
-import type { DenebConfig } from "../config/config.js";
-import { resolveChannelGroupToolsPolicy } from "../config/group-policy.js";
-import type { AgentToolsConfig } from "../config/types.tools.js";
-import { normalizeAgentId } from "../routing/session-key.js";
-import { resolveThreadParentSessionKey } from "../sessions/session-key-utils.js";
-import { normalizeMessageChannel } from "../utils/message-channel.js";
-import { resolveAgentConfig, resolveAgentIdFromSessionKey } from "./agent-scope.js";
-import type { AnyAgentTool } from "./pi-tools.types.js";
-import { pickSandboxToolPolicy } from "./sandbox-tool-policy.js";
-import type { SandboxToolPolicy } from "./sandbox.js";
+import { getChannelPlugin } from "../../channels/plugins/index.js";
+import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../../config/agent-limits.js";
+import type { DenebConfig } from "../../config/config.js";
+import { resolveChannelGroupToolsPolicy } from "../../config/group-policy.js";
+import type { AgentToolsConfig } from "../../config/types.tools.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
+import { resolveThreadParentSessionKey } from "../../sessions/session-key-utils.js";
+import { normalizeMessageChannel } from "../../utils/message-channel.js";
+import { resolveAgentConfig, resolveAgentIdFromSessionKey } from "../agent-scope.js";
+import { pickSandboxToolPolicy } from "../sandbox-tool-policy.js";
+import type { SandboxToolPolicy } from "../sandbox.js";
 import {
   resolveStoredSubagentCapabilities,
   type SubagentSessionRole,
-} from "./subagent/subagent-capabilities.js";
-import { isToolAllowedByPolicies, isToolAllowedByPolicyName } from "./tool-policy-match.js";
-import { normalizeToolName } from "./tool-policy.js";
+} from "../subagent/subagent-capabilities.js";
+import { isToolAllowedByPolicies, isToolAllowedByPolicyName } from "../tool-policy-match.js";
+import { normalizeToolName } from "../tool-policy.js";
+import type { AnyAgentTool } from "./pi-tools.types.js";
 
 /**
  * Tools always denied for sub-agents regardless of depth.
@@ -346,4 +346,4 @@ export function resolveGroupToolPolicy(params: {
   return pickSandboxToolPolicy(toolsConfig);
 }
 
-export { isToolAllowedByPolicies, isToolAllowedByPolicyName } from "./tool-policy-match.js";
+export { isToolAllowedByPolicies, isToolAllowedByPolicyName } from "../tool-policy-match.js";

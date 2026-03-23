@@ -39,7 +39,7 @@ import { subscribeEmbeddedPiSession } from "../../pi-embedded-subscribe.js";
 import { createPreparedEmbeddedPiSettingsManager } from "../../pi-project-settings.js";
 import { applyPiAutoCompactionGuard } from "../../pi-settings.js";
 import { toClientToolDefinitions } from "../../pi-tool-definition-adapter.js";
-import { createDenebCodingTools, resolveToolLoopDetectionConfig } from "../../pi-tools.js";
+import { createDenebCodingTools, resolveToolLoopDetectionConfig } from "../../pi-tools/pi-tools.js";
 import { resolveSandboxContext } from "../../sandbox.js";
 import { repairSessionFileIfNeeded } from "../../session-file-repair.js";
 import { guardSessionManager } from "../../session-tool-result-guard-wrapper.js";

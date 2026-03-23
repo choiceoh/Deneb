@@ -3,11 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import "./test-helpers/fast-coding-tools.js";
-import type { DenebConfig } from "../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
+import type { SandboxDockerConfig } from "../sandbox.js";
+import type { SandboxFsBridge } from "../sandbox/fs-bridge.js";
+import { createRestrictedAgentSandboxConfig } from "../test-helpers/sandbox-agent-config-fixtures.js";
 import { createDenebCodingTools } from "./pi-tools.js";
-import type { SandboxDockerConfig } from "./sandbox.js";
-import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
-import { createRestrictedAgentSandboxConfig } from "./test-helpers/sandbox-agent-config-fixtures.js";
 
 type ToolWithExecute = {
   execute: (toolCallId: string, args: unknown, signal?: AbortSignal) => Promise<unknown>;

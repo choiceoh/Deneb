@@ -279,7 +279,7 @@ export async function loadCompactHooksHarness(): Promise<{
     resolveChannelMessageToolHints: vi.fn(() => undefined),
   }));
 
-  vi.doMock("../pi-tools.js", () => ({
+  vi.doMock("../pi-tools/pi-tools.js", () => ({
     createDenebCodingTools: createDenebCodingToolsMock,
   }));
 

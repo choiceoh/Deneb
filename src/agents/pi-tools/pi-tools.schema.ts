@@ -1,8 +1,8 @@
-import type { ModelCompatConfig } from "../config/types.models.js";
-import { usesXaiToolSchemaProfile } from "./model-compat.js";
+import type { ModelCompatConfig } from "../../config/types.models.js";
+import { usesXaiToolSchemaProfile } from "../models/model-compat.js";
+import { cleanSchemaForGemini } from "../schema/clean-for-gemini.js";
+import { stripXaiUnsupportedKeywords } from "../schema/clean-for-xai.js";
 import type { AnyAgentTool } from "./pi-tools.types.js";
-import { cleanSchemaForGemini } from "./schema/clean-for-gemini.js";
-import { stripXaiUnsupportedKeywords } from "./schema/clean-for-xai.js";
 
 function extractEnumValues(schema: unknown): unknown[] | undefined {
   if (!schema || typeof schema !== "object") {

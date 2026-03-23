@@ -1,10 +1,10 @@
-import { getDiagnosticSessionState } from "../logging/diagnostic-session-state.js";
-import { logToolLoopAction } from "../logging/diagnostic.js";
+import { getDiagnosticSessionState } from "../../logging/diagnostic-session-state.js";
+import { logToolLoopAction } from "../../logging/diagnostic.js";
 import {
   detectToolCallLoop,
   recordToolCall,
   recordToolCallOutcome,
-} from "./tool-loop-detection.js";
+} from "../tool-loop-detection.js";
 
 export const beforeToolCallRuntime = {
   getDiagnosticSessionState,

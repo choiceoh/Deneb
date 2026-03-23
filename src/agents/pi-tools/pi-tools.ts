@@ -1,25 +1,38 @@
 import { codingTools, createReadTool, readTool } from "@mariozechner/pi-coding-agent";
-import type { DenebConfig } from "../config/config.js";
-import type { ModelCompatConfig } from "../config/types.models.js";
-import type { ToolLoopDetectionConfig } from "../config/types.tools.js";
-import { resolveMergedSafeBinProfileFixtures } from "../infra/exec-safe-bin-runtime-policy.js";
-import { logWarn } from "../logger.js";
-import { getPluginToolMeta } from "../plugins/tools.js";
-import { isSubagentSessionKey } from "../routing/session-key.js";
-import { resolveGatewayMessageChannel } from "../utils/message-channel.js";
-import { resolveAgentConfig } from "./agent-scope.js";
-import { createApplyPatchTool } from "./apply-patch.js";
+import type { DenebConfig } from "../../config/config.js";
+import type { ModelCompatConfig } from "../../config/types.models.js";
+import type { ToolLoopDetectionConfig } from "../../config/types.tools.js";
+import { resolveMergedSafeBinProfileFixtures } from "../../infra/exec-safe-bin-runtime-policy.js";
+import { logWarn } from "../../logger.js";
+import { getPluginToolMeta } from "../../plugins/tools.js";
+import { isSubagentSessionKey } from "../../routing/session-key.js";
+import { resolveGatewayMessageChannel } from "../../utils/message-channel.js";
+import { resolveAgentConfig } from "../agent-scope.js";
+import { createApplyPatchTool } from "../apply-patch.js";
 import {
   createExecTool,
   createProcessTool,
   type ExecToolDefaults,
   type ProcessToolDefaults,
-} from "./bash-tools/bash-tools.js";
-import { listChannelAgentTools } from "./channel-tools.js";
-import { createDenebTools } from "./deneb-tools.js";
-import { resolveImageSanitizationLimits } from "./image-sanitization.js";
-import type { ModelAuthMode } from "./model-auth.js";
-import { hasNativeWebSearchTool } from "./model-compat.js";
+} from "../bash-tools/bash-tools.js";
+import { listChannelAgentTools } from "../channel-tools.js";
+import { createDenebTools } from "../deneb-tools.js";
+import { resolveImageSanitizationLimits } from "../image-sanitization.js";
+import type { ModelAuthMode } from "../models/model-auth.js";
+import { hasNativeWebSearchTool } from "../models/model-compat.js";
+import type { SandboxContext } from "../sandbox.js";
+import { createToolFsPolicy, resolveToolFsConfig } from "../tool-fs-policy.js";
+import {
+  applyToolPolicyPipeline,
+  buildDefaultToolPolicyPipelineSteps,
+} from "../tool-policy-pipeline.js";
+import {
+  applyOwnerOnlyToolPolicy,
+  collectExplicitAllowlist,
+  mergeAlsoAllowPolicy,
+  resolveToolProfilePolicy,
+} from "../tool-policy.js";
+import { resolveWorkspaceRoot } from "../workspace-dir.js";
 import { wrapToolWithAbortSignal } from "./pi-tools.abort.js";
 import { wrapToolWithBeforeToolCallHook } from "./pi-tools.before-tool-call.js";
 import {
@@ -45,19 +58,6 @@ import {
 } from "./pi-tools.read.js";
 import { cleanToolSchemaForGemini, normalizeToolParameters } from "./pi-tools.schema.js";
 import type { AnyAgentTool } from "./pi-tools.types.js";
-import type { SandboxContext } from "./sandbox.js";
-import { createToolFsPolicy, resolveToolFsConfig } from "./tool-fs-policy.js";
-import {
-  applyToolPolicyPipeline,
-  buildDefaultToolPolicyPipelineSteps,
-} from "./tool-policy-pipeline.js";
-import {
-  applyOwnerOnlyToolPolicy,
-  collectExplicitAllowlist,
-  mergeAlsoAllowPolicy,
-  resolveToolProfilePolicy,
-} from "./tool-policy.js";
-import { resolveWorkspaceRoot } from "./workspace-dir.js";
 
 function isOpenAIProvider(provider?: string) {
   const normalized = provider?.trim().toLowerCase();

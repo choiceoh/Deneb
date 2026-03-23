@@ -1,17 +1,17 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { DenebConfig } from "../config/config.js";
-import { createDenebCodingTools } from "./pi-tools.js";
+import type { DenebConfig } from "../../config/config.js";
 import {
   expectReadWriteEditTools,
   expectReadWriteTools,
   getTextContent,
-} from "./test-helpers/pi-tools-fs-helpers.js";
-import { withUnsafeMountedSandboxHarness } from "./test-helpers/unsafe-mounted-sandbox.js";
+} from "../test-helpers/pi-tools-fs-helpers.js";
+import { withUnsafeMountedSandboxHarness } from "../test-helpers/unsafe-mounted-sandbox.js";
+import { createDenebCodingTools } from "./pi-tools.js";
 
-vi.mock("../infra/shell-env.js", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("../infra/shell-env.js")>();
+vi.mock("../../infra/shell-env.js", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../../infra/shell-env.js")>();
   return { ...mod, getShellPathFromLoginShell: () => null };
 });
 

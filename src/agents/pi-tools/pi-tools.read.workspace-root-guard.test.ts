@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   assertSandboxPath: vi.fn(async () => ({ resolved: "/tmp/root", relative: "" })),
 }));
 
-vi.mock("./sandbox-paths.js", () => ({
+vi.mock("../sandbox-paths.js", () => ({
   assertSandboxPath: mocks.assertSandboxPath,
 }));
 

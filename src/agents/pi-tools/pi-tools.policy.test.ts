@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { DenebConfig } from "../config/config.js";
+import type { DenebConfig } from "../../config/config.js";
+import { createStubTool } from "../test-helpers/pi-tool-stubs.js";
 import {
   filterToolsByPolicy,
   isToolAllowedByPolicyName,
@@ -10,7 +11,6 @@ import {
   resolveSubagentToolPolicy,
   resolveSubagentToolPolicyForSession,
 } from "./pi-tools.policy.js";
-import { createStubTool } from "./test-helpers/pi-tool-stubs.js";
 
 describe("pi-tools.policy", () => {
   it("treats * in allow as allow-all", () => {
