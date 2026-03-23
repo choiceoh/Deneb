@@ -1,4 +1,4 @@
-import { resolveEnvApiKey } from "../agents/model-auth.js";
+import { resolveEnvApiKey } from "../agents/models/model-auth.js";
 import type { DenebConfig } from "../config/types.js";
 import {
   isValidEnvSecretRefId,

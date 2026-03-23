@@ -1,4 +1,4 @@
-import { normalizeProviderId } from "./model-selection.js";
+import { normalizeProviderId } from "./models/model-selection.js";
 
 const KEY_SPLIT_RE = /[\s,;]+/g;
 const GOOGLE_LIVE_SINGLE_KEY = "DENEB_LIVE_GEMINI_KEY";

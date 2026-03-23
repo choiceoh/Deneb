@@ -1,6 +1,6 @@
 import "./isolated-agent.mocks.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import * as modelSelection from "../agents/model-selection.js";
+import * as modelSelection from "../agents/models/model-selection.js";
 import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
 import { runSubagentAnnounceFlow } from "../agents/subagent/subagent-announce.js";
 import type { CliDeps } from "../cli/deps.js";

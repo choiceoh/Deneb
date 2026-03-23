@@ -1,6 +1,6 @@
 import type { AuthProfileStore } from "../agents/auth-profiles.js";
 import { describeFailoverError, isFailoverError } from "../agents/failover-error.js";
-import type { FallbackAttempt } from "../agents/model-fallback.types.js";
+import type { FallbackAttempt } from "../agents/models/model-fallback.types.js";
 import type { DenebConfig } from "../config/config.js";
 import {
   resolveAgentModelFallbackValues,

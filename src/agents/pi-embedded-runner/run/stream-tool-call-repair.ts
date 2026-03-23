@@ -1,6 +1,6 @@
 import type { StreamFn } from "@mariozechner/pi-agent-core";
 import { streamSimple } from "@mariozechner/pi-ai";
-import { normalizeProviderId } from "../../model-selection.js";
+import { normalizeProviderId } from "../../models/model-selection.js";
 import { log } from "../logger.js";
 
 function isToolCallBlockType(type: unknown): boolean {

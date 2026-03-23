@@ -40,7 +40,7 @@ vi.mock("../config/config.js", () => ({
   setRuntimeConfigSnapshot,
 }));
 
-vi.mock("../agents/models-config.js", () => ({
+vi.mock("../agents/models/models-config.js", () => ({
   ensureDenebModelsJson,
 }));
 
@@ -56,7 +56,7 @@ vi.mock("../agents/auth-profiles.js", () => ({
   resolveProfileUnusableUntilForDisplay,
 }));
 
-vi.mock("../agents/model-auth.js", () => ({
+vi.mock("../agents/models/model-auth.js", () => ({
   resolveEnvApiKey,
   resolveAwsSdkEnvVarName,
   hasUsableCustomProviderApiKey,

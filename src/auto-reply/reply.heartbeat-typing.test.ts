@@ -4,7 +4,7 @@ import { runEmbeddedPiAgentMock } from "./reply.directive.directive-behavior.e2e
 import { createTempHomeHarness, makeReplyConfig } from "./reply.test-harness.js";
 
 vi.mock(
-  "../agents/model-fallback.js",
+  "../agents/models/model-fallback.js",
   async () => await import("../test-utils/model-fallback.mock.js"),
 );
 

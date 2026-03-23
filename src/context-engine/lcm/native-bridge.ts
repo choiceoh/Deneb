@@ -17,8 +17,11 @@ import {
   type Model,
   type ThinkingLevel,
 } from "@mariozechner/pi-ai";
-import { resolveApiKeyForProvider, getCustomProviderApiKey } from "../../agents/model-auth.js";
-import { parseModelRef } from "../../agents/model-selection.js";
+import {
+  resolveApiKeyForProvider,
+  getCustomProviderApiKey,
+} from "../../agents/models/model-auth.js";
+import { parseModelRef } from "../../agents/models/model-selection.js";
 import type { DenebConfig } from "../../config/config.js";
 import { loadConfig } from "../../config/io.js";
 import { resolveDefaultSessionStorePath, resolveStorePath } from "../../config/sessions/paths.js";

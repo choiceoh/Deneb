@@ -44,9 +44,9 @@ import {
   applyLocalNoAuthHeaderOverride,
   getApiKeyForModel,
   resolveModelAuthMode,
-} from "../model-auth.js";
-import { supportsModelTools } from "../model-tool-support.js";
-import { ensureDenebModelsJson } from "../models-config.js";
+} from "../models/model-auth.js";
+import { supportsModelTools } from "../models/model-tool-support.js";
+import { ensureDenebModelsJson } from "../models/models-config.js";
 import { resolveOwnerDisplaySetting } from "../owner-display.js";
 import { createBundleLspToolRuntime } from "../pi-bundle-lsp-runtime.js";
 import { createBundleMcpToolRuntime } from "../pi-bundle-mcp-tools.js";

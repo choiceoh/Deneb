@@ -216,8 +216,8 @@ vi.mock("../../cache-trace.js", () => ({
   createCacheTrace: () => undefined,
 }));
 
-vi.mock("../../model-selection.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../model-selection.js")>();
+vi.mock("../../models/model-selection.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../models/model-selection.js")>();
 
   return {
     ...actual,

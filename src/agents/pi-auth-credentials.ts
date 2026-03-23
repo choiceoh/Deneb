@@ -1,5 +1,5 @@
 import type { AuthProfileCredential, AuthProfileStore } from "./auth-profiles.js";
-import { normalizeProviderId } from "./model-selection.js";
+import { normalizeProviderId } from "./models/model-selection.js";
 
 export type PiApiKeyCredential = { type: "api_key"; key: string };
 export type PiOAuthCredential = {

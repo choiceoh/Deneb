@@ -20,7 +20,7 @@ import { emitSessionLifecycleEvent } from "../sessions/session-lifecycle-events.
 import { normalizeDeliveryContext } from "../utils/delivery-context.js";
 import { resolveAgentConfig } from "./agent-scope.js";
 import { AGENT_LANE_SUBAGENT } from "./lanes.js";
-import { resolveSubagentSpawnModelSelection } from "./model-selection.js";
+import { resolveSubagentSpawnModelSelection } from "./models/model-selection.js";
 import { resolveSandboxRuntimeStatus } from "./sandbox/runtime-status.js";
 import {
   mapToolContextToSpawnedRunMetadata,

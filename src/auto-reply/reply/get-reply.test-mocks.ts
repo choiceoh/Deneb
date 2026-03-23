@@ -7,7 +7,7 @@ export function registerGetReplyCommonMocks(): void {
     resolveSessionAgentId: vi.fn(() => "main"),
     resolveAgentSkillsFilter: vi.fn(() => undefined),
   }));
-  vi.mock("../../agents/model-selection.js", () => ({
+  vi.mock("../../agents/models/model-selection.js", () => ({
     resolveModelRefFromString: vi.fn(() => null),
   }));
   vi.mock("../../agents/timeout.js", () => ({

@@ -10,12 +10,12 @@ vi.mock("../agents/pi-embedded.js", () => ({
   resolveEmbeddedSessionLane: (key: string) => `session:${key.trim() || "main"}`,
 }));
 
-vi.mock("../agents/model-catalog.js", () => ({
+vi.mock("../agents/models/model-catalog.js", () => ({
   loadModelCatalog: vi.fn(),
 }));
 
-vi.mock("../agents/model-selection.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../agents/model-selection.js")>();
+vi.mock("../agents/models/model-selection.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../agents/models/model-selection.js")>();
   return {
     ...actual,
     isCliProvider: vi.fn(() => false),

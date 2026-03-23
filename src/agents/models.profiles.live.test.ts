@@ -10,9 +10,9 @@ import {
   isAnthropicRateLimitError,
 } from "./live-auth-keys.js";
 import { isModernModelRef } from "./live-model-filter.js";
-import { getApiKeyForModel, requireApiKey } from "./model-auth.js";
-import { shouldSuppressBuiltInModel } from "./model-suppression.js";
-import { ensureDenebModelsJson } from "./models-config.js";
+import { getApiKeyForModel, requireApiKey } from "./models/model-auth.js";
+import { shouldSuppressBuiltInModel } from "./models/model-suppression.js";
+import { ensureDenebModelsJson } from "./models/models-config.js";
 import { isRateLimitErrorMessage } from "./pi-embedded-helpers/errors.js";
 import { discoverAuthStorage, discoverModels } from "./pi-model-discovery.js";
 

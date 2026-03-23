@@ -19,7 +19,7 @@ export {
   MINIMAX_OAUTH_MARKER,
   resolveOAuthApiKeyMarker,
   resolveNonEnvSecretRefApiKeyMarker,
-} from "../agents/model-auth-markers.js";
+} from "../agents/models/model-auth-markers.js";
 export {
   formatApiKeyPreview,
   normalizeApiKeyInput,

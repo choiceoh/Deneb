@@ -24,8 +24,8 @@ export {
   modelKey,
   normalizeModelRef,
   parseModelRef,
-} from "./model-selection.js";
-export type { ModelAliasIndex, ModelRef } from "./model-selection.js";
+} from "./models/model-selection.js";
+export type { ModelAliasIndex, ModelRef } from "./models/model-selection.js";
 
 // Model catalog
 export {
@@ -34,8 +34,8 @@ export {
   modelSupportsDocument,
   modelSupportsVision,
   resetModelCatalogCacheForTest,
-} from "./model-catalog.js";
-export type { ModelCatalogEntry, ModelInputType } from "./model-catalog.js";
+} from "./models/model-catalog.js";
+export type { ModelCatalogEntry, ModelInputType } from "./models/model-catalog.js";
 
 // Subagent registry
 export {

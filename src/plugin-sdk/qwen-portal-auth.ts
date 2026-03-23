@@ -9,6 +9,6 @@ export type {
   ProviderCatalogContext,
 } from "../plugins/types.js";
 export { ensureAuthProfileStore, listProfilesForProvider } from "../agents/auth-profiles.js";
-export { QWEN_OAUTH_MARKER } from "../agents/model-auth-markers.js";
+export { QWEN_OAUTH_MARKER } from "../agents/models/model-auth-markers.js";
 export { refreshQwenPortalCredentials } from "../providers/qwen-portal-oauth.js";
 export { generatePkceVerifierChallenge, toFormUrlEncoded } from "./oauth-utils.js";

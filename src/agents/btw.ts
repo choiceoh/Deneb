@@ -17,8 +17,8 @@ import {
 } from "../config/sessions.js";
 import { diagnosticLogger as diag } from "../logging/diagnostic.js";
 import { resolveSessionAuthProfileOverride } from "./auth-profiles/session-override.js";
-import { getApiKeyForModel, requireApiKey } from "./model-auth.js";
-import { ensureDenebModelsJson } from "./models-config.js";
+import { getApiKeyForModel, requireApiKey } from "./models/model-auth.js";
+import { ensureDenebModelsJson } from "./models/models-config.js";
 import { EmbeddedBlockChunker, type BlockReplyChunking } from "./pi-embedded-block-chunker.js";
 import { resolveModelWithRegistry } from "./pi-embedded-runner/model.js";
 import { getActiveEmbeddedRunSnapshot } from "./pi-embedded-runner/runs.js";

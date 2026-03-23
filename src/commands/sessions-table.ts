@@ -1,5 +1,5 @@
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
-import { resolveConfiguredModelRef } from "../agents/model-selection.js";
+import { resolveConfiguredModelRef } from "../agents/models/model-selection.js";
 import type { SessionEntry } from "../config/sessions.js";
 import type { DenebConfig } from "../config/types.deneb.js";
 import { resolveSessionModelRef } from "../gateway/session/session-utils.js";

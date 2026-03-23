@@ -20,7 +20,7 @@ vi.mock("../../agents/auth-profiles.js", () => ({
   resolveAuthStorePathForDisplay: () => "/tmp/auth-profiles.json",
 }));
 
-vi.mock("../../agents/model-selection.js", () => ({
+vi.mock("../../agents/models/model-selection.js", () => ({
   findNormalizedProviderValue: (
     values: Record<string, unknown> | undefined,
     provider: string,
@@ -35,7 +35,7 @@ vi.mock("../../agents/model-selection.js", () => ({
   normalizeProviderId: (provider: string) => provider.trim().toLowerCase(),
 }));
 
-vi.mock("../../agents/model-auth.js", () => ({
+vi.mock("../../agents/models/model-auth.js", () => ({
   ensureAuthProfileStore: () => mockStore,
   resolveUsableCustomProviderApiKey: () => null,
   resolveAuthProfileOrder: () => mockOrder,

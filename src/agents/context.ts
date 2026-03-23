@@ -6,8 +6,8 @@ import type { DenebConfig } from "../config/config.js";
 import { computeBackoff, type BackoffPolicy } from "../infra/backoff.js";
 import { consumeRootOptionToken, FLAG_TERMINATOR } from "../infra/cli-root-options.js";
 import { resolveDenebAgentDir } from "./agent-paths.js";
-import { normalizeProviderId } from "./model-selection.js";
-import { ensureDenebModelsJson } from "./models-config.js";
+import { normalizeProviderId } from "./models/model-selection.js";
+import { ensureDenebModelsJson } from "./models/models-config.js";
 
 type ModelEntry = { id: string; contextWindow?: number };
 type ModelRegistryLike = {

@@ -3,7 +3,7 @@ import {
   clearRuntimeAuthProfileStoreSnapshots,
   replaceRuntimeAuthProfileStoreSnapshots,
 } from "../../agents/auth-profiles.js";
-import type { ModelAliasIndex } from "../../agents/model-selection.js";
+import type { ModelAliasIndex } from "../../agents/models/model-selection.js";
 import type { DenebConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { handleDirectiveOnly } from "./directive-handling.impl.js";

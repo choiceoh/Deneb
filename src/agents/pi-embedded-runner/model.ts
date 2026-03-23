@@ -10,14 +10,14 @@ import {
 } from "../../plugins/provider-runtime.js";
 import { resolveDenebAgentDir } from "../agent-paths.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../defaults.js";
-import { buildModelAliasLines } from "../model-alias-lines.js";
-import { isSecretRefHeaderValueMarker } from "../model-auth-markers.js";
-import { normalizeModelCompat } from "../model-compat.js";
-import { findNormalizedProviderValue, normalizeProviderId } from "../model-selection.js";
+import { buildModelAliasLines } from "../models/model-alias-lines.js";
+import { isSecretRefHeaderValueMarker } from "../models/model-auth-markers.js";
+import { normalizeModelCompat } from "../models/model-compat.js";
+import { findNormalizedProviderValue, normalizeProviderId } from "../models/model-selection.js";
 import {
   buildSuppressedBuiltInModelError,
   shouldSuppressBuiltInModel,
-} from "../model-suppression.js";
+} from "../models/model-suppression.js";
 import { discoverAuthStorage, discoverModels } from "../pi-model-discovery.js";
 import { normalizeResolvedProviderModel } from "./model.provider-normalization.js";
 

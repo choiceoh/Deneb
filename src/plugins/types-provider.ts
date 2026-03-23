@@ -7,7 +7,7 @@ import type {
   OAuthCredential,
   AuthProfileStore,
 } from "../agents/auth-profiles/types.js";
-import type { ModelCatalogEntry } from "../agents/model-catalog.js";
+import type { ModelCatalogEntry } from "../agents/models/model-catalog.js";
 import type { ProviderCapabilities } from "../agents/provider-capabilities.js";
 import type { ThinkLevel } from "../auto-reply/thinking.js";
 import type { DenebConfig } from "../config/config.js";

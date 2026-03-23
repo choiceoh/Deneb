@@ -84,16 +84,16 @@ vi.mock("../../agents/workspace/workspace.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../../agents/model-catalog.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../agents/model-catalog.js")>();
+vi.mock("../../agents/models/model-catalog.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../agents/models/model-catalog.js")>();
   return {
     ...actual,
     loadModelCatalog: vi.fn().mockResolvedValue({ models: [] }),
   };
 });
 
-vi.mock("../../agents/model-selection.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../agents/model-selection.js")>();
+vi.mock("../../agents/models/model-selection.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../agents/models/model-selection.js")>();
   return {
     ...actual,
     getModelRefStatus: getModelRefStatusMock,
@@ -105,8 +105,8 @@ vi.mock("../../agents/model-selection.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../../agents/model-fallback.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../agents/model-fallback.js")>();
+vi.mock("../../agents/models/model-fallback.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../agents/models/model-fallback.js")>();
   return {
     ...actual,
     runWithModelFallback: runWithModelFallbackMock,

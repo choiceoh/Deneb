@@ -7,8 +7,8 @@ import {
   hasUsableCustomProviderApiKey,
   resolveAwsSdkEnvVarName,
   resolveEnvApiKey,
-} from "../../agents/model-auth.js";
-import { shouldSuppressBuiltInModel } from "../../agents/model-suppression.js";
+} from "../../agents/models/model-auth.js";
+import { shouldSuppressBuiltInModel } from "../../agents/models/model-suppression.js";
 import { discoverAuthStorage, discoverModels } from "../../agents/pi-model-discovery.js";
 import type { DenebConfig } from "../../config/config.js";
 import {

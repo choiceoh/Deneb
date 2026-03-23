@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
-import type { ModelCatalogEntry } from "../../agents/model-catalog.js";
+import type { ModelCatalogEntry } from "../../agents/models/model-catalog.js";
 import {
   resolveAllowedModelRef,
   resolveDefaultModelForAgent,
   resolveSubagentConfiguredModelSelection,
-} from "../../agents/model-selection.js";
+} from "../../agents/models/model-selection.js";
 import { normalizeGroupActivation } from "../../auto-reply/group-activation.js";
 import {
   formatThinkingLevels,

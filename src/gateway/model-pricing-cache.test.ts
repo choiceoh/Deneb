@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { modelKey } from "../agents/model-selection.js";
+import { modelKey } from "../agents/models/model-selection.js";
 import type { DenebConfig } from "../config/config.js";
 import {
   __resetGatewayModelPricingCacheForTest,

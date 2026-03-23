@@ -1,7 +1,7 @@
 import { clearSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
 import { lookupContextTokens } from "../../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
-import { loadModelCatalog } from "../../agents/model-catalog.js";
+import { loadModelCatalog } from "../../agents/models/model-catalog.js";
 import {
   buildAllowedModelSet,
   type ModelAliasIndex,
@@ -10,7 +10,7 @@ import {
   resolveModelRefFromString,
   resolveReasoningDefault,
   resolveThinkingDefault,
-} from "../../agents/model-selection.js";
+} from "../../agents/models/model-selection.js";
 import type { DenebConfig } from "../../config/config.js";
 import { type SessionEntry, updateSessionStore } from "../../config/sessions.js";
 import { applyModelOverrideToSessionEntry } from "../../sessions/model-overrides.js";

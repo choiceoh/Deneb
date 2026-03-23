@@ -1,6 +1,6 @@
 import { CONTEXT_WINDOW_HARD_MIN_TOKENS } from "../agents/context-window-guard.js";
 import { DEFAULT_PROVIDER } from "../agents/defaults.js";
-import { buildModelAliasIndex, modelKey } from "../agents/model-selection.js";
+import { buildModelAliasIndex, modelKey } from "../agents/models/model-selection.js";
 const OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434";
 import type { DenebConfig } from "../config/config.js";
 import type { ModelProviderConfig } from "../config/types.models.js";

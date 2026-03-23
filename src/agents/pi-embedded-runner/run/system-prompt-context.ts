@@ -25,7 +25,7 @@ import {
   listChannelSupportedActions,
   resolveChannelMessageToolHints,
 } from "../../channel-tools.js";
-import { resolveDefaultModelForAgent } from "../../model-selection.js";
+import { resolveDefaultModelForAgent } from "../../models/model-selection.js";
 import { resolveOwnerDisplaySetting } from "../../owner-display.js";
 import {
   resolveBootstrapMaxChars,

@@ -1,6 +1,6 @@
-export { getApiKeyForModel, requireApiKey } from "../model-auth.js";
-export { runWithImageModelFallback } from "../model-fallback.js";
-export { ensureDenebModelsJson } from "../models-config.js";
+export { getApiKeyForModel, requireApiKey } from "../models/model-auth.js";
+export { runWithImageModelFallback } from "../models/model-fallback.js";
+export { ensureDenebModelsJson } from "../models/models-config.js";
 export { discoverAuthStorage, discoverModels } from "../pi-model-discovery.js";
 export {
   createSandboxBridgeReadFile,

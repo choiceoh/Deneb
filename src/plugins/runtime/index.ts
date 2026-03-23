@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import {
   getApiKeyForModel as getApiKeyForModelRaw,
   resolveApiKeyForProvider as resolveApiKeyForProviderRaw,
-} from "../../agents/model-auth.js";
+} from "../../agents/models/model-auth.js";
 import { resolveStateDir } from "../../config/paths.js";
 import {
   generateImage,

@@ -1,4 +1,4 @@
-import { normalizeModelCompat } from "../agents/model-compat.js";
+import { normalizeModelCompat } from "../agents/models/model-compat.js";
 import type { ProviderResolveDynamicModelContext, ProviderRuntimeModel } from "./types.js";
 
 export function cloneFirstTemplateModel(params: {

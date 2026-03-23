@@ -1,7 +1,7 @@
 import { completeSimple, type AssistantMessage } from "@mariozechner/pi-ai";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ensureCustomApiRegistered } from "../agents/custom-api-registry.js";
-import { getApiKeyForModel } from "../agents/model-auth.js";
+import { getApiKeyForModel } from "../agents/models/model-auth.js";
 import { resolveModelAsync } from "../agents/pi-embedded-runner/model.js";
 import type { DenebConfig } from "../config/config.js";
 import { withEnv } from "../test-utils/env.js";
@@ -47,7 +47,7 @@ vi.mock("../agents/pi-embedded-runner/model.js", () => ({
   ),
 }));
 
-vi.mock("../agents/model-auth.js", () => ({
+vi.mock("../agents/models/model-auth.js", () => ({
   getApiKeyForModel: vi.fn(async () => ({
     apiKey: "test-api-key",
     source: "test",
@@ -377,7 +377,8 @@ describe("tts", () => {
     beforeEach(async () => {
       vi.resetModules();
       ({ completeSimple: completeSimpleForTest } = await import("@mariozechner/pi-ai"));
-      ({ getApiKeyForModel: getApiKeyForModelForTest } = await import("../agents/model-auth.js"));
+      ({ getApiKeyForModel: getApiKeyForModelForTest } =
+        await import("../agents/models/model-auth.js"));
       ({ resolveModelAsync: resolveModelAsyncForTest } =
         await import("../agents/pi-embedded-runner/model.js"));
       ({ ensureCustomApiRegistered: ensureCustomApiRegisteredForTest } =

@@ -319,7 +319,7 @@ export async function loadRunOverflowCompactionHarness(): Promise<{
     })),
   }));
 
-  vi.doMock("../model-auth.js", () => ({
+  vi.doMock("../models/model-auth.js", () => ({
     applyLocalNoAuthHeaderOverride: vi.fn((model: unknown) => model),
     ensureAuthProfileStore: vi.fn(() => ({})),
     getApiKeyForModel: vi.fn(async () => ({
@@ -330,7 +330,7 @@ export async function loadRunOverflowCompactionHarness(): Promise<{
     resolveAuthProfileOrder: vi.fn(() => []),
   }));
 
-  vi.doMock("../models-config.js", () => ({
+  vi.doMock("../models/models-config.js", () => ({
     ensureDenebModelsJson: vi.fn(async () => {}),
   }));
 

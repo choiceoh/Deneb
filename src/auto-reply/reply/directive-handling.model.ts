@@ -10,7 +10,7 @@ import {
   normalizeProviderIdForAuth,
   resolveConfiguredModelRef,
   resolveModelRefFromString,
-} from "../../agents/model-selection.js";
+} from "../../agents/models/model-selection.js";
 import type { DenebConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { shortenHomePath } from "../../utils.js";

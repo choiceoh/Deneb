@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import * as authModule from "../agents/model-auth.js";
+import * as authModule from "../agents/models/model-auth.js";
 import {
   buildGeminiEmbeddingRequest,
   buildGeminiTextEmbeddingRequest,
@@ -11,7 +11,7 @@ import {
 } from "./embeddings-gemini.js";
 import { mockPublicPinnedHostname } from "./test-helpers/ssrf.js";
 
-vi.mock("../agents/model-auth.js", async () => {
+vi.mock("../agents/models/model-auth.js", async () => {
   const { createModelAuthMockModule } = await import("../test-utils/model-auth-mock.js");
   return createModelAuthMockModule();
 });

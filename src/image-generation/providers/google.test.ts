@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import * as modelAuth from "../../agents/model-auth.js";
+import * as modelAuth from "../../agents/models/model-auth.js";
 import { buildGoogleImageGenerationProvider } from "./google.js";
 
 describe("Google image-generation provider", () => {

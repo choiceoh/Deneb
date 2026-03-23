@@ -5,9 +5,9 @@ import {
   getApiKeyForModel,
   requireApiKey,
   resolveApiKeyForProvider,
-} from "../../agents/model-auth.js";
-import { normalizeModelRef } from "../../agents/model-selection.js";
-import { ensureDenebModelsJson } from "../../agents/models-config.js";
+} from "../../agents/models/model-auth.js";
+import { normalizeModelRef } from "../../agents/models/model-selection.js";
+import { ensureDenebModelsJson } from "../../agents/models/models-config.js";
 import { coerceImageAssistantText } from "../../agents/tools/image-tool.helpers.js";
 import type {
   ImageDescriptionRequest,

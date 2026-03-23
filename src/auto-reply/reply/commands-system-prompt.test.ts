@@ -32,7 +32,7 @@ vi.mock("../../agents/agent-scope.js", () => ({
   resolveSessionAgentIds: vi.fn(() => ({ sessionAgentId: "main" })),
 }));
 
-vi.mock("../../agents/model-selection.js", () => ({
+vi.mock("../../agents/models/model-selection.js", () => ({
   resolveDefaultModelForAgent: vi.fn(() => ({ provider: "openai", model: "gpt-5" })),
 }));
 

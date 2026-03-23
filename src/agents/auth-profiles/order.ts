@@ -3,7 +3,7 @@ import {
   findNormalizedProviderValue,
   normalizeProviderId,
   normalizeProviderIdForAuth,
-} from "../model-selection.js";
+} from "../models/model-selection.js";
 import {
   evaluateStoredCredentialEligibility,
   type AuthCredentialReasonCode,

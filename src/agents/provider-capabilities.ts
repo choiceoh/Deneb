@@ -1,6 +1,6 @@
 import type { DenebConfig } from "../config/config.js";
 import { resolveProviderCapabilitiesWithPlugin } from "../plugins/provider-runtime.js";
-import { normalizeProviderId } from "./model-selection.js";
+import { normalizeProviderId } from "./models/model-selection.js";
 
 export type ProviderCapabilities = {
   anthropicToolSchemaMode: "native" | "openai-functions";

@@ -12,7 +12,7 @@ const routeReplyMock = vi.fn();
 const isRoutableChannelMock = vi.fn();
 
 vi.mock(
-  "../../agents/model-fallback.js",
+  "../../agents/models/model-fallback.js",
   async () => await import("../../test-utils/model-fallback.mock.js"),
 );
 

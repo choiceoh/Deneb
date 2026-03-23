@@ -52,7 +52,7 @@ vi.mock("./subagent-depth.js", () => ({
   getSubagentDepthFromSessionStore: () => 0,
 }));
 
-vi.mock("./model-selection.js", () => ({
+vi.mock("./models/model-selection.js", () => ({
   resolveSubagentSpawnModelSelection: () => undefined,
 }));
 
