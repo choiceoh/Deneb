@@ -7,6 +7,7 @@ import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { stripInlineDirectiveTagsForDisplay } from "../utils/directive-tags.js";
 import { classifyChatErrorKind } from "./chat-error-kind.js";
+import { resolveMergedAssistantText as _resolveMergedAssistantText } from "./chat-text-merge.js";
 import {
   deriveGatewaySessionLifecycleSnapshot,
   persistGatewaySessionLifecycleEvent,
@@ -97,47 +98,8 @@ function isSilentReplyLeadFragment(text: string): boolean {
   return SILENT_REPLY_TOKEN.startsWith(normalized);
 }
 
-function appendUniqueSuffix(base: string, suffix: string): string {
-  if (!suffix) {
-    return base;
-  }
-  if (!base) {
-    return suffix;
-  }
-  if (base.endsWith(suffix)) {
-    return base;
-  }
-  const maxOverlap = Math.min(base.length, suffix.length);
-  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
-    if (base.slice(-overlap) === suffix.slice(0, overlap)) {
-      return base + suffix.slice(overlap);
-    }
-  }
-  return base + suffix;
-}
-
-function resolveMergedAssistantText(params: {
-  previousText: string;
-  nextText: string;
-  nextDelta: string;
-}) {
-  const { previousText, nextText, nextDelta } = params;
-  if (nextText && previousText) {
-    if (nextText.startsWith(previousText)) {
-      return nextText;
-    }
-    if (previousText.startsWith(nextText) && !nextDelta) {
-      return previousText;
-    }
-  }
-  if (nextDelta) {
-    return appendUniqueSuffix(previousText, nextDelta);
-  }
-  if (nextText) {
-    return nextText;
-  }
-  return previousText;
-}
+// Delegated to chat-text-merge.ts for testability and tool-boundary fix (OpenClaw #36957).
+const resolveMergedAssistantText = _resolveMergedAssistantText;
 
 export type ChatRunEntry = {
   sessionKey: string;
