@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { runSecretsAudit } from "./audit.js";
 
 type AuditFixture = {
@@ -38,8 +38,13 @@ function hasFinding(
   );
 }
 
-async function createAuditFixture(): Promise<AuditFixture> {
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-secrets-audit-"));
+let auditFixtureIndex = 0;
+
+async function createAuditFixture(parentDir?: string): Promise<AuditFixture> {
+  const rootDir = parentDir
+    ? path.join(parentDir, `case-${auditFixtureIndex++}`)
+    : await fs.mkdtemp(path.join(os.tmpdir(), "deneb-secrets-audit-"));
+  await fs.mkdir(rootDir, { recursive: true });
   const stateDir = path.join(rootDir, ".deneb");
   const configPath = path.join(stateDir, "deneb.json");
   const authStorePath = path.join(stateDir, "agents", "main", "agent", "auth-profiles.json");
@@ -147,13 +152,21 @@ describe("secrets audit", () => {
     ).toBe(params.present ?? true);
   }
 
-  beforeEach(async () => {
-    fixture = await createAuditFixture();
-    await seedAuditFixture(fixture);
+  // Reuse a single fixture directory across tests; only re-seed files per test
+  // instead of creating/deleting temp dirs each time (~18 mkdtemp + rm avoided).
+  let fixtureRootDir: string;
+
+  beforeAll(async () => {
+    fixtureRootDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-secrets-audit-"));
   });
 
-  afterEach(async () => {
-    await fs.rm(fixture.rootDir, { recursive: true, force: true });
+  afterAll(async () => {
+    await fs.rm(fixtureRootDir, { recursive: true, force: true });
+  });
+
+  beforeEach(async () => {
+    fixture = await createAuditFixture(fixtureRootDir);
+    await seedAuditFixture(fixture);
   });
 
   it("reports plaintext + shadowing findings", async () => {

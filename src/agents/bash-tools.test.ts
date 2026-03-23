@@ -16,12 +16,12 @@ const defaultShell = isWin
   ? undefined
   : process.env.DENEB_TEST_SHELL || resolveShellFromPath("bash") || process.env.SHELL || "sh";
 // PowerShell: Start-Sleep for delays, ; for command separation, $null for null device
-const shortDelayCmd = isWin ? "Start-Sleep -Milliseconds 4" : "sleep 0.004";
-const yieldDelayCmd = isWin ? "Start-Sleep -Milliseconds 16" : "sleep 0.016";
-const longDelayCmd = isWin ? "Start-Sleep -Milliseconds 72" : "sleep 0.072";
-const POLL_INTERVAL_MS = 15;
-const BACKGROUND_POLL_TIMEOUT_MS = isWin ? 8000 : 1200;
-const NOTIFY_EVENT_TIMEOUT_MS = isWin ? 12_000 : 5_000;
+const shortDelayCmd = isWin ? "Start-Sleep -Milliseconds 4" : "sleep 0.002";
+const yieldDelayCmd = isWin ? "Start-Sleep -Milliseconds 16" : "sleep 0.008";
+const longDelayCmd = isWin ? "Start-Sleep -Milliseconds 72" : "sleep 0.06";
+const POLL_INTERVAL_MS = 10;
+const BACKGROUND_POLL_TIMEOUT_MS = isWin ? 8000 : 800;
+const NOTIFY_EVENT_TIMEOUT_MS = isWin ? 12_000 : 3_000;
 const BACKGROUND_POLL_OPTIONS = {
   timeout: BACKGROUND_POLL_TIMEOUT_MS,
   interval: POLL_INTERVAL_MS,
