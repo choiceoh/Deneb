@@ -382,7 +382,9 @@ export class GatewayClient {
       const forceTerminateTimer = setTimeout(() => {
         try {
           ws.terminate();
-        } catch {}
+        } catch {
+          // Force-terminate may throw if the socket is already destroyed.
+        }
         this.resolvePendingStop(ws);
       }, FORCE_STOP_TERMINATE_GRACE_MS);
       forceTerminateTimer.unref?.();

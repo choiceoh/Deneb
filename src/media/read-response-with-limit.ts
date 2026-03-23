@@ -76,7 +76,9 @@ export async function readResponseWithLimit(
         if (total > maxBytes) {
           try {
             await reader.cancel();
-          } catch {}
+          } catch {
+            // Best-effort cancel; the overflow error is thrown regardless.
+          }
           throw onOverflow({ size: total, maxBytes, res });
         }
         chunks.push(value);
@@ -85,7 +87,9 @@ export async function readResponseWithLimit(
   } finally {
     try {
       reader.releaseLock();
-    } catch {}
+    } catch {
+      // Lock may already be released if the stream was fully consumed or cancelled.
+    }
   }
 
   return Buffer.concat(

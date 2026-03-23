@@ -257,6 +257,7 @@ import {
   WizardStepSchema,
 } from "./schema.js";
 
+// AJV's default export varies between ESM/CJS; cast to constructor signature for safe instantiation.
 const ajv = new (AjvPkg as unknown as new (opts?: object) => import("ajv").default)({
   allErrors: true,
   strict: false,

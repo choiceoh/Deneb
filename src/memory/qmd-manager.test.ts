@@ -184,6 +184,18 @@ describe("QmdMemoryManager", () => {
   });
 
   it("debounces back-to-back sync calls", async () => {
+    cfg = {
+      ...cfg,
+      memory: {
+        backend: "qmd",
+        qmd: {
+          includeDefaultMemory: false,
+          searchMode: "search",
+          update: { interval: "0s", debounceMs: 60_000, onBoot: false },
+          paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
+        },
+      },
+    } as DenebConfig;
     const { manager, resolved } = await createManager();
 
     const baselineCalls = spawnMock.mock.calls.length;
@@ -1432,6 +1444,7 @@ describe("QmdMemoryManager", () => {
         backend: "qmd",
         qmd: {
           includeDefaultMemory: false,
+          searchMode: "search",
           update: { interval: "0s", debounceMs: 60_000, onBoot: false },
           paths: [
             { path: workspaceDir, pattern: "**/*.md", name: "workspace" },
@@ -1674,10 +1687,6 @@ describe("QmdMemoryManager", () => {
     const platformSpy = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
     const previousPath = process.env.PATH;
     try {
-      const shimDir = await fs.mkdtemp(path.join(tmpRoot, "mcporter-shim-"));
-      await fs.writeFile(path.join(shimDir, "mcporter.cmd"), "@echo off\n");
-      process.env.PATH = `${shimDir};${previousPath ?? ""}`;
-
       cfg = {
         ...cfg,
         memory: {
@@ -1691,12 +1700,8 @@ describe("QmdMemoryManager", () => {
         },
       } as DenebConfig;
 
-      let firstCallCommand: string | null = null;
-      spawnMock.mockImplementation((cmd: string, args: string[]) => {
-        if (args[0] === "call" && firstCallCommand === null) {
-          firstCallCommand = cmd;
-        }
-        if (args[0] === "call" && typeof cmd === "string" && cmd.toLowerCase().endsWith(".cmd")) {
+      spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+        if (args[0] === "call") {
           const child = createMockChild({ autoClose: false });
           queueMicrotask(() => {
             const err = Object.assign(new Error("spawn EINVAL"), { code: "EINVAL" });
@@ -1704,25 +1709,19 @@ describe("QmdMemoryManager", () => {
           });
           return child;
         }
-        const child = createMockChild({ autoClose: false });
-        emitAndClose(child, "stdout", "[]");
-        return child;
+        return createMockChild();
       });
 
       const { manager } = await createManager();
       await expect(
         manager.search("hello", { sessionKey: "agent:main:slack:dm:u123" }),
-      ).rejects.toThrow(/without shell execution|EINVAL/);
-      const attemptedCmdShim = (firstCallCommand ?? "").toLowerCase().endsWith(".cmd");
-      if (attemptedCmdShim) {
-        expect(
-          spawnMock.mock.calls.some(
-            (call: unknown[]) =>
-              call[0] === "mcporter" &&
-              (call[2] as { shell?: boolean } | undefined)?.shell === true,
-          ),
-        ).toBe(false);
-      }
+      ).rejects.toThrow(/EINVAL/);
+      // Verify no retry with shell: true was attempted.
+      expect(
+        spawnMock.mock.calls.some(
+          (call: unknown[]) => (call[2] as { shell?: boolean } | undefined)?.shell === true,
+        ),
+      ).toBe(false);
       await manager.close();
     } finally {
       platformSpy.mockRestore();
@@ -1884,6 +1883,7 @@ describe("QmdMemoryManager", () => {
         backend: "qmd",
         qmd: {
           includeDefaultMemory: false,
+          searchMode: "search",
           update: { interval: "0s", debounceMs: 60_000, onBoot: false },
           sessions: { enabled: true },
           paths: [{ path: workspaceDir, pattern: "**/*.md", name: "workspace" }],
@@ -2315,7 +2315,7 @@ describe("QmdMemoryManager", () => {
         name: "search",
         run: async (manager: QmdMemoryManager) => {
           spawnMock.mockImplementation((_cmd: string, args: string[]) => {
-            if (args[0] === "search") {
+            if (args[0] === "query" || args[0] === "search") {
               const child = createMockChild({ autoClose: false });
               emitAndClose(
                 child,
@@ -2365,7 +2365,7 @@ describe("QmdMemoryManager", () => {
     const prepareCalls: string[] = [];
     const exactDocid = "abc123";
     spawnMock.mockImplementation((_cmd: string, args: string[]) => {
-      if (args[0] === "search") {
+      if (args[0] === "query" || args[0] === "search") {
         const child = createMockChild({ autoClose: false });
         emitAndClose(
           child,
@@ -2428,6 +2428,7 @@ describe("QmdMemoryManager", () => {
         backend: "qmd",
         qmd: {
           includeDefaultMemory: false,
+          searchMode: "search",
           update: { interval: "0s", debounceMs: 60_000, onBoot: false },
           paths: [
             { path: workspaceDir, pattern: "**/*.md", name: "workspace" },
@@ -2505,7 +2506,7 @@ describe("QmdMemoryManager", () => {
     } as DenebConfig;
 
     spawnMock.mockImplementation((_cmd: string, args: string[]) => {
-      if (args[0] === "search") {
+      if (args[0] === "query" || args[0] === "search") {
         const child = createMockChild({ autoClose: false });
         emitAndClose(
           child,
@@ -2548,6 +2549,7 @@ describe("QmdMemoryManager", () => {
         backend: "qmd",
         qmd: {
           includeDefaultMemory: false,
+          searchMode: "search",
           update: { interval: "0s", debounceMs: 60_000, onBoot: false },
           paths: [
             { path: workspaceDir, pattern: "**/*.md", name: "workspace" },
@@ -2620,7 +2622,7 @@ describe("QmdMemoryManager", () => {
   it("errors when qmd output exceeds command output safety cap", async () => {
     const noisyPayload = "x".repeat(240_000);
     spawnMock.mockImplementation((_cmd: string, args: string[]) => {
-      if (args[0] === "search") {
+      if (args[0] === "query" || args[0] === "search") {
         const child = createMockChild({ autoClose: false });
         emitAndClose(child, "stdout", noisyPayload);
         return child;
@@ -2645,7 +2647,7 @@ describe("QmdMemoryManager", () => {
 
     for (const testCase of cases) {
       spawnMock.mockImplementation((_cmd: string, args: string[]) => {
-        if (args[0] === "search") {
+        if (args[0] === "query" || args[0] === "search") {
           const child = createMockChild({ autoClose: false });
           emitAndClose(child, testCase.stream, testCase.payload);
           return child;

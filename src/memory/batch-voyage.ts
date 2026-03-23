@@ -257,6 +257,8 @@ export async function runVoyageEmbeddingBatches(
             return;
           }
           const reader = createInterface({
+            // Node's `Readable.fromWeb` expects `stream/web.ReadableStream` but fetch returns the global `ReadableStream`;
+            // the runtime types are compatible but TS declarations diverge.
             input: Readable.fromWeb(
               contentRes.body as unknown as import("stream/web").ReadableStream,
             ),

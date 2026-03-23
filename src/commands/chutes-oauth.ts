@@ -147,7 +147,9 @@ async function waitForLocalCallback(params: {
     timeout = setTimeout(() => {
       try {
         server.close();
-      } catch {}
+      } catch {
+        // Best-effort server shutdown on timeout; the timeout error is thrown regardless.
+      }
       reject(new Error("OAuth callback timeout"));
     }, params.timeoutMs);
   });
