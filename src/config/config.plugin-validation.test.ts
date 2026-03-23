@@ -209,16 +209,29 @@ describe("config plugin validation", () => {
       ).toBe(true);
       expect(res.issues).toEqual(
         expect.arrayContaining([
-          { path: "plugins.allow", message: "plugin not found: missing-allow" },
-          { path: "plugins.deny", message: "plugin not found: missing-deny" },
           { path: "plugins.slots.memory", message: "plugin not found: missing-slot" },
         ]),
       );
-      expect(res.warnings).toContainEqual({
-        path: "plugins.entries.missing-plugin",
-        message:
-          "plugin not found: missing-plugin (stale config entry ignored; remove it from plugins config)",
-      });
+      // allow, deny, and entries all warn instead of failing for missing plugins.
+      expect(res.warnings).toEqual(
+        expect.arrayContaining([
+          {
+            path: "plugins.entries.missing-plugin",
+            message:
+              "plugin not found: missing-plugin (stale config entry ignored; remove it from plugins config)",
+          },
+          {
+            path: "plugins.allow",
+            message:
+              "plugin not found: missing-allow (stale config entry ignored; remove it from plugins config)",
+          },
+          {
+            path: "plugins.deny",
+            message:
+              "plugin not found: missing-deny (stale config entry ignored; remove it from plugins config)",
+          },
+        ]),
+      );
     }
   });
 

@@ -526,7 +526,8 @@ function validateConfigObjectWithPluginsBase(
       continue;
     }
     if (!knownIds.has(pluginId)) {
-      pushMissingPluginIssue("plugins.allow", pluginId);
+      // Keep gateway startup resilient when plugins are removed/renamed across upgrades.
+      pushMissingPluginIssue("plugins.allow", pluginId, { warnOnly: true });
     }
   }
 
@@ -536,7 +537,8 @@ function validateConfigObjectWithPluginsBase(
       continue;
     }
     if (!knownIds.has(pluginId)) {
-      pushMissingPluginIssue("plugins.deny", pluginId);
+      // Keep gateway startup resilient when plugins are removed/renamed across upgrades.
+      pushMissingPluginIssue("plugins.deny", pluginId, { warnOnly: true });
     }
   }
 
