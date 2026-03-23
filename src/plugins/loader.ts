@@ -2,9 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
-import type { ChannelPlugin } from "../channels/plugins/types.js";
 import type { DenebConfig } from "../config/config.js";
-import { isChannelConfigured } from "../config/plugin-auto-enable.js";
 import type { PluginInstallRecord } from "../config/types.plugins.js";
 import type { GatewayRequestHandler } from "../gateway/server-methods/types.js";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
@@ -22,15 +20,26 @@ import { discoverDenebPlugins } from "./discovery.js";
 import { initializeGlobalHookRunner } from "./hook-runner-global.js";
 import { clearPluginInteractiveHandlers } from "./interactive.js";
 import { validateBundlePlugin } from "./loader-bundle-validation.js";
+import {
+  compareDuplicateCandidateOrder,
+  createPluginRecord,
+  normalizeScopedPluginIds,
+  pushDiagnostics,
+  recordPluginError,
+  resolvePluginModuleExport,
+  resolveSetupChannelRegistration,
+  shouldLoadChannelPluginInSetupRuntime,
+  validatePluginConfig,
+  warnWhenAllowlistIsOpen,
+} from "./loader-helpers.js";
+import { buildProvenanceIndex, warnAboutUntrackedLoadedPlugins } from "./loader-provenance.js";
 import { createLazyRuntimeProxy } from "./loader-runtime-proxy.js";
 import { loadPluginManifestRegistry } from "./manifest-registry.js";
-import { isPathInside, safeStatSync } from "./path-safety.js";
-import { createPluginRegistry, type PluginRecord, type PluginRegistry } from "./registry.js";
+import { createPluginRegistry, type PluginRegistry } from "./registry.js";
 import { resolvePluginCacheInputs } from "./roots.js";
 import { setActivePluginRegistry } from "./runtime.js";
 import type { CreatePluginRuntimeOptions } from "./runtime/index.js";
 import type { PluginRuntime } from "./runtime/types.js";
-import { validateJsonSchemaValue } from "./schema-validator.js";
 import {
   buildPluginLoaderJitiOptions,
   listPluginSdkAliasCandidates,
@@ -42,14 +51,7 @@ import {
   shouldPreferNativeJiti,
   type LoaderModuleResolveParams,
 } from "./sdk-alias.js";
-import type {
-  DenebPluginDefinition,
-  DenebPluginModule,
-  PluginDiagnostic,
-  PluginBundleFormat,
-  PluginFormat,
-  PluginLogger,
-} from "./types.js";
+import type { DenebPluginModule, PluginLogger } from "./types.js";
 
 export type PluginLoadResult = PluginRegistry;
 
@@ -200,432 +202,6 @@ function buildCacheKey(params: {
   })}::${scopeKey}::${setupOnlyKey}::${startupChannelMode}::${params.runtimeSubagentMode ?? "default"}`;
 }
 
-function normalizeScopedPluginIds(ids?: string[]): string[] | undefined {
-  if (!ids) {
-    return undefined;
-  }
-  const normalized = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).toSorted();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-function validatePluginConfig(params: {
-  schema?: Record<string, unknown>;
-  cacheKey?: string;
-  value?: unknown;
-}): { ok: boolean; value?: Record<string, unknown>; errors?: string[] } {
-  const schema = params.schema;
-  if (!schema) {
-    return { ok: true, value: params.value as Record<string, unknown> | undefined };
-  }
-  const cacheKey = params.cacheKey ?? JSON.stringify(schema);
-  const result = validateJsonSchemaValue({
-    schema,
-    cacheKey,
-    value: params.value ?? {},
-  });
-  if (result.ok) {
-    return { ok: true, value: params.value as Record<string, unknown> | undefined };
-  }
-  return { ok: false, errors: result.errors.map((error) => error.text) };
-}
-
-function resolvePluginModuleExport(moduleExport: unknown): {
-  definition?: DenebPluginDefinition;
-  register?: DenebPluginDefinition["register"];
-} {
-  const resolved =
-    moduleExport &&
-    typeof moduleExport === "object" &&
-    "default" in (moduleExport as Record<string, unknown>)
-      ? (moduleExport as { default: unknown }).default
-      : moduleExport;
-  if (typeof resolved === "function") {
-    return {
-      register: resolved as DenebPluginDefinition["register"],
-    };
-  }
-  if (resolved && typeof resolved === "object") {
-    const def = resolved as DenebPluginDefinition;
-    const register = def.register ?? def.activate;
-    return { definition: def, register };
-  }
-  return {};
-}
-
-function resolveSetupChannelRegistration(moduleExport: unknown): {
-  plugin?: ChannelPlugin;
-} {
-  const resolved =
-    moduleExport &&
-    typeof moduleExport === "object" &&
-    "default" in (moduleExport as Record<string, unknown>)
-      ? (moduleExport as { default: unknown }).default
-      : moduleExport;
-  if (!resolved || typeof resolved !== "object") {
-    return {};
-  }
-  const setup = resolved as {
-    plugin?: unknown;
-  };
-  if (!setup.plugin || typeof setup.plugin !== "object") {
-    return {};
-  }
-  return {
-    plugin: setup.plugin as ChannelPlugin,
-  };
-}
-
-function shouldLoadChannelPluginInSetupRuntime(params: {
-  manifestChannels: string[];
-  setupSource?: string;
-  startupDeferConfiguredChannelFullLoadUntilAfterListen?: boolean;
-  cfg: DenebConfig;
-  env: NodeJS.ProcessEnv;
-  preferSetupRuntimeForChannelPlugins?: boolean;
-}): boolean {
-  if (!params.setupSource || params.manifestChannels.length === 0) {
-    return false;
-  }
-  if (
-    params.preferSetupRuntimeForChannelPlugins &&
-    params.startupDeferConfiguredChannelFullLoadUntilAfterListen === true
-  ) {
-    return true;
-  }
-  return !params.manifestChannels.some((channelId) =>
-    isChannelConfigured(params.cfg, channelId, params.env),
-  );
-}
-
-function createPluginRecord(params: {
-  id: string;
-  name?: string;
-  description?: string;
-  version?: string;
-  format?: PluginFormat;
-  bundleFormat?: PluginBundleFormat;
-  bundleCapabilities?: string[];
-  source: string;
-  rootDir?: string;
-  origin: PluginRecord["origin"];
-  workspaceDir?: string;
-  enabled: boolean;
-  configSchema: boolean;
-}): PluginRecord {
-  return {
-    id: params.id,
-    name: params.name ?? params.id,
-    description: params.description,
-    version: params.version,
-    format: params.format ?? "deneb",
-    bundleFormat: params.bundleFormat,
-    bundleCapabilities: params.bundleCapabilities,
-    source: params.source,
-    rootDir: params.rootDir,
-    origin: params.origin,
-    workspaceDir: params.workspaceDir,
-    enabled: params.enabled,
-    status: params.enabled ? "loaded" : "disabled",
-    toolNames: [],
-    hookNames: [],
-    channelIds: [],
-    providerIds: [],
-    speechProviderIds: [],
-    mediaUnderstandingProviderIds: [],
-    imageGenerationProviderIds: [],
-    webSearchProviderIds: [],
-    gatewayMethods: [],
-    cliCommands: [],
-    services: [],
-    commands: [],
-    httpRoutes: 0,
-    hookCount: 0,
-    configSchema: params.configSchema,
-    configUiHints: undefined,
-    configJsonSchema: undefined,
-  };
-}
-
-function recordPluginError(params: {
-  logger: PluginLogger;
-  registry: PluginRegistry;
-  record: PluginRecord;
-  seenIds: Map<string, PluginRecord["origin"]>;
-  pluginId: string;
-  origin: PluginRecord["origin"];
-  error: unknown;
-  logPrefix: string;
-  diagnosticMessagePrefix: string;
-}) {
-  const errorText =
-    process.env.DENEB_PLUGIN_LOADER_DEBUG_STACKS === "1" &&
-    params.error instanceof Error &&
-    typeof params.error.stack === "string"
-      ? params.error.stack
-      : String(params.error);
-  const deprecatedApiHint =
-    errorText.includes("api.registerHttpHandler") && errorText.includes("is not a function")
-      ? "deprecated api.registerHttpHandler(...) was removed; use api.registerHttpRoute(...) for plugin-owned routes or registerPluginHttpRoute(...) for dynamic lifecycle routes"
-      : null;
-  const displayError = deprecatedApiHint ? `${deprecatedApiHint} (${errorText})` : errorText;
-  params.logger.error(`${params.logPrefix}${displayError}`);
-  params.record.status = "error";
-  params.record.error = displayError;
-  params.registry.plugins.push(params.record);
-  params.seenIds.set(params.pluginId, params.origin);
-  params.registry.diagnostics.push({
-    level: "error",
-    pluginId: params.record.id,
-    source: params.record.source,
-    message: `${params.diagnosticMessagePrefix}${displayError}`,
-  });
-}
-
-function pushDiagnostics(diagnostics: PluginDiagnostic[], append: PluginDiagnostic[]) {
-  diagnostics.push(...append);
-}
-
-type PathMatcher = {
-  exact: Set<string>;
-  dirs: string[];
-};
-
-type InstallTrackingRule = {
-  trackedWithoutPaths: boolean;
-  matcher: PathMatcher;
-};
-
-type PluginProvenanceIndex = {
-  loadPathMatcher: PathMatcher;
-  installRules: Map<string, InstallTrackingRule>;
-};
-
-function createPathMatcher(): PathMatcher {
-  return { exact: new Set<string>(), dirs: [] };
-}
-
-function addPathToMatcher(
-  matcher: PathMatcher,
-  rawPath: string,
-  env: NodeJS.ProcessEnv = process.env,
-): void {
-  const trimmed = rawPath.trim();
-  if (!trimmed) {
-    return;
-  }
-  const resolved = resolveUserPath(trimmed, env);
-  if (!resolved) {
-    return;
-  }
-  if (matcher.exact.has(resolved) || matcher.dirs.includes(resolved)) {
-    return;
-  }
-  const stat = safeStatSync(resolved);
-  if (stat?.isDirectory()) {
-    matcher.dirs.push(resolved);
-    return;
-  }
-  matcher.exact.add(resolved);
-}
-
-function matchesPathMatcher(matcher: PathMatcher, sourcePath: string): boolean {
-  if (matcher.exact.has(sourcePath)) {
-    return true;
-  }
-  return matcher.dirs.some((dirPath) => isPathInside(dirPath, sourcePath));
-}
-
-function buildProvenanceIndex(params: {
-  config: DenebConfig;
-  normalizedLoadPaths: string[];
-  env: NodeJS.ProcessEnv;
-}): PluginProvenanceIndex {
-  const loadPathMatcher = createPathMatcher();
-  for (const loadPath of params.normalizedLoadPaths) {
-    addPathToMatcher(loadPathMatcher, loadPath, params.env);
-  }
-
-  const installRules = new Map<string, InstallTrackingRule>();
-  const installs = params.config.plugins?.installs ?? {};
-  for (const [pluginId, install] of Object.entries(installs)) {
-    const rule: InstallTrackingRule = {
-      trackedWithoutPaths: false,
-      matcher: createPathMatcher(),
-    };
-    const trackedPaths = [install.installPath, install.sourcePath]
-      .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
-      .filter(Boolean);
-    if (trackedPaths.length === 0) {
-      rule.trackedWithoutPaths = true;
-    } else {
-      for (const trackedPath of trackedPaths) {
-        addPathToMatcher(rule.matcher, trackedPath, params.env);
-      }
-    }
-    installRules.set(pluginId, rule);
-  }
-
-  return { loadPathMatcher, installRules };
-}
-
-function isTrackedByProvenance(params: {
-  pluginId: string;
-  source: string;
-  index: PluginProvenanceIndex;
-  env: NodeJS.ProcessEnv;
-}): boolean {
-  const sourcePath = resolveUserPath(params.source, params.env);
-  const installRule = params.index.installRules.get(params.pluginId);
-  if (installRule) {
-    if (installRule.trackedWithoutPaths) {
-      return true;
-    }
-    if (matchesPathMatcher(installRule.matcher, sourcePath)) {
-      return true;
-    }
-  }
-  return matchesPathMatcher(params.index.loadPathMatcher, sourcePath);
-}
-
-function matchesExplicitInstallRule(params: {
-  pluginId: string;
-  source: string;
-  index: PluginProvenanceIndex;
-  env: NodeJS.ProcessEnv;
-}): boolean {
-  const sourcePath = resolveUserPath(params.source, params.env);
-  const installRule = params.index.installRules.get(params.pluginId);
-  if (!installRule || installRule.trackedWithoutPaths) {
-    return false;
-  }
-  return matchesPathMatcher(installRule.matcher, sourcePath);
-}
-
-function resolveCandidateDuplicateRank(params: {
-  candidate: ReturnType<typeof discoverDenebPlugins>["candidates"][number];
-  manifestByRoot: Map<string, ReturnType<typeof loadPluginManifestRegistry>["plugins"][number]>;
-  provenance: PluginProvenanceIndex;
-  env: NodeJS.ProcessEnv;
-}): number {
-  const manifestRecord = params.manifestByRoot.get(params.candidate.rootDir);
-  const pluginId = manifestRecord?.id;
-  const isExplicitInstall =
-    params.candidate.origin === "global" &&
-    pluginId !== undefined &&
-    matchesExplicitInstallRule({
-      pluginId,
-      source: params.candidate.source,
-      index: params.provenance,
-      env: params.env,
-    });
-
-  if (params.candidate.origin === "config") {
-    return 0;
-  }
-  if (params.candidate.origin === "global" && isExplicitInstall) {
-    return 1;
-  }
-  if (params.candidate.origin === "bundled") {
-    // Bundled plugin ids stay reserved unless the operator configured an override.
-    return 2;
-  }
-  if (params.candidate.origin === "workspace") {
-    return 3;
-  }
-  return 4;
-}
-
-function compareDuplicateCandidateOrder(params: {
-  left: ReturnType<typeof discoverDenebPlugins>["candidates"][number];
-  right: ReturnType<typeof discoverDenebPlugins>["candidates"][number];
-  manifestByRoot: Map<string, ReturnType<typeof loadPluginManifestRegistry>["plugins"][number]>;
-  provenance: PluginProvenanceIndex;
-  env: NodeJS.ProcessEnv;
-}): number {
-  const leftPluginId = params.manifestByRoot.get(params.left.rootDir)?.id;
-  const rightPluginId = params.manifestByRoot.get(params.right.rootDir)?.id;
-  if (!leftPluginId || leftPluginId !== rightPluginId) {
-    return 0;
-  }
-  return (
-    resolveCandidateDuplicateRank({
-      candidate: params.left,
-      manifestByRoot: params.manifestByRoot,
-      provenance: params.provenance,
-      env: params.env,
-    }) -
-    resolveCandidateDuplicateRank({
-      candidate: params.right,
-      manifestByRoot: params.manifestByRoot,
-      provenance: params.provenance,
-      env: params.env,
-    })
-  );
-}
-
-function warnWhenAllowlistIsOpen(params: {
-  logger: PluginLogger;
-  pluginsEnabled: boolean;
-  allow: string[];
-  warningCacheKey: string;
-  discoverablePlugins: Array<{ id: string; source: string; origin: PluginRecord["origin"] }>;
-}) {
-  if (!params.pluginsEnabled) {
-    return;
-  }
-  if (params.allow.length > 0) {
-    return;
-  }
-  const nonBundled = params.discoverablePlugins.filter((entry) => entry.origin !== "bundled");
-  if (nonBundled.length === 0) {
-    return;
-  }
-  if (openAllowlistWarningCache.has(params.warningCacheKey)) {
-    return;
-  }
-  const preview = nonBundled
-    .slice(0, 6)
-    .map((entry) => `${entry.id} (${entry.source})`)
-    .join(", ");
-  const extra = nonBundled.length > 6 ? ` (+${nonBundled.length - 6} more)` : "";
-  openAllowlistWarningCache.add(params.warningCacheKey);
-  params.logger.warn(
-    `[plugins] plugins.allow is empty; discovered non-bundled plugins may auto-load: ${preview}${extra}. Set plugins.allow to explicit trusted ids.`,
-  );
-}
-
-function warnAboutUntrackedLoadedPlugins(params: {
-  registry: PluginRegistry;
-  provenance: PluginProvenanceIndex;
-  logger: PluginLogger;
-  env: NodeJS.ProcessEnv;
-}) {
-  for (const plugin of params.registry.plugins) {
-    if (plugin.status !== "loaded" || plugin.origin === "bundled") {
-      continue;
-    }
-    if (
-      isTrackedByProvenance({
-        pluginId: plugin.id,
-        source: plugin.source,
-        index: params.provenance,
-        env: params.env,
-      })
-    ) {
-      continue;
-    }
-    const message =
-      "loaded without install/load-path provenance; treat as untracked local code and pin trust via plugins.allow or install records";
-    params.registry.diagnostics.push({
-      level: "warn",
-      pluginId: plugin.id,
-      source: plugin.source,
-      message,
-    });
-    params.logger.warn(`[plugins] ${plugin.id}: ${message} (${plugin.source})`);
-  }
-}
-
 function activatePluginRegistry(registry: PluginRegistry, cacheKey: string): void {
   setActivePluginRegistry(registry, cacheKey);
   initializeGlobalHookRunner(registry);
@@ -764,6 +340,7 @@ export function loadDenebPlugins(options: PluginLoadOptions = {}): PluginRegistr
     pluginsEnabled: normalized.enabled,
     allow: normalized.allow,
     warningCacheKey: cacheKey,
+    warningCache: openAllowlistWarningCache,
     // Keep warning input scoped as well so partial snapshot loads only mention the
     // plugins that were intentionally requested for this registry.
     discoverablePlugins: manifestRegistry.plugins
@@ -793,7 +370,10 @@ export function loadDenebPlugins(options: PluginLoadOptions = {}): PluginRegistr
     });
   });
 
-  const seenIds = new Map<string, PluginRecord["origin"]>();
+  const seenIds = new Map<
+    string,
+    ReturnType<typeof discoverDenebPlugins>["candidates"][number]["origin"]
+  >();
   const memorySlot = normalized.slots.memory;
   let selectedMemoryPluginId: string | null = null;
   let memorySlotMatched = false;
