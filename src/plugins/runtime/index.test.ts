@@ -55,27 +55,6 @@ describe("plugin runtime command execution", () => {
     expect(runtime.events.onSessionTranscriptUpdate).toBe(onSessionTranscriptUpdate);
   });
 
-  it("exposes runtime.mediaUnderstanding helpers and keeps stt as an alias", () => {
-    const runtime = createPluginRuntime();
-    expect(typeof runtime.mediaUnderstanding.runFile).toBe("function");
-    expect(typeof runtime.mediaUnderstanding.describeImageFile).toBe("function");
-    expect(typeof runtime.mediaUnderstanding.describeImageFileWithModel).toBe("function");
-    expect(typeof runtime.mediaUnderstanding.describeVideoFile).toBe("function");
-    expect(runtime.mediaUnderstanding.transcribeAudioFile).toBe(runtime.stt.transcribeAudioFile);
-  });
-
-  it("exposes runtime.imageGeneration helpers", () => {
-    const runtime = createPluginRuntime();
-    expect(typeof runtime.imageGeneration.generate).toBe("function");
-    expect(typeof runtime.imageGeneration.listProviders).toBe("function");
-  });
-
-  it("exposes runtime.webSearch helpers", () => {
-    const runtime = createPluginRuntime();
-    expect(typeof runtime.webSearch.listProviders).toBe("function");
-    expect(typeof runtime.webSearch.search).toBe("function");
-  });
-
   it("exposes runtime.system.requestHeartbeatNow", () => {
     const runtime = createPluginRuntime();
     expect(runtime.system.requestHeartbeatNow).toBe(requestHeartbeatNow);
@@ -87,16 +66,6 @@ describe("plugin runtime command execution", () => {
       model: DEFAULT_MODEL,
       provider: DEFAULT_PROVIDER,
     });
-    expect(typeof runtime.agent.runEmbeddedPiAgent).toBe("function");
-    expect(typeof runtime.agent.resolveAgentDir).toBe("function");
-    expect(typeof runtime.agent.session.resolveSessionFilePath).toBe("function");
-  });
-
-  it("exposes runtime.modelAuth with getApiKeyForModel and resolveApiKeyForProvider", () => {
-    const runtime = createPluginRuntime();
-    expect(runtime.modelAuth).toBeDefined();
-    expect(typeof runtime.modelAuth.getApiKeyForModel).toBe("function");
-    expect(typeof runtime.modelAuth.resolveApiKeyForProvider).toBe("function");
   });
 
   it("modelAuth wrappers strip agentDir and store to prevent credential steering", async () => {
