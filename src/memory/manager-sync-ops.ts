@@ -1,15 +1,10 @@
 import { randomUUID } from "node:crypto";
-import fsSync from "node:fs";
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import chokidar, { FSWatcher } from "chokidar";
+import type { FSWatcher } from "chokidar";
 import { resolveAgentDir } from "../agents/agent-scope.js";
 import { ResolvedMemorySearchConfig } from "../agents/memory-search.js";
 import { type DenebConfig } from "../config/config.js";
-import { resolveSessionTranscriptsDirForAgent } from "../config/sessions/paths.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { onSessionTranscriptUpdate } from "../sessions/transcript-events.js";
 import { resolveUserPath } from "../utils.js";
 import { DEFAULT_GEMINI_EMBEDDING_MODEL } from "./embeddings-gemini.js";
 import { DEFAULT_MISTRAL_EMBEDDING_MODEL } from "./embeddings-mistral.js";
@@ -23,74 +18,52 @@ import {
   type OpenAiEmbeddingClient,
   type VoyageEmbeddingClient,
 } from "./embeddings.js";
-import { isFileMissingError } from "./fs-utils.js";
+import type { MemoryFileEntry } from "./internal.js";
 import {
-  buildFileEntry,
-  ensureDir,
-  hashText,
-  listMemoryFiles,
-  normalizeExtraMemoryPaths,
-  runWithConcurrency,
-} from "./internal.js";
-import { type MemoryFileEntry } from "./internal.js";
-import { ensureMemoryIndexSchema } from "./memory-schema.js";
+  buildSourceFilter,
+  openDatabase,
+  openDatabaseAtPath,
+  removeIndexFiles,
+  runEnsureSchema,
+  seedEmbeddingCache,
+  swapIndexFiles,
+} from "./manager-sync-ops-db.js";
+import { syncMemoryFiles, syncSessionFiles, createSyncProgress } from "./manager-sync-ops-index.js";
 import {
-  buildCaseInsensitiveExtensionGlob,
-  classifyMemoryMultimodalPath,
-  getMemoryMultimodalExtensions,
-} from "./multimodal.js";
+  metaSourcesDiffer,
+  readMeta as readMetaHelper,
+  resolveConfiguredScopeHash as resolveConfiguredScopeHashHelper,
+  resolveConfiguredSourcesForMeta as resolveConfiguredSourcesForMetaHelper,
+  writeMeta as writeMetaHelper,
+} from "./manager-sync-ops-meta.js";
+import {
+  FTS_TABLE,
+  VECTOR_LOAD_TIMEOUT_MS,
+  type MemoryIndexMeta,
+  type MemorySyncProgressState,
+} from "./manager-sync-ops-types.js";
+import {
+  dropVectorTable,
+  ensureVectorTable,
+  loadVectorExtension,
+} from "./manager-sync-ops-vector.js";
+import {
+  clearSyncedSessionFiles,
+  createIntervalSyncTimer,
+  createMemoryWatcher,
+  createSessionListener,
+  normalizeTargetSessionFiles,
+  scheduleSessionDirty,
+  scheduleWatchSync,
+  shouldSyncSessions,
+  updateSessionDelta,
+} from "./manager-sync-ops-watchers.js";
 import type { SessionFileEntry } from "./session-files.js";
-import {
-  buildSessionEntry,
-  listSessionFilesForAgent,
-  sessionPathForFile,
-} from "./session-files.js";
-import { loadSqliteVecExtension } from "./sqlite-vec.js";
-import { requireNodeSqlite } from "./sqlite.js";
 import type { MemorySource, MemorySyncProgressUpdate } from "./types.js";
 
-type MemoryIndexMeta = {
-  model: string;
-  provider: string;
-  providerKey?: string;
-  sources?: MemorySource[];
-  scopeHash?: string;
-  chunkTokens: number;
-  chunkOverlap: number;
-  vectorDims?: number;
-};
-
-type MemorySyncProgressState = {
-  completed: number;
-  total: number;
-  label?: string;
-  report: (update: MemorySyncProgressUpdate) => void;
-};
-
-const META_KEY = "memory_index_meta_v1";
-const VECTOR_TABLE = "chunks_vec";
-const FTS_TABLE = "chunks_fts";
-const EMBEDDING_CACHE_TABLE = "embedding_cache";
-const SESSION_DIRTY_DEBOUNCE_MS = 2000; // Faster dirty detection (down from 5s)
-const SESSION_DELTA_READ_CHUNK_BYTES = 256 * 1024; // Larger read chunks (up from 64KB)
-const VECTOR_LOAD_TIMEOUT_MS = 30_000;
-const IGNORED_MEMORY_WATCH_DIR_NAMES = new Set([
-  ".git",
-  "node_modules",
-  ".pnpm-store",
-  ".venv",
-  "venv",
-  ".tox",
-  "__pycache__",
-]);
+export type { MemoryIndexMeta };
 
 const log = createSubsystemLogger("memory");
-
-function shouldIgnoreMemoryWatchPath(watchPath: string): boolean {
-  const normalized = path.normalize(watchPath);
-  const parts = normalized.split(path.sep).map((segment) => segment.trim().toLowerCase());
-  return parts.some((segment) => IGNORED_MEMORY_WATCH_DIR_NAMES.has(segment));
-}
 
 export abstract class MemoryManagerSyncOps {
   protected abstract readonly cfg: DenebConfig;
@@ -140,7 +113,7 @@ export abstract class MemoryManagerSyncOps {
     string,
     { lastSize: number; pendingBytes: number; pendingMessages: number }
   >();
-  private lastMetaSerialized: string | null = null;
+  private readonly lastMetaSerializedRef: { value: string | null } = { value: null };
 
   protected abstract readonly cache: { enabled: boolean; maxEntries?: number };
   protected abstract db: DatabaseSync;
@@ -170,7 +143,7 @@ export abstract class MemoryManagerSyncOps {
     }
     if (!this.vectorReady) {
       this.vectorReady = this.withTimeout(
-        this.loadVectorExtension(),
+        loadVectorExtension(this.vector, this.db),
         VECTOR_LOAD_TIMEOUT_MS,
         `sqlite-vec load timed out after ${Math.round(VECTOR_LOAD_TIMEOUT_MS / 1000)}s`,
       );
@@ -187,276 +160,85 @@ export abstract class MemoryManagerSyncOps {
       return false;
     }
     if (ready && typeof dimensions === "number" && dimensions > 0) {
-      this.ensureVectorTable(dimensions);
+      ensureVectorTable(this.vector, this.db, dimensions);
     }
     return ready;
   }
 
-  private async loadVectorExtension(): Promise<boolean> {
-    if (this.vector.available !== null) {
-      return this.vector.available;
-    }
-    if (!this.vector.enabled) {
-      this.vector.available = false;
-      return false;
-    }
-    try {
-      const resolvedPath = this.vector.extensionPath?.trim()
-        ? resolveUserPath(this.vector.extensionPath)
-        : undefined;
-      const loaded = await loadSqliteVecExtension({ db: this.db, extensionPath: resolvedPath });
-      if (!loaded.ok) {
-        throw new Error(loaded.error ?? "unknown sqlite-vec load error");
-      }
-      this.vector.extensionPath = loaded.extensionPath;
-      this.vector.available = true;
-      return true;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.vector.available = false;
-      this.vector.loadError = message;
-      log.warn(`sqlite-vec unavailable: ${message}`);
-      return false;
-    }
-  }
-
-  private ensureVectorTable(dimensions: number): void {
-    if (this.vector.dims === dimensions) {
-      return;
-    }
-    if (this.vector.dims && this.vector.dims !== dimensions) {
-      this.dropVectorTable();
-    }
-    this.db.exec(
-      `CREATE VIRTUAL TABLE IF NOT EXISTS ${VECTOR_TABLE} USING vec0(\n` +
-        `  id TEXT PRIMARY KEY,\n` +
-        `  embedding FLOAT[${dimensions}]\n` +
-        `)`,
-    );
-    this.vector.dims = dimensions;
-  }
-
-  private dropVectorTable(): void {
-    try {
-      this.db.exec(`DROP TABLE IF EXISTS ${VECTOR_TABLE}`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      log.debug(`Failed to drop ${VECTOR_TABLE}: ${message}`);
-    }
-  }
-
   protected buildSourceFilter(alias?: string): { sql: string; params: MemorySource[] } {
-    const sources = Array.from(this.sources);
-    if (sources.length === 0) {
-      return { sql: "", params: [] };
-    }
-    const column = alias ? `${alias}.source` : "source";
-    const placeholders = sources.map(() => "?").join(", ");
-    return { sql: ` AND ${column} IN (${placeholders})`, params: sources };
+    return buildSourceFilter(this.sources, alias);
   }
 
   protected openDatabase(): DatabaseSync {
-    const dbPath = resolveUserPath(this.settings.store.path);
-    return this.openDatabaseAtPath(dbPath);
+    return openDatabase(this.settings);
   }
 
   private openDatabaseAtPath(dbPath: string): DatabaseSync {
-    const dir = path.dirname(dbPath);
-    ensureDir(dir);
-    const { DatabaseSync } = requireNodeSqlite();
-    const db = new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });
-    // busy_timeout is per-connection and resets to 0 on restart.
-    // Set it on every open so concurrent processes retry instead of
-    // failing immediately with SQLITE_BUSY.
-    db.exec("PRAGMA busy_timeout = 5000");
-    return db;
+    return openDatabaseAtPath(this.settings, dbPath);
   }
 
   private seedEmbeddingCache(sourceDb: DatabaseSync): void {
-    if (!this.cache.enabled) {
-      return;
-    }
-    try {
-      const rows = sourceDb
-        .prepare(
-          `SELECT provider, model, provider_key, hash, embedding, dims, updated_at FROM ${EMBEDDING_CACHE_TABLE}`,
-        )
-        .all() as Array<{
-        provider: string;
-        model: string;
-        provider_key: string;
-        hash: string;
-        embedding: string;
-        dims: number | null;
-        updated_at: number;
-      }>;
-      if (!rows.length) {
-        return;
-      }
-      const insert = this.db.prepare(
-        `INSERT INTO ${EMBEDDING_CACHE_TABLE} (provider, model, provider_key, hash, embedding, dims, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(provider, model, provider_key, hash) DO UPDATE SET
-           embedding=excluded.embedding,
-           dims=excluded.dims,
-           updated_at=excluded.updated_at`,
-      );
-      this.db.exec("BEGIN");
-      for (const row of rows) {
-        insert.run(
-          row.provider,
-          row.model,
-          row.provider_key,
-          row.hash,
-          row.embedding,
-          row.dims,
-          row.updated_at,
-        );
-      }
-      this.db.exec("COMMIT");
-    } catch (err) {
-      try {
-        this.db.exec("ROLLBACK");
-      } catch {
-        // ROLLBACK may fail if the connection is already broken; the original error is rethrown below.
-      }
-      throw err;
-    }
+    seedEmbeddingCache(this.cache, this.db, sourceDb);
   }
 
   private async swapIndexFiles(targetPath: string, tempPath: string): Promise<void> {
-    const backupPath = `${targetPath}.backup-${randomUUID()}`;
-    await this.moveIndexFiles(targetPath, backupPath);
-    try {
-      await this.moveIndexFiles(tempPath, targetPath);
-    } catch (err) {
-      await this.moveIndexFiles(backupPath, targetPath);
-      throw err;
-    }
-    await this.removeIndexFiles(backupPath);
-  }
-
-  private async moveIndexFiles(sourceBase: string, targetBase: string): Promise<void> {
-    const suffixes = ["", "-wal", "-shm"];
-    for (const suffix of suffixes) {
-      const source = `${sourceBase}${suffix}`;
-      const target = `${targetBase}${suffix}`;
-      try {
-        await fs.rename(source, target);
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-          throw err;
-        }
-      }
-    }
+    await swapIndexFiles(targetPath, tempPath);
   }
 
   private async removeIndexFiles(basePath: string): Promise<void> {
-    const suffixes = ["", "-wal", "-shm"];
-    await Promise.all(suffixes.map((suffix) => fs.rm(`${basePath}${suffix}`, { force: true })));
+    await removeIndexFiles(basePath);
   }
 
   protected ensureSchema() {
-    const result = ensureMemoryIndexSchema({
-      db: this.db,
-      embeddingCacheTable: EMBEDDING_CACHE_TABLE,
-      ftsTable: FTS_TABLE,
-      ftsEnabled: this.fts.enabled,
-    });
-    this.fts.available = result.ftsAvailable;
-    if (result.ftsError) {
-      this.fts.loadError = result.ftsError;
-      // Only warn when hybrid search is enabled; otherwise this is expected noise.
-      if (this.fts.enabled) {
-        log.warn(`fts unavailable: ${result.ftsError}`);
-      }
+    runEnsureSchema(this.db, this.fts);
+    // Only warn when hybrid search is enabled; otherwise this is expected noise.
+    if (this.fts.loadError && this.fts.enabled) {
+      log.warn(`fts unavailable: ${this.fts.loadError}`);
     }
   }
 
   protected ensureWatcher() {
-    if (!this.sources.has("memory") || !this.settings.sync.watch || this.watcher) {
-      return;
-    }
-    const watchPaths = new Set<string>([
-      path.join(this.workspaceDir, "MEMORY.md"),
-      path.join(this.workspaceDir, "memory.md"),
-      path.join(this.workspaceDir, "memory", "**", "*.md"),
-    ]);
-    const additionalPaths = normalizeExtraMemoryPaths(this.workspaceDir, this.settings.extraPaths);
-    for (const entry of additionalPaths) {
-      try {
-        const stat = fsSync.lstatSync(entry);
-        if (stat.isSymbolicLink()) {
-          continue;
-        }
-        if (stat.isDirectory()) {
-          watchPaths.add(path.join(entry, "**", "*.md"));
-          if (this.settings.multimodal.enabled) {
-            for (const modality of this.settings.multimodal.modalities) {
-              for (const extension of getMemoryMultimodalExtensions(modality)) {
-                watchPaths.add(
-                  path.join(entry, "**", buildCaseInsensitiveExtensionGlob(extension)),
-                );
-              }
-            }
-          }
-          continue;
-        }
-        if (
-          stat.isFile() &&
-          (entry.toLowerCase().endsWith(".md") ||
-            classifyMemoryMultimodalPath(entry, this.settings.multimodal) !== null)
-        ) {
-          watchPaths.add(entry);
-        }
-      } catch {
-        // Skip missing/unreadable additional paths.
-      }
-    }
-    this.watcher = chokidar.watch(Array.from(watchPaths), {
-      ignoreInitial: true,
-      ignored: (watchPath) => shouldIgnoreMemoryWatchPath(String(watchPath)),
-      awaitWriteFinish: {
-        stabilityThreshold: this.settings.sync.watchDebounceMs,
-        pollInterval: 100,
+    const newWatcher = createMemoryWatcher(
+      this.sources,
+      this.settings,
+      this.workspaceDir,
+      this.watcher,
+      () => {
+        this.dirty = true;
+        this.scheduleWatchSync();
       },
-    });
-    const markDirty = () => {
-      this.dirty = true;
-      this.scheduleWatchSync();
-    };
-    this.watcher.on("add", markDirty);
-    this.watcher.on("change", markDirty);
-    this.watcher.on("unlink", markDirty);
+    );
+    if (newWatcher) {
+      this.watcher = newWatcher;
+    }
   }
 
   protected ensureSessionListener() {
-    if (!this.sources.has("sessions") || this.sessionUnsubscribe) {
-      return;
+    const unsubscribe = createSessionListener(
+      this.sources,
+      this.agentId,
+      this.sessionUnsubscribe,
+      () => this.closed,
+      (sessionFile) => this.scheduleSessionDirty(sessionFile),
+    );
+    if (unsubscribe) {
+      this.sessionUnsubscribe = unsubscribe;
     }
-    this.sessionUnsubscribe = onSessionTranscriptUpdate((update) => {
-      if (this.closed) {
-        return;
-      }
-      const sessionFile = update.sessionFile;
-      if (!this.isSessionFileForAgent(sessionFile)) {
-        return;
-      }
-      this.scheduleSessionDirty(sessionFile);
-    });
   }
 
   private scheduleSessionDirty(sessionFile: string) {
-    this.sessionPendingFiles.add(sessionFile);
-    if (this.sessionWatchTimer) {
-      return;
-    }
-    this.sessionWatchTimer = setTimeout(() => {
-      this.sessionWatchTimer = null;
-      void this.processSessionDeltaBatch().catch((err) => {
-        log.warn(`memory session delta failed: ${String(err)}`);
-      });
-    }, SESSION_DIRTY_DEBOUNCE_MS);
+    const newTimer = scheduleSessionDirty(
+      sessionFile,
+      this.sessionPendingFiles,
+      this.sessionWatchTimer,
+      () => {
+        this.sessionWatchTimer = null;
+        void this.processSessionDeltaBatch().catch((err) => {
+          log.warn(`memory session delta failed: ${String(err)}`);
+        });
+      },
+    );
+    this.sessionWatchTimer = newTimer;
   }
 
   private async processSessionDeltaBatch(): Promise<void> {
@@ -467,7 +249,7 @@ export abstract class MemoryManagerSyncOps {
     this.sessionPendingFiles.clear();
     let shouldSync = false;
     for (const sessionFile of pending) {
-      const delta = await this.updateSessionDelta(sessionFile);
+      const delta = await updateSessionDelta(sessionFile, this.settings, this.sessionDeltas);
       if (!delta) {
         continue;
       }
@@ -497,294 +279,55 @@ export abstract class MemoryManagerSyncOps {
     }
   }
 
-  private async updateSessionDelta(sessionFile: string): Promise<{
-    deltaBytes: number;
-    deltaMessages: number;
-    pendingBytes: number;
-    pendingMessages: number;
-  } | null> {
-    const thresholds = this.settings.sync.sessions;
-    if (!thresholds) {
-      return null;
-    }
-    let stat: { size: number };
-    try {
-      stat = await fs.stat(sessionFile);
-    } catch {
-      return null;
-    }
-    const size = stat.size;
-    let state = this.sessionDeltas.get(sessionFile);
-    if (!state) {
-      state = { lastSize: 0, pendingBytes: 0, pendingMessages: 0 };
-      this.sessionDeltas.set(sessionFile, state);
-    }
-    const deltaBytes = Math.max(0, size - state.lastSize);
-    if (deltaBytes === 0 && size === state.lastSize) {
-      return {
-        deltaBytes: thresholds.deltaBytes,
-        deltaMessages: thresholds.deltaMessages,
-        pendingBytes: state.pendingBytes,
-        pendingMessages: state.pendingMessages,
-      };
-    }
-    if (size < state.lastSize) {
-      state.lastSize = size;
-      state.pendingBytes += size;
-      const shouldCountMessages =
-        thresholds.deltaMessages > 0 &&
-        (thresholds.deltaBytes <= 0 || state.pendingBytes < thresholds.deltaBytes);
-      if (shouldCountMessages) {
-        state.pendingMessages += await this.countNewlines(sessionFile, 0, size);
-      }
-    } else {
-      state.pendingBytes += deltaBytes;
-      const shouldCountMessages =
-        thresholds.deltaMessages > 0 &&
-        (thresholds.deltaBytes <= 0 || state.pendingBytes < thresholds.deltaBytes);
-      if (shouldCountMessages) {
-        state.pendingMessages += await this.countNewlines(sessionFile, state.lastSize, size);
-      }
-      state.lastSize = size;
-    }
-    this.sessionDeltas.set(sessionFile, state);
-    return {
-      deltaBytes: thresholds.deltaBytes,
-      deltaMessages: thresholds.deltaMessages,
-      pendingBytes: state.pendingBytes,
-      pendingMessages: state.pendingMessages,
-    };
-  }
-
-  private async countNewlines(absPath: string, start: number, end: number): Promise<number> {
-    if (end <= start) {
-      return 0;
-    }
-    let handle;
-    try {
-      handle = await fs.open(absPath, "r");
-    } catch (err) {
-      if (isFileMissingError(err)) {
-        return 0;
-      }
-      throw err;
-    }
-    try {
-      let offset = start;
-      let count = 0;
-      const buffer = Buffer.alloc(SESSION_DELTA_READ_CHUNK_BYTES);
-      while (offset < end) {
-        const toRead = Math.min(buffer.length, end - offset);
-        const { bytesRead } = await handle.read(buffer, 0, toRead, offset);
-        if (bytesRead <= 0) {
-          break;
-        }
-        for (let i = 0; i < bytesRead; i += 1) {
-          if (buffer[i] === 10) {
-            count += 1;
-          }
-        }
-        offset += bytesRead;
-      }
-      return count;
-    } finally {
-      await handle.close();
-    }
-  }
-
-  private resetSessionDelta(absPath: string, size: number): void {
-    const state = this.sessionDeltas.get(absPath);
-    if (!state) {
-      return;
-    }
-    state.lastSize = size;
-    state.pendingBytes = 0;
-    state.pendingMessages = 0;
-  }
-
-  private isSessionFileForAgent(sessionFile: string): boolean {
-    if (!sessionFile) {
-      return false;
-    }
-    const sessionsDir = resolveSessionTranscriptsDirForAgent(this.agentId);
-    const resolvedFile = path.resolve(sessionFile);
-    const resolvedDir = path.resolve(sessionsDir);
-    return resolvedFile.startsWith(`${resolvedDir}${path.sep}`);
-  }
-
-  private normalizeTargetSessionFiles(sessionFiles?: string[]): Set<string> | null {
-    if (!sessionFiles || sessionFiles.length === 0) {
-      return null;
-    }
-    const normalized = new Set<string>();
-    for (const sessionFile of sessionFiles) {
-      const trimmed = sessionFile.trim();
-      if (!trimmed) {
-        continue;
-      }
-      const resolved = path.resolve(trimmed);
-      if (this.isSessionFileForAgent(resolved)) {
-        normalized.add(resolved);
-      }
-    }
-    return normalized.size > 0 ? normalized : null;
-  }
-
-  private clearSyncedSessionFiles(targetSessionFiles?: Iterable<string> | null) {
-    if (!targetSessionFiles) {
-      this.sessionsDirtyFiles.clear();
-    } else {
-      for (const targetSessionFile of targetSessionFiles) {
-        this.sessionsDirtyFiles.delete(targetSessionFile);
-      }
-    }
-    this.sessionsDirty = this.sessionsDirtyFiles.size > 0;
-  }
-
   protected ensureIntervalSync() {
-    const minutes = this.settings.sync.intervalMinutes;
-    if (!minutes || minutes <= 0 || this.intervalTimer) {
-      return;
-    }
-    const ms = minutes * 60 * 1000;
-    this.intervalTimer = setInterval(() => {
+    const newTimer = createIntervalSyncTimer(this.settings, this.intervalTimer, () => {
       void this.sync({ reason: "interval" }).catch((err) => {
         log.warn(`memory sync failed (interval): ${String(err)}`);
       });
-    }, ms);
+    });
+    if (newTimer) {
+      this.intervalTimer = newTimer;
+    }
   }
 
   private scheduleWatchSync() {
-    if (!this.sources.has("memory") || !this.settings.sync.watch) {
-      return;
-    }
-    if (this.watchTimer) {
-      clearTimeout(this.watchTimer);
-    }
-    this.watchTimer = setTimeout(() => {
+    this.watchTimer = scheduleWatchSync(this.sources, this.settings, this.watchTimer, () => {
       this.watchTimer = null;
       void this.sync({ reason: "watch" }).catch((err) => {
         log.warn(`memory sync failed (watch): ${String(err)}`);
       });
-    }, this.settings.sync.watchDebounceMs);
+    });
   }
 
   private shouldSyncSessions(
     params?: { reason?: string; force?: boolean; sessionFiles?: string[] },
     needsFullReindex = false,
   ) {
-    if (!this.sources.has("sessions")) {
-      return false;
-    }
-    if (params?.sessionFiles?.some((sessionFile) => sessionFile.trim().length > 0)) {
-      return true;
-    }
-    if (params?.force) {
-      return true;
-    }
-    const reason = params?.reason;
-    if (reason === "session-start" || reason === "watch") {
-      return false;
-    }
-    if (needsFullReindex) {
-      return true;
-    }
-    return this.sessionsDirty && this.sessionsDirtyFiles.size > 0;
+    return shouldSyncSessions(
+      this.sources,
+      this.sessionsDirty,
+      this.sessionsDirtyFiles,
+      params,
+      needsFullReindex,
+    );
   }
 
   private async syncMemoryFiles(params: {
     needsFullReindex: boolean;
     progress?: MemorySyncProgressState;
   }) {
-    // FTS-only mode: skip embedding sync (no provider)
-    if (!this.provider) {
-      log.debug("Skipping memory file sync in FTS-only mode (no embedding provider)");
-      return;
-    }
-
-    const files = await listMemoryFiles(
-      this.workspaceDir,
-      this.settings.extraPaths,
-      this.settings.multimodal,
-    );
-    const fileEntries = (
-      await runWithConcurrency(
-        files.map(
-          (file) => async () =>
-            await buildFileEntry(file, this.workspaceDir, this.settings.multimodal),
-        ),
-        this.getIndexConcurrency(),
-      )
-    ).filter((entry): entry is MemoryFileEntry => entry !== null);
-    log.debug("memory sync: indexing memory files", {
-      files: fileEntries.length,
+    await syncMemoryFiles({
+      db: this.db,
+      provider: this.provider,
+      settings: this.settings,
+      workspaceDir: this.workspaceDir,
+      fts: this.fts,
       needsFullReindex: params.needsFullReindex,
-      batch: this.batch.enabled,
-      concurrency: this.getIndexConcurrency(),
+      getConcurrency: () => this.getIndexConcurrency(),
+      isBatchEnabled: this.batch.enabled,
+      indexFile: (entry, options) => this.indexFile(entry, options),
+      progress: params.progress,
     });
-    const activePaths = new Set(fileEntries.map((entry) => entry.path));
-    if (params.progress) {
-      params.progress.total += fileEntries.length;
-      params.progress.report({
-        completed: params.progress.completed,
-        total: params.progress.total,
-        label: this.batch.enabled ? "Indexing memory files (batch)..." : "Indexing memory files…",
-      });
-    }
-
-    const tasks = fileEntries.map((entry) => async () => {
-      const record = this.db
-        .prepare(`SELECT hash FROM files WHERE path = ? AND source = ?`)
-        .get(entry.path, "memory") as { hash: string } | undefined;
-      if (!params.needsFullReindex && record?.hash === entry.hash) {
-        if (params.progress) {
-          params.progress.completed += 1;
-          params.progress.report({
-            completed: params.progress.completed,
-            total: params.progress.total,
-          });
-        }
-        return;
-      }
-      await this.indexFile(entry, { source: "memory" });
-      if (params.progress) {
-        params.progress.completed += 1;
-        params.progress.report({
-          completed: params.progress.completed,
-          total: params.progress.total,
-        });
-      }
-    });
-    await runWithConcurrency(tasks, this.getIndexConcurrency());
-
-    const staleRows = this.db
-      .prepare(`SELECT path FROM files WHERE source = ?`)
-      .all("memory") as Array<{ path: string }>;
-    for (const stale of staleRows) {
-      if (activePaths.has(stale.path)) {
-        continue;
-      }
-      this.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(stale.path, "memory");
-      try {
-        this.db
-          .prepare(
-            `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`,
-          )
-          .run(stale.path, "memory");
-      } catch (err) {
-        log.debug?.(`failed to delete vector rows for ${stale.path}: ${String(err)}`);
-      }
-      this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(stale.path, "memory");
-      if (this.fts.enabled && this.fts.available) {
-        try {
-          this.db
-            .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
-            .run(stale.path, "memory", this.provider.model);
-        } catch (err) {
-          log.debug?.(`failed to delete FTS rows for ${stale.path}: ${String(err)}`);
-        }
-      }
-    }
   }
 
   private async syncSessionFiles(params: {
@@ -792,151 +335,27 @@ export abstract class MemoryManagerSyncOps {
     targetSessionFiles?: string[];
     progress?: MemorySyncProgressState;
   }) {
-    // FTS-only mode: skip embedding sync (no provider)
-    if (!this.provider) {
-      log.debug("Skipping session file sync in FTS-only mode (no embedding provider)");
-      return;
-    }
-
-    const targetSessionFiles = params.needsFullReindex
-      ? null
-      : this.normalizeTargetSessionFiles(params.targetSessionFiles);
-    const files = targetSessionFiles
-      ? Array.from(targetSessionFiles)
-      : await listSessionFilesForAgent(this.agentId);
-    const activePaths = targetSessionFiles
-      ? null
-      : new Set(files.map((file) => sessionPathForFile(file)));
-    const indexAll =
-      params.needsFullReindex || Boolean(targetSessionFiles) || this.sessionsDirtyFiles.size === 0;
-    log.debug("memory sync: indexing session files", {
-      files: files.length,
-      indexAll,
-      dirtyFiles: this.sessionsDirtyFiles.size,
-      targetedFiles: targetSessionFiles?.size ?? 0,
-      batch: this.batch.enabled,
-      concurrency: this.getIndexConcurrency(),
+    await syncSessionFiles({
+      db: this.db,
+      provider: this.provider,
+      agentId: this.agentId,
+      settings: this.settings,
+      fts: this.fts,
+      sessionsDirtyFiles: this.sessionsDirtyFiles,
+      sessionDeltas: this.sessionDeltas,
+      needsFullReindex: params.needsFullReindex,
+      targetSessionFiles: params.targetSessionFiles,
+      getConcurrency: () => this.getIndexConcurrency(),
+      isBatchEnabled: this.batch.enabled,
+      indexFile: (entry, options) => this.indexFile(entry, options),
+      progress: params.progress,
     });
-    if (params.progress) {
-      params.progress.total += files.length;
-      params.progress.report({
-        completed: params.progress.completed,
-        total: params.progress.total,
-        label: this.batch.enabled ? "Indexing session files (batch)..." : "Indexing session files…",
-      });
-    }
-
-    const tasks = files.map((absPath) => async () => {
-      if (!indexAll && !this.sessionsDirtyFiles.has(absPath)) {
-        if (params.progress) {
-          params.progress.completed += 1;
-          params.progress.report({
-            completed: params.progress.completed,
-            total: params.progress.total,
-          });
-        }
-        return;
-      }
-      const entry = await buildSessionEntry(absPath);
-      if (!entry) {
-        if (params.progress) {
-          params.progress.completed += 1;
-          params.progress.report({
-            completed: params.progress.completed,
-            total: params.progress.total,
-          });
-        }
-        return;
-      }
-      const record = this.db
-        .prepare(`SELECT hash FROM files WHERE path = ? AND source = ?`)
-        .get(entry.path, "sessions") as { hash: string } | undefined;
-      if (!params.needsFullReindex && record?.hash === entry.hash) {
-        if (params.progress) {
-          params.progress.completed += 1;
-          params.progress.report({
-            completed: params.progress.completed,
-            total: params.progress.total,
-          });
-        }
-        this.resetSessionDelta(absPath, entry.size);
-        return;
-      }
-      await this.indexFile(entry, { source: "sessions", content: entry.content });
-      this.resetSessionDelta(absPath, entry.size);
-      if (params.progress) {
-        params.progress.completed += 1;
-        params.progress.report({
-          completed: params.progress.completed,
-          total: params.progress.total,
-        });
-      }
-    });
-    await runWithConcurrency(tasks, this.getIndexConcurrency());
-
-    if (activePaths === null) {
-      // Targeted syncs only refresh the requested transcripts and should not
-      // prune unrelated session rows without a full directory enumeration.
-      return;
-    }
-
-    const staleRows = this.db
-      .prepare(`SELECT path FROM files WHERE source = ?`)
-      .all("sessions") as Array<{ path: string }>;
-    for (const stale of staleRows) {
-      if (activePaths.has(stale.path)) {
-        continue;
-      }
-      this.db
-        .prepare(`DELETE FROM files WHERE path = ? AND source = ?`)
-        .run(stale.path, "sessions");
-      try {
-        this.db
-          .prepare(
-            `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`,
-          )
-          .run(stale.path, "sessions");
-      } catch (err) {
-        log.debug?.(`failed to delete vector rows for ${stale.path}: ${String(err)}`);
-      }
-      this.db
-        .prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`)
-        .run(stale.path, "sessions");
-      if (this.fts.enabled && this.fts.available) {
-        try {
-          this.db
-            .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
-            .run(stale.path, "sessions", this.provider.model);
-        } catch (err) {
-          log.debug?.(`failed to delete FTS rows for ${stale.path}: ${String(err)}`);
-        }
-      }
-    }
   }
 
   private createSyncProgress(
     onProgress: (update: MemorySyncProgressUpdate) => void,
   ): MemorySyncProgressState {
-    const state: MemorySyncProgressState = {
-      completed: 0,
-      total: 0,
-      label: undefined,
-      report: (update) => {
-        if (update.label) {
-          state.label = update.label;
-        }
-        const label =
-          update.total > 0 && state.label
-            ? `${state.label} ${update.completed}/${update.total}`
-            : state.label;
-        onProgress({
-          completed: update.completed,
-          total: update.total,
-          label,
-        });
-      },
-    };
-    return state;
+    return createSyncProgress(onProgress);
   }
 
   protected async runSync(params?: {
@@ -957,7 +376,7 @@ export abstract class MemoryManagerSyncOps {
     const meta = this.readMeta();
     const configuredSources = this.resolveConfiguredSourcesForMeta();
     const configuredScopeHash = this.resolveConfiguredScopeHash();
-    const targetSessionFiles = this.normalizeTargetSessionFiles(params?.sessionFiles);
+    const targetSessionFiles = normalizeTargetSessionFiles(this.agentId, params?.sessionFiles);
     const hasTargetSessionFiles = targetSessionFiles !== null;
     if (hasTargetSessionFiles && targetSessionFiles && this.sources.has("sessions")) {
       // Post-compaction refreshes should only update the explicit transcript files and
@@ -968,7 +387,7 @@ export abstract class MemoryManagerSyncOps {
           targetSessionFiles: Array.from(targetSessionFiles),
           progress: progress ?? undefined,
         });
-        this.clearSyncedSessionFiles(targetSessionFiles);
+        this.sessionsDirty = clearSyncedSessionFiles(this.sessionsDirtyFiles, targetSessionFiles);
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         const activated =
@@ -1031,14 +450,14 @@ export abstract class MemoryManagerSyncOps {
       const shouldSyncMemory =
         this.sources.has("memory") &&
         ((!hasTargetSessionFiles && params?.force) || needsFullReindex || this.dirty);
-      const shouldSyncSessions = this.shouldSyncSessions(params, needsFullReindex);
+      const shouldSyncSessionsFlag = this.shouldSyncSessions(params, needsFullReindex);
 
       if (shouldSyncMemory) {
         await this.syncMemoryFiles({ needsFullReindex, progress: progress ?? undefined });
         this.dirty = false;
       }
 
-      if (shouldSyncSessions) {
+      if (shouldSyncSessionsFlag) {
         await this.syncSessionFiles({
           needsFullReindex,
           targetSessionFiles: targetSessionFiles ? Array.from(targetSessionFiles) : undefined,
@@ -1188,7 +607,7 @@ export abstract class MemoryManagerSyncOps {
     try {
       this.seedEmbeddingCache(originalDb);
       const shouldSyncMemory = this.sources.has("memory");
-      const shouldSyncSessions = this.shouldSyncSessions(
+      const shouldSyncSessionsFlag = this.shouldSyncSessions(
         { reason: params.reason, force: params.force },
         true,
       );
@@ -1198,7 +617,7 @@ export abstract class MemoryManagerSyncOps {
         this.dirty = false;
       }
 
-      if (shouldSyncSessions) {
+      if (shouldSyncSessionsFlag) {
         await this.syncSessionFiles({ needsFullReindex: true, progress: params.progress });
         this.sessionsDirty = false;
         this.sessionsDirtyFiles.clear();
@@ -1262,7 +681,7 @@ export abstract class MemoryManagerSyncOps {
     this.resetIndex();
 
     const shouldSyncMemory = this.sources.has("memory");
-    const shouldSyncSessions = this.shouldSyncSessions(
+    const shouldSyncSessionsFlag = this.shouldSyncSessions(
       { reason: params.reason, force: params.force },
       true,
     );
@@ -1272,7 +691,7 @@ export abstract class MemoryManagerSyncOps {
       this.dirty = false;
     }
 
-    if (shouldSyncSessions) {
+    if (shouldSyncSessionsFlag) {
       await this.syncSessionFiles({ needsFullReindex: true, progress: params.progress });
       this.sessionsDirty = false;
       this.sessionsDirtyFiles.clear();
@@ -1309,85 +728,28 @@ export abstract class MemoryManagerSyncOps {
         log.debug?.(`failed to reset FTS table: ${String(err)}`);
       }
     }
-    this.dropVectorTable();
+    dropVectorTable(this.vector, this.db);
     this.vector.dims = undefined;
     this.sessionsDirtyFiles.clear();
   }
 
   protected readMeta(): MemoryIndexMeta | null {
-    const row = this.db.prepare(`SELECT value FROM meta WHERE key = ?`).get(META_KEY) as
-      | { value: string }
-      | undefined;
-    if (!row?.value) {
-      this.lastMetaSerialized = null;
-      return null;
-    }
-    try {
-      const parsed = JSON.parse(row.value) as MemoryIndexMeta;
-      this.lastMetaSerialized = row.value;
-      return parsed;
-    } catch {
-      this.lastMetaSerialized = null;
-      return null;
-    }
+    return readMetaHelper(this.db, this.lastMetaSerializedRef);
   }
 
   protected writeMeta(meta: MemoryIndexMeta) {
-    const value = JSON.stringify(meta);
-    if (this.lastMetaSerialized === value) {
-      return;
-    }
-    this.db
-      .prepare(
-        `INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
-      )
-      .run(META_KEY, value);
-    this.lastMetaSerialized = value;
+    writeMetaHelper(this.db, meta, this.lastMetaSerializedRef);
   }
 
   private resolveConfiguredSourcesForMeta(): MemorySource[] {
-    const normalized = Array.from(this.sources)
-      .filter((source): source is MemorySource => source === "memory" || source === "sessions")
-      .toSorted();
-    return normalized.length > 0 ? normalized : ["memory"];
-  }
-
-  private normalizeMetaSources(meta: MemoryIndexMeta): MemorySource[] {
-    if (!Array.isArray(meta.sources)) {
-      // Backward compatibility for older indexes that did not persist sources.
-      return ["memory"];
-    }
-    const normalized = Array.from(
-      new Set(
-        meta.sources.filter(
-          (source): source is MemorySource => source === "memory" || source === "sessions",
-        ),
-      ),
-    ).toSorted();
-    return normalized.length > 0 ? normalized : ["memory"];
+    return resolveConfiguredSourcesForMetaHelper(this.sources);
   }
 
   private resolveConfiguredScopeHash(): string {
-    const extraPaths = normalizeExtraMemoryPaths(this.workspaceDir, this.settings.extraPaths)
-      .map((value) => value.replace(/\\/g, "/"))
-      .toSorted();
-    return hashText(
-      JSON.stringify({
-        extraPaths,
-        multimodal: {
-          enabled: this.settings.multimodal.enabled,
-          modalities: [...this.settings.multimodal.modalities].toSorted(),
-          maxFileBytes: this.settings.multimodal.maxFileBytes,
-        },
-      }),
-    );
+    return resolveConfiguredScopeHashHelper(this.workspaceDir, this.settings);
   }
 
   private metaSourcesDiffer(meta: MemoryIndexMeta, configuredSources: MemorySource[]): boolean {
-    const metaSources = this.normalizeMetaSources(meta);
-    if (metaSources.length !== configuredSources.length) {
-      return true;
-    }
-    return metaSources.some((source, index) => source !== configuredSources[index]);
+    return metaSourcesDiffer(meta, configuredSources);
   }
 }
