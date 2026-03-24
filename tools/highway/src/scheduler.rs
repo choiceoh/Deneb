@@ -335,3 +335,315 @@ impl Schedule {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cache::CacheStore;
+
+    // ── compute_optimal_shard_count ─────────────────────────────────────────
+
+    #[test]
+    fn shard_count_minimum_is_2() {
+        // Even with 1 test, we get at least MIN_WORKERS (2)
+        assert_eq!(compute_optimal_shard_count(1, 8), 2);
+    }
+
+    #[test]
+    fn shard_count_capped_at_16() {
+        // With 1000 tests and 32 CPUs, sqrt(1000) ≈ 32, but hard cap is 16
+        assert_eq!(compute_optimal_shard_count(1000, 32), 16);
+    }
+
+    #[test]
+    fn shard_count_capped_at_cpus() {
+        // sqrt(100) = 10, but only 4 CPUs available
+        assert_eq!(compute_optimal_shard_count(100, 4), 4);
+    }
+
+    #[test]
+    fn shard_count_sqrt_based() {
+        // sqrt(16) = 4, with 8 CPUs available -> 4
+        assert_eq!(compute_optimal_shard_count(16, 8), 4);
+    }
+
+    #[test]
+    fn shard_count_rounds_up() {
+        // sqrt(10) ≈ 3.16 -> ceil = 4
+        assert_eq!(compute_optimal_shard_count(10, 8), 4);
+    }
+
+    // ── TimingSource ────────────────────────────────────────────────────────
+
+    #[test]
+    fn timing_source_returns_default_for_unknown() {
+        let cache = CacheStore::default();
+        let timing = TimingSource::new(&cache, None);
+        assert_eq!(timing.estimate("unknown.test.ts"), DEFAULT_DURATION_MS);
+    }
+
+    #[test]
+    fn timing_source_prefers_cache_over_baseline() {
+        let mut cache = CacheStore::default();
+        cache.record("a.test.ts".into(), 1, crate::cache::TestResult::Pass, 999);
+
+        // Write a baseline file with a different value
+        let dir = tempfile::tempdir().unwrap();
+        let baseline = dir.path().join("timings.json");
+        std::fs::write(&baseline, r#"{"a.test.ts": 100}"#).unwrap();
+
+        let timing = TimingSource::new(&cache, Some(baseline.as_path()));
+        assert_eq!(timing.estimate("a.test.ts"), 999);
+    }
+
+    #[test]
+    fn timing_source_falls_back_to_baseline() {
+        let cache = CacheStore::default();
+        let dir = tempfile::tempdir().unwrap();
+        let baseline = dir.path().join("timings.json");
+        std::fs::write(&baseline, r#"{"b.test.ts": 500.0}"#).unwrap();
+
+        let timing = TimingSource::new(&cache, Some(baseline.as_path()));
+        assert_eq!(timing.estimate("b.test.ts"), 500);
+    }
+
+    // ── IsolationBehavior ───────────────────────────────────────────────────
+
+    #[test]
+    fn isolation_behavior_default_empty() {
+        let b = IsolationBehavior::default();
+        assert!(b.isolated.is_empty());
+        assert!(b.singleton_isolated.is_empty());
+        assert!(b.thread_singleton.is_empty());
+    }
+
+    #[test]
+    fn load_isolation_behavior_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let b = load_isolation_behavior(dir.path());
+        assert!(b.isolated.is_empty());
+    }
+
+    #[test]
+    fn load_isolation_behavior_from_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("test/fixtures")).unwrap();
+        std::fs::write(
+            dir.path().join("test/fixtures/test-parallel.behavior.json"),
+            r#"{"isolated": ["gateway"], "singleton_isolated": [], "thread_singleton": []}"#,
+        )
+        .unwrap();
+
+        let b = load_isolation_behavior(dir.path());
+        assert_eq!(b.isolated, vec!["gateway"]);
+    }
+
+    // ── create_schedule ─────────────────────────────────────────────────────
+
+    #[test]
+    fn create_schedule_empty_input() {
+        let cache = CacheStore::default();
+        let timing = TimingSource::new(&cache, None);
+        let behavior = IsolationBehavior::default();
+
+        let schedule = create_schedule(&[], Path::new("/root"), 4, &timing, &behavior).unwrap();
+        assert_eq!(schedule.num_shards, 0);
+        assert!(schedule.shards.is_empty());
+        assert_eq!(schedule.estimated_wall_time_ms, 0);
+        assert!((schedule.efficiency - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn create_schedule_single_test() {
+        let cache = CacheStore::default();
+        let timing = TimingSource::new(&cache, None);
+        let behavior = IsolationBehavior::default();
+        let tests = vec![PathBuf::from("/root/a.test.ts")];
+
+        let schedule = create_schedule(&tests, Path::new("/root"), 4, &timing, &behavior).unwrap();
+        assert!(schedule.num_shards >= 1);
+        // The single test should appear in exactly one shard
+        let total_files: usize = schedule.shards.iter().map(|s| s.test_files.len()).sum();
+        assert_eq!(total_files, 1);
+    }
+
+    #[test]
+    fn create_schedule_distributes_tests() {
+        let cache = CacheStore::default();
+        let timing = TimingSource::new(&cache, None);
+        let behavior = IsolationBehavior::default();
+
+        let tests: Vec<PathBuf> = (0..20)
+            .map(|i| PathBuf::from(format!("/root/test{}.test.ts", i)))
+            .collect();
+
+        let schedule = create_schedule(&tests, Path::new("/root"), 8, &timing, &behavior).unwrap();
+        assert!(schedule.num_shards >= 2);
+        let total_files: usize = schedule.shards.iter().map(|s| s.test_files.len()).sum();
+        assert_eq!(total_files, 20);
+    }
+
+    #[test]
+    fn create_schedule_isolates_tests() {
+        let cache = CacheStore::default();
+        let timing = TimingSource::new(&cache, None);
+        let behavior = IsolationBehavior {
+            isolated: vec!["gateway".into()],
+            singleton_isolated: Vec::new(),
+            thread_singleton: Vec::new(),
+        };
+
+        let tests = vec![
+            PathBuf::from("/root/gateway.test.ts"),
+            PathBuf::from("/root/utils.test.ts"),
+            PathBuf::from("/root/config.test.ts"),
+        ];
+
+        let schedule = create_schedule(&tests, Path::new("/root"), 4, &timing, &behavior).unwrap();
+
+        // The gateway test should be alone in its shard
+        let gateway_shard = schedule
+            .shards
+            .iter()
+            .find(|s| {
+                s.test_files
+                    .iter()
+                    .any(|f| f.to_string_lossy().contains("gateway"))
+            })
+            .expect("gateway test should be in a shard");
+        assert_eq!(
+            gateway_shard.test_files.len(),
+            1,
+            "isolated test should be alone in its shard"
+        );
+    }
+
+    #[test]
+    fn create_schedule_indices_are_sequential() {
+        let cache = CacheStore::default();
+        let timing = TimingSource::new(&cache, None);
+        let behavior = IsolationBehavior::default();
+
+        let tests: Vec<PathBuf> = (0..10)
+            .map(|i| PathBuf::from(format!("/root/t{}.test.ts", i)))
+            .collect();
+
+        let schedule = create_schedule(&tests, Path::new("/root"), 4, &timing, &behavior).unwrap();
+        for (i, shard) in schedule.shards.iter().enumerate() {
+            assert_eq!(shard.index, i, "shard indices should be sequential");
+        }
+    }
+
+    #[test]
+    fn create_schedule_shards_sorted_by_duration_desc() {
+        let mut cache = CacheStore::default();
+        // Give different durations to force ordering
+        cache.record("fast.test.ts".into(), 1, crate::cache::TestResult::Pass, 100);
+        cache.record("slow.test.ts".into(), 2, crate::cache::TestResult::Pass, 5000);
+
+        let timing = TimingSource::new(&cache, None);
+        let behavior = IsolationBehavior::default();
+
+        let tests = vec![
+            PathBuf::from("/root/fast.test.ts"),
+            PathBuf::from("/root/slow.test.ts"),
+            PathBuf::from("/root/other1.test.ts"),
+            PathBuf::from("/root/other2.test.ts"),
+        ];
+
+        let schedule = create_schedule(&tests, Path::new("/root"), 4, &timing, &behavior).unwrap();
+        for i in 1..schedule.shards.len() {
+            assert!(
+                schedule.shards[i - 1].estimated_duration_ms
+                    >= schedule.shards[i].estimated_duration_ms,
+                "shards should be sorted by duration descending"
+            );
+        }
+    }
+
+    // ── refine_schedule ─────────────────────────────────────────────────────
+
+    #[test]
+    fn refine_schedule_balances_loads() {
+        let a = PathBuf::from("a");
+        let b = PathBuf::from("b");
+        let c = PathBuf::from("c");
+        let timed = vec![(a.clone(), 1000), (b.clone(), 100), (c.clone(), 100)];
+
+        // Start with imbalanced assignment: shard0 has all, shard1 empty
+        let mut shard_loads = vec![
+            (vec![a.clone(), b.clone(), c.clone()], 1200),
+            (vec![], 0),
+        ];
+
+        refine_schedule(&mut shard_loads, &timed);
+
+        // After refinement, loads should be more balanced
+        let diff = (shard_loads[0].1 as i64 - shard_loads[1].1 as i64).unsigned_abs();
+        assert!(diff < 1200, "loads should be more balanced after refinement");
+    }
+
+    #[test]
+    fn refine_schedule_noop_when_balanced() {
+        let a = PathBuf::from("a");
+        let b = PathBuf::from("b");
+        let timed = vec![(a.clone(), 500), (b.clone(), 500)];
+
+        let mut shard_loads = vec![(vec![a.clone()], 500), (vec![b.clone()], 500)];
+
+        refine_schedule(&mut shard_loads, &timed);
+
+        // Should remain the same
+        assert_eq!(shard_loads[0].1, 500);
+        assert_eq!(shard_loads[1].1, 500);
+    }
+
+    // ── to_vitest_specs ─────────────────────────────────────────────────────
+
+    #[test]
+    fn to_vitest_specs_strips_root_prefix() {
+        let schedule = Schedule {
+            num_shards: 1,
+            shards: vec![Shard {
+                index: 0,
+                test_files: vec![PathBuf::from("/root/src/a.test.ts")],
+                estimated_duration_ms: 100,
+            }],
+            estimated_wall_time_ms: 100,
+            total_execution_time_ms: 100,
+            efficiency: 1.0,
+        };
+
+        let specs = schedule.to_vitest_specs(Path::new("/root"));
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].test_files, vec!["src/a.test.ts"]);
+        assert_eq!(specs[0].estimated_ms, 100);
+    }
+
+    #[test]
+    fn to_vitest_specs_preserves_ordering() {
+        let schedule = Schedule {
+            num_shards: 2,
+            shards: vec![
+                Shard {
+                    index: 0,
+                    test_files: vec![PathBuf::from("/r/a.test.ts")],
+                    estimated_duration_ms: 500,
+                },
+                Shard {
+                    index: 1,
+                    test_files: vec![PathBuf::from("/r/b.test.ts"), PathBuf::from("/r/c.test.ts")],
+                    estimated_duration_ms: 400,
+                },
+            ],
+            estimated_wall_time_ms: 500,
+            total_execution_time_ms: 900,
+            efficiency: 0.9,
+        };
+
+        let specs = schedule.to_vitest_specs(Path::new("/r"));
+        assert_eq!(specs[0].shard_index, 0);
+        assert_eq!(specs[1].shard_index, 1);
+        assert_eq!(specs[1].test_files.len(), 2);
+    }
+}

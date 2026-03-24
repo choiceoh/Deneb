@@ -9,13 +9,14 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use dashmap::DashMap;
+use ignore::WalkBuilder;
+use memchr::memmem;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::Statement;
 use oxc_parser::Parser;
 use oxc_resolver::{ResolveOptions, Resolver};
 use oxc_span::SourceType;
 use rayon::prelude::*;
-use walkdir::WalkDir;
 
 /// Represents the full import graph of the project.
 #[derive(Debug)]
@@ -167,33 +168,55 @@ pub fn find_affected_tests(
 }
 
 /// Discover all source files matching the given extensions.
+/// Uses the `ignore` crate's parallel walker for multi-threaded traversal
+/// with native .gitignore support (automatically skips node_modules, .git, etc.).
 fn discover_source_files(
     root: &Path,
     extensions: &[String],
     ignore_dirs: &[String],
 ) -> Vec<PathBuf> {
     let ext_set: HashSet<&str> = extensions.iter().map(|s| s.as_str()).collect();
-    let ignore_set: HashSet<&str> = ignore_dirs.iter().map(|s| s.as_str()).collect();
 
-    WalkDir::new(root)
-        .into_iter()
-        .filter_entry(|entry| {
-            let name = entry.file_name().to_string_lossy();
-            if entry.file_type().is_dir() {
-                return !ignore_set.contains(name.as_ref());
+    let mut builder = WalkBuilder::new(root);
+    builder.hidden(false).git_ignore(true).git_global(false);
+
+    // Add custom ignore dirs as overrides
+    let mut overrides = ignore::overrides::OverrideBuilder::new(root);
+    for dir in ignore_dirs {
+        // Ignore pattern: negate match to skip these directories
+        let _ = overrides.add(&format!("!{}/**", dir));
+    }
+    if let Ok(ov) = overrides.build() {
+        builder.overrides(ov);
+    }
+
+    let results: DashMap<PathBuf, ()> = DashMap::new();
+    let ext_set_ref = &ext_set;
+    let results_ref = &results;
+
+    builder.build_parallel().run(|| {
+        Box::new(move |entry| {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => return ignore::WalkState::Continue,
+            };
+
+            if !entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+                return ignore::WalkState::Continue;
             }
-            true
+
+            let path = entry.path();
+            if let Some(ext) = path.extension() {
+                if ext_set_ref.contains(ext.to_string_lossy().as_ref()) {
+                    results_ref.insert(path.to_path_buf(), ());
+                }
+            }
+
+            ignore::WalkState::Continue
         })
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .map(|ext| ext_set.contains(ext.to_string_lossy().as_ref()))
-                .unwrap_or(false)
-        })
-        .map(|e| e.into_path())
-        .collect()
+    });
+
+    results.into_iter().map(|(k, _)| k).collect()
 }
 
 /// Parse a TypeScript/JavaScript file and extract all import source strings.
@@ -238,42 +261,36 @@ fn extract_imports(file_path: &Path) -> Result<Vec<String>> {
     Ok(sources)
 }
 
-/// Extract dynamic import() calls via lightweight string scanning.
+/// Extract dynamic import() calls via SIMD-accelerated substring search.
 /// This catches `await import("./foo")` and `import("./bar")` patterns.
 fn extract_dynamic_imports(source: &str, sources: &mut Vec<String>) {
     let bytes = source.as_bytes();
     let len = bytes.len();
-    let import_bytes = b"import(";
+    let finder = memmem::Finder::new(b"import(");
 
-    let mut i = 0;
-    while i + import_bytes.len() < len {
-        if &bytes[i..i + import_bytes.len()] == import_bytes {
-            let start = i + import_bytes.len();
-            // Skip whitespace
-            let mut j = start;
-            while j < len && bytes[j].is_ascii_whitespace() {
-                j += 1;
+    for pos in finder.find_iter(bytes) {
+        let start = pos + 7; // len("import(")
+        // Skip whitespace
+        let mut j = start;
+        while j < len && bytes[j].is_ascii_whitespace() {
+            j += 1;
+        }
+        // Check for quote character
+        if j < len && (bytes[j] == b'"' || bytes[j] == b'\'' || bytes[j] == b'`') {
+            let quote = bytes[j];
+            let str_start = j + 1;
+            let mut str_end = str_start;
+            while str_end < len && bytes[str_end] != quote {
+                str_end += 1;
             }
-            // Check for quote character
-            if j < len && (bytes[j] == b'"' || bytes[j] == b'\'' || bytes[j] == b'`') {
-                let quote = bytes[j];
-                let str_start = j + 1;
-                let mut str_end = str_start;
-                while str_end < len && bytes[str_end] != quote {
-                    str_end += 1;
-                }
-                if str_end < len {
-                    if let Ok(s) = std::str::from_utf8(&bytes[str_start..str_end]) {
-                        // Only include relative/alias imports, not bare specifiers for npm packages
-                        if s.starts_with('.') || s.starts_with('/') || s.contains('/') {
-                            sources.push(s.to_string());
-                        }
+            if str_end < len {
+                if let Ok(s) = std::str::from_utf8(&bytes[str_start..str_end]) {
+                    // Only include relative/alias imports, not bare specifiers for npm packages
+                    if s.starts_with('.') || s.starts_with('/') || s.contains('/') {
+                        sources.push(s.to_string());
                     }
                 }
             }
-            i = start;
-        } else {
-            i += 1;
         }
     }
 }
@@ -342,4 +359,250 @@ pub struct AnalysisResult {
     pub graph_nodes: usize,
     pub graph_edges: usize,
     pub elapsed_ms: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::{HashMap, HashSet};
+    use std::path::PathBuf;
+
+    // ── extract_dynamic_imports ──────────────────────────────────────────────
+
+    #[test]
+    fn extract_dynamic_imports_double_quotes() {
+        let mut sources = Vec::new();
+        extract_dynamic_imports(r#"const m = import("./foo");"#, &mut sources);
+        assert_eq!(sources, vec!["./foo"]);
+    }
+
+    #[test]
+    fn extract_dynamic_imports_single_quotes() {
+        let mut sources = Vec::new();
+        extract_dynamic_imports("const m = import('./bar');", &mut sources);
+        assert_eq!(sources, vec!["./bar"]);
+    }
+
+    #[test]
+    fn extract_dynamic_imports_backtick() {
+        let mut sources = Vec::new();
+        extract_dynamic_imports("const m = import(`./baz`);", &mut sources);
+        assert_eq!(sources, vec!["./baz"]);
+    }
+
+    #[test]
+    fn extract_dynamic_imports_with_whitespace() {
+        let mut sources = Vec::new();
+        extract_dynamic_imports("await import(  \"./spaced\"  )", &mut sources);
+        assert_eq!(sources, vec!["./spaced"]);
+    }
+
+    #[test]
+    fn extract_dynamic_imports_skips_bare_specifiers() {
+        let mut sources = Vec::new();
+        extract_dynamic_imports(r#"import("lodash")"#, &mut sources);
+        assert!(sources.is_empty(), "bare npm specifier should be skipped");
+    }
+
+    #[test]
+    fn extract_dynamic_imports_includes_scoped_packages() {
+        let mut sources = Vec::new();
+        extract_dynamic_imports(r#"import("@scope/pkg")"#, &mut sources);
+        assert_eq!(sources, vec!["@scope/pkg"], "scoped package has a slash so it's included");
+    }
+
+    #[test]
+    fn extract_dynamic_imports_multiple() {
+        let mut sources = Vec::new();
+        let code = r#"
+            import("./a");
+            import('./b');
+            import(`./c`);
+        "#;
+        extract_dynamic_imports(code, &mut sources);
+        assert_eq!(sources, vec!["./a", "./b", "./c"]);
+    }
+
+    #[test]
+    fn extract_dynamic_imports_empty_source() {
+        let mut sources = Vec::new();
+        extract_dynamic_imports("", &mut sources);
+        assert!(sources.is_empty());
+    }
+
+    #[test]
+    fn extract_dynamic_imports_absolute_path() {
+        let mut sources = Vec::new();
+        extract_dynamic_imports(r#"import("/absolute/path")"#, &mut sources);
+        assert_eq!(sources, vec!["/absolute/path"]);
+    }
+
+    // ── is_node_builtin ─────────────────────────────────────────────────────
+
+    #[test]
+    fn node_builtins_detected() {
+        for name in &["fs", "path", "os", "crypto", "http", "https", "child_process", "events"] {
+            assert!(is_node_builtin(name), "{} should be detected as a builtin", name);
+        }
+    }
+
+    #[test]
+    fn node_builtin_subpath_detected() {
+        assert!(is_node_builtin("fs/promises"), "fs/promises should match via split('/')");
+    }
+
+    #[test]
+    fn non_builtins_rejected() {
+        assert!(!is_node_builtin("express"));
+        assert!(!is_node_builtin("./local"));
+        assert!(!is_node_builtin("@scope/pkg"));
+    }
+
+    // ── AnalyzerConfig defaults ─────────────────────────────────────────────
+
+    #[test]
+    fn analyzer_config_defaults() {
+        let cfg = AnalyzerConfig::default();
+        assert_eq!(cfg.root, PathBuf::from("."));
+        assert!(cfg.extensions.contains(&"ts".to_string()));
+        assert!(cfg.extensions.contains(&"tsx".to_string()));
+        assert!(cfg.extensions.contains(&"js".to_string()));
+        assert!(cfg.ignore_dirs.contains(&"node_modules".to_string()));
+        assert!(cfg.ignore_dirs.contains(&"dist".to_string()));
+        assert_eq!(cfg.test_pattern, ".test.");
+    }
+
+    // ── discover_source_files ───────────────────────────────────────────────
+
+    #[test]
+    fn discover_source_files_finds_ts_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(root.join("a.ts"), "export const a = 1;").unwrap();
+        std::fs::write(root.join("b.js"), "export const b = 2;").unwrap();
+        std::fs::write(root.join("c.txt"), "not source").unwrap();
+
+        let files = discover_source_files(
+            root,
+            &["ts".into(), "js".into()],
+            &["node_modules".into()],
+        );
+        assert_eq!(files.len(), 2);
+        let names: HashSet<String> = files
+            .iter()
+            .map(|f| f.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert!(names.contains("a.ts"));
+        assert!(names.contains("b.js"));
+    }
+
+    #[test]
+    fn discover_source_files_ignores_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::create_dir(root.join("node_modules")).unwrap();
+        std::fs::write(root.join("node_modules/dep.ts"), "").unwrap();
+        std::fs::write(root.join("src.ts"), "").unwrap();
+
+        let files = discover_source_files(root, &["ts".into()], &["node_modules".into()]);
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("src.ts"));
+    }
+
+    // ── find_affected_tests ─────────────────────────────────────────────────
+
+    fn make_graph(
+        forward: Vec<(&str, Vec<&str>)>,
+        reverse: Vec<(&str, Vec<&str>)>,
+        tests: Vec<&str>,
+    ) -> ImportGraph {
+        let to_map = |pairs: Vec<(&str, Vec<&str>)>| -> HashMap<PathBuf, HashSet<PathBuf>> {
+            pairs
+                .into_iter()
+                .map(|(k, vs)| {
+                    (
+                        PathBuf::from(k),
+                        vs.into_iter().map(PathBuf::from).collect(),
+                    )
+                })
+                .collect()
+        };
+
+        ImportGraph {
+            forward: to_map(forward),
+            reverse: to_map(reverse),
+            test_files: tests.into_iter().map(PathBuf::from).collect(),
+        }
+    }
+
+    #[test]
+    fn find_affected_tests_direct_change() {
+        // Changing a test file itself should mark it as affected
+        let graph = make_graph(
+            vec![("/a.test.ts", vec!["/a.ts"])],
+            vec![("/a.ts", vec!["/a.test.ts"])],
+            vec!["/a.test.ts"],
+        );
+        let affected = find_affected_tests(&graph, &[PathBuf::from("/a.test.ts")]).unwrap();
+        assert_eq!(affected, vec![PathBuf::from("/a.test.ts")]);
+    }
+
+    #[test]
+    fn find_affected_tests_transitive() {
+        // a.test.ts -> b.ts -> c.ts; changing c.ts should affect a.test.ts
+        let graph = make_graph(
+            vec![
+                ("/a.test.ts", vec!["/b.ts"]),
+                ("/b.ts", vec!["/c.ts"]),
+            ],
+            vec![
+                ("/c.ts", vec!["/b.ts"]),
+                ("/b.ts", vec!["/a.test.ts"]),
+            ],
+            vec!["/a.test.ts"],
+        );
+        let affected = find_affected_tests(&graph, &[PathBuf::from("/c.ts")]).unwrap();
+        assert_eq!(affected, vec![PathBuf::from("/a.test.ts")]);
+    }
+
+    #[test]
+    fn find_affected_tests_no_match() {
+        let graph = make_graph(
+            vec![("/a.test.ts", vec!["/a.ts"])],
+            vec![("/a.ts", vec!["/a.test.ts"])],
+            vec!["/a.test.ts"],
+        );
+        // /unrelated.ts has no reverse edges, so no tests affected
+        let affected = find_affected_tests(&graph, &[PathBuf::from("/unrelated.ts")]).unwrap();
+        assert!(affected.is_empty());
+    }
+
+    #[test]
+    fn find_affected_tests_multiple_tests() {
+        // Both test1 and test2 depend on shared.ts
+        let graph = make_graph(
+            vec![
+                ("/test1.test.ts", vec!["/shared.ts"]),
+                ("/test2.test.ts", vec!["/shared.ts"]),
+            ],
+            vec![("/shared.ts", vec!["/test1.test.ts", "/test2.test.ts"])],
+            vec!["/test1.test.ts", "/test2.test.ts"],
+        );
+        let affected = find_affected_tests(&graph, &[PathBuf::from("/shared.ts")]).unwrap();
+        assert_eq!(affected.len(), 2);
+    }
+
+    #[test]
+    fn find_affected_tests_handles_cycles() {
+        // a -> b -> a (cycle); changing a should still terminate
+        let graph = make_graph(
+            vec![("/a.test.ts", vec!["/b.ts"]), ("/b.ts", vec!["/a.test.ts"])],
+            vec![("/a.test.ts", vec!["/b.ts"]), ("/b.ts", vec!["/a.test.ts"])],
+            vec!["/a.test.ts"],
+        );
+        let affected = find_affected_tests(&graph, &[PathBuf::from("/b.ts")]).unwrap();
+        assert_eq!(affected, vec![PathBuf::from("/a.test.ts")]);
+    }
 }
