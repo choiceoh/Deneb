@@ -40,9 +40,6 @@ impl DangerousPatterns {
     }
 
     fn matches(&self, haystack: &[u8]) -> bool {
-        // Build a lowercase view of the haystack on the stack for small inputs,
-        // or heap for large ones, then search with SIMD finders.
-        // For very large inputs (>64 KiB), use a window-based approach.
         let lower: Vec<u8> = haystack.iter().map(|b| b.to_ascii_lowercase()).collect();
         self.finders.iter().any(|f| f.find(&lower).is_some())
     }

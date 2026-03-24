@@ -31,7 +31,7 @@ const FRAME_TYPE_EVENT: u32 = 2;
 /// Uses zero-copy JsString to avoid Rust String allocation on the input side.
 /// Throws a JS error if the frame is invalid or exceeds the size limit.
 #[napi]
-pub fn validate_frame(env: Env, json: napi::JsString) -> Result<u32> {
+pub fn validate_frame(_env: Env, json: napi::JsString) -> Result<u32> {
     let json_utf8 = json.into_utf8()?;
     let json_str = json_utf8.as_str()?;
     if json_str.len() > MAX_JSON_BYTES {

@@ -358,19 +358,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "deneb-native"
-version = "0.1.0"
-dependencies = [
- "crc32fast",
- "flate2",
- "globset",
- "kamadak-exif",
- "napi",
- "napi-build",
- "napi-derive",
-]
-
-[[package]]
 name = "displaydoc"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

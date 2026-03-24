@@ -1,10 +1,10 @@
 /**
- * Lazy loader for the optional @deneb/core-rs Rust addon.
+ * Lazy loader for core-rs functions from the unified @deneb/native addon.
  * Exposes protocol validation, security primitives, and media detection.
- * Falls back gracefully when the addon is not available or has an ABI mismatch.
+ * Falls back gracefully when the addon is not available.
  */
 
-import { createRequire } from "node:module";
+import { loadRawAddon } from "./native.js";
 
 /** Frame type IDs returned by native validateFrame (matches Rust enum order). */
 const FRAME_TYPES = ["req", "res", "event"] as const;
@@ -42,59 +42,31 @@ function wrapModule(raw: CoreRsModuleRaw): CoreRsModule {
       }
       return ft;
     },
-    constantTimeEq: raw.constantTimeEq.bind(raw),
-    detectMime: raw.detectMime.bind(raw),
-    isSafeInput: raw.isSafeInput.bind(raw),
-    sanitizeControlChars: raw.sanitizeControlChars.bind(raw),
+    constantTimeEq: (a: Buffer, b: Buffer) => raw.constantTimeEq(a, b),
+    detectMime: (data: Buffer) => raw.detectMime(data),
+    isSafeInput: (input: string) => raw.isSafeInput(input),
+    sanitizeControlChars: (input: string) => raw.sanitizeControlChars(input),
   };
 }
-
-/** Expected function exports and their types, used for runtime shape validation. */
-const EXPECTED_EXPORTS: Array<[string, string]> = [
-  ["validateFrame", "function"],
-  ["constantTimeEq", "function"],
-  ["detectMime", "function"],
-  ["isSafeInput", "function"],
-  ["sanitizeControlChars", "function"],
-];
-
-/** PNG magic bytes for the load-time smoke test. */
-const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 let coreRs: CoreRsModule | null = null;
 let loaded = false;
 
 /**
- * Attempt to load the core-rs native addon. Returns null if unavailable.
- * Validates that the loaded module exposes all expected functions and produces
- * correct output (smoke test) to guard against ABI mismatches from stale builds.
- * Result is cached after first call.
+ * Load core-rs functions from the unified native addon.
+ * Returns null if the addon is unavailable. Result is cached.
+ * Shape validation and smoke tests are handled by the shared loadRawAddon().
  */
 export function loadCoreRs(): CoreRsModule | null {
   if (loaded) {
     return coreRs;
   }
   loaded = true;
-  try {
-    const require = createRequire(import.meta.url);
-    const mod = require("@deneb/native") as Record<string, unknown>;
-    // Runtime shape validation: ensure all expected functions are present.
-    for (const [name, kind] of EXPECTED_EXPORTS) {
-      if (typeof mod[name] !== kind) {
-        coreRs = null;
-        return coreRs;
-      }
-    }
-    const raw = mod as unknown as CoreRsModuleRaw;
-    // Smoke test: verify detectMime returns correct result for a known input.
-    if (raw.detectMime(PNG_MAGIC) !== "image/png") {
-      coreRs = null;
-      return coreRs;
-    }
-    // Wrap raw module to map numeric frame type IDs to strings.
-    coreRs = wrapModule(raw);
-  } catch {
+  const raw = loadRawAddon();
+  if (!raw) {
     coreRs = null;
+    return coreRs;
   }
+  coreRs = wrapModule(raw as unknown as CoreRsModuleRaw);
   return coreRs;
 }

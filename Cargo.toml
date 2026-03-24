@@ -1,5 +1,5 @@
 [workspace]
-members = ["core-rs", "core-rs-napi", "native", "tools/highway"]
+members = ["core-rs", "core-rs-napi", "tools/highway"]
 resolver = "2"
 
 [profile.release]
