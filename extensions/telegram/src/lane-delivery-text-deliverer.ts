@@ -269,11 +269,16 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
           return "fallback";
         }
         if (isRecoverableTelegramNetworkError(err, { allowMessageMatch: true })) {
+          // Network errors after connect (ECONNRESET, ETIMEDOUT, etc.) are
+          // ambiguous — the edit may or may not have landed. Previously we
+          // marked as delivered and kept the partial preview, which caused
+          // truncated or missing messages. Fall back to a standard send so
+          // the user always receives the full response. The old preview will
+          // be cleaned up by the finally block.
           params.log(
-            `telegram: ${args.laneName} preview final edit may have landed despite network error; keeping existing preview (${String(err)})`,
+            `telegram: ${args.laneName} preview final edit failed with network error; falling back to standard send to ensure delivery (${String(err)})`,
           );
-          params.markDelivered();
-          return "retained";
+          return "fallback";
         }
         if (isTelegramClientRejection(err)) {
           params.log(
@@ -281,12 +286,14 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
           );
           return "fallback";
         }
-        // Default: ambiguous error — prefer incomplete over duplicate
+        // Default: ambiguous error — fall back to standard send to ensure the
+        // user always receives the complete response. This may occasionally
+        // produce a duplicate message, but that is preferable to silent
+        // message loss.
         params.log(
-          `telegram: ${args.laneName} preview final edit failed with ambiguous error; keeping existing preview to avoid duplicate (${String(err)})`,
+          `telegram: ${args.laneName} preview final edit failed with ambiguous error; falling back to standard send to ensure delivery (${String(err)})`,
         );
-        params.markDelivered();
-        return "retained";
+        return "fallback";
       }
       params.log(
         `telegram: ${args.laneName} preview ${args.context} edit failed; falling back to standard send (${String(err)})`,
@@ -380,16 +387,15 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
       context,
     });
     if (typeof previewTargetAfterStop.previewMessageId !== "number") {
-      // Only retain for final delivery when a prior preview is already visible
-      // to the user — otherwise falling back is safer than silence. For updates,
-      // always fall back so the caller can attempt sendPayload without stale
-      // markDelivered() state.
+      // When there is no preview message id, always fall back to standard send.
+      // Previously, sendMayHaveLanded() suppressed the fallback to avoid
+      // duplicates, but this caused silent message loss when the initial send
+      // never actually landed. A possible duplicate is preferable to the user
+      // receiving no response at all.
       if (context === "final" && lane.hasStreamedMessage && lane.stream?.sendMayHaveLanded?.()) {
         params.log(
-          `telegram: ${laneName} preview send may have landed despite missing message id; keeping to avoid duplicate`,
+          `telegram: ${laneName} preview send may have landed but no message id; falling back to standard send to ensure delivery`,
         );
-        params.markDelivered();
-        return "retained";
       }
       return "fallback";
     }

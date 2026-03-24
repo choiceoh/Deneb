@@ -214,16 +214,16 @@ describe("createLaneTextDeliverer", () => {
     );
   });
 
-  it("retains preview when an existing preview final edit fails with ambiguous error", async () => {
+  it("falls back to send when an existing preview final edit fails with ambiguous error", async () => {
     const harness = createHarness({ answerMessageId: 999 });
-    // Plain Error with no error_code → ambiguous, prefer incomplete over duplicate
+    // Plain Error with no error_code → ambiguous, fall back to ensure delivery
     harness.editPreview.mockRejectedValue(new Error("500: preview edit failed"));
 
-    await expectFinalPreviewRetained({
+    await expectFinalEditFallbackToSend({
       harness,
-      expectedLogSnippet: "ambiguous error; keeping existing preview to avoid duplicate",
+      text: HELLO_FINAL,
+      expectedLogSnippet: "ambiguous error; falling back to standard send to ensure delivery",
     });
-    expect(harness.editPreview).toHaveBeenCalledTimes(1);
   });
 
   it("falls back when Telegram reports the current final edit target missing", async () => {
@@ -253,13 +253,15 @@ describe("createLaneTextDeliverer", () => {
     );
   });
 
-  it("keeps preview when the final edit times out after the request may have landed", async () => {
+  it("falls back to send when the final edit times out after the request may have landed", async () => {
     const harness = createHarness({ answerMessageId: 999 });
     harness.editPreview.mockRejectedValue(new Error("timeout: request timed out after 30000ms"));
 
-    await expectFinalPreviewRetained({
+    await expectFinalEditFallbackToSend({
       harness,
-      expectedLogSnippet: "may have landed despite network error; keeping existing preview",
+      text: HELLO_FINAL,
+      expectedLogSnippet:
+        "failed with network error; falling back to standard send to ensure delivery",
     });
   });
 
@@ -436,13 +438,16 @@ describe("createLaneTextDeliverer", () => {
   // During final delivery, only ambiguous post-connect failures keep the
   // preview. Definite non-delivery falls back to a real send.
 
-  it("retains preview on ambiguous API error during final", async () => {
+  it("falls back to send on ambiguous API error during final", async () => {
     const harness = createHarness({ answerMessageId: 999 });
-    // Plain Error with no error_code → ambiguous, prefer incomplete over duplicate
+    // Plain Error with no error_code → ambiguous, fall back to ensure delivery
     harness.editPreview.mockRejectedValue(new Error("500: Internal Server Error"));
 
-    await expectFinalPreviewRetained({ harness });
-    expect(harness.editPreview).toHaveBeenCalledTimes(1);
+    await expectFinalEditFallbackToSend({
+      harness,
+      text: HELLO_FINAL,
+      expectedLogSnippet: "ambiguous error; falling back to standard send to ensure delivery",
+    });
   });
 
   it("falls back when an archived preview edit target is missing and no alternate preview exists", async () => {
@@ -487,14 +492,15 @@ describe("createLaneTextDeliverer", () => {
     });
   });
 
-  it("retains preview on 502 with error_code during final (ambiguous server error)", async () => {
+  it("falls back to send on 502 with error_code during final (ambiguous server error)", async () => {
     const harness = createHarness({ answerMessageId: 999 });
     const err = Object.assign(new Error("502: Bad Gateway"), { error_code: 502 });
     harness.editPreview.mockRejectedValue(err);
 
-    await expectFinalPreviewRetained({
+    await expectFinalEditFallbackToSend({
       harness,
-      expectedLogSnippet: "ambiguous error; keeping existing preview to avoid duplicate",
+      text: HELLO_FINAL,
+      expectedLogSnippet: "ambiguous error; falling back to standard send to ensure delivery",
     });
   });
 
@@ -511,8 +517,10 @@ describe("createLaneTextDeliverer", () => {
     );
   });
 
-  it("retains when sendMayHaveLanded is true and a prior preview was visible", async () => {
-    // Stream has a messageId (visible preview) but loses it after stop
+  it("falls back to send when sendMayHaveLanded is true and a prior preview was visible", async () => {
+    // Stream has a messageId (visible preview) but loses it after stop.
+    // Previously this retained the preview (risking no visible message);
+    // now it falls back to standard send to guarantee delivery.
     const stream = createTestDraftStream({ messageId: 999 });
     stream.sendMayHaveLanded.mockReturnValue(true);
     const harness = createHarness({
@@ -525,10 +533,14 @@ describe("createLaneTextDeliverer", () => {
       await lane.stream?.stop();
     });
 
-    await expectFinalPreviewRetained({
-      harness,
-      expectedLogSnippet: "preview send may have landed despite missing message id",
-    });
+    const result = await deliverFinalAnswer(harness, HELLO_FINAL);
+    expect(result).toBe("sent");
+    expect(harness.sendPayload).toHaveBeenCalledWith(
+      expect.objectContaining({ text: HELLO_FINAL }),
+    );
+    expect(harness.log).toHaveBeenCalledWith(
+      expect.stringContaining("preview send may have landed but no message id; falling back"),
+    );
   });
 
   it("deletes consumed boundary previews after fallback final send", async () => {
