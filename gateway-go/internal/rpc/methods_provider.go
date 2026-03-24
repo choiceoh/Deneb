@@ -2,50 +2,162 @@ package rpc
 
 import (
 	"context"
-	"time"
+	"encoding/json"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// ProviderDeps holds the dependencies for provider RPC methods.
+// ProviderDeps holds dependencies for provider RPC methods.
 type ProviderDeps struct {
 	Deps
-	ProviderCatalog ProviderCatalog
-}
-
-// ProviderCatalog is the interface for querying discovered model providers.
-// This decouples the RPC layer from the concrete provider manager.
-type ProviderCatalog interface {
-	ListProviders() []protocol.ProviderMeta
-	ListCatalogEntries() []protocol.ProviderCatalogEntry
+	Providers   *provider.Registry
+	AuthManager *provider.AuthManager
+	Forwarder   Forwarder
 }
 
 // RegisterProviderMethods registers provider-related RPC methods.
 func RegisterProviderMethods(d *Dispatcher, deps ProviderDeps) {
-	if deps.ProviderCatalog == nil {
+	if deps.Providers == nil {
 		return
 	}
 
 	d.Register("providers.list", providersList(deps))
+	d.Register("providers.get", providersGet(deps))
 	d.Register("providers.catalog", providersCatalog(deps))
+	d.Register("providers.auth.prepare", providersAuthPrepare(deps))
 }
 
 func providersList(deps ProviderDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		providers := deps.ProviderCatalog.ListProviders()
-		resp, _ := protocol.NewResponseOK(req.ID, providers)
+		snap := deps.Providers.Snapshot()
+		providers := make([]map[string]any, 0, len(snap))
+		for _, p := range snap {
+			entry := map[string]any{
+				"id":    p.ID(),
+				"label": p.Label(),
+				"auth":  p.AuthMethods(),
+			}
+			if ap, ok := p.(provider.AliasProvider); ok {
+				entry["aliases"] = ap.Aliases()
+			}
+			if cp, ok := p.(provider.CapabilitiesProvider); ok {
+				entry["capabilities"] = cp.Capabilities()
+			}
+			providers = append(providers, entry)
+		}
+
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"providers": providers,
+		})
+		return resp
+	}
+}
+
+func providersGet(deps ProviderDeps) HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "id is required"))
+		}
+
+		plugin := deps.Providers.GetByNormalizedID(p.ID)
+		if plugin == nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrNotFound, "provider not found: "+p.ID))
+		}
+
+		result := map[string]any{
+			"id":    plugin.ID(),
+			"label": plugin.Label(),
+			"auth":  plugin.AuthMethods(),
+		}
+		if ap, ok := plugin.(provider.AliasProvider); ok {
+			result["aliases"] = ap.Aliases()
+		}
+		if cp, ok := plugin.(provider.CapabilitiesProvider); ok {
+			result["capabilities"] = cp.Capabilities()
+		}
+
+		resp, _ := protocol.NewResponseOK(req.ID, result)
 		return resp
 	}
 }
 
 func providersCatalog(deps ProviderDeps) HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		snapshot := protocol.ProviderCatalogSnapshot{
-			Providers:  deps.ProviderCatalog.ListProviders(),
-			Entries:    deps.ProviderCatalog.ListCatalogEntries(),
-			SnapshotAt: time.Now().UnixMilli(),
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Provider string `json:"provider"`
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, snapshot)
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+
+		// If provider specified, check if it supports catalog locally.
+		if p.Provider != "" {
+			plugin := deps.Providers.GetByNormalizedID(p.Provider)
+			if cp, ok := plugin.(provider.CatalogProvider); ok {
+				result, err := cp.Catalog(ctx, provider.CatalogContext{})
+				if err == nil && result != nil {
+					resp, _ := protocol.NewResponseOK(req.ID, result)
+					return resp
+				}
+			}
+		}
+
+		// Forward to bridge for catalog discovery.
+		if deps.Forwarder != nil {
+			forwardReq := &protocol.RequestFrame{
+				Type:   protocol.FrameTypeRequest,
+				ID:     req.ID,
+				Method: "providers.catalog",
+				Params: req.Params,
+			}
+			resp, err := deps.Forwarder.Forward(ctx, forwardReq)
+			if err == nil {
+				return resp
+			}
+		}
+
+		// Empty catalog fallback.
+		resp, _ := protocol.NewResponseOK(req.ID, provider.CatalogResult{
+			Entries: []provider.CatalogEntry{},
+		})
+		return resp
+	}
+}
+
+func providersAuthPrepare(deps ProviderDeps) HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p provider.RuntimeAuthContext
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid auth params: "+err.Error()))
+		}
+		if p.Provider == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "provider is required"))
+		}
+
+		if deps.AuthManager == nil {
+			// Passthrough without rotation.
+			resp, _ := protocol.NewResponseOK(req.ID, provider.PreparedAuth{
+				APIKey: p.APIKey,
+			})
+			return resp
+		}
+
+		prepared, err := deps.AuthManager.Prepare(ctx, p)
+		if err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrDependencyFailed, "auth prepare failed: "+err.Error()))
+		}
+
+		resp, _ := protocol.NewResponseOK(req.ID, prepared)
 		return resp
 	}
 }

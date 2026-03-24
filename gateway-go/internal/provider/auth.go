@@ -1,0 +1,236 @@
+package provider
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"sync"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+)
+
+// ManagedCredential holds a provider credential with rotation metadata.
+type ManagedCredential struct {
+	ProviderID  string `json:"providerId"`
+	ProfileID   string `json:"profileId,omitempty"`
+	APIKey      string `json:"apiKey"`
+	BaseURL     string `json:"baseUrl,omitempty"`
+	AuthMode    string `json:"authMode,omitempty"`
+	ExpiresAt   int64  `json:"expiresAt,omitempty"`   // unix ms, 0 = no expiry
+	RefreshedAt int64  `json:"refreshedAt,omitempty"` // unix ms of last refresh
+}
+
+// credKey returns the map key for a credential.
+func credKey(providerID, profileID string) string {
+	if profileID == "" {
+		return providerID
+	}
+	return providerID + ":" + profileID
+}
+
+// IsExpired reports whether the credential has passed its expiry time.
+func (mc *ManagedCredential) IsExpired() bool {
+	if mc.ExpiresAt == 0 {
+		return false
+	}
+	return time.Now().UnixMilli() >= mc.ExpiresAt
+}
+
+// IsExpiringSoon reports whether the credential will expire within the given duration.
+func (mc *ManagedCredential) IsExpiringSoon(within time.Duration) bool {
+	if mc.ExpiresAt == 0 {
+		return false
+	}
+	return time.Now().Add(within).UnixMilli() >= mc.ExpiresAt
+}
+
+// AuthManager manages provider credentials with background key rotation.
+type AuthManager struct {
+	mu          sync.RWMutex
+	credentials map[string]*ManagedCredential
+	registry    *Registry
+	forwarder   Forwarder
+	logger      *slog.Logger
+	stopCh      chan struct{}
+}
+
+// NewAuthManager creates a new auth manager.
+func NewAuthManager(registry *Registry, forwarder Forwarder, logger *slog.Logger) *AuthManager {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &AuthManager{
+		credentials: make(map[string]*ManagedCredential),
+		registry:    registry,
+		forwarder:   forwarder,
+		logger:      logger,
+		stopCh:      make(chan struct{}),
+	}
+}
+
+// Store adds or updates a credential in the manager.
+func (am *AuthManager) Store(cred *ManagedCredential) {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	am.credentials[credKey(cred.ProviderID, cred.ProfileID)] = cred
+}
+
+// Resolve returns the current credential for a provider+profile.
+func (am *AuthManager) Resolve(providerID, profileID string) *ManagedCredential {
+	am.mu.RLock()
+	defer am.mu.RUnlock()
+
+	key := credKey(NormalizeProviderIDForAuth(providerID), profileID)
+	cred := am.credentials[key]
+	if cred == nil {
+		return nil
+	}
+	// Return a copy to avoid races.
+	c := *cred
+	return &c
+}
+
+// Prepare resolves runtime auth for a provider. If the provider plugin
+// implements RuntimeAuthProvider, it delegates to that; otherwise it
+// forwards to the Node.js bridge.
+func (am *AuthManager) Prepare(ctx context.Context, req RuntimeAuthContext) (*PreparedAuth, error) {
+	// Try local provider plugin first.
+	if am.registry != nil {
+		plugin := am.registry.GetByNormalizedID(req.Provider)
+		if rap, ok := plugin.(RuntimeAuthProvider); ok {
+			prepared, err := rap.PrepareRuntimeAuth(ctx, req)
+			if err == nil && prepared != nil {
+				am.storePrepared(req.Provider, req.ProfileID, prepared)
+				return prepared, nil
+			}
+		}
+	}
+
+	// Fall back to bridge.
+	if am.forwarder == nil {
+		// No bridge, return raw credentials.
+		return &PreparedAuth{
+			APIKey:  req.APIKey,
+			BaseURL: "",
+		}, nil
+	}
+
+	params, _ := json.Marshal(req)
+	fwdReq := &protocol.RequestFrame{
+		Type:   protocol.FrameTypeRequest,
+		ID:     fmt.Sprintf("auth-prepare-%s-%d", req.Provider, time.Now().UnixMilli()),
+		Method: "providers.auth.prepare",
+		Params: params,
+	}
+
+	resp, err := am.forwarder.Forward(ctx, fwdReq)
+	if err != nil {
+		return nil, fmt.Errorf("auth prepare bridge error: %w", err)
+	}
+	if !resp.OK {
+		return &PreparedAuth{APIKey: req.APIKey}, nil
+	}
+
+	var prepared PreparedAuth
+	if err := json.Unmarshal(resp.Payload, &prepared); err != nil {
+		return nil, fmt.Errorf("auth prepare decode: %w", err)
+	}
+
+	am.storePrepared(req.Provider, req.ProfileID, &prepared)
+	return &prepared, nil
+}
+
+// storePrepared updates the credential store after a successful auth preparation.
+func (am *AuthManager) storePrepared(providerID, profileID string, prepared *PreparedAuth) {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+
+	key := credKey(NormalizeProviderIDForAuth(providerID), profileID)
+	existing := am.credentials[key]
+	if existing == nil {
+		existing = &ManagedCredential{
+			ProviderID: providerID,
+			ProfileID:  profileID,
+		}
+	}
+	existing.APIKey = prepared.APIKey
+	if prepared.BaseURL != "" {
+		existing.BaseURL = prepared.BaseURL
+	}
+	existing.ExpiresAt = prepared.ExpiresAt
+	existing.RefreshedAt = time.Now().UnixMilli()
+	am.credentials[key] = existing
+}
+
+// RefreshIfNeeded checks if a credential needs refresh and refreshes it via bridge.
+func (am *AuthManager) RefreshIfNeeded(ctx context.Context, providerID, profileID string) error {
+	cred := am.Resolve(providerID, profileID)
+	if cred == nil || !cred.IsExpiringSoon(5*time.Minute) {
+		return nil
+	}
+
+	_, err := am.Prepare(ctx, RuntimeAuthContext{
+		Provider:  providerID,
+		APIKey:    cred.APIKey,
+		AuthMode:  cred.AuthMode,
+		ProfileID: profileID,
+	})
+	return err
+}
+
+// StartRotationLoop runs a background goroutine that refreshes expiring credentials.
+// Call Stop() to terminate the loop.
+func (am *AuthManager) StartRotationLoop(ctx context.Context) {
+	go am.rotationLoop(ctx)
+}
+
+// Stop terminates the rotation loop.
+func (am *AuthManager) Stop() {
+	select {
+	case <-am.stopCh:
+		// Already stopped.
+	default:
+		close(am.stopCh)
+	}
+}
+
+func (am *AuthManager) rotationLoop(ctx context.Context) {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-am.stopCh:
+			return
+		case <-ticker.C:
+			am.refreshExpiring(ctx)
+		}
+	}
+}
+
+func (am *AuthManager) refreshExpiring(ctx context.Context) {
+	am.mu.RLock()
+	var expiring []ManagedCredential
+	for _, cred := range am.credentials {
+		if cred.IsExpiringSoon(5 * time.Minute) {
+			expiring = append(expiring, *cred)
+		}
+	}
+	am.mu.RUnlock()
+
+	for _, cred := range expiring {
+		refreshCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		if err := am.RefreshIfNeeded(refreshCtx, cred.ProviderID, cred.ProfileID); err != nil {
+			am.logger.Warn("credential refresh failed",
+				"provider", cred.ProviderID,
+				"profile", cred.ProfileID,
+				"error", err,
+			)
+		}
+		cancel()
+	}
+}

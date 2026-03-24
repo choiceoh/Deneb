@@ -34,6 +34,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
+	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -78,6 +79,8 @@ type Server struct {
 	gatewaySubs     *events.GatewayEventSubscriptions
 	chatHandler     *chat.Handler
 	providers       *provider.Registry
+	authManager     *provider.AuthManager
+	transcript      *transcript.Writer
 	authRateLimiter *auth.AuthRateLimiter
 	watchdog        *monitoring.Watchdog
 	channelHealth   *monitoring.ChannelHealthMonitor
@@ -142,6 +145,13 @@ func WithProviders(r *provider.Registry) Option {
 	}
 }
 
+// WithTranscript sets the session transcript writer.
+func WithTranscript(w *transcript.Writer) Option {
+	return func(s *Server) {
+		s.transcript = w
+	}
+}
+
 // New creates a new gateway server bound to the given address.
 func New(addr string, opts ...Option) *Server {
 	s := &Server{
@@ -174,6 +184,11 @@ func New(addr string, opts ...Option) *Server {
 	s.activity = monitoring.NewActivityTracker()
 	s.channelEvents = monitoring.NewChannelEventTracker()
 	s.authRateLimiter = auth.NewAuthRateLimiter(10, 60*1000, 5*60*1000)
+
+	// Provider auth manager (bridge will be wired later via SetBridge).
+	if s.providers != nil {
+		s.authManager = provider.NewAuthManager(s.providers, nil, s.logger)
+	}
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.registerBuiltinMethods()
@@ -726,6 +741,25 @@ func (s *Server) registerExtendedMethods() {
 		Cron:        s.cron,
 		Hooks:       s.hooks,
 		Broadcaster: s.broadcaster,
+	})
+
+	// Provider methods.
+	rpc.RegisterProviderMethods(s.dispatcher, rpc.ProviderDeps{
+		Deps: rpc.Deps{
+			Sessions: s.sessions,
+			Channels: s.channels,
+		},
+		Providers:   s.providers,
+		AuthManager: s.authManager,
+	})
+
+	// Tool methods.
+	rpc.RegisterToolMethods(s.dispatcher, rpc.ToolDeps{
+		Deps: rpc.Deps{
+			Sessions: s.sessions,
+			Channels: s.channels,
+		},
+		Processes: s.processes,
 	})
 
 	// Daemon status method.
