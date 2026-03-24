@@ -19,15 +19,13 @@ type BridgeDeps struct {
 // implementations and are registered here for proper scope-based authorization
 // rather than falling through to the dispatcher's default forwarder (which
 // would require ScopeAdmin for unknown methods).
+//
+// Note: Methods that have been ported to native Go (exec.approvals.*, node.*,
+// device.*, cron advanced, agents.*, config advanced, skills.*, wizard.*,
+// secrets.*, talk.*) are no longer bridge-forwarded — they are registered
+// by their respective Register*Methods functions.
 func RegisterBridgeMethods(d *Dispatcher, deps BridgeDeps) {
 	methods := []string{
-		// Config
-		"config.set",
-		"config.patch",
-		"config.apply",
-		"config.schema",
-		"config.schema.lookup",
-
 		// Channels
 		"channels.logout",
 
@@ -44,35 +42,14 @@ func RegisterBridgeMethods(d *Dispatcher, deps BridgeDeps) {
 		// Messaging
 		"send",
 		"poll",
-		"talk.config",
-		"talk.mode",
 
 		// Agent
 		"agent",
 		"agent.identity.get",
 		"agent.wait",
 
-		// Agents CRUD
-		"agents.list",
-		"agents.create",
-		"agents.update",
-		"agents.delete",
-		"agents.files.list",
-		"agents.files.get",
-		"agents.files.set",
-
-		// Skills
-		"skills.status",
-		"skills.bins",
-		"skills.install",
-		"skills.update",
+		// Tools (catalog only — invoke/list/status are native)
 		"tools.catalog",
-
-		// Wizard
-		"wizard.start",
-		"wizard.next",
-		"wizard.cancel",
-		"wizard.status",
 
 		// TTS / Media
 		"tts.status",
@@ -89,56 +66,9 @@ func RegisterBridgeMethods(d *Dispatcher, deps BridgeDeps) {
 		"web.login.start",
 		"web.login.wait",
 
-		// Exec Approvals
-		"exec.approvals.get",
-		"exec.approvals.set",
-		"exec.approvals.node.get",
-		"exec.approvals.node.set",
-		"exec.approval.request",
-		"exec.approval.waitDecision",
-		"exec.approval.resolve",
-
-		// Nodes
-		"node.pair.request",
-		"node.pair.list",
-		"node.pair.approve",
-		"node.pair.reject",
-		"node.pair.verify",
-		"node.list",
-		"node.describe",
-		"node.rename",
-		"node.invoke",
-		"node.invoke.result",
-		"node.canvas.capability.refresh",
-		"node.pending.pull",
-		"node.pending.ack",
-		"node.pending.drain",
-		"node.pending.enqueue",
-
-		// Device
-		"device.pair.list",
-		"device.pair.approve",
-		"device.pair.reject",
-		"device.pair.remove",
-		"device.token.rotate",
-		"device.token.revoke",
-
-		// Secrets
-		"secrets.reload",
-		"secrets.resolve",
-
 		// Usage
 		"usage.status",
 		"usage.cost",
-
-		// Cron (RPC-driven task management — persisted in TS)
-		"wake",
-		"cron.status",
-		"cron.add",
-		"cron.update",
-		"cron.remove",
-		"cron.run",
-		"cron.runs",
 
 		// System (heavy — delegated to TS)
 		"update.run",
