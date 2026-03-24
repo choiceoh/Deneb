@@ -4,6 +4,12 @@
 // TypeScript plugin SDK and all channel extensions. Communication with the
 // Go gateway happens over a Unix domain socket using the NDJSON frame protocol.
 //
+// Phase 3 architecture:
+// 1. Go gateway receives HTTP/WS RPC request
+// 2. If the method is not handled natively in Go, it forwards to Plugin Host
+// 3. Plugin Host routes to the actual TypeScript gateway method handler
+// 4. Response flows back through the bridge to the Go gateway
+//
 // Environment:
 //   DENEB_PLUGIN_HOST_SOCKET — Unix socket path to listen on (required)
 
@@ -47,18 +53,15 @@ registry.register("plugin-host.methods", async () => ({
 }));
 
 // --- Gateway method forwarding ---
-// Methods that the Go gateway forwards to us are handled here.
-// In Phase 3, we register stub handlers that will be replaced with
-// actual gateway method wiring as the migration progresses.
+// Methods that the Go gateway forwards to us are routed to the actual
+// TypeScript gateway method handlers via a headless gateway context.
 //
-// The architecture:
-// 1. Go gateway receives RPC request
-// 2. If method is not handled natively in Go, it forwards to Plugin Host
-// 3. Plugin Host routes to the appropriate TypeScript handler
-// 4. Response flows back through the bridge
+// The headless context initializes the minimum dependencies needed to run
+// TypeScript handlers without an HTTP/WS server. The Go gateway owns the
+// transport, auth, and client management.
 
-// Register forwarded methods that map to existing TypeScript handlers.
-// These are loaded lazily to avoid pulling in the entire gateway stack at startup.
+// Methods forwarded from the Go gateway to the TypeScript handler layer.
+// These cover config, sessions, chat, channels, agents, skills, and system methods.
 const FORWARDED_METHODS = [
   "config.get",
   "config.set",
@@ -169,18 +172,56 @@ const FORWARDED_METHODS = [
   "chat.send",
 ];
 
-// Register placeholder handlers for all forwarded methods.
-// These return a "not yet wired" response until the full gateway context is initialized.
-// In a fully integrated setup, these would call into the actual TypeScript gateway method handlers.
+// Gateway context is initialized lazily on first forwarded request.
+// This avoids pulling in the full gateway stack during startup.
+let gatewayInvoke:
+  | ((
+      method: string,
+      params: Record<string, unknown>,
+      reqId: string,
+    ) => Promise<{ ok: boolean; payload?: unknown; error?: { code: string; message: string } }>)
+  | null = null;
+let gatewayShutdown: (() => void) | null = null;
+let gatewayInitPromise: Promise<void> | null = null;
+
+async function ensureGatewayContext(): Promise<typeof gatewayInvoke> {
+  if (gatewayInvoke) {
+    return gatewayInvoke;
+  }
+  if (!gatewayInitPromise) {
+    gatewayInitPromise = (async () => {
+      try {
+        const { createHeadlessGatewayContext } = await import("./gateway-context.js");
+        const ctx = await createHeadlessGatewayContext();
+        gatewayInvoke = ctx.invoke;
+        gatewayShutdown = ctx.shutdown;
+        console.log("[plugin-host] gateway context initialized");
+      } catch (err) {
+        console.error("[plugin-host] failed to initialize gateway context:", err);
+        // Fall through — methods will return UNAVAILABLE on next call.
+      }
+    })();
+  }
+  await gatewayInitPromise;
+  return gatewayInvoke;
+}
+
+// Register forwarded methods that route to the TypeScript gateway handlers.
 for (const method of FORWARDED_METHODS) {
   const m = method;
-  registry.register(m, async () => ({
-    ok: false,
-    error: {
-      code: "UNAVAILABLE",
-      message: `method "${m}" is registered but not yet wired to a handler`,
-    },
-  }));
+  registry.register(m, async (_method, params, reqId) => {
+    const invoke = await ensureGatewayContext();
+    if (!invoke) {
+      return {
+        ok: false,
+        error: {
+          code: "UNAVAILABLE",
+          message: `gateway context not initialized; method "${m}" unavailable`,
+        },
+      };
+    }
+    return invoke(m, params, reqId);
+  });
 }
 
 // Start the socket server.
@@ -197,9 +238,16 @@ async function main(): Promise<void> {
   console.log(`[plugin-host] listening on ${socketPath} (pid: ${process.pid})`);
   console.log(`[plugin-host] registered ${registry.methods().length} methods`);
 
+  // Pre-warm the gateway context in the background so the first RPC
+  // doesn't pay the full initialization cost.
+  ensureGatewayContext().catch(() => {
+    // Logged inside ensureGatewayContext; swallow here.
+  });
+
   // Graceful shutdown.
   const shutdown = () => {
     console.log("[plugin-host] shutting down...");
+    gatewayShutdown?.();
     server.close(() => {
       // Clean up socket file.
       try {
