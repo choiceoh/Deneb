@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 // Available reports whether the Rust FFI library is linked.
@@ -88,15 +87,17 @@ func DetectMIME(data []byte) string {
 }
 
 // ValidateSessionKey is a pure-Go fallback for session key validation.
-// Uses rune count (not byte length) to match TypeScript/Rust char-count semantics.
+// Single-pass: counts runes and checks for control chars simultaneously.
 func ValidateSessionKey(key string) error {
 	if len(key) == 0 {
 		return errors.New("ffi: empty session key")
 	}
-	if utf8.RuneCountInString(key) > 512 {
-		return errors.New("ffi: session key too long")
-	}
+	count := 0
 	for _, r := range key {
+		count++
+		if count > 512 {
+			return errors.New("ffi: session key too long")
+		}
 		if unicode.IsControl(r) && r != '\n' && r != '\t' && r != '\r' {
 			return errors.New("ffi: invalid session key")
 		}
@@ -106,8 +107,12 @@ func ValidateSessionKey(key string) error {
 
 // SanitizeHTML is a pure-Go fallback for HTML sanitization.
 func SanitizeHTML(input string) string {
+	// Fast path: no special chars — return as-is (zero alloc).
+	if !strings.ContainsAny(input, "<>&\"'") {
+		return input
+	}
 	var b strings.Builder
-	b.Grow(len(input))
+	b.Grow(len(input) + len(input)/4)
 	for _, r := range input {
 		switch r {
 		case '<':

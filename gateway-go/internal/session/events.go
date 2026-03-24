@@ -67,7 +67,12 @@ func (b *EventBus) Subscribe(handler EventHandler) func() {
 // A panicking handler is recovered so it does not prevent other handlers from executing.
 func (b *EventBus) Emit(event Event) {
 	b.mu.RLock()
-	snapshot := make([]EventHandler, len(b.subs))
+	n := len(b.subs)
+	if n == 0 {
+		b.mu.RUnlock()
+		return
+	}
+	snapshot := make([]EventHandler, n)
 	for i, s := range b.subs {
 		snapshot[i] = s.handler
 	}

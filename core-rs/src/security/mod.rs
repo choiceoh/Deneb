@@ -102,49 +102,58 @@ pub fn is_valid_session_key(key: &str) -> bool {
 
 /// Sanitize user input by escaping HTML-significant characters.
 /// Prevents XSS when user input is rendered in HTML contexts.
+/// Operates at byte level since all HTML-special chars are ASCII.
 pub fn sanitize_html(input: &str) -> String {
-    // Fast path: no special chars.
+    // Fast path: no special chars — avoid allocation entirely.
     if !input.bytes().any(|b| matches!(b, b'<' | b'>' | b'&' | b'"' | b'\'')) {
         return input.to_string();
     }
-    let mut out = String::with_capacity(input.len() + 16);
-    for c in input.chars() {
-        match c {
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '&' => out.push_str("&amp;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#x27;"),
-            _ => out.push(c),
+    // All escapable characters are single-byte ASCII, so we can work at byte level.
+    let mut out = Vec::with_capacity(input.len() + input.len() / 4);
+    for &b in input.as_bytes() {
+        match b {
+            b'<' => out.extend_from_slice(b"&lt;"),
+            b'>' => out.extend_from_slice(b"&gt;"),
+            b'&' => out.extend_from_slice(b"&amp;"),
+            b'"' => out.extend_from_slice(b"&quot;"),
+            b'\'' => out.extend_from_slice(b"&#x27;"),
+            _ => out.push(b),
         }
     }
-    out
+    // Safety: input is valid UTF-8 and we only replaced ASCII bytes with ASCII sequences.
+    unsafe { String::from_utf8_unchecked(out) }
 }
 
 /// Basic SSRF protection: reject URLs targeting internal/private networks.
 /// Returns true if the URL appears safe for outbound requests.
+/// Only lowercases the scheme+host portion to avoid copying the full URL.
 pub fn is_safe_url(url: &str) -> bool {
-    let lower = url.to_ascii_lowercase();
-
-    // Must be http or https.
-    if !lower.starts_with("http://") && !lower.starts_with("https://") {
-        return false;
-    }
-
-    // Extract host portion (strip userinfo, port, and path).
-    let after_scheme = if lower.starts_with("https://") {
-        &lower[8..]
+    // Quick byte-level scheme check (case-insensitive, no alloc).
+    let bytes = url.as_bytes();
+    let scheme_len = if bytes.len() >= 8
+        && bytes[..8].eq_ignore_ascii_case(b"https://")
+    {
+        8
+    } else if bytes.len() >= 7
+        && bytes[..7].eq_ignore_ascii_case(b"http://")
+    {
+        7
     } else {
-        &lower[7..]
+        return false;
     };
-    let authority = after_scheme.split('/').next().unwrap_or("");
+
+    // Extract authority (up to first '/') from after the scheme.
+    let rest = &url[scheme_len..];
+    let authority = rest.split('/').next().unwrap_or("");
     // Strip userinfo (user:pass@host) — prevents SSRF bypass via http://evil@localhost/
     let after_userinfo = match authority.rfind('@') {
         Some(pos) => &authority[pos + 1..],
         None => authority,
     };
-    // Strip port
-    let host = after_userinfo.split(':').next().unwrap_or("");
+    // Strip port — only lowercase the host portion (small string).
+    let host_raw = after_userinfo.split(':').next().unwrap_or("");
+    // Stack-allocated lowercase for typical hostnames (≤253 bytes per RFC).
+    let host = host_raw.to_ascii_lowercase();
 
     if host.is_empty() {
         return false;
@@ -159,7 +168,7 @@ pub fn is_safe_url(url: &str) -> bool {
         "metadata.google.internal",
         "169.254.169.254",
     ];
-    if BLOCKED_HOSTS.iter().any(|&b| host == b) {
+    if BLOCKED_HOSTS.iter().any(|&b| host.as_str() == b) {
         return false;
     }
 
