@@ -181,15 +181,37 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient) error {
 		return fmt.Errorf("build hello-ok: %w", err)
 	}
 
+	// Rate limit check before token validation.
+	if s.authRateLimiter != nil && params.Auth != nil && params.Auth.Token != "" {
+		// Use connID as the rate limit key (remote IP not available at this level).
+		allowed, retryMs := s.authRateLimiter.Check(client.connID)
+		if !allowed {
+			errShape := protocol.NewError(protocol.ErrUnauthorized,
+				fmt.Sprintf("rate limited, retry after %dms", retryMs))
+			if writeErr := s.writeFrame(ctx, client, protocol.NewResponseError(req.ID, errShape)); writeErr != nil {
+				s.logger.Error("failed to send rate limit error", "connId", client.connID, "error", writeErr)
+			}
+			return fmt.Errorf("auth rate limited")
+		}
+	}
+
 	// Authenticate: validate token if auth validator is configured.
 	if s.authValidator != nil && params.Auth != nil && params.Auth.Token != "" {
 		claims, err := s.authValidator.ValidateToken(params.Auth.Token)
 		if err != nil {
+			// Record auth failure for rate limiting.
+			if s.authRateLimiter != nil {
+				s.authRateLimiter.RecordFailure(client.connID)
+			}
 			errShape := protocol.NewError(protocol.ErrUnauthorized, "invalid token: "+err.Error())
 			if writeErr := s.writeFrame(ctx, client, protocol.NewResponseError(req.ID, errShape)); writeErr != nil {
 				s.logger.Error("failed to send auth error", "connId", client.connID, "error", writeErr)
 			}
 			return fmt.Errorf("token validation failed: %w", err)
+		}
+		// Reset rate limiter on successful auth.
+		if s.authRateLimiter != nil {
+			s.authRateLimiter.Reset(client.connID)
 		}
 		client.authed = true
 		client.role = string(claims.Role)
@@ -247,6 +269,11 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 			}
 			s.logger.Error("websocket read error", "connId", client.connID, "error", err)
 			return
+		}
+
+		// Track activity on every inbound WS message.
+		if s.activity != nil {
+			s.activity.Touch()
 		}
 
 		// Single-pass: unmarshal directly as RequestFrame (dominant case).

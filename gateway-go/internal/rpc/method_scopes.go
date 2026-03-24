@@ -21,11 +21,14 @@ var methodScopes = map[string]auth.Scope{
 	"sessions.create":    auth.ScopeWrite,
 	"sessions.lifecycle": auth.ScopeWrite,
 
-	// --- Channels (read/write) ---
-	"channels.list":   auth.ScopeRead,
-	"channels.get":    auth.ScopeRead,
-	"channels.status": auth.ScopeRead,
-	"channels.health": auth.ScopeRead,
+	// --- Channels (read/write/admin) ---
+	"channels.list":    auth.ScopeRead,
+	"channels.get":     auth.ScopeRead,
+	"channels.status":  auth.ScopeRead,
+	"channels.health":  auth.ScopeRead,
+	"channels.start":   auth.ScopeAdmin,
+	"channels.stop":    auth.ScopeAdmin,
+	"channels.restart": auth.ScopeAdmin,
 
 	// --- Agent (read/write) ---
 	"agent.status": auth.ScopeRead,
@@ -47,6 +50,23 @@ var methodScopes = map[string]auth.Scope{
 	"hooks.unregister": auth.ScopeAdmin,
 	"hooks.fire":       auth.ScopeWrite,
 
+	// --- Chat (write) ---
+	"chat.send":    auth.ScopeWrite,
+	"chat.history": auth.ScopeRead,
+	"chat.abort":   auth.ScopeWrite,
+	"chat.inject":  auth.ScopeWrite,
+
+	// --- Monitoring (read) ---
+	"monitoring.channel_health": auth.ScopeRead,
+	"monitoring.activity":       auth.ScopeRead,
+
+	// --- Event subscriptions (read) ---
+	"node.event":                    auth.ScopeWrite,
+	"subscribe.session":             auth.ScopeRead,
+	"unsubscribe.session":           auth.ScopeRead,
+	"subscribe.session.messages":    auth.ScopeRead,
+	"unsubscribe.session.messages":  auth.ScopeRead,
+
 	// --- Security & Media (read) ---
 	"protocol.validate":            auth.ScopeRead,
 	"security.validate_session_key": auth.ScopeRead,
@@ -55,8 +75,13 @@ var methodScopes = map[string]auth.Scope{
 	"security.validate_error_code":  auth.ScopeRead,
 	"media.detect_mime":             auth.ScopeRead,
 
+	// --- Providers (read) ---
+	"providers.list":    auth.ScopeRead,
+	"providers.catalog": auth.ScopeRead,
+
 	// --- Config (admin) ---
-	"config.get": auth.ScopeAdmin,
+	"config.get":    auth.ScopeAdmin,
+	"config.reload": auth.ScopeAdmin,
 
 	// --- Daemon (admin) ---
 	"daemon.status": auth.ScopeAdmin,

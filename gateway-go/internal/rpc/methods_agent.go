@@ -16,9 +16,10 @@ import (
 // ExtendedDeps holds the additional subsystems for Phase 2 RPC methods.
 type ExtendedDeps struct {
 	Deps
-	Processes *process.Manager
-	Cron      *cron.Scheduler
-	Hooks     *hooks.Registry
+	Processes   *process.Manager
+	Cron        *cron.Scheduler
+	Hooks       *hooks.Registry
+	Broadcaster *events.Broadcaster
 }
 
 // RegisterExtendedMethods registers the Phase 2 RPC methods that handle
@@ -327,6 +328,23 @@ func sessionsLifecycle(deps ExtendedDeps) HandlerFunc {
 				SessionKey: p.Key,
 				Reason:     p.Phase,
 			})
+		}
+
+		// Fire session lifecycle hooks.
+		if deps.Hooks != nil {
+			var hookEvent hooks.Event
+			switch session.LifecyclePhase(p.Phase) {
+			case session.PhaseStart:
+				hookEvent = hooks.EventSessionStart
+			case session.PhaseEnd, session.PhaseError:
+				hookEvent = hooks.EventSessionEnd
+			}
+			if hookEvent != "" {
+				go deps.Hooks.Fire(context.Background(), hookEvent, map[string]string{
+					"DENEB_SESSION_KEY": p.Key,
+					"DENEB_PHASE":      p.Phase,
+				})
+			}
 		}
 
 		resp, _ := protocol.NewResponseOK(req.ID, s)

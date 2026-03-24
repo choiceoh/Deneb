@@ -168,6 +168,19 @@ func New(addr string, opts ...Option) *Server {
 	})
 	s.registerExtendedMethods()
 	s.registerPhase2Methods()
+
+	// Wire provider RPC methods if a provider registry is configured.
+	if s.providers != nil {
+		adapter := provider.NewProtocolAdapter(s.providers)
+		rpc.RegisterProviderMethods(s.dispatcher, rpc.ProviderDeps{
+			Deps: rpc.Deps{
+				Sessions: s.sessions,
+				Channels: s.channels,
+			},
+			ProviderCatalog: adapter,
+		})
+	}
+
 	return s
 }
 
@@ -184,11 +197,68 @@ func (s *Server) SetBridge(b *bridge.PluginHost) {
 		})
 	}
 
-	// Wire bridge events: chat events go to chatHandler, others to broadcaster.
+	// Wire process approval callback via bridge forward.
+	if s.processes != nil {
+		s.processes.SetApprover(func(req process.ExecRequest) bool {
+			if b == nil || !b.IsRunning() {
+				return false
+			}
+			approvalReq := &protocol.RequestFrame{
+				Type:   protocol.FrameTypeRequest,
+				ID:     "approval-" + req.ID,
+				Method: "exec.approve",
+			}
+			approvalReq.Params, _ = json.Marshal(map[string]any{
+				"id":      req.ID,
+				"command": req.Command,
+				"args":    req.Args,
+			})
+			resp, err := b.Forward(context.Background(), approvalReq)
+			if err != nil {
+				s.logger.Warn("process approval forward failed", "id", req.ID, "error", err)
+				return false
+			}
+			return resp.OK
+		})
+	}
+
+	// Wire bridge events: chat events go to chatHandler, lifecycle/agent events
+	// to gatewaySubs, and everything else to broadcaster.
 	b.SetEventHandler(func(ev *protocol.EventFrame) {
-		if s.chatHandler != nil && (ev.Event == "chat" || ev.Event == "chat.delta") {
+		// Track activity on all bridge events.
+		if s.activity != nil {
+			s.activity.Touch()
+		}
+
+		switch {
+		case s.chatHandler != nil && (ev.Event == "chat" || ev.Event == "chat.delta"):
 			s.chatHandler.HandleBridgeEvent(ev)
-		} else {
+
+		case ev.Event == "agent" || ev.Event == "agent.event":
+			if s.gatewaySubs != nil {
+				s.gatewaySubs.EmitAgent(events.AgentEvent{
+					Kind:    ev.Event,
+					Payload: ev.Payload,
+				})
+			}
+			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
+
+		case ev.Event == "heartbeat":
+			if s.gatewaySubs != nil {
+				s.gatewaySubs.EmitHeartbeat(events.HeartbeatEvent{
+					Ts: time.Now().UnixMilli(),
+				})
+			}
+
+		case ev.Event == "session.transcript":
+			if s.gatewaySubs != nil {
+				var update events.TranscriptUpdate
+				if json.Unmarshal(ev.Payload, &update) == nil {
+					s.gatewaySubs.EmitTranscript(update)
+				}
+			}
+
+		default:
 			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
 		}
 	})
@@ -224,6 +294,14 @@ func (s *Server) Run(ctx context.Context) error {
 	s.ready.Store(true)
 	s.startTickBroadcaster(ctx)
 	s.StartMonitoring(ctx)
+	s.startProcessPruner(ctx)
+
+	// Fire gateway.start hooks.
+	if s.hooks != nil {
+		go s.hooks.Fire(context.Background(), hooks.EventGatewayStart, map[string]string{
+			"DENEB_GATEWAY_ADDR": ln.Addr().String(),
+		})
+	}
 
 	s.logger.Info("gateway server starting", "addr", ln.Addr().String())
 
@@ -541,9 +619,10 @@ func (s *Server) registerExtendedMethods() {
 			Channels:    s.channels,
 			GatewaySubs: s.gatewaySubs,
 		},
-		Processes: s.processes,
-		Cron:      s.cron,
-		Hooks:     s.hooks,
+		Processes:   s.processes,
+		Cron:        s.cron,
+		Hooks:       s.hooks,
+		Broadcaster: s.broadcaster,
 	})
 
 	// Daemon status method.
@@ -603,14 +682,33 @@ func (s *Server) registerPhase2Methods() {
 	)
 	rpc.RegisterChatMethods(s.dispatcher, rpc.ChatDeps{Chat: s.chatHandler})
 
-	// Config reload method.
-	// Note: config.get is already registered in registerBuiltinMethods using runtimeCfg.
-	rpc.RegisterConfigReloadMethod(s.dispatcher)
+	// Config reload method with bridge forwarding and Go subsystem propagation.
+	rpc.RegisterConfigReloadMethod(s.dispatcher, rpc.ConfigReloadDeps{
+		Forwarder: s.bridge,
+		Logger:    s.logger,
+		OnReloaded: func(_ *config.ConfigSnapshot) {
+			// Notify hooks of config change.
+			if s.hooks != nil {
+				go s.hooks.Fire(context.Background(), hooks.Event("config.reloaded"), nil)
+			}
+			// Broadcast config change to subscribers.
+			s.broadcaster.Broadcast("config.changed", map[string]any{
+				"ts": time.Now().UnixMilli(),
+			})
+		},
+	})
 
 	// Monitoring methods.
 	rpc.RegisterMonitoringMethods(s.dispatcher, rpc.MonitoringDeps{
 		ChannelHealth: s.channelHealth,
 		Activity:      s.activity,
+	})
+
+	// Channel lifecycle RPC methods.
+	rpc.RegisterChannelLifecycleMethods(s.dispatcher, rpc.ChannelLifecycleDeps{
+		ChannelLifecycle: s.channelLifecycle,
+		Hooks:            s.hooks,
+		Broadcaster:      s.broadcaster,
 	})
 
 	// Event subscription methods.
@@ -668,18 +766,66 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			return "stopped"
 		},
 		GetChannelLastEventAt: func(_ string) int64 {
-			// Placeholder: real implementation tracks per-channel event timestamps.
+			// Per-channel event timestamps tracked by bridge events in production.
+			// Returns 0 until channel-specific event tracking is wired.
 			return 0
 		},
-		GetChannelStartedAt: func(_ string) int64 {
+		GetChannelStartedAt: func(id string) int64 {
+			if s.channelLifecycle != nil {
+				return s.channelLifecycle.GetStartedAt(id)
+			}
 			return 0
 		},
 		RestartChannel: func(id string) error {
-			s.logger.Info("restarting channel", "channel", id)
-			return nil // Placeholder: real restart via channel lifecycle manager.
+			if s.channelLifecycle == nil {
+				return fmt.Errorf("channel lifecycle manager not available")
+			}
+			s.logger.Info("restarting channel via watchdog", "channel", id)
+			restartCtx, restartCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer restartCancel()
+			err := s.channelLifecycle.RestartChannel(restartCtx, id)
+			if err != nil {
+				s.logger.Error("channel restart failed", "channel", id, "error", err)
+			} else {
+				// Fire channel lifecycle hooks.
+				if s.hooks != nil {
+					go s.hooks.Fire(context.Background(), hooks.EventChannelConnect, map[string]string{
+						"DENEB_CHANNEL_ID": id,
+					})
+				}
+				// Broadcast channel status change.
+				s.broadcaster.Broadcast("channels.changed", map[string]any{
+					"channelId": id,
+					"action":    "restarted",
+				})
+			}
+			return err
 		},
 	}, monitoring.DefaultChannelHealthConfig(), s.logger)
 	go s.channelHealth.Run(ctx)
+}
+
+// startProcessPruner runs a background loop that periodically prunes completed
+// processes older than 1 hour to prevent unbounded memory growth.
+func (s *Server) startProcessPruner(ctx context.Context) {
+	if s.processes == nil {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				pruned := s.processes.Prune(1 * time.Hour)
+				if pruned > 0 {
+					s.logger.Info("pruned completed processes", "count", pruned)
+				}
+			}
+		}
+	}()
 }
 
 // registerBuiltinMethods registers the core RPC methods handled natively in Go.

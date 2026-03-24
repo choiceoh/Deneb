@@ -15,6 +15,9 @@ type ConfigReloadDeps struct {
 	// reinitialize its gateway context with updated config and plugins.
 	Forwarder Forwarder
 	Logger    *slog.Logger
+	// OnReloaded is called after a successful config reload with the new config snapshot.
+	// Use this to propagate config changes to Go subsystems (hooks, broadcaster, etc.).
+	OnReloaded func(snapshot *config.ConfigSnapshot)
 }
 
 // RegisterConfigReloadMethod registers the config.reload RPC method.
@@ -23,9 +26,11 @@ type ConfigReloadDeps struct {
 func RegisterConfigReloadMethod(d *Dispatcher, deps ...ConfigReloadDeps) {
 	var forwarder Forwarder
 	var logger *slog.Logger
+	var onReloaded func(snapshot *config.ConfigSnapshot)
 	if len(deps) > 0 {
 		forwarder = deps[0].Forwarder
 		logger = deps[0].Logger
+		onReloaded = deps[0].OnReloaded
 	}
 
 	d.Register("config.reload", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
@@ -40,6 +45,11 @@ func RegisterConfigReloadMethod(d *Dispatcher, deps ...ConfigReloadDeps) {
 				"issues": snapshot.Issues,
 			})
 			return resp
+		}
+
+		// Propagate to Go subsystems (hooks, broadcaster, etc.).
+		if onReloaded != nil {
+			onReloaded(snapshot)
 		}
 
 		// Propagate reload to Plugin Host so it reinitializes its gateway
