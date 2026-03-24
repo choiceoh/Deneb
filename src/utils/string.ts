@@ -20,9 +20,7 @@ export function sliceUtf16Safe(input: string, start: number, end?: number): stri
   let to = end === undefined ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
 
   if (to < from) {
-    const tmp = from;
-    from = to;
-    to = tmp;
+    return "";
   }
 
   if (from > 0 && from < len) {

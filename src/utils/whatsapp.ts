@@ -7,10 +7,7 @@ import { CONFIG_DIR } from "./paths.js";
 
 export function normalizeE164(number: string): string {
   const withoutPrefix = number.replace(/^whatsapp:/, "").trim();
-  const digits = withoutPrefix.replace(/[^\d+]/g, "");
-  if (digits.startsWith("+")) {
-    return `+${digits.slice(1)}`;
-  }
+  const digits = withoutPrefix.replace(/\D/g, "");
   return `+${digits}`;
 }
 
