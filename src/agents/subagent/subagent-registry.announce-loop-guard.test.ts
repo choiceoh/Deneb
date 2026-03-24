@@ -8,14 +8,14 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vi
  * forever via the max-retry and expiration guards.
  */
 
-vi.mock("../config/config.js", () => ({
+vi.mock("../../config/config.js", () => ({
   loadConfig: () => ({
     session: { store: "/tmp/test-store", mainKey: "main" },
     agents: {},
   }),
 }));
 
-vi.mock("../config/sessions.js", () => ({
+vi.mock("../../config/sessions.js", () => ({
   loadSessionStore: () => ({
     "agent:main:subagent:child-1": { sessionId: "sess-child-1", updatedAt: 1 },
     "agent:main:subagent:expired-child": { sessionId: "sess-expired", updatedAt: 1 },
@@ -30,11 +30,11 @@ vi.mock("../config/sessions.js", () => ({
   updateSessionStore: vi.fn(),
 }));
 
-vi.mock("../gateway/call.js", () => ({
+vi.mock("../../gateway/call.js", () => ({
   callGateway: vi.fn().mockResolvedValue({ status: "ok" }),
 }));
 
-vi.mock("../infra/agent-events.js", () => ({
+vi.mock("../../infra/agent-events.js", () => ({
   onAgentEvent: vi.fn().mockReturnValue(() => {}),
 }));
 
@@ -54,7 +54,7 @@ vi.mock("./subagent-announce-queue.js", () => ({
   resetAnnounceQueuesForTests: vi.fn(),
 }));
 
-vi.mock("./timeout.js", () => ({
+vi.mock("../timeout.js", () => ({
   resolveAgentTimeoutMs: () => 60_000,
 }));
 

@@ -15,7 +15,7 @@ let lifecycleHandler:
     }) => void)
   | undefined;
 
-vi.mock("../gateway/call.js", () => ({
+vi.mock("../../gateway/call.js", () => ({
   callGateway: vi.fn(async (opts: unknown) => {
     const request = opts as { method?: string };
     if (request.method === "agent.wait") {
@@ -25,20 +25,20 @@ vi.mock("../gateway/call.js", () => ({
   }),
 }));
 
-vi.mock("../infra/agent-events.js", () => ({
+vi.mock("../../infra/agent-events.js", () => ({
   onAgentEvent: vi.fn((handler: typeof lifecycleHandler) => {
     lifecycleHandler = handler;
     return noop;
   }),
 }));
 
-vi.mock("../config/config.js", () => ({
+vi.mock("../../config/config.js", () => ({
   loadConfig: vi.fn(() => ({
     agents: { defaults: { subagents: { archiveAfterMinutes: 0 } } },
   })),
 }));
 
-vi.mock("../config/sessions.js", () => {
+vi.mock("../../config/sessions.js", () => {
   const sessionStore = new Proxy<Record<string, { sessionId: string; updatedAt: number }>>(
     {},
     {
@@ -70,14 +70,14 @@ vi.mock("./subagent-announce.js", () => ({
   runSubagentAnnounceFlow: announceSpy,
 }));
 
-vi.mock("../plugins/hook-runner-global.js", () => ({
+vi.mock("../../plugins/hook-runner-global.js", () => ({
   getGlobalHookRunner: vi.fn(() => ({
     hasHooks: (hookName: string) => hookName === "subagent_ended",
     runSubagentEnded: runSubagentEndedHookMock,
   })),
 }));
 
-vi.mock("../sessions/session-lifecycle-events.js", () => ({
+vi.mock("../../sessions/session-lifecycle-events.js", () => ({
   emitSessionLifecycleEvent: emitSessionLifecycleEventMock,
 }));
 
@@ -101,7 +101,7 @@ describe("subagent registry steer restarts", () => {
   };
 
   const withPendingAgentWait = async <T>(run: () => Promise<T>): Promise<T> => {
-    const callGateway = vi.mocked((await import("../gateway/call.js")).callGateway);
+    const callGateway = vi.mocked((await import("../../gateway/call.js")).callGateway);
     const originalCallGateway = callGateway.getMockImplementation();
     callGateway.mockImplementation(async (request: unknown) => {
       const typed = request as { method?: string };

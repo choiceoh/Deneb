@@ -22,12 +22,12 @@ const hoisted = vi.hoisted(() => ({
   registerSubagentRunMock: vi.fn(),
 }));
 
-vi.mock("../gateway/call.js", () => ({
+vi.mock("../../gateway/call.js", () => ({
   callGateway: (opts: unknown) => hoisted.callGatewayMock(opts),
 }));
 
-vi.mock("../config/config.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../config/config.js")>();
+vi.mock("../../config/config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../config/config.js")>();
   return {
     ...actual,
     loadConfig: () => hoisted.configOverride,
@@ -52,29 +52,29 @@ vi.mock("./subagent-depth.js", () => ({
   getSubagentDepthFromSessionStore: () => 0,
 }));
 
-vi.mock("./model-selection.js", () => ({
+vi.mock("../models/model-selection.js", () => ({
   resolveSubagentSpawnModelSelection: () => undefined,
 }));
 
-vi.mock("./sandbox/runtime-status.js", () => ({
+vi.mock("../sandbox/runtime-status.js", () => ({
   resolveSandboxRuntimeStatus: () => ({ sandboxed: false }),
 }));
 
-vi.mock("../plugins/hook-runner-global.js", () => ({
+vi.mock("../../plugins/hook-runner-global.js", () => ({
   getGlobalHookRunner: () => ({ hasHooks: () => false }),
 }));
 
-vi.mock("../utils/delivery-context.js", () => ({
+vi.mock("../../utils/delivery-context.js", () => ({
   normalizeDeliveryContext: (value: unknown) => value,
 }));
 
-vi.mock("./tools/sessions-helpers.js", () => ({
+vi.mock("../tools/sessions-helpers.js", () => ({
   resolveMainSessionAlias: () => ({ mainKey: "main", alias: "main" }),
   resolveInternalSessionKey: ({ key }: { key?: string }) => key ?? "agent:main:main",
   resolveDisplaySessionKey: ({ key }: { key?: string }) => key ?? "agent:main:main",
 }));
 
-vi.mock("./agent-scope.js", () => ({
+vi.mock("../agent-scope.js", () => ({
   resolveAgentConfig: (cfg: TestConfig, agentId: string) =>
     cfg.agents?.list?.find((entry) => entry.id === agentId),
   resolveAgentWorkspaceDir: (cfg: TestConfig, agentId: string) =>

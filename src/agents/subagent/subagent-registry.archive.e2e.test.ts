@@ -5,7 +5,7 @@ const loadConfigMock = vi.fn(() => ({
   agents: { defaults: { subagents: { archiveAfterMinutes: 60 } } },
 }));
 
-vi.mock("../gateway/call.js", () => ({
+vi.mock("../../gateway/call.js", () => ({
   callGateway: vi.fn(async (request: unknown) => {
     const method = (request as { method?: string }).method;
     if (method === "agent.wait") {
@@ -16,12 +16,12 @@ vi.mock("../gateway/call.js", () => ({
   }),
 }));
 
-vi.mock("../infra/agent-events.js", () => ({
+vi.mock("../../infra/agent-events.js", () => ({
   onAgentEvent: vi.fn((_handler: unknown) => noop),
 }));
 
-vi.mock("../config/config.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../config/config.js")>();
+vi.mock("../../config/config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../config/config.js")>();
   return {
     ...actual,
     loadConfig: loadConfigMock,
@@ -32,7 +32,7 @@ vi.mock("./subagent-announce.js", () => ({
   runSubagentAnnounceFlow: vi.fn(async () => true),
 }));
 
-vi.mock("../plugins/hook-runner-global.js", () => ({
+vi.mock("../../plugins/hook-runner-global.js", () => ({
   getGlobalHookRunner: vi.fn(() => null),
 }));
 

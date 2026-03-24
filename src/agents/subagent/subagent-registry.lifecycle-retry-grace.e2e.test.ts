@@ -41,16 +41,16 @@ const captureCompletionReplySpy = vi.fn(
   async (_sessionKey?: string) => undefined as string | undefined,
 );
 
-vi.mock("../gateway/call.js", () => ({
+vi.mock("../../gateway/call.js", () => ({
   callGateway: callGatewayMock,
 }));
 
-vi.mock("../infra/agent-events.js", () => ({
+vi.mock("../../infra/agent-events.js", () => ({
   onAgentEvent: onAgentEventMock,
 }));
 
-vi.mock("../config/config.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../config/config.js")>();
+vi.mock("../../config/config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../config/config.js")>();
   return {
     ...actual,
     loadConfig: loadConfigMock,
@@ -62,7 +62,7 @@ vi.mock("./subagent-announce.js", () => ({
   captureSubagentCompletionReply: captureCompletionReplySpy,
 }));
 
-vi.mock("../plugins/hook-runner-global.js", () => ({
+vi.mock("../../plugins/hook-runner-global.js", () => ({
   getGlobalHookRunner: vi.fn(() => null),
 }));
 

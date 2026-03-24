@@ -15,7 +15,7 @@ let callGatewayImpl: (request: GatewayCall) => Promise<unknown> = async (request
   return {};
 };
 let sessionStore: Record<string, Record<string, unknown>> = {};
-let configOverride: ReturnType<(typeof import("../config/config.js"))["loadConfig"]> = {
+let configOverride: ReturnType<(typeof import("../../config/config.js"))["loadConfig"]> = {
   session: {
     mainKey: "main",
     scope: "per-sender",
@@ -30,22 +30,22 @@ let fallbackRequesterResolution: {
   requesterOrigin?: { channel?: string; to?: string; accountId?: string };
 } | null = null;
 
-vi.mock("../gateway/call.js", () => ({
+vi.mock("../../gateway/call.js", () => ({
   callGateway: vi.fn(async (request: GatewayCall) => {
     gatewayCalls.push(request);
     return await callGatewayImpl(request);
   }),
 }));
 
-vi.mock("../config/config.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../config/config.js")>();
+vi.mock("../../config/config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../config/config.js")>();
   return {
     ...actual,
     loadConfig: () => configOverride,
   };
 });
 
-vi.mock("../config/sessions.js", () => ({
+vi.mock("../../config/sessions.js", () => ({
   loadSessionStore: vi.fn(() => sessionStore),
   resolveAgentIdFromSessionKey: () => "main",
   resolveStorePath: () => "/tmp/sessions-main.json",
@@ -56,7 +56,7 @@ vi.mock("./subagent-depth.js", () => ({
   getSubagentDepthFromSessionStore: (sessionKey?: string) => requesterDepthResolver(sessionKey),
 }));
 
-vi.mock("./pi-embedded.js", () => ({
+vi.mock("../pi-embedded.js", () => ({
   isEmbeddedPiRunActive: () => false,
   queueEmbeddedPiMessage: () => false,
   waitForEmbeddedPiRunEnd: async () => true,
