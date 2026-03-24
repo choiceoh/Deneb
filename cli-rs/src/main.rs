@@ -49,6 +49,12 @@ async fn main() {
         Commands::Agent(args) => commands::agent::run(args).await,
         Commands::Message(args) => commands::message::run(args).await,
         Commands::Memory(args) => commands::memory::run(args).await,
+        // Interactive commands
+        Commands::Setup(args) => commands::setup::run(args).await,
+        Commands::Onboard(args) => commands::onboard::run(args).await,
+        Commands::Configure(args) => commands::configure::run(args).await,
+        Commands::Doctor(args) => commands::doctor::run(args).await,
+        Commands::Dashboard(args) => commands::dashboard::run(args).await,
         // SubCLI commands
         Commands::Gateway(args) => subcli::gateway_cmd::run(args).await,
         Commands::Channels(args) => subcli::channels::run(args).await,

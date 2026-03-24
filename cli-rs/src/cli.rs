@@ -62,6 +62,22 @@ pub enum Commands {
     /// Memory search and management.
     Memory(commands::memory::MemoryArgs),
 
+    // --- Interactive commands ---
+    /// Initialize config and workspace.
+    Setup(commands::setup::SetupArgs),
+
+    /// Interactive onboarding wizard.
+    Onboard(commands::onboard::OnboardArgs),
+
+    /// Interactive configuration editor.
+    Configure(commands::configure::ConfigureArgs),
+
+    /// Run diagnostic checks and repairs.
+    Doctor(commands::doctor::DoctorArgs),
+
+    /// Open the control dashboard in the browser.
+    Dashboard(commands::dashboard::DashboardArgs),
+
     // --- SubCLI commands ---
     /// Gateway management.
     Gateway(subcli::gateway_cmd::GatewayArgs),
