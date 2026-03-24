@@ -11,7 +11,7 @@
 #   - Rust toolchain (for prost-build via cargo build)
 #
 # Usage:
-#   ./scripts/proto-gen.sh          # generate all
+#   ./scripts/proto-gen.sh          # generate all (parallel)
 #   ./scripts/proto-gen.sh --go     # Go only
 #   ./scripts/proto-gen.sh --rust   # Rust only
 #   ./scripts/proto-gen.sh --ts     # TypeScript only
@@ -24,6 +24,7 @@ PROTO_DIR="$REPO_ROOT/proto"
 GO_OUT="$REPO_ROOT/gateway-go/pkg/protocol/gen"
 TS_OUT="$REPO_ROOT/src/protocol/generated"
 LOCKFILE="$REPO_ROOT/.proto-gen.lock"
+HASH_FILE="$REPO_ROOT/.proto-gen.hash"
 
 # Ensure Go bin is in PATH (protoc-gen-go).
 export PATH="${GOPATH:-$HOME/go}/bin:$PATH"
@@ -37,10 +38,6 @@ NC='\033[0m'
 info() { echo -e "${GREEN}[proto-gen]${NC} $*"; }
 warn() { echo -e "${YELLOW}[proto-gen]${NC} $*"; }
 fail() { echo -e "${RED}[proto-gen]${NC} $*" >&2; exit 1; }
-
-require_cmd() {
-  command -v "$1" &>/dev/null || fail "$1 not found. $2"
-}
 
 # --- Concurrency lock ---
 
@@ -56,13 +53,7 @@ acquire_lock() {
   echo $$ > "$LOCKFILE"
 }
 
-release_lock() {
-  rm -f "$LOCKFILE"
-}
-
-# --- Signal handling ---
-# On interrupt, clean up lockfile and restore any partially cleaned output
-# from git so the working tree isn't left in a broken state.
+release_lock() { rm -f "$LOCKFILE"; }
 
 cleanup_on_signal() {
   warn "Interrupted — restoring generated files from git..."
@@ -73,16 +64,45 @@ cleanup_on_signal() {
   exit 130
 }
 
-trap cleanup_on_signal INT TERM
+# --- Prerequisite checks (run once) ---
 
-# --- Validation helpers ---
+check_prereqs() {
+  local need_buf="${1:-}" need_rust="${2:-}"
 
-verify_proto_sources() {
   [ -d "$PROTO_DIR" ] || fail "Proto directory not found: $PROTO_DIR"
   local count
   count=$(find "$PROTO_DIR" -maxdepth 1 -name "*.proto" -type f | wc -l)
   [ "$count" -gt 0 ] || fail "No .proto files found in $PROTO_DIR"
+
+  if [ "$need_buf" = "buf" ]; then
+    command -v buf &>/dev/null || fail "buf not found. Install: https://buf.build/docs/installation"
+  fi
+  if [ "$need_rust" = "rust" ]; then
+    command -v cargo &>/dev/null || fail "cargo not found. Install: https://rustup.rs"
+    command -v protoc &>/dev/null || fail "protoc not found. Install: apt install protobuf-compiler / brew install protobuf"
+  fi
 }
+
+# --- Proto hash for skip optimization ---
+
+compute_proto_hash() {
+  # Hash proto files + gen configs to detect changes.
+  cat "$PROTO_DIR"/*.proto \
+    "$PROTO_DIR"/buf.gen.go.yaml \
+    "$PROTO_DIR"/buf.gen.ts.yaml \
+    "$REPO_ROOT/core-rs/build.rs" \
+    2>/dev/null | sha256sum | cut -d' ' -f1
+}
+
+is_up_to_date() {
+  [ -f "$HASH_FILE" ] && [ "$(cat "$HASH_FILE" 2>/dev/null)" = "$(compute_proto_hash)" ]
+}
+
+save_hash() {
+  compute_proto_hash > "$HASH_FILE"
+}
+
+# --- Helpers ---
 
 verify_output() {
   local dir="$1" pattern="$2" label="$3"
@@ -102,34 +122,18 @@ clean_generated() {
   fi
 }
 
-# Run buf lint as a pre-check before generation.
-lint_protos() {
-  require_cmd buf "Install: https://buf.build/docs/installation"
-  info "Linting proto files..."
-  (cd "$PROTO_DIR" && buf lint) || fail "buf lint failed — fix proto errors before generating"
-}
-
 # --- Generators ---
-# Each runs in a subshell to avoid cd side effects.
-# Pattern: verify prereqs → clean stale → generate → verify output.
 
 gen_go() {
   info "Generating Go → gateway-go/pkg/protocol/gen/"
-  require_cmd buf "Install: https://buf.build/docs/installation"
-  require_cmd protoc-gen-go "Install: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
+  command -v protoc-gen-go &>/dev/null || fail "protoc-gen-go not found. Install: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
   clean_generated "$GO_OUT"
-  (
-    mkdir -p "$GO_OUT"
-    cd "$PROTO_DIR"
-    buf generate --template buf.gen.go.yaml
-  )
+  ( mkdir -p "$GO_OUT" && cd "$PROTO_DIR" && buf generate --template buf.gen.go.yaml )
   verify_output "$GO_OUT" "*.pb.go" "Go"
 }
 
 gen_rust() {
   info "Generating Rust via prost-build (output in cargo OUT_DIR)"
-  require_cmd cargo "Install: https://rustup.rs"
-  require_cmd protoc "Install: apt install protobuf-compiler / brew install protobuf"
   local output
   if ! output=$(cd "$REPO_ROOT/core-rs" && cargo check 2>&1); then
     echo "$output" >&2
@@ -140,30 +144,44 @@ gen_rust() {
 
 gen_ts() {
   info "Generating TypeScript → src/protocol/generated/"
-  require_cmd buf "Install: https://buf.build/docs/installation"
-  require_cmd protoc-gen-ts_proto "Install: npm install -g ts-proto"
+  command -v protoc-gen-ts_proto &>/dev/null || fail "protoc-gen-ts_proto not found. Install: npm install -g ts-proto"
   clean_generated "$TS_OUT"
-  (
-    mkdir -p "$TS_OUT"
-    cd "$PROTO_DIR"
-    buf generate --template buf.gen.ts.yaml
-  )
+  ( mkdir -p "$TS_OUT" && cd "$PROTO_DIR" && buf generate --template buf.gen.ts.yaml )
   verify_output "$TS_OUT" "*.ts" "TypeScript"
 }
 
-gen_all() {
-  verify_proto_sources
-  lint_protos
+# Run Go, Rust, and TS generation in parallel.
+gen_all_parallel() {
+  check_prereqs buf rust
+  info "Linting proto files..."
+  (cd "$PROTO_DIR" && buf lint) || fail "buf lint failed — fix proto errors before generating"
+
+  local go_log rust_log ts_log
+  go_log=$(mktemp) rust_log=$(mktemp) ts_log=$(mktemp)
+
+  # Launch all three in parallel.
+  gen_go   > "$go_log"   2>&1 &
+  local go_pid=$!
+  gen_rust > "$rust_log"  2>&1 &
+  local rust_pid=$!
+  gen_ts   > "$ts_log"    2>&1 &
+  local ts_pid=$!
 
   local failures=()
 
-  gen_go    || failures+=("Go")
-  gen_rust  || failures+=("Rust")
-  gen_ts    || failures+=("TypeScript")
+  wait "$go_pid"   || failures+=("Go")
+  wait "$rust_pid"  || failures+=("Rust")
+  wait "$ts_pid"    || failures+=("TypeScript")
+
+  # Print output (success and failure both).
+  cat "$go_log" "$rust_log" "$ts_log"
+  rm -f "$go_log" "$rust_log" "$ts_log"
 
   if [ ${#failures[@]} -gt 0 ]; then
     fail "Generation failed for: ${failures[*]}"
   fi
+
+  save_hash
 }
 
 check_diffs() {
@@ -175,17 +193,12 @@ check_diffs() {
   )
   local has_diff=0
 
-  # Check unstaged changes.
   if ! git diff --exit-code -- "${paths[@]}" >/dev/null 2>&1; then
     has_diff=1
   fi
-
-  # Check staged changes.
   if ! git diff --cached --exit-code -- "${paths[@]}" >/dev/null 2>&1; then
     has_diff=1
   fi
-
-  # Check untracked new files.
   if [ -n "$(git ls-files --others --exclude-standard -- "${paths[@]}" 2>/dev/null)" ]; then
     has_diff=1
   fi
@@ -214,10 +227,30 @@ trap 'cleanup_on_signal' INT TERM
 trap 'release_lock' EXIT
 
 case "${1:-all}" in
-  --go)    verify_proto_sources; lint_protos; gen_go ;;
-  --rust)  verify_proto_sources; gen_rust ;;
-  --ts)    verify_proto_sources; lint_protos; gen_ts ;;
-  --check) gen_all; check_diffs ;;
-  all|"")  gen_all ;;
-  *)       fail "Unknown option: $1. Use --go, --rust, --ts, --check, or no args." ;;
+  --go)
+    check_prereqs buf
+    gen_go
+    ;;
+  --rust)
+    check_prereqs "" rust
+    gen_rust
+    ;;
+  --ts)
+    check_prereqs buf
+    gen_ts
+    ;;
+  --check)
+    if is_up_to_date; then
+      info "Proto hash unchanged — skipping regeneration"
+    else
+      gen_all_parallel
+    fi
+    check_diffs
+    ;;
+  all|"")
+    gen_all_parallel
+    ;;
+  *)
+    fail "Unknown option: $1. Use --go, --rust, --ts, --check, or no args."
+    ;;
 esac

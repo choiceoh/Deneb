@@ -71,5 +71,6 @@ core-rs/npm/
 /tmp/
 *.tmp
 
-# Proto generation lockfile
+# Proto generation
 .proto-gen.lock
+.proto-gen.hash

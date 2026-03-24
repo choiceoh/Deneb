@@ -23,33 +23,26 @@ env:
   TS_PROTO_VERSION: "2.11.6"
 
 jobs:
-  lint:
-    name: buf lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: bufbuild/buf-setup-action@v1
-      - run: cd proto && buf lint
-
   generate-check:
     name: proto generate check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: bufbuild/buf-setup-action@v1
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup buf, Go, Rust, Node (parallel-safe)
+        uses: bufbuild/buf-setup-action@v1
+
+      - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
           cache: true
           cache-dependency-path: gateway-go/go.sum
 
-      - name: Install protoc-gen-go
-        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@${{ env.PROTOC_GEN_GO_VERSION }}
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -61,16 +54,12 @@ jobs:
           key: proto-rust-${{ hashFiles('core-rs/Cargo.lock') }}
           restore-keys: proto-rust-
 
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Install ts-proto
-        run: npm install -g ts-proto@${{ env.TS_PROTO_VERSION }}
+      - name: Install protoc + codegen plugins
+        run: |
+          sudo apt-get install -y protobuf-compiler &
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@${{ env.PROTOC_GEN_GO_VERSION }} &
+          npm install -g ts-proto@${{ env.TS_PROTO_VERSION }} &
+          wait
 
       - name: Generate and verify
         run: ./scripts/proto-gen.sh --check
