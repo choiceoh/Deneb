@@ -1,0 +1,7 @@
+# buf code generation — Go only.
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: ../gateway-go/pkg/protocol/gen
+    opt:
+      - paths=source_relative

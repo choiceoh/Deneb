@@ -70,3 +70,7 @@ core-rs/npm/
 # Temp
 /tmp/
 *.tmp
+
+# Proto generation
+.proto-gen.lock
+.proto-gen.hash

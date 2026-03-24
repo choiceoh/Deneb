@@ -1,7 +1,18 @@
-"gateway-go":
+"lang: rust":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "core-rs/**"
+          - "native/**"
+"lang: go":
   - changed-files:
       - any-glob-to-any-file:
           - "gateway-go/**"
+"lang: protobuf":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "proto/**"
+          - "scripts/proto-gen.sh"
+          - "src/protocol/generated/**"
 "channel: bluebubbles":
   - changed-files:
       - any-glob-to-any-file:
