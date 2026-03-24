@@ -378,17 +378,19 @@ func (s *Server) buildMux() *http.ServeMux {
 	return mux
 }
 
+// bridgeStatus returns the current bridge connection state as a string.
+func (s *Server) bridgeStatus() string {
+	if s.bridge == nil {
+		return "not_configured"
+	}
+	if s.bridge.IsRunning() {
+		return "connected"
+	}
+	return "disconnected"
+}
+
 // handleHealth responds with gateway health status including subsystem state.
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	bridgeStatus := "not_configured"
-	if s.bridge != nil {
-		if s.bridge.IsRunning() {
-			bridgeStatus = "connected"
-		} else {
-			bridgeStatus = "disconnected"
-		}
-	}
-
 	authMode := ""
 	providerCount := 0
 	if s.runtimeCfg != nil {
@@ -405,7 +407,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"uptime":      time.Since(s.startedAt).Milliseconds(),
 		"connections": s.clientCnt.Load(),
 		"sessions":    s.sessions.Count(),
-		"bridge":      bridgeStatus,
+		"bridge":      s.bridgeStatus(),
 		"rust_core":   s.rustFFI,
 		"auth_mode":   authMode,
 		"providers":   providerCount,
@@ -715,19 +717,11 @@ func (s *Server) registerBuiltinMethods() {
 
 	// gateway.identity.get: returns the gateway's identity and runtime information.
 	s.dispatcher.Register("gateway.identity.get", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		bridgeStatus := "not_configured"
-		if s.bridge != nil {
-			if s.bridge.IsRunning() {
-				bridgeStatus = "connected"
-			} else {
-				bridgeStatus = "disconnected"
-			}
-		}
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"version": s.version,
 			"runtime": "go",
 			"uptime":  time.Since(s.startedAt).Milliseconds(),
-			"bridge":  bridgeStatus,
+			"bridge":  s.bridgeStatus(),
 			"rustFFI": s.rustFFI,
 		})
 		return resp
@@ -754,20 +748,28 @@ func (s *Server) registerBuiltinMethods() {
 
 	// system-presence: broadcast a presence event to all connected clients.
 	s.dispatcher.Register("system-presence", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			Payload any `json:"payload"`
+		var payload any
+		if len(req.Params) > 0 {
+			var p struct {
+				Payload any `json:"payload"`
+			}
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return protocol.NewResponseError(req.ID, protocol.NewError(
+					protocol.ErrInvalidRequest, "invalid params"))
+			}
+			payload = p.Payload
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
-		}
-		sent, _ := s.broadcaster.Broadcast("presence", p.Payload)
+		sent, _ := s.broadcaster.Broadcast("presence", payload)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]int{"sent": sent})
 		return resp
 	})
 
 	// system-event: broadcast an arbitrary system event.
 	s.dispatcher.Register("system-event", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if len(req.Params) == 0 {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "event is required"))
+		}
 		var p struct {
 			Event   string `json:"event"`
 			Payload any    `json:"payload"`

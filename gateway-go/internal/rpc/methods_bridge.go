@@ -150,8 +150,7 @@ func RegisterBridgeMethods(d *Dispatcher, deps BridgeDeps) {
 	}
 
 	for _, m := range methods {
-		method := m // capture for closure
-		d.Register(method, bridgeForward(deps, method))
+		d.Register(m, bridgeForward(deps, m))
 	}
 }
 

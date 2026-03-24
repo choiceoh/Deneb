@@ -143,50 +143,36 @@ func fullDispatcher() *Dispatcher {
 		ForwarderFunc: func() Forwarder { return nil },
 	})
 
-	// Events (requires broadcaster mock — register manually for parity test).
-	// The session subscription aliases are registered here.
-	eventMethods := []string{
+	// Stub for methods registered outside the rpc package (events, chat, server inline).
+	stub := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
+		return resp
+	}
+
+	// Event subscription methods (normally via RegisterEventsMethods with Broadcaster).
+	for _, m := range []string{
 		"node.event",
-		"subscribe.session",
-		"unsubscribe.session",
-		"subscribe.session.messages",
-		"unsubscribe.session.messages",
-		"sessions.subscribe",
-		"sessions.unsubscribe",
-		"sessions.messages.subscribe",
-		"sessions.messages.unsubscribe",
-	}
-	for _, m := range eventMethods {
-		method := m
-		d.Register(method, func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
-			return resp
-		})
+		"subscribe.session", "unsubscribe.session",
+		"subscribe.session.messages", "unsubscribe.session.messages",
+		"sessions.subscribe", "sessions.unsubscribe",
+		"sessions.messages.subscribe", "sessions.messages.unsubscribe",
+	} {
+		d.Register(m, stub)
 	}
 
-	// Chat methods (stub for parity test).
-	chatMethods := []string{"chat.send", "chat.history", "chat.abort", "chat.inject"}
-	for _, m := range chatMethods {
-		method := m
-		d.Register(method, func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
-			return resp
-		})
+	// Chat methods (normally via RegisterChatMethods with chat.Handler).
+	for _, m := range []string{"chat.send", "chat.history", "chat.abort", "chat.inject"} {
+		d.Register(m, stub)
 	}
 
-	// Inline server methods (health, status, config.get, etc.).
-	serverMethods := []string{
+	// Server inline methods (normally in server.registerBuiltinMethods).
+	for _, m := range []string{
 		"health", "status", "config.get",
 		"daemon.status", "events.broadcast",
 		"gateway.identity.get", "last-heartbeat", "set-heartbeats",
 		"system-presence", "system-event", "models.list",
-	}
-	for _, m := range serverMethods {
-		method := m
-		d.Register(method, func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
-			return resp
-		})
+	} {
+		d.Register(m, stub)
 	}
 
 	return d
