@@ -15,10 +15,10 @@ export function parsePositiveIntOrUndefined(value: unknown): number | undefined 
   }
   if (typeof value === "string") {
     const parsed = Number.parseInt(value, 10);
-    if (Number.isNaN(parsed) || parsed <= 0) {
+    if (!Number.isFinite(parsed)) {
       return undefined;
     }
-    return parsed;
+    return parsed > 0 ? parsed : undefined;
   }
   return undefined;
 }
@@ -27,6 +27,6 @@ export function resolveActionArgs(actionCommand?: import("commander").Command): 
   if (!actionCommand) {
     return [];
   }
-  const args = (actionCommand as import("commander").Command & { args?: string[] }).args;
+  const args = actionCommand.args;
   return Array.isArray(args) ? args : [];
 }

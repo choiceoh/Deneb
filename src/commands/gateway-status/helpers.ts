@@ -1,4 +1,3 @@
-import { parseTimeoutMsWithFallback } from "../../cli/parse-timeout.js";
 import { resolveGatewayPort } from "../../config/config.js";
 import type { DenebConfig, ConfigFileSnapshot } from "../../config/types.js";
 import { hasConfiguredSecretInput } from "../../config/types.secrets.js";
@@ -9,6 +8,7 @@ import { pickPrimaryTailnetIPv4 } from "../../infra/tailnet.js";
 import { colorize, theme } from "../../terminal/theme.js";
 import { pickGatewaySelfPresence } from "../gateway-presence.js";
 
+/** Matches RPC probe errors indicating the token lacks a required scope. */
 const MISSING_SCOPE_PATTERN = /\bmissing scope:\s*[a-z0-9._-]+/i;
 
 type TargetKind = "explicit" | "configRemote" | "localLoopback" | "sshTunnel";
@@ -66,10 +66,6 @@ function parseIntOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export function parseTimeoutMs(raw: unknown, fallbackMs: number): number {
-  return parseTimeoutMsWithFallback(raw, fallbackMs);
-}
-
 function normalizeWsUrl(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -116,14 +112,18 @@ export function resolveTargets(cfg: DenebConfig, explicitUrl?: string): GatewayS
   return targets;
 }
 
+const PROBE_BUDGET_LOCAL_MS = 800;
+const PROBE_BUDGET_SSH_TUNNEL_MS = 2000;
+const PROBE_BUDGET_REMOTE_MS = 1500;
+
 export function resolveProbeBudgetMs(overallMs: number, kind: TargetKind): number {
   if (kind === "localLoopback") {
-    return Math.min(800, overallMs);
+    return Math.min(PROBE_BUDGET_LOCAL_MS, overallMs);
   }
   if (kind === "sshTunnel") {
-    return Math.min(2000, overallMs);
+    return Math.min(PROBE_BUDGET_SSH_TUNNEL_MS, overallMs);
   }
-  return Math.min(1500, overallMs);
+  return Math.min(PROBE_BUDGET_REMOTE_MS, overallMs);
 }
 
 export function sanitizeSshTarget(value: unknown): string | null {
@@ -153,31 +153,18 @@ export async function resolveAuthForTarget(
   const tokenOnly = authMode === "token";
   const passwordOnly = authMode === "password";
 
-  const resolveToken = async (value: unknown, path: string): Promise<string | undefined> => {
-    const tokenResolution = await resolveConfiguredSecretInputString({
+  const resolveSecret = async (value: unknown, path: string): Promise<string | undefined> => {
+    const resolution = await resolveConfiguredSecretInputString({
       config: cfg,
       env: process.env,
       value,
       path,
       unresolvedReasonStyle: "detailed",
     });
-    if (tokenResolution.unresolvedRefReason) {
-      diagnostics.push(tokenResolution.unresolvedRefReason);
+    if (resolution.unresolvedRefReason) {
+      diagnostics.push(resolution.unresolvedRefReason);
     }
-    return tokenResolution.value;
-  };
-  const resolvePassword = async (value: unknown, path: string): Promise<string | undefined> => {
-    const passwordResolution = await resolveConfiguredSecretInputString({
-      config: cfg,
-      env: process.env,
-      value,
-      path,
-      unresolvedReasonStyle: "detailed",
-    });
-    if (passwordResolution.unresolvedRefReason) {
-      diagnostics.push(passwordResolution.unresolvedRefReason);
-    }
-    return passwordResolution.value;
+    return resolution.value;
   };
   const withDiagnostics = <T extends { token?: string; password?: string }>(result: T) =>
     diagnostics.length > 0 ? { ...result, diagnostics } : result;
@@ -186,10 +173,10 @@ export async function resolveAuthForTarget(
     const remoteTokenValue = cfg.gateway?.remote?.token;
     const remotePasswordValue = (cfg.gateway?.remote as { password?: unknown } | undefined)
       ?.password;
-    const token = await resolveToken(remoteTokenValue, "gateway.remote.token");
+    const token = await resolveSecret(remoteTokenValue, "gateway.remote.token");
     const password = token
       ? undefined
-      : await resolvePassword(remotePasswordValue, "gateway.remote.password");
+      : await resolveSecret(remotePasswordValue, "gateway.remote.password");
     return withDiagnostics({ token, password });
   }
 
@@ -201,7 +188,7 @@ export async function resolveAuthForTarget(
   const envToken = readGatewayTokenEnv();
   const envPassword = readGatewayPasswordEnv();
   if (tokenOnly) {
-    const token = await resolveToken(cfg.gateway?.auth?.token, "gateway.auth.token");
+    const token = await resolveSecret(cfg.gateway?.auth?.token, "gateway.auth.token");
     if (token) {
       return withDiagnostics({ token });
     }
@@ -211,7 +198,7 @@ export async function resolveAuthForTarget(
     return withDiagnostics({});
   }
   if (passwordOnly) {
-    const password = await resolvePassword(cfg.gateway?.auth?.password, "gateway.auth.password");
+    const password = await resolveSecret(cfg.gateway?.auth?.password, "gateway.auth.password");
     if (password) {
       return withDiagnostics({ password });
     }
@@ -221,7 +208,7 @@ export async function resolveAuthForTarget(
     return withDiagnostics({});
   }
 
-  const token = await resolveToken(cfg.gateway?.auth?.token, "gateway.auth.token");
+  const token = await resolveSecret(cfg.gateway?.auth?.token, "gateway.auth.token");
   if (token) {
     return withDiagnostics({ token });
   }
@@ -231,7 +218,7 @@ export async function resolveAuthForTarget(
   if (envPassword) {
     return withDiagnostics({ password: envPassword });
   }
-  const password = await resolvePassword(cfg.gateway?.auth?.password, "gateway.auth.password");
+  const password = await resolveSecret(cfg.gateway?.auth?.password, "gateway.auth.password");
 
   return withDiagnostics({ token, password });
 }

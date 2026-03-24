@@ -1,3 +1,4 @@
+import { parseTimeoutMsWithFallback } from "../cli/parse-timeout.js";
 import { withProgress } from "../cli/progress.js";
 import { readBestEffortConfig, resolveGatewayPort } from "../config/config.js";
 import { probeGateway } from "../gateway/monitoring/probe.js";
@@ -11,7 +12,6 @@ import {
   isProbeReachable,
   isScopeLimitedProbeFailure,
   type GatewayStatusTarget,
-  parseTimeoutMs,
   pickGatewaySelfPresence,
   renderProbeSummaryLine,
   renderTargetHeader,
@@ -50,7 +50,7 @@ export async function gatewayStatusCommand(
   const startedAt = Date.now();
   const cfg = await readBestEffortConfig();
   const rich = isRich() && opts.json !== true;
-  const overallTimeoutMs = parseTimeoutMs(opts.timeout, 3000);
+  const overallTimeoutMs = parseTimeoutMsWithFallback(opts.timeout, 3000);
   const wideAreaDomain = resolveWideAreaDiscoveryDomain({
     configDomain: cfg.discovery?.wideArea?.domain,
   });
