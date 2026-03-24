@@ -1,5 +1,6 @@
 [workspace]
-members = ["core-rs", "core-rs-napi", "tools/highway"]
+members = ["core-rs-napi", "tools/highway", "cli-rs"]
+exclude = ["core-rs"]
 resolver = "2"
 
 [profile.release]

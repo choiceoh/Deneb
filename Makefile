@@ -4,13 +4,16 @@
 
 .PHONY: all rust rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
        go go-ffi go-pure go-run go-test go-test-pure go-test-fuzz go-vet go-clean go-binary \
+       cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
+       cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 \
+       cli-cross-win-x64 cli-cross-all \
        ts ts-check ts-test \
        test test-all clean check fmt \
        proto proto-go proto-rust proto-ts proto-check proto-lint proto-watch \
        info
 
-# Default: build Rust first (produces .a), then Go (links it via CGo).
-all: rust go
+# Default: build Rust first (produces .a), then Go (links it via CGo), then CLI.
+all: rust go cli
 
 # --- Rust core library (workspace) ---
 
@@ -77,6 +80,50 @@ go-binary: rust go
 go-clean:
 	cd gateway-go && go clean ./...
 
+# --- Rust CLI ---
+
+cli:
+	cd cli-rs && cargo build --release
+
+cli-debug:
+	cd cli-rs && cargo build
+
+cli-test:
+	cd cli-rs && cargo test
+
+cli-fmt:
+	cd cli-rs && cargo fmt -- --check
+
+cli-clippy:
+	cd cli-rs && cargo clippy --all-targets -- -D warnings
+
+cli-bench:
+	cd cli-rs && cargo test --test startup_bench -- --nocapture
+
+cli-clean:
+	cd cli-rs && cargo clean
+
+# Cross-compilation targets (requires cross or appropriate rustup targets)
+cli-cross-linux-x64:
+	cd cli-rs && cargo build --release --target x86_64-unknown-linux-gnu
+
+cli-cross-linux-arm64:
+	cd cli-rs && cargo build --release --target aarch64-unknown-linux-gnu
+
+cli-cross-darwin-x64:
+	cd cli-rs && cargo build --release --target x86_64-apple-darwin
+
+cli-cross-darwin-arm64:
+	cd cli-rs && cargo build --release --target aarch64-apple-darwin
+
+cli-cross-win-x64:
+	cd cli-rs && cargo build --release --target x86_64-pc-windows-msvc
+
+cli-cross-all: cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 cli-cross-win-x64
+
+cli-install: cli
+	./cli-rs/scripts/install.sh
+
 # --- TypeScript (existing) ---
 
 ts:
@@ -90,20 +137,21 @@ ts-test:
 
 # --- Combined operations ---
 
-test: rust-test go-test
-	@echo "Rust and Go tests passed"
+test: rust-test go-test cli-test
+	@echo "Rust, Go, and CLI tests passed"
 
-test-all: rust-test go-test ts-test
-	@echo "All tests passed (Rust + Go + TypeScript)"
+test-all: rust-test go-test cli-test ts-test
+	@echo "All tests passed (Rust + Go + CLI + TypeScript)"
 
-clean: rust-clean go-clean
-	@echo "Cleaned Rust and Go build artifacts"
+clean: rust-clean go-clean cli-clean
+	@echo "Cleaned Rust, Go, and CLI build artifacts"
 
-check: proto-check rust-fmt rust-clippy rust-test go-vet go-test ts-check
+check: proto-check rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-vet go-test ts-check
 	@echo "All checks passed"
 
 fmt:
 	cd core-rs && cargo fmt --all
+	cd cli-rs && cargo fmt
 	cd gateway-go && gofmt -w .
 
 # --- Protobuf code generation ---
@@ -137,11 +185,14 @@ info:
 	@echo "  make rust       - Build Rust core crate (release, CGo)"
 	@echo "  make rust-all   - Build all Rust workspace crates"
 	@echo "  make go         - Build Go gateway"
+	@echo "  make cli        - Build Rust CLI (release)"
 	@echo "  make go-binary  - Build Go gateway binary to dist/"
 	@echo "  make ts         - Build TypeScript (pnpm)"
-	@echo "  make test       - Run Rust + Go tests"
-	@echo "  make check      - Run all checks (Rust + Go + TS)"
-	@echo "  make clean      - Clean Rust + Go build artifacts"
+	@echo "  make test       - Run Rust + Go + CLI tests"
+	@echo "  make check      - Run all checks (Rust + Go + CLI + TS)"
+	@echo "  make clean      - Clean Rust, Go, and CLI build artifacts"
+	@echo "  make cli-bench  - Run CLI startup benchmark"
+	@echo "  make cli-cross-all - Cross-compile CLI for all platforms"
 	@echo "  make proto      - Generate protobuf code (Go + Rust + TS)"
 	@echo "  make proto-go   - Generate Go protobuf structs"
 	@echo "  make proto-rust - Generate Rust protobuf structs"
