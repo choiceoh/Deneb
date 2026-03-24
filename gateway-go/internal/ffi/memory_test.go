@@ -100,7 +100,7 @@ func TestMemoryExtractKeywords_Empty(t *testing.T) {
 
 func TestMemoryMergeHybridResults_Empty(t *testing.T) {
 	// Minimal valid merge params with empty results.
-	params := `{"vector_results":[],"fts_results":[],"limit":10,"vector_weight":0.7,"fts_weight":0.3}`
+	params := `{"vector":[],"keyword":[],"vectorWeight":0.7,"textWeight":0.3}`
 	results, err := MemoryMergeHybridResults(params)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

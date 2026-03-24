@@ -6,6 +6,9 @@
 /// Only the safety analysis (`has_nested_repetition`) is in Rust.
 /// `compileSafeRegex` stays in TypeScript because it creates V8 RegExp objects.
 
+#[cfg(feature = "napi_binding")]
+use napi::bindgen_prelude::*;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------

@@ -10,6 +10,8 @@
 
 use once_cell::sync::Lazy;
 use regex::Regex;
+#[cfg(feature = "napi_binding")]
+use napi::bindgen_prelude::*;
 
 // ---------------------------------------------------------------------------
 // Suspicious patterns (compiled once)
