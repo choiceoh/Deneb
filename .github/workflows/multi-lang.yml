@@ -1,0 +1,113 @@
+# CI pipeline for Rust (core-rs) and Go (gateway-go) components.
+#
+# Runs on PRs and pushes that touch Rust, Go, or protobuf files.
+# The existing ci.yml handles TypeScript — this workflow is additive.
+name: Multi-Language CI
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'core-rs/**'
+      - 'gateway-go/**'
+      - 'proto/**'
+      - 'Makefile'
+      - '.github/workflows/multi-lang.yml'
+  pull_request:
+    paths:
+      - 'core-rs/**'
+      - 'gateway-go/**'
+      - 'proto/**'
+      - 'Makefile'
+      - '.github/workflows/multi-lang.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust (core-rs)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core-rs
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core-rs
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Clippy lint
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Test
+        run: cargo test
+
+      - name: Upload static library
+        uses: actions/upload-artifact@v4
+        with:
+          name: libdeneb-core
+          path: core-rs/target/release/libdeneb_core.a
+          retention-days: 1
+
+  go-pure:
+    name: Go (pure, no FFI)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway-go
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: gateway-go/go.sum
+
+      - name: Build (no FFI)
+        run: CGO_ENABLED=0 go build -tags no_ffi ./...
+
+      - name: Test (no FFI)
+        run: CGO_ENABLED=0 go test -tags no_ffi -count=1 ./...
+
+      - name: Vet
+        run: go vet -tags no_ffi ./...
+
+  go-ffi:
+    name: Go (with Rust FFI)
+    runs-on: ubuntu-latest
+    needs: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: gateway-go/go.sum
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libdeneb-core
+          path: core-rs/target/release/
+
+      - name: Build (CGo + Rust FFI)
+        working-directory: gateway-go
+        run: go build ./...
+
+      - name: Test (CGo + Rust FFI, race detector)
+        working-directory: gateway-go
+        run: go test -race -count=1 ./...
+
+      - name: Test (integration)
+        working-directory: gateway-go
+        run: go test -race -count=1 -tags=integration ./...

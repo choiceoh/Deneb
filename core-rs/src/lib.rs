@@ -10,6 +10,7 @@
 
 #![deny(clippy::all)]
 
+#[cfg(feature = "napi_binding")]
 #[macro_use]
 extern crate napi_derive;
 

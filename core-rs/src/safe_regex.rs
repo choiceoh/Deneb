@@ -346,7 +346,7 @@ pub fn has_nested_repetition_impl(source: &str) -> bool {
 /// Check whether a regex source pattern contains nested repetition (ReDoS risk).
 ///
 /// This is the Rust equivalent of `hasNestedRepetition` from `src/security/safe-regex.ts`.
-#[napi]
+#[cfg_attr(feature = "napi_binding", napi)]
 pub fn has_nested_repetition(source: String) -> bool {
     has_nested_repetition_impl(&source)
 }

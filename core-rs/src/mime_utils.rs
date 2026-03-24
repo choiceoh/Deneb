@@ -36,13 +36,13 @@ pub fn is_generic_mime_impl(mime: &str) -> bool {
 
 /// Normalize a MIME type: extract base type, trim, lowercase.
 /// Returns null for empty input.
-#[napi]
+#[cfg_attr(feature = "napi_binding", napi)]
 pub fn normalize_mime_type(mime: String) -> Option<String> {
     normalize_mime_type_impl(&mime)
 }
 
 /// Check if a MIME type is a generic container (octet-stream or zip).
-#[napi]
+#[cfg_attr(feature = "napi_binding", napi)]
 pub fn is_generic_mime(mime: String) -> bool {
     is_generic_mime_impl(&mime)
 }
