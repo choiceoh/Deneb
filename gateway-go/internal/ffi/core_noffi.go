@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -143,7 +144,8 @@ func IsSafeURL(rawURL string) bool {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return false
 	}
-	host := u.Hostname()
+	// url.Hostname() already strips userinfo and port.
+	host := strings.ToLower(u.Hostname())
 	if host == "" {
 		return false
 	}
@@ -157,13 +159,7 @@ func IsSafeURL(rawURL string) bool {
 	if strings.HasPrefix(host, "172.") {
 		parts := strings.SplitN(host, ".", 3)
 		if len(parts) >= 2 {
-			var n int
-			for _, c := range parts[1] {
-				if c >= '0' && c <= '9' {
-					n = n*10 + int(c-'0')
-				}
-			}
-			if n >= 16 && n <= 31 {
+			if n, err := strconv.Atoi(parts[1]); err == nil && n >= 16 && n <= 31 {
 				return false
 			}
 		}

@@ -80,9 +80,14 @@ pub fn sanitize_control_chars(input: &str) -> String {
 /// Maximum session key length (matches TypeScript ChatSendSessionKeyString).
 const MAX_SESSION_KEY_LEN: usize = 512;
 
-/// Validate a session key: non-empty, max 512 chars, no control characters.
+/// Validate a session key: non-empty, max 512 characters, no control characters.
+/// Uses char count (not byte length) to match TypeScript's `maxLength` semantics.
 pub fn is_valid_session_key(key: &str) -> bool {
-    if key.is_empty() || key.len() > MAX_SESSION_KEY_LEN {
+    if key.is_empty() {
+        return false;
+    }
+    let char_count = key.chars().count();
+    if char_count > MAX_SESSION_KEY_LEN {
         return false;
     }
     // Reject control characters (except common whitespace).
@@ -120,19 +125,20 @@ pub fn is_safe_url(url: &str) -> bool {
         return false;
     }
 
-    // Extract host portion.
+    // Extract host portion (strip userinfo, port, and path).
     let after_scheme = if lower.starts_with("https://") {
         &lower[8..]
     } else {
         &lower[7..]
     };
-    let host = after_scheme
-        .split('/')
-        .next()
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("");
+    let authority = after_scheme.split('/').next().unwrap_or("");
+    // Strip userinfo (user:pass@host) — prevents SSRF bypass via http://evil@localhost/
+    let after_userinfo = match authority.rfind('@') {
+        Some(pos) => &authority[pos + 1..],
+        None => authority,
+    };
+    // Strip port
+    let host = after_userinfo.split(':').next().unwrap_or("");
 
     if host.is_empty() {
         return false;
@@ -264,5 +270,27 @@ mod tests {
         // Blocked: empty/malformed
         assert!(!is_safe_url(""));
         assert!(!is_safe_url("http://"));
+
+        // Blocked: userinfo bypass attempts
+        assert!(!is_safe_url("http://evil@localhost/"));
+        assert!(!is_safe_url("http://user:pass@127.0.0.1/"));
+        assert!(!is_safe_url("http://anything@10.0.0.1/secret"));
+        assert!(is_safe_url("http://user@example.com/")); // public host with userinfo is ok
+    }
+
+    #[test]
+    fn test_is_valid_session_key_multibyte() {
+        // Multibyte chars: 512 chars is the limit, not 512 bytes.
+        let key_512_chars: String = "a".repeat(512);
+        assert!(is_valid_session_key(&key_512_chars));
+
+        let key_513_chars: String = "a".repeat(513);
+        assert!(!is_valid_session_key(&key_513_chars));
+
+        // 256 two-byte chars = 256 chars, 512 bytes — should pass (under 512 char limit)
+        let multibyte_key: String = "\u{00e9}".repeat(256); // e-accent, 2 bytes each
+        assert!(is_valid_session_key(&multibyte_key));
+        assert_eq!(multibyte_key.chars().count(), 256);
+        assert_eq!(multibyte_key.len(), 512); // 512 bytes but only 256 chars
     }
 }

@@ -61,8 +61,8 @@ func TestLifecycleStartAll(t *testing.T) {
 	lm := NewLifecycleManager(reg, slog.Default())
 	errs := lm.StartAll(context.Background())
 
-	if len(errs) != 0 {
-		t.Fatalf("expected no errors, got %v", errs)
+	if errs != nil {
+		t.Fatalf("expected nil errors, got %v", errs)
 	}
 	if !p1.startCalled || !p2.startCalled {
 		t.Error("expected both plugins to be started")
@@ -97,8 +97,8 @@ func TestLifecycleStopAll(t *testing.T) {
 	_ = lm.StartAll(context.Background())
 	errs := lm.StopAll(context.Background())
 
-	if len(errs) != 0 {
-		t.Fatalf("expected no errors, got %v", errs)
+	if errs != nil {
+		t.Fatalf("expected nil errors, got %v", errs)
 	}
 	if !p1.stopCalled {
 		t.Error("expected stop to be called")

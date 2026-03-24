@@ -40,7 +40,7 @@ pub unsafe extern "C" fn deneb_validate_frame(json_ptr: *const u8, json_len: usi
     if json_ptr.is_null() {
         return -1;
     }
-    let slice = unsafe { std::slice::from_raw_parts(json_ptr, json_len) };
+    let slice = std::slice::from_raw_parts(json_ptr, json_len);
     let json_str = match std::str::from_utf8(slice) {
         Ok(s) => s,
         Err(_) => return -2,
@@ -66,8 +66,8 @@ pub unsafe extern "C" fn deneb_constant_time_eq(
     if a_ptr.is_null() || b_ptr.is_null() {
         return -1;
     }
-    let a = unsafe { std::slice::from_raw_parts(a_ptr, a_len) };
-    let b = unsafe { std::slice::from_raw_parts(b_ptr, b_len) };
+    let a = std::slice::from_raw_parts(a_ptr, a_len);
+    let b = std::slice::from_raw_parts(b_ptr, b_len);
     if security::constant_time_eq(a, b) {
         0
     } else {
@@ -92,15 +92,13 @@ pub unsafe extern "C" fn deneb_detect_mime(
     if data_ptr.is_null() || out_ptr.is_null() {
         return -1;
     }
-    let data = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
+    let data = std::slice::from_raw_parts(data_ptr, data_len);
     let mime = media::detect_mime(data);
     let mime_bytes = mime.as_bytes();
     if mime_bytes.len() > out_len {
         return -2;
     }
-    unsafe {
-        std::ptr::copy_nonoverlapping(mime_bytes.as_ptr(), out_ptr, mime_bytes.len());
-    }
+    std::ptr::copy_nonoverlapping(mime_bytes.as_ptr(), out_ptr, mime_bytes.len());
     mime_bytes.len() as i32
 }
 
@@ -114,7 +112,7 @@ pub unsafe extern "C" fn deneb_validate_session_key(key_ptr: *const u8, key_len:
     if key_ptr.is_null() {
         return -1;
     }
-    let slice = unsafe { std::slice::from_raw_parts(key_ptr, key_len) };
+    let slice = std::slice::from_raw_parts(key_ptr, key_len);
     let key_str = match std::str::from_utf8(slice) {
         Ok(s) => s,
         Err(_) => return -2,
@@ -143,7 +141,7 @@ pub unsafe extern "C" fn deneb_sanitize_html(
     if input_ptr.is_null() || out_ptr.is_null() {
         return -1;
     }
-    let slice = unsafe { std::slice::from_raw_parts(input_ptr, input_len) };
+    let slice = std::slice::from_raw_parts(input_ptr, input_len);
     let input_str = match std::str::from_utf8(slice) {
         Ok(s) => s,
         Err(_) => return -2,
@@ -153,9 +151,7 @@ pub unsafe extern "C" fn deneb_sanitize_html(
     if bytes.len() > out_len {
         return -3; // output buffer too small
     }
-    unsafe {
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr, bytes.len());
-    }
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr, bytes.len());
     bytes.len() as i32
 }
 
@@ -169,7 +165,7 @@ pub unsafe extern "C" fn deneb_is_safe_url(url_ptr: *const u8, url_len: usize) -
     if url_ptr.is_null() {
         return -1;
     }
-    let slice = unsafe { std::slice::from_raw_parts(url_ptr, url_len) };
+    let slice = std::slice::from_raw_parts(url_ptr, url_len);
     let url_str = match std::str::from_utf8(slice) {
         Ok(s) => s,
         Err(_) => return -2,
@@ -191,7 +187,7 @@ pub unsafe extern "C" fn deneb_validate_error_code(code_ptr: *const u8, code_len
     if code_ptr.is_null() {
         return -1;
     }
-    let slice = unsafe { std::slice::from_raw_parts(code_ptr, code_len) };
+    let slice = std::slice::from_raw_parts(code_ptr, code_len);
     let code_str = match std::str::from_utf8(slice) {
         Ok(s) => s,
         Err(_) => return -2,

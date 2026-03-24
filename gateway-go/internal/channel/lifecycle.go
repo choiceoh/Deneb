@@ -35,19 +35,14 @@ func NewLifecycleManager(registry *Registry, logger *slog.Logger) *LifecycleMana
 }
 
 // StartAll starts all registered channel plugins concurrently.
-// Returns a map of channel ID → error for any failures.
+// Returns nil when all succeed; a non-nil map for any failures.
 func (lm *LifecycleManager) StartAll(ctx context.Context) map[string]error {
-	lm.registry.mu.RLock()
-	plugins := make(map[string]Plugin, len(lm.registry.plugins))
-	for id, p := range lm.registry.plugins {
-		plugins[id] = p
-	}
-	lm.registry.mu.RUnlock()
+	plugins := lm.registry.Snapshot()
 
 	var (
 		mu     sync.Mutex
 		wg     sync.WaitGroup
-		errors = make(map[string]error)
+		errs   map[string]error
 	)
 
 	for id, p := range plugins {
@@ -57,7 +52,10 @@ func (lm *LifecycleManager) StartAll(ctx context.Context) map[string]error {
 			lm.logger.Info("starting channel", "id", id)
 			if err := p.Start(ctx); err != nil {
 				mu.Lock()
-				errors[id] = err
+				if errs == nil {
+					errs = make(map[string]error)
+				}
+				errs[id] = err
 				mu.Unlock()
 				lm.logger.Error("channel start failed", "id", id, "error", err)
 				return
@@ -70,23 +68,18 @@ func (lm *LifecycleManager) StartAll(ctx context.Context) map[string]error {
 	}
 
 	wg.Wait()
-	return errors
+	return errs
 }
 
 // StopAll stops all registered channel plugins concurrently.
-// Returns a map of channel ID → error for any failures.
+// Returns nil when all succeed; a non-nil map for any failures.
 func (lm *LifecycleManager) StopAll(ctx context.Context) map[string]error {
-	lm.registry.mu.RLock()
-	plugins := make(map[string]Plugin, len(lm.registry.plugins))
-	for id, p := range lm.registry.plugins {
-		plugins[id] = p
-	}
-	lm.registry.mu.RUnlock()
+	plugins := lm.registry.Snapshot()
 
 	var (
-		mu     sync.Mutex
-		wg     sync.WaitGroup
-		errors = make(map[string]error)
+		mu   sync.Mutex
+		wg   sync.WaitGroup
+		errs map[string]error
 	)
 
 	for id, p := range plugins {
@@ -96,7 +89,10 @@ func (lm *LifecycleManager) StopAll(ctx context.Context) map[string]error {
 			lm.logger.Info("stopping channel", "id", id)
 			if err := p.Stop(ctx); err != nil {
 				mu.Lock()
-				errors[id] = err
+				if errs == nil {
+					errs = make(map[string]error)
+				}
+				errs[id] = err
 				mu.Unlock()
 				lm.logger.Error("channel stop failed", "id", id, "error", err)
 				return
@@ -109,17 +105,12 @@ func (lm *LifecycleManager) StopAll(ctx context.Context) map[string]error {
 	}
 
 	wg.Wait()
-	return errors
+	return errs
 }
 
 // HealthCheck performs a health check on all channels.
 func (lm *LifecycleManager) HealthCheck() []ChannelHealth {
-	lm.registry.mu.RLock()
-	plugins := make(map[string]Plugin, len(lm.registry.plugins))
-	for id, p := range lm.registry.plugins {
-		plugins[id] = p
-	}
-	lm.registry.mu.RUnlock()
+	plugins := lm.registry.Snapshot()
 
 	results := make([]ChannelHealth, 0, len(plugins))
 	for id, p := range plugins {

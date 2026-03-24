@@ -22,10 +22,17 @@ type Event struct {
 // EventHandler is a callback for session events.
 type EventHandler func(event Event)
 
+// subscription wraps a handler with a unique ID for safe unsubscribe.
+type subscription struct {
+	id      uint64
+	handler EventHandler
+}
+
 // EventBus provides pub/sub for session lifecycle events.
 type EventBus struct {
-	mu       sync.RWMutex
-	handlers []EventHandler
+	mu      sync.RWMutex
+	subs    []subscription
+	nextID  uint64
 }
 
 // NewEventBus creates a new event bus.
@@ -34,18 +41,24 @@ func NewEventBus() *EventBus {
 }
 
 // Subscribe registers a handler for all session events.
-// Returns an unsubscribe function.
+// Returns an unsubscribe function that is safe to call concurrently.
 func (b *EventBus) Subscribe(handler EventHandler) func() {
 	b.mu.Lock()
-	idx := len(b.handlers)
-	b.handlers = append(b.handlers, handler)
+	id := b.nextID
+	b.nextID++
+	b.subs = append(b.subs, subscription{id: id, handler: handler})
 	b.mu.Unlock()
 
 	return func() {
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		if idx < len(b.handlers) {
-			b.handlers[idx] = nil
+		for i, s := range b.subs {
+			if s.id == id {
+				// Remove by swapping with last element.
+				b.subs[i] = b.subs[len(b.subs)-1]
+				b.subs = b.subs[:len(b.subs)-1]
+				return
+			}
 		}
 	}
 }
@@ -53,13 +66,13 @@ func (b *EventBus) Subscribe(handler EventHandler) func() {
 // Emit sends an event to all subscribers.
 func (b *EventBus) Emit(event Event) {
 	b.mu.RLock()
-	handlers := make([]EventHandler, len(b.handlers))
-	copy(handlers, b.handlers)
+	snapshot := make([]EventHandler, len(b.subs))
+	for i, s := range b.subs {
+		snapshot[i] = s.handler
+	}
 	b.mu.RUnlock()
 
-	for _, h := range handlers {
-		if h != nil {
-			h(event)
-		}
+	for _, h := range snapshot {
+		h(event)
 	}
 }
