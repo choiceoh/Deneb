@@ -137,5 +137,6 @@ message HelloOk {
   }
   optional AuthInfo auth = 5;
 
-  optional string canvas_host_url = 6;
+  // Deprecated: Control UI removed in Phase 0 (Rust+Go migration).
+  optional string canvas_host_url = 6 [deprecated = true];
 }

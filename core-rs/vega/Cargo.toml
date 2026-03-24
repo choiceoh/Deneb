@@ -1,0 +1,15 @@
+[package]
+name = "deneb-vega"
+version = "0.1.0"
+edition = "2021"
+description = "Deneb Vega — project search engine (Rust port of Python vega/)"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+rusqlite = { version = "0.33", features = ["bundled", "vtab"] }
+regex.workspace = true

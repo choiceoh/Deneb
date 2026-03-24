@@ -1,8 +1,8 @@
-// Package vega implements an MCP client for communicating with the Python
-// Vega project management tool via subprocess + JSONL protocol.
+// Package vega implements communication with the Vega project management tool.
 //
-// This mirrors the existing Node.js → Python integration but runs directly
-// from the Go gateway, eliminating the Node.js hop for Vega operations.
+// The Backend interface abstracts the transport layer, allowing:
+// - PythonBackend: subprocess + JSONL (current, Phase 0)
+// - RustBackend: Rust FFI via deneb-core (Phase 1, replaces Python)
 package vega
 
 import (
@@ -17,6 +17,34 @@ import (
 	"sync/atomic"
 	"time"
 )
+
+// Backend abstracts the Vega execution layer.
+// Phase 0: PythonBackend (subprocess + JSONL).
+// Phase 1: RustBackend (Rust FFI via deneb-core).
+type Backend interface {
+	// Execute runs a Vega command and returns the JSON result.
+	Execute(ctx context.Context, cmd string, args map[string]any) (json.RawMessage, error)
+	// Search runs a Vega search query and returns results.
+	Search(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, error)
+	// Close releases resources.
+	Close() error
+}
+
+// SearchOpts configures a search query.
+type SearchOpts struct {
+	Limit  int    `json:"limit,omitempty"`
+	Offset int    `json:"offset,omitempty"`
+	Mode   string `json:"mode,omitempty"` // "bm25", "semantic", "hybrid"
+}
+
+// SearchResult is a single search result.
+type SearchResult struct {
+	ProjectID   int     `json:"projectId"`
+	ProjectName string  `json:"projectName"`
+	Section     string  `json:"section,omitempty"`
+	Content     string  `json:"content"`
+	Score       float64 `json:"score"`
+}
 
 const (
 	// defaultTimeout is the maximum time to wait for a Vega response.

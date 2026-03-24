@@ -1,0 +1,51 @@
+[package]
+name = "deneb-core"
+version = "0.1.0"
+edition = "2021"
+description = "Deneb core library — protocol validation, security, and media processing"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[features]
+default = ["napi_binding"]
+# Enable napi-rs bindings for Node.js native addon builds.
+# Disable for CGo static linking: cargo build --release --no-default-features
+napi_binding = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
+# Enable Vega project search engine (Rust port of Python vega/).
+vega = ["dep:deneb-vega"]
+# Enable local ML inference (GGUF models via llama.cpp).
+ml = ["dep:deneb-ml"]
+
+[dependencies]
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+jsonschema = "0.28"
+memchr = "2"
+
+# Protobuf runtime
+prost.workspace = true
+prost-types.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# Node.js FFI via napi-rs (optional, behind "napi_binding" feature)
+napi = { version = "2", features = ["napi9", "serde-json"], optional = true }
+napi-derive = { version = "2", optional = true }
+
+# Regex (ReDoS-safe by design)
+regex.workspace = true
+once_cell.workspace = true
+
+# Compression (PNG encoding)
+flate2 = "1"
+
+# Optional workspace crates
+deneb-vega = { path = "../vega", optional = true }
+deneb-ml = { path = "../ml", optional = true }
+
+[build-dependencies]
+prost-build = "0.13"
+napi-build = { version = "2", optional = true }

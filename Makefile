@@ -1,8 +1,8 @@
 # Deneb Multi-Language Build
 #
-# Orchestrates Rust (core-rs), Go (gateway-go), and TypeScript (pnpm) builds.
+# Orchestrates Rust (core-rs workspace), Go (gateway-go), and TypeScript (pnpm) builds.
 
-.PHONY: all rust rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
+.PHONY: all rust rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
        go go-ffi go-pure go-run go-test go-test-pure go-test-fuzz go-vet go-clean go-binary \
        ts ts-check ts-test \
        test test-all clean check fmt \
@@ -12,30 +12,34 @@
 # Default: build Rust first (produces .a), then Go (links it via CGo).
 all: rust go
 
-# --- Rust core library ---
+# --- Rust core library (workspace) ---
 
-# Build for CGo static linking (no napi-rs).
+# Build core crate for CGo static linking (no napi-rs).
 # Use `make rust-napi` for Node.js native addon builds.
 rust:
-	cd core-rs && cargo build --release --no-default-features
+	cd core-rs && cargo build --release -p deneb-core --no-default-features
+
+# Build all workspace crates (core + vega + ml).
+rust-all:
+	cd core-rs && cargo build --release --workspace
 
 rust-napi:
-	cd core-rs && cargo build --release
+	cd core-rs && cargo build --release -p deneb-core
 
 rust-debug:
-	cd core-rs && cargo build
+	cd core-rs && cargo build --workspace
 
 rust-test:
-	cd core-rs && cargo test
+	cd core-rs && cargo test --workspace
 
 rust-bench:
-	cd core-rs && cargo bench
+	cd core-rs && cargo bench --workspace
 
 rust-fmt:
-	cd core-rs && cargo fmt -- --check
+	cd core-rs && cargo fmt --all -- --check
 
 rust-clippy:
-	cd core-rs && cargo clippy --all-targets -- -D warnings
+	cd core-rs && cargo clippy --workspace --all-targets -- -D warnings
 
 rust-clean:
 	cd core-rs && cargo clean
@@ -99,7 +103,7 @@ check: proto-check rust-fmt rust-clippy rust-test go-vet go-test ts-check
 	@echo "All checks passed"
 
 fmt:
-	cd core-rs && cargo fmt
+	cd core-rs && cargo fmt --all
 	cd gateway-go && gofmt -w .
 
 # --- Protobuf code generation ---
@@ -130,7 +134,8 @@ proto-watch:
 info:
 	@echo "Deneb Multi-Language Build"
 	@echo ""
-	@echo "  make rust       - Build Rust core library (release)"
+	@echo "  make rust       - Build Rust core crate (release, CGo)"
+	@echo "  make rust-all   - Build all Rust workspace crates"
 	@echo "  make go         - Build Go gateway"
 	@echo "  make go-binary  - Build Go gateway binary to dist/"
 	@echo "  make ts         - Build TypeScript (pnpm)"
