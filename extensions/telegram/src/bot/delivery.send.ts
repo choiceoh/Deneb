@@ -162,8 +162,8 @@ export async function sendTelegramText(
           ...effectiveParams,
         }),
     });
-    runtime.log?.(`telegram sendMessage ok chat=${chatId} message=${res.message_id}`);
-    return res.message_id;
+    runtime.log?.(`telegram sendMessage ok chat=${chatId} message=${res?.message_id}`);
+    return res?.message_id;
   } catch (err) {
     const errText = formatErrorMessage(err);
     if (PARSE_ERR_RE.test(errText) || EMPTY_TEXT_ERR_RE.test(errText)) {
