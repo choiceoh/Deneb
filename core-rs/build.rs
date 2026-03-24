@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     napi_build::setup();
 
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
-    let proto_dir = manifest_dir.join("../proto");
+    let proto_dir = manifest_dir.join("../proto").canonicalize()?;
 
     let protos: Vec<_> = ["gateway", "channel", "session"]
         .iter()

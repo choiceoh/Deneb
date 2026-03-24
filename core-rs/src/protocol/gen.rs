@@ -1,6 +1,6 @@
 //! Auto-generated protobuf types (via prost-build).
 //!
-//! Do not edit manually. Regenerate with: cargo build (or ./scripts/proto-gen.sh --rust)
+//! Do not edit manually. Regenerate with: cargo check (or ./scripts/proto-gen.sh --rust)
 
 /// Gateway protocol frame types from proto/gateway.proto.
 pub mod gateway {

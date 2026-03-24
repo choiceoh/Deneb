@@ -36,12 +36,24 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24"
+          cache: true
+          cache-dependency-path: gateway-go/go.sum
 
       - name: Install protoc-gen-go
         run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            core-rs/target
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: proto-rust-${{ hashFiles('core-rs/Cargo.lock') }}
+          restore-keys: proto-rust-
 
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
