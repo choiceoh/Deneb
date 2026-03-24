@@ -65,6 +65,11 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }}
+
       - uses: bufbuild/buf-setup-action@v1
+
       - name: Detect breaking changes
         run: cd proto && buf breaking --against ../.git#subdir=proto,ref=origin/${{ github.base_ref }}

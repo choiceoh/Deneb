@@ -39,6 +39,15 @@ require_cmd() {
   command -v "$1" &>/dev/null || fail "$1 not found. $2"
 }
 
+# Clean generated files before regenerating to remove stale outputs
+# (e.g. when a .proto file is deleted or renamed).
+clean_generated() {
+  local dir="$1"
+  if [ -d "$dir" ]; then
+    find "$dir" -type f \( -name "*.pb.go" -o -name "*.ts" \) -delete
+  fi
+}
+
 # --- Generators ---
 # Each runs in a subshell to avoid cd side effects.
 
@@ -46,6 +55,7 @@ gen_go() {
   info "Generating Go → gateway-go/pkg/protocol/gen/"
   require_cmd buf "Install: https://buf.build/docs/installation"
   require_cmd protoc-gen-go "Install: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
+  clean_generated "$GO_OUT"
   (
     mkdir -p "$GO_OUT"
     cd "$PROTO_DIR"
@@ -58,12 +68,11 @@ gen_rust() {
   info "Generating Rust via prost-build (output in cargo OUT_DIR)"
   require_cmd cargo "Install: https://rustup.rs"
   require_cmd protoc "Install: apt install protobuf-compiler / brew install protobuf"
-  (
-    cd "$REPO_ROOT/core-rs"
-    # cargo check is sufficient to trigger build.rs (prost codegen)
-    # without compiling the full cdylib/staticlib/rlib targets.
-    cargo check 2>&1
-  )
+  local output
+  if ! output=$(cd "$REPO_ROOT/core-rs" && cargo check 2>&1); then
+    echo "$output" >&2
+    fail "Rust protobuf generation failed"
+  fi
   info "Rust generation complete"
 }
 
@@ -71,6 +80,7 @@ gen_ts() {
   info "Generating TypeScript → src/protocol/generated/"
   require_cmd buf "Install: https://buf.build/docs/installation"
   require_cmd protoc-gen-ts_proto "Install: npm install -g ts-proto"
+  clean_generated "$TS_OUT"
   (
     mkdir -p "$TS_OUT"
     cd "$PROTO_DIR"
@@ -94,7 +104,7 @@ check_diffs() {
   )
   local has_diff=0
 
-  # Check modified tracked files.
+  # Check modified or deleted tracked files.
   if ! git diff --exit-code -- "${paths[@]}" >/dev/null 2>&1; then
     has_diff=1
   fi

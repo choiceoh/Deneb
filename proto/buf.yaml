@@ -2,7 +2,9 @@
 #
 # Usage:
 #   cd proto && buf lint
-#   cd proto && buf generate
+#   cd proto && buf generate --template buf.gen.go.yaml   # Go only
+#   cd proto && buf generate --template buf.gen.ts.yaml   # TypeScript only
+#   ./scripts/proto-gen.sh                                # all languages
 version: v2
 lint:
   use:
