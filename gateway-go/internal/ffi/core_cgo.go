@@ -109,10 +109,18 @@ func ValidateSessionKey(key string) error {
 	}
 }
 
+// maxSanitizeInputBytes is the maximum input size for SanitizeHTML (1 MB).
+// Prevents OOM from pathologically large inputs multiplied by 6x expansion.
+const maxSanitizeInputBytes = 1 * 1024 * 1024
+
 // SanitizeHTML escapes HTML-significant characters in the input.
+// Inputs exceeding 1 MB are returned unmodified to prevent OOM.
 func SanitizeHTML(input string) string {
 	if len(input) == 0 {
 		return ""
+	}
+	if len(input) > maxSanitizeInputBytes {
+		return input // safety limit: return original for oversized input
 	}
 	// Output can be up to 6x input size (each char could become &#x27;)
 	outSize := len(input) * 6

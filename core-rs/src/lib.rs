@@ -30,6 +30,24 @@ pub mod safe_regex;
 // C FFI exports (Phase 0 — used by Go via CGo)
 // ---------------------------------------------------------------------------
 
+/// Maximum input size for FFI string functions (16 MB).
+/// Prevents DoS via pathologically large inputs.
+const FFI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
+
+/// Wraps an FFI body in catch_unwind to prevent Rust panics from aborting
+/// the Go process. Returns `panic_rc` if the closure panics.
+///
+/// # Safety
+/// Callers must ensure the closure does not rely on invariants that could
+/// be violated by unwinding. All FFI closures here operate on local data
+/// only, so AssertUnwindSafe is safe.
+fn ffi_catch(panic_rc: i32, f: impl FnOnce() -> i32) -> i32 {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+        Ok(rc) => rc,
+        Err(_) => panic_rc,
+    }
+}
+
 /// C FFI: Validate a gateway frame (JSON bytes).
 /// Returns 0 on success, negative error code on failure.
 ///
@@ -40,15 +58,20 @@ pub unsafe extern "C" fn deneb_validate_frame(json_ptr: *const u8, json_len: usi
     if json_ptr.is_null() {
         return -1;
     }
-    let slice = std::slice::from_raw_parts(json_ptr, json_len);
-    let json_str = match std::str::from_utf8(slice) {
-        Ok(s) => s,
-        Err(_) => return -2,
-    };
-    match protocol::validate_frame(json_str) {
-        Ok(_) => 0,
-        Err(_) => -3,
+    if json_len > FFI_MAX_INPUT_LEN {
+        return -4;
     }
+    let slice = std::slice::from_raw_parts(json_ptr, json_len);
+    ffi_catch(-99, move || {
+        let json_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        match protocol::validate_frame(json_str) {
+            Ok(_) => 0,
+            Err(_) => -3,
+        }
+    })
 }
 
 /// C FFI: Constant-time secret comparison.
@@ -112,16 +135,21 @@ pub unsafe extern "C" fn deneb_validate_session_key(key_ptr: *const u8, key_len:
     if key_ptr.is_null() {
         return -1;
     }
-    let slice = std::slice::from_raw_parts(key_ptr, key_len);
-    let key_str = match std::str::from_utf8(slice) {
-        Ok(s) => s,
-        Err(_) => return -2,
-    };
-    if security::is_valid_session_key(key_str) {
-        0
-    } else {
-        -3
+    if key_len > FFI_MAX_INPUT_LEN {
+        return -4;
     }
+    let slice = std::slice::from_raw_parts(key_ptr, key_len);
+    ffi_catch(-99, move || {
+        let key_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        if security::is_valid_session_key(key_str) {
+            0
+        } else {
+            -3
+        }
+    })
 }
 
 /// C FFI: Sanitize HTML in a string.
@@ -141,18 +169,24 @@ pub unsafe extern "C" fn deneb_sanitize_html(
     if input_ptr.is_null() || out_ptr.is_null() {
         return -1;
     }
-    let slice = std::slice::from_raw_parts(input_ptr, input_len);
-    let input_str = match std::str::from_utf8(slice) {
-        Ok(s) => s,
-        Err(_) => return -2,
-    };
-    let sanitized = security::sanitize_html(input_str);
-    let bytes = sanitized.as_bytes();
-    if bytes.len() > out_len {
-        return -3; // output buffer too small
+    if input_len > FFI_MAX_INPUT_LEN {
+        return -4;
     }
-    std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr, bytes.len());
-    bytes.len() as i32
+    let slice = std::slice::from_raw_parts(input_ptr, input_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let input_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let sanitized = security::sanitize_html(input_str);
+        let bytes = sanitized.as_bytes();
+        if bytes.len() > out_slice.len() {
+            return -3; // output buffer too small
+        }
+        out_slice[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
 }
 
 /// C FFI: Check if a URL is safe (not targeting internal networks).
@@ -165,16 +199,22 @@ pub unsafe extern "C" fn deneb_is_safe_url(url_ptr: *const u8, url_len: usize) -
     if url_ptr.is_null() {
         return -1;
     }
-    let slice = std::slice::from_raw_parts(url_ptr, url_len);
-    let url_str = match std::str::from_utf8(slice) {
-        Ok(s) => s,
-        Err(_) => return -2,
-    };
-    if security::is_safe_url(url_str) {
-        0
-    } else {
-        1
+    // URLs should not be extremely long; cap at 8 KB.
+    if url_len > 8192 {
+        return 1; // treat oversized URLs as unsafe
     }
+    let slice = std::slice::from_raw_parts(url_ptr, url_len);
+    ffi_catch(-99, move || {
+        let url_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        if security::is_safe_url(url_str) {
+            0
+        } else {
+            1
+        }
+    })
 }
 
 /// C FFI: Validate an error code string.

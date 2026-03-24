@@ -49,6 +49,17 @@ func (lm *LifecycleManager) StartAll(ctx context.Context) map[string]error {
 		wg.Add(1)
 		go func(id string, p Plugin) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					mu.Lock()
+					if errs == nil {
+						errs = make(map[string]error)
+					}
+					errs[id] = fmt.Errorf("panic in channel %q Start: %v", id, r)
+					mu.Unlock()
+					lm.logger.Error("channel start panicked", "id", id, "panic", r)
+				}
+			}()
 			lm.logger.Info("starting channel", "id", id)
 			if err := p.Start(ctx); err != nil {
 				mu.Lock()
@@ -86,6 +97,17 @@ func (lm *LifecycleManager) StopAll(ctx context.Context) map[string]error {
 		wg.Add(1)
 		go func(id string, p Plugin) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					mu.Lock()
+					if errs == nil {
+						errs = make(map[string]error)
+					}
+					errs[id] = fmt.Errorf("panic in channel %q Stop: %v", id, r)
+					mu.Unlock()
+					lm.logger.Error("channel stop panicked", "id", id, "panic", r)
+				}
+			}()
 			lm.logger.Info("stopping channel", "id", id)
 			if err := p.Stop(ctx); err != nil {
 				mu.Lock()

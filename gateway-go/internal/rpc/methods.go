@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"runtime"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
@@ -16,6 +17,14 @@ type Deps struct {
 	Sessions         *session.Manager
 	Channels         *channel.Registry
 	ChannelLifecycle *channel.LifecycleManager
+}
+
+// unmarshalParams safely unmarshals request params, handling nil/empty params.
+func unmarshalParams(params json.RawMessage, v any) error {
+	if len(params) == 0 {
+		return errors.New("missing params")
+	}
+	return json.Unmarshal(params, v)
 }
 
 // RegisterBuiltinMethods registers the core Go-native RPC methods on the
@@ -65,7 +74,7 @@ func sessionsGet(deps Deps) HandlerFunc {
 		var p struct {
 			Key string `json:"key"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Key == "" {
+		if err := unmarshalParams(req.Params, &p); err != nil || p.Key == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "key is required"))
 		}
@@ -85,7 +94,7 @@ func sessionsDelete(deps Deps) HandlerFunc {
 			Key   string `json:"key"`
 			Force bool   `json:"force"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Key == "" {
+		if err := unmarshalParams(req.Params, &p); err != nil || p.Key == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "key is required"))
 		}
@@ -113,7 +122,7 @@ func channelsGet(deps Deps) HandlerFunc {
 		var p struct {
 			ID string `json:"id"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+		if err := unmarshalParams(req.Params, &p); err != nil || p.ID == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "id is required"))
 		}
@@ -160,7 +169,7 @@ func protocolValidate() HandlerFunc {
 		var p struct {
 			Frame string `json:"frame"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Frame == "" {
+		if err := unmarshalParams(req.Params, &p); err != nil || p.Frame == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "frame is required"))
 		}
@@ -187,7 +196,7 @@ func mediaDetectMIME() HandlerFunc {
 		var p struct {
 			Data []byte `json:"data"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := unmarshalParams(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
@@ -219,7 +228,7 @@ func securityValidateSessionKey() HandlerFunc {
 		var p struct {
 			Key string `json:"key"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := unmarshalParams(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
@@ -236,7 +245,7 @@ func securitySanitizeHTML() HandlerFunc {
 		var p struct {
 			Input string `json:"input"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := unmarshalParams(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
@@ -252,7 +261,7 @@ func securityIsSafeURL() HandlerFunc {
 		var p struct {
 			URL string `json:"url"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := unmarshalParams(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
@@ -268,7 +277,7 @@ func securityValidateErrorCode() HandlerFunc {
 		var p struct {
 			Code string `json:"code"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := unmarshalParams(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
