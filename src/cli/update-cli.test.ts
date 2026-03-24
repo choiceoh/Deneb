@@ -286,86 +286,76 @@ describe("update-cli", () => {
     return { root, entryPath };
   };
 
-  beforeEach(() => {
-    vi.clearAllMocks();
+  // Pre-computed default mock values to avoid re-creating identical objects per test.
+  const defaultNpmTagVersion = { tag: "latest", version: "9999.0.0" } as const;
+  const defaultCheckUpdateStatus = {
+    root: "/test/path",
+    installKind: "git" as const,
+    packageManager: "pnpm" as const,
+    git: {
+      root: "/test/path",
+      sha: "abcdef1234567890",
+      tag: "v1.2.3",
+      branch: "main",
+      upstream: "origin/main",
+      dirty: false,
+      ahead: 0,
+      behind: 0,
+      fetchOk: true,
+    },
+    deps: {
+      manager: "pnpm" as const,
+      status: "ok" as const,
+      lockfilePath: "/test/path/pnpm-lock.yaml",
+      markerPath: "/test/path/node_modules",
+    },
+    registry: { latestVersion: "1.2.3" },
+  };
+  const defaultRunCommandResult = {
+    stdout: "",
+    stderr: "",
+    code: 0,
+    signal: null,
+    killed: false,
+    termination: "exit" as const,
+  };
+  const defaultPortUsage = {
+    port: 18789,
+    status: "busy" as const,
+    listeners: [{ pid: 4242, command: "deneb-gateway" }],
+    hints: [],
+  };
+  const defaultPluginSyncResult = {
+    changed: false,
+    config: baseConfig,
+    summary: { switchedToBundled: [], switchedToNpm: [], warnings: [], errors: [] },
+  };
+  const defaultPluginUpdateResult = {
+    changed: false,
+    config: baseConfig,
+    outcomes: [],
+  };
+
+  function applyDefaultMocks() {
     vi.mocked(resolveDenebPackageRoot).mockResolvedValue(process.cwd());
     vi.mocked(readConfigFileSnapshot).mockResolvedValue(baseSnapshot);
-    vi.mocked(fetchNpmTagVersion).mockResolvedValue({
-      tag: "latest",
-      version: "9999.0.0",
-    });
-    vi.mocked(resolveNpmChannelTag).mockResolvedValue({
-      tag: "latest",
-      version: "9999.0.0",
-    });
-    vi.mocked(checkUpdateStatus).mockResolvedValue({
-      root: "/test/path",
-      installKind: "git",
-      packageManager: "pnpm",
-      git: {
-        root: "/test/path",
-        sha: "abcdef1234567890",
-        tag: "v1.2.3",
-        branch: "main",
-        upstream: "origin/main",
-        dirty: false,
-        ahead: 0,
-        behind: 0,
-        fetchOk: true,
-      },
-      deps: {
-        manager: "pnpm",
-        status: "ok",
-        lockfilePath: "/test/path/pnpm-lock.yaml",
-        markerPath: "/test/path/node_modules",
-      },
-      registry: {
-        latestVersion: "1.2.3",
-      },
-    });
-    vi.mocked(runCommandWithTimeout).mockResolvedValue({
-      stdout: "",
-      stderr: "",
-      code: 0,
-      signal: null,
-      killed: false,
-      termination: "exit",
-    });
+    vi.mocked(fetchNpmTagVersion).mockResolvedValue(defaultNpmTagVersion);
+    vi.mocked(resolveNpmChannelTag).mockResolvedValue(defaultNpmTagVersion);
+    vi.mocked(checkUpdateStatus).mockResolvedValue(defaultCheckUpdateStatus);
+    vi.mocked(runCommandWithTimeout).mockResolvedValue(defaultRunCommandResult);
     readPackageName.mockResolvedValue("deneb");
     readPackageVersion.mockResolvedValue("1.0.0");
     resolveGlobalManager.mockResolvedValue("npm");
     serviceLoaded.mockResolvedValue(false);
-    serviceReadRuntime.mockResolvedValue({
-      status: "running",
-      pid: 4242,
-      state: "running",
-    });
+    serviceReadRuntime.mockResolvedValue({ status: "running", pid: 4242, state: "running" });
     prepareRestartScript.mockResolvedValue("/tmp/deneb-restart-test.sh");
     runRestartScript.mockResolvedValue(undefined);
-    inspectPortUsage.mockResolvedValue({
-      port: 18789,
-      status: "busy",
-      listeners: [{ pid: 4242, command: "deneb-gateway" }],
-      hints: [],
-    });
+    inspectPortUsage.mockResolvedValue(defaultPortUsage);
     classifyPortListener.mockReturnValue("gateway");
     formatPortDiagnostics.mockReturnValue(["Port 18789 is already in use."]);
     pathExists.mockResolvedValue(false);
-    syncPluginsForUpdateChannel.mockResolvedValue({
-      changed: false,
-      config: baseConfig,
-      summary: {
-        switchedToBundled: [],
-        switchedToNpm: [],
-        warnings: [],
-        errors: [],
-      },
-    });
-    updateNpmInstalledPlugins.mockResolvedValue({
-      changed: false,
-      config: baseConfig,
-      outcomes: [],
-    });
+    syncPluginsForUpdateChannel.mockResolvedValue(defaultPluginSyncResult);
+    updateNpmInstalledPlugins.mockResolvedValue(defaultPluginUpdateResult);
     vi.mocked(runDaemonInstall).mockResolvedValue(undefined);
     vi.mocked(runDaemonRestart).mockResolvedValue(true);
     vi.mocked(doctorCommand).mockResolvedValue(undefined);
@@ -374,6 +364,11 @@ describe("update-cli", () => {
     vi.mocked(runGatewayUpdate).mockResolvedValue(makeOkUpdateResult());
     setTty(false);
     setStdoutTty(false);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    applyDefaultMocks();
   });
 
   it("updateCommand dry-run previews without mutating and bypasses downgrade confirmation", async () => {

@@ -8,8 +8,12 @@
       "testCount": 380
     },
     "src/plugins/loader.test.ts": {
-      "durationMs": 6100,
-      "testCount": 260
+      "durationMs": 4800,
+      "testCount": 240
+    },
+    "src/plugins/loader.plugin-sdk-aliases.test.ts": {
+      "durationMs": 1300,
+      "testCount": 20
     },
     "src/cli/update-cli.test.ts": {
       "durationMs": 5400,
@@ -23,17 +27,25 @@
       "durationMs": 5000,
       "testCount": 120
     },
-    "src/agents/bash-tools.test.ts": {
-      "durationMs": 4700,
-      "testCount": 150
+    "src/agents/bash-tools/bash-tools.test.ts": {
+      "durationMs": 3800,
+      "testCount": 143
+    },
+    "src/agents/bash-tools/path-utils.test.ts": {
+      "durationMs": 300,
+      "testCount": 7
     },
     "src/cli/program.smoke.test.ts": {
       "durationMs": 4500,
       "testCount": 95
     },
     "src/hooks/install.test.ts": {
-      "durationMs": 4300,
-      "testCount": 95
+      "durationMs": 3800,
+      "testCount": 94
+    },
+    "src/hooks/gmail-watcher.address-in-use.test.ts": {
+      "durationMs": 250,
+      "testCount": 1
     },
     "src/agents/skills.test.ts": {
       "durationMs": 4200,

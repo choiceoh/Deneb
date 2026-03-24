@@ -10,8 +10,6 @@ import {
   expectUnsupportedNpmSpec,
   mockNpmPackMetadataResult,
 } from "../test-utils/npm-spec-install-test-helpers.js";
-import { isAddressInUseError } from "./gmail-watcher.js";
-
 const fixtureRoot = path.join(os.tmpdir(), `deneb-hook-install-${randomUUID()}`);
 const sharedArchiveDir = path.join(fixtureRoot, "_archives");
 let tempDirIndex = 0;
@@ -117,11 +115,7 @@ function expectPathInstallFailureContains(
   result: Awaited<ReturnType<typeof installHooksFromPath>>,
   snippet: string,
 ) {
-  expect(result.ok).toBe(false);
-  if (result.ok) {
-    throw new Error("expected install failure");
-  }
-  expect(result.error).toContain(snippet);
+  expectInstallFailureContains(result, [snippet]);
 }
 
 describe("installHooksFromArchive", () => {
@@ -430,15 +424,5 @@ describe("installHooksFromNpmSpec", () => {
       expect(result.error).toContain("prerelease version 0.0.2-beta.1");
       expect(result.error).toContain('"@deneb/test-hooks@beta"');
     }
-  });
-});
-
-describe("gmail watcher", () => {
-  it("detects address already in use errors", () => {
-    expect(isAddressInUseError("listen tcp 127.0.0.1:8788: bind: address already in use")).toBe(
-      true,
-    );
-    expect(isAddressInUseError("EADDRINUSE: address already in use")).toBe(true);
-    expect(isAddressInUseError("some other error")).toBe(false);
   });
 });
