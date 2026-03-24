@@ -16,6 +16,7 @@ extern crate napi_derive;
 
 // Phase 0: Core modules (C FFI + Rust API)
 pub mod compaction;
+pub mod markdown;
 pub mod media;
 pub mod protocol;
 pub mod security;

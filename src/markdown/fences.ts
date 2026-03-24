@@ -1,3 +1,5 @@
+import { loadMarkdownNative } from "../bindings/markdown-native.js";
+
 export type FenceSpan = {
   start: number;
   end: number;
@@ -7,6 +9,18 @@ export type FenceSpan = {
 };
 
 export function parseFenceSpans(buffer: string): FenceSpan[] {
+  const native = loadMarkdownNative();
+  if (native) {
+    try {
+      return native.markdownParseFenceSpans(buffer);
+    } catch {
+      // fall through to TS
+    }
+  }
+  return parseFenceSpansTs(buffer);
+}
+
+function parseFenceSpansTs(buffer: string): FenceSpan[] {
   const spans: FenceSpan[] = [];
   let open:
     | {

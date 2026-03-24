@@ -1,3 +1,4 @@
+import { loadMarkdownNative } from "../bindings/markdown-native.js";
 import { parseFenceSpans, type FenceSpan } from "./fences.js";
 
 export type InlineCodeState = {
@@ -20,6 +21,26 @@ export type CodeSpanIndex = {
 };
 
 export function buildCodeSpanIndex(text: string, inlineState?: InlineCodeState): CodeSpanIndex {
+  const native = loadMarkdownNative();
+  if (native) {
+    try {
+      const state = native.markdownBuildCodeSpanState(
+        text,
+        inlineState?.open ?? null,
+        inlineState?.ticks ?? null,
+      );
+      return {
+        inlineState: state,
+        isInside: (index: number) => native.markdownIsInsideCode(text, index),
+      };
+    } catch {
+      // fall through to TS
+    }
+  }
+  return buildCodeSpanIndexTs(text, inlineState);
+}
+
+function buildCodeSpanIndexTs(text: string, inlineState?: InlineCodeState): CodeSpanIndex {
   const fenceSpans = parseFenceSpans(text);
   const startState = inlineState
     ? { open: inlineState.open, ticks: inlineState.ticks }

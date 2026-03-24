@@ -52,7 +52,10 @@ export function generateSummaryIdNative(content: string): string | undefined {
 /**
  * Deterministic fallback for LLM summarization failure.
  */
-export function deterministicFallbackNative(source: string, inputTokens: number): string | undefined {
+export function deterministicFallbackNative(
+  source: string,
+  inputTokens: number,
+): string | undefined {
   const native = getNative();
   if (native) {
     return native.compactionDeterministicFallback(source, inputTokens);
@@ -119,7 +122,11 @@ export async function runNativeCompactionSweep(params: {
   fetchSummaries: (summaryIds: string[]) => Promise<Record<string, unknown>>;
   fetchTokenCount: (conversationId: number) => Promise<number>;
   fetchDistinctDepths: (conversationId: number, maxOrdinal: number) => Promise<number[]>;
-  summarize: (text: string, aggressive: boolean, options?: Record<string, unknown>) => Promise<string>;
+  summarize: (
+    text: string,
+    aggressive: boolean,
+    options?: Record<string, unknown>,
+  ) => Promise<string>;
   persistLeafSummary: (input: Record<string, unknown>) => Promise<void>;
   persistCondensedSummary: (input: Record<string, unknown>) => Promise<void>;
   persistEvent: (input: Record<string, unknown>) => Promise<void>;
@@ -165,7 +172,11 @@ async function executeCommand(
     fetchSummaries: (summaryIds: string[]) => Promise<Record<string, unknown>>;
     fetchTokenCount: (conversationId: number) => Promise<number>;
     fetchDistinctDepths: (conversationId: number, maxOrdinal: number) => Promise<number[]>;
-    summarize: (text: string, aggressive: boolean, options?: Record<string, unknown>) => Promise<string>;
+    summarize: (
+      text: string,
+      aggressive: boolean,
+      options?: Record<string, unknown>,
+    ) => Promise<string>;
     persistLeafSummary: (input: Record<string, unknown>) => Promise<void>;
     persistCondensedSummary: (input: Record<string, unknown>) => Promise<void>;
     persistEvent: (input: Record<string, unknown>) => Promise<void>;
@@ -221,6 +232,9 @@ async function executeCommand(
       }
     }
     default:
-      return { type: "persistError", error: `Unknown command type: ${(cmd as { type: string }).type}` };
+      return {
+        type: "persistError",
+        error: `Unknown command type: ${(cmd as { type: string }).type}`,
+      };
   }
 }
