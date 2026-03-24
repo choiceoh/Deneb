@@ -46,7 +46,9 @@ def find_md_path(project_id_or_name, db_path=None, md_dir=None):
     md_dir = md_dir or config.MD_DIR
     try:
         conn = get_db_connection(db_path, row_factory=True)
-    except Exception:
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("find_md_path DB 연결 실패: %s", e)
         return None, None, None
 
     try:
@@ -56,7 +58,9 @@ def find_md_path(project_id_or_name, db_path=None, md_dir=None):
         else:
             row = conn.execute("SELECT id, name, source_file FROM projects WHERE name LIKE ?",
                               (f"%{project_id_or_name}%",)).fetchone()
-    except Exception:
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("find_md_path 쿼리 실패: %s", e)
         row = None
     finally:
         conn.close()
@@ -150,6 +154,10 @@ def update_db_field(project_id, field, value, db_path=None):
     db_field = field_map.get(field)
     if not db_field:
         return False
+    # 허용된 컬럼명만 SQL에 삽입 (SQL 인젝션 방어)
+    _ALLOWED_DB_FIELDS = {'status', 'client', 'person_internal', 'person_external', 'capacity', 'biz_type', 'partner'}
+    if db_field not in _ALLOWED_DB_FIELDS:
+        return False
     db_path = db_path or config.DB_PATH
     conn = None
     try:
@@ -161,7 +169,9 @@ def update_db_field(project_id, field, value, db_path=None):
         conn.execute(f"UPDATE projects SET {db_field} = ? WHERE id = ?", (db_value, project_id))
         conn.commit()
         return True
-    except Exception:
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("DB 필드 업데이트 실패 (project %s, %s): %s", project_id, db_field, e)
         return False
     finally:
         if conn:

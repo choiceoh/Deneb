@@ -164,7 +164,8 @@ def init_db(db_path=None):
     conn.executescript(SCHEMA)
 
     # ── Migration logic ──
-    user_ver = conn.execute("PRAGMA user_version").fetchone()[0]
+    row = conn.execute("PRAGMA user_version").fetchone()
+    user_ver = row[0] if row else 0
     if user_ver < 4:
         try:
             conn.execute("ALTER TABLE projects ADD COLUMN amount REAL")

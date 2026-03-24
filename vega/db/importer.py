@@ -283,13 +283,38 @@ def _import_incremental_impl(conn, directory):
 
 
 def rebuild_fts(conn):
-    """FTS 인덱스 전체 rebuild. health/system에서 명시적 호출 가능."""
+    """FTS 인덱스 전체 rebuild. health/system에서 명시적 호출 가능.
+
+    FTS5 external-content 모드에서는 VALUES('rebuild')가 content 테이블에서
+    직접 읽기를 시도하지만, project_name/client 등의 컬럼은 JOIN으로만 접근
+    가능하므로 실패합니다. 대신 수동으로 delete-all 후 JOIN 쿼리로 재삽입합니다.
+    """
     import logging as _logging
     try:
         cur = conn.cursor()
-        cur.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild')")
-        cur.execute("INSERT INTO chunks_fts_trigram(chunks_fts_trigram) VALUES('rebuild')")
-        cur.execute("INSERT INTO comm_fts(comm_fts) VALUES('rebuild')")
+        # chunks_fts: project_name, client는 projects 테이블에서 JOIN 필요
+        cur.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('delete-all')")
+        cur.execute("""
+            INSERT INTO chunks_fts(rowid, project_name, client, section_heading, content)
+            SELECT c.id, p.name, p.client, c.section_heading, c.content
+            FROM chunks c JOIN projects p ON p.id = c.project_id
+        """)
+
+        # chunks_fts_trigram: project_name은 projects 테이블에서 JOIN 필요
+        cur.execute("INSERT INTO chunks_fts_trigram(chunks_fts_trigram) VALUES('delete-all')")
+        cur.execute("""
+            INSERT INTO chunks_fts_trigram(rowid, project_name, content)
+            SELECT c.id, p.name, c.content
+            FROM chunks c JOIN projects p ON p.id = c.project_id
+        """)
+
+        # comm_fts: project_name은 projects 테이블에서 JOIN 필요
+        cur.execute("INSERT INTO comm_fts(comm_fts) VALUES('delete-all')")
+        cur.execute("""
+            INSERT INTO comm_fts(rowid, project_name, sender, subject, summary)
+            SELECT cl.id, p.name, cl.sender, cl.subject, cl.summary
+            FROM comm_log cl JOIN projects p ON p.id = cl.project_id
+        """)
     except Exception as e:
         _logging.getLogger(__name__).warning("FTS rebuild 실패 (데이터는 보존): %s", e)
 
