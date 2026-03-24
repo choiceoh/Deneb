@@ -2,7 +2,7 @@
 #
 # Orchestrates Rust (core-rs), Go (gateway-go), and TypeScript (pnpm) builds.
 
-.PHONY: all rust go ts clean test fmt check
+.PHONY: all rust go ts clean test fmt check proto proto-go proto-rust proto-ts proto-check
 
 # Default: build everything
 all: rust go
@@ -60,16 +60,22 @@ clean: rust-clean go-clean
 check: rust-test go-test ts-check
 	@echo "All checks passed"
 
-# --- Protobuf (requires protoc + plugins) ---
+# --- Protobuf code generation ---
 
 proto:
-	@echo "Protobuf compilation requires protoc. Install with:"
-	@echo "  apt install protobuf-compiler"
-	@echo "  go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
-	@echo "  cargo install protobuf-codegen"
-	@echo ""
-	@echo "Then run:"
-	@echo "  protoc --go_out=gateway-go/pkg/protocol --go_opt=paths=source_relative proto/*.proto"
+	./scripts/proto-gen.sh
+
+proto-go:
+	./scripts/proto-gen.sh --go
+
+proto-rust:
+	./scripts/proto-gen.sh --rust
+
+proto-ts:
+	./scripts/proto-gen.sh --ts
+
+proto-check:
+	./scripts/proto-gen.sh --check
 
 # --- Info ---
 
@@ -82,4 +88,8 @@ info:
 	@echo "  make test       - Run Rust + Go tests"
 	@echo "  make check      - Run all checks (Rust + Go + TS)"
 	@echo "  make clean      - Clean Rust + Go build artifacts"
-	@echo "  make proto      - Show protobuf compilation instructions"
+	@echo "  make proto      - Generate protobuf code (Go + Rust + TS)"
+	@echo "  make proto-go   - Generate Go protobuf structs"
+	@echo "  make proto-rust - Generate Rust protobuf structs"
+	@echo "  make proto-ts   - Generate TypeScript protobuf types"
+	@echo "  make proto-check - Generate + verify no uncommitted diffs"

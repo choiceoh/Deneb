@@ -2,6 +2,11 @@
 //!
 //! Validates RequestFrame, ResponseFrame, and EventFrame structures
 //! matching the TypeScript definitions in `src/gateway/protocol/schema/frames.ts`.
+//!
+//! Generated protobuf types (via prost) are available in the `gen` submodule
+//! when built with `cargo build` (see build.rs).
+
+pub mod gen;
 
 use serde::Deserialize;
 use thiserror::Error;

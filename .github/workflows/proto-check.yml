@@ -1,0 +1,64 @@
+# Verify protobuf definitions are valid and generated code is up to date.
+name: Proto Check
+
+on:
+  pull_request:
+    paths:
+      - "proto/**"
+      - "core-rs/build.rs"
+      - "core-rs/Cargo.toml"
+      - "scripts/proto-gen.sh"
+  push:
+    branches: [main]
+    paths:
+      - "proto/**"
+      - "core-rs/build.rs"
+      - "core-rs/Cargo.toml"
+      - "scripts/proto-gen.sh"
+
+jobs:
+  lint:
+    name: buf lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: bufbuild/buf-setup-action@v1
+      - run: cd proto && buf lint
+
+  generate-check:
+    name: proto generate check
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v6
+      - uses: bufbuild/buf-setup-action@v1
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+
+      - name: Generate protobuf code
+        run: ./scripts/proto-gen.sh
+
+      - name: Check for uncommitted diffs
+        run: |
+          git diff --exit-code -- \
+            gateway-go/pkg/protocol/gen \
+            src/protocol/generated \
+          || (echo "Generated protobuf code is out of date. Run: ./scripts/proto-gen.sh" && exit 1)
+
+  breaking:
+    name: buf breaking change detection
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: bufbuild/buf-setup-action@v1
+      - run: cd proto && buf breaking --against ../.git#subdir=proto,ref=origin/${{ github.base_ref }}

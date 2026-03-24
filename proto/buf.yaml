@@ -1,0 +1,20 @@
+# buf module configuration for Deneb protocol definitions.
+#
+# Usage:
+#   cd proto && buf lint
+#   cd proto && buf generate
+version: v2
+lint:
+  use:
+    - STANDARD
+  except:
+    - PACKAGE_VERSION_SUFFIX
+    - PACKAGE_DIRECTORY_MATCH
+    - PACKAGE_SAME_DIRECTORY
+    - DIRECTORY_SAME_PACKAGE
+breaking:
+  use:
+    - FILE
+modules:
+  - path: .
+    name: buf.build/deneb/protocol
