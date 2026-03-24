@@ -18,6 +18,15 @@ export const VOLC_MODEL_KIMI_K2_5 = {
   maxTokens: 4096,
 } as const;
 
+export const VOLC_MODEL_GLM_5 = {
+  id: "glm-5",
+  name: "GLM 5",
+  reasoning: true,
+  input: ["text", "image"] as const,
+  contextWindow: 256000,
+  maxTokens: 16384,
+} as const;
+
 export const VOLC_MODEL_GLM_4_7 = {
   id: "glm-4-7-251222",
   name: "GLM 4.7",
@@ -43,6 +52,14 @@ export const VOLC_SHARED_CODING_MODEL_CATALOG = [
     input: ["text"] as const,
     contextWindow: 256000,
     maxTokens: 4096,
+  },
+  {
+    id: "glm-5",
+    name: "GLM 5 Coding",
+    reasoning: true,
+    input: ["text", "image"] as const,
+    contextWindow: 256000,
+    maxTokens: 16384,
   },
   {
     id: "glm-4.7",

@@ -18,6 +18,19 @@ export type ZaiDetectedEndpoint = {
   note: string;
 };
 
+/** Detailed detection result that includes failure diagnostics. */
+export type ZaiDetectionResult =
+  | { ok: true; detected: ZaiDetectedEndpoint }
+  | { ok: false; detected: null; failures: ZaiProbeFailure[] };
+
+export type ZaiProbeFailure = {
+  endpoint: ZaiEndpointId;
+  modelId: string;
+  status?: number;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
 type ProbeResult =
   | { ok: true }
   | {
@@ -86,94 +99,195 @@ async function probeZaiChatCompletions(params: {
   }
 }
 
+type ProbeCandidate = {
+  endpoint: ZaiEndpointId;
+  baseUrl: string;
+  modelId: string;
+  note: string;
+};
+
+function buildProbeCandidates(endpoint?: ZaiEndpointId): ProbeCandidate[] {
+  const general: ProbeCandidate[] = [
+    {
+      endpoint: "global",
+      baseUrl: ZAI_GLOBAL_BASE_URL,
+      modelId: "glm-5",
+      note: "Verified GLM-5 on global endpoint.",
+    },
+    {
+      endpoint: "cn",
+      baseUrl: ZAI_CN_BASE_URL,
+      modelId: "glm-5",
+      note: "Verified GLM-5 on cn endpoint.",
+    },
+  ];
+  const codingGlm5: ProbeCandidate[] = [
+    {
+      endpoint: "coding-global",
+      baseUrl: ZAI_CODING_GLOBAL_BASE_URL,
+      modelId: "glm-5",
+      note: "Verified GLM-5 on coding-global endpoint.",
+    },
+    {
+      endpoint: "coding-cn",
+      baseUrl: ZAI_CODING_CN_BASE_URL,
+      modelId: "glm-5",
+      note: "Verified GLM-5 on coding-cn endpoint.",
+    },
+  ];
+  const codingFallback: ProbeCandidate[] = [
+    {
+      endpoint: "coding-global",
+      baseUrl: ZAI_CODING_GLOBAL_BASE_URL,
+      modelId: "glm-4.7",
+      note: "Coding Plan endpoint verified, but this key/plan does not expose GLM-5 there. Defaulting to GLM-4.7.",
+    },
+    {
+      endpoint: "coding-cn",
+      baseUrl: ZAI_CODING_CN_BASE_URL,
+      modelId: "glm-4.7",
+      note: "Coding Plan CN endpoint verified, but this key/plan does not expose GLM-5 there. Defaulting to GLM-4.7.",
+    },
+  ];
+
+  switch (endpoint) {
+    case "global":
+      return general.filter((c) => c.endpoint === "global");
+    case "cn":
+      return general.filter((c) => c.endpoint === "cn");
+    case "coding-global":
+      return [
+        ...codingGlm5.filter((c) => c.endpoint === "coding-global"),
+        ...codingFallback.filter((c) => c.endpoint === "coding-global"),
+      ];
+    case "coding-cn":
+      return [
+        ...codingGlm5.filter((c) => c.endpoint === "coding-cn"),
+        ...codingFallback.filter((c) => c.endpoint === "coding-cn"),
+      ];
+    default:
+      return [...general, ...codingGlm5, ...codingFallback];
+  }
+}
+
+/**
+ * Probe candidates in parallel within the same endpoint group, sequential
+ * across groups. This cuts latency roughly in half for the common case where
+ * only one region (global or cn) is reachable.
+ */
+async function probeParallel(
+  candidates: ProbeCandidate[],
+  params: { apiKey: string; timeoutMs: number; fetchFn?: typeof fetch },
+): Promise<ZaiDetectionResult> {
+  // Group candidates by endpoint so we can race within each group.
+  const groups = new Map<ZaiEndpointId, ProbeCandidate[]>();
+  for (const c of candidates) {
+    const list = groups.get(c.endpoint) ?? [];
+    list.push(c);
+    groups.set(c.endpoint, list);
+  }
+
+  const failures: ZaiProbeFailure[] = [];
+
+  // Preserve original candidate ordering across groups.
+  const seenEndpoints = new Set<ZaiEndpointId>();
+  const orderedGroups: ProbeCandidate[][] = [];
+  for (const c of candidates) {
+    if (!seenEndpoints.has(c.endpoint)) {
+      seenEndpoints.add(c.endpoint);
+      orderedGroups.push(groups.get(c.endpoint)!);
+    }
+  }
+
+  for (const group of orderedGroups) {
+    const results = await Promise.all(
+      group.map(async (candidate) => {
+        const result = await probeZaiChatCompletions({
+          baseUrl: candidate.baseUrl,
+          apiKey: params.apiKey,
+          modelId: candidate.modelId,
+          timeoutMs: params.timeoutMs,
+          fetchFn: params.fetchFn,
+        });
+        return { candidate, result };
+      }),
+    );
+
+    for (const { candidate, result } of results) {
+      if (result.ok) {
+        return { ok: true as const, detected: candidate };
+      }
+      failures.push({
+        endpoint: candidate.endpoint,
+        modelId: candidate.modelId,
+        ...(!result.ok
+          ? {
+              status: result.status,
+              errorCode: result.errorCode,
+              errorMessage: result.errorMessage,
+            }
+          : {}),
+      });
+    }
+  }
+
+  return { ok: false, detected: null, failures };
+}
+
 export async function detectZaiEndpoint(params: {
   apiKey: string;
   endpoint?: ZaiEndpointId;
   timeoutMs?: number;
   fetchFn?: typeof fetch;
 }): Promise<ZaiDetectedEndpoint | null> {
+  const result = await detectZaiEndpointDetailed(params);
+  return result.detected;
+}
+
+/**
+ * Like `detectZaiEndpoint` but returns structured failure diagnostics so
+ * callers can display actionable error messages when detection fails.
+ */
+export async function detectZaiEndpointDetailed(params: {
+  apiKey: string;
+  endpoint?: ZaiEndpointId;
+  timeoutMs?: number;
+  fetchFn?: typeof fetch;
+}): Promise<ZaiDetectionResult> {
   // Never auto-probe in vitest; it would create flaky network behavior.
   if (process.env.VITEST && !params.fetchFn) {
-    return null;
+    return { ok: false, detected: null, failures: [] };
   }
 
   const timeoutMs = params.timeoutMs ?? 5_000;
-  const probeCandidates = (() => {
-    const general = [
-      {
-        endpoint: "global" as const,
-        baseUrl: ZAI_GLOBAL_BASE_URL,
-        modelId: "glm-5",
-        note: "Verified GLM-5 on global endpoint.",
-      },
-      {
-        endpoint: "cn" as const,
-        baseUrl: ZAI_CN_BASE_URL,
-        modelId: "glm-5",
-        note: "Verified GLM-5 on cn endpoint.",
-      },
-    ];
-    const codingGlm5 = [
-      {
-        endpoint: "coding-global" as const,
-        baseUrl: ZAI_CODING_GLOBAL_BASE_URL,
-        modelId: "glm-5",
-        note: "Verified GLM-5 on coding-global endpoint.",
-      },
-      {
-        endpoint: "coding-cn" as const,
-        baseUrl: ZAI_CODING_CN_BASE_URL,
-        modelId: "glm-5",
-        note: "Verified GLM-5 on coding-cn endpoint.",
-      },
-    ];
-    const codingFallback = [
-      {
-        endpoint: "coding-global" as const,
-        baseUrl: ZAI_CODING_GLOBAL_BASE_URL,
-        modelId: "glm-4.7",
-        note: "Coding Plan endpoint verified, but this key/plan does not expose GLM-5 there. Defaulting to GLM-4.7.",
-      },
-      {
-        endpoint: "coding-cn" as const,
-        baseUrl: ZAI_CODING_CN_BASE_URL,
-        modelId: "glm-4.7",
-        note: "Coding Plan CN endpoint verified, but this key/plan does not expose GLM-5 there. Defaulting to GLM-4.7.",
-      },
-    ];
+  const candidates = buildProbeCandidates(params.endpoint);
+  return probeParallel(candidates, { apiKey: params.apiKey, timeoutMs, fetchFn: params.fetchFn });
+}
 
-    switch (params.endpoint) {
-      case "global":
-        return general.filter((candidate) => candidate.endpoint === "global");
-      case "cn":
-        return general.filter((candidate) => candidate.endpoint === "cn");
-      case "coding-global":
-        return [
-          ...codingGlm5.filter((candidate) => candidate.endpoint === "coding-global"),
-          ...codingFallback.filter((candidate) => candidate.endpoint === "coding-global"),
-        ];
-      case "coding-cn":
-        return [
-          ...codingGlm5.filter((candidate) => candidate.endpoint === "coding-cn"),
-          ...codingFallback.filter((candidate) => candidate.endpoint === "coding-cn"),
-        ];
-      default:
-        return [...general, ...codingGlm5, ...codingFallback];
-    }
-  })();
-
-  for (const candidate of probeCandidates) {
-    const result = await probeZaiChatCompletions({
-      baseUrl: candidate.baseUrl,
-      apiKey: params.apiKey,
-      modelId: candidate.modelId,
-      timeoutMs,
-      fetchFn: params.fetchFn,
-    });
-    if (result.ok) {
-      return candidate;
-    }
+/**
+ * Format detection failures into a human-readable diagnostic string.
+ */
+export function formatZaiDetectionFailures(failures: ZaiProbeFailure[]): string {
+  if (failures.length === 0) {
+    return "No endpoints were probed.";
   }
 
-  return null;
+  const authFailures = failures.filter((f) => f.status === 401 || f.status === 403);
+  if (authFailures.length === failures.length) {
+    return "API key was rejected by all endpoints (HTTP 401/403). Verify your Z.AI API key is valid.";
+  }
+
+  const lines = failures.map((f) => {
+    const parts = [`  ${f.endpoint}/${f.modelId}`];
+    if (f.status) {
+      parts.push(`HTTP ${f.status}`);
+    }
+    if (f.errorMessage) {
+      parts.push(f.errorMessage);
+    } else if (!f.status) {
+      parts.push("network error or timeout");
+    }
+    return parts.join(" — ");
+  });
+  return `Endpoint detection failed:\n${lines.join("\n")}`;
 }

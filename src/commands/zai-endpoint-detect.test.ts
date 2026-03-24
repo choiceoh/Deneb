@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { detectZaiEndpoint } from "./zai-endpoint-detect.js";
+import {
+  detectZaiEndpoint,
+  detectZaiEndpointDetailed,
+  formatZaiDetectionFailures,
+} from "./zai-endpoint-detect.js";
 
 type FetchResponse = { status: number; body?: unknown };
 
@@ -105,5 +109,84 @@ describe("detectZaiEndpoint", () => {
         expect(detected?.modelId).toBe(scenario.expected.modelId);
       }
     }
+  });
+});
+
+describe("detectZaiEndpointDetailed", () => {
+  it("returns structured failure diagnostics when all probes fail", async () => {
+    const result = await detectZaiEndpointDetailed({
+      apiKey: "sk-bad-key", // pragma: allowlist secret
+      endpoint: "coding-global",
+      fetchFn: makeFetch({
+        "https://api.z.ai/api/coding/paas/v4/chat/completions::glm-5": {
+          status: 401,
+          body: { error: { code: "invalid_api_key", message: "Invalid API key" } },
+        },
+        "https://api.z.ai/api/coding/paas/v4/chat/completions::glm-4.7": {
+          status: 401,
+          body: { error: { code: "invalid_api_key", message: "Invalid API key" } },
+        },
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.detected).toBeNull();
+    if (!result.ok) {
+      expect(result.failures).toHaveLength(2);
+      expect(result.failures[0]).toMatchObject({
+        endpoint: "coding-global",
+        modelId: "glm-5",
+        status: 401,
+        errorCode: "invalid_api_key",
+        errorMessage: "Invalid API key",
+      });
+      expect(result.failures[1]).toMatchObject({
+        endpoint: "coding-global",
+        modelId: "glm-4.7",
+        status: 401,
+      });
+    }
+  });
+
+  it("returns success with detected endpoint", async () => {
+    const result = await detectZaiEndpointDetailed({
+      apiKey: "sk-good-key", // pragma: allowlist secret
+      endpoint: "global",
+      fetchFn: makeFetch({
+        "https://api.z.ai/api/paas/v4/chat/completions::glm-5": { status: 200 },
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.detected).toMatchObject({
+      endpoint: "global",
+      modelId: "glm-5",
+    });
+  });
+});
+
+describe("formatZaiDetectionFailures", () => {
+  it("formats auth failures with actionable message", () => {
+    const formatted = formatZaiDetectionFailures([
+      { endpoint: "global", modelId: "glm-5", status: 401 },
+      { endpoint: "cn", modelId: "glm-5", status: 403 },
+    ]);
+    expect(formatted).toContain("API key was rejected");
+    expect(formatted).toContain("401/403");
+  });
+
+  it("formats mixed failures with per-endpoint details", () => {
+    const formatted = formatZaiDetectionFailures([
+      { endpoint: "global", modelId: "glm-5", status: 404, errorMessage: "model not found" },
+      { endpoint: "cn", modelId: "glm-5" },
+    ]);
+    expect(formatted).toContain("global/glm-5");
+    expect(formatted).toContain("HTTP 404");
+    expect(formatted).toContain("model not found");
+    expect(formatted).toContain("network error or timeout");
+  });
+
+  it("handles empty failures list", () => {
+    expect(formatZaiDetectionFailures([])).toContain("No endpoints were probed");
   });
 });
