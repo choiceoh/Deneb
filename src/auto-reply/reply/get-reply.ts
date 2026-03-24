@@ -125,279 +125,292 @@ export async function getReplyFromConfig(
   });
   opts?.onTypingController?.(typing);
 
-  const finalized = finalizeInboundContext(ctx);
+  try {
+    const finalized = finalizeInboundContext(ctx);
 
-  if (!isFastTestEnv) {
-    await applyMediaUnderstanding({
+    if (!isFastTestEnv) {
+      await applyMediaUnderstanding({
+        ctx: finalized,
+        cfg,
+        agentDir,
+        activeModel: { provider, model },
+      });
+      await applyLinkUnderstanding({
+        ctx: finalized,
+        cfg,
+      });
+    }
+    emitPreAgentMessageHooks({
       ctx: finalized,
       cfg,
-      agentDir,
-      activeModel: { provider, model },
+      isFastTestEnv,
     });
-    await applyLinkUnderstanding({
+
+    const commandAuthorized = finalized.CommandAuthorized;
+    const sessionState = await initSessionState({
       ctx: finalized,
       cfg,
+      commandAuthorized,
     });
-  }
-  emitPreAgentMessageHooks({
-    ctx: finalized,
-    cfg,
-    isFastTestEnv,
-  });
-
-  const commandAuthorized = finalized.CommandAuthorized;
-  const sessionState = await initSessionState({
-    ctx: finalized,
-    cfg,
-    commandAuthorized,
-  });
-  let {
-    sessionCtx,
-    sessionEntry,
-    previousSessionEntry,
-    sessionStore,
-    sessionKey,
-    sessionId,
-    isNewSession,
-    resetTriggered,
-    systemSent,
-    abortedLastRun,
-    storePath,
-    sessionScope,
-    groupResolution,
-    isGroup,
-    triggerBodyNormalized,
-    bodyStripped,
-  } = sessionState;
-
-  await applyResetModelOverride({
-    cfg,
-    agentId,
-    resetTriggered,
-    bodyStripped,
-    sessionCtx,
-    ctx: finalized,
-    sessionEntry,
-    sessionStore,
-    sessionKey,
-    storePath,
-    defaultProvider,
-    defaultModel,
-    aliasIndex,
-  });
-
-  const channelModelOverride = resolveChannelModelOverride({
-    cfg,
-    channel:
-      groupResolution?.channel ??
-      sessionEntry.channel ??
-      sessionEntry.origin?.provider ??
-      (typeof finalized.OriginatingChannel === "string"
-        ? finalized.OriginatingChannel
-        : undefined) ??
-      finalized.Provider,
-    groupId: groupResolution?.id ?? sessionEntry.groupId,
-    groupChannel: sessionEntry.groupChannel ?? sessionCtx.GroupChannel ?? finalized.GroupChannel,
-    groupSubject: sessionEntry.subject ?? sessionCtx.GroupSubject ?? finalized.GroupSubject,
-    parentSessionKey: sessionCtx.ParentSessionKey,
-  });
-  const hasSessionModelOverride = Boolean(
-    sessionEntry.modelOverride?.trim() || sessionEntry.providerOverride?.trim(),
-  );
-  if (!hasResolvedHeartbeatModelOverride && !hasSessionModelOverride && channelModelOverride) {
-    const resolved = resolveModelRefFromString({
-      raw: channelModelOverride.model,
-      defaultProvider,
-      aliasIndex,
-    });
-    if (resolved) {
-      provider = resolved.ref.provider;
-      model = resolved.ref.model;
-    }
-  }
-
-  const directiveResult = await resolveReplyDirectives({
-    ctx: finalized,
-    cfg,
-    agentId,
-    agentDir,
-    workspaceDir,
-    agentCfg,
-    sessionCtx,
-    sessionEntry,
-    sessionStore,
-    sessionKey,
-    storePath,
-    sessionScope,
-    groupResolution,
-    isGroup,
-    triggerBodyNormalized,
-    commandAuthorized,
-    defaultProvider,
-    defaultModel,
-    aliasIndex,
-    provider,
-    model,
-    hasResolvedHeartbeatModelOverride,
-    typing,
-    opts: resolvedOpts,
-    skillFilter: mergedSkillFilter,
-  });
-  if (directiveResult.kind === "reply") {
-    return directiveResult.reply;
-  }
-
-  let {
-    commandSource,
-    command,
-    allowTextCommands,
-    skillCommands,
-    directives,
-    cleanedBody,
-    elevatedEnabled,
-    elevatedAllowed,
-    elevatedFailures,
-    defaultActivation,
-    resolvedThinkLevel,
-    resolvedVerboseLevel,
-    resolvedReasoningLevel,
-    resolvedElevatedLevel,
-    execOverrides,
-    blockStreamingEnabled,
-    blockReplyChunking,
-    resolvedBlockStreamingBreak,
-    provider: resolvedProvider,
-    model: resolvedModel,
-    modelState,
-    contextTokens,
-    inlineStatusRequested,
-    directiveAck,
-    perMessageQueueMode,
-    perMessageQueueOptions,
-  } = directiveResult.result;
-  provider = resolvedProvider;
-  model = resolvedModel;
-
-  const maybeEmitMissingResetHooks = async () => {
-    if (!resetTriggered || !command.isAuthorizedSender || command.resetHookTriggered) {
-      return;
-    }
-    const resetMatch = command.commandBodyNormalized.match(/^\/(new|reset)(?:\s|$)/);
-    if (!resetMatch) {
-      return;
-    }
-    const action: ResetCommandAction = resetMatch[1] === "reset" ? "reset" : "new";
-    await emitResetCommandHooks({
-      action,
-      ctx,
-      cfg,
-      command,
-      sessionKey,
+    let {
+      sessionCtx,
       sessionEntry,
       previousSessionEntry,
+      sessionStore,
+      sessionKey,
+      sessionId,
+      isNewSession,
+      resetTriggered,
+      systemSent,
+      abortedLastRun,
+      storePath,
+      sessionScope,
+      groupResolution,
+      isGroup,
+      triggerBodyNormalized,
+      bodyStripped,
+    } = sessionState;
+
+    await applyResetModelOverride({
+      cfg,
+      agentId,
+      resetTriggered,
+      bodyStripped,
+      sessionCtx,
+      ctx: finalized,
+      sessionEntry,
+      sessionStore,
+      sessionKey,
+      storePath,
+      defaultProvider,
+      defaultModel,
+      aliasIndex,
+    });
+
+    const channelModelOverride = resolveChannelModelOverride({
+      cfg,
+      channel:
+        groupResolution?.channel ??
+        sessionEntry.channel ??
+        sessionEntry.origin?.provider ??
+        (typeof finalized.OriginatingChannel === "string"
+          ? finalized.OriginatingChannel
+          : undefined) ??
+        finalized.Provider,
+      groupId: groupResolution?.id ?? sessionEntry.groupId,
+      groupChannel: sessionEntry.groupChannel ?? sessionCtx.GroupChannel ?? finalized.GroupChannel,
+      groupSubject: sessionEntry.subject ?? sessionCtx.GroupSubject ?? finalized.GroupSubject,
+      parentSessionKey: sessionCtx.ParentSessionKey,
+    });
+    const hasSessionModelOverride = Boolean(
+      sessionEntry.modelOverride?.trim() || sessionEntry.providerOverride?.trim(),
+    );
+    if (!hasResolvedHeartbeatModelOverride && !hasSessionModelOverride && channelModelOverride) {
+      const resolved = resolveModelRefFromString({
+        raw: channelModelOverride.model,
+        defaultProvider,
+        aliasIndex,
+      });
+      if (resolved) {
+        provider = resolved.ref.provider;
+        model = resolved.ref.model;
+      }
+    }
+
+    const directiveResult = await resolveReplyDirectives({
+      ctx: finalized,
+      cfg,
+      agentId,
+      agentDir,
+      workspaceDir,
+      agentCfg,
+      sessionCtx,
+      sessionEntry,
+      sessionStore,
+      sessionKey,
+      storePath,
+      sessionScope,
+      groupResolution,
+      isGroup,
+      triggerBodyNormalized,
+      commandAuthorized,
+      defaultProvider,
+      defaultModel,
+      aliasIndex,
+      provider,
+      model,
+      hasResolvedHeartbeatModelOverride,
+      typing,
+      opts: resolvedOpts,
+      skillFilter: mergedSkillFilter,
+    });
+    if (directiveResult.kind === "reply") {
+      return directiveResult.reply;
+    }
+
+    let {
+      commandSource,
+      command,
+      allowTextCommands,
+      skillCommands,
+      directives,
+      cleanedBody,
+      elevatedEnabled,
+      elevatedAllowed,
+      elevatedFailures,
+      defaultActivation,
+      resolvedThinkLevel,
+      resolvedVerboseLevel,
+      resolvedReasoningLevel,
+      resolvedElevatedLevel,
+      execOverrides,
+      blockStreamingEnabled,
+      blockReplyChunking,
+      resolvedBlockStreamingBreak,
+      provider: resolvedProvider,
+      model: resolvedModel,
+      modelState,
+      contextTokens,
+      inlineStatusRequested,
+      directiveAck,
+      perMessageQueueMode,
+      perMessageQueueOptions,
+    } = directiveResult.result;
+    provider = resolvedProvider;
+    model = resolvedModel;
+
+    const maybeEmitMissingResetHooks = async () => {
+      if (!resetTriggered || !command.isAuthorizedSender || command.resetHookTriggered) {
+        return;
+      }
+      const resetMatch = command.commandBodyNormalized.match(/^\/(new|reset)(?:\s|$)/);
+      if (!resetMatch) {
+        return;
+      }
+      const action: ResetCommandAction = resetMatch[1] === "reset" ? "reset" : "new";
+      await emitResetCommandHooks({
+        action,
+        ctx,
+        cfg,
+        command,
+        sessionKey,
+        sessionEntry,
+        previousSessionEntry,
+        workspaceDir,
+      });
+    };
+
+    const inlineActionResult = await handleInlineActions({
+      ctx,
+      sessionCtx,
+      cfg,
+      agentId,
+      agentDir,
+      sessionEntry,
+      previousSessionEntry,
+      sessionStore,
+      sessionKey,
+      storePath,
+      sessionScope,
+      workspaceDir,
+      isGroup,
+      opts: resolvedOpts,
+      typing,
+      allowTextCommands,
+      inlineStatusRequested,
+      command,
+      skillCommands,
+      directives,
+      cleanedBody,
+      elevatedEnabled,
+      elevatedAllowed,
+      elevatedFailures,
+      defaultActivation: () => defaultActivation,
+      resolvedThinkLevel,
+      resolvedVerboseLevel,
+      resolvedReasoningLevel,
+      resolvedElevatedLevel,
+      blockReplyChunking,
+      resolvedBlockStreamingBreak,
+      resolveDefaultThinkingLevel: modelState.resolveDefaultThinkingLevel,
+      provider,
+      model,
+      contextTokens,
+      directiveAck,
+      abortedLastRun,
+      skillFilter: mergedSkillFilter,
+    });
+    if (inlineActionResult.kind === "reply") {
+      await maybeEmitMissingResetHooks();
+      return inlineActionResult.reply;
+    }
+    await maybeEmitMissingResetHooks();
+    directives = inlineActionResult.directives;
+    abortedLastRun = inlineActionResult.abortedLastRun ?? abortedLastRun;
+
+    await stageSandboxMedia({
+      ctx,
+      sessionCtx,
+      cfg,
+      sessionKey,
       workspaceDir,
     });
-  };
 
-  const inlineActionResult = await handleInlineActions({
-    ctx,
-    sessionCtx,
-    cfg,
-    agentId,
-    agentDir,
-    sessionEntry,
-    previousSessionEntry,
-    sessionStore,
-    sessionKey,
-    storePath,
-    sessionScope,
-    workspaceDir,
-    isGroup,
-    opts: resolvedOpts,
-    typing,
-    allowTextCommands,
-    inlineStatusRequested,
-    command,
-    skillCommands,
-    directives,
-    cleanedBody,
-    elevatedEnabled,
-    elevatedAllowed,
-    elevatedFailures,
-    defaultActivation: () => defaultActivation,
-    resolvedThinkLevel,
-    resolvedVerboseLevel,
-    resolvedReasoningLevel,
-    resolvedElevatedLevel,
-    blockReplyChunking,
-    resolvedBlockStreamingBreak,
-    resolveDefaultThinkingLevel: modelState.resolveDefaultThinkingLevel,
-    provider,
-    model,
-    contextTokens,
-    directiveAck,
-    abortedLastRun,
-    skillFilter: mergedSkillFilter,
-  });
-  if (inlineActionResult.kind === "reply") {
-    await maybeEmitMissingResetHooks();
-    return inlineActionResult.reply;
+    return runPreparedReply({
+      ctx,
+      sessionCtx,
+      cfg,
+      agentId,
+      agentDir,
+      agentCfg,
+      sessionCfg,
+      commandAuthorized,
+      command,
+      commandSource,
+      allowTextCommands,
+      directives,
+      defaultActivation,
+      resolvedThinkLevel,
+      resolvedVerboseLevel,
+      resolvedReasoningLevel,
+      resolvedElevatedLevel,
+      execOverrides,
+      elevatedEnabled,
+      elevatedAllowed,
+      blockStreamingEnabled,
+      blockReplyChunking,
+      resolvedBlockStreamingBreak,
+      modelState,
+      provider,
+      model,
+      perMessageQueueMode,
+      perMessageQueueOptions,
+      typing,
+      opts: resolvedOpts,
+      defaultProvider,
+      defaultModel,
+      timeoutMs,
+      isNewSession,
+      resetTriggered,
+      systemSent,
+      sessionEntry,
+      sessionStore,
+      sessionKey,
+      sessionId,
+      storePath,
+      workspaceDir,
+      abortedLastRun,
+    });
+  } finally {
+    // Backstop: ensure the typing indicator is always cleaned up, even if
+    // pre-runner code (media understanding, session init, directives, etc.)
+    // throws before the agent-runner's own finally block fires.
+    // cleanup() is idempotent (sealed flag) so this is safe on the happy path.
+    if (typing.isActive()) {
+      defaultRuntime.log(
+        "typing: backstop cleanup triggered in getReplyFromConfig (typing was still active)",
+      );
+    }
+    typing.cleanup();
   }
-  await maybeEmitMissingResetHooks();
-  directives = inlineActionResult.directives;
-  abortedLastRun = inlineActionResult.abortedLastRun ?? abortedLastRun;
-
-  await stageSandboxMedia({
-    ctx,
-    sessionCtx,
-    cfg,
-    sessionKey,
-    workspaceDir,
-  });
-
-  return runPreparedReply({
-    ctx,
-    sessionCtx,
-    cfg,
-    agentId,
-    agentDir,
-    agentCfg,
-    sessionCfg,
-    commandAuthorized,
-    command,
-    commandSource,
-    allowTextCommands,
-    directives,
-    defaultActivation,
-    resolvedThinkLevel,
-    resolvedVerboseLevel,
-    resolvedReasoningLevel,
-    resolvedElevatedLevel,
-    execOverrides,
-    elevatedEnabled,
-    elevatedAllowed,
-    blockStreamingEnabled,
-    blockReplyChunking,
-    resolvedBlockStreamingBreak,
-    modelState,
-    provider,
-    model,
-    perMessageQueueMode,
-    perMessageQueueOptions,
-    typing,
-    opts: resolvedOpts,
-    defaultProvider,
-    defaultModel,
-    timeoutMs,
-    isNewSession,
-    resetTriggered,
-    systemSent,
-    sessionEntry,
-    sessionStore,
-    sessionKey,
-    sessionId,
-    storePath,
-    workspaceDir,
-    abortedLastRun,
-  });
 }

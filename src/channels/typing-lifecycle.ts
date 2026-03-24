@@ -7,6 +7,8 @@ export type TypingKeepaliveLoop = {
   isRunning: () => boolean;
 };
 
+const TICK_TIMEOUT_MS = 10_000;
+
 export function createTypingKeepaliveLoop(params: {
   intervalMs: number;
   onTick: AsyncTick;
@@ -19,9 +21,19 @@ export function createTypingKeepaliveLoop(params: {
       return;
     }
     tickInFlight = true;
+    let tickTimer: ReturnType<typeof setTimeout> | undefined;
     try {
-      await params.onTick();
+      await Promise.race([
+        params.onTick(),
+        new Promise<void>((resolve) => {
+          tickTimer = setTimeout(resolve, TICK_TIMEOUT_MS);
+          tickTimer.unref?.();
+        }),
+      ]);
     } finally {
+      if (tickTimer) {
+        clearTimeout(tickTimer);
+      }
       tickInFlight = false;
     }
   };

@@ -419,7 +419,19 @@ export async function runReplyAgent(params: {
       blockReplyPipeline.stop();
     }
     if (pendingToolTasks.size > 0) {
-      await Promise.allSettled(pendingToolTasks);
+      // Timeout prevents indefinite hang if a tool result delivery stalls.
+      const PENDING_TOOL_TASKS_TIMEOUT_MS = 30_000;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        Promise.allSettled(pendingToolTasks),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, PENDING_TOOL_TASKS_TIMEOUT_MS);
+          timer.unref?.();
+        }),
+      ]);
+      if (timer) {
+        clearTimeout(timer);
+      }
     }
 
     const usage = runResult.meta?.agentMeta?.usage;
