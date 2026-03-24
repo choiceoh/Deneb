@@ -26,6 +26,20 @@ export interface CoreRsNative {
   // mime_utils
   normalizeMimeType(mime: string): string | null;
   isGenericMime(mime: string): boolean;
+
+  // compaction
+  compactionEstimateTokens(text: string): number;
+  compactionFormatTimestamp(epochMs: number, tz: string): string;
+  compactionEvaluate(configJson: string, storedTokens: number, liveTokens: number, tokenBudget: number): string;
+  compactionResolveFreshTailOrdinal(itemsJson: string, freshTailCount: number): number;
+  compactionBuildLeafSourceText(messagesJson: string, tz: string): string;
+  compactionBuildCondensedSourceText(summariesJson: string, tz: string): string;
+  compactionGenerateSummaryId(content: string, nowMs: number): string;
+  compactionDeterministicFallback(source: string, inputTokens: number): string;
+  compactionSweepNew(configJson: string, conversationId: number, tokenBudget: number, force: boolean, hardTrigger: boolean, nowMs: number): number;
+  compactionSweepStart(handle: number): string;
+  compactionSweepStep(handle: number, responseJson: string): string;
+  compactionSweepDrop(handle: number): void;
 }
 
 let native: CoreRsNative | null = null;

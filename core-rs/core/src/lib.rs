@@ -15,6 +15,7 @@
 extern crate napi_derive;
 
 // Phase 0: Core modules (C FFI + Rust API)
+pub mod compaction;
 pub mod media;
 pub mod protocol;
 pub mod security;
@@ -451,6 +452,165 @@ pub unsafe extern "C" fn deneb_validate_params(
             Err(protocol::validation::ValidateParamsError::InvalidJson(_)) => -5,
         }
     })
+}
+
+// ---------------------------------------------------------------------------
+// Compaction FFI exports (context compression engine)
+// ---------------------------------------------------------------------------
+
+/// C FFI: Evaluate whether compaction is needed.
+/// Writes JSON `CompactionDecision` into `out_ptr`.
+/// Returns bytes written, or negative on error.
+///
+/// # Safety
+/// `config_ptr` must be valid UTF-8 JSON of `config_len` bytes.
+/// `out_ptr` must be writable for `out_len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_compaction_evaluate(
+    config_ptr: *const u8,
+    config_len: usize,
+    stored_tokens: u64,
+    live_tokens: u64,
+    token_budget: u64,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if config_ptr.is_null() || out_ptr.is_null() {
+        return -1;
+    }
+    if config_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let config_slice = std::slice::from_raw_parts(config_ptr, config_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let config_str = match std::str::from_utf8(config_slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let config: compaction::CompactionConfig = match serde_json::from_str(config_str) {
+            Ok(c) => c,
+            Err(_) => return -3,
+        };
+        let decision = compaction::evaluate(&config, stored_tokens, live_tokens, token_budget);
+        let json = match serde_json::to_string(&decision) {
+            Ok(j) => j,
+            Err(_) => return -5,
+        };
+        let bytes = json.as_bytes();
+        if bytes.len() > out_slice.len() {
+            return -6;
+        }
+        out_slice[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
+}
+
+/// C FFI: Create a new compaction sweep engine.
+/// Returns a positive handle on success, negative on error.
+///
+/// # Safety
+/// `config_ptr` must be valid UTF-8 JSON of `config_len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_compaction_sweep_new(
+    config_ptr: *const u8,
+    config_len: usize,
+    conversation_id: u64,
+    token_budget: u64,
+    force: i32,
+    hard_trigger: i32,
+    now_ms: i64,
+) -> i64 {
+    if config_ptr.is_null() {
+        return -1;
+    }
+    if config_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let config_slice = std::slice::from_raw_parts(config_ptr, config_len);
+    ffi_catch(-99, move || {
+        let config_str = match std::str::from_utf8(config_slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let handle = compaction::napi::compaction_sweep_new(
+            config_str.to_string(),
+            conversation_id as u32,
+            token_budget as u32,
+            force != 0,
+            hard_trigger != 0,
+            now_ms as f64,
+        );
+        handle as i32
+    }) as i64
+}
+
+/// C FFI: Start a sweep engine. Writes first SweepCommand JSON to `out_ptr`.
+/// Returns bytes written, or negative on error.
+///
+/// # Safety
+/// `out_ptr` must be writable for `out_len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_compaction_sweep_start(
+    handle: u32,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if out_ptr.is_null() {
+        return -1;
+    }
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let json = compaction::napi::compaction_sweep_start(handle);
+        let bytes = json.as_bytes();
+        if bytes.len() > out_slice.len() {
+            return -6;
+        }
+        out_slice[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
+}
+
+/// C FFI: Step a sweep engine with a response. Writes next SweepCommand JSON.
+/// Returns bytes written, or negative on error.
+///
+/// # Safety
+/// `resp_ptr` must be valid UTF-8 JSON. `out_ptr` must be writable.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_compaction_sweep_step(
+    handle: u32,
+    resp_ptr: *const u8,
+    resp_len: usize,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if resp_ptr.is_null() || out_ptr.is_null() {
+        return -1;
+    }
+    if resp_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let resp_slice = std::slice::from_raw_parts(resp_ptr, resp_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let resp_str = match std::str::from_utf8(resp_slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let json = compaction::napi::compaction_sweep_step(handle, resp_str.to_string());
+        let bytes = json.as_bytes();
+        if bytes.len() > out_slice.len() {
+            return -6;
+        }
+        out_slice[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
+}
+
+/// C FFI: Drop a sweep engine, freeing its resources.
+#[no_mangle]
+pub extern "C" fn deneb_compaction_sweep_drop(handle: u32) {
+    compaction::napi::compaction_sweep_drop(handle);
 }
 
 #[cfg(test)]
