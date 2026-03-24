@@ -40,9 +40,17 @@ async fn main() {
     }
 
     let result = match &cli.command {
+        // Core commands
         Commands::Health(args) => commands::health::run(args).await,
         Commands::Status(args) => commands::status::run(args).await,
         Commands::Config(args) => commands::config_cmd::run(args).await,
+        Commands::Sessions(args) => commands::sessions::run(args).await,
+        Commands::Agents(args) => commands::agents::run(args).await,
+        Commands::Memory(args) => commands::memory::run(args).await,
+        // SubCLI commands
+        Commands::Gateway(args) => subcli::gateway_cmd::run(args).await,
+        Commands::Logs(args) => subcli::logs::run(args).await,
+        Commands::Models(args) => subcli::models::run(args).await,
     };
 
     if let Err(e) = result {

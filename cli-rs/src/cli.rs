@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 
 use crate::commands;
+use crate::subcli;
 
 #[derive(Parser)]
 #[command(
@@ -36,6 +37,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    // --- Core commands ---
     /// Check gateway health.
     Health(commands::health::HealthArgs),
 
@@ -44,71 +46,23 @@ pub enum Commands {
 
     /// Manage configuration.
     Config(commands::config_cmd::ConfigArgs),
-    // --- Placeholder commands for Phase 2+ ---
-    // Uncomment and implement as each command is ported.
 
-    // /// Initialize config and workspace.
-    // Setup(commands::setup::SetupArgs),
+    /// List and manage sessions.
+    Sessions(commands::sessions::SessionsArgs),
 
-    // /// Interactive onboarding.
-    // Onboard(commands::onboard::OnboardArgs),
+    /// Agent operations.
+    Agents(commands::agents::AgentsArgs),
 
-    // /// Interactive configuration.
-    // Configure(commands::configure::ConfigureArgs),
+    /// Memory search and management.
+    Memory(commands::memory::MemoryArgs),
 
-    // /// Create/verify backup archives.
-    // Backup(commands::backup::BackupArgs),
+    // --- SubCLI commands ---
+    /// Gateway management.
+    Gateway(subcli::gateway_cmd::GatewayArgs),
 
-    // /// Run diagnostic checks.
-    // Doctor(commands::doctor::DoctorArgs),
+    /// Tail gateway logs.
+    Logs(subcli::logs::LogsArgs),
 
-    // /// Open the dashboard.
-    // Dashboard(commands::dashboard::DashboardArgs),
-
-    // /// Reset state.
-    // Reset(commands::reset::ResetArgs),
-
-    // /// Uninstall Deneb.
-    // Uninstall(commands::uninstall::UninstallArgs),
-
-    // /// Send and manage messages.
-    // Message(commands::message::MessageArgs),
-
-    // /// Memory search and management.
-    // Memory(commands::memory::MemoryArgs),
-
-    // /// Single agent turn.
-    // Agent(commands::agent::AgentArgs),
-
-    // /// Agent CRUD operations.
-    // Agents(commands::agents::AgentsArgs),
-
-    // /// List and manage sessions.
-    // Sessions(commands::sessions::SessionsArgs),
-
-    // /// Browser management.
-    // Browser(commands::browser::BrowserArgs),
-
-    // --- SubCLI commands (Phase 2+) ---
-
-    // /// Gateway management.
-    // Gateway(subcli::gateway_cmd::GatewayArgs),
-
-    // /// Tail gateway logs.
-    // Logs(subcli::logs::LogsArgs),
-
-    // /// Model discovery and configuration.
-    // Models(subcli::models::ModelsArgs),
-
-    // /// Channel management.
-    // Channels(subcli::channels::ChannelsArgs),
-
-    // /// Plugin management.
-    // Plugins(subcli::plugins::PluginsArgs),
-
-    // /// Update management.
-    // Update(subcli::update::UpdateArgs),
-
-    // /// Shell completion generation.
-    // Completion(subcli::completion::CompletionArgs),
+    /// Model discovery and configuration.
+    Models(subcli::models::ModelsArgs),
 }
