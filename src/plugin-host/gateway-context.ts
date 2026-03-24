@@ -239,12 +239,16 @@ export async function createHeadlessGatewayContext(): Promise<HeadlessGatewayCon
     findRunningWizard: NOOP_NULL as unknown as GatewayRequestContext["findRunningWizard"],
     purgeWizardSession: NOOP,
 
-    // Channel runtime: stub that returns empty snapshot.
-    // Go gateway manages channel lifecycle; Plugin Host handles method logic only.
-    getRuntimeSnapshot: (() => ({
-      accounts: [],
-      channels: [],
-    })) as unknown as GatewayRequestContext["getRuntimeSnapshot"],
+    // Channel runtime: returns the snapshot synced from the Go gateway via
+    // the plugin-host.channels.sync bridge method. Falls back to empty if
+    // the Go gateway hasn't synced yet.
+    getRuntimeSnapshot: (() => {
+      const snap = globalThis.__pluginHostChannelSnapshot;
+      if (snap) {
+        return snap;
+      }
+      return { channels: {}, channelAccounts: {} };
+    }) as unknown as GatewayRequestContext["getRuntimeSnapshot"],
     startChannel: NOOP_ASYNC as unknown as GatewayRequestContext["startChannel"],
     stopChannel: NOOP_ASYNC as unknown as GatewayRequestContext["stopChannel"],
     markChannelLoggedOut: NOOP as unknown as GatewayRequestContext["markChannelLoggedOut"],

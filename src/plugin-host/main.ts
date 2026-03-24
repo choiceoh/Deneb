@@ -71,6 +71,16 @@ registry.register("plugin-host.reload", async () => {
   }
 });
 
+// Register a channel state sync method. The Go gateway calls this to push
+// channel account snapshots so TypeScript handlers (e.g., channels.status)
+// return accurate runtime state from the Go-managed channel lifecycle.
+registry.register("plugin-host.channels.sync", async (_method, params) => {
+  // Store the snapshot on globalThis so the headless gateway context
+  // can return it from getRuntimeSnapshot().
+  globalThis.__pluginHostChannelSnapshot = params;
+  return { ok: true, payload: { synced: true } };
+});
+
 // --- Gateway method forwarding ---
 // Methods that the Go gateway forwards to us are routed to the actual
 // TypeScript gateway method handlers via a headless gateway context.
@@ -289,10 +299,12 @@ async function main(): Promise<void> {
   process.on("SIGTERM", shutdown);
 }
 
-// Extend globalThis type for the event emitter bridge.
+// Extend globalThis type for the event emitter bridge and channel state sync.
 declare global {
   // eslint-disable-next-line no-var
   var __pluginHostEmitEvent: ((event: string, payload?: unknown) => void) | undefined;
+  // eslint-disable-next-line no-var
+  var __pluginHostChannelSnapshot: Record<string, unknown> | undefined;
 }
 
 main().catch((err) => {
