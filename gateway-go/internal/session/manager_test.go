@@ -114,7 +114,66 @@ func TestApplyLifecycleEndWithoutStart(t *testing.T) {
 	if s.Status != StatusDone {
 		t.Errorf("Status = %q, want %q", s.Status, StatusDone)
 	}
-	if s.RuntimeMs != nil {
-		t.Error("RuntimeMs should be nil without prior start")
+	// Without a prior start, startedAt falls back to event.Ts (same as endedAt),
+	// so runtimeMs = endedAt - startedAt = 0.
+	if s.RuntimeMs == nil || *s.RuntimeMs != 0 {
+		t.Errorf("RuntimeMs = %v, want 0 (startedAt falls back to event.Ts)", s.RuntimeMs)
+	}
+}
+
+func TestApplyLifecycleAbortedLastRun(t *testing.T) {
+	m := NewManager()
+
+	// Start: AbortedLastRun = false.
+	s := m.ApplyLifecycleEvent("s1", LifecycleEvent{Phase: PhaseStart, Ts: 1000})
+	if s.AbortedLastRun {
+		t.Error("AbortedLastRun should be false after start")
+	}
+
+	// Killed: AbortedLastRun = true.
+	s = m.ApplyLifecycleEvent("s1", LifecycleEvent{Phase: PhaseEnd, Ts: 2000, StopReason: "aborted"})
+	if !s.AbortedLastRun {
+		t.Error("AbortedLastRun should be true after killed")
+	}
+
+	// Restart: AbortedLastRun resets to false.
+	s = m.ApplyLifecycleEvent("s1", LifecycleEvent{Phase: PhaseStart, Ts: 3000})
+	if s.AbortedLastRun {
+		t.Error("AbortedLastRun should be false after restart")
+	}
+}
+
+func TestApplyLifecycleUpdatedAtFromSnapshot(t *testing.T) {
+	m := NewManager()
+	s := m.ApplyLifecycleEvent("s1", LifecycleEvent{Phase: PhaseStart, Ts: 4200})
+	if s.UpdatedAt != 4200 {
+		t.Errorf("UpdatedAt = %d, want 4200 (from snapshot)", s.UpdatedAt)
+	}
+}
+
+func TestApplyLifecycleUnknownPhase(t *testing.T) {
+	m := NewManager()
+
+	// Apply a valid event first.
+	m.ApplyLifecycleEvent("s1", LifecycleEvent{Phase: PhaseStart, Ts: 1000})
+
+	// Unknown phase should not mutate the session.
+	s := m.ApplyLifecycleEvent("s1", LifecycleEvent{Phase: "bogus", Ts: 9999})
+	if s.Status != StatusRunning {
+		t.Errorf("Status = %q, want %q (unchanged after unknown phase)", s.Status, StatusRunning)
+	}
+}
+
+func TestApplyLifecycleRuntimeMsFallback(t *testing.T) {
+	m := NewManager()
+
+	// Manually set a session with existing runtimeMs but no startedAt.
+	rm := int64(777)
+	m.Set(&Session{Key: "s1", Kind: KindDirect, RuntimeMs: &rm})
+
+	// End event with Ts=0 means endedAt won't resolve, but existing runtimeMs preserved.
+	s := m.ApplyLifecycleEvent("s1", LifecycleEvent{Phase: PhaseEnd, Ts: 0})
+	if s.RuntimeMs == nil || *s.RuntimeMs != 777 {
+		t.Errorf("RuntimeMs = %v, want 777 (fallback to existing)", s.RuntimeMs)
 	}
 }

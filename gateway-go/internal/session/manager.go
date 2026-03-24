@@ -32,16 +32,17 @@ const (
 
 // Session represents a gateway session row.
 type Session struct {
-	Key       string    `json:"key"`
-	Kind      Kind      `json:"kind"`
-	Status    RunStatus `json:"status,omitempty"`
-	Channel   string    `json:"channel,omitempty"`
-	Model     string    `json:"model,omitempty"`
-	UpdatedAt int64     `json:"updatedAt,omitempty"`
-	StartedAt *int64    `json:"startedAt,omitempty"`
-	EndedAt   *int64    `json:"endedAt,omitempty"`
-	RuntimeMs *int64    `json:"runtimeMs,omitempty"`
-	CreatedAt time.Time `json:"-"`
+	Key            string    `json:"key"`
+	Kind           Kind      `json:"kind"`
+	Status         RunStatus `json:"status,omitempty"`
+	Channel        string    `json:"channel,omitempty"`
+	Model          string    `json:"model,omitempty"`
+	UpdatedAt      int64     `json:"updatedAt,omitempty"`
+	StartedAt      *int64    `json:"startedAt,omitempty"`
+	EndedAt        *int64    `json:"endedAt,omitempty"`
+	RuntimeMs      *int64    `json:"runtimeMs,omitempty"`
+	AbortedLastRun bool      `json:"abortedLastRun"`
+	CreatedAt      time.Time `json:"-"`
 }
 
 // Manager tracks active sessions in memory.
@@ -131,26 +132,40 @@ func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session
 	existing := m.sessions[key]
 	snap := DeriveLifecycleSnapshot(existing, event)
 
+	// Empty snapshot means unknown phase — no-op.
+	if snap.Status == "" {
+		if existing != nil {
+			return existing
+		}
+		return &Session{Key: key, Kind: KindUnknown}
+	}
+
 	if existing == nil {
 		existing = &Session{Key: key, Kind: KindUnknown, CreatedAt: time.Now()}
 		m.sessions[key] = existing
 	}
 
 	existing.Status = snap.Status
-	existing.UpdatedAt = time.Now().UnixMilli()
-	// Only overwrite fields that the snapshot explicitly sets (non-nil).
-	// PhaseStart sets StartedAt and clears EndedAt/RuntimeMs.
-	// PhaseEnd/Error sets EndedAt and RuntimeMs, preserving StartedAt.
-	if snap.StartedAt != nil {
+	existing.AbortedLastRun = snap.AbortedLastRun
+
+	// Prefer snapshot-derived UpdatedAt; fall back to now.
+	if snap.UpdatedAt != nil {
+		existing.UpdatedAt = *snap.UpdatedAt
+	} else {
+		existing.UpdatedAt = time.Now().UnixMilli()
+	}
+
+	if snap.Status == StatusRunning {
+		// Start phase: set StartedAt, clear terminal fields.
 		existing.StartedAt = snap.StartedAt
-		// New start clears terminal fields.
 		existing.EndedAt = nil
 		existing.RuntimeMs = nil
-	}
-	if snap.EndedAt != nil {
+	} else {
+		// End/Error phase: preserve existing StartedAt if snapshot doesn't set one.
+		if snap.StartedAt != nil {
+			existing.StartedAt = snap.StartedAt
+		}
 		existing.EndedAt = snap.EndedAt
-	}
-	if snap.RuntimeMs != nil {
 		existing.RuntimeMs = snap.RuntimeMs
 	}
 
