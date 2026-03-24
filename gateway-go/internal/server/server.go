@@ -1,8 +1,8 @@
 // Package server implements the HTTP + WebSocket gateway server.
 //
-// This will eventually replace the TypeScript implementation in
-// src/gateway/server.impl.ts, providing concurrent connection handling
-// via goroutines and integration with the Rust core via CGo.
+// This replaces the scaffolding from Phase 0/1 with a working gateway
+// server that handles health endpoints, WebSocket connections with the
+// full handshake protocol, and RPC dispatch.
 package server
 
 import (
@@ -10,55 +10,97 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
+	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // Server is the main gateway server.
 type Server struct {
 	addr       string
 	httpServer *http.Server
-	mu         sync.Mutex
-	conns      map[string]*Connection
+	dispatcher *rpc.Dispatcher
+	sessions   *session.Manager
+	channels   *channel.Registry
+	bridge     *bridge.PluginHost
+	clients    sync.Map // connID -> *WsClient
+	startedAt  time.Time
+	version    string
+	logger     *slog.Logger
+	ready      atomic.Bool
 }
 
-// Connection represents a connected client (WebSocket or HTTP).
-type Connection struct {
-	ID        string
-	CreatedAt time.Time
+// Option configures the gateway server.
+type Option func(*Server)
+
+// WithLogger sets a custom logger.
+func WithLogger(logger *slog.Logger) Option {
+	return func(s *Server) {
+		s.logger = logger
+	}
+}
+
+// WithVersion sets the server version string.
+func WithVersion(version string) Option {
+	return func(s *Server) {
+		s.version = version
+	}
 }
 
 // New creates a new gateway server bound to the given address.
-func New(addr string) *Server {
+func New(addr string, opts ...Option) *Server {
 	s := &Server{
-		addr:  addr,
-		conns: make(map[string]*Connection),
+		addr:     addr,
+		sessions: session.NewManager(),
+		channels: channel.NewRegistry(),
+		version:  "0.1.0-go",
+		logger:   slog.New(slog.NewJSONHandler(os.Stderr, nil)),
 	}
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", s.handleHealth)
-	mux.HandleFunc("/api/v1/rpc", s.handleRPC)
-	mux.HandleFunc("/", s.handleRoot)
-
-	s.httpServer = &http.Server{
-		Addr:              addr,
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       120 * time.Second,
+	for _, opt := range opts {
+		opt(s)
 	}
-
+	s.dispatcher = rpc.NewDispatcher(s.logger)
+	s.registerBuiltinMethods()
 	return s
+}
+
+// SetBridge sets the Plugin Host bridge for forwarding unhandled RPC methods.
+func (s *Server) SetBridge(b *bridge.PluginHost) {
+	s.bridge = b
+	s.dispatcher.SetForwarder(b)
 }
 
 // Run starts the server and blocks until the context is canceled.
 func (s *Server) Run(ctx context.Context) error {
+	mux := s.buildMux()
+
 	ln, err := net.Listen("tcp", s.addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", s.addr, err)
 	}
+
+	s.httpServer = &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		BaseContext: func(l net.Listener) context.Context {
+			return ctx
+		},
+	}
+	s.startedAt = time.Now()
+	s.ready.Store(true)
+
+	s.logger.Info("gateway server starting", "addr", ln.Addr().String())
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -70,34 +112,101 @@ func (s *Server) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		log.Println("shutting down gateway server")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return s.httpServer.Shutdown(shutdownCtx)
+		return s.shutdown()
 	case err := <-errCh:
 		return err
 	}
 }
 
+// StartAndListen starts the server and returns its actual address (useful with port ":0").
+func (s *Server) StartAndListen(ctx context.Context) (net.Addr, error) {
+	mux := s.buildMux()
+
+	ln, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return nil, fmt.Errorf("listen: %w", err)
+	}
+
+	s.httpServer = &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		BaseContext: func(l net.Listener) context.Context {
+			return ctx
+		},
+	}
+	s.startedAt = time.Now()
+	s.ready.Store(true)
+
+	go s.httpServer.Serve(ln)
+
+	return ln.Addr(), nil
+}
+
+// Close gracefully shuts down the server.
+func (s *Server) Close(ctx context.Context) error {
+	return s.shutdown()
+}
+
+func (s *Server) shutdown() error {
+	s.ready.Store(false)
+	s.logger.Info("gateway server shutting down")
+
+	if s.bridge != nil {
+		s.bridge.Close()
+	}
+
+	s.clients.Range(func(key, value any) bool {
+		client := value.(*WsClient)
+		client.conn.Close(4000, "server shutting down")
+		return true
+	})
+
+	if s.httpServer != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return s.httpServer.Shutdown(shutdownCtx)
+	}
+	return nil
+}
+
+func (s *Server) buildMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", s.handleHealth)
+	mux.HandleFunc("GET /healthz", s.handleHealth)
+	mux.HandleFunc("GET /ready", s.handleReady)
+	mux.HandleFunc("GET /readyz", s.handleReady)
+	mux.HandleFunc("POST /api/v1/rpc", s.handleRPC)
+	mux.HandleFunc("GET /ws", s.handleWsUpgrade)
+	mux.HandleFunc("GET /{$}", s.handleRoot)
+	return mux
+}
+
 // handleHealth responds with gateway health status.
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	resp := map[string]any{
+	json.NewEncoder(w).Encode(map[string]any{
 		"status":  "ok",
-		"version": "0.1.0-go",
+		"version": s.version,
 		"runtime": "go",
-	}
-	json.NewEncoder(w).Encode(resp)
+		"uptime":  time.Since(s.startedAt).Milliseconds(),
+	})
 }
 
-// handleRPC is a placeholder for the JSON-RPC endpoint.
-// This will be expanded to dispatch to internal/rpc handlers.
-func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+// handleReady responds with readiness status.
+func (s *Server) handleReady(w http.ResponseWriter, _ *http.Request) {
+	ready := s.ready.Load()
+	status := http.StatusOK
+	if !ready {
+		status = http.StatusServiceUnavailable
 	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]any{"ready": ready})
+}
 
+// handleRPC processes HTTP JSON-RPC requests via the dispatcher.
+func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Method string          `json:"method"`
 		Params json.RawMessage `json:"params,omitempty"`
@@ -105,21 +214,33 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeRPCError(w, "", "PARSE_ERROR", "invalid JSON", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(protocol.NewResponseError("", protocol.NewError(
+			protocol.ErrInvalidRequest, "invalid JSON",
+		)))
 		return
 	}
 
 	if req.Method == "" || req.ID == "" {
-		writeRPCError(w, req.ID, "INVALID_REQUEST", "method and id are required", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrMissingParam, "method and id are required",
+		)))
 		return
 	}
 
-	// Placeholder: echo the method back
-	writeRPCResponse(w, req.ID, map[string]string{
-		"echo":    req.Method,
-		"status":  "not_implemented",
-		"message": "Go gateway RPC is scaffolding only",
-	})
+	frame := &protocol.RequestFrame{
+		Type:   protocol.FrameTypeRequest,
+		ID:     req.ID,
+		Method: req.Method,
+		Params: req.Params,
+	}
+	resp := s.dispatcher.Dispatch(r.Context(), frame)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
@@ -127,30 +248,26 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"service": "deneb-gateway",
 		"runtime": "go",
-		"version": "0.1.0",
+		"version": s.version,
 	})
 }
 
-func writeRPCResponse(w http.ResponseWriter, id string, result any) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"type":    "res",
-		"id":      id,
-		"ok":      true,
-		"payload": result,
+// registerBuiltinMethods registers the core RPC methods handled natively in Go.
+func (s *Server) registerBuiltinMethods() {
+	s.dispatcher.Register("health", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"status": "ok",
+			"uptime": time.Since(s.startedAt).Milliseconds(),
+		})
+		return resp
 	})
-}
 
-func writeRPCError(w http.ResponseWriter, id, code, message string, status int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]any{
-		"type": "res",
-		"id":   id,
-		"ok":   false,
-		"error": map[string]string{
-			"code":    code,
-			"message": message,
-		},
+	s.dispatcher.Register("status", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"version":  s.version,
+			"channels": s.channels.StatusAll(),
+			"sessions": s.sessions.Count(),
+		})
+		return resp
 	})
 }

@@ -1,49 +1,64 @@
 // Package main provides the entry point for the Deneb gateway server.
 //
-// This will eventually replace the TypeScript gateway (src/gateway/server.impl.ts).
-// Currently it serves as the scaffolding for the Go gateway.
+// This replaces the TypeScript gateway (src/gateway/server.impl.ts)
+// with a Go implementation supporting HTTP health, WebSocket + RPC dispatch,
+// and optional Plugin Host bridge.
 package main
 
 import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/server"
 )
 
 func main() {
 	port := flag.Int("port", 18789, "Gateway server port")
 	bind := flag.String("bind", "loopback", "Bind address: 'loopback' or 'all'")
+	bridgeSocket := flag.String("bridge", "", "Path to plugin host unix socket")
+	version := flag.String("version", "0.1.0-go", "Server version string")
 	flag.Parse()
 
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
 	bindAddr := "127.0.0.1"
-	if *bind == "all" {
+	if *bind == "all" || *bind == "lan" {
 		bindAddr = "0.0.0.0"
 	}
 
 	addr := fmt.Sprintf("%s:%d", bindAddr, *port)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	srv := server.New(addr,
+		server.WithLogger(logger),
+		server.WithVersion(*version),
+	)
 
-	// Graceful shutdown on SIGINT/SIGTERM
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig := <-sigCh
-		log.Printf("received signal %v, shutting down", sig)
-		cancel()
-	}()
+	// Connect to Plugin Host bridge if specified.
+	if *bridgeSocket != "" {
+		b := bridge.NewWithSocket(*bridgeSocket, logger)
+		if err := b.Connect(context.Background()); err != nil {
+			logger.Warn("plugin host bridge not available", "socket", *bridgeSocket, "error", err)
+		} else {
+			logger.Info("plugin host bridge connected", "socket", *bridgeSocket)
+			srv.SetBridge(b)
+		}
+	}
 
-	srv := server.New(addr)
-	log.Printf("deneb gateway starting on %s", addr)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	logger.Info("deneb gateway starting", "addr", addr)
 
 	if err := srv.Run(ctx); err != nil {
-		log.Fatalf("gateway error: %v", err)
+		logger.Error("gateway error", "error", err)
+		os.Exit(1)
 	}
 }
