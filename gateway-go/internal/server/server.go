@@ -73,6 +73,7 @@ type Server struct {
 	ready       atomic.Bool
 
 	// Phase 2 additions.
+	gatewaySubs     *events.GatewayEventSubscriptions
 	chatHandler     *chat.Handler
 	controlUI       *controlui.Handler
 	authRateLimiter *auth.AuthRateLimiter
@@ -146,6 +147,10 @@ func New(addr string, opts ...Option) *Server {
 	s.broadcaster = events.NewBroadcaster()
 	s.broadcaster.SetLogger(s.logger)
 	s.keyCache = session.NewKeyCache()
+	s.gatewaySubs = events.NewGatewayEventSubscriptions(events.GatewaySubscriptionParams{
+		Broadcaster: s.broadcaster,
+		Logger:      s.logger,
+	})
 	s.processes = process.NewManager(s.logger)
 	s.cron = cron.NewScheduler(s.logger)
 	s.hooks = hooks.NewRegistry(s.logger)
@@ -296,7 +301,12 @@ func (s *Server) shutdown() error {
 		return true
 	})
 
-	// 4. Stop dedupe background GC.
+	// 4. Stop gateway event subscriptions.
+	if s.gatewaySubs != nil {
+		s.gatewaySubs.Stop()
+	}
+
+	// 5. Stop dedupe background GC.
 	s.dedupe.Close()
 
 	// 5. Stop cron scheduler.
@@ -572,6 +582,12 @@ func (s *Server) Broadcaster() *events.Broadcaster {
 	return s.broadcaster
 }
 
+// GatewaySubscriptions returns the gateway event subscription manager
+// for emitting agent, heartbeat, transcript, and lifecycle events.
+func (s *Server) GatewaySubscriptions() *events.GatewayEventSubscriptions {
+	return s.gatewaySubs
+}
+
 // registerPhase2Methods registers chat, config, monitoring, and event subscription methods.
 func (s *Server) registerPhase2Methods() {
 	// Chat methods — forward heavy work to Node.js bridge.
@@ -598,7 +614,7 @@ func (s *Server) registerPhase2Methods() {
 	})
 
 	// Event subscription methods.
-	rpc.RegisterEventsMethods(s.dispatcher, rpc.EventsDeps{Broadcaster: s.broadcaster})
+	rpc.RegisterEventsMethods(s.dispatcher, rpc.EventsDeps{Broadcaster: s.broadcaster, Logger: s.logger})
 }
 
 // StartMonitoring starts the watchdog and channel health monitor goroutines.
