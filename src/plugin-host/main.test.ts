@@ -96,12 +96,12 @@ describe("startSocketServer", () => {
       payload: { status: "ok" },
     }));
 
-    const server = await startSocketServer({
+    const handle = await startSocketServer({
       socketPath,
       handler: registry.handle,
       logger: { info: () => {}, error: () => {} },
     });
-    servers.push(server);
+    servers.push(handle.server);
 
     // Connect as a client (simulating Go bridge).
     const response = await sendRequest(socketPath, {
@@ -120,12 +120,12 @@ describe("startSocketServer", () => {
     sockets.push(socketPath);
 
     const registry = createMethodRegistry();
-    const server = await startSocketServer({
+    const handle = await startSocketServer({
       socketPath,
       handler: registry.handle,
       logger: { info: () => {}, error: () => {} },
     });
-    servers.push(server);
+    servers.push(handle.server);
 
     const response = await sendRequest(socketPath, {
       type: "req",
@@ -136,6 +136,53 @@ describe("startSocketServer", () => {
 
     expect(response.ok).toBe(false);
     expect(response.error?.code).toBe("NOT_FOUND");
+  });
+
+  it("emits event frames to connected clients", async () => {
+    const socketPath = tmpSocketPath();
+    sockets.push(socketPath);
+
+    const registry = createMethodRegistry();
+    const handle = await startSocketServer({
+      socketPath,
+      handler: registry.handle,
+      logger: { info: () => {}, error: () => {} },
+    });
+    servers.push(handle.server);
+
+    // Connect a client and listen for event frames.
+    const eventPromise = new Promise<{ type: string; event: string; payload: unknown }>(
+      (resolve, reject) => {
+        const conn = net.connect(socketPath, () => {
+          // Trigger event emission after connection is established.
+          setTimeout(() => handle.emitEvent("test.event", { hello: "world" }), 50);
+        });
+
+        const rl = readline.createInterface({ input: conn });
+        rl.on("line", (line) => {
+          try {
+            const frame = JSON.parse(line);
+            if (frame.type === "event") {
+              resolve(frame);
+              conn.end();
+            }
+          } catch (err) {
+            reject(err);
+          }
+        });
+
+        conn.on("error", reject);
+        setTimeout(() => {
+          conn.destroy();
+          reject(new Error("timeout waiting for event"));
+        }, 5000);
+      },
+    );
+
+    const event = await eventPromise;
+    expect(event.type).toBe("event");
+    expect(event.event).toBe("test.event");
+    expect(event.payload).toEqual({ hello: "world" });
   });
 });
 

@@ -226,7 +226,7 @@ for (const method of FORWARDED_METHODS) {
 
 // Start the socket server.
 async function main(): Promise<void> {
-  const server = await startSocketServer({
+  const handle = await startSocketServer({
     socketPath,
     handler: registry.handle,
     logger: {
@@ -238,6 +238,10 @@ async function main(): Promise<void> {
   console.log(`[plugin-host] listening on ${socketPath} (pid: ${process.pid})`);
   console.log(`[plugin-host] registered ${registry.methods().length} methods`);
 
+  // Export the event emitter so the gateway context can broadcast events
+  // back to the Go gateway (which then relays them to WS clients).
+  globalThis.__pluginHostEmitEvent = handle.emitEvent;
+
   // Pre-warm the gateway context in the background so the first RPC
   // doesn't pay the full initialization cost.
   ensureGatewayContext().catch(() => {
@@ -248,7 +252,7 @@ async function main(): Promise<void> {
   const shutdown = () => {
     console.log("[plugin-host] shutting down...");
     gatewayShutdown?.();
-    server.close(() => {
+    handle.server.close(() => {
       // Clean up socket file.
       try {
         fs.unlinkSync(socketPath);
@@ -264,6 +268,12 @@ async function main(): Promise<void> {
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+}
+
+// Extend globalThis type for the event emitter bridge.
+declare global {
+  // eslint-disable-next-line no-var
+  var __pluginHostEmitEvent: ((event: string, payload?: unknown) => void) | undefined;
 }
 
 main().catch((err) => {

@@ -134,8 +134,16 @@ export async function createHeadlessGatewayContext(): Promise<HeadlessGatewayCon
     })(),
     getHealthVersion: NOOP_NUMBER,
 
-    // Broadcast: no-op in Plugin Host. The Go gateway handles WS broadcasting.
-    broadcast: (() => noopBroadcast()) as unknown as GatewayRequestContext["broadcast"],
+    // Broadcast: relay events back to the Go gateway via the bridge socket.
+    // The Go gateway then broadcasts to connected WS clients.
+    broadcast: ((event: string, payload: unknown) => {
+      const emitter = globalThis.__pluginHostEmitEvent;
+      if (emitter) {
+        emitter(event, payload);
+        return { sent: 1, errors: [] };
+      }
+      return noopBroadcast();
+    }) as unknown as GatewayRequestContext["broadcast"],
     broadcastToConnIds: (() =>
       noopBroadcast()) as unknown as GatewayRequestContext["broadcastToConnIds"],
 
