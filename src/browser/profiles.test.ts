@@ -21,9 +21,7 @@ describe("profile name validation", () => {
 
   it("rejects empty or missing names", () => {
     expect(isValidProfileName("")).toBe(false);
-    // @ts-expect-error testing invalid input
     expect(isValidProfileName(null)).toBe(false);
-    // @ts-expect-error testing invalid input
     expect(isValidProfileName(undefined)).toBe(false);
   });
 
