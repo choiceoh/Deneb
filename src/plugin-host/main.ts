@@ -4,6 +4,12 @@
 // TypeScript plugin SDK and all channel extensions. Communication with the
 // Go gateway happens over a Unix domain socket using the NDJSON frame protocol.
 //
+// Phase 3 architecture:
+// 1. Go gateway receives HTTP/WS RPC request
+// 2. If the method is not handled natively in Go, it forwards to Plugin Host
+// 3. Plugin Host routes to the actual TypeScript gateway method handler
+// 4. Response flows back through the bridge to the Go gateway
+//
 // Environment:
 //   DENEB_PLUGIN_HOST_SOCKET — Unix socket path to listen on (required)
 
@@ -46,19 +52,45 @@ registry.register("plugin-host.methods", async () => ({
   payload: { methods: registry.methods() },
 }));
 
-// --- Gateway method forwarding ---
-// Methods that the Go gateway forwards to us are handled here.
-// In Phase 3, we register stub handlers that will be replaced with
-// actual gateway method wiring as the migration progresses.
-//
-// The architecture:
-// 1. Go gateway receives RPC request
-// 2. If method is not handled natively in Go, it forwards to Plugin Host
-// 3. Plugin Host routes to the appropriate TypeScript handler
-// 4. Response flows back through the bridge
+// Register a reload method so the Go gateway can reinitialize the gateway context
+// (e.g., after config changes). This tears down the old context and creates a new one.
+registry.register("plugin-host.reload", async () => {
+  console.log("[plugin-host] reloading gateway context...");
+  gatewayShutdown?.();
+  gatewayInvoke = null;
+  gatewayShutdown = null;
+  gatewayInitPromise = null;
+  try {
+    await ensureGatewayContext();
+    return { ok: true, payload: { reloaded: true } };
+  } catch (err) {
+    return {
+      ok: false,
+      error: { code: "UNAVAILABLE", message: `reload failed: ${String(err)}` },
+    };
+  }
+});
 
-// Register forwarded methods that map to existing TypeScript handlers.
-// These are loaded lazily to avoid pulling in the entire gateway stack at startup.
+// Register a channel state sync method. The Go gateway calls this to push
+// channel account snapshots so TypeScript handlers (e.g., channels.status)
+// return accurate runtime state from the Go-managed channel lifecycle.
+registry.register("plugin-host.channels.sync", async (_method, params) => {
+  // Store the snapshot on globalThis so the headless gateway context
+  // can return it from getRuntimeSnapshot().
+  globalThis.__pluginHostChannelSnapshot = params;
+  return { ok: true, payload: { synced: true } };
+});
+
+// --- Gateway method forwarding ---
+// Methods that the Go gateway forwards to us are routed to the actual
+// TypeScript gateway method handlers via a headless gateway context.
+//
+// The headless context initializes the minimum dependencies needed to run
+// TypeScript handlers without an HTTP/WS server. The Go gateway owns the
+// transport, auth, and client management.
+
+// Methods forwarded from the Go gateway to the TypeScript handler layer.
+// These cover config, sessions, chat, channels, agents, skills, and system methods.
 const FORWARDED_METHODS = [
   "config.get",
   "config.set",
@@ -169,23 +201,61 @@ const FORWARDED_METHODS = [
   "chat.send",
 ];
 
-// Register placeholder handlers for all forwarded methods.
-// These return a "not yet wired" response until the full gateway context is initialized.
-// In a fully integrated setup, these would call into the actual TypeScript gateway method handlers.
+// Gateway context is initialized lazily on first forwarded request.
+// This avoids pulling in the full gateway stack during startup.
+let gatewayInvoke:
+  | ((
+      method: string,
+      params: Record<string, unknown>,
+      reqId: string,
+    ) => Promise<{ ok: boolean; payload?: unknown; error?: { code: string; message: string } }>)
+  | null = null;
+let gatewayShutdown: (() => void) | null = null;
+let gatewayInitPromise: Promise<void> | null = null;
+
+async function ensureGatewayContext(): Promise<typeof gatewayInvoke> {
+  if (gatewayInvoke) {
+    return gatewayInvoke;
+  }
+  if (!gatewayInitPromise) {
+    gatewayInitPromise = (async () => {
+      try {
+        const { createHeadlessGatewayContext } = await import("./gateway-context.js");
+        const ctx = await createHeadlessGatewayContext();
+        gatewayInvoke = ctx.invoke;
+        gatewayShutdown = ctx.shutdown;
+        console.log("[plugin-host] gateway context initialized");
+      } catch (err) {
+        console.error("[plugin-host] failed to initialize gateway context:", err);
+        // Fall through — methods will return UNAVAILABLE on next call.
+      }
+    })();
+  }
+  await gatewayInitPromise;
+  return gatewayInvoke;
+}
+
+// Register forwarded methods that route to the TypeScript gateway handlers.
 for (const method of FORWARDED_METHODS) {
   const m = method;
-  registry.register(m, async () => ({
-    ok: false,
-    error: {
-      code: "UNAVAILABLE",
-      message: `method "${m}" is registered but not yet wired to a handler`,
-    },
-  }));
+  registry.register(m, async (_method, params, reqId) => {
+    const invoke = await ensureGatewayContext();
+    if (!invoke) {
+      return {
+        ok: false,
+        error: {
+          code: "UNAVAILABLE",
+          message: `gateway context not initialized; method "${m}" unavailable`,
+        },
+      };
+    }
+    return invoke(m, params, reqId);
+  });
 }
 
 // Start the socket server.
 async function main(): Promise<void> {
-  const server = await startSocketServer({
+  const handle = await startSocketServer({
     socketPath,
     handler: registry.handle,
     logger: {
@@ -197,10 +267,21 @@ async function main(): Promise<void> {
   console.log(`[plugin-host] listening on ${socketPath} (pid: ${process.pid})`);
   console.log(`[plugin-host] registered ${registry.methods().length} methods`);
 
+  // Export the event emitter so the gateway context can broadcast events
+  // back to the Go gateway (which then relays them to WS clients).
+  globalThis.__pluginHostEmitEvent = handle.emitEvent;
+
+  // Pre-warm the gateway context in the background so the first RPC
+  // doesn't pay the full initialization cost.
+  ensureGatewayContext().catch(() => {
+    // Logged inside ensureGatewayContext; swallow here.
+  });
+
   // Graceful shutdown.
   const shutdown = () => {
     console.log("[plugin-host] shutting down...");
-    server.close(() => {
+    gatewayShutdown?.();
+    handle.server.close(() => {
       // Clean up socket file.
       try {
         fs.unlinkSync(socketPath);
@@ -216,6 +297,14 @@ async function main(): Promise<void> {
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+}
+
+// Extend globalThis type for the event emitter bridge and channel state sync.
+declare global {
+  // eslint-disable-next-line no-var
+  var __pluginHostEmitEvent: ((event: string, payload?: unknown) => void) | undefined;
+  // eslint-disable-next-line no-var
+  var __pluginHostChannelSnapshot: Record<string, unknown> | undefined;
 }
 
 main().catch((err) => {

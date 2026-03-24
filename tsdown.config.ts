@@ -205,6 +205,10 @@ function buildCoreDistEntries(): Record<string, string> {
     "plugins/build-smoke-entry": "src/plugins/build-smoke-entry.ts",
     "plugins/runtime/index": "src/plugins/runtime/index.ts",
     "llm-slug-generator": "src/hooks/llm-slug-generator.ts",
+
+    // Plugin Host entry point for Go gateway Phase 3.
+    // The Go gateway spawns this as: node dist/plugin-host/main.js
+    "plugin-host/main": "src/plugin-host/main.ts",
   };
 }
 
