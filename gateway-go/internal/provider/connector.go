@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,8 +25,9 @@ type ConnectorConfig struct {
 
 // Connector is a reusable HTTP client for provider API calls.
 // It handles auth header injection, env-var expansion in headers,
-// and configurable timeouts.
+// and configurable timeouts. All methods are safe for concurrent use.
 type Connector struct {
+	mu     sync.RWMutex
 	client *http.Client
 	config ConnectorConfig
 	logger *slog.Logger
@@ -52,7 +54,12 @@ func NewConnector(cfg ConnectorConfig, logger *slog.Logger) *Connector {
 // Do executes an HTTP request against the provider API.
 // The path is appended to the configured BaseURL.
 func (c *Connector) Do(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
-	url := strings.TrimRight(c.config.BaseURL, "/")
+	// Snapshot config under read lock.
+	c.mu.RLock()
+	cfg := c.config
+	c.mu.RUnlock()
+
+	url := strings.TrimRight(cfg.BaseURL, "/")
 	if path != "" {
 		url += "/" + strings.TrimLeft(path, "/")
 	}
@@ -63,10 +70,10 @@ func (c *Connector) Do(ctx context.Context, method, path string, body io.Reader)
 	}
 
 	// Inject auth header based on mode.
-	c.applyAuth(req)
+	applyAuth(req, cfg.APIKey, cfg.AuthMode)
 
 	// Apply custom headers with env-var expansion.
-	for k, v := range c.config.Headers {
+	for k, v := range cfg.Headers {
 		req.Header.Set(k, ExpandEnvVars(v))
 	}
 
@@ -119,6 +126,8 @@ func (c *Connector) JSON(ctx context.Context, method, path string, reqBody, resp
 
 // UpdateConfig replaces the connector's configuration (e.g., after key rotation).
 func (c *Connector) UpdateConfig(cfg ConnectorConfig) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.config = cfg
 	if cfg.TimeoutMs > 0 {
 		c.client.Timeout = time.Duration(cfg.TimeoutMs) * time.Millisecond
@@ -126,12 +135,11 @@ func (c *Connector) UpdateConfig(cfg ConnectorConfig) {
 }
 
 // applyAuth injects the appropriate authorization header.
-func (c *Connector) applyAuth(req *http.Request) {
-	key := c.config.APIKey
+func applyAuth(req *http.Request, key, authMode string) {
 	if key == "" {
 		return
 	}
-	switch strings.ToLower(c.config.AuthMode) {
+	switch strings.ToLower(authMode) {
 	case "bearer", "oauth", "token":
 		req.Header.Set("Authorization", "Bearer "+key)
 	case "api_key":
@@ -155,10 +163,7 @@ func (e *ConnectorError) Error() string {
 }
 
 // ExpandEnvVars expands ${VAR} references in a string using os.Getenv.
-// Only the ${VAR} form is supported (not $VAR).
+// Both ${VAR} and $VAR forms are expanded.
 func ExpandEnvVars(s string) string {
-	return os.Expand(s, func(key string) string {
-		// os.Expand calls this for both $VAR and ${VAR} forms.
-		return os.Getenv(key)
-	})
+	return os.Expand(s, os.Getenv)
 }

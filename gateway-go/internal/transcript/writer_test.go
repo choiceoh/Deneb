@@ -23,7 +23,10 @@ func TestWriter_EnsureSession(t *testing.T) {
 	}
 
 	// File should exist.
-	path := w.SessionPath("test-session")
+	path, err := w.SessionPath("test-session")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t.Fatal("expected session file to exist")
 	}
@@ -78,7 +81,7 @@ func TestWriter_AppendMessage(t *testing.T) {
 	}
 
 	// Read file and count lines.
-	path := w.SessionPath("sess1")
+	path, _ := w.SessionPath("sess1")
 	lines := readLines(t, path)
 
 	// 1 header + 2 messages = 3 lines
@@ -91,6 +94,27 @@ func TestWriter_AppendMessage(t *testing.T) {
 		if !json.Valid([]byte(line)) {
 			t.Errorf("line %d is not valid JSON: %q", i, line)
 		}
+	}
+}
+
+func TestWriter_AppendMessage_NoSliceMutation(t *testing.T) {
+	dir := t.TempDir()
+	w := NewWriter(dir, nil)
+
+	_ = w.EnsureSession("sess-mut", SessionHeader{Version: 1, ID: "sess-mut"})
+
+	// Create a message with extra capacity so append could mutate it.
+	original := []byte(`{"role":"user"}`)
+	msg := make([]byte, len(original), len(original)+10)
+	copy(msg, original)
+
+	if err := w.AppendMessage("sess-mut", msg); err != nil {
+		t.Fatal(err)
+	}
+
+	// The original msg should not have been modified.
+	if string(msg) != string(original) {
+		t.Errorf("AppendMessage mutated input: got %q, want %q", msg, original)
 	}
 }
 
@@ -110,7 +134,8 @@ func TestWriter_AppendStructured(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	lines := readLines(t, w.SessionPath("sess2"))
+	path, _ := w.SessionPath("sess2")
+	lines := readLines(t, path)
 	if len(lines) != 2 { // header + 1 message
 		t.Errorf("expected 2 lines, got %d", len(lines))
 	}
@@ -130,9 +155,41 @@ func TestWriter_InvalidJSON(t *testing.T) {
 
 func TestWriter_SessionPath(t *testing.T) {
 	w := NewWriter("/base/dir", nil)
+	path, err := w.SessionPath("my-key")
+	if err != nil {
+		t.Fatal(err)
+	}
 	expected := filepath.Join("/base/dir", "my-key.jsonl")
-	if w.SessionPath("my-key") != expected {
-		t.Errorf("expected %q, got %q", expected, w.SessionPath("my-key"))
+	if path != expected {
+		t.Errorf("expected %q, got %q", expected, path)
+	}
+}
+
+func TestWriter_SessionPath_PathTraversal(t *testing.T) {
+	w := NewWriter("/base/dir", nil)
+
+	cases := []string{
+		"../etc/passwd",
+		"foo/../bar",
+		"foo/bar",
+		"foo\\bar",
+		"",
+	}
+	for _, key := range cases {
+		_, err := w.SessionPath(key)
+		if err == nil {
+			t.Errorf("expected error for unsafe session key %q", key)
+		}
+	}
+}
+
+func TestWriter_EnsureSession_PathTraversal(t *testing.T) {
+	dir := t.TempDir()
+	w := NewWriter(dir, nil)
+
+	err := w.EnsureSession("../evil", SessionHeader{Version: 1, ID: "evil"})
+	if err == nil {
+		t.Error("expected error for path traversal session key")
 	}
 }
 

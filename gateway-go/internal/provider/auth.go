@@ -57,6 +57,7 @@ type AuthManager struct {
 }
 
 // NewAuthManager creates a new auth manager.
+// The forwarder can be nil initially and set later via SetForwarder.
 func NewAuthManager(registry *Registry, forwarder Forwarder, logger *slog.Logger) *AuthManager {
 	if logger == nil {
 		logger = slog.Default()
@@ -70,6 +71,14 @@ func NewAuthManager(registry *Registry, forwarder Forwarder, logger *slog.Logger
 	}
 }
 
+// SetForwarder updates the bridge forwarder. This is called after
+// the server's bridge connection is established.
+func (am *AuthManager) SetForwarder(fwd Forwarder) {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	am.forwarder = fwd
+}
+
 // Store adds or updates a credential in the manager.
 func (am *AuthManager) Store(cred *ManagedCredential) {
 	am.mu.Lock()
@@ -78,6 +87,7 @@ func (am *AuthManager) Store(cred *ManagedCredential) {
 }
 
 // Resolve returns the current credential for a provider+profile.
+// Returns a copy to avoid data races.
 func (am *AuthManager) Resolve(providerID, profileID string) *ManagedCredential {
 	am.mu.RLock()
 	defer am.mu.RUnlock()
@@ -87,7 +97,6 @@ func (am *AuthManager) Resolve(providerID, profileID string) *ManagedCredential 
 	if cred == nil {
 		return nil
 	}
-	// Return a copy to avoid races.
 	c := *cred
 	return &c
 }
@@ -101,7 +110,10 @@ func (am *AuthManager) Prepare(ctx context.Context, req RuntimeAuthContext) (*Pr
 		plugin := am.registry.GetByNormalizedID(req.Provider)
 		if rap, ok := plugin.(RuntimeAuthProvider); ok {
 			prepared, err := rap.PrepareRuntimeAuth(ctx, req)
-			if err == nil && prepared != nil {
+			if err != nil {
+				am.logger.Warn("local provider auth prepare failed, falling back to bridge",
+					"provider", req.Provider, "error", err)
+			} else if prepared != nil {
 				am.storePrepared(req.Provider, req.ProfileID, prepared)
 				return prepared, nil
 			}
@@ -109,8 +121,11 @@ func (am *AuthManager) Prepare(ctx context.Context, req RuntimeAuthContext) (*Pr
 	}
 
 	// Fall back to bridge.
-	if am.forwarder == nil {
-		// No bridge, return raw credentials.
+	am.mu.RLock()
+	fwd := am.forwarder
+	am.mu.RUnlock()
+
+	if fwd == nil {
 		return &PreparedAuth{
 			APIKey:  req.APIKey,
 			BaseURL: "",
@@ -120,12 +135,12 @@ func (am *AuthManager) Prepare(ctx context.Context, req RuntimeAuthContext) (*Pr
 	params, _ := json.Marshal(req)
 	fwdReq := &protocol.RequestFrame{
 		Type:   protocol.FrameTypeRequest,
-		ID:     fmt.Sprintf("auth-prepare-%s-%d", req.Provider, time.Now().UnixMilli()),
+		ID:     fmt.Sprintf("auth-prepare-%s-%d", req.Provider, time.Now().UnixNano()),
 		Method: "providers.auth.prepare",
 		Params: params,
 	}
 
-	resp, err := am.forwarder.Forward(ctx, fwdReq)
+	resp, err := fwd.Forward(ctx, fwdReq)
 	if err != nil {
 		return nil, fmt.Errorf("auth prepare bridge error: %w", err)
 	}
@@ -173,6 +188,7 @@ func (am *AuthManager) RefreshIfNeeded(ctx context.Context, providerID, profileI
 
 	_, err := am.Prepare(ctx, RuntimeAuthContext{
 		Provider:  providerID,
+		ModelID:   "", // not needed for refresh
 		APIKey:    cred.APIKey,
 		AuthMode:  cred.AuthMode,
 		ProfileID: profileID,
@@ -190,7 +206,6 @@ func (am *AuthManager) StartRotationLoop(ctx context.Context) {
 func (am *AuthManager) Stop() {
 	select {
 	case <-am.stopCh:
-		// Already stopped.
 	default:
 		close(am.stopCh)
 	}

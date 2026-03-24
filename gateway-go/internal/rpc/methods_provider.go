@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"sort"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -28,23 +29,36 @@ func RegisterProviderMethods(d *Dispatcher, deps ProviderDeps) {
 	d.Register("providers.auth.prepare", providersAuthPrepare(deps))
 }
 
+// serializePlugin builds a map representation of a provider plugin.
+func serializePlugin(p provider.Plugin) map[string]any {
+	entry := map[string]any{
+		"id":    p.ID(),
+		"label": p.Label(),
+		"auth":  p.AuthMethods(),
+	}
+	if ap, ok := p.(provider.AliasProvider); ok {
+		entry["aliases"] = ap.Aliases()
+	}
+	if cp, ok := p.(provider.CapabilitiesProvider); ok {
+		entry["capabilities"] = cp.Capabilities()
+	}
+	return entry
+}
+
 func providersList(deps ProviderDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		snap := deps.Providers.Snapshot()
+
+		// Build sorted list for deterministic output.
+		ids := make([]string, 0, len(snap))
+		for id := range snap {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+
 		providers := make([]map[string]any, 0, len(snap))
-		for _, p := range snap {
-			entry := map[string]any{
-				"id":    p.ID(),
-				"label": p.Label(),
-				"auth":  p.AuthMethods(),
-			}
-			if ap, ok := p.(provider.AliasProvider); ok {
-				entry["aliases"] = ap.Aliases()
-			}
-			if cp, ok := p.(provider.CapabilitiesProvider); ok {
-				entry["capabilities"] = cp.Capabilities()
-			}
-			providers = append(providers, entry)
+		for _, id := range ids {
+			providers = append(providers, serializePlugin(snap[id]))
 		}
 
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
@@ -70,19 +84,7 @@ func providersGet(deps ProviderDeps) HandlerFunc {
 				protocol.ErrNotFound, "provider not found: "+p.ID))
 		}
 
-		result := map[string]any{
-			"id":    plugin.ID(),
-			"label": plugin.Label(),
-			"auth":  plugin.AuthMethods(),
-		}
-		if ap, ok := plugin.(provider.AliasProvider); ok {
-			result["aliases"] = ap.Aliases()
-		}
-		if cp, ok := plugin.(provider.CapabilitiesProvider); ok {
-			result["capabilities"] = cp.Capabilities()
-		}
-
-		resp, _ := protocol.NewResponseOK(req.ID, result)
+		resp, _ := protocol.NewResponseOK(req.ID, serializePlugin(plugin))
 		return resp
 	}
 }
@@ -144,7 +146,6 @@ func providersAuthPrepare(deps ProviderDeps) HandlerFunc {
 		}
 
 		if deps.AuthManager == nil {
-			// Passthrough without rotation.
 			resp, _ := protocol.NewResponseOK(req.ID, provider.PreparedAuth{
 				APIKey: p.APIKey,
 			})

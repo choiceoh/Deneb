@@ -217,10 +217,16 @@ func New(addr string, opts ...Option) *Server {
 }
 
 // SetBridge sets the Plugin Host bridge for forwarding unhandled RPC methods.
-// Also wires bridge event forwarding to the chat handler and broadcaster.
+// Also wires bridge event forwarding to the chat handler, broadcaster,
+// and auth manager.
 func (s *Server) SetBridge(b *bridge.PluginHost) {
 	s.bridge = b
 	s.dispatcher.SetForwarder(b)
+
+	// Wire bridge into auth manager for credential refresh.
+	if s.authManager != nil {
+		s.authManager.SetForwarder(b)
+	}
 
 	// Wire raw broadcast to chat handler for streaming event relay.
 	if s.chatHandler != nil {
@@ -326,6 +332,20 @@ func (s *Server) SetBridge(b *bridge.PluginHost) {
 			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
 		}
 	})
+}
+
+// lazyForwarder defers to the server's bridge, which is set after construction.
+// This allows RPC handlers registered at server creation to forward to the bridge
+// that gets connected later via SetBridge.
+type lazyForwarder struct {
+	server *Server
+}
+
+func (lf *lazyForwarder) Forward(ctx context.Context, req *protocol.RequestFrame) (*protocol.ResponseFrame, error) {
+	if lf.server.bridge == nil {
+		return nil, fmt.Errorf("bridge not connected")
+	}
+	return lf.server.bridge.Forward(ctx, req)
 }
 
 // mustMarshalEvent marshals an event frame to JSON bytes.
@@ -743,7 +763,7 @@ func (s *Server) registerExtendedMethods() {
 		Broadcaster: s.broadcaster,
 	})
 
-	// Provider methods.
+	// Provider methods. Use lazyForwarder so bridge wired later via SetBridge works.
 	rpc.RegisterProviderMethods(s.dispatcher, rpc.ProviderDeps{
 		Deps: rpc.Deps{
 			Sessions: s.sessions,
@@ -751,6 +771,7 @@ func (s *Server) registerExtendedMethods() {
 		},
 		Providers:   s.providers,
 		AuthManager: s.authManager,
+		Forwarder:   &lazyForwarder{server: s},
 	})
 
 	// Tool methods.
@@ -760,6 +781,7 @@ func (s *Server) registerExtendedMethods() {
 			Channels: s.channels,
 		},
 		Processes: s.processes,
+		Forwarder: &lazyForwarder{server: s},
 	})
 
 	// Daemon status method.

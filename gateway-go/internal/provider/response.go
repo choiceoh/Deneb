@@ -70,9 +70,7 @@ func FormatForChannel(resp *ProviderResponse) string {
 			b.WriteString("]")
 		case "tool_result":
 			if len(part.Content) > 0 {
-				// Try to extract text from the tool result.
-				var text string
-				_ = json.Unmarshal(part.Content, &text)
+				text := extractToolResultText(part.Content)
 				if text != "" {
 					b.WriteString(text)
 				}
@@ -93,6 +91,34 @@ func FormatForTranscript(resp *ProviderResponse) json.RawMessage {
 		return nil
 	}
 	return data
+}
+
+// extractToolResultText extracts text from a tool_result content field.
+// The content can be a plain string or an array of content parts.
+func extractToolResultText(raw json.RawMessage) string {
+	// Try string first.
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	// Try array of content parts.
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(raw, &parts) == nil {
+		var b strings.Builder
+		for _, p := range parts {
+			if p.Type == "text" && p.Text != "" {
+				if b.Len() > 0 {
+					b.WriteString("\n")
+				}
+				b.WriteString(p.Text)
+			}
+		}
+		return b.String()
+	}
+	return ""
 }
 
 // ExtractText returns the concatenated text content from a response.

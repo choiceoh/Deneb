@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -95,7 +97,7 @@ func (r *Registry) DiscoverFromBridge(ctx context.Context, fwd Forwarder) error 
 	params, _ := json.Marshal(map[string]any{})
 	req := &protocol.RequestFrame{
 		Type:   protocol.FrameTypeRequest,
-		ID:     "discover-providers",
+		ID:     fmt.Sprintf("discover-providers-%d", time.Now().UnixNano()),
 		Method: "providers.list",
 		Params: params,
 	}

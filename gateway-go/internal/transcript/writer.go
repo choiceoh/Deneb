@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -46,13 +47,32 @@ func NewWriter(baseDir string, logger *slog.Logger) *Writer {
 }
 
 // SessionPath returns the file path for a session's transcript.
-func (w *Writer) SessionPath(sessionKey string) string {
-	return filepath.Join(w.baseDir, sessionKey+".jsonl")
+// Returns an error if the session key contains unsafe path characters.
+func (w *Writer) SessionPath(sessionKey string) (string, error) {
+	if err := validateSessionKey(sessionKey); err != nil {
+		return "", err
+	}
+	return filepath.Join(w.baseDir, sessionKey+".jsonl"), nil
+}
+
+// validateSessionKey rejects session keys that could cause path traversal.
+func validateSessionKey(key string) error {
+	if key == "" {
+		return fmt.Errorf("transcript: empty session key")
+	}
+	if strings.Contains(key, "..") || strings.ContainsAny(key, "/\\") {
+		return fmt.Errorf("transcript: unsafe session key: %q", key)
+	}
+	return nil
 }
 
 // EnsureSession creates the transcript file with a header if it does not
 // already exist. If the file already exists, this is a no-op.
 func (w *Writer) EnsureSession(sessionKey string, header SessionHeader) error {
+	if err := validateSessionKey(sessionKey); err != nil {
+		return err
+	}
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -60,7 +80,7 @@ func (w *Writer) EnsureSession(sessionKey string, header SessionHeader) error {
 		return nil
 	}
 
-	path := w.SessionPath(sessionKey)
+	path := filepath.Join(w.baseDir, sessionKey+".jsonl")
 
 	// Check if file already exists.
 	if _, err := os.Stat(path); err == nil {
@@ -98,10 +118,17 @@ func (w *Writer) EnsureSession(sessionKey string, header SessionHeader) error {
 // The message is written as a single JSON line followed by a newline.
 // The session file must already exist (call EnsureSession first).
 func (w *Writer) AppendMessage(sessionKey string, msg json.RawMessage) error {
+	if err := validateSessionKey(sessionKey); err != nil {
+		return err
+	}
+	if !json.Valid(msg) {
+		return fmt.Errorf("transcript: invalid JSON message")
+	}
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	path := w.SessionPath(sessionKey)
+	path := filepath.Join(w.baseDir, sessionKey+".jsonl")
 
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
 	if err != nil {
@@ -109,15 +136,11 @@ func (w *Writer) AppendMessage(sessionKey string, msg json.RawMessage) error {
 	}
 	defer f.Close()
 
-	// Ensure the message is valid JSON and compact.
-	var compact json.RawMessage
-	if json.Valid(msg) {
-		compact = msg
-	} else {
-		return fmt.Errorf("transcript: invalid JSON message")
-	}
+	// Build the line as a new slice to avoid mutating the caller's msg.
+	line := make([]byte, len(msg)+1)
+	copy(line, msg)
+	line[len(msg)] = '\n'
 
-	line := append(compact, '\n')
 	if _, err := f.Write(line); err != nil {
 		return fmt.Errorf("transcript: write: %w", err)
 	}
