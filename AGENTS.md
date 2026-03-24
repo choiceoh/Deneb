@@ -9,6 +9,10 @@
 ### Top-Level Directory Map
 
 - `src/` — core application source (TypeScript, ESM).
+- `core-rs/` — Rust core library (protocol validation, security, media). Builds as cdylib + staticlib + rlib.
+- `gateway-go/` — Go gateway server scaffolding (HTTP/WS server, RPC dispatch, session management, channel registry, Node.js bridge).
+- `native/` — napi-rs native addon for Node.js (gitignore matching, EXIF, PNG encoding).
+- `proto/` — shared Protobuf schemas (gateway frames, channel types, session models). Source of truth for cross-language types.
 - `extensions/` — channel and feature plugin packages (each is an independent package).
 - `ui/` — Lit-based web control UI (separate pnpm workspace).
 - `vega/` — Python project management tool (models, router, database, CLI).
@@ -23,7 +27,8 @@
 - `dist/`, `dist-runtime/` — build output (generated, not committed).
 - `bin/` — binary entry points (`deneb.mjs`).
 - `git-hooks/` — pre-commit hooks.
-- Tests: colocated `*.test.ts` alongside source files.
+- `Makefile` — multi-language build orchestration (Rust + Go + TypeScript + protobuf).
+- Tests: colocated `*.test.ts` alongside source files; Rust tests inline `#[cfg(test)]`; Go tests `*_test.go`.
 
 ### Core Source (`src/`) Architecture
 
@@ -165,6 +170,68 @@
 - Plugins: install runs `npm install --omit=dev` in plugin dir; runtime deps must live in `dependencies`. Avoid `workspace:*` in `dependencies` (npm install breaks); put `deneb` in `devDependencies` or `peerDependencies` instead (runtime resolves `deneb/plugin-sdk` via jiti alias).
 - Import boundaries: extension production code should treat `deneb/plugin-sdk/*` plus local `api.ts` / `runtime-api.ts` barrels as the public surface. Do not import core `src/**`, `src/plugin-sdk-internal/**`, or another extension's `src/**` directly.
 
+### Rust Core Library (`core-rs/`)
+
+CPU-intensive core functions in Rust, exposed via C FFI and napi-rs.
+
+- `src/lib.rs` — FFI entry: `deneb_validate_frame`, `deneb_constant_time_eq`, `deneb_detect_mime`.
+- `src/protocol/mod.rs` — Gateway frame validation (replaces AJV). Types: `RequestFrame`, `ResponseFrame`, `EventFrame`, `ErrorShape`, `StateVersion`.
+- `src/protocol/gen.rs` — prost-generated protobuf types (`gen::gateway`, `gen::channel`, `gen::session`).
+- `src/security/mod.rs` — `constant_time_eq`, `is_safe_input`, `sanitize_control_chars`.
+- `src/media/mod.rs` — Magic-byte MIME detection (21 formats, zero-allocation).
+- `build.rs` — prost-build code generation from `proto/*.proto`.
+- Crate types: `cdylib` (Go/Node FFI), `staticlib` (C linking), `rlib` (Rust consumers).
+- Build: `cd core-rs && cargo build --release` or `make rust`.
+- Test: `cd core-rs && cargo test` or `make rust-test`.
+
+### Go Gateway (`gateway-go/`)
+
+HTTP/WS gateway server scaffolding (Phase 2 target: replace Node.js gateway).
+
+- `cmd/gateway/main.go` — Entry point with `--port`/`--bind` flags, graceful shutdown.
+- `internal/server/` — HTTP server: `/health`, `/api/v1/rpc`. Connection tracking.
+- `internal/rpc/` — Registry-based RPC method dispatcher (thread-safe).
+- `internal/session/` — In-memory session CRUD (`Get`/`Set`/`Delete`/`List`/`Count`).
+- `internal/channel/` — Channel plugin registry with `Plugin` interface, `Meta`, `Capabilities`.
+- `internal/bridge/` — Node.js plugin host bridge via Unix socket frame protocol.
+- `pkg/protocol/` — Hand-written JSON wire types + generated protobuf types in `gen/`.
+- `pkg/protocol/consistency_test.go` — Bidirectional reflection tests ensuring hand-written and generated types stay in sync.
+- Build: `cd gateway-go && go build ./...` or `make go`.
+- Test: `cd gateway-go && go test ./...` or `make go-test`.
+
+### Protobuf Schemas (`proto/`)
+
+Shared type definitions compiled to Go, Rust, and TypeScript.
+
+- `gateway.proto` — `RequestFrame`, `ResponseFrame`, `EventFrame`, `ErrorShape`, `StateVersion`, `GatewayFrame`, `PresenceEntry`, `HelloOk`.
+- `channel.proto` — `ChannelCapabilities`, `ChannelMeta`, `ChannelAccountSnapshot`.
+- `session.proto` — `SessionRunStatus`, `SessionKind`, `GatewaySessionRow`, `SessionPreviewItem`.
+- `buf.yaml` — buf lint/breaking config.
+- `buf.gen.go.yaml` — Go codegen config (protoc-gen-go).
+- `buf.gen.ts.yaml` — TypeScript codegen config (ts-proto).
+- Generation: `./scripts/proto-gen.sh` (parallel Go+Rust+TS). See also `make proto`.
+- Outputs: `gateway-go/pkg/protocol/gen/*.pb.go`, `src/protocol/generated/*.ts`, Rust via `OUT_DIR`.
+- CI: `.github/workflows/proto-check.yml` validates generation + breaking changes on PR.
+
+### Native Addon (`native/`)
+
+napi-rs Node.js addon for performance-critical TypeScript callers.
+
+- `src/lib.rs` — napi entry.
+- `src/gitignore.rs` — globset-based gitignore matching.
+- `src/exif.rs` — EXIF orientation extraction (kamadak-exif).
+- `src/png.rs` — PNG encoding (crc32fast + flate2).
+- Build: `pnpm native:build` (napi build --release).
+- Test: `pnpm native:test` (cargo test).
+
+### Multi-Language IPC Architecture
+
+- **Go ↔ Rust:** CGo FFI (in-process, zero overhead). Go calls `deneb_*` C functions from `core-rs`.
+- **Go ↔ Node.js:** Unix domain socket + gateway frame protocol. Node.js runs as plugin host subprocess.
+- **Go ↔ Python:** Subprocess + JSONL/MCP (existing vega integration).
+- **CLI ↔ Gateway:** WebSocket (existing).
+- Proto schemas are the cross-language source of truth for frame types.
+
 ### Monorepo Topology
 
 - pnpm workspaces: root + `ui/` (extensions are NOT workspace packages; they are installed separately).
@@ -172,6 +239,7 @@
 - Package exports: 160+ plugin-sdk subpath exports defined in `package.json`.
 - Entry point: `bin/deneb.mjs` → `src/entry.ts` → `src/cli/run-main.ts`.
 - Build output: `dist/` (main), `dist-runtime/` (runtime).
+- Multi-language build: `Makefile` orchestrates Rust (`cargo`), Go (`go`), TypeScript (`pnpm`), and protobuf (`buf`/`prost`).
 
 ### Key Architectural Flows
 
@@ -180,6 +248,9 @@
 3. **Plugin loading:** `plugins/loader.ts` → `plugins/manifest-registry.ts` → plugin-sdk contracts → `extensions/*` implementations.
 4. **Channel message flow:** `channels/registry.ts` → `channels/run-state-machine.ts` → transport layer → channel plugin (extension or built-in).
 5. **Provider resolution:** `plugins/provider-catalog.ts` → `plugins/provider-runtime.ts` → provider auth → LLM/image/search/TTS provider.
+6. **Protobuf type flow:** `proto/*.proto` → `scripts/proto-gen.sh` → Go (`gen/*.pb.go`), Rust (prost `OUT_DIR`), TypeScript (`src/protocol/generated/*.ts`).
+7. **Go gateway (target):** `gateway-go/cmd/gateway/main.go` → `internal/server` (HTTP/WS) → `internal/rpc` (dispatch) → `internal/session` (state) → `internal/bridge` (Node.js plugin host via Unix socket).
+8. **Rust FFI flow:** `core-rs/src/lib.rs` (C ABI) → Go CGo calls or napi-rs Node.js addon → protocol validation / security / media detection.
 
 ### Cross-Cutting Concerns
 
@@ -261,6 +332,29 @@
 - Hard gate: before any push to `main`, `pnpm check` MUST be run and MUST pass, and `pnpm test` MUST be run and MUST pass.
 - Hard gate: if the change can affect build output, packaging, lazy-loading/module boundaries, or published surfaces, `pnpm build` MUST be run and MUST pass before pushing `main`.
 - Hard gate: do not commit or push with failing format, lint, type, build, or required test checks.
+- Hard gate: if the change touches `core-rs/`, `gateway-go/`, or `proto/`, run `make check` (includes `proto-check`, `rust-test`, `go-test`, `ts-check`) before pushing.
+- Multi-language toolchain: Rust (stable via rustup), Go (1.24+), buf (latest), protoc, protoc-gen-go, ts-proto.
+
+### Multi-Language Build (Makefile)
+
+| Command            | Description                                          |
+| ------------------ | ---------------------------------------------------- |
+| `make all`         | Build Rust + Go (release)                            |
+| `make rust`        | Build Rust core library (release)                    |
+| `make rust-test`   | Run Rust tests (`cargo test`)                        |
+| `make go`          | Build Go gateway                                     |
+| `make go-test`     | Run Go tests (`go test ./...`)                       |
+| `make go-run`      | Run Go gateway locally                               |
+| `make test`        | Run Rust + Go tests                                  |
+| `make check`       | Full check: proto-check + rust-test + go-test + ts   |
+| `make clean`       | Clean Rust + Go build artifacts                      |
+| `make proto`       | Generate protobuf code (Go + Rust + TS, parallel)    |
+| `make proto-go`    | Generate Go protobuf structs only                    |
+| `make proto-rust`  | Generate Rust protobuf structs only                  |
+| `make proto-ts`    | Generate TypeScript protobuf types only              |
+| `make proto-check` | Generate + verify no uncommitted diffs               |
+| `make proto-lint`  | Lint proto files only (buf lint)                     |
+| `make proto-watch` | Watch proto files and regenerate on change           |
 
 ### Development
 
