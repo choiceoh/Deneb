@@ -17,6 +17,7 @@ const MAX_COMPARE_BYTES: usize = 256 * 1024 * 1024;
 
 /// Validate a gateway protocol frame (JSON string).
 /// Returns the frame type ("req", "res", or "event") on success.
+/// Uses fast envelope-only validation (skips deep parsing of payload/params/error).
 /// Throws a JS error if the frame is invalid or exceeds the size limit.
 #[napi]
 pub fn validate_frame(json: String) -> Result<String> {
@@ -27,11 +28,11 @@ pub fn validate_frame(json: String) -> Result<String> {
             MAX_JSON_BYTES
         )));
     }
-    deneb_core::protocol::validate_frame(&json)
-        .map(|frame| match frame {
-            deneb_core::protocol::GatewayFrame::Request(_) => "req".to_string(),
-            deneb_core::protocol::GatewayFrame::Response(_) => "res".to_string(),
-            deneb_core::protocol::GatewayFrame::Event(_) => "event".to_string(),
+    deneb_core::protocol::validate_frame_type(&json)
+        .map(|ft| match ft {
+            deneb_core::protocol::FrameType::Req => "req".to_string(),
+            deneb_core::protocol::FrameType::Res => "res".to_string(),
+            deneb_core::protocol::FrameType::Event => "event".to_string(),
         })
         .map_err(|e| Error::from_reason(e.to_string()))
 }
@@ -52,7 +53,7 @@ pub fn constant_time_eq(a: Buffer, b: Buffer) -> bool {
 /// Only reads the first 4096 bytes for detection regardless of buffer size.
 /// Returns the MIME string (e.g. "image/png") or "application/octet-stream" for unknown.
 #[napi]
-pub fn detect_mime(data: Buffer) -> String {
+pub fn detect_mime(env: Env, data: Buffer) -> Result<napi::JsString> {
     let slice = data.as_ref();
     // Only the first bytes matter for magic-byte sniffing; cap to avoid unnecessary work.
     let head = if slice.len() > 4096 {
@@ -60,7 +61,8 @@ pub fn detect_mime(data: Buffer) -> String {
     } else {
         slice
     };
-    deneb_core::media::detect_mime(head).to_string()
+    // Return &'static str directly via napi Env — avoids Rust String allocation.
+    env.create_string(deneb_core::media::detect_mime(head))
 }
 
 /// Check if a string contains potential injection patterns.

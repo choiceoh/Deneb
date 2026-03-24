@@ -16,31 +16,49 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
+/// Case-insensitive substring search without allocating a lowercase copy.
+fn contains_ignore_case(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.len() > haystack.len() {
+        return false;
+    }
+    haystack
+        .windows(needle.len())
+        .any(|window| window.eq_ignore_ascii_case(needle))
+}
+
 /// Check if a string contains potential injection patterns.
 /// Returns true if the input appears safe.
 pub fn is_safe_input(input: &str) -> bool {
-    // Reject null bytes
-    if input.contains('\0') {
+    let bytes = input.as_bytes();
+    // Reject null bytes (fast memchr-style scan).
+    if bytes.contains(&0) {
         return false;
     }
-    // Reject common injection patterns
-    let dangerous_patterns = [
-        "<script",
-        "javascript:",
-        "data:text/html",
-        "onerror=",
-        "onload=",
+    // Reject common injection patterns (case-insensitive, zero-alloc).
+    const DANGEROUS: &[&[u8]] = &[
+        b"<script",
+        b"javascript:",
+        b"data:text/html",
+        b"onerror=",
+        b"onload=",
     ];
-    let lower = input.to_lowercase();
-    !dangerous_patterns.iter().any(|p| lower.contains(p))
+    !DANGEROUS.iter().any(|p| contains_ignore_case(bytes, p))
 }
 
-/// Sanitize a string by removing control characters (except newline/tab).
+/// Returns true if the character is a control char that should be stripped.
+#[inline]
+fn is_strippable_control(c: char) -> bool {
+    c.is_control() && c != '\n' && c != '\t' && c != '\r'
+}
+
+/// Sanitize a string by removing control characters (except newline/tab/CR).
+/// Returns the input unchanged (zero-alloc) if no control characters are present.
 pub fn sanitize_control_chars(input: &str) -> String {
-    input
-        .chars()
-        .filter(|c| !c.is_control() || *c == '\n' || *c == '\t' || *c == '\r')
-        .collect()
+    // Fast path: scan for any strippable control chars before allocating.
+    if !input.chars().any(is_strippable_control) {
+        return input.to_string();
+    }
+    input.chars().filter(|c| !is_strippable_control(*c)).collect()
 }
 
 #[cfg(test)]
