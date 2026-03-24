@@ -5,14 +5,16 @@ on:
   pull_request:
     paths:
       - "proto/**"
-      - "core-rs/build.rs"
+      - "core-rs/core/build.rs"
+      - "core-rs/core/Cargo.toml"
       - "core-rs/Cargo.toml"
       - "scripts/proto-gen.sh"
   push:
     branches: [master]
     paths:
       - "proto/**"
-      - "core-rs/build.rs"
+      - "core-rs/core/build.rs"
+      - "core-rs/core/Cargo.toml"
       - "core-rs/Cargo.toml"
       - "scripts/proto-gen.sh"
 

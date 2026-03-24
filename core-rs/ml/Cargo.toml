@@ -1,0 +1,13 @@
+[package]
+name = "deneb-ml"
+version = "0.1.0"
+edition = "2021"
+description = "Local ML inference for Deneb (GGUF models via llama.cpp)"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

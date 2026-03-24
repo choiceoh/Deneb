@@ -24,7 +24,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/controlui"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
@@ -33,6 +32,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
+	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -75,7 +75,7 @@ type Server struct {
 	// Phase 2 additions.
 	gatewaySubs     *events.GatewayEventSubscriptions
 	chatHandler     *chat.Handler
-	controlUI       *controlui.Handler
+	providers       *provider.Registry
 	authRateLimiter *auth.AuthRateLimiter
 	watchdog        *monitoring.Watchdog
 	channelHealth   *monitoring.ChannelHealthMonitor
@@ -119,10 +119,10 @@ func WithAuthValidator(v *auth.Validator) Option {
 	}
 }
 
-// WithControlUI configures the control UI handler.
-func WithControlUI(cfg controlui.Config) Option {
+// WithProviders sets the provider plugin registry.
+func WithProviders(r *provider.Registry) Option {
 	return func(s *Server) {
-		s.controlUI = controlui.New(cfg, s.logger)
+		s.providers = r
 	}
 }
 
@@ -371,11 +371,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /ws", s.handleWsUpgrade)
 
 	// Control UI routes.
-	if s.controlUI != nil {
-		mux.Handle("/ui/", s.controlUI)
-		mux.Handle("/api/control-ui/", s.controlUI)
-		mux.Handle("/control-ui/", s.controlUI)
-	}
+	// Control UI removed (Phase 0: Rust+Go migration).
 
 	mux.HandleFunc("GET /{$}", s.handleRoot)
 	return mux
@@ -393,10 +389,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	authMode := ""
-	controlUI := false
+	providerCount := 0
 	if s.runtimeCfg != nil {
 		authMode = s.runtimeCfg.AuthMode
-		controlUI = s.runtimeCfg.ControlUIEnabled
+	}
+	if s.providers != nil {
+		providerCount = len(s.providers.List())
 	}
 
 	s.writeJSON(w, http.StatusOK, map[string]any{
@@ -409,7 +407,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"bridge":      bridgeStatus,
 		"rust_core":   s.rustFFI,
 		"auth_mode":   authMode,
-		"control_ui":  controlUI,
+		"providers":   providerCount,
 	})
 }
 
@@ -712,9 +710,7 @@ func (s *Server) registerBuiltinMethods() {
 			"bindHost":       s.runtimeCfg.BindHost,
 			"port":           s.runtimeCfg.Port,
 			"authMode":       s.runtimeCfg.AuthMode,
-			"controlUi":      s.runtimeCfg.ControlUIEnabled,
 			"tailscaleMode":  s.runtimeCfg.TailscaleMode,
-			"canvasHost":     s.runtimeCfg.CanvasHostEnabled,
 		})
 		return resp
 	})
