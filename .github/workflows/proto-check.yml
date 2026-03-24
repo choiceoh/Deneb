@@ -16,6 +16,12 @@ on:
       - "core-rs/Cargo.toml"
       - "scripts/proto-gen.sh"
 
+# Pin tool versions to match committed generated code.
+# Update these when regenerating with newer tools.
+env:
+  PROTOC_GEN_GO_VERSION: v1.36.11
+  TS_PROTO_VERSION: "2.11.6"
+
 jobs:
   lint:
     name: buf lint
@@ -40,7 +46,7 @@ jobs:
           cache-dependency-path: gateway-go/go.sum
 
       - name: Install protoc-gen-go
-        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@${{ env.PROTOC_GEN_GO_VERSION }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -64,7 +70,7 @@ jobs:
           node-version: "22"
 
       - name: Install ts-proto
-        run: npm install -g ts-proto
+        run: npm install -g ts-proto@${{ env.TS_PROTO_VERSION }}
 
       - name: Generate and verify
         run: ./scripts/proto-gen.sh --check

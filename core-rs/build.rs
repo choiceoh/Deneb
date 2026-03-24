@@ -13,17 +13,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     napi_build::setup();
 
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
-    let proto_dir = manifest_dir.join("../proto").canonicalize()?;
+    let proto_dir = manifest_dir.join("../proto");
+
+    if !proto_dir.is_dir() {
+        return Err(format!(
+            "Proto directory not found: {}. \
+             Ensure the proto/ directory exists at the repo root.",
+            proto_dir.display()
+        )
+        .into());
+    }
+
+    let proto_dir = proto_dir.canonicalize()?;
 
     let protos: Vec<_> = ["gateway", "channel", "session"]
         .iter()
-        .map(|name| proto_dir.join(format!("{name}.proto")))
+        .map(|name| {
+            let path = proto_dir.join(format!("{name}.proto"));
+            if !path.is_file() {
+                panic!("Missing proto file: {}", path.display());
+            }
+            path
+        })
         .collect();
 
     // Rerun if any proto file changes.
     for proto in &protos {
         println!("cargo:rerun-if-changed={}", proto.display());
     }
+    // Also rerun if the proto directory itself changes (new/deleted files).
+    println!("cargo:rerun-if-changed={}", proto_dir.display());
 
     // Selectively derive Serialize on types without google.protobuf.Value/Struct fields,
     // since prost_types::Value doesn't implement serde::Serialize.
