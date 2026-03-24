@@ -1,16 +1,7 @@
 import path from "node:path";
 import { fileTypeFromBuffer } from "file-type";
-import { loadCoreRs, type CoreRsModule } from "../bindings/core-rs.js";
+import { loadCoreRs } from "../bindings/core-rs.js";
 import { type MediaKind, mediaKindFromMime } from "./constants.js";
-
-// Resolve once at module scope to avoid per-call overhead.
-let _coreRs: CoreRsModule | null | undefined;
-function coreRs(): CoreRsModule | null {
-  if (_coreRs === undefined) {
-    _coreRs = loadCoreRs();
-  }
-  return _coreRs;
-}
 
 // Map common mimes to preferred file extensions.
 const EXT_BY_MIME: Record<string, string> = {
@@ -80,7 +71,7 @@ async function sniffMime(buffer?: Buffer): Promise<string | undefined> {
     return undefined;
   }
   // Fast path: use native Rust MIME detection (synchronous magic-byte sniffing).
-  const native = coreRs();
+  const native = loadCoreRs();
   if (native) {
     try {
       const mime = native.detectMime(buffer);

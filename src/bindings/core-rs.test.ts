@@ -15,6 +15,18 @@ describe("core-rs loader", () => {
     const b = loadCoreRs();
     expect(a).toBe(b);
   });
+
+  it("if loaded, exposes all expected functions", () => {
+    const mod = loadCoreRs();
+    if (!mod) {
+      return;
+    }
+    expect(typeof mod.validateFrame).toBe("function");
+    expect(typeof mod.constantTimeEq).toBe("function");
+    expect(typeof mod.detectMime).toBe("function");
+    expect(typeof mod.isSafeInput).toBe("function");
+    expect(typeof mod.sanitizeControlChars).toBe("function");
+  });
 });
 
 // Only run functional tests when the native addon is available.
@@ -96,5 +108,69 @@ describeNative("core-rs native functions", () => {
     expect(mod!.sanitizeControlChars("keep\nnewlines\tand\ttabs")).toBe(
       "keep\nnewlines\tand\ttabs",
     );
+  });
+
+  // --- Edge cases ---
+
+  it("validateFrame handles empty string", () => {
+    expect(() => mod!.validateFrame("")).toThrow();
+  });
+
+  it("validateFrame handles malformed nested JSON", () => {
+    // Malformed nesting — should throw, not hang.
+    expect(() => mod!.validateFrame("{".repeat(100))).toThrow();
+  });
+
+  it("constantTimeEq handles large equal buffers", () => {
+    const big = Buffer.alloc(1024 * 64, 0xab);
+    expect(mod!.constantTimeEq(big, Buffer.from(big))).toBe(true);
+  });
+
+  it("detectMime handles empty buffer", () => {
+    expect(mod!.detectMime(Buffer.alloc(0))).toBe("application/octet-stream");
+  });
+
+  it("detectMime handles single-byte buffer", () => {
+    expect(mod!.detectMime(Buffer.from([0xff]))).toBe("application/octet-stream");
+  });
+
+  it("detectMime handles GIF87a", () => {
+    expect(mod!.detectMime(Buffer.from("GIF87a..."))).toBe("image/gif");
+  });
+
+  it("detectMime handles GIF89a", () => {
+    expect(mod!.detectMime(Buffer.from("GIF89a..."))).toBe("image/gif");
+  });
+
+  it("isSafeInput handles empty string", () => {
+    expect(mod!.isSafeInput("")).toBe(true);
+  });
+
+  it("isSafeInput detects javascript: URI", () => {
+    expect(mod!.isSafeInput("javascript:void(0)")).toBe(false);
+  });
+
+  it("isSafeInput detects null byte", () => {
+    expect(mod!.isSafeInput("has\0null")).toBe(false);
+  });
+
+  it("isSafeInput handles unicode safely", () => {
+    expect(mod!.isSafeInput("안녕하세요 🌍")).toBe(true);
+  });
+
+  it("sanitizeControlChars handles empty string", () => {
+    expect(mod!.sanitizeControlChars("")).toBe("");
+  });
+
+  it("sanitizeControlChars handles pure unicode", () => {
+    expect(mod!.sanitizeControlChars("카페☕")).toBe("카페☕");
+  });
+
+  it("sanitizeControlChars strips bell and escape", () => {
+    expect(mod!.sanitizeControlChars("a\x07b\x1Bc")).toBe("abc");
+  });
+
+  it("sanitizeControlChars preserves carriage return", () => {
+    expect(mod!.sanitizeControlChars("line\r\nbreak")).toBe("line\r\nbreak");
   });
 });
