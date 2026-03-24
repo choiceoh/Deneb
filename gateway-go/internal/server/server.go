@@ -164,6 +164,7 @@ func New(addr string, opts ...Option) *Server {
 		Sessions:         s.sessions,
 		Channels:         s.channels,
 		ChannelLifecycle: s.channelLifecycle,
+		GatewaySubs:      s.gatewaySubs,
 	})
 	s.registerExtendedMethods()
 	s.registerPhase2Methods()
@@ -538,8 +539,9 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) registerExtendedMethods() {
 	rpc.RegisterExtendedMethods(s.dispatcher, rpc.ExtendedDeps{
 		Deps: rpc.Deps{
-			Sessions: s.sessions,
-			Channels: s.channels,
+			Sessions:    s.sessions,
+			Channels:    s.channels,
+			GatewaySubs: s.gatewaySubs,
 		},
 		Processes: s.processes,
 		Cron:      s.cron,
