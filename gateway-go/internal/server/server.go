@@ -14,10 +14,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
@@ -56,7 +58,8 @@ type Server struct {
 	cron        *cron.Scheduler
 	daemon      *daemon.Daemon
 	hooks       *hooks.Registry
-	runtimeCfg  *config.GatewayRuntimeConfig
+	runtimeCfg    *config.GatewayRuntimeConfig
+	authValidator *auth.Validator
 	clients     sync.Map // connID -> *WsClient
 	clientCnt   atomic.Int32
 	startedAt   time.Time
@@ -95,6 +98,13 @@ func (s *Server) RuntimeConfig() *config.GatewayRuntimeConfig {
 	return s.runtimeCfg
 }
 
+// WithAuthValidator sets the auth validator for token-based authentication.
+// If not set, the server operates in no-auth mode (all connections are trusted).
+func WithAuthValidator(v *auth.Validator) Option {
+	return func(s *Server) {
+		s.authValidator = v
+	}
+}
 // New creates a new gateway server bound to the given address.
 func New(addr string, opts ...Option) *Server {
 	s := &Server{
@@ -345,6 +355,7 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 // handleRPC processes HTTP JSON-RPC requests via the dispatcher.
+// Extracts Bearer token from Authorization header for authentication.
 func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Method string          `json:"method"`
@@ -367,6 +378,42 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve auth from Bearer token.
+	role := ""
+	authenticated := false
+	var scopes []auth.Scope
+
+	if s.authValidator != nil {
+		token := extractBearerToken(r)
+		if token != "" {
+			claims, err := s.authValidator.ValidateToken(token)
+			if err != nil {
+				s.writeJSON(w, http.StatusUnauthorized, protocol.NewResponseError(req.ID, protocol.NewError(
+					protocol.ErrUnauthorized, "invalid token: "+err.Error(),
+				)))
+				return
+			}
+			role = string(claims.Role)
+			authenticated = true
+			scopes = claims.Scopes
+		}
+	} else {
+		// No-auth mode: treat all HTTP requests as operator.
+		role = "operator"
+		authenticated = true
+		scopes = auth.DefaultScopes(auth.RoleOperator)
+	}
+
+	// Authorize method call.
+	if authErr := rpc.AuthorizeMethod(req.Method, role, authenticated, scopes); authErr != nil {
+		status := http.StatusForbidden
+		if authErr.Code == protocol.ErrUnauthorized {
+			status = http.StatusUnauthorized
+		}
+		s.writeJSON(w, status, protocol.NewResponseError(req.ID, authErr))
+		return
+	}
+
 	frame := &protocol.RequestFrame{
 		Type:   protocol.FrameTypeRequest,
 		ID:     req.ID,
@@ -379,6 +426,19 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	dispatchCancel()
 
 	s.writeJSON(w, http.StatusOK, resp)
+}
+
+// extractBearerToken extracts the token from an "Authorization: Bearer <token>" header.
+func extractBearerToken(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return ""
+	}
+	const prefix = "Bearer "
+	if len(authHeader) > len(prefix) && strings.EqualFold(authHeader[:len(prefix)], prefix) {
+		return authHeader[len(prefix):]
+	}
+	return ""
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
