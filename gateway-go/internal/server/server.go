@@ -89,6 +89,10 @@ func New(addr string, opts ...Option) *Server {
 	}
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.registerBuiltinMethods()
+	rpc.RegisterBuiltinMethods(s.dispatcher, rpc.Deps{
+		Sessions: s.sessions,
+		Channels: s.channels,
+	})
 	return s
 }
 

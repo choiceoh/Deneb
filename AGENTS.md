@@ -174,11 +174,13 @@
 
 CPU-intensive core functions in Rust, exposed via C FFI and napi-rs.
 
-- `src/lib.rs` — FFI entry: `deneb_validate_frame`, `deneb_constant_time_eq`, `deneb_detect_mime`.
+- `src/lib.rs` — FFI entry: `deneb_validate_frame`, `deneb_constant_time_eq`, `deneb_detect_mime`, `deneb_validate_session_key`, `deneb_sanitize_html`, `deneb_is_safe_url`, `deneb_validate_error_code`.
 - `src/protocol/mod.rs` — Gateway frame validation (replaces AJV). Types: `RequestFrame`, `ResponseFrame`, `EventFrame`, `ErrorShape`, `StateVersion`.
+- `src/protocol/error_codes.rs` — `ErrorCode` enum (14 codes matching TypeScript `error-codes.ts`), wire-format roundtrip, retryability classification.
 - `src/protocol/gen.rs` — prost-generated protobuf types (`gen::gateway`, `gen::channel`, `gen::session`).
-- `src/security/mod.rs` — `constant_time_eq`, `is_safe_input`, `sanitize_control_chars`.
+- `src/security/mod.rs` — `constant_time_eq`, `is_safe_input`, `sanitize_control_chars`, `is_valid_session_key`, `sanitize_html`, `is_safe_url` (SSRF protection).
 - `src/media/mod.rs` — Magic-byte MIME detection (21 formats, zero-allocation).
+- `src/media/extensions.rs` — MIME-to-extension mapping (35+ types), `MediaCategory` classification, `detect_mime_with_info`, `is_image`/`is_audio`/`is_video` helpers.
 - `build.rs` — prost-build code generation from `proto/*.proto`.
 - Crate types: `cdylib` (Go/Node FFI), `staticlib` (C linking), `rlib` (Rust consumers).
 - Build: `cd core-rs && cargo build --release` or `make rust`.
@@ -190,9 +192,9 @@ HTTP/WS gateway server scaffolding (Phase 2 target: replace Node.js gateway).
 
 - `cmd/gateway/main.go` — Entry point with `--port`/`--bind` flags, graceful shutdown.
 - `internal/server/` — HTTP server: `/health`, `/api/v1/rpc`. Connection tracking.
-- `internal/rpc/` — Registry-based RPC method dispatcher (thread-safe).
-- `internal/session/` — In-memory session CRUD (`Get`/`Set`/`Delete`/`List`/`Count`).
-- `internal/channel/` — Channel plugin registry with `Plugin` interface, `Meta`, `Capabilities`.
+- `internal/rpc/` — Registry-based RPC method dispatcher (thread-safe). 15+ built-in methods including FFI-backed security/media validation.
+- `internal/session/` — Session management with lifecycle state machine (`IDLE → RUNNING → DONE/FAILED/KILLED/TIMEOUT`), state transition validation, event pub/sub bus.
+- `internal/channel/` — Channel plugin registry with `Plugin` interface, `Meta`, `Capabilities`. Lifecycle manager for concurrent start/stop/health-check orchestration.
 - `internal/bridge/` — Node.js plugin host bridge via Unix socket frame protocol.
 - `pkg/protocol/` — Hand-written JSON wire types + generated protobuf types in `gen/`.
 - `pkg/protocol/consistency_test.go` — Bidirectional reflection tests ensuring hand-written and generated types stay in sync.
@@ -203,9 +205,9 @@ HTTP/WS gateway server scaffolding (Phase 2 target: replace Node.js gateway).
 
 Shared type definitions compiled to Go, Rust, and TypeScript.
 
-- `gateway.proto` — `RequestFrame`, `ResponseFrame`, `EventFrame`, `ErrorShape`, `StateVersion`, `GatewayFrame`, `PresenceEntry`, `HelloOk`.
+- `gateway.proto` — `ErrorCode` enum, `RequestFrame`, `ResponseFrame`, `EventFrame`, `ErrorShape`, `StateVersion`, `GatewayFrame`, `PresenceEntry`, `HelloOk`.
 - `channel.proto` — `ChannelCapabilities`, `ChannelMeta`, `ChannelAccountSnapshot`.
-- `session.proto` — `SessionRunStatus`, `SessionKind`, `GatewaySessionRow`, `SessionPreviewItem`.
+- `session.proto` — `SessionRunStatus`, `SessionKind`, `GatewaySessionRow`, `SessionPreviewItem`, `SessionTransition`, `SessionLifecyclePhase`, `SessionLifecycleEvent`.
 - `buf.yaml` — buf lint/breaking config.
 - `buf.gen.go.yaml` — Go codegen config (protoc-gen-go).
 - `buf.gen.ts.yaml` — TypeScript codegen config (ts-proto).

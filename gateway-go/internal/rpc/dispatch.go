@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -95,17 +96,37 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *
 	))
 }
 
-// safeCall invokes a handler with panic recovery so a single bad handler
-// cannot crash the gateway.
-func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, handler HandlerFunc) (resp *protocol.ResponseFrame) {
-	defer func() {
-		if r := recover(); r != nil {
-			d.logger.Error("handler panic", "method", req.Method, "panic", r)
-			resp = protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable,
-				fmt.Sprintf("internal error handling %q", req.Method),
-			))
-		}
+// safeCall invokes a handler with panic recovery and a hard deadline.
+// If the handler ignores context cancellation and exceeds the deadline,
+// safeCall returns a timeout error without waiting indefinitely.
+func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, handler HandlerFunc) *protocol.ResponseFrame {
+	type result struct {
+		resp *protocol.ResponseFrame
+	}
+	ch := make(chan result, 1)
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("handler panic", "method", req.Method, "panic", r,
+					"stack", string(debug.Stack()))
+				ch <- result{resp: protocol.NewResponseError(req.ID, protocol.NewError(
+					protocol.ErrUnavailable,
+					fmt.Sprintf("internal error handling %q", req.Method),
+				))}
+			}
+		}()
+		ch <- result{resp: handler(ctx, req)}
 	}()
-	return handler(ctx, req)
+
+	select {
+	case r := <-ch:
+		return r.resp
+	case <-ctx.Done():
+		d.logger.Warn("handler timeout", "method", req.Method)
+		return protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrAgentTimeout,
+			fmt.Sprintf("handler %q did not complete within deadline", req.Method),
+		))
+	}
 }

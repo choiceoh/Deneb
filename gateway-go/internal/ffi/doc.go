@@ -3,6 +3,15 @@
 // The Rust library (core-rs/) is compiled to a C-compatible static library
 // (libdeneb_core.a) and linked here via CGo.
 //
+// Exported functions:
+//   - ValidateFrame: Gateway frame JSON validation
+//   - ConstantTimeEq: Constant-time byte comparison
+//   - DetectMIME: Magic-byte MIME type detection
+//   - ValidateSessionKey: Session key format validation
+//   - SanitizeHTML: HTML entity escaping
+//   - IsSafeURL: SSRF URL validation
+//   - ValidateErrorCode: Error code string validation
+//
 // Build requirements:
 //   - Rust toolchain with cargo
 //   - Run `make rust` first to produce the static library

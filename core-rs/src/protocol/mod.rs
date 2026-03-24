@@ -6,6 +6,7 @@
 //! Generated protobuf types (via prost) are available in the `gen` submodule
 //! when built with `cargo build` (see build.rs).
 
+pub mod error_codes;
 pub mod gen;
 
 use serde::Deserialize;

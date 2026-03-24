@@ -107,3 +107,15 @@ func (r *Registry) StatusAll() map[string]Status {
 	}
 	return result
 }
+
+// Snapshot returns a copy of all registered plugins for iteration
+// without holding the registry lock.
+func (r *Registry) Snapshot() map[string]Plugin {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	snap := make(map[string]Plugin, len(r.plugins))
+	for id, p := range r.plugins {
+		snap[id] = p
+	}
+	return snap
+}

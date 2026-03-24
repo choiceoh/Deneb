@@ -30,6 +30,24 @@ pub mod safe_regex;
 // C FFI exports (Phase 0 — used by Go via CGo)
 // ---------------------------------------------------------------------------
 
+/// Maximum input size for FFI string functions (16 MB).
+/// Prevents DoS via pathologically large inputs.
+const FFI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
+
+/// Wraps an FFI body in catch_unwind to prevent Rust panics from aborting
+/// the Go process. Returns `panic_rc` if the closure panics.
+///
+/// # Safety
+/// Callers must ensure the closure does not rely on invariants that could
+/// be violated by unwinding. All FFI closures here operate on local data
+/// only, so AssertUnwindSafe is safe.
+fn ffi_catch(panic_rc: i32, f: impl FnOnce() -> i32) -> i32 {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+        Ok(rc) => rc,
+        Err(_) => panic_rc,
+    }
+}
+
 /// C FFI: Validate a gateway frame (JSON bytes).
 /// Returns 0 on success, negative error code on failure.
 ///
@@ -40,15 +58,20 @@ pub unsafe extern "C" fn deneb_validate_frame(json_ptr: *const u8, json_len: usi
     if json_ptr.is_null() {
         return -1;
     }
-    let slice = unsafe { std::slice::from_raw_parts(json_ptr, json_len) };
-    let json_str = match std::str::from_utf8(slice) {
-        Ok(s) => s,
-        Err(_) => return -2,
-    };
-    match protocol::validate_frame(json_str) {
-        Ok(_) => 0,
-        Err(_) => -3,
+    if json_len > FFI_MAX_INPUT_LEN {
+        return -4;
     }
+    let slice = std::slice::from_raw_parts(json_ptr, json_len);
+    ffi_catch(-99, move || {
+        let json_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        match protocol::validate_frame(json_str) {
+            Ok(_) => 0,
+            Err(_) => -3,
+        }
+    })
 }
 
 /// C FFI: Constant-time secret comparison.
@@ -66,8 +89,8 @@ pub unsafe extern "C" fn deneb_constant_time_eq(
     if a_ptr.is_null() || b_ptr.is_null() {
         return -1;
     }
-    let a = unsafe { std::slice::from_raw_parts(a_ptr, a_len) };
-    let b = unsafe { std::slice::from_raw_parts(b_ptr, b_len) };
+    let a = std::slice::from_raw_parts(a_ptr, a_len);
+    let b = std::slice::from_raw_parts(b_ptr, b_len);
     if security::constant_time_eq(a, b) {
         0
     } else {
@@ -92,16 +115,128 @@ pub unsafe extern "C" fn deneb_detect_mime(
     if data_ptr.is_null() || out_ptr.is_null() {
         return -1;
     }
-    let data = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
+    let data = std::slice::from_raw_parts(data_ptr, data_len);
     let mime = media::detect_mime(data);
     let mime_bytes = mime.as_bytes();
     if mime_bytes.len() > out_len {
         return -2;
     }
-    unsafe {
-        std::ptr::copy_nonoverlapping(mime_bytes.as_ptr(), out_ptr, mime_bytes.len());
-    }
+    std::ptr::copy_nonoverlapping(mime_bytes.as_ptr(), out_ptr, mime_bytes.len());
     mime_bytes.len() as i32
+}
+
+/// C FFI: Validate a session key string.
+/// Returns 0 if valid, -1 if null pointer, -2 if invalid UTF-8, -3 if invalid key.
+///
+/// # Safety
+/// `key_ptr` must point to a valid UTF-8 byte buffer of length `key_len`.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_validate_session_key(key_ptr: *const u8, key_len: usize) -> i32 {
+    if key_ptr.is_null() {
+        return -1;
+    }
+    if key_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let slice = std::slice::from_raw_parts(key_ptr, key_len);
+    ffi_catch(-99, move || {
+        let key_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        if security::is_valid_session_key(key_str) {
+            0
+        } else {
+            -3
+        }
+    })
+}
+
+/// C FFI: Sanitize HTML in a string.
+/// Writes the sanitized output into `out_ptr` (max `out_len` bytes).
+/// Returns the number of bytes written, or negative on error.
+///
+/// # Safety
+/// `input_ptr` must be valid UTF-8 of `input_len` bytes.
+/// `out_ptr` must be writable for `out_len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_sanitize_html(
+    input_ptr: *const u8,
+    input_len: usize,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if input_ptr.is_null() || out_ptr.is_null() {
+        return -1;
+    }
+    if input_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let slice = std::slice::from_raw_parts(input_ptr, input_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let input_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let sanitized = security::sanitize_html(input_str);
+        let bytes = sanitized.as_bytes();
+        if bytes.len() > out_slice.len() {
+            return -3; // output buffer too small
+        }
+        out_slice[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
+}
+
+/// C FFI: Check if a URL is safe (not targeting internal networks).
+/// Returns 0 if safe, 1 if unsafe, negative on error.
+///
+/// # Safety
+/// `url_ptr` must point to valid UTF-8 of `url_len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_is_safe_url(url_ptr: *const u8, url_len: usize) -> i32 {
+    if url_ptr.is_null() {
+        return -1;
+    }
+    // URLs should not be extremely long; cap at 8 KB.
+    if url_len > 8192 {
+        return 1; // treat oversized URLs as unsafe
+    }
+    let slice = std::slice::from_raw_parts(url_ptr, url_len);
+    ffi_catch(-99, move || {
+        let url_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        if security::is_safe_url(url_str) {
+            0
+        } else {
+            1
+        }
+    })
+}
+
+/// C FFI: Validate an error code string.
+/// Returns 0 if valid, 1 if unknown, negative on error.
+///
+/// # Safety
+/// `code_ptr` must point to valid UTF-8 of `code_len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_validate_error_code(code_ptr: *const u8, code_len: usize) -> i32 {
+    if code_ptr.is_null() {
+        return -1;
+    }
+    let slice = std::slice::from_raw_parts(code_ptr, code_len);
+    let code_str = match std::str::from_utf8(slice) {
+        Ok(s) => s,
+        Err(_) => return -2,
+    };
+    if protocol::error_codes::is_valid_error_code(code_str) {
+        0
+    } else {
+        1
+    }
 }
 
 #[cfg(test)]
@@ -134,6 +269,59 @@ mod tests {
         assert_ne!(
             unsafe { deneb_constant_time_eq(a.as_ptr(), a.len(), c.as_ptr(), c.len()) },
             0
+        );
+    }
+
+    #[test]
+    fn test_validate_session_key_valid() {
+        let key = "my-session-123";
+        let result = unsafe { deneb_validate_session_key(key.as_ptr(), key.len()) };
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_validate_session_key_empty() {
+        let key = "";
+        let result = unsafe { deneb_validate_session_key(key.as_ptr(), key.len()) };
+        assert_eq!(result, -3);
+    }
+
+    #[test]
+    fn test_sanitize_html_ffi() {
+        let input = "<b>hi</b>";
+        let mut out = [0u8; 256];
+        let len = unsafe {
+            deneb_sanitize_html(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len())
+        };
+        assert!(len > 0);
+        let result = std::str::from_utf8(&out[..len as usize]).unwrap();
+        assert_eq!(result, "&lt;b&gt;hi&lt;/b&gt;");
+    }
+
+    #[test]
+    fn test_is_safe_url_ffi() {
+        let safe = "https://example.com";
+        assert_eq!(unsafe { deneb_is_safe_url(safe.as_ptr(), safe.len()) }, 0);
+
+        let unsafe_url = "http://localhost/admin";
+        assert_eq!(
+            unsafe { deneb_is_safe_url(unsafe_url.as_ptr(), unsafe_url.len()) },
+            1
+        );
+    }
+
+    #[test]
+    fn test_validate_error_code_ffi() {
+        let valid = "NOT_FOUND";
+        assert_eq!(
+            unsafe { deneb_validate_error_code(valid.as_ptr(), valid.len()) },
+            0
+        );
+
+        let invalid = "BOGUS";
+        assert_eq!(
+            unsafe { deneb_validate_error_code(invalid.as_ptr(), invalid.len()) },
+            1
         );
     }
 

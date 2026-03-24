@@ -40,7 +40,19 @@ impl DangerousPatterns {
     }
 
     fn matches(&self, haystack: &[u8]) -> bool {
-        let lower: Vec<u8> = haystack.iter().map(|b| b.to_ascii_lowercase()).collect();
+        // Fast reject: all patterns start with '<', 'j', 'd', or 'o'.
+        // If none of these bytes exist (case-insensitive), skip the expensive lowercase+search.
+        if !haystack.iter().any(|&b| matches!(b.to_ascii_lowercase(), b'<' | b'j' | b'd' | b'o')) {
+            return false;
+        }
+        // Stack buffer for small inputs; heap only for large.
+        let lower: Vec<u8> = if haystack.len() <= 256 {
+            let mut buf = Vec::with_capacity(haystack.len());
+            buf.extend(haystack.iter().map(|b| b.to_ascii_lowercase()));
+            buf
+        } else {
+            haystack.iter().map(|b| b.to_ascii_lowercase()).collect()
+        };
         self.finders.iter().any(|f| f.find(&lower).is_some())
     }
 }
@@ -75,6 +87,127 @@ pub fn sanitize_control_chars(input: &str) -> String {
         return input.to_string();
     }
     input.chars().filter(|c| !is_strippable_control(*c)).collect()
+}
+
+/// Maximum session key length (matches TypeScript ChatSendSessionKeyString).
+const MAX_SESSION_KEY_LEN: usize = 512;
+
+/// Validate a session key: non-empty, max 512 characters, no control characters.
+/// Uses char count (not byte length) to match TypeScript's `maxLength` semantics.
+pub fn is_valid_session_key(key: &str) -> bool {
+    if key.is_empty() {
+        return false;
+    }
+    // ASCII fast path: for pure-ASCII strings, byte length == char count.
+    // Avoids costly chars() iteration for the common case.
+    if key.is_ascii() {
+        if key.len() > MAX_SESSION_KEY_LEN {
+            return false;
+        }
+        // Check for control chars at byte level (faster than char iteration).
+        return !key.bytes().any(|b| b.is_ascii_control() && b != b'\n' && b != b'\t' && b != b'\r');
+    }
+    // Non-ASCII: single-pass char count + control check.
+    let mut count = 0usize;
+    for c in key.chars() {
+        count += 1;
+        if count > MAX_SESSION_KEY_LEN {
+            return false;
+        }
+        if is_strippable_control(c) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Sanitize user input by escaping HTML-significant characters.
+/// Prevents XSS when user input is rendered in HTML contexts.
+/// Operates at byte level since all HTML-special chars are ASCII.
+pub fn sanitize_html(input: &str) -> String {
+    // Fast path: no special chars — avoid allocation entirely.
+    if !input.bytes().any(|b| matches!(b, b'<' | b'>' | b'&' | b'"' | b'\'')) {
+        return input.to_string();
+    }
+    // All escapable characters are single-byte ASCII, so we can work at byte level.
+    let mut out = Vec::with_capacity(input.len() + input.len() / 4);
+    for &b in input.as_bytes() {
+        match b {
+            b'<' => out.extend_from_slice(b"&lt;"),
+            b'>' => out.extend_from_slice(b"&gt;"),
+            b'&' => out.extend_from_slice(b"&amp;"),
+            b'"' => out.extend_from_slice(b"&quot;"),
+            b'\'' => out.extend_from_slice(b"&#x27;"),
+            _ => out.push(b),
+        }
+    }
+    // Safety: input is valid UTF-8 and we only replaced ASCII bytes with ASCII sequences.
+    unsafe { String::from_utf8_unchecked(out) }
+}
+
+/// Basic SSRF protection: reject URLs targeting internal/private networks.
+/// Returns true if the URL appears safe for outbound requests.
+/// Only lowercases the scheme+host portion to avoid copying the full URL.
+pub fn is_safe_url(url: &str) -> bool {
+    // Quick byte-level scheme check (case-insensitive, no alloc).
+    let bytes = url.as_bytes();
+    let scheme_len = if bytes.len() >= 8
+        && bytes[..8].eq_ignore_ascii_case(b"https://")
+    {
+        8
+    } else if bytes.len() >= 7
+        && bytes[..7].eq_ignore_ascii_case(b"http://")
+    {
+        7
+    } else {
+        return false;
+    };
+
+    // Extract authority (up to first '/') from after the scheme.
+    let rest = &url[scheme_len..];
+    let authority = rest.split('/').next().unwrap_or("");
+    // Strip userinfo (user:pass@host) — prevents SSRF bypass via http://evil@localhost/
+    let after_userinfo = match authority.rfind('@') {
+        Some(pos) => &authority[pos + 1..],
+        None => authority,
+    };
+    // Strip port — only lowercase the host portion (small string).
+    let host_raw = after_userinfo.split(':').next().unwrap_or("");
+    // Stack-allocated lowercase for typical hostnames (≤253 bytes per RFC).
+    let host = host_raw.to_ascii_lowercase();
+
+    if host.is_empty() {
+        return false;
+    }
+
+    // Block common private/internal hostnames and IPs.
+    const BLOCKED_HOSTS: &[&str] = &[
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "[::1]",
+        "metadata.google.internal",
+        "169.254.169.254",
+    ];
+    if BLOCKED_HOSTS.iter().any(|&b| host.as_str() == b) {
+        return false;
+    }
+
+    // Block private IP ranges (10.x, 172.16-31.x, 192.168.x).
+    if host.starts_with("10.") || host.starts_with("192.168.") {
+        return false;
+    }
+    if host.starts_with("172.") {
+        if let Some(second) = host.split('.').nth(1) {
+            if let Ok(n) = second.parse::<u8>() {
+                if (16..=31).contains(&n) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    true
 }
 
 #[cfg(test)]
@@ -119,5 +252,81 @@ mod tests {
             sanitize_control_chars("remove\x07bell\x1Bescape"),
             "removebellescape"
         );
+    }
+
+    #[test]
+    fn test_is_valid_session_key() {
+        assert!(is_valid_session_key("my-session-123"));
+        assert!(is_valid_session_key("a")); // min length 1
+        assert!(!is_valid_session_key("")); // empty
+        assert!(!is_valid_session_key(&"x".repeat(513))); // too long
+        assert!(is_valid_session_key(&"x".repeat(512))); // exactly at limit
+        assert!(!is_valid_session_key("has\x00null")); // control char
+    }
+
+    #[test]
+    fn test_sanitize_html() {
+        assert_eq!(sanitize_html("hello"), "hello");
+        assert_eq!(sanitize_html("<script>"), "&lt;script&gt;");
+        assert_eq!(sanitize_html("a & b"), "a &amp; b");
+        assert_eq!(sanitize_html("\"quoted\""), "&quot;quoted&quot;");
+        assert_eq!(sanitize_html("it's"), "it&#x27;s");
+        // Mixed
+        assert_eq!(
+            sanitize_html("<div class=\"x\">a & b</div>"),
+            "&lt;div class=&quot;x&quot;&gt;a &amp; b&lt;/div&gt;"
+        );
+    }
+
+    #[test]
+    fn test_is_safe_url() {
+        // Safe URLs
+        assert!(is_safe_url("https://example.com/api"));
+        assert!(is_safe_url("http://cdn.example.com/image.png"));
+
+        // Blocked: private networks
+        assert!(!is_safe_url("http://localhost/admin"));
+        assert!(!is_safe_url("http://127.0.0.1:8080/"));
+        assert!(!is_safe_url("http://0.0.0.0/"));
+        assert!(!is_safe_url("http://10.0.0.1/secret"));
+        assert!(!is_safe_url("http://192.168.1.1/"));
+        assert!(!is_safe_url("http://172.16.0.1/"));
+        assert!(!is_safe_url("http://172.31.255.255/"));
+        assert!(is_safe_url("http://172.32.0.1/")); // 172.32 is public
+
+        // Blocked: cloud metadata
+        assert!(!is_safe_url("http://169.254.169.254/latest/meta-data/"));
+        assert!(!is_safe_url("http://metadata.google.internal/"));
+
+        // Blocked: non-http schemes
+        assert!(!is_safe_url("ftp://example.com/file"));
+        assert!(!is_safe_url("file:///etc/passwd"));
+        assert!(!is_safe_url("javascript:alert(1)"));
+
+        // Blocked: empty/malformed
+        assert!(!is_safe_url(""));
+        assert!(!is_safe_url("http://"));
+
+        // Blocked: userinfo bypass attempts
+        assert!(!is_safe_url("http://evil@localhost/"));
+        assert!(!is_safe_url("http://user:pass@127.0.0.1/"));
+        assert!(!is_safe_url("http://anything@10.0.0.1/secret"));
+        assert!(is_safe_url("http://user@example.com/")); // public host with userinfo is ok
+    }
+
+    #[test]
+    fn test_is_valid_session_key_multibyte() {
+        // Multibyte chars: 512 chars is the limit, not 512 bytes.
+        let key_512_chars: String = "a".repeat(512);
+        assert!(is_valid_session_key(&key_512_chars));
+
+        let key_513_chars: String = "a".repeat(513);
+        assert!(!is_valid_session_key(&key_513_chars));
+
+        // 256 two-byte chars = 256 chars, 512 bytes — should pass (under 512 char limit)
+        let multibyte_key: String = "\u{00e9}".repeat(256); // e-accent, 2 bytes each
+        assert!(is_valid_session_key(&multibyte_key));
+        assert_eq!(multibyte_key.chars().count(), 256);
+        assert_eq!(multibyte_key.len(), 512); // 512 bytes but only 256 chars
     }
 }

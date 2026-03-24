@@ -188,3 +188,52 @@ func TestRPCEndpointLive(t *testing.T) {
 		t.Errorf("status = %d, want 400", resp3.StatusCode)
 	}
 }
+
+// TestPhase1MethodsReachableViaRPC verifies that Phase 1 RPC methods
+// (registered via rpc.RegisterBuiltinMethods) are reachable through the server.
+func TestPhase1MethodsReachableViaRPC(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv := New("127.0.0.1:0")
+	addr, err := srv.StartAndListen(ctx)
+	if err != nil {
+		t.Fatalf("StartAndListen: %v", err)
+	}
+	defer srv.Close(context.Background())
+
+	url := fmt.Sprintf("http://%s/api/v1/rpc", addr.String())
+
+	// Test a selection of Phase 1 methods that should be registered.
+	methods := []struct {
+		method string
+		body   string
+	}{
+		{"health.check", `{"method":"health.check","id":"p1"}`},
+		{"system.info", `{"method":"system.info","id":"p2"}`},
+		{"sessions.list", `{"method":"sessions.list","id":"p3"}`},
+		{"channels.status", `{"method":"channels.status","id":"p4"}`},
+		{"channels.health", `{"method":"channels.health","id":"p5"}`},
+		{"security.is_safe_url", `{"method":"security.is_safe_url","id":"p6","params":{"url":"https://example.com"}}`},
+		// data is base64-encoded PNG header: 0x89 0x50 0x4E 0x47 0x0D 0x0A 0x1A 0x0A
+		{"media.detect_mime", `{"method":"media.detect_mime","id":"p7","params":{"data":"iVBORw0KGgo="}}`},
+	}
+
+	for _, tc := range methods {
+		t.Run(tc.method, func(t *testing.T) {
+			resp, err := http.Post(url, "application/json", strings.NewReader(tc.body))
+			if err != nil {
+				t.Fatalf("POST %s: %v", tc.method, err)
+			}
+			defer resp.Body.Close()
+
+			var body map[string]any
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if body["ok"] != true {
+				t.Errorf("%s: expected ok=true, got %v (error: %v)", tc.method, body["ok"], body["error"])
+			}
+		})
+	}
+}

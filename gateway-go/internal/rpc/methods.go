@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"runtime"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
@@ -13,8 +14,29 @@ import (
 
 // Deps holds the subsystems that built-in RPC methods need.
 type Deps struct {
-	Sessions *session.Manager
-	Channels *channel.Registry
+	Sessions         *session.Manager
+	Channels         *channel.Registry
+	ChannelLifecycle *channel.LifecycleManager
+}
+
+// unmarshalParams safely unmarshals request params, handling nil/empty params.
+func unmarshalParams(params json.RawMessage, v any) error {
+	if len(params) == 0 {
+		return errors.New("missing params")
+	}
+	return json.Unmarshal(params, v)
+}
+
+// maxKeyInErrorMsg is the maximum key length included in error messages.
+// Prevents log inflation from pathologically large keys.
+const maxKeyInErrorMsg = 128
+
+// truncateForError truncates a string for safe inclusion in error messages.
+func truncateForError(s string) string {
+	if len(s) <= maxKeyInErrorMsg {
+		return s
+	}
+	return s[:maxKeyInErrorMsg] + "..."
 }
 
 // RegisterBuiltinMethods registers the core Go-native RPC methods on the
@@ -28,8 +50,14 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 	d.Register("channels.get", channelsGet(deps))
 	d.Register("channels.status", channelsStatus(deps))
 	d.Register("system.info", systemInfo())
+	d.Register("channels.health", channelsHealth(deps))
 	d.Register("protocol.validate", protocolValidate())
-	d.Register("security.constant_time_eq", securityConstantTimeEq())
+	// Note: constant_time_eq is intentionally not exposed as an RPC method
+	// to prevent use as a secret comparison oracle.
+	d.Register("security.validate_session_key", securityValidateSessionKey())
+	d.Register("security.sanitize_html", securitySanitizeHTML())
+	d.Register("security.is_safe_url", securityIsSafeURL())
+	d.Register("security.validate_error_code", securityValidateErrorCode())
 	d.Register("media.detect_mime", mediaDetectMIME())
 }
 
@@ -58,14 +86,14 @@ func sessionsGet(deps Deps) HandlerFunc {
 		var p struct {
 			Key string `json:"key"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Key == "" {
+		if err := unmarshalParams(req.Params, &p); err != nil || p.Key == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "key is required"))
 		}
 		s := deps.Sessions.Get(p.Key)
 		if s == nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, "session not found: "+p.Key))
+				protocol.ErrNotFound, "session not found: "+truncateForError(p.Key)))
 		}
 		resp, _ := protocol.NewResponseOK(req.ID, s)
 		return resp
@@ -75,11 +103,18 @@ func sessionsGet(deps Deps) HandlerFunc {
 func sessionsDelete(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			Key string `json:"key"`
+			Key   string `json:"key"`
+			Force bool   `json:"force"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Key == "" {
+		if err := unmarshalParams(req.Params, &p); err != nil || p.Key == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "key is required"))
+		}
+		// Check if session is running (prevent accidental deletion).
+		s := deps.Sessions.Get(p.Key)
+		if s != nil && s.Status == session.StatusRunning && !p.Force {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrConflict, "session is currently running; use force=true to delete"))
 		}
 		found := deps.Sessions.Delete(p.Key)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"deleted": found})
@@ -99,14 +134,14 @@ func channelsGet(deps Deps) HandlerFunc {
 		var p struct {
 			ID string `json:"id"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+		if err := unmarshalParams(req.Params, &p); err != nil || p.ID == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "id is required"))
 		}
 		ch := deps.Channels.Get(p.ID)
 		if ch == nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, "channel not found: "+p.ID))
+				protocol.ErrNotFound, "channel not found: "+truncateForError(p.ID)))
 		}
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"id":           ch.ID(),
@@ -146,7 +181,7 @@ func protocolValidate() HandlerFunc {
 		var p struct {
 			Frame string `json:"frame"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Frame == "" {
+		if err := unmarshalParams(req.Params, &p); err != nil || p.Frame == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "frame is required"))
 		}
@@ -168,34 +203,98 @@ func protocolValidate() HandlerFunc {
 	}
 }
 
-func securityConstantTimeEq() HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			A string `json:"a"`
-			B string `json:"b"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
-		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
-			"equal": ffi.ConstantTimeEq([]byte(p.A), []byte(p.B)),
-		})
-		return resp
-	}
-}
-
 func mediaDetectMIME() HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			Data []byte `json:"data"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := unmarshalParams(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"mime": ffi.DetectMIME(p.Data),
+		})
+		return resp
+	}
+}
+
+func channelsHealth(deps Deps) HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if deps.ChannelLifecycle == nil {
+			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+				"channels": []any{},
+			})
+			return resp
+		}
+		health := deps.ChannelLifecycle.HealthCheck()
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"channels": health,
+		})
+		return resp
+	}
+}
+
+func securityValidateSessionKey() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Key string `json:"key"`
+		}
+		if err := unmarshalParams(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		err := ffi.ValidateSessionKey(p.Key)
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"valid": err == nil,
+		})
+		return resp
+	}
+}
+
+func securitySanitizeHTML() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Input string `json:"input"`
+		}
+		if err := unmarshalParams(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"output": ffi.SanitizeHTML(p.Input),
+		})
+		return resp
+	}
+}
+
+func securityIsSafeURL() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			URL string `json:"url"`
+		}
+		if err := unmarshalParams(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"safe": ffi.IsSafeURL(p.URL),
+		})
+		return resp
+	}
+}
+
+func securityValidateErrorCode() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Code string `json:"code"`
+		}
+		if err := unmarshalParams(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"valid": ffi.ValidateErrorCode(p.Code),
 		})
 		return resp
 	}
