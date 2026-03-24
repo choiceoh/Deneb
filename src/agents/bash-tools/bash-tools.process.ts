@@ -20,9 +20,18 @@ import {
 } from "./bash-process-registry.js";
 import { deriveSessionName, pad, sliceLogLines, truncateMiddle } from "./bash-tools.shared.js";
 
+export type ProcessToolDeps = {
+  supervisor?: Pick<
+    import("../../process/supervisor/types.js").ProcessSupervisor,
+    "getRecord" | "cancel"
+  >;
+  killTree?: (pid: number) => void;
+};
+
 export type ProcessToolDefaults = {
   cleanupMs?: number;
   scopeKey?: string;
+  deps?: ProcessToolDeps;
 };
 
 type WritableStdin = {
@@ -125,7 +134,8 @@ export function createProcessTool(
     setJobTtlMs(defaults.cleanupMs);
   }
   const scopeKey = defaults?.scopeKey;
-  const supervisor = getProcessSupervisor();
+  const supervisor = defaults?.deps?.supervisor ?? getProcessSupervisor();
+  const killTree = defaults?.deps?.killTree ?? killProcessTree;
   const isInScope = (session?: { scopeKey?: string } | null) =>
     !scopeKey || session?.scopeKey === scopeKey;
 
@@ -143,7 +153,7 @@ export function createProcessTool(
     if (typeof pid !== "number" || !Number.isFinite(pid) || pid <= 0) {
       return false;
     }
-    killProcessTree(pid);
+    killTree(pid);
     return true;
   };
 

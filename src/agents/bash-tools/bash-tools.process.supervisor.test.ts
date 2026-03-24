@@ -8,27 +8,15 @@ import {
 import { createProcessSessionFixture } from "./bash-process-registry.test-helpers.js";
 import { createProcessTool } from "./bash-tools.process.js";
 
-const { supervisorMock } = vi.hoisted(() => ({
-  supervisorMock: {
+function createSupervisorMock() {
+  return {
     spawn: vi.fn(),
     cancel: vi.fn(),
     cancelScope: vi.fn(),
     reconcileOrphans: vi.fn(),
     getRecord: vi.fn(),
-  },
-}));
-
-const { killProcessTreeMock } = vi.hoisted(() => ({
-  killProcessTreeMock: vi.fn(),
-}));
-
-vi.mock("../../process/supervisor/index.js", () => ({
-  getProcessSupervisor: () => supervisorMock,
-}));
-
-vi.mock("../../process/kill-tree.js", () => ({
-  killProcessTree: (...args: unknown[]) => killProcessTreeMock(...args),
-}));
+  };
+}
 
 function createBackgroundSession(id: string, pid?: number) {
   return createProcessSessionFixture({
@@ -40,13 +28,12 @@ function createBackgroundSession(id: string, pid?: number) {
 }
 
 describe("process tool supervisor cancellation", () => {
+  let supervisorMock: ReturnType<typeof createSupervisorMock>;
+  let killProcessTreeMock: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
-    supervisorMock.spawn.mockClear();
-    supervisorMock.cancel.mockClear();
-    supervisorMock.cancelScope.mockClear();
-    supervisorMock.reconcileOrphans.mockClear();
-    supervisorMock.getRecord.mockClear();
-    killProcessTreeMock.mockClear();
+    supervisorMock = createSupervisorMock();
+    killProcessTreeMock = vi.fn();
   });
 
   afterEach(() => {
@@ -59,7 +46,9 @@ describe("process tool supervisor cancellation", () => {
       state: "running",
     });
     addSession(createBackgroundSession("sess"));
-    const processTool = createProcessTool();
+    const processTool = createProcessTool({
+      deps: { supervisor: supervisorMock, killTree: killProcessTreeMock },
+    });
 
     const result = await processTool.execute("toolcall", {
       action: "kill",
@@ -81,7 +70,9 @@ describe("process tool supervisor cancellation", () => {
       state: "running",
     });
     addSession(createBackgroundSession("sess"));
-    const processTool = createProcessTool();
+    const processTool = createProcessTool({
+      deps: { supervisor: supervisorMock, killTree: killProcessTreeMock },
+    });
 
     const result = await processTool.execute("toolcall", {
       action: "remove",
@@ -100,7 +91,9 @@ describe("process tool supervisor cancellation", () => {
   it("falls back to process-tree kill when supervisor record is missing", async () => {
     supervisorMock.getRecord.mockReturnValue(undefined);
     addSession(createBackgroundSession("sess-fallback", 4242));
-    const processTool = createProcessTool();
+    const processTool = createProcessTool({
+      deps: { supervisor: supervisorMock, killTree: killProcessTreeMock },
+    });
 
     const result = await processTool.execute("toolcall", {
       action: "kill",
@@ -119,7 +112,9 @@ describe("process tool supervisor cancellation", () => {
   it("fails remove when no supervisor record and no pid is available", async () => {
     supervisorMock.getRecord.mockReturnValue(undefined);
     addSession(createBackgroundSession("sess-no-pid"));
-    const processTool = createProcessTool();
+    const processTool = createProcessTool({
+      deps: { supervisor: supervisorMock, killTree: killProcessTreeMock },
+    });
 
     const result = await processTool.execute("toolcall", {
       action: "remove",

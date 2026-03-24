@@ -62,6 +62,14 @@ export type CommandOptions = {
   noOutputTimeoutMs?: number;
 };
 
+// Security hardening: never enable shell execution to prevent cmd.exe injection on Windows.
+export function shouldSpawnWithShell(_params: {
+  resolvedCommand: string;
+  platform: string;
+}): boolean {
+  return false;
+}
+
 export function resolveCommandEnv(params: {
   argv: string[];
   env?: NodeJS.ProcessEnv;
