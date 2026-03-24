@@ -76,29 +76,31 @@ const MIME_MAP: &[(&str, &str, MediaCategory)] = &[
 
 /// Get the file extension for a MIME type.
 pub fn extension_for_mime(mime: &str) -> &'static str {
-    MIME_MAP
-        .iter()
-        .find(|(m, _, _)| *m == mime)
-        .map(|(_, ext, _)| *ext)
-        .unwrap_or("bin")
+    lookup_mime(mime).map(|(ext, _)| ext).unwrap_or("bin")
 }
 
 /// Get the media category for a MIME type.
 pub fn category_for_mime(mime: &str) -> MediaCategory {
+    lookup_mime(mime).map(|(_, cat)| cat).unwrap_or(MediaCategory::Unknown)
+}
+
+/// Look up MIME info from the mapping table in a single pass.
+fn lookup_mime(mime: &str) -> Option<(&'static str, MediaCategory)> {
     MIME_MAP
         .iter()
         .find(|(m, _, _)| *m == mime)
-        .map(|(_, _, cat)| *cat)
-        .unwrap_or(MediaCategory::Unknown)
+        .map(|(_, ext, cat)| (*ext, *cat))
 }
 
 /// Detect MIME type from magic bytes and return full info.
+/// Single lookup: detects MIME then resolves extension+category in one pass.
 pub fn detect_mime_with_info(data: &[u8]) -> MimeInfo {
     let mime = super::detect_mime(data);
+    let (extension, category) = lookup_mime(mime).unwrap_or(("bin", MediaCategory::Unknown));
     MimeInfo {
         mime,
-        extension: extension_for_mime(mime),
-        category: category_for_mime(mime),
+        extension,
+        category,
     }
 }
 

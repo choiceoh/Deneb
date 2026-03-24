@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Available reports whether the Rust FFI library is linked.
@@ -87,11 +88,12 @@ func DetectMIME(data []byte) string {
 }
 
 // ValidateSessionKey is a pure-Go fallback for session key validation.
+// Uses rune count (not byte length) to match TypeScript/Rust char-count semantics.
 func ValidateSessionKey(key string) error {
 	if len(key) == 0 {
 		return errors.New("ffi: empty session key")
 	}
-	if len(key) > 512 {
+	if utf8.RuneCountInString(key) > 512 {
 		return errors.New("ffi: session key too long")
 	}
 	for _, r := range key {

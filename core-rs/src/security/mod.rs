@@ -82,16 +82,22 @@ const MAX_SESSION_KEY_LEN: usize = 512;
 
 /// Validate a session key: non-empty, max 512 characters, no control characters.
 /// Uses char count (not byte length) to match TypeScript's `maxLength` semantics.
+/// Single-pass: counts chars and checks for control chars simultaneously.
 pub fn is_valid_session_key(key: &str) -> bool {
     if key.is_empty() {
         return false;
     }
-    let char_count = key.chars().count();
-    if char_count > MAX_SESSION_KEY_LEN {
-        return false;
+    let mut count = 0usize;
+    for c in key.chars() {
+        count += 1;
+        if count > MAX_SESSION_KEY_LEN {
+            return false;
+        }
+        if is_strippable_control(c) {
+            return false;
+        }
     }
-    // Reject control characters (except common whitespace).
-    !key.chars().any(is_strippable_control)
+    true
 }
 
 /// Sanitize user input by escaping HTML-significant characters.

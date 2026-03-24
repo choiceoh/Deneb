@@ -31,7 +31,8 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 	d.Register("system.info", systemInfo())
 	d.Register("channels.health", channelsHealth(deps))
 	d.Register("protocol.validate", protocolValidate())
-	d.Register("security.constant_time_eq", securityConstantTimeEq())
+	// Note: constant_time_eq is intentionally not exposed as an RPC method
+	// to prevent use as a secret comparison oracle.
 	d.Register("security.validate_session_key", securityValidateSessionKey())
 	d.Register("security.sanitize_html", securitySanitizeHTML())
 	d.Register("security.is_safe_url", securityIsSafeURL())
@@ -176,23 +177,6 @@ func protocolValidate() HandlerFunc {
 		}
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"valid": true, "backend": backend,
-		})
-		return resp
-	}
-}
-
-func securityConstantTimeEq() HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			A string `json:"a"`
-			B string `json:"b"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, "invalid params"))
-		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
-			"equal": ffi.ConstantTimeEq([]byte(p.A), []byte(p.B)),
 		})
 		return resp
 	}

@@ -50,7 +50,7 @@ impl ErrorCode {
     }
 
     /// Parse a wire-format string into an ErrorCode.
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "NOT_LINKED" => Some(Self::NotLinked),
             "NOT_PAIRED" => Some(Self::NotPaired),
@@ -105,7 +105,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
 
 /// Validate that an error code string is a known code.
 pub fn is_valid_error_code(code: &str) -> bool {
-    ErrorCode::from_str(code).is_some()
+    ErrorCode::parse(code).is_some()
 }
 
 #[cfg(test)]
@@ -116,14 +116,14 @@ mod tests {
     fn test_roundtrip() {
         for code in ALL_ERROR_CODES {
             let s = code.as_str();
-            let parsed = ErrorCode::from_str(s).unwrap();
+            let parsed = ErrorCode::parse(s).unwrap();
             assert_eq!(*code, parsed);
         }
     }
 
     #[test]
     fn test_unknown_code() {
-        assert!(ErrorCode::from_str("UNKNOWN_CODE").is_none());
+        assert!(ErrorCode::parse("UNKNOWN_CODE").is_none());
         assert!(!is_valid_error_code("BOGUS"));
     }
 
