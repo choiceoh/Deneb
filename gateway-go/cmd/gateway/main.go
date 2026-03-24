@@ -52,7 +52,11 @@ func main() {
 	if *daemonMode || *pidFile != "" {
 		pidPath := *pidFile
 		if pidPath == "" {
-			home, _ := os.UserHomeDir()
+			home, err := os.UserHomeDir()
+			if err != nil || home == "" {
+				home = "/tmp"
+				logger.Warn("could not determine home directory, using /tmp for pid file", "error", err)
+			}
 			pidPath = filepath.Join(home, ".deneb", "gateway.pid")
 		}
 

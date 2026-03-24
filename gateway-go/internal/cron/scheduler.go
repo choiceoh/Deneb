@@ -106,10 +106,12 @@ func (s *Scheduler) Register(ctx context.Context, id string, schedule Schedule, 
 		return fmt.Errorf("task must have intervalMs > 0 or immediate=true")
 	}
 
+	// Extract existing cancel func under lock, then call it outside the lock
+	// to avoid deadlock if the task's cleanup path needs s.mu.
 	s.mu.Lock()
-	// Cancel existing task with same ID.
+	var existingCancel context.CancelFunc
 	if existing, ok := s.tasks[id]; ok {
-		existing.cancel()
+		existingCancel = existing.cancel
 	}
 
 	taskCtx, cancel := context.WithCancel(ctx)
@@ -124,6 +126,11 @@ func (s *Scheduler) Register(ctx context.Context, id string, schedule Schedule, 
 	// before we register the goroutine.
 	s.wg.Add(1)
 	s.mu.Unlock()
+
+	// Cancel the old task outside the lock.
+	if existingCancel != nil {
+		existingCancel()
+	}
 
 	go s.runTask(taskCtx, t)
 

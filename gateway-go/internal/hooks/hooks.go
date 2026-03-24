@@ -244,20 +244,30 @@ func (r *Registry) executeHook(ctx context.Context, hook Hook, env map[string]st
 	return result
 }
 
-// limitedWriter wraps a writer and silently drops bytes after the limit.
+// limitedWriter wraps a writer and discards bytes after the limit.
+// Always reports the full input length to the caller so exec.Cmd doesn't
+// treat a short write as an error (which would kill the subprocess early).
 type limitedWriter struct {
 	w         io.Writer
 	remaining int
+	dropped   int
 }
 
 func (lw *limitedWriter) Write(p []byte) (int, error) {
+	total := len(p)
 	if lw.remaining <= 0 {
-		return len(p), nil // discard silently
+		lw.dropped += total
+		return total, nil
 	}
-	if len(p) > lw.remaining {
-		p = p[:lw.remaining]
+	write := p
+	if len(write) > lw.remaining {
+		write = write[:lw.remaining]
 	}
-	n, err := lw.w.Write(p)
+	n, err := lw.w.Write(write)
 	lw.remaining -= n
-	return n, err
+	lw.dropped += total - n
+	if err != nil {
+		return total, err
+	}
+	return total, nil
 }

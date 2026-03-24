@@ -138,6 +138,10 @@ func TestDeviceManagement(t *testing.T) {
 	if len(devices) != 1 {
 		t.Errorf("expected 1 device, got %d", len(devices))
 	}
+	// ListDevices returns copies, so mutating them is safe.
+	if devices[0].Name != "Test Device" {
+		t.Errorf("expected copy with name 'Test Device', got %s", devices[0].Name)
+	}
 
 	v.TouchDevice("dev-1")
 

@@ -260,13 +260,21 @@ func (h *PluginHost) reconnectLoop() {
 
 		h.logger.Info("bridge reconnecting", "socket", h.socketPath, "backoff", backoff)
 
-		// Reset closed channel for the new connection attempt.
+		// Reset state for the new connection attempt.
 		// Safe because readLoop has exited (we're in its defer path)
 		// and no Forward() callers hold references to the old channel
 		// (they either returned or saw <-h.closed).
 		h.closeMu.Lock()
 		h.closed = make(chan struct{})
 		h.closeMu.Unlock()
+
+		// Clear stale pending entries from the previous connection.
+		// These callers have already returned via <-h.closed or ctx.Done().
+		h.mu.Lock()
+		for id := range h.pending {
+			delete(h.pending, id)
+		}
+		h.mu.Unlock()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		err := h.dial(ctx)

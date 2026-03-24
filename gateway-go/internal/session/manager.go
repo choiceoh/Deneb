@@ -70,8 +70,11 @@ func (m *Manager) Get(key string) *Session {
 	return &cp
 }
 
-// Set stores or updates a session.
+// Set stores or updates a session. Panics if s is nil.
 func (m *Manager) Set(s *Session) {
+	if s == nil {
+		return
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sessions[s.Key] = s

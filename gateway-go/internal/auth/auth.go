@@ -161,13 +161,14 @@ func (v *Validator) RemoveDevice(id string) bool {
 	return false
 }
 
-// ListDevices returns all registered devices.
-func (v *Validator) ListDevices() []*DeviceRecord {
+// ListDevices returns copies of all registered devices.
+// The returned records are safe to read without synchronization.
+func (v *Validator) ListDevices() []DeviceRecord {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
-	result := make([]*DeviceRecord, 0, len(v.devices))
+	result := make([]DeviceRecord, 0, len(v.devices))
 	for _, d := range v.devices {
-		result = append(result, d)
+		result = append(result, *d)
 	}
 	return result
 }

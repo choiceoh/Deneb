@@ -177,9 +177,11 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		return m.failProcess(tracked, req.ID, startedAt, err.Error())
 	}
 
-	// Capture output (bounded).
-	stdoutBytes, _ := io.ReadAll(io.LimitReader(stdout, int64(m.maxStdout)))
-	stderrBytes, _ := io.ReadAll(io.LimitReader(stderr, int64(m.maxStdout)))
+	// Capture output (bounded). We must fully drain both pipes even beyond the
+	// capture limit, otherwise the subprocess blocks on a full pipe buffer and
+	// cmd.Wait() hangs forever.
+	stdoutBytes := drainBounded(stdout, m.maxStdout)
+	stderrBytes := drainBounded(stderr, m.maxStdout)
 
 	err = cmd.Wait()
 	cancel()
@@ -304,6 +306,15 @@ func (m *Manager) failProcess(tracked *TrackedProcess, id string, startedAt int6
 	tracked.Result = result
 	tracked.mu.Unlock()
 	return result
+}
+
+// drainBounded reads up to limit bytes into memory, then discards the rest
+// to prevent the subprocess from blocking on a full pipe.
+func drainBounded(r io.Reader, limit int) []byte {
+	kept, _ := io.ReadAll(io.LimitReader(r, int64(limit)))
+	// Drain any remaining bytes so the writer doesn't block.
+	io.Copy(io.Discard, r)
+	return kept
 }
 
 // Prune removes completed/failed processes older than the given duration.

@@ -180,6 +180,12 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 		var req protocol.RequestFrame
 		if err := json.Unmarshal(data, &req); err != nil {
 			s.logger.Warn("unmarshal frame", "connId", client.connID, "error", err)
+			// Send error response so the client knows the frame was rejected.
+			errResp := protocol.NewResponseError("", protocol.NewError(
+				protocol.ErrInvalidRequest, "malformed JSON frame"))
+			if writeErr := s.writeFrame(ctx, client, errResp); writeErr != nil {
+				return
+			}
 			continue
 		}
 
