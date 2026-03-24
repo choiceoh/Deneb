@@ -46,8 +46,9 @@ type Server struct {
 	httpServer  *http.Server
 	dispatcher  *rpc.Dispatcher
 	sessions    *session.Manager
-	channels    *channel.Registry
-	bridge      *bridge.PluginHost
+	channels         *channel.Registry
+	channelLifecycle *channel.LifecycleManager
+	bridge           *bridge.PluginHost
 	dedupe      *dedupe.Tracker
 	broadcaster *events.Broadcaster
 	processes   *process.Manager
@@ -102,12 +103,14 @@ func New(addr string, opts ...Option) *Server {
 	s.processes = process.NewManager(s.logger)
 	s.cron = cron.NewScheduler(s.logger)
 	s.hooks = hooks.NewRegistry(s.logger)
+	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.registerBuiltinMethods()
 	rpc.RegisterBuiltinMethods(s.dispatcher, rpc.Deps{
-		Sessions: s.sessions,
-		Channels: s.channels,
+		Sessions:         s.sessions,
+		Channels:         s.channels,
+		ChannelLifecycle: s.channelLifecycle,
 	})
 	s.registerExtendedMethods()
 	return s
@@ -230,7 +233,14 @@ func (s *Server) shutdown() error {
 		s.hooks.Fire(context.Background(), hooks.EventGatewayStop, nil)
 	}
 
-	// 7. Close Plugin Host bridge last (in-flight forwards finish first).
+	// 7. Stop all channel plugins.
+	if s.channelLifecycle != nil {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		s.channelLifecycle.StopAll(stopCtx)
+		stopCancel()
+	}
+
+	// 8. Close Plugin Host bridge last (in-flight forwards finish first).
 	if s.bridge != nil {
 		s.bridge.Close()
 	}
