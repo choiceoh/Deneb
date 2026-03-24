@@ -1,0 +1,33 @@
+{
+  "name": "@deneb/core-rs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "High-performance native core for Deneb",
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --release --platform",
+    "build:dev": "napi build --platform",
+    "test": "cargo test"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  },
+  "napi": {
+    "name": "core-rs",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "aarch64-apple-darwin",
+        "x86_64-unknown-linux-musl",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-unknown-linux-musl"
+      ]
+    }
+  }
+}
