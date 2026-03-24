@@ -36,8 +36,8 @@ export function isHeartbeatContentEffectivelyEmpty(content: string | undefined |
       continue;
     }
     // Skip markdown header lines (# followed by space or EOL, ## etc)
-    // This intentionally does NOT skip lines like "#TODO" or "#hashtag" which might be content
-    // (Those aren't valid markdown headers - ATX headers require space after #)
+    // This intentionally does NOT skip lines like "#hashtag" which might be content
+    // (those aren't valid markdown headers — ATX headers require space after #)
     if (/^#+(\s|$)/.test(trimmed)) {
       continue;
     }

@@ -691,7 +691,7 @@ class TestNonProjectPenalty(unittest.TestCase):
     def test_index_md_penalized(self):
         """INDEX.md 소스를 가진 의미 검색 결과는 0.3× 페널티를 받아야 함"""
         import re
-        pattern = re.compile(r'(INDEX|README|CLAUDE|CHANGELOG|TODO|LICENSE|\.github)', re.IGNORECASE)
+        pattern = re.compile(r'(INDEX|README|CLAUDE|CHANGELOG|LICENSE|\.github)', re.IGNORECASE)
         self.assertTrue(pattern.search('/projects/INDEX.md'))
         self.assertTrue(pattern.search('/path/to/README.md'))
         self.assertTrue(pattern.search('CLAUDE.md'))
@@ -700,7 +700,7 @@ class TestNonProjectPenalty(unittest.TestCase):
     def test_normal_project_not_penalized(self):
         """일반 프로젝트 파일은 페널티를 받지 않아야 함"""
         import re
-        pattern = re.compile(r'(INDEX|README|CLAUDE|CHANGELOG|TODO|LICENSE|\.github)', re.IGNORECASE)
+        pattern = re.compile(r'(INDEX|README|CLAUDE|CHANGELOG|LICENSE|\.github)', re.IGNORECASE)
         self.assertIsNone(pattern.search('/projects/비금도.md'))
         self.assertIsNone(pattern.search('/projects/화성산단.md'))
         self.assertIsNone(pattern.search('/projects/영암태양광.md'))

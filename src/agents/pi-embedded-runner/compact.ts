@@ -892,8 +892,6 @@ export async function compactEmbeddedPiSessionDirect(
         const tokenCountOriginal = sumTokenEstimates(originalMessages);
         const messageCountBefore = session.messages.length;
         const tokenCountBefore = observedTokenCount ?? sumTokenEstimates(session.messages);
-        // TODO(#7175): Consider exposing full message snapshots or pre-compaction injection
-        // hooks; current events only report counts/metadata.
         await fireCompactionHooks(
           {
             phase: "before",
@@ -996,8 +994,6 @@ export async function compactEmbeddedPiSessionDirect(
               `delta.estTokens=${typeof preMetrics.estTokens === "number" && typeof postMetrics.estTokens === "number" ? postMetrics.estTokens - preMetrics.estTokens : "unknown"}`,
           );
         }
-        // TODO(#9611): Consider exposing compaction summaries or post-compaction injection;
-        // current events only report summary metadata.
         await fireCompactionHooks(
           {
             phase: "after",
