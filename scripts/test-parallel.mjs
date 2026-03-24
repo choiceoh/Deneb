@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +9,95 @@ import {
   packFilesByDuration,
   selectTimedHeavyFiles,
 } from "./test-runner-manifest.mjs";
+
+// ── Highway (required) ──────────────────────────────────────────────────────
+// Highway is the mandatory test orchestration engine. It requires a Rust
+// toolchain (cargo). The binary is auto-built on first run. Tests cannot
+// proceed without it — this ensures every test run benefits from import graph
+// analysis, content-addressed caching, and optimal scheduling.
+const __highwayRoot = path.resolve(import.meta.dirname, "..");
+const __highwayBin = (() => {
+  const release = path.join(__highwayRoot, "tools/highway/target/release/highway");
+  const debug = path.join(__highwayRoot, "tools/highway/target/debug/highway");
+  if (fs.existsSync(release)) return release;
+  if (fs.existsSync(debug)) return debug;
+
+  // Auto-build: Cargo.toml must exist
+  const cargoToml = path.join(__highwayRoot, "tools/highway/Cargo.toml");
+  if (!fs.existsSync(cargoToml)) {
+    console.error("[highway] FATAL: tools/highway/Cargo.toml not found. Cannot run tests.");
+    process.exit(1);
+  }
+
+  // Rust toolchain is required
+  try {
+    execFileSync("cargo", ["--version"], { stdio: "pipe", timeout: 5_000 });
+  } catch {
+    console.error(
+      "[highway] FATAL: Rust toolchain not found. Install via: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
+    );
+    process.exit(1);
+  }
+
+  // Build the binary
+  console.log("[highway] first run — building optimized binary (~30s one-time cost)...");
+  try {
+    execFileSync("cargo", ["build", "--release"], {
+      cwd: path.join(__highwayRoot, "tools/highway"),
+      stdio: "inherit",
+      timeout: 300_000,
+    });
+  } catch {
+    console.error("[highway] FATAL: cargo build failed. Fix compilation errors in tools/highway/.");
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(release)) {
+    console.error("[highway] FATAL: build succeeded but binary not found at", release);
+    process.exit(1);
+  }
+  return release;
+})();
+
+let highwaySkipSet = new Set();
+{
+  try {
+    const result = execFileSync(
+      __highwayBin,
+      ["--root", __highwayRoot, "--format", "json", "run", "--git", "--dry-run"],
+      { encoding: "utf-8", timeout: 30_000, stdio: ["pipe", "pipe", "pipe"] },
+    );
+    // The JSON output contains { cached_tests, cache_summary: { skipped_tests } }
+    // Extract it from stdout (skip stderr lines)
+    const jsonStart = result.indexOf("{");
+    if (jsonStart >= 0) {
+      const parsed = JSON.parse(result.slice(jsonStart));
+      if (parsed.success && parsed.cached_tests > 0) {
+        // Load the cache to get the list of cached (skippable) test paths
+        const cachePath = path.join(__highwayRoot, ".highway-cache.json");
+        if (fs.existsSync(cachePath)) {
+          const cache = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+          for (const [testPath, entry] of Object.entries(cache.entries ?? {})) {
+            if (entry.result === "Pass") {
+              highwaySkipSet.add(testPath);
+            }
+          }
+        }
+        if (highwaySkipSet.size > 0) {
+          console.log(
+            `[highway] ${highwaySkipSet.size} tests cached & passing → skipping`,
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[highway] cache analysis failed: ${String(err.message ?? err)}`);
+    console.error("[highway] continuing without cache optimization");
+  }
+}
+// Export for use in test configs if needed
+process.env.HIGHWAY_SKIP_TESTS = highwaySkipSet.size > 0 ? [...highwaySkipSet].join("\n") : "";
+// ── End Highway integration ─────────────────────────────────────────────────
 
 // On Windows, `.cmd` launchers can fail with `spawn EINVAL` when invoked without a shell
 // (especially under GitHub Actions + Git Bash). Use `shell: true` and let the shell resolve pnpm.
@@ -704,16 +793,25 @@ const runOnce = (entry, extraArgs = []) =>
       entry.name === "extensions" && maxWorkers === 1 && entry.args.includes("--pool=vmForks")
         ? entry.args.map((arg) => (arg === "--pool=vmForks" ? "--pool=forks" : arg))
         : entry.args;
+    // Highway: inject --exclude for cached tests
+    const highwayExcludes = [];
+    if (highwaySkipSet.size > 0) {
+      for (const skipPath of highwaySkipSet) {
+        // Only exclude if this test would be part of the current lane
+        highwayExcludes.push("--exclude", skipPath);
+      }
+    }
     const args = maxWorkers
       ? [
           ...entryArgs,
           "--maxWorkers",
           String(maxWorkers),
+          ...highwayExcludes,
           ...silentArgs,
           ...windowsCiArgs,
           ...extraArgs,
         ]
-      : [...entryArgs, ...silentArgs, ...windowsCiArgs, ...extraArgs];
+      : [...entryArgs, ...highwayExcludes, ...silentArgs, ...windowsCiArgs, ...extraArgs];
     console.log(
       `[test-parallel] start ${entry.name} workers=${maxWorkers ?? "default"} filters=${String(
         countExplicitEntryFilters(entryArgs) ?? "all",
@@ -876,6 +974,17 @@ for (const entry of serialRuns) {
   if (code !== 0) {
     process.exit(code);
   }
+}
+
+// ── Highway: update cache after successful run ──────────────────────────────
+try {
+  execFileSync(
+    __highwayBin,
+    ["--root", __highwayRoot, "run", "--dry-run", "--git"],
+    { encoding: "utf-8", timeout: 30_000, stdio: "pipe" },
+  );
+} catch {
+  // Cache update is best-effort — test results are still valid
 }
 
 process.exit(0);
