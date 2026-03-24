@@ -2,15 +2,32 @@
 //!
 //! This crate provides:
 //! - Protocol frame validation (replacing AJV)
-//! - Security verification primitives
-//! - Media MIME detection and processing helpers
+//! - Security verification primitives + ReDoS detection
+//! - Media MIME detection, EXIF parsing, PNG encoding
 //!
 //! It exposes both a Rust API and a C FFI surface for integration
 //! with Go (via CGo) and Node.js (via napi-rs).
 
+#![deny(clippy::all)]
+
+#[macro_use]
+extern crate napi_derive;
+
+// Phase 0: Core modules (C FFI + Rust API)
 pub mod media;
 pub mod protocol;
 pub mod security;
+
+// Phase 1: napi-rs modules (Node.js native addon)
+pub mod exif;
+pub mod external_content;
+pub mod mime_utils;
+pub mod png;
+pub mod safe_regex;
+
+// ---------------------------------------------------------------------------
+// C FFI exports (Phase 0 — used by Go via CGo)
+// ---------------------------------------------------------------------------
 
 /// C FFI: Validate a gateway frame (JSON bytes).
 /// Returns 0 on success, negative error code on failure.
@@ -93,16 +110,14 @@ mod tests {
     #[test]
     fn test_validate_frame_valid_request() {
         let json = r#"{"type":"req","id":"1","method":"chat.send"}"#;
-        let result =
-            unsafe { deneb_validate_frame(json.as_ptr(), json.len()) };
+        let result = unsafe { deneb_validate_frame(json.as_ptr(), json.len()) };
         assert_eq!(result, 0);
     }
 
     #[test]
     fn test_validate_frame_invalid() {
         let json = r#"{"type":"unknown"}"#;
-        let result =
-            unsafe { deneb_validate_frame(json.as_ptr(), json.len()) };
+        let result = unsafe { deneb_validate_frame(json.as_ptr(), json.len()) };
         assert!(result < 0);
     }
 
@@ -123,12 +138,10 @@ mod tests {
 
     #[test]
     fn test_detect_mime() {
-        // PNG magic bytes
         let png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
         let mut out = [0u8; 64];
-        let len = unsafe {
-            deneb_detect_mime(png.as_ptr(), png.len(), out.as_mut_ptr(), out.len())
-        };
+        let len =
+            unsafe { deneb_detect_mime(png.as_ptr(), png.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
         let mime = std::str::from_utf8(&out[..len as usize]).unwrap();
         assert_eq!(mime, "image/png");

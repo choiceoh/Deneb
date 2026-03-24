@@ -598,6 +598,39 @@ jobs:
       - name: Audit production dependencies
         run: pre-commit run --all-files pnpm-audit-prod
 
+  core-rs:
+    needs: [docs-scope]
+    if: needs.docs-scope.outputs.docs_only != 'true'
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            core-rs/target
+          key: core-rs-${{ runner.os }}-${{ hashFiles('core-rs/Cargo.lock', 'core-rs/Cargo.toml') }}
+          restore-keys: |
+            core-rs-${{ runner.os }}-
+
+      - name: Build core-rs
+        working-directory: core-rs
+        run: cargo build
+
+      - name: Test core-rs
+        working-directory: core-rs
+        run: cargo test
+
   checks-windows:
     needs: [docs-scope, changed-scope]
     if: needs.docs-scope.outputs.docs_only != 'true' && needs.changed-scope.outputs.run_windows == 'true'
