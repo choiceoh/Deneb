@@ -1,4 +1,5 @@
 import AjvPkg, { type ErrorObject } from "ajv";
+import { loadCoreRs } from "../../bindings/core-rs.js";
 import type { SessionsPatchResult } from "../session/session-utils.types.js";
 import {
   type AgentEvent,
@@ -268,6 +269,23 @@ export const validateConnectParams = ajv.compile<ConnectParams>(ConnectParamsSch
 export const validateRequestFrame = ajv.compile<RequestFrame>(RequestFrameSchema);
 export const validateResponseFrame = ajv.compile<ResponseFrame>(ResponseFrameSchema);
 export const validateEventFrame = ajv.compile<EventFrame>(EventFrameSchema);
+
+/**
+ * Validate a raw JSON string as a gateway frame using the native Rust validator.
+ * Returns the frame type ("req"/"res"/"event") on success, or null if invalid/unavailable.
+ */
+export function validateFrameNative(json: string): string | null {
+  const native = loadCoreRs();
+  if (!native) {
+    return null;
+  }
+  try {
+    return native.validateFrame(json);
+  } catch {
+    return null;
+  }
+}
+
 export const validateSendParams = ajv.compile(SendParamsSchema);
 export const validatePollParams = ajv.compile<PollParams>(PollParamsSchema);
 export const validateAgentParams = ajv.compile(AgentParamsSchema);

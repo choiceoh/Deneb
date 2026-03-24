@@ -20,6 +20,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -47,6 +48,7 @@ type Server struct {
 	clientCnt  atomic.Int32
 	startedAt  time.Time
 	version    string
+	rustFFI    bool // true when Rust FFI is available
 	logger     *slog.Logger
 	ready      atomic.Bool
 }
@@ -74,6 +76,7 @@ func New(addr string, opts ...Option) *Server {
 		addr:     addr,
 		sessions: session.NewManager(),
 		channels: channel.NewRegistry(),
+		rustFFI:  ffi.Available,
 		dedupe: dedupe.NewTracker(
 			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,
 			protocol.DedupeMax,
@@ -250,6 +253,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"connections": s.clientCnt.Load(),
 		"sessions":    s.sessions.Count(),
 		"bridge":      bridgeStatus,
+		"rust_core":   s.rustFFI,
 	})
 }
 

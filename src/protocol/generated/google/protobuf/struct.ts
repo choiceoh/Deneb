@@ -51,23 +51,18 @@ export interface Value {
   /** The kind of value. */
   kind:
     | //
-    /** Represents a null value. */
-    { $case: "nullValue"; nullValue: NullValue }
-    | //
+      /** Represents a null value. */
+      { $case: "nullValue"; nullValue: NullValue } //
     /** Represents a double value. */
-    { $case: "numberValue"; numberValue: number }
-    | //
+    | { $case: "numberValue"; numberValue: number } //
     /** Represents a string value. */
-    { $case: "stringValue"; stringValue: string }
-    | //
+    | { $case: "stringValue"; stringValue: string } //
     /** Represents a boolean value. */
-    { $case: "boolValue"; boolValue: boolean }
-    | //
+    | { $case: "boolValue"; boolValue: boolean } //
     /** Represents a structured value. */
-    { $case: "structValue"; structValue: { [key: string]: any } | undefined }
-    | //
+    | { $case: "structValue"; structValue: { [key: string]: any } | undefined } //
     /** Represents a repeated `Value`. */
-    { $case: "listValue"; listValue: Array<any> | undefined }
+    | { $case: "listValue"; listValue: Array<any> | undefined }
     | undefined;
 }
 

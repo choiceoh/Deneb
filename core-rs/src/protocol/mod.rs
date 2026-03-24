@@ -125,7 +125,51 @@ fn validate_non_empty(value: &Option<String>, field: &'static str) -> Result<Str
     }
 }
 
-/// Validate a JSON string as a gateway frame.
+/// A lightweight raw frame that skips deep parsing of payload/params/error.
+/// Used by `validate_frame_type` for envelope-only validation.
+#[derive(Deserialize)]
+struct RawFrameEnvelope {
+    #[serde(rename = "type")]
+    frame_type: FrameType,
+    id: Option<String>,
+    method: Option<String>,
+    ok: Option<bool>,
+    event: Option<String>,
+    seq: Option<i64>,
+}
+
+/// Fast envelope-only validation: returns the frame type without parsing
+/// payload/params/error. Significantly cheaper than `validate_frame` for
+/// callers that only need to know if the frame is well-formed.
+pub fn validate_frame_type(json: &str) -> Result<FrameType, FrameError> {
+    let raw: RawFrameEnvelope = serde_json::from_str(json)?;
+    match raw.frame_type {
+        FrameType::Req => {
+            validate_non_empty(&raw.id, "id")?;
+            validate_non_empty(&raw.method, "method")?;
+            Ok(FrameType::Req)
+        }
+        FrameType::Res => {
+            validate_non_empty(&raw.id, "id")?;
+            raw.ok.ok_or(FrameError::MissingField("ok"))?;
+            Ok(FrameType::Res)
+        }
+        FrameType::Event => {
+            validate_non_empty(&raw.event, "event")?;
+            if let Some(s) = raw.seq {
+                if s < 0 {
+                    return Err(FrameError::InvalidField {
+                        field: "seq",
+                        reason: format!("must be non-negative, got {}", s),
+                    });
+                }
+            }
+            Ok(FrameType::Event)
+        }
+    }
+}
+
+/// Validate a JSON string as a gateway frame (full parse including payload/params).
 pub fn validate_frame(json: &str) -> Result<GatewayFrame, FrameError> {
     let raw: RawFrame = serde_json::from_str(json)?;
 
@@ -155,7 +199,16 @@ pub fn validate_frame(json: &str) -> Result<GatewayFrame, FrameError> {
         }
         FrameType::Event => {
             let event = validate_non_empty(&raw.event, "event")?;
-            let seq = raw.seq.and_then(|s| if s >= 0 { Some(s as u64) } else { None });
+            let seq = match raw.seq {
+                Some(s) if s < 0 => {
+                    return Err(FrameError::InvalidField {
+                        field: "seq",
+                        reason: format!("must be non-negative, got {}", s),
+                    });
+                }
+                Some(s) => Some(s as u64),
+                None => None,
+            };
             Ok(GatewayFrame::Event(EventFrame {
                 event,
                 payload: raw.payload,
@@ -359,5 +412,34 @@ mod tests {
         assert_eq!(parsed["label"], "Telegram");
         // prost + serde uses snake_case field names by default.
         assert_eq!(parsed["selection_label"], "Telegram Bot");
+    }
+
+    #[test]
+    fn test_negative_seq_rejected() {
+        let json = r#"{"type":"event","event":"health","seq":-1}"#;
+        let err = validate_frame(json).unwrap_err();
+        assert!(err.to_string().contains("non-negative"));
+    }
+
+    #[test]
+    fn test_zero_seq_accepted() {
+        let json = r#"{"type":"event","event":"health","seq":0}"#;
+        let frame = validate_frame(json).unwrap();
+        match frame {
+            GatewayFrame::Event(ev) => assert_eq!(ev.seq, Some(0)),
+            _ => panic!("expected event frame"),
+        }
+    }
+
+    #[test]
+    fn test_extra_fields_ignored() {
+        let json = r#"{"type":"req","id":"1","method":"test","unknown_field":42}"#;
+        assert!(validate_frame(json).is_ok());
+    }
+
+    #[test]
+    fn test_frame_type_case_sensitive() {
+        let json = r#"{"type":"REQ","id":"1","method":"test"}"#;
+        assert!(validate_frame(json).is_err());
     }
 }

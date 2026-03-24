@@ -1,0 +1,22 @@
+[package]
+name = "deneb-core-rs-napi"
+version = "0.1.0"
+edition = "2021"
+description = "napi-rs bridge for deneb-core — exposes Rust functions to Node.js"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "2", default-features = false, features = ["napi9"] }
+napi-derive = "2"
+deneb-core = { path = "../core-rs" }
+
+# From native/: gitignore, exif, png
+globset = "0.4"
+kamadak-exif = "0.6"
+crc32fast = "1"
+flate2 = "1"
+
+[build-dependencies]
+napi-build = "2"

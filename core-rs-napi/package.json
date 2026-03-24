@@ -1,0 +1,19 @@
+{
+  "name": "@deneb/native",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Unified Rust native addon for Deneb — core-rs bridge + performance utilities",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "build": "napi build --release --platform",
+    "build:debug": "napi build --platform"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  },
+  "napi": {
+    "name": "deneb-native",
+    "triples": {}
+  }
+}

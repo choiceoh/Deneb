@@ -1,6 +1,17 @@
 import path from "node:path";
 import { fileTypeFromBuffer } from "file-type";
+import { loadCoreRs, type CoreRsModule } from "../bindings/core-rs.js";
 import { type MediaKind, mediaKindFromMime } from "./constants.js";
+
+// Cache the bound detectMime function to avoid repeated loadCoreRs() + property lookup.
+let _nativeDetectMime: CoreRsModule["detectMime"] | null | undefined;
+function nativeDetectMime(): CoreRsModule["detectMime"] | null {
+  if (_nativeDetectMime === undefined) {
+    const mod = loadCoreRs();
+    _nativeDetectMime = mod ? mod.detectMime.bind(mod) : null;
+  }
+  return _nativeDetectMime;
+}
 
 // Map common mimes to preferred file extensions.
 const EXT_BY_MIME: Record<string, string> = {
@@ -65,9 +76,42 @@ export function normalizeMimeType(mime?: string | null): string | undefined {
   return cleaned || undefined;
 }
 
+/**
+ * Synchronous MIME sniff using native Rust detection only.
+ * Returns undefined if native addon is unavailable or type is unknown.
+ * Avoids the async overhead of fileTypeFromBuffer when native can handle it.
+ */
+export function sniffMimeSync(buffer?: Buffer): string | undefined {
+  if (!buffer) {
+    return undefined;
+  }
+  const detect = nativeDetectMime();
+  if (!detect) {
+    return undefined;
+  }
+  try {
+    const mime = detect(buffer);
+    return mime && mime !== "application/octet-stream" ? mime : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function sniffMime(buffer?: Buffer): Promise<string | undefined> {
   if (!buffer) {
     return undefined;
+  }
+  // Fast path: use native Rust MIME detection (synchronous magic-byte sniffing).
+  const detectMimeNative = nativeDetectMime();
+  if (detectMimeNative) {
+    try {
+      const mime = detectMimeNative(buffer);
+      if (mime && mime !== "application/octet-stream") {
+        return mime;
+      }
+    } catch {
+      // Fall through to JS implementation.
+    }
   }
   try {
     const type = await fileTypeFromBuffer(buffer);
