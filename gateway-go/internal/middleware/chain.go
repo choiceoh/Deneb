@@ -105,7 +105,8 @@ type RateLimitConfig struct {
 }
 
 // RateLimit returns a middleware that rate-limits requests per connection
-// using a fixed-window algorithm.
+// using a fixed-window algorithm. Expired windows are garbage-collected
+// every 2x the window interval to prevent unbounded memory growth.
 func RateLimit(cfg RateLimitConfig) Middleware {
 	type window struct {
 		mu      sync.Mutex
@@ -114,6 +115,29 @@ func RateLimit(cfg RateLimitConfig) Middleware {
 	}
 
 	var windows sync.Map
+
+	// Background GC: remove windows that haven't been touched in 2x the window.
+	gcInterval := time.Duration(cfg.WindowMs*2) * time.Millisecond
+	if gcInterval < time.Second {
+		gcInterval = time.Second
+	}
+	go func() {
+		ticker := time.NewTicker(gcInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			cutoff := time.Now().UnixMilli() - cfg.WindowMs*2
+			windows.Range(func(key, val any) bool {
+				w := val.(*window)
+				w.mu.Lock()
+				stale := w.startMs < cutoff
+				w.mu.Unlock()
+				if stale {
+					windows.Delete(key)
+				}
+				return true
+			})
+		}
+	}()
 
 	return func(next HandlerFunc) HandlerFunc {
 		return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {

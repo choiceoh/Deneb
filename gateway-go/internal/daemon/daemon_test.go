@@ -149,8 +149,3 @@ func TestCheckExistingDaemon_CurrentProcess(t *testing.T) {
 	}
 }
 
-func TestFormatPID(t *testing.T) {
-	if FormatPID(12345) != "12345" {
-		t.Errorf("expected '12345', got %s", FormatPID(12345))
-	}
-}

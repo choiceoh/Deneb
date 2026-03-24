@@ -225,7 +225,7 @@ func (s *Server) shutdown() error {
 
 	// 6. Fire gateway.stop hooks.
 	if s.hooks != nil {
-		s.hooks.Fire(context.Background(), "gateway.stop", nil)
+		s.hooks.Fire(context.Background(), hooks.EventGatewayStop, nil)
 	}
 
 	// 7. Close Plugin Host bridge last (in-flight forwards finish first).

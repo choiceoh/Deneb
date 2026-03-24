@@ -8,7 +8,10 @@ import (
 func TestIssueAndValidateToken(t *testing.T) {
 	v := NewValidator([]byte("test-secret"))
 
-	token := v.IssueToken("device-1", RoleOperator, []Scope{ScopeRead, ScopeWrite})
+	token, err := v.IssueToken("device-1", RoleOperator, []Scope{ScopeRead, ScopeWrite})
+	if err != nil {
+		t.Fatalf("issue error: %v", err)
+	}
 	if token == "" {
 		t.Fatal("expected non-empty token")
 	}
@@ -29,9 +32,26 @@ func TestIssueAndValidateToken(t *testing.T) {
 	}
 }
 
+func TestIssueToken_EmptyDeviceID(t *testing.T) {
+	v := NewValidator([]byte("secret"))
+	_, err := v.IssueToken("", RoleOperator, nil)
+	if err == nil {
+		t.Error("expected error for empty device ID")
+	}
+}
+
+func TestIssueToken_DeviceIDWithColon(t *testing.T) {
+	v := NewValidator([]byte("secret"))
+	_, err := v.IssueToken("device:bad", RoleOperator, nil)
+	if err == nil {
+		t.Error("expected error for device ID containing colon")
+	}
+}
+
 func TestValidateToken_InvalidSignature(t *testing.T) {
 	v := NewValidator([]byte("test-secret"))
-	_, err := v.ValidateToken("deadbeef:device-1:operator:read:12345")
+	// 64 hex chars (all zeros) + colon + payload
+	_, err := v.ValidateToken("0000000000000000000000000000000000000000000000000000000000000000:device-1:operator:read:12345")
 	if err == nil {
 		t.Fatal("expected error for invalid signature")
 	}
@@ -45,11 +65,19 @@ func TestValidateToken_InvalidFormat(t *testing.T) {
 	}
 }
 
+func TestValidateToken_TooShort(t *testing.T) {
+	v := NewValidator([]byte("test-secret"))
+	_, err := v.ValidateToken("abcd:payload")
+	if err == nil {
+		t.Fatal("expected error for short token")
+	}
+}
+
 func TestValidateToken_DifferentSecret(t *testing.T) {
 	v1 := NewValidator([]byte("secret-1"))
 	v2 := NewValidator([]byte("secret-2"))
 
-	token := v1.IssueToken("dev", RoleViewer, []Scope{ScopeRead})
+	token, _ := v1.IssueToken("dev", RoleViewer, []Scope{ScopeRead})
 	_, err := v2.ValidateToken(token)
 	if err == nil {
 		t.Fatal("expected error for different secret")

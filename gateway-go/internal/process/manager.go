@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -58,6 +59,7 @@ type TrackedProcess struct {
 	Request ExecRequest `json:"request"`
 	Result  *ExecResult `json:"result,omitempty"`
 	Status  RunStatus   `json:"status"`
+	mu      sync.Mutex
 	cmd     *exec.Cmd
 	cancel  context.CancelFunc
 }
@@ -114,6 +116,7 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		m.mu.RUnlock()
 
 		if approver == nil || !approver(req) {
+			tracked.mu.Lock()
 			tracked.Status = StatusDenied
 			result := &ExecResult{
 				ID:     req.ID,
@@ -121,9 +124,12 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 				Error:  "execution denied",
 			}
 			tracked.Result = result
+			tracked.mu.Unlock()
 			return result
 		}
+		tracked.mu.Lock()
 		tracked.Status = StatusApproved
+		tracked.mu.Unlock()
 	}
 
 	// Build command.
@@ -133,12 +139,16 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	}
 
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
+	tracked.mu.Lock()
 	tracked.cancel = cancel
+	tracked.mu.Unlock()
 
 	cmd := exec.CommandContext(execCtx, req.Command, req.Args...)
 	if req.WorkingDir != "" {
 		cmd.Dir = req.WorkingDir
 	}
+	// Inherit parent environment, then overlay user-specified vars.
+	cmd.Env = os.Environ()
 	for k, v := range req.Env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
@@ -146,14 +156,17 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
 
+	tracked.mu.Lock()
 	tracked.cmd = cmd
 	tracked.Status = StatusRunning
+	tracked.mu.Unlock()
 	startedAt := time.Now().UnixMilli()
 
 	m.logger.Info("process starting", "id", req.ID, "command", req.Command)
 
 	if err := cmd.Start(); err != nil {
 		cancel()
+		tracked.mu.Lock()
 		tracked.Status = StatusFailed
 		result := &ExecResult{
 			ID:        req.ID,
@@ -163,6 +176,7 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 			Error:     err.Error(),
 		}
 		tracked.Result = result
+		tracked.mu.Unlock()
 		return result
 	}
 
@@ -196,14 +210,15 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		} else {
 			result.ExitCode = -1
 		}
-		tracked.Status = result.Status
 	} else {
 		result.Status = StatusDone
 		result.ExitCode = 0
-		tracked.Status = StatusDone
 	}
 
+	tracked.mu.Lock()
+	tracked.Status = result.Status
 	tracked.Result = result
+	tracked.mu.Unlock()
 	m.logger.Info("process completed", "id", req.ID, "status", result.Status, "exitCode", result.ExitCode, "ms", result.RuntimeMs)
 	return result
 }
@@ -217,6 +232,10 @@ func (m *Manager) Kill(id string) error {
 	if !ok {
 		return fmt.Errorf("process not found: %s", id)
 	}
+
+	tracked.mu.Lock()
+	defer tracked.mu.Unlock()
+
 	if tracked.Status != StatusRunning {
 		return fmt.Errorf("process not running: %s (status=%s)", id, tracked.Status)
 	}

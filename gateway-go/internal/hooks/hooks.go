@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -187,7 +188,8 @@ func (r *Registry) executeHook(ctx context.Context, hook Hook, env map[string]st
 	// Execute via shell for user-defined commands.
 	cmd := exec.CommandContext(execCtx, "sh", "-c", hook.Command)
 
-	// Set environment variables.
+	// Inherit parent environment, then overlay hook-specific vars.
+	cmd.Env = os.Environ()
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}

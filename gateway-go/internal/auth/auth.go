@@ -89,32 +89,51 @@ func NewValidator(secret []byte) *Validator {
 // Token format: hex(hmac-sha256(payload, secret)):payload
 // where payload is: deviceId:role:scopes:issuedAtUnix
 func (v *Validator) ValidateToken(token string) (*TokenClaims, error) {
-	parts := strings.SplitN(token, ":", 2)
-	if len(parts) != 2 {
+	// The HMAC hex is always 64 chars (sha256 = 32 bytes = 64 hex).
+	// Split at the first colon after the hex prefix.
+	if len(token) < 65 || token[64] != ':' {
 		return nil, fmt.Errorf("invalid token format")
 	}
 
-	sig, err := hex.DecodeString(parts[0])
+	sig, err := hex.DecodeString(token[:64])
 	if err != nil {
 		return nil, fmt.Errorf("invalid token signature encoding")
 	}
 
-	payload := parts[1]
+	payload := token[65:]
 	expected := v.computeHMAC([]byte(payload))
 	if !hmac.Equal(sig, expected) {
 		return nil, fmt.Errorf("invalid token signature")
 	}
 
-	return parsePayload(payload)
+	claims, err := parsePayload(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check expiration if set.
+	if claims.IsExpired(time.Now()) {
+		return nil, fmt.Errorf("token expired")
+	}
+
+	return claims, nil
 }
 
 // IssueToken creates a signed token for the given device and role.
-func (v *Validator) IssueToken(deviceID string, role Role, scopes []Scope) string {
+// Returns an error if deviceID is empty or contains the delimiter character.
+func (v *Validator) IssueToken(deviceID string, role Role, scopes []Scope) (string, error) {
+	if deviceID == "" {
+		return "", fmt.Errorf("deviceID is required")
+	}
+	if strings.ContainsRune(deviceID, ':') {
+		return "", fmt.Errorf("deviceID must not contain ':'")
+	}
+
 	now := time.Now().Unix()
 	scopeStr := joinScopes(scopes)
 	payload := fmt.Sprintf("%s:%s:%s:%d", deviceID, role, scopeStr, now)
 	sig := hex.EncodeToString(v.computeHMAC([]byte(payload)))
-	return sig + ":" + payload
+	return sig + ":" + payload, nil
 }
 
 // RegisterDevice adds or updates a paired device.

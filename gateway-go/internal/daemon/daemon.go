@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -209,9 +208,4 @@ func ReadPIDFile(path string) (*PIDInfo, error) {
 		return nil, fmt.Errorf("parse pid file: %w", err)
 	}
 	return &info, nil
-}
-
-// FormatPID returns a human-readable PID description.
-func FormatPID(pid int) string {
-	return strconv.Itoa(pid)
 }

@@ -223,7 +223,7 @@ func agentStatus(deps ExtendedDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		activeSessions := 0
 		for _, s := range deps.Sessions.List() {
-			if s.Status == "running" {
+			if s.Status == session.StatusRunning {
 				activeSessions++
 			}
 		}
@@ -237,7 +237,7 @@ func agentStatus(deps ExtendedDeps) HandlerFunc {
 		if deps.Processes != nil {
 			running := 0
 			for _, p := range deps.Processes.List() {
-				if p.Status == "running" {
+				if p.Status == process.StatusRunning {
 					running++
 				}
 			}

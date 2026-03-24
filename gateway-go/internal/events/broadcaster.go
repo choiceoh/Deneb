@@ -79,7 +79,7 @@ func (b *Broadcaster) Count() int {
 
 // Broadcast sends an event to all matching subscribers.
 // Returns the number of subscribers that received the event and any send errors.
-func (b *Broadcaster) Broadcast(event string, payload any) (sent int, errors []error) {
+func (b *Broadcaster) Broadcast(event string, payload any) (sent int, errs []error) {
 	b.mu.Lock()
 	b.seq++
 	seq := b.seq
@@ -110,13 +110,13 @@ func (b *Broadcaster) Broadcast(event string, payload any) (sent int, errors []e
 		if !entry.filter.Accepts(event) {
 			continue
 		}
-		if err := entry.sub.SendEvent(data); err != nil {
-			errors = append(errors, err)
+		if sendErr := entry.sub.SendEvent(data); sendErr != nil {
+			errs = append(errs, sendErr)
 		} else {
 			sent++
 		}
 	}
-	return sent, errors
+	return sent, errs
 }
 
 // BroadcastRaw sends pre-serialized event data to all authenticated subscribers
