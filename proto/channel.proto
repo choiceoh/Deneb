@@ -6,7 +6,7 @@ syntax = "proto3";
 
 package deneb.channel;
 
-option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol";
+option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen";
 
 // ChannelCapabilities describes what a channel supports.
 // TypeScript: ChannelCapabilities in types.core.ts

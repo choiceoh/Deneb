@@ -748,8 +748,7 @@ const file_channel_proto_rawDesc = "" +
 	"\f_webhook_urlB\v\n" +
 	"\t_base_urlB\a\n" +
 	"\x05_portB\x10\n" +
-	"\x0e_last_probe_atB\xad\x01\n" +
-	"\x11com.deneb.channelB\fChannelProtoP\x01Z5github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen\xa2\x02\x03DCX\xaa\x02\rDeneb.Channel\xca\x02\rDeneb\\Channel\xe2\x02\x19Deneb\\Channel\\GPBMetadata\xea\x02\x0eDeneb::Channelb\x06proto3"
+	"\x0e_last_probe_atB7Z5github.com/choiceoh/deneb/gateway-go/pkg/protocol/genb\x06proto3"
 
 var (
 	file_channel_proto_rawDescOnce sync.Once

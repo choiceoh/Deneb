@@ -1051,8 +1051,7 @@ const file_gateway_proto_rawDesc = "" +
 	"issuedAtMs\x88\x01\x01B\x0f\n" +
 	"\r_issued_at_msB\a\n" +
 	"\x05_authB\x12\n" +
-	"\x10_canvas_host_urlB\xad\x01\n" +
-	"\x11com.deneb.gatewayB\fGatewayProtoP\x01Z5github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen\xa2\x02\x03DGX\xaa\x02\rDeneb.Gateway\xca\x02\rDeneb\\Gateway\xe2\x02\x19Deneb\\Gateway\\GPBMetadata\xea\x02\x0eDeneb::Gatewayb\x06proto3"
+	"\x10_canvas_host_urlB7Z5github.com/choiceoh/deneb/gateway-go/pkg/protocol/genb\x06proto3"
 
 var (
 	file_gateway_proto_rawDescOnce sync.Once

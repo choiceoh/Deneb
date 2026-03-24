@@ -10,11 +10,6 @@
 #   go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 #   npm install -g ts-proto
 version: v2
-managed:
-  enabled: true
-  override:
-    - file_option: go_package_prefix
-      value: github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen
 plugins:
   # Go protobuf structs
   - local: protoc-gen-go
@@ -27,7 +22,9 @@ plugins:
     out: ../src/protocol/generated
     opt:
       - esModuleInterop=true
-      - outputTypeOnly=true
       - oneof=unions
       - unrecognizedEnum=false
       - snakeToCamel=true
+      - outputEncodeMethods=false
+      - outputJsonMethods=false
+      - outputClientImpl=false

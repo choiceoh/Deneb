@@ -743,8 +743,7 @@ const file_session_proto_rawDesc = "" +
 	"\x13SESSION_KIND_DIRECT\x10\x01\x12\x16\n" +
 	"\x12SESSION_KIND_GROUP\x10\x02\x12\x17\n" +
 	"\x13SESSION_KIND_GLOBAL\x10\x03\x12\x18\n" +
-	"\x14SESSION_KIND_UNKNOWN\x10\x04B\xad\x01\n" +
-	"\x11com.deneb.sessionB\fSessionProtoP\x01Z5github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen\xa2\x02\x03DSX\xaa\x02\rDeneb.Session\xca\x02\rDeneb\\Session\xe2\x02\x19Deneb\\Session\\GPBMetadata\xea\x02\x0eDeneb::Sessionb\x06proto3"
+	"\x14SESSION_KIND_UNKNOWN\x10\x04B7Z5github.com/choiceoh/deneb/gateway-go/pkg/protocol/genb\x06proto3"
 
 var (
 	file_session_proto_rawDescOnce sync.Once

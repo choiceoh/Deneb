@@ -7,7 +7,7 @@ syntax = "proto3";
 
 package deneb.gateway;
 
-option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol";
+option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen";
 
 import "google/protobuf/struct.proto";
 

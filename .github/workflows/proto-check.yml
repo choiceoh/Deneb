@@ -9,7 +9,7 @@ on:
       - "core-rs/Cargo.toml"
       - "scripts/proto-gen.sh"
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - "proto/**"
       - "core-rs/build.rs"
@@ -38,21 +38,28 @@ jobs:
         with:
           go-version: "1.24"
 
+      - name: Install protoc-gen-go
+        run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install ts-proto
+        run: npm install -g ts-proto
+
       - name: Generate protobuf code
         run: ./scripts/proto-gen.sh
 
       - name: Check for uncommitted diffs
-        run: |
-          git diff --exit-code -- \
-            gateway-go/pkg/protocol/gen \
-            src/protocol/generated \
-          || (echo "Generated protobuf code is out of date. Run: ./scripts/proto-gen.sh" && exit 1)
+        run: ./scripts/proto-gen.sh --check
 
   breaking:
     name: buf breaking change detection
@@ -60,5 +67,8 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: bufbuild/buf-setup-action@v1
-      - run: cd proto && buf breaking --against ../.git#subdir=proto,ref=origin/${{ github.base_ref }}
+      - name: Detect breaking changes
+        run: cd proto && buf breaking --against ../.git#subdir=proto,ref=origin/${{ github.base_ref }}

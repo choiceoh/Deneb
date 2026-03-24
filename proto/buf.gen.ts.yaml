@@ -1,0 +1,13 @@
+# buf code generation — TypeScript only.
+version: v2
+plugins:
+  - local: protoc-gen-ts_proto
+    out: ../src/protocol/generated
+    opt:
+      - esModuleInterop=true
+      - oneof=unions
+      - unrecognizedEnum=false
+      - snakeToCamel=true
+      - outputEncodeMethods=false
+      - outputJsonMethods=false
+      - outputClientImpl=false
