@@ -55,20 +55,21 @@ export async function extractPdfContent(params: {
     ? pageNumbers.filter((p) => p >= 1 && p <= pdf.numPages).slice(0, maxPages)
     : Array.from({ length: Math.min(pdf.numPages, maxPages) }, (_, i) => i + 1);
 
-  const textParts: string[] = [];
-  for (const pageNum of effectivePages) {
-    const page = await pdf.getPage(pageNum);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item) => ("str" in item ? String(item.str) : ""))
-      .filter(Boolean)
-      .join(" ");
-    if (pageText) {
-      textParts.push(pageText);
-    }
-  }
+  // Extract text from all pages concurrently. pdfjs getPage() + getTextContent()
+  // are CPU-bound (parsing, layout) — running them in parallel across 20 cores
+  // dramatically speeds up multi-page PDFs.
+  const textResults = await Promise.all(
+    effectivePages.map(async (pageNum) => {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      return textContent.items
+        .map((item) => ("str" in item ? String(item.str) : ""))
+        .filter(Boolean)
+        .join(" ");
+    }),
+  );
 
-  const text = textParts.join("\n\n");
+  const text = textResults.filter(Boolean).join("\n\n");
   if (text.trim().length >= minTextChars) {
     return { text, images: [] };
   }
@@ -82,23 +83,26 @@ export async function extractPdfContent(params: {
   }
 
   const { createCanvas } = canvasModule;
-  const images: PdfExtractedImage[] = [];
   const pixelBudget = Math.max(1, maxPixels);
 
-  for (const pageNum of effectivePages) {
-    const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1 });
-    const pagePixels = viewport.width * viewport.height;
-    const scale = Math.min(1, Math.sqrt(pixelBudget / Math.max(1, pagePixels)));
-    const scaled = page.getViewport({ scale: Math.max(0.1, scale) });
-    const canvas = createCanvas(Math.ceil(scaled.width), Math.ceil(scaled.height));
-    await page.render({
-      canvas: canvas as unknown as HTMLCanvasElement,
-      viewport: scaled,
-    }).promise;
-    const png = canvas.toBuffer("image/png");
-    images.push({ type: "image", data: png.toString("base64"), mimeType: "image/png" });
-  }
+  // Render all pages to images concurrently. Canvas rendering + PNG encoding
+  // are CPU-heavy; concurrent execution saturates multicore.
+  const images = await Promise.all(
+    effectivePages.map(async (pageNum) => {
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1 });
+      const pagePixels = viewport.width * viewport.height;
+      const scale = Math.min(1, Math.sqrt(pixelBudget / Math.max(1, pagePixels)));
+      const scaled = page.getViewport({ scale: Math.max(0.1, scale) });
+      const canvas = createCanvas(Math.ceil(scaled.width), Math.ceil(scaled.height));
+      await page.render({
+        canvas: canvas as unknown as HTMLCanvasElement,
+        viewport: scaled,
+      }).promise;
+      const png = canvas.toBuffer("image/png");
+      return { type: "image" as const, data: png.toString("base64"), mimeType: "image/png" };
+    }),
+  );
 
   return { text, images };
 }
