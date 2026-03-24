@@ -5,11 +5,13 @@
 package channel
 
 import (
+	"context"
 	"fmt"
 	"sync"
 )
 
 // Capabilities describes what a channel supports.
+// Mirrors proto/channel.proto ChannelCapabilities.
 type Capabilities struct {
 	ChatTypes      []string `json:"chatTypes"`
 	Polls          bool     `json:"polls,omitempty"`
@@ -23,6 +25,7 @@ type Capabilities struct {
 }
 
 // Meta describes channel metadata.
+// Mirrors proto/channel.proto ChannelMeta.
 type Meta struct {
 	ID             string   `json:"id"`
 	Label          string   `json:"label"`
@@ -33,12 +36,21 @@ type Meta struct {
 	Aliases        []string `json:"aliases,omitempty"`
 }
 
+// Status represents the current runtime state of a channel.
+type Status struct {
+	Connected bool   `json:"connected"`
+	Error     string `json:"error,omitempty"`
+}
+
 // Plugin is the interface that channel plugins must implement.
 // This mirrors the ChannelPlugin contract from TypeScript.
 type Plugin interface {
 	ID() string
 	Meta() Meta
 	Capabilities() Capabilities
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+	Status() Status
 }
 
 // Registry manages registered channel plugins.
@@ -78,10 +90,20 @@ func (r *Registry) Get(id string) Plugin {
 func (r *Registry) List() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-
 	ids := make([]string, 0, len(r.plugins))
 	for id := range r.plugins {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+// StatusAll returns the status of all registered channels.
+func (r *Registry) StatusAll() map[string]Status {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make(map[string]Status, len(r.plugins))
+	for id, p := range r.plugins {
+		result[id] = p.Status()
+	}
+	return result
 }

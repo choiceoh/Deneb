@@ -1,3 +1,7 @@
+"gateway-go":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "gateway-go/**"
 "channel: bluebubbles":
   - changed-files:
       - any-glob-to-any-file:

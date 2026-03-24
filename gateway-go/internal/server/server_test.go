@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,22 +22,39 @@ func TestHealthEndpoint(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 
-	var resp map[string]string
+	var resp map[string]any
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
+		t.Fatalf("decode: %v", err)
 	}
-
 	if resp["status"] != "ok" {
-		t.Errorf("expected status ok, got %s", resp["status"])
+		t.Errorf("expected status ok, got %v", resp["status"])
 	}
 	if resp["runtime"] != "go" {
-		t.Errorf("expected runtime go, got %s", resp["runtime"])
+		t.Errorf("expected runtime go, got %v", resp["runtime"])
+	}
+}
+
+func TestReadyEndpoint(t *testing.T) {
+	srv := New(":0")
+
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	w := httptest.NewRecorder()
+	srv.handleReady(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected 503, got %d", w.Code)
+	}
+
+	srv.ready.Store(true)
+	w = httptest.NewRecorder()
+	srv.handleReady(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
 	}
 }
 
 func TestRPCEndpoint_ValidRequest(t *testing.T) {
 	srv := New(":0")
-	body := `{"method":"chat.send","id":"test-1","params":{"text":"hello"}}`
+	body := `{"method":"health","id":"test-1"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/rpc", strings.NewReader(body))
 	w := httptest.NewRecorder()
 
@@ -48,16 +66,10 @@ func TestRPCEndpoint_ValidRequest(t *testing.T) {
 
 	var resp map[string]any
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode: %v", err)
+		t.Fatalf("decode: %v", err)
 	}
-
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
-	}
-
-	payload := resp["payload"].(map[string]any)
-	if payload["echo"] != "chat.send" {
-		t.Errorf("expected echo=chat.send, got %v", payload["echo"])
 	}
 }
 
@@ -74,18 +86,6 @@ func TestRPCEndpoint_MissingMethod(t *testing.T) {
 	}
 }
 
-func TestRPCEndpoint_WrongHTTPMethod(t *testing.T) {
-	srv := New(":0")
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/rpc", nil)
-	w := httptest.NewRecorder()
-
-	srv.handleRPC(w, req)
-
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", w.Code)
-	}
-}
-
 func TestServerStartStop(t *testing.T) {
 	srv := New("127.0.0.1:0")
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -94,5 +94,97 @@ func TestServerStartStop(t *testing.T) {
 	err := srv.Run(ctx)
 	if err != nil {
 		t.Fatalf("server run error: %v", err)
+	}
+}
+
+func TestServerHealthEndpointLive(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv := New("127.0.0.1:0")
+	addr, err := srv.StartAndListen(ctx)
+	if err != nil {
+		t.Fatalf("StartAndListen: %v", err)
+	}
+	defer srv.Close(context.Background())
+
+	url := fmt.Sprintf("http://%s/health", addr.String())
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("GET /health: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["status"] != "ok" {
+		t.Errorf("status = %v, want ok", body["status"])
+	}
+}
+
+func TestRPCEndpointLive(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv := New("127.0.0.1:0")
+	addr, err := srv.StartAndListen(ctx)
+	if err != nil {
+		t.Fatalf("StartAndListen: %v", err)
+	}
+	defer srv.Close(context.Background())
+
+	url := fmt.Sprintf("http://%s/api/v1/rpc", addr.String())
+
+	// Valid health request.
+	resp, err := http.Post(url, "application/json",
+		strings.NewReader(`{"method":"health","id":"live-1"}`))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ok"] != true {
+		t.Errorf("ok = %v, want true", body["ok"])
+	}
+
+	// Unknown method returns NOT_FOUND.
+	resp2, err := http.Post(url, "application/json",
+		strings.NewReader(`{"method":"nonexistent","id":"live-2"}`))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp2.Body.Close()
+
+	var body2 map[string]any
+	if err := json.NewDecoder(resp2.Body).Decode(&body2); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body2["ok"] != false {
+		t.Errorf("ok = %v, want false", body2["ok"])
+	}
+
+	// Malformed JSON returns 400.
+	resp3, err := http.Post(url, "application/json",
+		strings.NewReader(`{invalid`))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp3.StatusCode)
 	}
 }

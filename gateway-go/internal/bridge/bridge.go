@@ -6,65 +6,52 @@
 package bridge
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"net"
 	"sync"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// PluginHost manages a Node.js subprocess for plugin execution.
+// PluginHost manages IPC communication with a Node.js plugin host process
+// over a Unix domain socket. It implements the rpc.Forwarder interface.
 type PluginHost struct {
-	mu      sync.Mutex
-	running bool
-}
-
-// RequestFrame mirrors the TypeScript RequestFrame for plugin calls.
-type RequestFrame struct {
-	Type   string          `json:"type"`
-	ID     string          `json:"id"`
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params,omitempty"`
-}
-
-// ResponseFrame mirrors the TypeScript ResponseFrame from plugin calls.
-type ResponseFrame struct {
-	Type    string          `json:"type"`
-	ID      string          `json:"id"`
-	OK      bool            `json:"ok"`
-	Payload json.RawMessage `json:"payload,omitempty"`
-	Error   *ErrorShape     `json:"error,omitempty"`
-}
-
-// ErrorShape mirrors the TypeScript ErrorShape.
-type ErrorShape struct {
-	Code         string          `json:"code"`
-	Message      string          `json:"message"`
-	Details      json.RawMessage `json:"details,omitempty"`
-	Retryable    *bool           `json:"retryable,omitempty"`
-	RetryAfterMs *uint64         `json:"retryAfterMs,omitempty"`
-	Cause        *string         `json:"cause,omitempty"`
+	socketPath string
+	conn       net.Conn
+	writer     *FrameWriter
+	reader     *FrameReader
+	mu         sync.Mutex
+	pending    map[string]chan *protocol.ResponseFrame
+	running    bool
+	logger     *slog.Logger
+	closed     chan struct{}
+	closeOnce  sync.Once
+	// reconnect controls automatic reconnection.
+	reconnect     bool
+	reconnectStop chan struct{}
 }
 
 // New creates a new PluginHost (not yet started).
 func New() *PluginHost {
-	return &PluginHost{}
+	return &PluginHost{
+		pending: make(map[string]chan *protocol.ResponseFrame),
+		logger:  slog.Default(),
+		closed:  make(chan struct{}),
+	}
 }
 
-// NewRequestFrame creates a request frame for a plugin method call.
-func NewRequestFrame(id, method string, params any) (*RequestFrame, error) {
-	var rawParams json.RawMessage
-	if params != nil {
-		b, err := json.Marshal(params)
-		if err != nil {
-			return nil, fmt.Errorf("marshal params: %w", err)
-		}
-		rawParams = b
+// NewWithSocket creates a PluginHost configured to connect to a Unix socket.
+func NewWithSocket(socketPath string, logger *slog.Logger) *PluginHost {
+	return &PluginHost{
+		socketPath: socketPath,
+		pending:    make(map[string]chan *protocol.ResponseFrame),
+		logger:     logger,
+		closed:     make(chan struct{}),
 	}
-	return &RequestFrame{
-		Type:   "req",
-		ID:     id,
-		Method: method,
-		Params: rawParams,
-	}, nil
 }
 
 // IsRunning reports whether the plugin host subprocess is active.
@@ -72,4 +59,205 @@ func (h *PluginHost) IsRunning() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.running
+}
+
+// Connect establishes the Unix domain socket connection to the Plugin Host.
+func (h *PluginHost) Connect(ctx context.Context) error {
+	return h.dial(ctx)
+}
+
+// ConnectWithReconnect connects and automatically reconnects on failure
+// with exponential backoff (1s, 2s, 4s, ..., max 30s).
+func (h *PluginHost) ConnectWithReconnect(ctx context.Context) error {
+	if err := h.dial(ctx); err != nil {
+		return err
+	}
+	h.reconnect = true
+	h.reconnectStop = make(chan struct{})
+	return nil
+}
+
+func (h *PluginHost) dial(ctx context.Context) error {
+	if h.socketPath == "" {
+		return fmt.Errorf("no socket path configured")
+	}
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "unix", h.socketPath)
+	if err != nil {
+		return fmt.Errorf("connect to plugin host at %s: %w", h.socketPath, err)
+	}
+	h.mu.Lock()
+	h.conn = conn
+	h.writer = NewFrameWriter(conn)
+	h.reader = NewFrameReader(conn)
+	h.running = true
+	h.mu.Unlock()
+
+	go h.readLoop()
+	return nil
+}
+
+const (
+	// defaultForwardTimeout is the maximum time to wait for a bridge response
+	// if the caller's context has no deadline.
+	defaultForwardTimeout = 60 * time.Second
+)
+
+// Forward sends an RPC request to the Plugin Host and waits for the response.
+// If the caller's context has no deadline, a default 60-second timeout is applied.
+// This implements the rpc.Forwarder interface.
+func (h *PluginHost) Forward(ctx context.Context, req *protocol.RequestFrame) (*protocol.ResponseFrame, error) {
+	if !h.IsRunning() {
+		return nil, fmt.Errorf("bridge not connected")
+	}
+
+	// Apply default timeout if no deadline is set.
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, defaultForwardTimeout)
+		defer cancel()
+	}
+
+	respCh := make(chan *protocol.ResponseFrame, 1)
+
+	h.mu.Lock()
+	h.pending[req.ID] = respCh
+	h.mu.Unlock()
+
+	defer func() {
+		h.mu.Lock()
+		delete(h.pending, req.ID)
+		h.mu.Unlock()
+	}()
+
+	h.mu.Lock()
+	err := h.writer.WriteRequest(req)
+	h.mu.Unlock()
+	if err != nil {
+		return nil, fmt.Errorf("write request: %w", err)
+	}
+
+	select {
+	case resp := <-respCh:
+		return resp, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-h.closed:
+		return nil, fmt.Errorf("bridge connection closed")
+	}
+}
+
+// Close closes the bridge connection. Safe to call multiple times.
+func (h *PluginHost) Close() error {
+	// Stop reconnect loop if running.
+	if h.reconnectStop != nil {
+		select {
+		case <-h.reconnectStop:
+		default:
+			close(h.reconnectStop)
+		}
+	}
+
+	var closeErr error
+	h.closeOnce.Do(func() {
+		close(h.closed)
+		h.mu.Lock()
+		h.running = false
+		conn := h.conn
+		h.mu.Unlock()
+		if conn != nil {
+			closeErr = conn.Close()
+		}
+	})
+	return closeErr
+}
+
+// readLoop reads frames from the Plugin Host and dispatches responses.
+func (h *PluginHost) readLoop() {
+	defer func() {
+		h.closeOnce.Do(func() {
+			close(h.closed)
+		})
+		h.mu.Lock()
+		h.running = false
+		h.mu.Unlock()
+
+		// Attempt reconnect if enabled.
+		if h.reconnect {
+			go h.reconnectLoop()
+		}
+	}()
+
+	for {
+		frameType, data, err := h.reader.ReadFrame()
+		if err != nil {
+			select {
+			case <-h.closed:
+				return
+			default:
+				h.logger.Error("bridge read error", "error", err)
+				return
+			}
+		}
+
+		switch frameType {
+		case protocol.FrameTypeResponse:
+			var resp protocol.ResponseFrame
+			if err := json.Unmarshal(data, &resp); err != nil {
+				h.logger.Error("unmarshal response", "error", err)
+				continue
+			}
+			h.mu.Lock()
+			ch, ok := h.pending[resp.ID]
+			h.mu.Unlock()
+			if ok {
+				select {
+				case ch <- &resp:
+				default:
+				}
+			}
+
+		case protocol.FrameTypeEvent:
+			h.logger.Debug("bridge event received", "data", string(data))
+
+		default:
+			h.logger.Warn("unexpected frame type from bridge", "type", string(frameType))
+		}
+	}
+}
+
+// reconnectLoop attempts to re-establish the bridge connection with
+// exponential backoff: 1s, 2s, 4s, ..., capped at 30s.
+func (h *PluginHost) reconnectLoop() {
+	backoff := 1 * time.Second
+	const maxBackoff = 30 * time.Second
+
+	for {
+		select {
+		case <-h.reconnectStop:
+			return
+		case <-time.After(backoff):
+		}
+
+		h.logger.Info("bridge reconnecting", "socket", h.socketPath, "backoff", backoff)
+
+		// Reset state for new connection.
+		h.closed = make(chan struct{})
+		h.closeOnce = sync.Once{}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := h.dial(ctx)
+		cancel()
+
+		if err == nil {
+			h.logger.Info("bridge reconnected", "socket", h.socketPath)
+			return
+		}
+
+		h.logger.Warn("bridge reconnect failed", "error", err, "retryIn", backoff)
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
 }
