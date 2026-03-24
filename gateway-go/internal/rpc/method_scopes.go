@@ -55,12 +55,7 @@ var methodScopes = map[string]auth.Scope{
 	"channels.start":   auth.ScopeAdmin,
 	"channels.stop":    auth.ScopeAdmin,
 	"channels.restart": auth.ScopeAdmin,
-	// --- Channels (read/write) ---
-	"channels.list":   auth.ScopeRead,
-	"channels.get":    auth.ScopeRead,
-	"channels.status": auth.ScopeRead,
-	"channels.health": auth.ScopeRead,
-	"channels.logout": auth.ScopeWrite,
+	"channels.logout":  auth.ScopeWrite,
 
 	// --- Messaging ---
 	"send":        auth.ScopeWrite,
@@ -124,12 +119,6 @@ var methodScopes = map[string]auth.Scope{
 	"monitoring.channel_health": auth.ScopeRead,
 	"monitoring.activity":       auth.ScopeRead,
 
-	// --- Event subscriptions (read) ---
-	"node.event":                    auth.ScopeWrite,
-	"subscribe.session":             auth.ScopeRead,
-	"unsubscribe.session":           auth.ScopeRead,
-	"subscribe.session.messages":    auth.ScopeRead,
-	"unsubscribe.session.messages":  auth.ScopeRead,
 	// --- Wizard ---
 	"wizard.start":  auth.ScopeWrite,
 	"wizard.next":   auth.ScopeWrite,
@@ -214,8 +203,6 @@ var methodScopes = map[string]auth.Scope{
 	"vega.version":     auth.ScopeRead,
 
 	// --- Config (admin) ---
-	"config.get":    auth.ScopeAdmin,
-	"config.reload": auth.ScopeAdmin,
 	"config.get":           auth.ScopeAdmin,
 	"config.set":           auth.ScopeAdmin,
 	"config.patch":         auth.ScopeAdmin,
@@ -224,34 +211,17 @@ var methodScopes = map[string]auth.Scope{
 	"config.schema":        auth.ScopeRead,
 	"config.schema.lookup": auth.ScopeRead,
 
-	// --- Chat (write) ---
-	"chat.send":    auth.ScopeWrite,
-	"chat.history": auth.ScopeRead,
-	"chat.abort":   auth.ScopeWrite,
-	"chat.inject":  auth.ScopeWrite,
-
 	// --- Daemon (admin) ---
 	"daemon.status": auth.ScopeAdmin,
 
 	// --- Events (admin) ---
 	"events.broadcast": auth.ScopeAdmin,
 
-	// --- Monitoring (read) ---
-	"monitoring.channel_health": auth.ScopeRead,
-	"monitoring.activity":       auth.ScopeRead,
-
-	// --- Vega (write) ---
-	"vega.ask":         auth.ScopeWrite,
-	"vega.update":      auth.ScopeWrite,
-	"vega.add-action":  auth.ScopeWrite,
-	"vega.mail-append": auth.ScopeWrite,
-	"vega.version":     auth.ScopeRead,
-
 	// --- Legacy event subscription aliases ---
-	"subscribe.session":              auth.ScopeRead,
-	"unsubscribe.session":            auth.ScopeRead,
-	"subscribe.session.messages":     auth.ScopeRead,
-	"unsubscribe.session.messages":   auth.ScopeRead,
+	"subscribe.session":             auth.ScopeRead,
+	"unsubscribe.session":           auth.ScopeRead,
+	"subscribe.session.messages":    auth.ScopeRead,
+	"unsubscribe.session.messages":  auth.ScopeRead,
 }
 
 // RequiredScope returns the scope needed to call the given method.

@@ -17,8 +17,8 @@ import { existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const HIGHWAY_BIN = join(ROOT, "tools/highway/target/release/highway");
-const HIGHWAY_DEBUG_BIN = join(ROOT, "tools/highway/target/debug/highway");
+const HIGHWAY_BIN = join(ROOT, "target/release/highway");
+const HIGHWAY_DEBUG_BIN = join(ROOT, "target/debug/highway");
 
 function getHighwayBin(): string {
   if (existsSync(HIGHWAY_BIN)) {
@@ -29,8 +29,8 @@ function getHighwayBin(): string {
   }
 
   console.error("⚡ Highway binary not found. Building...");
-  const buildResult = spawnSync("cargo", ["build", "--release"], {
-    cwd: join(ROOT, "tools/highway"),
+  const buildResult = spawnSync("cargo", ["build", "--release", "-p", "highway"], {
+    cwd: ROOT,
     stdio: "inherit",
   });
 
