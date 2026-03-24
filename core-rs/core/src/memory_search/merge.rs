@@ -109,12 +109,17 @@ pub fn merge_hybrid_results(params: &MergeParams) -> Vec<MergedResult> {
 
     // Apply MMR re-ranking if enabled
     let mmr_config = params.mmr.as_ref().cloned().unwrap_or_default();
-    if mmr_config.enabled {
+    if mmr_config.enabled && !merged.is_empty() {
         let scores: Vec<f64> = merged.iter().map(|r| r.score).collect();
         let snippets: Vec<&str> = merged.iter().map(|r| r.snippet.as_str()).collect();
         let indices = mmr::mmr_rerank_hybrid(&scores, &snippets, &mmr_config);
         let original = merged;
-        merged = indices.into_iter().map(|i| original[i].clone()).collect();
+        // Bounds-check indices defensively
+        merged = indices
+            .into_iter()
+            .filter(|&i| i < original.len())
+            .map(|i| original[i].clone())
+            .collect();
     }
 
     merged
@@ -245,6 +250,58 @@ mod tests {
         // ~30 days old, so score should be roughly halved
         assert!(results[0].score < 0.9);
         assert!(results[0].score > 0.3);
+    }
+
+    #[test]
+    fn test_merge_nan_scores_no_panic() {
+        let params = MergeParams {
+            vector: vec![make_vector("a", "file.md", f64::NAN)],
+            keyword: vec![make_keyword("b", "file.md", 0.8)],
+            vector_weight: 0.7,
+            text_weight: 0.3,
+            mmr: None,
+            temporal_decay: None,
+            now_ms: None,
+        };
+        let results = merge_hybrid_results(&params);
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_merge_keyword_only() {
+        let params = MergeParams {
+            vector: vec![],
+            keyword: vec![make_keyword("a", "file.md", 0.8)],
+            vector_weight: 0.7,
+            text_weight: 0.3,
+            mmr: None,
+            temporal_decay: None,
+            now_ms: None,
+        };
+        let results = merge_hybrid_results(&params);
+        assert_eq!(results.len(), 1);
+        assert!((results[0].score - 0.24).abs() < 1e-10); // 0.3 * 0.8
+    }
+
+    #[test]
+    fn test_merge_with_mmr() {
+        let params = MergeParams {
+            vector: vec![
+                make_vector("a", "file.md", 0.9),
+                make_vector("b", "file2.md", 0.8),
+            ],
+            keyword: vec![],
+            vector_weight: 1.0,
+            text_weight: 0.0,
+            mmr: Some(MmrConfig {
+                enabled: true,
+                lambda: 0.7,
+            }),
+            temporal_decay: None,
+            now_ms: None,
+        };
+        let results = merge_hybrid_results(&params);
+        assert_eq!(results.len(), 2);
     }
 
     #[test]

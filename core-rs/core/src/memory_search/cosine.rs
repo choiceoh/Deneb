@@ -1,5 +1,7 @@
 /// Cosine similarity between two f64 vectors.
 /// Returns 0.0 for empty or zero-norm vectors.
+/// Result is clamped to [-1.0, 1.0] to guard against float imprecision.
+/// Returns 0.0 if the result is NaN (e.g., from NaN inputs).
 pub fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
     if a.is_empty() || b.is_empty() {
         return 0.0;
@@ -7,15 +9,16 @@ pub fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
     let len = a.len().min(b.len());
 
     #[cfg(target_arch = "x86_64")]
-    {
-        // SSE2 is always available on x86_64.
-        // Process 2 f64 elements at a time via 128-bit registers.
-        cosine_similarity_sse2(&a[..len], &b[..len])
-    }
+    let raw = cosine_similarity_sse2(&a[..len], &b[..len]);
 
     #[cfg(not(target_arch = "x86_64"))]
-    {
-        cosine_similarity_scalar(&a[..len], &b[..len])
+    let raw = cosine_similarity_scalar(&a[..len], &b[..len]);
+
+    // Guard: NaN from bad inputs → 0.0; clamp to valid range
+    if raw.is_nan() {
+        0.0
+    } else {
+        raw.clamp(-1.0, 1.0)
     }
 }
 
@@ -167,5 +170,34 @@ mod tests {
         // Manual: dot=32, normA=14, normB=77 => 32/sqrt(14*77) ≈ 0.9746
         let expected = 32.0 / (14.0_f64.sqrt() * 77.0_f64.sqrt());
         assert!((sim - expected).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_nan_input() {
+        assert_eq!(cosine_similarity(&[f64::NAN, 1.0], &[1.0, 2.0]), 0.0);
+        assert_eq!(cosine_similarity(&[1.0, 2.0], &[f64::NAN, 1.0]), 0.0);
+    }
+
+    #[test]
+    fn test_infinity_input() {
+        // Infinity inputs should not panic; result clamped or 0.0
+        let sim = cosine_similarity(&[f64::INFINITY, 1.0], &[1.0, 2.0]);
+        assert!(sim.is_finite());
+        assert!(sim >= -1.0 && sim <= 1.0);
+    }
+
+    #[test]
+    fn test_result_clamped() {
+        // Identical vectors: result should be exactly 1.0, not 1.0000000000002
+        let v = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let sim = cosine_similarity(&v, &v);
+        assert_eq!(sim, 1.0);
+        assert!(sim <= 1.0);
+    }
+
+    #[test]
+    fn test_single_element() {
+        assert!((cosine_similarity(&[3.0], &[3.0]) - 1.0).abs() < 1e-10);
+        assert!((cosine_similarity(&[3.0], &[-3.0]) - (-1.0)).abs() < 1e-10);
     }
 }

@@ -78,22 +78,28 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
     let token_cache: Vec<HashSet<String>> =
         items.iter().map(|item| tokenize(&item.content)).collect();
 
-    // Normalize scores to [0, 1]
+    // Normalize scores to [0, 1], filtering NaN values
     let max_score = items
         .iter()
         .map(|i| i.score)
+        .filter(|s| s.is_finite())
         .fold(f64::NEG_INFINITY, f64::max);
     let min_score = items
         .iter()
         .map(|i| i.score)
+        .filter(|s| s.is_finite())
         .fold(f64::INFINITY, f64::min);
-    let score_range = max_score - min_score;
+    let score_range = if max_score.is_finite() && min_score.is_finite() {
+        max_score - min_score
+    } else {
+        0.0
+    };
 
     let normalize = |score: f64| -> f64 {
-        if score_range == 0.0 {
+        if !score.is_finite() || score_range == 0.0 {
             1.0
         } else {
-            (score - min_score) / score_range
+            ((score - min_score) / score_range).clamp(0.0, 1.0)
         }
     };
 
@@ -292,5 +298,75 @@ mod tests {
     fn test_compute_mmr_score() {
         assert!((compute_mmr_score(1.0, 0.0, 0.7) - 0.7).abs() < 1e-10);
         assert!((compute_mmr_score(1.0, 1.0, 0.7) - 0.4).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_mmr_nan_scores_no_panic() {
+        let items = vec![
+            MmrItem {
+                id: "a".into(),
+                score: f64::NAN,
+                content: "hello world".into(),
+            },
+            MmrItem {
+                id: "b".into(),
+                score: 0.8,
+                content: "foo bar".into(),
+            },
+        ];
+        let config = MmrConfig {
+            enabled: true,
+            lambda: 0.7,
+        };
+        let result = mmr_rerank(&items, &config);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_mmr_all_same_score() {
+        let items = vec![
+            MmrItem {
+                id: "a".into(),
+                score: 0.5,
+                content: "hello".into(),
+            },
+            MmrItem {
+                id: "b".into(),
+                score: 0.5,
+                content: "world".into(),
+            },
+        ];
+        let config = MmrConfig {
+            enabled: true,
+            lambda: 0.7,
+        };
+        let result = mmr_rerank(&items, &config);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_mmr_single_item() {
+        let items = vec![MmrItem {
+            id: "a".into(),
+            score: 0.9,
+            content: "hello".into(),
+        }];
+        let config = MmrConfig {
+            enabled: true,
+            lambda: 0.7,
+        };
+        let result = mmr_rerank(&items, &config);
+        assert_eq!(result, vec![0]);
+    }
+
+    #[test]
+    fn test_mmr_empty() {
+        let items: Vec<MmrItem> = vec![];
+        let config = MmrConfig {
+            enabled: true,
+            lambda: 0.7,
+        };
+        let result = mmr_rerank(&items, &config);
+        assert!(result.is_empty());
     }
 }

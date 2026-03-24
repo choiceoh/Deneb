@@ -620,7 +620,7 @@ pub extern "C" fn deneb_compaction_sweep_drop(handle: u32) {
 // ---------------------------------------------------------------------------
 
 /// C FFI: Cosine similarity between two f64 vectors.
-/// Returns the similarity value (0.0-1.0) cast to f64.
+/// Returns the similarity value [-1.0, 1.0], or 0.0 on error.
 ///
 /// # Safety
 /// `a_ptr` and `b_ptr` must point to valid f64 arrays of their respective lengths.
@@ -634,9 +634,19 @@ pub unsafe extern "C" fn deneb_memory_cosine_similarity(
     if a_ptr.is_null() || b_ptr.is_null() {
         return 0.0;
     }
+    // Cap at 2M elements (16 MB per vector) to prevent DoS
+    const MAX_VEC_LEN: usize = 2 * 1024 * 1024;
+    if a_len > MAX_VEC_LEN || b_len > MAX_VEC_LEN {
+        return 0.0;
+    }
     let a = std::slice::from_raw_parts(a_ptr, a_len);
     let b = std::slice::from_raw_parts(b_ptr, b_len);
-    memory_search::cosine::cosine_similarity(a, b)
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        memory_search::cosine::cosine_similarity(a, b)
+    })) {
+        Ok(v) => v,
+        Err(_) => 0.0,
+    }
 }
 
 /// C FFI: BM25 rank to score conversion.

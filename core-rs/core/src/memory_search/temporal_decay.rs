@@ -224,4 +224,47 @@ mod tests {
         let age = age_in_days_from_ms(ts, now);
         assert!((age - 1.0).abs() < 1e-10);
     }
+
+    #[test]
+    fn test_age_future_timestamp_clamped() {
+        // Timestamp in the future → age clamped to 0
+        let now = 1_000_000.0;
+        let future = 2_000_000.0;
+        assert_eq!(age_in_days_from_ms(future, now), 0.0);
+    }
+
+    #[test]
+    fn test_decay_nan_age() {
+        assert_eq!(calculate_temporal_decay_multiplier(f64::NAN, 30.0), 1.0);
+    }
+
+    #[test]
+    fn test_decay_nan_half_life() {
+        assert_eq!(calculate_temporal_decay_multiplier(10.0, f64::NAN), 1.0);
+    }
+
+    #[test]
+    fn test_decay_very_large_age() {
+        // Very old document → multiplier approaches 0 but never negative
+        let m = calculate_temporal_decay_multiplier(100_000.0, 30.0);
+        assert!(m >= 0.0);
+        assert!(m < 1e-10);
+    }
+
+    #[test]
+    fn test_date_to_ms_invalid() {
+        // Invalid date should return 0.0
+        assert_eq!(date_to_ms(2024, 13, 1), 0.0);
+        assert_eq!(date_to_ms(2024, 0, 1), 0.0);
+    }
+
+    #[test]
+    fn test_parse_path_empty() {
+        assert_eq!(parse_memory_date_from_path(""), None);
+    }
+
+    #[test]
+    fn test_evergreen_empty() {
+        assert!(!is_evergreen_memory_path(""));
+    }
 }

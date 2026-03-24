@@ -190,11 +190,13 @@ fn is_ascii_stem(s: &str) -> bool {
 fn strip_korean_trailing_particle(token: &str) -> Option<String> {
     for &particle in KO_TRAILING_PARTICLES {
         if token.len() > particle.len() && token.ends_with(particle) {
-            let stem = &token[..token.len() - particle.len()];
-            // Ensure we didn't split in the middle of a multi-byte char
-            if token.is_char_boundary(token.len() - particle.len()) {
-                return Some(stem.to_string());
+            // `ends_with` on &str guarantees the split point is a valid char boundary,
+            // so the slice is always safe. Double-check defensively.
+            let split_at = token.len() - particle.len();
+            if !token.is_char_boundary(split_at) {
+                continue;
             }
+            return Some(token[..split_at].to_string());
         }
     }
     None

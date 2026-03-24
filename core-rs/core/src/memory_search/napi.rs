@@ -8,6 +8,9 @@ use napi::bindgen_prelude::*;
 
 use super::{bm25, cosine, fts, merge, mmr, query_expansion, temporal_decay, types};
 
+/// Maximum input size for napi string/JSON functions (16 MB, matching FFI_MAX_INPUT_LEN).
+const NAPI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
+
 // ---------------------------------------------------------------------------
 // Cosine similarity — zero-copy Float64Array
 // ---------------------------------------------------------------------------
@@ -68,6 +71,9 @@ pub fn memory_is_evergreen_memory_path(file_path: String) -> bool {
 /// Takes JSON arrays of items and config, returns JSON array of reranked items.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn memory_mmr_rerank(items_json: String, config_json: String) -> String {
+    if items_json.len() > NAPI_MAX_INPUT_LEN {
+        return "[]".to_string();
+    }
     let items: Vec<types::MmrItem> = match serde_json::from_str(&items_json) {
         Ok(v) => v,
         Err(_) => return "[]".to_string(),
@@ -78,7 +84,11 @@ pub fn memory_mmr_rerank(items_json: String, config_json: String) -> String {
     };
 
     let indices = mmr::mmr_rerank(&items, &config);
-    let reranked: Vec<&types::MmrItem> = indices.iter().map(|&i| &items[i]).collect();
+    let reranked: Vec<&types::MmrItem> = indices
+        .iter()
+        .filter(|&&i| i < items.len())
+        .map(|&i| &items[i])
+        .collect();
     serde_json::to_string(&reranked).unwrap_or_else(|_| "[]".to_string())
 }
 
@@ -110,6 +120,9 @@ pub fn memory_expand_query_for_fts(query: String) -> String {
 /// Takes JSON MergeParams, returns JSON array of MergedResult.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn memory_merge_hybrid_results(params_json: String) -> String {
+    if params_json.len() > NAPI_MAX_INPUT_LEN {
+        return "[]".to_string();
+    }
     let params: types::MergeParams = match serde_json::from_str(&params_json) {
         Ok(v) => v,
         Err(_) => return "[]".to_string(),
