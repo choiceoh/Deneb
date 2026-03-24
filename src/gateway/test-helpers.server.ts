@@ -19,10 +19,7 @@ import { captureEnv } from "../test-utils/env.js";
 import { getDeterministicFreePortBlock } from "../test-utils/ports.js";
 import { sleep } from "../utils.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
-// Device auth payload stub (device auth removed for solo-dev simplification).
-function buildDeviceAuthPayloadV3(_params: Record<string, unknown>): string {
-  return "";
-}
+import { buildDeviceAuthPayloadV3 } from "./device-auth.js";
 import { PROTOCOL_VERSION } from "./protocol/index.js";
 import type { GatewayServerOptions } from "./server.js";
 import {
@@ -646,7 +643,7 @@ export async function connectReq(
     return {
       id: identity.deviceId,
       publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem ?? ""),
-      signature: signDevicePayload(payload),
+      signature: signDevicePayload(payload, identity),
       signedAt: signedAtMs,
       nonce: connectChallengeNonce,
     };

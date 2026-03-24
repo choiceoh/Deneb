@@ -1,41 +1,16 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, sign as cryptoSign } from "node:crypto";
 import { WebSocket, type ClientOptions, type CertMeta } from "ws";
+import {
+  clearDeviceAuthToken,
+  loadDeviceAuthToken,
+  storeDeviceAuthToken,
+} from "../infra/device-auth-store.js";
+import {
+  type DeviceIdentity,
+  loadOrCreateDeviceIdentity,
+  publicKeyRawBase64UrlFromPem,
+} from "../infra/device-identity.js";
 import { normalizeFingerprint } from "../infra/tls/fingerprint.js";
-
-/** Stub types/functions — device auth store and device identity modules have been removed. */
-type DeviceIdentity = {
-  deviceId: string;
-  privateKeyPem: string;
-  publicKeyPem: string;
-};
-
-function loadOrCreateDeviceIdentity(): DeviceIdentity | undefined {
-  return undefined;
-}
-
-function publicKeyRawBase64UrlFromPem(_pem: string): string {
-  return "";
-}
-
-function signDevicePayload(_privateKeyPem: string, _payload: string): string {
-  return "";
-}
-
-function loadDeviceAuthToken(_params: {
-  deviceId: string;
-  role: string;
-}): { token: string } | null {
-  return null;
-}
-
-function storeDeviceAuthToken(_params: {
-  deviceId: string;
-  role: string;
-  token: string;
-  scopes: string[];
-}): void {}
-
-function clearDeviceAuthToken(_params: { deviceId: string; role: string }): void {}
 import { rawDataToString } from "../infra/ws.js";
 import { logDebug, logError } from "../logger.js";
 import {
@@ -45,23 +20,8 @@ import {
   type GatewayClientName,
 } from "../utils/message-channel.js";
 import { VERSION } from "../version.js";
+import { buildDeviceAuthPayloadV3 } from "./device-auth.js";
 import { isLoopbackHost, isSecureWebSocketUrl } from "./net.js";
-
-/** Stub — device-auth module has been removed. */
-function buildDeviceAuthPayloadV3(_params: {
-  deviceId: string;
-  clientId: string;
-  clientMode: string;
-  role: string;
-  scopes: string[];
-  signedAtMs: number;
-  token: string | null;
-  nonce: string;
-  platform: string;
-  deviceFamily?: string;
-}): string {
-  return "";
-}
 import {
   ConnectErrorDetailCodes,
   readConnectErrorDetailCode,
@@ -473,10 +433,14 @@ export class GatewayClient {
         platform,
         deviceFamily: this.opts.deviceFamily,
       });
-      const signature = signDevicePayload(this.opts.deviceIdentity.privateKeyPem, payload);
+      const signature = this.opts.deviceIdentity.privateKeyPem
+        ? cryptoSign(null, Buffer.from(payload), this.opts.deviceIdentity.privateKeyPem).toString(
+            "base64url",
+          )
+        : "";
       return {
         id: this.opts.deviceIdentity.deviceId,
-        publicKey: publicKeyRawBase64UrlFromPem(this.opts.deviceIdentity.publicKeyPem),
+        publicKey: publicKeyRawBase64UrlFromPem(this.opts.deviceIdentity.publicKeyPem ?? ""),
         signature,
         signedAt: signedAtMs,
         nonce,

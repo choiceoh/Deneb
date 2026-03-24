@@ -12,8 +12,9 @@ vi.mock("../config/config.js", () => ({
 }));
 
 vi.mock("./session/session-utils.js", async () => {
-  const actual =
-    await vi.importActual<typeof import("./session/session-utils.js")>("./session-utils.js");
+  const actual = await vi.importActual<typeof import("./session/session-utils.js")>(
+    "./session/session-utils.js",
+  );
   return {
     ...actual,
     loadCombinedSessionStoreForGateway: (cfg: DenebConfig) =>

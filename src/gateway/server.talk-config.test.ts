@@ -7,10 +7,7 @@ import {
   signDevicePayload,
 } from "../infra/device-identity.js";
 import { withEnvAsync } from "../test-utils/env.js";
-// Device auth payload stub (device auth removed for solo-dev simplification).
-function buildDeviceAuthPayload(_params: Record<string, unknown>): string {
-  return "";
-}
+import { buildDeviceAuthPayload } from "./device-auth.js";
 import { validateTalkConfigResult } from "./protocol/index.js";
 import {
   connectOk,
@@ -66,7 +63,7 @@ async function createFreshOperatorDevice(scopes: string[], nonce: string) {
   return {
     id: TALK_CONFIG_DEVICE.deviceId,
     publicKey: publicKeyRawBase64UrlFromPem(TALK_CONFIG_DEVICE.publicKeyPem),
-    signature: signDevicePayload(TALK_CONFIG_DEVICE.privateKeyPem, payload),
+    signature: signDevicePayload(payload, TALK_CONFIG_DEVICE),
     signedAt: signedAtMs,
     nonce,
   };
