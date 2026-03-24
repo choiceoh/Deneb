@@ -22,13 +22,16 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/controlui"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -67,6 +70,14 @@ type Server struct {
 	rustFFI     bool // true when Rust FFI is available
 	logger      *slog.Logger
 	ready       atomic.Bool
+
+	// Phase 2 additions.
+	chatHandler     *chat.Handler
+	controlUI       *controlui.Handler
+	authRateLimiter *auth.AuthRateLimiter
+	watchdog        *monitoring.Watchdog
+	channelHealth   *monitoring.ChannelHealthMonitor
+	activity        *monitoring.ActivityTracker
 }
 
 // Option configures the gateway server.
@@ -105,6 +116,14 @@ func WithAuthValidator(v *auth.Validator) Option {
 		s.authValidator = v
 	}
 }
+
+// WithControlUI configures the control UI handler.
+func WithControlUI(cfg controlui.Config) Option {
+	return func(s *Server) {
+		s.controlUI = controlui.New(cfg, s.logger)
+	}
+}
+
 // New creates a new gateway server bound to the given address.
 func New(addr string, opts ...Option) *Server {
 	s := &Server{
@@ -124,10 +143,13 @@ func New(addr string, opts ...Option) *Server {
 	}
 
 	s.broadcaster = events.NewBroadcaster()
+	s.broadcaster.SetLogger(s.logger)
 	s.processes = process.NewManager(s.logger)
 	s.cron = cron.NewScheduler(s.logger)
 	s.hooks = hooks.NewRegistry(s.logger)
 	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
+	s.activity = monitoring.NewActivityTracker()
+	s.authRateLimiter = auth.NewAuthRateLimiter(10, 60*1000, 5*60*1000)
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.registerBuiltinMethods()
@@ -137,6 +159,7 @@ func New(addr string, opts ...Option) *Server {
 		ChannelLifecycle: s.channelLifecycle,
 	})
 	s.registerExtendedMethods()
+	s.registerPhase2Methods()
 	return s
 }
 
@@ -166,6 +189,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.startedAt = time.Now()
 	s.ready.Store(true)
 	s.startTickBroadcaster(ctx)
+	s.StartMonitoring(ctx)
 
 	s.logger.Info("gateway server starting", "addr", ln.Addr().String())
 
@@ -264,7 +288,17 @@ func (s *Server) shutdown() error {
 		stopCancel()
 	}
 
-	// 8. Close Plugin Host bridge last (in-flight forwards finish first).
+	// 8. Close chat handler.
+	if s.chatHandler != nil {
+		s.chatHandler.Close()
+	}
+
+	// 9. Close auth rate limiter.
+	if s.authRateLimiter != nil {
+		s.authRateLimiter.Close()
+	}
+
+	// 10. Close Plugin Host bridge last (in-flight forwards finish first).
 	if s.bridge != nil {
 		s.bridge.Close()
 	}
@@ -297,6 +331,14 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("POST /api/v1/rpc", s.handleRPC)
 	mux.HandleFunc("GET /ws", s.handleWsUpgrade)
+
+	// Control UI routes.
+	if s.controlUI != nil {
+		mux.Handle("/ui/", s.controlUI)
+		mux.Handle("/api/control-ui/", s.controlUI)
+		mux.Handle("/control-ui/", s.controlUI)
+	}
+
 	mux.HandleFunc("GET /{$}", s.handleRoot)
 	return mux
 }
@@ -357,6 +399,11 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 // handleRPC processes HTTP JSON-RPC requests via the dispatcher.
 // Extracts Bearer token from Authorization header for authentication.
 func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
+	// Track activity.
+	if s.activity != nil {
+		s.activity.Touch()
+	}
+
 	var req struct {
 		Method string          `json:"method"`
 		Params json.RawMessage `json:"params,omitempty"`
@@ -495,6 +542,100 @@ func (s *Server) SetDaemon(d *daemon.Daemon) {
 // Broadcaster returns the event broadcaster for external use.
 func (s *Server) Broadcaster() *events.Broadcaster {
 	return s.broadcaster
+}
+
+// registerPhase2Methods registers chat, config, monitoring, and event subscription methods.
+func (s *Server) registerPhase2Methods() {
+	// Chat methods — forward heavy work to Node.js bridge.
+	broadcastFn := func(event string, payload any) (int, []error) {
+		return s.broadcaster.Broadcast(event, payload)
+	}
+	s.chatHandler = chat.NewHandler(
+		s.sessions,
+		s.bridge, // may be nil; chat.send will error gracefully
+		broadcastFn,
+		s.logger,
+		chat.DefaultHandlerConfig(),
+	)
+	rpc.RegisterChatMethods(s.dispatcher, rpc.ChatDeps{Chat: s.chatHandler})
+
+	// Config reload method.
+	// Note: config.get is already registered in registerBuiltinMethods using runtimeCfg.
+	rpc.RegisterConfigReloadMethod(s.dispatcher)
+
+	// Monitoring methods.
+	rpc.RegisterMonitoringMethods(s.dispatcher, rpc.MonitoringDeps{
+		ChannelHealth: s.channelHealth,
+		Activity:      s.activity,
+	})
+
+	// Event subscription methods.
+	rpc.RegisterEventsMethods(s.dispatcher, rpc.EventsDeps{Broadcaster: s.broadcaster})
+}
+
+// StartMonitoring starts the watchdog and channel health monitor goroutines.
+func (s *Server) StartMonitoring(ctx context.Context) {
+	// Gateway self-watchdog.
+	s.watchdog = monitoring.NewWatchdog(monitoring.WatchdogDeps{
+		IsServerListening: func() bool { return s.ready.Load() },
+		GetExpectedChannelCount: func() int {
+			return len(s.channels.List())
+		},
+		GetConnectedChannelCount: func() int {
+			count := 0
+			statusAll := s.channels.StatusAll()
+			for _, st := range statusAll {
+				if st.Connected {
+					count++
+				}
+			}
+			return count
+		},
+		GetLastActivityAt: func() int64 {
+			if s.activity != nil {
+				return s.activity.LastActivityAt()
+			}
+			return 0
+		},
+		OnRestartNeeded: func(reason string) {
+			s.logger.Warn("watchdog restart requested", "reason", reason)
+			// In production, this would send SIGUSR1 to trigger graceful restart.
+		},
+	}, monitoring.DefaultWatchdogConfig(), s.logger)
+	go s.watchdog.Run(ctx)
+
+	// Channel health monitor.
+	s.channelHealth = monitoring.NewChannelHealthMonitor(monitoring.ChannelHealthDeps{
+		ListChannelIDs: func() []string {
+			return s.channels.List()
+		},
+		GetChannelStatus: func(id string) string {
+			ch := s.channels.Get(id)
+			if ch == nil {
+				return "unknown"
+			}
+			st := ch.Status()
+			if st.Connected {
+				return "running"
+			}
+			if st.Error != "" {
+				return "error"
+			}
+			return "stopped"
+		},
+		GetChannelLastEventAt: func(_ string) int64 {
+			// Placeholder: real implementation tracks per-channel event timestamps.
+			return 0
+		},
+		GetChannelStartedAt: func(_ string) int64 {
+			return 0
+		},
+		RestartChannel: func(id string) error {
+			s.logger.Info("restarting channel", "channel", id)
+			return nil // Placeholder: real restart via channel lifecycle manager.
+		},
+	}, monitoring.DefaultChannelHealthConfig(), s.logger)
+	go s.channelHealth.Run(ctx)
 }
 
 // registerBuiltinMethods registers the core RPC methods handled natively in Go.

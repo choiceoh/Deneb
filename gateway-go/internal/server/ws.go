@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
+	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"nhooyr.io/websocket"
@@ -32,15 +34,57 @@ var jsonBufPool = sync.Pool{
 
 // WsClient represents a connected WebSocket client.
 type WsClient struct {
-	conn     *websocket.Conn
-	connID   string
-	created  time.Time
-	role     string
-	authed   bool
-	deviceID string
-	scopes   []auth.Scope
-	writeMu  sync.Mutex
+	conn           *websocket.Conn
+	connID         string
+	created        time.Time
+	role           string
+	authed         bool
+	deviceID       string
+	scopes         []auth.Scope
+	writeMu        sync.Mutex
+	bufferedAmount atomic.Int64
 }
+
+// --- Subscriber interface (events.Subscriber) ---
+
+// ID returns the connection identifier.
+func (c *WsClient) ID() string { return c.connID }
+
+// IsAuthenticated returns true if the client has completed the handshake.
+func (c *WsClient) IsAuthenticated() bool { return c.authed }
+
+// Role returns the client's RBAC role.
+func (c *WsClient) Role() string {
+	if c.role == "" {
+		return "operator"
+	}
+	return c.role
+}
+
+// Scopes returns the client's permission scopes as strings.
+func (c *WsClient) Scopes() []string {
+	result := make([]string, len(c.scopes))
+	for i, s := range c.scopes {
+		result[i] = string(s)
+	}
+	return result
+}
+
+// SendEvent writes event data to the WebSocket.
+func (c *WsClient) SendEvent(data []byte) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := c.conn.Write(ctx, websocket.MessageText, data)
+	if err == nil {
+		c.bufferedAmount.Add(int64(len(data)))
+	}
+	return err
+}
+
+// BufferedAmount returns an estimate of queued bytes.
+func (c *WsClient) BufferedAmount() int64 { return c.bufferedAmount.Load() }
 
 // handleWsUpgrade upgrades an HTTP connection to WebSocket and manages the lifecycle.
 func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +115,7 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		s.clients.Delete(client.connID)
 		s.clientCnt.Add(-1)
+		s.broadcaster.Unsubscribe(client.connID)
 	}()
 
 	s.logger.Info("websocket connected", "connId", client.connID, "remote", r.RemoteAddr)
@@ -164,6 +209,9 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient) error {
 		}
 		client.scopes = auth.DefaultScopes(auth.Role(client.role))
 	}
+
+	// Register with broadcaster.
+	s.broadcaster.Subscribe(client, events.Filter{})
 
 	return s.writeFrame(ctx, client, helloResp)
 }
