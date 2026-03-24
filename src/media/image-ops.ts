@@ -428,17 +428,23 @@ export async function optimizeImageToPng(
 }> {
   // Try a grid of sizes/compression levels until under the limit.
   // PNG uses compression levels 0-9 (higher = smaller but slower).
+  //
+  // On multicore (DGX SPARK 20 cores), run all combos concurrently via
+  // TaskPool so Sharp's libvips threads can saturate available cores.
+  // Each Sharp call releases the event loop, so concurrency here
+  // translates to real CPU parallelism.
   const sides = [2048, 1536, 1280, 1024, 800];
   const compressionLevels = [6, 7, 8, 9];
-  let smallest: {
+
+  type Candidate = {
     buffer: Buffer;
     size: number;
     resizeSide: number;
     compressionLevel: number;
-  } | null = null;
+  };
 
-  for (const side of sides) {
-    for (const compressionLevel of compressionLevels) {
+  const tasks = sides.flatMap((side) =>
+    compressionLevels.map((compressionLevel) => async (): Promise<Candidate | null> => {
       try {
         const out = await resizeToPng({
           buffer,
@@ -446,21 +452,34 @@ export async function optimizeImageToPng(
           compressionLevel,
           withoutEnlargement: true,
         });
-        const size = out.length;
-        if (!smallest || size < smallest.size) {
-          smallest = { buffer: out, size, resizeSide: side, compressionLevel };
-        }
-        if (size <= maxBytes) {
-          return {
-            buffer: out,
-            optimizedSize: size,
-            resizeSide: side,
-            compressionLevel,
-          };
-        }
+        return { buffer: out, size: out.length, resizeSide: side, compressionLevel };
       } catch {
-        // Continue trying other size/compression combinations.
+        return null;
       }
+    }),
+  );
+
+  const { getMediaTaskPool } = await import("../infra/worker-pool.js");
+  const pool = getMediaTaskPool();
+  const results = await pool.map(tasks, async (task) => task());
+
+  let smallest: Candidate | null = null;
+  // Check results in original order (largest side first) so the first
+  // candidate that fits is the highest-resolution match.
+  for (const candidate of results) {
+    if (!candidate) {
+      continue;
+    }
+    if (!smallest || candidate.size < smallest.size) {
+      smallest = candidate;
+    }
+    if (candidate.size <= maxBytes) {
+      return {
+        buffer: candidate.buffer,
+        optimizedSize: candidate.size,
+        resizeSide: candidate.resizeSide,
+        compressionLevel: candidate.compressionLevel,
+      };
     }
   }
 

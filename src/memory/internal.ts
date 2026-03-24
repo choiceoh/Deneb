@@ -197,6 +197,24 @@ export function hashText(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
+/**
+ * Async hash that runs in a worker thread via ComputePool.
+ * Use for bulk hashing (file indexing) to keep the event loop free
+ * on multicore systems. Falls back to synchronous hash on error.
+ */
+export async function hashTextAsync(value: string): Promise<string> {
+  try {
+    const { getComputePool } = await import("../infra/compute-pool.js");
+    return await getComputePool().run((text: string) => {
+      const crypto = require("node:crypto");
+      return crypto.createHash("sha256").update(text).digest("hex");
+    }, value);
+  } catch {
+    // Fallback to sync hash if worker fails.
+    return hashText(value);
+  }
+}
+
 export async function buildFileEntry(
   absPath: string,
   workspaceDir: string,
@@ -232,8 +250,10 @@ export async function buildFileEntry(
       return null;
     }
     const contentText = buildMemoryMultimodalLabel(modality, normalizedPath);
+    // dataHash: hash the raw binary via sync crypto (buffer is not
+    // structuredClone-safe for worker_threads, and the hash itself is fast).
     const dataHash = crypto.createHash("sha256").update(buffer).digest("hex");
-    const chunkHash = hashText(
+    const chunkHash = await hashTextAsync(
       JSON.stringify({
         path: normalizedPath,
         contentText,
@@ -263,7 +283,7 @@ export async function buildFileEntry(
     }
     throw err;
   }
-  const hash = hashText(content);
+  const hash = await hashTextAsync(content);
   return {
     path: normalizedPath,
     absPath,

@@ -130,7 +130,9 @@ func (lm *LifecycleManager) StopAll(ctx context.Context) map[string]error {
 	return errs
 }
 
-// HealthCheck performs a health check on all channels.
+// HealthCheck performs a concurrent health check on all channels.
+// Each channel's Status() call runs in its own goroutine so a slow
+// channel does not block health reporting for the rest.
 func (lm *LifecycleManager) HealthCheck() []ChannelHealth {
 	plugins := lm.registry.Snapshot()
 
@@ -142,19 +144,42 @@ func (lm *LifecycleManager) HealthCheck() []ChannelHealth {
 	}
 	lm.mu.RUnlock()
 
-	results := make([]ChannelHealth, 0, len(plugins))
-	for id, p := range plugins {
-		start := time.Now()
-		status := p.Status()
-		latency := time.Since(start).Milliseconds()
+	type indexedHealth struct {
+		idx    int
+		health ChannelHealth
+	}
 
-		results = append(results, ChannelHealth{
-			ID:        id,
-			Connected: status.Connected,
-			Error:     status.Error,
-			StartedAt: startedSnap[id],
-			Latency:   latency,
-		})
+	count := len(plugins)
+	if count == 0 {
+		return nil
+	}
+
+	ch := make(chan indexedHealth, count)
+	i := 0
+	for id, p := range plugins {
+		idx := i
+		i++
+		go func(id string, p Plugin, idx int) {
+			start := time.Now()
+			status := p.Status()
+			latency := time.Since(start).Milliseconds()
+			ch <- indexedHealth{
+				idx: idx,
+				health: ChannelHealth{
+					ID:        id,
+					Connected: status.Connected,
+					Error:     status.Error,
+					StartedAt: startedSnap[id],
+					Latency:   latency,
+				},
+			}
+		}(id, p, idx)
+	}
+
+	results := make([]ChannelHealth, count)
+	for j := 0; j < count; j++ {
+		ih := <-ch
+		results[ih.idx] = ih.health
 	}
 	return results
 }

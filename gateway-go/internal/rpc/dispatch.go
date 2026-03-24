@@ -24,11 +24,13 @@ type Forwarder interface {
 }
 
 // Dispatcher routes RPC method calls to registered handlers.
+// Optionally backed by a WorkerPool to bound concurrent handler goroutines.
 type Dispatcher struct {
 	mu        sync.RWMutex
 	handlers  map[string]HandlerFunc
 	forwarder Forwarder
 	logger    *slog.Logger
+	pool      *WorkerPool
 }
 
 // NewDispatcher creates an empty RPC dispatcher.
@@ -37,6 +39,16 @@ func NewDispatcher(logger *slog.Logger) *Dispatcher {
 		handlers: make(map[string]HandlerFunc),
 		logger:   logger,
 	}
+}
+
+// SetWorkerPool attaches a bounded worker pool for handler execution.
+// When set, Dispatch routes handler calls through the pool instead of
+// spawning unbounded goroutines. This prevents goroutine explosion
+// under burst load.
+func (d *Dispatcher) SetWorkerPool(pool *WorkerPool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.pool = pool
 }
 
 // Register adds a handler for the given method name.
@@ -97,15 +109,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *
 }
 
 // safeCall invokes a handler with panic recovery and a hard deadline.
-// If the handler ignores context cancellation and exceeds the deadline,
-// safeCall returns a timeout error without waiting indefinitely.
+// If a WorkerPool is attached, the handler goroutine is submitted through
+// the pool so concurrent handler execution is bounded.
 func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, handler HandlerFunc) *protocol.ResponseFrame {
 	type result struct {
 		resp *protocol.ResponseFrame
 	}
 	ch := make(chan result, 1)
 
-	go func() {
+	run := func() {
 		defer func() {
 			if r := recover(); r != nil {
 				d.logger.Error("handler panic", "method", req.Method, "panic", r,
@@ -117,7 +129,17 @@ func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, h
 			}
 		}()
 		ch <- result{resp: handler(ctx, req)}
-	}()
+	}
+
+	d.mu.RLock()
+	pool := d.pool
+	d.mu.RUnlock()
+
+	if pool != nil {
+		pool.Submit(run)
+	} else {
+		go run()
+	}
 
 	select {
 	case r := <-ch:
