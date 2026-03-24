@@ -80,6 +80,7 @@ beforeEach(() => {
   isLocalDirectRequestMock.mockReset();
   isLocalDirectRequestMock.mockReturnValue(true);
   loadSessionEntryMock.mockReset();
+  loadSessionEntryMock.mockReturnValue({ entry: undefined, canonicalKey: "" });
   getSubagentRunByChildSessionKeyMock.mockReset();
   resolveSubagentControllerMock.mockReset();
   resolveSubagentControllerMock.mockReturnValue({ controllerSessionKey: "agent:main:main" });

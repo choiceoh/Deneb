@@ -17,10 +17,7 @@ import {
   type GatewayClientName,
 } from "../utils/message-channel.js";
 import { GatewayClient } from "./client.js";
-// Device auth payload stub (device auth removed for solo-dev simplification).
-function buildDeviceAuthPayloadV3(_params: Record<string, unknown>): string {
-  return "";
-}
+import { buildDeviceAuthPayloadV3 } from "./device-auth.js";
 import { PROTOCOL_VERSION } from "./protocol/index.js";
 import { startGatewayServer } from "./server.js";
 
@@ -171,7 +168,7 @@ export async function connectDeviceAuthReq(params: { url: string; token?: string
   const device = {
     id: identity.deviceId,
     publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem ?? ""),
-    signature: signDevicePayload(payload),
+    signature: signDevicePayload(payload, identity),
     signedAt: signedAtMs,
     nonce: connectNonce,
   };

@@ -7,6 +7,7 @@ import {
   resolveStateDir,
 } from "../config/config.js";
 import { resolveSecretInputRef } from "../config/types.secrets.js";
+import { loadOrCreateDeviceIdentity } from "../infra/device-identity.js";
 import { loadGatewayTlsRuntime } from "../infra/tls/gateway.js";
 import { resolveSecretInputString } from "../secrets/resolve-secret-input-string.js";
 import {
@@ -810,7 +811,7 @@ async function executeGatewayRequestWithScopes<T>(params: {
       mode: opts.mode ?? GATEWAY_CLIENT_MODES.CLI,
       role: "operator",
       scopes,
-      deviceIdentity: undefined,
+      deviceIdentity: loadOrCreateDeviceIdentity(),
       minProtocol: opts.minProtocol ?? PROTOCOL_VERSION,
       maxProtocol: opts.maxProtocol ?? PROTOCOL_VERSION,
       onHelloOk: async (hello) => {

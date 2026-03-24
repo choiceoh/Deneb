@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
-import { whatsappPlugin } from "../../extensions/whatsapp/src/channel.js";
+import { telegramPlugin } from "../../extensions/telegram/src/channel.js";
 import type { ChannelPlugin } from "../channels/plugins/types.js";
 import { emitAgentEvent, registerAgentRunContext } from "../infra/agent-events.js";
 import { setRegistry } from "./server.agent.gateway-server-agent.mocks.js";
@@ -61,9 +61,9 @@ const createMSTeamsPlugin = (params?: { aliases?: string[] }): ChannelPlugin => 
 const emptyRegistry = createRegistry([]);
 const defaultRegistry = createRegistry([
   {
-    pluginId: "whatsapp",
+    pluginId: "telegram",
     source: "test",
-    plugin: whatsappPlugin,
+    plugin: telegramPlugin,
   },
 ]);
 

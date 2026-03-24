@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type GatewayErrorInfo, isNonRecoverableAuthError } from "../../../ui/src/ui/gateway.ts.js";
+import { type GatewayErrorInfo, isNonRecoverableAuthError } from "../../../ui/src/ui/gateway.js";
 import { ConnectErrorDetailCodes } from "../protocol/connect-error-details.js";
 
 function makeError(detailCode: string): GatewayErrorInfo {
