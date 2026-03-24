@@ -17,8 +17,8 @@ export const CDP_PORT_RANGE_END = 18899;
 
 export const PROFILE_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
 
-export function isValidProfileName(name: string): boolean {
-  if (!name || name.length > 64) {
+export function isValidProfileName(name: unknown): name is string {
+  if (typeof name !== "string" || !name || name.length > 64) {
     return false;
   }
   return PROFILE_NAME_REGEX.test(name);

@@ -98,17 +98,17 @@ describe("models-config: explicit reasoning override", () => {
           contextWindow: 1_000_000,
           maxTokens: 8192,
         };
-        const cfg: DenebConfig = {
+        // Deliberately omit `reasoning` to emulate user config that doesn't set it.
+        const cfg = {
           models: {
             providers: {
               minimax: {
                 ...baseMinimaxProvider,
-                // @ts-expect-error Intentional: emulate user config omitting reasoning.
                 models: [modelWithoutReasoning],
               },
             },
           },
-        };
+        } as DenebConfig;
 
         const m25 = await generateAndReadMinimaxModel(cfg);
         expect(m25).toBeDefined();

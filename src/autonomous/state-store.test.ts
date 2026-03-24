@@ -13,7 +13,7 @@ import {
   updatePlan,
   updateSocialEntry,
 } from "./state-store.js";
-import type { AutonomousState } from "./types.js";
+import type { AutonomousState, GoalPriority } from "./types.js";
 
 let tmpDir: string;
 let storePath: string;
@@ -134,8 +134,9 @@ describe("addGoal", () => {
 
   it("rejects invalid priority", () => {
     const state = createEmptyState();
-    // @ts-expect-error testing invalid input
-    expect(() => addGoal(state, "Test", "invalid-priority")).toThrow("Invalid goal priority");
+    expect(() => addGoal(state, "Test", "invalid-priority" as GoalPriority)).toThrow(
+      "Invalid goal priority",
+    );
   });
 });
 
