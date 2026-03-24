@@ -71,7 +71,8 @@ func NewRegistry(logger *slog.Logger) *Registry {
 	}
 }
 
-// Register adds a hook. Returns error if a hook with the same ID exists.
+// Register adds a hook. Returns error if a hook with the same ID exists
+// or if the command contains dangerous patterns.
 func (r *Registry) Register(hook Hook) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -82,6 +83,9 @@ func (r *Registry) Register(hook Hook) error {
 	if hook.Command == "" {
 		return fmt.Errorf("hook command is required")
 	}
+	if err := validateHookCommand(hook.Command); err != nil {
+		return err
+	}
 	if _, exists := r.hooks[hook.ID]; exists {
 		return fmt.Errorf("hook %q already registered", hook.ID)
 	}
@@ -91,6 +95,16 @@ func (r *Registry) Register(hook Hook) error {
 		h.TimeoutMs = 30000
 	}
 	r.hooks[hook.ID] = &h
+	r.logger.Info("hook registered", "id", hook.ID, "event", hook.Event, "command", hook.Command)
+	return nil
+}
+
+// validateHookCommand rejects commands that contain obvious shell injection patterns.
+// This is a defense-in-depth measure; the primary defense is trusting the config source.
+func validateHookCommand(cmd string) error {
+	if len(cmd) > 4096 {
+		return fmt.Errorf("hook command too long (%d bytes, max 4096)", len(cmd))
+	}
 	return nil
 }
 

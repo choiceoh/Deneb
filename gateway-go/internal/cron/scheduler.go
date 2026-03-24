@@ -206,7 +206,18 @@ func (s *Scheduler) runTask(ctx context.Context, t *task) {
 
 func (s *Scheduler) executeTask(ctx context.Context, t *task) {
 	t.setRunning()
-	err := t.fn(ctx)
+
+	var err error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("task panicked: %v", r)
+				s.logger.Error("cron task panic", "id", t.id, "panic", r)
+			}
+		}()
+		err = t.fn(ctx)
+	}()
+
 	t.recordRun(err)
 
 	if err != nil {

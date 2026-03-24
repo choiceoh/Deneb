@@ -153,8 +153,16 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		cancel()
+		return m.failProcess(tracked, req.ID, time.Now().UnixMilli(), "stdout pipe: "+err.Error())
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		cancel()
+		return m.failProcess(tracked, req.ID, time.Now().UnixMilli(), "stderr pipe: "+err.Error())
+	}
 
 	tracked.mu.Lock()
 	tracked.cmd = cmd
@@ -166,25 +174,14 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 
 	if err := cmd.Start(); err != nil {
 		cancel()
-		tracked.mu.Lock()
-		tracked.Status = StatusFailed
-		result := &ExecResult{
-			ID:        req.ID,
-			Status:    StatusFailed,
-			StartedAt: startedAt,
-			EndedAt:   time.Now().UnixMilli(),
-			Error:     err.Error(),
-		}
-		tracked.Result = result
-		tracked.mu.Unlock()
-		return result
+		return m.failProcess(tracked, req.ID, startedAt, err.Error())
 	}
 
 	// Capture output (bounded).
 	stdoutBytes, _ := io.ReadAll(io.LimitReader(stdout, int64(m.maxStdout)))
 	stderrBytes, _ := io.ReadAll(io.LimitReader(stderr, int64(m.maxStdout)))
 
-	err := cmd.Wait()
+	err = cmd.Wait()
 	cancel()
 	endedAt := time.Now().UnixMilli()
 
@@ -290,6 +287,22 @@ func (m *Manager) List() []ProcessSnapshot {
 	for _, p := range procs {
 		result = append(result, p.snapshot())
 	}
+	return result
+}
+
+// failProcess records a failed process and returns the result.
+func (m *Manager) failProcess(tracked *TrackedProcess, id string, startedAt int64, errMsg string) *ExecResult {
+	tracked.mu.Lock()
+	tracked.Status = StatusFailed
+	result := &ExecResult{
+		ID:        id,
+		Status:    StatusFailed,
+		StartedAt: startedAt,
+		EndedAt:   time.Now().UnixMilli(),
+		Error:     errMsg,
+	}
+	tracked.Result = result
+	tracked.mu.Unlock()
 	return result
 }
 

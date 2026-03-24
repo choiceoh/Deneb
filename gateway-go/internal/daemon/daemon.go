@@ -152,6 +152,7 @@ func (d *Daemon) IsRunning() bool {
 
 // CheckExistingDaemon reads the PID file to check if another daemon is running.
 // Returns the PID info if a live process owns the PID file, nil otherwise.
+// Validates that the process start time is plausible to guard against PID reuse.
 func (d *Daemon) CheckExistingDaemon() *PIDInfo {
 	data, err := os.ReadFile(d.pidFile)
 	if err != nil {
@@ -163,15 +164,28 @@ func (d *Daemon) CheckExistingDaemon() *PIDInfo {
 		return nil
 	}
 
-	// Check if the process is still alive.
+	// Reject PID files with a start time in the future (corrupt/stale).
+	if info.StartedAt > time.Now().UnixMilli()+60_000 {
+		return nil
+	}
+
+	// On Unix, FindProcess always succeeds; it just creates a Process struct.
+	// Signal(0) actually checks whether the process exists.
 	proc, err := os.FindProcess(info.PID)
 	if err != nil {
 		return nil
 	}
-
-	// Signal 0 checks for process existence without sending a signal.
 	if err := proc.Signal(syscall.Signal(0)); err != nil {
 		// Process doesn't exist; stale PID file.
+		return nil
+	}
+
+	// Guard against PID reuse: reject if the recorded start time is too old.
+	// If the PID file says started 7+ days ago, it's likely a recycled PID.
+	const maxStalenessMs = 7 * 24 * 60 * 60 * 1000 // 7 days
+	if info.StartedAt > 0 && time.Now().UnixMilli()-info.StartedAt > maxStalenessMs {
+		d.logger.Warn("stale pid file detected (started too long ago), ignoring",
+			"pid", info.PID, "startedAt", info.StartedAt)
 		return nil
 	}
 

@@ -28,8 +28,10 @@ type PluginHost struct {
 	pending    map[string]chan *protocol.ResponseFrame
 	running    bool
 	logger     *slog.Logger
-	closed     chan struct{}
-	closeOnce  sync.Once
+	// closed is signaled when the current connection is done.
+	// Protected by closeMu to prevent double-close.
+	closed  chan struct{}
+	closeMu sync.Mutex
 	// reconnect controls automatic reconnection.
 	reconnect     bool
 	reconnectStop chan struct{}
@@ -123,17 +125,16 @@ func (h *PluginHost) Forward(ctx context.Context, req *protocol.RequestFrame) (*
 
 	h.mu.Lock()
 	h.pending[req.ID] = respCh
+	err := h.writer.WriteRequest(req)
 	h.mu.Unlock()
 
+	// Clean up pending entry on all exit paths.
 	defer func() {
 		h.mu.Lock()
 		delete(h.pending, req.ID)
 		h.mu.Unlock()
 	}()
 
-	h.mu.Lock()
-	err := h.writer.WriteRequest(req)
-	h.mu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("write request: %w", err)
 	}
@@ -160,29 +161,38 @@ func (h *PluginHost) Close() error {
 		}
 	}
 
-	var closeErr error
-	h.closeOnce.Do(func() {
-		close(h.closed)
-		h.mu.Lock()
-		h.running = false
-		conn := h.conn
-		h.mu.Unlock()
-		if conn != nil {
-			closeErr = conn.Close()
-		}
-	})
+	h.signalClosed()
+
+	h.mu.Lock()
+	h.running = false
+	conn := h.conn
+	h.mu.Unlock()
 
 	// Wait for reconnect goroutine to finish (prevents goroutine leak).
 	h.reconnectWg.Wait()
-	return closeErr
+
+	if conn != nil {
+		return conn.Close()
+	}
+	return nil
+}
+
+// signalClosed safely closes the h.closed channel exactly once.
+func (h *PluginHost) signalClosed() {
+	h.closeMu.Lock()
+	defer h.closeMu.Unlock()
+	select {
+	case <-h.closed:
+		// already closed
+	default:
+		close(h.closed)
+	}
 }
 
 // readLoop reads frames from the Plugin Host and dispatches responses.
 func (h *PluginHost) readLoop() {
 	defer func() {
-		h.closeOnce.Do(func() {
-			close(h.closed)
-		})
+		h.signalClosed()
 		h.mu.Lock()
 		h.running = false
 		h.mu.Unlock()
@@ -250,9 +260,13 @@ func (h *PluginHost) reconnectLoop() {
 
 		h.logger.Info("bridge reconnecting", "socket", h.socketPath, "backoff", backoff)
 
-		// Reset state for new connection.
+		// Reset closed channel for the new connection attempt.
+		// Safe because readLoop has exited (we're in its defer path)
+		// and no Forward() callers hold references to the old channel
+		// (they either returned or saw <-h.closed).
+		h.closeMu.Lock()
 		h.closed = make(chan struct{})
-		h.closeOnce = sync.Once{}
+		h.closeMu.Unlock()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		err := h.dial(ctx)

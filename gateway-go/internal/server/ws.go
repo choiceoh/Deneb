@@ -275,7 +275,10 @@ func (s *Server) writeFrame(ctx context.Context, client *WsClient, v any) error 
 
 	buf := jsonBufPool.Get().(*bytes.Buffer)
 	buf.Reset()
-	defer jsonBufPool.Put(buf)
+	defer func() {
+		buf.Reset() // clear any partial/corrupted data before returning to pool
+		jsonBufPool.Put(buf)
+	}()
 
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
