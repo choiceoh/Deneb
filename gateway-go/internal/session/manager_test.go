@@ -164,6 +164,51 @@ func TestApplyLifecycleUnknownPhase(t *testing.T) {
 	}
 }
 
+func TestApplyLifecycleReturnsSnapshotCopy(t *testing.T) {
+	m := NewManager()
+	s := m.ApplyLifecycleEvent("s1", LifecycleEvent{Phase: PhaseStart, Ts: 1000})
+
+	// Mutate the returned snapshot — should not affect internal state.
+	s.Status = StatusFailed
+	s.AbortedLastRun = true
+
+	internal := m.Get("s1")
+	if internal.Status != StatusRunning {
+		t.Errorf("internal Status = %q, want %q (mutation leaked)", internal.Status, StatusRunning)
+	}
+	if internal.AbortedLastRun {
+		t.Error("internal AbortedLastRun should be false (mutation leaked)")
+	}
+}
+
+func TestCreateReturnsSnapshotCopy(t *testing.T) {
+	m := NewManager()
+	s := m.Create("s1", KindDirect)
+
+	// Mutate the returned snapshot — should not affect internal state.
+	s.Kind = KindGroup
+
+	internal := m.Get("s1")
+	if internal.Kind != KindDirect {
+		t.Errorf("internal Kind = %q, want %q (mutation leaked)", internal.Kind, KindDirect)
+	}
+}
+
+func TestDeriveSnapshotUpdatedAtNotAliased(t *testing.T) {
+	event := LifecycleEvent{Phase: PhaseStart, Ts: 3000}
+	snap := DeriveLifecycleSnapshot(nil, event)
+
+	if snap.StartedAt == nil || snap.UpdatedAt == nil {
+		t.Fatal("both StartedAt and UpdatedAt should be set")
+	}
+	if snap.StartedAt == snap.UpdatedAt {
+		t.Error("StartedAt and UpdatedAt should not be the same pointer (aliased)")
+	}
+	if *snap.StartedAt != *snap.UpdatedAt {
+		t.Errorf("values should be equal: StartedAt=%d, UpdatedAt=%d", *snap.StartedAt, *snap.UpdatedAt)
+	}
+}
+
 func TestApplyLifecycleRuntimeMsFallback(t *testing.T) {
 	m := NewManager()
 

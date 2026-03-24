@@ -101,6 +101,15 @@ func resolveRuntimeMs(startedAt, endedAt, existingRuntimeMs *int64) *int64 {
 	return nil
 }
 
+// cloneInt64Ptr returns a new pointer with the same value, breaking aliasing.
+func cloneInt64Ptr(p *int64) *int64 {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
 // DeriveLifecycleSnapshot computes the new session state from an existing session
 // and a lifecycle event. Mirrors the logic in deriveGatewaySessionLifecycleSnapshot().
 func DeriveLifecycleSnapshot(existing *Session, event LifecycleEvent) LifecycleSnapshot {
@@ -122,7 +131,7 @@ func DeriveLifecycleSnapshot(existing *Session, event LifecycleEvent) LifecycleS
 
 	if *phase == PhaseStart {
 		startedAt := resolveLifecycleStartedAt(existingStartedAt, event)
-		updatedAt := startedAt
+		updatedAt := cloneInt64Ptr(startedAt)
 		if updatedAt == nil {
 			updatedAt = existingUpdatedAt
 		}
@@ -139,7 +148,7 @@ func DeriveLifecycleSnapshot(existing *Session, event LifecycleEvent) LifecycleS
 	// PhaseEnd or PhaseError.
 	startedAt := resolveLifecycleStartedAt(existingStartedAt, event)
 	endedAt := resolveLifecycleEndedAt(event)
-	updatedAt := endedAt
+	updatedAt := cloneInt64Ptr(endedAt)
 	if updatedAt == nil {
 		updatedAt = existingUpdatedAt
 	}

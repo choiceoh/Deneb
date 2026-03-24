@@ -110,6 +110,7 @@ func (m *Manager) Count() int {
 }
 
 // Create creates a new session with the given key and kind.
+// Returns a snapshot copy safe for concurrent use.
 func (m *Manager) Create(key string, kind Kind) *Session {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -121,10 +122,12 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 		CreatedAt: now,
 	}
 	m.sessions[key] = s
-	return s
+	cp := *s
+	return &cp
 }
 
 // ApplyLifecycleEvent applies a lifecycle event to a session, creating it if needed.
+// Returns a snapshot copy safe for concurrent use.
 func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -135,7 +138,8 @@ func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session
 	// Empty snapshot means unknown phase — no-op.
 	if snap.Status == "" {
 		if existing != nil {
-			return existing
+			cp := *existing
+			return &cp
 		}
 		return &Session{Key: key, Kind: KindUnknown}
 	}
@@ -169,5 +173,6 @@ func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session
 		existing.RuntimeMs = snap.RuntimeMs
 	}
 
-	return existing
+	cp := *existing
+	return &cp
 }
