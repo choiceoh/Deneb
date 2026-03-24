@@ -1,8 +1,11 @@
 /**
  * Minimal PNG encoder for generating simple RGBA images without native dependencies.
  * Used for QR codes, live probes, and other programmatic image generation.
+ *
+ * When @deneb/native is available, CRC32 and full PNG encoding are accelerated via Rust.
  */
 import { deflateSync } from "node:zlib";
+import { loadNative } from "../bindings/native.js";
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -18,6 +21,10 @@ const CRC_TABLE = (() => {
 
 /** Compute CRC32 checksum for a buffer (used in PNG chunk encoding). */
 export function crc32(buf: Buffer): number {
+  const native = loadNative();
+  if (native) {
+    return native.crc32(buf);
+  }
   let crc = 0xffffffff;
   for (let i = 0; i < buf.length; i += 1) {
     crc = CRC_TABLE[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
@@ -62,6 +69,16 @@ export function fillPixel(
 
 /** Encode an RGBA buffer as a PNG image. */
 export function encodePngRgba(buffer: Buffer, width: number, height: number): Buffer {
+  // Try native Rust encoder first.
+  const native = loadNative();
+  if (native) {
+    try {
+      return native.encodePngRgba(buffer, width, height);
+    } catch {
+      // Fall through to TS implementation.
+    }
+  }
+
   const stride = width * 4;
   const raw = Buffer.alloc((stride + 1) * height);
   for (let row = 0; row < height; row += 1) {

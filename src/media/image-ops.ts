@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { loadNative } from "../bindings/native.js";
 import { runExec } from "../process/exec.js";
 
 type Sharp = typeof import("sharp");
@@ -45,6 +46,16 @@ async function loadSharp(): Promise<(buffer: Buffer) => ReturnType<Sharp>> {
  * 5 = Rotate 270 CW + Flip H, 6 = Rotate 90 CW, 7 = Rotate 90 CW + Flip H, 8 = Rotate 270 CW
  */
 function readJpegExifOrientation(buffer: Buffer): number | null {
+  // Try native Rust EXIF reader first.
+  const native = loadNative();
+  if (native) {
+    try {
+      return native.readJpegExifOrientation(buffer);
+    } catch {
+      // Fall through to TS implementation.
+    }
+  }
+
   // Check JPEG magic bytes
   if (buffer.length < 2 || buffer[0] !== 0xff || buffer[1] !== 0xd8) {
     return null;

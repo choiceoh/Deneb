@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { loadNative, type NativeGitignoreMatcher } from "../bindings/native.js";
 
 export interface GitignorePattern {
   /** The raw line from the .gitignore file. */
@@ -195,19 +196,47 @@ export function readGitignoreFromDir(dirPath: string): GitignoreResult {
   return readGitignoreFile(path.join(dirPath, ".gitignore"));
 }
 
+// Native matcher cache: keyed by the patterns array reference for quick lookup.
+const nativeMatcherCache = new WeakMap<GitignorePattern[], NativeGitignoreMatcher>();
+
 /**
  * Check whether a file path is ignored by the given gitignore patterns.
+ *
+ * Uses the native Rust addon when available for faster matching.
+ * Falls back to the pure-TS regex loop otherwise.
  *
  * @param filePath - Relative file path (forward-slash separated).
  * @param patterns - Parsed gitignore patterns.
  * @param isDirectory - Whether the path refers to a directory.
+ * @param originalContent - Optional raw .gitignore content for native acceleration.
  * @returns `true` if the path is ignored.
  */
 export function isIgnoredByPatterns(
   filePath: string,
   patterns: GitignorePattern[],
   isDirectory = false,
+  originalContent?: string,
 ): boolean {
+  // Try native acceleration when original content is available.
+  if (originalContent !== undefined) {
+    const native = loadNative();
+    if (native) {
+      let matcher = nativeMatcherCache.get(patterns);
+      if (!matcher) {
+        try {
+          matcher = new native.GitignoreMatcher(originalContent);
+          nativeMatcherCache.set(patterns, matcher);
+        } catch {
+          // Fall through to TS implementation.
+        }
+      }
+      if (matcher) {
+        return matcher.isIgnored(filePath, isDirectory);
+      }
+    }
+  }
+
+  // Pure-TS fallback.
   const normalized = filePath.replace(/\\/g, "/").replace(/^\/+/, "");
   if (!normalized) {
     return false;
