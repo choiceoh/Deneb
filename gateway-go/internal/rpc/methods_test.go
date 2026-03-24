@@ -37,10 +37,17 @@ func dispatch(t *testing.T, d *Dispatcher, method string, params any) *protocol.
 func TestBuiltinMethodsRegistered(t *testing.T) {
 	d := testDispatcher()
 	methods := d.Methods()
-	if len(methods) < 8 {
-		t.Errorf("expected at least 8 built-in methods, got %d: %v", len(methods), methods)
+	if len(methods) < 14 {
+		t.Errorf("expected at least 14 built-in methods, got %d: %v", len(methods), methods)
 	}
-	expected := []string{"health.check", "sessions.get", "sessions.list", "channels.list", "system.info", "protocol.validate"}
+	expected := []string{
+		"health.check", "sessions.get", "sessions.list", "sessions.delete",
+		"channels.list", "channels.get", "channels.status", "channels.health",
+		"system.info", "protocol.validate",
+		"security.validate_session_key", "security.sanitize_html",
+		"security.is_safe_url", "security.validate_error_code",
+		"media.detect_mime",
+	}
 	set := make(map[string]bool)
 	for _, m := range methods {
 		set[m] = true
@@ -135,6 +142,35 @@ func TestSessionsDelete(t *testing.T) {
 	}
 	if sm.Get("test-1") != nil {
 		t.Error("session should have been deleted")
+	}
+}
+
+func TestSessionsDelete_RunningBlocked(t *testing.T) {
+	sm := session.NewManager()
+	sm.Set(&session.Session{Key: "run-1", Kind: session.KindDirect, Status: session.StatusRunning})
+
+	d := NewDispatcher(testLogger())
+	RegisterBuiltinMethods(d, Deps{Sessions: sm, Channels: channel.NewRegistry()})
+
+	// Without force: should be rejected.
+	resp := dispatch(t, d, "sessions.delete", map[string]any{"key": "run-1"})
+	if resp.OK {
+		t.Fatal("expected CONFLICT error for running session without force")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrConflict {
+		t.Errorf("expected CONFLICT, got %+v", resp.Error)
+	}
+	if sm.Get("run-1") == nil {
+		t.Fatal("running session should NOT have been deleted")
+	}
+
+	// With force=true: should succeed.
+	resp = dispatch(t, d, "sessions.delete", map[string]any{"key": "run-1", "force": true})
+	if !resp.OK {
+		t.Fatalf("expected ok with force=true, got error: %+v", resp.Error)
+	}
+	if sm.Get("run-1") != nil {
+		t.Error("session should have been deleted with force")
 	}
 }
 
