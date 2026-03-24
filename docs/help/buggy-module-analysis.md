@@ -15,43 +15,43 @@ Analysis of Deneb codebase modules with the highest bug risk, evaluated by code 
 
 ### CRITICAL (Immediate Attention Required)
 
-#### 1. `src/memory/qmd-manager.ts` — 1,903 LOC
+#### 1. `src/context-engine/lcm/src/compaction.ts` — 1,701 LOC
 
-- **Risk indicators**: Largest file in codebase, 127 try/catch blocks (most), no dedicated test file
+- **Risk indicators**: Zero direct test coverage, most algorithmically dense file, 3 silent `catch {}` blocks
 - **Bug risks**:
-  - Data loss during SQLite schema migrations
-  - `shouldRepairDuplicateDocumentConstraint` — edge cases in duplicate document constraint repair logic
-  - Incomplete null-byte collection error recovery path
-  - FTS (Full-Text Search) rebuild failure with no recovery (recently fixed in #147 — may recur)
-  - Many of 127 try/catch blocks silently swallow errors
-- **Recommendation**: Add integration tests per database repair path, audit silent catches
-
-#### 2. `src/context-engine/lcm/src/compaction.ts` — 1,701 LOC
-
-- **Risk indicators**: No tests, complex token-based compaction algorithm, multi-level escalation
-- **Bug risks**:
-  - Token counting mismatch leading to memory overflow
-  - Summary tree depth calculation errors causing tree corruption
-  - Unclear error recovery during `normal` → `aggressive` → `fallback` escalation
+  - **Summary tree corruption**: `compactFullSweep` iterates leaf and condensed passes with depth tracking. If the summary store returns stale data mid-sweep (concurrent session activity), the depth chain becomes inconsistent — a condensed summary may reference source summaries already pruned.
+  - **Token counting drift**: `estimateTokens()` approximation errors compound over multi-round compaction (up to `maxRounds: 10`). When real token count exceeds budget after compaction reports success, the context window silently overflows.
+  - **Lossy fallback truncation**: `FALLBACK_MAX_CHARS = 512 * 4` truncates deterministically when LLM summarization fails. The 3 silent `catch {}` blocks make failures invisible — the system silently loses conversation context with no signal to the user.
   - Fanout constraints not enforced during concurrent compaction calls
-- **Recommendation**: Add token boundary tests, escalation level transition tests
+- **Recommendation**: Highest-priority module for test investment. Add integration tests exercising `compactFullSweep` with mock `SummaryStore`/`ConversationStore`, specifically: (a) multi-round escalation, (b) concurrent writes during compaction, (c) token budget adherence post-compaction.
 
-#### 3. `src/context-engine/lcm/src/engine.ts` — 1,498 LOC, 87 async/await
+#### 2. `src/context-engine/lcm/src/engine.ts` — 1,498 LOC, 87 async/await
 
 - **Risk indicators**: No tests, most async operations, session queuing logic
 - **Bug risks**:
-  - Session queue contention (race condition)
+  - **Session queue starvation**: If a compaction operation blocks (e.g., waiting for LLM summarization timeout), queued sessions stall indefinitely. No visible timeout or circuit breaker in the engine queue path.
+  - **Subagent lifecycle coupling**: Exposes `onSubagentEnded` (called from `subagent-registry.ts`), creating a cross-module dependency. Errors caught best-effort in `notifyContextEngineSubagentEnded` — context can silently desynchronize from actual agent state.
   - Partial state residue when async operations fail during context orchestration
-- **Recommendation**: Add session queuing concurrency tests, failure recovery path tests
+- **Recommendation**: Pair with `compaction.ts` testing. Add engine-level tests simulating concurrent session access, compaction timeout, and subagent-end notification races.
 
-#### 4. `src/gateway/server-methods/sessions/sessions.ts` — 1,146 LOC, 58 try/catch
+#### 3. `src/memory/qmd-manager.ts` — 1,903 LOC
 
-- **Risk indicators**: Core session CRUD path, multiple recent fixes (#131, #133)
+- **Risk indicators**: Largest file in codebase, test file exists (2,807 lines) but gaps remain, 20 catch clauses with 3 silent
 - **Bug risks**:
-  - Race condition during concurrent session create/delete/reset
-  - parentId chain corruption leading to transcript integrity violation
+  - **Embed queue deadlock**: `qmdEmbedQueueTail` promise-chain lock — if a task throws synchronously before the `try` block, `release()` never fires, permanently deadlocking all subsequent embed operations for the process lifetime.
+  - **Silent retry storm**: Retry loop with `QMD_EMBED_BACKOFF_MAX_MS = 1 hour` — a persistent failure silently retries for up to an hour before any user feedback.
+  - **Fragile error matching**: `shouldRepairNullByteCollectionError` and `shouldRepairDuplicateDocumentConstraint` use string matching on qmd CLI subprocess error messages. If CLI changes error format, repairs silently stop triggering.
+  - FTS rebuild failure with no recovery (recently fixed in #147 — may recur)
+- **Recommendation**: Split into focused sub-modules (collection management, embedding lifecycle, search, export). Pin error-message patterns to version-checked constants. Add timeout/circuit-breaker to embed queue.
+
+#### 4. `src/gateway/server-methods/sessions/sessions.ts` — 1,146 LOC
+
+- **Risk indicators**: Core session CRUD path, multiple recent fixes (#131, #133), only 2 try/catch for 20 await calls
+- **Bug risks**:
+  - **Low error handling ratio**: 20 await calls with only 2 try/catch — most async failures propagate as unhandled RPC errors to clients, potentially exposing internal stack traces.
+  - **Session mutation races**: Multiple RPC methods (create, delete, reset, patch, send, abort) callable concurrently for same session. Raw writes could sever the parentId DAG chain.
   - Incomplete recovery path for session file I/O failures
-- **Recommendation**: Add concurrent session mutation sequence integration tests
+- **Recommendation**: Add session-level locking or queuing for mutating RPC methods. Wrap all RPC handlers in standard error boundary producing safe error shapes.
 
 ---
 
@@ -59,39 +59,39 @@ Analysis of Deneb codebase modules with the highest bug risk, evaluated by code 
 
 #### 5. `src/agents/subagent/subagent-registry.ts` — 1,512 LOC, 46 imports
 
-- **Risk indicators**: Complex state machine, orphan subagent reconciliation logic
+- **Risk indicators**: 7 mutable module-level state declarations (`subagentRuns` Map, `sweeper`, `listenerStarted`, `restoreAttempted`, `resumedRuns` Set, `pendingLifecycleErrorByRunId` Map, `endedHookInFlightRunIds` Set). Uses `var restoreAttempted = false` to work around TDZ/circular-import — fragile initialization order.
 - **Bug risks**:
-  - `reconcileOrphanedRunsImpl` — may miss runs in transition
-  - Retry delay calculation infinite loop or skip
-  - No consistency validation for disk-restored state
-  - `emitSubagentEndedHookOnce` — hook firing before cleanup causes duplicate processing
-- **Recommendation**: State machine transition tests, orphan reconciliation integration tests
+  - **Orphan reconciliation race**: `reconcileOrphanedRestoredRuns` iterates `subagentRuns` while `completeSubagentRun` concurrently mutates the same Map. `schedulePendingLifecycleError` timer callback reads from `subagentRuns` without holding any lock.
+  - **Announce retry exhaustion**: `MAX_ANNOUNCE_RETRY_COUNT = 3` (fix for #18264) means transient network failures permanently drop completion notifications. Combined with `ANNOUNCE_EXPIRY_MS = 5 min`, a subagent completing during a brief gateway hiccup may never deliver its result.
+  - **Disk persistence without validation**: `persistSubagentRunsToDisk` serializes entire Map — if a run is in an inconsistent intermediate state, restored state on next startup is corrupt. `restoreSubagentRunsFromDisk` has no schema validation.
+- **Recommendation**: Extract mutable state into a class instance for testability/resettability. Add restore-path validation. Test announce-retry/expiry interaction specifically.
 
-#### 6. `src/agents/pi-embedded-runner/run/attempt.ts` — 1,464 LOC
+#### 6. `src/agents/pi-embedded-runner/run/attempt.ts` — 1,464 LOC, 67 imports
 
-- **Risk indicators**: Core LLM execution orchestration, tool execution and result handling
+- **Risk indicators**: Highest import count in codebase (67), coupled to nearly every subsystem. Test file exists (1,109 lines) but coverage incomplete.
 - **Bug risks**:
-  - PI SessionManager appendMessage parentId chain integrity violation
-  - `sanitizeToolUseResultPairing` edge case misses
+  - **Import fan-out fragility**: Coupled to sandbox, tools, sessions, models, skills, media, streaming, transcript repair. A breaking change in any dependency silently affects agent execution.
+  - **Reactive repair pattern**: Imports `sanitizeToolUseResultPairing` and `repairSessionFileIfNeeded` — existence of these indicates known transcript corruption patched reactively, not prevented. New corruption modes manifest as silent conversation breakage.
+  - **Session write lock stall**: `acquireSessionWriteLock` hold time derived from agent timeout (potentially very long). Other operations waiting for this lock stall indefinitely.
   - Bootstrap context + tail protection budget calculation failure
-  - Incomplete state cleanup during failover stream/timeout
-- **Recommendation**: Message ordering integrity tests, budget boundary tests
+- **Recommendation**: Factor out sub-orchestrators (tool execution, session setup, streaming) to reduce coupling. Replace repair imports with prevention at the write layer.
 
 #### 7. `src/acp/control-plane/manager.core.ts` — 1,421 LOC
 
-- **Risk indicators**: Multiple concurrent data structures (Map, Queue, Cache)
+- **Risk indicators**: Multiple concurrent data structures (Map, Queue, Cache). Test file exists (1,661 lines) but concurrency model hard to test exhaustively.
 - **Bug risks**:
-  - `activeTurnBySession` set/delete non-atomic — race condition
-  - Runtime cache eviction during active turns — orphaned state
-  - SessionActorQueue deadlock on error
-  - TTL-based idle cleanup conflicting with active turns
-- **Recommendation**: Add concurrency guards, apply atomic operations to Map-based state
+  - **activeTurn identity race**: Reference equality check at line ~735 (`this.activeTurnBySession.get(actorKey) === activeTurn`) guards cleanup. If a new turn is created for the same actor key between set and cleanup check, old turn's resources (abort controllers, timers) may never be cleaned up.
+  - **Idle eviction TOCTOU**: `evictIdleRuntimeHandles` checks `activeTurnBySession.has(candidate.actorKey)` — a turn could start between the check and the eviction.
+  - **Concurrent session limit bypass**: `enforceConcurrentSessionLimit` called inside `withSessionActor` operates on global state. Multiple concurrent `initializeSession` calls for different actor keys could each pass the limit check before any completes.
+- **Recommendation**: Add targeted concurrency tests using Promise scheduling for activeTurn identity guard and idle eviction race. Consider single coordination lock for limit enforcement.
 
-#### 8. `src/security/audit-extra.async.ts` — 1,264 LOC, 74 try/catch
+#### 8. `src/security/audit-extra.async.ts` — 1,264 LOC
 
-- **Risk indicators**: Security-critical async audit logging, no tests
-- **Bug risks**: Async audit log loss, security event loss due to race conditions
-- **Recommendation**: Async safety tests, audit log verification per error path
+- **Risk indicators**: Security-critical audit scanning, no tests, 4 silent `catch {}` blocks
+- **Bug risks**:
+  - **False negatives from swallowed errors**: Silent catch blocks mean filesystem permission errors, Docker connectivity issues, or skill scanner failures result in a clean audit report rather than a flagged finding. A failed security check that silently succeeds is worse than a crash.
+  - **Permanently cached failed imports**: `skillsModulePromise` and `configModulePromise` cache module imports globally. If the first import fails (transient error), the failed promise is cached permanently.
+- **Recommendation**: Replace all silent catches with `catch` blocks that emit audit findings of type "scan-error". Add null-check or retry logic for cached module promises.
 
 #### 9. `src/plugins/registry.ts` — 1,008 LOC, 38 imports
 
@@ -131,18 +131,25 @@ Analysis of Deneb codebase modules with the highest bug risk, evaluated by code 
 
 ## Cross-Cutting Concerns
 
-### Concurrency Risks
+### Concurrency and Shared Mutable State
 
-- **SessionActorQueue**: `pendingBySession` Map sync missing, deadlock if `onSettle` callback fails
-- **RuntimeCache**: get-check-set not atomic, no safety guarantees during eviction
-- **WebSocket auth**: Concurrent connection state conflicts during device pairing
+The codebase makes heavy use of module-level `Map` and `Set` instances as shared state (`subagentRuns`, `activeTurnBySession`, `pendingLifecycleErrorByRunId`, `qmdEmbedQueueTail`). These are accessed from multiple async code paths without formal synchronization beyond promise-chain queuing.
 
-### Error Handling Anti-Patterns
+- **SessionActorQueue**: Serializes per-actor, not globally. `pendingBySession` Map sync missing, deadlock if `onSettle` callback fails.
+- **RuntimeCache**: get-check-set not atomic, no safety guarantees during eviction.
+- **WebSocket auth**: Concurrent connection state conflicts during device pairing.
 
-- **Silent catch**: 67 files swallow errors (no logging/re-throw)
-  - High risk: `src/agents/pi-embedded-runner/run/attempt.ts`, `src/media/host.ts`, `src/browser/*.ts`
-- **Over-defensive**: `qmd-manager.ts` (127), `audit-extra.async.ts` (74) — lacks error abstraction
-- **Under-defensive**: `setup-wizard.ts` — 50 async/await vs only 2 try/catch
+**Impact**: Race conditions manifest as silent data loss (dropped announcements, stale cache entries) rather than crashes, making them difficult to detect and reproduce.
+
+### Error Handling Polarization
+
+Two opposite anti-patterns coexist:
+
+- **Over-defensive**: `qmd-manager.ts` (25 try/catch wrapping nearly every operation) masks root causes, makes debugging difficult.
+- **Under-defensive**: `message-handler.ts` (1 try/catch for 1,114 LOC of untrusted network input) and `sessions.ts` (2 for 1,146 LOC) leave most async paths unguarded.
+- **Silent catch `{}`**: Found across critical paths — `compaction.ts` (3), `audit-extra.async.ts` (4), `qmd-manager.ts` (3). These produce false successes in security scans and invisible context loss.
+
+**Recommended standard**: (1) RPC/WebSocket handlers get mandatory top-level error boundary with safe client-facing error shapes. (2) Internal modules use targeted try/catch only where recovery is possible. (3) Ban bare `catch {}` — require `catch { /* intentional: <reason> */ }` with mandatory comment.
 
 ### Test Coverage Gaps
 
@@ -162,22 +169,17 @@ Analysis of Deneb codebase modules with the highest bug risk, evaluated by code 
 
 ---
 
-## Prioritized Recommendations
+## Prioritized Action Items
 
-### P0 (Immediate)
-
-1. `src/memory/qmd-manager.ts` — Integration tests per DB repair path, silent catch audit
-2. `src/context-engine/lcm/src/compaction.ts` — Token boundary + escalation transition tests
-3. `src/gateway/server-methods/sessions/sessions.ts` — Concurrent session mutation sequence tests
-
-### P1 (Soon)
-
-4. `src/acp/control-plane/manager.core.ts` — Add atomic operation guards to Map-based state
-5. `src/agents/pi-embedded-runner/run/attempt.ts` — parentId chain integrity verification tests
-6. `src/security/audit-extra.async.ts` — Async audit safety tests
-
-### P2 (Planned)
-
-7. Codebase-wide audit of silent catch patterns (67 files)
-8. `setup-wizard.ts` error handling reinforcement (resolve async/try-catch imbalance)
-9. Test coverage expansion campaign for 500+ LOC files
+| Priority | Action | Modules | Expected Impact |
+|----------|--------|---------|-----------------|
+| P0 | Add compaction integration tests | `compaction.ts`, `engine.ts` | Prevents silent context loss — the most user-visible bug category |
+| P0 | Add error boundary to WS message handler | `message-handler.ts` | Prevents connection crashes from malformed input |
+| P1 | Extract subagent registry mutable state into testable class | `subagent-registry.ts` | Enables direct testing, eliminates `var` TDZ workaround |
+| P1 | Replace silent `catch {}` with logged/finding-emitting catches | `audit-extra.async.ts`, `compaction.ts`, `qmd-manager.ts` | Eliminates false-negative security audits and invisible context loss |
+| P1 | Add embed queue timeout/circuit-breaker | `qmd-manager.ts` | Prevents permanent deadlock and hour-long silent retry storms |
+| P2 | Add session-method-level error boundaries | `sessions.ts` | Standardizes RPC error responses, prevents stack trace leaks |
+| P2 | Add concurrency tests for ACP manager | `manager.core.ts` | Catches activeTurn identity and eviction TOCTOU races |
+| P2 | Split `qmd-manager.ts` below 700 LOC | `qmd-manager.ts` | Reduces merge conflicts, enables focused testing |
+| P3 | Reduce `attempt.ts` import fan-out | `attempt.ts` | Reduces coupling surface and breakage risk |
+| P3 | Add persistent outbox for subagent announcements | `subagent-announce.ts` | Prevents dropped completion notifications during gateway hiccups |
