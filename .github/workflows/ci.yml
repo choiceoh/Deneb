@@ -305,7 +305,7 @@ jobs:
         run: cargo test -p deneb-core
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.24"
           cache-dependency-path: gateway-go/go.sum

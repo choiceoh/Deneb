@@ -34,7 +34,7 @@ jobs:
       - name: Setup buf, Go, Rust, Node (parallel-safe)
         uses: bufbuild/buf-setup-action@v1
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.24"
           cache: true
