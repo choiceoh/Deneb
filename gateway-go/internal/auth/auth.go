@@ -249,6 +249,16 @@ func DefaultScopes(role Role) []Scope {
 	return rolePermissions[role]
 }
 
+// DefaultScopesStrings returns the default scopes for a role as string slices.
+func DefaultScopesStrings(role Role) []string {
+	scopes := DefaultScopes(role)
+	result := make([]string, len(scopes))
+	for i, s := range scopes {
+		result[i] = string(s)
+	}
+	return result
+}
+
 // CheckPermission verifies that a role+scopes combination allows the given action scope.
 func CheckPermission(role Role, scopes []Scope, required Scope) error {
 	for _, s := range scopes {
