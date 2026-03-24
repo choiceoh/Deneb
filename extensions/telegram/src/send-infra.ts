@@ -201,11 +201,12 @@ export function setCachedTelegramClientOptions(
 export function resolveTelegramClientOptions(
   account: ResolvedTelegramAccount,
 ): ApiClientOptions | undefined {
+  const DEFAULT_TELEGRAM_TIMEOUT_SECONDS = 30;
   const timeoutSeconds =
     typeof account.config.timeoutSeconds === "number" &&
     Number.isFinite(account.config.timeoutSeconds)
       ? Math.max(1, Math.floor(account.config.timeoutSeconds))
-      : undefined;
+      : DEFAULT_TELEGRAM_TIMEOUT_SECONDS;
 
   const cacheEnabled = shouldUseTelegramClientOptionsCache();
   const cacheKey = cacheEnabled

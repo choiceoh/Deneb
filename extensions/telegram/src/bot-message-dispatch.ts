@@ -270,6 +270,16 @@ export const dispatchTelegramMessage = async ({
     });
     return draftLaneEventQueue;
   };
+  const drainQueueWithTimeout = (ms: number, label: string): Promise<void> =>
+    Promise.race([
+      enqueueDraftLaneEvent(async () => {}),
+      new Promise<void>((resolve) =>
+        setTimeout(() => {
+          runtime.error?.(`telegram: ${label} timed out after ${ms}ms; proceeding`);
+          resolve();
+        }, ms),
+      ),
+    ]);
   type SplitLaneSegment = { lane: LaneName; text: string };
   type SplitLaneSegmentsResult = {
     segments: SplitLaneSegment[];
@@ -508,6 +518,7 @@ export const dispatchTelegramMessage = async ({
     markDelivered: () => {
       deliveryState.markDelivered();
     },
+    renderText: renderDraftPreview,
   });
 
   let queuedFinal = false;
@@ -549,7 +560,9 @@ export const dispatchTelegramMessage = async ({
           if (info.kind === "final") {
             // Assistant callbacks are fire-and-forget; ensure queued boundary
             // rotations/partials are applied before final delivery mapping.
-            await enqueueDraftLaneEvent(async () => {});
+            // Use a timeout to prevent hung draft lane tasks from permanently
+            // blocking final delivery (e.g. a stalled editMessageText call).
+            await drainQueueWithTimeout(30_000, "draft lane drain before final delivery");
           }
           if (
             shouldSuppressLocalTelegramExecApprovalPrompt({
@@ -745,7 +758,18 @@ export const dispatchTelegramMessage = async ({
   } finally {
     // Upstream assistant callbacks are fire-and-forget; drain queued lane work
     // before stream cleanup so boundary rotations/materialization complete first.
-    await draftLaneEventQueue;
+    // Use a timeout to prevent hung draft lane tasks from blocking cleanup.
+    await Promise.race([
+      draftLaneEventQueue,
+      new Promise<void>((resolve) =>
+        setTimeout(() => {
+          runtime.error?.(
+            "telegram: draft lane drain in finally timed out after 15s; proceeding to cleanup",
+          );
+          resolve();
+        }, 15_000),
+      ),
+    ]);
     // Must stop() first to flush debounced content before clear() wipes state.
     const streamCleanupStates = new Map<
       NonNullable<DraftLaneState["stream"]>,
