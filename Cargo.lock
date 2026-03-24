@@ -336,6 +336,7 @@ dependencies = [
 name = "deneb-core"
 version = "0.1.0"
 dependencies = [
+ "fancy-regex",
  "flate2",
  "jsonschema",
  "memchr",

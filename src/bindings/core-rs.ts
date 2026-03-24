@@ -19,6 +19,20 @@ interface CoreRsModuleRaw {
   isSafeUrl(url: string): boolean;
   validateErrorCode(code: string): boolean;
   isRetryableErrorCode(code: string): boolean;
+  validateParams(method: string, json: string): string;
+}
+
+/** Validation error returned from native param validation. */
+export interface NativeValidationError {
+  path: string;
+  message: string;
+  keyword: string;
+}
+
+/** Result of native param validation. */
+export interface NativeValidationResult {
+  valid: boolean;
+  errors?: NativeValidationError[];
 }
 
 export interface CoreRsModule {
@@ -38,6 +52,8 @@ export interface CoreRsModule {
   validateErrorCode(code: string): boolean;
   /** Check if an error code is retryable by default. */
   isRetryableErrorCode(code: string): boolean;
+  /** Validate RPC parameters for a method. Returns validation result with errors. */
+  validateParams(method: string, json: string): NativeValidationResult;
 }
 
 /** Wraps the raw native module, mapping numeric frame type IDs to strings. */
@@ -58,6 +74,10 @@ function wrapModule(raw: CoreRsModuleRaw): CoreRsModule {
     isSafeUrl: (url: string) => raw.isSafeUrl(url),
     validateErrorCode: (code: string) => raw.validateErrorCode(code),
     isRetryableErrorCode: (code: string) => raw.isRetryableErrorCode(code),
+    validateParams(method: string, json: string): NativeValidationResult {
+      const resultJson = raw.validateParams(method, json);
+      return JSON.parse(resultJson) as NativeValidationResult;
+    },
   };
 }
 

@@ -9,4 +9,6 @@ prost = "0.13"
 prost-types = "0.13"
 thiserror = "2"
 regex = "1"
+# Fancy regex for patterns with lookahead/lookbehind (e.g., secret ref ID validation).
+fancy-regex = "0.14"
 once_cell = "1"

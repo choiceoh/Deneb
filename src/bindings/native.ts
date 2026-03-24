@@ -43,6 +43,8 @@ const ALL_EXPECTED_EXPORTS: Array<[string, string]> = [
   ["isSafeUrl", "function"],
   ["validateErrorCode", "function"],
   ["isRetryableErrorCode", "function"],
+  // core-rs protocol schema validation (Phase 3)
+  ["validateParams", "function"],
 ];
 
 /** PNG magic bytes for the load-time smoke test. */

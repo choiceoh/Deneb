@@ -22,6 +22,10 @@ extern int deneb_sanitize_html(
 	unsigned char *out_ptr, unsigned long out_len);
 extern int deneb_is_safe_url(const unsigned char *url_ptr, unsigned long url_len);
 extern int deneb_validate_error_code(const unsigned char *code_ptr, unsigned long code_len);
+extern int deneb_validate_params(
+	const unsigned char *method_ptr, unsigned long method_len,
+	const unsigned char *json_ptr, unsigned long json_len,
+	unsigned char *errors_out, unsigned long errors_out_len);
 */
 import "C"
 import (
@@ -143,6 +147,59 @@ func IsSafeURL(url string) bool {
 	ptr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(url)))
 	rc := C.deneb_is_safe_url(ptr, C.ulong(len(url)))
 	return rc == 0
+}
+
+// maxErrorsBufSize is the buffer size for validation error JSON output (64 KB).
+const maxErrorsBufSize = 64 * 1024
+
+// ValidateParams validates RPC parameters for a given method name using the
+// Rust schema validators. Returns nil if valid, or the raw JSON error array.
+func ValidateParams(method, json string) (valid bool, errorsJSON []byte, err error) {
+	if len(method) == 0 {
+		return false, nil, errors.New("ffi: empty method name")
+	}
+	if len(json) == 0 {
+		return false, nil, errors.New("ffi: empty JSON input")
+	}
+	methodPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(method)))
+	jsonPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(json)))
+	var out [maxErrorsBufSize]byte
+	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
+	rc := C.deneb_validate_params(
+		methodPtr, C.ulong(len(method)),
+		jsonPtr, C.ulong(len(json)),
+		outPtr, C.ulong(len(out)),
+	)
+	switch {
+	case rc == 0:
+		return true, nil, nil
+	case rc == -1:
+		return false, nil, errors.New("ffi: null pointer")
+	case rc == -2:
+		return false, nil, errors.New("ffi: invalid UTF-8")
+	case rc == -3:
+		return false, nil, errors.New("ffi: unknown method")
+	case rc == -4:
+		return false, nil, errors.New("ffi: input too large")
+	case rc == -5:
+		return false, nil, errors.New("ffi: invalid JSON")
+	case rc > 0:
+		// rc is the number of errors; errors are written as JSON to out.
+		// Find the actual JSON length (scan for closing bracket).
+		jsonEnd := 0
+		for i := len(out) - 1; i >= 0; i-- {
+			if out[i] == ']' {
+				jsonEnd = i + 1
+				break
+			}
+		}
+		if jsonEnd == 0 {
+			return false, nil, errors.New("ffi: validation failed but no error output")
+		}
+		return false, out[:jsonEnd], nil
+	default:
+		return false, nil, errors.New("ffi: unknown error")
+	}
 }
 
 // ValidateErrorCode checks if an error code string is a known gateway error code.
