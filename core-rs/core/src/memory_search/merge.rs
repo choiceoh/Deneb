@@ -76,7 +76,9 @@ pub fn merge_hybrid_results(params: &MergeParams) -> Vec<MergedResult> {
         .unwrap_or_default();
 
     if decay_config.enabled {
-        let now_ms = params.now_ms.unwrap_or(0.0);
+        let now_ms = params.now_ms.unwrap_or_else(|| {
+            chrono::Utc::now().timestamp_millis() as f64
+        });
         for result in &mut merged {
             // Try to extract date from path
             if let Some((year, month, day)) = temporal_decay::parse_memory_date_from_path(&result.path) {
@@ -96,11 +98,13 @@ pub fn merge_hybrid_results(params: &MergeParams) -> Vec<MergedResult> {
         }
     }
 
-    // Sort by score descending
+    // Sort by score descending, with path+startLine as tiebreaker for determinism
     merged.sort_by(|a, b| {
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.path.cmp(&b.path))
+            .then_with(|| a.start_line.cmp(&b.start_line))
     });
 
     // Apply MMR re-ranking if enabled

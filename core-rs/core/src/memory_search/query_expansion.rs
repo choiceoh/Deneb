@@ -149,17 +149,43 @@ pub fn is_query_stop_word_token(token: &str) -> bool {
 static SPLIT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[\s\p{P}]+").unwrap());
 static JP_PART_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[a-z0-9_]+|[\x{30A0}-\x{30FF}ー]+|[\x{4E00}-\x{9FFF}]+|[\x{3040}-\x{309F}]{2,}").unwrap());
-static HIRAGANA_KATAKANA_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[\x{3040}-\x{30FF}]").unwrap());
-static CJK_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[\x{4E00}-\x{9FFF}]").unwrap());
-static HANGUL_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[\x{AC00}-\x{D7AF}\x{3131}-\x{3163}]").unwrap());
-static VALID_KEYWORD_ALPHA_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z]+$").unwrap());
-static PURE_DIGITS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+$").unwrap());
 static PUNCT_SYMBOL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[\p{P}\p{S}]+$").unwrap());
-static HANGUL_SYLLABLE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[\x{AC00}-\x{D7AF}]").unwrap());
-static ASCII_STEM_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z0-9_]+$").unwrap());
+
+#[inline]
+fn contains_hiragana_katakana(s: &str) -> bool {
+    s.chars().any(|c| ('\u{3040}'..='\u{30FF}').contains(&c))
+}
+
+#[inline]
+fn contains_cjk(s: &str) -> bool {
+    s.chars().any(|c| is_cjk_char(c))
+}
+
+#[inline]
+fn contains_hangul(s: &str) -> bool {
+    s.chars()
+        .any(|c| ('\u{AC00}'..='\u{D7AF}').contains(&c) || ('\u{3131}'..='\u{3163}').contains(&c))
+}
+
+#[inline]
+fn is_pure_ascii_alpha(s: &str) -> bool {
+    !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphabetic())
+}
+
+#[inline]
+fn is_pure_digits(s: &str) -> bool {
+    !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
+}
+
+#[inline]
+fn contains_hangul_syllable(s: &str) -> bool {
+    s.chars().any(|c| ('\u{AC00}'..='\u{D7AF}').contains(&c))
+}
+
+#[inline]
+fn is_ascii_stem(s: &str) -> bool {
+    !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
 
 fn strip_korean_trailing_particle(token: &str) -> Option<String> {
     for &particle in KO_TRAILING_PARTICLES {
@@ -175,10 +201,10 @@ fn strip_korean_trailing_particle(token: &str) -> Option<String> {
 }
 
 fn is_useful_korean_stem(stem: &str) -> bool {
-    if HANGUL_SYLLABLE_RE.is_match(stem) {
+    if contains_hangul_syllable(stem) {
         return stem.chars().count() >= 2;
     }
-    ASCII_STEM_RE.is_match(stem)
+    is_ascii_stem(stem)
 }
 
 fn is_cjk_char(c: char) -> bool {
@@ -189,12 +215,15 @@ fn is_valid_keyword(token: &str) -> bool {
     if token.is_empty() {
         return false;
     }
-    if VALID_KEYWORD_ALPHA_RE.is_match(token) && token.len() < 3 {
+    // Skip very short English words (likely stop words or fragments)
+    if is_pure_ascii_alpha(token) && token.len() < 3 {
         return false;
     }
-    if PURE_DIGITS_RE.is_match(token) {
+    // Skip pure numbers
+    if is_pure_digits(token) {
         return false;
     }
+    // Skip tokens that are all punctuation/symbols
     if PUNCT_SYMBOL_RE.is_match(token) {
         return false;
     }
@@ -212,7 +241,7 @@ fn tokenize(text: &str) -> Vec<String> {
         .collect();
 
     for segment in segments {
-        if HIRAGANA_KATAKANA_RE.is_match(segment) {
+        if contains_hiragana_katakana(segment) {
             // Japanese text: extract script-specific chunks
             for m in JP_PART_RE.find_iter(segment) {
                 let part = m.as_str();
@@ -228,7 +257,7 @@ fn tokenize(text: &str) -> Vec<String> {
                     tokens.push(part.to_string());
                 }
             }
-        } else if CJK_RE.is_match(segment) {
+        } else if contains_cjk(segment) {
             // Chinese: character n-grams
             let chars: Vec<char> = segment.chars().filter(|c| is_cjk_char(*c)).collect();
             for &c in &chars {
@@ -238,7 +267,7 @@ fn tokenize(text: &str) -> Vec<String> {
                 let bigram: String = [chars[i], chars[i + 1]].iter().collect();
                 tokens.push(bigram);
             }
-        } else if HANGUL_RE.is_match(segment) {
+        } else if contains_hangul(segment) {
             // Korean
             let stem = strip_korean_trailing_particle(segment);
             let stem_is_stop = stem.as_ref().map_or(false, |s| STOP_WORDS_KO.contains(s.as_str()));
