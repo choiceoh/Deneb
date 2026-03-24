@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -123,7 +124,7 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 
 	// Handshake: first message must be a connect request.
 	handshakeCtx, handshakeCancel := context.WithTimeout(r.Context(), time.Duration(protocol.HandshakeTimeoutMs)*time.Millisecond)
-	if err := s.handleHandshake(handshakeCtx, client); err != nil {
+	if err := s.handleHandshake(handshakeCtx, client, r.RemoteAddr); err != nil {
 		handshakeCancel()
 		s.logger.Warn("handshake failed", "connId", client.connID, "error", err)
 		conn.Close(websocket.StatusPolicyViolation, "handshake failed")
@@ -141,7 +142,7 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleHandshake reads the first frame and validates it as a connect request.
-func (s *Server) handleHandshake(ctx context.Context, client *WsClient) error {
+func (s *Server) handleHandshake(ctx context.Context, client *WsClient, remoteAddr string) error {
 	_, data, err := client.conn.Read(ctx)
 	if err != nil {
 		return fmt.Errorf("read connect frame: %w", err)
@@ -181,10 +182,15 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient) error {
 		return fmt.Errorf("build hello-ok: %w", err)
 	}
 
+	// Extract IP for rate limiting (strip port from remoteAddr).
+	rateLimitKey := remoteAddr
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		rateLimitKey = host
+	}
+
 	// Rate limit check before token validation.
 	if s.authRateLimiter != nil && params.Auth != nil && params.Auth.Token != "" {
-		// Use connID as the rate limit key (remote IP not available at this level).
-		allowed, retryMs := s.authRateLimiter.Check(client.connID)
+		allowed, retryMs := s.authRateLimiter.Check(rateLimitKey)
 		if !allowed {
 			errShape := protocol.NewError(protocol.ErrUnauthorized,
 				fmt.Sprintf("rate limited, retry after %dms", retryMs))
@@ -201,7 +207,7 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient) error {
 		if err != nil {
 			// Record auth failure for rate limiting.
 			if s.authRateLimiter != nil {
-				s.authRateLimiter.RecordFailure(client.connID)
+				s.authRateLimiter.RecordFailure(rateLimitKey)
 			}
 			errShape := protocol.NewError(protocol.ErrUnauthorized, "invalid token: "+err.Error())
 			if writeErr := s.writeFrame(ctx, client, protocol.NewResponseError(req.ID, errShape)); writeErr != nil {
@@ -211,7 +217,7 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient) error {
 		}
 		// Reset rate limiter on successful auth.
 		if s.authRateLimiter != nil {
-			s.authRateLimiter.Reset(client.connID)
+			s.authRateLimiter.Reset(rateLimitKey)
 		}
 		client.authed = true
 		client.role = string(claims.Role)

@@ -140,7 +140,7 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 	cp := *s
 	m.mu.Unlock()
 
-	m.eventBus.Emit(Event{Kind: EventCreated, Key: key, NewStatus: ""})
+	m.eventBus.Emit(Event{Kind: EventCreated, Key: key})
 	return &cp
 }
 

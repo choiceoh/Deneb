@@ -82,7 +82,7 @@ type Server struct {
 	channelHealth   *monitoring.ChannelHealthMonitor
 	activity        *monitoring.ActivityTracker
 	channelEvents   *monitoring.ChannelEventTracker
-	vega            interface{ Close() error } // optional vega client (typed loosely to avoid hard dep)
+	vegaClient      *vega.Client
 }
 
 // Option configures the gateway server.
@@ -217,7 +217,9 @@ func (s *Server) SetBridge(b *bridge.PluginHost) {
 				"command": req.Command,
 				"args":    req.Args,
 			})
-			resp, err := b.Forward(context.Background(), approvalReq)
+			approvalCtx, approvalCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer approvalCancel()
+			resp, err := b.Forward(approvalCtx, approvalReq)
 			if err != nil {
 				s.logger.Warn("process approval forward failed", "id", req.ID, "error", err)
 				return false
@@ -415,39 +417,39 @@ func (s *Server) shutdown() error {
 	// 5. Stop dedupe background GC.
 	s.dedupe.Close()
 
-	// 5. Stop cron scheduler.
+	// 6. Stop cron scheduler.
 	if s.cron != nil {
 		s.cron.Close()
 	}
 
-	// 6. Fire gateway.stop hooks.
+	// 7. Fire gateway.stop hooks.
 	if s.hooks != nil {
 		s.hooks.Fire(context.Background(), hooks.EventGatewayStop, nil)
 	}
 
-	// 7. Stop all channel plugins.
+	// 8. Stop all channel plugins.
 	if s.channelLifecycle != nil {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		s.channelLifecycle.StopAll(stopCtx)
 		stopCancel()
 	}
 
-	// 8. Close chat handler.
+	// 9. Close chat handler.
 	if s.chatHandler != nil {
 		s.chatHandler.Close()
 	}
 
-	// 9. Close auth rate limiter.
+	// 10. Close auth rate limiter.
 	if s.authRateLimiter != nil {
 		s.authRateLimiter.Close()
 	}
 
-	// 10. Close Vega client.
-	if s.vega != nil {
-		s.vega.Close()
+	// 11. Close Vega client.
+	if s.vegaClient != nil {
+		s.vegaClient.Close()
 	}
 
-	// 11. Close Plugin Host bridge last (in-flight forwards finish first).
+	// 12. Close Plugin Host bridge last (in-flight forwards finish first).
 	if s.bridge != nil {
 		s.bridge.Close()
 	}
@@ -728,7 +730,7 @@ func (s *Server) SetDaemon(d *daemon.Daemon) {
 
 // SetVega sets the Vega MCP client and registers its RPC methods.
 func (s *Server) SetVega(client *vega.Client) {
-	s.vega = client
+	s.vegaClient = client
 	rpc.RegisterVegaMethods(s.dispatcher, rpc.VegaDeps{Client: client})
 }
 

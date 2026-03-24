@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
@@ -29,12 +28,29 @@ func RegisterChannelLifecycleMethods(d *Dispatcher, deps ChannelLifecycleDeps) {
 	d.Register("channels.restart", channelRestart(deps))
 }
 
+// emitChannelLifecycleEvent fires the appropriate hook and broadcasts a
+// channels.changed event after a successful channel operation.
+func emitChannelLifecycleEvent(deps ChannelLifecycleDeps, id string, hookEvent hooks.Event, action string) {
+	if deps.Hooks != nil {
+		go deps.Hooks.Fire(context.Background(), hookEvent, map[string]string{
+			"DENEB_CHANNEL_ID": id,
+		})
+	}
+	if deps.Broadcaster != nil {
+		deps.Broadcaster.Broadcast("channels.changed", map[string]any{
+			"channelId": id,
+			"action":    action,
+			"ts":        time.Now().UnixMilli(),
+		})
+	}
+}
+
 func channelStart(deps ChannelLifecycleDeps) HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			ID string `json:"id"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+		if err := unmarshalParams(req.Params, &p); err != nil || p.ID == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "id is required"))
 		}
@@ -42,19 +58,7 @@ func channelStart(deps ChannelLifecycleDeps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrUnavailable, "channel start failed: "+err.Error()))
 		}
-		// Fire hook and broadcast.
-		if deps.Hooks != nil {
-			go deps.Hooks.Fire(context.Background(), hooks.EventChannelConnect, map[string]string{
-				"DENEB_CHANNEL_ID": p.ID,
-			})
-		}
-		if deps.Broadcaster != nil {
-			deps.Broadcaster.Broadcast("channels.changed", map[string]any{
-				"channelId": p.ID,
-				"action":    "started",
-				"ts":        time.Now().UnixMilli(),
-			})
-		}
+		emitChannelLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "started")
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"started": true, "id": p.ID})
 		return resp
 	}
@@ -65,7 +69,7 @@ func channelStop(deps ChannelLifecycleDeps) HandlerFunc {
 		var p struct {
 			ID string `json:"id"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+		if err := unmarshalParams(req.Params, &p); err != nil || p.ID == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "id is required"))
 		}
@@ -73,18 +77,7 @@ func channelStop(deps ChannelLifecycleDeps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrUnavailable, "channel stop failed: "+err.Error()))
 		}
-		if deps.Hooks != nil {
-			go deps.Hooks.Fire(context.Background(), hooks.EventChannelDisconnect, map[string]string{
-				"DENEB_CHANNEL_ID": p.ID,
-			})
-		}
-		if deps.Broadcaster != nil {
-			deps.Broadcaster.Broadcast("channels.changed", map[string]any{
-				"channelId": p.ID,
-				"action":    "stopped",
-				"ts":        time.Now().UnixMilli(),
-			})
-		}
+		emitChannelLifecycleEvent(deps, p.ID, hooks.EventChannelDisconnect, "stopped")
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"stopped": true, "id": p.ID})
 		return resp
 	}
@@ -95,7 +88,7 @@ func channelRestart(deps ChannelLifecycleDeps) HandlerFunc {
 		var p struct {
 			ID string `json:"id"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" {
+		if err := unmarshalParams(req.Params, &p); err != nil || p.ID == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "id is required"))
 		}
@@ -103,18 +96,7 @@ func channelRestart(deps ChannelLifecycleDeps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrUnavailable, "channel restart failed: "+err.Error()))
 		}
-		if deps.Hooks != nil {
-			go deps.Hooks.Fire(context.Background(), hooks.EventChannelConnect, map[string]string{
-				"DENEB_CHANNEL_ID": p.ID,
-			})
-		}
-		if deps.Broadcaster != nil {
-			deps.Broadcaster.Broadcast("channels.changed", map[string]any{
-				"channelId": p.ID,
-				"action":    "restarted",
-				"ts":        time.Now().UnixMilli(),
-			})
-		}
+		emitChannelLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "restarted")
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"restarted": true, "id": p.ID})
 		return resp
 	}
