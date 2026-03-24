@@ -83,13 +83,9 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 
 	conn.SetReadLimit(protocol.MaxPayloadBytes)
 
-	// Start tick heartbeat in background.
-	tickCtx, tickCancel := context.WithCancel(r.Context())
-	go s.tickLoop(tickCtx, client)
-
 	// Enter message loop (blocks until disconnect).
+	// Ticks are handled by a shared server-level ticker (see startTickBroadcaster).
 	s.runMessageLoop(r.Context(), client)
-	tickCancel()
 
 	s.logger.Info("websocket disconnected", "connId", client.connID)
 }
@@ -180,6 +176,12 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 		var req protocol.RequestFrame
 		if err := json.Unmarshal(data, &req); err != nil {
 			s.logger.Warn("unmarshal frame", "connId", client.connID, "error", err)
+			// Send error response so the client knows the frame was rejected.
+			errResp := protocol.NewResponseError("", protocol.NewError(
+				protocol.ErrInvalidRequest, "malformed JSON frame"))
+			if writeErr := s.writeFrame(ctx, client, errResp); writeErr != nil {
+				return
+			}
 			continue
 		}
 
@@ -211,24 +213,32 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 	}
 }
 
-// tickLoop sends periodic tick events to the client so both sides can detect
-// dead connections. Uses pre-serialized tick template with only the timestamp
-// patched per-tick to avoid repeated JSON marshaling.
-func (s *Server) tickLoop(ctx context.Context, client *WsClient) {
+// startTickBroadcaster runs a single goroutine that broadcasts tick events
+// to all authenticated WebSocket clients. This replaces the per-client
+// tickLoop pattern, reducing goroutine count from O(clients) to O(1).
+func (s *Server) startTickBroadcaster(ctx context.Context) {
 	ticker := time.NewTicker(time.Duration(protocol.TickIntervalMs) * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			data := buildTickJSON(time.Now().UnixMilli())
-			if err := s.writeFrameRaw(ctx, client, data); err != nil {
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
 				return
+			case <-ticker.C:
+				data := buildTickJSON(time.Now().UnixMilli())
+				s.clients.Range(func(_, value any) bool {
+					client := value.(*WsClient)
+					if client.authed {
+						// Best-effort tick: ignore write errors (client will disconnect naturally).
+						writeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+						s.writeFrameRaw(writeCtx, client, data)
+						cancel()
+					}
+					return true
+				})
 			}
 		}
-	}
+	}()
 }
 
 // tickPrefix is the pre-serialized tick event envelope up to the timestamp value.
@@ -275,22 +285,26 @@ func (s *Server) writeFrame(ctx context.Context, client *WsClient, v any) error 
 
 	buf := jsonBufPool.Get().(*bytes.Buffer)
 	buf.Reset()
-	defer jsonBufPool.Put(buf)
 
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(v); err != nil {
+		buf.Reset()
+		jsonBufPool.Put(buf)
 		s.logger.Error("marshal frame", "connId", client.connID, "error", err)
 		return err
 	}
 
 	// json.Encoder.Encode appends a trailing newline; trim it for WS frames.
 	data := buf.Bytes()
-	if len(data) > 0 && data[len(data)-1] == '\n' {
-		data = data[:len(data)-1]
+	if n := len(data); n > 0 && data[n-1] == '\n' {
+		data = data[:n-1]
 	}
 
-	return s.writeFrameRaw(ctx, client, data)
+	err := s.writeFrameRaw(ctx, client, data)
+	buf.Reset()
+	jsonBufPool.Put(buf)
+	return err
 }
 
 // writeFrameRaw writes pre-serialized JSON bytes to the WebSocket.

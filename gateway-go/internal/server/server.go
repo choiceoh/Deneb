@@ -20,8 +20,13 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
-	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
+	"github.com/choiceoh/deneb/gateway-go/internal/events"
+	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -37,20 +42,26 @@ const (
 
 // Server is the main gateway server.
 type Server struct {
-	addr       string
-	httpServer *http.Server
-	dispatcher *rpc.Dispatcher
-	sessions   *session.Manager
-	channels   *channel.Registry
-	bridge     *bridge.PluginHost
-	dedupe     *dedupe.Tracker
-	clients    sync.Map // connID -> *WsClient
-	clientCnt  atomic.Int32
-	startedAt  time.Time
-	version    string
-	rustFFI    bool // true when Rust FFI is available
-	logger     *slog.Logger
-	ready      atomic.Bool
+	addr        string
+	httpServer  *http.Server
+	dispatcher  *rpc.Dispatcher
+	sessions    *session.Manager
+	channels         *channel.Registry
+	channelLifecycle *channel.LifecycleManager
+	bridge           *bridge.PluginHost
+	dedupe      *dedupe.Tracker
+	broadcaster *events.Broadcaster
+	processes   *process.Manager
+	cron        *cron.Scheduler
+	daemon      *daemon.Daemon
+	hooks       *hooks.Registry
+	clients     sync.Map // connID -> *WsClient
+	clientCnt   atomic.Int32
+	startedAt   time.Time
+	version     string
+	rustFFI     bool // true when Rust FFI is available
+	logger      *slog.Logger
+	ready       atomic.Bool
 }
 
 // Option configures the gateway server.
@@ -87,12 +98,21 @@ func New(addr string, opts ...Option) *Server {
 	for _, opt := range opts {
 		opt(s)
 	}
+
+	s.broadcaster = events.NewBroadcaster()
+	s.processes = process.NewManager(s.logger)
+	s.cron = cron.NewScheduler(s.logger)
+	s.hooks = hooks.NewRegistry(s.logger)
+	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
+
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.registerBuiltinMethods()
 	rpc.RegisterBuiltinMethods(s.dispatcher, rpc.Deps{
-		Sessions: s.sessions,
-		Channels: s.channels,
+		Sessions:         s.sessions,
+		Channels:         s.channels,
+		ChannelLifecycle: s.channelLifecycle,
 	})
+	s.registerExtendedMethods()
 	return s
 }
 
@@ -121,6 +141,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.startedAt = time.Now()
 	s.ready.Store(true)
+	s.startTickBroadcaster(ctx)
 
 	s.logger.Info("gateway server starting", "addr", ln.Addr().String())
 
@@ -161,6 +182,7 @@ func (s *Server) StartAndListen(ctx context.Context) (net.Addr, error) {
 	}
 	s.startedAt = time.Now()
 	s.ready.Store(true)
+	s.startTickBroadcaster(ctx)
 
 	go func() {
 		if err := s.httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -201,7 +223,24 @@ func (s *Server) shutdown() error {
 	// 4. Stop dedupe background GC.
 	s.dedupe.Close()
 
-	// 5. Close Plugin Host bridge last (in-flight forwards finish first).
+	// 5. Stop cron scheduler.
+	if s.cron != nil {
+		s.cron.Close()
+	}
+
+	// 6. Fire gateway.stop hooks.
+	if s.hooks != nil {
+		s.hooks.Fire(context.Background(), hooks.EventGatewayStop, nil)
+	}
+
+	// 7. Stop all channel plugins.
+	if s.channelLifecycle != nil {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		s.channelLifecycle.StopAll(stopCtx)
+		stopCancel()
+	}
+
+	// 8. Close Plugin Host bridge last (in-flight forwards finish first).
 	if s.bridge != nil {
 		s.bridge.Close()
 	}
@@ -327,9 +366,57 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// registerExtendedMethods registers Phase 2 RPC methods (process, cron, hooks, agent).
+func (s *Server) registerExtendedMethods() {
+	rpc.RegisterExtendedMethods(s.dispatcher, rpc.ExtendedDeps{
+		Deps: rpc.Deps{
+			Sessions: s.sessions,
+			Channels: s.channels,
+		},
+		Processes: s.processes,
+		Cron:      s.cron,
+		Hooks:     s.hooks,
+	})
+
+	// Daemon status method.
+	s.dispatcher.Register("daemon.status", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if s.daemon == nil {
+			resp, _ := protocol.NewResponseOK(req.ID, map[string]string{"state": "not_configured"})
+			return resp
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, s.daemon.Status())
+		return resp
+	})
+
+	// Event broadcasting method.
+	s.dispatcher.Register("events.broadcast", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Event   string `json:"event"`
+			Payload any    `json:"payload"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Event == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "event is required"))
+		}
+		sent, _ := s.broadcaster.Broadcast(p.Event, p.Payload)
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]int{"sent": sent})
+		return resp
+	})
+}
+
+// SetDaemon sets the daemon manager for lifecycle control.
+func (s *Server) SetDaemon(d *daemon.Daemon) {
+	s.daemon = d
+}
+
+// Broadcaster returns the event broadcaster for external use.
+func (s *Server) Broadcaster() *events.Broadcaster {
+	return s.broadcaster
+}
+
 // registerBuiltinMethods registers the core RPC methods handled natively in Go.
 func (s *Server) registerBuiltinMethods() {
-	s.dispatcher.Register("health", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	s.dispatcher.Register("health", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"status": "ok",
 			"uptime": time.Since(s.startedAt).Milliseconds(),
@@ -337,7 +424,7 @@ func (s *Server) registerBuiltinMethods() {
 		return resp
 	})
 
-	s.dispatcher.Register("status", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	s.dispatcher.Register("status", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"version":     s.version,
 			"channels":    s.channels.StatusAll(),
