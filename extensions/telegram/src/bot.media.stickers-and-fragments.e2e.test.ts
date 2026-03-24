@@ -19,8 +19,7 @@ describe("telegram stickers", () => {
     describeStickerImageSpy.mockReturnValue(undefined);
   });
 
-  // TODO #50185: re-enable once deterministic static sticker fetch injection is in place.
-  it.skip(
+  it(
     "downloads static sticker (WEBP) and includes sticker metadata",
     async () => {
       const proxyFetch = vi.fn().mockResolvedValue(
@@ -70,8 +69,7 @@ describe("telegram stickers", () => {
     STICKER_TEST_TIMEOUT_MS,
   );
 
-  // TODO #50185: re-enable with deterministic cache-refresh assertions in CI.
-  it.skip(
+  it(
     "refreshes cached sticker metadata on cache hit",
     async () => {
       const proxyFetch = vi.fn().mockResolvedValue(

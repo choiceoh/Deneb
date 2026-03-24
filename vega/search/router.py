@@ -792,7 +792,7 @@ def _infer_semantic_project_name(result):
 
 
 _NON_PROJECT_RE = re.compile(
-    r'(INDEX|README|CLAUDE|CHANGELOG|TODO|LICENSE|\.github)',
+    r'(INDEX|README|CLAUDE|CHANGELOG|LICENSE|\.github)',
     re.IGNORECASE,
 )
 
