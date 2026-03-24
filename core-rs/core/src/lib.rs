@@ -18,6 +18,7 @@ extern crate napi_derive;
 pub mod compaction;
 pub mod markdown;
 pub mod media;
+pub mod memory_search;
 pub mod protocol;
 pub mod security;
 
@@ -612,6 +613,168 @@ pub unsafe extern "C" fn deneb_compaction_sweep_step(
 #[no_mangle]
 pub extern "C" fn deneb_compaction_sweep_drop(handle: u32) {
     compaction::napi::compaction_sweep_drop(handle);
+}
+
+// ---------------------------------------------------------------------------
+// Memory search FFI exports
+// ---------------------------------------------------------------------------
+
+/// C FFI: Cosine similarity between two f64 vectors.
+/// Returns the similarity value [-1.0, 1.0], or 0.0 on error.
+///
+/// # Safety
+/// `a_ptr` and `b_ptr` must point to valid f64 arrays of their respective lengths.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_memory_cosine_similarity(
+    a_ptr: *const f64,
+    a_len: usize,
+    b_ptr: *const f64,
+    b_len: usize,
+) -> f64 {
+    if a_ptr.is_null() || b_ptr.is_null() {
+        return 0.0;
+    }
+    // Cap at 2M elements (16 MB per vector) to prevent DoS
+    const MAX_VEC_LEN: usize = 2 * 1024 * 1024;
+    if a_len > MAX_VEC_LEN || b_len > MAX_VEC_LEN {
+        return 0.0;
+    }
+    let a = std::slice::from_raw_parts(a_ptr, a_len);
+    let b = std::slice::from_raw_parts(b_ptr, b_len);
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        memory_search::cosine::cosine_similarity(a, b)
+    })) {
+        Ok(v) => v,
+        Err(_) => 0.0,
+    }
+}
+
+/// C FFI: BM25 rank to score conversion.
+#[no_mangle]
+pub extern "C" fn deneb_memory_bm25_rank_to_score(rank: f64) -> f64 {
+    memory_search::bm25::bm25_rank_to_score(rank)
+}
+
+/// C FFI: Build FTS query from raw text.
+/// Writes the query string to `out_ptr`. Returns bytes written, or 0 if no tokens.
+///
+/// # Safety
+/// `raw_ptr` must be valid UTF-8. `out_ptr` must be writable for `out_len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_memory_build_fts_query(
+    raw_ptr: *const u8,
+    raw_len: usize,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if raw_ptr.is_null() || out_ptr.is_null() {
+        return -1;
+    }
+    if raw_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let slice = std::slice::from_raw_parts(raw_ptr, raw_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let raw_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        match memory_search::fts::build_fts_query(raw_str) {
+            Some(query) => {
+                let bytes = query.as_bytes();
+                if bytes.len() > out_slice.len() {
+                    return -3;
+                }
+                out_slice[..bytes.len()].copy_from_slice(bytes);
+                bytes.len() as i32
+            }
+            None => 0,
+        }
+    })
+}
+
+/// C FFI: Merge hybrid search results.
+/// Takes JSON MergeParams, writes JSON MergedResult array to output.
+/// Returns bytes written, or negative on error.
+///
+/// # Safety
+/// `params_ptr` must be valid UTF-8 JSON. `out_ptr` must be writable.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_memory_merge_hybrid_results(
+    params_ptr: *const u8,
+    params_len: usize,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if params_ptr.is_null() || out_ptr.is_null() {
+        return -1;
+    }
+    if params_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let slice = std::slice::from_raw_parts(params_ptr, params_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let params_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let params: memory_search::types::MergeParams = match serde_json::from_str(params_str) {
+            Ok(p) => p,
+            Err(_) => return -3,
+        };
+        let results = memory_search::merge::merge_hybrid_results(&params);
+        let json = match serde_json::to_string(&results) {
+            Ok(j) => j,
+            Err(_) => return -5,
+        };
+        let bytes = json.as_bytes();
+        if bytes.len() > out_slice.len() {
+            return -6;
+        }
+        out_slice[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
+}
+
+/// C FFI: Extract keywords from a query for FTS.
+/// Writes JSON string array to output. Returns bytes written.
+///
+/// # Safety
+/// `query_ptr` must be valid UTF-8. `out_ptr` must be writable.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_memory_extract_keywords(
+    query_ptr: *const u8,
+    query_len: usize,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if query_ptr.is_null() || out_ptr.is_null() {
+        return -1;
+    }
+    if query_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let slice = std::slice::from_raw_parts(query_ptr, query_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let query_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let keywords = memory_search::query_expansion::extract_keywords(query_str);
+        let json = match serde_json::to_string(&keywords) {
+            Ok(j) => j,
+            Err(_) => return -5,
+        };
+        let bytes = json.as_bytes();
+        if bytes.len() > out_slice.len() {
+            return -6;
+        }
+        out_slice[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
 }
 
 #[cfg(test)]

@@ -45,6 +45,20 @@ const ALL_EXPECTED_EXPORTS: Array<[string, string]> = [
   ["isRetryableErrorCode", "function"],
   // core-rs protocol schema validation (Phase 3)
   ["validateParams", "function"],
+  // core-rs memory search functions
+  ["memoryCosineSimilarity", "function"],
+  ["memoryBm25RankToScore", "function"],
+  ["memoryBuildFtsQuery", "function"],
+  ["memoryTemporalDecayMultiplier", "function"],
+  ["memoryApplyTemporalDecay", "function"],
+  ["memoryParseMemoryDateFromPath", "function"],
+  ["memoryIsEvergreenMemoryPath", "function"],
+  ["memoryMmrRerank", "function"],
+  ["memoryExtractKeywords", "function"],
+  ["memoryIsQueryStopWord", "function"],
+  ["memoryExpandQueryForFts", "function"],
+  ["memoryMergeHybridResults", "function"],
+  ["memoryTextSimilarity", "function"],
 ];
 
 /** PNG magic bytes for the load-time smoke test. */
