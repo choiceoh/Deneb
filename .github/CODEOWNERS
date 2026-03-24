@@ -47,6 +47,16 @@
 /docs/reference/secretref-user-supplied-credentials-matrix.json @deneb/secops
 
 # Release workflow and its supporting release-path checks.
+# Multi-language core: Rust, Go, Protobuf schemas.
+/core-rs/ @deneb/secops
+/core-rs/src/security/ @deneb/secops
+/gateway-go/ @steipete
+/proto/ @steipete
+/native/ @steipete
+/scripts/proto-gen.sh @steipete
+/Makefile @steipete
+
+# Release workflow and its supporting release-path checks.
 /.github/workflows/deneb-npm-release.yml @deneb/deneb-release-managers
 /docs/reference/RELEASING.md @deneb/deneb-release-managers
 /scripts/deneb-npm-publish.sh @deneb/deneb-release-managers
