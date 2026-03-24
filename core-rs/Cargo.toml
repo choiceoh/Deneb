@@ -7,6 +7,12 @@ description = "Deneb core library — protocol validation, security, and media p
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
 
+[features]
+default = ["napi_binding"]
+# Enable napi-rs bindings for Node.js native addon builds.
+# Disable for CGo static linking: cargo build --release --no-default-features
+napi_binding = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
+
 [dependencies]
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -18,9 +24,9 @@ thiserror = "2"
 prost = "0.13"
 prost-types = "0.13"
 
-# Node.js FFI via napi-rs
-napi = { version = "2", features = ["napi9", "serde-json"] }
-napi-derive = "2"
+# Node.js FFI via napi-rs (optional, behind "napi_binding" feature)
+napi = { version = "2", features = ["napi9", "serde-json"], optional = true }
+napi-derive = { version = "2", optional = true }
 
 # Regex (ReDoS-safe by design)
 regex = "1"
@@ -31,7 +37,7 @@ flate2 = "1"
 
 [build-dependencies]
 prost-build = "0.13"
-napi-build = "2"
+napi-build = { version = "2", optional = true }
 
 [profile.release]
 opt-level = 3

@@ -2,19 +2,24 @@
 #
 # Orchestrates Rust (core-rs), Go (gateway-go), and TypeScript (pnpm) builds.
 
-.PHONY: all rust rust-debug rust-test rust-bench rust-clean \
-       go go-run go-test go-clean \
+.PHONY: all rust rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
+       go go-ffi go-pure go-run go-test go-test-pure go-test-fuzz go-vet go-clean \
        ts ts-check ts-test \
-       test clean check \
+       test test-all clean check fmt \
        proto proto-go proto-rust proto-ts proto-check proto-lint proto-watch \
        info
 
-# Default: build everything
+# Default: build Rust first (produces .a), then Go (links it via CGo).
 all: rust go
 
 # --- Rust core library ---
 
+# Build for CGo static linking (no napi-rs).
+# Use `make rust-napi` for Node.js native addon builds.
 rust:
+	cd core-rs && cargo build --release --no-default-features
+
+rust-napi:
 	cd core-rs && cargo build --release
 
 rust-debug:
@@ -26,19 +31,41 @@ rust-test:
 rust-bench:
 	cd core-rs && cargo bench
 
+rust-fmt:
+	cd core-rs && cargo fmt -- --check
+
+rust-clippy:
+	cd core-rs && cargo clippy --all-targets -- -D warnings
+
 rust-clean:
 	cd core-rs && cargo clean
 
 # --- Go gateway ---
 
-go:
+# Default go: CGo build linking Rust static lib (requires `make rust` first).
+go: go-ffi
+
+go-ffi:
 	cd gateway-go && go build ./...
 
-go-run:
+# Pure-Go build with fallback implementations (no Rust required).
+go-pure:
+	cd gateway-go && CGO_ENABLED=0 go build -tags no_ffi ./...
+
+go-run: go
 	cd gateway-go && go run ./cmd/gateway/
 
 go-test:
-	cd gateway-go && go test ./...
+	cd gateway-go && go test -race -count=1 ./...
+
+go-test-pure:
+	cd gateway-go && CGO_ENABLED=0 go test -tags no_ffi -count=1 ./...
+
+go-test-fuzz:
+	cd gateway-go && go test ./internal/bridge/ -fuzz=FuzzParseRequestFrame -fuzztime=10s
+
+go-vet:
+	cd gateway-go && go vet ./...
 
 go-clean:
 	cd gateway-go && go clean ./...
@@ -59,11 +86,18 @@ ts-test:
 test: rust-test go-test
 	@echo "Rust and Go tests passed"
 
+test-all: rust-test go-test ts-test
+	@echo "All tests passed (Rust + Go + TypeScript)"
+
 clean: rust-clean go-clean
 	@echo "Cleaned Rust and Go build artifacts"
 
-check: proto-check rust-test go-test ts-check
+check: proto-check rust-fmt rust-clippy rust-test go-vet go-test ts-check
 	@echo "All checks passed"
+
+fmt:
+	cd core-rs && cargo fmt
+	cd gateway-go && gofmt -w .
 
 # --- Protobuf code generation ---
 

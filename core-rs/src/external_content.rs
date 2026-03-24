@@ -206,19 +206,19 @@ pub fn replace_markers_impl(content: &str) -> String {
 
 /// Detect suspicious patterns in content that may indicate prompt injection.
 /// Returns array of matched pattern source strings.
-#[napi]
+#[cfg_attr(feature = "napi_binding", napi)]
 pub fn detect_suspicious_patterns(content: String) -> Vec<String> {
     detect_suspicious_patterns_impl(&content)
 }
 
 /// Fold marker text: normalize Unicode homoglyphs to ASCII equivalents.
-#[napi]
+#[cfg_attr(feature = "napi_binding", napi)]
 pub fn fold_marker_text(input: String) -> String {
     fold_marker_text_impl(&input)
 }
 
 /// Replace spoofed security boundary markers in content.
-#[napi]
+#[cfg_attr(feature = "napi_binding", napi)]
 pub fn replace_markers(content: String) -> String {
     replace_markers_impl(&content)
 }

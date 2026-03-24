@@ -4,6 +4,7 @@
 /// `src/media/png-encode.ts`.
 
 use flate2::Compression;
+#[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::Buffer;
 use std::io::Write;
 
@@ -131,14 +132,16 @@ pub fn encode_png_rgba_impl(buffer: &[u8], width: u32, height: u32) -> Vec<u8> {
 // napi exports
 // ---------------------------------------------------------------------------
 
-/// Compute CRC32 checksum for a buffer.
-#[napi]
+/// Compute CRC32 checksum for a buffer (napi entrypoint).
+#[cfg(feature = "napi_binding")]
+#[cfg_attr(feature = "napi_binding", napi)]
 pub fn crc32(buf: Buffer) -> u32 {
     crc32_impl(&buf)
 }
 
-/// Encode an RGBA buffer as a PNG image.
-#[napi]
+/// Encode an RGBA buffer as a PNG image (napi entrypoint).
+#[cfg(feature = "napi_binding")]
+#[cfg_attr(feature = "napi_binding", napi)]
 pub fn encode_png_rgba(buffer: Buffer, width: u32, height: u32) -> Buffer {
     encode_png_rgba_impl(&buffer, width, height).into()
 }

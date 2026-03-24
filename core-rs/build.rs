@@ -4,12 +4,11 @@
 //! - prost: compiles .proto files from ../proto/ into Rust structs in OUT_DIR,
 //!   which are then included by src/protocol/gen.rs.
 
-extern crate napi_build;
-
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // napi-rs build setup for Node.js native addon.
+    // napi-rs build setup for Node.js native addon (only when feature enabled).
+    #[cfg(feature = "napi_binding")]
     napi_build::setup();
 
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
