@@ -79,8 +79,12 @@ pub enum Commands {
     Dashboard(commands::dashboard::DashboardArgs),
 
     // --- SubCLI commands ---
-    /// Gateway management.
+    /// Gateway management (status, call, usage-cost).
     Gateway(subcli::gateway_cmd::GatewayArgs),
+
+    /// Run the gateway server (delegates to Node.js).
+    #[command(name = "gateway-run")]
+    GatewayRun(subcli::gateway_run::GatewayRunArgs),
 
     /// Channel management and status.
     Channels(subcli::channels::ChannelsArgs),
@@ -90,4 +94,79 @@ pub enum Commands {
 
     /// Model discovery and configuration.
     Models(subcli::models::ModelsArgs),
+
+    /// Manage plugins and extensions.
+    Plugins(subcli::plugins::PluginsArgs),
+
+    /// Self-update CLI.
+    Update(subcli::update::UpdateArgs),
+
+    /// Generate shell completions.
+    Completion(subcli::completion::CompletionArgs),
+
+    /// Manage sandbox containers.
+    Sandbox(subcli::sandbox::SandboxArgs),
+
+    /// Manage compute nodes.
+    Nodes(subcli::nodes::NodesArgs),
+
+    /// Manage paired devices.
+    Devices(subcli::devices::DevicesArgs),
+
+    /// Device pairing.
+    Pairing(subcli::pairing::PairingArgs),
+
+    /// QR code operations.
+    Qr(subcli::qr::QrArgs),
+
+    /// Autonomous agent management.
+    Autonomous(subcli::autonomous::AutonomousArgs),
+
+    /// Cron job scheduling.
+    Cron(subcli::cron::CronArgs),
+
+    /// Hook management.
+    Hooks(subcli::hooks::HooksArgs),
+
+    /// Webhook management.
+    Webhooks(subcli::webhooks::WebhooksArgs),
+
+    /// Security audit.
+    Security(subcli::security::SecurityArgs),
+
+    /// Secret reference management.
+    Secrets(subcli::secrets::SecretsArgs),
+
+    /// Skill management.
+    Skills(subcli::skills::SkillsArgs),
+
+    /// Search documentation.
+    Docs(subcli::docs::DocsArgs),
+
+    /// Contact and group directory.
+    Directory(subcli::directory::DirectoryArgs),
+
+    /// Backup config and state.
+    Backup(subcli::backup::BackupArgs),
+
+    /// Reset config or state.
+    Reset(subcli::reset::ResetArgs),
+
+    /// Uninstall Deneb.
+    Uninstall(subcli::uninstall::UninstallArgs),
+
+    /// Daemon management.
+    Daemon(subcli::daemon::DaemonArgs),
+
+    /// Browser automation.
+    Browser(subcli::browser::BrowserArgs),
+
+    /// System events and presence.
+    System(subcli::system::SystemArgs),
+
+    /// Approval management.
+    Approvals(subcli::approvals::ApprovalsArgs),
+
+    /// Agent Control Protocol.
+    Acp(subcli::acp::AcpArgs),
 }
