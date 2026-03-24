@@ -242,4 +242,107 @@ mod tests {
     fn test_invalid_json() {
         assert!(validate_frame("{not json}").is_err());
     }
+
+    // --- Generated type smoke tests ---
+    // Verify prost-generated types are usable and have expected fields.
+
+    #[test]
+    fn test_gen_gateway_request_frame() {
+        let frame = gen::gateway::RequestFrame {
+            id: "abc".into(),
+            method: "chat.send".into(),
+            params: None,
+        };
+        assert_eq!(frame.id, "abc");
+        assert_eq!(frame.method, "chat.send");
+    }
+
+    #[test]
+    fn test_gen_gateway_response_frame() {
+        let frame = gen::gateway::ResponseFrame {
+            id: "r1".into(),
+            ok: true,
+            payload: None,
+            error: None,
+        };
+        assert!(frame.ok);
+        assert!(frame.error.is_none());
+    }
+
+    #[test]
+    fn test_gen_gateway_event_frame() {
+        let frame = gen::gateway::EventFrame {
+            event: "health".into(),
+            payload: None,
+            seq: Some(42),
+            state_version: Some(gen::gateway::StateVersion {
+                presence: 1,
+                health: 2,
+            }),
+        };
+        assert_eq!(frame.event, "health");
+        assert_eq!(frame.seq, Some(42));
+        assert_eq!(frame.state_version.unwrap().presence, 1);
+    }
+
+    #[test]
+    fn test_gen_channel_capabilities() {
+        let caps = gen::channel::ChannelCapabilities {
+            chat_types: vec!["text".into(), "media".into()],
+            polls: Some(true),
+            reactions: Some(true),
+            ..Default::default()
+        };
+        assert_eq!(caps.chat_types.len(), 2);
+        assert_eq!(caps.polls, Some(true));
+    }
+
+    #[test]
+    fn test_gen_session_enums() {
+        assert_eq!(gen::session::SessionRunStatus::Running as i32, 1);
+        assert_eq!(gen::session::SessionRunStatus::Done as i32, 2);
+        assert_eq!(gen::session::SessionKind::Direct as i32, 1);
+        assert_eq!(gen::session::SessionKind::Group as i32, 2);
+    }
+
+    #[test]
+    fn test_gen_session_row() {
+        let row = gen::session::GatewaySessionRow {
+            key: "sess-1".into(),
+            kind: gen::session::SessionKind::Direct as i32,
+            status: gen::session::SessionRunStatus::Running as i32,
+            model: Some("claude-opus-4-6".into()),
+            ..Default::default()
+        };
+        assert_eq!(row.key, "sess-1");
+        assert_eq!(row.model, Some("claude-opus-4-6".into()));
+    }
+
+    #[test]
+    fn test_gen_presence_entry_serialize() {
+        let entry = gen::gateway::PresenceEntry {
+            host: Some("myhost".into()),
+            ts: 1700000000,
+            tags: vec!["admin".into()],
+            roles: vec!["owner".into()],
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(json.contains("myhost"));
+        assert!(json.contains("1700000000"));
+    }
+
+    #[test]
+    fn test_gen_channel_serialize() {
+        let meta = gen::channel::ChannelMeta {
+            id: "telegram".into(),
+            label: "Telegram".into(),
+            selection_label: "Telegram Bot".into(),
+            docs_path: "/channels/telegram".into(),
+            blurb: "Telegram Bot API".into(),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&meta).unwrap();
+        assert!(json.contains("telegram"));
+    }
 }

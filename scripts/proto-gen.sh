@@ -16,6 +16,8 @@
 #   ./scripts/proto-gen.sh --rust   # Rust only
 #   ./scripts/proto-gen.sh --ts     # TypeScript only
 #   ./scripts/proto-gen.sh --check  # generate + verify no uncommitted diffs
+#   ./scripts/proto-gen.sh --lint   # lint proto files only
+#   ./scripts/proto-gen.sh --watch  # watch proto files and regenerate on change
 
 set -euo pipefail
 
@@ -117,7 +119,8 @@ verify_output() {
 clean_generated() {
   local dir="$1"
   if [ -d "$dir" ]; then
-    find "$dir" -type f \( -name "*.pb.go" -o -name "*.ts" \) -delete
+    # Delete generated files but preserve hand-written barrels (index.ts).
+    find "$dir" -type f \( -name "*.pb.go" -o -name "*.ts" \) ! -name "index.ts" -delete
     find "$dir" -mindepth 1 -type d -empty -delete 2>/dev/null || true
   fi
 }
@@ -222,11 +225,59 @@ check_diffs() {
 
 # --- Main ---
 
+lint_only() {
+  check_prereqs buf
+  info "Linting proto files..."
+  (cd "$PROTO_DIR" && buf lint) || fail "buf lint failed"
+  info "Lint passed"
+}
+
+watch_protos() {
+  local watch_cmd=""
+  if command -v fswatch &>/dev/null; then
+    watch_cmd="fswatch"
+  elif command -v inotifywait &>/dev/null; then
+    watch_cmd="inotifywait"
+  else
+    fail "Neither fswatch nor inotifywait found. Install: brew install fswatch / apt install inotify-tools"
+  fi
+
+  info "Watching $PROTO_DIR for changes (Ctrl+C to stop)..."
+  gen_all_parallel
+
+  if [ "$watch_cmd" = "fswatch" ]; then
+    fswatch -0 --event Updated "$PROTO_DIR" | while read -r -d '' _; do
+      info "Change detected — regenerating..."
+      gen_all_parallel 2>&1 || warn "Generation failed (will retry on next change)"
+    done
+  else
+    while true; do
+      inotifywait -q -e modify,create,delete "$PROTO_DIR" --include '\.proto$' >/dev/null 2>&1
+      info "Change detected — regenerating..."
+      gen_all_parallel 2>&1 || warn "Generation failed (will retry on next change)"
+    done
+  fi
+}
+
+# --- Main ---
+
+# --lint and --watch don't need the concurrency lock.
+case "${1:-all}" in
+  --lint)
+    lint_only
+    exit 0
+    ;;
+  --watch)
+    watch_protos
+    exit 0
+    ;;
+esac
+
 acquire_lock
 trap 'cleanup_on_signal' INT TERM
 trap 'release_lock' EXIT
 
-case "${1:-all}" in
+case "$1" in
   --go)
     check_prereqs buf
     gen_go
@@ -251,6 +302,6 @@ case "${1:-all}" in
     gen_all_parallel
     ;;
   *)
-    fail "Unknown option: $1. Use --go, --rust, --ts, --check, or no args."
+    fail "Unknown option: $1. Use --go, --rust, --ts, --check, --lint, --watch, or no args."
     ;;
 esac

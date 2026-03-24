@@ -53,10 +53,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Selectively derive Serialize on types without google.protobuf.Value/Struct fields,
     // since prost_types::Value doesn't implement serde::Serialize.
     let mut config = prost_build::Config::new();
-    config.type_attribute("deneb.channel", "#[derive(serde::Serialize)]");
-    config.type_attribute("deneb.session", "#[derive(serde::Serialize)]");
-    config.type_attribute("deneb.gateway.StateVersion", "#[derive(serde::Serialize)]");
-    config.type_attribute("deneb.gateway.PresenceEntry", "#[derive(serde::Serialize)]");
+    config.type_attribute(".deneb.channel", "#[derive(serde::Serialize)]");
+    config.type_attribute(".deneb.session", "#[derive(serde::Serialize)]");
+    config.type_attribute(".deneb.gateway.StateVersion", "#[derive(serde::Serialize)]");
+    config.type_attribute(".deneb.gateway.PresenceEntry", "#[derive(serde::Serialize)]");
 
     config.compile_protos(&protos, &[&proto_dir])?;
 

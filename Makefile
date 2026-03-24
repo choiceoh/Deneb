@@ -6,7 +6,7 @@
        go go-run go-test go-clean \
        ts ts-check ts-test \
        test clean check \
-       proto proto-go proto-rust proto-ts proto-check \
+       proto proto-go proto-rust proto-ts proto-check proto-lint proto-watch \
        info
 
 # Default: build everything
@@ -62,7 +62,7 @@ test: rust-test go-test
 clean: rust-clean go-clean
 	@echo "Cleaned Rust and Go build artifacts"
 
-check: rust-test go-test ts-check
+check: rust-test go-test ts-check proto-check
 	@echo "All checks passed"
 
 # --- Protobuf code generation ---
@@ -82,6 +82,12 @@ proto-ts:
 proto-check:
 	./scripts/proto-gen.sh --check
 
+proto-lint:
+	./scripts/proto-gen.sh --lint
+
+proto-watch:
+	./scripts/proto-gen.sh --watch
+
 # --- Info ---
 
 info:
@@ -98,3 +104,5 @@ info:
 	@echo "  make proto-rust - Generate Rust protobuf structs"
 	@echo "  make proto-ts   - Generate TypeScript protobuf types"
 	@echo "  make proto-check - Generate + verify no uncommitted diffs"
+	@echo "  make proto-lint  - Lint proto files only"
+	@echo "  make proto-watch - Watch proto files and regenerate on change"
