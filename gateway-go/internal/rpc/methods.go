@@ -66,6 +66,20 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 	d.Register("parsing.base64_estimate", parsingBase64Estimate())
 	d.Register("parsing.base64_canonicalize", parsingBase64Canonicalize())
 	d.Register("parsing.media_tokens", parsingMediaTokens())
+
+	// Memory search methods (Rust SIMD-accelerated algorithms).
+	d.Register("memory.cosine_similarity", memoryCosineSimilarity())
+	d.Register("memory.bm25_rank_to_score", memoryBm25RankToScore())
+	d.Register("memory.build_fts_query", memoryBuildFtsQuery())
+	d.Register("memory.merge_hybrid_results", memoryMergeHybridResults())
+	d.Register("memory.extract_keywords", memoryExtractKeywords())
+
+	// Markdown IR processing methods (Rust pulldown-cmark parser).
+	d.Register("markdown.to_ir", markdownToIR())
+	d.Register("markdown.detect_fences", markdownDetectFences())
+
+	// Compaction methods (Rust context compression engine).
+	d.Register("compaction.evaluate", compactionEvaluate())
 }
 
 func healthCheck(deps Deps) HandlerFunc {
@@ -430,6 +444,179 @@ func parsingMediaTokens() HandlerFunc {
 			result["audio_as_voice"] = true
 		}
 		resp, _ := protocol.NewResponseOK(req.ID, result)
+		return resp
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Memory search RPC methods (Rust SIMD-accelerated)
+// ---------------------------------------------------------------------------
+
+func memoryCosineSimilarity() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			A []float64 `json:"a"`
+			B []float64 `json:"b"`
+		}
+		if err := unmarshalParams(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		similarity := ffi.MemoryCosineSimilarity(p.A, p.B)
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"similarity": similarity,
+		})
+		return resp
+	}
+}
+
+func memoryBm25RankToScore() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Rank float64 `json:"rank"`
+		}
+		if err := unmarshalParams(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"score": ffi.MemoryBm25RankToScore(p.Rank),
+		})
+		return resp
+	}
+}
+
+func memoryBuildFtsQuery() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Raw string `json:"raw"`
+		}
+		if err := unmarshalParams(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		query, err := ffi.MemoryBuildFtsQuery(p.Raw)
+		if err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, err.Error()))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"query": query,
+		})
+		return resp
+	}
+}
+
+func memoryMergeHybridResults() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if len(req.Params) == 0 {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "params required"))
+		}
+		results, err := ffi.MemoryMergeHybridResults(string(req.Params))
+		if err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, err.Error()))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"results": results,
+		})
+		return resp
+	}
+}
+
+func memoryExtractKeywords() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Query string `json:"query"`
+		}
+		if err := unmarshalParams(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		keywords, err := ffi.MemoryExtractKeywords(p.Query)
+		if err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, err.Error()))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"keywords": keywords,
+		})
+		return resp
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Markdown RPC methods (Rust pulldown-cmark parser)
+// ---------------------------------------------------------------------------
+
+func markdownToIR() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Markdown string `json:"markdown"`
+			Options  string `json:"options"`
+		}
+		if err := unmarshalParams(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		ir, err := ffi.MarkdownToIR(p.Markdown, p.Options)
+		if err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, err.Error()))
+		}
+		// ir is already JSON; wrap in the response directly.
+		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(ir))
+		return resp
+	}
+}
+
+func markdownDetectFences() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Text string `json:"text"`
+		}
+		if err := unmarshalParams(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		fences, err := ffi.MarkdownDetectFences(p.Text)
+		if err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, err.Error()))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"fences": fences,
+		})
+		return resp
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Compaction RPC methods (Rust context compression engine)
+// ---------------------------------------------------------------------------
+
+func compactionEvaluate() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Config       string `json:"config"`
+			StoredTokens uint64 `json:"stored_tokens"`
+			LiveTokens   uint64 `json:"live_tokens"`
+			TokenBudget  uint64 `json:"token_budget"`
+		}
+		if err := unmarshalParams(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		if p.Config == "" {
+			p.Config = `{"contextThreshold":0.75}`
+		}
+		result, err := ffi.CompactionEvaluate(p.Config, p.StoredTokens, p.LiveTokens, p.TokenBudget)
+		if err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, err.Error()))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
 		return resp
 	}
 }
