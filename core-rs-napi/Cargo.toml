@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 napi = { version = "2", default-features = false, features = ["napi9"] }
 napi-derive = "2"
 deneb-core = { path = "../core-rs/core" }
+serde_json = "1"
 
 # From native/: gitignore, exif, png
 globset = "0.4"
