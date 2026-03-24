@@ -232,12 +232,18 @@ func joinScopes(scopes []Scope) string {
 	return strings.Join(strs, ",")
 }
 
-// RolePermissions defines what scopes each role has by default.
-var RolePermissions = map[Role][]Scope{
+// rolePermissions defines the default scopes for each role.
+// Unexported to prevent accidental mutation.
+var rolePermissions = map[Role][]Scope{
 	RoleOperator: {ScopeRead, ScopeWrite, ScopeAdmin, ScopeExecute},
 	RoleViewer:   {ScopeRead},
 	RoleAgent:    {ScopeRead, ScopeWrite, ScopeExecute},
 	RoleProbe:    {ScopeRead},
+}
+
+// DefaultScopes returns the default scopes for the given role.
+func DefaultScopes(role Role) []Scope {
+	return rolePermissions[role]
 }
 
 // CheckPermission verifies that a role+scopes combination allows the given action scope.
@@ -248,7 +254,7 @@ func CheckPermission(role Role, scopes []Scope, required Scope) error {
 		}
 	}
 	// Fallback: check role defaults.
-	if defaults, ok := RolePermissions[role]; ok {
+	if defaults, ok := rolePermissions[role]; ok {
 		for _, s := range defaults {
 			if s == required || s == ScopeAdmin {
 				return nil

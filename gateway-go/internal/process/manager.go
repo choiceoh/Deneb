@@ -246,20 +246,49 @@ func (m *Manager) Kill(id string) error {
 	return nil
 }
 
-// Get returns a tracked process by ID.
-func (m *Manager) Get(id string) *TrackedProcess {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.processes[id]
+// ProcessSnapshot is a point-in-time copy of a TrackedProcess, safe to
+// read/marshal without holding locks.
+type ProcessSnapshot struct {
+	Request ExecRequest `json:"request"`
+	Result  *ExecResult `json:"result,omitempty"`
+	Status  RunStatus   `json:"status"`
 }
 
-// List returns all tracked processes.
-func (m *Manager) List() []*TrackedProcess {
+func (tp *TrackedProcess) snapshot() ProcessSnapshot {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+	return ProcessSnapshot{
+		Request: tp.Request,
+		Result:  tp.Result,
+		Status:  tp.Status,
+	}
+}
+
+// Get returns a snapshot of a tracked process by ID, or nil if not found.
+func (m *Manager) Get(id string) *ProcessSnapshot {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	result := make([]*TrackedProcess, 0, len(m.processes))
+	tp := m.processes[id]
+	m.mu.RUnlock()
+
+	if tp == nil {
+		return nil
+	}
+	snap := tp.snapshot()
+	return &snap
+}
+
+// List returns snapshots of all tracked processes.
+func (m *Manager) List() []ProcessSnapshot {
+	m.mu.RLock()
+	procs := make([]*TrackedProcess, 0, len(m.processes))
 	for _, p := range m.processes {
-		result = append(result, p)
+		procs = append(procs, p)
+	}
+	m.mu.RUnlock()
+
+	result := make([]ProcessSnapshot, 0, len(procs))
+	for _, p := range procs {
+		result = append(result, p.snapshot())
 	}
 	return result
 }
@@ -272,7 +301,10 @@ func (m *Manager) Prune(maxAge time.Duration) int {
 	cutoff := time.Now().Add(-maxAge).UnixMilli()
 	pruned := 0
 	for id, p := range m.processes {
-		if p.Result != nil && p.Result.EndedAt < cutoff {
+		p.mu.Lock()
+		done := p.Result != nil && p.Result.EndedAt < cutoff
+		p.mu.Unlock()
+		if done {
 			delete(m.processes, id)
 			pruned++
 		}

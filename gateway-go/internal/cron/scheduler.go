@@ -120,9 +120,11 @@ func (s *Scheduler) Register(ctx context.Context, id string, schedule Schedule, 
 		cancel:   cancel,
 	}
 	s.tasks[id] = t
+	// wg.Add must happen under the lock so Close() cannot call wg.Wait()
+	// before we register the goroutine.
+	s.wg.Add(1)
 	s.mu.Unlock()
 
-	s.wg.Add(1)
 	go s.runTask(taskCtx, t)
 
 	s.logger.Info("cron task registered", "id", id, "label", schedule.Label, "intervalMs", schedule.IntervalMs)

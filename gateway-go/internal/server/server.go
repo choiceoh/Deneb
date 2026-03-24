@@ -377,7 +377,7 @@ func (s *Server) registerExtendedMethods() {
 	})
 
 	// Event broadcasting method.
-	s.dispatcher.Register("events.broadcast", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	s.dispatcher.Register("events.broadcast", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			Event   string `json:"event"`
 			Payload any    `json:"payload"`
@@ -404,7 +404,7 @@ func (s *Server) Broadcaster() *events.Broadcaster {
 
 // registerBuiltinMethods registers the core RPC methods handled natively in Go.
 func (s *Server) registerBuiltinMethods() {
-	s.dispatcher.Register("health", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	s.dispatcher.Register("health", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"status": "ok",
 			"uptime": time.Since(s.startedAt).Milliseconds(),
@@ -412,7 +412,7 @@ func (s *Server) registerBuiltinMethods() {
 		return resp
 	})
 
-	s.dispatcher.Register("status", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	s.dispatcher.Register("status", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"version":     s.version,
 			"channels":    s.channels.StatusAll(),

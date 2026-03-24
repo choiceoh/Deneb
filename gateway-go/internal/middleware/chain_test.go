@@ -105,8 +105,9 @@ func TestLogging_Middleware(t *testing.T) {
 }
 
 func TestRateLimit_AllowsNormal(t *testing.T) {
-	mw := RateLimit(RateLimitConfig{MaxRequests: 5, WindowMs: 60000})
-	handler := mw(okHandler)
+	rl := NewRateLimiter(RateLimitConfig{MaxRequests: 5, WindowMs: 60000})
+	defer rl.Close()
+	handler := rl.Middleware()(okHandler)
 
 	ctx := WithRequestContext(context.Background(), &RequestContext{ConnID: "c1"})
 	for i := 0; i < 5; i++ {
@@ -118,8 +119,9 @@ func TestRateLimit_AllowsNormal(t *testing.T) {
 }
 
 func TestRateLimit_BlocksExcess(t *testing.T) {
-	mw := RateLimit(RateLimitConfig{MaxRequests: 2, WindowMs: 60000})
-	handler := mw(okHandler)
+	rl := NewRateLimiter(RateLimitConfig{MaxRequests: 2, WindowMs: 60000})
+	defer rl.Close()
+	handler := rl.Middleware()(okHandler)
 
 	ctx := WithRequestContext(context.Background(), &RequestContext{ConnID: "c1"})
 	handler(ctx, makeReq("1", "test"))

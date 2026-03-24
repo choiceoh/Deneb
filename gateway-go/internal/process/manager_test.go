@@ -130,8 +130,12 @@ func TestGet_And_List(t *testing.T) {
 	m.Execute(context.Background(), ExecRequest{ID: "a", Command: "echo", Args: []string{"a"}})
 	m.Execute(context.Background(), ExecRequest{ID: "b", Command: "echo", Args: []string{"b"}})
 
-	if m.Get("a") == nil {
+	snap := m.Get("a")
+	if snap == nil {
 		t.Error("expected process 'a'")
+	}
+	if snap != nil && snap.Status != StatusDone {
+		t.Errorf("expected done, got %s", snap.Status)
 	}
 	if m.Get("nonexistent") != nil {
 		t.Error("expected nil for nonexistent")

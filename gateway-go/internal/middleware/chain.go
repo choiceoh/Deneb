@@ -104,41 +104,72 @@ type RateLimitConfig struct {
 	WindowMs    int64
 }
 
-// RateLimit returns a middleware that rate-limits requests per connection
-// using a fixed-window algorithm. Expired windows are garbage-collected
-// every 2x the window interval to prevent unbounded memory growth.
-func RateLimit(cfg RateLimitConfig) Middleware {
-	type window struct {
-		mu      sync.Mutex
-		count   int
-		startMs int64
+// RateLimiter is a stoppable rate-limiting middleware.
+type RateLimiter struct {
+	windows sync.Map
+	cfg     RateLimitConfig
+	stopCh  chan struct{}
+}
+
+// NewRateLimiter creates a rate limiter with background GC.
+// Call Close() on shutdown to stop the GC goroutine.
+func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
+	rl := &RateLimiter{
+		cfg:    cfg,
+		stopCh: make(chan struct{}),
 	}
 
-	var windows sync.Map
-
-	// Background GC: remove windows that haven't been touched in 2x the window.
 	gcInterval := time.Duration(cfg.WindowMs*2) * time.Millisecond
 	if gcInterval < time.Second {
 		gcInterval = time.Second
 	}
-	go func() {
-		ticker := time.NewTicker(gcInterval)
-		defer ticker.Stop()
-		for range ticker.C {
-			cutoff := time.Now().UnixMilli() - cfg.WindowMs*2
-			windows.Range(func(key, val any) bool {
-				w := val.(*window)
+	go rl.gcLoop(gcInterval)
+
+	return rl
+}
+
+// Close stops the background GC goroutine.
+func (rl *RateLimiter) Close() {
+	select {
+	case <-rl.stopCh:
+		// already closed
+	default:
+		close(rl.stopCh)
+	}
+}
+
+func (rl *RateLimiter) gcLoop(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-rl.stopCh:
+			return
+		case <-ticker.C:
+			cutoff := time.Now().UnixMilli() - rl.cfg.WindowMs*2
+			rl.windows.Range(func(key, val any) bool {
+				w := val.(*rateLimitWindow)
 				w.mu.Lock()
 				stale := w.startMs < cutoff
 				w.mu.Unlock()
 				if stale {
-					windows.Delete(key)
+					rl.windows.Delete(key)
 				}
 				return true
 			})
 		}
-	}()
+	}
+}
 
+type rateLimitWindow struct {
+	mu      sync.Mutex
+	count   int
+	startMs int64
+}
+
+// Middleware returns the rate-limiting middleware function.
+func (rl *RateLimiter) Middleware() Middleware {
 	return func(next HandlerFunc) HandlerFunc {
 		return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 			rc := GetRequestContext(ctx)
@@ -149,20 +180,20 @@ func RateLimit(cfg RateLimitConfig) Middleware {
 			nowMs := time.Now().UnixMilli()
 			key := rc.ConnID
 
-			val, _ := windows.LoadOrStore(key, &window{startMs: nowMs})
-			w := val.(*window)
+			val, _ := rl.windows.LoadOrStore(key, &rateLimitWindow{startMs: nowMs})
+			w := val.(*rateLimitWindow)
 
 			w.mu.Lock()
-			if nowMs-w.startMs >= cfg.WindowMs {
+			if nowMs-w.startMs >= rl.cfg.WindowMs {
 				w.startMs = nowMs
 				w.count = 0
 			}
 			w.count++
 			count := w.count
-			remaining := cfg.WindowMs - (nowMs - w.startMs)
+			remaining := rl.cfg.WindowMs - (nowMs - w.startMs)
 			w.mu.Unlock()
 
-			if count > cfg.MaxRequests {
+			if count > rl.cfg.MaxRequests {
 				retryMs := uint64(remaining)
 				retryable := true
 				return protocol.NewResponseError(req.ID, &protocol.ErrorShape{

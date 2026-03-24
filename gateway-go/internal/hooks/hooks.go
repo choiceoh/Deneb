@@ -6,12 +6,13 @@
 package hooks
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
-	"strings"
 	"sync"
 	"time"
 )
@@ -178,6 +179,10 @@ func (r *Registry) Fire(ctx context.Context, event Event, env map[string]string)
 	return results
 }
 
+// maxHookOutputBytes limits how much stdout/stderr is captured per hook
+// to prevent OOM from runaway output.
+const maxHookOutputBytes = 256 * 1024 // 256 KB
+
 func (r *Registry) executeHook(ctx context.Context, hook Hook, env map[string]string) HookResult {
 	timeout := time.Duration(hook.TimeoutMs) * time.Millisecond
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -196,9 +201,10 @@ func (r *Registry) executeHook(ctx context.Context, hook Hook, env map[string]st
 	cmd.Env = append(cmd.Env, "DENEB_HOOK_EVENT="+string(hook.Event))
 	cmd.Env = append(cmd.Env, "DENEB_HOOK_ID="+hook.ID)
 
-	var stdout, stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	// Capture output with bounded buffers to prevent OOM.
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &limitedWriter{w: &stdoutBuf, remaining: maxHookOutputBytes}
+	cmd.Stderr = &limitedWriter{w: &stderrBuf, remaining: maxHookOutputBytes}
 
 	err := cmd.Run()
 	duration := time.Since(start).Milliseconds()
@@ -206,8 +212,8 @@ func (r *Registry) executeHook(ctx context.Context, hook Hook, env map[string]st
 	result := HookResult{
 		HookID:   hook.ID,
 		Event:    hook.Event,
-		Stdout:   stdout.String(),
-		Stderr:   stderr.String(),
+		Stdout:   stdoutBuf.String(),
+		Stderr:   stderrBuf.String(),
 		Duration: duration,
 	}
 
@@ -222,4 +228,22 @@ func (r *Registry) executeHook(ctx context.Context, hook Hook, env map[string]st
 	}
 
 	return result
+}
+
+// limitedWriter wraps a writer and silently drops bytes after the limit.
+type limitedWriter struct {
+	w         io.Writer
+	remaining int
+}
+
+func (lw *limitedWriter) Write(p []byte) (int, error) {
+	if lw.remaining <= 0 {
+		return len(p), nil // discard silently
+	}
+	if len(p) > lw.remaining {
+		p = p[:lw.remaining]
+	}
+	n, err := lw.w.Write(p)
+	lw.remaining -= n
+	return n, err
 }
