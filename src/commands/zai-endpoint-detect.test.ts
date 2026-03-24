@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
+  clearZaiEndpointCache,
   detectZaiEndpoint,
   detectZaiEndpointDetailed,
   formatZaiDetectionFailures,
@@ -21,6 +22,10 @@ function makeFetch(map: Record<string, FetchResponse>) {
     });
   }) as typeof fetch;
 }
+
+beforeEach(() => {
+  clearZaiEndpointCache();
+});
 
 describe("detectZaiEndpoint", () => {
   it("resolves preferred/fallback endpoints and null when probes fail", async () => {
@@ -95,9 +100,11 @@ describe("detectZaiEndpoint", () => {
       },
     ];
 
-    for (const scenario of scenarios) {
+    for (let i = 0; i < scenarios.length; i++) {
+      const scenario = scenarios[i];
+      clearZaiEndpointCache();
       const detected = await detectZaiEndpoint({
-        apiKey: "sk-test", // pragma: allowlist secret
+        apiKey: `sk-test-${i}`, // pragma: allowlist secret
         ...(scenario.endpoint ? { endpoint: scenario.endpoint } : {}),
         fetchFn: makeFetch(scenario.responses),
       });

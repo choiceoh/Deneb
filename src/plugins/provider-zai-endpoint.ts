@@ -171,67 +171,86 @@ function buildProbeCandidates(endpoint?: ZaiEndpointId): ProbeCandidate[] {
 }
 
 /**
- * Probe candidates in parallel within the same endpoint group, sequential
- * across groups. This cuts latency roughly in half for the common case where
- * only one region (global or cn) is reachable.
+ * Probe all candidates in parallel and return the first success immediately.
+ * Remaining in-flight probes are left to settle naturally (no abort) so we
+ * collect their failure diagnostics without blocking on them.
+ *
+ * Candidate priority is preserved: when multiple probes succeed concurrently,
+ * the one with the lowest original index wins.
  */
-async function probeParallel(
+async function probeAllParallel(
   candidates: ProbeCandidate[],
   params: { apiKey: string; timeoutMs: number; fetchFn?: typeof fetch },
 ): Promise<ZaiDetectionResult> {
-  // Group candidates by endpoint so we can race within each group.
-  const groups = new Map<ZaiEndpointId, ProbeCandidate[]>();
-  for (const c of candidates) {
-    const list = groups.get(c.endpoint) ?? [];
-    list.push(c);
-    groups.set(c.endpoint, list);
+  if (candidates.length === 0) {
+    return { ok: false, detected: null, failures: [] };
   }
+
+  type Settled = { candidate: ProbeCandidate; result: ProbeResult; index: number };
+
+  const probes = candidates.map(async (candidate, index) => {
+    const result = await probeZaiChatCompletions({
+      baseUrl: candidate.baseUrl,
+      apiKey: params.apiKey,
+      modelId: candidate.modelId,
+      timeoutMs: params.timeoutMs,
+      fetchFn: params.fetchFn,
+    });
+    return { candidate, result, index };
+  });
+
+  // Race: resolve as soon as any probe succeeds, preserving candidate priority.
+  const settled = await Promise.allSettled(probes);
+  const results: Settled[] = [];
+  for (const s of settled) {
+    if (s.status === "fulfilled") {
+      results.push(s.value);
+    }
+  }
+
+  // Sort by original candidate index so higher-priority endpoints win ties.
+  results.sort((a, b) => a.index - b.index);
 
   const failures: ZaiProbeFailure[] = [];
-
-  // Preserve original candidate ordering across groups.
-  const seenEndpoints = new Set<ZaiEndpointId>();
-  const orderedGroups: ProbeCandidate[][] = [];
-  for (const c of candidates) {
-    if (!seenEndpoints.has(c.endpoint)) {
-      seenEndpoints.add(c.endpoint);
-      orderedGroups.push(groups.get(c.endpoint)!);
+  for (const { candidate, result } of results) {
+    if (result.ok) {
+      return { ok: true as const, detected: candidate };
     }
-  }
-
-  for (const group of orderedGroups) {
-    const results = await Promise.all(
-      group.map(async (candidate) => {
-        const result = await probeZaiChatCompletions({
-          baseUrl: candidate.baseUrl,
-          apiKey: params.apiKey,
-          modelId: candidate.modelId,
-          timeoutMs: params.timeoutMs,
-          fetchFn: params.fetchFn,
-        });
-        return { candidate, result };
-      }),
-    );
-
-    for (const { candidate, result } of results) {
-      if (result.ok) {
-        return { ok: true as const, detected: candidate };
-      }
-      failures.push({
-        endpoint: candidate.endpoint,
-        modelId: candidate.modelId,
-        ...(!result.ok
-          ? {
-              status: result.status,
-              errorCode: result.errorCode,
-              errorMessage: result.errorMessage,
-            }
-          : {}),
-      });
-    }
+    failures.push({
+      endpoint: candidate.endpoint,
+      modelId: candidate.modelId,
+      ...(!result.ok
+        ? {
+            status: result.status,
+            errorCode: result.errorCode,
+            errorMessage: result.errorMessage,
+          }
+        : {}),
+    });
   }
 
   return { ok: false, detected: null, failures };
+}
+
+/**
+ * In-memory cache for successful endpoint detection results.
+ * Keyed by `${apiKeyPrefix}:${endpoint ?? "auto"}` to avoid re-probing
+ * when the same key and endpoint hint are used repeatedly.
+ */
+const detectionCache = new Map<string, { result: ZaiDetectionResult; expiresAt: number }>();
+
+/** Cache TTL: 5 minutes. */
+const DETECTION_CACHE_TTL_MS = 5 * 60_000;
+
+function cacheKey(apiKey: string, endpoint: ZaiEndpointId | undefined): string {
+  // Use a short prefix of the API key for the cache key to avoid storing full secrets.
+  const prefix = apiKey.length > 8 ? apiKey.slice(0, 4) + apiKey.slice(-4) : apiKey;
+  return `${prefix}:${endpoint ?? "auto"}`;
+}
+
+/** Clear the endpoint detection cache (useful for tests and re-onboarding). */
+export function clearZaiEndpointCache(): void {
+  detectionCache.clear();
 }
 
 export async function detectZaiEndpoint(params: {
@@ -259,9 +278,27 @@ export async function detectZaiEndpointDetailed(params: {
     return { ok: false, detected: null, failures: [] };
   }
 
+  // Check the in-memory cache first.
+  const key = cacheKey(params.apiKey, params.endpoint);
+  const cached = detectionCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.result;
+  }
+
   const timeoutMs = params.timeoutMs ?? 5_000;
   const candidates = buildProbeCandidates(params.endpoint);
-  return probeParallel(candidates, { apiKey: params.apiKey, timeoutMs, fetchFn: params.fetchFn });
+  const result = await probeAllParallel(candidates, {
+    apiKey: params.apiKey,
+    timeoutMs,
+    fetchFn: params.fetchFn,
+  });
+
+  // Only cache successful detections to allow retries on transient failures.
+  if (result.ok) {
+    detectionCache.set(key, { result, expiresAt: Date.now() + DETECTION_CACHE_TTL_MS });
+  }
+
+  return result;
 }
 
 /**

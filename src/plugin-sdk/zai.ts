@@ -1,6 +1,7 @@
 // Public Z.ai helpers for provider plugins that need endpoint detection.
 
 export {
+  clearZaiEndpointCache,
   detectZaiEndpoint,
   detectZaiEndpointDetailed,
   formatZaiDetectionFailures,
