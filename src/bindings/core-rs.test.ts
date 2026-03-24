@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { loadCoreRs } from "./core-rs.js";
 
@@ -172,5 +173,55 @@ describeNative("core-rs native functions", () => {
 
   it("sanitizeControlChars preserves carriage return", () => {
     expect(mod!.sanitizeControlChars("line\r\nbreak")).toBe("line\r\nbreak");
+  });
+
+  // --- Size limit guards ---
+
+  it("validateFrame rejects oversized input", () => {
+    const huge =
+      '{"type":"req","id":"1","method":"x","params":"' + "a".repeat(17 * 1024 * 1024) + '"}';
+    expect(() => mod!.validateFrame(huge)).toThrow(/size limit/);
+  });
+
+  it("validateFrame rejects negative seq in event frame", () => {
+    expect(() => mod!.validateFrame('{"type":"event","event":"x","seq":-1}')).toThrow();
+  });
+
+  it("validateFrame accepts seq of 0", () => {
+    expect(mod!.validateFrame('{"type":"event","event":"x","seq":0}')).toBe("event");
+  });
+
+  it("validateFrame rejects uppercase frame type", () => {
+    expect(() => mod!.validateFrame('{"type":"REQ","id":"1","method":"test"}')).toThrow();
+  });
+
+  it("validateFrame ignores unknown extra fields", () => {
+    expect(mod!.validateFrame('{"type":"req","id":"1","method":"test","extra":42}')).toBe("req");
+  });
+
+  // --- Parity: native vs Node.js built-in ---
+
+  it("constantTimeEq matches crypto.timingSafeEqual for equal inputs", () => {
+    const a = Buffer.from("test-secret-value");
+    const b = Buffer.from("test-secret-value");
+    expect(mod!.constantTimeEq(a, b)).toBe(crypto.timingSafeEqual(a, b));
+  });
+
+  it("constantTimeEq matches crypto.timingSafeEqual for different inputs", () => {
+    const a = Buffer.from("secret-a-value!!");
+    const b = Buffer.from("secret-b-value!!");
+    expect(mod!.constantTimeEq(a, b)).toBe(crypto.timingSafeEqual(a, b));
+  });
+
+  it("constantTimeEq handles binary buffers with null bytes", () => {
+    const a = Buffer.from([0x00, 0x01, 0x02, 0x00]);
+    const b = Buffer.from([0x00, 0x01, 0x02, 0x00]);
+    expect(mod!.constantTimeEq(a, b)).toBe(true);
+  });
+
+  it("constantTimeEq single-byte difference", () => {
+    const a = Buffer.from([0x00, 0x01, 0x02, 0x03]);
+    const b = Buffer.from([0x00, 0x01, 0x02, 0x04]);
+    expect(mod!.constantTimeEq(a, b)).toBe(false);
   });
 });

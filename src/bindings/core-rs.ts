@@ -28,13 +28,16 @@ const EXPECTED_EXPORTS: Array<[string, string]> = [
   ["sanitizeControlChars", "function"],
 ];
 
+/** PNG magic bytes for the load-time smoke test. */
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
 let coreRs: CoreRsModule | null = null;
 let loaded = false;
 
 /**
  * Attempt to load the core-rs native addon. Returns null if unavailable.
- * Validates that the loaded module exposes all expected functions to guard
- * against ABI mismatches from stale builds.
+ * Validates that the loaded module exposes all expected functions and produces
+ * correct output (smoke test) to guard against ABI mismatches from stale builds.
  * Result is cached after first call.
  */
 export function loadCoreRs(): CoreRsModule | null {
@@ -52,7 +55,14 @@ export function loadCoreRs(): CoreRsModule | null {
         return coreRs;
       }
     }
-    coreRs = mod as unknown as CoreRsModule;
+    const candidate = mod as unknown as CoreRsModule;
+    // Smoke test: verify detectMime returns correct result for a known input.
+    // Catches stale/corrupt .node binaries that pass shape checks but return garbage.
+    if (candidate.detectMime(PNG_MAGIC) !== "image/png") {
+      coreRs = null;
+      return coreRs;
+    }
+    coreRs = candidate;
   } catch {
     coreRs = null;
   }

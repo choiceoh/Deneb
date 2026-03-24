@@ -155,7 +155,16 @@ pub fn validate_frame(json: &str) -> Result<GatewayFrame, FrameError> {
         }
         FrameType::Event => {
             let event = validate_non_empty(&raw.event, "event")?;
-            let seq = raw.seq.and_then(|s| if s >= 0 { Some(s as u64) } else { None });
+            let seq = match raw.seq {
+                Some(s) if s < 0 => {
+                    return Err(FrameError::InvalidField {
+                        field: "seq",
+                        reason: format!("must be non-negative, got {}", s),
+                    });
+                }
+                Some(s) => Some(s as u64),
+                None => None,
+            };
             Ok(GatewayFrame::Event(EventFrame {
                 event,
                 payload: raw.payload,
@@ -359,5 +368,34 @@ mod tests {
         assert_eq!(parsed["label"], "Telegram");
         // prost + serde uses snake_case field names by default.
         assert_eq!(parsed["selection_label"], "Telegram Bot");
+    }
+
+    #[test]
+    fn test_negative_seq_rejected() {
+        let json = r#"{"type":"event","event":"health","seq":-1}"#;
+        let err = validate_frame(json).unwrap_err();
+        assert!(err.to_string().contains("non-negative"));
+    }
+
+    #[test]
+    fn test_zero_seq_accepted() {
+        let json = r#"{"type":"event","event":"health","seq":0}"#;
+        let frame = validate_frame(json).unwrap();
+        match frame {
+            GatewayFrame::Event(ev) => assert_eq!(ev.seq, Some(0)),
+            _ => panic!("expected event frame"),
+        }
+    }
+
+    #[test]
+    fn test_extra_fields_ignored() {
+        let json = r#"{"type":"req","id":"1","method":"test","unknown_field":42}"#;
+        assert!(validate_frame(json).is_ok());
+    }
+
+    #[test]
+    fn test_frame_type_case_sensitive() {
+        let json = r#"{"type":"REQ","id":"1","method":"test"}"#;
+        assert!(validate_frame(json).is_err());
     }
 }
