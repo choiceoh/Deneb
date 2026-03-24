@@ -1,0 +1,83 @@
+// Channel type definitions.
+//
+// These mirror the TypeScript definitions in src/channels/plugins/types.core.ts.
+
+syntax = "proto3";
+
+package deneb.channel;
+
+option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol";
+
+// ChannelCapabilities describes what a channel supports.
+// TypeScript: ChannelCapabilities in types.core.ts
+message ChannelCapabilities {
+  repeated string chat_types = 1;
+  optional bool polls = 2;
+  optional bool reactions = 3;
+  optional bool edit = 4;
+  optional bool unsend = 5;
+  optional bool reply = 6;
+  optional bool effects = 7;
+  optional bool group_management = 8;
+  optional bool threads = 9;
+  optional bool media = 10;
+  optional bool native_commands = 11;
+  optional bool block_streaming = 12;
+}
+
+// ChannelMeta describes channel metadata.
+// TypeScript: ChannelMeta in types.core.ts
+message ChannelMeta {
+  string id = 1;
+  string label = 2;
+  string selection_label = 3;
+  string docs_path = 4;
+  optional string docs_label = 5;
+  string blurb = 6;
+  optional int32 order = 7;
+  repeated string aliases = 8;
+  optional string selection_docs_prefix = 9;
+  optional bool selection_docs_omit_label = 10;
+  repeated string selection_extras = 11;
+  optional string detail_label = 12;
+  optional string system_image = 13;
+  optional bool show_configured = 14;
+  optional bool quickstart_allow_from = 15;
+  optional bool force_account_binding = 16;
+  repeated string prefer_over = 17;
+}
+
+// ChannelAccountSnapshot — runtime state of a channel account.
+// TypeScript: ChannelAccountSnapshot in types.core.ts
+message ChannelAccountSnapshot {
+  string account_id = 1;
+  optional string name = 2;
+  optional bool enabled = 3;
+  optional bool configured = 4;
+  optional bool linked = 5;
+  optional bool running = 6;
+  optional bool connected = 7;
+  optional bool restart_pending = 8;
+  optional uint32 reconnect_attempts = 9;
+  optional int64 last_connected_at = 10;
+  optional int64 last_message_at = 11;
+  optional int64 last_event_at = 12;
+  optional string last_error = 13;
+  optional int64 last_start_at = 14;
+  optional int64 last_stop_at = 15;
+  optional int64 last_inbound_at = 16;
+  optional int64 last_outbound_at = 17;
+  optional bool busy = 18;
+  optional uint32 active_runs = 19;
+  optional int64 last_run_activity_at = 20;
+  optional string mode = 21;
+  optional string dm_policy = 22;
+  repeated string allow_from = 23;
+  optional string token_source = 24;
+  optional string token_status = 25;
+  optional string webhook_path = 26;
+  optional string webhook_url = 27;
+  optional string base_url = 28;
+  optional int32 port = 29;
+  optional int64 last_probe_at = 30;
+}

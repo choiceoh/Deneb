@@ -1,0 +1,87 @@
+// Package channel manages channel plugin registration and dispatch.
+//
+// This mirrors the channel framework in src/channels/ and the plugin
+// registry in src/channels/plugins/.
+package channel
+
+import (
+	"fmt"
+	"sync"
+)
+
+// Capabilities describes what a channel supports.
+type Capabilities struct {
+	ChatTypes      []string `json:"chatTypes"`
+	Polls          bool     `json:"polls,omitempty"`
+	Reactions      bool     `json:"reactions,omitempty"`
+	Edit           bool     `json:"edit,omitempty"`
+	Unsend         bool     `json:"unsend,omitempty"`
+	Reply          bool     `json:"reply,omitempty"`
+	Threads        bool     `json:"threads,omitempty"`
+	Media          bool     `json:"media,omitempty"`
+	BlockStreaming bool     `json:"blockStreaming,omitempty"`
+}
+
+// Meta describes channel metadata.
+type Meta struct {
+	ID             string   `json:"id"`
+	Label          string   `json:"label"`
+	SelectionLabel string   `json:"selectionLabel"`
+	DocsPath       string   `json:"docsPath"`
+	Blurb          string   `json:"blurb"`
+	Order          int      `json:"order,omitempty"`
+	Aliases        []string `json:"aliases,omitempty"`
+}
+
+// Plugin is the interface that channel plugins must implement.
+// This mirrors the ChannelPlugin contract from TypeScript.
+type Plugin interface {
+	ID() string
+	Meta() Meta
+	Capabilities() Capabilities
+}
+
+// Registry manages registered channel plugins.
+type Registry struct {
+	mu      sync.RWMutex
+	plugins map[string]Plugin
+}
+
+// NewRegistry creates an empty channel registry.
+func NewRegistry() *Registry {
+	return &Registry{
+		plugins: make(map[string]Plugin),
+	}
+}
+
+// Register adds a channel plugin to the registry.
+func (r *Registry) Register(p Plugin) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	id := p.ID()
+	if _, exists := r.plugins[id]; exists {
+		return fmt.Errorf("channel %q already registered", id)
+	}
+	r.plugins[id] = p
+	return nil
+}
+
+// Get returns a channel plugin by ID, or nil if not found.
+func (r *Registry) Get(id string) Plugin {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.plugins[id]
+}
+
+// List returns all registered channel IDs.
+func (r *Registry) List() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	ids := make([]string, 0, len(r.plugins))
+	for id := range r.plugins {
+		ids = append(ids, id)
+	}
+	return ids
+}
