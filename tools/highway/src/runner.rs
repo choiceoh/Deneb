@@ -74,7 +74,6 @@ pub enum ProgressEvent {
 pub struct RunnerConfig {
     pub root: PathBuf,
     pub vitest_bin: String,
-    pub max_retries: usize,
     pub timeout_ms: u64,
     pub verbose: bool,
     pub dry_run: bool,
@@ -85,7 +84,6 @@ impl Default for RunnerConfig {
         Self {
             root: PathBuf::from("."),
             vitest_bin: "pnpm".into(),
-            max_retries: 0,
             timeout_ms: 120_000,
             verbose: false,
             dry_run: false,
@@ -291,9 +289,9 @@ fn run_vitest_shard(
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    // Keep last 50 lines for debugging
-    let stdout_tail: String = stdout.lines().rev().take(50).collect::<Vec<_>>().join("\n");
-    let stderr_tail: String = stderr.lines().rev().take(50).collect::<Vec<_>>().join("\n");
+    // Keep last 50 lines for debugging (in correct order)
+    let stdout_tail = tail_lines(&stdout, 50);
+    let stderr_tail = tail_lines(&stderr, 50);
 
     Ok(ShardResult {
         shard_index,
@@ -304,6 +302,13 @@ fn run_vitest_shard(
         stdout_tail,
         stderr_tail,
     })
+}
+
+/// Extract the last `n` lines from a string without collecting all lines first.
+fn tail_lines(s: &str, n: usize) -> String {
+    let lines: Vec<&str> = s.lines().collect();
+    let start = lines.len().saturating_sub(n);
+    lines[start..].join("\n")
 }
 
 /// Update cache with test results from the run.
@@ -340,5 +345,327 @@ pub fn update_cache_from_results(
                 cache.record(rel, hash, result, per_test_ms);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cache::CacheStore;
+    use crate::scheduler::{Schedule, Shard};
+
+    // ── RunnerConfig defaults ───────────────────────────────────────────────
+
+    #[test]
+    fn runner_config_defaults() {
+        let cfg = RunnerConfig::default();
+        assert_eq!(cfg.root, PathBuf::from("."));
+        assert_eq!(cfg.vitest_bin, "pnpm");
+        assert_eq!(cfg.max_retries, 0);
+        assert_eq!(cfg.timeout_ms, 120_000);
+        assert!(!cfg.verbose);
+        assert!(!cfg.dry_run);
+    }
+
+    // ── execute_schedule dry run ─────────────────────────────────────────────
+
+    #[test]
+    fn execute_schedule_dry_run_returns_success() {
+        let schedule = Schedule {
+            num_shards: 2,
+            shards: vec![
+                Shard {
+                    index: 0,
+                    test_files: vec![PathBuf::from("/root/a.test.ts")],
+                    estimated_duration_ms: 100,
+                },
+                Shard {
+                    index: 1,
+                    test_files: vec![PathBuf::from("/root/b.test.ts")],
+                    estimated_duration_ms: 200,
+                },
+            ],
+            estimated_wall_time_ms: 200,
+            total_execution_time_ms: 300,
+            efficiency: 0.75,
+        };
+
+        let config = RunnerConfig {
+            dry_run: true,
+            ..Default::default()
+        };
+
+        let result = execute_schedule(&schedule, &config, 3, 500, None).unwrap();
+        assert!(result.success);
+        assert_eq!(result.total_tests, 5); // 2 executed + 3 cached
+        assert_eq!(result.cached_tests, 3);
+        assert_eq!(result.executed_tests, 2);
+        assert_eq!(result.passed_shards, 2);
+        assert_eq!(result.failed_shards, 0);
+        assert_eq!(result.wall_time_ms, 0);
+        assert!(result.shard_results.is_empty());
+        assert_eq!(result.cache_summary.skipped_tests, 3);
+        assert_eq!(result.cache_summary.estimated_time_saved_ms, 500);
+    }
+
+    #[test]
+    fn execute_schedule_dry_run_empty_schedule() {
+        let schedule = Schedule {
+            num_shards: 0,
+            shards: vec![],
+            estimated_wall_time_ms: 0,
+            total_execution_time_ms: 0,
+            efficiency: 1.0,
+        };
+
+        let config = RunnerConfig {
+            dry_run: true,
+            ..Default::default()
+        };
+
+        let result = execute_schedule(&schedule, &config, 0, 0, None).unwrap();
+        assert!(result.success);
+        assert_eq!(result.total_tests, 0);
+        assert_eq!(result.executed_tests, 0);
+    }
+
+    #[test]
+    fn execute_schedule_dry_run_no_cache() {
+        let schedule = Schedule {
+            num_shards: 1,
+            shards: vec![Shard {
+                index: 0,
+                test_files: vec![PathBuf::from("/root/x.test.ts")],
+                estimated_duration_ms: 50,
+            }],
+            estimated_wall_time_ms: 50,
+            total_execution_time_ms: 50,
+            efficiency: 1.0,
+        };
+
+        let config = RunnerConfig {
+            dry_run: true,
+            ..Default::default()
+        };
+
+        let result = execute_schedule(&schedule, &config, 0, 0, None).unwrap();
+        assert!(result.success);
+        assert_eq!(result.cached_tests, 0);
+        assert!((result.cache_summary.hit_rate).abs() < f64::EPSILON);
+    }
+
+    // ── update_cache_from_results ───────────────────────────────────────────
+
+    #[test]
+    fn update_cache_from_results_records_pass() {
+        let mut cache = CacheStore::default();
+        let root = Path::new("/root");
+
+        let schedule = Schedule {
+            num_shards: 1,
+            shards: vec![Shard {
+                index: 0,
+                test_files: vec![PathBuf::from("/root/a.test.ts")],
+                estimated_duration_ms: 100,
+            }],
+            estimated_wall_time_ms: 100,
+            total_execution_time_ms: 100,
+            efficiency: 1.0,
+        };
+
+        let run_result = RunResult {
+            success: true,
+            total_tests: 1,
+            cached_tests: 0,
+            executed_tests: 1,
+            passed_shards: 1,
+            failed_shards: 0,
+            wall_time_ms: 150,
+            total_execution_ms: 150,
+            shard_results: vec![ShardResult {
+                shard_index: 0,
+                success: true,
+                duration_ms: 150,
+                test_count: 1,
+                exit_code: 0,
+                stdout_tail: String::new(),
+                stderr_tail: String::new(),
+            }],
+            cache_summary: CacheSummaryOutput {
+                hit_rate: 0.0,
+                skipped_tests: 0,
+                estimated_time_saved_ms: 0,
+            },
+        };
+
+        let test_hashes: HashMap<PathBuf, u128> =
+            [(PathBuf::from("/root/a.test.ts"), 42u128)].into();
+
+        update_cache_from_results(&mut cache, &run_result, &schedule, &test_hashes, root);
+
+        assert!(cache.is_cached("a.test.ts", 42));
+        let entry = cache.entries.get("a.test.ts").unwrap();
+        assert_eq!(entry.result, TestResult::Pass);
+        assert_eq!(entry.duration_ms, 150);
+    }
+
+    #[test]
+    fn update_cache_from_results_records_fail() {
+        let mut cache = CacheStore::default();
+        let root = Path::new("/root");
+
+        let schedule = Schedule {
+            num_shards: 1,
+            shards: vec![Shard {
+                index: 0,
+                test_files: vec![PathBuf::from("/root/fail.test.ts")],
+                estimated_duration_ms: 100,
+            }],
+            estimated_wall_time_ms: 100,
+            total_execution_time_ms: 100,
+            efficiency: 1.0,
+        };
+
+        let run_result = RunResult {
+            success: false,
+            total_tests: 1,
+            cached_tests: 0,
+            executed_tests: 1,
+            passed_shards: 0,
+            failed_shards: 1,
+            wall_time_ms: 200,
+            total_execution_ms: 200,
+            shard_results: vec![ShardResult {
+                shard_index: 0,
+                success: false,
+                duration_ms: 200,
+                test_count: 1,
+                exit_code: 1,
+                stdout_tail: String::new(),
+                stderr_tail: "FAIL".into(),
+            }],
+            cache_summary: CacheSummaryOutput {
+                hit_rate: 0.0,
+                skipped_tests: 0,
+                estimated_time_saved_ms: 0,
+            },
+        };
+
+        let test_hashes: HashMap<PathBuf, u128> =
+            [(PathBuf::from("/root/fail.test.ts"), 99u128)].into();
+
+        update_cache_from_results(&mut cache, &run_result, &schedule, &test_hashes, root);
+
+        // Failed test should be recorded but not considered "cached" (is_cached returns false for Fail)
+        assert!(!cache.is_cached("fail.test.ts", 99));
+        let entry = cache.entries.get("fail.test.ts").unwrap();
+        assert_eq!(entry.result, TestResult::Fail);
+    }
+
+    #[test]
+    fn update_cache_distributes_duration_proportionally() {
+        let mut cache = CacheStore::default();
+        let root = Path::new("/root");
+
+        let schedule = Schedule {
+            num_shards: 1,
+            shards: vec![Shard {
+                index: 0,
+                test_files: vec![
+                    PathBuf::from("/root/a.test.ts"),
+                    PathBuf::from("/root/b.test.ts"),
+                ],
+                estimated_duration_ms: 200,
+            }],
+            estimated_wall_time_ms: 200,
+            total_execution_time_ms: 200,
+            efficiency: 1.0,
+        };
+
+        let run_result = RunResult {
+            success: true,
+            total_tests: 2,
+            cached_tests: 0,
+            executed_tests: 2,
+            passed_shards: 1,
+            failed_shards: 0,
+            wall_time_ms: 300,
+            total_execution_ms: 300,
+            shard_results: vec![ShardResult {
+                shard_index: 0,
+                success: true,
+                duration_ms: 300,
+                test_count: 2,
+                exit_code: 0,
+                stdout_tail: String::new(),
+                stderr_tail: String::new(),
+            }],
+            cache_summary: CacheSummaryOutput {
+                hit_rate: 0.0,
+                skipped_tests: 0,
+                estimated_time_saved_ms: 0,
+            },
+        };
+
+        let test_hashes: HashMap<PathBuf, u128> = [
+            (PathBuf::from("/root/a.test.ts"), 1u128),
+            (PathBuf::from("/root/b.test.ts"), 2u128),
+        ]
+        .into();
+
+        update_cache_from_results(&mut cache, &run_result, &schedule, &test_hashes, root);
+
+        // 300ms / 2 tests = 150ms each
+        assert_eq!(cache.entries.get("a.test.ts").unwrap().duration_ms, 150);
+        assert_eq!(cache.entries.get("b.test.ts").unwrap().duration_ms, 150);
+    }
+
+    #[test]
+    fn update_cache_skips_missing_hashes() {
+        let mut cache = CacheStore::default();
+        let root = Path::new("/root");
+
+        let schedule = Schedule {
+            num_shards: 1,
+            shards: vec![Shard {
+                index: 0,
+                test_files: vec![PathBuf::from("/root/no-hash.test.ts")],
+                estimated_duration_ms: 100,
+            }],
+            estimated_wall_time_ms: 100,
+            total_execution_time_ms: 100,
+            efficiency: 1.0,
+        };
+
+        let run_result = RunResult {
+            success: true,
+            total_tests: 1,
+            cached_tests: 0,
+            executed_tests: 1,
+            passed_shards: 1,
+            failed_shards: 0,
+            wall_time_ms: 100,
+            total_execution_ms: 100,
+            shard_results: vec![ShardResult {
+                shard_index: 0,
+                success: true,
+                duration_ms: 100,
+                test_count: 1,
+                exit_code: 0,
+                stdout_tail: String::new(),
+                stderr_tail: String::new(),
+            }],
+            cache_summary: CacheSummaryOutput {
+                hit_rate: 0.0,
+                skipped_tests: 0,
+                estimated_time_saved_ms: 0,
+            },
+        };
+
+        // Empty hash map — the test file has no hash entry
+        let test_hashes: HashMap<PathBuf, u128> = HashMap::new();
+
+        update_cache_from_results(&mut cache, &run_result, &schedule, &test_hashes, root);
+        assert!(cache.entries.is_empty(), "no entries should be recorded without a hash");
     }
 }

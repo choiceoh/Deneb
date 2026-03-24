@@ -29,15 +29,20 @@ rayon = "1.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# File system
-walkdir = "2"
+# File system (ignore crate includes parallel walker + .gitignore support)
 globset = "0.4"
 ignore = "0.4"
+
+# Fast substring search (SIMD-accelerated)
+memchr = "2"
 
 # Misc
 anyhow = "1"
 dashmap = "6"
 crossbeam-channel = "0.5"
+
+[dev-dependencies]
+tempfile = "3"
 
 [profile.release]
 opt-level = 3
