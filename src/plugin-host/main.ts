@@ -52,6 +52,25 @@ registry.register("plugin-host.methods", async () => ({
   payload: { methods: registry.methods() },
 }));
 
+// Register a reload method so the Go gateway can reinitialize the gateway context
+// (e.g., after config changes). This tears down the old context and creates a new one.
+registry.register("plugin-host.reload", async () => {
+  console.log("[plugin-host] reloading gateway context...");
+  gatewayShutdown?.();
+  gatewayInvoke = null;
+  gatewayShutdown = null;
+  gatewayInitPromise = null;
+  try {
+    await ensureGatewayContext();
+    return { ok: true, payload: { reloaded: true } };
+  } catch (err) {
+    return {
+      ok: false,
+      error: { code: "UNAVAILABLE", message: `reload failed: ${String(err)}` },
+    };
+  }
+});
+
 // --- Gateway method forwarding ---
 // Methods that the Go gateway forwards to us are routed to the actual
 // TypeScript gateway method handlers via a headless gateway context.

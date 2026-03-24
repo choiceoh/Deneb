@@ -9,7 +9,11 @@
 import { createDefaultDeps } from "../cli/deps.js";
 import type { ConnectParams, RequestFrame, ErrorShape } from "../gateway/protocol/index.js";
 import { handleGatewayRequest, coreGatewayHandlers } from "../gateway/server-methods.js";
-import type { GatewayRequestContext, GatewayClient } from "../gateway/server-methods/types.js";
+import type {
+  GatewayRequestContext,
+  GatewayRequestHandlers,
+  GatewayClient,
+} from "../gateway/server-methods/types.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { PluginHostHandler } from "./method-registry.js";
 
@@ -88,6 +92,43 @@ export async function createHeadlessGatewayContext(): Promise<HeadlessGatewayCon
       status: "ok" as const,
     }),
   });
+
+  // Load plugins to get extra gateway handlers (e.g., from channel extensions).
+  // This makes plugin-registered RPC methods available through the bridge.
+  let extraHandlers: GatewayRequestHandlers = {};
+  try {
+    const { loadConfig } = await import("../config/config.js");
+    const { resolveDefaultAgentId } = await import("../agents/agent-scope.js");
+    const { resolveAgentWorkspaceDir } = await import("../agents/agent-scope.js");
+    const { loadGatewayPlugins } = await import("../gateway/server-plugins.js");
+
+    const cfg = loadConfig();
+    const agentId = resolveDefaultAgentId(cfg);
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const baseMethods = Object.keys(coreGatewayHandlers);
+
+    const { pluginRegistry } = loadGatewayPlugins({
+      cfg,
+      workspaceDir,
+      log: {
+        info: (msg) => log.info(msg),
+        warn: (msg) => log.warn(msg),
+        error: (msg) => log.error(msg),
+        debug: (msg) => log.debug(msg),
+      },
+      coreGatewayHandlers,
+      baseMethods,
+      logDiagnostics: true,
+    });
+
+    extraHandlers = pluginRegistry.gatewayHandlers;
+    const pluginMethodCount = Object.keys(extraHandlers).length;
+    if (pluginMethodCount > 0) {
+      log.info(`loaded ${pluginMethodCount} plugin gateway handler(s)`);
+    }
+  } catch (err) {
+    log.warn(`plugin loading skipped: ${String(err)}`);
+  }
 
   // Shared mutable state for session/chat tracking.
   const agentRunSeq = new Map<string, number>();
@@ -246,6 +287,7 @@ export async function createHeadlessGatewayContext(): Promise<HeadlessGatewayCon
         isWebchatConnect: () => false,
         respond,
         context,
+        extraHandlers,
       }).catch((err) => {
         resolve({
           ok: false,
@@ -262,9 +304,8 @@ export async function createHeadlessGatewayContext(): Promise<HeadlessGatewayCon
     cron.stop();
   };
 
-  log.info(
-    `headless gateway context created (${Object.keys(coreGatewayHandlers).length} handlers available)`,
-  );
+  const totalHandlers = Object.keys(coreGatewayHandlers).length + Object.keys(extraHandlers).length;
+  log.info(`headless gateway context created (${totalHandlers} handlers available)`);
 
   return { context, invoke, shutdown };
 }
