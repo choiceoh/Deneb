@@ -3,7 +3,7 @@
 # Orchestrates Rust (core-rs), Go (gateway-go), and TypeScript (pnpm) builds.
 
 .PHONY: all rust rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
-       go go-ffi go-pure go-run go-test go-test-pure go-test-fuzz go-vet go-clean \
+       go go-ffi go-pure go-run go-test go-test-pure go-test-fuzz go-vet go-clean go-binary \
        ts ts-check ts-test \
        test test-all clean check fmt \
        proto proto-go proto-rust proto-ts proto-check proto-lint proto-watch \
@@ -67,6 +67,9 @@ go-test-fuzz:
 go-vet:
 	cd gateway-go && go vet ./...
 
+go-binary: rust go
+	cd gateway-go && go build -o ../dist/deneb-gateway ./cmd/gateway/
+
 go-clean:
 	cd gateway-go && go clean ./...
 
@@ -129,6 +132,7 @@ info:
 	@echo ""
 	@echo "  make rust       - Build Rust core library (release)"
 	@echo "  make go         - Build Go gateway"
+	@echo "  make go-binary  - Build Go gateway binary to dist/"
 	@echo "  make ts         - Build TypeScript (pnpm)"
 	@echo "  make test       - Run Rust + Go tests"
 	@echo "  make check      - Run all checks (Rust + Go + TS)"

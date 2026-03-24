@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
@@ -425,7 +426,16 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
         }
       : undefined;
 
+  // Phase 3: Go gateway runtime (opt-in via config or env).
+  const useGoGateway = cfg.gateway?.runtime === "go" || process.env.DENEB_GATEWAY_GO === "1";
+
   try {
+    if (useGoGateway) {
+      gatewayLog.info("using Go gateway runtime");
+      await runGoGateway(port, bind);
+      return;
+    }
+
     await runGatewayLoop({
       runtime: defaultRuntime,
       lockPort: port,
@@ -462,6 +472,86 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
     defaultRuntime.error(`Gateway failed to start: ${String(err)}`);
     defaultRuntime.exit(1);
   }
+}
+
+/**
+ * Spawn the Go gateway binary as a child process.
+ * The Go gateway will in turn spawn the Node.js Plugin Host for TypeScript
+ * plugin/extension execution.
+ */
+async function runGoGateway(port: number, bind: string): Promise<void> {
+  // Resolve the Go binary path.
+  const goBinaryPaths = [
+    path.resolve(process.cwd(), "dist", "deneb-gateway"),
+    path.resolve(__dirname, "..", "..", "..", "dist", "deneb-gateway"),
+  ];
+  let goBinary: string | undefined;
+  for (const p of goBinaryPaths) {
+    if (fs.existsSync(p)) {
+      goBinary = p;
+      break;
+    }
+  }
+  if (!goBinary) {
+    defaultRuntime.error("Go gateway binary not found. Run `make go-binary` to build it.");
+    defaultRuntime.exit(1);
+    return;
+  }
+
+  // Build Plugin Host command for the Go gateway to spawn.
+  const pluginHostCmd = `node ${path.resolve(process.cwd(), "dist", "plugin-host", "main.js")}`;
+
+  // The Go gateway reads config from ~/.deneb/deneb.json via its own bootstrap.
+  // Pass port/bind as CLI overrides; auth is resolved from config.
+  const args: string[] = [
+    "--port",
+    String(port),
+    "--bind",
+    bind,
+    "--plugin-host-cmd",
+    pluginHostCmd,
+  ];
+
+  // Pass config file path if explicitly set.
+  if (process.env.DENEB_CONFIG_PATH) {
+    args.push("--config", process.env.DENEB_CONFIG_PATH);
+  }
+
+  const verbose = process.env.DEBUG || process.env.DENEB_VERBOSE;
+  if (verbose) {
+    args.push("--log-level", "debug");
+  }
+
+  gatewayLog.info(`spawning Go gateway: ${goBinary} ${args.join(" ")}`);
+
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(goBinary, args, {
+      stdio: "inherit",
+      env: { ...process.env },
+    });
+
+    child.on("error", (err) => {
+      reject(new Error(`Go gateway spawn failed: ${err.message}`));
+    });
+
+    child.on("exit", (code, signal) => {
+      if (signal) {
+        gatewayLog.info(`Go gateway exited with signal ${signal}`);
+        resolve();
+      } else if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Go gateway exited with code ${code}`));
+      }
+    });
+
+    // Forward SIGINT/SIGTERM to child.
+    const forwardSignal = (sig: NodeJS.Signals) => {
+      child.kill(sig);
+    };
+    process.on("SIGINT", forwardSignal);
+    process.on("SIGTERM", forwardSignal);
+  });
 }
 
 export function addGatewayRunCommand(cmd: Command): Command {

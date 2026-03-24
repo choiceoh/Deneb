@@ -3,6 +3,10 @@
 // This replaces the TypeScript gateway (src/gateway/server.impl.ts)
 // with a Go implementation supporting HTTP health, WebSocket + RPC dispatch,
 // Plugin Host bridge, daemon management, and subsystem orchestration.
+//
+// Phase 3: The Go gateway is the primary process. It can spawn a Node.js
+// Plugin Host child process (--plugin-host-cmd) for TypeScript plugin/extension
+// execution, and connects to it via Unix domain socket bridge.
 package main
 
 import (
@@ -26,12 +30,19 @@ func main() {
 	configPath := flag.String("config", "", "Path to deneb.json config file")
 	port := flag.Int("port", 0, "Gateway server port (overrides config)")
 	bind := flag.String("bind", "", "Bind address: 'loopback', 'lan', 'all', 'custom', 'tailnet' (overrides config)")
-	bridgeSocket := flag.String("bridge", "", "Path to plugin host unix socket")
+	bridgeSocket := flag.String("bridge", "", "Path to existing plugin host unix socket (mutually exclusive with --plugin-host-cmd)")
+	pluginHostCmd := flag.String("plugin-host-cmd", "", "Command to spawn the Node.js Plugin Host subprocess (e.g. 'node dist/plugin-host/main.js')")
 	version := flag.String("version", "0.1.0-go", "Server version string")
 	pidFile := flag.String("pid-file", "", "Path to PID file for daemon mode")
 	daemonMode := flag.Bool("daemon", false, "Run as daemon (write PID file, check for existing)")
 	logLevel := flag.String("log-level", "", "Log level: debug, info, warn, error (overrides config)")
 	flag.Parse()
+
+	// Validate mutually exclusive bridge options.
+	if *bridgeSocket != "" && *pluginHostCmd != "" {
+		fmt.Fprintln(os.Stderr, "--bridge and --plugin-host-cmd are mutually exclusive")
+		os.Exit(1)
+	}
 
 	// Bootstrap config from ~/.deneb/deneb.json (or --config path).
 	bootstrap, err := config.BootstrapGatewayConfig(config.BootstrapOptions{
@@ -89,19 +100,29 @@ func main() {
 		)
 	}
 
+	// Resolve config directory for PID file fallback.
+	cfgDir := ""
+	if bootstrap.Snapshot != nil && bootstrap.Snapshot.Path != "" {
+		cfgDir = filepath.Dir(bootstrap.Snapshot.Path)
+	}
+	if cfgDir == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			cfgDir = filepath.Join(home, ".deneb")
+		}
+	}
+
 	// Daemon mode: manage PID file and check for existing daemon.
 	if *daemonMode || *pidFile != "" {
 		pidPath := *pidFile
 		if pidPath == "" {
-			home, err := os.UserHomeDir()
-			if err != nil || home == "" {
-				home = "/tmp"
-				logger.Warn("could not determine home directory, using /tmp for pid file", "error", err)
+			if cfgDir != "" {
+				pidPath = filepath.Join(cfgDir, "gateway.pid")
+			} else {
+				pidPath = "/tmp/deneb-gateway.pid"
 			}
-			pidPath = filepath.Join(home, ".deneb", "gateway.pid")
 		}
 
-		d := daemon.NewDaemon(pidPath, *port, *version, logger)
+		d := daemon.NewDaemon(pidPath, resolvedPort, *version, logger)
 
 		// Check for existing daemon.
 		if existing := d.CheckExistingDaemon(); existing != nil {
@@ -124,8 +145,11 @@ func main() {
 		}
 		defer d.Stop()
 
-		// Connect bridge.
-		connectBridge(srv, *bridgeSocket, logger)
+		// Connect bridge (spawn or direct socket).
+		spawnResult := setupBridge(ctx, srv, *bridgeSocket, *pluginHostCmd, logger)
+		if spawnResult != nil {
+			defer spawnResult.Shutdown()
+		}
 
 		logger.Info("deneb gateway starting (daemon mode)", "addr", addr, "pid", os.Getpid())
 
@@ -136,11 +160,15 @@ func main() {
 		return
 	}
 
-	// Non-daemon mode (original behavior).
-	connectBridge(srv, *bridgeSocket, logger)
-
+	// Non-daemon mode.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Connect bridge (spawn or direct socket).
+	spawnResult := setupBridge(ctx, srv, *bridgeSocket, *pluginHostCmd, logger)
+	if spawnResult != nil {
+		defer spawnResult.Shutdown()
+	}
 
 	logger.Info("deneb gateway starting", "addr", addr)
 
@@ -150,19 +178,37 @@ func main() {
 	}
 }
 
-func connectBridge(srv *server.Server, socketPath string, logger *slog.Logger) {
-	if socketPath == "" {
-		return
+// setupBridge configures the Plugin Host bridge, either by spawning a child
+// process (--plugin-host-cmd) or connecting to an existing socket (--bridge).
+func setupBridge(ctx context.Context, srv *server.Server, socketPath, pluginHostCmd string, logger *slog.Logger) *bridge.SpawnResult {
+	if pluginHostCmd != "" {
+		// Spawn the Plugin Host as a child process.
+		result, err := bridge.SpawnPluginHost(ctx, bridge.SpawnConfig{
+			Command: pluginHostCmd,
+			Logger:  logger,
+		})
+		if err != nil {
+			logger.Error("failed to spawn plugin host", "error", err)
+			os.Exit(1)
+		}
+		srv.SetBridge(result.Host)
+		return result
 	}
-	b := bridge.NewWithSocket(socketPath, logger)
-	connectCtx, connectCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	if err := b.ConnectWithReconnect(connectCtx); err != nil {
-		logger.Warn("plugin host bridge not available, will retry", "socket", socketPath, "error", err)
-	} else {
-		logger.Info("plugin host bridge connected", "socket", socketPath)
+
+	if socketPath != "" {
+		// Connect to an existing Plugin Host socket.
+		b := bridge.NewWithSocket(socketPath, logger)
+		connectCtx, connectCancel := context.WithTimeout(ctx, 5*time.Second)
+		if err := b.ConnectWithReconnect(connectCtx); err != nil {
+			logger.Warn("plugin host bridge not available, will retry", "socket", socketPath, "error", err)
+		} else {
+			logger.Info("plugin host bridge connected", "socket", socketPath)
+		}
+		connectCancel()
+		srv.SetBridge(b)
 	}
-	connectCancel()
-	srv.SetBridge(b)
+
+	return nil
 }
 
 func parseLogLevel(s string) slog.Level {
