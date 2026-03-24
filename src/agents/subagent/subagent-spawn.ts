@@ -158,7 +158,7 @@ function sanitizeMountPathHint(value?: string): string | undefined {
     return undefined;
   }
   // Prevent prompt injection via control/newline characters in system prompt hints.
-  // eslint-disable-next-line no-control-regex
+  // oxlint-disable-next-line no-control-regex
   if (/[\r\n\u0000-\u001F\u007F\u0085\u2028\u2029]/.test(trimmed)) {
     return undefined;
   }

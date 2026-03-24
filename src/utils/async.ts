@@ -35,9 +35,9 @@ export async function waitFor<T>(
  */
 export function waitForEvent<T = unknown>(
   emitter: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Node EventEmitter compat requires any[]
+    // oxlint-disable-next-line typescript/no-explicit-any -- Node EventEmitter compat requires any[]
     once: (event: string, fn: (...args: any[]) => void) => void;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Node EventEmitter compat requires any[]
+    // oxlint-disable-next-line typescript/no-explicit-any -- Node EventEmitter compat requires any[]
     off: (event: string, fn: (...args: any[]) => void) => void;
   },
   event: string,

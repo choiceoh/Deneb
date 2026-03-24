@@ -1114,7 +1114,7 @@ export async function runEmbeddedAttempt(
             aborted = false;
             // Ensure the session abort has fully settled before proceeding.
             if (yieldAbortSettled) {
-              // eslint-disable-next-line @typescript-eslint/await-thenable -- abort() returns Promise<void> per AgentSession.d.ts
+              // oxlint-disable-next-line typescript/await-thenable -- abort() returns Promise<void> per AgentSession.d.ts
               await yieldAbortSettled;
             }
             stripSessionsYieldArtifacts(activeSession);

@@ -25,8 +25,6 @@ interface DenebCustomMatchers<R = unknown> {
 }
 
 declare module "vitest" {
-  // eslint-disable-next-line @typescript-eslint/no-empty-interface
   interface Assertion<T = unknown> extends DenebCustomMatchers<T> {}
-  // eslint-disable-next-line @typescript-eslint/no-empty-interface
   interface AsymmetricMatchersContaining extends DenebCustomMatchers {}
 }
