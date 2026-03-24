@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
@@ -284,6 +285,12 @@ func sessionsCreate(deps ExtendedDeps) HandlerFunc {
 			kind = session.KindUnknown
 		}
 		s := deps.Sessions.Create(p.Key, kind)
+		if deps.GatewaySubs != nil {
+			deps.GatewaySubs.EmitLifecycle(events.LifecycleChangeEvent{
+				SessionKey: p.Key,
+				Reason:     "created",
+			})
+		}
 		resp, _ := protocol.NewResponseOK(req.ID, s)
 		return resp
 	}
@@ -292,9 +299,13 @@ func sessionsCreate(deps ExtendedDeps) HandlerFunc {
 func sessionsLifecycle(deps ExtendedDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			Key   string `json:"key"`
-			Phase string `json:"phase"`
-			Ts    int64  `json:"ts"`
+			Key        string `json:"key"`
+			Phase      string `json:"phase"`
+			Ts         int64  `json:"ts"`
+			StopReason string `json:"stopReason,omitempty"`
+			Aborted    bool   `json:"aborted,omitempty"`
+			StartedAt  *int64 `json:"startedAt,omitempty"`
+			EndedAt    *int64 `json:"endedAt,omitempty"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -310,10 +321,22 @@ func sessionsLifecycle(deps ExtendedDeps) HandlerFunc {
 		}
 
 		event := session.LifecycleEvent{
-			Phase: session.LifecyclePhase(p.Phase),
-			Ts:    p.Ts,
+			Phase:      session.LifecyclePhase(p.Phase),
+			Ts:         p.Ts,
+			StopReason: p.StopReason,
+			Aborted:    p.Aborted,
+			StartedAt:  p.StartedAt,
+			EndedAt:    p.EndedAt,
 		}
 		s := deps.Sessions.ApplyLifecycleEvent(p.Key, event)
+
+		if deps.GatewaySubs != nil {
+			deps.GatewaySubs.EmitLifecycle(events.LifecycleChangeEvent{
+				SessionKey: p.Key,
+				Reason:     p.Phase,
+			})
+		}
+
 		resp, _ := protocol.NewResponseOK(req.ID, s)
 		return resp
 	}
