@@ -266,9 +266,6 @@ const ajv = new (AjvPkg as unknown as new (opts?: object) => import("ajv").defau
 });
 
 export const validateConnectParams = ajv.compile<ConnectParams>(ConnectParamsSchema);
-export const validateRequestFrame = ajv.compile<RequestFrame>(RequestFrameSchema);
-export const validateResponseFrame = ajv.compile<ResponseFrame>(ResponseFrameSchema);
-export const validateEventFrame = ajv.compile<EventFrame>(EventFrameSchema);
 
 /**
  * Validate a raw JSON string as a gateway frame using the native Rust validator.
@@ -284,6 +281,36 @@ export function validateFrameNative(json: string): string | null {
   } catch {
     return null;
   }
+}
+
+function frameTypeOf(raw: string, parsed: unknown): string | null {
+  const native = validateFrameNative(raw);
+  if (native !== null) {
+    return native;
+  }
+  // Lightweight fallback when native addon is unavailable.
+  if (parsed && typeof parsed === "object" && "type" in parsed) {
+    const t = (parsed as { type: unknown }).type;
+    if (t === "req" || t === "res" || t === "event") {
+      return t;
+    }
+  }
+  return null;
+}
+
+/** Type guard: validates a raw JSON string as a RequestFrame via Rust FFI (falls back to type check). */
+export function isRequestFrame(raw: string, parsed: unknown): parsed is RequestFrame {
+  return frameTypeOf(raw, parsed) === "req";
+}
+
+/** Type guard: validates a raw JSON string as a ResponseFrame via Rust FFI (falls back to type check). */
+export function isResponseFrame(raw: string, parsed: unknown): parsed is ResponseFrame {
+  return frameTypeOf(raw, parsed) === "res";
+}
+
+/** Type guard: validates a raw JSON string as an EventFrame via Rust FFI (falls back to type check). */
+export function isEventFrame(raw: string, parsed: unknown): parsed is EventFrame {
+  return frameTypeOf(raw, parsed) === "event";
 }
 
 export const validateSendParams = ajv.compile(SendParamsSchema);

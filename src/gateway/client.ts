@@ -32,11 +32,10 @@ import {
   type ConnectParams,
   type EventFrame,
   type HelloOk,
+  isRequestFrame,
   PROTOCOL_VERSION,
   type RequestFrame,
-  validateEventFrame,
-  validateRequestFrame,
-  validateResponseFrame,
+  validateFrameNative,
 } from "./protocol/index.js";
 
 type Pending = {
@@ -639,7 +638,13 @@ export class GatewayClient {
   private handleMessage(raw: string) {
     try {
       const parsed = JSON.parse(raw);
-      if (validateEventFrame(parsed)) {
+      const nativeType = validateFrameNative(raw);
+      const frameType =
+        nativeType ??
+        (parsed && typeof parsed === "object" && typeof parsed.type === "string"
+          ? parsed.type
+          : null);
+      if (frameType === "event") {
         const evt = parsed;
         if (evt.event === "connect.challenge") {
           const payload = evt.payload as { nonce?: unknown } | undefined;
@@ -666,7 +671,7 @@ export class GatewayClient {
         this.opts.onEvent?.(evt);
         return;
       }
-      if (validateResponseFrame(parsed)) {
+      if (frameType === "res") {
         const pending = this.pending.get(parsed.id);
         if (!pending) {
           return;
@@ -802,10 +807,8 @@ export class GatewayClient {
     }
     const id = randomUUID();
     const frame: RequestFrame = { type: "req", id, method, params };
-    if (!validateRequestFrame(frame)) {
-      throw new Error(
-        `invalid request frame: ${JSON.stringify(validateRequestFrame.errors, null, 2)}`,
-      );
+    if (!isRequestFrame(JSON.stringify(frame), frame)) {
+      throw new Error("invalid request frame");
     }
     const expectFinal = opts?.expectFinal === true;
     const timeoutMs =

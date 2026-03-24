@@ -25,8 +25,6 @@ describe("core-rs loader", () => {
     expect(typeof mod.validateFrame).toBe("function");
     expect(typeof mod.constantTimeEq).toBe("function");
     expect(typeof mod.detectMime).toBe("function");
-    expect(typeof mod.isSafeInput).toBe("function");
-    expect(typeof mod.sanitizeControlChars).toBe("function");
   });
 });
 
@@ -93,24 +91,6 @@ describeNative("core-rs native functions", () => {
     expect(mod!.detectMime(Buffer.from([0x00, 0x01, 0x02, 0x03]))).toBe("application/octet-stream");
   });
 
-  it("isSafeInput returns true for normal text", () => {
-    expect(mod!.isSafeInput("normal text")).toBe(true);
-  });
-
-  it("isSafeInput returns false for script injection", () => {
-    expect(mod!.isSafeInput("<script>alert(1)</script>")).toBe(false);
-  });
-
-  it("sanitizeControlChars removes control characters", () => {
-    expect(mod!.sanitizeControlChars("hello\x00world")).toBe("helloworld");
-  });
-
-  it("sanitizeControlChars keeps newlines and tabs", () => {
-    expect(mod!.sanitizeControlChars("keep\nnewlines\tand\ttabs")).toBe(
-      "keep\nnewlines\tand\ttabs",
-    );
-  });
-
   // --- Edge cases ---
 
   it("validateFrame handles empty string", () => {
@@ -141,38 +121,6 @@ describeNative("core-rs native functions", () => {
 
   it("detectMime handles GIF89a", () => {
     expect(mod!.detectMime(Buffer.from("GIF89a..."))).toBe("image/gif");
-  });
-
-  it("isSafeInput handles empty string", () => {
-    expect(mod!.isSafeInput("")).toBe(true);
-  });
-
-  it("isSafeInput detects javascript: URI", () => {
-    expect(mod!.isSafeInput("javascript:void(0)")).toBe(false);
-  });
-
-  it("isSafeInput detects null byte", () => {
-    expect(mod!.isSafeInput("has\0null")).toBe(false);
-  });
-
-  it("isSafeInput handles unicode safely", () => {
-    expect(mod!.isSafeInput("안녕하세요 🌍")).toBe(true);
-  });
-
-  it("sanitizeControlChars handles empty string", () => {
-    expect(mod!.sanitizeControlChars("")).toBe("");
-  });
-
-  it("sanitizeControlChars handles pure unicode", () => {
-    expect(mod!.sanitizeControlChars("카페☕")).toBe("카페☕");
-  });
-
-  it("sanitizeControlChars strips bell and escape", () => {
-    expect(mod!.sanitizeControlChars("a\x07b\x1Bc")).toBe("abc");
-  });
-
-  it("sanitizeControlChars preserves carriage return", () => {
-    expect(mod!.sanitizeControlChars("line\r\nbreak")).toBe("line\r\nbreak");
   });
 
   // --- Size limit guards ---

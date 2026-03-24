@@ -37,8 +37,6 @@ const ALL_EXPECTED_EXPORTS: Array<[string, string]> = [
   ["validateFrame", "function"],
   ["constantTimeEq", "function"],
   ["detectMime", "function"],
-  ["isSafeInput", "function"],
-  ["sanitizeControlChars", "function"],
 ];
 
 /** PNG magic bytes for the load-time smoke test. */

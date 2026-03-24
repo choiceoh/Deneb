@@ -37,28 +37,4 @@ describeBench("core-rs native vs JS performance", () => {
   bench("detectMime JPEG (native)", () => {
     mod!.detectMime(jpegBuffer);
   });
-
-  // --- is_safe_input ---
-  const safeText = "This is a normal message with no dangerous patterns at all.";
-  const unsafeText = 'Check this: <script>alert("xss")</script>';
-
-  bench("isSafeInput safe (native)", () => {
-    mod!.isSafeInput(safeText);
-  });
-
-  bench("isSafeInput unsafe (native)", () => {
-    mod!.isSafeInput(unsafeText);
-  });
-
-  // --- sanitize_control_chars ---
-  const cleanText = "Hello, world! This has no control characters.";
-  const dirtyText = "Hello\x00world\x07bell\x1Bescape\nnewline\ttab";
-
-  bench("sanitizeControlChars clean (native, short-circuit)", () => {
-    mod!.sanitizeControlChars(cleanText);
-  });
-
-  bench("sanitizeControlChars dirty (native)", () => {
-    mod!.sanitizeControlChars(dirtyText);
-  });
 });

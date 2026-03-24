@@ -51,9 +51,9 @@ import {
   type ErrorShape,
   errorShape,
   formatValidationErrors,
+  isRequestFrame,
   PROTOCOL_VERSION,
   validateConnectParams,
-  validateRequestFrame,
 } from "../../protocol/index.js";
 import {
   MAX_BUFFERED_BYTES,
@@ -295,13 +295,9 @@ export function attachGatewayWsMessageHandler(params: {
       if (!client) {
         // Handshake must be a normal request:
         // { type:"req", method:"connect", params: ConnectParams }.
-        const isRequestFrame = validateRequestFrame(parsed);
-        if (
-          !isRequestFrame ||
-          parsed.method !== "connect" ||
-          !validateConnectParams(parsed.params)
-        ) {
-          const handshakeError = isRequestFrame
+        const isReqFrame = isRequestFrame(text, parsed);
+        if (!isReqFrame || parsed.method !== "connect" || !validateConnectParams(parsed.params)) {
+          const handshakeError = isReqFrame
             ? parsed.method === "connect"
               ? `invalid connect params: ${formatValidationErrors(validateConnectParams.errors)}`
               : "invalid handshake: first request must be connect"
@@ -313,7 +309,7 @@ export function attachGatewayWsMessageHandler(params: {
             frameId,
             handshakeError,
           });
-          if (isRequestFrame) {
+          if (isReqFrame) {
             const req = parsed;
             send({
               type: "res",
@@ -327,7 +323,7 @@ export function attachGatewayWsMessageHandler(params: {
             );
           }
           const closeReason = truncateCloseReason(handshakeError || "invalid handshake");
-          if (isRequestFrame) {
+          if (isReqFrame) {
             queueMicrotask(() => close(1008, closeReason));
           } else {
             close(1008, closeReason);
@@ -1038,15 +1034,12 @@ export function attachGatewayWsMessageHandler(params: {
       }
 
       // After handshake, accept only req frames
-      if (!validateRequestFrame(parsed)) {
+      if (!isRequestFrame(text, parsed)) {
         send({
           type: "res",
           id: (parsed as { id?: unknown })?.id ?? "invalid",
           ok: false,
-          error: errorShape(
-            ErrorCodes.VALIDATION_FAILED,
-            `invalid request frame: ${formatValidationErrors(validateRequestFrame.errors)}`,
-          ),
+          error: errorShape(ErrorCodes.VALIDATION_FAILED, "invalid request frame"),
         });
         return;
       }

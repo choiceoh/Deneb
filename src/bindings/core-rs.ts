@@ -14,8 +14,6 @@ interface CoreRsModuleRaw {
   validateFrame(json: string): number;
   constantTimeEq(a: Buffer, b: Buffer): boolean;
   detectMime(data: Buffer): string;
-  isSafeInput(input: string): boolean;
-  sanitizeControlChars(input: string): string;
 }
 
 export interface CoreRsModule {
@@ -25,10 +23,6 @@ export interface CoreRsModule {
   constantTimeEq(a: Buffer, b: Buffer): boolean;
   /** Detect MIME type from file magic bytes. */
   detectMime(data: Buffer): string;
-  /** Check if a string is free of injection patterns. */
-  isSafeInput(input: string): boolean;
-  /** Remove control characters (keeps newline/tab/CR). */
-  sanitizeControlChars(input: string): string;
 }
 
 /** Wraps the raw native module, mapping numeric frame type IDs to strings. */
@@ -44,8 +38,6 @@ function wrapModule(raw: CoreRsModuleRaw): CoreRsModule {
     },
     constantTimeEq: (a: Buffer, b: Buffer) => raw.constantTimeEq(a, b),
     detectMime: (data: Buffer) => raw.detectMime(data),
-    isSafeInput: (input: string) => raw.isSafeInput(input),
-    sanitizeControlChars: (input: string) => raw.sanitizeControlChars(input),
   };
 }
 
