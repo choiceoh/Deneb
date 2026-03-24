@@ -81,3 +81,20 @@ func TestMethods(t *testing.T) {
 		t.Errorf("expected 2 methods, got %d", len(methods))
 	}
 }
+
+func TestDispatchPanicRecovery(t *testing.T) {
+	d := NewDispatcher(testLogger())
+	d.Register("crasher", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		panic("intentional test panic")
+	})
+
+	req := &protocol.RequestFrame{Type: "req", ID: "panic-1", Method: "crasher"}
+	resp := d.Dispatch(context.Background(), req)
+
+	if resp.OK {
+		t.Error("expected error response after panic")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrUnavailable {
+		t.Errorf("expected UNAVAILABLE error, got: %+v", resp.Error)
+	}
+}

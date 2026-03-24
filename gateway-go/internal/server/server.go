@@ -25,6 +25,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+const (
+	// maxRPCBodyBytes limits the HTTP RPC request body to 1 MB.
+	maxRPCBodyBytes = 1 * 1024 * 1024
+	// maxWebSocketClients limits the number of concurrent WebSocket connections.
+	maxWebSocketClients = 256
+)
+
 // Server is the main gateway server.
 type Server struct {
 	addr       string
@@ -33,7 +40,8 @@ type Server struct {
 	sessions   *session.Manager
 	channels   *channel.Registry
 	bridge     *bridge.PluginHost
-	clients    sync.Map // connID -> *WsClient
+	clients    sync.Map   // connID -> *WsClient
+	clientCnt  atomic.Int32
 	startedAt  time.Time
 	version    string
 	logger     *slog.Logger
@@ -232,7 +240,8 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		ID     string          `json:"id"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	limited := http.MaxBytesReader(w, r.Body, maxRPCBodyBytes)
+	if err := json.NewDecoder(limited).Decode(&req); err != nil {
 		s.writeJSON(w, http.StatusBadRequest, protocol.NewResponseError("", protocol.NewError(
 			protocol.ErrInvalidRequest, "invalid JSON",
 		)))

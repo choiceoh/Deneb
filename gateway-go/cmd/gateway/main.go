@@ -46,13 +46,13 @@ func main() {
 	if *bridgeSocket != "" {
 		b := bridge.NewWithSocket(*bridgeSocket, logger)
 		connectCtx, connectCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := b.Connect(connectCtx); err != nil {
-			logger.Warn("plugin host bridge not available", "socket", *bridgeSocket, "error", err)
+		if err := b.ConnectWithReconnect(connectCtx); err != nil {
+			logger.Warn("plugin host bridge not available, will retry", "socket", *bridgeSocket, "error", err)
 		} else {
 			logger.Info("plugin host bridge connected", "socket", *bridgeSocket)
-			srv.SetBridge(b)
 		}
 		connectCancel()
+		srv.SetBridge(b)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

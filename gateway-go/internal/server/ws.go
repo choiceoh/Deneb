@@ -24,6 +24,12 @@ type WsClient struct {
 
 // handleWsUpgrade upgrades an HTTP connection to WebSocket and manages the lifecycle.
 func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
+	// Enforce connection limit.
+	if s.clientCnt.Load() >= maxWebSocketClients {
+		http.Error(w, "too many connections", http.StatusServiceUnavailable)
+		return
+	}
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true, // origin validation deferred
 	})
@@ -41,7 +47,11 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.clients.Store(client.connID, client)
-	defer s.clients.Delete(client.connID)
+	s.clientCnt.Add(1)
+	defer func() {
+		s.clients.Delete(client.connID)
+		s.clientCnt.Add(-1)
+	}()
 
 	s.logger.Info("websocket connected", "connId", client.connID, "remote", r.RemoteAddr)
 
@@ -57,8 +67,14 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 
 	conn.SetReadLimit(protocol.MaxPayloadBytes)
 
-	// Enter message loop.
+	// Start tick heartbeat in background.
+	tickCtx, tickCancel := context.WithCancel(r.Context())
+	go s.tickLoop(tickCtx, client)
+
+	// Enter message loop (blocks until disconnect).
 	s.runMessageLoop(r.Context(), client)
+	tickCancel()
+
 	s.logger.Info("websocket disconnected", "connId", client.connID)
 }
 
@@ -130,6 +146,7 @@ func (s *Server) buildHelloOk(client *WsClient) *protocol.HelloOk {
 	}
 }
 
+// runMessageLoop reads frames from the WebSocket and dispatches them.
 func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 	for {
 		_, data, err := client.conn.Read(ctx)
@@ -156,6 +173,28 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 			resp := s.dispatcher.Dispatch(ctx, &req)
 			if err := s.writeFrame(ctx, client, resp); err != nil {
 				s.logger.Warn("response write failed", "connId", client.connID, "method", req.Method, "error", err)
+				return
+			}
+		}
+	}
+}
+
+// tickLoop sends periodic tick events to the client so both sides can detect
+// dead connections. Mirrors TICK_INTERVAL_MS from src/gateway/server-constants.ts.
+func (s *Server) tickLoop(ctx context.Context, client *WsClient) {
+	ticker := time.NewTicker(time.Duration(protocol.TickIntervalMs) * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ev, _ := protocol.NewEventFrame("tick", map[string]int64{
+				"ts": time.Now().UnixMilli(),
+			})
+			if err := s.writeFrame(ctx, client, ev); err != nil {
+				// Write failure means connection is dead; exit silently.
 				return
 			}
 		}

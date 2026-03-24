@@ -73,7 +73,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *
 	d.mu.RUnlock()
 
 	if ok {
-		return handler(ctx, req)
+		return d.safeCall(ctx, req, handler)
 	}
 
 	// Forward to Plugin Host bridge if available.
@@ -93,4 +93,19 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *
 		protocol.ErrNotFound,
 		fmt.Sprintf("unknown method: %q", req.Method),
 	))
+}
+
+// safeCall invokes a handler with panic recovery so a single bad handler
+// cannot crash the gateway.
+func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, handler HandlerFunc) (resp *protocol.ResponseFrame) {
+	defer func() {
+		if r := recover(); r != nil {
+			d.logger.Error("handler panic", "method", req.Method, "panic", r)
+			resp = protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrUnavailable,
+				fmt.Sprintf("internal error handling %q", req.Method),
+			))
+		}
+	}()
+	return handler(ctx, req)
 }
