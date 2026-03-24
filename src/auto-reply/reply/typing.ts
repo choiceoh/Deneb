@@ -106,9 +106,27 @@ export function createTypingController(params: {
     rethrowOnError: true,
   });
 
+  const TYPING_TRIGGER_TIMEOUT_MS = 10_000;
+
   const triggerTyping = async () => {
     await startGuard.run(async () => {
-      await onReplyStart?.();
+      if (!onReplyStart) {
+        return;
+      }
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const result = await Promise.race([
+        Promise.resolve(onReplyStart()).then(() => "ok" as const),
+        new Promise<"timeout">((resolve) => {
+          timer = setTimeout(() => resolve("timeout"), TYPING_TRIGGER_TIMEOUT_MS);
+          timer.unref?.();
+        }),
+      ]);
+      if (timer) {
+        clearTimeout(timer);
+      }
+      if (result === "timeout") {
+        log?.("typing: onReplyStart timed out; continuing without typing indicator");
+      }
     });
   };
 

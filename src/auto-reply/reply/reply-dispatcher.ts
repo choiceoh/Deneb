@@ -23,6 +23,7 @@ type ReplyDispatchDeliverer = (
 
 const DEFAULT_HUMAN_DELAY_MIN_MS = 800;
 const DEFAULT_HUMAN_DELAY_MAX_MS = 2500;
+const DELIVER_TIMEOUT_MS = 30_000;
 
 /** Generate a random delay within the configured range. */
 function getHumanDelay(config: HumanDelayConfig | undefined): number {
@@ -157,7 +158,24 @@ export function createReplyDispatcher(options: ReplyDispatcherOptions): ReplyDis
         }
         // Safe: deliver is called inside an async .then() callback, so even a synchronous
         // throw becomes a rejection that flows through .catch()/.finally(), ensuring cleanup.
-        await options.deliver(normalized, { kind });
+        // Wrap with timeout so a hung channel API call doesn't block the chain forever.
+        let deliverTimer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            options.deliver(normalized, { kind }),
+            new Promise<never>((_, reject) => {
+              deliverTimer = setTimeout(
+                () => reject(new Error(`reply delivery timed out after ${DELIVER_TIMEOUT_MS}ms`)),
+                DELIVER_TIMEOUT_MS,
+              );
+              deliverTimer.unref?.();
+            }),
+          ]);
+        } finally {
+          if (deliverTimer) {
+            clearTimeout(deliverTimer);
+          }
+        }
       })
       .catch((err) => {
         options.onError?.(err, { kind });
