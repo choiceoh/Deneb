@@ -22,6 +22,26 @@ const __highwayBin = (() => {
   const debug = path.join(__highwayRoot, "tools/highway/target/debug/highway");
   if (fs.existsSync(release)) return release;
   if (fs.existsSync(debug)) return debug;
+
+  // Auto-build: if Cargo.toml exists and cargo is available, build automatically
+  const cargoToml = path.join(__highwayRoot, "tools/highway/Cargo.toml");
+  if (!fs.existsSync(cargoToml)) return null;
+  try {
+    execFileSync("cargo", ["--version"], { stdio: "pipe", timeout: 5_000 });
+  } catch {
+    return null; // No Rust toolchain
+  }
+  try {
+    console.log("[highway] first run — building optimized binary (~30s one-time cost)...");
+    execFileSync("cargo", ["build", "--release"], {
+      cwd: path.join(__highwayRoot, "tools/highway"),
+      stdio: "inherit",
+      timeout: 300_000,
+    });
+    if (fs.existsSync(release)) return release;
+  } catch {
+    console.log("[highway] build failed — falling back to standard test runner");
+  }
   return null;
 })();
 
