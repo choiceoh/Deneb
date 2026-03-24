@@ -30,10 +30,10 @@ import type { Bot } from "grammy";
 import { defaultTelegramBotDeps, type TelegramBotDeps } from "./bot-deps.js";
 import type { TelegramMessageContext } from "./bot-message-context.js";
 import type { TelegramBotOptions } from "./bot.js";
-import { deliverReplies } from "./bot/delivery.js";
+import { deliverReplies as defaultDeliverReplies } from "./bot/delivery.replies.js";
 import type { TelegramStreamMode } from "./bot/types.js";
 import type { TelegramInlineButtons } from "./button-types.js";
-import { createTelegramDraftStream } from "./draft-stream.js";
+import { createTelegramDraftStream as defaultCreateTelegramDraftStream } from "./draft-stream.js";
 import { shouldSuppressLocalTelegramExecApprovalPrompt } from "./exec-approvals.js";
 import { renderTelegramHtmlText } from "./format.js";
 import {
@@ -48,8 +48,11 @@ import {
   createTelegramReasoningStepState,
   splitTelegramReasoningText,
 } from "./reasoning-lane-coordinator.js";
-import { editMessageTelegram } from "./send.js";
-import { cacheSticker, describeStickerImage } from "./sticker-cache.js";
+import { editMessageTelegram as defaultEditMessageTelegram } from "./send.js";
+import {
+  cacheSticker as defaultCacheSticker,
+  describeStickerImage as defaultDescribeStickerImage,
+} from "./sticker-cache.js";
 
 const EMPTY_RESPONSE_FALLBACK = "No response generated. Please try again.";
 
@@ -112,6 +115,12 @@ type DispatchTelegramMessageParams = {
   telegramCfg: TelegramAccountConfig;
   telegramDeps?: TelegramBotDeps;
   opts: Pick<TelegramBotOptions, "token">;
+  /** Injectable for testing; defaults to the real implementations. */
+  _deliverReplies?: typeof defaultDeliverReplies;
+  _createTelegramDraftStream?: typeof defaultCreateTelegramDraftStream;
+  _editMessageTelegram?: typeof defaultEditMessageTelegram;
+  _describeStickerImage?: typeof defaultDescribeStickerImage;
+  _cacheSticker?: typeof defaultCacheSticker;
 };
 
 type TelegramReasoningLevel = "off" | "on" | "stream";
@@ -150,6 +159,11 @@ export const dispatchTelegramMessage = async ({
   telegramCfg,
   telegramDeps = defaultTelegramBotDeps,
   opts,
+  _deliverReplies: deliverReplies = defaultDeliverReplies,
+  _createTelegramDraftStream: createTelegramDraftStream = defaultCreateTelegramDraftStream,
+  _editMessageTelegram: editMessageTelegram = defaultEditMessageTelegram,
+  _describeStickerImage: describeStickerImage = defaultDescribeStickerImage,
+  _cacheSticker: cacheSticker = defaultCacheSticker,
 }: DispatchTelegramMessageParams) => {
   const {
     ctxPayload,

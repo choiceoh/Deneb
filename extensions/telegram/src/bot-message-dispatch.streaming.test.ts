@@ -44,9 +44,9 @@ vi.mock("./draft-stream.js", () => ({
   createTelegramDraftStream,
 }));
 
-vi.mock("./bot/delivery.js", () => ({
-  deliverReplies,
-}));
+// deliverReplies is injected via _deliverReplies param instead of vi.mock
+// because vitest's forks pool can resolve barrel re-exports to a different
+// module instance than the one mocked.
 
 vi.mock("./send.js", () => ({
   createForumTopicTelegram,
@@ -227,6 +227,15 @@ describe("dispatchTelegramMessage draft streaming", () => {
       telegramCfg: params.telegramCfg ?? {},
       telegramDeps: params.telegramDeps ?? telegramDepsForTest,
       opts: { token: "token" },
+      _deliverReplies: deliverReplies as Parameters<
+        typeof dispatchTelegramMessage
+      >[0]["_deliverReplies"],
+      _createTelegramDraftStream: createTelegramDraftStream as Parameters<
+        typeof dispatchTelegramMessage
+      >[0]["_createTelegramDraftStream"],
+      _editMessageTelegram: editMessageTelegram as Parameters<
+        typeof dispatchTelegramMessage
+      >[0]["_editMessageTelegram"],
     });
   }
 

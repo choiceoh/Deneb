@@ -2,18 +2,16 @@ import type { Message } from "@grammyjs/types";
 import type { DmPolicy } from "deneb/plugin-sdk/config-runtime";
 import { upsertChannelPairingRequest } from "deneb/plugin-sdk/conversation-runtime";
 
-// Inline stub for removed channel-pairing module.
-// Solo-dev: pairing always succeeds.
-function createChannelPairingChallengeIssuer(_opts: {
+function createChannelPairingChallengeIssuer(opts: {
   channel: string;
   upsertPairingRequest: (params: {
     channel: string;
     id: string;
     accountId: string;
     meta?: unknown;
-  }) => Promise<void>;
+  }) => Promise<{ code: string; created: boolean } | void>;
 }) {
-  return (params: {
+  return async (params: {
     senderId: string;
     senderIdLine: string;
     meta?: unknown;
@@ -21,10 +19,27 @@ function createChannelPairingChallengeIssuer(_opts: {
     sendPairingReply: (text: string) => Promise<void>;
     onReplyError?: (err: unknown) => void;
   }) => {
-    params.onCreated?.();
-    return params
-      .sendPairingReply("Pairing auto-approved (solo-dev mode).")
-      .catch(params.onReplyError ?? (() => {}));
+    try {
+      const result = await opts.upsertPairingRequest({
+        channel: opts.channel,
+        id: params.senderId,
+        accountId: params.senderId,
+        meta: params.meta,
+      });
+      const code = result && "code" in result ? result.code : undefined;
+      const created = result && "created" in result ? result.created : true;
+      if (code && created) {
+        params.onCreated?.();
+        const lines = [
+          params.senderIdLine,
+          `Pairing code: ${code}`,
+          `Run: deneb pairing approve ${opts.channel} ${code}`,
+        ];
+        await params.sendPairingReply(lines.join("\n"));
+      }
+    } catch (err) {
+      (params.onReplyError ?? (() => {}))(err);
+    }
   };
 }
 import { logVerbose } from "deneb/plugin-sdk/runtime-env";
@@ -109,12 +124,12 @@ export async function enforceTelegramDmAccess(params: {
       await createChannelPairingChallengeIssuer({
         channel: "telegram",
         upsertPairingRequest: async ({ id, meta }) =>
-          await (upsertPairingRequest ?? upsertChannelPairingRequest)({
+          (await (upsertPairingRequest ?? upsertChannelPairingRequest)({
             channel: "telegram",
             id,
             accountId,
             meta,
-          }),
+          })) as { code: string; created: boolean } | void,
       })({
         senderId: telegramUserId,
         senderIdLine: `Your Telegram user id: ${telegramUserId}`,
