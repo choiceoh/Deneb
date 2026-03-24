@@ -91,7 +91,14 @@ function linkPluginNodeModules(params) {
   if (!fs.existsSync(params.sourcePluginNodeModulesDir)) {
     return;
   }
-  fs.symlinkSync(params.sourcePluginNodeModulesDir, runtimeNodeModulesDir, symlinkType());
+  const type = symlinkType();
+  // Windows junctions require absolute targets; Unix dir symlinks use relative
+  // paths for portability (consistent with file-level symlinks in the overlay).
+  const target =
+    type === "junction"
+      ? params.sourcePluginNodeModulesDir
+      : relativeSymlinkTarget(params.sourcePluginNodeModulesDir, runtimeNodeModulesDir);
+  fs.symlinkSync(target, runtimeNodeModulesDir, type);
 }
 
 export function stageBundledPluginRuntime(params = {}) {
