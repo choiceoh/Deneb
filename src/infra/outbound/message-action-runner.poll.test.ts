@@ -42,6 +42,13 @@ const telegramPollTestPlugin: ChannelPlugin = {
     resolveAccount: () => ({ botToken: "telegram-test" }),
     isConfigured: () => true,
   },
+  outbound: {
+    deliveryMode: "gateway",
+    sendText: async () => ({ channel: "telegram", messageId: "t1" }),
+    sendMedia: async () => ({ channel: "telegram", messageId: "t2" }),
+    sendPoll: async () => ({ channel: "telegram", messageId: "p1", pollId: "poll1" }),
+    pollMaxOptions: 10,
+  },
   messaging: {
     targetResolver: {
       looksLikeId: () => true,
