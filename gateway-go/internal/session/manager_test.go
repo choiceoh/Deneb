@@ -77,3 +77,44 @@ func TestApplyLifecycleEventRestart(t *testing.T) {
 		t.Error("EndedAt should be nil after restart")
 	}
 }
+
+func TestConcurrentLifecycleEvents(t *testing.T) {
+	m := NewManager()
+	const n = 100
+
+	done := make(chan struct{})
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			key := "concurrent-session"
+			m.ApplyLifecycleEvent(key, LifecycleEvent{Phase: PhaseStart, Ts: int64(i * 1000)})
+			m.ApplyLifecycleEvent(key, LifecycleEvent{Phase: PhaseEnd, Ts: int64(i*1000 + 500)})
+			done <- struct{}{}
+		}(i)
+	}
+	for i := 0; i < n; i++ {
+		<-done
+	}
+
+	s := m.Get("concurrent-session")
+	if s == nil {
+		t.Fatal("session should exist")
+	}
+	// Final state should be a valid terminal status.
+	switch s.Status {
+	case StatusDone, StatusRunning:
+		// OK — depends on goroutine scheduling
+	default:
+		t.Errorf("unexpected status: %q", s.Status)
+	}
+}
+
+func TestApplyLifecycleEndWithoutStart(t *testing.T) {
+	m := NewManager()
+	s := m.ApplyLifecycleEvent("no-start", LifecycleEvent{Phase: PhaseEnd, Ts: 5000})
+	if s.Status != StatusDone {
+		t.Errorf("Status = %q, want %q", s.Status, StatusDone)
+	}
+	if s.RuntimeMs != nil {
+		t.Error("RuntimeMs should be nil without prior start")
+	}
+}

@@ -1,5 +1,7 @@
 package protocol
 
+import "fmt"
+
 // ConnectParams represents the handshake payload sent by the client.
 // Mirrors ConnectParamsSchema from src/gateway/protocol/schema/frames.ts.
 type ConnectParams struct {
@@ -113,6 +115,23 @@ type PresenceEntry struct {
 	Roles           []string `json:"roles,omitempty"`
 	Scopes          []string `json:"scopes,omitempty"`
 	InstanceID      string   `json:"instanceId,omitempty"`
+}
+
+// ValidateConnectParams checks that required client fields are present.
+func ValidateConnectParams(params *ConnectParams) error {
+	if params.Client.ID == "" {
+		return fmt.Errorf("client.id is required")
+	}
+	if params.Client.Version == "" {
+		return fmt.Errorf("client.version is required")
+	}
+	if params.Client.Platform == "" {
+		return fmt.Errorf("client.platform is required")
+	}
+	if params.Client.Mode == "" {
+		return fmt.Errorf("client.mode is required")
+	}
+	return nil
 }
 
 // ValidateProtocolVersion checks whether the server's protocol version

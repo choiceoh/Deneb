@@ -83,6 +83,10 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient) error {
 		return fmt.Errorf("parse connect params: %w", err)
 	}
 
+	if err := protocol.ValidateConnectParams(&params); err != nil {
+		return fmt.Errorf("invalid connect params: %w", err)
+	}
+
 	if !protocol.ValidateProtocolVersion(&params) {
 		errShape := protocol.NewError(protocol.ErrInvalidRequest,
 			fmt.Sprintf("protocol version mismatch: server=%d, client range=%d-%d",
@@ -161,6 +165,10 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 // writeFrame serializes v as JSON and writes it to the WebSocket connection.
 // The write is bounded by a 5-second timeout derived from the parent context.
 func (s *Server) writeFrame(ctx context.Context, client *WsClient, v any) error {
+	if client.conn == nil {
+		return fmt.Errorf("connection closed")
+	}
+
 	data, err := json.Marshal(v)
 	if err != nil {
 		s.logger.Error("marshal frame", "connId", client.connID, "error", err)

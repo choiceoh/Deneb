@@ -158,22 +158,27 @@ func (s *Server) shutdown() error {
 	s.ready.Store(false)
 	s.logger.Info("gateway server shutting down")
 
-	if s.bridge != nil {
-		s.bridge.Close()
+	// 1. Stop accepting new connections first.
+	var httpErr error
+	if s.httpServer != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		httpErr = s.httpServer.Shutdown(shutdownCtx)
 	}
 
+	// 2. Close existing WebSocket clients.
 	s.clients.Range(func(key, value any) bool {
 		client := value.(*WsClient)
 		client.conn.Close(4000, "server shutting down")
 		return true
 	})
 
-	if s.httpServer != nil {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return s.httpServer.Shutdown(shutdownCtx)
+	// 3. Close Plugin Host bridge last (in-flight forwards finish first).
+	if s.bridge != nil {
+		s.bridge.Close()
 	}
-	return nil
+
+	return httpErr
 }
 
 func (s *Server) buildMux() *http.ServeMux {

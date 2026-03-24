@@ -98,3 +98,36 @@ func TestValidateProtocolVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateConnectParams(t *testing.T) {
+	valid := &ConnectParams{
+		MinProtocol: 1,
+		MaxProtocol: 3,
+		Client: ConnectClientInfo{
+			ID: "test", Version: "1.0", Platform: "linux", Mode: "control",
+		},
+	}
+	if err := ValidateConnectParams(valid); err != nil {
+		t.Errorf("valid params rejected: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		modify func(*ConnectParams)
+	}{
+		{"empty id", func(p *ConnectParams) { p.Client.ID = "" }},
+		{"empty version", func(p *ConnectParams) { p.Client.Version = "" }},
+		{"empty platform", func(p *ConnectParams) { p.Client.Platform = "" }},
+		{"empty mode", func(p *ConnectParams) { p.Client.Mode = "" }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := *valid
+			p.Client = valid.Client // copy
+			tt.modify(&p)
+			if err := ValidateConnectParams(&p); err == nil {
+				t.Error("expected error for invalid params")
+			}
+		})
+	}
+}

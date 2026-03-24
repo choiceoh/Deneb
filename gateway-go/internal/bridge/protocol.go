@@ -1,3 +1,8 @@
+// Package bridge provides IPC frame encoding for the Plugin Host.
+//
+// Frames are encoded as newline-delimited JSON (NDJSON): each frame is a
+// single line of JSON terminated by '\n'. This matches the WebSocket gateway
+// protocol but uses a stream-oriented transport (Unix domain socket).
 package bridge
 
 import (
@@ -19,17 +24,8 @@ func NewFrameWriter(w io.Writer) *FrameWriter {
 	return &FrameWriter{w: w}
 }
 
-// WriteRequest writes a RequestFrame as a newline-delimited JSON line.
-func (fw *FrameWriter) WriteRequest(req *protocol.RequestFrame) error {
-	return fw.writeJSON(req)
-}
-
-// WriteResponse writes a ResponseFrame as a newline-delimited JSON line.
-func (fw *FrameWriter) WriteResponse(resp *protocol.ResponseFrame) error {
-	return fw.writeJSON(resp)
-}
-
-func (fw *FrameWriter) writeJSON(v any) error {
+// WriteFrame writes any frame value as a newline-delimited JSON line.
+func (fw *FrameWriter) WriteFrame(v any) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Errorf("marshal frame: %w", err)
@@ -37,6 +33,16 @@ func (fw *FrameWriter) writeJSON(v any) error {
 	b = append(b, '\n')
 	_, err = fw.w.Write(b)
 	return err
+}
+
+// WriteRequest writes a RequestFrame as NDJSON.
+func (fw *FrameWriter) WriteRequest(req *protocol.RequestFrame) error {
+	return fw.WriteFrame(req)
+}
+
+// WriteResponse writes a ResponseFrame as NDJSON.
+func (fw *FrameWriter) WriteResponse(resp *protocol.ResponseFrame) error {
+	return fw.WriteFrame(resp)
 }
 
 // FrameReader reads newline-delimited JSON frames.
@@ -60,6 +66,9 @@ func (fr *FrameReader) ReadFrame() (protocol.FrameType, []byte, error) {
 		return "", nil, io.EOF
 	}
 	data := fr.scanner.Bytes()
+	if len(data) == 0 {
+		return "", nil, fmt.Errorf("empty frame")
+	}
 	buf := make([]byte, len(data))
 	copy(buf, data)
 

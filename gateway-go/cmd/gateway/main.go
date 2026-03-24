@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/server"
@@ -44,12 +45,14 @@ func main() {
 	// Connect to Plugin Host bridge if specified.
 	if *bridgeSocket != "" {
 		b := bridge.NewWithSocket(*bridgeSocket, logger)
-		if err := b.Connect(context.Background()); err != nil {
+		connectCtx, connectCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := b.Connect(connectCtx); err != nil {
 			logger.Warn("plugin host bridge not available", "socket", *bridgeSocket, "error", err)
 		} else {
 			logger.Info("plugin host bridge connected", "socket", *bridgeSocket)
 			srv.SetBridge(b)
 		}
+		connectCancel()
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

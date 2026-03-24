@@ -165,3 +165,81 @@ func TestPluginHostForwardTimeout(t *testing.T) {
 		t.Error("expected timeout error")
 	}
 }
+
+func TestPluginHostForwardConnectionClosed(t *testing.T) {
+	dir := t.TempDir()
+	socketPath := filepath.Join(dir, "test.sock")
+
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	go func() {
+		conn, _ := listener.Accept()
+		// Close the connection immediately after accept.
+		time.Sleep(20 * time.Millisecond)
+		conn.Close()
+	}()
+
+	h := NewWithSocket(socketPath, testLogger())
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := h.Connect(ctx); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer h.Close()
+
+	// Wait for readLoop to detect the closed connection.
+	time.Sleep(50 * time.Millisecond)
+
+	req := &protocol.RequestFrame{Type: "req", ID: "closed-1", Method: "test"}
+	_, err = h.Forward(ctx, req)
+	if err == nil {
+		t.Error("expected error when connection is closed")
+	}
+}
+
+func TestPluginHostConnectNoSocket(t *testing.T) {
+	h := NewWithSocket("/nonexistent/path.sock", testLogger())
+	err := h.Connect(context.Background())
+	if err == nil {
+		t.Error("expected error connecting to nonexistent socket")
+	}
+}
+
+func TestPluginHostConnectNoPath(t *testing.T) {
+	h := New()
+	err := h.Connect(context.Background())
+	if err == nil {
+		t.Error("expected error when no socket path configured")
+	}
+}
+
+func TestPluginHostDoubleClose(t *testing.T) {
+	dir := t.TempDir()
+	socketPath := filepath.Join(dir, "test.sock")
+
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	go func() {
+		conn, _ := listener.Accept()
+		time.Sleep(5 * time.Second)
+		conn.Close()
+	}()
+
+	h := NewWithSocket(socketPath, testLogger())
+	if err := h.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+
+	// Double close should not panic.
+	h.Close()
+	h.Close()
+}
