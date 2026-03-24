@@ -115,17 +115,17 @@ Analysis of Deneb codebase modules with the highest bug risk, evaluated by code 
 
 ### MEDIUM (Monitor)
 
-| Module | LOC | Primary Risk |
-|--------|-----|-------------|
-| `src/agents/subagent/subagent-announce.ts` | 1,509 | Delivery/retry logic edge cases |
-| `src/agents/pi-embedded-runner/compact.ts` | 1,172 | Pi session compaction, 25 try/catch |
-| `src/gateway/server.impl.ts` | 1,044 | 76 imports, gateway orchestrator |
-| `src/gateway/server/ws-connection/message-handler.ts` | 1,114 | WebSocket auth/device pairing |
-| `src/config/zod-schema.ts` | 1,034 | Config validation, all user configs depend on this |
-| `src/infra/state-migrations.ts` | 967 | DB migration rollback difficulty |
-| `src/channels/plugins/setup-wizard.ts` | 864 | 50 async vs 2 try/catch (imbalance) |
-| `src/markdown/ir.ts` | 973 | Markdown IR transformation |
-| `src/acp/translator.ts` | 1,099 | ACP protocol translation layer |
+| Module                                                | LOC   | Primary Risk                                       |
+| ----------------------------------------------------- | ----- | -------------------------------------------------- |
+| `src/agents/subagent/subagent-announce.ts`            | 1,509 | Delivery/retry logic edge cases                    |
+| `src/agents/pi-embedded-runner/compact.ts`            | 1,172 | Pi session compaction, 25 try/catch                |
+| `src/gateway/server.impl.ts`                          | 1,044 | 76 imports, gateway orchestrator                   |
+| `src/gateway/server/ws-connection/message-handler.ts` | 1,114 | WebSocket auth/device pairing                      |
+| `src/config/zod-schema.ts`                            | 1,034 | Config validation, all user configs depend on this |
+| `src/infra/state-migrations.ts`                       | 967   | DB migration rollback difficulty                   |
+| `src/channels/plugins/setup-wizard.ts`                | 864   | 50 async vs 2 try/catch (imbalance)                |
+| `src/markdown/ir.ts`                                  | 973   | Markdown IR transformation                         |
+| `src/acp/translator.ts`                               | 1,099 | ACP protocol translation layer                     |
 
 ---
 
@@ -153,12 +153,12 @@ Two opposite anti-patterns coexist:
 
 ### Test Coverage Gaps
 
-| Area | Test Ratio | Untested Large Files |
-|------|-----------|---------------------|
-| Gateway | 43% | 12 (>500 LOC) |
-| Context Engine | ~28% | 11 (>500 LOC) |
-| Plugins | 53% | 5 (>500 LOC) |
-| Channels | 60% | 5 (>500 LOC) |
+| Area           | Test Ratio | Untested Large Files |
+| -------------- | ---------- | -------------------- |
+| Gateway        | 43%        | 12 (>500 LOC)        |
+| Context Engine | ~28%       | 11 (>500 LOC)        |
+| Plugins        | 53%        | 5 (>500 LOC)         |
+| Channels       | 60%        | 5 (>500 LOC)         |
 
 ### Recurring Fix Patterns (Git History)
 
@@ -171,15 +171,15 @@ Two opposite anti-patterns coexist:
 
 ## Prioritized Action Items
 
-| Priority | Action | Modules | Expected Impact |
-|----------|--------|---------|-----------------|
-| P0 | Add compaction integration tests | `compaction.ts`, `engine.ts` | Prevents silent context loss — the most user-visible bug category |
-| P0 | Add error boundary to WS message handler | `message-handler.ts` | Prevents connection crashes from malformed input |
-| P1 | Extract subagent registry mutable state into testable class | `subagent-registry.ts` | Enables direct testing, eliminates `var` TDZ workaround |
-| P1 | Replace silent `catch {}` with logged/finding-emitting catches | `audit-extra.async.ts`, `compaction.ts`, `qmd-manager.ts` | Eliminates false-negative security audits and invisible context loss |
-| P1 | Add embed queue timeout/circuit-breaker | `qmd-manager.ts` | Prevents permanent deadlock and hour-long silent retry storms |
-| P2 | Add session-method-level error boundaries | `sessions.ts` | Standardizes RPC error responses, prevents stack trace leaks |
-| P2 | Add concurrency tests for ACP manager | `manager.core.ts` | Catches activeTurn identity and eviction TOCTOU races |
-| P2 | Split `qmd-manager.ts` below 700 LOC | `qmd-manager.ts` | Reduces merge conflicts, enables focused testing |
-| P3 | Reduce `attempt.ts` import fan-out | `attempt.ts` | Reduces coupling surface and breakage risk |
-| P3 | Add persistent outbox for subagent announcements | `subagent-announce.ts` | Prevents dropped completion notifications during gateway hiccups |
+| Priority | Action                                                         | Modules                                                   | Expected Impact                                                      |
+| -------- | -------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------- |
+| P0       | Add compaction integration tests                               | `compaction.ts`, `engine.ts`                              | Prevents silent context loss — the most user-visible bug category    |
+| P0       | Add error boundary to WS message handler                       | `message-handler.ts`                                      | Prevents connection crashes from malformed input                     |
+| P1       | Extract subagent registry mutable state into testable class    | `subagent-registry.ts`                                    | Enables direct testing, eliminates `var` TDZ workaround              |
+| P1       | Replace silent `catch {}` with logged/finding-emitting catches | `audit-extra.async.ts`, `compaction.ts`, `qmd-manager.ts` | Eliminates false-negative security audits and invisible context loss |
+| P1       | Add embed queue timeout/circuit-breaker                        | `qmd-manager.ts`                                          | Prevents permanent deadlock and hour-long silent retry storms        |
+| P2       | Add session-method-level error boundaries                      | `sessions.ts`                                             | Standardizes RPC error responses, prevents stack trace leaks         |
+| P2       | Add concurrency tests for ACP manager                          | `manager.core.ts`                                         | Catches activeTurn identity and eviction TOCTOU races                |
+| P2       | Split `qmd-manager.ts` below 700 LOC                           | `qmd-manager.ts`                                          | Reduces merge conflicts, enables focused testing                     |
+| P3       | Reduce `attempt.ts` import fan-out                             | `attempt.ts`                                              | Reduces coupling surface and breakage risk                           |
+| P3       | Add persistent outbox for subagent announcements               | `subagent-announce.ts`                                    | Prevents dropped completion notifications during gateway hiccups     |

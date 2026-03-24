@@ -19,8 +19,12 @@ const __highwayRoot = path.resolve(import.meta.dirname, "..");
 const __highwayBin = (() => {
   const release = path.join(__highwayRoot, "tools/highway/target/release/highway");
   const debug = path.join(__highwayRoot, "tools/highway/target/debug/highway");
-  if (fs.existsSync(release)) return release;
-  if (fs.existsSync(debug)) return debug;
+  if (fs.existsSync(release)) {
+    return release;
+  }
+  if (fs.existsSync(debug)) {
+    return debug;
+  }
 
   // Auto-build: Cargo.toml must exist
   const cargoToml = path.join(__highwayRoot, "tools/highway/Cargo.toml");
@@ -84,9 +88,7 @@ let highwaySkipSet = new Set();
           }
         }
         if (highwaySkipSet.size > 0) {
-          console.log(
-            `[highway] ${highwaySkipSet.size} tests cached & passing → skipping`,
-          );
+          console.log(`[highway] ${highwaySkipSet.size} tests cached & passing → skipping`);
         }
       }
     }
@@ -978,11 +980,11 @@ for (const entry of serialRuns) {
 
 // ── Highway: update cache after successful run ──────────────────────────────
 try {
-  execFileSync(
-    __highwayBin,
-    ["--root", __highwayRoot, "run", "--dry-run", "--git"],
-    { encoding: "utf-8", timeout: 30_000, stdio: "pipe" },
-  );
+  execFileSync(__highwayBin, ["--root", __highwayRoot, "run", "--dry-run", "--git"], {
+    encoding: "utf-8",
+    timeout: 30_000,
+    stdio: "pipe",
+  });
 } catch {
   // Cache update is best-effort — test results are still valid
 }

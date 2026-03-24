@@ -84,10 +84,10 @@ highway run --git
 
 ## Performance
 
-| Operation | JS (current) | Highway (Rust) | Speedup |
-|-----------|-------------|----------------|---------|
-| Import graph build | ~3-5s | ~50-200ms | 15-100x |
-| File hashing (1000 files) | ~500ms | ~10ms | 50x |
-| Affected test analysis | ~2-4s | ~1-5ms | 400-800x |
-| Schedule generation | ~100ms | ~1ms | 100x |
-| Cache check | N/A | ~5ms | ∞ (new) |
+| Operation                 | JS (current) | Highway (Rust) | Speedup  |
+| ------------------------- | ------------ | -------------- | -------- |
+| Import graph build        | ~3-5s        | ~50-200ms      | 15-100x  |
+| File hashing (1000 files) | ~500ms       | ~10ms          | 50x      |
+| Affected test analysis    | ~2-4s        | ~1-5ms         | 400-800x |
+| Schedule generation       | ~100ms       | ~1ms           | 100x     |
+| Cache check               | N/A          | ~5ms           | ∞ (new)  |
