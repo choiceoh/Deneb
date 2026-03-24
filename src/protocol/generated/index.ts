@@ -23,3 +23,18 @@ export type { ChannelCapabilities, ChannelMeta, ChannelAccountSnapshot } from ".
 export { SessionRunStatus, SessionKind } from "./session.js";
 
 export type { GatewaySessionRow, SessionPreviewItem, SessionsPreviewEntry } from "./session.js";
+
+export { AgentStatus } from "./agent.js";
+
+export type { AgentSpawnRequest, AgentStatusUpdate, AgentExecutionResult } from "./agent.js";
+
+export { PluginKind } from "./plugin.js";
+
+export type { PluginMeta, PluginHealthStatus, PluginRegistrySnapshot } from "./plugin.js";
+
+export type {
+  ProviderMeta,
+  ProviderAuthMethod,
+  ProviderCatalogEntry,
+  ProviderCatalogSnapshot,
+} from "./provider.js";

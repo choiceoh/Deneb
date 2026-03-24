@@ -16,9 +16,10 @@ import (
 // ExtendedDeps holds the additional subsystems for Phase 2 RPC methods.
 type ExtendedDeps struct {
 	Deps
-	Processes *process.Manager
-	Cron      *cron.Scheduler
-	Hooks     *hooks.Registry
+	Processes   *process.Manager
+	Cron        *cron.Scheduler
+	Hooks       *hooks.Registry
+	Broadcaster *events.Broadcaster
 }
 
 // RegisterExtendedMethods registers the Phase 2 RPC methods that handle
@@ -67,6 +68,17 @@ func processExec(deps ExtendedDeps) HandlerFunc {
 				protocol.ErrMissingParam, "command is required"))
 		}
 		result := deps.Processes.Execute(ctx, p)
+
+		// Broadcast process completion event to subscribers.
+		if deps.Broadcaster != nil && result != nil {
+			deps.Broadcaster.Broadcast("process.completed", map[string]any{
+				"id":       result.ID,
+				"status":   result.Status,
+				"exitCode": result.ExitCode,
+				"ms":       result.RuntimeMs,
+			})
+		}
+
 		resp, _ := protocol.NewResponseOK(req.ID, result)
 		return resp
 	}
@@ -275,15 +287,7 @@ func sessionsCreate(deps ExtendedDeps) HandlerFunc {
 				protocol.ErrValidationFailed, "invalid session key"))
 		}
 
-		kind := session.KindDirect
-		switch p.Kind {
-		case "group":
-			kind = session.KindGroup
-		case "global":
-			kind = session.KindGlobal
-		case "unknown":
-			kind = session.KindUnknown
-		}
+		kind := session.Kind(protocol.ParseSessionKind(p.Kind))
 		s := deps.Sessions.Create(p.Key, kind)
 		if deps.GatewaySubs != nil {
 			deps.GatewaySubs.EmitLifecycle(events.LifecycleChangeEvent{
@@ -335,6 +339,29 @@ func sessionsLifecycle(deps ExtendedDeps) HandlerFunc {
 				SessionKey: p.Key,
 				Reason:     p.Phase,
 			})
+		}
+
+		// Fire session lifecycle hooks with panic recovery.
+		if deps.Hooks != nil {
+			var hookEvent hooks.Event
+			switch session.LifecyclePhase(p.Phase) {
+			case session.PhaseStart:
+				hookEvent = hooks.EventSessionStart
+			case session.PhaseEnd, session.PhaseError:
+				hookEvent = hooks.EventSessionEnd
+			}
+			if hookEvent != "" {
+				evt := hookEvent
+				key := p.Key
+				phase := p.Phase
+				go func() {
+					defer func() { recover() }()
+					deps.Hooks.Fire(context.Background(), evt, map[string]string{
+						"DENEB_SESSION_KEY": key,
+						"DENEB_PHASE":      phase,
+					})
+				}()
+			}
 		}
 
 		resp, _ := protocol.NewResponseOK(req.ID, s)

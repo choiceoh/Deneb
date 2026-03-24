@@ -116,6 +116,36 @@ verify_output() {
   info "$label: generated $count file(s)"
 }
 
+# Verify that every .proto file in proto/ has a corresponding generated output
+# in both Go and TypeScript directories. Catches forgotten proto files.
+verify_completeness() {
+  local proto_count go_count ts_count missing=()
+  proto_count=$(find "$PROTO_DIR" -maxdepth 1 -name "*.proto" -type f | wc -l)
+  go_count=$(find "$GO_OUT" -maxdepth 1 -name "*.pb.go" -type f 2>/dev/null | wc -l)
+  # TS count excludes index.ts (hand-written barrel) and the google/ directory.
+  ts_count=$(find "$TS_OUT" -maxdepth 1 -name "*.ts" -type f ! -name "index.ts" 2>/dev/null | wc -l)
+
+  for proto in "$PROTO_DIR"/*.proto; do
+    local base
+    base=$(basename "$proto" .proto)
+    if [ ! -f "$GO_OUT/${base}.pb.go" ]; then
+      missing+=("Go: ${base}.pb.go")
+    fi
+    if [ ! -f "$TS_OUT/${base}.ts" ]; then
+      missing+=("TS: ${base}.ts")
+    fi
+  done
+
+  if [ ${#missing[@]} -gt 0 ]; then
+    warn "Proto completeness check: missing generated files:"
+    for m in "${missing[@]}"; do
+      warn "  - $m"
+    done
+    fail "Not all .proto files have generated outputs. Found $proto_count protos, $go_count Go, $ts_count TS."
+  fi
+  info "Proto completeness: $proto_count protos → $go_count Go + $ts_count TS (all present)"
+}
+
 clean_generated() {
   local dir="$1"
   if [ -d "$dir" ]; then
@@ -188,6 +218,7 @@ gen_all_parallel() {
 }
 
 check_diffs() {
+  verify_completeness
   info "Checking for uncommitted generated diffs..."
   cd "$REPO_ROOT"
   local paths=(

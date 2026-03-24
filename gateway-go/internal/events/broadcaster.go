@@ -80,6 +80,8 @@ var eventScopeGuards = map[string][]string{
 	"agent.event":             {ScopeRead},
 	"channels.changed":        {ScopeRead},
 	"config.changed":          {ScopeAdmin},
+	"process.completed":       {ScopeWrite, ScopeAdmin},
+	"heartbeat":               {ScopeRead},
 }
 
 // maxBufferedBytes is the threshold for slow consumer detection.

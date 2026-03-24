@@ -35,6 +35,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"nhooyr.io/websocket"
 )
@@ -71,6 +72,7 @@ type Server struct {
 	rustFFI     bool // true when Rust FFI is available
 	logger      *slog.Logger
 	ready       atomic.Bool
+	shutdownOnce sync.Once
 
 	// Phase 2 additions.
 	gatewaySubs     *events.GatewayEventSubscriptions
@@ -80,6 +82,20 @@ type Server struct {
 	watchdog        *monitoring.Watchdog
 	channelHealth   *monitoring.ChannelHealthMonitor
 	activity        *monitoring.ActivityTracker
+	channelEvents   *monitoring.ChannelEventTracker
+	vegaClient      *vega.Client
+}
+
+// safeGo starts a goroutine with panic recovery that logs and continues.
+func (s *Server) safeGo(name string, fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("panic in background goroutine", "goroutine", name, "panic", r)
+			}
+		}()
+		fn()
+	}()
 }
 
 // Option configures the gateway server.
@@ -156,6 +172,7 @@ func New(addr string, opts ...Option) *Server {
 	s.hooks = hooks.NewRegistry(s.logger)
 	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
 	s.activity = monitoring.NewActivityTracker()
+	s.channelEvents = monitoring.NewChannelEventTracker()
 	s.authRateLimiter = auth.NewAuthRateLimiter(10, 60*1000, 5*60*1000)
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
@@ -168,6 +185,19 @@ func New(addr string, opts ...Option) *Server {
 	})
 	s.registerExtendedMethods()
 	s.registerPhase2Methods()
+
+	// Wire provider RPC methods if a provider registry is configured.
+	if s.providers != nil {
+		adapter := provider.NewProtocolAdapter(s.providers)
+		rpc.RegisterProviderMethods(s.dispatcher, rpc.ProviderDeps{
+			Deps: rpc.Deps{
+				Sessions: s.sessions,
+				Channels: s.channels,
+			},
+			ProviderCatalog: adapter,
+		})
+	}
+
 	return s
 }
 
@@ -184,11 +214,100 @@ func (s *Server) SetBridge(b *bridge.PluginHost) {
 		})
 	}
 
-	// Wire bridge events: chat events go to chatHandler, others to broadcaster.
+	// Wire process approval callback via bridge forward.
+	if s.processes != nil {
+		s.processes.SetApprover(func(req process.ExecRequest) bool {
+			if !b.IsRunning() {
+				return false
+			}
+			// Truncate command in approval payload to prevent OOM on marshal.
+			cmd := req.Command
+			if len(cmd) > 4096 {
+				cmd = cmd[:4096]
+			}
+			params, err := json.Marshal(map[string]any{
+				"id":      req.ID,
+				"command": cmd,
+				"args":    req.Args,
+			})
+			if err != nil {
+				s.logger.Error("approval params marshal failed", "id", req.ID, "error", err)
+				return false
+			}
+			approvalReq := &protocol.RequestFrame{
+				Type:   protocol.FrameTypeRequest,
+				ID:     "approval-" + req.ID,
+				Method: "exec.approve",
+				Params: params,
+			}
+			approvalCtx, approvalCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer approvalCancel()
+			resp, err := b.Forward(approvalCtx, approvalReq)
+			if err != nil {
+				s.logger.Warn("process approval forward failed", "id", req.ID, "error", err)
+				return false
+			}
+			return resp.OK
+		})
+	}
+
+	// Wire bridge events: chat events go to chatHandler, lifecycle/agent events
+	// to gatewaySubs, and everything else to broadcaster.
+	// Wrapped in panic recovery so a single bad event doesn't kill the bridge read loop.
 	b.SetEventHandler(func(ev *protocol.EventFrame) {
-		if s.chatHandler != nil && (ev.Event == "chat" || ev.Event == "chat.delta") {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("panic in bridge event handler", "event", ev.Event, "panic", r)
+			}
+		}()
+
+		// Track activity on all bridge events.
+		if s.activity != nil {
+			s.activity.Touch()
+		}
+
+		switch {
+		case s.chatHandler != nil && (ev.Event == "chat" || ev.Event == "chat.delta"):
 			s.chatHandler.HandleBridgeEvent(ev)
-		} else {
+
+		case ev.Event == "agent" || ev.Event == "agent.event":
+			if s.gatewaySubs != nil {
+				s.gatewaySubs.EmitAgent(events.AgentEvent{
+					Kind:    ev.Event,
+					Payload: ev.Payload,
+				})
+			}
+			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
+
+		case ev.Event == "heartbeat":
+			if s.gatewaySubs != nil {
+				s.gatewaySubs.EmitHeartbeat(events.HeartbeatEvent{
+					Ts: time.Now().UnixMilli(),
+				})
+			}
+			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
+
+		case ev.Event == "channel.event":
+			// Track per-channel event timestamps for health monitoring.
+			if s.channelEvents != nil && len(ev.Payload) > 0 {
+				var chEvt struct {
+					ChannelID string `json:"channelId"`
+				}
+				if json.Unmarshal(ev.Payload, &chEvt) == nil && chEvt.ChannelID != "" {
+					s.channelEvents.Touch(chEvt.ChannelID)
+				}
+			}
+			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
+
+		case ev.Event == "session.transcript":
+			if s.gatewaySubs != nil && len(ev.Payload) > 0 {
+				var update events.TranscriptUpdate
+				if json.Unmarshal(ev.Payload, &update) == nil {
+					s.gatewaySubs.EmitTranscript(update)
+				}
+			}
+
+		default:
 			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
 		}
 	})
@@ -203,13 +322,15 @@ func mustMarshalEvent(ev *protocol.EventFrame) []byte {
 	return data
 }
 
-// Run starts the server and blocks until the context is canceled.
-func (s *Server) Run(ctx context.Context) error {
+// initAndListen creates the HTTP server, binds to the address, and starts
+// background subsystems (tick broadcaster, monitoring, process pruner, hooks).
+// Shared by Run and StartAndListen to avoid duplicating the startup sequence.
+func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	mux := s.buildMux()
 
 	ln, err := net.Listen("tcp", s.addr)
 	if err != nil {
-		return fmt.Errorf("failed to listen on %s: %w", s.addr, err)
+		return nil, fmt.Errorf("failed to listen on %s: %w", s.addr, err)
 	}
 
 	s.httpServer = &http.Server{
@@ -224,6 +345,27 @@ func (s *Server) Run(ctx context.Context) error {
 	s.ready.Store(true)
 	s.startTickBroadcaster(ctx)
 	s.StartMonitoring(ctx)
+	s.startProcessPruner(ctx)
+
+	// Fire gateway.start hooks.
+	if s.hooks != nil {
+		addr := ln.Addr().String()
+		s.safeGo("hooks:gateway.start", func() {
+			s.hooks.Fire(context.Background(), hooks.EventGatewayStart, map[string]string{
+				"DENEB_GATEWAY_ADDR": addr,
+			})
+		})
+	}
+
+	return ln, nil
+}
+
+// Run starts the server and blocks until the context is canceled.
+func (s *Server) Run(ctx context.Context) error {
+	ln, err := s.initAndListen(ctx)
+	if err != nil {
+		return err
+	}
 
 	s.logger.Info("gateway server starting", "addr", ln.Addr().String())
 
@@ -247,24 +389,10 @@ func (s *Server) Run(ctx context.Context) error {
 // The caller must call Close() to stop the server; the serve goroutine is tied to
 // the http.Server lifecycle and will exit when Shutdown is called.
 func (s *Server) StartAndListen(ctx context.Context) (net.Addr, error) {
-	mux := s.buildMux()
-
-	ln, err := net.Listen("tcp", s.addr)
+	ln, err := s.initAndListen(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("listen: %w", err)
+		return nil, err
 	}
-
-	s.httpServer = &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		BaseContext: func(l net.Listener) context.Context {
-			return ctx
-		},
-	}
-	s.startedAt = time.Now()
-	s.ready.Store(true)
-	s.startTickBroadcaster(ctx)
 
 	go func() {
 		if err := s.httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -281,6 +409,14 @@ func (s *Server) Close(ctx context.Context) error {
 }
 
 func (s *Server) shutdown() error {
+	var httpErr error
+	s.shutdownOnce.Do(func() {
+		httpErr = s.doShutdown()
+	})
+	return httpErr
+}
+
+func (s *Server) doShutdown() error {
 	s.ready.Store(false)
 	s.logger.Info("gateway server shutting down")
 
@@ -310,34 +446,39 @@ func (s *Server) shutdown() error {
 	// 5. Stop dedupe background GC.
 	s.dedupe.Close()
 
-	// 5. Stop cron scheduler.
+	// 6. Stop cron scheduler.
 	if s.cron != nil {
 		s.cron.Close()
 	}
 
-	// 6. Fire gateway.stop hooks.
+	// 7. Fire gateway.stop hooks.
 	if s.hooks != nil {
 		s.hooks.Fire(context.Background(), hooks.EventGatewayStop, nil)
 	}
 
-	// 7. Stop all channel plugins.
+	// 8. Stop all channel plugins.
 	if s.channelLifecycle != nil {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		s.channelLifecycle.StopAll(stopCtx)
 		stopCancel()
 	}
 
-	// 8. Close chat handler.
+	// 9. Close chat handler.
 	if s.chatHandler != nil {
 		s.chatHandler.Close()
 	}
 
-	// 9. Close auth rate limiter.
+	// 10. Close auth rate limiter.
 	if s.authRateLimiter != nil {
 		s.authRateLimiter.Close()
 	}
 
-	// 10. Close Plugin Host bridge last (in-flight forwards finish first).
+	// 11. Close Vega client.
+	if s.vegaClient != nil {
+		s.vegaClient.Close()
+	}
+
+	// 12. Close Plugin Host bridge last (in-flight forwards finish first).
 	if s.bridge != nil {
 		s.bridge.Close()
 	}
@@ -400,17 +541,55 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		providerCount = len(s.providers.List())
 	}
 
+	// Count active processes.
+	activeProcesses := 0
+	if s.processes != nil {
+		for _, p := range s.processes.List() {
+			if p.Status == process.StatusRunning {
+				activeProcesses++
+			}
+		}
+	}
+
+	// Count cron tasks.
+	cronTasks := 0
+	if s.cron != nil {
+		cronTasks = len(s.cron.List())
+	}
+
+	// Count registered hooks.
+	hooksCount := 0
+	if s.hooks != nil {
+		hooksCount = len(s.hooks.List())
+	}
+
+	// Channel health summary.
+	channelHealthSummary := map[string]int{"healthy": 0, "unhealthy": 0}
+	if s.channelHealth != nil {
+		for _, ch := range s.channelHealth.HealthSnapshot() {
+			if ch.Healthy {
+				channelHealthSummary["healthy"]++
+			} else {
+				channelHealthSummary["unhealthy"]++
+			}
+		}
+	}
+
 	s.writeJSON(w, http.StatusOK, map[string]any{
-		"status":      "ok",
-		"version":     s.version,
-		"runtime":     "go",
-		"uptime":      time.Since(s.startedAt).Milliseconds(),
-		"connections": s.clientCnt.Load(),
-		"sessions":    s.sessions.Count(),
-		"bridge":      s.bridgeStatus(),
-		"rust_core":   s.rustFFI,
-		"auth_mode":   authMode,
-		"providers":   providerCount,
+		"status":          "ok",
+		"version":         s.version,
+		"runtime":         "go",
+		"uptime":          time.Since(s.startedAt).Milliseconds(),
+		"connections":     s.clientCnt.Load(),
+		"sessions":        s.sessions.Count(),
+		"bridge":          bridgeStatus,
+		"rust_core":       s.rustFFI,
+		"auth_mode":       authMode,
+		"providers":       providerCount,
+		"processes":       activeProcesses,
+		"cronTasks":       cronTasks,
+		"hooks":           hooksCount,
+		"channelHealth":   channelHealthSummary,
 	})
 }
 
@@ -543,9 +722,10 @@ func (s *Server) registerExtendedMethods() {
 			Channels:    s.channels,
 			GatewaySubs: s.gatewaySubs,
 		},
-		Processes: s.processes,
-		Cron:      s.cron,
-		Hooks:     s.hooks,
+		Processes:   s.processes,
+		Cron:        s.cron,
+		Hooks:       s.hooks,
+		Broadcaster: s.broadcaster,
 	})
 
 	// Daemon status method.
@@ -579,6 +759,12 @@ func (s *Server) SetDaemon(d *daemon.Daemon) {
 	s.daemon = d
 }
 
+// SetVega sets the Vega MCP client and registers its RPC methods.
+func (s *Server) SetVega(client *vega.Client) {
+	s.vegaClient = client
+	rpc.RegisterVegaMethods(s.dispatcher, rpc.VegaDeps{Client: client})
+}
+
 // Broadcaster returns the event broadcaster for external use.
 func (s *Server) Broadcaster() *events.Broadcaster {
 	return s.broadcaster
@@ -605,14 +791,35 @@ func (s *Server) registerPhase2Methods() {
 	)
 	rpc.RegisterChatMethods(s.dispatcher, rpc.ChatDeps{Chat: s.chatHandler})
 
-	// Config reload method.
-	// Note: config.get is already registered in registerBuiltinMethods using runtimeCfg.
-	rpc.RegisterConfigReloadMethod(s.dispatcher)
+	// Config reload method with bridge forwarding and Go subsystem propagation.
+	rpc.RegisterConfigReloadMethod(s.dispatcher, rpc.ConfigReloadDeps{
+		Forwarder: s.bridge,
+		Logger:    s.logger,
+		OnReloaded: func(_ *config.ConfigSnapshot) {
+			// Notify hooks of config change.
+			if s.hooks != nil {
+				s.safeGo("hooks:config.reloaded", func() {
+					s.hooks.Fire(context.Background(), hooks.Event("config.reloaded"), nil)
+				})
+			}
+			// Broadcast config change to subscribers.
+			s.broadcaster.Broadcast("config.changed", map[string]any{
+				"ts": time.Now().UnixMilli(),
+			})
+		},
+	})
 
 	// Monitoring methods.
 	rpc.RegisterMonitoringMethods(s.dispatcher, rpc.MonitoringDeps{
 		ChannelHealth: s.channelHealth,
 		Activity:      s.activity,
+	})
+
+	// Channel lifecycle RPC methods.
+	rpc.RegisterChannelLifecycleMethods(s.dispatcher, rpc.ChannelLifecycleDeps{
+		ChannelLifecycle: s.channelLifecycle,
+		Hooks:            s.hooks,
+		Broadcaster:      s.broadcaster,
 	})
 
 	// Event subscription methods.
@@ -659,7 +866,7 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			// In production, this would send SIGUSR1 to trigger graceful restart.
 		},
 	}, monitoring.DefaultWatchdogConfig(), s.logger)
-	go s.watchdog.Run(ctx)
+	s.safeGo("watchdog", func() { s.watchdog.Run(ctx) })
 
 	// Channel health monitor.
 	s.channelHealth = monitoring.NewChannelHealthMonitor(monitoring.ChannelHealthDeps{
@@ -680,19 +887,74 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			}
 			return "stopped"
 		},
-		GetChannelLastEventAt: func(_ string) int64 {
-			// Placeholder: real implementation tracks per-channel event timestamps.
+		GetChannelLastEventAt: func(id string) int64 {
+			if s.channelEvents != nil {
+				return s.channelEvents.LastEventAt(id)
+			}
 			return 0
 		},
-		GetChannelStartedAt: func(_ string) int64 {
+		GetChannelStartedAt: func(id string) int64 {
+			if s.channelLifecycle != nil {
+				return s.channelLifecycle.GetStartedAt(id)
+			}
 			return 0
 		},
 		RestartChannel: func(id string) error {
-			s.logger.Info("restarting channel", "channel", id)
-			return nil // Placeholder: real restart via channel lifecycle manager.
+			if s.channelLifecycle == nil {
+				return fmt.Errorf("channel lifecycle manager not available")
+			}
+			s.logger.Info("restarting channel via watchdog", "channel", id)
+			restartCtx, restartCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer restartCancel()
+			err := s.channelLifecycle.RestartChannel(restartCtx, id)
+			if err != nil {
+				s.logger.Error("channel restart failed", "channel", id, "error", err)
+			} else {
+				s.emitChannelEvent(id, hooks.EventChannelConnect, "restarted")
+			}
+			return err
 		},
 	}, monitoring.DefaultChannelHealthConfig(), s.logger)
-	go s.channelHealth.Run(ctx)
+	s.safeGo("channel-health-monitor", func() { s.channelHealth.Run(ctx) })
+}
+
+// emitChannelEvent fires the appropriate hook and broadcasts a channels.changed event.
+func (s *Server) emitChannelEvent(channelID string, hookEvent hooks.Event, action string) {
+	if s.hooks != nil {
+		s.safeGo("hooks:"+string(hookEvent), func() {
+			s.hooks.Fire(context.Background(), hookEvent, map[string]string{
+				"DENEB_CHANNEL_ID": channelID,
+			})
+		})
+	}
+	s.broadcaster.Broadcast("channels.changed", map[string]any{
+		"channelId": channelID,
+		"action":    action,
+		"ts":        time.Now().UnixMilli(),
+	})
+}
+
+// startProcessPruner runs a background loop that periodically prunes completed
+// processes older than 1 hour to prevent unbounded memory growth.
+func (s *Server) startProcessPruner(ctx context.Context) {
+	if s.processes == nil {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				pruned := s.processes.Prune(1 * time.Hour)
+				if pruned > 0 {
+					s.logger.Info("pruned completed processes", "count", pruned)
+				}
+			}
+		}
+	}()
 }
 
 // registerBuiltinMethods registers the core RPC methods handled natively in Go.

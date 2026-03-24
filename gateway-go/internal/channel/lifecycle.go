@@ -174,6 +174,21 @@ func (lm *LifecycleManager) StartChannel(ctx context.Context, id string) error {
 	return nil
 }
 
+// GetStartedAt returns the start timestamp (unix ms) for a channel, or 0 if unknown.
+func (lm *LifecycleManager) GetStartedAt(id string) int64 {
+	lm.mu.RLock()
+	defer lm.mu.RUnlock()
+	return lm.startedAt[id]
+}
+
+// RestartChannel stops and restarts a single channel.
+func (lm *LifecycleManager) RestartChannel(ctx context.Context, id string) error {
+	if err := lm.StopChannel(ctx, id); err != nil {
+		lm.logger.Warn("channel stop failed during restart", "id", id, "error", err)
+	}
+	return lm.StartChannel(ctx, id)
+}
+
 // StopChannel stops a single channel by ID.
 func (lm *LifecycleManager) StopChannel(ctx context.Context, id string) error {
 	p := lm.registry.Get(id)
