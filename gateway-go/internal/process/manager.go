@@ -148,7 +148,9 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		cmd.Dir = req.WorkingDir
 	}
 	// Inherit parent environment, then overlay user-specified vars.
-	cmd.Env = os.Environ()
+	parentEnv := os.Environ()
+	cmd.Env = make([]string, 0, len(parentEnv)+len(req.Env))
+	cmd.Env = append(cmd.Env, parentEnv...)
 	for k, v := range req.Env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}

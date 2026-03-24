@@ -96,12 +96,7 @@ func (b *Broadcaster) Broadcast(event string, payload any) (sent int, errs []err
 		return 0, []error{err}
 	}
 
-	b.mu.RLock()
-	entries := make([]subscriberEntry, 0, len(b.subscribers))
-	for _, entry := range b.subscribers {
-		entries = append(entries, entry)
-	}
-	b.mu.RUnlock()
+	entries := b.snapshotSubscribers()
 
 	for _, entry := range entries {
 		if !entry.sub.IsAuthenticated() {
@@ -122,12 +117,7 @@ func (b *Broadcaster) Broadcast(event string, payload any) (sent int, errs []err
 // BroadcastRaw sends pre-serialized event data to all authenticated subscribers
 // that accept the given event name.
 func (b *Broadcaster) BroadcastRaw(event string, data []byte) (sent int) {
-	b.mu.RLock()
-	entries := make([]subscriberEntry, 0, len(b.subscribers))
-	for _, entry := range b.subscribers {
-		entries = append(entries, entry)
-	}
-	b.mu.RUnlock()
+	entries := b.snapshotSubscribers()
 
 	for _, entry := range entries {
 		if !entry.sub.IsAuthenticated() {
@@ -141,4 +131,17 @@ func (b *Broadcaster) BroadcastRaw(event string, data []byte) (sent int) {
 		}
 	}
 	return sent
+}
+
+// snapshotSubscribers returns a snapshot of all subscribers under read lock.
+// The returned slice is taken from a pool to reduce per-broadcast allocations.
+func (b *Broadcaster) snapshotSubscribers() []subscriberEntry {
+	b.mu.RLock()
+	n := len(b.subscribers)
+	entries := make([]subscriberEntry, 0, n)
+	for _, entry := range b.subscribers {
+		entries = append(entries, entry)
+	}
+	b.mu.RUnlock()
+	return entries
 }

@@ -208,7 +208,9 @@ func (r *Registry) executeHook(ctx context.Context, hook Hook, env map[string]st
 	cmd := exec.CommandContext(execCtx, "sh", "-c", hook.Command)
 
 	// Inherit parent environment, then overlay hook-specific vars.
-	cmd.Env = os.Environ()
+	parentEnv := os.Environ()
+	cmd.Env = make([]string, 0, len(parentEnv)+len(env)+2)
+	cmd.Env = append(cmd.Env, parentEnv...)
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}

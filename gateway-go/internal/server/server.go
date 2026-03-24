@@ -138,6 +138,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.startedAt = time.Now()
 	s.ready.Store(true)
+	s.startTickBroadcaster(ctx)
 
 	s.logger.Info("gateway server starting", "addr", ln.Addr().String())
 
@@ -178,6 +179,7 @@ func (s *Server) StartAndListen(ctx context.Context) (net.Addr, error) {
 	}
 	s.startedAt = time.Now()
 	s.ready.Store(true)
+	s.startTickBroadcaster(ctx)
 
 	go func() {
 		if err := s.httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {

@@ -24,7 +24,8 @@ type PluginHost struct {
 	conn       net.Conn
 	writer     *FrameWriter
 	reader     *FrameReader
-	mu         sync.Mutex
+	mu         sync.Mutex // protects pending map and running flag
+	writeMu    sync.Mutex // serializes socket writes (separate from mu to avoid holding mu during I/O)
 	pending    map[string]chan *protocol.ResponseFrame
 	running    bool
 	logger     *slog.Logger
@@ -123,9 +124,9 @@ func (h *PluginHost) Forward(ctx context.Context, req *protocol.RequestFrame) (*
 
 	respCh := make(chan *protocol.ResponseFrame, 1)
 
+	// Register pending entry under mu (fast path, no I/O).
 	h.mu.Lock()
 	h.pending[req.ID] = respCh
-	err := h.writer.WriteRequest(req)
 	h.mu.Unlock()
 
 	// Clean up pending entry on all exit paths.
@@ -135,6 +136,11 @@ func (h *PluginHost) Forward(ctx context.Context, req *protocol.RequestFrame) (*
 		h.mu.Unlock()
 	}()
 
+	// Write under writeMu (separate from mu to avoid blocking pending map
+	// lookups in readLoop while I/O is in progress).
+	h.writeMu.Lock()
+	err := h.writer.WriteRequest(req)
+	h.writeMu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("write request: %w", err)
 	}
