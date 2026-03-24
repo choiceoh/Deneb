@@ -54,14 +54,21 @@ const ALL_CHECKS = [
 type CheckResult = {
   name: string;
   passed: boolean;
+  aborted: boolean;
   durationMs: number;
   output: string;
 };
 
 function runCheck(name: string, signal: AbortSignal): Promise<CheckResult> {
   return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve({ name, passed: false, aborted: true, durationMs: 0, output: "" });
+      return;
+    }
+
     const start = performance.now();
     const chunks: Buffer[] = [];
+    let wasAborted = false;
 
     const proc = spawn("pnpm", [name], {
       cwd: ROOT,
@@ -75,6 +82,7 @@ function runCheck(name: string, signal: AbortSignal): Promise<CheckResult> {
     signal.addEventListener(
       "abort",
       () => {
+        wasAborted = true;
         proc.kill("SIGTERM");
       },
       { once: true },
@@ -84,6 +92,7 @@ function runCheck(name: string, signal: AbortSignal): Promise<CheckResult> {
       resolve({
         name,
         passed: code === 0,
+        aborted: wasAborted,
         durationMs: Math.round(performance.now() - start),
         output: Buffer.concat(chunks).toString("utf8"),
       });
@@ -97,17 +106,29 @@ async function main() {
 
   console.log(`\x1b[1m▶ Running ${ALL_CHECKS.length} checks in parallel…\x1b[0m\n`);
 
-  const results = await Promise.all(ALL_CHECKS.map((name) => runCheck(name, controller.signal)));
+  const results = await Promise.all(
+    ALL_CHECKS.map(async (name) => {
+      const result = await runCheck(name, controller.signal);
+      if (!result.passed) {
+        controller.abort();
+      }
+      return result;
+    }),
+  );
 
   const totalMs = Math.round(performance.now() - totalStart);
-  const failed = results.filter((r) => !r.passed);
+  const failed = results.filter((r) => !r.passed && !r.aborted);
   const passed = results.filter((r) => r.passed);
 
   // Print summary
   console.log(`\x1b[1m── Results ──\x1b[0m\n`);
 
   for (const r of results.toSorted((a, b) => b.durationMs - a.durationMs)) {
-    const icon = r.passed ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m";
+    const icon = r.passed
+      ? "\x1b[32m✓\x1b[0m"
+      : r.aborted
+        ? "\x1b[33m⊘\x1b[0m"
+        : "\x1b[31m✗\x1b[0m";
     const ms = `${r.durationMs}ms`.padStart(7);
     console.log(`  ${icon} ${ms}  ${r.name}`);
   }

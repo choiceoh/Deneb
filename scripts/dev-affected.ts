@@ -153,9 +153,18 @@ function findAllDependents(changedFiles: string[]): Map<string, string[]> {
       }
     }
 
-    // Assign matched files to their source changed files
+    // Assign matched files only to source files whose basename actually appears
     for (const matchedFile of matchedFiles) {
-      for (const [_basename, sourceFiles] of basenameToFiles) {
+      let content: string;
+      try {
+        content = fs.readFileSync(path.resolve(ROOT, matchedFile), "utf8");
+      } catch {
+        continue;
+      }
+      for (const [basename, sourceFiles] of basenameToFiles) {
+        if (!content.includes(basename)) {
+          continue;
+        }
         for (const sourceFile of sourceFiles) {
           if (matchedFile !== sourceFile) {
             result.get(sourceFile)!.push(matchedFile);
