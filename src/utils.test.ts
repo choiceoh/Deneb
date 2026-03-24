@@ -66,6 +66,11 @@ describe("normalizeE164 & toWhatsappJid", () => {
     expect(toWhatsappJid("whatsapp:+555 123 4567")).toBe("5551234567@s.whatsapp.net");
   });
 
+  it("strips embedded plus signs from numbers", () => {
+    expect(normalizeE164("+1+234+567")).toBe("+1234567");
+    expect(normalizeE164("++12345")).toBe("+12345");
+  });
+
   it("preserves existing JIDs", () => {
     expect(toWhatsappJid("123456789-987654321@g.us")).toBe("123456789-987654321@g.us");
     expect(toWhatsappJid("whatsapp:123456789-987654321@g.us")).toBe("123456789-987654321@g.us");

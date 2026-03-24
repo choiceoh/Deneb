@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseBooleanValue } from "./boolean.js";
 import { isReasoningTagProvider } from "./provider-utils.js";
 import { splitShellArgs } from "./shell-argv.js";
+import { sliceUtf16Safe } from "./string.js";
 
 describe("parseBooleanValue", () => {
   it("handles boolean inputs", () => {
@@ -89,6 +90,26 @@ describe("isReasoningTagProvider", () => {
       expect(isReasoningTagProvider(testCase.value)).toBe(testCase.expected);
     });
   }
+});
+
+describe("sliceUtf16Safe", () => {
+  it("returns empty string when end < start (matches native slice)", () => {
+    expect(sliceUtf16Safe("hello world", 5, 3)).toBe("");
+  });
+
+  it("handles basic slicing", () => {
+    expect(sliceUtf16Safe("hello world", 0, 5)).toBe("hello");
+  });
+
+  it("avoids splitting surrogate pairs", () => {
+    const emoji = "a\uD83D\uDE00b"; // a😀b
+    // Slicing at index 2 would land in the middle of the surrogate pair
+    expect(sliceUtf16Safe(emoji, 0, 2)).toBe("a");
+  });
+
+  it("handles negative indices", () => {
+    expect(sliceUtf16Safe("hello", -3)).toBe("llo");
+  });
 });
 
 describe("splitShellArgs", () => {
