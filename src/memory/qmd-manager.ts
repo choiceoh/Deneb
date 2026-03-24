@@ -1590,10 +1590,7 @@ export class QmdMemoryManager implements MemorySearchManager {
     if (!relativePath) {
       return true;
     }
-    if (relativePath.startsWith("..")) {
-      return false;
-    }
-    if (relativePath.startsWith(`..${path.sep}`)) {
+    if (relativePath === ".." || relativePath.startsWith(`..${path.sep}`)) {
       return false;
     }
     return !path.isAbsolute(relativePath);

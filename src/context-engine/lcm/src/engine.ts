@@ -689,19 +689,22 @@ export class LcmContextEngine implements ContextEngine {
 
     // Post-bootstrap pruning: clean HEARTBEAT_OK turns that were already
     // in the DB from prior bootstrap cycles (before pruning was enabled).
+    // Runs inside the session queue to prevent races with concurrent ingest.
     if (this.config.pruneHeartbeatOk && !result.bootstrapped) {
       try {
-        const conversation = await this.conversationStore.getConversationBySessionId(
-          params.sessionId,
-        );
-        if (conversation) {
-          const pruned = await this.pruneHeartbeatOkTurns(conversation.conversationId);
-          if (pruned > 0) {
-            this.deps.log.info(
-              `[lcm] bootstrap: retroactively pruned ${pruned} HEARTBEAT_OK messages from conversation ${conversation.conversationId}`,
-            );
+        await this.withSessionQueue(params.sessionId, async () => {
+          const conversation = await this.conversationStore.getConversationBySessionId(
+            params.sessionId,
+          );
+          if (conversation) {
+            const pruned = await this.pruneHeartbeatOkTurns(conversation.conversationId);
+            if (pruned > 0) {
+              this.deps.log.info(
+                `[lcm] bootstrap: retroactively pruned ${pruned} HEARTBEAT_OK messages from conversation ${conversation.conversationId}`,
+              );
+            }
           }
-        }
+        });
       } catch (err) {
         this.deps.log.error(
           `[lcm] bootstrap: heartbeat pruning failed: ${err instanceof Error ? err.message : String(err)}`,

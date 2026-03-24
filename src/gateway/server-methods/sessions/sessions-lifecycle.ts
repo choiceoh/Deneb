@@ -466,7 +466,22 @@ export const sessionsLifecycleHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const raw = fs.readFileSync(filePath, "utf-8");
+    let raw: string;
+    try {
+      raw = fs.readFileSync(filePath, "utf-8");
+    } catch {
+      respond(
+        true,
+        {
+          ok: true,
+          key: target.canonicalKey,
+          compacted: false,
+          reason: "transcript unreadable",
+        },
+        undefined,
+      );
+      return;
+    }
     const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
     if (lines.length <= maxLines) {
       respond(
