@@ -20,6 +20,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
@@ -55,6 +56,7 @@ type Server struct {
 	cron        *cron.Scheduler
 	daemon      *daemon.Daemon
 	hooks       *hooks.Registry
+	runtimeCfg  *config.GatewayRuntimeConfig
 	clients     sync.Map // connID -> *WsClient
 	clientCnt   atomic.Int32
 	startedAt   time.Time
@@ -79,6 +81,18 @@ func WithVersion(version string) Option {
 	return func(s *Server) {
 		s.version = version
 	}
+}
+
+// WithConfig sets the resolved runtime configuration.
+func WithConfig(cfg *config.GatewayRuntimeConfig) Option {
+	return func(s *Server) {
+		s.runtimeCfg = cfg
+	}
+}
+
+// RuntimeConfig returns the server's runtime configuration (may be nil if not set).
+func (s *Server) RuntimeConfig() *config.GatewayRuntimeConfig {
+	return s.runtimeCfg
 }
 
 // New creates a new gateway server bound to the given address.
@@ -288,6 +302,13 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 
+	authMode := ""
+	controlUI := false
+	if s.runtimeCfg != nil {
+		authMode = s.runtimeCfg.AuthMode
+		controlUI = s.runtimeCfg.ControlUIEnabled
+	}
+
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"status":      "ok",
 		"version":     s.version,
@@ -297,6 +318,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"sessions":    s.sessions.Count(),
 		"bridge":      bridgeStatus,
 		"rust_core":   s.rustFFI,
+		"auth_mode":   authMode,
+		"control_ui":  controlUI,
 	})
 }
 
@@ -430,6 +453,23 @@ func (s *Server) registerBuiltinMethods() {
 			"channels":    s.channels.StatusAll(),
 			"sessions":    s.sessions.Count(),
 			"connections": s.clientCnt.Load(),
+		})
+		return resp
+	})
+
+	// config.get: returns the resolved runtime config for diagnostics.
+	s.dispatcher.Register("config.get", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if s.runtimeCfg == nil {
+			resp, _ := protocol.NewResponseOK(req.ID, map[string]string{"status": "not_loaded"})
+			return resp
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"bindHost":       s.runtimeCfg.BindHost,
+			"port":           s.runtimeCfg.Port,
+			"authMode":       s.runtimeCfg.AuthMode,
+			"controlUi":      s.runtimeCfg.ControlUIEnabled,
+			"tailscaleMode":  s.runtimeCfg.TailscaleMode,
+			"canvasHost":     s.runtimeCfg.CanvasHostEnabled,
 		})
 		return resp
 	})
