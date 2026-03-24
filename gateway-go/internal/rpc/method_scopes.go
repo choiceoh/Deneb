@@ -196,13 +196,6 @@ var methodScopes = map[string]auth.Scope{
 	"security.is_safe_url":          auth.ScopeRead,
 	"security.validate_error_code":  auth.ScopeRead,
 	"media.detect_mime":             auth.ScopeRead,
-	"parsing.extract_links":         auth.ScopeRead,
-	"parsing.html_to_markdown":      auth.ScopeRead,
-	"parsing.base64_estimate":       auth.ScopeRead,
-	"parsing.base64_canonicalize":   auth.ScopeRead,
-	"parsing.media_tokens":          auth.ScopeRead,
-
-	// --- Parsing (read) ---
 	"parsing.extract_links":       auth.ScopeRead,
 	"parsing.html_to_markdown":    auth.ScopeRead,
 	"parsing.base64_estimate":     auth.ScopeRead,
