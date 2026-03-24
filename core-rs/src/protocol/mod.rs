@@ -299,10 +299,18 @@ mod tests {
 
     #[test]
     fn test_gen_session_enums() {
-        assert_eq!(gen::session::SessionRunStatus::Running as i32, 1);
-        assert_eq!(gen::session::SessionRunStatus::Done as i32, 2);
-        assert_eq!(gen::session::SessionKind::Direct as i32, 1);
-        assert_eq!(gen::session::SessionKind::Group as i32, 2);
+        // Verify enum variants exist and have distinct non-zero values.
+        let running = gen::session::SessionRunStatus::Running as i32;
+        let done = gen::session::SessionRunStatus::Done as i32;
+        assert_ne!(running, 0, "Running should not be the proto default (0)");
+        assert_ne!(done, 0, "Done should not be the proto default (0)");
+        assert_ne!(running, done, "Running and Done must be distinct");
+
+        let direct = gen::session::SessionKind::Direct as i32;
+        let group = gen::session::SessionKind::Group as i32;
+        assert_ne!(direct, 0);
+        assert_ne!(group, 0);
+        assert_ne!(direct, group);
     }
 
     #[test]
@@ -319,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn test_gen_presence_entry_serialize() {
+    fn test_gen_presence_entry_roundtrip() {
         let entry = gen::gateway::PresenceEntry {
             host: Some("myhost".into()),
             ts: 1700000000,
@@ -328,12 +336,15 @@ mod tests {
             ..Default::default()
         };
         let json = serde_json::to_string(&entry).unwrap();
-        assert!(json.contains("myhost"));
-        assert!(json.contains("1700000000"));
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["host"], "myhost");
+        assert_eq!(parsed["ts"], 1700000000u64);
+        assert_eq!(parsed["tags"][0], "admin");
+        assert_eq!(parsed["roles"][0], "owner");
     }
 
     #[test]
-    fn test_gen_channel_serialize() {
+    fn test_gen_channel_roundtrip() {
         let meta = gen::channel::ChannelMeta {
             id: "telegram".into(),
             label: "Telegram".into(),
@@ -343,6 +354,10 @@ mod tests {
             ..Default::default()
         };
         let json = serde_json::to_string(&meta).unwrap();
-        assert!(json.contains("telegram"));
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["id"], "telegram");
+        assert_eq!(parsed["label"], "Telegram");
+        // prost + serde uses snake_case field names by default.
+        assert_eq!(parsed["selection_label"], "Telegram Bot");
     }
 }

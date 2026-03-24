@@ -223,7 +223,7 @@ check_diffs() {
   info "All generated code is up to date"
 }
 
-# --- Main ---
+# --- Standalone commands (no lock needed) ---
 
 lint_only() {
   check_prereqs buf
@@ -243,18 +243,18 @@ watch_protos() {
   fi
 
   info "Watching $PROTO_DIR for changes (Ctrl+C to stop)..."
-  gen_all_parallel
+  (gen_all_parallel) || warn "Initial generation failed — watching for changes anyway"
 
   if [ "$watch_cmd" = "fswatch" ]; then
-    fswatch -0 --event Updated "$PROTO_DIR" | while read -r -d '' _; do
+    fswatch -0 --event Updated --include '\.proto$' --exclude '.*' "$PROTO_DIR" | while read -r -d '' _; do
       info "Change detected — regenerating..."
-      gen_all_parallel 2>&1 || warn "Generation failed (will retry on next change)"
+      (gen_all_parallel) 2>&1 || warn "Generation failed (will retry on next change)"
     done
   else
     while true; do
       inotifywait -q -e modify,create,delete "$PROTO_DIR" --include '\.proto$' >/dev/null 2>&1
       info "Change detected — regenerating..."
-      gen_all_parallel 2>&1 || warn "Generation failed (will retry on next change)"
+      (gen_all_parallel) 2>&1 || warn "Generation failed (will retry on next change)"
     done
   fi
 }

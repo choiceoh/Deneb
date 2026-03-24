@@ -62,7 +62,7 @@ test: rust-test go-test
 clean: rust-clean go-clean
 	@echo "Cleaned Rust and Go build artifacts"
 
-check: rust-test go-test ts-check proto-check
+check: proto-check rust-test go-test ts-check
 	@echo "All checks passed"
 
 # --- Protobuf code generation ---

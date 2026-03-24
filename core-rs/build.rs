@@ -55,6 +55,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = prost_build::Config::new();
     config.type_attribute(".deneb.channel", "#[derive(serde::Serialize)]");
     config.type_attribute(".deneb.session", "#[derive(serde::Serialize)]");
+    // Note: ErrorShape intentionally excluded — it contains google.protobuf.Value
+    // (prost_types::Value) which doesn't implement Serialize.
     config.type_attribute(".deneb.gateway.StateVersion", "#[derive(serde::Serialize)]");
     config.type_attribute(".deneb.gateway.PresenceEntry", "#[derive(serde::Serialize)]");
 
