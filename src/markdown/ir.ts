@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import { chunkText } from "../auto-reply/chunk.js";
+import { loadMarkdownNative } from "../bindings/markdown-native.js";
 import type { MarkdownTableMode } from "../config/types.base.js";
 
 type ListState = {
@@ -771,6 +772,14 @@ function closeRemainingStyles(target: RenderTarget) {
 }
 
 function clampStyleSpans(spans: MarkdownStyleSpan[], maxLength: number): MarkdownStyleSpan[] {
+  const native = loadMarkdownNative();
+  if (native) {
+    try {
+      return native.markdownClampStyleSpans(spans, maxLength) as MarkdownStyleSpan[];
+    } catch {
+      // fall through to TS
+    }
+  }
   const clamped: MarkdownStyleSpan[] = [];
   for (const span of spans) {
     const start = Math.max(0, Math.min(span.start, maxLength));
@@ -783,6 +792,14 @@ function clampStyleSpans(spans: MarkdownStyleSpan[], maxLength: number): Markdow
 }
 
 function clampLinkSpans(spans: MarkdownLinkSpan[], maxLength: number): MarkdownLinkSpan[] {
+  const native = loadMarkdownNative();
+  if (native) {
+    try {
+      return native.markdownClampLinkSpans(spans, maxLength);
+    } catch {
+      // fall through to TS
+    }
+  }
   const clamped: MarkdownLinkSpan[] = [];
   for (const span of spans) {
     const start = Math.max(0, Math.min(span.start, maxLength));
@@ -795,6 +812,18 @@ function clampLinkSpans(spans: MarkdownLinkSpan[], maxLength: number): MarkdownL
 }
 
 function mergeStyleSpans(spans: MarkdownStyleSpan[]): MarkdownStyleSpan[] {
+  const native = loadMarkdownNative();
+  if (native) {
+    try {
+      return native.markdownMergeStyleSpans(spans) as MarkdownStyleSpan[];
+    } catch {
+      // fall through to TS
+    }
+  }
+  return mergeStyleSpansTs(spans);
+}
+
+function mergeStyleSpansTs(spans: MarkdownStyleSpan[]): MarkdownStyleSpan[] {
   const sorted = [...spans].toSorted((a, b) => {
     if (a.start !== b.start) {
       return a.start - b.start;
@@ -841,6 +870,14 @@ function sliceStyleSpans(
   start: number,
   end: number,
 ): MarkdownStyleSpan[] {
+  const native = loadMarkdownNative();
+  if (native) {
+    try {
+      return native.markdownSliceStyleSpans(spans, start, end) as MarkdownStyleSpan[];
+    } catch {
+      // fall through to TS
+    }
+  }
   if (spans.length === 0) {
     return [];
   }
@@ -856,10 +893,18 @@ function sliceStyleSpans(
       style: span.style,
     });
   }
-  return mergeStyleSpans(sliced);
+  return mergeStyleSpansTs(sliced);
 }
 
 function sliceLinkSpans(spans: MarkdownLinkSpan[], start: number, end: number): MarkdownLinkSpan[] {
+  const native = loadMarkdownNative();
+  if (native) {
+    try {
+      return native.markdownSliceLinkSpans(spans, start, end);
+    } catch {
+      // fall through to TS
+    }
+  }
   if (spans.length === 0) {
     return [];
   }
@@ -883,6 +928,25 @@ export function markdownToIR(markdown: string, options: MarkdownParseOptions = {
 }
 
 export function markdownToIRWithMeta(
+  markdown: string,
+  options: MarkdownParseOptions = {},
+): { ir: MarkdownIR; hasTables: boolean } {
+  const native = loadMarkdownNative();
+  if (native?.markdownToIrWithMeta) {
+    try {
+      const result = native.markdownToIrWithMeta(markdown ?? "", options);
+      return {
+        ir: result.ir as MarkdownIR,
+        hasTables: result.hasTables,
+      };
+    } catch {
+      // fall through to TS
+    }
+  }
+  return markdownToIRWithMetaTs(markdown, options);
+}
+
+function markdownToIRWithMetaTs(
   markdown: string,
   options: MarkdownParseOptions = {},
 ): { ir: MarkdownIR; hasTables: boolean } {
