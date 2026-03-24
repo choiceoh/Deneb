@@ -37,6 +37,14 @@ const ALL_EXPECTED_EXPORTS: Array<[string, string]> = [
   ["validateFrame", "function"],
   ["constantTimeEq", "function"],
   ["detectMime", "function"],
+  // core-rs security/validation functions (Phase 2)
+  ["validateSessionKey", "function"],
+  ["sanitizeHtml", "function"],
+  ["isSafeUrl", "function"],
+  ["validateErrorCode", "function"],
+  ["isRetryableErrorCode", "function"],
+  // core-rs protocol schema validation (Phase 3)
+  ["validateParams", "function"],
 ];
 
 /** PNG magic bytes for the load-time smoke test. */

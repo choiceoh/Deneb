@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -17,6 +18,7 @@ type Deps struct {
 	Sessions         *session.Manager
 	Channels         *channel.Registry
 	ChannelLifecycle *channel.LifecycleManager
+	GatewaySubs      *events.GatewayEventSubscriptions
 }
 
 // unmarshalParams safely unmarshals request params, handling nil/empty params.
@@ -117,6 +119,12 @@ func sessionsDelete(deps Deps) HandlerFunc {
 				protocol.ErrConflict, "session is currently running; use force=true to delete"))
 		}
 		found := deps.Sessions.Delete(p.Key)
+		if found && deps.GatewaySubs != nil {
+			deps.GatewaySubs.EmitLifecycle(events.LifecycleChangeEvent{
+				SessionKey: p.Key,
+				Reason:     "deleted",
+			})
+		}
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"deleted": found})
 		return resp
 	}

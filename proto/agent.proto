@@ -1,0 +1,49 @@
+// Agent execution type definitions.
+//
+// Defines agent lifecycle status, spawn requests, and status updates
+// for the agent execution system.
+
+syntax = "proto3";
+
+package deneb.agent;
+
+option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen";
+
+// AgentStatus tracks the lifecycle of an agent execution.
+enum AgentStatus {
+  AGENT_STATUS_UNSPECIFIED = 0;
+  AGENT_STATUS_SPAWNING = 1;
+  AGENT_STATUS_RUNNING = 2;
+  AGENT_STATUS_COMPLETED = 3;
+  AGENT_STATUS_FAILED = 4;
+  AGENT_STATUS_KILLED = 5;
+}
+
+// AgentSpawnRequest initiates a new agent execution.
+message AgentSpawnRequest {
+  string session_key = 1;
+  optional string model = 2;
+  optional string provider = 3;
+  optional string prompt = 4;
+  optional string thinking_level = 5;
+  optional string parent_session_key = 6;
+}
+
+// AgentStatusUpdate reports a change in agent execution state.
+message AgentStatusUpdate {
+  string session_key = 1;
+  AgentStatus status = 2;
+  optional int64 timestamp_ms = 3;
+  optional string reason = 4;
+}
+
+// AgentExecutionResult is the final result of an agent execution.
+message AgentExecutionResult {
+  string session_key = 1;
+  AgentStatus final_status = 2;
+  optional string output = 3;
+  optional int64 runtime_ms = 4;
+  optional uint64 input_tokens = 5;
+  optional uint64 output_tokens = 6;
+  optional double estimated_cost_usd = 7;
+}
