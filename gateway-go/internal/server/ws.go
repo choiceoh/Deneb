@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -19,6 +20,13 @@ const (
 	// being canceled. Prevents a stuck handler from blocking the message loop.
 	dispatchTimeout = 30 * time.Second
 )
+
+// jsonBufPool reduces GC pressure for writeFrame by reusing marshal buffers.
+var jsonBufPool = sync.Pool{
+	New: func() any {
+		return bytes.NewBuffer(make([]byte, 0, 4096))
+	},
+}
 
 // WsClient represents a connected WebSocket client.
 type WsClient struct {
@@ -155,6 +163,8 @@ func (s *Server) buildHelloOk(client *WsClient) *protocol.HelloOk {
 }
 
 // runMessageLoop reads frames from the WebSocket and dispatches them.
+// Uses single-pass unmarshal: tries RequestFrame first (the common case),
+// falling back to type-peek only for non-request frames.
 func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 	for {
 		_, data, err := client.conn.Read(ctx)
@@ -166,40 +176,44 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 			return
 		}
 
-		frameType, err := protocol.ParseFrameType(data)
-		if err != nil {
-			s.logger.Warn("invalid frame", "connId", client.connID, "error", err)
+		// Single-pass: unmarshal directly as RequestFrame (dominant case).
+		var req protocol.RequestFrame
+		if err := json.Unmarshal(data, &req); err != nil {
+			s.logger.Warn("unmarshal frame", "connId", client.connID, "error", err)
 			continue
 		}
 
-		if frameType == protocol.FrameTypeRequest {
-			var req protocol.RequestFrame
-			if err := json.Unmarshal(data, &req); err != nil {
-				s.logger.Warn("unmarshal request", "connId", client.connID, "error", err)
-				continue
-			}
+		if req.Type != protocol.FrameTypeRequest {
+			// Non-request frames (events, etc.) are ignored on inbound WS.
+			continue
+		}
 
-			// Deduplicate: reject requests with recently-seen IDs.
-			if !s.dedupe.Check(req.ID) {
-				s.logger.Debug("duplicate request", "connId", client.connID, "id", req.ID)
-				continue
-			}
+		if req.Method == "" || req.ID == "" {
+			s.logger.Warn("request missing method/id", "connId", client.connID)
+			continue
+		}
 
-			// Dispatch with a per-request timeout to prevent stuck handlers.
-			dispatchCtx, dispatchCancel := context.WithTimeout(ctx, dispatchTimeout)
-			resp := s.dispatcher.Dispatch(dispatchCtx, &req)
-			dispatchCancel()
+		// Deduplicate: reject requests with recently-seen IDs.
+		if !s.dedupe.Check(req.ID) {
+			s.logger.Debug("duplicate request", "connId", client.connID, "id", req.ID)
+			continue
+		}
 
-			if err := s.writeFrame(ctx, client, resp); err != nil {
-				s.logger.Warn("response write failed", "connId", client.connID, "method", req.Method, "error", err)
-				return
-			}
+		// Dispatch with a per-request timeout to prevent stuck handlers.
+		dispatchCtx, dispatchCancel := context.WithTimeout(ctx, dispatchTimeout)
+		resp := s.dispatcher.Dispatch(dispatchCtx, &req)
+		dispatchCancel()
+
+		if err := s.writeFrame(ctx, client, resp); err != nil {
+			s.logger.Warn("response write failed", "connId", client.connID, "method", req.Method, "error", err)
+			return
 		}
 	}
 }
 
 // tickLoop sends periodic tick events to the client so both sides can detect
-// dead connections. Mirrors TICK_INTERVAL_MS from src/gateway/server-constants.ts.
+// dead connections. Uses pre-serialized tick template with only the timestamp
+// patched per-tick to avoid repeated JSON marshaling.
 func (s *Server) tickLoop(ctx context.Context, client *WsClient) {
 	ticker := time.NewTicker(time.Duration(protocol.TickIntervalMs) * time.Millisecond)
 	defer ticker.Stop()
@@ -209,29 +223,78 @@ func (s *Server) tickLoop(ctx context.Context, client *WsClient) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			ev, _ := protocol.NewEventFrame("tick", map[string]int64{
-				"ts": time.Now().UnixMilli(),
-			})
-			if err := s.writeFrame(ctx, client, ev); err != nil {
+			data := buildTickJSON(time.Now().UnixMilli())
+			if err := s.writeFrameRaw(ctx, client, data); err != nil {
 				return
 			}
 		}
 	}
 }
 
+// tickPrefix is the pre-serialized tick event envelope up to the timestamp value.
+// Format: {"type":"event","event":"tick","payload":{"ts":<TIMESTAMP>}}
+var tickPrefix = []byte(`{"type":"event","event":"tick","payload":{"ts":`)
+var tickSuffix = []byte(`}}`)
+
+// buildTickJSON constructs a tick event JSON without json.Marshal by
+// concatenating the static prefix, the integer timestamp, and the suffix.
+func buildTickJSON(tsMs int64) []byte {
+	buf := make([]byte, 0, len(tickPrefix)+20+len(tickSuffix))
+	buf = append(buf, tickPrefix...)
+	buf = appendInt64(buf, tsMs)
+	buf = append(buf, tickSuffix...)
+	return buf
+}
+
+// appendInt64 appends the decimal representation of n to buf.
+func appendInt64(buf []byte, n int64) []byte {
+	if n < 0 {
+		buf = append(buf, '-')
+		n = -n
+	}
+	if n == 0 {
+		return append(buf, '0')
+	}
+	var tmp [20]byte
+	i := len(tmp)
+	for n > 0 {
+		i--
+		tmp[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return append(buf, tmp[i:]...)
+}
+
 // writeFrame serializes v as JSON and writes it to the WebSocket connection.
+// Uses a pooled buffer to reduce GC pressure.
 // The write is bounded by a 5-second timeout derived from the parent context.
 func (s *Server) writeFrame(ctx context.Context, client *WsClient, v any) error {
 	if client.conn == nil {
 		return fmt.Errorf("connection closed")
 	}
 
-	data, err := json.Marshal(v)
-	if err != nil {
+	buf := jsonBufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer jsonBufPool.Put(buf)
+
+	enc := json.NewEncoder(buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
 		s.logger.Error("marshal frame", "connId", client.connID, "error", err)
 		return err
 	}
 
+	// json.Encoder.Encode appends a trailing newline; trim it for WS frames.
+	data := buf.Bytes()
+	if len(data) > 0 && data[len(data)-1] == '\n' {
+		data = data[:len(data)-1]
+	}
+
+	return s.writeFrameRaw(ctx, client, data)
+}
+
+// writeFrameRaw writes pre-serialized JSON bytes to the WebSocket.
+func (s *Server) writeFrameRaw(ctx context.Context, client *WsClient, data []byte) error {
 	client.writeMu.Lock()
 	defer client.writeMu.Unlock()
 

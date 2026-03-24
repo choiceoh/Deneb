@@ -191,7 +191,10 @@ func (s *Server) shutdown() error {
 		return true
 	})
 
-	// 4. Close Plugin Host bridge last (in-flight forwards finish first).
+	// 4. Stop dedupe background GC.
+	s.dedupe.Close()
+
+	// 5. Close Plugin Host bridge last (in-flight forwards finish first).
 	if s.bridge != nil {
 		s.bridge.Close()
 	}

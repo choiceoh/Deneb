@@ -17,17 +17,31 @@ type Tracker struct {
 	entries map[string]time.Time
 	ttl     time.Duration
 	maxSize int
+	stopGC  chan struct{}
 }
 
-// NewTracker creates a deduplication tracker.
-// ttl is how long to remember a request ID; maxSize caps the map to prevent
-// unbounded growth (oldest entries are evicted on overflow).
+// NewTracker creates a deduplication tracker with a background GC goroutine
+// that sweeps expired entries at half the TTL interval.
+// Call Close() to stop the GC goroutine.
 func NewTracker(ttl time.Duration, maxSize int) *Tracker {
-	return &Tracker{
+	t := &Tracker{
 		entries: make(map[string]time.Time, maxSize),
 		ttl:     ttl,
 		maxSize: maxSize,
+		stopGC:  make(chan struct{}),
 	}
+
+	// Background GC at half the TTL so expired entries are cleaned
+	// before they accumulate to maxSize, keeping Check() O(1) on average.
+	// Minimum 100ms to avoid busy-looping; for production TTLs (minutes)
+	// this floor is never hit.
+	gcInterval := ttl / 2
+	if gcInterval < 100*time.Millisecond {
+		gcInterval = 100 * time.Millisecond
+	}
+	go t.gcLoop(gcInterval)
+
+	return t
 }
 
 // Check returns true if the request ID has NOT been seen recently (i.e., it's new).
@@ -44,11 +58,7 @@ func (t *Tracker) Check(id string) bool {
 		}
 	}
 
-	// Evict expired entries if at capacity.
-	if len(t.entries) >= t.maxSize {
-		t.evictExpired(now)
-	}
-	// If still at capacity after eviction, drop oldest.
+	// If at capacity, drop oldest as a fallback (GC should prevent this).
 	if len(t.entries) >= t.maxSize {
 		t.evictOldest()
 	}
@@ -57,10 +67,32 @@ func (t *Tracker) Check(id string) bool {
 	return true
 }
 
-func (t *Tracker) evictExpired(now time.Time) {
-	for id, seenAt := range t.entries {
-		if now.Sub(seenAt) >= t.ttl {
-			delete(t.entries, id)
+// Close stops the background GC goroutine.
+func (t *Tracker) Close() {
+	select {
+	case <-t.stopGC:
+	default:
+		close(t.stopGC)
+	}
+}
+
+// gcLoop periodically sweeps expired entries so Check() stays fast.
+func (t *Tracker) gcLoop(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-t.stopGC:
+			return
+		case now := <-ticker.C:
+			t.mu.Lock()
+			for id, seenAt := range t.entries {
+				if now.Sub(seenAt) >= t.ttl {
+					delete(t.entries, id)
+				}
+			}
+			t.mu.Unlock()
 		}
 	}
 }

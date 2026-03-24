@@ -14,25 +14,36 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// FrameWriter writes newline-delimited JSON frames.
+const (
+	// writerBufSize is the bufio.Writer buffer for IPC writes.
+	// 32 KB is large enough to batch typical NDJSON frames.
+	writerBufSize = 32 * 1024
+)
+
+// FrameWriter writes newline-delimited JSON frames with buffering.
+// Each write is buffered and explicitly flushed to batch small frames
+// into fewer syscalls on the Unix socket.
 type FrameWriter struct {
-	w io.Writer
+	bw *bufio.Writer
 }
 
-// NewFrameWriter creates a new frame writer.
+// NewFrameWriter creates a new buffered frame writer.
 func NewFrameWriter(w io.Writer) *FrameWriter {
-	return &FrameWriter{w: w}
+	return &FrameWriter{bw: bufio.NewWriterSize(w, writerBufSize)}
 }
 
-// WriteFrame writes any frame value as a newline-delimited JSON line.
+// WriteFrame writes any frame value as a newline-delimited JSON line
+// and flushes the buffer to ensure the frame is sent immediately.
 func (fw *FrameWriter) WriteFrame(v any) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Errorf("marshal frame: %w", err)
 	}
 	b = append(b, '\n')
-	_, err = fw.w.Write(b)
-	return err
+	if _, err := fw.bw.Write(b); err != nil {
+		return err
+	}
+	return fw.bw.Flush()
 }
 
 // WriteRequest writes a RequestFrame as NDJSON.
