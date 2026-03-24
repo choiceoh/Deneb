@@ -10,12 +10,11 @@ import {
   selectTimedHeavyFiles,
 } from "./test-runner-manifest.mjs";
 
-// ── Highway integration (transparent) ───────────────────────────────────────
-// When the Highway Rust binary is present and HIGHWAY !== "0", automatically
-// run cache analysis before Vitest. Tests whose full dependency tree is
-// unchanged since the last passing run are excluded, dramatically reducing
-// execution time for incremental runs. The filtered list is passed via the
-// HIGHWAY_SKIP_TESTS env var so that vitest configs can honor it.
+// ── Highway (required) ──────────────────────────────────────────────────────
+// Highway is the mandatory test orchestration engine. It requires a Rust
+// toolchain (cargo). The binary is auto-built on first run. Tests cannot
+// proceed without it — this ensures every test run benefits from import graph
+// analysis, content-addressed caching, and optimal scheduling.
 const __highwayRoot = path.resolve(import.meta.dirname, "..");
 const __highwayBin = (() => {
   const release = path.join(__highwayRoot, "tools/highway/target/release/highway");
@@ -23,30 +22,45 @@ const __highwayBin = (() => {
   if (fs.existsSync(release)) return release;
   if (fs.existsSync(debug)) return debug;
 
-  // Auto-build: if Cargo.toml exists and cargo is available, build automatically
+  // Auto-build: Cargo.toml must exist
   const cargoToml = path.join(__highwayRoot, "tools/highway/Cargo.toml");
-  if (!fs.existsSync(cargoToml)) return null;
+  if (!fs.existsSync(cargoToml)) {
+    console.error("[highway] FATAL: tools/highway/Cargo.toml not found. Cannot run tests.");
+    process.exit(1);
+  }
+
+  // Rust toolchain is required
   try {
     execFileSync("cargo", ["--version"], { stdio: "pipe", timeout: 5_000 });
   } catch {
-    return null; // No Rust toolchain
+    console.error(
+      "[highway] FATAL: Rust toolchain not found. Install via: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
+    );
+    process.exit(1);
   }
+
+  // Build the binary
+  console.log("[highway] first run — building optimized binary (~30s one-time cost)...");
   try {
-    console.log("[highway] first run — building optimized binary (~30s one-time cost)...");
     execFileSync("cargo", ["build", "--release"], {
       cwd: path.join(__highwayRoot, "tools/highway"),
       stdio: "inherit",
       timeout: 300_000,
     });
-    if (fs.existsSync(release)) return release;
   } catch {
-    console.log("[highway] build failed — falling back to standard test runner");
+    console.error("[highway] FATAL: cargo build failed. Fix compilation errors in tools/highway/.");
+    process.exit(1);
   }
-  return null;
+
+  if (!fs.existsSync(release)) {
+    console.error("[highway] FATAL: build succeeded but binary not found at", release);
+    process.exit(1);
+  }
+  return release;
 })();
 
 let highwaySkipSet = new Set();
-if (__highwayBin && process.env.HIGHWAY !== "0") {
+{
   try {
     const result = execFileSync(
       __highwayBin,
@@ -71,13 +85,14 @@ if (__highwayBin && process.env.HIGHWAY !== "0") {
         }
         if (highwaySkipSet.size > 0) {
           console.log(
-            `[highway] ${highwaySkipSet.size} tests cached & passing → skipping (set HIGHWAY=0 to disable)`,
+            `[highway] ${highwaySkipSet.size} tests cached & passing → skipping`,
           );
         }
       }
     }
-  } catch {
-    // Highway failed silently — fall back to normal test execution
+  } catch (err) {
+    console.error(`[highway] cache analysis failed: ${String(err.message ?? err)}`);
+    console.error("[highway] continuing without cache optimization");
   }
 }
 // Export for use in test configs if needed
@@ -962,16 +977,14 @@ for (const entry of serialRuns) {
 }
 
 // ── Highway: update cache after successful run ──────────────────────────────
-if (__highwayBin && process.env.HIGHWAY !== "0") {
-  try {
-    execFileSync(
-      __highwayBin,
-      ["--root", __highwayRoot, "run", "--dry-run", "--git"],
-      { encoding: "utf-8", timeout: 30_000, stdio: "pipe" },
-    );
-  } catch {
-    // Cache update is best-effort
-  }
+try {
+  execFileSync(
+    __highwayBin,
+    ["--root", __highwayRoot, "run", "--dry-run", "--git"],
+    { encoding: "utf-8", timeout: 30_000, stdio: "pipe" },
+  );
+} catch {
+  // Cache update is best-effort — test results are still valid
 }
 
 process.exit(0);
