@@ -43,7 +43,7 @@ require_cmd() {
 # Each runs in a subshell to avoid cd side effects.
 
 gen_go() {
-  info "Generating Go structs → gateway-go/pkg/protocol/gen/"
+  info "Generating Go → gateway-go/pkg/protocol/gen/"
   require_cmd buf "Install: https://buf.build/docs/installation"
   require_cmd protoc-gen-go "Install: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
   (
@@ -55,18 +55,20 @@ gen_go() {
 }
 
 gen_rust() {
-  info "Generating Rust structs → core-rs/src/protocol/ (via prost-build)"
+  info "Generating Rust via prost-build (output in cargo OUT_DIR)"
   require_cmd cargo "Install: https://rustup.rs"
   require_cmd protoc "Install: apt install protobuf-compiler / brew install protobuf"
   (
     cd "$REPO_ROOT/core-rs"
-    cargo build 2>&1
+    # cargo check is sufficient to trigger build.rs (prost codegen)
+    # without compiling the full cdylib/staticlib/rlib targets.
+    cargo check 2>&1
   )
   info "Rust generation complete"
 }
 
 gen_ts() {
-  info "Generating TypeScript types → src/protocol/generated/"
+  info "Generating TypeScript → src/protocol/generated/"
   require_cmd buf "Install: https://buf.build/docs/installation"
   require_cmd protoc-gen-ts_proto "Install: npm install -g ts-proto"
   (

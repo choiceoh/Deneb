@@ -6,35 +6,35 @@
 
 extern crate napi_build;
 
+use std::path::PathBuf;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // napi-rs build setup for Node.js native addon.
     napi_build::setup();
 
-    let proto_dir = "../proto";
-    let protos = &[
-        format!("{proto_dir}/gateway.proto"),
-        format!("{proto_dir}/channel.proto"),
-        format!("{proto_dir}/session.proto"),
-    ];
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let proto_dir = manifest_dir.join("../proto");
+    let proto_dir_str = proto_dir.to_str().expect("proto dir path is valid UTF-8");
+
+    let protos: Vec<String> = ["gateway", "channel", "session"]
+        .iter()
+        .map(|name| format!("{proto_dir_str}/{name}.proto"))
+        .collect();
 
     // Rerun if any proto file changes.
-    for proto in protos {
+    for proto in &protos {
         println!("cargo:rerun-if-changed={proto}");
     }
 
-    // Generate without blanket Serialize — prost_types::Value doesn't impl Serialize.
-    // Types that don't use google.protobuf.Value/Struct get Serialize via selective attributes.
+    // Selectively derive Serialize on types without google.protobuf.Value/Struct fields,
+    // since prost_types::Value doesn't implement serde::Serialize.
     let mut config = prost_build::Config::new();
-
-    // Channel and session types have no well-known type fields, so Serialize is safe.
     config.type_attribute("deneb.channel", "#[derive(serde::Serialize)]");
     config.type_attribute("deneb.session", "#[derive(serde::Serialize)]");
-
-    // Gateway types that don't contain Value/Struct fields.
     config.type_attribute("deneb.gateway.StateVersion", "#[derive(serde::Serialize)]");
     config.type_attribute("deneb.gateway.PresenceEntry", "#[derive(serde::Serialize)]");
 
-    config.compile_protos(protos, &[proto_dir])?;
+    config.compile_protos(&protos, &[proto_dir_str])?;
 
     Ok(())
 }

@@ -2,7 +2,12 @@
 #
 # Orchestrates Rust (core-rs), Go (gateway-go), and TypeScript (pnpm) builds.
 
-.PHONY: all rust go ts clean test fmt check proto proto-go proto-rust proto-ts proto-check
+.PHONY: all rust rust-debug rust-test rust-bench rust-clean \
+       go go-run go-test go-clean \
+       ts ts-check ts-test \
+       test clean check \
+       proto proto-go proto-rust proto-ts proto-check \
+       info
 
 # Default: build everything
 all: rust go
