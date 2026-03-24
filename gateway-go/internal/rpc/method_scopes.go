@@ -14,12 +14,38 @@ var methodScopes = map[string]auth.Scope{
 	"status":       auth.ScopeRead,
 	"system.info":  auth.ScopeRead,
 
+	// --- System / Diagnostics ---
+	"gateway.identity.get":  auth.ScopeRead,
+	"last-heartbeat":        auth.ScopeRead,
+	"set-heartbeats":        auth.ScopeWrite,
+	"system-presence":       auth.ScopeAdmin,
+	"system-event":          auth.ScopeAdmin,
+	"logs.tail":             auth.ScopeRead,
+	"doctor.memory.status":  auth.ScopeRead,
+	"models.list":           auth.ScopeRead,
+	"update.run":            auth.ScopeAdmin,
+	"maintenance.run":       auth.ScopeAdmin,
+	"maintenance.status":    auth.ScopeRead,
+	"maintenance.summary":   auth.ScopeRead,
+
 	// --- Sessions (read/write) ---
-	"sessions.list":      auth.ScopeRead,
-	"sessions.get":       auth.ScopeRead,
-	"sessions.delete":    auth.ScopeWrite,
-	"sessions.create":    auth.ScopeWrite,
-	"sessions.lifecycle": auth.ScopeWrite,
+	"sessions.list":                 auth.ScopeRead,
+	"sessions.get":                  auth.ScopeRead,
+	"sessions.preview":              auth.ScopeRead,
+	"sessions.resolve":              auth.ScopeRead,
+	"sessions.subscribe":            auth.ScopeRead,
+	"sessions.unsubscribe":          auth.ScopeRead,
+	"sessions.messages.subscribe":   auth.ScopeRead,
+	"sessions.messages.unsubscribe": auth.ScopeRead,
+	"sessions.create":               auth.ScopeWrite,
+	"sessions.send":                 auth.ScopeWrite,
+	"sessions.steer":                auth.ScopeWrite,
+	"sessions.abort":                auth.ScopeWrite,
+	"sessions.patch":                auth.ScopeWrite,
+	"sessions.reset":                auth.ScopeWrite,
+	"sessions.delete":               auth.ScopeWrite,
+	"sessions.compact":              auth.ScopeWrite,
+	"sessions.lifecycle":            auth.ScopeWrite,
 
 	// --- Channels (read/write/admin) ---
 	"channels.list":    auth.ScopeRead,
@@ -29,9 +55,40 @@ var methodScopes = map[string]auth.Scope{
 	"channels.start":   auth.ScopeAdmin,
 	"channels.stop":    auth.ScopeAdmin,
 	"channels.restart": auth.ScopeAdmin,
+	// --- Channels (read/write) ---
+	"channels.list":   auth.ScopeRead,
+	"channels.get":    auth.ScopeRead,
+	"channels.status": auth.ScopeRead,
+	"channels.health": auth.ScopeRead,
+	"channels.logout": auth.ScopeWrite,
+
+	// --- Messaging ---
+	"send":        auth.ScopeWrite,
+	"poll":        auth.ScopeWrite,
+	"talk.config": auth.ScopeRead,
+	"talk.mode":   auth.ScopeWrite,
 
 	// --- Agent (read/write) ---
-	"agent.status": auth.ScopeRead,
+	"agent":              auth.ScopeWrite,
+	"agent.identity.get": auth.ScopeRead,
+	"agent.wait":         auth.ScopeRead,
+	"agent.status":       auth.ScopeRead,
+
+	// --- Agents CRUD ---
+	"agents.list":       auth.ScopeRead,
+	"agents.create":     auth.ScopeWrite,
+	"agents.update":     auth.ScopeWrite,
+	"agents.delete":     auth.ScopeWrite,
+	"agents.files.list": auth.ScopeRead,
+	"agents.files.get":  auth.ScopeRead,
+	"agents.files.set":  auth.ScopeWrite,
+
+	// --- Skills ---
+	"skills.status":  auth.ScopeRead,
+	"skills.bins":    auth.ScopeRead,
+	"skills.install": auth.ScopeWrite,
+	"skills.update":  auth.ScopeWrite,
+	"tools.catalog":  auth.ScopeRead,
 
 	// --- Process (write) ---
 	"process.exec": auth.ScopeApprovals,
@@ -40,8 +97,15 @@ var methodScopes = map[string]auth.Scope{
 	"process.list": auth.ScopeRead,
 
 	// --- Cron (read/write) ---
+	"wake":            auth.ScopeWrite,
 	"cron.list":       auth.ScopeRead,
 	"cron.get":        auth.ScopeRead,
+	"cron.status":     auth.ScopeRead,
+	"cron.runs":       auth.ScopeRead,
+	"cron.add":        auth.ScopeWrite,
+	"cron.update":     auth.ScopeWrite,
+	"cron.remove":     auth.ScopeWrite,
+	"cron.run":        auth.ScopeWrite,
 	"cron.unregister": auth.ScopeWrite,
 
 	// --- Hooks (read/admin) ---
@@ -66,9 +130,72 @@ var methodScopes = map[string]auth.Scope{
 	"unsubscribe.session":           auth.ScopeRead,
 	"subscribe.session.messages":    auth.ScopeRead,
 	"unsubscribe.session.messages":  auth.ScopeRead,
+	// --- Wizard ---
+	"wizard.start":  auth.ScopeWrite,
+	"wizard.next":   auth.ScopeWrite,
+	"wizard.cancel": auth.ScopeWrite,
+	"wizard.status": auth.ScopeRead,
+
+	// --- TTS / Media ---
+	"tts.status":      auth.ScopeRead,
+	"tts.providers":   auth.ScopeRead,
+	"tts.enable":      auth.ScopeWrite,
+	"tts.disable":     auth.ScopeWrite,
+	"tts.convert":     auth.ScopeWrite,
+	"tts.setProvider": auth.ScopeWrite,
+	"voicewake.get":   auth.ScopeRead,
+	"voicewake.set":   auth.ScopeWrite,
+	"browser.request": auth.ScopeWrite,
+
+	// --- Web Login ---
+	"web.login.start": auth.ScopeWrite,
+	"web.login.wait":  auth.ScopeRead,
+
+	// --- Exec Approvals ---
+	"exec.approvals.get":       auth.ScopeRead,
+	"exec.approvals.set":       auth.ScopeAdmin,
+	"exec.approvals.node.get":  auth.ScopeRead,
+	"exec.approvals.node.set":  auth.ScopeAdmin,
+	"exec.approval.request":    auth.ScopeApprovals,
+	"exec.approval.waitDecision": auth.ScopeApprovals,
+	"exec.approval.resolve":    auth.ScopeApprovals,
+
+	// --- Nodes ---
+	"node.pair.request":              auth.ScopeWrite,
+	"node.pair.list":                 auth.ScopeRead,
+	"node.pair.approve":              auth.ScopeAdmin,
+	"node.pair.reject":               auth.ScopeAdmin,
+	"node.pair.verify":               auth.ScopeRead,
+	"node.list":                      auth.ScopeRead,
+	"node.describe":                  auth.ScopeRead,
+	"node.rename":                    auth.ScopeWrite,
+	"node.invoke":                    auth.ScopeWrite,
+	"node.invoke.result":             auth.ScopeWrite,
+	"node.event":                     auth.ScopeWrite,
+	"node.canvas.capability.refresh": auth.ScopeWrite,
+	"node.pending.pull":              auth.ScopeRead,
+	"node.pending.ack":               auth.ScopeWrite,
+	"node.pending.drain":             auth.ScopeAdmin,
+	"node.pending.enqueue":           auth.ScopeWrite,
+
+	// --- Device ---
+	"device.pair.list":    auth.ScopeRead,
+	"device.pair.approve": auth.ScopeAdmin,
+	"device.pair.reject":  auth.ScopeAdmin,
+	"device.pair.remove":  auth.ScopeAdmin,
+	"device.token.rotate": auth.ScopeAdmin,
+	"device.token.revoke": auth.ScopeAdmin,
+
+	// --- Secrets ---
+	"secrets.reload":  auth.ScopeAdmin,
+	"secrets.resolve": auth.ScopeAdmin,
+
+	// --- Usage ---
+	"usage.status": auth.ScopeRead,
+	"usage.cost":   auth.ScopeRead,
 
 	// --- Security & Media (read) ---
-	"protocol.validate":            auth.ScopeRead,
+	"protocol.validate":             auth.ScopeRead,
 	"security.validate_session_key": auth.ScopeRead,
 	"security.sanitize_html":        auth.ScopeRead,
 	"security.is_safe_url":          auth.ScopeRead,
@@ -89,12 +216,42 @@ var methodScopes = map[string]auth.Scope{
 	// --- Config (admin) ---
 	"config.get":    auth.ScopeAdmin,
 	"config.reload": auth.ScopeAdmin,
+	"config.get":           auth.ScopeAdmin,
+	"config.set":           auth.ScopeAdmin,
+	"config.patch":         auth.ScopeAdmin,
+	"config.apply":         auth.ScopeAdmin,
+	"config.reload":        auth.ScopeAdmin,
+	"config.schema":        auth.ScopeRead,
+	"config.schema.lookup": auth.ScopeRead,
+
+	// --- Chat (write) ---
+	"chat.send":    auth.ScopeWrite,
+	"chat.history": auth.ScopeRead,
+	"chat.abort":   auth.ScopeWrite,
+	"chat.inject":  auth.ScopeWrite,
 
 	// --- Daemon (admin) ---
 	"daemon.status": auth.ScopeAdmin,
 
 	// --- Events (admin) ---
 	"events.broadcast": auth.ScopeAdmin,
+
+	// --- Monitoring (read) ---
+	"monitoring.channel_health": auth.ScopeRead,
+	"monitoring.activity":       auth.ScopeRead,
+
+	// --- Vega (write) ---
+	"vega.ask":         auth.ScopeWrite,
+	"vega.update":      auth.ScopeWrite,
+	"vega.add-action":  auth.ScopeWrite,
+	"vega.mail-append": auth.ScopeWrite,
+	"vega.version":     auth.ScopeRead,
+
+	// --- Legacy event subscription aliases ---
+	"subscribe.session":              auth.ScopeRead,
+	"unsubscribe.session":            auth.ScopeRead,
+	"subscribe.session.messages":     auth.ScopeRead,
+	"unsubscribe.session.messages":   auth.ScopeRead,
 }
 
 // RequiredScope returns the scope needed to call the given method.

@@ -519,17 +519,19 @@ func (s *Server) buildMux() *http.ServeMux {
 	return mux
 }
 
+// bridgeStatus returns the current bridge connection state as a string.
+func (s *Server) bridgeStatus() string {
+	if s.bridge == nil {
+		return "not_configured"
+	}
+	if s.bridge.IsRunning() {
+		return "connected"
+	}
+	return "disconnected"
+}
+
 // handleHealth responds with gateway health status including subsystem state.
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	bridgeStatus := "not_configured"
-	if s.bridge != nil {
-		if s.bridge.IsRunning() {
-			bridgeStatus = "connected"
-		} else {
-			bridgeStatus = "disconnected"
-		}
-	}
-
 	authMode := ""
 	providerCount := 0
 	if s.runtimeCfg != nil {
@@ -822,6 +824,17 @@ func (s *Server) registerPhase2Methods() {
 
 	// Event subscription methods.
 	rpc.RegisterEventsMethods(s.dispatcher, rpc.EventsDeps{Broadcaster: s.broadcaster, Logger: s.logger})
+
+	// Bridge-forwarded methods for full TS parity.
+	// Uses ForwarderFunc closure so the bridge can be set after server init via SetBridge.
+	rpc.RegisterBridgeMethods(s.dispatcher, rpc.BridgeDeps{
+		ForwarderFunc: func() rpc.Forwarder {
+			if s.bridge != nil {
+				return s.bridge
+			}
+			return nil
+		},
+	})
 }
 
 // StartMonitoring starts the watchdog and channel health monitor goroutines.
@@ -960,6 +973,86 @@ func (s *Server) registerBuiltinMethods() {
 			"channels":    s.channels.StatusAll(),
 			"sessions":    s.sessions.Count(),
 			"connections": s.clientCnt.Load(),
+		})
+		return resp
+	})
+
+	// gateway.identity.get: returns the gateway's identity and runtime information.
+	s.dispatcher.Register("gateway.identity.get", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"version": s.version,
+			"runtime": "go",
+			"uptime":  time.Since(s.startedAt).Milliseconds(),
+			"bridge":  s.bridgeStatus(),
+			"rustFFI": s.rustFFI,
+		})
+		return resp
+	})
+
+	// last-heartbeat: returns the last heartbeat timestamp.
+	s.dispatcher.Register("last-heartbeat", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var ts int64
+		if s.activity != nil {
+			ts = s.activity.LastActivityAt()
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"lastHeartbeatMs": ts,
+		})
+		return resp
+	})
+
+	// set-heartbeats: configure heartbeat settings (accepted but no-op in Go gateway;
+	// the tick broadcaster runs at a fixed 1000ms interval).
+	s.dispatcher.Register("set-heartbeats", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
+		return resp
+	})
+
+	// system-presence: broadcast a presence event to all connected clients.
+	s.dispatcher.Register("system-presence", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var payload any
+		if len(req.Params) > 0 {
+			var p struct {
+				Payload any `json:"payload"`
+			}
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return protocol.NewResponseError(req.ID, protocol.NewError(
+					protocol.ErrInvalidRequest, "invalid params"))
+			}
+			payload = p.Payload
+		}
+		sent, _ := s.broadcaster.Broadcast("presence", payload)
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]int{"sent": sent})
+		return resp
+	})
+
+	// system-event: broadcast an arbitrary system event.
+	s.dispatcher.Register("system-event", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if len(req.Params) == 0 {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "event is required"))
+		}
+		var p struct {
+			Event   string `json:"event"`
+			Payload any    `json:"payload"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Event == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "event is required"))
+		}
+		sent, _ := s.broadcaster.Broadcast(p.Event, p.Payload)
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]int{"sent": sent})
+		return resp
+	})
+
+	// models.list: return provider model list if available.
+	s.dispatcher.Register("models.list", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if s.providers == nil {
+			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"models": []any{}})
+			return resp
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"models": s.providers.List(),
 		})
 		return resp
 	})

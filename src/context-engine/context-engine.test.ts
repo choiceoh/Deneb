@@ -6,7 +6,6 @@ import { compactEmbeddedPiSessionDirect } from "../agents/pi-embedded-runner/com
 // group when needed.  For most groups we use the shared singleton directly.
 // ---------------------------------------------------------------------------
 import { delegateCompactionToRuntime } from "./delegate.js";
-import { LegacyContextEngine, registerLegacyContextEngine } from "./legacy.js";
 import {
   registerContextEngine,
   registerContextEngineForOwner,
@@ -236,25 +235,6 @@ describe("Engine contract tests", () => {
     const engine = await resolved!();
     expect(engine).toBeInstanceOf(MockContextEngine);
     expect(engine.info.id).toBe("mock");
-  });
-
-  it("legacy compact preserves runtimeContext currentTokenCount when top-level value is absent", async () => {
-    const engine = new LegacyContextEngine();
-
-    await engine.compact({
-      sessionId: "s1",
-      sessionFile: "/tmp/session.json",
-      runtimeContext: {
-        workspaceDir: "/tmp/workspace",
-        currentTokenCount: 277403,
-      },
-    });
-
-    expect(mockedCompactEmbeddedPiSessionDirect).toHaveBeenCalledWith(
-      expect.objectContaining({
-        currentTokenCount: 277403,
-      }),
-    );
   });
 
   it("delegateCompactionToRuntime reuses the legacy runtime bridge", async () => {
@@ -501,10 +481,7 @@ describe("Legacy sessionKey compatibility", () => {
 });
 
 describe("Default engine selection", () => {
-  // Ensure legacy, lcm, and a custom test engine are registered before these tests.
   beforeEach(() => {
-    // Registration is idempotent (Map.set), so calling again is safe.
-    registerLegacyContextEngine();
     // Register a lightweight LCM stub (default engine) so we don't need SQLite.
     registerContextEngineForOwner(
       "lcm",
@@ -546,11 +523,6 @@ describe("Default engine selection", () => {
     expect(engine.info.id).toBe("lcm");
   });
 
-  it("resolveContextEngine() with config contextEngine='legacy' returns legacy engine", async () => {
-    const engine = await resolveContextEngine(configWithSlot("legacy"));
-    expect(engine.info.id).toBe("legacy");
-  });
-
   it("resolveContextEngine() with config contextEngine='test-engine' returns the custom engine", async () => {
     const engine = await resolveContextEngine(configWithSlot("test-engine"));
     expect(engine.info.id).toBe("test-engine");
@@ -563,63 +535,15 @@ describe("Default engine selection", () => {
 
 describe("Invalid engine fallback", () => {
   it("includes the requested id and available ids in unknown-engine errors", async () => {
-    // Ensure at least legacy is registered so we see it in the available list
-    registerLegacyContextEngine();
-
     try {
       await resolveContextEngine(configWithSlot("does-not-exist"));
-      // Should not reach here
       expect.unreachable("Expected resolveContextEngine to throw");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       expect(message).toContain("does-not-exist");
       expect(message).toContain("not registered");
-      // Should mention available engines
       expect(message).toMatch(/Available engines:/);
-      // At least "legacy" should be listed as available
-      expect(message).toContain("legacy");
     }
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 5. LegacyContextEngine parity
-// ═══════════════════════════════════════════════════════════════════════════
-
-describe("LegacyContextEngine parity", () => {
-  it("ingest() returns { ingested: false } (no-op)", async () => {
-    const engine = new LegacyContextEngine();
-    const result = await engine.ingest({
-      sessionId: "s1",
-      message: makeMockMessage(),
-    });
-
-    expect(result).toEqual({ ingested: false });
-  });
-
-  it("assemble() returns messages as-is (pass-through)", async () => {
-    const engine = new LegacyContextEngine();
-    const messages = [
-      makeMockMessage("user", "first"),
-      makeMockMessage("assistant", "second"),
-      makeMockMessage("user", "third"),
-    ];
-
-    const result = await engine.assemble({
-      sessionId: "s1",
-      messages,
-    });
-
-    // Messages should be the exact same array reference (pass-through)
-    expect(result.messages).toBe(messages);
-    expect(result.messages).toHaveLength(3);
-    expect(result.estimatedTokens).toBe(0);
-    expect(result.systemPromptAddition).toBeUndefined();
-  });
-
-  it("dispose() completes without error", async () => {
-    const engine = new LegacyContextEngine();
-    await expect(engine.dispose()).resolves.toBeUndefined();
   });
 });
 
@@ -628,14 +552,13 @@ describe("LegacyContextEngine parity", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("Initialization guard", () => {
-  it("ensureContextEnginesInitialized() is idempotent and registers both engines", async () => {
+  it("ensureContextEnginesInitialized() is idempotent and registers the LCM engine", async () => {
     const { ensureContextEnginesInitialized } = await import("./init.js");
 
     expect(() => ensureContextEnginesInitialized()).not.toThrow();
     expect(() => ensureContextEnginesInitialized()).not.toThrow();
 
     const ids = listContextEngineIds();
-    expect(ids).toContain("legacy");
     expect(ids).toContain("lcm");
   });
 });

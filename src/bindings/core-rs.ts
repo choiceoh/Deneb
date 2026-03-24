@@ -20,6 +20,20 @@ interface CoreRsModuleRaw {
   validateErrorCode(code: string): boolean;
   isRetryableErrorCode(code: string): boolean;
   validateParams(method: string, json: string): string;
+  // Memory search functions
+  memoryCosineSimilarity(a: number[], b: number[]): number;
+  memoryBm25RankToScore(rank: number): number;
+  memoryBuildFtsQuery(raw: string): string | null;
+  memoryTemporalDecayMultiplier(ageInDays: number, halfLifeDays: number): number;
+  memoryApplyTemporalDecay(score: number, ageInDays: number, halfLifeDays: number): number;
+  memoryParseMemoryDateFromPath(filePath: string): string | null;
+  memoryIsEvergreenMemoryPath(filePath: string): boolean;
+  memoryMmrRerank(itemsJson: string, configJson: string): string;
+  memoryExtractKeywords(query: string): string[];
+  memoryIsQueryStopWord(token: string): boolean;
+  memoryExpandQueryForFts(query: string): string;
+  memoryMergeHybridResults(paramsJson: string): string;
+  memoryTextSimilarity(a: string, b: string): number;
 }
 
 /** Validation error returned from native param validation. */
@@ -54,6 +68,32 @@ export interface CoreRsModule {
   isRetryableErrorCode(code: string): boolean;
   /** Validate RPC parameters for a method. Returns validation result with errors. */
   validateParams(method: string, json: string): NativeValidationResult;
+  /** Memory search: cosine similarity between two vectors. */
+  memoryCosineSimilarity(a: number[], b: number[]): number;
+  /** Memory search: BM25 rank to [0,1] score. */
+  memoryBm25RankToScore(rank: number): number;
+  /** Memory search: build FTS5 query. */
+  memoryBuildFtsQuery(raw: string): string | null;
+  /** Memory search: temporal decay multiplier. */
+  memoryTemporalDecayMultiplier(ageInDays: number, halfLifeDays: number): number;
+  /** Memory search: apply temporal decay to score. */
+  memoryApplyTemporalDecay(score: number, ageInDays: number, halfLifeDays: number): number;
+  /** Memory search: parse date from memory path. Returns ISO date or null. */
+  memoryParseMemoryDateFromPath(filePath: string): string | null;
+  /** Memory search: check if path is evergreen memory. */
+  memoryIsEvergreenMemoryPath(filePath: string): boolean;
+  /** Memory search: MMR re-rank (JSON in/out). */
+  memoryMmrRerank(itemsJson: string, configJson: string): string;
+  /** Memory search: extract keywords from query. */
+  memoryExtractKeywords(query: string): string[];
+  /** Memory search: check if token is a stop word. */
+  memoryIsQueryStopWord(token: string): boolean;
+  /** Memory search: expand query for FTS (JSON). */
+  memoryExpandQueryForFts(query: string): string;
+  /** Memory search: merge hybrid results (JSON in/out). */
+  memoryMergeHybridResults(paramsJson: string): string;
+  /** Memory search: Jaccard text similarity. */
+  memoryTextSimilarity(a: string, b: string): number;
 }
 
 /** Wraps the raw native module, mapping numeric frame type IDs to strings. */
@@ -78,6 +118,22 @@ function wrapModule(raw: CoreRsModuleRaw): CoreRsModule {
       const resultJson = raw.validateParams(method, json);
       return JSON.parse(resultJson) as NativeValidationResult;
     },
+    // Memory search passthrough
+    memoryCosineSimilarity: (a: number[], b: number[]) => raw.memoryCosineSimilarity(a, b),
+    memoryBm25RankToScore: (rank: number) => raw.memoryBm25RankToScore(rank),
+    memoryBuildFtsQuery: (r: string) => raw.memoryBuildFtsQuery(r),
+    memoryTemporalDecayMultiplier: (age: number, half: number) =>
+      raw.memoryTemporalDecayMultiplier(age, half),
+    memoryApplyTemporalDecay: (score: number, age: number, half: number) =>
+      raw.memoryApplyTemporalDecay(score, age, half),
+    memoryParseMemoryDateFromPath: (fp: string) => raw.memoryParseMemoryDateFromPath(fp),
+    memoryIsEvergreenMemoryPath: (fp: string) => raw.memoryIsEvergreenMemoryPath(fp),
+    memoryMmrRerank: (items: string, config: string) => raw.memoryMmrRerank(items, config),
+    memoryExtractKeywords: (q: string) => raw.memoryExtractKeywords(q),
+    memoryIsQueryStopWord: (t: string) => raw.memoryIsQueryStopWord(t),
+    memoryExpandQueryForFts: (q: string) => raw.memoryExpandQueryForFts(q),
+    memoryMergeHybridResults: (p: string) => raw.memoryMergeHybridResults(p),
+    memoryTextSimilarity: (a: string, b: string) => raw.memoryTextSimilarity(a, b),
   };
 }
 
