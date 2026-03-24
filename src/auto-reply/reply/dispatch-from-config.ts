@@ -182,7 +182,12 @@ export async function dispatchReplyFromConfig(params: {
     });
   };
 
-  if (shouldSkipDuplicateInbound(ctx)) {
+  // Skip inbound deduplication for internal webchat messages (chat.send RPC).
+  // The RPC handler already deduplicates via idempotency key (context.dedupe).
+  // Applying inbound dedupe here with the same MessageSid can cause false-positive
+  // skips when the RPC dedupe TTL expires but the inbound dedupe TTL (20 min) hasn't.
+  const inboundProvider = normalizeMessageChannel(ctx.Provider);
+  if (inboundProvider !== INTERNAL_MESSAGE_CHANNEL && shouldSkipDuplicateInbound(ctx)) {
     recordProcessed("skipped", { reason: "duplicate" });
     return { queuedFinal: false, counts: dispatcher.getQueuedCounts() };
   }
@@ -458,26 +463,33 @@ export async function dispatchReplyFromConfig(params: {
 
     const bypassAcpForCommand = shouldBypassAcpDispatchForCommand(ctx, cfg);
 
-    const sendPolicy = resolveSendPolicy({
-      cfg,
-      entry: sessionStoreEntry.entry,
-      sessionKey: sessionStoreEntry.sessionKey ?? sessionKey,
-      channel:
-        sessionStoreEntry.entry?.channel ??
-        ctx.OriginatingChannel ??
-        ctx.Surface ??
-        ctx.Provider ??
-        undefined,
-      chatType: sessionStoreEntry.entry?.chatType,
-    });
-    if (sendPolicy === "deny" && !bypassAcpForCommand) {
-      logVerbose(
-        `Send blocked by policy for session ${sessionStoreEntry.sessionKey ?? sessionKey ?? "unknown"}`,
-      );
-      const counts = dispatcher.getQueuedCounts();
-      recordProcessed("completed", { reason: "send_policy_deny" });
-      markIdle("message_completed");
-      return { queuedFinal: false, counts };
+    // Skip send policy check for internal webchat messages (chat.send RPC).
+    // The RPC handler already gates on send policy before ACK (chat.ts:500-510).
+    // Checking again here with different channel fallbacks (Surface/Provider = "internal")
+    // can produce false denies when entry.channel is undefined.
+    const isInternalProvider = normalizeMessageChannel(ctx.Provider) === INTERNAL_MESSAGE_CHANNEL;
+    if (!isInternalProvider) {
+      const sendPolicy = resolveSendPolicy({
+        cfg,
+        entry: sessionStoreEntry.entry,
+        sessionKey: sessionStoreEntry.sessionKey ?? sessionKey,
+        channel:
+          sessionStoreEntry.entry?.channel ??
+          ctx.OriginatingChannel ??
+          ctx.Surface ??
+          ctx.Provider ??
+          undefined,
+        chatType: sessionStoreEntry.entry?.chatType,
+      });
+      if (sendPolicy === "deny" && !bypassAcpForCommand) {
+        logVerbose(
+          `Send blocked by policy for session ${sessionStoreEntry.sessionKey ?? sessionKey ?? "unknown"}`,
+        );
+        const counts = dispatcher.getQueuedCounts();
+        recordProcessed("completed", { reason: "send_policy_deny" });
+        markIdle("message_completed");
+        return { queuedFinal: false, counts };
+      }
     }
 
     const shouldSendToolSummaries = ctx.ChatType !== "group" && ctx.CommandSource !== "native";

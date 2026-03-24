@@ -286,11 +286,15 @@ export async function tryDispatchAcpReply(params: {
     const promptText = resolveAcpPromptText(params.ctx);
     const attachments = await resolveAcpAttachments(params.ctx);
     if (!promptText && attachments.length === 0) {
+      logVerbose(`dispatch-acp: empty prompt for session ${sessionKey}, sending feedback`);
+      const delivered = await delivery.deliver("final", {
+        text: prefixSystemMessage("Empty message received — nothing to process."),
+      });
       const counts = params.dispatcher.getQueuedCounts();
       delivery.applyRoutedCounts(counts);
       params.recordProcessed("completed", { reason: "acp_empty_prompt" });
       params.markIdle("message_completed");
-      return { queuedFinal: false, counts };
+      return { queuedFinal: delivered, counts };
     }
 
     try {
