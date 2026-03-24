@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/auth"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"nhooyr.io/websocket"
 )
@@ -30,12 +32,14 @@ var jsonBufPool = sync.Pool{
 
 // WsClient represents a connected WebSocket client.
 type WsClient struct {
-	conn    *websocket.Conn
-	connID  string
-	created time.Time
-	role    string
-	authed  bool
-	writeMu sync.Mutex
+	conn     *websocket.Conn
+	connID   string
+	created  time.Time
+	role     string
+	authed   bool
+	deviceID string
+	scopes   []auth.Scope
+	writeMu  sync.Mutex
 }
 
 // handleWsUpgrade upgrades an HTTP connection to WebSocket and manages the lifecycle.
@@ -131,10 +135,34 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient) error {
 		return fmt.Errorf("build hello-ok: %w", err)
 	}
 
-	client.authed = true
-	client.role = params.Role
-	if client.role == "" {
+	// Authenticate: validate token if auth validator is configured.
+	if s.authValidator != nil && params.Auth != nil && params.Auth.Token != "" {
+		claims, err := s.authValidator.ValidateToken(params.Auth.Token)
+		if err != nil {
+			errShape := protocol.NewError(protocol.ErrUnauthorized, "invalid token: "+err.Error())
+			if writeErr := s.writeFrame(ctx, client, protocol.NewResponseError(req.ID, errShape)); writeErr != nil {
+				s.logger.Error("failed to send auth error", "connId", client.connID, "error", writeErr)
+			}
+			return fmt.Errorf("token validation failed: %w", err)
+		}
+		client.authed = true
+		client.role = string(claims.Role)
+		client.deviceID = claims.DeviceID
+		client.scopes = claims.Scopes
+		s.authValidator.TouchDevice(claims.DeviceID)
+	} else if s.authValidator == nil {
+		// No-auth mode: trust all connections as operator.
+		client.authed = true
 		client.role = "operator"
+		client.scopes = auth.DefaultScopes(auth.RoleOperator)
+	} else {
+		// Auth configured but no token provided: allow connection with limited access.
+		client.authed = false
+		client.role = params.Role
+		if client.role == "" {
+			client.role = "viewer"
+		}
+		client.scopes = auth.DefaultScopes(auth.Role(client.role))
 	}
 
 	return s.writeFrame(ctx, client, helloResp)
@@ -192,6 +220,14 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 
 		if req.Method == "" || req.ID == "" {
 			s.logger.Warn("request missing method/id", "connId", client.connID)
+			continue
+		}
+
+		// Authorize: check scope-based permissions.
+		if authErr := rpc.AuthorizeMethod(req.Method, client.role, client.authed, client.scopes); authErr != nil {
+			if err := s.writeFrame(ctx, client, protocol.NewResponseError(req.ID, authErr)); err != nil {
+				return
+			}
 			continue
 		}
 

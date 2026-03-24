@@ -25,13 +25,15 @@ const (
 )
 
 // Scope represents a permission scope granted to a client.
+// These match the OperatorScope values in src/gateway/method-scopes.ts.
 type Scope string
 
 const (
-	ScopeRead    Scope = "read"
-	ScopeWrite   Scope = "write"
-	ScopeAdmin   Scope = "admin"
-	ScopeExecute Scope = "execute"
+	ScopeAdmin     Scope = "operator.admin"
+	ScopeRead      Scope = "operator.read"
+	ScopeWrite     Scope = "operator.write"
+	ScopeApprovals Scope = "operator.approvals"
+	ScopePairing   Scope = "operator.pairing"
 )
 
 // TokenClaims represents the claims extracted from a validated token.
@@ -234,11 +236,11 @@ func joinScopes(scopes []Scope) string {
 }
 
 // rolePermissions defines the default scopes for each role.
-// Unexported to prevent accidental mutation.
+// Matches CLI_DEFAULT_OPERATOR_SCOPES in src/gateway/method-scopes.ts.
 var rolePermissions = map[Role][]Scope{
-	RoleOperator: {ScopeRead, ScopeWrite, ScopeAdmin, ScopeExecute},
+	RoleOperator: {ScopeAdmin, ScopeRead, ScopeWrite, ScopeApprovals, ScopePairing},
 	RoleViewer:   {ScopeRead},
-	RoleAgent:    {ScopeRead, ScopeWrite, ScopeExecute},
+	RoleAgent:    {ScopeRead, ScopeWrite},
 	RoleProbe:    {ScopeRead},
 }
 
