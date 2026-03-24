@@ -626,6 +626,23 @@ export async function deliverReplies(params: {
       }
     }
 
+    // After hooks may have blanked the content, check if there is anything left to deliver.
+    const hasTextAfterHooks = Boolean(reply.text?.trim());
+    if (!hasTextAfterHooks && !hasMedia) {
+      emitMessageSentHooks({
+        hookRunner,
+        enabled: hasMessageSentHooks,
+        sessionKeyForInternalHooks: params.sessionKeyForInternalHooks,
+        chatId: params.chatId,
+        accountId: params.accountId,
+        content: reply.text || "",
+        success: false,
+        isGroup: params.mirrorIsGroup,
+        groupId: params.mirrorGroupId,
+      });
+      continue;
+    }
+
     const contentForSentHook = reply.text || "";
 
     try {
