@@ -28,6 +28,7 @@ type PluginHost struct {
 	running    bool
 	logger     *slog.Logger
 	closed     chan struct{}
+	closeOnce  sync.Once
 }
 
 // New creates a new PluginHost (not yet started).
@@ -109,31 +110,29 @@ func (h *PluginHost) Forward(ctx context.Context, req *protocol.RequestFrame) (*
 	}
 }
 
-// Close closes the bridge connection.
+// Close closes the bridge connection. Safe to call multiple times.
 func (h *PluginHost) Close() error {
-	select {
-	case <-h.closed:
-		return nil
-	default:
+	var closeErr error
+	h.closeOnce.Do(func() {
 		close(h.closed)
-	}
-	h.mu.Lock()
-	h.running = false
-	h.mu.Unlock()
-	if h.conn != nil {
-		return h.conn.Close()
-	}
-	return nil
+		h.mu.Lock()
+		h.running = false
+		conn := h.conn
+		h.mu.Unlock()
+		if conn != nil {
+			closeErr = conn.Close()
+		}
+	})
+	return closeErr
 }
 
 // readLoop reads frames from the Plugin Host and dispatches responses.
 func (h *PluginHost) readLoop() {
 	defer func() {
-		select {
-		case <-h.closed:
-		default:
+		// Use closeOnce to safely close the channel (may race with Close()).
+		h.closeOnce.Do(func() {
 			close(h.closed)
-		}
+		})
 		h.mu.Lock()
 		h.running = false
 		h.mu.Unlock()
@@ -162,7 +161,12 @@ func (h *PluginHost) readLoop() {
 			ch, ok := h.pending[resp.ID]
 			h.mu.Unlock()
 			if ok {
-				ch <- &resp
+				// Non-blocking send: if Forward() already returned (timeout/cancel),
+				// the buffered channel absorbs the value without blocking.
+				select {
+				case ch <- &resp:
+				default:
+				}
 			}
 
 		case protocol.FrameTypeEvent:

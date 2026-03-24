@@ -128,18 +128,20 @@ func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session
 
 	existing.Status = snap.Status
 	existing.UpdatedAt = time.Now().UnixMilli()
+	// Only overwrite fields that the snapshot explicitly sets (non-nil).
+	// PhaseStart sets StartedAt and clears EndedAt/RuntimeMs.
+	// PhaseEnd/Error sets EndedAt and RuntimeMs, preserving StartedAt.
 	if snap.StartedAt != nil {
 		existing.StartedAt = snap.StartedAt
+		// New start clears terminal fields.
+		existing.EndedAt = nil
+		existing.RuntimeMs = nil
 	}
 	if snap.EndedAt != nil {
 		existing.EndedAt = snap.EndedAt
 	}
 	if snap.RuntimeMs != nil {
 		existing.RuntimeMs = snap.RuntimeMs
-	}
-	if event.Phase == PhaseStart {
-		existing.EndedAt = nil
-		existing.RuntimeMs = nil
 	}
 
 	return existing

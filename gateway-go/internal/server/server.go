@@ -119,6 +119,8 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 // StartAndListen starts the server and returns its actual address (useful with port ":0").
+// The caller must call Close() to stop the server; the serve goroutine is tied to
+// the http.Server lifecycle and will exit when Shutdown is called.
 func (s *Server) StartAndListen(ctx context.Context) (net.Addr, error) {
 	mux := s.buildMux()
 
@@ -138,7 +140,11 @@ func (s *Server) StartAndListen(ctx context.Context) (net.Addr, error) {
 	s.startedAt = time.Now()
 	s.ready.Store(true)
 
-	go s.httpServer.Serve(ln)
+	go func() {
+		if err := s.httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.logger.Error("serve error", "error", err)
+		}
+	}()
 
 	return ln.Addr(), nil
 }
@@ -184,8 +190,7 @@ func (s *Server) buildMux() *http.ServeMux {
 
 // handleHealth responds with gateway health status.
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	s.writeJSON(w, http.StatusOK, map[string]any{
 		"status":  "ok",
 		"version": s.version,
 		"runtime": "go",
@@ -200,9 +205,18 @@ func (s *Server) handleReady(w http.ResponseWriter, _ *http.Request) {
 	if !ready {
 		status = http.StatusServiceUnavailable
 	}
+	s.writeJSON(w, status, map[string]any{"ready": ready})
+}
+
+// writeJSON encodes v as JSON to the response writer, logging any encoding errors.
+func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]any{"ready": ready})
+	if status != http.StatusOK {
+		w.WriteHeader(status)
+	}
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		s.logger.Error("json encode error", "error", err)
+	}
 }
 
 // handleRPC processes HTTP JSON-RPC requests via the dispatcher.
@@ -214,18 +228,14 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(protocol.NewResponseError("", protocol.NewError(
+		s.writeJSON(w, http.StatusBadRequest, protocol.NewResponseError("", protocol.NewError(
 			protocol.ErrInvalidRequest, "invalid JSON",
 		)))
 		return
 	}
 
 	if req.Method == "" || req.ID == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(protocol.NewResponseError(req.ID, protocol.NewError(
+		s.writeJSON(w, http.StatusBadRequest, protocol.NewResponseError(req.ID, protocol.NewError(
 			protocol.ErrMissingParam, "method and id are required",
 		)))
 		return
@@ -238,14 +248,11 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		Params: req.Params,
 	}
 	resp := s.dispatcher.Dispatch(r.Context(), frame)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	s.writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	s.writeJSON(w, http.StatusOK, map[string]string{
 		"service": "deneb-gateway",
 		"runtime": "go",
 		"version": s.version,

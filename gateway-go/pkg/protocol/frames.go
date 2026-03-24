@@ -69,7 +69,14 @@ func NewError(code, message string) *ErrorShape {
 }
 
 // NewRequestFrame creates a new RequestFrame with optional params.
+// Both id and method must be non-empty.
 func NewRequestFrame(id, method string, params any) (*RequestFrame, error) {
+	if id == "" {
+		return nil, fmt.Errorf("request id must not be empty")
+	}
+	if method == "" {
+		return nil, fmt.Errorf("method must not be empty")
+	}
 	var raw json.RawMessage
 	if params != nil {
 		b, err := json.Marshal(params)

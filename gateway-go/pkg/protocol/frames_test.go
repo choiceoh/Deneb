@@ -54,6 +54,17 @@ func TestNewRequestFrameNilParams(t *testing.T) {
 	}
 }
 
+func TestNewRequestFrameValidation(t *testing.T) {
+	_, err := NewRequestFrame("", "health", nil)
+	if err == nil {
+		t.Error("expected error for empty id")
+	}
+	_, err = NewRequestFrame("req-1", "", nil)
+	if err == nil {
+		t.Error("expected error for empty method")
+	}
+}
+
 func TestResponseFrameOK(t *testing.T) {
 	resp, err := NewResponseOK("resp-1", map[string]string{"status": "ok"})
 	if err != nil {
