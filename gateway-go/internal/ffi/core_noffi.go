@@ -189,6 +189,12 @@ var knownErrorCodes = map[string]bool{
 	"DEPENDENCY_FAILED": true, "FEATURE_DISABLED": true,
 }
 
+// ValidateParams is a pure-Go fallback that always returns valid=false with
+// an "unavailable" error since schema validation requires the Rust library.
+func ValidateParams(method, jsonStr string) (valid bool, errorsJSON []byte, err error) {
+	return false, nil, errors.New("ffi: schema validation requires Rust FFI (not available)")
+}
+
 // ValidateErrorCode is a pure-Go fallback for error code validation.
 func ValidateErrorCode(code string) bool {
 	return knownErrorCodes[code]

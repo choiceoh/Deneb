@@ -392,6 +392,67 @@ pub unsafe extern "C" fn deneb_ml_rerank(
     })
 }
 
+// ---------------------------------------------------------------------------
+// Protocol schema validation FFI (validates RPC parameters in Rust)
+// ---------------------------------------------------------------------------
+
+/// C FFI: Validate RPC parameters for a given method name.
+/// Returns 0 if valid, positive N if validation failed (N errors written to `errors_out`),
+/// negative on error (-1 = null ptr, -2 = invalid UTF-8, -3 = unknown method, -4 = input too large).
+///
+/// # Safety
+/// All pointers must be valid for their respective lengths.
+/// `errors_out` must be writable for `errors_out_len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_validate_params(
+    method_ptr: *const u8,
+    method_len: usize,
+    json_ptr: *const u8,
+    json_len: usize,
+    errors_out: *mut u8,
+    errors_out_len: usize,
+) -> i32 {
+    if method_ptr.is_null() || json_ptr.is_null() {
+        return -1;
+    }
+    if json_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let method_slice = std::slice::from_raw_parts(method_ptr, method_len);
+    let json_slice = std::slice::from_raw_parts(json_ptr, json_len);
+
+    ffi_catch(-99, move || {
+        let method_str = match std::str::from_utf8(method_slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let json_str = match std::str::from_utf8(json_slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+
+        match protocol::validation::validate_params(method_str, json_str) {
+            Ok(result) => {
+                if result.valid {
+                    0
+                } else {
+                    // Write errors as JSON to output buffer.
+                    let json_bytes =
+                        serde_json::to_vec(&result.errors).unwrap_or_default();
+                    if !errors_out.is_null() && !json_bytes.is_empty() {
+                        let write_len = json_bytes.len().min(errors_out_len);
+                        let out = std::slice::from_raw_parts_mut(errors_out, errors_out_len);
+                        out[..write_len].copy_from_slice(&json_bytes[..write_len]);
+                    }
+                    result.errors.len() as i32
+                }
+            }
+            Err(protocol::validation::ValidateParamsError::UnknownMethod(_)) => -3,
+            Err(protocol::validation::ValidateParamsError::InvalidJson(_)) => -5,
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

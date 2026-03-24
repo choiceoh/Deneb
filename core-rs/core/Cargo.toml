@@ -37,6 +37,8 @@ napi-derive = { version = "2", optional = true }
 
 # Regex (ReDoS-safe by design)
 regex.workspace = true
+# Fancy regex for patterns with lookahead/lookbehind (e.g., secret ref ID validation).
+fancy-regex.workspace = true
 once_cell.workspace = true
 
 # Compression (PNG encoding)

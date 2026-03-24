@@ -150,3 +150,31 @@ pub fn is_retryable_error_code(code: String) -> bool {
         .map(|c| c.is_retryable())
         .unwrap_or(false)
 }
+
+// ---------------------------------------------------------------------------
+// Protocol schema validation (Phase 3 — RPC parameter validation in Rust)
+// ---------------------------------------------------------------------------
+
+/// Validate RPC parameters for a given method name.
+/// Returns a JSON string with the validation result: `{ "valid": true/false, "errors": [...] }`.
+/// Throws if the method name is unknown or JSON is invalid.
+#[napi]
+pub fn validate_params(method: String, json: String) -> Result<String> {
+    if json.len() > MAX_JSON_BYTES {
+        return Err(Error::from_reason(format!(
+            "params JSON exceeds size limit ({} > {} bytes)",
+            json.len(),
+            MAX_JSON_BYTES
+        )));
+    }
+    match deneb_core::protocol::validation::validate_params(&method, &json) {
+        Ok(result) => serde_json::to_string(&result)
+            .map_err(|e| Error::from_reason(format!("serialization error: {e}"))),
+        Err(deneb_core::protocol::validation::ValidateParamsError::UnknownMethod(m)) => {
+            Err(Error::from_reason(format!("unknown method: {m}")))
+        }
+        Err(deneb_core::protocol::validation::ValidateParamsError::InvalidJson(e)) => {
+            Err(Error::from_reason(format!("invalid JSON: {e}")))
+        }
+    }
+}

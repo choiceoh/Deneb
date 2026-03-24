@@ -150,6 +150,7 @@ version = "0.1.0"
 dependencies = [
  "deneb-ml",
  "deneb-vega",
+ "fancy-regex",
  "flate2",
  "jsonschema",
  "memchr",
