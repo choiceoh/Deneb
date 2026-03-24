@@ -17,12 +17,12 @@ For user-facing config docs, see [Configuration](/gateway/configuration). For th
 
 The config system has four layers:
 
-| Layer | Location | Purpose |
-| --- | --- | --- |
-| **Types** | `src/config/types.*.ts` | TypeScript type definitions |
-| **Schemas** | `src/config/zod-schema.*.ts` | Zod validation schemas |
-| **Defaults** | `src/config/defaults.ts` | Runtime default application |
-| **I/O** | `src/config/io*.ts` | Read, write, cache, reload |
+| Layer        | Location                     | Purpose                     |
+| ------------ | ---------------------------- | --------------------------- |
+| **Types**    | `src/config/types.*.ts`      | TypeScript type definitions |
+| **Schemas**  | `src/config/zod-schema.*.ts` | Zod validation schemas      |
+| **Defaults** | `src/config/defaults.ts`     | Runtime default application |
+| **I/O**      | `src/config/io*.ts`          | Read, write, cache, reload  |
 
 All layers must stay in sync when adding or changing config fields.
 
@@ -46,6 +46,7 @@ All layers must stay in sync when adding or changing config fields.
     - Add a JSDoc comment with a brief description and the default value
     - Use strict types — avoid `any`, prefer unions, literals, and branded types
     - Use `Record<string, T>` for open-ended maps, not index signatures
+
   </Step>
 
   <Step title="Add the Zod schema">
@@ -68,6 +69,7 @@ All layers must stay in sync when adding or changing config fields.
     - Use `z.literal()` for fixed values and `z.enum()` for known string sets
     - Use discriminated unions (`z.discriminatedUnion()`) for variant types (see `SecretRefSchema`)
     - Mark sensitive fields with the `sensitive()` wrapper from `zod-schema.sensitive.ts`
+
   </Step>
 
   <Step title="Apply defaults">
@@ -86,12 +88,14 @@ All layers must stay in sync when adding or changing config fields.
     - Only set defaults for fields that have meaningful non-zero defaults
     - Defaults are applied **after** validation, not before — the schema must accept `undefined`
     - Do not mutate fields the user explicitly set (always check `=== undefined`)
+
   </Step>
 
   <Step title="Update documentation">
     Add the field to `docs/gateway/configuration-reference.md` in the correct section. If the field introduces a new user-facing capability, add a task entry in `docs/gateway/configuration.md` under **Common tasks**.
 
     Follow [Docs Syntax Rules](/gateway/configuration-guidelines#documentation-conventions) below.
+
   </Step>
 
   <Step title="Add tests">
@@ -224,15 +228,19 @@ Zod error messages should be actionable. Include the expected format or allowed 
 
 ```typescript
 // Good
-z.string().regex(/^[a-z][a-z0-9-]*$/, 'Must be lowercase alphanumeric with hyphens (example: "my-plugin")')
+z.string().regex(
+  /^[a-z][a-z0-9-]*$/,
+  'Must be lowercase alphanumeric with hyphens (example: "my-plugin")',
+);
 
 // Bad
-z.string().regex(/^[a-z][a-z0-9-]*$/)
+z.string().regex(/^[a-z][a-z0-9-]*$/);
 ```
 
 ### Validation issues
 
 The validation pipeline maps Zod errors to `ConfigValidationIssue` objects with:
+
 - `path` — dot-notation path to the failing field
 - `message` — human-readable error
 - `allowedValues` — list of valid options (auto-extracted from Zod enums)
@@ -252,6 +260,7 @@ Config writes use atomic file operations (write to temp, rename). Never write di
 ### Integrity guards
 
 The integrity guard (`integrity-guard.ts`) runs before every write and blocks:
+
 - Removal of critical top-level keys (`gateway`, `models`, `agents`, `channels`, `secrets`, `auth`)
 - Bulk key removal (keys present before but missing after)
 - Size drops below 40% of previous file size
@@ -270,14 +279,14 @@ Config reads can be cached via `DENEB_CONFIG_CACHE_MS`. Always call cache-clear 
 
 When adding config fields, decide whether changes can be applied at runtime (hot reload) or require a gateway restart:
 
-| Hot-reloadable | Restart required |
-| --- | --- |
-| `channels.*` | `gateway.*` (port, bind, auth, TLS) |
-| `agents.*`, `models.*` | `discovery` |
-| `hooks`, `cron` | `canvasHost` |
-| `session`, `messages` | `plugins` (install/uninstall) |
-| `tools`, `browser`, `skills` | |
-| `ui`, `logging`, `bindings` | |
+| Hot-reloadable               | Restart required                    |
+| ---------------------------- | ----------------------------------- |
+| `channels.*`                 | `gateway.*` (port, bind, auth, TLS) |
+| `agents.*`, `models.*`       | `discovery`                         |
+| `hooks`, `cron`              | `canvasHost`                        |
+| `session`, `messages`        | `plugins` (install/uninstall)       |
+| `tools`, `browser`, `skills` |                                     |
+| `ui`, `logging`, `bindings`  |                                     |
 
 Update the reload classification in the gateway reload logic when adding new sections.
 
@@ -293,6 +302,7 @@ Config supports modular composition via `$include`:
 ```
 
 Rules:
+
 - Max include depth: 10 levels
 - Max included file size: 2 MB
 - Circular includes are detected and rejected

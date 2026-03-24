@@ -2,10 +2,7 @@ import path from "node:path";
 import type { AnyAgentTool } from "../agents/tools/common.js";
 import type { ChannelPlugin } from "../channels/plugins/types.js";
 import { registerContextEngineForOwner } from "../context-engine/registry.js";
-import type {
-  GatewayRequestHandler,
-  GatewayRequestHandlers,
-} from "../gateway/server-methods/types.js";
+import type { GatewayRequestHandler } from "../gateway/server-methods/types.js";
 import { registerInternalHook } from "../hooks/internal-hooks.js";
 import type { HookEntry } from "../hooks/types.js";
 import { resolveUserPath } from "../utils.js";
@@ -15,6 +12,12 @@ import { findOverlappingPluginHttpRoute } from "./http-route-overlap.js";
 import { registerPluginInteractiveHandler } from "./interactive.js";
 import { normalizeRegisteredProvider } from "./provider-validation.js";
 import { createEmptyPluginRegistry } from "./registry-empty.js";
+import type {
+  PluginHttpRouteRegistration,
+  PluginOwnedProviderRegistration,
+  PluginRecord,
+  PluginRegistryParams,
+} from "./registry-types.js";
 import { withPluginRuntimePluginIdScope } from "./runtime/gateway-request-scope.js";
 import type { PluginRuntime } from "./runtime/types.js";
 import { defaultSlotIdForKey } from "./slots.js";
@@ -30,9 +33,6 @@ import type {
   DenebPluginCliRegistrar,
   DenebPluginCommandDefinition,
   PluginConversationBindingResolvedEvent,
-  DenebPluginHttpRouteAuth,
-  DenebPluginHttpRouteMatch,
-  DenebPluginHttpRouteHandler,
   DenebPluginHttpRouteParams,
   DenebPluginHookOptions,
   MediaUnderstandingProviderPlugin,
@@ -40,13 +40,8 @@ import type {
   DenebPluginService,
   DenebPluginToolContext,
   DenebPluginToolFactory,
-  PluginConfigUiHint,
   PluginDiagnostic,
-  PluginBundleFormat,
-  PluginFormat,
   PluginLogger,
-  PluginOrigin,
-  PluginKind,
   PluginRegistrationMode,
   PluginHookName,
   PluginHookHandlerMap,
@@ -55,173 +50,26 @@ import type {
   WebSearchProviderPlugin,
 } from "./types.js";
 
-export type PluginToolRegistration = {
-  pluginId: string;
-  pluginName?: string;
-  factory: DenebPluginToolFactory;
-  names: string[];
-  optional: boolean;
-  source: string;
-  rootDir?: string;
-};
-
-export type PluginCliRegistration = {
-  pluginId: string;
-  pluginName?: string;
-  register: DenebPluginCliRegistrar;
-  commands: string[];
-  source: string;
-  rootDir?: string;
-};
-
-export type PluginHttpRouteRegistration = {
-  pluginId?: string;
-  path: string;
-  handler: DenebPluginHttpRouteHandler;
-  auth: DenebPluginHttpRouteAuth;
-  match: DenebPluginHttpRouteMatch;
-  source?: string;
-};
-
-export type PluginChannelRegistration = {
-  pluginId: string;
-  pluginName?: string;
-  plugin: ChannelPlugin;
-  source: string;
-  rootDir?: string;
-};
-
-export type PluginChannelSetupRegistration = {
-  pluginId: string;
-  pluginName?: string;
-  plugin: ChannelPlugin;
-  source: string;
-  enabled: boolean;
-  rootDir?: string;
-};
-
-export type PluginProviderRegistration = {
-  pluginId: string;
-  pluginName?: string;
-  provider: ProviderPlugin;
-  source: string;
-  rootDir?: string;
-};
-
-type PluginOwnedProviderRegistration<T extends { id: string }> = {
-  pluginId: string;
-  pluginName?: string;
-  provider: T;
-  source: string;
-  rootDir?: string;
-};
-
-export type PluginSpeechProviderRegistration =
-  PluginOwnedProviderRegistration<SpeechProviderPlugin>;
-export type PluginMediaUnderstandingProviderRegistration =
-  PluginOwnedProviderRegistration<MediaUnderstandingProviderPlugin>;
-export type PluginImageGenerationProviderRegistration =
-  PluginOwnedProviderRegistration<ImageGenerationProviderPlugin>;
-export type PluginWebSearchProviderRegistration =
-  PluginOwnedProviderRegistration<WebSearchProviderPlugin>;
-
-export type PluginHookRegistration = {
-  pluginId: string;
-  entry: HookEntry;
-  events: string[];
-  source: string;
-  rootDir?: string;
-};
-
-export type PluginServiceRegistration = {
-  pluginId: string;
-  pluginName?: string;
-  service: DenebPluginService;
-  source: string;
-  rootDir?: string;
-};
-
-export type PluginCommandRegistration = {
-  pluginId: string;
-  pluginName?: string;
-  command: DenebPluginCommandDefinition;
-  source: string;
-  rootDir?: string;
-};
-
-export type PluginConversationBindingResolvedHandlerRegistration = {
-  pluginId: string;
-  pluginName?: string;
-  pluginRoot?: string;
-  handler: (event: PluginConversationBindingResolvedEvent) => void | Promise<void>;
-  source: string;
-  rootDir?: string;
-};
-
-export type PluginRecord = {
-  id: string;
-  name: string;
-  version?: string;
-  description?: string;
-  format?: PluginFormat;
-  bundleFormat?: PluginBundleFormat;
-  bundleCapabilities?: string[];
-  kind?: PluginKind;
-  source: string;
-  rootDir?: string;
-  origin: PluginOrigin;
-  workspaceDir?: string;
-  enabled: boolean;
-  status: "loaded" | "disabled" | "error";
-  error?: string;
-  toolNames: string[];
-  hookNames: string[];
-  channelIds: string[];
-  providerIds: string[];
-  speechProviderIds: string[];
-  mediaUnderstandingProviderIds: string[];
-  imageGenerationProviderIds: string[];
-  webSearchProviderIds: string[];
-  gatewayMethods: string[];
-  cliCommands: string[];
-  services: string[];
-  commands: string[];
-  httpRoutes: number;
-  hookCount: number;
-  configSchema: boolean;
-  configUiHints?: Record<string, PluginConfigUiHint>;
-  configJsonSchema?: Record<string, unknown>;
-};
-
-export type PluginRegistry = {
-  plugins: PluginRecord[];
-  tools: PluginToolRegistration[];
-  hooks: PluginHookRegistration[];
-  typedHooks: TypedPluginHookRegistration[];
-  channels: PluginChannelRegistration[];
-  channelSetups: PluginChannelSetupRegistration[];
-  providers: PluginProviderRegistration[];
-  speechProviders: PluginSpeechProviderRegistration[];
-  mediaUnderstandingProviders: PluginMediaUnderstandingProviderRegistration[];
-  imageGenerationProviders: PluginImageGenerationProviderRegistration[];
-  webSearchProviders: PluginWebSearchProviderRegistration[];
-  gatewayHandlers: GatewayRequestHandlers;
-  httpRoutes: PluginHttpRouteRegistration[];
-  cliRegistrars: PluginCliRegistration[];
-  services: PluginServiceRegistration[];
-  commands: PluginCommandRegistration[];
-  conversationBindingResolvedHandlers: PluginConversationBindingResolvedHandlerRegistration[];
-  diagnostics: PluginDiagnostic[];
-};
-
-export type PluginRegistryParams = {
-  logger: PluginLogger;
-  coreGatewayHandlers?: GatewayRequestHandlers;
-  runtime: PluginRuntime;
-  // When true, skip writing to the global plugin command registry during register().
-  // Used by non-activating snapshot loads to avoid leaking commands into the running gateway.
-  suppressGlobalCommands?: boolean;
-};
+// Re-export all types from registry-types for backward compatibility.
+export type {
+  PluginToolRegistration,
+  PluginCliRegistration,
+  PluginHttpRouteRegistration,
+  PluginChannelRegistration,
+  PluginChannelSetupRegistration,
+  PluginProviderRegistration,
+  PluginSpeechProviderRegistration,
+  PluginMediaUnderstandingProviderRegistration,
+  PluginImageGenerationProviderRegistration,
+  PluginWebSearchProviderRegistration,
+  PluginHookRegistration,
+  PluginServiceRegistration,
+  PluginCommandRegistration,
+  PluginConversationBindingResolvedHandlerRegistration,
+  PluginRecord,
+  PluginRegistry,
+  PluginRegistryParams,
+} from "./registry-types.js";
 
 type PluginTypedHookPolicy = {
   allowPromptInjection?: boolean;
