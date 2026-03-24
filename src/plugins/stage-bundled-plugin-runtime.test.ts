@@ -48,6 +48,11 @@ describe("stageBundledPluginRuntime", () => {
     expect(fs.realpathSync(path.join(runtimePluginDir, "node_modules"))).toBe(
       fs.realpathSync(path.join(distPluginDir, "node_modules")),
     );
+    // node_modules symlinks should be relative on Unix for portability.
+    if (process.platform !== "win32") {
+      const linkTarget = fs.readlinkSync(path.join(runtimePluginDir, "node_modules"));
+      expect(path.isAbsolute(linkTarget)).toBe(false);
+    }
     expect(fs.existsSync(path.join(distPluginDir, "node_modules"))).toBe(true);
   });
 
