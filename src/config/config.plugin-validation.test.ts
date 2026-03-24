@@ -5,6 +5,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { clearPluginManifestRegistryCache } from "../plugins/manifest-registry.js";
 import { validateConfigObjectWithPlugins } from "./config.js";
 
+const voiceCallManifestPath = path.join(
+  process.cwd(),
+  "extensions",
+  "voice-call",
+  "deneb.plugin.json",
+);
+const hasVoiceCallExtension = await fs.access(voiceCallManifestPath).then(
+  () => true,
+  () => false,
+);
+
 async function chmodSafeDir(dir: string) {
   if (process.platform === "win32") {
     return;
@@ -145,23 +156,19 @@ describe("config plugin validation", () => {
       dir: manifestlessClaudeBundleDir,
     });
     voiceCallSchemaPluginDir = path.join(suiteHome, "voice-call-schema-plugin");
-    const voiceCallManifestPath = path.join(
-      process.cwd(),
-      "extensions",
-      "voice-call",
-      "deneb.plugin.json",
-    );
-    const voiceCallManifest = JSON.parse(await fs.readFile(voiceCallManifestPath, "utf-8")) as {
-      configSchema?: Record<string, unknown>;
-    };
-    if (!voiceCallManifest.configSchema) {
-      throw new Error("voice-call manifest missing configSchema");
+    if (hasVoiceCallExtension) {
+      const voiceCallManifest = JSON.parse(await fs.readFile(voiceCallManifestPath, "utf-8")) as {
+        configSchema?: Record<string, unknown>;
+      };
+      if (!voiceCallManifest.configSchema) {
+        throw new Error("voice-call manifest missing configSchema");
+      }
+      await writePluginFixture({
+        dir: voiceCallSchemaPluginDir,
+        id: "voice-call-schema-fixture",
+        schema: voiceCallManifest.configSchema,
+      });
     }
-    await writePluginFixture({
-      dir: voiceCallSchemaPluginDir,
-      id: "voice-call-schema-fixture",
-      schema: voiceCallManifest.configSchema,
-    });
     clearPluginManifestRegistryCache();
     // Warm the plugin manifest cache once so path-based validations can reuse
     // parsed manifests across test cases.
@@ -174,7 +181,7 @@ describe("config plugin validation", () => {
             bluebubblesPluginDir,
             bundlePluginDir,
             manifestlessClaudeBundleDir,
-            voiceCallSchemaPluginDir,
+            ...(hasVoiceCallExtension ? [voiceCallSchemaPluginDir] : []),
           ],
         },
       },
@@ -402,61 +409,67 @@ describe("config plugin validation", () => {
     }
   });
 
-  it("accepts voice-call webhookSecurity and streaming guard config fields", async () => {
-    const res = validateInSuite({
-      agents: { list: [{ id: "pi" }] },
-      plugins: {
-        enabled: true,
-        load: { paths: [voiceCallSchemaPluginDir] },
-        entries: {
-          "voice-call-schema-fixture": {
-            config: {
-              provider: "twilio",
-              webhookSecurity: {
-                allowedHosts: ["voice.example.com"],
-                trustForwardingHeaders: false,
-                trustedProxyIPs: ["127.0.0.1"],
+  (hasVoiceCallExtension ? it : it.skip)(
+    "accepts voice-call webhookSecurity and streaming guard config fields",
+    async () => {
+      const res = validateInSuite({
+        agents: { list: [{ id: "pi" }] },
+        plugins: {
+          enabled: true,
+          load: { paths: [voiceCallSchemaPluginDir] },
+          entries: {
+            "voice-call-schema-fixture": {
+              config: {
+                provider: "twilio",
+                webhookSecurity: {
+                  allowedHosts: ["voice.example.com"],
+                  trustForwardingHeaders: false,
+                  trustedProxyIPs: ["127.0.0.1"],
+                },
+                streaming: {
+                  enabled: true,
+                  preStartTimeoutMs: 5000,
+                  maxPendingConnections: 16,
+                  maxPendingConnectionsPerIp: 4,
+                  maxConnections: 64,
+                },
+                staleCallReaperSeconds: 180,
               },
-              streaming: {
-                enabled: true,
-                preStartTimeoutMs: 5000,
-                maxPendingConnections: 16,
-                maxPendingConnectionsPerIp: 4,
-                maxConnections: 64,
-              },
-              staleCallReaperSeconds: 180,
             },
           },
         },
-      },
-    });
-    expect(res.ok).toBe(true);
-  });
+      });
+      expect(res.ok).toBe(true);
+    },
+  );
 
-  it("accepts voice-call OpenAI TTS speed, instructions, and baseUrl config fields", async () => {
-    const res = validateInSuite({
-      agents: { list: [{ id: "pi" }] },
-      plugins: {
-        enabled: true,
-        load: { paths: [voiceCallSchemaPluginDir] },
-        entries: {
-          "voice-call-schema-fixture": {
-            config: {
-              tts: {
-                openai: {
-                  baseUrl: "http://localhost:8880/v1",
-                  voice: "alloy",
-                  speed: 1.5,
-                  instructions: "Speak in a cheerful tone",
+  (hasVoiceCallExtension ? it : it.skip)(
+    "accepts voice-call OpenAI TTS speed, instructions, and baseUrl config fields",
+    async () => {
+      const res = validateInSuite({
+        agents: { list: [{ id: "pi" }] },
+        plugins: {
+          enabled: true,
+          load: { paths: [voiceCallSchemaPluginDir] },
+          entries: {
+            "voice-call-schema-fixture": {
+              config: {
+                tts: {
+                  openai: {
+                    baseUrl: "http://localhost:8880/v1",
+                    voice: "alloy",
+                    speed: 1.5,
+                    instructions: "Speak in a cheerful tone",
+                  },
                 },
               },
             },
           },
         },
-      },
-    });
-    expect(res.ok).toBe(true);
-  });
+      });
+      expect(res.ok).toBe(true);
+    },
+  );
 
   it("accepts known plugin ids and valid channel/heartbeat enums", async () => {
     const res = validateInSuite({

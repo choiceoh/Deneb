@@ -67,7 +67,7 @@ describe("resolveChannelCapabilities", () => {
   it("matches account keys case-insensitively", () => {
     const cfg = {
       channels: {
-        slack: {
+        telegram: {
           accounts: {
             Family: { capabilities: ["threads"] },
           },
@@ -78,13 +78,13 @@ describe("resolveChannelCapabilities", () => {
     expect(
       resolveChannelCapabilities({
         cfg,
-        channel: "slack",
+        channel: "telegram",
         accountId: "family",
       }),
     ).toEqual(["threads"]);
   });
 
-  it("supports msteams capabilities", () => {
+  it("supports plugin channel capabilities", () => {
     setActivePluginRegistry(
       createTestRegistry([
         {
@@ -126,10 +126,10 @@ describe("resolveChannelCapabilities", () => {
     ).toBeUndefined();
   });
 
-  it("handles Slack object-format capabilities gracefully", () => {
+  it("handles object-format capabilities gracefully on registered channel", () => {
     const cfg = {
       channels: {
-        slack: {
+        telegram: {
           capabilities: { interactiveReplies: true },
         },
       },
@@ -138,7 +138,7 @@ describe("resolveChannelCapabilities", () => {
     expect(
       resolveChannelCapabilities({
         cfg,
-        channel: "slack",
+        channel: "telegram",
       }),
     ).toBeUndefined();
   });
@@ -162,7 +162,6 @@ const createStubPlugin = (id: string): ChannelPlugin => ({
 
 const baseRegistry = createTestRegistry([
   { pluginId: "telegram", source: "test", plugin: createStubPlugin("telegram") },
-  { pluginId: "slack", source: "test", plugin: createStubPlugin("slack") },
 ]);
 
 const createMSTeamsPlugin = (): ChannelPlugin => createStubPlugin("msteams");

@@ -18,9 +18,9 @@ describe("config validation fail-closed behavior", () => {
         agents: { list: [{ id: "main" }] },
         nope: true,
         channels: {
-          whatsapp: {
+          telegram: {
             dmPolicy: "allowlist",
-            allowFrom: ["+1234567890"],
+            allowFrom: ["123456789"],
           },
         },
       },
@@ -102,16 +102,16 @@ describe("config validation fail-closed behavior", () => {
       {
         agents: { list: [{ id: "main" }] },
         channels: {
-          whatsapp: {
+          telegram: {
             dmPolicy: "allowlist",
-            allowFrom: ["+1234567890"],
+            allowFrom: ["123456789"],
           },
         },
       },
       async () => {
         const cfg = loadConfig();
-        expect(cfg.channels?.whatsapp?.dmPolicy).toBe("allowlist");
-        expect(cfg.channels?.whatsapp?.allowFrom).toEqual(["+1234567890"]);
+        expect(cfg.channels?.telegram?.dmPolicy).toBe("allowlist");
+        expect(cfg.channels?.telegram?.allowFrom).toEqual(["123456789"]);
       },
     );
   });

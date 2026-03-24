@@ -8,7 +8,6 @@ import {
 import {
   bundledChannelPlugins,
   bundledChannelRuntimeSetters,
-  getBundledChannelPlugin,
   requireBundledChannelPlugin,
 } from "../bundled.js";
 import type { ChannelPlugin } from "../types.js";
@@ -163,7 +162,22 @@ function expectClearedSessionBinding(params: {
   ).toBeNull();
 }
 
-const telegramDescribeMessageToolMock: unknown = null;
+// Simple mock function for test contract registry (only used by test files)
+function createMockFn() {
+  let returnValue: unknown;
+  const fn = (..._args: unknown[]) => returnValue;
+  fn.mockReset = () => {
+    returnValue = undefined;
+    return fn;
+  };
+  fn.mockReturnValue = (val: unknown) => {
+    returnValue = val;
+    return fn;
+  };
+  return fn;
+}
+
+const telegramDescribeMessageToolMock = createMockFn();
 
 bundledChannelRuntimeSetters.setTelegramRuntime({
   channel: {
@@ -183,54 +197,6 @@ export const pluginContractRegistry: PluginContractEntry[] = bundledChannelPlugi
 );
 
 export const actionContractRegistry: ActionsContractEntry[] = [
-  {
-    id: "mattermost",
-    plugin: getBundledChannelPlugin("mattermost")!,
-    unsupportedAction: "poll",
-    cases: [
-      {
-        name: "configured account exposes send and react",
-        cfg: {
-          channels: {
-            mattermost: {
-              enabled: true,
-              botToken: "test-token",
-              baseUrl: "https://chat.example.com",
-            },
-          },
-        } as DenebConfig,
-        expectedActions: ["send", "react"],
-        expectedCapabilities: ["buttons"],
-      },
-      {
-        name: "reactions can be disabled while send stays available",
-        cfg: {
-          channels: {
-            mattermost: {
-              enabled: true,
-              botToken: "test-token",
-              baseUrl: "https://chat.example.com",
-              actions: { reactions: false },
-            },
-          },
-        } as DenebConfig,
-        expectedActions: ["send"],
-        expectedCapabilities: ["buttons"],
-      },
-      {
-        name: "missing bot credentials disables the actions surface",
-        cfg: {
-          channels: {
-            mattermost: {
-              enabled: true,
-            },
-          },
-        } as DenebConfig,
-        expectedActions: [],
-        expectedCapabilities: [],
-      },
-    ],
-  },
   {
     id: "telegram",
     plugin: requireBundledChannelPlugin("telegram"),
@@ -252,71 +218,9 @@ export const actionContractRegistry: ActionsContractEntry[] = [
   },
 ];
 
-export const setupContractRegistry: SetupContractEntry[] = [
-  {
-    id: "mattermost",
-    plugin: getBundledChannelPlugin("mattermost")!,
-    cases: [
-      {
-        name: "default account stores token and normalized base URL",
-        cfg: {} as DenebConfig,
-        input: {
-          botToken: "test-token",
-          httpUrl: "https://chat.example.com/",
-        },
-        expectedAccountId: "default",
-        assertPatchedConfig: (cfg) => {
-          expect(cfg.channels?.mattermost?.enabled).toBe(true);
-          expect(cfg.channels?.mattermost?.botToken).toBe("test-token");
-          expect(cfg.channels?.mattermost?.baseUrl).toBe("https://chat.example.com");
-        },
-      },
-      {
-        name: "missing credentials are rejected",
-        cfg: {} as DenebConfig,
-        input: {
-          httpUrl: "",
-        },
-        expectedAccountId: "default",
-        expectedValidation: "Mattermost requires --bot-token and --http-url (or --use-env).",
-      },
-    ],
-  },
-];
+export const setupContractRegistry: SetupContractEntry[] = [];
 
-export const statusContractRegistry: StatusContractEntry[] = [
-  {
-    id: "mattermost",
-    plugin: getBundledChannelPlugin("mattermost")!,
-    cases: [
-      {
-        name: "configured account preserves connectivity details in the snapshot",
-        cfg: {
-          channels: {
-            mattermost: {
-              enabled: true,
-              botToken: "test-token",
-              baseUrl: "https://chat.example.com",
-            },
-          },
-        } as DenebConfig,
-        runtime: {
-          accountId: "default",
-          connected: true,
-          lastConnectedAt: 1234,
-        },
-        probe: { ok: true },
-        assertSnapshot: (snapshot) => {
-          expect(snapshot.accountId).toBe("default");
-          expect(snapshot.enabled).toBe(true);
-          expect(snapshot.configured).toBe(true);
-          expect(snapshot.connected).toBe(true);
-          expect(snapshot.baseUrl).toBe("https://chat.example.com");
-        },
-      },
-    ],
-  },
-];
+export const statusContractRegistry: StatusContractEntry[] = [];
 
 export const surfaceContractRegistry: SurfaceContractEntry[] = bundledChannelPlugins.map(
   (plugin) => ({

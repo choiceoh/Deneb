@@ -19,12 +19,12 @@ describe("config validation allowed-values metadata", () => {
 
   it("keeps native enum messages while attaching allowed values metadata", () => {
     const result = validateConfigObjectRaw({
-      channels: { signal: { dmPolicy: "maybe" } },
+      channels: { telegram: { dmPolicy: "maybe" } },
     });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      const issue = result.issues.find((entry) => entry.path === "channels.signal.dmPolicy");
+      const issue = result.issues.find((entry) => entry.path === "channels.telegram.dmPolicy");
       expect(issue).toBeDefined();
       expect(issue?.message).toContain("expected one of");
       expect(issue?.message).not.toContain("(allowed:");
