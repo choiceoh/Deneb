@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
@@ -27,16 +29,22 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
+	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
+	"github.com/choiceoh/deneb/gateway-go/internal/node"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
-	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
+	"github.com/choiceoh/deneb/gateway-go/internal/secret"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/skill"
+	"github.com/choiceoh/deneb/gateway-go/internal/talk"
+	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
+	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"nhooyr.io/websocket"
 )
@@ -87,6 +95,16 @@ type Server struct {
 	activity        *monitoring.ActivityTracker
 	channelEvents   *monitoring.ChannelEventTracker
 	vegaClient      *vega.Client
+
+	// Phase 3: Advanced workflow subsystems.
+	approvals  *approval.Store
+	nodes      *node.Manager
+	devices    *device.Manager
+	agents     *agent.Store
+	skills     *skill.Manager
+	wizardEng  *wizard.Engine
+	secrets    *secret.Resolver
+	talkState  *talk.State
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
@@ -190,6 +208,16 @@ func New(addr string, opts ...Option) *Server {
 		s.authManager = provider.NewAuthManager(s.providers, nil, s.logger)
 	}
 
+	// Phase 3: Advanced workflow subsystems.
+	s.approvals = approval.NewStore()
+	s.nodes = node.NewManager()
+	s.devices = device.NewManager()
+	s.agents = agent.NewStore()
+	s.skills = skill.NewManager()
+	s.wizardEng = wizard.NewEngine()
+	s.secrets = secret.NewResolver()
+	s.talkState = talk.NewState()
+
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.registerBuiltinMethods()
 	rpc.RegisterBuiltinMethods(s.dispatcher, rpc.Deps{
@@ -200,6 +228,7 @@ func New(addr string, opts ...Option) *Server {
 	})
 	s.registerExtendedMethods()
 	s.registerPhase2Methods()
+	s.registerAdvancedWorkflowMethods()
 
 	// Wire provider RPC methods if a provider registry is configured.
 	if s.providers != nil {
@@ -889,6 +918,65 @@ func (s *Server) registerPhase2Methods() {
 			}
 			return nil
 		},
+	})
+}
+
+// registerAdvancedWorkflowMethods registers Phase 3 RPC methods for exec approvals,
+// nodes, devices, agents, cron advanced, config advanced, skills, wizard, secrets, and talk.
+func (s *Server) registerAdvancedWorkflowMethods() {
+	broadcastFn := func(event string, payload any) (int, []error) {
+		return s.broadcaster.Broadcast(event, payload)
+	}
+
+	rpc.RegisterApprovalMethods(s.dispatcher, rpc.ApprovalDeps{
+		Store:       s.approvals,
+		Broadcaster: broadcastFn,
+	})
+
+	canvasHost := ""
+	if s.runtimeCfg != nil {
+		canvasHost = fmt.Sprintf("http://%s:%d", s.runtimeCfg.BindHost, s.runtimeCfg.Port)
+	}
+	rpc.RegisterNodeMethods(s.dispatcher, rpc.NodeDeps{
+		Nodes:       s.nodes,
+		Broadcaster: broadcastFn,
+		CanvasHost:  canvasHost,
+	})
+
+	rpc.RegisterDeviceMethods(s.dispatcher, rpc.DeviceDeps{
+		Devices:     s.devices,
+		Broadcaster: broadcastFn,
+	})
+
+	rpc.RegisterCronAdvancedMethods(s.dispatcher, rpc.CronAdvancedDeps{
+		Cron:        s.cron,
+		Broadcaster: broadcastFn,
+	})
+
+	rpc.RegisterAgentsMethods(s.dispatcher, rpc.AgentsDeps{
+		Agents:      s.agents,
+		Broadcaster: broadcastFn,
+	})
+
+	rpc.RegisterConfigAdvancedMethods(s.dispatcher, rpc.ConfigAdvancedDeps{
+		Broadcaster: broadcastFn,
+	})
+
+	rpc.RegisterSkillMethods(s.dispatcher, rpc.SkillDeps{
+		Skills:      s.skills,
+		Broadcaster: broadcastFn,
+	})
+
+	rpc.RegisterWizardMethods(s.dispatcher, rpc.WizardDeps{
+		Engine: s.wizardEng,
+	})
+
+	rpc.RegisterSecretMethods(s.dispatcher, rpc.SecretDeps{
+		Resolver: s.secrets,
+	})
+
+	rpc.RegisterTalkMethods(s.dispatcher, rpc.TalkDeps{
+		Talk: s.talkState,
 	})
 }
 

@@ -7,9 +7,17 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/node"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
+	"github.com/choiceoh/deneb/gateway-go/internal/secret"
+	"github.com/choiceoh/deneb/gateway-go/internal/skill"
+	"github.com/choiceoh/deneb/gateway-go/internal/talk"
+	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -138,6 +146,19 @@ func fullDispatcher() *Dispatcher {
 		Hooks:     hooks.NewRegistry(testLogger()),
 	})
 
+	// Phase 3: Native workflow methods (previously bridge-forwarded).
+	broadcastFn := func(event string, payload any) (int, []error) { return 0, nil }
+	RegisterApprovalMethods(d, ApprovalDeps{Store: approval.NewStore(), Broadcaster: broadcastFn})
+	RegisterNodeMethods(d, NodeDeps{Nodes: node.NewManager(), Broadcaster: broadcastFn})
+	RegisterDeviceMethods(d, DeviceDeps{Devices: device.NewManager(), Broadcaster: broadcastFn})
+	RegisterCronAdvancedMethods(d, CronAdvancedDeps{Cron: cron.NewScheduler(testLogger()), Broadcaster: broadcastFn})
+	RegisterAgentsMethods(d, AgentsDeps{Agents: agent.NewStore(), Broadcaster: broadcastFn})
+	RegisterConfigAdvancedMethods(d, ConfigAdvancedDeps{Broadcaster: broadcastFn})
+	RegisterSkillMethods(d, SkillDeps{Skills: skill.NewManager(), Broadcaster: broadcastFn})
+	RegisterWizardMethods(d, WizardDeps{Engine: wizard.NewEngine()})
+	RegisterSecretMethods(d, SecretDeps{Resolver: secret.NewResolver()})
+	RegisterTalkMethods(d, TalkDeps{Talk: talk.NewState()})
+
 	// Bridge methods with a nil-returning forwarder (for registration only).
 	RegisterBridgeMethods(d, BridgeDeps{
 		ForwarderFunc: func() Forwarder { return nil },
@@ -151,7 +172,6 @@ func fullDispatcher() *Dispatcher {
 
 	// Event subscription methods (normally via RegisterEventsMethods with Broadcaster).
 	for _, m := range []string{
-		"node.event",
 		"subscribe.session", "unsubscribe.session",
 		"subscribe.session.messages", "unsubscribe.session.messages",
 		"sessions.subscribe", "sessions.unsubscribe",
@@ -230,11 +250,11 @@ func TestBridgeForwardSuccess(t *testing.T) {
 		ForwarderFunc: func() Forwarder { return fwd },
 	})
 
-	// Pick a bridge-forwarded method.
+	// Pick a bridge-forwarded method (still forwarded after Phase 3 port).
 	req := &protocol.RequestFrame{
 		Type:   "req",
 		ID:     "bridge-1",
-		Method: "agents.list",
+		Method: "send",
 		Params: json.RawMessage("{}"),
 	}
 	resp := d.Dispatch(context.Background(), req)
@@ -257,7 +277,7 @@ func TestBridgeForwardNilBridge(t *testing.T) {
 	req := &protocol.RequestFrame{
 		Type:   "req",
 		ID:     "bridge-nil-1",
-		Method: "agents.list",
+		Method: "send",
 		Params: json.RawMessage("{}"),
 	}
 	resp := d.Dispatch(context.Background(), req)
@@ -287,7 +307,7 @@ func TestBridgeForwardError(t *testing.T) {
 	req := &protocol.RequestFrame{
 		Type:   "req",
 		ID:     "bridge-err-1",
-		Method: "config.set",
+		Method: "tts.status",
 		Params: json.RawMessage("{}"),
 	}
 	resp := d.Dispatch(context.Background(), req)
