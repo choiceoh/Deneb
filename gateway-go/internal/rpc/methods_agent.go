@@ -341,7 +341,7 @@ func sessionsLifecycle(deps ExtendedDeps) HandlerFunc {
 			})
 		}
 
-		// Fire session lifecycle hooks.
+		// Fire session lifecycle hooks with panic recovery.
 		if deps.Hooks != nil {
 			var hookEvent hooks.Event
 			switch session.LifecyclePhase(p.Phase) {
@@ -351,10 +351,16 @@ func sessionsLifecycle(deps ExtendedDeps) HandlerFunc {
 				hookEvent = hooks.EventSessionEnd
 			}
 			if hookEvent != "" {
-				go deps.Hooks.Fire(context.Background(), hookEvent, map[string]string{
-					"DENEB_SESSION_KEY": p.Key,
-					"DENEB_PHASE":      p.Phase,
-				})
+				evt := hookEvent
+				key := p.Key
+				phase := p.Phase
+				go func() {
+					defer func() { recover() }()
+					deps.Hooks.Fire(context.Background(), evt, map[string]string{
+						"DENEB_SESSION_KEY": key,
+						"DENEB_PHASE":      phase,
+					})
+				}()
 			}
 		}
 

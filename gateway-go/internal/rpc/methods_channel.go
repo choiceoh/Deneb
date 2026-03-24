@@ -32,9 +32,12 @@ func RegisterChannelLifecycleMethods(d *Dispatcher, deps ChannelLifecycleDeps) {
 // channels.changed event after a successful channel operation.
 func emitChannelLifecycleEvent(deps ChannelLifecycleDeps, id string, hookEvent hooks.Event, action string) {
 	if deps.Hooks != nil {
-		go deps.Hooks.Fire(context.Background(), hookEvent, map[string]string{
-			"DENEB_CHANNEL_ID": id,
-		})
+		go func() {
+			defer func() { recover() }()
+			deps.Hooks.Fire(context.Background(), hookEvent, map[string]string{
+				"DENEB_CHANNEL_ID": id,
+			})
+		}()
 	}
 	if deps.Broadcaster != nil {
 		deps.Broadcaster.Broadcast("channels.changed", map[string]any{

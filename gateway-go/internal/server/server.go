@@ -72,6 +72,7 @@ type Server struct {
 	rustFFI     bool // true when Rust FFI is available
 	logger      *slog.Logger
 	ready       atomic.Bool
+	shutdownOnce sync.Once
 
 	// Phase 2 additions.
 	gatewaySubs     *events.GatewayEventSubscriptions
@@ -83,6 +84,18 @@ type Server struct {
 	activity        *monitoring.ActivityTracker
 	channelEvents   *monitoring.ChannelEventTracker
 	vegaClient      *vega.Client
+}
+
+// safeGo starts a goroutine with panic recovery that logs and continues.
+func (s *Server) safeGo(name string, fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("panic in background goroutine", "goroutine", name, "panic", r)
+			}
+		}()
+		fn()
+	}()
 }
 
 // Option configures the gateway server.
@@ -207,16 +220,26 @@ func (s *Server) SetBridge(b *bridge.PluginHost) {
 			if !b.IsRunning() {
 				return false
 			}
+			// Truncate command in approval payload to prevent OOM on marshal.
+			cmd := req.Command
+			if len(cmd) > 4096 {
+				cmd = cmd[:4096]
+			}
+			params, err := json.Marshal(map[string]any{
+				"id":      req.ID,
+				"command": cmd,
+				"args":    req.Args,
+			})
+			if err != nil {
+				s.logger.Error("approval params marshal failed", "id", req.ID, "error", err)
+				return false
+			}
 			approvalReq := &protocol.RequestFrame{
 				Type:   protocol.FrameTypeRequest,
 				ID:     "approval-" + req.ID,
 				Method: "exec.approve",
+				Params: params,
 			}
-			approvalReq.Params, _ = json.Marshal(map[string]any{
-				"id":      req.ID,
-				"command": req.Command,
-				"args":    req.Args,
-			})
 			approvalCtx, approvalCancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer approvalCancel()
 			resp, err := b.Forward(approvalCtx, approvalReq)
@@ -230,7 +253,14 @@ func (s *Server) SetBridge(b *bridge.PluginHost) {
 
 	// Wire bridge events: chat events go to chatHandler, lifecycle/agent events
 	// to gatewaySubs, and everything else to broadcaster.
+	// Wrapped in panic recovery so a single bad event doesn't kill the bridge read loop.
 	b.SetEventHandler(func(ev *protocol.EventFrame) {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("panic in bridge event handler", "event", ev.Event, "panic", r)
+			}
+		}()
+
 		// Track activity on all bridge events.
 		if s.activity != nil {
 			s.activity.Touch()
@@ -255,12 +285,11 @@ func (s *Server) SetBridge(b *bridge.PluginHost) {
 					Ts: time.Now().UnixMilli(),
 				})
 			}
-			// Also broadcast heartbeat to WS clients for dashboard liveness.
 			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
 
 		case ev.Event == "channel.event":
 			// Track per-channel event timestamps for health monitoring.
-			if s.channelEvents != nil {
+			if s.channelEvents != nil && len(ev.Payload) > 0 {
 				var chEvt struct {
 					ChannelID string `json:"channelId"`
 				}
@@ -271,7 +300,7 @@ func (s *Server) SetBridge(b *bridge.PluginHost) {
 			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
 
 		case ev.Event == "session.transcript":
-			if s.gatewaySubs != nil {
+			if s.gatewaySubs != nil && len(ev.Payload) > 0 {
 				var update events.TranscriptUpdate
 				if json.Unmarshal(ev.Payload, &update) == nil {
 					s.gatewaySubs.EmitTranscript(update)
@@ -320,8 +349,11 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 
 	// Fire gateway.start hooks.
 	if s.hooks != nil {
-		go s.hooks.Fire(context.Background(), hooks.EventGatewayStart, map[string]string{
-			"DENEB_GATEWAY_ADDR": ln.Addr().String(),
+		addr := ln.Addr().String()
+		s.safeGo("hooks:gateway.start", func() {
+			s.hooks.Fire(context.Background(), hooks.EventGatewayStart, map[string]string{
+				"DENEB_GATEWAY_ADDR": addr,
+			})
 		})
 	}
 
@@ -377,6 +409,14 @@ func (s *Server) Close(ctx context.Context) error {
 }
 
 func (s *Server) shutdown() error {
+	var httpErr error
+	s.shutdownOnce.Do(func() {
+		httpErr = s.doShutdown()
+	})
+	return httpErr
+}
+
+func (s *Server) doShutdown() error {
 	s.ready.Store(false)
 	s.logger.Info("gateway server shutting down")
 
@@ -756,7 +796,9 @@ func (s *Server) registerPhase2Methods() {
 		OnReloaded: func(_ *config.ConfigSnapshot) {
 			// Notify hooks of config change.
 			if s.hooks != nil {
-				go s.hooks.Fire(context.Background(), hooks.Event("config.reloaded"), nil)
+				s.safeGo("hooks:config.reloaded", func() {
+					s.hooks.Fire(context.Background(), hooks.Event("config.reloaded"), nil)
+				})
 			}
 			// Broadcast config change to subscribers.
 			s.broadcaster.Broadcast("config.changed", map[string]any{
@@ -811,7 +853,7 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			// In production, this would send SIGUSR1 to trigger graceful restart.
 		},
 	}, monitoring.DefaultWatchdogConfig(), s.logger)
-	go s.watchdog.Run(ctx)
+	s.safeGo("watchdog", func() { s.watchdog.Run(ctx) })
 
 	// Channel health monitor.
 	s.channelHealth = monitoring.NewChannelHealthMonitor(monitoring.ChannelHealthDeps{
@@ -860,14 +902,16 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			return err
 		},
 	}, monitoring.DefaultChannelHealthConfig(), s.logger)
-	go s.channelHealth.Run(ctx)
+	s.safeGo("channel-health-monitor", func() { s.channelHealth.Run(ctx) })
 }
 
 // emitChannelEvent fires the appropriate hook and broadcasts a channels.changed event.
 func (s *Server) emitChannelEvent(channelID string, hookEvent hooks.Event, action string) {
 	if s.hooks != nil {
-		go s.hooks.Fire(context.Background(), hookEvent, map[string]string{
-			"DENEB_CHANNEL_ID": channelID,
+		s.safeGo("hooks:"+string(hookEvent), func() {
+			s.hooks.Fire(context.Background(), hookEvent, map[string]string{
+				"DENEB_CHANNEL_ID": channelID,
+			})
 		})
 	}
 	s.broadcaster.Broadcast("channels.changed", map[string]any{
