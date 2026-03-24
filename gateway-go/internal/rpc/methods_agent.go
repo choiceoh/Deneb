@@ -275,15 +275,7 @@ func sessionsCreate(deps ExtendedDeps) HandlerFunc {
 				protocol.ErrValidationFailed, "invalid session key"))
 		}
 
-		kind := session.KindDirect
-		switch p.Kind {
-		case "group":
-			kind = session.KindGroup
-		case "global":
-			kind = session.KindGlobal
-		case "unknown":
-			kind = session.KindUnknown
-		}
+		kind := session.Kind(protocol.ParseSessionKind(p.Kind))
 		s := deps.Sessions.Create(p.Key, kind)
 		if deps.GatewaySubs != nil {
 			deps.GatewaySubs.EmitLifecycle(events.LifecycleChangeEvent{
