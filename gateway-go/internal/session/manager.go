@@ -78,14 +78,26 @@ func (m *Manager) Get(key string) *Session {
 	return &cp
 }
 
-// Set stores or updates a session. Panics if s is nil.
+// Set stores or updates a session.
 func (m *Manager) Set(s *Session) {
 	if s == nil {
 		return
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	old := m.sessions[s.Key]
+	var oldStatus RunStatus
+	if old != nil {
+		oldStatus = old.Status
+	}
 	m.sessions[s.Key] = s
+	newStatus := s.Status
+	m.mu.Unlock()
+
+	if old == nil {
+		m.eventBus.Emit(Event{Kind: EventCreated, Key: s.Key})
+	} else if oldStatus != newStatus {
+		m.eventBus.Emit(Event{Kind: EventStatusChanged, Key: s.Key, OldStatus: oldStatus, NewStatus: newStatus})
+	}
 }
 
 // Delete removes a session by key. Returns true if the session existed.

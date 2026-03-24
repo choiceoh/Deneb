@@ -204,7 +204,7 @@ func (s *Server) SetBridge(b *bridge.PluginHost) {
 	// Wire process approval callback via bridge forward.
 	if s.processes != nil {
 		s.processes.SetApprover(func(req process.ExecRequest) bool {
-			if b == nil || !b.IsRunning() {
+			if !b.IsRunning() {
 				return false
 			}
 			approvalReq := &protocol.RequestFrame{
@@ -293,13 +293,15 @@ func mustMarshalEvent(ev *protocol.EventFrame) []byte {
 	return data
 }
 
-// Run starts the server and blocks until the context is canceled.
-func (s *Server) Run(ctx context.Context) error {
+// initAndListen creates the HTTP server, binds to the address, and starts
+// background subsystems (tick broadcaster, monitoring, process pruner, hooks).
+// Shared by Run and StartAndListen to avoid duplicating the startup sequence.
+func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	mux := s.buildMux()
 
 	ln, err := net.Listen("tcp", s.addr)
 	if err != nil {
-		return fmt.Errorf("failed to listen on %s: %w", s.addr, err)
+		return nil, fmt.Errorf("failed to listen on %s: %w", s.addr, err)
 	}
 
 	s.httpServer = &http.Server{
@@ -321,6 +323,16 @@ func (s *Server) Run(ctx context.Context) error {
 		go s.hooks.Fire(context.Background(), hooks.EventGatewayStart, map[string]string{
 			"DENEB_GATEWAY_ADDR": ln.Addr().String(),
 		})
+	}
+
+	return ln, nil
+}
+
+// Run starts the server and blocks until the context is canceled.
+func (s *Server) Run(ctx context.Context) error {
+	ln, err := s.initAndListen(ctx)
+	if err != nil {
+		return err
 	}
 
 	s.logger.Info("gateway server starting", "addr", ln.Addr().String())
@@ -345,32 +357,9 @@ func (s *Server) Run(ctx context.Context) error {
 // The caller must call Close() to stop the server; the serve goroutine is tied to
 // the http.Server lifecycle and will exit when Shutdown is called.
 func (s *Server) StartAndListen(ctx context.Context) (net.Addr, error) {
-	mux := s.buildMux()
-
-	ln, err := net.Listen("tcp", s.addr)
+	ln, err := s.initAndListen(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("listen: %w", err)
-	}
-
-	s.httpServer = &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		BaseContext: func(l net.Listener) context.Context {
-			return ctx
-		},
-	}
-	s.startedAt = time.Now()
-	s.ready.Store(true)
-	s.startTickBroadcaster(ctx)
-	s.StartMonitoring(ctx)
-	s.startProcessPruner(ctx)
-
-	// Fire gateway.start hooks.
-	if s.hooks != nil {
-		go s.hooks.Fire(context.Background(), hooks.EventGatewayStart, map[string]string{
-			"DENEB_GATEWAY_ADDR": ln.Addr().String(),
-		})
+		return nil, err
 	}
 
 	go func() {
@@ -866,22 +855,26 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			if err != nil {
 				s.logger.Error("channel restart failed", "channel", id, "error", err)
 			} else {
-				// Fire channel lifecycle hooks.
-				if s.hooks != nil {
-					go s.hooks.Fire(context.Background(), hooks.EventChannelConnect, map[string]string{
-						"DENEB_CHANNEL_ID": id,
-					})
-				}
-				// Broadcast channel status change.
-				s.broadcaster.Broadcast("channels.changed", map[string]any{
-					"channelId": id,
-					"action":    "restarted",
-				})
+				s.emitChannelEvent(id, hooks.EventChannelConnect, "restarted")
 			}
 			return err
 		},
 	}, monitoring.DefaultChannelHealthConfig(), s.logger)
 	go s.channelHealth.Run(ctx)
+}
+
+// emitChannelEvent fires the appropriate hook and broadcasts a channels.changed event.
+func (s *Server) emitChannelEvent(channelID string, hookEvent hooks.Event, action string) {
+	if s.hooks != nil {
+		go s.hooks.Fire(context.Background(), hookEvent, map[string]string{
+			"DENEB_CHANNEL_ID": channelID,
+		})
+	}
+	s.broadcaster.Broadcast("channels.changed", map[string]any{
+		"channelId": channelID,
+		"action":    action,
+		"ts":        time.Now().UnixMilli(),
+	})
 }
 
 // startProcessPruner runs a background loop that periodically prunes completed
