@@ -45,7 +45,7 @@ const mockedCompactEmbeddedPiSessionDirect = vi.mocked(compactEmbeddedPiSessionD
 // ---------------------------------------------------------------------------
 
 /** Build a config object with a contextEngine slot for testing. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line typescript/no-explicit-any
 function configWithSlot(engineId: string): any {
   return { plugins: { slots: { contextEngine: engineId } } };
 }

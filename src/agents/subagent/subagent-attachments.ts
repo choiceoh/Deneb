@@ -148,7 +148,7 @@ export async function materializeSubagentAttachments(params: {
       if (name.includes("/") || name.includes("\\") || name.includes("\u0000")) {
         fail(`attachments_invalid_name (${name})`);
       }
-      // eslint-disable-next-line no-control-regex
+      // oxlint-disable-next-line no-control-regex
       if (/[\r\n\t\u0000-\u001F\u007F]/.test(name)) {
         fail(`attachments_invalid_name (${name})`);
       }

@@ -232,13 +232,13 @@ export async function runGatewayLoop(params: {
     // Keep process alive; SIGUSR1 triggers an in-process restart (no supervisor required).
     // SIGTERM/SIGINT still exit after a graceful shutdown.
     let isFirstStart = true;
-    // eslint-disable-next-line no-constant-condition
+    // oxlint-disable-next-line no-constant-condition
     while (true) {
       onIteration();
       let startupRetries = 0;
       // Inner retry loop: on non-initial startup failures, retry with backoff
       // instead of sitting idle forever waiting for a manual SIGUSR1.
-      // eslint-disable-next-line no-constant-condition
+      // oxlint-disable-next-line no-constant-condition
       while (true) {
         // If a shutdown signal arrived during retry sleep, stop retrying.
         if (shuttingDown) {

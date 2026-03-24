@@ -21,7 +21,6 @@ const getArg = (flag: string, short?: string) => {
 const chatId = getArg("--chat", "-c");
 const accountId = getArg("--account", "-a");
 if (!chatId) {
-  // eslint-disable-next-line no-console
   console.error(
     "Usage: bun scripts/dev/test-device-pair-telegram.ts --chat <telegram-chat-id> [--account <accountId>]",
   );
@@ -33,7 +32,6 @@ loadDenebPlugins({ config: cfg });
 
 const match = matchPluginCommand("/pair");
 if (!match) {
-  // eslint-disable-next-line no-console
   console.error("/pair plugin command not registered.");
   process.exit(1);
 }
@@ -58,5 +56,4 @@ if (result.text) {
   });
 }
 
-// eslint-disable-next-line no-console
 console.log("Sent split /pair messages to", chatId, accountId ? `(${accountId})` : "");

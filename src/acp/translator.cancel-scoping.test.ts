@@ -69,7 +69,7 @@ function createHarness(sessions: Array<{ sessionId: string; sessionKey: string }
   return {
     agent,
     requestSpy,
-    // eslint-disable-next-line @typescript-eslint/unbound-method
+    // oxlint-disable-next-line typescript/unbound-method
     sessionUpdateSpy: connection.sessionUpdate as unknown as ReturnType<typeof vi.fn>,
     sessionStore,
     sentRunIds,

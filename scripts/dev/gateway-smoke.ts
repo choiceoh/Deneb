@@ -5,7 +5,6 @@ const urlRaw = getArg("--url") ?? process.env.DENEB_GATEWAY_URL;
 const token = getArg("--token") ?? process.env.DENEB_GATEWAY_TOKEN;
 
 if (!urlRaw || !token) {
-  // eslint-disable-next-line no-console
   console.error(
     "Usage: bun scripts/dev/gateway-smoke.ts --url <wss://host[:port]> --token <gateway.auth.token>\n" +
       "Or set env: DENEB_GATEWAY_URL / DENEB_GATEWAY_TOKEN",
@@ -48,26 +47,22 @@ async function main() {
   });
 
   if (!connectRes.ok) {
-    // eslint-disable-next-line no-console
     console.error("connect failed:", connectRes.error);
     process.exit(2);
   }
 
   const healthRes = await request("health");
   if (!healthRes.ok) {
-    // eslint-disable-next-line no-console
     console.error("health failed:", healthRes.error);
     process.exit(3);
   }
 
   const historyRes = await request("chat.history", { sessionKey: "main" }, 15000);
   if (!historyRes.ok) {
-    // eslint-disable-next-line no-console
     console.error("chat.history failed:", historyRes.error);
     process.exit(4);
   }
 
-  // eslint-disable-next-line no-console
   console.log("ok: connected + health + chat.history");
   close();
 }
