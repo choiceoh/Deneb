@@ -79,6 +79,13 @@ var methodScopes = map[string]auth.Scope{
 	"providers.list":    auth.ScopeRead,
 	"providers.catalog": auth.ScopeRead,
 
+	// --- Vega (write) ---
+	"vega.ask":         auth.ScopeWrite,
+	"vega.update":      auth.ScopeWrite,
+	"vega.add-action":  auth.ScopeWrite,
+	"vega.mail-append": auth.ScopeWrite,
+	"vega.version":     auth.ScopeRead,
+
 	// --- Config (admin) ---
 	"config.get":    auth.ScopeAdmin,
 	"config.reload": auth.ScopeAdmin,

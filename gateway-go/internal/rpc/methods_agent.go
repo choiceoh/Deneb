@@ -68,6 +68,17 @@ func processExec(deps ExtendedDeps) HandlerFunc {
 				protocol.ErrMissingParam, "command is required"))
 		}
 		result := deps.Processes.Execute(ctx, p)
+
+		// Broadcast process completion event to subscribers.
+		if deps.Broadcaster != nil && result != nil {
+			deps.Broadcaster.Broadcast("process.completed", map[string]any{
+				"id":       result.ID,
+				"status":   result.Status,
+				"exitCode": result.ExitCode,
+				"ms":       result.RuntimeMs,
+			})
+		}
+
 		resp, _ := protocol.NewResponseOK(req.ID, result)
 		return resp
 	}

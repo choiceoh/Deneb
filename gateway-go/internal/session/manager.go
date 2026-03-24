@@ -49,13 +49,20 @@ type Session struct {
 type Manager struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session
+	eventBus *EventBus
 }
 
-// NewManager creates an empty session manager.
+// NewManager creates an empty session manager with an integrated event bus.
 func NewManager() *Manager {
 	return &Manager{
 		sessions: make(map[string]*Session),
+		eventBus: NewEventBus(),
 	}
+}
+
+// EventBusRef returns the session event bus for subscribing to lifecycle events.
+func (m *Manager) EventBusRef() *EventBus {
+	return m.eventBus
 }
 
 // Get returns a snapshot copy of a session by key, or nil if not found.
@@ -84,9 +91,18 @@ func (m *Manager) Set(s *Session) {
 // Delete removes a session by key. Returns true if the session existed.
 func (m *Manager) Delete(key string) bool {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	_, ok := m.sessions[key]
+	s := m.sessions[key]
+	ok := s != nil
+	var oldStatus RunStatus
+	if s != nil {
+		oldStatus = s.Status
+	}
 	delete(m.sessions, key)
+	m.mu.Unlock()
+
+	if ok {
+		m.eventBus.Emit(Event{Kind: EventDeleted, Key: key, OldStatus: oldStatus})
+	}
 	return ok
 }
 
@@ -113,7 +129,6 @@ func (m *Manager) Count() int {
 // Returns a snapshot copy safe for concurrent use.
 func (m *Manager) Create(key string, kind Kind) *Session {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	now := time.Now()
 	s := &Session{
 		Key:       key,
@@ -123,6 +138,9 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 	}
 	m.sessions[key] = s
 	cp := *s
+	m.mu.Unlock()
+
+	m.eventBus.Emit(Event{Kind: EventCreated, Key: key, NewStatus: ""})
 	return &cp
 }
 
@@ -130,7 +148,6 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 // Returns a snapshot copy safe for concurrent use.
 func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	existing := m.sessions[key]
 	snap := DeriveLifecycleSnapshot(existing, event)
@@ -139,9 +156,17 @@ func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session
 	if snap.Status == "" {
 		if existing != nil {
 			cp := *existing
+			m.mu.Unlock()
 			return &cp
 		}
+		m.mu.Unlock()
 		return &Session{Key: key, Kind: KindUnknown}
+	}
+
+	// Capture old status before mutation.
+	oldStatus := RunStatus("")
+	if existing != nil {
+		oldStatus = existing.Status
 	}
 
 	if existing == nil {
@@ -173,6 +198,10 @@ func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session
 		existing.RuntimeMs = snap.RuntimeMs
 	}
 
+	newStatus := existing.Status
 	cp := *existing
+	m.mu.Unlock()
+
+	m.eventBus.Emit(Event{Kind: EventStatusChanged, Key: key, OldStatus: oldStatus, NewStatus: newStatus})
 	return &cp
 }

@@ -35,6 +35,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"nhooyr.io/websocket"
 )
@@ -80,6 +81,8 @@ type Server struct {
 	watchdog        *monitoring.Watchdog
 	channelHealth   *monitoring.ChannelHealthMonitor
 	activity        *monitoring.ActivityTracker
+	channelEvents   *monitoring.ChannelEventTracker
+	vega            interface{ Close() error } // optional vega client (typed loosely to avoid hard dep)
 }
 
 // Option configures the gateway server.
@@ -156,6 +159,7 @@ func New(addr string, opts ...Option) *Server {
 	s.hooks = hooks.NewRegistry(s.logger)
 	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
 	s.activity = monitoring.NewActivityTracker()
+	s.channelEvents = monitoring.NewChannelEventTracker()
 	s.authRateLimiter = auth.NewAuthRateLimiter(10, 60*1000, 5*60*1000)
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
@@ -249,6 +253,20 @@ func (s *Server) SetBridge(b *bridge.PluginHost) {
 					Ts: time.Now().UnixMilli(),
 				})
 			}
+			// Also broadcast heartbeat to WS clients for dashboard liveness.
+			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
+
+		case ev.Event == "channel.event":
+			// Track per-channel event timestamps for health monitoring.
+			if s.channelEvents != nil {
+				var chEvt struct {
+					ChannelID string `json:"channelId"`
+				}
+				if json.Unmarshal(ev.Payload, &chEvt) == nil && chEvt.ChannelID != "" {
+					s.channelEvents.Touch(chEvt.ChannelID)
+				}
+			}
+			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
 
 		case ev.Event == "session.transcript":
 			if s.gatewaySubs != nil {
@@ -343,6 +361,15 @@ func (s *Server) StartAndListen(ctx context.Context) (net.Addr, error) {
 	s.startedAt = time.Now()
 	s.ready.Store(true)
 	s.startTickBroadcaster(ctx)
+	s.StartMonitoring(ctx)
+	s.startProcessPruner(ctx)
+
+	// Fire gateway.start hooks.
+	if s.hooks != nil {
+		go s.hooks.Fire(context.Background(), hooks.EventGatewayStart, map[string]string{
+			"DENEB_GATEWAY_ADDR": ln.Addr().String(),
+		})
+	}
 
 	go func() {
 		if err := s.httpServer.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -415,7 +442,12 @@ func (s *Server) shutdown() error {
 		s.authRateLimiter.Close()
 	}
 
-	// 10. Close Plugin Host bridge last (in-flight forwards finish first).
+	// 10. Close Vega client.
+	if s.vega != nil {
+		s.vega.Close()
+	}
+
+	// 11. Close Plugin Host bridge last (in-flight forwards finish first).
 	if s.bridge != nil {
 		s.bridge.Close()
 	}
@@ -476,17 +508,55 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		providerCount = len(s.providers.List())
 	}
 
+	// Count active processes.
+	activeProcesses := 0
+	if s.processes != nil {
+		for _, p := range s.processes.List() {
+			if p.Status == process.StatusRunning {
+				activeProcesses++
+			}
+		}
+	}
+
+	// Count cron tasks.
+	cronTasks := 0
+	if s.cron != nil {
+		cronTasks = len(s.cron.List())
+	}
+
+	// Count registered hooks.
+	hooksCount := 0
+	if s.hooks != nil {
+		hooksCount = len(s.hooks.List())
+	}
+
+	// Channel health summary.
+	channelHealthSummary := map[string]int{"healthy": 0, "unhealthy": 0}
+	if s.channelHealth != nil {
+		for _, ch := range s.channelHealth.HealthSnapshot() {
+			if ch.Healthy {
+				channelHealthSummary["healthy"]++
+			} else {
+				channelHealthSummary["unhealthy"]++
+			}
+		}
+	}
+
 	s.writeJSON(w, http.StatusOK, map[string]any{
-		"status":      "ok",
-		"version":     s.version,
-		"runtime":     "go",
-		"uptime":      time.Since(s.startedAt).Milliseconds(),
-		"connections": s.clientCnt.Load(),
-		"sessions":    s.sessions.Count(),
-		"bridge":      bridgeStatus,
-		"rust_core":   s.rustFFI,
-		"auth_mode":   authMode,
-		"providers":   providerCount,
+		"status":          "ok",
+		"version":         s.version,
+		"runtime":         "go",
+		"uptime":          time.Since(s.startedAt).Milliseconds(),
+		"connections":     s.clientCnt.Load(),
+		"sessions":        s.sessions.Count(),
+		"bridge":          bridgeStatus,
+		"rust_core":       s.rustFFI,
+		"auth_mode":       authMode,
+		"providers":       providerCount,
+		"processes":       activeProcesses,
+		"cronTasks":       cronTasks,
+		"hooks":           hooksCount,
+		"channelHealth":   channelHealthSummary,
 	})
 }
 
@@ -656,6 +726,12 @@ func (s *Server) SetDaemon(d *daemon.Daemon) {
 	s.daemon = d
 }
 
+// SetVega sets the Vega MCP client and registers its RPC methods.
+func (s *Server) SetVega(client *vega.Client) {
+	s.vega = client
+	rpc.RegisterVegaMethods(s.dispatcher, rpc.VegaDeps{Client: client})
+}
+
 // Broadcaster returns the event broadcaster for external use.
 func (s *Server) Broadcaster() *events.Broadcaster {
 	return s.broadcaster
@@ -765,9 +841,10 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			}
 			return "stopped"
 		},
-		GetChannelLastEventAt: func(_ string) int64 {
-			// Per-channel event timestamps tracked by bridge events in production.
-			// Returns 0 until channel-specific event tracking is wired.
+		GetChannelLastEventAt: func(id string) int64 {
+			if s.channelEvents != nil {
+				return s.channelEvents.LastEventAt(id)
+			}
 			return 0
 		},
 		GetChannelStartedAt: func(id string) int64 {

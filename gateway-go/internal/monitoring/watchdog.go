@@ -414,6 +414,43 @@ func (t *ActivityTracker) LastActivityAt() int64 {
 	return t.lastActivityMs.Load()
 }
 
+// --- Channel Event Tracker ---
+
+// ChannelEventTracker records per-channel event timestamps for health monitoring.
+type ChannelEventTracker struct {
+	mu     sync.RWMutex
+	events map[string]int64 // channelID -> last event unix ms
+}
+
+// NewChannelEventTracker creates a new per-channel event tracker.
+func NewChannelEventTracker() *ChannelEventTracker {
+	return &ChannelEventTracker{
+		events: make(map[string]int64),
+	}
+}
+
+// Touch records an event for a specific channel.
+func (t *ChannelEventTracker) Touch(channelID string) {
+	now := time.Now().UnixMilli()
+	t.mu.Lock()
+	t.events[channelID] = now
+	t.mu.Unlock()
+}
+
+// LastEventAt returns the last event timestamp for a channel, or 0 if unknown.
+func (t *ChannelEventTracker) LastEventAt(channelID string) int64 {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.events[channelID]
+}
+
+// Remove clears tracking for a channel (e.g., on disconnect).
+func (t *ChannelEventTracker) Remove(channelID string) {
+	t.mu.Lock()
+	delete(t.events, channelID)
+	t.mu.Unlock()
+}
+
 // itoa is a simple int-to-string without importing strconv.
 func itoa(n int) string {
 	if n == 0 {
