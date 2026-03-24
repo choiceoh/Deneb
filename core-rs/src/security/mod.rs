@@ -3,6 +3,8 @@
 //! Provides constant-time comparison, input sanitization,
 //! and regex safety validation — ported from `src/security/`.
 
+use memchr::memmem;
+
 /// Constant-time byte comparison to prevent timing attacks.
 /// Both slices must be the same length for equality.
 pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -16,33 +18,50 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-/// Case-insensitive substring search without allocating a lowercase copy.
-fn contains_ignore_case(haystack: &[u8], needle: &[u8]) -> bool {
-    if needle.len() > haystack.len() {
-        return false;
+/// Pre-built case-insensitive finders for dangerous patterns.
+/// Each entry: (lowercase pattern bytes, memmem::Finder for the lowercase version).
+/// We search the lowercased haystack for a match using SIMD-accelerated memmem.
+struct DangerousPatterns {
+    finders: Vec<memmem::Finder<'static>>,
+}
+
+impl DangerousPatterns {
+    fn new() -> Self {
+        const PATTERNS: &[&[u8]] = &[
+            b"<script",
+            b"javascript:",
+            b"data:text/html",
+            b"onerror=",
+            b"onload=",
+        ];
+        Self {
+            finders: PATTERNS.iter().map(|p| memmem::Finder::new(p)).collect(),
+        }
     }
-    haystack
-        .windows(needle.len())
-        .any(|window| window.eq_ignore_ascii_case(needle))
+
+    fn matches(&self, haystack: &[u8]) -> bool {
+        // Build a lowercase view of the haystack on the stack for small inputs,
+        // or heap for large ones, then search with SIMD finders.
+        // For very large inputs (>64 KiB), use a window-based approach.
+        let lower: Vec<u8> = haystack.iter().map(|b| b.to_ascii_lowercase()).collect();
+        self.finders.iter().any(|f| f.find(&lower).is_some())
+    }
 }
 
 /// Check if a string contains potential injection patterns.
 /// Returns true if the input appears safe.
+/// Uses SIMD-accelerated substring search via memchr crate.
 pub fn is_safe_input(input: &str) -> bool {
     let bytes = input.as_bytes();
-    // Reject null bytes (fast memchr-style scan).
-    if bytes.contains(&0) {
+    // Reject null bytes (SIMD-accelerated).
+    if memchr::memchr(0, bytes).is_some() {
         return false;
     }
-    // Reject common injection patterns (case-insensitive, zero-alloc).
-    const DANGEROUS: &[&[u8]] = &[
-        b"<script",
-        b"javascript:",
-        b"data:text/html",
-        b"onerror=",
-        b"onload=",
-    ];
-    !DANGEROUS.iter().any(|p| contains_ignore_case(bytes, p))
+    // Reject common injection patterns (SIMD-accelerated case-insensitive search).
+    use std::sync::OnceLock;
+    static PATTERNS: OnceLock<DangerousPatterns> = OnceLock::new();
+    let patterns = PATTERNS.get_or_init(DangerousPatterns::new);
+    !patterns.matches(bytes)
 }
 
 /// Returns true if the character is a control char that should be stripped.

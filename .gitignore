@@ -56,21 +56,24 @@ test/fixtures/failed-tests.json
 tools/highway/target/
 .highway-cache.json
 
-# Native addon (Rust napi-rs)
+# Rust build artifacts (workspace)
+/target/
 native/target/
-native/*.node
-native/index.js
-native/index.d.ts
-
-# Core-rs napi bridge
+core-rs/target/
 core-rs-napi/target/
+
+# Native addon build output (unified in core-rs-napi/)
 core-rs-napi/*.node
 core-rs-napi/index.js
 core-rs-napi/index.d.ts
 core-rs-napi/node_modules/
 
+# Legacy native/ build output
+native/*.node
+native/index.js
+native/index.d.ts
+
 # Rust build artifacts
-core-rs/target/
 core-rs/*.node
 core-rs/npm/
 

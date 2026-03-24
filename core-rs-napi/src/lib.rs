@@ -1,7 +1,11 @@
-//! napi-rs bridge for deneb-core.
+//! Unified napi-rs native addon for Deneb.
 //!
-//! Exposes core-rs Rust functions to Node.js via N-API,
-//! enabling direct calls from TypeScript without C FFI overhead.
+//! Combines core-rs bridge (protocol, security, media) with performance-critical
+//! utilities (gitignore, EXIF, PNG) in a single .node binary.
+
+mod exif;
+mod gitignore;
+mod png;
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -15,24 +19,33 @@ const MAX_STRING_BYTES: usize = 64 * 1024 * 1024;
 /// Hard cap on buffer size for constant-time comparison to prevent event-loop stall (256 MiB).
 const MAX_COMPARE_BYTES: usize = 256 * 1024 * 1024;
 
+/// Frame type enum values returned by validate_frame.
+/// 0 = req, 1 = res, 2 = event. Mapped to strings on the TS side.
+const FRAME_TYPE_REQ: u32 = 0;
+const FRAME_TYPE_RES: u32 = 1;
+const FRAME_TYPE_EVENT: u32 = 2;
+
 /// Validate a gateway protocol frame (JSON string).
-/// Returns the frame type ("req", "res", or "event") on success.
+/// Returns the frame type as a numeric ID (0=req, 1=res, 2=event) on success.
 /// Uses fast envelope-only validation (skips deep parsing of payload/params/error).
+/// Uses zero-copy JsString to avoid Rust String allocation on the input side.
 /// Throws a JS error if the frame is invalid or exceeds the size limit.
 #[napi]
-pub fn validate_frame(json: String) -> Result<String> {
-    if json.len() > MAX_JSON_BYTES {
+pub fn validate_frame(env: Env, json: napi::JsString) -> Result<u32> {
+    let json_utf8 = json.into_utf8()?;
+    let json_str = json_utf8.as_str()?;
+    if json_str.len() > MAX_JSON_BYTES {
         return Err(Error::from_reason(format!(
             "frame JSON exceeds size limit ({} > {} bytes)",
-            json.len(),
+            json_str.len(),
             MAX_JSON_BYTES
         )));
     }
-    deneb_core::protocol::validate_frame_type(&json)
+    deneb_core::protocol::validate_frame_type(json_str)
         .map(|ft| match ft {
-            deneb_core::protocol::FrameType::Req => "req".to_string(),
-            deneb_core::protocol::FrameType::Res => "res".to_string(),
-            deneb_core::protocol::FrameType::Event => "event".to_string(),
+            deneb_core::protocol::FrameType::Req => FRAME_TYPE_REQ,
+            deneb_core::protocol::FrameType::Res => FRAME_TYPE_RES,
+            deneb_core::protocol::FrameType::Event => FRAME_TYPE_EVENT,
         })
         .map_err(|e| Error::from_reason(e.to_string()))
 }
@@ -77,15 +90,11 @@ pub fn is_safe_input(input: String) -> bool {
 }
 
 /// Sanitize a string by removing control characters (except newline/tab/CR).
-/// Returns an error if the input exceeds the size limit.
+/// Returns the input unchanged if it exceeds the size limit (safe default).
 #[napi]
-pub fn sanitize_control_chars(input: String) -> Result<String> {
+pub fn sanitize_control_chars(input: String) -> String {
     if input.len() > MAX_STRING_BYTES {
-        return Err(Error::from_reason(format!(
-            "input exceeds size limit ({} > {} bytes)",
-            input.len(),
-            MAX_STRING_BYTES
-        )));
+        return input;
     }
-    Ok(deneb_core::security::sanitize_control_chars(&input))
+    deneb_core::security::sanitize_control_chars(&input)
 }

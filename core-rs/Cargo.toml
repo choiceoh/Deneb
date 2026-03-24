@@ -19,6 +19,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 jsonschema = "0.28"
 thiserror = "2"
+memchr = "2"
 
 # Protobuf runtime
 prost = "0.13"
@@ -38,9 +39,3 @@ flate2 = "1"
 [build-dependencies]
 prost-build = "0.13"
 napi-build = { version = "2", optional = true }
-
-[profile.release]
-opt-level = 3
-lto = "fat"
-codegen-units = 1
-strip = true

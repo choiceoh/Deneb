@@ -12,11 +12,11 @@ napi = { version = "2", default-features = false, features = ["napi9"] }
 napi-derive = "2"
 deneb-core = { path = "../core-rs" }
 
+# From native/: gitignore, exif, png
+globset = "0.4"
+kamadak-exif = "0.6"
+crc32fast = "1"
+flate2 = "1"
+
 [build-dependencies]
 napi-build = "2"
-
-[profile.release]
-opt-level = 3
-lto = "fat"
-codegen-units = 1
-strip = true

@@ -293,6 +293,12 @@ jobs:
           install-bun: "false"
           use-sticky-disk: "false"
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust workspace tests (core-rs + native)
+        run: cargo test -p deneb-core -p deneb-core-rs-napi
+
       - name: Check types and lint and oxfmt
         run: pnpm check
 

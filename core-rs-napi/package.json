@@ -1,8 +1,8 @@
 {
-  "name": "@deneb/core-rs",
-  "version": "0.1.0",
+  "name": "@deneb/native",
+  "version": "0.2.0",
   "private": true,
-  "description": "napi-rs bridge for deneb-core — protocol validation, security, and media processing",
+  "description": "Unified Rust native addon for Deneb — core-rs bridge + performance utilities",
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
@@ -13,7 +13,7 @@
     "@napi-rs/cli": "^2.18.0"
   },
   "napi": {
-    "name": "deneb-core-rs",
+    "name": "deneb-native",
     "triples": {}
   }
 }

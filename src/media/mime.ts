@@ -76,6 +76,27 @@ export function normalizeMimeType(mime?: string | null): string | undefined {
   return cleaned || undefined;
 }
 
+/**
+ * Synchronous MIME sniff using native Rust detection only.
+ * Returns undefined if native addon is unavailable or type is unknown.
+ * Avoids the async overhead of fileTypeFromBuffer when native can handle it.
+ */
+export function sniffMimeSync(buffer?: Buffer): string | undefined {
+  if (!buffer) {
+    return undefined;
+  }
+  const detect = nativeDetectMime();
+  if (!detect) {
+    return undefined;
+  }
+  try {
+    const mime = detect(buffer);
+    return mime && mime !== "application/octet-stream" ? mime : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function sniffMime(buffer?: Buffer): Promise<string | undefined> {
   if (!buffer) {
     return undefined;
