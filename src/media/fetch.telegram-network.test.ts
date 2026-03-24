@@ -30,6 +30,12 @@ describe("fetchRemoteMedia telegram network policy", () => {
 
   beforeEach(async () => {
     vi.resetModules();
+    // Stub proxy env vars so hasEnvHttpProxyForTelegramApi() returns false,
+    // ensuring transport uses "direct" mode with sticky fallback attempts.
+    vi.stubEnv("HTTP_PROXY", "");
+    vi.stubEnv("HTTPS_PROXY", "");
+    vi.stubEnv("http_proxy", "");
+    vi.stubEnv("https_proxy", "");
     ({ resolveTelegramTransport, shouldRetryTelegramTransportFallback } =
       await import("../../extensions/telegram/src/fetch.js"));
     ({ fetchRemoteMedia } = await import("./fetch.js"));
@@ -92,7 +98,7 @@ describe("fetchRemoteMedia telegram network policy", () => {
     expect(init?.dispatcher?.options?.connect).toEqual(
       expect.objectContaining({
         autoSelectFamily: true,
-        autoSelectFamilyAttemptTimeout: 300,
+        autoSelectFamilyAttemptTimeout: 200,
         lookup: expect.any(Function),
       }),
     );
@@ -200,7 +206,7 @@ describe("fetchRemoteMedia telegram network policy", () => {
     expect(firstInit?.dispatcher?.options?.connect).toEqual(
       expect.objectContaining({
         autoSelectFamily: true,
-        autoSelectFamilyAttemptTimeout: 300,
+        autoSelectFamilyAttemptTimeout: 200,
         lookup: expect.any(Function),
       }),
     );
