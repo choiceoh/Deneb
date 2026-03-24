@@ -32,6 +32,9 @@ type Forwarder interface {
 // BroadcastFunc sends an event to all matching subscribers.
 type BroadcastFunc func(event string, payload any) (int, []error)
 
+// BroadcastRawFunc sends pre-serialized event data to all matching subscribers.
+type BroadcastRawFunc func(event string, data []byte) int
+
 // DeliveryContext carries channel routing information for a chat message.
 type DeliveryContext struct {
 	Channel   string `json:"channel,omitempty"`
@@ -69,10 +72,11 @@ type AbortEntry struct {
 
 // Handler manages chat RPC methods.
 type Handler struct {
-	sessions    *session.Manager
-	forwarder   Forwarder
-	broadcast   BroadcastFunc
-	logger      *slog.Logger
+	sessions     *session.Manager
+	forwarder    Forwarder
+	broadcast    BroadcastFunc
+	broadcastRaw BroadcastRawFunc
+	logger       *slog.Logger
 
 	abortMu     sync.Mutex
 	abortMap    map[string]*AbortEntry // clientRunId -> entry
@@ -118,6 +122,11 @@ func NewHandler(sessions *session.Manager, forwarder Forwarder, broadcast Broadc
 	}
 	go h.abortGCLoop()
 	return h
+}
+
+// SetBroadcastRaw sets the raw broadcast function for streaming event relay.
+func (h *Handler) SetBroadcastRaw(fn BroadcastRawFunc) {
+	h.broadcastRaw = fn
 }
 
 // Close stops background goroutines.

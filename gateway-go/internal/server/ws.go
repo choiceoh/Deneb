@@ -33,6 +33,7 @@ var jsonBufPool = sync.Pool{
 }
 
 // WsClient represents a connected WebSocket client.
+// Implements events.Subscriber for event broadcasting.
 type WsClient struct {
 	conn           *websocket.Conn
 	connID         string
@@ -113,9 +114,9 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 	s.clients.Store(client.connID, client)
 	s.clientCnt.Add(1)
 	defer func() {
+		s.broadcaster.Unsubscribe(client.connID)
 		s.clients.Delete(client.connID)
 		s.clientCnt.Add(-1)
-		s.broadcaster.Unsubscribe(client.connID)
 	}()
 
 	s.logger.Info("websocket connected", "connId", client.connID, "remote", r.RemoteAddr)
@@ -223,7 +224,7 @@ func (s *Server) buildHelloOk(client *WsClient) *protocol.HelloOk {
 		Server:   protocol.HelloServer{Version: s.version, ConnID: client.connID},
 		Features: protocol.HelloFeatures{
 			Methods: s.dispatcher.Methods(),
-			Events:  []string{"tick", "agent.event", "shutdown"},
+			Events:  []string{"tick", "agent.event", "shutdown", "chat", "chat.delta"},
 		},
 		Snapshot: protocol.Snapshot{},
 		Policy: protocol.HelloPolicy{

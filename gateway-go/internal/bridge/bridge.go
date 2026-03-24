@@ -17,6 +17,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+// EventHandler is called when the bridge receives an event frame from Node.js.
+// Implementations must not block; long-running work should be dispatched to a goroutine.
+type EventHandler func(event *protocol.EventFrame)
+
 // PluginHost manages IPC communication with a Node.js plugin host process
 // over a Unix domain socket. It implements the rpc.Forwarder interface.
 type PluginHost struct {
@@ -37,6 +41,8 @@ type PluginHost struct {
 	reconnect     bool
 	reconnectStop chan struct{}
 	reconnectWg   sync.WaitGroup // tracks reconnectLoop goroutine
+	// onEvent is called for each event frame received from the bridge.
+	onEvent EventHandler
 }
 
 // New creates a new PluginHost (not yet started).
@@ -155,6 +161,12 @@ func (h *PluginHost) Forward(ctx context.Context, req *protocol.RequestFrame) (*
 	}
 }
 
+// SetEventHandler registers a callback for event frames from the Node.js plugin host.
+// Must be called before Connect. Not safe to call concurrently with readLoop.
+func (h *PluginHost) SetEventHandler(handler EventHandler) {
+	h.onEvent = handler
+}
+
 // Close closes the bridge connection and waits for background goroutines.
 // Safe to call multiple times.
 func (h *PluginHost) Close() error {
@@ -243,7 +255,16 @@ func (h *PluginHost) readLoop() {
 			}
 
 		case protocol.FrameTypeEvent:
-			h.logger.Debug("bridge event received", "data", string(data))
+			var ev protocol.EventFrame
+			if err := json.Unmarshal(data, &ev); err != nil {
+				h.logger.Error("unmarshal bridge event", "error", err)
+				continue
+			}
+			if h.onEvent != nil {
+				h.onEvent(&ev)
+			} else {
+				h.logger.Debug("bridge event received (no handler)", "event", ev.Event)
+			}
 
 		default:
 			h.logger.Warn("unexpected frame type from bridge", "type", string(frameType))
