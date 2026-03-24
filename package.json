@@ -412,6 +412,9 @@
     "mac:package": "bash scripts/package-mac-app.sh",
     "mac:restart": "bash scripts/restart-mac.sh",
     "moltbot:rpc": "node scripts/run-node.mjs agent --mode rpc --json",
+    "native:build": "cd native && cargo build --release && napi build --release --platform",
+    "native:build:debug": "cd native && cargo build && napi build --platform",
+    "native:test": "cd native && cargo test",
     "plugin-sdk:check-exports": "node scripts/sync-plugin-sdk-exports.mjs --check",
     "plugin-sdk:sync-exports": "node scripts/sync-plugin-sdk-exports.mjs",
     "plugins:sync": "node --import tsx scripts/sync-plugin-versions.ts",
@@ -595,6 +598,7 @@
       "yauzl": "3.2.1"
     },
     "onlyBuiltDependencies": [
+      "@deneb/native",
       "@lydell/node-pty",
       "@napi-rs/canvas",
       "@tloncorp/api",

@@ -1,0 +1,19 @@
+{
+  "name": "@deneb/native",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rust native addon for performance-critical Deneb operations",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "build": "napi build --release --platform",
+    "build:debug": "napi build --platform"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  },
+  "napi": {
+    "name": "deneb-native",
+    "triples": {}
+  }
+}

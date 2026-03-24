@@ -1,0 +1,32 @@
+[package]
+name = "deneb-native"
+version = "0.1.0"
+edition = "2021"
+description = "Rust native addon for performance-critical Deneb operations"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# napi-rs core
+napi = { version = "2", default-features = false, features = ["napi9"] }
+napi-derive = "2"
+
+# P1: gitignore pattern matching
+globset = "0.4"
+
+# P2: EXIF orientation
+kamadak-exif = "0.6"
+
+# P3: PNG encoding
+crc32fast = "1"
+flate2 = "1"
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true

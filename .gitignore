@@ -56,6 +56,12 @@ test/fixtures/failed-tests.json
 tools/highway/target/
 .highway-cache.json
 
+# Native addon (Rust napi-rs)
+native/target/
+native/*.node
+native/index.js
+native/index.d.ts
+
 # Temp
 /tmp/
 *.tmp
