@@ -109,10 +109,10 @@ function resolvePinnedClientMetadata(params: {
   pinnedPlatform?: string;
   pinnedDeviceFamily?: string;
 } {
-  const claimedPlatform = "";
-  const claimedDeviceFamily = "";
-  const pairedPlatform = "";
-  const pairedDeviceFamily = "";
+  const claimedPlatform = params.claimedPlatform ?? "";
+  const claimedDeviceFamily = params.claimedDeviceFamily ?? "";
+  const pairedPlatform = params.pairedPlatform ?? "";
+  const pairedDeviceFamily = params.pairedDeviceFamily ?? "";
   const hasPinnedPlatform = pairedPlatform !== "";
   const hasPinnedDeviceFamily = pairedDeviceFamily !== "";
   const platformMismatch = hasPinnedPlatform && claimedPlatform !== pairedPlatform;
