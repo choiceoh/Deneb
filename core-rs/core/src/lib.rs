@@ -20,6 +20,7 @@ pub mod context_engine;
 pub mod markdown;
 pub mod media;
 pub mod memory_search;
+pub mod parsing;
 pub mod protocol;
 pub mod security;
 
@@ -779,6 +780,222 @@ pub unsafe extern "C" fn deneb_memory_extract_keywords(
 }
 
 // ---------------------------------------------------------------------------
+// Parsing FFI exports (pre-LLM heavy parsing for Go gateway)
+// ---------------------------------------------------------------------------
+
+/// C FFI: Extract links from message text.
+/// Takes the message text and a JSON config `{"max_links": N}`.
+/// Writes a JSON array of URL strings to `out_ptr`.
+/// Returns bytes written, or negative on error.
+///
+/// # Safety
+/// All pointers must be valid for their respective lengths.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_extract_links(
+    text_ptr: *const u8,
+    text_len: usize,
+    config_ptr: *const u8,
+    config_len: usize,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if text_ptr.is_null() || config_ptr.is_null() || out_ptr.is_null() {
+        return -1;
+    }
+    if text_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let text_slice = std::slice::from_raw_parts(text_ptr, text_len);
+    let config_slice = std::slice::from_raw_parts(config_ptr, config_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let text_str = match std::str::from_utf8(text_slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let config_str = match std::str::from_utf8(config_slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+
+        #[derive(serde::Deserialize)]
+        struct ConfigInput {
+            #[serde(default = "default_max_links")]
+            max_links: usize,
+        }
+        fn default_max_links() -> usize { 5 }
+
+        let config: ConfigInput = match serde_json::from_str(config_str) {
+            Ok(c) => c,
+            Err(_) => return -5,
+        };
+        let cfg = parsing::url_extract::ExtractLinksConfig {
+            max_links: config.max_links,
+        };
+        let urls = parsing::url_extract::extract_links(text_str, &cfg);
+        let json = match serde_json::to_string(&urls) {
+            Ok(j) => j,
+            Err(_) => return -5,
+        };
+        let bytes = json.as_bytes();
+        if bytes.len() > out_slice.len() {
+            return -6;
+        }
+        out_slice[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
+}
+
+/// C FFI: Convert HTML to Markdown.
+/// Writes JSON `{"text":"...","title":"..."}` to `out_ptr`.
+/// Returns bytes written, or negative on error.
+///
+/// # Safety
+/// `html_ptr` must be valid UTF-8. `out_ptr` must be writable.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_html_to_markdown(
+    html_ptr: *const u8,
+    html_len: usize,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if html_ptr.is_null() || out_ptr.is_null() {
+        return -1;
+    }
+    if html_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let html_slice = std::slice::from_raw_parts(html_ptr, html_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let html_str = match std::str::from_utf8(html_slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let result = parsing::html_to_markdown::html_to_markdown(html_str);
+        let json = match serde_json::to_string(&result) {
+            Ok(j) => j,
+            Err(_) => return -5,
+        };
+        let bytes = json.as_bytes();
+        if bytes.len() > out_slice.len() {
+            return -6;
+        }
+        out_slice[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
+}
+
+/// C FFI: Estimate decoded size of a base64 string.
+/// Returns estimated byte count (>= 0) on success, negative on error.
+///
+/// # Safety
+/// `input_ptr` must be valid UTF-8.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_base64_estimate(
+    input_ptr: *const u8,
+    input_len: usize,
+) -> i64 {
+    if input_ptr.is_null() {
+        return -1;
+    }
+    if input_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let slice = std::slice::from_raw_parts(input_ptr, input_len);
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let input_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2_i64,
+        };
+        parsing::base64_util::estimate_base64_decoded_bytes(input_str) as i64
+    })) {
+        Ok(v) => v,
+        Err(_) => -99,
+    }
+}
+
+/// C FFI: Canonicalize a base64 string (strip whitespace, validate).
+/// Writes the canonical base64 string to `out_ptr`.
+/// Returns bytes written on success, -3 if invalid, other negatives on error.
+///
+/// # Safety
+/// `input_ptr` must be valid UTF-8. `out_ptr` must be writable.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_base64_canonicalize(
+    input_ptr: *const u8,
+    input_len: usize,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if input_ptr.is_null() || out_ptr.is_null() {
+        return -1;
+    }
+    if input_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let slice = std::slice::from_raw_parts(input_ptr, input_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let input_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        match parsing::base64_util::canonicalize_base64(input_str) {
+            Some(canonical) => {
+                let bytes = canonical.as_bytes();
+                if bytes.len() > out_slice.len() {
+                    return -6;
+                }
+                out_slice[..bytes.len()].copy_from_slice(bytes);
+                bytes.len() as i32
+            }
+            None => -3, // invalid base64
+        }
+    })
+}
+
+/// C FFI: Parse MEDIA: tokens from text output.
+/// Writes JSON `{"text":"...","media_urls":[...],"audio_as_voice":bool}` to `out_ptr`.
+/// Returns bytes written, or negative on error.
+///
+/// # Safety
+/// `text_ptr` must be valid UTF-8. `out_ptr` must be writable.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_parse_media_tokens(
+    text_ptr: *const u8,
+    text_len: usize,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if text_ptr.is_null() || out_ptr.is_null() {
+        return -1;
+    }
+    if text_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let text_slice = std::slice::from_raw_parts(text_ptr, text_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let text_str = match std::str::from_utf8(text_slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let result = parsing::media_tokens::split_media_from_output(text_str);
+        let json = match serde_json::to_string(&result) {
+            Ok(j) => j,
+            Err(_) => return -5,
+        };
+        let bytes = json.as_bytes();
+        if bytes.len() > out_slice.len() {
+            return -6;
+        }
+        out_slice[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
+}
+
+// ---------------------------------------------------------------------------
 // C FFI exports — Context Engine
 // ---------------------------------------------------------------------------
 
@@ -1097,5 +1314,79 @@ mod tests {
         assert!(len > 0);
         let result = std::str::from_utf8(&out[..len as usize]).unwrap();
         assert!(result.contains("ranked"));
+    }
+
+    #[test]
+    fn test_extract_links_ffi() {
+        let text = "Check https://example.com and https://rust-lang.org please";
+        let config = r#"{"max_links":5}"#;
+        let mut out = [0u8; 1024];
+        let len = unsafe {
+            deneb_extract_links(
+                text.as_ptr(), text.len(),
+                config.as_ptr(), config.len(),
+                out.as_mut_ptr(), out.len(),
+            )
+        };
+        assert!(len > 0);
+        let result = std::str::from_utf8(&out[..len as usize]).unwrap();
+        assert!(result.contains("https://example.com"));
+        assert!(result.contains("https://rust-lang.org"));
+    }
+
+    #[test]
+    fn test_html_to_markdown_ffi() {
+        let html = "<html><head><title>Test</title></head><body><h1>Hello</h1><p>World</p></body></html>";
+        let mut out = [0u8; 4096];
+        let len = unsafe {
+            deneb_html_to_markdown(html.as_ptr(), html.len(), out.as_mut_ptr(), out.len())
+        };
+        assert!(len > 0);
+        let result = std::str::from_utf8(&out[..len as usize]).unwrap();
+        assert!(result.contains("Hello"));
+        assert!(result.contains("World"));
+        assert!(result.contains("Test"));
+    }
+
+    #[test]
+    fn test_base64_estimate_ffi() {
+        let input = "AAAA";
+        let result = unsafe { deneb_base64_estimate(input.as_ptr(), input.len()) };
+        assert_eq!(result, 3);
+    }
+
+    #[test]
+    fn test_base64_canonicalize_ffi() {
+        let input = " A A A A ";
+        let mut out = [0u8; 256];
+        let len = unsafe {
+            deneb_base64_canonicalize(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len())
+        };
+        assert!(len > 0);
+        let result = std::str::from_utf8(&out[..len as usize]).unwrap();
+        assert_eq!(result, "AAAA");
+    }
+
+    #[test]
+    fn test_base64_canonicalize_invalid() {
+        let input = "AAA"; // not multiple of 4
+        let mut out = [0u8; 256];
+        let len = unsafe {
+            deneb_base64_canonicalize(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len())
+        };
+        assert_eq!(len, -3); // invalid
+    }
+
+    #[test]
+    fn test_parse_media_tokens_ffi() {
+        let text = "Here is output\nMEDIA: https://example.com/img.png\nDone.";
+        let mut out = [0u8; 4096];
+        let len = unsafe {
+            deneb_parse_media_tokens(text.as_ptr(), text.len(), out.as_mut_ptr(), out.len())
+        };
+        assert!(len > 0);
+        let result = std::str::from_utf8(&out[..len as usize]).unwrap();
+        assert!(result.contains("https://example.com/img.png"));
+        assert!(result.contains("media_urls"));
     }
 }
