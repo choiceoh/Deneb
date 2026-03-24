@@ -9,55 +9,57 @@ type DeliveryPayload = Pick<
   "text" | "mediaUrl" | "mediaUrls" | "interactive" | "channelData" | "isError"
 >;
 
+const SUMMARY_MAX_CHARS = 2000;
+
+/**
+ * Iterate payloads in reverse, first skipping error entries then falling back
+ * to include them. Returns the first truthy result from `extract`.
+ */
+function pickLastFromPayloads<T extends { isError?: boolean }, R>(
+  payloads: T[],
+  extract: (item: T) => R | undefined,
+): R | undefined {
+  for (let i = payloads.length - 1; i >= 0; i--) {
+    if (payloads[i]?.isError) {
+      continue;
+    }
+    const result = extract(payloads[i]);
+    if (result !== undefined) {
+      return result;
+    }
+  }
+  for (let i = payloads.length - 1; i >= 0; i--) {
+    const result = extract(payloads[i]);
+    if (result !== undefined) {
+      return result;
+    }
+  }
+  return undefined;
+}
+
 export function pickSummaryFromOutput(text: string | undefined) {
   const clean = (text ?? "").trim();
   if (!clean) {
     return undefined;
   }
-  const limit = 2000;
-  return clean.length > limit ? `${truncateUtf16Safe(clean, limit)}…` : clean;
+  return clean.length > SUMMARY_MAX_CHARS
+    ? `${truncateUtf16Safe(clean, SUMMARY_MAX_CHARS)}…`
+    : clean;
 }
 
 export function pickSummaryFromPayloads(
   payloads: Array<{ text?: string | undefined; isError?: boolean }>,
 ) {
-  for (let i = payloads.length - 1; i >= 0; i--) {
-    if (payloads[i]?.isError) {
-      continue;
-    }
-    const summary = pickSummaryFromOutput(payloads[i]?.text);
-    if (summary) {
-      return summary;
-    }
-  }
-  for (let i = payloads.length - 1; i >= 0; i--) {
-    const summary = pickSummaryFromOutput(payloads[i]?.text);
-    if (summary) {
-      return summary;
-    }
-  }
-  return undefined;
+  return pickLastFromPayloads(payloads, (p) => pickSummaryFromOutput(p?.text));
 }
 
 export function pickLastNonEmptyTextFromPayloads(
   payloads: Array<{ text?: string | undefined; isError?: boolean }>,
 ) {
-  for (let i = payloads.length - 1; i >= 0; i--) {
-    if (payloads[i]?.isError) {
-      continue;
-    }
-    const clean = (payloads[i]?.text ?? "").trim();
-    if (clean) {
-      return clean;
-    }
-  }
-  for (let i = payloads.length - 1; i >= 0; i--) {
-    const clean = (payloads[i]?.text ?? "").trim();
-    if (clean) {
-      return clean;
-    }
-  }
-  return undefined;
+  return pickLastFromPayloads(payloads, (p) => {
+    const clean = (p?.text ?? "").trim();
+    return clean || undefined;
+  });
 }
 
 export function pickLastDeliverablePayload(payloads: DeliveryPayload[]) {
@@ -66,25 +68,12 @@ export function pickLastDeliverablePayload(payloads: DeliveryPayload[]) {
     const hasChannelData = Object.keys(p?.channelData ?? {}).length > 0;
     return hasOutboundReplyContent(p, { trimText: true }) || hasInteractive || hasChannelData;
   };
-  for (let i = payloads.length - 1; i >= 0; i--) {
-    if (payloads[i]?.isError) {
-      continue;
-    }
-    if (isDeliverable(payloads[i])) {
-      return payloads[i];
-    }
-  }
-  for (let i = payloads.length - 1; i >= 0; i--) {
-    if (isDeliverable(payloads[i])) {
-      return payloads[i];
-    }
-  }
-  return undefined;
+  return pickLastFromPayloads(payloads, (p) => (isDeliverable(p) ? p : undefined));
 }
 
 /**
  * Check if delivery should be skipped because the agent signaled no user-visible update.
- * Returns true when any payload is a heartbeat ack token and no payload contains media.
+ * Domain-specific alias for `shouldSkipHeartbeatOnlyDelivery`.
  */
 export function isHeartbeatOnlyResponse(payloads: DeliveryPayload[], ackMaxChars: number) {
   return shouldSkipHeartbeatOnlyDelivery(payloads, ackMaxChars);
