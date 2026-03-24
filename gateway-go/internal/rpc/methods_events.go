@@ -16,6 +16,8 @@ type EventsDeps struct {
 }
 
 // RegisterEventsMethods registers event subscription, streaming, and node event RPC methods.
+// Also registers TS-compatible aliases (sessions.subscribe, etc.) that map to the
+// same handlers as subscribe.session, etc.
 func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 	if deps.Broadcaster == nil {
 		return
@@ -93,4 +95,63 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"unsubscribed": true})
 		return resp
 	})
+
+	// TS-compatible aliases: sessions.subscribe → subscribe.session, etc.
+	// The TypeScript gateway uses "sessions.subscribe" while the Go gateway
+	// originally used "subscribe.session". Register both for compatibility.
+	subscribeSession := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			ConnID string `json:"connId"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "connId is required"))
+		}
+		deps.Broadcaster.SubscribeSessionEvents(p.ConnID)
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"subscribed": true})
+		return resp
+	}
+	unsubscribeSession := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			ConnID string `json:"connId"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "connId is required"))
+		}
+		deps.Broadcaster.UnsubscribeSessionEvents(p.ConnID)
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"unsubscribed": true})
+		return resp
+	}
+	subscribeMessages := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			ConnID     string `json:"connId"`
+			SessionKey string `json:"sessionKey"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" || p.SessionKey == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "connId and sessionKey are required"))
+		}
+		deps.Broadcaster.SubscribeSessionMessageEvents(p.ConnID, p.SessionKey)
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"subscribed": true})
+		return resp
+	}
+	unsubscribeMessages := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			ConnID     string `json:"connId"`
+			SessionKey string `json:"sessionKey"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.ConnID == "" || p.SessionKey == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "connId and sessionKey are required"))
+		}
+		deps.Broadcaster.UnsubscribeSessionMessageEvents(p.ConnID, p.SessionKey)
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"unsubscribed": true})
+		return resp
+	}
+
+	d.Register("sessions.subscribe", subscribeSession)
+	d.Register("sessions.unsubscribe", unsubscribeSession)
+	d.Register("sessions.messages.subscribe", subscribeMessages)
+	d.Register("sessions.messages.unsubscribe", unsubscribeMessages)
 }
