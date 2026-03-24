@@ -32,7 +32,7 @@ import {
 
 const ROOT_PREFIX = "/";
 const CONTROL_UI_ASSETS_MISSING_MESSAGE =
-  "Control UI assets not found. Build them with `pnpm ui:build` (auto-installs UI deps), or run `pnpm ui:dev` during development.";
+  "Control UI assets not found. Run `pnpm build` to generate them.";
 
 export type ControlUiRequestOptions = {
   basePath?: string;
@@ -132,7 +132,7 @@ function respondControlUiAssetsUnavailable(
     respondPlainText(
       res,
       503,
-      `Control UI assets not found at ${options.configuredRootPath}. Build them with \`pnpm ui:build\` (auto-installs UI deps), or update gateway.controlUi.root.`,
+      `Control UI assets not found at ${options.configuredRootPath}. Run \`pnpm build\` to generate them, or update gateway.controlUi.root.`,
     );
     return;
   }
