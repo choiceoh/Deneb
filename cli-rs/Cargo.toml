@@ -14,7 +14,14 @@ clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 
 # Async runtime
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util", "sync"] }
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "macros",
+  "time",
+  "net",
+  "io-util",
+  "sync",
+] }
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 futures-util = "0.3"
 
