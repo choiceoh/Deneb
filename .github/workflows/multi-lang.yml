@@ -8,18 +8,18 @@ on:
   push:
     branches: [master]
     paths:
-      - 'core-rs/**'
-      - 'gateway-go/**'
-      - 'proto/**'
-      - 'Makefile'
-      - '.github/workflows/multi-lang.yml'
+      - "core-rs/**"
+      - "gateway-go/**"
+      - "proto/**"
+      - "Makefile"
+      - ".github/workflows/multi-lang.yml"
   pull_request:
     paths:
-      - 'core-rs/**'
-      - 'gateway-go/**'
-      - 'proto/**'
-      - 'Makefile'
-      - '.github/workflows/multi-lang.yml'
+      - "core-rs/**"
+      - "gateway-go/**"
+      - "proto/**"
+      - "Makefile"
+      - ".github/workflows/multi-lang.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -71,7 +71,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
           cache-dependency-path: gateway-go/go.sum
 
       - name: Build (no FFI)
@@ -92,7 +92,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
           cache-dependency-path: gateway-go/go.sum
 
       - uses: actions/download-artifact@v4

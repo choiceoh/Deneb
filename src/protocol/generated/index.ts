@@ -16,21 +16,10 @@ export type {
   HelloOk_Features,
   HelloOk_Policy,
   HelloOk_AuthInfo,
-} from "./gateway";
+} from "./gateway.js";
 
-export type {
-  ChannelCapabilities,
-  ChannelMeta,
-  ChannelAccountSnapshot,
-} from "./channel";
+export type { ChannelCapabilities, ChannelMeta, ChannelAccountSnapshot } from "./channel.js";
 
-export {
-  SessionRunStatus,
-  SessionKind,
-} from "./session";
+export { SessionRunStatus, SessionKind } from "./session.js";
 
-export type {
-  GatewaySessionRow,
-  SessionPreviewItem,
-  SessionsPreviewEntry,
-} from "./session";
+export type { GatewaySessionRow, SessionPreviewItem, SessionsPreviewEntry } from "./session.js";

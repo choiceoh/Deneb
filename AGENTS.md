@@ -337,24 +337,24 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 
 ### Multi-Language Build (Makefile)
 
-| Command            | Description                                          |
-| ------------------ | ---------------------------------------------------- |
-| `make all`         | Build Rust + Go (release)                            |
-| `make rust`        | Build Rust core library (release)                    |
-| `make rust-test`   | Run Rust tests (`cargo test`)                        |
-| `make go`          | Build Go gateway                                     |
-| `make go-test`     | Run Go tests (`go test ./...`)                       |
-| `make go-run`      | Run Go gateway locally                               |
-| `make test`        | Run Rust + Go tests                                  |
-| `make check`       | Full check: proto-check + rust-test + go-test + ts   |
-| `make clean`       | Clean Rust + Go build artifacts                      |
-| `make proto`       | Generate protobuf code (Go + Rust + TS, parallel)    |
-| `make proto-go`    | Generate Go protobuf structs only                    |
-| `make proto-rust`  | Generate Rust protobuf structs only                  |
-| `make proto-ts`    | Generate TypeScript protobuf types only              |
-| `make proto-check` | Generate + verify no uncommitted diffs               |
-| `make proto-lint`  | Lint proto files only (buf lint)                     |
-| `make proto-watch` | Watch proto files and regenerate on change           |
+| Command            | Description                                        |
+| ------------------ | -------------------------------------------------- |
+| `make all`         | Build Rust + Go (release)                          |
+| `make rust`        | Build Rust core library (release)                  |
+| `make rust-test`   | Run Rust tests (`cargo test`)                      |
+| `make go`          | Build Go gateway                                   |
+| `make go-test`     | Run Go tests (`go test ./...`)                     |
+| `make go-run`      | Run Go gateway locally                             |
+| `make test`        | Run Rust + Go tests                                |
+| `make check`       | Full check: proto-check + rust-test + go-test + ts |
+| `make clean`       | Clean Rust + Go build artifacts                    |
+| `make proto`       | Generate protobuf code (Go + Rust + TS, parallel)  |
+| `make proto-go`    | Generate Go protobuf structs only                  |
+| `make proto-rust`  | Generate Rust protobuf structs only                |
+| `make proto-ts`    | Generate TypeScript protobuf types only            |
+| `make proto-check` | Generate + verify no uncommitted diffs             |
+| `make proto-lint`  | Lint proto files only (buf lint)                   |
+| `make proto-watch` | Watch proto files and regenerate on change         |
 
 ### Development
 

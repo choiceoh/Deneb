@@ -1,8 +1,10 @@
+# DEPRECATED: Merged into core-rs-napi (unified @deneb/native addon).
+# This crate is not in the workspace and is kept only for reference.
 [package]
-name = "deneb-native"
+name = "deneb-native-legacy"
 version = "0.1.0"
 edition = "2021"
-description = "Rust native addon for performance-critical Deneb operations"
+description = "DEPRECATED — merged into core-rs-napi"
 
 [lib]
 crate-type = ["cdylib"]
