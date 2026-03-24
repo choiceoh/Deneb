@@ -50,8 +50,14 @@ pub enum Commands {
     /// List and manage sessions.
     Sessions(commands::sessions::SessionsArgs),
 
-    /// Agent operations.
+    /// Agent operations (list, add, delete, bind, unbind).
     Agents(commands::agents::AgentsArgs),
+
+    /// Run a single agent turn via gateway.
+    Agent(commands::agent::AgentArgs),
+
+    /// Send messages to channel targets.
+    Message(commands::message::MessageArgs),
 
     /// Memory search and management.
     Memory(commands::memory::MemoryArgs),
@@ -59,6 +65,9 @@ pub enum Commands {
     // --- SubCLI commands ---
     /// Gateway management.
     Gateway(subcli::gateway_cmd::GatewayArgs),
+
+    /// Channel management and status.
+    Channels(subcli::channels::ChannelsArgs),
 
     /// Tail gateway logs.
     Logs(subcli::logs::LogsArgs),

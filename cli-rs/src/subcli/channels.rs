@@ -1,0 +1,332 @@
+use clap::{Args, Subcommand};
+
+use crate::errors::CliError;
+use crate::gateway::{call_gateway, CallOptions};
+use crate::terminal::{is_json_mode, styled_table, Palette};
+
+#[derive(Args, Debug)]
+pub struct ChannelsArgs {
+    #[command(subcommand)]
+    pub command: ChannelsCommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ChannelsCommand {
+    /// List configured channels and accounts.
+    List {
+        /// Skip usage/quota snapshots.
+        #[arg(long)]
+        no_usage: bool,
+
+        /// Output JSON.
+        #[arg(long)]
+        json: bool,
+
+        /// Gateway WebSocket URL override.
+        #[arg(long)]
+        url: Option<String>,
+
+        /// Gateway auth token.
+        #[arg(long)]
+        token: Option<String>,
+
+        /// Gateway password.
+        #[arg(long)]
+        password: Option<String>,
+
+        /// Timeout in milliseconds.
+        #[arg(long, default_value = "15000")]
+        timeout: u64,
+    },
+
+    /// Show channel status with optional connectivity probe.
+    Status {
+        /// Probe channel credentials for connectivity.
+        #[arg(long)]
+        probe: bool,
+
+        /// Output JSON.
+        #[arg(long)]
+        json: bool,
+
+        /// Gateway WebSocket URL override.
+        #[arg(long)]
+        url: Option<String>,
+
+        /// Gateway auth token.
+        #[arg(long)]
+        token: Option<String>,
+
+        /// Gateway password.
+        #[arg(long)]
+        password: Option<String>,
+
+        /// Timeout in milliseconds.
+        #[arg(long, default_value = "15000")]
+        timeout: u64,
+    },
+}
+
+pub async fn run(args: &ChannelsArgs) -> Result<(), CliError> {
+    match &args.command {
+        ChannelsCommand::List {
+            no_usage,
+            json,
+            url,
+            token,
+            password,
+            timeout,
+        } => {
+            cmd_list(
+                *no_usage,
+                *json,
+                url.as_deref(),
+                token.as_deref(),
+                password.as_deref(),
+                *timeout,
+            )
+            .await
+        }
+        ChannelsCommand::Status {
+            probe,
+            json,
+            url,
+            token,
+            password,
+            timeout,
+        } => {
+            cmd_status(
+                *probe,
+                *json,
+                url.as_deref(),
+                token.as_deref(),
+                password.as_deref(),
+                *timeout,
+            )
+            .await
+        }
+    }
+}
+
+async fn cmd_list(
+    no_usage: bool,
+    json: bool,
+    url: Option<&str>,
+    token: Option<&str>,
+    password: Option<&str>,
+    timeout: u64,
+) -> Result<(), CliError> {
+    let json_mode = is_json_mode(json);
+
+    let mut params = serde_json::json!({});
+    if no_usage {
+        params["noUsage"] = serde_json::json!(true);
+    }
+
+    let result = crate::terminal::progress::with_spinner(
+        "Fetching channels...",
+        !json_mode,
+        call_gateway(CallOptions {
+            url: url.map(|s| s.to_string()),
+            token: token.map(|s| s.to_string()),
+            password: password.map(|s| s.to_string()),
+            method: "channels.list".to_string(),
+            params: Some(params),
+            timeout_ms: timeout,
+            expect_final: false,
+        }),
+    )
+    .await?;
+
+    if json_mode {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+        return Ok(());
+    }
+
+    let bold = Palette::bold();
+    let muted = Palette::muted();
+
+    let channel_accounts = result.get("channelAccounts").and_then(|ca| ca.as_object());
+
+    let Some(channel_accounts) = channel_accounts else {
+        println!("{}", muted.apply_to("No channels configured."));
+        return Ok(());
+    };
+
+    println!("{}", bold.apply_to("Channels"));
+
+    let mut table = styled_table();
+    table.set_header(vec!["Channel", "Account", "Enabled"]);
+
+    for (channel, accounts) in channel_accounts {
+        let accounts_arr = accounts.as_array().cloned().unwrap_or_default();
+        if accounts_arr.is_empty() {
+            table.add_row(vec![channel.clone(), "-".to_string(), "-".to_string()]);
+            continue;
+        }
+        for acct in &accounts_arr {
+            let account_id = acct
+                .get("accountId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("-");
+            let enabled = acct
+                .get("enabled")
+                .and_then(|v| v.as_bool())
+                .map(|b| if b { "yes" } else { "no" })
+                .unwrap_or("-");
+            table.add_row(vec![
+                channel.clone(),
+                account_id.to_string(),
+                enabled.to_string(),
+            ]);
+        }
+    }
+
+    println!("{table}");
+    Ok(())
+}
+
+async fn cmd_status(
+    probe: bool,
+    json: bool,
+    url: Option<&str>,
+    token: Option<&str>,
+    password: Option<&str>,
+    timeout: u64,
+) -> Result<(), CliError> {
+    let json_mode = is_json_mode(json);
+
+    let mut params = serde_json::json!({});
+    if probe {
+        params["probe"] = serde_json::json!(true);
+    }
+    params["timeoutMs"] = serde_json::json!(timeout);
+
+    let spinner_msg = if probe {
+        "Probing channels..."
+    } else {
+        "Fetching channel status..."
+    };
+
+    let result = crate::terminal::progress::with_spinner(
+        spinner_msg,
+        !json_mode,
+        call_gateway(CallOptions {
+            url: url.map(|s| s.to_string()),
+            token: token.map(|s| s.to_string()),
+            password: password.map(|s| s.to_string()),
+            method: "channels.status".to_string(),
+            params: Some(params),
+            timeout_ms: timeout,
+            expect_final: false,
+        }),
+    )
+    .await?;
+
+    if json_mode {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+        return Ok(());
+    }
+
+    let bold = Palette::bold();
+    let muted = Palette::muted();
+
+    let channel_accounts = result.get("channelAccounts").and_then(|ca| ca.as_object());
+
+    let Some(channel_accounts) = channel_accounts else {
+        println!("{}", muted.apply_to("No channels configured."));
+        return Ok(());
+    };
+
+    println!("{}", bold.apply_to("Channel Status"));
+
+    let mut table = styled_table();
+    let mut headers = vec![
+        "Channel",
+        "Account",
+        "Enabled",
+        "Configured",
+        "Linked",
+        "Connected",
+    ];
+    if probe {
+        headers.push("Probe");
+    }
+    headers.push("Last Activity");
+    table.set_header(headers);
+
+    for (channel, accounts) in channel_accounts {
+        let accounts_arr = accounts.as_array().cloned().unwrap_or_default();
+        for acct in &accounts_arr {
+            let account_id = acct
+                .get("accountId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("-");
+            let enabled = bool_indicator(acct.get("enabled"));
+            let configured = bool_indicator(acct.get("configured"));
+            let linked = bool_indicator(acct.get("linked"));
+            let connected = bool_indicator(acct.get("connected"));
+
+            let last_activity = acct
+                .get("lastInboundAt")
+                .or_else(|| acct.get("lastOutboundAt"))
+                .and_then(|v| v.as_f64())
+                .map(format_age)
+                .unwrap_or_else(|| "-".to_string());
+
+            let mut row = vec![
+                channel.clone(),
+                account_id.to_string(),
+                enabled,
+                configured,
+                linked,
+                connected,
+            ];
+
+            if probe {
+                let probe_ok = acct
+                    .get("probe")
+                    .and_then(|p| p.get("ok"))
+                    .and_then(|v| v.as_bool());
+                row.push(match probe_ok {
+                    Some(true) => "ok".to_string(),
+                    Some(false) => "fail".to_string(),
+                    None => "-".to_string(),
+                });
+            }
+
+            row.push(last_activity);
+            table.add_row(row);
+        }
+    }
+
+    println!("{table}");
+    Ok(())
+}
+
+fn bool_indicator(val: Option<&serde_json::Value>) -> String {
+    match val.and_then(|v| v.as_bool()) {
+        Some(true) => "yes".to_string(),
+        Some(false) => "no".to_string(),
+        None => "-".to_string(),
+    }
+}
+
+/// Format a Unix millisecond timestamp as a relative age string.
+fn format_age(ts_ms: f64) -> String {
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as f64)
+        .unwrap_or(0.0);
+    let diff_s = ((now_ms - ts_ms) / 1000.0).max(0.0);
+
+    if diff_s < 60.0 {
+        format!("{:.0}s ago", diff_s)
+    } else if diff_s < 3600.0 {
+        format!("{:.0}m ago", diff_s / 60.0)
+    } else if diff_s < 86400.0 {
+        format!("{:.0}h ago", diff_s / 3600.0)
+    } else {
+        format!("{:.0}d ago", diff_s / 86400.0)
+    }
+}
