@@ -17,36 +17,77 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
+	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/server"
 )
 
 func main() {
-	port := flag.Int("port", 18789, "Gateway server port")
-	bind := flag.String("bind", "loopback", "Bind address: 'loopback' or 'all'")
+	configPath := flag.String("config", "", "Path to deneb.json config file")
+	port := flag.Int("port", 0, "Gateway server port (overrides config)")
+	bind := flag.String("bind", "", "Bind address: 'loopback', 'lan', 'all', 'custom', 'tailnet' (overrides config)")
 	bridgeSocket := flag.String("bridge", "", "Path to plugin host unix socket")
 	version := flag.String("version", "0.1.0-go", "Server version string")
 	pidFile := flag.String("pid-file", "", "Path to PID file for daemon mode")
 	daemonMode := flag.Bool("daemon", false, "Run as daemon (write PID file, check for existing)")
-	logLevel := flag.String("log-level", "info", "Log level: debug, info, warn, error")
+	logLevel := flag.String("log-level", "", "Log level: debug, info, warn, error (overrides config)")
 	flag.Parse()
 
-	level := parseLogLevel(*logLevel)
+	// Bootstrap config from ~/.deneb/deneb.json (or --config path).
+	bootstrap, err := config.BootstrapGatewayConfig(config.BootstrapOptions{
+		ConfigPath: *configPath,
+		Persist:    true,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config bootstrap failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Resolve log level: CLI flag > config > default.
+	resolvedLogLevel := "info"
+	if bootstrap.Config.Logging != nil && bootstrap.Config.Logging.Level != "" {
+		resolvedLogLevel = bootstrap.Config.Logging.Level
+	}
+	if *logLevel != "" {
+		resolvedLogLevel = *logLevel
+	}
+	level := parseLogLevel(resolvedLogLevel)
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: level,
 	}))
 
-	bindAddr := "127.0.0.1"
-	if *bind == "all" || *bind == "lan" {
-		bindAddr = "0.0.0.0"
+	// Resolve port: CLI flag > env > config > default.
+	resolvedPort := config.ResolveGatewayPort(&bootstrap.Config)
+	if *port > 0 {
+		resolvedPort = *port
 	}
 
-	addr := fmt.Sprintf("%s:%d", bindAddr, *port)
+	// Resolve runtime config (bind host, auth, validation constraints).
+	rtCfg, err := config.ResolveGatewayRuntimeConfig(config.RuntimeConfigParams{
+		Config: &bootstrap.Config,
+		Port:   resolvedPort,
+		Bind:   *bind,
+		Auth:   &bootstrap.Auth,
+	})
+	if err != nil {
+		logger.Error("runtime config resolution failed", "error", err)
+		os.Exit(1)
+	}
+
+	addr := fmt.Sprintf("%s:%d", rtCfg.BindHost, rtCfg.Port)
 
 	srv := server.New(addr,
 		server.WithLogger(logger),
 		server.WithVersion(*version),
+		server.WithConfig(rtCfg),
 	)
+
+	if bootstrap.GeneratedToken != "" {
+		logger.Info("gateway auth token auto-generated",
+			"persisted", bootstrap.PersistedGeneratedToken,
+			"configPath", bootstrap.Snapshot.Path,
+		)
+	}
 
 	// Daemon mode: manage PID file and check for existing daemon.
 	if *daemonMode || *pidFile != "" {
