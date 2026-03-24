@@ -49,6 +49,10 @@ export type PerformanceProfile = {
   uvThreadPoolSize: number;
   /** V8 max old generation size in MB (--max-old-space-size). 0 = use default. */
   v8MaxOldSpaceMb: number;
+
+  // worker_threads compute pool
+  /** Size of the worker_threads pool for CPU-bound parallel work. */
+  computePoolSize: number;
 };
 
 const cpuCores = os.cpus().length;
@@ -71,6 +75,8 @@ const totalMemoryMb = Math.floor(os.totalmem() / (1024 * 1024));
  * - UV threadpool: 20 (2x 10 cores) — saturates async I/O on Grace ARM cores
  * - V8 heap: 8GB — plenty of headroom from 128GB unified memory
  * - Audio duration: 60 min — NVENC is fast enough for long media
+ * - Compute pool: half of CPU cores — dedicated worker_threads for
+ *   CPU-bound work (image resize, hashing, PDF extraction)
  */
 const DGX_SPARK_PROFILE: PerformanceProfile = {
   name: "dgx-spark-gb10",
@@ -100,6 +106,8 @@ const DGX_SPARK_PROFILE: PerformanceProfile = {
 
   uvThreadPoolSize: 20, // 2x 10 Grace cores
   v8MaxOldSpaceMb: 8_192, // 8GB from 128GB unified memory
+
+  computePoolSize: Math.max(2, Math.min(Math.floor(cpuCores / 2), 10)),
 };
 
 /**
@@ -135,6 +143,8 @@ const DESKTOP_GPU_PROFILE: PerformanceProfile = {
 
   uvThreadPoolSize: Math.min(cpuCores * 2, 32),
   v8MaxOldSpaceMb: Math.min(Math.floor(totalMemoryMb * 0.25), 4_096),
+
+  computePoolSize: Math.max(2, Math.min(Math.floor(cpuCores / 2), 8)),
 };
 
 /**
@@ -167,6 +177,8 @@ const CPU_PROFILE: PerformanceProfile = {
 
   uvThreadPoolSize: Math.min(cpuCores, 16),
   v8MaxOldSpaceMb: 0, // Use Node.js default
+
+  computePoolSize: Math.max(2, Math.min(Math.floor(cpuCores / 4), 4)),
 };
 
 const PROFILES_BY_TIER: Record<GpuTier, PerformanceProfile> = {

@@ -1,0 +1,72 @@
+package rpc
+
+import (
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+func TestWorkerPoolConcurrencyLimit(t *testing.T) {
+	pool := NewWorkerPool(2)
+	var maxConcurrent atomic.Int64
+	var running atomic.Int64
+	var wg sync.WaitGroup
+
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		pool.Submit(func() {
+			defer wg.Done()
+			cur := running.Add(1)
+			// Track peak concurrency
+			for {
+				old := maxConcurrent.Load()
+				if cur <= old || maxConcurrent.CompareAndSwap(old, cur) {
+					break
+				}
+			}
+			time.Sleep(10 * time.Millisecond)
+			running.Add(-1)
+		})
+	}
+
+	wg.Wait()
+
+	if got := maxConcurrent.Load(); got > 2 {
+		t.Errorf("expected max concurrency ≤2, got %d", got)
+	}
+}
+
+func TestWorkerPoolStats(t *testing.T) {
+	pool := NewWorkerPool(4)
+	var wg sync.WaitGroup
+
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		pool.Submit(func() {
+			defer wg.Done()
+			time.Sleep(5 * time.Millisecond)
+		})
+	}
+
+	wg.Wait()
+
+	stats := pool.Stats()
+	if stats.Done != 3 {
+		t.Errorf("expected 3 done, got %d", stats.Done)
+	}
+	if stats.MaxSize != 4 {
+		t.Errorf("expected max size 4, got %d", stats.MaxSize)
+	}
+	if stats.Active != 0 {
+		t.Errorf("expected 0 active after completion, got %d", stats.Active)
+	}
+}
+
+func TestWorkerPoolDefaultSize(t *testing.T) {
+	pool := NewWorkerPool(0) // should use default
+	stats := pool.Stats()
+	if stats.MaxSize < 4 || stats.MaxSize > 64 {
+		t.Errorf("default pool size out of range [4, 64]: %d", stats.MaxSize)
+	}
+}

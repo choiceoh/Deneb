@@ -3,4 +3,6 @@ export const enum CommandLane {
   Cron = "cron",
   Subagent = "subagent",
   Nested = "nested",
+  /** Dedicated lane for parallel plugin/extension loading during startup. */
+  PluginLoad = "plugin-load",
 }
