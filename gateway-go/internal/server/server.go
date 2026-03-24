@@ -55,7 +55,8 @@ type Server struct {
 	channels         *channel.Registry
 	channelLifecycle *channel.LifecycleManager
 	bridge           *bridge.PluginHost
-	dedupe      *dedupe.Tracker
+	keyCache         *session.KeyCache
+	dedupe           *dedupe.Tracker
 	broadcaster *events.Broadcaster
 	processes   *process.Manager
 	cron        *cron.Scheduler
@@ -144,6 +145,7 @@ func New(addr string, opts ...Option) *Server {
 
 	s.broadcaster = events.NewBroadcaster()
 	s.broadcaster.SetLogger(s.logger)
+	s.keyCache = session.NewKeyCache()
 	s.processes = process.NewManager(s.logger)
 	s.cron = cron.NewScheduler(s.logger)
 	s.hooks = hooks.NewRegistry(s.logger)
@@ -164,9 +166,35 @@ func New(addr string, opts ...Option) *Server {
 }
 
 // SetBridge sets the Plugin Host bridge for forwarding unhandled RPC methods.
+// Also wires bridge event forwarding to the chat handler and broadcaster.
 func (s *Server) SetBridge(b *bridge.PluginHost) {
 	s.bridge = b
 	s.dispatcher.SetForwarder(b)
+
+	// Wire raw broadcast to chat handler for streaming event relay.
+	if s.chatHandler != nil {
+		s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
+			return s.broadcaster.BroadcastRaw(event, data)
+		})
+	}
+
+	// Wire bridge events: chat events go to chatHandler, others to broadcaster.
+	b.SetEventHandler(func(ev *protocol.EventFrame) {
+		if s.chatHandler != nil && (ev.Event == "chat" || ev.Event == "chat.delta") {
+			s.chatHandler.HandleBridgeEvent(ev)
+		} else {
+			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
+		}
+	})
+}
+
+// mustMarshalEvent marshals an event frame to JSON bytes.
+func mustMarshalEvent(ev *protocol.EventFrame) []byte {
+	data, err := json.Marshal(ev)
+	if err != nil {
+		return []byte("{}")
+	}
+	return data
 }
 
 // Run starts the server and blocks until the context is canceled.
