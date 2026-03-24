@@ -56,36 +56,26 @@ export interface GatewaySessionRow {
   updatedAt?: number | undefined;
   sessionId?: string | undefined;
   systemSent?: boolean | undefined;
-  abortedLastRun?:
-    | boolean
-    | undefined;
+  abortedLastRun?: boolean | undefined;
   /** Model/inference settings */
   thinkingLevel?: string | undefined;
   fastMode?: boolean | undefined;
   verboseLevel?: string | undefined;
   reasoningLevel?: string | undefined;
-  elevatedLevel?:
-    | string
-    | undefined;
+  elevatedLevel?: string | undefined;
   /** "allow" | "deny" */
-  sendPolicy?:
-    | string
-    | undefined;
+  sendPolicy?: string | undefined;
   /** Token usage */
   inputTokens?: number | undefined;
   outputTokens?: number | undefined;
   totalTokens?: number | undefined;
   totalTokensFresh?: boolean | undefined;
-  estimatedCostUsd?:
-    | number
-    | undefined;
+  estimatedCostUsd?: number | undefined;
   /** Run state */
   status: SessionRunStatus;
   startedAt?: number | undefined;
   endedAt?: number | undefined;
-  runtimeMs?:
-    | number
-    | undefined;
+  runtimeMs?: number | undefined;
   /** Hierarchy */
   parentSessionKey?: string | undefined;
   childSessions: string[];
@@ -93,9 +83,7 @@ export interface GatewaySessionRow {
   responseUsage?: string | undefined;
   modelProvider?: string | undefined;
   model?: string | undefined;
-  contextTokens?:
-    | number
-    | undefined;
+  contextTokens?: number | undefined;
   /** Delivery */
   lastChannel?: string | undefined;
   lastTo?: string | undefined;

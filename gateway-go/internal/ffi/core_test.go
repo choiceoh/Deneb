@@ -68,6 +68,87 @@ func TestDetectMIME(t *testing.T) {
 	}
 }
 
+func TestValidateSessionKey(t *testing.T) {
+	if err := ValidateSessionKey("my-session-123"); err != nil {
+		t.Errorf("expected valid, got: %v", err)
+	}
+	if err := ValidateSessionKey("a"); err != nil {
+		t.Errorf("expected valid single char, got: %v", err)
+	}
+	if err := ValidateSessionKey(""); err == nil {
+		t.Error("expected error for empty key")
+	}
+	if err := ValidateSessionKey("has\x00null"); err == nil {
+		t.Error("expected error for control char in key")
+	}
+}
+
+func TestSanitizeHTML(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"hello", "hello"},
+		{"<script>", "&lt;script&gt;"},
+		{"a & b", "a &amp; b"},
+		{`"quoted"`, "&quot;quoted&quot;"},
+		{"it's", "it&#x27;s"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got := SanitizeHTML(tt.input)
+		if got != tt.want {
+			t.Errorf("SanitizeHTML(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestIsSafeURL(t *testing.T) {
+	safe := []string{
+		"https://example.com/api",
+		"http://cdn.example.com/image.png",
+	}
+	for _, url := range safe {
+		if !IsSafeURL(url) {
+			t.Errorf("expected safe: %s", url)
+		}
+	}
+	blocked := []string{
+		"http://localhost/admin",
+		"http://127.0.0.1:8080/",
+		"http://10.0.0.1/secret",
+		"http://192.168.1.1/",
+		"http://169.254.169.254/latest/meta-data/",
+		"ftp://example.com/file",
+		"",
+	}
+	for _, url := range blocked {
+		if IsSafeURL(url) {
+			t.Errorf("expected blocked: %s", url)
+		}
+	}
+}
+
+func TestValidateErrorCode(t *testing.T) {
+	valid := []string{
+		"NOT_LINKED", "NOT_PAIRED", "AGENT_TIMEOUT", "INVALID_REQUEST",
+		"UNAVAILABLE", "MISSING_PARAM", "NOT_FOUND", "UNAUTHORIZED",
+		"VALIDATION_FAILED", "CONFLICT", "FORBIDDEN", "NODE_DISCONNECTED",
+		"DEPENDENCY_FAILED", "FEATURE_DISABLED",
+	}
+	for _, code := range valid {
+		if !ValidateErrorCode(code) {
+			t.Errorf("expected valid error code: %s", code)
+		}
+	}
+	if ValidateErrorCode("BOGUS") {
+		t.Error("expected invalid for unknown code")
+	}
+	if ValidateErrorCode("") {
+		t.Error("expected invalid for empty code")
+	}
+}
+
 func TestAvailable(t *testing.T) {
 	t.Logf("FFI available: %v", Available)
 }

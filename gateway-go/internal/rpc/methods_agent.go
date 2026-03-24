@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -267,6 +268,11 @@ func sessionsCreate(deps ExtendedDeps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "key is required"))
 		}
+		// Validate session key format (Rust FFI or Go fallback).
+		if err := ffi.ValidateSessionKey(p.Key); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrValidationFailed, "invalid session key"))
+		}
 
 		kind := session.KindDirect
 		switch p.Kind {
@@ -297,6 +303,10 @@ func sessionsLifecycle(deps ExtendedDeps) HandlerFunc {
 		if p.Key == "" || p.Phase == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "key and phase are required"))
+		}
+		if err := ffi.ValidateSessionKey(p.Key); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrValidationFailed, "invalid session key"))
 		}
 
 		event := session.LifecycleEvent{
