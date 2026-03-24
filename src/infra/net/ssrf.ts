@@ -1,6 +1,7 @@
 import { lookup as dnsLookupCb, type LookupAddress } from "node:dns";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { Agent, EnvHttpProxyAgent, ProxyAgent, type Dispatcher } from "undici";
+import { loadCoreRs } from "../../bindings/core-rs.js";
 import {
   extractEmbeddedIpv4FromIpv6,
   isBlockedSpecialUseIpv4Address,
@@ -13,6 +14,23 @@ import {
   parseLooseIpAddress,
 } from "../../shared/net/ip.js";
 import { normalizeHostname } from "./hostname.js";
+
+/**
+ * Fast-path SSRF check using native Rust implementation.
+ * Returns true if the URL is definitely unsafe (blocked by Rust).
+ * Returns false if Rust says safe or is unavailable (caller must still run full TS checks).
+ */
+function nativeSsrfReject(url: string): boolean {
+  const native = loadCoreRs();
+  if (!native) {
+    return false;
+  }
+  try {
+    return !native.isSafeUrl(url);
+  } catch {
+    return false;
+  }
+}
 
 type LookupCallback = (
   err: NodeJS.ErrnoException | null,
@@ -318,6 +336,15 @@ export async function resolvePinnedHostnameWithPolicy(
 
   const hostnameAllowlist = normalizeHostnameAllowlist(params.policy?.hostnameAllowlist);
   const skipPrivateNetworkChecks = shouldSkipPrivateNetworkChecks(normalized, params.policy);
+
+  // Phase 0: native Rust fast-path for obvious blocks (no DNS, no policy checks).
+  // Only applies when private network checks are active and no hostname allowlist overrides.
+  if (!skipPrivateNetworkChecks && hostnameAllowlist.length === 0) {
+    const scheme = "https://";
+    if (nativeSsrfReject(`${scheme}${normalized}/`)) {
+      throw new SsrFBlockedError(BLOCKED_HOST_OR_IP_MESSAGE);
+    }
+  }
 
   if (!matchesHostnameAllowlist(normalized, hostnameAllowlist)) {
     throw new SsrFBlockedError(`Blocked hostname (not in allowlist): ${hostname}`);

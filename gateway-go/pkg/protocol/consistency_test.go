@@ -151,3 +151,67 @@ func TestStateVersionConsistency(t *testing.T) {
 		nil, nil, nil,
 	)
 }
+
+// TestErrorCodeConsistency verifies that the hand-written error code string
+// constants in errors.go match every non-UNSPECIFIED value in the generated
+// ErrorCode protobuf enum. This catches additions to the proto that aren't
+// reflected in the Go constants (or vice versa).
+func TestErrorCodeConsistency(t *testing.T) {
+	// Hand-written string constants from errors.go.
+	handWritten := []string{
+		protocol.ErrNotLinked,
+		protocol.ErrNotPaired,
+		protocol.ErrAgentTimeout,
+		protocol.ErrInvalidRequest,
+		protocol.ErrUnavailable,
+		protocol.ErrMissingParam,
+		protocol.ErrNotFound,
+		protocol.ErrUnauthorized,
+		protocol.ErrValidationFailed,
+		protocol.ErrConflict,
+		protocol.ErrForbidden,
+		protocol.ErrNodeDisconnected,
+		protocol.ErrDependencyFailed,
+		protocol.ErrFeatureDisabled,
+	}
+
+	// Build a set from the generated enum (skip UNSPECIFIED = 0).
+	genCodes := make(map[string]bool)
+	for val, name := range gen.ErrorCode_name {
+		if val == 0 { // UNSPECIFIED
+			continue
+		}
+		// Generated names are like "ERROR_CODE_NOT_LINKED"; strip the prefix
+		// to get the wire-format code "NOT_LINKED".
+		const prefix = "ERROR_CODE_"
+		wire := name
+		if len(name) > len(prefix) {
+			wire = name[len(prefix):]
+		}
+		genCodes[wire] = true
+	}
+
+	hwSet := make(map[string]bool, len(handWritten))
+	for _, code := range handWritten {
+		hwSet[code] = true
+	}
+
+	// Check every hand-written code exists in proto.
+	for _, code := range handWritten {
+		if !genCodes[code] {
+			t.Errorf("hand-written error code %q not found in generated ErrorCode enum", code)
+		}
+	}
+
+	// Check every generated code exists in hand-written constants.
+	for code := range genCodes {
+		if !hwSet[code] {
+			t.Errorf("generated ErrorCode %q not found in hand-written constants (errors.go)", code)
+		}
+	}
+
+	// Verify counts match.
+	if len(handWritten) != len(genCodes) {
+		t.Errorf("error code count mismatch: hand-written=%d, generated=%d", len(handWritten), len(genCodes))
+	}
+}

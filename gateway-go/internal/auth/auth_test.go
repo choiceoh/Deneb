@@ -172,7 +172,17 @@ func TestCheckPermission(t *testing.T) {
 	}
 
 	// Admin scope grants everything.
-	if err := CheckPermission(RoleViewer, []Scope{ScopeAdmin}, ScopeExecute); err != nil {
-		t.Errorf("admin scope should grant execute: %v", err)
+	if err := CheckPermission(RoleViewer, []Scope{ScopeAdmin}, ScopeApprovals); err != nil {
+		t.Errorf("admin scope should grant approvals: %v", err)
+	}
+
+	// Operator has pairing scope by default.
+	if err := CheckPermission(RoleOperator, nil, ScopePairing); err != nil {
+		t.Errorf("operator should have pairing: %v", err)
+	}
+
+	// Agent lacks admin.
+	if err := CheckPermission(RoleAgent, nil, ScopeAdmin); err == nil {
+		t.Error("agent should not have admin")
 	}
 }

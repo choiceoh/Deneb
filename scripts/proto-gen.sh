@@ -92,7 +92,7 @@ compute_proto_hash() {
   cat "$PROTO_DIR"/*.proto \
     "$PROTO_DIR"/buf.gen.go.yaml \
     "$PROTO_DIR"/buf.gen.ts.yaml \
-    "$REPO_ROOT/core-rs/build.rs" \
+    "$REPO_ROOT/core-rs/core/build.rs" \
     2>/dev/null | sha256sum | cut -d' ' -f1
 }
 

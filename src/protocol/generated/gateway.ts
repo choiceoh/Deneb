@@ -86,10 +86,14 @@ export interface EventFrame {
  * On the wire (JSON), the "type" field is "req", "res", or "event".
  */
 export interface GatewayFrame {
-  frame: { $case: "request"; request: RequestFrame } | { $case: "response"; response: ResponseFrame } | {
-    $case: "event";
-    event: EventFrame;
-  } | undefined;
+  frame:
+    | { $case: "request"; request: RequestFrame }
+    | { $case: "response"; response: ResponseFrame }
+    | {
+        $case: "event";
+        event: EventFrame;
+      }
+    | undefined;
 }
 
 /** PresenceEntry represents a connected device/client. */

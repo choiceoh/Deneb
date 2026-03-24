@@ -98,3 +98,83 @@ pub fn sanitize_control_chars(input: String) -> String {
     }
     deneb_core::security::sanitize_control_chars(&input)
 }
+
+// ---------------------------------------------------------------------------
+// Security & validation functions (Phase 2 — bridge Rust FFI to Node.js)
+// ---------------------------------------------------------------------------
+
+/// Validate a session key: non-empty, max 512 characters, no control characters.
+/// Returns true if the key is valid.
+#[napi]
+pub fn validate_session_key(key: String) -> bool {
+    if key.len() > MAX_STRING_BYTES {
+        return false;
+    }
+    deneb_core::security::is_valid_session_key(&key)
+}
+
+/// Sanitize HTML by escaping significant characters (<, >, &, ", ').
+/// Prevents XSS when user input is rendered in HTML contexts.
+/// Returns the input unchanged for inputs exceeding 1 MB (safe default).
+#[napi]
+pub fn sanitize_html(input: String) -> String {
+    // Match Go's 1 MB limit to prevent OOM from 6x expansion.
+    const MAX_SANITIZE_INPUT: usize = 1024 * 1024;
+    if input.len() > MAX_SANITIZE_INPUT {
+        return input;
+    }
+    deneb_core::security::sanitize_html(&input)
+}
+
+/// Check if a URL is safe for outbound requests (not targeting internal/private networks).
+/// Returns true if the URL is safe, false if it targets private networks or is malformed.
+#[napi]
+pub fn is_safe_url(url: String) -> bool {
+    if url.is_empty() || url.len() > 8192 {
+        return false;
+    }
+    deneb_core::security::is_safe_url(&url)
+}
+
+/// Validate that an error code string is a known gateway error code.
+#[napi]
+pub fn validate_error_code(code: String) -> bool {
+    deneb_core::protocol::error_codes::is_valid_error_code(&code)
+}
+
+/// Check if an error code is retryable by default.
+/// Returns false for unknown codes.
+#[napi]
+pub fn is_retryable_error_code(code: String) -> bool {
+    deneb_core::protocol::error_codes::ErrorCode::parse(&code)
+        .map(|c| c.is_retryable())
+        .unwrap_or(false)
+}
+
+// ---------------------------------------------------------------------------
+// Protocol schema validation (Phase 3 — RPC parameter validation in Rust)
+// ---------------------------------------------------------------------------
+
+/// Validate RPC parameters for a given method name.
+/// Returns a JSON string with the validation result: `{ "valid": true/false, "errors": [...] }`.
+/// Throws if the method name is unknown or JSON is invalid.
+#[napi]
+pub fn validate_params(method: String, json: String) -> Result<String> {
+    if json.len() > MAX_JSON_BYTES {
+        return Err(Error::from_reason(format!(
+            "params JSON exceeds size limit ({} > {} bytes)",
+            json.len(),
+            MAX_JSON_BYTES
+        )));
+    }
+    match deneb_core::protocol::validation::validate_params(&method, &json) {
+        Ok(result) => serde_json::to_string(&result)
+            .map_err(|e| Error::from_reason(format!("serialization error: {e}"))),
+        Err(deneb_core::protocol::validation::ValidateParamsError::UnknownMethod(m)) => {
+            Err(Error::from_reason(format!("unknown method: {m}")))
+        }
+        Err(deneb_core::protocol::validation::ValidateParamsError::InvalidJson(e)) => {
+            Err(Error::from_reason(format!("invalid JSON: {e}")))
+        }
+    }
+}

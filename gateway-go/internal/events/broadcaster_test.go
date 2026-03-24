@@ -6,15 +6,21 @@ import (
 )
 
 type mockSubscriber struct {
-	id        string
-	authed    bool
-	mu        sync.Mutex
-	received  [][]byte
-	failSend  bool
+	id             string
+	authed         bool
+	role           string
+	scopes         []string
+	bufferedAmount int64
+	mu             sync.Mutex
+	received       [][]byte
+	failSend       bool
 }
 
 func (m *mockSubscriber) ID() string              { return m.id }
 func (m *mockSubscriber) IsAuthenticated() bool    { return m.authed }
+func (m *mockSubscriber) Role() string             { if m.role == "" { return "operator" }; return m.role }
+func (m *mockSubscriber) Scopes() []string         { if m.scopes == nil { return []string{"read", "write", "admin"} }; return m.scopes }
+func (m *mockSubscriber) BufferedAmount() int64    { return m.bufferedAmount }
 func (m *mockSubscriber) SendEvent(data []byte) error {
 	if m.failSend {
 		return &sendError{}
@@ -141,5 +147,144 @@ func TestSequenceIncrement(t *testing.T) {
 
 	if len(s.received) != 3 {
 		t.Fatalf("expected 3 messages, got %d", len(s.received))
+	}
+}
+
+// --- Phase 2 tests: scope guards, targeted broadcast, session subscriptions ---
+
+func TestBroadcast_ScopeGuard(t *testing.T) {
+	b := NewBroadcaster()
+	viewer := &mockSubscriber{id: "viewer", authed: true, scopes: []string{"read"}}
+	noScope := &mockSubscriber{id: "none", authed: true, scopes: []string{}}
+
+	b.Subscribe(viewer, Filter{})
+	b.Subscribe(noScope, Filter{})
+
+	// "sessions.changed" requires "read" scope.
+	sent, _ := b.Broadcast("sessions.changed", nil)
+	if sent != 1 {
+		t.Errorf("expected 1 sent (only viewer), got %d", sent)
+	}
+	if len(viewer.received) != 1 {
+		t.Error("viewer should receive event")
+	}
+	if len(noScope.received) != 0 {
+		t.Error("no-scope subscriber should not receive scoped event")
+	}
+}
+
+func TestBroadcast_AdminBypassesScope(t *testing.T) {
+	b := NewBroadcaster()
+	admin := &mockSubscriber{id: "admin", authed: true, scopes: []string{"admin"}}
+	b.Subscribe(admin, Filter{})
+
+	sent, _ := b.Broadcast("config.changed", nil)
+	if sent != 1 {
+		t.Errorf("admin should receive config.changed, got %d", sent)
+	}
+}
+
+func TestBroadcast_UnguardedEvent(t *testing.T) {
+	b := NewBroadcaster()
+	s := &mockSubscriber{id: "s1", authed: true, scopes: []string{}}
+	b.Subscribe(s, Filter{})
+
+	// "tick" is not in scope guards — everyone receives it.
+	sent, _ := b.Broadcast("tick", nil)
+	if sent != 1 {
+		t.Errorf("unguarded event should reach all, got %d", sent)
+	}
+}
+
+func TestBroadcastToConnIDs(t *testing.T) {
+	b := NewBroadcaster()
+	s1 := &mockSubscriber{id: "s1", authed: true}
+	s2 := &mockSubscriber{id: "s2", authed: true}
+	b.Subscribe(s1, Filter{})
+	b.Subscribe(s2, Filter{})
+
+	targets := map[string]bool{"s1": true}
+	sent, _ := b.BroadcastToConnIDs("test", nil, targets)
+	if sent != 1 {
+		t.Errorf("expected 1 targeted send, got %d", sent)
+	}
+	if len(s1.received) != 1 {
+		t.Error("s1 should receive targeted event")
+	}
+	if len(s2.received) != 0 {
+		t.Error("s2 should not receive targeted event")
+	}
+}
+
+func TestSessionEventSubscriptions(t *testing.T) {
+	b := NewBroadcaster()
+
+	b.SubscribeSessionEvents("conn-1")
+	b.SubscribeSessionEvents("conn-2")
+
+	subs := b.GetSessionEventSubscriberConnIDs()
+	if len(subs) != 2 {
+		t.Errorf("expected 2 session subs, got %d", len(subs))
+	}
+
+	b.UnsubscribeSessionEvents("conn-1")
+	subs = b.GetSessionEventSubscriberConnIDs()
+	if len(subs) != 1 {
+		t.Errorf("expected 1 session sub after unsubscribe, got %d", len(subs))
+	}
+}
+
+func TestSessionMessageSubscriptions(t *testing.T) {
+	b := NewBroadcaster()
+
+	b.SubscribeSessionMessageEvents("conn-1", "session-abc")
+	b.SubscribeSessionMessageEvents("conn-2", "session-abc")
+	b.SubscribeSessionMessageEvents("conn-1", "session-xyz")
+
+	subs := b.GetSessionMessageSubscriberConnIDs("session-abc")
+	if len(subs) != 2 {
+		t.Errorf("expected 2 subs for session-abc, got %d", len(subs))
+	}
+	subs = b.GetSessionMessageSubscriberConnIDs("session-xyz")
+	if len(subs) != 1 {
+		t.Errorf("expected 1 sub for session-xyz, got %d", len(subs))
+	}
+
+	b.UnsubscribeSessionMessageEvents("conn-1", "session-abc")
+	subs = b.GetSessionMessageSubscriberConnIDs("session-abc")
+	if len(subs) != 1 {
+		t.Errorf("expected 1 sub after unsubscribe, got %d", len(subs))
+	}
+}
+
+func TestToolEventRecipients(t *testing.T) {
+	b := NewBroadcaster()
+
+	b.RegisterToolEventRecipient("run-1", "conn-1")
+	if got := b.GetToolEventRecipient("run-1"); got != "conn-1" {
+		t.Errorf("expected conn-1, got %q", got)
+	}
+
+	b.UnregisterToolEventRecipient("run-1")
+	if got := b.GetToolEventRecipient("run-1"); got != "" {
+		t.Errorf("expected empty after unregister, got %q", got)
+	}
+}
+
+func TestUnsubscribe_CleansUpSessionSubs(t *testing.T) {
+	b := NewBroadcaster()
+	s := &mockSubscriber{id: "conn-1", authed: true}
+	b.Subscribe(s, Filter{})
+
+	b.SubscribeSessionEvents("conn-1")
+	b.SubscribeSessionMessageEvents("conn-1", "session-abc")
+
+	b.Unsubscribe("conn-1")
+
+	if subs := b.GetSessionEventSubscriberConnIDs(); len(subs) != 0 {
+		t.Error("session subs should be cleaned up on Unsubscribe")
+	}
+	if subs := b.GetSessionMessageSubscriberConnIDs("session-abc"); len(subs) != 0 {
+		t.Error("session message subs should be cleaned up on Unsubscribe")
 	}
 }

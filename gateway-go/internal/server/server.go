@@ -14,19 +14,25 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
+	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -49,12 +55,15 @@ type Server struct {
 	channels         *channel.Registry
 	channelLifecycle *channel.LifecycleManager
 	bridge           *bridge.PluginHost
-	dedupe      *dedupe.Tracker
+	keyCache         *session.KeyCache
+	dedupe           *dedupe.Tracker
 	broadcaster *events.Broadcaster
 	processes   *process.Manager
 	cron        *cron.Scheduler
 	daemon      *daemon.Daemon
 	hooks       *hooks.Registry
+	runtimeCfg    *config.GatewayRuntimeConfig
+	authValidator *auth.Validator
 	clients     sync.Map // connID -> *WsClient
 	clientCnt   atomic.Int32
 	startedAt   time.Time
@@ -62,6 +71,15 @@ type Server struct {
 	rustFFI     bool // true when Rust FFI is available
 	logger      *slog.Logger
 	ready       atomic.Bool
+
+	// Phase 2 additions.
+	gatewaySubs     *events.GatewayEventSubscriptions
+	chatHandler     *chat.Handler
+	providers       *provider.Registry
+	authRateLimiter *auth.AuthRateLimiter
+	watchdog        *monitoring.Watchdog
+	channelHealth   *monitoring.ChannelHealthMonitor
+	activity        *monitoring.ActivityTracker
 }
 
 // Option configures the gateway server.
@@ -78,6 +96,33 @@ func WithLogger(logger *slog.Logger) Option {
 func WithVersion(version string) Option {
 	return func(s *Server) {
 		s.version = version
+	}
+}
+
+// WithConfig sets the resolved runtime configuration.
+func WithConfig(cfg *config.GatewayRuntimeConfig) Option {
+	return func(s *Server) {
+		s.runtimeCfg = cfg
+	}
+}
+
+// RuntimeConfig returns the server's runtime configuration (may be nil if not set).
+func (s *Server) RuntimeConfig() *config.GatewayRuntimeConfig {
+	return s.runtimeCfg
+}
+
+// WithAuthValidator sets the auth validator for token-based authentication.
+// If not set, the server operates in no-auth mode (all connections are trusted).
+func WithAuthValidator(v *auth.Validator) Option {
+	return func(s *Server) {
+		s.authValidator = v
+	}
+}
+
+// WithProviders sets the provider plugin registry.
+func WithProviders(r *provider.Registry) Option {
+	return func(s *Server) {
+		s.providers = r
 	}
 }
 
@@ -100,10 +145,18 @@ func New(addr string, opts ...Option) *Server {
 	}
 
 	s.broadcaster = events.NewBroadcaster()
+	s.broadcaster.SetLogger(s.logger)
+	s.keyCache = session.NewKeyCache()
+	s.gatewaySubs = events.NewGatewayEventSubscriptions(events.GatewaySubscriptionParams{
+		Broadcaster: s.broadcaster,
+		Logger:      s.logger,
+	})
 	s.processes = process.NewManager(s.logger)
 	s.cron = cron.NewScheduler(s.logger)
 	s.hooks = hooks.NewRegistry(s.logger)
 	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
+	s.activity = monitoring.NewActivityTracker()
+	s.authRateLimiter = auth.NewAuthRateLimiter(10, 60*1000, 5*60*1000)
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.registerBuiltinMethods()
@@ -111,15 +164,43 @@ func New(addr string, opts ...Option) *Server {
 		Sessions:         s.sessions,
 		Channels:         s.channels,
 		ChannelLifecycle: s.channelLifecycle,
+		GatewaySubs:      s.gatewaySubs,
 	})
 	s.registerExtendedMethods()
+	s.registerPhase2Methods()
 	return s
 }
 
 // SetBridge sets the Plugin Host bridge for forwarding unhandled RPC methods.
+// Also wires bridge event forwarding to the chat handler and broadcaster.
 func (s *Server) SetBridge(b *bridge.PluginHost) {
 	s.bridge = b
 	s.dispatcher.SetForwarder(b)
+
+	// Wire raw broadcast to chat handler for streaming event relay.
+	if s.chatHandler != nil {
+		s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
+			return s.broadcaster.BroadcastRaw(event, data)
+		})
+	}
+
+	// Wire bridge events: chat events go to chatHandler, others to broadcaster.
+	b.SetEventHandler(func(ev *protocol.EventFrame) {
+		if s.chatHandler != nil && (ev.Event == "chat" || ev.Event == "chat.delta") {
+			s.chatHandler.HandleBridgeEvent(ev)
+		} else {
+			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
+		}
+	})
+}
+
+// mustMarshalEvent marshals an event frame to JSON bytes.
+func mustMarshalEvent(ev *protocol.EventFrame) []byte {
+	data, err := json.Marshal(ev)
+	if err != nil {
+		return []byte("{}")
+	}
+	return data
 }
 
 // Run starts the server and blocks until the context is canceled.
@@ -142,6 +223,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.startedAt = time.Now()
 	s.ready.Store(true)
 	s.startTickBroadcaster(ctx)
+	s.StartMonitoring(ctx)
 
 	s.logger.Info("gateway server starting", "addr", ln.Addr().String())
 
@@ -220,7 +302,12 @@ func (s *Server) shutdown() error {
 		return true
 	})
 
-	// 4. Stop dedupe background GC.
+	// 4. Stop gateway event subscriptions.
+	if s.gatewaySubs != nil {
+		s.gatewaySubs.Stop()
+	}
+
+	// 5. Stop dedupe background GC.
 	s.dedupe.Close()
 
 	// 5. Stop cron scheduler.
@@ -240,7 +327,17 @@ func (s *Server) shutdown() error {
 		stopCancel()
 	}
 
-	// 8. Close Plugin Host bridge last (in-flight forwards finish first).
+	// 8. Close chat handler.
+	if s.chatHandler != nil {
+		s.chatHandler.Close()
+	}
+
+	// 9. Close auth rate limiter.
+	if s.authRateLimiter != nil {
+		s.authRateLimiter.Close()
+	}
+
+	// 10. Close Plugin Host bridge last (in-flight forwards finish first).
 	if s.bridge != nil {
 		s.bridge.Close()
 	}
@@ -273,6 +370,10 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("POST /api/v1/rpc", s.handleRPC)
 	mux.HandleFunc("GET /ws", s.handleWsUpgrade)
+
+	// Control UI routes.
+	// Control UI removed (Phase 0: Rust+Go migration).
+
 	mux.HandleFunc("GET /{$}", s.handleRoot)
 	return mux
 }
@@ -288,6 +389,15 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 
+	authMode := ""
+	providerCount := 0
+	if s.runtimeCfg != nil {
+		authMode = s.runtimeCfg.AuthMode
+	}
+	if s.providers != nil {
+		providerCount = len(s.providers.List())
+	}
+
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"status":      "ok",
 		"version":     s.version,
@@ -297,6 +407,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"sessions":    s.sessions.Count(),
 		"bridge":      bridgeStatus,
 		"rust_core":   s.rustFFI,
+		"auth_mode":   authMode,
+		"providers":   providerCount,
 	})
 }
 
@@ -322,7 +434,13 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 // handleRPC processes HTTP JSON-RPC requests via the dispatcher.
+// Extracts Bearer token from Authorization header for authentication.
 func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
+	// Track activity.
+	if s.activity != nil {
+		s.activity.Touch()
+	}
+
 	var req struct {
 		Method string          `json:"method"`
 		Params json.RawMessage `json:"params,omitempty"`
@@ -344,6 +462,42 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve auth from Bearer token.
+	role := ""
+	authenticated := false
+	var scopes []auth.Scope
+
+	if s.authValidator != nil {
+		token := extractBearerToken(r)
+		if token != "" {
+			claims, err := s.authValidator.ValidateToken(token)
+			if err != nil {
+				s.writeJSON(w, http.StatusUnauthorized, protocol.NewResponseError(req.ID, protocol.NewError(
+					protocol.ErrUnauthorized, "invalid token: "+err.Error(),
+				)))
+				return
+			}
+			role = string(claims.Role)
+			authenticated = true
+			scopes = claims.Scopes
+		}
+	} else {
+		// No-auth mode: treat all HTTP requests as operator.
+		role = "operator"
+		authenticated = true
+		scopes = auth.DefaultScopes(auth.RoleOperator)
+	}
+
+	// Authorize method call.
+	if authErr := rpc.AuthorizeMethod(req.Method, role, authenticated, scopes); authErr != nil {
+		status := http.StatusForbidden
+		if authErr.Code == protocol.ErrUnauthorized {
+			status = http.StatusUnauthorized
+		}
+		s.writeJSON(w, status, protocol.NewResponseError(req.ID, authErr))
+		return
+	}
+
 	frame := &protocol.RequestFrame{
 		Type:   protocol.FrameTypeRequest,
 		ID:     req.ID,
@@ -358,6 +512,19 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, resp)
 }
 
+// extractBearerToken extracts the token from an "Authorization: Bearer <token>" header.
+func extractBearerToken(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return ""
+	}
+	const prefix = "Bearer "
+	if len(authHeader) > len(prefix) && strings.EqualFold(authHeader[:len(prefix)], prefix) {
+		return authHeader[len(prefix):]
+	}
+	return ""
+}
+
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 	s.writeJSON(w, http.StatusOK, map[string]string{
 		"service": "deneb-gateway",
@@ -370,8 +537,9 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) registerExtendedMethods() {
 	rpc.RegisterExtendedMethods(s.dispatcher, rpc.ExtendedDeps{
 		Deps: rpc.Deps{
-			Sessions: s.sessions,
-			Channels: s.channels,
+			Sessions:    s.sessions,
+			Channels:    s.channels,
+			GatewaySubs: s.gatewaySubs,
 		},
 		Processes: s.processes,
 		Cron:      s.cron,
@@ -414,6 +582,106 @@ func (s *Server) Broadcaster() *events.Broadcaster {
 	return s.broadcaster
 }
 
+// GatewaySubscriptions returns the gateway event subscription manager
+// for emitting agent, heartbeat, transcript, and lifecycle events.
+func (s *Server) GatewaySubscriptions() *events.GatewayEventSubscriptions {
+	return s.gatewaySubs
+}
+
+// registerPhase2Methods registers chat, config, monitoring, and event subscription methods.
+func (s *Server) registerPhase2Methods() {
+	// Chat methods — forward heavy work to Node.js bridge.
+	broadcastFn := func(event string, payload any) (int, []error) {
+		return s.broadcaster.Broadcast(event, payload)
+	}
+	s.chatHandler = chat.NewHandler(
+		s.sessions,
+		s.bridge, // may be nil; chat.send will error gracefully
+		broadcastFn,
+		s.logger,
+		chat.DefaultHandlerConfig(),
+	)
+	rpc.RegisterChatMethods(s.dispatcher, rpc.ChatDeps{Chat: s.chatHandler})
+
+	// Config reload method.
+	// Note: config.get is already registered in registerBuiltinMethods using runtimeCfg.
+	rpc.RegisterConfigReloadMethod(s.dispatcher)
+
+	// Monitoring methods.
+	rpc.RegisterMonitoringMethods(s.dispatcher, rpc.MonitoringDeps{
+		ChannelHealth: s.channelHealth,
+		Activity:      s.activity,
+	})
+
+	// Event subscription methods.
+	rpc.RegisterEventsMethods(s.dispatcher, rpc.EventsDeps{Broadcaster: s.broadcaster, Logger: s.logger})
+}
+
+// StartMonitoring starts the watchdog and channel health monitor goroutines.
+func (s *Server) StartMonitoring(ctx context.Context) {
+	// Gateway self-watchdog.
+	s.watchdog = monitoring.NewWatchdog(monitoring.WatchdogDeps{
+		IsServerListening: func() bool { return s.ready.Load() },
+		GetExpectedChannelCount: func() int {
+			return len(s.channels.List())
+		},
+		GetConnectedChannelCount: func() int {
+			count := 0
+			statusAll := s.channels.StatusAll()
+			for _, st := range statusAll {
+				if st.Connected {
+					count++
+				}
+			}
+			return count
+		},
+		GetLastActivityAt: func() int64 {
+			if s.activity != nil {
+				return s.activity.LastActivityAt()
+			}
+			return 0
+		},
+		OnRestartNeeded: func(reason string) {
+			s.logger.Warn("watchdog restart requested", "reason", reason)
+			// In production, this would send SIGUSR1 to trigger graceful restart.
+		},
+	}, monitoring.DefaultWatchdogConfig(), s.logger)
+	go s.watchdog.Run(ctx)
+
+	// Channel health monitor.
+	s.channelHealth = monitoring.NewChannelHealthMonitor(monitoring.ChannelHealthDeps{
+		ListChannelIDs: func() []string {
+			return s.channels.List()
+		},
+		GetChannelStatus: func(id string) string {
+			ch := s.channels.Get(id)
+			if ch == nil {
+				return "unknown"
+			}
+			st := ch.Status()
+			if st.Connected {
+				return "running"
+			}
+			if st.Error != "" {
+				return "error"
+			}
+			return "stopped"
+		},
+		GetChannelLastEventAt: func(_ string) int64 {
+			// Placeholder: real implementation tracks per-channel event timestamps.
+			return 0
+		},
+		GetChannelStartedAt: func(_ string) int64 {
+			return 0
+		},
+		RestartChannel: func(id string) error {
+			s.logger.Info("restarting channel", "channel", id)
+			return nil // Placeholder: real restart via channel lifecycle manager.
+		},
+	}, monitoring.DefaultChannelHealthConfig(), s.logger)
+	go s.channelHealth.Run(ctx)
+}
+
 // registerBuiltinMethods registers the core RPC methods handled natively in Go.
 func (s *Server) registerBuiltinMethods() {
 	s.dispatcher.Register("health", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
@@ -430,6 +698,21 @@ func (s *Server) registerBuiltinMethods() {
 			"channels":    s.channels.StatusAll(),
 			"sessions":    s.sessions.Count(),
 			"connections": s.clientCnt.Load(),
+		})
+		return resp
+	})
+
+	// config.get: returns the resolved runtime config for diagnostics.
+	s.dispatcher.Register("config.get", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if s.runtimeCfg == nil {
+			resp, _ := protocol.NewResponseOK(req.ID, map[string]string{"status": "not_loaded"})
+			return resp
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"bindHost":       s.runtimeCfg.BindHost,
+			"port":           s.runtimeCfg.Port,
+			"authMode":       s.runtimeCfg.AuthMode,
+			"tailscaleMode":  s.runtimeCfg.TailscaleMode,
 		})
 		return resp
 	})
