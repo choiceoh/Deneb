@@ -7,6 +7,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 )
 
 // FrameType discriminates gateway frames.
@@ -63,8 +64,21 @@ type StateVersion struct {
 // ProtocolVersion is the current gateway protocol version.
 const ProtocolVersion = 3
 
+// validErrorCodes contains all known gateway error codes for validation.
+var validErrorCodes = map[string]bool{
+	ErrNotLinked: true, ErrNotPaired: true, ErrAgentTimeout: true,
+	ErrInvalidRequest: true, ErrUnavailable: true, ErrMissingParam: true,
+	ErrNotFound: true, ErrUnauthorized: true, ErrValidationFailed: true,
+	ErrConflict: true, ErrForbidden: true, ErrNodeDisconnected: true,
+	ErrDependencyFailed: true, ErrFeatureDisabled: true,
+}
+
 // NewError creates a new ErrorShape with the given code and message.
+// Logs a warning if the code is not a known error code (use Err* constants).
 func NewError(code, message string) *ErrorShape {
+	if !validErrorCodes[code] {
+		slog.Warn("unknown error code used", "code", code, "message", message)
+	}
 	return &ErrorShape{Code: code, Message: message}
 }
 

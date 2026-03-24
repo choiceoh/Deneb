@@ -3,6 +3,7 @@ package channel
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -25,6 +26,7 @@ type RunStateMachine struct {
 	heartbeat  *time.Ticker
 	cancelFunc context.CancelFunc
 	done       sync.WaitGroup
+	closed     atomic.Bool
 }
 
 // NewRunStateMachine creates a new run state machine with heartbeat emission.
@@ -79,7 +81,9 @@ func (sm *RunStateMachine) EndRun() {
 }
 
 // Close stops the heartbeat and waits for the goroutine to exit.
+// After Close returns, no more sink callbacks will be invoked.
 func (sm *RunStateMachine) Close() {
+	sm.closed.Store(true)
 	sm.cancelFunc()
 	if sm.heartbeat != nil {
 		sm.heartbeat.Stop()
@@ -97,6 +101,10 @@ func (sm *RunStateMachine) heartbeatLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-sm.heartbeat.C:
+			// Check closed flag to prevent sink call after Close() returns.
+			if sm.closed.Load() {
+				return
+			}
 			sm.mu.Lock()
 			active := sm.active
 			sm.mu.Unlock()

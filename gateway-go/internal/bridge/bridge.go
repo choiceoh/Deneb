@@ -33,6 +33,7 @@ type PluginHost struct {
 	// reconnect controls automatic reconnection.
 	reconnect     bool
 	reconnectStop chan struct{}
+	reconnectWg   sync.WaitGroup // tracks reconnectLoop goroutine
 }
 
 // New creates a new PluginHost (not yet started).
@@ -147,7 +148,8 @@ func (h *PluginHost) Forward(ctx context.Context, req *protocol.RequestFrame) (*
 	}
 }
 
-// Close closes the bridge connection. Safe to call multiple times.
+// Close closes the bridge connection and waits for background goroutines.
+// Safe to call multiple times.
 func (h *PluginHost) Close() error {
 	// Stop reconnect loop if running.
 	if h.reconnectStop != nil {
@@ -169,6 +171,9 @@ func (h *PluginHost) Close() error {
 			closeErr = conn.Close()
 		}
 	})
+
+	// Wait for reconnect goroutine to finish (prevents goroutine leak).
+	h.reconnectWg.Wait()
 	return closeErr
 }
 
@@ -184,7 +189,11 @@ func (h *PluginHost) readLoop() {
 
 		// Attempt reconnect if enabled.
 		if h.reconnect {
-			go h.reconnectLoop()
+			h.reconnectWg.Add(1)
+			go func() {
+				defer h.reconnectWg.Done()
+				h.reconnectLoop()
+			}()
 		}
 	}()
 

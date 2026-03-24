@@ -27,6 +27,18 @@ func unmarshalParams(params json.RawMessage, v any) error {
 	return json.Unmarshal(params, v)
 }
 
+// maxKeyInErrorMsg is the maximum key length included in error messages.
+// Prevents log inflation from pathologically large keys.
+const maxKeyInErrorMsg = 128
+
+// truncateForError truncates a string for safe inclusion in error messages.
+func truncateForError(s string) string {
+	if len(s) <= maxKeyInErrorMsg {
+		return s
+	}
+	return s[:maxKeyInErrorMsg] + "..."
+}
+
 // RegisterBuiltinMethods registers the core Go-native RPC methods on the
 // dispatcher. Methods handled here don't need to be forwarded to Node.js.
 func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
@@ -81,7 +93,7 @@ func sessionsGet(deps Deps) HandlerFunc {
 		s := deps.Sessions.Get(p.Key)
 		if s == nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, "session not found: "+p.Key))
+				protocol.ErrNotFound, "session not found: "+truncateForError(p.Key)))
 		}
 		resp, _ := protocol.NewResponseOK(req.ID, s)
 		return resp
@@ -129,7 +141,7 @@ func channelsGet(deps Deps) HandlerFunc {
 		ch := deps.Channels.Get(p.ID)
 		if ch == nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrNotFound, "channel not found: "+p.ID))
+				protocol.ErrNotFound, "channel not found: "+truncateForError(p.ID)))
 		}
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"id":           ch.ID(),

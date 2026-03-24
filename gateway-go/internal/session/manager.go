@@ -57,11 +57,17 @@ func NewManager() *Manager {
 	}
 }
 
-// Get returns a session by key, or nil if not found.
+// Get returns a snapshot copy of a session by key, or nil if not found.
+// The returned Session is safe to read without holding the manager lock.
 func (m *Manager) Get(key string) *Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.sessions[key]
+	s := m.sessions[key]
+	if s == nil {
+		return nil
+	}
+	cp := *s
+	return &cp
 }
 
 // Set stores or updates a session.
@@ -80,13 +86,14 @@ func (m *Manager) Delete(key string) bool {
 	return ok
 }
 
-// List returns all sessions.
+// List returns snapshot copies of all sessions.
 func (m *Manager) List() []*Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	result := make([]*Session, 0, len(m.sessions))
 	for _, s := range m.sessions {
-		result = append(result, s)
+		cp := *s
+		result = append(result, &cp)
 	}
 	return result
 }
