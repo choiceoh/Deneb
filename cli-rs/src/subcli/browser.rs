@@ -29,7 +29,7 @@ pub enum BrowserCommand {
     /// Open a URL in the headless browser.
     Open {
         /// URL to open.
-        url: String,
+        target_url: String,
         #[command(flatten)]
         gw: GatewayFlags,
     },
@@ -73,12 +73,12 @@ pub async fn run(args: &BrowserArgs) -> Result<(), CliError> {
         BrowserCommand::Status { gw } => {
             super::rpc_helpers::rpc_print("browser.status", serde_json::json!({}), gw).await
         }
-        BrowserCommand::Open { url, gw } => {
+        BrowserCommand::Open { target_url, gw } => {
             super::rpc_helpers::rpc_action(
                 "browser.open",
-                serde_json::json!({"url": url}),
+                serde_json::json!({"url": target_url}),
                 gw,
-                &format!("Opened {url}"),
+                &format!("Opened {target_url}"),
             )
             .await
         }

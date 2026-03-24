@@ -4,7 +4,9 @@
 
 .PHONY: all rust rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
        go go-ffi go-pure go-run go-test go-test-pure go-test-fuzz go-vet go-clean \
-       cli cli-debug cli-test cli-fmt cli-clippy cli-clean \
+       cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
+       cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 \
+       cli-cross-win-x64 cli-cross-all \
        ts ts-check ts-test \
        test test-all clean check fmt \
        proto proto-go proto-rust proto-ts proto-check proto-lint proto-watch \
@@ -88,8 +90,32 @@ cli-fmt:
 cli-clippy:
 	cd cli-rs && cargo clippy --all-targets -- -D warnings
 
+cli-bench:
+	cd cli-rs && cargo test --test startup_bench -- --nocapture
+
 cli-clean:
 	cd cli-rs && cargo clean
+
+# Cross-compilation targets (requires cross or appropriate rustup targets)
+cli-cross-linux-x64:
+	cd cli-rs && cargo build --release --target x86_64-unknown-linux-gnu
+
+cli-cross-linux-arm64:
+	cd cli-rs && cargo build --release --target aarch64-unknown-linux-gnu
+
+cli-cross-darwin-x64:
+	cd cli-rs && cargo build --release --target x86_64-apple-darwin
+
+cli-cross-darwin-arm64:
+	cd cli-rs && cargo build --release --target aarch64-apple-darwin
+
+cli-cross-win-x64:
+	cd cli-rs && cargo build --release --target x86_64-pc-windows-msvc
+
+cli-cross-all: cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 cli-cross-win-x64
+
+cli-install: cli
+	./cli-rs/scripts/install.sh
 
 # --- TypeScript (existing) ---
 
@@ -156,6 +182,8 @@ info:
 	@echo "  make test       - Run Rust + Go + CLI tests"
 	@echo "  make check      - Run all checks (Rust + Go + CLI + TS)"
 	@echo "  make clean      - Clean Rust, Go, and CLI build artifacts"
+	@echo "  make cli-bench  - Run CLI startup benchmark"
+	@echo "  make cli-cross-all - Cross-compile CLI for all platforms"
 	@echo "  make proto      - Generate protobuf code (Go + Rust + TS)"
 	@echo "  make proto-go   - Generate Go protobuf structs"
 	@echo "  make proto-rust - Generate Rust protobuf structs"
