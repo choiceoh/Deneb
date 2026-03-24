@@ -1186,6 +1186,7 @@
                       "gateway/configuration",
                       "gateway/configuration-reference",
                       "gateway/configuration-examples",
+                      "gateway/configuration-guidelines",
                       "gateway/authentication",
                       "auth-credential-semantics",
                       "gateway/secrets",
