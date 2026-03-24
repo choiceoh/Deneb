@@ -2,6 +2,7 @@ import type { AcpRuntimeEvent, AcpSessionUpdateTag } from "../../acp/runtime/typ
 import { EmbeddedBlockChunker } from "../../agents/pi-embedded-block-chunker.js";
 import { formatToolSummary, resolveToolDisplay } from "../../agents/tool-display.js";
 import type { DenebConfig } from "../../config/config.js";
+import { logVerbose } from "../../globals.js";
 import { prefixSystemMessage } from "../../infra/system-message.js";
 import type { ReplyPayload } from "../types.js";
 import {
@@ -175,6 +176,19 @@ export function createAcpReplyProjector(params: {
   provider?: string;
   accountId?: string;
 }): AcpReplyProjector {
+  // Wrap deliver to prevent unhandled rejections from crashing the runTurn loop.
+  // Delivery failures (e.g. channel API timeout) are non-fatal for the agent turn.
+  const safeDeliver: typeof params.deliver = async (kind, payload, meta) => {
+    try {
+      return await params.deliver(kind, payload, meta);
+    } catch (err) {
+      logVerbose(
+        `acp-projector: ${kind} delivery failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return false;
+    }
+  };
+
   const settings = resolveAcpProjectionSettings(params.cfg);
   const streaming = resolveAcpStreamingConfig({
     cfg: params.cfg,
@@ -185,7 +199,7 @@ export function createAcpReplyProjector(params: {
   const createTurnBlockReplyPipeline = () =>
     createBlockReplyPipeline({
       onBlockReply: async (payload) => {
-        await params.deliver("block", payload);
+        await safeDeliver("block", payload);
       },
       timeoutMs: ACP_BLOCK_REPLY_TIMEOUT_MS,
       coalescing: settings.deliveryMode === "live" ? undefined : streaming.coalescing,
@@ -279,7 +293,7 @@ export function createAcpReplyProjector(params: {
       return;
     }
     for (const entry of pendingToolDeliveries.splice(0, pendingToolDeliveries.length)) {
-      await params.deliver("tool", entry.payload, entry.meta);
+      await safeDeliver("tool", entry.payload, entry.meta);
     }
   };
 
@@ -318,7 +332,7 @@ export function createAcpReplyProjector(params: {
       });
     } else {
       await flush(true);
-      await params.deliver("tool", { text: formatted }, meta);
+      await safeDeliver("tool", { text: formatted }, meta);
     }
     lastStatusHash = hash;
   };
@@ -380,7 +394,7 @@ export function createAcpReplyProjector(params: {
       });
     } else {
       await flush(true);
-      await params.deliver("tool", { text: toolSummary }, deliveryMeta);
+      await safeDeliver("tool", { text: toolSummary }, deliveryMeta);
     }
     lastToolHash = hash;
   };

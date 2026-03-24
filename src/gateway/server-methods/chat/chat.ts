@@ -766,12 +766,23 @@ export const chatHandlers: GatewayRequestHandlers = {
                   };
                 }
               }
-              broadcastChatFinal({
-                context,
-                runId: clientRunId,
-                sessionKey: rawSessionKey,
-                message,
-              });
+              if (message) {
+                broadcastChatFinal({
+                  context,
+                  runId: clientRunId,
+                  sessionKey: rawSessionKey,
+                  message,
+                });
+              } else {
+                // No agent run started and no reply produced — signal an error
+                // instead of broadcasting an empty final event.
+                broadcastChatError({
+                  context,
+                  runId: clientRunId,
+                  sessionKey: rawSessionKey,
+                  errorMessage: "No response was generated for this message.",
+                });
+              }
             }
           }
           // Feed conversation to autonomous state as an observation (fire-and-forget).
