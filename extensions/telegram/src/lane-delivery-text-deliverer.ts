@@ -83,6 +83,8 @@ type CreateLaneTextDelivererParams = {
   deletePreviewMessage: (messageId: number) => Promise<void>;
   log: (message: string) => void;
   markDelivered: () => void;
+  /** Render text to HTML for length estimation (accounts for HTML tag expansion). */
+  renderText?: (text: string) => { text: string };
 };
 
 type DeliverLaneTextParams = {
@@ -468,8 +470,11 @@ export function createLaneTextDeliverer(params: CreateLaneTextDelivererParams) {
     const lane = params.lanes[laneName];
     const reply = resolveSendableOutboundReplyParts(payload, { text });
     const hasMedia = reply.hasMedia;
+    // Check rendered (HTML) length to avoid Telegram API rejection when HTML
+    // tags expand the text beyond the 4096-char message limit.
+    const renderedLength = params.renderText ? params.renderText(text).text.length : text.length;
     const canEditViaPreview =
-      !hasMedia && text.length > 0 && text.length <= params.draftMaxChars && !payload.isError;
+      !hasMedia && text.length > 0 && renderedLength <= params.draftMaxChars && !payload.isError;
 
     if (infoKind === "final") {
       // Transient previews must decide cleanup retention per final attempt.

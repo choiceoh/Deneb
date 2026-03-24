@@ -435,8 +435,8 @@ describe("createLaneTextDeliverer", () => {
   });
 
   // ── Duplicate message regression tests ──────────────────────────────────
-  // During final delivery, only ambiguous post-connect failures keep the
-  // preview. Definite non-delivery falls back to a real send.
+  // During final delivery, ambiguous errors fall back to a fresh send rather
+  // than silently retaining a potentially stale preview.
 
   it("falls back to send on ambiguous API error during final", async () => {
     const harness = createHarness({ answerMessageId: 999 });
