@@ -28,8 +28,9 @@ class Ctx:
                 import project_db_v2
                 if os.path.isdir(self.md_dir):
                     project_db_v2.import_files(self.md_dir, db_path=self.db_path)
-            except Exception:
-                pass
+            except Exception as e:
+                import logging as _logging
+                _logging.getLogger(__name__).warning("DB 자동 재빌드 실패: %s", e)
         return config.get_db_connection(self.db_path, row_factory=True)
 
     @property

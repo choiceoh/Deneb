@@ -154,7 +154,7 @@ def check_schema_version(conn):
 
 def set_schema_version(conn):
     """스키마 버전 설정."""
-    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    conn.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
 
 
 # audit_log 기록 유틸리티
