@@ -9,16 +9,24 @@ on:
     branches: [master]
     paths:
       - "core-rs/**"
+      - "core-rs-napi/**"
+      - "cli-rs/**"
       - "gateway-go/**"
       - "proto/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "Makefile"
       - ".github/workflows/multi-lang.yml"
   pull_request:
     paths:
       - "core-rs/**"
+      - "core-rs-napi/**"
+      - "cli-rs/**"
       - "gateway-go/**"
       - "proto/**"
       - "src/plugin-host/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "Makefile"
       - ".github/workflows/multi-lang.yml"
 
@@ -137,6 +145,51 @@ jobs:
           name: deneb-gateway
           path: gateway-go/gateway
           retention-days: 1
+
+  cli-rs:
+    name: Rust CLI (cli-rs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli-rs
+
+      - name: Check formatting
+        working-directory: cli-rs
+        run: cargo fmt -- --check
+
+      - name: Clippy lint
+        working-directory: cli-rs
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build (release)
+        working-directory: cli-rs
+        run: cargo build --release
+
+      - name: Test
+        working-directory: cli-rs
+        run: cargo test
+
+  napi:
+    name: Rust napi bridge (core-rs-napi)
+    runs-on: ubuntu-latest
+    needs: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+
+      - name: Check
+        run: cargo check -p deneb-core-rs-napi
 
   integration:
     name: Integration (Go + Plugin Host)
