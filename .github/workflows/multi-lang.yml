@@ -63,7 +63,7 @@ jobs:
         run: cargo test
 
       - name: Upload static library
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: libdeneb-core
           path: core-rs/target/release/libdeneb_core.a
@@ -140,7 +140,7 @@ jobs:
           echo "Gateway smoke test passed"
 
       - name: Upload gateway binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: deneb-gateway
           path: gateway-go/gateway
