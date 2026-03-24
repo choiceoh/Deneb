@@ -76,7 +76,20 @@ type SanitizedSkillEnvOverrides = {
 };
 
 // Always block skill env overrides that can alter runtime loading or host execution behavior.
-const SKILL_ALWAYS_BLOCKED_ENV_PATTERNS: ReadonlyArray<RegExp> = [/^OPENSSL_CONF$/i];
+const SKILL_ALWAYS_BLOCKED_ENV_PATTERNS: ReadonlyArray<RegExp> = [
+  /^OPENSSL_CONF$/i,
+  /^NODE_OPTIONS$/i,
+  /^NODE_EXTRA_CA_CERTS$/i,
+  /^BASH_ENV$/i,
+  /^ENV$/i,
+  /^SHELL$/i,
+  /^ZDOTDIR$/i,
+  /^LD_PRELOAD$/i,
+  /^LD_LIBRARY_PATH$/i,
+  /^DYLD_INSERT_LIBRARIES$/i,
+  /^DYLD_LIBRARY_PATH$/i,
+  /^HOME$/i,
+];
 
 function matchesAnyPattern(value: string, patterns: readonly RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(value));

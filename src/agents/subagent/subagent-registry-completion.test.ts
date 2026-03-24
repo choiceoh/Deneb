@@ -7,7 +7,7 @@ const lifecycleMocks = vi.hoisted(() => ({
   runSubagentEnded: vi.fn(async () => {}),
 }));
 
-vi.mock("../plugins/hook-runner-global.js", () => ({
+vi.mock("../../plugins/hook-runner-global.js", () => ({
   getGlobalHookRunner: () => lifecycleMocks.getGlobalHookRunner(),
 }));
 

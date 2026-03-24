@@ -7,12 +7,12 @@ const callGatewayMock = vi.fn();
 const updateSessionStoreMock = vi.fn();
 const pruneLegacyStoreKeysMock = vi.fn();
 
-vi.mock("../gateway/call.js", () => ({
+vi.mock("../../gateway/call.js", () => ({
   callGateway: (opts: unknown) => callGatewayMock(opts),
 }));
 
-vi.mock("../config/config.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../config/config.js")>();
+vi.mock("../../config/config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../config/config.js")>();
   return {
     ...actual,
     loadConfig: () => ({
@@ -29,16 +29,16 @@ vi.mock("../config/config.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../config/sessions.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../config/sessions.js")>();
+vi.mock("../../config/sessions.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../config/sessions.js")>();
   return {
     ...actual,
     updateSessionStore: (...args: unknown[]) => updateSessionStoreMock(...args),
   };
 });
 
-vi.mock("../gateway/session-utils.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../gateway/session-utils.js")>();
+vi.mock("../../gateway/session-utils.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../gateway/session-utils.js")>();
   return {
     ...actual,
     resolveGatewaySessionStoreTarget: (params: { key: string }) => ({
@@ -72,7 +72,7 @@ vi.mock("./subagent-depth.js", () => ({
   getSubagentDepthFromSessionStore: () => 0,
 }));
 
-vi.mock("../plugins/hook-runner-global.js", () => ({
+vi.mock("../../plugins/hook-runner-global.js", () => ({
   getGlobalHookRunner: () => ({ hasHooks: () => false }),
 }));
 

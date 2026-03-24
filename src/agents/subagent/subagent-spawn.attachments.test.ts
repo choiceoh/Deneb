@@ -6,7 +6,7 @@ import { resetSubagentRegistryForTests } from "./subagent-registry.js";
 
 const callGatewayMock = vi.fn();
 
-vi.mock("../gateway/call.js", () => ({
+vi.mock("../../gateway/call.js", () => ({
   callGateway: (opts: unknown) => callGatewayMock(opts),
 }));
 
@@ -52,8 +52,8 @@ vi.mock("./subagent-announce.js", async (importOriginal) => {
   };
 });
 
-vi.mock("./agent-scope.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./agent-scope.js")>();
+vi.mock("../agent-scope.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../agent-scope.js")>();
   return {
     ...actual,
     resolveAgentWorkspaceDir: () => workspaceDirOverride,
@@ -64,7 +64,7 @@ vi.mock("./subagent-depth.js", () => ({
   getSubagentDepthFromSessionStore: () => 0,
 }));
 
-vi.mock("../plugins/hook-runner-global.js", () => ({
+vi.mock("../../plugins/hook-runner-global.js", () => ({
   getGlobalHookRunner: () => ({ hasHooks: () => false }),
 }));
 

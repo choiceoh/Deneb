@@ -7,24 +7,24 @@ import * as subagentRegistry from "./subagent-registry.js";
 import type { SubagentRunRecord } from "./subagent-registry.types.js";
 
 // Mock dependencies before importing the module under test
-vi.mock("../config/config.js", () => ({
+vi.mock("../../config/config.js", () => ({
   loadConfig: vi.fn(() => ({
     session: { store: undefined },
   })),
 }));
 
-vi.mock("../config/sessions.js", () => ({
+vi.mock("../../config/sessions.js", () => ({
   loadSessionStore: vi.fn(() => ({})),
   resolveAgentIdFromSessionKey: vi.fn(() => "main"),
   resolveStorePath: vi.fn(() => "/tmp/test-sessions.json"),
   updateSessionStore: vi.fn(async () => {}),
 }));
 
-vi.mock("../gateway/call.js", () => ({
+vi.mock("../../gateway/call.js", () => ({
   callGateway: vi.fn(async () => ({ runId: "test-run-id" })),
 }));
 
-vi.mock("../gateway/session-utils.fs.js", () => ({
+vi.mock("../../gateway/session-utils.fs.js", () => ({
   readSessionMessages: vi.fn(() => []),
 }));
 

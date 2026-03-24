@@ -2,7 +2,7 @@ import { vi } from "vitest";
 
 const noop = () => {};
 
-vi.mock("../gateway/call.js", () => ({
+vi.mock("../../gateway/call.js", () => ({
   callGateway: vi.fn(async () => ({
     status: "ok",
     startedAt: 111,
@@ -10,6 +10,6 @@ vi.mock("../gateway/call.js", () => ({
   })),
 }));
 
-vi.mock("../infra/agent-events.js", () => ({
+vi.mock("../../infra/agent-events.js", () => ({
   onAgentEvent: vi.fn(() => noop),
 }));

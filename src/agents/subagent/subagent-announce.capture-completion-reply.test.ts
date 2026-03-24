@@ -7,7 +7,7 @@ const chatHistoryMock = vi.fn<(sessionKey: string) => Promise<{ messages?: Array
   async (_sessionKey: string) => ({ messages: [] }),
 );
 
-vi.mock("../gateway/call.js", () => ({
+vi.mock("../../gateway/call.js", () => ({
   callGateway: vi.fn(async (request: unknown) => {
     const typed = request as { method?: string; params?: { sessionKey?: string } };
     if (typed.method === "chat.history") {
@@ -17,7 +17,7 @@ vi.mock("../gateway/call.js", () => ({
   }),
 }));
 
-vi.mock("./tools/agent-step.js", () => ({
+vi.mock("../tools/agent-step.js", () => ({
   readLatestAssistantReply: readLatestAssistantReplyMock,
 }));
 

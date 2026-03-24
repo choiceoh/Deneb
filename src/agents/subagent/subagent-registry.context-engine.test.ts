@@ -9,27 +9,28 @@ const mocks = vi.hoisted(() => ({
   persistSubagentRunsToDisk: vi.fn(),
 }));
 
-vi.mock("../config/config.js", async () => {
-  const actual = await vi.importActual<typeof import("../config/config.js")>("../config/config.js");
+vi.mock("../../config/config.js", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../config/config.js")>("../../config/config.js");
   return {
     ...actual,
     loadConfig: vi.fn(() => ({})),
   };
 });
 
-vi.mock("../context-engine/init.js", () => ({
+vi.mock("../../context-engine/init.js", () => ({
   ensureContextEnginesInitialized: mocks.ensureContextEnginesInitialized,
 }));
 
-vi.mock("../context-engine/registry.js", () => ({
+vi.mock("../../context-engine/registry.js", () => ({
   resolveContextEngine: mocks.resolveContextEngine,
 }));
 
-vi.mock("../infra/agent-events.js", () => ({
+vi.mock("../../infra/agent-events.js", () => ({
   onAgentEvent: mocks.onAgentEvent,
 }));
 
-vi.mock("./runtime-plugins.js", () => ({
+vi.mock("../runtime-plugins.js", () => ({
   ensureRuntimePluginsLoaded: mocks.ensureRuntimePluginsLoaded,
 }));
 
@@ -43,7 +44,7 @@ vi.mock("./subagent-announce-queue.js", () => ({
   resetAnnounceQueuesForTests: vi.fn(),
 }));
 
-vi.mock("./timeout.js", () => ({
+vi.mock("../timeout.js", () => ({
   resolveAgentTimeoutMs: vi.fn(() => 1_000),
 }));
 

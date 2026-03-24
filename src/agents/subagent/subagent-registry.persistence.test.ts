@@ -177,7 +177,7 @@ describe("subagent registry persistence", () => {
     tempStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-subagent-"));
     process.env.DENEB_STATE_DIR = tempStateDir;
 
-    const { callGateway } = await import("../gateway/call.js");
+    const { callGateway } = await import("../../gateway/call.js");
     let releaseInitialWait:
       | ((value: { status: "ok"; startedAt: number; endedAt: number }) => void)
       | undefined;
@@ -264,7 +264,7 @@ describe("subagent registry persistence", () => {
     tempStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "deneb-subagent-"));
     process.env.DENEB_STATE_DIR = tempStateDir;
 
-    const { callGateway } = await import("../gateway/call.js");
+    const { callGateway } = await import("../../gateway/call.js");
     const now = Date.now();
     const startedAt = now;
     const endedAt = now + 500;
