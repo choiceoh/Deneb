@@ -44,6 +44,13 @@ once_cell.workspace = true
 # Compression (PNG encoding)
 flate2 = "1"
 
+# Hashing (summary ID generation)
+sha2 = "0.10"
+
+# Timezone-aware timestamps (compaction)
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+chrono-tz = "0.10"
+
 # Optional workspace crates
 deneb-vega = { path = "../vega", optional = true }
 deneb-ml = { path = "../ml", optional = true }
