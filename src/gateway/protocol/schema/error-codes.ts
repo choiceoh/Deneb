@@ -1,3 +1,4 @@
+import { loadCoreRs } from "../../../bindings/core-rs.js";
 import type { ErrorShape } from "./types.js";
 
 export const ErrorCodes = {
@@ -62,4 +63,44 @@ export function errorShape(
     message,
     ...opts,
   };
+}
+
+/** TS fallback set of retryable error codes (mirrors Rust `ErrorCode::is_retryable`). */
+const RETRYABLE_CODES: ReadonlySet<string> = new Set([
+  ErrorCodes.AGENT_TIMEOUT,
+  ErrorCodes.UNAVAILABLE,
+  ErrorCodes.NODE_DISCONNECTED,
+  ErrorCodes.DEPENDENCY_FAILED,
+]);
+
+/**
+ * Validate that a string is a known gateway error code.
+ * Uses native Rust validation when available, falls back to TS lookup.
+ */
+export function isValidErrorCode(code: string): code is ErrorCode {
+  const native = loadCoreRs();
+  if (native) {
+    try {
+      return native.validateErrorCode(code);
+    } catch {
+      // fall through to TS
+    }
+  }
+  return code in ErrorCodes && ErrorCodes[code as keyof typeof ErrorCodes] === code;
+}
+
+/**
+ * Check if an error code is retryable by default.
+ * Uses native Rust classification when available, falls back to TS set.
+ */
+export function isRetryableErrorCode(code: string): boolean {
+  const native = loadCoreRs();
+  if (native) {
+    try {
+      return native.isRetryableErrorCode(code);
+    } catch {
+      // fall through to TS
+    }
+  }
+  return RETRYABLE_CODES.has(code);
 }

@@ -14,6 +14,11 @@ interface CoreRsModuleRaw {
   validateFrame(json: string): number;
   constantTimeEq(a: Buffer, b: Buffer): boolean;
   detectMime(data: Buffer): string;
+  validateSessionKey(key: string): boolean;
+  sanitizeHtml(input: string): string;
+  isSafeUrl(url: string): boolean;
+  validateErrorCode(code: string): boolean;
+  isRetryableErrorCode(code: string): boolean;
 }
 
 export interface CoreRsModule {
@@ -23,6 +28,16 @@ export interface CoreRsModule {
   constantTimeEq(a: Buffer, b: Buffer): boolean;
   /** Detect MIME type from file magic bytes. */
   detectMime(data: Buffer): string;
+  /** Validate a session key (non-empty, max 512 chars, no control chars). */
+  validateSessionKey(key: string): boolean;
+  /** Escape HTML-significant characters to prevent XSS. */
+  sanitizeHtml(input: string): string;
+  /** Check if a URL is safe for outbound requests (SSRF protection). */
+  isSafeUrl(url: string): boolean;
+  /** Check if an error code string is a known gateway error code. */
+  validateErrorCode(code: string): boolean;
+  /** Check if an error code is retryable by default. */
+  isRetryableErrorCode(code: string): boolean;
 }
 
 /** Wraps the raw native module, mapping numeric frame type IDs to strings. */
@@ -38,6 +53,11 @@ function wrapModule(raw: CoreRsModuleRaw): CoreRsModule {
     },
     constantTimeEq: (a: Buffer, b: Buffer) => raw.constantTimeEq(a, b),
     detectMime: (data: Buffer) => raw.detectMime(data),
+    validateSessionKey: (key: string) => raw.validateSessionKey(key),
+    sanitizeHtml: (input: string) => raw.sanitizeHtml(input),
+    isSafeUrl: (url: string) => raw.isSafeUrl(url),
+    validateErrorCode: (code: string) => raw.validateErrorCode(code),
+    isRetryableErrorCode: (code: string) => raw.isRetryableErrorCode(code),
   };
 }
 

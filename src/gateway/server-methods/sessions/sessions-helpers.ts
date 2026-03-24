@@ -1,3 +1,4 @@
+import { loadCoreRs } from "../../../bindings/core-rs.js";
 import { loadConfig } from "../../../config/config.js";
 import { GATEWAY_CLIENT_IDS } from "../../protocol/client-info.js";
 import { ErrorCodes, errorShape } from "../../protocol/index.js";
@@ -17,6 +18,12 @@ export function requireSessionKey(key: unknown, respond: RespondFn): string | nu
   const normalized = raw.trim();
   if (!normalized) {
     respond(false, undefined, errorShape(ErrorCodes.MISSING_PARAM, "key required"));
+    return null;
+  }
+  // Native Rust validation: rejects keys with control chars or exceeding 512 chars.
+  const native = loadCoreRs();
+  if (native && !native.validateSessionKey(normalized)) {
+    respond(false, undefined, errorShape(ErrorCodes.VALIDATION_FAILED, "invalid session key"));
     return null;
   }
   return normalized;
