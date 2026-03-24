@@ -70,3 +70,6 @@ core-rs/npm/
 # Temp
 /tmp/
 *.tmp
+
+# Proto generation lockfile
+.proto-gen.lock

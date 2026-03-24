@@ -26,16 +26,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let proto_dir = proto_dir.canonicalize()?;
 
-    let protos: Vec<_> = ["gateway", "channel", "session"]
-        .iter()
-        .map(|name| {
-            let path = proto_dir.join(format!("{name}.proto"));
-            if !path.is_file() {
-                panic!("Missing proto file: {}", path.display());
-            }
-            path
-        })
-        .collect();
+    let proto_names = ["gateway", "channel", "session"];
+    let mut protos = Vec::with_capacity(proto_names.len());
+
+    for name in &proto_names {
+        let path = proto_dir.join(format!("{name}.proto"));
+        if !path.is_file() {
+            return Err(format!(
+                "Missing proto file: {}. \
+                 Expected all of: {:?}",
+                path.display(),
+                proto_names
+            )
+            .into());
+        }
+        protos.push(path);
+    }
 
     // Rerun if any proto file changes.
     for proto in &protos {

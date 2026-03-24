@@ -23,6 +23,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROTO_DIR="$REPO_ROOT/proto"
 GO_OUT="$REPO_ROOT/gateway-go/pkg/protocol/gen"
 TS_OUT="$REPO_ROOT/src/protocol/generated"
+LOCKFILE="$REPO_ROOT/.proto-gen.lock"
 
 # Ensure Go bin is in PATH (protoc-gen-go).
 export PATH="${GOPATH:-$HOME/go}/bin:$PATH"
@@ -41,7 +42,41 @@ require_cmd() {
   command -v "$1" &>/dev/null || fail "$1 not found. $2"
 }
 
-# Verify proto source directory has .proto files.
+# --- Concurrency lock ---
+
+acquire_lock() {
+  if [ -f "$LOCKFILE" ]; then
+    local pid
+    pid=$(cat "$LOCKFILE" 2>/dev/null)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      fail "Another proto-gen.sh is running (PID $pid). If stale, remove $LOCKFILE"
+    fi
+    warn "Removing stale lockfile (PID $pid no longer running)"
+  fi
+  echo $$ > "$LOCKFILE"
+}
+
+release_lock() {
+  rm -f "$LOCKFILE"
+}
+
+# --- Signal handling ---
+# On interrupt, clean up lockfile and restore any partially cleaned output
+# from git so the working tree isn't left in a broken state.
+
+cleanup_on_signal() {
+  warn "Interrupted — restoring generated files from git..."
+  git -C "$REPO_ROOT" checkout -- \
+    "gateway-go/pkg/protocol/gen" \
+    "src/protocol/generated" 2>/dev/null || true
+  release_lock
+  exit 130
+}
+
+trap cleanup_on_signal INT TERM
+
+# --- Validation helpers ---
+
 verify_proto_sources() {
   [ -d "$PROTO_DIR" ] || fail "Proto directory not found: $PROTO_DIR"
   local count
@@ -49,7 +84,6 @@ verify_proto_sources() {
   [ "$count" -gt 0 ] || fail "No .proto files found in $PROTO_DIR"
 }
 
-# Verify that generation produced at least one output file matching the pattern.
 verify_output() {
   local dir="$1" pattern="$2" label="$3"
   local count
@@ -60,15 +94,19 @@ verify_output() {
   info "$label: generated $count file(s)"
 }
 
-# Clean generated files before regenerating to remove stale outputs
-# (e.g. when a .proto file is deleted or renamed).
 clean_generated() {
   local dir="$1"
   if [ -d "$dir" ]; then
     find "$dir" -type f \( -name "*.pb.go" -o -name "*.ts" \) -delete
-    # Remove empty subdirectories left after cleaning.
     find "$dir" -mindepth 1 -type d -empty -delete 2>/dev/null || true
   fi
+}
+
+# Run buf lint as a pre-check before generation.
+lint_protos() {
+  require_cmd buf "Install: https://buf.build/docs/installation"
+  info "Linting proto files..."
+  (cd "$PROTO_DIR" && buf lint) || fail "buf lint failed — fix proto errors before generating"
 }
 
 # --- Generators ---
@@ -79,7 +117,6 @@ gen_go() {
   info "Generating Go → gateway-go/pkg/protocol/gen/"
   require_cmd buf "Install: https://buf.build/docs/installation"
   require_cmd protoc-gen-go "Install: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
-  verify_proto_sources
   clean_generated "$GO_OUT"
   (
     mkdir -p "$GO_OUT"
@@ -93,7 +130,6 @@ gen_rust() {
   info "Generating Rust via prost-build (output in cargo OUT_DIR)"
   require_cmd cargo "Install: https://rustup.rs"
   require_cmd protoc "Install: apt install protobuf-compiler / brew install protobuf"
-  verify_proto_sources
   local output
   if ! output=$(cd "$REPO_ROOT/core-rs" && cargo check 2>&1); then
     echo "$output" >&2
@@ -106,7 +142,6 @@ gen_ts() {
   info "Generating TypeScript → src/protocol/generated/"
   require_cmd buf "Install: https://buf.build/docs/installation"
   require_cmd protoc-gen-ts_proto "Install: npm install -g ts-proto"
-  verify_proto_sources
   clean_generated "$TS_OUT"
   (
     mkdir -p "$TS_OUT"
@@ -117,9 +152,18 @@ gen_ts() {
 }
 
 gen_all() {
-  gen_go
-  gen_rust
-  gen_ts
+  verify_proto_sources
+  lint_protos
+
+  local failures=()
+
+  gen_go    || failures+=("Go")
+  gen_rust  || failures+=("Rust")
+  gen_ts    || failures+=("TypeScript")
+
+  if [ ${#failures[@]} -gt 0 ]; then
+    fail "Generation failed for: ${failures[*]}"
+  fi
 }
 
 check_diffs() {
@@ -131,8 +175,13 @@ check_diffs() {
   )
   local has_diff=0
 
-  # Check modified or deleted tracked files.
+  # Check unstaged changes.
   if ! git diff --exit-code -- "${paths[@]}" >/dev/null 2>&1; then
+    has_diff=1
+  fi
+
+  # Check staged changes.
+  if ! git diff --cached --exit-code -- "${paths[@]}" >/dev/null 2>&1; then
     has_diff=1
   fi
 
@@ -145,6 +194,7 @@ check_diffs() {
     echo "" >&2
     warn "Changed files:"
     git diff --stat -- "${paths[@]}" >&2 || true
+    git diff --cached --stat -- "${paths[@]}" >&2 || true
     local untracked
     untracked=$(git ls-files --others --exclude-standard -- "${paths[@]}" 2>/dev/null)
     if [ -n "$untracked" ]; then
@@ -159,10 +209,14 @@ check_diffs() {
 
 # --- Main ---
 
+acquire_lock
+trap 'cleanup_on_signal' INT TERM
+trap 'release_lock' EXIT
+
 case "${1:-all}" in
-  --go)    gen_go ;;
-  --rust)  gen_rust ;;
-  --ts)    gen_ts ;;
+  --go)    verify_proto_sources; lint_protos; gen_go ;;
+  --rust)  verify_proto_sources; gen_rust ;;
+  --ts)    verify_proto_sources; lint_protos; gen_ts ;;
   --check) gen_all; check_diffs ;;
   all|"")  gen_all ;;
   *)       fail "Unknown option: $1. Use --go, --rust, --ts, --check, or no args." ;;
