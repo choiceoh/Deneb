@@ -125,6 +125,16 @@ func NewResponseOK(id string, payload any) (*ResponseFrame, error) {
 	}, nil
 }
 
+// NewResponseOKRaw creates a successful ResponseFrame with a pre-serialized payload.
+func NewResponseOKRaw(id string, payload json.RawMessage) (*ResponseFrame, error) {
+	return &ResponseFrame{
+		Type:    FrameTypeResponse,
+		ID:      id,
+		OK:      true,
+		Payload: payload,
+	}, nil
+}
+
 // NewResponseError creates an error ResponseFrame.
 func NewResponseError(id string, err *ErrorShape) *ResponseFrame {
 	return &ResponseFrame{

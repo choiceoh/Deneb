@@ -450,4 +450,9 @@ export type GatewayConfig = {
    * the rolling window expires. Default: 10.
    */
   channelMaxRestartsPerHour?: number;
+  /**
+   * Gateway runtime implementation. When set to "go", the CLI spawns the Go
+   * gateway binary instead of the TypeScript gateway. Default: "node".
+   */
+  runtime?: "node" | "go";
 };
