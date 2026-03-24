@@ -117,21 +117,4 @@ func CompactionSweepDrop(handle uint32) {
 	C.deneb_compaction_sweep_drop(C.uint(handle))
 }
 
-func ffiError(fn string, rc int) error {
-	switch rc {
-	case -1:
-		return errors.New("ffi: " + fn + ": null pointer")
-	case -2:
-		return errors.New("ffi: " + fn + ": invalid UTF-8")
-	case -3:
-		return errors.New("ffi: " + fn + ": parse error")
-	case -4:
-		return errors.New("ffi: " + fn + ": input too large")
-	case -6:
-		return errors.New("ffi: " + fn + ": output buffer too small")
-	case -99:
-		return errors.New("ffi: " + fn + ": panic")
-	default:
-		return errors.New("ffi: " + fn + ": unknown error")
-	}
-}
+// ffiError is defined in errors.go (shared across all CGo files).

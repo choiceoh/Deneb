@@ -15,18 +15,18 @@ var methodScopes = map[string]auth.Scope{
 	"system.info":  auth.ScopeRead,
 
 	// --- System / Diagnostics ---
-	"gateway.identity.get":  auth.ScopeRead,
-	"last-heartbeat":        auth.ScopeRead,
-	"set-heartbeats":        auth.ScopeWrite,
-	"system-presence":       auth.ScopeAdmin,
-	"system-event":          auth.ScopeAdmin,
-	"logs.tail":             auth.ScopeRead,
-	"doctor.memory.status":  auth.ScopeRead,
-	"models.list":           auth.ScopeRead,
-	"update.run":            auth.ScopeAdmin,
-	"maintenance.run":       auth.ScopeAdmin,
-	"maintenance.status":    auth.ScopeRead,
-	"maintenance.summary":   auth.ScopeRead,
+	"gateway.identity.get": auth.ScopeRead,
+	"last-heartbeat":       auth.ScopeRead,
+	"set-heartbeats":       auth.ScopeWrite,
+	"system-presence":      auth.ScopeAdmin,
+	"system-event":         auth.ScopeAdmin,
+	"logs.tail":            auth.ScopeRead,
+	"doctor.memory.status": auth.ScopeRead,
+	"models.list":          auth.ScopeRead,
+	"update.run":           auth.ScopeAdmin,
+	"maintenance.run":      auth.ScopeAdmin,
+	"maintenance.status":   auth.ScopeRead,
+	"maintenance.summary":  auth.ScopeRead,
 
 	// --- Sessions (read/write) ---
 	"sessions.list":                 auth.ScopeRead,
@@ -119,6 +119,13 @@ var methodScopes = map[string]auth.Scope{
 	"monitoring.channel_health": auth.ScopeRead,
 	"monitoring.activity":       auth.ScopeRead,
 
+	// --- Event subscriptions (read) ---
+	"node.event":                   auth.ScopeWrite,
+	"subscribe.session":            auth.ScopeRead,
+	"unsubscribe.session":          auth.ScopeRead,
+	"subscribe.session.messages":   auth.ScopeRead,
+	"unsubscribe.session.messages": auth.ScopeRead,
+
 	// --- Wizard ---
 	"wizard.start":  auth.ScopeWrite,
 	"wizard.next":   auth.ScopeWrite,
@@ -141,13 +148,13 @@ var methodScopes = map[string]auth.Scope{
 	"web.login.wait":  auth.ScopeRead,
 
 	// --- Exec Approvals ---
-	"exec.approvals.get":       auth.ScopeRead,
-	"exec.approvals.set":       auth.ScopeAdmin,
-	"exec.approvals.node.get":  auth.ScopeRead,
-	"exec.approvals.node.set":  auth.ScopeAdmin,
-	"exec.approval.request":    auth.ScopeApprovals,
+	"exec.approvals.get":         auth.ScopeRead,
+	"exec.approvals.set":         auth.ScopeAdmin,
+	"exec.approvals.node.get":    auth.ScopeRead,
+	"exec.approvals.node.set":    auth.ScopeAdmin,
+	"exec.approval.request":      auth.ScopeApprovals,
 	"exec.approval.waitDecision": auth.ScopeApprovals,
-	"exec.approval.resolve":    auth.ScopeApprovals,
+	"exec.approval.resolve":      auth.ScopeApprovals,
 
 	// --- Nodes ---
 	"node.pair.request":              auth.ScopeWrite,
@@ -160,7 +167,6 @@ var methodScopes = map[string]auth.Scope{
 	"node.rename":                    auth.ScopeWrite,
 	"node.invoke":                    auth.ScopeWrite,
 	"node.invoke.result":             auth.ScopeWrite,
-	"node.event":                     auth.ScopeWrite,
 	"node.canvas.capability.refresh": auth.ScopeWrite,
 	"node.pending.pull":              auth.ScopeRead,
 	"node.pending.ack":               auth.ScopeWrite,
@@ -191,6 +197,27 @@ var methodScopes = map[string]auth.Scope{
 	"security.validate_error_code":  auth.ScopeRead,
 	"media.detect_mime":             auth.ScopeRead,
 
+	// --- Parsing (read) ---
+	"parsing.extract_links":       auth.ScopeRead,
+	"parsing.html_to_markdown":    auth.ScopeRead,
+	"parsing.base64_estimate":     auth.ScopeRead,
+	"parsing.base64_canonicalize": auth.ScopeRead,
+	"parsing.media_tokens":        auth.ScopeRead,
+
+	// --- Memory search (read) ---
+	"memory.cosine_similarity":    auth.ScopeRead,
+	"memory.bm25_rank_to_score":   auth.ScopeRead,
+	"memory.build_fts_query":      auth.ScopeRead,
+	"memory.merge_hybrid_results": auth.ScopeRead,
+	"memory.extract_keywords":     auth.ScopeRead,
+
+	// --- Markdown (read) ---
+	"markdown.to_ir":         auth.ScopeRead,
+	"markdown.detect_fences": auth.ScopeRead,
+
+	// --- Compaction (write) ---
+	"compaction.evaluate": auth.ScopeWrite,
+
 	// --- Providers (read) ---
 	"providers.list":    auth.ScopeRead,
 	"providers.catalog": auth.ScopeRead,
@@ -216,12 +243,6 @@ var methodScopes = map[string]auth.Scope{
 
 	// --- Events (admin) ---
 	"events.broadcast": auth.ScopeAdmin,
-
-	// --- Legacy event subscription aliases ---
-	"subscribe.session":             auth.ScopeRead,
-	"unsubscribe.session":           auth.ScopeRead,
-	"subscribe.session.messages":    auth.ScopeRead,
-	"unsubscribe.session.messages":  auth.ScopeRead,
 }
 
 // RequiredScope returns the scope needed to call the given method.

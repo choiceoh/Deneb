@@ -996,6 +996,119 @@ pub unsafe extern "C" fn deneb_parse_media_tokens(
 }
 
 // ---------------------------------------------------------------------------
+// Markdown FFI exports (IR parsing for Go gateway)
+// ---------------------------------------------------------------------------
+
+/// C FFI: Parse markdown text into a MarkdownIR structure.
+/// Takes markdown text and an optional JSON options string.
+/// Writes JSON `{"text":"...","styles":[...],"links":[...],"has_code_blocks":bool}` to `out_ptr`.
+/// Returns bytes written, or negative on error.
+///
+/// # Safety
+/// `md_ptr` must be valid UTF-8. `out_ptr` must be writable for `out_len` bytes.
+/// `opts_ptr` may be null for default options.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_markdown_to_ir(
+    md_ptr: *const u8,
+    md_len: usize,
+    opts_ptr: *const u8,
+    opts_len: usize,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if md_ptr.is_null() || out_ptr.is_null() {
+        return -1;
+    }
+    if md_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let md_slice = std::slice::from_raw_parts(md_ptr, md_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let md_str = match std::str::from_utf8(md_slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let options = if !opts_ptr.is_null() && opts_len > 0 {
+            let opts_bytes = std::slice::from_raw_parts(opts_ptr, opts_len);
+            match std::str::from_utf8(opts_bytes) {
+                Ok(s) => match serde_json::from_str::<markdown::parser::ParseOptions>(s) {
+                    Ok(o) => o,
+                    Err(_) => return -5,
+                },
+                Err(_) => return -2,
+            }
+        } else {
+            markdown::parser::ParseOptions::default()
+        };
+        let (ir, has_code_blocks) = markdown::parser::markdown_to_ir_with_meta(md_str, &options);
+        #[derive(serde::Serialize)]
+        struct IrOutput<'a> {
+            text: &'a str,
+            styles: &'a [markdown::spans::StyleSpan],
+            links: &'a [markdown::spans::LinkSpan],
+            has_code_blocks: bool,
+        }
+        let output = IrOutput {
+            text: &ir.text,
+            styles: &ir.styles,
+            links: &ir.links,
+            has_code_blocks,
+        };
+        let json = match serde_json::to_string(&output) {
+            Ok(j) => j,
+            Err(_) => return -5,
+        };
+        let bytes = json.as_bytes();
+        if bytes.len() > out_slice.len() {
+            return -6;
+        }
+        out_slice[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
+}
+
+/// C FFI: Detect fenced code blocks in text.
+/// Writes JSON array of fence block objects to `out_ptr`.
+/// Returns bytes written, or negative on error.
+///
+/// # Safety
+/// `text_ptr` must be valid UTF-8. `out_ptr` must be writable.
+#[no_mangle]
+pub unsafe extern "C" fn deneb_markdown_detect_fences(
+    text_ptr: *const u8,
+    text_len: usize,
+    out_ptr: *mut u8,
+    out_len: usize,
+) -> i32 {
+    if text_ptr.is_null() || out_ptr.is_null() {
+        return -1;
+    }
+    if text_len > FFI_MAX_INPUT_LEN {
+        return -4;
+    }
+    let text_slice = std::slice::from_raw_parts(text_ptr, text_len);
+    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
+    ffi_catch(-99, move || {
+        let text_str = match std::str::from_utf8(text_slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let fences = markdown::fences::parse_fence_spans(text_str);
+        let json = match serde_json::to_string(&fences) {
+            Ok(j) => j,
+            Err(_) => return -5,
+        };
+        let bytes = json.as_bytes();
+        if bytes.len() > out_slice.len() {
+            return -6;
+        }
+        out_slice[..bytes.len()].copy_from_slice(bytes);
+        bytes.len() as i32
+    })
+}
+
+// ---------------------------------------------------------------------------
 // C FFI exports — Context Engine
 // ---------------------------------------------------------------------------
 
