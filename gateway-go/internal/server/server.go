@@ -203,13 +203,12 @@ func New(addr string, opts ...Option) *Server {
 
 	// Wire provider RPC methods if a provider registry is configured.
 	if s.providers != nil {
-		adapter := provider.NewProtocolAdapter(s.providers)
 		rpc.RegisterProviderMethods(s.dispatcher, rpc.ProviderDeps{
 			Deps: rpc.Deps{
 				Sessions: s.sessions,
 				Channels: s.channels,
 			},
-			ProviderCatalog: adapter,
+			Providers: s.providers,
 		})
 	}
 
@@ -617,7 +616,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"uptime":          time.Since(s.startedAt).Milliseconds(),
 		"connections":     s.clientCnt.Load(),
 		"sessions":        s.sessions.Count(),
-		"bridge":          bridgeStatus,
+		"bridge":          s.bridgeStatus(),
 		"rust_core":       s.rustFFI,
 		"auth_mode":       authMode,
 		"providers":       providerCount,

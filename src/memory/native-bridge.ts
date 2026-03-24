@@ -7,18 +7,20 @@
  */
 
 import { type CoreRsModule, loadCoreRs } from "../bindings/core-rs.js";
-
-import { cosineSimilarity as cosineSimilarityTS } from "./internal.js";
-import { bm25RankToScore as bm25RankToScoreTS, buildFtsQuery as buildFtsQueryTS } from "./hybrid.js";
 import {
-  calculateTemporalDecayMultiplier as calculateTemporalDecayMultiplierTS,
-  applyTemporalDecayToScore as applyTemporalDecayToScoreTS,
-} from "./temporal-decay.js";
+  bm25RankToScore as bm25RankToScoreTS,
+  buildFtsQuery as buildFtsQueryTS,
+} from "./hybrid.js";
+import { cosineSimilarity as cosineSimilarityTS } from "./internal.js";
 import { textSimilarity as textSimilarityTS } from "./mmr.js";
 import {
   extractKeywords as extractKeywordsTS,
   isQueryStopWordToken as isQueryStopWordTokenTS,
 } from "./query-expansion.js";
+import {
+  calculateTemporalDecayMultiplier as calculateTemporalDecayMultiplierTS,
+  applyTemporalDecayToScore as applyTemporalDecayToScoreTS,
+} from "./temporal-decay.js";
 
 // Cache the native module reference once at first use.
 let nativeChecked = false;

@@ -17,8 +17,8 @@ import {
 // analysis, content-addressed caching, and optimal scheduling.
 const __highwayRoot = path.resolve(import.meta.dirname, "..");
 const __highwayBin = (() => {
-  const release = path.join(__highwayRoot, "tools/highway/target/release/highway");
-  const debug = path.join(__highwayRoot, "tools/highway/target/debug/highway");
+  const release = path.join(__highwayRoot, "target/release/highway");
+  const debug = path.join(__highwayRoot, "target/debug/highway");
   if (fs.existsSync(release)) {
     return release;
   }
@@ -46,8 +46,8 @@ const __highwayBin = (() => {
   // Build the binary
   console.log("[highway] first run — building optimized binary (~30s one-time cost)...");
   try {
-    execFileSync("cargo", ["build", "--release"], {
-      cwd: path.join(__highwayRoot, "tools/highway"),
+    execFileSync("cargo", ["build", "--release", "-p", "highway"], {
+      cwd: __highwayRoot,
       stdio: "inherit",
       timeout: 300_000,
     });
