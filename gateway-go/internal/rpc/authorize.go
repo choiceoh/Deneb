@@ -1,6 +1,10 @@
 package rpc
 
-import "github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+import (
+	"fmt"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+)
 
 // publicMethods are accessible without authentication.
 var publicMethods = map[string]bool{
@@ -14,7 +18,7 @@ func AuthorizeMethod(method string, role string, authenticated bool) *protocol.E
 		return nil
 	}
 	if !authenticated {
-		return protocol.NewError(protocol.ErrUnauthorized, "authentication required for method: "+method)
+		return protocol.NewError(protocol.ErrUnauthorized, fmt.Sprintf("authentication required for method: %q", method))
 	}
 	if role == "" {
 		return protocol.NewError(protocol.ErrUnauthorized, "no role assigned")

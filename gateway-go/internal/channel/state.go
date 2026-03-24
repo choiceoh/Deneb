@@ -24,6 +24,7 @@ type RunStateMachine struct {
 	sink       StatusSink
 	heartbeat  *time.Ticker
 	cancelFunc context.CancelFunc
+	done       sync.WaitGroup
 }
 
 // NewRunStateMachine creates a new run state machine with heartbeat emission.
@@ -36,6 +37,7 @@ func NewRunStateMachine(ctx context.Context, sink StatusSink, heartbeatInterval 
 
 	if heartbeatInterval > 0 {
 		sm.heartbeat = time.NewTicker(heartbeatInterval)
+		sm.done.Add(1)
 		go sm.heartbeatLoop(ctx)
 	}
 
@@ -76,15 +78,17 @@ func (sm *RunStateMachine) EndRun() {
 	})
 }
 
-// Close stops the heartbeat and cleans up.
+// Close stops the heartbeat and waits for the goroutine to exit.
 func (sm *RunStateMachine) Close() {
 	sm.cancelFunc()
 	if sm.heartbeat != nil {
 		sm.heartbeat.Stop()
 	}
+	sm.done.Wait()
 }
 
 func (sm *RunStateMachine) heartbeatLoop(ctx context.Context) {
+	defer sm.done.Done()
 	if sm.heartbeat == nil {
 		return
 	}

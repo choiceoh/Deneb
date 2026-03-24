@@ -3,6 +3,7 @@ package channel
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -40,20 +41,35 @@ func TestRunStateMachineStartEnd(t *testing.T) {
 }
 
 func TestRunStateMachineHeartbeat(t *testing.T) {
-	var mu sync.Mutex
-	var count int
+	var count atomic.Int32
 
 	sm := NewRunStateMachine(context.Background(), func(p StatusPatch) {
-		mu.Lock()
-		count++
-		mu.Unlock()
+		count.Add(1)
 	}, 10*time.Millisecond)
-	time.Sleep(35 * time.Millisecond)
+
+	// Wait for at least 2 heartbeats using polling instead of fixed sleep.
+	deadline := time.After(2 * time.Second)
+	for count.Load() < 2 {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for heartbeats, got %d", count.Load())
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
 	sm.Close()
 
-	mu.Lock()
-	defer mu.Unlock()
-	if count < 2 {
-		t.Errorf("expected at least 2 heartbeat patches, got %d", count)
+	// After Close(), the goroutine should have exited (WaitGroup done).
+	// Verify no more events arrive.
+	countAfter := count.Load()
+	time.Sleep(30 * time.Millisecond)
+	if count.Load() != countAfter {
+		t.Error("heartbeat should stop after Close()")
 	}
+}
+
+func TestRunStateMachineCloseWithoutHeartbeat(t *testing.T) {
+	sm := NewRunStateMachine(context.Background(), func(p StatusPatch) {}, 0)
+	sm.Close() // should not panic or block
 }

@@ -36,7 +36,9 @@ func TestSmokeHealthEndpoint(t *testing.T) {
 	}
 
 	var body map[string]any
-	json.NewDecoder(resp.Body).Decode(&body)
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
 	if body["status"] != "ok" {
 		t.Errorf("status = %v, want ok", body["status"])
 	}
@@ -68,14 +70,21 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 		},
 	})
 	data, _ := json.Marshal(connectReq)
-	conn.Write(ctx, websocket.MessageText, data)
+	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+		t.Fatalf("write connect: %v", err)
+	}
 
 	readCtx, readCancel := context.WithTimeout(ctx, 2*time.Second)
-	_, helloData, _ := conn.Read(readCtx)
+	_, helloData, err := conn.Read(readCtx)
 	readCancel()
+	if err != nil {
+		t.Fatalf("read hello: %v", err)
+	}
 
 	var helloResp protocol.ResponseFrame
-	json.Unmarshal(helloData, &helloResp)
+	if err := json.Unmarshal(helloData, &helloResp); err != nil {
+		t.Fatalf("unmarshal hello: %v", err)
+	}
 	if !helloResp.OK {
 		t.Fatalf("handshake failed: %+v", helloResp.Error)
 	}
@@ -83,14 +92,21 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	// Health RPC.
 	healthReq, _ := protocol.NewRequestFrame("smoke-rpc", "health", nil)
 	data, _ = json.Marshal(healthReq)
-	conn.Write(ctx, websocket.MessageText, data)
+	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+		t.Fatalf("write health: %v", err)
+	}
 
 	readCtx, readCancel = context.WithTimeout(ctx, 2*time.Second)
-	_, rpcData, _ := conn.Read(readCtx)
+	_, rpcData, err := conn.Read(readCtx)
 	readCancel()
+	if err != nil {
+		t.Fatalf("read rpc: %v", err)
+	}
 
 	var rpcResp protocol.ResponseFrame
-	json.Unmarshal(rpcData, &rpcResp)
+	if err := json.Unmarshal(rpcData, &rpcResp); err != nil {
+		t.Fatalf("unmarshal rpc: %v", err)
+	}
 	if !rpcResp.OK {
 		t.Errorf("health RPC failed: %+v", rpcResp.Error)
 	}
@@ -98,14 +114,21 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	// Unknown method -> NOT_FOUND.
 	unknownReq, _ := protocol.NewRequestFrame("smoke-unknown", "nonexistent", nil)
 	data, _ = json.Marshal(unknownReq)
-	conn.Write(ctx, websocket.MessageText, data)
+	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+		t.Fatalf("write unknown: %v", err)
+	}
 
 	readCtx, readCancel = context.WithTimeout(ctx, 2*time.Second)
-	_, errData, _ := conn.Read(readCtx)
+	_, errData, err := conn.Read(readCtx)
 	readCancel()
+	if err != nil {
+		t.Fatalf("read error: %v", err)
+	}
 
 	var errResp protocol.ResponseFrame
-	json.Unmarshal(errData, &errResp)
+	if err := json.Unmarshal(errData, &errResp); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
 	if errResp.OK {
 		t.Error("expected error for unknown method")
 	}

@@ -50,7 +50,7 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 	if err := s.handleHandshake(handshakeCtx, client); err != nil {
 		handshakeCancel()
 		s.logger.Warn("handshake failed", "connId", client.connID, "error", err)
-		conn.Close(websocket.StatusPolicyViolation, err.Error())
+		conn.Close(websocket.StatusPolicyViolation, "handshake failed")
 		return
 	}
 	handshakeCancel()
@@ -87,7 +87,9 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient) error {
 		errShape := protocol.NewError(protocol.ErrInvalidRequest,
 			fmt.Sprintf("protocol version mismatch: server=%d, client range=%d-%d",
 				protocol.ProtocolVersion, params.MinProtocol, params.MaxProtocol))
-		s.writeFrame(client, protocol.NewResponseError(req.ID, errShape))
+		if err := s.writeFrame(ctx, client, protocol.NewResponseError(req.ID, errShape)); err != nil {
+			s.logger.Error("failed to send protocol error", "connId", client.connID, "error", err)
+		}
 		return fmt.Errorf("protocol version mismatch")
 	}
 
@@ -103,7 +105,7 @@ func (s *Server) handleHandshake(ctx context.Context, client *WsClient) error {
 		client.role = "operator"
 	}
 
-	return s.writeFrame(client, helloResp)
+	return s.writeFrame(ctx, client, helloResp)
 }
 
 func (s *Server) buildHelloOk(client *WsClient) *protocol.HelloOk {
@@ -148,12 +150,17 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 				continue
 			}
 			resp := s.dispatcher.Dispatch(ctx, &req)
-			s.writeFrame(client, resp)
+			if err := s.writeFrame(ctx, client, resp); err != nil {
+				s.logger.Warn("response write failed", "connId", client.connID, "method", req.Method, "error", err)
+				return
+			}
 		}
 	}
 }
 
-func (s *Server) writeFrame(client *WsClient, v any) error {
+// writeFrame serializes v as JSON and writes it to the WebSocket connection.
+// The write is bounded by a 5-second timeout derived from the parent context.
+func (s *Server) writeFrame(ctx context.Context, client *WsClient, v any) error {
 	data, err := json.Marshal(v)
 	if err != nil {
 		s.logger.Error("marshal frame", "connId", client.connID, "error", err)
@@ -163,8 +170,8 @@ func (s *Server) writeFrame(client *WsClient, v any) error {
 	client.writeMu.Lock()
 	defer client.writeMu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	return client.conn.Write(ctx, websocket.MessageText, data)
+	return client.conn.Write(writeCtx, websocket.MessageText, data)
 }

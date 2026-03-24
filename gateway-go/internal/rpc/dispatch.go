@@ -7,6 +7,7 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 
@@ -90,6 +91,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *
 
 	return protocol.NewResponseError(req.ID, protocol.NewError(
 		protocol.ErrNotFound,
-		"unknown method: "+req.Method,
+		fmt.Sprintf("unknown method: %q", req.Method),
 	))
 }

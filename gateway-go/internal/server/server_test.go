@@ -24,7 +24,7 @@ func TestHealthEndpoint(t *testing.T) {
 
 	var resp map[string]any
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
+		t.Fatalf("decode: %v", err)
 	}
 	if resp["status"] != "ok" {
 		t.Errorf("expected status ok, got %v", resp["status"])
@@ -37,7 +37,6 @@ func TestHealthEndpoint(t *testing.T) {
 func TestReadyEndpoint(t *testing.T) {
 	srv := New(":0")
 
-	// Not ready initially.
 	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 	srv.handleReady(w, req)
@@ -45,7 +44,6 @@ func TestReadyEndpoint(t *testing.T) {
 		t.Errorf("expected 503, got %d", w.Code)
 	}
 
-	// Mark ready.
 	srv.ready.Store(true)
 	w = httptest.NewRecorder()
 	srv.handleReady(w, req)
@@ -67,7 +65,9 @@ func TestRPCEndpoint_ValidRequest(t *testing.T) {
 	}
 
 	var resp map[string]any
-	json.NewDecoder(w.Body).Decode(&resp)
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
 	if resp["ok"] != true {
 		t.Error("expected ok=true")
 	}
@@ -120,7 +120,9 @@ func TestServerHealthEndpointLive(t *testing.T) {
 	}
 
 	var body map[string]any
-	json.NewDecoder(resp.Body).Decode(&body)
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
 	if body["status"] != "ok" {
 		t.Errorf("status = %v, want ok", body["status"])
 	}

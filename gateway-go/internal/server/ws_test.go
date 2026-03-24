@@ -38,7 +38,9 @@ func TestWebSocketHandshake(t *testing.T) {
 		},
 	})
 	data, _ := json.Marshal(connectReq)
-	conn.Write(ctx, websocket.MessageText, data)
+	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+		t.Fatalf("write connect: %v", err)
+	}
 
 	// Read HelloOk.
 	readCtx, readCancel := context.WithTimeout(ctx, 2*time.Second)
@@ -49,13 +51,17 @@ func TestWebSocketHandshake(t *testing.T) {
 	}
 
 	var resp protocol.ResponseFrame
-	json.Unmarshal(respData, &resp)
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if !resp.OK {
 		t.Fatalf("handshake failed: %+v", resp.Error)
 	}
 
 	var hello protocol.HelloOk
-	json.Unmarshal(resp.Payload, &hello)
+	if err := json.Unmarshal(resp.Payload, &hello); err != nil {
+		t.Fatalf("unmarshal hello: %v", err)
+	}
 	if hello.Type != "hello-ok" {
 		t.Errorf("HelloOk.Type = %q, want %q", hello.Type, "hello-ok")
 	}
@@ -81,7 +87,9 @@ func TestWebSocketRPCHealth(t *testing.T) {
 	// Send health RPC.
 	healthReq, _ := protocol.NewRequestFrame("rpc-1", "health", nil)
 	data, _ := json.Marshal(healthReq)
-	conn.Write(ctx, websocket.MessageText, data)
+	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+		t.Fatalf("write: %v", err)
+	}
 
 	readCtx, readCancel := context.WithTimeout(ctx, 2*time.Second)
 	defer readCancel()
@@ -91,7 +99,9 @@ func TestWebSocketRPCHealth(t *testing.T) {
 	}
 
 	var resp protocol.ResponseFrame
-	json.Unmarshal(respData, &resp)
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if !resp.OK {
 		t.Errorf("health RPC failed: %+v", resp.Error)
 	}
@@ -113,7 +123,9 @@ func TestWebSocketRPCUnknownMethod(t *testing.T) {
 
 	req, _ := protocol.NewRequestFrame("rpc-2", "nonexistent.method", nil)
 	data, _ := json.Marshal(req)
-	conn.Write(ctx, websocket.MessageText, data)
+	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+		t.Fatalf("write: %v", err)
+	}
 
 	readCtx, readCancel := context.WithTimeout(ctx, 2*time.Second)
 	defer readCancel()
@@ -123,7 +135,9 @@ func TestWebSocketRPCUnknownMethod(t *testing.T) {
 	}
 
 	var resp protocol.ResponseFrame
-	json.Unmarshal(respData, &resp)
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if resp.OK {
 		t.Error("expected error for unknown method")
 	}
@@ -148,11 +162,24 @@ func connectWS(t *testing.T, ctx context.Context, addr string) *websocket.Conn {
 		},
 	})
 	data, _ := json.Marshal(connectReq)
-	conn.Write(ctx, websocket.MessageText, data)
+	if err := conn.Write(ctx, websocket.MessageText, data); err != nil {
+		t.Fatalf("write connect: %v", err)
+	}
 
 	readCtx, readCancel := context.WithTimeout(ctx, 2*time.Second)
 	defer readCancel()
-	conn.Read(readCtx)
+	_, respData, err := conn.Read(readCtx)
+	if err != nil {
+		t.Fatalf("read hello: %v", err)
+	}
+
+	var resp protocol.ResponseFrame
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		t.Fatalf("unmarshal hello: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("handshake failed: %+v", resp.Error)
+	}
 
 	return conn
 }
