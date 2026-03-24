@@ -1,5 +1,5 @@
 import AjvPkg, { type ErrorObject } from "ajv";
-import { loadCoreRs } from "../../bindings/core-rs.js";
+import { loadCoreRs, type CoreRsModule } from "../../bindings/core-rs.js";
 import type { SessionsPatchResult } from "../session/session-utils.types.js";
 import {
   type AgentEvent,
@@ -270,22 +270,31 @@ export const validateRequestFrame = ajv.compile<RequestFrame>(RequestFrameSchema
 export const validateResponseFrame = ajv.compile<ResponseFrame>(ResponseFrameSchema);
 export const validateEventFrame = ajv.compile<EventFrame>(EventFrameSchema);
 
+// Resolve once at module scope to avoid per-call overhead.
+let _coreRs: CoreRsModule | null | undefined;
+function coreRs(): CoreRsModule | null {
+  if (_coreRs === undefined) {
+    _coreRs = loadCoreRs();
+  }
+  return _coreRs;
+}
+
 /**
  * Validate a raw JSON string as a gateway frame using the native Rust validator.
- * Returns true if valid, false if invalid or native addon unavailable.
+ * Returns the frame type ("req"/"res"/"event") on success, or null if invalid/unavailable.
  */
-export function validateFrameNative(json: string): boolean {
-  const native = loadCoreRs();
+export function validateFrameNative(json: string): string | null {
+  const native = coreRs();
   if (!native) {
-    return false;
+    return null;
   }
   try {
-    native.validateFrame(json);
-    return true;
+    return native.validateFrame(json);
   } catch {
-    return false;
+    return null;
   }
 }
+
 export const validateSendParams = ajv.compile(SendParamsSchema);
 export const validatePollParams = ajv.compile<PollParams>(PollParamsSchema);
 export const validateAgentParams = ajv.compile(AgentParamsSchema);

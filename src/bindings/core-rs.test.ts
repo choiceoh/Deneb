@@ -22,27 +22,27 @@ const mod = loadCoreRs();
 const describeNative = mod ? describe : describe.skip;
 
 describeNative("core-rs native functions", () => {
-  it("validateFrame accepts valid request frame", () => {
-    expect(() => mod!.validateFrame('{"type":"req","id":"1","method":"chat.send"}')).not.toThrow();
+  it("validateFrame returns 'req' for valid request frame", () => {
+    expect(mod!.validateFrame('{"type":"req","id":"1","method":"chat.send"}')).toBe("req");
   });
 
-  it("validateFrame accepts valid response frame", () => {
-    expect(() => mod!.validateFrame('{"type":"res","id":"1","ok":true}')).not.toThrow();
+  it("validateFrame returns 'res' for valid response frame", () => {
+    expect(mod!.validateFrame('{"type":"res","id":"1","ok":true}')).toBe("res");
   });
 
-  it("validateFrame accepts valid event frame", () => {
-    expect(() => mod!.validateFrame('{"type":"event","event":"health","seq":5}')).not.toThrow();
+  it("validateFrame returns 'event' for valid event frame", () => {
+    expect(mod!.validateFrame('{"type":"event","event":"health","seq":5}')).toBe("event");
   });
 
-  it("validateFrame rejects invalid JSON", () => {
+  it("validateFrame throws on invalid JSON", () => {
     expect(() => mod!.validateFrame("{not json}")).toThrow();
   });
 
-  it("validateFrame rejects unknown frame type", () => {
+  it("validateFrame throws on unknown frame type", () => {
     expect(() => mod!.validateFrame('{"type":"unknown"}')).toThrow();
   });
 
-  it("validateFrame rejects frame with missing required fields", () => {
+  it("validateFrame throws on missing required fields", () => {
     expect(() => mod!.validateFrame('{"type":"req","id":"abc"}')).toThrow();
   });
 

@@ -7,11 +7,18 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
 /// Validate a gateway protocol frame (JSON string).
+/// Returns the frame type ("req", "res", or "event") on success.
 /// Throws a JS error if the frame is invalid.
 #[napi]
-pub fn validate_frame(json: String) -> Result<()> {
+pub fn validate_frame(json: String) -> Result<String> {
     deneb_core::protocol::validate_frame(&json)
-        .map(|_| ())
+        .map(|frame| {
+            match frame {
+                deneb_core::protocol::GatewayFrame::Request(_) => "req".to_string(),
+                deneb_core::protocol::GatewayFrame::Response(_) => "res".to_string(),
+                deneb_core::protocol::GatewayFrame::Event(_) => "event".to_string(),
+            }
+        })
         .map_err(|e| Error::from_reason(e.to_string()))
 }
 

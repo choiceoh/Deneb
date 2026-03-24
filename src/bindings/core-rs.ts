@@ -7,8 +7,8 @@
 import { createRequire } from "node:module";
 
 export interface CoreRsModule {
-  /** Validate a gateway protocol frame. Throws on invalid JSON/frame. */
-  validateFrame(json: string): void;
+  /** Validate a gateway protocol frame. Returns frame type ("req"/"res"/"event"). Throws on invalid. */
+  validateFrame(json: string): string;
   /** Constant-time byte comparison (timing-attack safe). */
   constantTimeEq(a: Buffer, b: Buffer): boolean;
   /** Detect MIME type from file magic bytes. */
