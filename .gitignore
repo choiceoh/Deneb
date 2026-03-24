@@ -62,6 +62,9 @@ native/*.node
 native/index.js
 native/index.d.ts
 
+# Rust build artifacts
+core-rs/target/
+
 # Temp
 /tmp/
 *.tmp
