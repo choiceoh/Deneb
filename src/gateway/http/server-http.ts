@@ -9,8 +9,6 @@ import { createServer as createHttpsServer } from "node:https";
 import type { TlsOptions } from "node:tls";
 import type { WebSocketServer } from "ws";
 import { resolveAgentAvatar } from "../../agents/identity-avatar.js";
-import { CANVAS_WS_PATH, handleA2uiHttpRequest } from "../../canvas-host/a2ui.js";
-import type { CanvasHostHandler } from "../../canvas-host/server.js";
 import { loadConfig } from "../../config/config.js";
 import type { createSubsystemLogger } from "../../logging/subsystem.js";
 import { safeEqualSecret } from "../../security/secret-equal.js";
@@ -26,7 +24,6 @@ import {
   type GatewayAuthResult,
   type ResolvedGatewayAuth,
 } from "../auth/auth.js";
-import { normalizeCanvasScopedUrl } from "../canvas-capability.js";
 import {
   handleControlUiAvatarRequest,
   handleControlUiHttpRequest,
@@ -55,11 +52,7 @@ import { resolveRequestClientIp } from "../net.js";
 import { handleOpenAiHttpRequest } from "../openai-http.js";
 import { handleOpenResponsesHttpRequest } from "../openresponses-http.js";
 import { DEDUPE_MAX, DEDUPE_TTL_MS } from "../server-constants.js";
-import {
-  authorizeCanvasRequest,
-  enforcePluginRouteGatewayAuth,
-  isCanvasPath,
-} from "../server/http-auth.js";
+import { enforcePluginRouteGatewayAuth } from "../server/http-auth.js";
 import {
   isProtectedPluginRoutePathFromContext,
   resolvePluginRoutePathContext,

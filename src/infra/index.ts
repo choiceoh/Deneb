@@ -67,9 +67,6 @@ export type { TailscaleWhoisIdentity } from "./tailscale.js";
 // Path environment
 export { ensureDenebCliOnPath } from "./path-env.js";
 
-// Canvas host URL
-export { resolveCanvasHostUrl } from "./canvas-host-url.js";
-
 // Home directory
 export {
   expandHomePrefix,

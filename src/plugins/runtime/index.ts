@@ -5,17 +5,12 @@ import {
 } from "../../agents/models/model-auth.js";
 import { resolveStateDir } from "../../config/paths.js";
 import {
-  generateImage,
-  listRuntimeImageGenerationProviders,
-} from "../../image-generation/runtime.js";
-import {
   describeImageFile,
   describeImageFileWithModel,
   describeVideoFile,
   runMediaUnderstandingFile,
   transcribeAudioFile,
 } from "../../media-understanding/runtime.js";
-import { listSpeechVoices, textToSpeech, textToSpeechTelephony } from "../../tts/runtime.js";
 import { listWebSearchProviders, runWebSearch } from "../../web-search/runtime.js";
 import { createRuntimeAgent } from "./runtime-agent.js";
 import { createRuntimeChannel } from "./runtime-channel.js";
