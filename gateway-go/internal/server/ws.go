@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +12,12 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"nhooyr.io/websocket"
+)
+
+const (
+	// dispatchTimeout bounds how long a single RPC handler can run before
+	// being canceled. Prevents a stuck handler from blocking the message loop.
+	dispatchTimeout = 30 * time.Second
 )
 
 // WsClient represents a connected WebSocket client.
@@ -42,7 +50,7 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 
 	client := &WsClient{
 		conn:    conn,
-		connID:  fmt.Sprintf("conn-%d", time.Now().UnixNano()),
+		connID:  generateConnID(),
 		created: time.Now(),
 	}
 
@@ -170,7 +178,18 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 				s.logger.Warn("unmarshal request", "connId", client.connID, "error", err)
 				continue
 			}
-			resp := s.dispatcher.Dispatch(ctx, &req)
+
+			// Deduplicate: reject requests with recently-seen IDs.
+			if !s.dedupe.Check(req.ID) {
+				s.logger.Debug("duplicate request", "connId", client.connID, "id", req.ID)
+				continue
+			}
+
+			// Dispatch with a per-request timeout to prevent stuck handlers.
+			dispatchCtx, dispatchCancel := context.WithTimeout(ctx, dispatchTimeout)
+			resp := s.dispatcher.Dispatch(dispatchCtx, &req)
+			dispatchCancel()
+
 			if err := s.writeFrame(ctx, client, resp); err != nil {
 				s.logger.Warn("response write failed", "connId", client.connID, "method", req.Method, "error", err)
 				return
@@ -194,7 +213,6 @@ func (s *Server) tickLoop(ctx context.Context, client *WsClient) {
 				"ts": time.Now().UnixMilli(),
 			})
 			if err := s.writeFrame(ctx, client, ev); err != nil {
-				// Write failure means connection is dead; exit silently.
 				return
 			}
 		}
@@ -221,4 +239,15 @@ func (s *Server) writeFrame(ctx context.Context, client *WsClient, v any) error 
 	defer cancel()
 
 	return client.conn.Write(writeCtx, websocket.MessageText, data)
+}
+
+// generateConnID returns a cryptographically random connection identifier
+// to avoid collisions under concurrent connection bursts.
+func generateConnID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to timestamp if crypto/rand fails (should never happen).
+		return fmt.Sprintf("conn-%d", time.Now().UnixNano())
+	}
+	return "conn-" + hex.EncodeToString(b)
 }

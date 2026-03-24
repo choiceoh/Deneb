@@ -97,11 +97,25 @@ func (h *PluginHost) dial(ctx context.Context) error {
 	return nil
 }
 
+const (
+	// defaultForwardTimeout is the maximum time to wait for a bridge response
+	// if the caller's context has no deadline.
+	defaultForwardTimeout = 60 * time.Second
+)
+
 // Forward sends an RPC request to the Plugin Host and waits for the response.
+// If the caller's context has no deadline, a default 60-second timeout is applied.
 // This implements the rpc.Forwarder interface.
 func (h *PluginHost) Forward(ctx context.Context, req *protocol.RequestFrame) (*protocol.ResponseFrame, error) {
 	if !h.IsRunning() {
 		return nil, fmt.Errorf("bridge not connected")
+	}
+
+	// Apply default timeout if no deadline is set.
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, defaultForwardTimeout)
+		defer cancel()
 	}
 
 	respCh := make(chan *protocol.ResponseFrame, 1)

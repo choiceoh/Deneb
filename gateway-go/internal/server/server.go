@@ -20,9 +20,11 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+	"nhooyr.io/websocket"
 )
 
 const (
@@ -40,7 +42,8 @@ type Server struct {
 	sessions   *session.Manager
 	channels   *channel.Registry
 	bridge     *bridge.PluginHost
-	clients    sync.Map   // connID -> *WsClient
+	dedupe     *dedupe.Tracker
+	clients    sync.Map // connID -> *WsClient
 	clientCnt  atomic.Int32
 	startedAt  time.Time
 	version    string
@@ -71,8 +74,12 @@ func New(addr string, opts ...Option) *Server {
 		addr:     addr,
 		sessions: session.NewManager(),
 		channels: channel.NewRegistry(),
-		version:  "0.1.0-go",
-		logger:   slog.New(slog.NewJSONHandler(os.Stderr, nil)),
+		dedupe: dedupe.NewTracker(
+			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,
+			protocol.DedupeMax,
+		),
+		version: "0.1.0-go",
+		logger:  slog.New(slog.NewJSONHandler(os.Stderr, nil)),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -166,7 +173,10 @@ func (s *Server) shutdown() error {
 	s.ready.Store(false)
 	s.logger.Info("gateway server shutting down")
 
-	// 1. Stop accepting new connections first.
+	// 1. Broadcast shutdown event to all connected clients.
+	s.broadcastShutdownEvent()
+
+	// 2. Stop accepting new connections.
 	var httpErr error
 	if s.httpServer != nil {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -174,19 +184,36 @@ func (s *Server) shutdown() error {
 		httpErr = s.httpServer.Shutdown(shutdownCtx)
 	}
 
-	// 2. Close existing WebSocket clients.
+	// 3. Close existing WebSocket clients.
 	s.clients.Range(func(key, value any) bool {
 		client := value.(*WsClient)
-		client.conn.Close(4000, "server shutting down")
+		client.conn.Close(websocket.StatusGoingAway, "server shutting down")
 		return true
 	})
 
-	// 3. Close Plugin Host bridge last (in-flight forwards finish first).
+	// 4. Close Plugin Host bridge last (in-flight forwards finish first).
 	if s.bridge != nil {
 		s.bridge.Close()
 	}
 
 	return httpErr
+}
+
+// broadcastShutdownEvent sends a shutdown event to all authenticated clients
+// so they can reconnect or show an appropriate message.
+func (s *Server) broadcastShutdownEvent() {
+	ev, _ := protocol.NewEventFrame("shutdown", map[string]any{
+		"reason": "server shutting down",
+	})
+	s.clients.Range(func(key, value any) bool {
+		client := value.(*WsClient)
+		if client.authed {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			s.writeFrame(ctx, client, ev)
+			cancel()
+		}
+		return true
+	})
 }
 
 func (s *Server) buildMux() *http.ServeMux {
@@ -201,13 +228,25 @@ func (s *Server) buildMux() *http.ServeMux {
 	return mux
 }
 
-// handleHealth responds with gateway health status.
+// handleHealth responds with gateway health status including subsystem state.
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	bridgeStatus := "not_configured"
+	if s.bridge != nil {
+		if s.bridge.IsRunning() {
+			bridgeStatus = "connected"
+		} else {
+			bridgeStatus = "disconnected"
+		}
+	}
+
 	s.writeJSON(w, http.StatusOK, map[string]any{
-		"status":  "ok",
-		"version": s.version,
-		"runtime": "go",
-		"uptime":  time.Since(s.startedAt).Milliseconds(),
+		"status":      "ok",
+		"version":     s.version,
+		"runtime":     "go",
+		"uptime":      time.Since(s.startedAt).Milliseconds(),
+		"connections": s.clientCnt.Load(),
+		"sessions":    s.sessions.Count(),
+		"bridge":      bridgeStatus,
 	})
 }
 
@@ -261,7 +300,11 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		Method: req.Method,
 		Params: req.Params,
 	}
-	resp := s.dispatcher.Dispatch(r.Context(), frame)
+
+	dispatchCtx, dispatchCancel := context.WithTimeout(r.Context(), dispatchTimeout)
+	resp := s.dispatcher.Dispatch(dispatchCtx, frame)
+	dispatchCancel()
+
 	s.writeJSON(w, http.StatusOK, resp)
 }
 
@@ -285,9 +328,10 @@ func (s *Server) registerBuiltinMethods() {
 
 	s.dispatcher.Register("status", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
-			"version":  s.version,
-			"channels": s.channels.StatusAll(),
-			"sessions": s.sessions.Count(),
+			"version":     s.version,
+			"channels":    s.channels.StatusAll(),
+			"sessions":    s.sessions.Count(),
+			"connections": s.clientCnt.Load(),
 		})
 		return resp
 	})
