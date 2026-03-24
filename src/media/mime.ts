@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileTypeFromBuffer } from "file-type";
+import { loadCoreRs } from "../bindings/core-rs.js";
 import { type MediaKind, mediaKindFromMime } from "./constants.js";
 
 // Map common mimes to preferred file extensions.
@@ -68,6 +69,18 @@ export function normalizeMimeType(mime?: string | null): string | undefined {
 async function sniffMime(buffer?: Buffer): Promise<string | undefined> {
   if (!buffer) {
     return undefined;
+  }
+  // Fast path: use native Rust MIME detection (synchronous magic-byte sniffing).
+  const native = loadCoreRs();
+  if (native) {
+    try {
+      const mime = native.detectMime(buffer);
+      if (mime && mime !== "application/octet-stream") {
+        return mime;
+      }
+    } catch {
+      // Fall through to JS implementation.
+    }
   }
   try {
     const type = await fileTypeFromBuffer(buffer);

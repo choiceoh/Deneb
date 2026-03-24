@@ -5,6 +5,7 @@ packages:
   # - extensions/*
 
 onlyBuiltDependencies:
+  - "@deneb/core-rs"
   - "@lydell/node-pty"
   - "@napi-rs/canvas"
   - "@tloncorp/api"

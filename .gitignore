@@ -62,7 +62,14 @@ native/*.node
 native/index.js
 native/index.d.ts
 
-# Rust core library
+# Core-rs napi bridge
+core-rs-napi/target/
+core-rs-napi/*.node
+core-rs-napi/index.js
+core-rs-napi/index.d.ts
+core-rs-napi/node_modules/
+
+# Rust build artifacts
 core-rs/target/
 core-rs/*.node
 core-rs/npm/
