@@ -65,9 +65,14 @@ const (
 
 // eventScopeGuards maps event names to required scopes.
 // Events not listed here are delivered to all authenticated subscribers.
+// Mirrors EVENT_SCOPE_GUARDS from src/gateway/server-broadcast.ts.
 var eventScopeGuards = map[string][]string{
 	"exec.approval.requested": {ScopeApprovals, ScopeAdmin},
 	"exec.approval.resolved":  {ScopeApprovals, ScopeAdmin},
+	"device.pair.requested":   {ScopeApprovals, ScopeAdmin},
+	"device.pair.resolved":    {ScopeApprovals, ScopeAdmin},
+	"node.pair.requested":     {ScopeApprovals, ScopeAdmin},
+	"node.pair.resolved":      {ScopeApprovals, ScopeAdmin},
 	"sessions.changed":        {ScopeRead},
 	"session.message":         {ScopeRead},
 	"session.tool":            {ScopeRead},
@@ -96,6 +101,10 @@ type Broadcaster struct {
 	// Tool event recipients: runId -> connID.
 	toolRecipientMu sync.RWMutex
 	toolRecipients  map[string]string
+
+	// Node session subscriptions: nodeID -> set of sessionKeys.
+	nodeSubMu  sync.RWMutex
+	nodeSubs   map[string]map[string]bool
 }
 
 type subscriberEntry struct {
@@ -110,6 +119,7 @@ func NewBroadcaster() *Broadcaster {
 		sessionSubs:    make(map[string]bool),
 		sessionMsgSubs: make(map[string]map[string]bool),
 		toolRecipients: make(map[string]string),
+		nodeSubs:       make(map[string]map[string]bool),
 		logger:         slog.Default(),
 	}
 }
@@ -329,6 +339,68 @@ func (b *Broadcaster) GetToolEventRecipient(runID string) string {
 	b.toolRecipientMu.RLock()
 	defer b.toolRecipientMu.RUnlock()
 	return b.toolRecipients[runID]
+}
+
+// --- Node session subscriptions ---
+
+// SubscribeNodeSession registers a node for events on a session key.
+func (b *Broadcaster) SubscribeNodeSession(nodeID, sessionKey string) {
+	b.nodeSubMu.Lock()
+	defer b.nodeSubMu.Unlock()
+	subs, ok := b.nodeSubs[nodeID]
+	if !ok {
+		subs = make(map[string]bool)
+		b.nodeSubs[nodeID] = subs
+	}
+	subs[sessionKey] = true
+}
+
+// UnsubscribeNodeSession removes a node from a session's events.
+func (b *Broadcaster) UnsubscribeNodeSession(nodeID, sessionKey string) {
+	b.nodeSubMu.Lock()
+	defer b.nodeSubMu.Unlock()
+	subs := b.nodeSubs[nodeID]
+	if subs == nil {
+		return
+	}
+	delete(subs, sessionKey)
+	if len(subs) == 0 {
+		delete(b.nodeSubs, nodeID)
+	}
+}
+
+// RemoveNode unsubscribes a node from all session subscriptions.
+func (b *Broadcaster) RemoveNode(nodeID string) {
+	b.nodeSubMu.Lock()
+	defer b.nodeSubMu.Unlock()
+	delete(b.nodeSubs, nodeID)
+}
+
+// NodeSessionKeys returns all session keys a node is subscribed to.
+func (b *Broadcaster) NodeSessionKeys(nodeID string) []string {
+	b.nodeSubMu.RLock()
+	defer b.nodeSubMu.RUnlock()
+	subs := b.nodeSubs[nodeID]
+	keys := make([]string, 0, len(subs))
+	for key := range subs {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+// MergedSessionRecipients returns the union of session event subscribers and
+// session message subscribers for a given session key.
+func (b *Broadcaster) MergedSessionRecipients(sessionKey string) map[string]bool {
+	b.sessionSubMu.RLock()
+	defer b.sessionSubMu.RUnlock()
+	result := make(map[string]bool)
+	for id := range b.sessionSubs {
+		result[id] = true
+	}
+	for id := range b.sessionMsgSubs[sessionKey] {
+		result[id] = true
+	}
+	return result
 }
 
 // --- Helpers ---
