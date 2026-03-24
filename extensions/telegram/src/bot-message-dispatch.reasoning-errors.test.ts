@@ -80,6 +80,22 @@ vi.mock("./sticker-cache.js", () => ({
 
 import { dispatchTelegramMessage } from "./bot-message-dispatch.js";
 
+const telegramDepsForTest: TelegramBotDeps = {
+  loadConfig: loadConfig as TelegramBotDeps["loadConfig"],
+  resolveStorePath: resolveStorePath as TelegramBotDeps["resolveStorePath"],
+  readChannelAllowFromStore:
+    readChannelAllowFromStore as TelegramBotDeps["readChannelAllowFromStore"],
+  upsertChannelPairingRequest:
+    upsertChannelPairingRequest as TelegramBotDeps["upsertChannelPairingRequest"],
+  enqueueSystemEvent: enqueueSystemEvent as TelegramBotDeps["enqueueSystemEvent"],
+  dispatchReplyWithBufferedBlockDispatcher:
+    dispatchReplyWithBufferedBlockDispatcher as TelegramBotDeps["dispatchReplyWithBufferedBlockDispatcher"],
+  buildModelsProviderData: buildModelsProviderData as TelegramBotDeps["buildModelsProviderData"],
+  listSkillCommandsForAgents:
+    listSkillCommandsForAgents as TelegramBotDeps["listSkillCommandsForAgents"],
+  wasSentByBot: wasSentByBot as TelegramBotDeps["wasSentByBot"],
+};
+
 describe("dispatchTelegramMessage — reasoning, errors & concurrency", () => {
   type TelegramMessageContext = Parameters<typeof dispatchTelegramMessage>[0]["context"];
 
@@ -211,6 +227,15 @@ describe("dispatchTelegramMessage — reasoning, errors & concurrency", () => {
       telegramCfg: params.telegramCfg ?? {},
       telegramDeps: params.telegramDeps ?? telegramDepsForTest,
       opts: { token: "token" },
+      _deliverReplies: deliverReplies as Parameters<
+        typeof dispatchTelegramMessage
+      >[0]["_deliverReplies"],
+      _createTelegramDraftStream: createTelegramDraftStream as Parameters<
+        typeof dispatchTelegramMessage
+      >[0]["_createTelegramDraftStream"],
+      _editMessageTelegram: editMessageTelegram as Parameters<
+        typeof dispatchTelegramMessage
+      >[0]["_editMessageTelegram"],
     });
   }
 

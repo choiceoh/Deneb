@@ -227,6 +227,15 @@ describe("dispatchTelegramMessage — preview lanes & multi-message", () => {
       telegramCfg: params.telegramCfg ?? {},
       telegramDeps: params.telegramDeps ?? telegramDepsForTest,
       opts: { token: "token" },
+      _deliverReplies: deliverReplies as Parameters<
+        typeof dispatchTelegramMessage
+      >[0]["_deliverReplies"],
+      _createTelegramDraftStream: createTelegramDraftStream as Parameters<
+        typeof dispatchTelegramMessage
+      >[0]["_createTelegramDraftStream"],
+      _editMessageTelegram: editMessageTelegram as Parameters<
+        typeof dispatchTelegramMessage
+      >[0]["_editMessageTelegram"],
     });
   }
 
