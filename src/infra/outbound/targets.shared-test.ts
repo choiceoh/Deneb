@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { telegramPlugin } from "../../../extensions/telegram/index.js";
+import { whatsappOutbound } from "../../../test/channel-outbounds.js";
 import type { ChannelPlugin } from "../../channels/plugins/types.plugin.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import { createTestRegistry } from "../../test-utils/channel-plugins.js";
 import { resolveOutboundTarget } from "./targets.js";
 
-// WhatsApp extension removed — provide minimal stub plugin for test registry.
+// WhatsApp extension removed — provide stub plugin with outbound resolveTarget.
 const whatsappPlugin = {
   id: "whatsapp",
   meta: { id: "whatsapp", label: "WhatsApp" },
+  outbound: whatsappOutbound,
 } as unknown as ChannelPlugin;
 
 export function installResolveOutboundTargetPluginRegistryHooks(): void {

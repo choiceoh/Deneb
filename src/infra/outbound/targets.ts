@@ -358,7 +358,7 @@ export function resolveHeartbeatDeliveryTarget(params: {
     channel: resolvedTarget.channel,
     cfg,
   });
-  if (plugin?.config.resolveAllowFrom) {
+  if (plugin?.config?.resolveAllowFrom) {
     const explicit = resolveOutboundTarget({
       channel: resolvedTarget.channel,
       to: resolvedTarget.to,

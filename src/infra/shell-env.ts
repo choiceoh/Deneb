@@ -45,8 +45,11 @@ function resolveShellExecEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     delete execEnv.HOME;
   }
 
-  // Avoid zsh startup-file redirection via env poisoning.
+  // Avoid startup-file redirection via env poisoning.
   delete execEnv.ZDOTDIR;
+  delete execEnv.BASH_ENV;
+  delete execEnv.PS4;
+  delete execEnv.SHELL;
   return execEnv;
 }
 

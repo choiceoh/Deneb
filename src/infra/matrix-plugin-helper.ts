@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
 import type { DenebConfig } from "../config/config.js";
 import {
@@ -107,6 +108,20 @@ function getJiti() {
   return jitiLoader;
 }
 
+async function importHelper(helperPath: string): Promise<unknown> {
+  // Prefer native import() for .js/.mjs files to avoid jiti compatibility
+  // issues in certain ESM environments (e.g., Vitest).
+  const ext = path.extname(helperPath);
+  if (ext === ".js" || ext === ".mjs" || ext === ".cjs") {
+    try {
+      return await import(pathToFileURL(helperPath).href);
+    } catch {
+      // Fall through to jiti for environments where native import fails.
+    }
+  }
+  return await getJiti().import(helperPath);
+}
+
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -154,7 +169,7 @@ export async function loadMatrixLegacyCryptoInspector(params: {
   }
 
   const pending = (async () => {
-    const loaded: unknown = await getJiti().import(helperPath);
+    const loaded: unknown = await importHelper(helperPath);
     const inspectLegacyMatrixCryptoStore = resolveInspectorExport(loaded);
     if (!inspectLegacyMatrixCryptoStore) {
       throw new Error(
