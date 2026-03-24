@@ -88,6 +88,35 @@ message GatewaySessionRow {
   optional string last_account_id = 41;
 }
 
+// SessionTransition represents a state transition event.
+// Used for audit logging and event broadcasting.
+message SessionTransition {
+  string key = 1;
+  SessionRunStatus from_status = 2;
+  SessionRunStatus to_status = 3;
+  int64 timestamp_ms = 4;
+  optional string reason = 5;
+  optional string stop_reason = 6;
+  optional bool aborted = 7;
+}
+
+// SessionLifecyclePhase identifies the phase of a lifecycle event.
+enum SessionLifecyclePhase {
+  SESSION_LIFECYCLE_PHASE_UNSPECIFIED = 0;
+  SESSION_LIFECYCLE_PHASE_START = 1;
+  SESSION_LIFECYCLE_PHASE_END = 2;
+  SESSION_LIFECYCLE_PHASE_ERROR = 3;
+}
+
+// SessionLifecycleEvent represents a session lifecycle event.
+message SessionLifecycleEvent {
+  string key = 1;
+  SessionLifecyclePhase phase = 2;
+  int64 timestamp_ms = 3;
+  optional string stop_reason = 4;
+  optional bool aborted = 5;
+}
+
 // SessionPreviewItem — a single item in a session preview.
 message SessionPreviewItem {
   string role = 1; // "user" | "assistant" | "tool" | "system" | "other"

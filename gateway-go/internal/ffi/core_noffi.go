@@ -5,7 +5,9 @@ package ffi
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"strings"
+	"unicode"
 )
 
 // Available reports whether the Rust FFI library is linked.
@@ -81,4 +83,104 @@ func DetectMIME(data []byte) string {
 		return "application/json"
 	}
 	return "application/octet-stream"
+}
+
+// ValidateSessionKey is a pure-Go fallback for session key validation.
+func ValidateSessionKey(key string) error {
+	if len(key) == 0 {
+		return errors.New("ffi: empty session key")
+	}
+	if len(key) > 512 {
+		return errors.New("ffi: session key too long")
+	}
+	for _, r := range key {
+		if unicode.IsControl(r) && r != '\n' && r != '\t' && r != '\r' {
+			return errors.New("ffi: invalid session key")
+		}
+	}
+	return nil
+}
+
+// SanitizeHTML is a pure-Go fallback for HTML sanitization.
+func SanitizeHTML(input string) string {
+	var b strings.Builder
+	b.Grow(len(input))
+	for _, r := range input {
+		switch r {
+		case '<':
+			b.WriteString("&lt;")
+		case '>':
+			b.WriteString("&gt;")
+		case '&':
+			b.WriteString("&amp;")
+		case '"':
+			b.WriteString("&quot;")
+		case '\'':
+			b.WriteString("&#x27;")
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// blockedHosts are hostnames that should not be accessed.
+var blockedHosts = map[string]bool{
+	"localhost":                true,
+	"127.0.0.1":               true,
+	"0.0.0.0":                 true,
+	"[::1]":                   true,
+	"metadata.google.internal": true,
+	"169.254.169.254":         true,
+}
+
+// IsSafeURL is a pure-Go fallback for SSRF URL validation.
+func IsSafeURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	host := u.Hostname()
+	if host == "" {
+		return false
+	}
+	if blockedHosts[host] {
+		return false
+	}
+	// Block private IP ranges.
+	if strings.HasPrefix(host, "10.") || strings.HasPrefix(host, "192.168.") {
+		return false
+	}
+	if strings.HasPrefix(host, "172.") {
+		parts := strings.SplitN(host, ".", 3)
+		if len(parts) >= 2 {
+			var n int
+			for _, c := range parts[1] {
+				if c >= '0' && c <= '9' {
+					n = n*10 + int(c-'0')
+				}
+			}
+			if n >= 16 && n <= 31 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// knownErrorCodes contains all valid gateway error codes.
+var knownErrorCodes = map[string]bool{
+	"NOT_LINKED": true, "NOT_PAIRED": true, "AGENT_TIMEOUT": true,
+	"INVALID_REQUEST": true, "UNAVAILABLE": true, "MISSING_PARAM": true,
+	"NOT_FOUND": true, "UNAUTHORIZED": true, "VALIDATION_FAILED": true,
+	"CONFLICT": true, "FORBIDDEN": true, "NODE_DISCONNECTED": true,
+	"DEPENDENCY_FAILED": true, "FEATURE_DISABLED": true,
+}
+
+// ValidateErrorCode is a pure-Go fallback for error code validation.
+func ValidateErrorCode(code string) bool {
+	return knownErrorCodes[code]
 }

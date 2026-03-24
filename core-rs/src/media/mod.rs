@@ -2,6 +2,8 @@
 //!
 //! Detects MIME types from file magic bytes — ported from `src/media/`.
 
+pub mod extensions;
+
 /// Detect MIME type from the first bytes of a file (magic byte sniffing).
 pub fn detect_mime(data: &[u8]) -> &'static str {
     if data.len() < 4 {

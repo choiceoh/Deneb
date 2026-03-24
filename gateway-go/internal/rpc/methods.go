@@ -13,8 +13,9 @@ import (
 
 // Deps holds the subsystems that built-in RPC methods need.
 type Deps struct {
-	Sessions *session.Manager
-	Channels *channel.Registry
+	Sessions         *session.Manager
+	Channels         *channel.Registry
+	ChannelLifecycle *channel.LifecycleManager
 }
 
 // RegisterBuiltinMethods registers the core Go-native RPC methods on the
@@ -28,8 +29,13 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 	d.Register("channels.get", channelsGet(deps))
 	d.Register("channels.status", channelsStatus(deps))
 	d.Register("system.info", systemInfo())
+	d.Register("channels.health", channelsHealth(deps))
 	d.Register("protocol.validate", protocolValidate())
 	d.Register("security.constant_time_eq", securityConstantTimeEq())
+	d.Register("security.validate_session_key", securityValidateSessionKey())
+	d.Register("security.sanitize_html", securitySanitizeHTML())
+	d.Register("security.is_safe_url", securityIsSafeURL())
+	d.Register("security.validate_error_code", securityValidateErrorCode())
 	d.Register("media.detect_mime", mediaDetectMIME())
 }
 
@@ -75,11 +81,18 @@ func sessionsGet(deps Deps) HandlerFunc {
 func sessionsDelete(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			Key string `json:"key"`
+			Key   string `json:"key"`
+			Force bool   `json:"force"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil || p.Key == "" {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "key is required"))
+		}
+		// Check if session is running (prevent accidental deletion).
+		s := deps.Sessions.Get(p.Key)
+		if s != nil && s.Status == session.StatusRunning && !p.Force {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrConflict, "session is currently running; use force=true to delete"))
 		}
 		found := deps.Sessions.Delete(p.Key)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"deleted": found})
@@ -196,6 +209,87 @@ func mediaDetectMIME() HandlerFunc {
 		}
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"mime": ffi.DetectMIME(p.Data),
+		})
+		return resp
+	}
+}
+
+func channelsHealth(deps Deps) HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if deps.ChannelLifecycle == nil {
+			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+				"channels": []any{},
+			})
+			return resp
+		}
+		health := deps.ChannelLifecycle.HealthCheck()
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"channels": health,
+		})
+		return resp
+	}
+}
+
+func securityValidateSessionKey() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Key string `json:"key"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		err := ffi.ValidateSessionKey(p.Key)
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"valid": err == nil,
+		})
+		return resp
+	}
+}
+
+func securitySanitizeHTML() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Input string `json:"input"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"output": ffi.SanitizeHTML(p.Input),
+		})
+		return resp
+	}
+}
+
+func securityIsSafeURL() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			URL string `json:"url"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"safe": ffi.IsSafeURL(p.URL),
+		})
+		return resp
+	}
+}
+
+func securityValidateErrorCode() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Code string `json:"code"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params"))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"valid": ffi.ValidateErrorCode(p.Code),
 		})
 		return resp
 	}

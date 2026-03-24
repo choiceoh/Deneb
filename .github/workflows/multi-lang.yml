@@ -111,3 +111,18 @@ jobs:
       - name: Test (integration)
         working-directory: gateway-go
         run: go test -race -count=1 -tags=integration ./...
+
+      - name: Gateway binary smoke test
+        working-directory: gateway-go
+        run: |
+          go build -o gateway ./cmd/gateway/
+          # Start gateway on a random port
+          ./gateway --port 0 &
+          GW_PID=$!
+          sleep 1
+          # Verify process is running
+          kill -0 $GW_PID 2>/dev/null || { echo "Gateway failed to start"; exit 1; }
+          # Clean shutdown
+          kill $GW_PID
+          wait $GW_PID 2>/dev/null || true
+          echo "Gateway smoke test passed"

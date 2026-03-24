@@ -16,6 +16,12 @@ extern int deneb_constant_time_eq(
 extern int deneb_detect_mime(
 	const unsigned char *data_ptr, unsigned long data_len,
 	unsigned char *out_ptr, unsigned long out_len);
+extern int deneb_validate_session_key(const unsigned char *key_ptr, unsigned long key_len);
+extern int deneb_sanitize_html(
+	const unsigned char *input_ptr, unsigned long input_len,
+	unsigned char *out_ptr, unsigned long out_len);
+extern int deneb_is_safe_url(const unsigned char *url_ptr, unsigned long url_len);
+extern int deneb_validate_error_code(const unsigned char *code_ptr, unsigned long code_len);
 */
 import "C"
 import (
@@ -79,4 +85,64 @@ func DetectMIME(data []byte) string {
 		return "application/octet-stream"
 	}
 	return string(out[:n])
+}
+
+// ValidateSessionKey checks if a session key is valid (non-empty, max 512 chars,
+// no control characters). Returns nil if valid.
+func ValidateSessionKey(key string) error {
+	if len(key) == 0 {
+		return errors.New("ffi: empty session key")
+	}
+	ptr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(key)))
+	rc := C.deneb_validate_session_key(ptr, C.ulong(len(key)))
+	switch rc {
+	case 0:
+		return nil
+	case -1:
+		return errors.New("ffi: null pointer")
+	case -2:
+		return errors.New("ffi: invalid UTF-8")
+	case -3:
+		return errors.New("ffi: invalid session key")
+	default:
+		return errors.New("ffi: unknown error")
+	}
+}
+
+// SanitizeHTML escapes HTML-significant characters in the input.
+func SanitizeHTML(input string) string {
+	if len(input) == 0 {
+		return ""
+	}
+	// Output can be up to 6x input size (each char could become &#x27;)
+	outSize := len(input) * 6
+	out := make([]byte, outSize)
+	ptr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(input)))
+	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
+	n := C.deneb_sanitize_html(ptr, C.ulong(len(input)), outPtr, C.ulong(outSize))
+	if n <= 0 {
+		return input // fallback: return original on error
+	}
+	return string(out[:n])
+}
+
+// IsSafeURL checks if a URL is safe for outbound requests (not targeting
+// internal/private networks). Returns true if safe.
+func IsSafeURL(url string) bool {
+	if len(url) == 0 {
+		return false
+	}
+	ptr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(url)))
+	rc := C.deneb_is_safe_url(ptr, C.ulong(len(url)))
+	return rc == 0
+}
+
+// ValidateErrorCode checks if an error code string is a known gateway error code.
+func ValidateErrorCode(code string) bool {
+	if len(code) == 0 {
+		return false
+	}
+	ptr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(code)))
+	rc := C.deneb_validate_error_code(ptr, C.ulong(len(code)))
+	return rc == 0
 }
