@@ -134,21 +134,25 @@ func (lm *LifecycleManager) StopAll(ctx context.Context) map[string]error {
 func (lm *LifecycleManager) HealthCheck() []ChannelHealth {
 	plugins := lm.registry.Snapshot()
 
+	// Snapshot startedAt once to avoid per-channel lock acquisition.
+	lm.mu.RLock()
+	startedSnap := make(map[string]int64, len(lm.startedAt))
+	for id, ts := range lm.startedAt {
+		startedSnap[id] = ts
+	}
+	lm.mu.RUnlock()
+
 	results := make([]ChannelHealth, 0, len(plugins))
 	for id, p := range plugins {
 		start := time.Now()
 		status := p.Status()
 		latency := time.Since(start).Milliseconds()
 
-		lm.mu.RLock()
-		startedAt := lm.startedAt[id]
-		lm.mu.RUnlock()
-
 		results = append(results, ChannelHealth{
 			ID:        id,
 			Connected: status.Connected,
 			Error:     status.Error,
-			StartedAt: startedAt,
+			StartedAt: startedSnap[id],
 			Latency:   latency,
 		})
 	}

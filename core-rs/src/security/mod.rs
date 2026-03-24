@@ -40,7 +40,19 @@ impl DangerousPatterns {
     }
 
     fn matches(&self, haystack: &[u8]) -> bool {
-        let lower: Vec<u8> = haystack.iter().map(|b| b.to_ascii_lowercase()).collect();
+        // Fast reject: all patterns start with '<', 'j', 'd', or 'o'.
+        // If none of these bytes exist (case-insensitive), skip the expensive lowercase+search.
+        if !haystack.iter().any(|&b| matches!(b.to_ascii_lowercase(), b'<' | b'j' | b'd' | b'o')) {
+            return false;
+        }
+        // Stack buffer for small inputs; heap only for large.
+        let lower: Vec<u8> = if haystack.len() <= 256 {
+            let mut buf = Vec::with_capacity(haystack.len());
+            buf.extend(haystack.iter().map(|b| b.to_ascii_lowercase()));
+            buf
+        } else {
+            haystack.iter().map(|b| b.to_ascii_lowercase()).collect()
+        };
         self.finders.iter().any(|f| f.find(&lower).is_some())
     }
 }
@@ -82,11 +94,20 @@ const MAX_SESSION_KEY_LEN: usize = 512;
 
 /// Validate a session key: non-empty, max 512 characters, no control characters.
 /// Uses char count (not byte length) to match TypeScript's `maxLength` semantics.
-/// Single-pass: counts chars and checks for control chars simultaneously.
 pub fn is_valid_session_key(key: &str) -> bool {
     if key.is_empty() {
         return false;
     }
+    // ASCII fast path: for pure-ASCII strings, byte length == char count.
+    // Avoids costly chars() iteration for the common case.
+    if key.is_ascii() {
+        if key.len() > MAX_SESSION_KEY_LEN {
+            return false;
+        }
+        // Check for control chars at byte level (faster than char iteration).
+        return !key.bytes().any(|b| b.is_ascii_control() && b != b'\n' && b != b'\t' && b != b'\r');
+    }
+    // Non-ASCII: single-pass char count + control check.
     let mut count = 0usize;
     for c in key.chars() {
         count += 1;
