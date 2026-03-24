@@ -23,7 +23,7 @@
       "deneb/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"]
     }
   },
-  "include": ["src/**/*", "ui/**/*", "extensions/**/*"],
+  "include": ["src/**/*", "extensions/**/*"],
   "exclude": [
     "node_modules",
     "dist",
