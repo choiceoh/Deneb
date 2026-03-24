@@ -1,9 +1,33 @@
 import { PERF } from "./hardware-profile.js";
 
 /**
+ * Encoder swap map: software → NVENC hardware equivalent.
+ * Blackwell supports H.264, HEVC, and AV1 hardware encoding.
+ */
+const NVENC_ENCODER_MAP: Record<string, string> = {
+  libx264: "h264_nvenc",
+  libx265: "hevc_nvenc",
+  libaom: "av1_nvenc",
+  "libaom-av1": "av1_nvenc",
+  libsvtav1: "av1_nvenc",
+};
+
+/** Reverse map: NVENC → software fallback. */
+const CPU_ENCODER_MAP: Record<string, string> = {
+  h264_nvenc: "libx264",
+  hevc_nvenc: "libx265",
+  av1_nvenc: "libsvtav1",
+};
+
+/** NVDEC decoder names to strip during CPU fallback. */
+const CUVID_DECODERS = new Set(["h264_cuvid", "hevc_cuvid", "av1_cuvid", "vp9_cuvid"]);
+
+/**
  * Build FFmpeg arguments with CUDA hardware acceleration.
- * Prepends NVDEC decode flags before the first -i input and
- * swaps software encoders for NVENC equivalents.
+ *
+ * - Prepends NVDEC decode flags before the first -i input
+ * - Swaps software encoders for NVENC equivalents
+ * - Appends profile-specific output flags (preset, tune, rc)
  */
 export function buildGpuFfmpegArgs(args: string[]): string[] {
   if (PERF.ffmpegHwAccel !== "cuda") {
@@ -23,15 +47,14 @@ export function buildGpuFfmpegArgs(args: string[]): string[] {
   }
 
   // Swap software encoders for NVENC
-  return enhanced.map((arg) => {
-    if (arg === "libx264") {
-      return "h264_nvenc";
-    }
-    if (arg === "libx265") {
-      return "hevc_nvenc";
-    }
-    return arg;
-  });
+  const swapped = enhanced.map((arg) => NVENC_ENCODER_MAP[arg] ?? arg);
+
+  // Append profile-specific output flags (e.g., -preset p4 -tune hq)
+  if (PERF.ffmpegExtraOutputFlags.length > 0) {
+    swapped.push(...PERF.ffmpegExtraOutputFlags);
+  }
+
+  return swapped;
 }
 
 /**
@@ -42,33 +65,42 @@ export function buildCpuFallbackArgs(args: string[]): string[] {
   const filtered: string[] = [];
   let skip = 0;
 
+  // Collect flags to strip that come from ffmpegExtraOutputFlags
+  const extraFlagsSet = new Set(PERF.ffmpegExtraOutputFlags);
+
   for (let i = 0; i < args.length; i++) {
     if (skip > 0) {
       skip--;
       continue;
     }
 
+    const arg = args[i];
+
     // Remove -hwaccel <value> and -hwaccel_output_format <value> pairs
-    if (args[i] === "-hwaccel" || args[i] === "-hwaccel_output_format") {
-      skip = 1; // Skip the next argument (the value)
+    if (arg === "-hwaccel" || arg === "-hwaccel_output_format") {
+      skip = 1;
       continue;
     }
 
     // Swap NVENC encoders back to software
-    if (args[i] === "h264_nvenc") {
-      filtered.push("libx264");
-      continue;
-    }
-    if (args[i] === "hevc_nvenc") {
-      filtered.push("libx265");
-      continue;
-    }
-    // Remove NVDEC decoder references
-    if (args[i] === "h264_cuvid" || args[i] === "hevc_cuvid") {
+    if (CPU_ENCODER_MAP[arg]) {
+      filtered.push(CPU_ENCODER_MAP[arg]);
       continue;
     }
 
-    filtered.push(args[i]);
+    // Remove NVDEC decoder references
+    if (CUVID_DECODERS.has(arg)) {
+      continue;
+    }
+
+    // Remove GPU-specific extra flags (e.g., -preset p4 -tune hq -rc vbr)
+    // These are flag-value pairs: -preset p4
+    if ((arg === "-preset" || arg === "-tune" || arg === "-rc") && extraFlagsSet.has(arg)) {
+      skip = 1; // Skip the value
+      continue;
+    }
+
+    filtered.push(arg);
   }
 
   return filtered;

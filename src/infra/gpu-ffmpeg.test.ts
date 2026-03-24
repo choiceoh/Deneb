@@ -3,14 +3,9 @@ import { buildCpuFallbackArgs, buildGpuFfmpegArgs } from "./gpu-ffmpeg.js";
 
 describe("gpu-ffmpeg", () => {
   describe("buildGpuFfmpegArgs", () => {
-    // Note: this test exercises the pure arg-building logic.
-    // Whether GPU flags are actually prepended depends on the PERF profile
-    // which is resolved at module load time based on GPU detection.
-
     it("returns args unchanged when no -i flag present", () => {
       const args = ["-f", "mp4", "output.mp4"];
       const result = buildGpuFfmpegArgs(args);
-      // Should contain the original args (may or may not have hwaccel depending on profile)
       expect(result).toContain("-f");
       expect(result).toContain("output.mp4");
     });
@@ -40,10 +35,21 @@ describe("gpu-ffmpeg", () => {
       expect(cpuArgs).toEqual(["-i", "input.mp4", "-c:v", "libx265", "output.mp4"]);
     });
 
+    it("swaps av1_nvenc back to libsvtav1", () => {
+      const gpuArgs = ["-i", "input.mp4", "-c:v", "av1_nvenc", "output.mp4"];
+      const cpuArgs = buildCpuFallbackArgs(gpuArgs);
+      expect(cpuArgs).toEqual(["-i", "input.mp4", "-c:v", "libsvtav1", "output.mp4"]);
+    });
+
     it("removes cuvid decoder references", () => {
       const gpuArgs = ["-c:v", "h264_cuvid", "-i", "input.mp4", "output.mp4"];
       const cpuArgs = buildCpuFallbackArgs(gpuArgs);
       expect(cpuArgs).toEqual(["-c:v", "-i", "input.mp4", "output.mp4"]);
+    });
+
+    it("removes av1_cuvid and vp9_cuvid decoder references", () => {
+      expect(buildCpuFallbackArgs(["av1_cuvid"])).toEqual([]);
+      expect(buildCpuFallbackArgs(["vp9_cuvid"])).toEqual([]);
     });
 
     it("passes through args without GPU-specific flags", () => {

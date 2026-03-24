@@ -6,7 +6,18 @@ export type GpuInfo = {
   cudaVersion: string | null;
   driverVersion: string | null;
   memoryMb: number | null;
+  /** Detected GPU tier for profile selection. */
+  tier: GpuTier;
 };
+
+/**
+ * GPU tier determines which performance profile to use.
+ *
+ * - `"dgx-spark"` — DGX Spark GB10 (Grace Blackwell, 128GB unified memory)
+ * - `"desktop"` — Consumer/workstation NVIDIA GPU (discrete VRAM)
+ * - `"none"` — No GPU detected
+ */
+export type GpuTier = "dgx-spark" | "desktop" | "none";
 
 const GPU_NOT_AVAILABLE: GpuInfo = {
   available: false,
@@ -14,6 +25,7 @@ const GPU_NOT_AVAILABLE: GpuInfo = {
   cudaVersion: null,
   driverVersion: null,
   memoryMb: null,
+  tier: "none",
 };
 
 let cachedResult: GpuInfo | null = null;
@@ -24,11 +36,15 @@ type ExecFn = (cmd: string, args: string[], opts: object) => string;
 const defaultExec: ExecFn = (cmd, args, opts) =>
   String(execFileSync(cmd, args, { ...opts, encoding: "utf-8" }));
 
+/** Patterns that identify DGX Spark / GB10 Blackwell GPUs. */
+const DGX_SPARK_PATTERNS = [/\bGB10\b/i, /\bGrace\s*Blackwell\b/i, /\bDGX\s*Spark\b/i];
+
 /**
  * Detect NVIDIA GPU and CUDA availability via `nvidia-smi`.
  *
  * Respects `DENEB_GPU_ACCEL` env var:
  * - `"cuda"` / `"1"` — force-enable CUDA (skip detection)
+ * - `"dgx-spark"` — force DGX Spark GB10 profile
  * - `"none"` / `"0"` — force-disable GPU acceleration
  * - unset — auto-detect via `nvidia-smi`
  *
@@ -49,6 +65,20 @@ export function detectGpu(exec?: ExecFn): GpuInfo {
 
   const run = exec ?? defaultExec;
 
+  if (override === "dgx-spark") {
+    cachedResult = queryNvidiaSmi(run) ?? {
+      available: true,
+      gpuName: "DGX Spark GB10 (forced via DENEB_GPU_ACCEL)",
+      cudaVersion: null,
+      driverVersion: null,
+      memoryMb: null,
+      tier: "dgx-spark",
+    };
+    // Force tier regardless of detection
+    cachedResult.tier = "dgx-spark";
+    return cachedResult;
+  }
+
   if (override === "cuda" || override === "1") {
     cachedResult = queryNvidiaSmi(run) ?? {
       available: true,
@@ -56,6 +86,7 @@ export function detectGpu(exec?: ExecFn): GpuInfo {
       cudaVersion: null,
       driverVersion: null,
       memoryMb: null,
+      tier: "desktop",
     };
     return cachedResult;
   }
@@ -64,6 +95,24 @@ export function detectGpu(exec?: ExecFn): GpuInfo {
   const detected = queryNvidiaSmi(run);
   cachedResult = detected ?? GPU_NOT_AVAILABLE;
   return cachedResult;
+}
+
+/**
+ * Classify GPU tier from the GPU name string.
+ */
+function classifyGpuTier(gpuName: string | null, memoryMb: number | null): GpuTier {
+  if (!gpuName) {
+    return "desktop";
+  }
+  // DGX Spark GB10: Grace Blackwell with 128GB unified memory
+  if (DGX_SPARK_PATTERNS.some((pattern) => pattern.test(gpuName))) {
+    return "dgx-spark";
+  }
+  // High-VRAM (>100GB) unified memory systems are likely DGX Spark
+  if (memoryMb && memoryMb >= 100_000) {
+    return "dgx-spark";
+  }
+  return "desktop";
 }
 
 /**
@@ -86,6 +135,7 @@ function queryNvidiaSmi(exec: ExecFn): GpuInfo | null {
     const [gpuName, memoryRaw, driverVersion] = line.split(",").map((s) => s.trim());
 
     const memoryMb = memoryRaw ? Number.parseInt(memoryRaw, 10) : Number.NaN;
+    const resolvedMemory = Number.isFinite(memoryMb) ? memoryMb : null;
 
     // Try to get CUDA version separately (nvidia-smi main output header)
     const cudaVersion = queryCudaVersion(exec);
@@ -95,7 +145,8 @@ function queryNvidiaSmi(exec: ExecFn): GpuInfo | null {
       gpuName: gpuName || null,
       cudaVersion,
       driverVersion: driverVersion || null,
-      memoryMb: Number.isFinite(memoryMb) ? memoryMb : null,
+      memoryMb: resolvedMemory,
+      tier: classifyGpuTier(gpuName || null, resolvedMemory),
     };
   } catch {
     return null;
