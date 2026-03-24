@@ -3,7 +3,7 @@
 package ffi
 
 /*
-// Compaction FFI functions (from core-rs/src/lib.rs).
+// Compaction FFI functions (from core-rs/core/src/lib.rs).
 extern int deneb_compaction_evaluate(
 	const unsigned char *config_ptr, unsigned long config_len,
 	unsigned long long stored_tokens, unsigned long long live_tokens,

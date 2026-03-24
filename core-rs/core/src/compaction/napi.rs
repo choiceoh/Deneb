@@ -71,17 +71,26 @@ pub fn compaction_evaluate(
     live_tokens: u32,
     token_budget: u32,
 ) -> String {
-    let config: CompactionConfig = match serde_json::from_str(&config_json) {
-        Ok(c) => c,
-        Err(e) => return format!(r#"{{"error":"{}"}}"#, e),
-    };
+    match compaction_evaluate_impl(&config_json, stored_tokens, live_tokens, token_budget) {
+        Ok(json) => json,
+        Err(e) => serde_json::json!({"error": e.to_string()}).to_string(),
+    }
+}
+
+fn compaction_evaluate_impl(
+    config_json: &str,
+    stored_tokens: u32,
+    live_tokens: u32,
+    token_budget: u32,
+) -> Result<String, CompactionError> {
+    let config: CompactionConfig = serde_json::from_str(config_json)?;
     let decision = evaluate(
         &config,
         stored_tokens as u64,
         live_tokens as u64,
         token_budget as u64,
     );
-    serde_json::to_string(&decision).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+    Ok(serde_json::to_string(&decision)?)
 }
 
 /// Resolve fresh tail ordinal from context items JSON.

@@ -17,6 +17,20 @@ pub mod timestamp;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::collections::HashMap;
+use thiserror::Error;
+
+/// Errors that can occur during compaction operations.
+#[derive(Error, Debug)]
+pub enum CompactionError {
+    #[error("invalid config JSON: {0}")]
+    InvalidConfig(#[from] serde_json::Error),
+
+    #[error("sweep engine not found: handle {0}")]
+    EngineNotFound(u32),
+
+    #[error("unexpected response type for current phase")]
+    UnexpectedResponse,
+}
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
