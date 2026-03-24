@@ -35,6 +35,46 @@ export function buildGpuFfmpegArgs(args: string[]): string[] {
 }
 
 /**
+ * Strip GPU-specific flags and restore software encoders.
+ * Used as a fallback when CUDA encoding fails.
+ */
+export function buildCpuFallbackArgs(args: string[]): string[] {
+  const filtered: string[] = [];
+  let skip = 0;
+
+  for (let i = 0; i < args.length; i++) {
+    if (skip > 0) {
+      skip--;
+      continue;
+    }
+
+    // Remove -hwaccel <value> and -hwaccel_output_format <value> pairs
+    if (args[i] === "-hwaccel" || args[i] === "-hwaccel_output_format") {
+      skip = 1; // Skip the next argument (the value)
+      continue;
+    }
+
+    // Swap NVENC encoders back to software
+    if (args[i] === "h264_nvenc") {
+      filtered.push("libx264");
+      continue;
+    }
+    if (args[i] === "hevc_nvenc") {
+      filtered.push("libx265");
+      continue;
+    }
+    // Remove NVDEC decoder references
+    if (args[i] === "h264_cuvid" || args[i] === "hevc_cuvid") {
+      continue;
+    }
+
+    filtered.push(args[i]);
+  }
+
+  return filtered;
+}
+
+/**
  * Optimized FFmpeg timeout for GPU-accelerated encoding.
  */
 export function getOptimizedFfmpegTimeout(): number {
@@ -42,7 +82,7 @@ export function getOptimizedFfmpegTimeout(): number {
 }
 
 /**
- * Optimized FFmpeg max buffer for DGX SPARK.
+ * Optimized FFmpeg max buffer.
  */
 export function getOptimizedFfmpegMaxBuffer(): number {
   return PERF.ffmpegMaxBufferBytes;

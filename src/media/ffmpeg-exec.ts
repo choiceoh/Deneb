@@ -1,11 +1,13 @@
 import { execFile, type ExecFileOptions } from "node:child_process";
 import { promisify } from "node:util";
 import {
+  buildCpuFallbackArgs,
   buildGpuFfmpegArgs,
   getOptimizedFfmpegMaxBuffer,
   getOptimizedFfmpegTimeout,
   getOptimizedFfprobeTimeout,
 } from "../infra/gpu-ffmpeg.js";
+import { PERF } from "../infra/hardware-profile.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -34,14 +36,24 @@ export async function runFfprobe(args: string[], options?: MediaExecOptions): Pr
 }
 
 export async function runFfmpeg(args: string[], options?: MediaExecOptions): Promise<string> {
-  // Apply GPU acceleration flags when available (NVENC/NVDEC on DGX SPARK)
+  // Apply GPU acceleration flags when available (NVENC/NVDEC)
   const enhancedArgs = buildGpuFfmpegArgs(args);
-  const { stdout } = await execFileAsync(
-    "ffmpeg",
-    enhancedArgs,
-    resolveExecOptions(getOptimizedFfmpegTimeout(), options),
-  );
-  return stdout.toString();
+  const execOpts = resolveExecOptions(getOptimizedFfmpegTimeout(), options);
+
+  try {
+    const { stdout } = await execFileAsync("ffmpeg", enhancedArgs, execOpts);
+    return stdout.toString();
+  } catch (error) {
+    // If GPU encoding failed and we had CUDA flags, retry with CPU encoders
+    if (PERF.ffmpegHwAccel === "cuda") {
+      const cpuArgs = buildCpuFallbackArgs(enhancedArgs);
+      // CPU encoding may need more time
+      const cpuOpts = resolveExecOptions(Math.max(execOpts.timeout as number, 120_000), options);
+      const { stdout } = await execFileAsync("ffmpeg", cpuArgs, cpuOpts);
+      return stdout.toString();
+    }
+    throw error;
+  }
 }
 
 export function parseFfprobeCsvFields(stdout: string, maxFields: number): string[] {

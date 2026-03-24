@@ -1,11 +1,12 @@
 import os from "node:os";
+import { isCudaAvailable } from "./gpu-detect.js";
 
 /**
- * DGX SPARK performance profile.
+ * Performance profile for hardware-aware tuning.
  *
- * Single-user DGX SPARK + CUDA + SGLang environment.
- * Focus: speed (lower latency, higher concurrency, GPU offload).
- * Limits kept close to upstream defaults to avoid stability issues.
+ * Two profiles:
+ * - GPU (CUDA): optimized for NVIDIA GPU systems (DGX SPARK, etc.)
+ * - CPU: conservative defaults for systems without GPU acceleration
  */
 
 export type PerformanceProfile = {
@@ -41,21 +42,21 @@ export type PerformanceProfile = {
 const cpuCores = os.cpus().length;
 
 /**
- * Speed-focused profile for DGX SPARK.
+ * CUDA GPU profile — optimized for NVIDIA GPU systems.
  *
- * What changed from defaults (and why):
- * - Concurrency: 2x agents/subagents — single-user, no contention
+ * What changed from CPU defaults (and why):
+ * - Concurrency: 2x agents/subagents — GPU handles parallel well
  * - FFmpeg: CUDA NVENC/NVDEC — hardware encode/decode is 5-10x faster
  * - FFmpeg buffer: 32MB (up from 10MB) — avoids re-reads on larger media
  * - Embedding batch: 6 concurrent (up from 2) — SGLang handles parallel well
  * - SQLite: 128MB cache + 512MB mmap — keeps hot data in memory
- * - UV threadpool: 2x cores — saturates async I/O on many-core ARM
+ * - UV threadpool: 2x cores — saturates async I/O on many-core systems
  */
-export const PERF: PerformanceProfile = {
+const GPU_PROFILE: PerformanceProfile = {
   agentMaxConcurrent: Math.min(cpuCores, 8),
   subagentMaxConcurrent: Math.min(cpuCores, 16),
 
-  ffmpegMaxBufferBytes: 32 * 1024 * 1024, // 32MB (up from 10MB)
+  ffmpegMaxBufferBytes: 32 * 1024 * 1024, // 32MB
   ffmpegTimeoutMs: 90_000, // GPU encoding is faster; generous for long media
   ffprobeTimeoutMs: 10_000,
   imageWorkerCount: Math.min(Math.ceil(cpuCores / 2), 6),
@@ -63,7 +64,7 @@ export const PERF: PerformanceProfile = {
   embeddingBatchConcurrency: 6,
   modelScanConcurrency: 6,
 
-  sqliteCacheKb: 128_000, // 128MB cache (up from ~64MB default)
+  sqliteCacheKb: 128_000, // 128MB cache
   sqliteMmapBytes: 512 * 1024 * 1024, // 512MB mmap
 
   // CUDA-accelerated FFmpeg
@@ -74,6 +75,56 @@ export const PERF: PerformanceProfile = {
   uvThreadPoolSize: Math.min(cpuCores * 2, 32),
 };
 
+/**
+ * CPU-only profile — conservative defaults for systems without GPU.
+ */
+const CPU_PROFILE: PerformanceProfile = {
+  agentMaxConcurrent: Math.min(cpuCores, 4),
+  subagentMaxConcurrent: Math.min(cpuCores, 8),
+
+  ffmpegMaxBufferBytes: 10 * 1024 * 1024, // 10MB
+  ffmpegTimeoutMs: 120_000, // CPU encoding needs more time
+  ffprobeTimeoutMs: 10_000,
+  imageWorkerCount: Math.min(Math.ceil(cpuCores / 4), 4),
+
+  embeddingBatchConcurrency: 2,
+  modelScanConcurrency: 4,
+
+  sqliteCacheKb: 64_000, // 64MB cache
+  sqliteMmapBytes: 256 * 1024 * 1024, // 256MB mmap
+
+  ffmpegHwAccel: "none",
+  ffmpegVideoEncoder: "libx264",
+  ffmpegVideoDecoder: "", // Use FFmpeg default
+  uvThreadPoolSize: Math.min(cpuCores, 16),
+};
+
+let cachedProfile: PerformanceProfile | null = null;
+
+function resolveProfile(): PerformanceProfile {
+  if (isCudaAvailable()) {
+    return GPU_PROFILE;
+  }
+  return CPU_PROFILE;
+}
+
+/**
+ * Active performance profile, auto-detected based on GPU availability.
+ * Override with `DENEB_GPU_ACCEL=cuda|none` env var.
+ */
+export const PERF: PerformanceProfile = resolveProfile();
+
 export function getCachedPerformanceProfile(): PerformanceProfile {
-  return PERF;
+  if (!cachedProfile) {
+    cachedProfile = resolveProfile();
+  }
+  return cachedProfile;
+}
+
+/**
+ * Reset cached profile (for testing).
+ * @internal
+ */
+export function _resetProfileCache(): void {
+  cachedProfile = null;
 }
