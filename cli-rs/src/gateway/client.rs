@@ -117,6 +117,11 @@ pub async fn call_gateway_with_config(
             match frame {
                 GatewayFrame::Response(resp) => {
                     if resp.id == request_id {
+                        // When expect_final is set, skip intermediate responses
+                        // and wait for the final one (marked with "final": true).
+                        if opts.expect_final && resp.is_final != Some(true) {
+                            continue;
+                        }
                         return handle_response(resp, &opts.method);
                     }
                     // Not our response, ignore

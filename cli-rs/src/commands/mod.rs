@@ -1,6 +1,13 @@
+pub mod agent;
 pub mod agents;
 pub mod config_cmd;
+pub mod configure;
+pub mod dashboard;
+pub mod doctor;
 pub mod health;
 pub mod memory;
+pub mod message;
+pub mod onboard;
 pub mod sessions;
+pub mod setup;
 pub mod status;
