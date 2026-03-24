@@ -1041,19 +1041,22 @@ pub unsafe extern "C" fn deneb_markdown_to_ir(
         } else {
             markdown::parser::ParseOptions::default()
         };
-        let (ir, has_code_blocks) = markdown::parser::markdown_to_ir_with_meta(md_str, &options);
+        let (ir, has_tables) = markdown::parser::markdown_to_ir_with_meta(md_str, &options);
+        let has_code_blocks = ir.styles.iter().any(|s| s.style == markdown::spans::MarkdownStyle::CodeBlock);
         #[derive(serde::Serialize)]
         struct IrOutput<'a> {
             text: &'a str,
             styles: &'a [markdown::spans::StyleSpan],
             links: &'a [markdown::spans::LinkSpan],
             has_code_blocks: bool,
+            has_tables: bool,
         }
         let output = IrOutput {
             text: &ir.text,
             styles: &ir.styles,
             links: &ir.links,
             has_code_blocks,
+            has_tables,
         };
         let json = match serde_json::to_string(&output) {
             Ok(j) => j,

@@ -13,8 +13,10 @@ use super::retrieval::{
 };
 #[cfg(test)]
 use super::retrieval::RetrievalCommand;
-use super::*;
+use super::{estimate_tokens, LcmConfig};
 use std::sync::Mutex;
+#[cfg(feature = "napi_binding")]
+use napi::bindgen_prelude::*;
 
 // ── Handle stores ────────────────────────────────────────────────────────────
 

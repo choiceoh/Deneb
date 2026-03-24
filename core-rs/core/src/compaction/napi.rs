@@ -4,8 +4,14 @@
 //! 1. **Pure functions** — stateless helpers callable from Node.js
 //! 2. **Sweep engine** — handle-based state machine for full compaction sweeps
 
-use super::*;
+use super::{
+    build_condensed_source_text, build_leaf_source_text, deterministic_fallback, estimate_tokens,
+    evaluate, generate_summary_id, resolve_fresh_tail_ordinal, timestamp, CompactionConfig,
+    CompactionError, ContextItem, MessageRecord, SummaryRecord,
+};
 use super::sweep::{SweepEngine, SweepResponse};
+#[cfg(feature = "napi_binding")]
+use napi::bindgen_prelude::*;
 #[cfg(test)]
 use super::sweep::SweepCommand;
 use std::sync::Mutex;
@@ -82,7 +88,7 @@ fn compaction_evaluate_impl(
     stored_tokens: u32,
     live_tokens: u32,
     token_budget: u32,
-) -> Result<String, CompactionError> {
+) -> std::result::Result<String, CompactionError> {
     let config: CompactionConfig = serde_json::from_str(config_json)?;
     let decision = evaluate(
         &config,
@@ -207,6 +213,7 @@ pub fn compaction_sweep_drop(handle: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compaction::CompactionDecision;
 
     #[test]
     fn test_compaction_estimate_tokens_napi() {
