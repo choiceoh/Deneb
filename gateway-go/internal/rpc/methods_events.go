@@ -16,6 +16,8 @@ type EventsDeps struct {
 }
 
 // RegisterEventsMethods registers event subscription, streaming, and node event RPC methods.
+// Also registers TS-compatible aliases (sessions.subscribe, etc.) that map to the
+// same handlers as subscribe.session, etc.
 func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 	if deps.Broadcaster == nil {
 		return
@@ -40,7 +42,8 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 		return resp
 	})
 
-	d.Register("subscribe.session", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	// Define handlers once, register under both legacy and TS-compatible names.
+	subscribeSession := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			ConnID string `json:"connId"`
 		}
@@ -51,9 +54,8 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 		deps.Broadcaster.SubscribeSessionEvents(p.ConnID)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"subscribed": true})
 		return resp
-	})
-
-	d.Register("unsubscribe.session", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	}
+	unsubscribeSession := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			ConnID string `json:"connId"`
 		}
@@ -64,9 +66,8 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 		deps.Broadcaster.UnsubscribeSessionEvents(p.ConnID)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"unsubscribed": true})
 		return resp
-	})
-
-	d.Register("subscribe.session.messages", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	}
+	subscribeMessages := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			ConnID     string `json:"connId"`
 			SessionKey string `json:"sessionKey"`
@@ -78,9 +79,8 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 		deps.Broadcaster.SubscribeSessionMessageEvents(p.ConnID, p.SessionKey)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"subscribed": true})
 		return resp
-	})
-
-	d.Register("unsubscribe.session.messages", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	}
+	unsubscribeMessages := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			ConnID     string `json:"connId"`
 			SessionKey string `json:"sessionKey"`
@@ -92,5 +92,17 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 		deps.Broadcaster.UnsubscribeSessionMessageEvents(p.ConnID, p.SessionKey)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"unsubscribed": true})
 		return resp
-	})
+	}
+
+	// Legacy Go names.
+	d.Register("subscribe.session", subscribeSession)
+	d.Register("unsubscribe.session", unsubscribeSession)
+	d.Register("subscribe.session.messages", subscribeMessages)
+	d.Register("unsubscribe.session.messages", unsubscribeMessages)
+
+	// TS-compatible aliases (sessions.subscribe, etc.).
+	d.Register("sessions.subscribe", subscribeSession)
+	d.Register("sessions.unsubscribe", unsubscribeSession)
+	d.Register("sessions.messages.subscribe", subscribeMessages)
+	d.Register("sessions.messages.unsubscribe", unsubscribeMessages)
 }
