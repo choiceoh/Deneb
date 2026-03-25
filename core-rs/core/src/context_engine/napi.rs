@@ -13,7 +13,7 @@ use super::retrieval::{
 };
 #[cfg(test)]
 use super::retrieval::RetrievalCommand;
-use super::{estimate_tokens, LcmConfig};
+use super::{estimate_tokens, AuroraConfig};
 use std::sync::Mutex;
 #[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::*;
@@ -283,10 +283,10 @@ pub fn context_engine_drop(handle: u32) {
 
 // ── Pure function exports ────────────────────────────────────────────────────
 
-/// Validate and resolve an LCM config from JSON. Returns validated config JSON.
+/// Validate and resolve an Aurora config from JSON. Returns validated config JSON.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn context_resolve_config(config_json: String) -> String {
-    match serde_json::from_str::<LcmConfig>(&config_json) {
+    match serde_json::from_str::<AuroraConfig>(&config_json) {
         Ok(config) => {
             let validated = config.validated();
             serde_json::to_string(&validated)
@@ -294,7 +294,7 @@ pub fn context_resolve_config(config_json: String) -> String {
         }
         Err(e) => {
             // Return defaults on parse failure
-            let default_config = LcmConfig::default();
+            let default_config = AuroraConfig::default();
             serde_json::to_string(&default_config)
                 .unwrap_or_else(|_| format!(r#"{{"error":"{}"}}"#, e))
         }
@@ -392,7 +392,7 @@ mod tests {
     fn test_resolve_config_valid() {
         let json = r#"{"contextThreshold": 0.5, "freshTailCount": 16}"#;
         let result = context_resolve_config(json.to_string());
-        let config: LcmConfig = serde_json::from_str(&result).unwrap();
+        let config: AuroraConfig = serde_json::from_str(&result).unwrap();
         assert_eq!(config.context_threshold, 0.5);
         assert_eq!(config.fresh_tail_count, 16);
     }
@@ -400,7 +400,7 @@ mod tests {
     #[test]
     fn test_resolve_config_invalid_returns_defaults() {
         let result = context_resolve_config("not-json".to_string());
-        let config: LcmConfig = serde_json::from_str(&result).unwrap();
+        let config: AuroraConfig = serde_json::from_str(&result).unwrap();
         assert_eq!(config.context_threshold, 0.75);
     }
 

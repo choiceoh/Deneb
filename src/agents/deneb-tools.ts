@@ -13,7 +13,7 @@ import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";
 import { createGatewayTool } from "./tools/gateway-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
-import { resolveLcmTools } from "./tools/lcm-tools.js";
+import { resolveAuroraTools } from "./tools/aurora-tools.js";
 import { createMessageTool } from "./tools/message-tool.js";
 import { createNodesTool } from "./tools/nodes-tool.js";
 import { createPdfTool } from "./tools/pdf-tool.js";
@@ -208,7 +208,7 @@ export function createDenebTools(
     ...(webFetchTool ? [webFetchTool] : []),
     ...(imageTool ? [imageTool] : []),
     ...(pdfTool ? [pdfTool] : []),
-    ...resolveLcmTools({ sessionKey: options?.agentSessionKey, config: options?.config }),
+    ...resolveAuroraTools({ sessionKey: options?.agentSessionKey, config: options?.config }),
   ];
 
   const pluginTools = resolvePluginTools({

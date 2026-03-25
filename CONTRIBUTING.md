@@ -65,7 +65,7 @@ AI PRs are first-class citizens here. We just want transparency so reviewers kno
 
 We are currently prioritizing:
 
-- **LCM Engine**: Improving DAG-based compaction and multi-layer recall
+- **Aurora Context Engine**: Improving DAG-based compaction and multi-layer recall
 - **Memory Stack**: Vega memory backend + Aurora Memory Module integration
 - **Stability**: Fixing edge cases in Telegram channel and gateway
 - **Performance**: Optimizing token usage and compaction logic

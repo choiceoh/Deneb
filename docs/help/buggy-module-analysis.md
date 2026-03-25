@@ -15,7 +15,7 @@ Analysis of Deneb codebase modules with the highest bug risk, evaluated by code 
 
 ### CRITICAL (Immediate Attention Required)
 
-#### 1. `src/context-engine/lcm/src/compaction.ts` — 1,701 LOC
+#### 1. `src/context-engine/aurora/src/compaction.ts` — 1,701 LOC
 
 - **Risk indicators**: Zero direct test coverage, most algorithmically dense file, 3 silent `catch {}` blocks
 - **Bug risks**:
@@ -25,7 +25,7 @@ Analysis of Deneb codebase modules with the highest bug risk, evaluated by code 
   - Fanout constraints not enforced during concurrent compaction calls
 - **Recommendation**: Highest-priority module for test investment. Add integration tests exercising `compactFullSweep` with mock `SummaryStore`/`ConversationStore`, specifically: (a) multi-round escalation, (b) concurrent writes during compaction, (c) token budget adherence post-compaction.
 
-#### 2. `src/context-engine/lcm/src/engine.ts` — 1,498 LOC, 87 async/await
+#### 2. `src/context-engine/aurora/src/engine.ts` — 1,498 LOC, 87 async/await
 
 - **Risk indicators**: No tests, most async operations, session queuing logic
 - **Bug risks**:
