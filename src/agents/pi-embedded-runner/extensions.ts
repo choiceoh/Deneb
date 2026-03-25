@@ -77,12 +77,10 @@ export function buildEmbeddedExtensionFactories(params: {
       modelContextWindow: params.model?.contextWindow,
       defaultTokens: DEFAULT_CONTEXT_TOKENS,
     });
-    // maxHistoryShare and recentTurnsPreserve are system constants —
-    // no longer read from user config to prevent quality degradation.
+    // maxHistoryShare, recentTurnsPreserve, identifierPolicy, and
+    // truncateAfterCompaction are system constants — not read from user config.
     setCompactionSafeguardRuntime(params.sessionManager, {
       contextWindowTokens: contextWindowInfo.tokens,
-      identifierPolicy: compactionCfg?.identifierPolicy,
-      identifierInstructions: compactionCfg?.identifierInstructions,
       customInstructions: compactionCfg?.customInstructions,
       model: params.model,
     });

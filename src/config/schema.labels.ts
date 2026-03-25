@@ -457,8 +457,9 @@ export const FIELD_LABELS: Record<string, string> = {
   "agents.defaults.compaction.keepRecentTokens": "Compaction Keep Recent Tokens",
   "agents.defaults.compaction.reserveTokensFloor": "Compaction Reserve Token Floor",
   "agents.defaults.compaction.maxHistoryShare": "Compaction Max History Share (system-managed)",
-  "agents.defaults.compaction.identifierPolicy": "Compaction Identifier Policy",
-  "agents.defaults.compaction.identifierInstructions": "Compaction Identifier Instructions",
+  "agents.defaults.compaction.identifierPolicy": "Compaction Identifier Policy (system-managed)",
+  "agents.defaults.compaction.identifierInstructions":
+    "Compaction Identifier Instructions (system-managed)",
   "agents.defaults.compaction.recentTurnsPreserve":
     "Compaction Preserve Recent Turns (system-managed)",
   "agents.defaults.compaction.qualityGuard": "Compaction Quality Guard (system-managed)",
@@ -470,9 +471,11 @@ export const FIELD_LABELS: Record<string, string> = {
   "agents.defaults.compaction.postCompactionSections": "Post-Compaction Context Sections",
   "agents.defaults.compaction.timeoutSeconds": "Compaction Timeout (Seconds)",
   "agents.defaults.compaction.model": "Compaction Model Override",
-  "agents.defaults.compaction.truncateAfterCompaction": "Truncate After Compaction",
+  "agents.defaults.compaction.truncateAfterCompaction":
+    "Truncate After Compaction (system-managed)",
   "agents.defaults.compaction.memoryFlush": "Compaction Memory Flush",
-  "agents.defaults.compaction.memoryFlush.enabled": "Compaction Memory Flush Enabled",
+  "agents.defaults.compaction.memoryFlush.enabled":
+    "Compaction Memory Flush Enabled (system-managed)",
   "agents.defaults.compaction.memoryFlush.softThresholdTokens":
     "Compaction Memory Flush Soft Threshold",
   "agents.defaults.compaction.memoryFlush.forceFlushTranscriptBytes":

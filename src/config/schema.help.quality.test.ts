@@ -441,7 +441,7 @@ const ENUM_EXPECTATIONS: Record<string, string[]> = {
   "cli.banner.taglineMode": ['"random"', '"default"', '"off"'],
   "update.channel": ['"stable"', '"beta"', '"dev"'],
   "agents.defaults.compaction.mode": ['"safeguard"'],
-  "agents.defaults.compaction.identifierPolicy": ['"strict"', '"off"', '"custom"'],
+  "agents.defaults.compaction.identifierPolicy": ['"strict"'],
 };
 
 const TOOLS_HOOKS_TARGET_KEYS = [
@@ -794,10 +794,9 @@ describe("config help copy quality", () => {
     const historyShare = FIELD_HELP["agents.defaults.compaction.maxHistoryShare"];
     expect(/system-managed|0\.5/i.test(historyShare)).toBe(true);
 
+    // identifierPolicy is system-managed — help text documents its fixed nature.
     const identifierPolicy = FIELD_HELP["agents.defaults.compaction.identifierPolicy"];
-    expect(identifierPolicy.includes('"strict"')).toBe(true);
-    expect(identifierPolicy.includes('"off"')).toBe(true);
-    expect(identifierPolicy.includes('"custom"')).toBe(true);
+    expect(/system-managed|strict/i.test(identifierPolicy)).toBe(true);
 
     const recentTurnsPreserve = FIELD_HELP["agents.defaults.compaction.recentTurnsPreserve"];
     expect(/system-managed|fixed/i.test(recentTurnsPreserve)).toBe(true);
@@ -810,7 +809,8 @@ describe("config help copy quality", () => {
     const compactionModel = FIELD_HELP["agents.defaults.compaction.model"];
     expect(/provider\/model|different model|primary agent model/i.test(compactionModel)).toBe(true);
 
+    // memoryFlush.enabled is system-managed — help text documents its fixed nature.
     const flush = FIELD_HELP["agents.defaults.compaction.memoryFlush.enabled"];
-    expect(/pre-compaction|memory flush|token/i.test(flush)).toBe(true);
+    expect(/system-managed|always true/i.test(flush)).toBe(true);
   });
 });
