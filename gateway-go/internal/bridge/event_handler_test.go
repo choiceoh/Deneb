@@ -132,7 +132,11 @@ func TestPluginHostEventHandlerNotSet(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Should not have panicked; debug log should mention "no handler".
+	// Close the bridge first so readLoop exits and stops writing to logBuf.
+	// Close() is idempotent, so the deferred Close above is safe.
+	h.Close()
+
+	// Now safe to read logBuf — readLoop goroutine has exited.
 	if !bytes.Contains(logBuf.Bytes(), []byte("no handler")) {
 		t.Log("log output:", logBuf.String())
 		// Not a hard failure — just verify it didn't panic.
