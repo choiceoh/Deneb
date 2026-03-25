@@ -10,6 +10,7 @@
        ts ts-check ts-test \
        test test-all clean check fmt \
        proto proto-go proto-rust proto-ts proto-check proto-lint proto-watch \
+       error-code-sync \
        info
 
 # Default: build Rust first (produces .a), then Go (links it via CGo), then CLI.
@@ -146,7 +147,7 @@ test-all: rust-test go-test cli-test ts-test
 clean: rust-clean go-clean cli-clean
 	@echo "Cleaned Rust, Go, and CLI build artifacts"
 
-check: proto-check rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-vet go-test ts-check
+check: proto-check error-code-sync rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-vet go-test ts-check
 	@echo "All checks passed"
 
 fmt:
@@ -176,6 +177,11 @@ proto-lint:
 
 proto-watch:
 	./scripts/proto-gen.sh --watch
+
+# --- Error code sync ---
+
+error-code-sync:
+	./scripts/error-code-sync-check.sh
 
 # --- Info ---
 

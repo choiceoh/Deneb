@@ -8,7 +8,10 @@ on:
       - "core-rs/core/build.rs"
       - "core-rs/core/Cargo.toml"
       - "core-rs/Cargo.toml"
+      - "core-rs/core/src/protocol/error_codes.rs"
+      - "src/gateway/protocol/schema/error-codes.ts"
       - "scripts/proto-gen.sh"
+      - "scripts/error-code-sync-check.sh"
   push:
     branches: [master]
     paths:
@@ -16,7 +19,10 @@ on:
       - "core-rs/core/build.rs"
       - "core-rs/core/Cargo.toml"
       - "core-rs/Cargo.toml"
+      - "core-rs/core/src/protocol/error_codes.rs"
+      - "src/gateway/protocol/schema/error-codes.ts"
       - "scripts/proto-gen.sh"
+      - "scripts/error-code-sync-check.sh"
 
 # Pin tool versions to match committed generated code.
 # Update these when regenerating with newer tools.
@@ -65,6 +71,9 @@ jobs:
 
       - name: Generate and verify
         run: ./scripts/proto-gen.sh --check
+
+      - name: Error code 3-way sync check
+        run: ./scripts/error-code-sync-check.sh
 
   breaking:
     name: buf breaking change detection
