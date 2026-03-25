@@ -204,36 +204,6 @@ export const SandboxDockerSchema = z
   })
   .optional();
 
-export const SandboxBrowserSchema = z
-  .object({
-    enabled: z.boolean().optional(),
-    image: z.string().optional(),
-    containerPrefix: z.string().optional(),
-    network: z.string().optional(),
-    cdpPort: z.number().int().positive().optional(),
-    cdpSourceRange: z.string().optional(),
-    vncPort: z.number().int().positive().optional(),
-    noVncPort: z.number().int().positive().optional(),
-    headless: z.boolean().optional(),
-    enableNoVnc: z.boolean().optional(),
-    allowHostControl: z.boolean().optional(),
-    autoStart: z.boolean().optional(),
-    autoStartTimeoutMs: z.number().int().positive().optional(),
-    binds: z.array(z.string()).optional(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.network?.trim().toLowerCase() === "host") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["network"],
-        message:
-          'Sandbox security: browser network mode "host" is blocked. Use "bridge" or a custom bridge network instead.',
-      });
-    }
-  })
-  .strict()
-  .optional();
-
 export const SandboxPruneSchema = z
   .object({
     idleHours: z.number().int().nonnegative().optional(),
@@ -524,25 +494,9 @@ export const AgentSandboxSchema = z
     workspaceRoot: z.string().optional(),
     docker: SandboxDockerSchema,
     ssh: SandboxSshSchema,
-    browser: SandboxBrowserSchema,
     prune: SandboxPruneSchema,
   })
   .strict()
-  .superRefine((data, ctx) => {
-    const blockedBrowserNetworkReason = getBlockedNetworkModeReason({
-      network: data.browser?.network,
-      allowContainerNamespaceJoin: data.docker?.dangerouslyAllowContainerNamespaceJoin === true,
-    });
-    if (blockedBrowserNetworkReason === "container_namespace_join") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["browser", "network"],
-        message:
-          'Sandbox security: browser network mode "container:*" is blocked by default. ' +
-          "Set sandbox.docker.dangerouslyAllowContainerNamespaceJoin=true only when you fully trust this runtime.",
-      });
-    }
-  })
   .optional();
 
 const CommonToolPolicyFields = {

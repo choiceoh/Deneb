@@ -44,9 +44,7 @@ export function createDockerSandboxBackendHandle(params: {
     env: params.env,
     configLabel: params.image,
     configLabelKind: "Image",
-    capabilities: {
-      browser: true,
-    },
+    capabilities: {},
     async buildExecSpec({ command, workdir, env, usePty }) {
       return {
         argv: [

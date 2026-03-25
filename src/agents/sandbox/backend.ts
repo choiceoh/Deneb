@@ -34,9 +34,7 @@ export type SandboxBackendHandle = {
   env?: Record<string, string>;
   configLabel?: string;
   configLabelKind?: string;
-  capabilities?: {
-    browser?: boolean;
-  };
+  capabilities?: Record<string, never>;
   buildExecSpec(params: {
     command: string;
     workdir?: string;

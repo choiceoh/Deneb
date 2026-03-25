@@ -26,7 +26,7 @@ export const ErrorCodes = {
   // --- UNAVAILABLE 세분화 ---
   /** 대상 노드가 연결되지 않음 */
   NODE_DISCONNECTED: "NODE_DISCONNECTED",
-  /** 의존 서비스 장애 (TTS, browser, auto-maintenance 등) */
+  /** 의존 서비스 장애 (TTS, auto-maintenance 등) */
   DEPENDENCY_FAILED: "DEPENDENCY_FAILED",
   /** 기능이 비활성화 상태 */
   FEATURE_DISABLED: "FEATURE_DISABLED",
@@ -49,7 +49,7 @@ export const ErrorCodeCauses: Record<ErrorCode, string> = {
   CONFLICT: "리소스 상태 충돌. 이미 존재하는 리소스 생성 시도, ID 불일치, 또는 중복 요청",
   FORBIDDEN: "보안 정책, 세션 정책, 또는 시스템 제약에 의해 작업이 차단됨",
   NODE_DISCONNECTED: "대상 노드의 WebSocket 연결이 끊어짐. 노드 재시작 또는 네트워크 문제",
-  DEPENDENCY_FAILED: "TTS, 브라우저, 모델 카탈로그 등 의존 서비스가 응답하지 않음",
+  DEPENDENCY_FAILED: "TTS, 모델 카탈로그 등 의존 서비스가 응답하지 않음",
   FEATURE_DISABLED: "요청한 기능이 현재 설정에서 비활성화 상태",
 };
 

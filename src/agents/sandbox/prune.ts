@@ -1,15 +1,7 @@
 import { loadConfig } from "../../config/config.js";
 import { defaultRuntime } from "../../runtime.js";
 import { getSandboxBackendManager } from "./backend.js";
-import { dockerSandboxBackendManager } from "./docker-backend.js";
-import {
-  readBrowserRegistry,
-  readRegistry,
-  removeBrowserRegistryEntry,
-  removeRegistryEntry,
-  type SandboxBrowserRegistryEntry,
-  type SandboxRegistryEntry,
-} from "./registry.js";
+import { readRegistry, removeRegistryEntry, type SandboxRegistryEntry } from "./registry.js";
 import type { SandboxConfig } from "./types.js";
 
 let lastPruneAtMs = 0;
@@ -76,32 +68,6 @@ async function pruneSandboxContainers(cfg: SandboxConfig) {
   });
 }
 
-async function pruneSandboxBrowsers(cfg: SandboxConfig) {
-  const config = loadConfig();
-  await pruneSandboxRegistryEntries<
-    SandboxBrowserRegistryEntry & {
-      backendId?: string;
-      runtimeLabel?: string;
-      configLabelKind?: string;
-    }
-  >({
-    cfg,
-    read: readBrowserRegistry,
-    remove: removeBrowserRegistryEntry,
-    removeRuntime: async (entry) => {
-      await dockerSandboxBackendManager.removeRuntime({
-        entry: {
-          ...entry,
-          backendId: "docker",
-          runtimeLabel: entry.containerName,
-          configLabelKind: "Image",
-        },
-        config,
-      });
-    },
-  });
-}
-
 export async function maybePruneSandboxes(cfg: SandboxConfig) {
   const now = Date.now();
   if (now - lastPruneAtMs < 5 * 60 * 1000) {
@@ -110,7 +76,6 @@ export async function maybePruneSandboxes(cfg: SandboxConfig) {
   lastPruneAtMs = now;
   try {
     await pruneSandboxContainers(cfg);
-    await pruneSandboxBrowsers(cfg);
   } catch (error) {
     const message =
       error instanceof Error

@@ -142,9 +142,6 @@ importers:
       pdfjs-dist:
         specifier: ^5.5.207
         version: 5.5.207
-      playwright-core:
-        specifier: 1.58.2
-        version: 1.58.2
       qrcode-terminal:
         specifier: ^0.12.0
         version: 0.12.0
@@ -8502,7 +8499,8 @@ snapshots:
 
   pkce-challenge@5.0.1: {}
 
-  playwright-core@1.58.2: {}
+  playwright-core@1.58.2:
+    optional: true
 
   playwright@1.58.2:
     dependencies:

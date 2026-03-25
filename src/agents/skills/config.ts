@@ -10,10 +10,7 @@ import { normalizeStringEntries } from "../../shared/string-normalization.js";
 import { resolveSkillKey } from "./frontmatter.js";
 import type { SkillEligibilityContext, SkillEntry } from "./types.js";
 
-const DEFAULT_CONFIG_VALUES: Record<string, boolean> = {
-  "browser.enabled": true,
-  "browser.evaluateEnabled": true,
-};
+const DEFAULT_CONFIG_VALUES: Record<string, boolean> = {};
 
 export { hasBinary, resolveConfigPath, resolveRuntimePlatform };
 

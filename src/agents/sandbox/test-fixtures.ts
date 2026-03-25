@@ -38,7 +38,6 @@ export function createSandboxTestContext(params?: {
     containerName: "deneb-sbx-test",
     containerWorkdir: "/workspace",
     tools: { allow: ["*"], deny: [] },
-    browserAllowHostControl: false,
     ...sandboxOverrides,
     docker,
   };

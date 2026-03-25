@@ -140,8 +140,6 @@ export function attachGatewayWsMessageHandler(params: {
   resolvedAuth: ResolvedGatewayAuth;
   /** Optional rate limiter for auth brute-force protection. */
   rateLimiter?: AuthRateLimiter;
-  /** Browser-origin fallback limiter (loopback is never exempt). */
-  browserRateLimiter?: AuthRateLimiter;
   gatewayMethods: string[];
   events: string[];
   extraHandlers: GatewayRequestHandlers;
@@ -174,7 +172,6 @@ export function attachGatewayWsMessageHandler(params: {
     connectNonce,
     resolvedAuth,
     rateLimiter,
-    browserRateLimiter,
     gatewayMethods,
     events,
     extraHandlers,
@@ -241,7 +238,6 @@ export function attachGatewayWsMessageHandler(params: {
     requestOrigin,
     clientIp,
     rateLimiter,
-    browserRateLimiter,
   });
   const {
     hasBrowserOriginHeader,
