@@ -60,6 +60,8 @@ func TestBuiltinMethodsRegistered(t *testing.T) {
 		"vega.ffi.execute", "vega.ffi.search",
 		// ML FFI (Phase 0 scaffolding).
 		"ml.embed", "ml.rerank",
+		// Tools catalog (static core).
+		"tools.catalog",
 	}
 	set := make(map[string]bool)
 	for _, m := range methods {

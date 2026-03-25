@@ -43,6 +43,40 @@ type Session struct {
 	RuntimeMs      *int64    `json:"runtimeMs,omitempty"`
 	AbortedLastRun bool      `json:"abortedLastRun"`
 	CreatedAt      time.Time `json:"-"`
+
+	// Identity / display (Phase 3).
+	SessionID string `json:"sessionId,omitempty"`
+	Label     string `json:"label,omitempty"`
+
+	// Model / inference settings.
+	ThinkingLevel  string `json:"thinkingLevel,omitempty"`
+	FastMode       *bool  `json:"fastMode,omitempty"`
+	VerboseLevel   string `json:"verboseLevel,omitempty"`
+	ReasoningLevel string `json:"reasoningLevel,omitempty"`
+	ElevatedLevel  string `json:"elevatedLevel,omitempty"`
+	ResponseUsage  string `json:"responseUsage,omitempty"`
+
+	// Execution environment.
+	ExecHost     string `json:"execHost,omitempty"`
+	ExecSecurity string `json:"execSecurity,omitempty"`
+	ExecAsk      string `json:"execAsk,omitempty"`
+	ExecNode     string `json:"execNode,omitempty"`
+
+	// Spawn / subagent lineage.
+	SpawnedBy            string `json:"spawnedBy,omitempty"`
+	SpawnedWorkspaceDir  string `json:"spawnedWorkspaceDir,omitempty"`
+	SpawnDepth           *int   `json:"spawnDepth,omitempty"`
+	SubagentRole         string `json:"subagentRole,omitempty"`
+	SubagentControlScope string `json:"subagentControlScope,omitempty"`
+
+	// Channel / messaging policy.
+	SendPolicy      string `json:"sendPolicy,omitempty"`
+	GroupActivation string `json:"groupActivation,omitempty"`
+
+	// Token accounting (cleared on compaction).
+	InputTokens  *int64 `json:"inputTokens,omitempty"`
+	OutputTokens *int64 `json:"outputTokens,omitempty"`
+	TotalTokens  *int64 `json:"totalTokens,omitempty"`
 }
 
 // Manager tracks active sessions in memory.
