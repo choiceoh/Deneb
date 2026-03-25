@@ -12,6 +12,7 @@ import {
   type DenebConfig,
 } from "../config/config.js";
 import { formatConfigIssueLines } from "../config/issue-format.js";
+import { isLastKnownGoodFallbackActive } from "../config/last-known-good.js";
 import {
   GATEWAY_AUTH_SURFACE_PATHS,
   evaluateGatewayAuthSurfaceStates,
@@ -107,6 +108,12 @@ export function assertValidGatewayStartupConfigSnapshot(
   options: { includeDoctorHint?: boolean } = {},
 ): void {
   if (snapshot.valid) {
+    return;
+  }
+  // When loadConfig() successfully fell back to a last-known-good backup,
+  // allow gateway startup to proceed with a warning instead of crashing.
+  // The runtime config is valid (from LKG); only the on-disk file is broken.
+  if (isLastKnownGoodFallbackActive()) {
     return;
   }
   const issues =

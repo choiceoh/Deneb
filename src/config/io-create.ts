@@ -49,6 +49,11 @@ import {
   warnOnConfigMiskeys,
 } from "./io-path-ops.js";
 import { readConfigFileSnapshotInternal } from "./io-read.js";
+import {
+  loadLastKnownGoodConfig,
+  saveLastKnownGoodConfig,
+  setLastKnownGoodFallbackActive,
+} from "./last-known-good.js";
 import { applyMergePatch } from "./merge-patch.js";
 import { normalizeExecSafeBinProfilesInConfig } from "./normalize-exec-safe-bin.js";
 import { normalizeConfigPaths } from "./normalize-paths.js";
@@ -96,6 +101,46 @@ const loggedInvalidConfigs = new Set<string>();
 const AUTO_OWNER_DISPLAY_SECRET_BY_PATH = new Map<string, string>();
 const AUTO_OWNER_DISPLAY_SECRET_PERSIST_IN_FLIGHT = new Set<string>();
 const AUTO_OWNER_DISPLAY_SECRET_PERSIST_WARNED = new Set<string>();
+
+/**
+ * Attempt to recover from a config load failure using the last-known-good backup.
+ * Returns a fully normalized DenebConfig on success, or null if recovery fails.
+ */
+function tryLastKnownGoodFallback(
+  configPath: string,
+  deps: Required<ConfigIoDeps>,
+): DenebConfig | null {
+  const lkg = loadLastKnownGoodConfig(configPath);
+  if (!lkg) {
+    return null;
+  }
+  // Re-validate the LKG config against the current schema.
+  // If the schema changed across an upgrade, LKG may also be invalid.
+  const lkgValidated = validateConfigObjectWithPlugins(lkg);
+  if (!lkgValidated.ok) {
+    deps.logger.warn(
+      `Last-known-good config backup also failed validation — cannot recover automatically.`,
+    );
+    return null;
+  }
+  deps.logger.warn(
+    `Config at ${configPath} is invalid. Using last-known-good backup. Fix your config and restart.`,
+  );
+  setLastKnownGoodFallbackActive(true);
+  const cfg = applyTalkConfigNormalization(
+    applyModelDefaults(
+      applyContextPruningDefaults(
+        applyAgentDefaults(
+          applySessionDefaults(applyLoggingDefaults(applyMessageDefaults(lkgValidated.config))),
+        ),
+      ),
+    ),
+  );
+  normalizeConfigPaths(cfg);
+  normalizeExecSafeBinProfilesInConfig(cfg);
+  applyConfigEnvVars(cfg, deps.env);
+  return applyConfigOverrides(cfg);
+}
 
 export function createConfigIO(overrides: ConfigIoDeps = {}, clearCacheFn?: () => void) {
   const deps = normalizeDeps(overrides);
@@ -167,6 +212,9 @@ export function createConfigIO(overrides: ConfigIoDeps = {}, clearCacheFn?: () =
           .join("\n");
         deps.logger.warn(`Config warnings:\\n${details}`);
       }
+      // Save the resolved config as last-known-good for recovery on future failures.
+      saveLastKnownGoodConfig(configPath, resolvedConfig);
+      setLastKnownGoodFallbackActive(false);
       warnIfConfigFromFuture(validated.config, deps.logger);
       const cfg = applyTalkConfigNormalization(
         applyModelDefaults(
@@ -234,10 +282,19 @@ export function createConfigIO(overrides: ConfigIoDeps = {}, clearCacheFn?: () =
       }
       const error = err as { code?: string };
       if (error?.code === "INVALID_CONFIG") {
-        // Fail closed so invalid configs cannot silently fall back to permissive defaults.
+        // Try last-known-good fallback before crashing.
+        const lkgResult = tryLastKnownGoodFallback(configPath, deps);
+        if (lkgResult) {
+          return lkgResult;
+        }
         throw err;
       }
       deps.logger.error(`Failed to read config at ${configPath}`, err);
+      // Try last-known-good fallback for parse errors and other read failures.
+      const lkgResult = tryLastKnownGoodFallback(configPath, deps);
+      if (lkgResult) {
+        return lkgResult;
+      }
       throw err;
     }
   }
