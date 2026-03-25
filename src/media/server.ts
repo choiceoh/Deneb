@@ -54,7 +54,7 @@ export function attachMediaRoutes(
         res.status(410).send("expired");
         return;
       }
-      const mime = await detectMime({ buffer: data, filePath: realPath });
+      const mime = detectMime({ buffer: data, filePath: realPath });
       if (mime) {
         res.type(mime);
       }

@@ -3,15 +3,14 @@ import { bench, describe } from "vitest";
 import { loadCoreRs } from "./core-rs.js";
 
 const mod = loadCoreRs();
-const describeBench = mod ? describe : describe.skip;
 
-describeBench("core-rs native vs JS performance", () => {
+describe("core-rs native vs JS performance", () => {
   // --- validate_frame ---
   const validReqJson =
     '{"type":"req","id":"abc-123","method":"chat.send","params":{"text":"hello world"}}';
 
   bench("validateFrame (native)", () => {
-    mod!.validateFrame(validReqJson);
+    mod.validateFrame(validReqJson);
   });
 
   // --- constant_time_eq ---
@@ -19,7 +18,7 @@ describeBench("core-rs native vs JS performance", () => {
   const secretB = Buffer.from("a]3kF!9x@Lm#pQ7z&wR2$vY5^tN8*hG");
 
   bench("constantTimeEq (native)", () => {
-    mod!.constantTimeEq(secretA, secretB);
+    mod.constantTimeEq(secretA, secretB);
   });
 
   bench("crypto.timingSafeEqual (Node.js)", () => {
@@ -31,10 +30,10 @@ describeBench("core-rs native vs JS performance", () => {
   const jpegBuffer = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 
   bench("detectMime PNG (native)", () => {
-    mod!.detectMime(pngBuffer);
+    mod.detectMime(pngBuffer);
   });
 
   bench("detectMime JPEG (native)", () => {
-    mod!.detectMime(jpegBuffer);
+    mod.detectMime(jpegBuffer);
   });
 });

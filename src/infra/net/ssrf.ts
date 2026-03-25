@@ -18,18 +18,10 @@ import { normalizeHostname } from "./hostname.js";
 /**
  * Fast-path SSRF check using native Rust implementation.
  * Returns true if the URL is definitely unsafe (blocked by Rust).
- * Returns false if Rust says safe or is unavailable (caller must still run full TS checks).
+ * Caller must still run full DNS-based checks for comprehensive protection.
  */
 function nativeSsrfReject(url: string): boolean {
-  const native = loadCoreRs();
-  if (!native) {
-    return false;
-  }
-  try {
-    return !native.isSafeUrl(url);
-  } catch {
-    return false;
-  }
+  return !loadCoreRs().isSafeUrl(url);
 }
 
 type LookupCallback = (

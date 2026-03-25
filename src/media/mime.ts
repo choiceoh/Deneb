@@ -1,14 +1,12 @@
 import path from "node:path";
-import { fileTypeFromBuffer } from "file-type";
 import { loadCoreRs, type CoreRsModule } from "../bindings/core-rs.js";
 import { type MediaKind, mediaKindFromMime } from "./constants.js";
 
 // Cache the bound detectMime function to avoid repeated loadCoreRs() + property lookup.
-let _nativeDetectMime: CoreRsModule["detectMime"] | null | undefined;
-function nativeDetectMime(): CoreRsModule["detectMime"] | null {
+let _nativeDetectMime: CoreRsModule["detectMime"] | undefined;
+function nativeDetectMime(): CoreRsModule["detectMime"] {
   if (_nativeDetectMime === undefined) {
-    const mod = loadCoreRs();
-    _nativeDetectMime = mod ? mod.detectMime.bind(mod) : null;
+    _nativeDetectMime = loadCoreRs().detectMime.bind(loadCoreRs());
   }
   return _nativeDetectMime;
 }
@@ -77,48 +75,23 @@ export function normalizeMimeType(mime?: string | null): string | undefined {
 }
 
 /**
- * Synchronous MIME sniff using native Rust detection only.
- * Returns undefined if native addon is unavailable or type is unknown.
- * Avoids the async overhead of fileTypeFromBuffer when native can handle it.
+ * Synchronous MIME sniff using native Rust detection.
+ * Returns undefined if type is unknown.
  */
 export function sniffMimeSync(buffer?: Buffer): string | undefined {
   if (!buffer) {
     return undefined;
   }
-  const detect = nativeDetectMime();
-  if (!detect) {
-    return undefined;
-  }
-  try {
-    const mime = detect(buffer);
-    return mime && mime !== "application/octet-stream" ? mime : undefined;
-  } catch {
-    return undefined;
-  }
+  const mime = nativeDetectMime()(buffer);
+  return mime && mime !== "application/octet-stream" ? mime : undefined;
 }
 
-async function sniffMime(buffer?: Buffer): Promise<string | undefined> {
+function sniffMime(buffer?: Buffer): string | undefined {
   if (!buffer) {
     return undefined;
   }
-  // Fast path: use native Rust MIME detection (synchronous magic-byte sniffing).
-  const detectMimeNative = nativeDetectMime();
-  if (detectMimeNative) {
-    try {
-      const mime = detectMimeNative(buffer);
-      if (mime && mime !== "application/octet-stream") {
-        return mime;
-      }
-    } catch {
-      // Fall through to JS implementation.
-    }
-  }
-  try {
-    const type = await fileTypeFromBuffer(buffer);
-    return type?.mime ?? undefined;
-  } catch {
-    return undefined;
-  }
+  const mime = nativeDetectMime()(buffer);
+  return mime && mime !== "application/octet-stream" ? mime : undefined;
 }
 
 export function getFileExtension(filePath?: string | null): string | undefined {
@@ -149,7 +122,7 @@ export function detectMime(opts: {
   buffer?: Buffer;
   headerMime?: string | null;
   filePath?: string;
-}): Promise<string | undefined> {
+}): string | undefined {
   return detectMimeImpl(opts);
 }
 
@@ -161,16 +134,16 @@ function isGenericMime(mime?: string): boolean {
   return m === "application/octet-stream" || m === "application/zip";
 }
 
-async function detectMimeImpl(opts: {
+function detectMimeImpl(opts: {
   buffer?: Buffer;
   headerMime?: string | null;
   filePath?: string;
-}): Promise<string | undefined> {
+}): string | undefined {
   const ext = getFileExtension(opts.filePath);
   const extMime = ext ? MIME_BY_EXT[ext] : undefined;
 
   const headerMime = normalizeMimeType(opts.headerMime);
-  const sniffed = await sniffMime(opts.buffer);
+  const sniffed = sniffMime(opts.buffer);
 
   // Prefer sniffed types, but don't let generic container types override a more
   // specific extension mapping (e.g. XLSX vs ZIP).

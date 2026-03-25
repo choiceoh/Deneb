@@ -384,7 +384,7 @@ async function loadWebMediaInternal(
       throw err;
     }
   }
-  const mime = await detectMime({ buffer: data, filePath: mediaUrl });
+  const mime = detectMime({ buffer: data, filePath: mediaUrl });
   const kind = kindFromMime(mime);
   let fileName = path.basename(mediaUrl) || undefined;
   if (fileName && !path.extname(fileName) && mime) {

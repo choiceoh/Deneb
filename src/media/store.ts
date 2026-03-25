@@ -357,7 +357,7 @@ export async function saveMediaSource(
     const { headerMime, sniffBuffer, size } = await retryAfterRecreatingDir(dir, () =>
       downloadToFile(source, tempDest, headers),
     );
-    const mime = await detectMime({
+    const mime = detectMime({
       buffer: sniffBuffer,
       headerMime,
       filePath: source,
@@ -371,7 +371,7 @@ export async function saveMediaSource(
   // local path
   try {
     const { buffer, stat } = await readLocalFileSafely({ filePath: source, maxBytes: MAX_BYTES });
-    const mime = await detectMime({ buffer, filePath: source });
+    const mime = detectMime({ buffer, filePath: source });
     const ext = extensionForMime(mime) ?? path.extname(source);
     const id = buildSavedMediaId({ baseId, ext });
     await writeSavedMediaBuffer({ dir, id, buffer });
@@ -398,7 +398,7 @@ export async function saveMediaBuffer(
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   const uuid = crypto.randomUUID();
   const headerExt = extensionForMime(contentType?.split(";")[0]?.trim() ?? undefined);
-  const mime = await detectMime({ buffer, headerMime: contentType });
+  const mime = detectMime({ buffer, headerMime: contentType });
   const ext = headerExt ?? extensionForMime(mime) ?? "";
   const id = buildSavedMediaId({ baseId: uuid, ext, originalFilename });
   await writeSavedMediaBuffer({ dir, id, buffer });

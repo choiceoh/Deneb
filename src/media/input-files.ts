@@ -236,7 +236,7 @@ async function normalizeInputImage(params: {
 }): Promise<InputImageContent> {
   const declaredMime = normalizeMimeType(params.mimeType) ?? "application/octet-stream";
   const detectedMime = normalizeMimeType(
-    await detectMime({ buffer: params.buffer, headerMime: params.mimeType }),
+    detectMime({ buffer: params.buffer, headerMime: params.mimeType }),
   );
   if (declaredMime.startsWith("image/") && detectedMime && !detectedMime.startsWith("image/")) {
     throw new Error(`Unsupported image MIME type: ${detectedMime}`);

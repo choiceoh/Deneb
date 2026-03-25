@@ -119,7 +119,7 @@ export async function parseMessageWithAttachments(
     const { base64: b64, label, mime } = normalized;
 
     const providedMime = normalizeMime(mime);
-    const sniffedMime = normalizeMime(await sniffMimeFromBase64(b64));
+    const sniffedMime = normalizeMime(sniffMimeFromBase64(b64));
     if (sniffedMime && !isImageMime(sniffedMime)) {
       log?.warn(`attachment ${label}: detected non-image (${sniffedMime}), dropping`);
       continue;

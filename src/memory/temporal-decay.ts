@@ -1,5 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  applyTemporalDecayToScore,
+  calculateTemporalDecayMultiplier,
+  isEvergreenMemoryPath,
+  parseMemoryDateFromPath as parseMemoryDateString,
+} from "./native-bridge.js";
 
 export type TemporalDecayConfig = {
   enabled: boolean;
@@ -12,71 +18,15 @@ export const DEFAULT_TEMPORAL_DECAY_CONFIG: TemporalDecayConfig = {
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const DATED_MEMORY_PATH_RE = /(?:^|\/)memory\/(\d{4})-(\d{2})-(\d{2})\.md$/;
 
-export function toDecayLambda(halfLifeDays: number): number {
-  if (!Number.isFinite(halfLifeDays) || halfLifeDays <= 0) {
-    return 0;
-  }
-  return Math.LN2 / halfLifeDays;
-}
-
-export function calculateTemporalDecayMultiplier(params: {
-  ageInDays: number;
-  halfLifeDays: number;
-}): number {
-  const lambda = toDecayLambda(params.halfLifeDays);
-  const clampedAge = Math.max(0, params.ageInDays);
-  if (lambda <= 0 || !Number.isFinite(clampedAge)) {
-    return 1;
-  }
-  return Math.exp(-lambda * clampedAge);
-}
-
-export function applyTemporalDecayToScore(params: {
-  score: number;
-  ageInDays: number;
-  halfLifeDays: number;
-}): number {
-  return params.score * calculateTemporalDecayMultiplier(params);
-}
+export { applyTemporalDecayToScore, calculateTemporalDecayMultiplier };
 
 function parseMemoryDateFromPath(filePath: string): Date | null {
-  const normalized = filePath.replaceAll("\\", "/").replace(/^\.\//, "");
-  const match = DATED_MEMORY_PATH_RE.exec(normalized);
-  if (!match) {
+  const dateStr = parseMemoryDateString(filePath);
+  if (!dateStr) {
     return null;
   }
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-    return null;
-  }
-
-  const timestamp = Date.UTC(year, month - 1, day);
-  const parsed = new Date(timestamp);
-  if (
-    parsed.getUTCFullYear() !== year ||
-    parsed.getUTCMonth() !== month - 1 ||
-    parsed.getUTCDate() !== day
-  ) {
-    return null;
-  }
-
-  return parsed;
-}
-
-function isEvergreenMemoryPath(filePath: string): boolean {
-  const normalized = filePath.replaceAll("\\", "/").replace(/^\.\//, "");
-  if (normalized === "MEMORY.md" || normalized === "memory.md") {
-    return true;
-  }
-  if (!normalized.startsWith("memory/")) {
-    return false;
-  }
-  return !DATED_MEMORY_PATH_RE.test(normalized);
+  return new Date(dateStr + "T00:00:00Z");
 }
 
 async function extractTimestamp(params: {

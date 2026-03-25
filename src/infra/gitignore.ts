@@ -217,26 +217,17 @@ export function isIgnoredByPatterns(
   isDirectory = false,
   originalContent?: string,
 ): boolean {
-  // Try native acceleration when original content is available.
+  // Use native acceleration when original content is available.
   if (originalContent !== undefined) {
-    const native = loadNative();
-    if (native) {
-      let matcher = nativeMatcherCache.get(patterns);
-      if (!matcher) {
-        try {
-          matcher = new native.GitignoreMatcher(originalContent);
-          nativeMatcherCache.set(patterns, matcher);
-        } catch {
-          // Fall through to TS implementation.
-        }
-      }
-      if (matcher) {
-        return matcher.isIgnored(filePath, isDirectory);
-      }
+    let matcher = nativeMatcherCache.get(patterns);
+    if (!matcher) {
+      matcher = new (loadNative().GitignoreMatcher)(originalContent);
+      nativeMatcherCache.set(patterns, matcher);
     }
+    return matcher.isIgnored(filePath, isDirectory);
   }
 
-  // Pure-TS fallback.
+  // TS path for when originalContent is not provided (parsed patterns only).
   const normalized = filePath.replace(/\\/g, "/").replace(/^\/+/, "");
   if (!normalized) {
     return false;

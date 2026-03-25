@@ -276,7 +276,7 @@ export async function imageResultFromFile(params: {
   imageSanitization?: ImageSanitizationLimits;
 }): Promise<AgentToolResult<unknown>> {
   const buf = await fs.readFile(params.path);
-  const mimeType = (await detectMime({ buffer: buf.slice(0, 256) })) ?? "image/png";
+  const mimeType = detectMime({ buffer: buf.slice(0, 256) }) ?? "image/png";
   return await imageResult({
     label: params.label,
     path: params.path,

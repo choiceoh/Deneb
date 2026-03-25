@@ -343,7 +343,7 @@ export async function createCanvasHostHandler(
       const mime =
         lower.endsWith(".html") || lower.endsWith(".htm")
           ? "text/html"
-          : ((await detectMime({ filePath: realPath })) ?? "application/octet-stream");
+          : (detectMime({ filePath: realPath }) ?? "application/octet-stream");
 
       res.setHeader("Cache-Control", "no-store");
       if (mime === "text/html") {

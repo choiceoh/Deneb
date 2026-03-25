@@ -138,23 +138,17 @@ function wrapModule(raw: CoreRsModuleRaw): CoreRsModule {
 }
 
 let coreRs: CoreRsModule | null = null;
-let loaded = false;
 
 /**
  * Load core-rs functions from the unified native addon.
- * Returns null if the addon is unavailable. Result is cached.
+ * Throws if the addon is unavailable. Result is cached.
  * Shape validation and smoke tests are handled by the shared loadRawAddon().
  */
-export function loadCoreRs(): CoreRsModule | null {
-  if (loaded) {
+export function loadCoreRs(): CoreRsModule {
+  if (coreRs) {
     return coreRs;
   }
-  loaded = true;
   const raw = loadRawAddon();
-  if (!raw) {
-    coreRs = null;
-    return coreRs;
-  }
   coreRs = wrapModule(raw as unknown as CoreRsModuleRaw);
   return coreRs;
 }
