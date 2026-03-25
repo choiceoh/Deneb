@@ -75,28 +75,29 @@ func MemoryBuildFtsQuery(raw string) (string, error) {
 
 // MemoryMergeHybridResults merges vector and FTS search results using the Rust
 // hybrid merge pipeline. Takes JSON-encoded MergeParams, returns JSON results.
+// The output buffer grows automatically if the Rust side signals it is too small.
 func MemoryMergeHybridResults(paramsJSON string) (json.RawMessage, error) {
 	if len(paramsJSON) == 0 {
 		return nil, fmt.Errorf("ffi: memory_merge: empty params")
 	}
 
-	outSize := len(paramsJSON) * 2
-	if outSize < 8192 {
-		outSize = 8192
+	initialSize := len(paramsJSON) * 2
+	if initialSize < 8192 {
+		initialSize = 8192
 	}
-	out := make([]byte, outSize)
 
 	paramsPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(paramsJSON)))
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
-
-	rc := C.deneb_memory_merge_hybrid_results(
-		paramsPtr, C.ulong(len(paramsJSON)),
-		outPtr, C.ulong(len(out)),
-	)
-	if rc < 0 {
-		return nil, ffiError("memory_merge_hybrid_results", int(rc))
+	data, err := ffiCallWithGrow("memory_merge_hybrid_results", initialSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_memory_merge_hybrid_results(
+				paramsPtr, C.ulong(len(paramsJSON)),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err != nil {
+		return nil, err
 	}
-	return json.RawMessage(out[:rc]), nil
+	return json.RawMessage(data), nil
 }
 
 // MemoryExtractKeywords extracts searchable keywords from a query string

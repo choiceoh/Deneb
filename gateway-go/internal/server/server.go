@@ -249,6 +249,7 @@ func New(addr string, opts ...Option) *Server {
 		Channels:         s.channels,
 		ChannelLifecycle: s.channelLifecycle,
 		GatewaySubs:      s.gatewaySubs,
+		Version:          s.version,
 	})
 	s.registerExtendedMethods()
 	s.registerPhase2Methods()

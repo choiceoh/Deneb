@@ -33,7 +33,7 @@ import (
 	"unsafe"
 )
 
-const contextOutBufSize = 1024 * 1024 // 1 MB output buffer
+const contextOutBufSize = 1024 * 1024 // 1 MB default output buffer (grows on demand)
 
 // ContextAssemblyNew creates a new context assembly engine.
 // Returns a handle for subsequent start/step calls.
@@ -50,35 +50,40 @@ func ContextAssemblyNew(conversationID, tokenBudget uint64, freshTailCount uint3
 }
 
 // ContextAssemblyStart starts an assembly engine, returning the first command JSON.
+// The output buffer grows automatically if the Rust side signals it is too small.
 func ContextAssemblyStart(handle uint32) (json.RawMessage, error) {
-	out := make([]byte, contextOutBufSize)
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
-
-	rc := C.deneb_context_assembly_start(C.uint(handle), outPtr, C.ulong(len(out)))
-	if rc < 0 {
-		return nil, ffiError("context_assembly_start", int(rc))
+	data, err := ffiCallWithGrow("context_assembly_start", contextOutBufSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_context_assembly_start(
+				C.uint(handle),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err != nil {
+		return nil, err
 	}
-	return json.RawMessage(out[:rc]), nil
+	return json.RawMessage(data), nil
 }
 
 // ContextAssemblyStep advances the assembly engine with a host response.
+// The output buffer grows automatically if the Rust side signals it is too small.
 func ContextAssemblyStep(handle uint32, responseJSON []byte) (json.RawMessage, error) {
 	if len(responseJSON) == 0 {
 		return nil, errors.New("ffi: empty response JSON")
 	}
 	respPtr := (*C.uchar)(unsafe.Pointer(&responseJSON[0]))
-	out := make([]byte, contextOutBufSize)
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
-
-	rc := C.deneb_context_assembly_step(
-		C.uint(handle),
-		respPtr, C.ulong(len(responseJSON)),
-		outPtr, C.ulong(len(out)),
-	)
-	if rc < 0 {
-		return nil, ffiError("context_assembly_step", int(rc))
+	data, err := ffiCallWithGrow("context_assembly_step", contextOutBufSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_context_assembly_step(
+				C.uint(handle),
+				respPtr, C.ulong(len(responseJSON)),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err != nil {
+		return nil, err
 	}
-	return json.RawMessage(out[:rc]), nil
+	return json.RawMessage(data), nil
 }
 
 // ContextExpandNew creates a new context expand engine for memory retrieval.
@@ -103,35 +108,40 @@ func ContextExpandNew(summaryID string, maxDepth uint32, includeMessages bool, t
 }
 
 // ContextExpandStart starts an expand engine, returning the first command JSON.
+// The output buffer grows automatically if the Rust side signals it is too small.
 func ContextExpandStart(handle uint32) (json.RawMessage, error) {
-	out := make([]byte, contextOutBufSize)
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
-
-	rc := C.deneb_context_expand_start(C.uint(handle), outPtr, C.ulong(len(out)))
-	if rc < 0 {
-		return nil, ffiError("context_expand_start", int(rc))
+	data, err := ffiCallWithGrow("context_expand_start", contextOutBufSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_context_expand_start(
+				C.uint(handle),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err != nil {
+		return nil, err
 	}
-	return json.RawMessage(out[:rc]), nil
+	return json.RawMessage(data), nil
 }
 
 // ContextExpandStep advances the expand engine with a host response.
+// The output buffer grows automatically if the Rust side signals it is too small.
 func ContextExpandStep(handle uint32, responseJSON []byte) (json.RawMessage, error) {
 	if len(responseJSON) == 0 {
 		return nil, errors.New("ffi: empty response JSON")
 	}
 	respPtr := (*C.uchar)(unsafe.Pointer(&responseJSON[0]))
-	out := make([]byte, contextOutBufSize)
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
-
-	rc := C.deneb_context_expand_step(
-		C.uint(handle),
-		respPtr, C.ulong(len(responseJSON)),
-		outPtr, C.ulong(len(out)),
-	)
-	if rc < 0 {
-		return nil, ffiError("context_expand_step", int(rc))
+	data, err := ffiCallWithGrow("context_expand_step", contextOutBufSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_context_expand_step(
+				C.uint(handle),
+				respPtr, C.ulong(len(responseJSON)),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err != nil {
+		return nil, err
 	}
-	return json.RawMessage(out[:rc]), nil
+	return json.RawMessage(data), nil
 }
 
 // ContextEngineDrop releases a context engine handle's resources.

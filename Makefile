@@ -18,8 +18,10 @@ all: rust go cli
 
 # --- Rust core library (workspace) ---
 
-# Build core crate for CGo static linking (no napi-rs).
-# Use `make rust-napi` for Node.js native addon builds.
+# Build core crate for CGo static linking.
+# --no-default-features disables "napi_binding" (Node.js addon), producing
+# only the staticlib (.a) and rlib needed by the Go gateway via CGo.
+# Use `make rust-napi` for Node.js native addon builds (includes cdylib).
 rust:
 	cd core-rs && cargo build --release -p deneb-core --no-default-features
 

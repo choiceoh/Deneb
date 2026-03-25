@@ -132,7 +132,7 @@ func Base64Canonicalize(input string) (string, error) {
 		ptr, C.ulong(len(input)),
 		outPtr, C.ulong(len(out)),
 	)
-	if rc == -3 {
+	if rc == rcValidation {
 		return "", errors.New("ffi: base64_canonicalize: invalid base64")
 	}
 	if rc < 0 {
