@@ -169,14 +169,6 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     includeInDenebGroup: true,
   },
   {
-    id: "browser",
-    label: "browser",
-    description: "Control web browser",
-    sectionId: "ui",
-    profiles: [],
-    includeInDenebGroup: true,
-  },
-  {
     id: "message",
     label: "message",
     description: "Send messages",
