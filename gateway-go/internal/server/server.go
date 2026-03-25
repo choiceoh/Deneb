@@ -1012,10 +1012,6 @@ func (s *Server) registerNativeSystemMethods(denebDir string) {
 	})
 
 	// Wire Telegram update handler → chat.send pipeline.
-	s.logger.Info("telegram chat handler check",
-		"telegramPlug", s.telegramPlug != nil,
-		"chatHandler", s.chatHandler != nil,
-	)
 	if s.telegramPlug != nil && s.chatHandler != nil {
 		s.wireTelegramChatHandler()
 	}
