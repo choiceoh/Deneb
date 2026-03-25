@@ -231,6 +231,7 @@ async fn cmd_status(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn cmd_call(
     method: &str,
     params_str: Option<&str>,

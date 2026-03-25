@@ -7,6 +7,7 @@ pub struct GatewayAuth {
     pub token: Option<String>,
     pub password: Option<String>,
     /// Where the token came from (for diagnostics).
+    #[allow(dead_code)]
     pub source: AuthSource,
 }
 

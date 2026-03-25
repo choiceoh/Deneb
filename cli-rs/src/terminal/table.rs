@@ -9,6 +9,7 @@ pub fn styled_table() -> Table {
 }
 
 /// Create a minimal borderless table (for compact output).
+#[allow(dead_code)]
 pub fn compact_table() -> Table {
     let mut table = Table::new();
     table.load_preset(presets::NOTHING);
