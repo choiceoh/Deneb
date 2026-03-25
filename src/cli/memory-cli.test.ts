@@ -1,6 +1,3 @@
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -137,17 +134,6 @@ describe("memory cli", () => {
     registerMemoryCli(program);
     const memoryCommand = program.commands.find((command) => command.name() === "memory");
     return captureHelpOutput(memoryCommand);
-  }
-
-  async function withQmdIndexDb(content: string, run: (dbPath: string) => Promise<void>) {
-    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "memory-cli-qmd-index-"));
-    const dbPath = path.join(tmpDir, "index.sqlite");
-    try {
-      await fs.writeFile(dbPath, content, "utf-8");
-      await run(dbPath);
-    } finally {
-      await fs.rm(tmpDir, { recursive: true, force: true });
-    }
   }
 
   async function expectCloseFailureAfterCommand(params: {
@@ -353,40 +339,6 @@ describe("memory cli", () => {
     expectCliSync(sync);
     expect(close).toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith("Memory index updated (main).");
-  });
-
-  it("logs qmd index file path and size after index", async () => {
-    const close = vi.fn(async () => {});
-    const sync = vi.fn(async () => {});
-    await withQmdIndexDb("sqlite-bytes", async (dbPath) => {
-      mockManager({ sync, status: () => ({ backend: "qmd", dbPath }), close });
-
-      const log = spyRuntimeLogs();
-      await runMemoryCli(["index"]);
-
-      expectCliSync(sync);
-      expect(log).toHaveBeenCalledWith(expect.stringContaining("QMD index: "));
-      expect(log).toHaveBeenCalledWith("Memory index updated (main).");
-      expect(close).toHaveBeenCalled();
-    });
-  });
-
-  it("fails index when qmd db file is empty", async () => {
-    const close = vi.fn(async () => {});
-    const sync = vi.fn(async () => {});
-    await withQmdIndexDb("", async (dbPath) => {
-      mockManager({ sync, status: () => ({ backend: "qmd", dbPath }), close });
-
-      const error = spyRuntimeErrors();
-      await runMemoryCli(["index"]);
-
-      expectCliSync(sync);
-      expect(error).toHaveBeenCalledWith(
-        expect.stringContaining("Memory index failed (main): QMD index file is empty"),
-      );
-      expect(close).toHaveBeenCalled();
-      expect(process.exitCode).toBe(1);
-    });
   });
 
   it("logs close failures without failing the command", async () => {

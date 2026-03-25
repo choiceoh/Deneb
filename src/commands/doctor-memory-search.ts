@@ -34,10 +34,10 @@ export async function noteMemorySearchHealth(
     return;
   }
 
-  // QMD and Vega backends handle embeddings internally (e.g. embeddinggemma) — no
-  // separate embedding provider is needed. Skip the provider check entirely.
+  // Vega backend handles embeddings internally — no separate embedding provider
+  // is needed. Skip the provider check entirely.
   const backendConfig = resolveMemoryBackendConfig({ cfg, agentId });
-  if (backendConfig.backend === "qmd" || backendConfig.backend === "vega") {
+  if (backendConfig.backend === "vega") {
     return;
   }
 

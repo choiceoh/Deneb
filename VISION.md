@@ -18,7 +18,7 @@ The current focus is:
 Priority:
 
 - **Lossless Context Management (LCM)** — DAG-based compaction, background observer, multi-layer recall
-- **Vega QMD memory backend** — Native integration for structured memory persistence
+- **Vega memory backend** — Native integration for structured memory persistence
 - **Aurora Memory Module** — AI-agent-first memory file management
 - **Security and safe defaults**
 - **Bug fixes and stability**
@@ -61,7 +61,7 @@ The bar for adding optional plugins to core is intentionally high.
 Plugin docs: [`docs/tools/plugin.md`](docs/tools/plugin.md)
 
 Memory is a special plugin slot where only one memory plugin can be active at a time.
-The recommended memory stack is: **Vega QMD backend + Aurora Memory Module + LCM engine**.
+The recommended memory stack is: **Vega memory backend + Aurora Memory Module + LCM engine**.
 
 ### Skills
 

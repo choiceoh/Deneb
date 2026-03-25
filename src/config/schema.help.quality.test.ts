@@ -41,33 +41,6 @@ const ROOT_SECTIONS = [
 const TARGET_KEYS = [
   "memory.citations",
   "memory.backend",
-  "memory.qmd.searchMode",
-  "memory.qmd.scope",
-  "memory.qmd.includeDefaultMemory",
-  "memory.qmd.mcporter.enabled",
-  "memory.qmd.mcporter.serverName",
-  "memory.qmd.command",
-  "memory.qmd.mcporter",
-  "memory.qmd.mcporter.startDaemon",
-  "memory.qmd.paths",
-  "memory.qmd.paths.path",
-  "memory.qmd.paths.pattern",
-  "memory.qmd.paths.name",
-  "memory.qmd.sessions.enabled",
-  "memory.qmd.sessions.exportDir",
-  "memory.qmd.sessions.retentionDays",
-  "memory.qmd.update.interval",
-  "memory.qmd.update.debounceMs",
-  "memory.qmd.update.onBoot",
-  "memory.qmd.update.waitForBootSync",
-  "memory.qmd.update.embedInterval",
-  "memory.qmd.update.commandTimeoutMs",
-  "memory.qmd.update.updateTimeoutMs",
-  "memory.qmd.update.embedTimeoutMs",
-  "memory.qmd.limits.maxResults",
-  "memory.qmd.limits.maxSnippetChars",
-  "memory.qmd.limits.maxInjectedChars",
-  "memory.qmd.limits.timeoutMs",
   "agents.defaults.memorySearch.provider",
   "agents.defaults.memorySearch.fallback",
   "agents.defaults.memorySearch.sources",
@@ -395,8 +368,7 @@ const TARGET_KEYS = [
 
 const ENUM_EXPECTATIONS: Record<string, string[]> = {
   "memory.citations": ['"auto"', '"on"', '"off"'],
-  "memory.backend": ['"builtin"', '"qmd"'],
-  "memory.qmd.searchMode": ['"query"', '"search"', '"vsearch"'],
+  "memory.backend": ['"builtin"', '"vega"'],
   "models.mode": ['"merge"', '"replace"'],
   "models.providers.*.auth": ['"api-key"', '"token"', '"oauth"', '"aws-sdk"'],
   "gateway.reload.mode": ['"off"', '"restart"', '"hot"', '"hybrid"'],
@@ -631,9 +603,6 @@ describe("config help copy quality", () => {
   });
 
   it("includes concrete examples on path and interval fields", () => {
-    expect(FIELD_HELP["memory.qmd.paths.pattern"].includes("**/*.md")).toBe(true);
-    expect(FIELD_HELP["memory.qmd.update.interval"].includes("5m")).toBe(true);
-    expect(FIELD_HELP["memory.qmd.update.embedInterval"].includes("60m")).toBe(true);
     expect(FIELD_HELP["agents.defaults.memorySearch.store.path"]).toContain(
       "~/.deneb/memory/{agentId}.sqlite",
     );

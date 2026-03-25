@@ -1,18 +1,17 @@
 /**
  * VegaMemoryManager — subprocess-based memory backend for Vega.
  *
- * Much simpler than QmdMemoryManager: no SQLite direct access, no model
- * symlinking, no collection management via CLI.  Vega handles all indexing,
- * embedding, and search internally.  This manager just calls the Vega CLI.
+ * Vega handles all indexing, embedding, and search internally.
+ * This manager just calls the Vega CLI.
  */
 
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { ResolvedVegaConfig } from "./backend-config.js";
+import { resolveCliSpawnInvocation, runCliCommand } from "./cli-process.js";
 import { isFileMissingError, statRegularFile } from "./fs-utils.js";
-import { resolveCliSpawnInvocation, runCliCommand } from "./qmd-process.js";
-import { deriveQmdScopeChannel, deriveQmdScopeChatType, isQmdScopeAllowed } from "./qmd-scope.js";
+import { deriveScopeChannel, deriveScopeChatType, isScopeAllowed } from "./session-scope.js";
 import type {
   MemoryEmbeddingProbeResult,
   MemoryProviderStatus,
@@ -617,12 +616,12 @@ export class VegaMemoryManager implements MemorySearchManager {
   }
 
   private isScopeAllowed(sessionKey?: string): boolean {
-    return isQmdScopeAllowed(this.vega.scope, sessionKey);
+    return isScopeAllowed(this.vega.scope, sessionKey);
   }
 
   private logScopeDenied(sessionKey?: string): void {
-    const channel = deriveQmdScopeChannel(sessionKey) ?? "unknown";
-    const chatType = deriveQmdScopeChatType(sessionKey) ?? "unknown";
+    const channel = deriveScopeChannel(sessionKey) ?? "unknown";
+    const chatType = deriveScopeChatType(sessionKey) ?? "unknown";
     const key = sessionKey?.trim() || "<none>";
     log.warn(
       `vega search denied by scope (channel=${channel}, chatType=${chatType}, session=${key})`,

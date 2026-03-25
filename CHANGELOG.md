@@ -28,7 +28,7 @@ Deneb 최초 릴리스. 독립 프로젝트로 시작.
 ### Features
 
 - **Aurora Memory Module** — AI-agent-first 메모리 파일 관리 (memory-md-manager)
-- **Vega QMD 백엔드 통합** — VegaMemoryManager, LCM 네이티브화
+- **Vega 메모리 백엔드 통합** — VegaMemoryManager, LCM 네이티브화
 - **Vega CLI 래퍼** — bin/vega wrapper + install.sh
 - **Lossless Context Management (LCM)** — DAG-based compaction, background observer, multi-layer recall
 - **컨텍스트 엔진** — transcript maintenance 기능
