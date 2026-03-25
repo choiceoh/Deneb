@@ -120,12 +120,123 @@ func FormatHTML(text string) string {
 			}
 		}
 
+		// Spoiler: ||...||
+		if i+1 < n && ch == '|' && runes[i+1] == '|' {
+			end := findDouble(runes, '|', i+2)
+			if end >= 0 {
+				b.WriteString("<tg-spoiler>")
+				b.WriteString(FormatHTML(string(runes[i+2 : end])))
+				b.WriteString("</tg-spoiler>")
+				i = end + 2
+				continue
+			}
+		}
+
 		// Default: escape and write.
 		b.WriteString(escapeHTMLRune(ch))
 		i++
 	}
 
 	return b.String()
+}
+
+// MarkdownToTelegramHTML converts multiline markdown to Telegram HTML.
+// Handles line-level constructs (headings, blockquotes, fenced code blocks)
+// in addition to inline formatting via FormatHTML.
+func MarkdownToTelegramHTML(markdown string) string {
+	if markdown == "" {
+		return ""
+	}
+	lines := strings.Split(markdown, "\n")
+	var out strings.Builder
+	out.Grow(len(markdown) + len(markdown)/4)
+
+	inCodeBlock := false
+	var codeBlockBuf strings.Builder
+
+	for i, line := range lines {
+		// Handle fenced code blocks.
+		if strings.HasPrefix(line, "```") {
+			if inCodeBlock {
+				out.WriteString("<pre><code>")
+				out.WriteString(escapeHTML(codeBlockBuf.String()))
+				out.WriteString("</code></pre>")
+				codeBlockBuf.Reset()
+				inCodeBlock = false
+				if i < len(lines)-1 {
+					out.WriteByte('\n')
+				}
+				continue
+			}
+			inCodeBlock = true
+			// Skip the language tag line.
+			continue
+		}
+		if inCodeBlock {
+			if codeBlockBuf.Len() > 0 {
+				codeBlockBuf.WriteByte('\n')
+			}
+			codeBlockBuf.WriteString(line)
+			continue
+		}
+
+		// Blockquote: "> text"
+		if strings.HasPrefix(line, "> ") {
+			out.WriteString("<blockquote>")
+			out.WriteString(FormatHTML(line[2:]))
+			out.WriteString("</blockquote>")
+			if i < len(lines)-1 {
+				out.WriteByte('\n')
+			}
+			continue
+		}
+
+		// Heading: render as bold (Telegram has no heading tags).
+		if headingContent := parseHeading(line); headingContent != "" {
+			out.WriteString("<b>")
+			out.WriteString(FormatHTML(headingContent))
+			out.WriteString("</b>")
+			if i < len(lines)-1 {
+				out.WriteByte('\n')
+			}
+			continue
+		}
+
+		out.WriteString(FormatHTML(line))
+		if i < len(lines)-1 {
+			out.WriteByte('\n')
+		}
+	}
+
+	// Handle unclosed code block.
+	if inCodeBlock {
+		out.WriteString("<pre><code>")
+		out.WriteString(escapeHTML(codeBlockBuf.String()))
+		out.WriteString("</code></pre>")
+	}
+
+	return out.String()
+}
+
+// parseHeading returns the heading content if line is a markdown heading.
+func parseHeading(line string) string {
+	if !strings.HasPrefix(line, "#") {
+		return ""
+	}
+	i := 0
+	for i < len(line) && line[i] == '#' {
+		i++
+	}
+	if i > 6 || i >= len(line) || line[i] != ' ' {
+		return ""
+	}
+	return strings.TrimSpace(line[i+1:])
+}
+
+// MarkdownToTelegramChunks converts markdown to chunked Telegram HTML.
+func MarkdownToTelegramChunks(markdown string, limit int) []string {
+	html := MarkdownToTelegramHTML(markdown)
+	return ChunkHTML(html, limit)
 }
 
 // ChunkText splits text into chunks that fit within Telegram's limits.
