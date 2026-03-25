@@ -25,7 +25,7 @@ Verbose output and `deneb plugins inspect <id>` also show the subtype
 Related:
 
 - Plugin system overview: [Plugins](/tools/plugin)
-- CLI install/list flows: [plugins](/cli/plugins)
+- CLI install/list flows: `deneb plugins --help`
 - Native manifest schema: [Plugin manifest](/plugins/manifest)
 
 ## What a bundle is

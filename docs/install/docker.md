@@ -248,7 +248,7 @@ docker compose run --rm deneb-cli devices list
 docker compose run --rm deneb-cli devices approve <requestId>
 ```
 
-More detail: [Dashboard](/web/dashboard), [Devices](/cli/devices).
+More detail: [Dashboard](/web/dashboard).
 
 ### Extra mounts (optional)
 
@@ -457,7 +457,7 @@ Discord (bot token):
 docker compose run --rm deneb-cli channels add --channel discord --token "<token>"
 ```
 
-Docs: [WhatsApp](/channels/whatsapp), [Telegram](/channels/telegram), [Discord](/channels/discord)
+Docs: WhatsApp, [Telegram](/channels/telegram), Discord
 
 ### OpenAI Codex OAuth (headless Docker)
 

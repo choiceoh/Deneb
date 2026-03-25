@@ -70,15 +70,15 @@ Use these hubs to discover every page, including deep dives and reference docs t
 
 - [Chat channels hub](/channels)
 - [Model providers hub](/providers/models)
-- [WhatsApp](/channels/whatsapp)
+- WhatsApp
 - [Telegram](/channels/telegram)
-- [Slack](/channels/slack)
-- [Discord](/channels/discord)
-- [Mattermost](/channels/mattermost) (plugin)
-- [Signal](/channels/signal)
-- [BlueBubbles (iMessage)](/channels/bluebubbles)
-- [iMessage (legacy)](/channels/imessage)
-- [Location parsing](/channels/location)
+- Slack
+- Discord
+- Mattermost (plugin)
+- Signal
+- BlueBubbles (iMessage)
+- iMessage (legacy)
+- Location parsing
 - [WebChat](/web/webchat)
 - [Webhooks](/automation/webhook)
 - [Gmail Pub/Sub](/automation/gmail-pubsub)

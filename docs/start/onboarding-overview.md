@@ -29,7 +29,7 @@ Use CLI onboarding when you want full control of the Gateway, workspace,
 channels, and skills. Docs:
 
 - [Onboarding (CLI)](/start/wizard)
-- [`deneb onboard` command](/cli/onboard)
+- `deneb onboard` command
 
 ## macOS app onboarding
 

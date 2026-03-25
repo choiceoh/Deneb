@@ -116,14 +116,6 @@
       "destination": "/providers/qianfan"
     },
     {
-      "source": "/mattermost",
-      "destination": "/channels/mattermost"
-    },
-    {
-      "source": "/line",
-      "destination": "/channels/line"
-    },
-    {
       "source": "/glm",
       "destination": "/providers/glm"
     },
@@ -132,48 +124,8 @@
       "destination": "/providers/zai"
     },
     {
-      "source": "/message",
-      "destination": "/cli/message"
-    },
-    {
-      "source": "/providers/discord",
-      "destination": "/channels/discord"
-    },
-    {
-      "source": "/providers/googlechat",
-      "destination": "/channels/googlechat"
-    },
-    {
       "source": "/providers/grammy",
       "destination": "/channels/telegram"
-    },
-    {
-      "source": "/providers/imessage",
-      "destination": "/channels/imessage"
-    },
-    {
-      "source": "/providers/location",
-      "destination": "/channels/location"
-    },
-    {
-      "source": "/providers/mattermost",
-      "destination": "/channels/mattermost"
-    },
-    {
-      "source": "/providers/msteams",
-      "destination": "/channels/msteams"
-    },
-    {
-      "source": "/providers/line",
-      "destination": "/channels/line"
-    },
-    {
-      "source": "/providers/signal",
-      "destination": "/channels/signal"
-    },
-    {
-      "source": "/providers/slack",
-      "destination": "/channels/slack"
     },
     {
       "source": "/providers/telegram",
@@ -182,18 +134,6 @@
     {
       "source": "/providers/troubleshooting",
       "destination": "/channels/troubleshooting"
-    },
-    {
-      "source": "/providers/zalo",
-      "destination": "/channels/zalo"
-    },
-    {
-      "source": "/providers/whatsapp",
-      "destination": "/channels/whatsapp"
-    },
-    {
-      "source": "/sandbox",
-      "destination": "/cli/sandbox"
     },
     {
       "source": "/sandboxing",
@@ -894,27 +834,7 @@
               {
                 "group": "Messaging platforms",
                 "pages": [
-                  "channels/bluebubbles",
-                  "channels/discord",
-                  "channels/feishu",
-                  "channels/googlechat",
-                  "channels/imessage",
-                  "channels/irc",
-                  "channels/line",
-                  "channels/matrix",
-                  "channels/mattermost",
-                  "channels/msteams",
-                  "channels/nextcloud-talk",
-                  "channels/nostr",
-                  "channels/signal",
-                  "channels/synology-chat",
-                  "channels/slack",
-                  "channels/telegram",
-                  "channels/tlon",
-                  "channels/twitch",
-                  "channels/whatsapp",
-                  "channels/zalo",
-                  "channels/zalouser"
+                  "channels/telegram"
                 ]
               },
               {
@@ -923,9 +843,7 @@
                   "channels/pairing",
                   "channels/group-messages",
                   "channels/groups",
-                  "channels/broadcast-groups",
                   "channels/channel-routing",
-                  "channels/location",
                   "channels/troubleshooting"
                 ]
               }
@@ -1255,56 +1173,6 @@
             "tab": "Reference",
             "groups": [
               {
-                "group": "CLI commands",
-                "pages": [
-                  "cli/index",
-                  "cli/acp",
-                  "cli/agent",
-                  "cli/agents",
-                  "cli/approvals",
-                  "cli/browser",
-                  "cli/channels",
-                  "cli/clawbot",
-                  "cli/completion",
-                  "cli/config",
-                  "cli/configure",
-                  "cli/cron",
-                  "cli/daemon",
-                  "cli/dashboard",
-                  "cli/devices",
-                  "cli/directory",
-                  "cli/dns",
-                  "cli/docs",
-                  "cli/doctor",
-                  "cli/gateway",
-                  "cli/health",
-                  "cli/hooks",
-                  "cli/logs",
-                  "cli/memory",
-                  "cli/message",
-                  "cli/models",
-                  "cli/node",
-                  "cli/nodes",
-                  "cli/onboard",
-                  "cli/pairing",
-                  "cli/plugins",
-                  "cli/qr",
-                  "cli/reset",
-                  "cli/sandbox",
-                  "cli/secrets",
-                  "cli/security",
-                  "cli/sessions",
-                  "cli/setup",
-                  "cli/skills",
-                  "cli/status",
-                  "cli/system",
-                  "cli/tui",
-                  "cli/uninstall",
-                  "cli/update",
-                  "cli/webhooks"
-                ]
-              },
-              {
                 "group": "RPC and API",
                 "pages": ["reference/rpc", "reference/device-models"]
               },
@@ -1485,26 +1353,7 @@
               {
                 "group": "消息平台",
                 "pages": [
-                  "zh-CN/channels/bluebubbles",
-                  "zh-CN/channels/discord",
-                  "zh-CN/channels/feishu",
-                  "zh-CN/channels/grammy",
-                  "zh-CN/channels/googlechat",
-                  "zh-CN/channels/imessage",
-                  "zh-CN/channels/line",
-                  "zh-CN/channels/matrix",
-                  "zh-CN/channels/mattermost",
-                  "zh-CN/channels/msteams",
-                  "zh-CN/channels/nextcloud-talk",
-                  "zh-CN/channels/nostr",
-                  "zh-CN/channels/signal",
-                  "zh-CN/channels/slack",
-                  "zh-CN/channels/telegram",
-                  "zh-CN/channels/tlon",
-                  "zh-CN/channels/twitch",
-                  "zh-CN/channels/whatsapp",
-                  "zh-CN/channels/zalo",
-                  "zh-CN/channels/zalouser"
+                  "zh-CN/channels/telegram"
                 ]
               },
               {
@@ -1513,9 +1362,7 @@
                   "zh-CN/channels/pairing",
                   "zh-CN/channels/group-messages",
                   "zh-CN/channels/groups",
-                  "zh-CN/channels/broadcast-groups",
                   "zh-CN/channels/channel-routing",
-                  "zh-CN/channels/location",
                   "zh-CN/channels/troubleshooting"
                 ]
               }
@@ -1823,51 +1670,6 @@
           {
             "tab": "参考",
             "groups": [
-              {
-                "group": "CLI 命令",
-                "pages": [
-                  "zh-CN/cli/index",
-                  "zh-CN/cli/acp",
-                  "zh-CN/cli/agent",
-                  "zh-CN/cli/agents",
-                  "zh-CN/cli/approvals",
-                  "zh-CN/cli/browser",
-                  "zh-CN/cli/channels",
-                  "zh-CN/cli/config",
-                  "zh-CN/cli/configure",
-                  "zh-CN/cli/cron",
-                  "zh-CN/cli/dashboard",
-                  "zh-CN/cli/devices",
-                  "zh-CN/cli/directory",
-                  "zh-CN/cli/dns",
-                  "zh-CN/cli/docs",
-                  "zh-CN/cli/doctor",
-                  "zh-CN/cli/gateway",
-                  "zh-CN/cli/health",
-                  "zh-CN/cli/hooks",
-                  "zh-CN/cli/logs",
-                  "zh-CN/cli/memory",
-                  "zh-CN/cli/message",
-                  "zh-CN/cli/models",
-                  "zh-CN/cli/node",
-                  "zh-CN/cli/nodes",
-                  "zh-CN/cli/onboard",
-                  "zh-CN/cli/pairing",
-                  "zh-CN/cli/plugins",
-                  "zh-CN/cli/reset",
-                  "zh-CN/cli/sandbox",
-                  "zh-CN/cli/security",
-                  "zh-CN/cli/sessions",
-                  "zh-CN/cli/setup",
-                  "zh-CN/cli/skills",
-                  "zh-CN/cli/status",
-                  "zh-CN/cli/system",
-                  "zh-CN/cli/tui",
-                  "zh-CN/cli/uninstall",
-                  "zh-CN/cli/update",
-                  "zh-CN/cli/webhooks"
-                ]
-              },
               {
                 "group": "RPC 与 API",
                 "pages": ["zh-CN/reference/rpc", "zh-CN/reference/device-models"]

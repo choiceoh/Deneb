@@ -528,7 +528,7 @@ pnpm install
 pnpm build
 ```
 
-Docs: [Update](/cli/update), [Development channels](/install/development-channels),
+Docs: [Development channels](/install/development-channels),
 [Install](/install).
 
 ### Installer stuck How do I get more feedback
@@ -658,7 +658,7 @@ local screen/camera/canvas or run commands on your laptop while keeping the
 Gateway in the cloud.
 
 Hub: [Platforms](/platforms). Remote access: [Gateway remote](/gateway/remote).
-Nodes: [Nodes](/nodes), [Nodes CLI](/cli/nodes).
+Nodes: [Nodes](/nodes).
 
 ### Can I ask Deneb to update itself
 
@@ -683,7 +683,7 @@ deneb update --yes --no-restart
 deneb gateway restart
 ```
 
-Docs: [Update](/cli/update), [Updating](/install/updating).
+Docs: [Updating](/install/updating).
 
 ### What does onboarding actually do
 
@@ -758,7 +758,7 @@ credential is eligible for long-context billing (API key billing or subscription
 with Extra Usage enabled).
 
 Tip: set a **fallback model** so Deneb can keep replying while a provider is rate-limited.
-See [Models](/cli/models), [OAuth](/concepts/oauth), and
+See [OAuth](/concepts/oauth) and
 [/gateway/troubleshooting#anthropic-429-extra-usage-required-for-long-context](/gateway/troubleshooting#anthropic-429-extra-usage-required-for-long-context).
 
 ### Is AWS Bedrock supported
@@ -801,21 +801,21 @@ Pick region-pinned endpoints. OpenRouter exposes US-hosted options for MiniMax, 
 No. Deneb runs on macOS or Linux (Windows via WSL2). A Mac mini is optional - some people
 buy one as an always-on host, but a small VPS, home server, or Raspberry Pi-class box works too.
 
-You only need a Mac **for macOS-only tools**. For iMessage, use [BlueBubbles](/channels/bluebubbles) (recommended) - the BlueBubbles server runs on any Mac, and the Gateway can run on Linux or elsewhere. If you want other macOS-only tools, run the Gateway on a Mac or pair a macOS node.
+You only need a Mac **for macOS-only tools**. For iMessage, use BlueBubbles (recommended) - the BlueBubbles server runs on any Mac, and the Gateway can run on Linux or elsewhere. If you want other macOS-only tools, run the Gateway on a Mac or pair a macOS node.
 
-Docs: [BlueBubbles](/channels/bluebubbles), [Nodes](/nodes), [Mac remote mode](/platforms/mac/remote).
+Docs: [Nodes](/nodes), [Mac remote mode](/platforms/mac/remote).
 
 ### Do I need a Mac mini for iMessage support
 
 You need **some macOS device** signed into Messages. It does **not** have to be a Mac mini -
-any Mac works. **Use [BlueBubbles](/channels/bluebubbles)** (recommended) for iMessage - the BlueBubbles server runs on macOS, while the Gateway can run on Linux or elsewhere.
+any Mac works. **Use BlueBubbles** (recommended) for iMessage - the BlueBubbles server runs on macOS, while the Gateway can run on Linux or elsewhere.
 
 Common setups:
 
 - Run the Gateway on Linux/VPS, and run the BlueBubbles server on any Mac signed into Messages.
 - Run everything on the Mac if you want the simplest single‑machine setup.
 
-Docs: [BlueBubbles](/channels/bluebubbles), [Nodes](/nodes),
+Docs: [Nodes](/nodes),
 [Mac remote mode](/platforms/mac/remote).
 
 ### If I buy a Mac mini to run Deneb can I connect it to my MacBook Pro
@@ -830,7 +830,7 @@ Common pattern:
 - MacBook Pro runs the macOS app or a node host and pairs to the Gateway.
 - Use `deneb nodes status` / `deneb nodes list` to see it.
 
-Docs: [Nodes](/nodes), [Nodes CLI](/cli/nodes).
+Docs: [Nodes](/nodes).
 
 ### Can I use Bun
 
@@ -862,7 +862,7 @@ See [/channels/telegram](/channels/telegram#access-control-dms--groups).
 
 ### Can multiple people use one WhatsApp number with different Deneb instances
 
-Yes, via **multi-agent routing**. Bind each sender's WhatsApp **DM** (peer `kind: "direct"`, sender E.164 like `+15551234567`) to a different `agentId`, so each person gets their own workspace and session store. Replies still come from the **same WhatsApp account**, and DM access control (`channels.whatsapp.dmPolicy` / `channels.whatsapp.allowFrom`) is global per WhatsApp account. See [Multi-Agent Routing](/concepts/multi-agent) and [WhatsApp](/channels/whatsapp).
+Yes, via **multi-agent routing**. Bind each sender's WhatsApp **DM** (peer `kind: "direct"`, sender E.164 like `+15551234567`) to a different `agentId`, so each person gets their own workspace and session store. Replies still come from the **same WhatsApp account**, and DM access control (`channels.whatsapp.dmPolicy` / `channels.whatsapp.allowFrom`) is global per WhatsApp account. See [Multi-Agent Routing](/concepts/multi-agent).
 
 ### Can I run a fast chat agent and an Opus for coding agent
 
@@ -1104,7 +1104,7 @@ Required config:
 - Discord overrides: `channels.discord.threadBindings.enabled`, `channels.discord.threadBindings.idleHours`, `channels.discord.threadBindings.maxAgeHours`.
 - Auto-bind on spawn: set `channels.discord.threadBindings.spawnSubagentSessions: true`.
 
-Docs: [Sub-agents](/tools/subagents), [Discord](/channels/discord), [Configuration Reference](/gateway/configuration-reference), [Slash commands](/tools/slash-commands).
+Docs: [Sub-agents](/tools/subagents), [Configuration Reference](/gateway/configuration-reference), [Slash commands](/tools/slash-commands).
 
 ### Cron or reminders do not fire What should I check
 
@@ -1657,7 +1657,7 @@ deneb agent --message "Hello from local bot" --deliver --channel telegram --repl
 Tip: add a guardrail so the two bots do not loop endlessly (mention-only, channel
 allowlists, or a "do not reply to bot messages" rule).
 
-Docs: [Remote access](/gateway/remote), [Agent CLI](/cli/agent), [Agent send](/tools/agent-send).
+Docs: [Remote access](/gateway/remote), [Agent send](/tools/agent-send).
 
 ### Do I need separate VPSes for multiple agents
 
@@ -1684,7 +1684,7 @@ setup is an always-on host plus your laptop as a node.
 SSH is fine for ad-hoc shell access, but nodes are simpler for ongoing agent workflows and
 device automation.
 
-Docs: [Nodes](/nodes), [Nodes CLI](/cli/nodes), [Browser](/tools/browser).
+Docs: [Nodes](/nodes), [Browser](/tools/browser).
 
 ### Should I install on a second laptop or just add a node
 
@@ -1694,13 +1694,13 @@ currently macOS-only, but we plan to extend them to other OSes.
 
 Install a second Gateway only when you need **hard isolation** or two fully separate bots.
 
-Docs: [Nodes](/nodes), [Nodes CLI](/cli/nodes), [Multiple gateways](/gateway/multiple-gateways).
+Docs: [Nodes](/nodes), [Multiple gateways](/gateway/multiple-gateways).
 
 ### Do nodes run a gateway service
 
 No. Only **one gateway** should run per host unless you intentionally run isolated profiles (see [Multiple gateways](/gateway/multiple-gateways)). Nodes are peripherals that connect
 to the gateway (iOS/Android nodes, or macOS "node mode" in the menubar app). For headless node
-hosts and CLI control, see [Node host CLI](/cli/node).
+hosts and CLI control, see `deneb node`.
 
 A full restart is required for `gateway`, `discovery`, and `canvasHost` changes.
 
@@ -1725,7 +1725,7 @@ Avoid it:
 - Use `deneb config set` for small changes.
 - Use `deneb configure` for interactive edits.
 
-Docs: [Config](/cli/config), [Configure](/cli/configure), [Doctor](/gateway/doctor).
+Docs: [Doctor](/gateway/doctor).
 
 ### Minimal sane config for a first install
 
@@ -1885,7 +1885,7 @@ less efficient than using one bot with separate sessions. The typical model we
 envision is one bot you talk to, with different sessions for parallel work. That
 bot can also spawn sub-agents when needed.
 
-Docs: [Multi-agent routing](/concepts/multi-agent), [Sub-agents](/tools/subagents), [Agents CLI](/cli/agents).
+Docs: [Multi-agent routing](/concepts/multi-agent), [Sub-agents](/tools/subagents).
 
 ### Why did context get truncated midtask How do I prevent it
 
@@ -2017,7 +2017,7 @@ Option 2 (if already configured/allowlisted): list groups from config:
 deneb directory groups list --channel whatsapp
 ```
 
-Docs: [WhatsApp](/channels/whatsapp), [Directory](/cli/directory), [Logs](/cli/logs).
+Docs: WhatsApp.
 
 ### Why does Deneb not reply in a group
 
@@ -2062,7 +2062,7 @@ Best-practice setup:
 - Slack channel(s) bound to those agents.
 - Local browser via Chrome MCP or a node when needed.
 
-Docs: [Multi-Agent Routing](/concepts/multi-agent), [Slack](/channels/slack),
+Docs: [Multi-Agent Routing](/concepts/multi-agent),
 [Browser](/tools/browser), [Nodes](/nodes).
 
 ## Models: defaults, selection, aliases, switching
@@ -2136,7 +2136,7 @@ Safe options:
 Avoid `config.apply` with a partial object unless you intend to replace the whole config.
 If you did overwrite config, restore from backup or re-run `deneb doctor` to repair.
 
-Docs: [Models](/concepts/models), [Configure](/cli/configure), [Config](/cli/config), [Doctor](/gateway/doctor).
+Docs: [Models](/concepts/models), [Doctor](/gateway/doctor).
 
 ### What do Deneb, Flawd, and Krill use for models
 

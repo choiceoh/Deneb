@@ -38,7 +38,7 @@ Healthy baseline:
 | Group messages ignored          | Check `requireMention` + mention patterns in config | Mention the bot or relax mention policy for that group. |
 | Random disconnect/relogin loops | `deneb channels status --probe` + logs              | Re-login and verify credentials directory is healthy.   |
 
-Full troubleshooting: [/channels/whatsapp#troubleshooting-quick](/channels/whatsapp#troubleshooting-quick)
+See also: `deneb channels status --probe` and `deneb logs --channel whatsapp`.
 
 ## Telegram
 
@@ -52,7 +52,7 @@ Full troubleshooting: [/channels/whatsapp#troubleshooting-quick](/channels/whats
 | `setMyCommands` rejected at startup | Inspect logs for `BOT_COMMANDS_TOO_MUCH`        | Reduce plugin/skill/custom Telegram commands or disable native menus.    |
 | Upgraded and allowlist blocks you   | `deneb security audit` and config allowlists    | Run `deneb doctor --fix` or replace `@username` with numeric sender IDs. |
 
-Full troubleshooting: [/channels/telegram#troubleshooting](/channels/telegram#troubleshooting)
+Full troubleshooting: [Telegram](/channels/telegram).
 
 ## Discord
 
@@ -64,7 +64,7 @@ Full troubleshooting: [/channels/telegram#troubleshooting](/channels/telegram#tr
 | Group messages ignored          | Check logs for mention gating drops | Mention bot or set guild/channel `requireMention: false`. |
 | DM replies missing              | `deneb pairing list discord`        | Approve DM pairing or adjust DM policy.                   |
 
-Full troubleshooting: [/channels/discord#troubleshooting](/channels/discord#troubleshooting)
+See also: `deneb channels status --probe` and `deneb logs --channel discord`.
 
 ## Slack
 
@@ -76,7 +76,7 @@ Full troubleshooting: [/channels/discord#troubleshooting](/channels/discord#trou
 | DMs blocked                            | `deneb pairing list slack`                | Approve pairing or relax DM policy.               |
 | Channel message ignored                | Check `groupPolicy` and channel allowlist | Allow the channel or switch policy to `open`.     |
 
-Full troubleshooting: [/channels/slack#troubleshooting](/channels/slack#troubleshooting)
+See also: `deneb channels status --probe` and `deneb logs --channel slack`.
 
 ## iMessage and BlueBubbles
 
@@ -90,8 +90,8 @@ Full troubleshooting: [/channels/slack#troubleshooting](/channels/slack#troubles
 
 Full troubleshooting:
 
-- [/channels/imessage#troubleshooting-macos-privacy-and-security-tcc](/channels/imessage#troubleshooting-macos-privacy-and-security-tcc)
-- [/channels/bluebubbles#troubleshooting](/channels/bluebubbles#troubleshooting)
+- Check macOS Privacy and Security (TCC) permissions for iMessage.
+- Check BlueBubbles server status and webhook configuration.
 
 ## Signal
 
@@ -103,7 +103,7 @@ Full troubleshooting:
 | DM blocked                      | `deneb pairing list signal`                | Approve sender or adjust DM policy.                      |
 | Group replies do not trigger    | Check group allowlist and mention patterns | Add sender/group or loosen gating.                       |
 
-Full troubleshooting: [/channels/signal#troubleshooting](/channels/signal#troubleshooting)
+See also: `deneb channels status --probe` and `deneb logs --channel signal`.
 
 ## Matrix
 
@@ -115,4 +115,4 @@ Full troubleshooting: [/channels/signal#troubleshooting](/channels/signal#troubl
 | DMs do not process                  | `deneb pairing list matrix`                  | Approve sender or adjust DM policy.             |
 | Encrypted rooms fail                | Verify crypto module and encryption settings | Enable encryption support and rejoin/sync room. |
 
-Full troubleshooting: [/channels/matrix#troubleshooting](/channels/matrix#troubleshooting)
+See also: `deneb channels status --probe` and `deneb logs --channel matrix`.

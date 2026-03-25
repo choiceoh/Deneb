@@ -52,7 +52,7 @@ Notes:
 - Local CLI onboarding writes `session.dmScope: "per-channel-peer"` by default when unset (existing explicit values are preserved).
 - For multi-account inboxes on the same channel, prefer `per-account-channel-peer`.
 - If the same person contacts you on multiple channels, use `session.identityLinks` to collapse their DM sessions into one canonical identity.
-- You can verify your DM settings with `deneb security audit` (see [security](/cli/security)).
+- You can verify your DM settings with `deneb security audit`.
 
 ## Gateway is the source of truth
 

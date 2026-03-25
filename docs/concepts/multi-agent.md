@@ -98,7 +98,7 @@ Create one account per agent on your preferred channels:
 deneb channels login --channel whatsapp --account work
 ```
 
-See channel guides: [Discord](/channels/discord), [Telegram](/channels/telegram), [WhatsApp](/channels/whatsapp).
+See channel guides: Discord, [Telegram](/channels/telegram), WhatsApp.
 
   </Step>
 
@@ -167,7 +167,7 @@ Example:
 Notes:
 
 - DM access control is **global per WhatsApp account** (pairing/allowlist), not per agent.
-- For shared groups, bind the group to one agent or use [Broadcast groups](/channels/broadcast-groups).
+- For shared groups, bind the group to one agent or use broadcast groups.
 
 ## Routing rules (how messages pick an agent)
 

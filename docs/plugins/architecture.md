@@ -70,7 +70,7 @@ registration behavior (not just static metadata):
   capabilities
 
 Use `deneb plugins inspect <id>` to see a plugin's shape and capability
-breakdown. See [CLI reference](/cli/plugins#inspect) for details.
+breakdown. Run `deneb plugins inspect <id> --help` for details.
 
 ### Legacy hooks
 
@@ -937,10 +937,6 @@ authoring plugins:
   `deneb/plugin-sdk/routing`,
   `deneb/plugin-sdk/runtime-store`, and
   `deneb/plugin-sdk/directory-runtime` for shared runtime/config helpers.
-- Narrow channel-core subpaths such as `deneb/plugin-sdk/discord-core`,
-  `deneb/plugin-sdk/telegram-core`, and `deneb/plugin-sdk/whatsapp-core`
-  for channel-specific primitives that should stay smaller than the full
-  channel helper barrels.
 - Bundled extension internals remain private. External plugins should use only
   `deneb/plugin-sdk/*` subpaths. Deneb core/test code may use the repo
   public entry points under `extensions/<id>/index.js`, `api.js`, `runtime-api.js`,
@@ -952,12 +948,6 @@ authoring plugins:
   `extensions/<id>/index.js` is the bundled plugin entry,
   and `extensions/<id>/setup-entry.js` is the setup plugin entry.
 - `deneb/plugin-sdk/telegram` for Telegram channel plugin types and shared channel-facing helpers. Built-in Telegram implementation internals stay private to the bundled extension.
-- `deneb/plugin-sdk/discord` for Discord channel plugin types and shared channel-facing helpers. Built-in Discord implementation internals stay private to the bundled extension.
-- `deneb/plugin-sdk/slack` for Slack channel plugin types and shared channel-facing helpers. Built-in Slack implementation internals stay private to the bundled extension.
-- `deneb/plugin-sdk/imessage` for iMessage channel plugin types and shared channel-facing helpers. Built-in iMessage implementation internals stay private to the bundled extension.
-- `deneb/plugin-sdk/whatsapp` for WhatsApp channel plugin types and shared channel-facing helpers. Built-in WhatsApp implementation internals stay private to the bundled extension.
-- `deneb/plugin-sdk/bluebubbles` remains public because it carries a small
-  focused helper surface that is shared intentionally.
 
 Compatibility note:
 

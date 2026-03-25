@@ -283,4 +283,4 @@ deneb cron add \
 
 - [Heartbeat](/gateway/heartbeat) - full heartbeat configuration
 - [Cron jobs](/automation/cron-jobs) - full cron CLI and API reference
-- [System](/cli/system) - system events + heartbeat controls
+- `deneb system` - system events + heartbeat controls

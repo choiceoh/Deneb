@@ -50,8 +50,7 @@ deneb devices approve <requestId>
 ```
 
 Once approved, the device is remembered and won't require re-approval unless
-you revoke it with `deneb devices revoke --device <id> --role <role>`. See
-[Devices CLI](/cli/devices) for token rotation and revocation.
+you revoke it with `deneb devices revoke --device <id> --role <role>`.
 
 **Notes:**
 

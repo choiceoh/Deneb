@@ -495,7 +495,6 @@ Some SecretInput unions are easier to configure in raw editor mode than in form 
 
 ## Related docs
 
-- CLI commands: [secrets](/cli/secrets)
 - Plan contract details: [Secrets Apply Plan Contract](/gateway/secrets-plan-contract)
 - Credential surface: [SecretRef Credential Surface](/reference/secretref-credential-surface)
 - Auth setup: [Authentication](/gateway/authentication)

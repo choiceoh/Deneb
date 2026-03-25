@@ -253,7 +253,7 @@ must advertise `system.execApprovals.get/set` (macOS app or headless node host).
 If a node does not advertise exec approvals yet, edit its local
 `~/.deneb/exec-approvals.json` directly.
 
-CLI: `deneb approvals` supports gateway or node editing (see [Approvals CLI](/cli/approvals)).
+CLI: `deneb approvals` supports gateway or node editing.
 
 ## Approval flow
 
@@ -354,7 +354,7 @@ topics, Deneb preserves the topic for the approval prompt and the post-approval 
 
 See:
 
-- [Discord](/channels/discord#exec-approvals-in-discord)
+- Discord
 - [Telegram](/channels/telegram#exec-approvals-in-telegram)
 
 ### macOS IPC flow

@@ -23,8 +23,8 @@ devices across localhost, LAN, and tailnet.
 
 - [Pairing overview (DM + nodes)](/channels/pairing)
 - [Gateway-owned node pairing](/gateway/pairing)
-- [Devices CLI (pairing + token rotation)](/cli/devices)
-- [Pairing CLI (DM approvals)](/cli/pairing)
+- `deneb devices` (pairing + token rotation)
+- `deneb pairing` (DM approvals)
 
 Local trust:
 

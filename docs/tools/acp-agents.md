@@ -514,12 +514,6 @@ deneb plugins install acpx
 deneb config set plugins.entries.acpx.enabled true
 ```
 
-Local workspace install during development:
-
-```bash
-deneb plugins install ./extensions/acpx
-```
-
 Then verify backend health:
 
 ```text
@@ -530,7 +524,7 @@ Then verify backend health:
 
 By default, the acpx plugin (published as `@deneb/acpx`) uses the plugin-local pinned binary:
 
-1. Command defaults to `extensions/acpx/node_modules/.bin/acpx`.
+1. Command defaults to the plugin-local pinned binary.
 2. Expected version defaults to the extension pin.
 3. Startup registers ACP backend immediately as not-ready.
 4. A background ensure job verifies `acpx --version`.

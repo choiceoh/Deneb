@@ -212,4 +212,4 @@ Notes:
 
 - Onboarding hub: [Onboarding (CLI)](/start/wizard)
 - Full reference: [CLI Setup Reference](/start/wizard-cli-reference)
-- Command reference: [`deneb onboard`](/cli/onboard)
+- Command reference: `deneb onboard --help`
