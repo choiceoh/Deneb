@@ -35,7 +35,7 @@ const (
 
 // runDeps holds the dependencies the async run needs from the Handler.
 // Optional fields (may be nil): transcript, tools, authManager,
-// broadcast, broadcastRaw, jobTracker. Required: sessions, logger.
+// broadcast, broadcastRaw, jobTracker, replyFunc. Required: sessions, logger.
 type runDeps struct {
 	sessions     *session.Manager       // required
 	llmClient    *llm.Client            // optional; resolved from authManager if nil
@@ -45,6 +45,7 @@ type runDeps struct {
 	broadcast    BroadcastFunc          // optional
 	broadcastRaw BroadcastRawFunc       // optional
 	jobTracker   *agent.JobTracker      // optional
+	replyFunc    ReplyFunc              // optional; delivers response to originating channel
 	logger       *slog.Logger           // required (defaults to slog.Default)
 
 	contextCfg    ContextConfig
@@ -256,6 +257,13 @@ func handleRunSuccess(
 
 	if broadcaster != nil {
 		broadcaster.EmitComplete(result.Text, result.Usage)
+	}
+
+	// Deliver response back to the originating channel (e.g., Telegram).
+	if deps.replyFunc != nil && params.Delivery != nil && result.Text != "" {
+		if err := deps.replyFunc(context.Background(), params.Delivery, result.Text); err != nil {
+			logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
+		}
 	}
 
 	finishRun(deps, params, session.PhaseEnd, "completed", "done", now)

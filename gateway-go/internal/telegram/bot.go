@@ -74,6 +74,13 @@ func (b *Bot) Stop() {
 	}
 }
 
+// SetHandler replaces the update handler. Safe to call while polling.
+func (b *Bot) SetHandler(h UpdateHandler) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.handler = h
+}
+
 // IsRunning returns whether the bot is currently polling.
 func (b *Bot) IsRunning() bool {
 	b.mu.Lock()
