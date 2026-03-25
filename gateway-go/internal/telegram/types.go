@@ -6,12 +6,33 @@ package telegram
 
 import "encoding/json"
 
+// --- Telegram Bot API constants ---
+
+const (
+	// TextChunkLimit is the conservative chunk size for outbound messages.
+	// Telegram's hard limit is 4096 chars; we leave headroom for HTML overhead.
+	TextChunkLimit = 4000
+
+	// MaxCallbackData is the maximum size of callback_data in bytes.
+	MaxCallbackData = 64
+
+	// DefaultPollTimeout is the long-polling timeout in seconds.
+	DefaultPollTimeout = 30
+
+	// MaxDedupeEntries is the maximum number of cached update IDs for dedup.
+	MaxDedupeEntries = 2000
+
+	// DedupeTTLMs is the TTL for deduplication entries in milliseconds (5 min).
+	DedupeTTLMs = 300_000
+)
+
 // Update represents an incoming update from Telegram.
 type Update struct {
-	UpdateID          int64    `json:"update_id"`
-	Message           *Message `json:"message,omitempty"`
-	EditedMessage     *Message `json:"edited_message,omitempty"`
-	CallbackQuery     *CallbackQuery `json:"callback_query,omitempty"`
+	UpdateID      int64          `json:"update_id"`
+	Message       *Message       `json:"message,omitempty"`
+	EditedMessage *Message       `json:"edited_message,omitempty"`
+	ChannelPost   *Message       `json:"channel_post,omitempty"`
+	CallbackQuery *CallbackQuery `json:"callback_query,omitempty"`
 }
 
 // Message represents a Telegram message.
@@ -28,6 +49,9 @@ type Message struct {
 	Video           *Video           `json:"video,omitempty"`
 	Audio           *Audio           `json:"audio,omitempty"`
 	Voice           *Voice           `json:"voice,omitempty"`
+	VideoNote       *VideoNote       `json:"video_note,omitempty"`
+	Sticker         *Sticker         `json:"sticker,omitempty"`
+	Animation       *Animation       `json:"animation,omitempty"`
 	Caption         string           `json:"caption,omitempty"`
 	CaptionEntities []MessageEntity  `json:"caption_entities,omitempty"`
 	MediaGroupID    string           `json:"media_group_id,omitempty"`
@@ -117,6 +141,44 @@ type Voice struct {
 	Duration     int    `json:"duration"`
 	MimeType     string `json:"mime_type,omitempty"`
 	FileSize     int64  `json:"file_size,omitempty"`
+}
+
+// VideoNote represents a video message (round video).
+type VideoNote struct {
+	FileID       string `json:"file_id"`
+	FileUniqueID string `json:"file_unique_id"`
+	Length       int    `json:"length"`
+	Duration     int    `json:"duration"`
+	FileSize     int64  `json:"file_size,omitempty"`
+}
+
+// Sticker represents a sticker.
+type Sticker struct {
+	FileID       string `json:"file_id"`
+	FileUniqueID string `json:"file_unique_id"`
+	Type         string `json:"type"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	Emoji        string `json:"emoji,omitempty"`
+	SetName      string `json:"set_name,omitempty"`
+	FileSize     int64  `json:"file_size,omitempty"`
+}
+
+// Animation represents an animation (GIF or H.264/MPEG-4 AVC without sound).
+type Animation struct {
+	FileID       string `json:"file_id"`
+	FileUniqueID string `json:"file_unique_id"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	Duration     int    `json:"duration"`
+	FileName     string `json:"file_name,omitempty"`
+	MimeType     string `json:"mime_type,omitempty"`
+	FileSize     int64  `json:"file_size,omitempty"`
+}
+
+// ForumTopic represents a forum topic in a supergroup.
+type ForumTopic struct {
+	Name string `json:"name"`
 }
 
 // CallbackQuery represents an incoming callback query from inline keyboard.

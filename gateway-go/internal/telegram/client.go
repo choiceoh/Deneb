@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -147,6 +148,8 @@ func (c *Client) Upload(ctx context.Context, method string, fieldName string, fi
 	return apiResp.Result, nil
 }
 
+// --- Convenience methods ---
+
 // GetMe calls the getMe API method to verify the bot token.
 func (c *Client) GetMe(ctx context.Context) (*User, error) {
 	result, err := c.Call(ctx, "getMe", nil)
@@ -158,6 +161,61 @@ func (c *Client) GetMe(ctx context.Context) (*User, error) {
 		return nil, fmt.Errorf("decode getMe: %w", err)
 	}
 	return &user, nil
+}
+
+// GetUpdates fetches incoming updates using long polling.
+func (c *Client) GetUpdates(ctx context.Context, offset int64, timeout int) ([]Update, error) {
+	params := map[string]any{
+		"offset":  offset,
+		"timeout": timeout,
+		"allowed_updates": []string{
+			"message", "edited_message", "channel_post",
+			"callback_query", "message_reaction",
+		},
+	}
+	// Long polling needs generous deadline.
+	pollCtx := ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		pollCtx, cancel = context.WithTimeout(ctx, time.Duration(timeout)*time.Second+10*time.Second)
+		defer cancel()
+	}
+	result, err := c.Call(pollCtx, "getUpdates", params)
+	if err != nil {
+		return nil, err
+	}
+	var updates []Update
+	if err := json.Unmarshal(result, &updates); err != nil {
+		return nil, fmt.Errorf("decode getUpdates: %w", err)
+	}
+	return updates, nil
+}
+
+// SendChatAction sends a chat action (e.g. "typing").
+func (c *Client) SendChatAction(ctx context.Context, chatID int64, action string) error {
+	_, err := c.Call(ctx, "sendChatAction", map[string]any{
+		"chat_id": chatID,
+		"action":  action,
+	})
+	return err
+}
+
+// AnswerCallbackQuery sends a response to a callback query.
+func (c *Client) AnswerCallbackQuery(ctx context.Context, callbackQueryID, text string) error {
+	_, err := c.Call(ctx, "answerCallbackQuery", map[string]any{
+		"callback_query_id": callbackQueryID,
+		"text":              text,
+	})
+	return err
+}
+
+// DeleteMessage deletes a message.
+func (c *Client) DeleteMessage(ctx context.Context, chatID, messageID int64) error {
+	_, err := c.Call(ctx, "deleteMessage", map[string]any{
+		"chat_id":    chatID,
+		"message_id": messageID,
+	})
+	return err
 }
 
 // APIError represents a Telegram Bot API error response.
@@ -174,6 +232,23 @@ func (e *APIError) Error() string {
 // IsRetryable returns true if the error suggests the request can be retried.
 func (e *APIError) IsRetryable() bool {
 	return e.Code == 429 || e.Code >= 500
+}
+
+// IsParseError returns true if the error is an HTML/entity parsing failure.
+func (e *APIError) IsParseError() bool {
+	return e.Code == 400 && (strings.Contains(e.Description, "can't parse entities") ||
+		strings.Contains(e.Description, "parse entities") ||
+		strings.Contains(e.Description, "find end of the entity"))
+}
+
+// IsThreadNotFound returns true if the error is about a missing message thread.
+func (e *APIError) IsThreadNotFound() bool {
+	return e.Code == 400 && strings.Contains(e.Description, "message thread not found")
+}
+
+// IsRateLimited returns true if the error is a rate limit (429).
+func (e *APIError) IsRateLimited() bool {
+	return e.Code == 429
 }
 
 func retryAfterFromParams(p *ResponseParameters) int {

@@ -2,8 +2,8 @@ package telegram
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
+	"math/rand/v2"
 	"sync"
 	"time"
 )
@@ -25,6 +25,10 @@ type Bot struct {
 	stopFunc  context.CancelFunc
 	messages  []*Message // buffered inbound messages for poll RPC
 	msgMu     sync.Mutex
+
+	// Update deduplication.
+	seen   map[int64]time.Time
+	seenMu sync.Mutex
 }
 
 // NewBot creates a new bot instance.
@@ -34,6 +38,7 @@ func NewBot(client *Client, config *Config, handler UpdateHandler, logger *slog.
 		config:  config,
 		handler: handler,
 		logger:  logger,
+		seen:    make(map[int64]time.Time),
 	}
 }
 
@@ -86,85 +91,141 @@ func (b *Bot) DrainMessages() []*Message {
 }
 
 func (b *Bot) pollLoop(ctx context.Context) error {
-	pollingTimeout := 30 // seconds, for long polling
-	backoff := time.Second
+	backoff := &ExponentialBackoff{
+		Initial: 1 * time.Second,
+		Max:     30 * time.Second,
+		Factor:  1.8,
+		Jitter:  0.25,
+	}
 
 	for {
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			b.logger.Info("telegram bot polling stopped")
 			return ctx.Err()
-		default:
 		}
 
-		updates, err := b.getUpdates(ctx, pollingTimeout)
+		updates, err := b.client.GetUpdates(ctx, b.offset, DefaultPollTimeout)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			b.logger.Warn("telegram getUpdates error", "error", err, "backoff", backoff)
+			b.logger.Warn("telegram getUpdates error", "error", err, "backoff", backoff.Current())
 
-			// Exponential backoff on error, max 30s.
-			select {
-			case <-time.After(backoff):
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-			if backoff < 30*time.Second {
-				backoff *= 2
+			if waitErr := backoff.Wait(ctx); waitErr != nil {
+				return waitErr
 			}
 			continue
 		}
 
-		backoff = time.Second // Reset backoff on success.
+		backoff.Reset()
 
-		for _, update := range updates {
-			if update.UpdateID >= b.offset {
-				b.offset = update.UpdateID + 1
+		for i := range updates {
+			u := &updates[i]
+			if u.UpdateID >= b.offset {
+				b.offset = u.UpdateID + 1
 			}
 
+			// Deduplication.
+			if b.isDuplicate(u.UpdateID) {
+				continue
+			}
+			b.markSeen(u.UpdateID)
+
 			// Buffer message for poll RPC.
-			if update.Message != nil {
-				if b.isAllowed(update.Message) {
-					b.msgMu.Lock()
-					b.messages = append(b.messages, update.Message)
-					// Cap buffer to prevent unbounded growth.
-					if len(b.messages) > 1000 {
-						b.messages = b.messages[len(b.messages)-500:]
-					}
-					b.msgMu.Unlock()
+			if u.Message != nil && b.isAllowed(u.Message) {
+				b.msgMu.Lock()
+				b.messages = append(b.messages, u.Message)
+				if len(b.messages) > 1000 {
+					b.messages = b.messages[len(b.messages)-500:]
 				}
+				b.msgMu.Unlock()
 			}
 
 			// Dispatch to handler.
 			if b.handler != nil {
-				b.handler(ctx, &update)
+				b.handler(ctx, u)
 			}
+		}
+
+		b.cleanupSeen()
+	}
+}
+
+// --- Update deduplication ---
+
+func (b *Bot) isDuplicate(updateID int64) bool {
+	b.seenMu.Lock()
+	defer b.seenMu.Unlock()
+	_, exists := b.seen[updateID]
+	return exists
+}
+
+func (b *Bot) markSeen(updateID int64) {
+	b.seenMu.Lock()
+	defer b.seenMu.Unlock()
+	b.seen[updateID] = time.Now()
+}
+
+func (b *Bot) cleanupSeen() {
+	b.seenMu.Lock()
+	defer b.seenMu.Unlock()
+	if len(b.seen) < MaxDedupeEntries/2 {
+		return
+	}
+	cutoff := time.Now().Add(-time.Duration(DedupeTTLMs) * time.Millisecond)
+	for id, ts := range b.seen {
+		if ts.Before(cutoff) {
+			delete(b.seen, id)
 		}
 	}
 }
 
-func (b *Bot) getUpdates(ctx context.Context, timeout int) ([]Update, error) {
-	params := map[string]any{
-		"offset":  b.offset,
-		"timeout": timeout,
-		"allowed_updates": []string{
-			"message",
-			"edited_message",
-			"callback_query",
-		},
+// --- Exponential backoff ---
+
+// ExponentialBackoff implements exponential backoff with jitter.
+// Matches the TypeScript TELEGRAM_POLL_RESTART_POLICY.
+type ExponentialBackoff struct {
+	Initial time.Duration
+	Max     time.Duration
+	Factor  float64
+	Jitter  float64
+	current time.Duration
+}
+
+// Current returns the current backoff duration.
+func (eb *ExponentialBackoff) Current() time.Duration {
+	if eb.current < eb.Initial {
+		return eb.Initial
+	}
+	return eb.current
+}
+
+// Wait sleeps for the current backoff duration (with jitter), then increases it.
+func (eb *ExponentialBackoff) Wait(ctx context.Context) error {
+	d := eb.Current()
+	jitterRange := float64(d) * eb.Jitter
+	jitter := (rand.Float64()*2 - 1) * jitterRange
+	d = time.Duration(float64(d) + jitter)
+	if d < 0 {
+		d = eb.Initial
 	}
 
-	result, err := b.client.Call(ctx, "getUpdates", params)
-	if err != nil {
-		return nil, err
+	eb.current = time.Duration(float64(eb.Current()) * eb.Factor)
+	if eb.current > eb.Max {
+		eb.current = eb.Max
 	}
 
-	var updates []Update
-	if err := json.Unmarshal(result, &updates); err != nil {
-		return nil, err
+	select {
+	case <-time.After(d):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	return updates, nil
+}
+
+// Reset resets the backoff to its initial value.
+func (eb *ExponentialBackoff) Reset() {
+	eb.current = 0
 }
 
 // isAllowed checks if the message sender is in the allow list.
