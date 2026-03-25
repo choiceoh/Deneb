@@ -95,6 +95,11 @@ func toolsExecLocal(ctx context.Context, req *protocol.RequestFrame, deps ToolDe
 	timeoutMs := int64(30000)
 	if t, ok := args["timeoutMs"].(float64); ok && t > 0 {
 		timeoutMs = int64(t)
+		// Cap at 5 minutes to prevent unbounded execution.
+		const maxTimeoutMs = int64(5 * 60 * 1000)
+		if timeoutMs > maxTimeoutMs {
+			timeoutMs = maxTimeoutMs
+		}
 	}
 
 	workDir, _ := args["workingDir"].(string)

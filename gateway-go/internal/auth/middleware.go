@@ -4,6 +4,7 @@
 package auth
 
 import (
+	"crypto/subtle"
 	"net"
 	"net/http"
 	"strings"
@@ -254,14 +255,8 @@ func isLoopback(ip string) bool {
 	return parsed.IsLoopback()
 }
 
-// constantTimeEqual compares two strings in constant time.
+// constantTimeEqual compares two strings in constant time using crypto/subtle.
 func constantTimeEqual(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	var result byte
-	for i := 0; i < len(a); i++ {
-		result |= a[i] ^ b[i]
-	}
-	return result == 0
+	// subtle.ConstantTimeCompare handles length differences in constant time.
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }

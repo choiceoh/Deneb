@@ -94,6 +94,11 @@ func cronAdd(deps CronAdvancedDeps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "name, schedule, and command are required"))
 		}
+		const maxCommandLen = 4096
+		if len(p.Command) > maxCommandLen {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrValidationFailed, "command exceeds maximum length of 4096 characters"))
+		}
 
 		schedule, err := cron.ParseSchedule(p.Schedule)
 		if err != nil {
@@ -245,7 +250,17 @@ func cronRuns(deps CronAdvancedDeps) HandlerFunc {
 			id = p.JobID
 		}
 
-		runs := deps.Cron.Runs(id, p.Limit, p.Offset)
+		// Cap pagination to prevent pathologically large queries.
+		limit := p.Limit
+		if limit <= 0 || limit > 1000 {
+			limit = 100
+		}
+		offset := p.Offset
+		if offset < 0 {
+			offset = 0
+		}
+
+		runs := deps.Cron.Runs(id, limit, offset)
 
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"runs":  runs,

@@ -138,7 +138,8 @@ func (b *Broadcaster) Subscribe(sub Subscriber, filter Filter) {
 	b.subscribers[sub.ID()] = subscriberEntry{sub: sub, filter: filter}
 }
 
-// Unsubscribe removes a subscriber by ID and cleans up all subscriptions.
+// Unsubscribe removes a subscriber by ID and cleans up all subscriptions
+// including session events, session message events, and tool event recipients.
 func (b *Broadcaster) Unsubscribe(id string) {
 	b.mu.Lock()
 	delete(b.subscribers, id)
@@ -153,6 +154,15 @@ func (b *Broadcaster) Unsubscribe(id string) {
 		}
 	}
 	b.sessionSubMu.Unlock()
+
+	// Clean up tool event recipients pointing to this connection.
+	b.toolRecipientMu.Lock()
+	for runID, connID := range b.toolRecipients {
+		if connID == id {
+			delete(b.toolRecipients, runID)
+		}
+	}
+	b.toolRecipientMu.Unlock()
 }
 
 // Count returns the number of active subscribers.
@@ -235,7 +245,7 @@ func (b *Broadcaster) BroadcastToConnIDs(event string, payload any, connIDs map[
 }
 
 // BroadcastRaw sends pre-serialized event data to all authenticated subscribers
-// that accept the given event name.
+// that accept the given event name. Slow consumers (buffered > 50 MB) are skipped.
 func (b *Broadcaster) BroadcastRaw(event string, data []byte) (sent int) {
 	entries := b.snapshotSubscribers()
 
@@ -247,6 +257,17 @@ func (b *Broadcaster) BroadcastRaw(event string, data []byte) (sent int) {
 			continue
 		}
 		if !hasEventScope(entry.sub, event) {
+			continue
+		}
+		// Slow consumer detection: skip subscribers with excessive buffered data.
+		if entry.sub.BufferedAmount() > maxBufferedBytes {
+			if b.logger != nil {
+				b.logger.Warn("dropping slow consumer (raw broadcast)",
+					"connId", entry.sub.ID(),
+					"buffered", entry.sub.BufferedAmount(),
+					"event", event,
+				)
+			}
 			continue
 		}
 		if err := entry.sub.SendEvent(data); err == nil {
