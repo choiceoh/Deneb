@@ -213,8 +213,28 @@ var methodScopes = map[string]auth.Scope{
 	"markdown.to_ir":         auth.ScopeRead,
 	"markdown.detect_fences": auth.ScopeRead,
 
+	// --- Protocol validation (read) ---
+	"protocol.validate_params": auth.ScopeRead,
+
 	// --- Compaction (write) ---
-	"compaction.evaluate": auth.ScopeWrite,
+	"compaction.evaluate":    auth.ScopeWrite,
+	"compaction.sweep.new":   auth.ScopeWrite,
+	"compaction.sweep.start": auth.ScopeWrite,
+	"compaction.sweep.step":  auth.ScopeWrite,
+	"compaction.sweep.drop":  auth.ScopeWrite,
+
+	// --- Context engine (write) ---
+	"context.assembly.new":   auth.ScopeWrite,
+	"context.assembly.start": auth.ScopeWrite,
+	"context.assembly.step":  auth.ScopeWrite,
+	"context.expand.new":     auth.ScopeWrite,
+	"context.expand.start":   auth.ScopeWrite,
+	"context.expand.step":    auth.ScopeWrite,
+	"context.engine.drop":    auth.ScopeWrite,
+
+	// --- ML (read) ---
+	"ml.embed":  auth.ScopeRead,
+	"ml.rerank": auth.ScopeRead,
 
 	// --- Providers (read) ---
 	"providers.list":    auth.ScopeRead,
@@ -226,6 +246,8 @@ var methodScopes = map[string]auth.Scope{
 	"vega.add-action":  auth.ScopeWrite,
 	"vega.mail-append": auth.ScopeWrite,
 	"vega.version":     auth.ScopeRead,
+	"vega.ffi.execute": auth.ScopeWrite,
+	"vega.ffi.search":  auth.ScopeRead,
 
 	// --- Config (admin) ---
 	"config.get":           auth.ScopeAdmin,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -33,6 +34,42 @@ func RegisterVegaMethods(d *Dispatcher, deps VegaDeps) {
 		m := method
 		t := tool
 		d.Register(m, vegaToolHandler(deps.Client, t))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Vega FFI RPC methods (Rust FFI — Phase 0 scaffolding)
+// ---------------------------------------------------------------------------
+
+func vegaFFIExecute() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if len(req.Params) == 0 {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "params required"))
+		}
+		result, err := ffi.VegaExecute(string(req.Params))
+		if err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrDependencyFailed, err.Error()))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
+		return resp
+	}
+}
+
+func vegaFFISearch() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if len(req.Params) == 0 {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "params required"))
+		}
+		result, err := ffi.VegaSearch(string(req.Params))
+		if err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrDependencyFailed, err.Error()))
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
+		return resp
 	}
 }
 

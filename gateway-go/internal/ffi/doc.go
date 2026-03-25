@@ -44,6 +44,14 @@
 //   - CompactionEvaluate: Compaction threshold evaluation
 //   - CompactionSweepNew/Start/Step/Drop: Sweep state machine
 //
+// Vega FFI (Phase 0 scaffolding):
+//   - VegaExecute: Execute a Vega command
+//   - VegaSearch: Execute a Vega search query
+//
+// ML FFI (Phase 0 scaffolding):
+//   - MLEmbed: Generate text embeddings
+//   - MLRerank: Rerank documents against a query
+//
 // Build requirements:
 //   - Rust toolchain with cargo
 //   - Run `make rust` first to produce the static library

@@ -78,8 +78,32 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 	d.Register("markdown.to_ir", markdownToIR())
 	d.Register("markdown.detect_fences", markdownDetectFences())
 
+	// Protocol parameter validation (Rust schema validators).
+	d.Register("protocol.validate_params", protocolValidateParams())
+
 	// Compaction methods (Rust context compression engine).
 	d.Register("compaction.evaluate", compactionEvaluate())
+	d.Register("compaction.sweep.new", compactionSweepNew())
+	d.Register("compaction.sweep.start", compactionSweepStart())
+	d.Register("compaction.sweep.step", compactionSweepStep())
+	d.Register("compaction.sweep.drop", compactionSweepDrop())
+
+	// Context engine methods (Rust FFI state-machine based).
+	d.Register("context.assembly.new", contextAssemblyNew())
+	d.Register("context.assembly.start", contextAssemblyStart())
+	d.Register("context.assembly.step", contextAssemblyStep())
+	d.Register("context.expand.new", contextExpandNew())
+	d.Register("context.expand.start", contextExpandStart())
+	d.Register("context.expand.step", contextExpandStep())
+	d.Register("context.engine.drop", contextEngineDrop())
+
+	// Vega FFI methods (Rust Phase 0 scaffolding).
+	d.Register("vega.ffi.execute", vegaFFIExecute())
+	d.Register("vega.ffi.search", vegaFFISearch())
+
+	// ML methods (Rust Phase 0 scaffolding).
+	d.Register("ml.embed", mlEmbed())
+	d.Register("ml.rerank", mlRerank())
 }
 
 func healthCheck(deps Deps) HandlerFunc {
@@ -593,30 +617,41 @@ func markdownDetectFences() HandlerFunc {
 }
 
 // ---------------------------------------------------------------------------
-// Compaction RPC methods (Rust context compression engine)
+// Protocol parameter validation RPC method
 // ---------------------------------------------------------------------------
 
-func compactionEvaluate() HandlerFunc {
+func protocolValidateParams() HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			Config       string `json:"config"`
-			StoredTokens uint64 `json:"stored_tokens"`
-			LiveTokens   uint64 `json:"live_tokens"`
-			TokenBudget  uint64 `json:"token_budget"`
+			Method string `json:"method"`
+			Params string `json:"params"`
 		}
 		if err := unmarshalParams(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
-		if p.Config == "" {
-			p.Config = `{"contextThreshold":0.75}`
+		if p.Method == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "method is required"))
 		}
-		result, err := ffi.CompactionEvaluate(p.Config, p.StoredTokens, p.LiveTokens, p.TokenBudget)
+		if p.Params == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "params is required"))
+		}
+		valid, errorsJSON, err := ffi.ValidateParams(p.Method, p.Params)
 		if err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, err.Error()))
+				protocol.ErrDependencyFailed, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
+		backend := "go-fallback"
+		if ffi.Available {
+			backend = "rust"
+		}
+		result := map[string]any{"valid": valid, "backend": backend}
+		if errorsJSON != nil {
+			result["errors"] = json.RawMessage(errorsJSON)
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, result)
 		return resp
 	}
 }
