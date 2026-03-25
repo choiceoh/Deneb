@@ -242,9 +242,7 @@ pub fn is_safe_url(url: &str) -> bool {
     }
 
     // Block private IPv4 ranges (10.x, 172.16-31.x, 192.168.x).
-    if host_normalized.starts_with("10.")
-        || host_normalized.starts_with("192.168.")
-    {
+    if host_normalized.starts_with("10.") || host_normalized.starts_with("192.168.") {
         return false;
     }
     if host_normalized.starts_with("172.") {

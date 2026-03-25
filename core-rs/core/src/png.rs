@@ -93,7 +93,10 @@ pub fn encode_png_rgba_impl(buffer: &[u8], width: u32, height: u32) -> Vec<u8> {
         Some(s) => s,
         None => return Vec::new(),
     };
-    let raw_len = match stride.checked_add(1).and_then(|s| s.checked_mul(height as usize)) {
+    let raw_len = match stride
+        .checked_add(1)
+        .and_then(|s| s.checked_mul(height as usize))
+    {
         Some(l) => l,
         None => return Vec::new(),
     };
