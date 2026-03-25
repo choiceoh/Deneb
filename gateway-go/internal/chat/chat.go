@@ -37,6 +37,13 @@ type BroadcastRawFunc func(event string, data []byte) int
 // Called with the delivery context (channel + recipient) and the response text.
 type ReplyFunc func(ctx context.Context, delivery *DeliveryContext, text string) error
 
+// ProviderConfig holds credentials and endpoint for an LLM provider.
+type ProviderConfig struct {
+	APIKey  string `json:"apiKey"`
+	BaseURL string `json:"baseUrl"`
+	API     string `json:"api"` // "anthropic" or "openai-completions" (default: inferred)
+}
+
 // DeliveryContext carries channel routing information for a chat message.
 type DeliveryContext struct {
 	Channel   string `json:"channel,omitempty"`
@@ -80,11 +87,12 @@ type Handler struct {
 	logger       *slog.Logger
 
 	// Native agent execution deps.
-	llmClient   *llm.Client
-	transcript  TranscriptStore
-	tools       *ToolRegistry
-	authManager *provider.AuthManager
-	jobTracker  *agent.JobTracker
+	llmClient       *llm.Client
+	transcript      TranscriptStore
+	tools           *ToolRegistry
+	authManager     *provider.AuthManager
+	jobTracker      *agent.JobTracker
+	providerConfigs map[string]ProviderConfig
 
 	// Agent run configuration.
 	contextCfg    ContextConfig
@@ -114,16 +122,17 @@ type HandlerConfig struct {
 	MaxMessageBytes int
 
 	// Native agent execution config.
-	LLMClient     *llm.Client
-	Transcript    TranscriptStore
-	Tools         *ToolRegistry
-	AuthManager   *provider.AuthManager
-	JobTracker    *agent.JobTracker
-	ContextCfg    ContextConfig
-	CompactionCfg CompactionConfig
-	DefaultModel  string
-	DefaultSystem string
-	MaxTokens     int
+	LLMClient       *llm.Client
+	Transcript      TranscriptStore
+	Tools           *ToolRegistry
+	AuthManager     *provider.AuthManager
+	JobTracker      *agent.JobTracker
+	ProviderConfigs map[string]ProviderConfig // provider ID → config
+	ContextCfg      ContextConfig
+	CompactionCfg   CompactionConfig
+	DefaultModel    string
+	DefaultSystem   string
+	MaxTokens       int
 }
 
 // DefaultHandlerConfig returns sensible defaults.
@@ -155,6 +164,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		tools:           cfg.Tools,
 		authManager:     cfg.AuthManager,
 		jobTracker:      cfg.JobTracker,
+		providerConfigs: cfg.ProviderConfigs,
 		contextCfg:      cfg.ContextCfg,
 		compactionCfg:   cfg.CompactionCfg,
 		defaultModel:    cfg.DefaultModel,
@@ -505,8 +515,9 @@ func (h *Handler) buildRunDeps() runDeps {
 		broadcast:     h.broadcast,
 		broadcastRaw:  h.broadcastRaw,
 		jobTracker:    h.jobTracker,
-		replyFunc:     h.replyFunc,
-		logger:        h.logger,
+		replyFunc:       h.replyFunc,
+		providerConfigs: h.providerConfigs,
+		logger:          h.logger,
 		contextCfg:    h.contextCfg,
 		compactionCfg: h.compactionCfg,
 		defaultModel:  h.defaultModel,

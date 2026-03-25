@@ -17,7 +17,8 @@ type AgentConfig struct {
 	Model     string
 	System    string
 	Tools     []llm.Tool
-	MaxTokens int // Max output tokens per LLM call. Default: 8192.
+	MaxTokens int    // Max output tokens per LLM call. Default: 8192.
+	APIType   string // "anthropic" (default) or "openai"
 }
 
 // DefaultAgentConfig returns sensible defaults.
@@ -81,7 +82,13 @@ func RunAgent(
 			Stream:    true,
 		}
 
-		events, err := client.StreamChat(ctx, req)
+		var events <-chan llm.StreamEvent
+		var err error
+		if cfg.APIType == "openai" {
+			events, err = client.StreamChatOpenAI(ctx, req)
+		} else {
+			events, err = client.StreamChat(ctx, req)
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				result.StopReason = stopReasonFromCtx(ctx)
