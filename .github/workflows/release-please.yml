@@ -17,13 +17,18 @@ jobs:
       tag: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.version }}
     steps:
+      # Use a PAT so the release PR triggers other CI workflows.
+      # Set RELEASE_PLEASE_TOKEN as a repo secret with a fine-grained PAT
+      # (contents: write, pull-requests: write).
+      # Falls back to the default GITHUB_TOKEN if the secret is not set.
       - uses: googleapis/release-please-action@v4
         id: release
         with:
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Print outputs
+      - name: Print release info
         if: steps.release.outputs.release_created == 'true'
         run: |
           echo "release-created: ${{ steps.release.outputs.release_created }}"
