@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -149,11 +150,21 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	if req.WorkingDir != "" {
 		cmd.Dir = req.WorkingDir
 	}
-	// Inherit parent environment, then overlay user-specified vars.
+	// Inherit parent environment with dangerous vars stripped.
 	parentEnv := os.Environ()
-	cmd.Env = make([]string, 0, len(parentEnv)+len(req.Env))
-	cmd.Env = append(cmd.Env, parentEnv...)
+	cmd.Env = SanitizeEnv(parentEnv, m.logger)
+	// Overlay user-specified vars, also filtering blocked keys.
 	for k, v := range req.Env {
+		if isBlockedEnvKey(k) {
+			m.logger.Info("exec sandbox: blocked user env var", "key", k)
+			continue
+		}
+		if strings.ToUpper(k) == "NODE_OPTIONS" {
+			v = sanitizeNodeOptions(v)
+			if v == "" {
+				continue
+			}
+		}
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 

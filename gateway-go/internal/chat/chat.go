@@ -169,6 +169,43 @@ func (h *Handler) SetBroadcastRaw(fn BroadcastRawFunc) {
 	h.broadcastRaw = fn
 }
 
+// HandleBtw processes a side question (/btw) without affecting the main
+// session context. It dispatches a lightweight chat.send-style request
+// with the side question, using the fast model default.
+func (h *Handler) HandleBtw(_ context.Context, sessionKey, question string) (string, error) {
+	// Build a side-question request and dispatch through Send.
+	// The answer is returned directly without persisting to the main transcript.
+	req, err := protocol.NewRequestFrame("btw-internal", "chat.send", map[string]any{
+		"sessionKey": sessionKey,
+		"message":    question,
+		"btw":        true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("btw request build failed: %w", err)
+	}
+
+	resp := h.Send(context.Background(), req)
+	if resp == nil {
+		return "", fmt.Errorf("btw returned nil response")
+	}
+	if !resp.OK {
+		msg := "unknown error"
+		if resp.Error != nil {
+			msg = resp.Error.Message
+		}
+		return "", fmt.Errorf("btw failed: %s", msg)
+	}
+
+	// Extract text from response payload.
+	var result struct {
+		Text string `json:"text"`
+	}
+	if len(resp.Payload) > 0 {
+		_ = json.Unmarshal(resp.Payload, &result)
+	}
+	return result.Text, nil
+}
+
 // Close stops background goroutines and cancels all active abort entries.
 func (h *Handler) Close() {
 	// Signal abortGCLoop to exit.

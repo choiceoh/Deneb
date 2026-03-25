@@ -159,6 +159,13 @@ func (s *Server) RuntimeConfig() *config.GatewayRuntimeConfig {
 	return s.runtimeCfg
 }
 
+// DispatchRPC dispatches an RPC request through the server's dispatcher.
+// This allows internal components (e.g., model prewarm) to invoke RPC
+// methods without going through HTTP/WebSocket.
+func (s *Server) DispatchRPC(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	return s.dispatcher.Dispatch(ctx, req)
+}
+
 // WithAuthValidator sets the auth validator for token-based authentication.
 // If not set, the server operates in no-auth mode (all connections are trusted).
 func WithAuthValidator(v *auth.Validator) Option {
@@ -672,13 +679,17 @@ func (s *Server) registerExtendedMethods() {
 	})
 
 	// Session state methods (patch/reset/preview/resolve/compact).
-	rpc.RegisterSessionMethods(s.dispatcher, rpc.SessionDeps{
+	sessionDeps := rpc.SessionDeps{
 		Deps: rpc.Deps{
 			Sessions:    s.sessions,
 			Channels:    s.channels,
 			GatewaySubs: s.gatewaySubs,
 		},
-	})
+	}
+	rpc.RegisterSessionMethods(s.dispatcher, sessionDeps)
+
+	// Session repair and overflow check methods.
+	rpc.RegisterSessionRepairMethods(s.dispatcher, sessionDeps)
 
 	// Daemon status method.
 	s.dispatcher.Register("daemon.status", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
@@ -764,6 +775,12 @@ func (s *Server) registerPhase2Methods() {
 	// Wire raw broadcast directly to chat handler for streaming event relay.
 	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
 		return s.broadcaster.BroadcastRaw(event, data)
+	})
+
+	// Side-question (/btw) method — routes through chat handler natively.
+	rpc.RegisterChatBtwMethods(s.dispatcher, rpc.ChatBtwDeps{
+		Chat:        s.chatHandler,
+		Broadcaster: broadcastFn,
 	})
 
 	// Native session execution / agent methods (Phase 4).

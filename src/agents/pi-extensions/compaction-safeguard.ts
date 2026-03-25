@@ -815,6 +815,34 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
   });
 }
 
+/**
+ * Check if context is in overflow state after compaction.
+ * If the context still exceeds the safe threshold (90% of max),
+ * returns instructions for an emergency secondary compaction.
+ *
+ * @param currentTokens - Current context token count after compaction
+ * @param maxTokens - Maximum context window size
+ * @param safeThreshold - Fraction of maxTokens considered safe (default 0.9)
+ */
+export function detectOverflowAfterCompaction(
+  currentTokens: number,
+  maxTokens: number,
+  safeThreshold = 0.9,
+): { isOverflow: boolean; emergencyPruneRatio: number } {
+  const threshold = Math.floor(maxTokens * safeThreshold);
+  if (currentTokens <= threshold) {
+    return { isOverflow: false, emergencyPruneRatio: 0 };
+  }
+
+  // Calculate how much to prune to get to 70% of max (leave headroom).
+  const targetTokens = Math.floor(maxTokens * 0.7);
+  const excess = currentTokens - targetTokens;
+  // Cap emergency prune at 50% of remaining context to prevent data loss.
+  const pruneRatio = Math.min(excess / currentTokens, 0.5);
+
+  return { isOverflow: true, emergencyPruneRatio: pruneRatio };
+}
+
 export const __testing = {
   collectToolFailures,
   formatToolFailuresSection,

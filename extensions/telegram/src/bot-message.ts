@@ -106,10 +106,14 @@ export const createTelegramMessageProcessor = (deps: TelegramMessageProcessorDep
     } catch (err) {
       runtime.error?.(danger(`telegram message processing failed: ${String(err)}`));
       try {
+        const silentErrorReplies = telegramCfg.silentErrorReplies === true;
         await bot.api.sendMessage(
           context.chatId,
           "Something went wrong while processing your request. Please try again.",
-          context.threadSpec?.id != null ? { message_thread_id: context.threadSpec.id } : undefined,
+          {
+            ...(context.threadSpec?.id != null ? { message_thread_id: context.threadSpec.id } : {}),
+            ...(silentErrorReplies ? { disable_notification: true } : {}),
+          },
         );
       } catch {
         // Best-effort fallback; delivery may fail if the bot was blocked or the chat is invalid.

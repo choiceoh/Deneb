@@ -183,6 +183,69 @@ function normalizeToolResultName(
   return message;
 }
 
+/**
+ * Detect and repair orphaned tool_result blocks that can appear after
+ * compaction. A tool_result is orphaned when its corresponding tool_use
+ * block was removed during compaction but the tool_result remains.
+ *
+ * Strategy: scan for tool_result entries whose tool_use_id doesn't match
+ * any preceding tool_use entry. Remove the orphaned tool_results.
+ */
+export function repairPostCompactionOrphans(messages: Array<{ role: string; content?: unknown }>): {
+  messages: Array<{ role: string; content?: unknown }>;
+  removedCount: number;
+} {
+  // Collect all tool_use IDs from assistant messages.
+  const toolUseIds = new Set<string>();
+  for (const msg of messages) {
+    if (msg.role !== "assistant") {
+      continue;
+    }
+    const content = msg.content;
+    if (!Array.isArray(content)) {
+      continue;
+    }
+    for (const block of content) {
+      if (block.type === "tool_use" && block.id) {
+        toolUseIds.add(block.id);
+      }
+    }
+  }
+
+  // Filter out tool_result messages whose tool_use_id is not in the set.
+  let removedCount = 0;
+  const repaired = messages.filter((msg) => {
+    if (msg.role !== "tool") {
+      return true;
+    }
+    const content = msg.content;
+    // Check if this is a tool_result with a missing parent tool_use.
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (block.type === "tool_result" && block.tool_use_id) {
+          if (!toolUseIds.has(block.tool_use_id)) {
+            removedCount++;
+            return false;
+          }
+        }
+      }
+    }
+    // Also handle the case where the message itself is a tool result.
+    if (typeof content === "object" && content !== null && !Array.isArray(content)) {
+      const obj = content as Record<string, unknown>;
+      if (obj.type === "tool_result" && obj.tool_use_id) {
+        if (!toolUseIds.has(obj.tool_use_id as string)) {
+          removedCount++;
+          return false;
+        }
+      }
+    }
+    return true;
+  });
+
+  return { messages: repaired, removedCount };
+}
+
 export { makeMissingToolResult };
 
 export type ToolCallInputRepairReport = {

@@ -29,9 +29,13 @@ export type TelegramThreadBindingRecord = {
   targetSessionKey: string;
   agentId?: string;
   label?: string;
+  /** Whether the topic has been auto-labeled after sufficient messages. */
+  autoLabeled?: boolean;
   boundBy?: string;
   boundAt: number;
   lastActivityAt: number;
+  /** Number of messages received in this binding (used for auto-label threshold). */
+  messageCount?: number;
   idleTimeoutMs?: number;
   maxAgeMs?: number;
   metadata?: Record<string, unknown>;
@@ -306,6 +310,12 @@ function loadBindingsFromDisk(accountId: string): TelegramThreadBindingRecord[] 
       if (typeof entry?.boundBy === "string" && entry.boundBy.trim()) {
         record.boundBy = entry.boundBy.trim();
       }
+      if (typeof entry?.messageCount === "number" && Number.isFinite(entry.messageCount)) {
+        record.messageCount = Math.max(0, Math.floor(entry.messageCount));
+      }
+      if (entry?.autoLabeled === true) {
+        record.autoLabeled = true;
+      }
       if (entry?.metadata && typeof entry.metadata === "object") {
         record.metadata = { ...entry.metadata };
       }
@@ -501,6 +511,7 @@ export function createTelegramThreadBindingManager(
       const nextRecord: TelegramThreadBindingRecord = {
         ...existing,
         lastActivityAt: normalizeTimestampMs(at ?? Date.now()),
+        messageCount: (existing.messageCount ?? 0) + 1,
       };
       BINDINGS_BY_ACCOUNT_CONVERSATION.set(key, nextRecord);
       persistBindingsSafely({
@@ -818,6 +829,74 @@ export function setTelegramThreadBindingMaxAgeBySessionKey(params: {
       lastActivityAt: now,
     }),
   });
+}
+
+/** Minimum messages before auto-labeling a forum topic. */
+const AUTO_LABEL_MESSAGE_THRESHOLD = 3;
+/** Maximum length for Telegram forum topic names. */
+const TELEGRAM_TOPIC_NAME_MAX_LENGTH = 128;
+
+/**
+ * Auto-label a forum topic after enough messages have been exchanged.
+ * Only labels once per binding (skips if already labeled).
+ */
+export async function autoLabelForumTopic(opts: {
+  chatId: number;
+  topicId: number;
+  messages: string[];
+  binding: TelegramThreadBindingRecord;
+  rename: (chatId: number, topicId: number, name: string) => Promise<void>;
+  generateLabel: (messages: string[]) => Promise<string>;
+}): Promise<void> {
+  // Skip if already auto-labeled or if the binding has a manual label
+  if (opts.binding.autoLabeled || opts.binding.label) {
+    return;
+  }
+  // Only label after enough messages
+  if ((opts.binding.messageCount ?? 0) < AUTO_LABEL_MESSAGE_THRESHOLD) {
+    return;
+  }
+  try {
+    const label = await opts.generateLabel(opts.messages);
+    if (label && label.length <= TELEGRAM_TOPIC_NAME_MAX_LENGTH) {
+      await opts.rename(opts.chatId, opts.topicId, label);
+      markBindingAutoLabeled({
+        accountId: opts.binding.accountId,
+        conversationId: opts.binding.conversationId,
+        label,
+      });
+    }
+  } catch (err) {
+    logVerbose(`telegram: auto-label forum topic failed: ${String(err)}`);
+  }
+}
+
+/** Mark a binding as auto-labeled so it is not re-labeled on subsequent messages. */
+function markBindingAutoLabeled(params: {
+  accountId: string;
+  conversationId: string;
+  label: string;
+}): void {
+  const key = resolveBindingKey(params);
+  const existing = BINDINGS_BY_ACCOUNT_CONVERSATION.get(key);
+  if (!existing) {
+    return;
+  }
+  const updated: TelegramThreadBindingRecord = {
+    ...existing,
+    autoLabeled: true,
+    label: params.label,
+  };
+  BINDINGS_BY_ACCOUNT_CONVERSATION.set(key, updated);
+  const manager = MANAGERS_BY_ACCOUNT_ID.get(params.accountId);
+  if (manager) {
+    persistBindingsSafely({
+      accountId: params.accountId,
+      persist: manager.shouldPersistMutations(),
+      bindings: listBindingsForAccount(params.accountId),
+      reason: "auto-label",
+    });
+  }
 }
 
 export const __testing = {

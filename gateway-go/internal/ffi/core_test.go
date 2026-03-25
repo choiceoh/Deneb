@@ -129,6 +129,32 @@ func TestIsSafeURL(t *testing.T) {
 	}
 }
 
+func TestIsSafeURL_FileAndUNC(t *testing.T) {
+	blocked := []string{
+		"file:///etc/passwd",
+		"FILE:///etc/passwd",
+		"file://localhost/etc/passwd",
+		"file:///C:/Windows/System32",
+		"\\\\server\\share",
+		"//server/share",
+	}
+	for _, u := range blocked {
+		if IsSafeURL(u) {
+			t.Errorf("expected %q to be blocked", u)
+		}
+	}
+	// Ensure valid URLs still pass
+	allowed := []string{
+		"https://example.com",
+		"http://example.com/path",
+	}
+	for _, u := range allowed {
+		if !IsSafeURL(u) {
+			t.Errorf("expected %q to be allowed", u)
+		}
+	}
+}
+
 func TestValidateErrorCode(t *testing.T) {
 	valid := []string{
 		"NOT_LINKED", "NOT_PAIRED", "AGENT_TIMEOUT", "INVALID_REQUEST",

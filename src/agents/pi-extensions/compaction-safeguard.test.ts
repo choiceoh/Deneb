@@ -18,6 +18,7 @@ import { buildEmbeddedExtensionFactories } from "../pi-embedded-runner/extension
 import { castAgentMessage } from "../test-helpers/agent-message-fixtures.js";
 import compactionSafeguardExtension, {
   __testing,
+  detectOverflowAfterCompaction,
   getCompactionSafeguardRuntime,
   setCompactionSafeguardRuntime,
 } from "./compaction-safeguard.js";
@@ -1142,5 +1143,41 @@ describe("clampReserveTokens", () => {
   });
   it("passes through reasonable values", () => {
     expect(clampReserveTokens(20_000, 128_000)).toBe(20_000);
+  });
+});
+
+describe("detectOverflowAfterCompaction", () => {
+  it("detects overflow when above threshold", () => {
+    const result = detectOverflowAfterCompaction(190_000, 200_000);
+    expect(result.isOverflow).toBe(true);
+    expect(result.emergencyPruneRatio).toBeGreaterThan(0);
+    expect(result.emergencyPruneRatio).toBeLessThanOrEqual(0.5);
+  });
+
+  it("no overflow when below threshold", () => {
+    const result = detectOverflowAfterCompaction(150_000, 200_000);
+    expect(result.isOverflow).toBe(false);
+    expect(result.emergencyPruneRatio).toBe(0);
+  });
+
+  it("caps emergency prune ratio at 0.5", () => {
+    // When currentTokens is very high relative to max, prune ratio should be capped at 0.5
+    const result = detectOverflowAfterCompaction(199_000, 200_000);
+    expect(result.isOverflow).toBe(true);
+    expect(result.emergencyPruneRatio).toBeLessThanOrEqual(0.5);
+  });
+
+  it("returns no overflow at exactly the threshold", () => {
+    // 90% of 200_000 = 180_000
+    const result = detectOverflowAfterCompaction(180_000, 200_000);
+    expect(result.isOverflow).toBe(false);
+    expect(result.emergencyPruneRatio).toBe(0);
+  });
+
+  it("accepts custom safe threshold", () => {
+    // With 0.8 threshold: 80% of 200_000 = 160_000
+    const result = detectOverflowAfterCompaction(170_000, 200_000, 0.8);
+    expect(result.isOverflow).toBe(true);
+    expect(result.emergencyPruneRatio).toBeGreaterThan(0);
   });
 });

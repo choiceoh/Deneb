@@ -16,6 +16,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
+	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/server"
 )
 
@@ -130,6 +131,9 @@ func main() {
 		}
 		defer d.Stop()
 
+		// Prewarm primary model before accepting requests.
+		go provider.PrewarmModel(ctx, srv, logger)
+
 		logger.Info("deneb gateway starting (daemon mode)", "addr", addr, "pid", os.Getpid())
 
 		if err := srv.Run(ctx); err != nil {
@@ -142,6 +146,9 @@ func main() {
 	// Non-daemon mode.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Prewarm primary model before accepting requests.
+	go provider.PrewarmModel(ctx, srv, logger)
 
 	logger.Info("deneb gateway starting", "addr", addr)
 

@@ -190,6 +190,8 @@ export type TelegramAccountConfig = {
   linkPreview?: boolean;
   /** Send Telegram bot error replies silently (no notification sound). Default: false. */
   silentErrorReplies?: boolean;
+  /** Custom Bot API server URL (e.g., "http://localhost:8081"). Overrides the default api.telegram.org endpoint. */
+  apiEndpoint?: string;
   /**
    * Per-channel outbound response prefix override.
    *

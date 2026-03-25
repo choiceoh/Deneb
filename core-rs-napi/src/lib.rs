@@ -96,7 +96,7 @@ pub fn sanitize_control_chars(input: String) -> String {
     if input.len() > MAX_STRING_BYTES {
         return input;
     }
-    deneb_core::security::sanitize_control_chars(&input)
+    deneb_core::security::sanitize_control_chars(&input).into_owned()
 }
 
 // ---------------------------------------------------------------------------

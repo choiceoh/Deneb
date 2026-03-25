@@ -16,7 +16,7 @@ import {
   CONTROL_UI_BOOTSTRAP_CONFIG_PATH,
   type ControlUiBootstrapConfig,
 } from "./control-ui-contract.js";
-import { buildControlUiCspHeader } from "./control-ui-csp.js";
+import { buildControlUiCspHeader, computeInlineScriptHashes } from "./control-ui-csp.js";
 import {
   isReadHttpMethod,
   respondNotFound as respondControlUiNotFound,
@@ -110,9 +110,22 @@ type ControlUiAvatarMeta = {
   avatarUrl: string | null;
 };
 
-function applyControlUiSecurityHeaders(res: ServerResponse) {
+/**
+ * Cache of computed inline-script SHA-256 hashes, keyed by the resolved
+ * control-UI root path.  Populated once per root on first index.html read
+ * so subsequent requests skip the hash computation.
+ */
+const inlineScriptHashCache = new Map<string, string[]>();
+
+function applyControlUiSecurityHeaders(
+  res: ServerResponse,
+  opts?: { inlineScriptHashes?: string[] },
+) {
   res.setHeader("X-Frame-Options", "DENY");
-  res.setHeader("Content-Security-Policy", buildControlUiCspHeader());
+  res.setHeader(
+    "Content-Security-Policy",
+    buildControlUiCspHeader({ inlineScriptHashes: opts?.inlineScriptHashes }),
+  );
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "no-referrer");
 }
@@ -233,7 +246,27 @@ function serveResolvedFile(res: ServerResponse, filePath: string, body: Buffer) 
   res.end(body);
 }
 
-function serveResolvedIndexHtml(res: ServerResponse, body: string) {
+/**
+ * Serve index.html with CSP inline-script hashes.  Hashes are computed on
+ * first access for a given root path and cached for subsequent requests.
+ */
+function serveResolvedIndexHtml(res: ServerResponse, body: string, rootPath: string) {
+  // Compute and cache inline-script hashes for this root path.
+  let hashes = inlineScriptHashCache.get(rootPath);
+  if (hashes === undefined) {
+    hashes = computeInlineScriptHashes(body);
+    inlineScriptHashCache.set(rootPath, hashes);
+  }
+
+  // Overwrite the CSP header that was set earlier (without hashes) so that
+  // the browser receives the hash-enriched policy for HTML responses.
+  if (hashes.length > 0) {
+    res.setHeader(
+      "Content-Security-Policy",
+      buildControlUiCspHeader({ inlineScriptHashes: hashes }),
+    );
+  }
+
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
   res.end(body);
@@ -441,7 +474,7 @@ export function handleControlUiHttpRequest(
         return true;
       }
       if (path.basename(safeFile.path) === "index.html") {
-        serveResolvedIndexHtml(res, fs.readFileSync(safeFile.fd, "utf8"));
+        serveResolvedIndexHtml(res, fs.readFileSync(safeFile.fd, "utf8"), root);
         return true;
       }
       serveResolvedFile(res, safeFile.path, fs.readFileSync(safeFile.fd));
@@ -469,7 +502,7 @@ export function handleControlUiHttpRequest(
       if (respondHeadForFile(req, res, safeIndex.path)) {
         return true;
       }
-      serveResolvedIndexHtml(res, fs.readFileSync(safeIndex.fd, "utf8"));
+      serveResolvedIndexHtml(res, fs.readFileSync(safeIndex.fd, "utf8"), root);
       return true;
     } finally {
       fs.closeSync(safeIndex.fd);

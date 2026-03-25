@@ -4,6 +4,7 @@ import {
   sanitizeToolCallInputs,
   sanitizeToolUseResultPairing,
   repairToolUseResultPairing,
+  repairPostCompactionOrphans,
   stripToolResultDetails,
 } from "./session-transcript-repair.js";
 import { castAgentMessage, castAgentMessages } from "./test-helpers/agent-message-fixtures.js";
@@ -486,5 +487,52 @@ describe("stripToolResultDetails", () => {
 
     const out = stripToolResultDetails(input);
     expect(out).toBe(input);
+  });
+});
+
+describe("repairPostCompactionOrphans", () => {
+  it("removes orphaned tool_result messages", () => {
+    const messages = [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: [{ type: "tool_use", id: "tu-1", name: "search", input: {} }] },
+      { role: "tool", content: [{ type: "tool_result", tool_use_id: "tu-1", content: "result" }] },
+      // Orphaned: tool_use for tu-2 was removed by compaction
+      { role: "tool", content: [{ type: "tool_result", tool_use_id: "tu-2", content: "orphan" }] },
+    ];
+    const { messages: repaired, removedCount } = repairPostCompactionOrphans(messages);
+    expect(removedCount).toBe(1);
+    expect(repaired).toHaveLength(3);
+  });
+
+  it("keeps all messages when no orphans exist", () => {
+    const messages = [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: [{ type: "tool_use", id: "tu-1", name: "search", input: {} }] },
+      { role: "tool", content: [{ type: "tool_result", tool_use_id: "tu-1", content: "result" }] },
+    ];
+    const { messages: repaired, removedCount } = repairPostCompactionOrphans(messages);
+    expect(removedCount).toBe(0);
+    expect(repaired).toHaveLength(3);
+  });
+
+  it("handles tool_result as direct content object", () => {
+    const messages = [
+      { role: "user", content: "hello" },
+      { role: "tool", content: { type: "tool_result", tool_use_id: "tu-orphan", content: "data" } },
+    ];
+    const { messages: repaired, removedCount } = repairPostCompactionOrphans(messages);
+    expect(removedCount).toBe(1);
+    expect(repaired).toHaveLength(1);
+  });
+
+  it("preserves non-tool messages regardless of content", () => {
+    const messages = [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: "just text" },
+      { role: "system", content: "system message" },
+    ];
+    const { messages: repaired, removedCount } = repairPostCompactionOrphans(messages);
+    expect(removedCount).toBe(0);
+    expect(repaired).toHaveLength(3);
   });
 });

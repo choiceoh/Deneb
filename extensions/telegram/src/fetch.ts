@@ -27,6 +27,30 @@ const TELEGRAM_PIPELINING = 2;
 const TELEGRAM_API_HOSTNAME = "api.telegram.org";
 const TELEGRAM_FALLBACK_IPS: readonly string[] = ["149.154.167.220"];
 
+// Sticky IPv4 fallback: when IPv4 fallback is used successfully,
+// subsequent transports start with ipv4first DNS order until the
+// sticky window expires. This avoids repeated DNS resolution failures
+// across polling restarts.
+let stickyIpv4Fallback = false;
+let stickyIpv4FallbackSetAt = 0;
+const STICKY_IPV4_EXPIRY_MS = 10 * 60_000; // 10 minutes
+
+/** Mark that IPv4 fallback was used successfully. */
+export function markIpv4FallbackUsed(): void {
+  stickyIpv4Fallback = true;
+  stickyIpv4FallbackSetAt = Date.now();
+}
+
+/** Check if sticky IPv4 fallback is currently active. */
+export function isStickyIpv4FallbackActive(): boolean {
+  if (!stickyIpv4Fallback) return false;
+  if (Date.now() - stickyIpv4FallbackSetAt > STICKY_IPV4_EXPIRY_MS) {
+    stickyIpv4Fallback = false;
+    return false;
+  }
+  return true;
+}
+
 type RequestInitWithDispatcher = RequestInit & {
   dispatcher?: unknown;
 };
@@ -425,6 +449,8 @@ export type TelegramTransport = {
   fetch: typeof fetch;
   sourceFetch: typeof fetch;
   dispatcherAttempts?: TelegramDispatcherAttempt[];
+  /** Custom Bot API server URL, if configured. Used to set grammy's apiRoot. */
+  apiEndpoint?: string;
 };
 
 function createTelegramTransportAttempts(params: {
@@ -484,7 +510,7 @@ function createTelegramTransportAttempts(params: {
 
 export function resolveTelegramTransport(
   proxyFetch?: typeof fetch,
-  options?: { network?: TelegramNetworkConfig },
+  options?: { network?: TelegramNetworkConfig; apiEndpoint?: string },
 ): TelegramTransport {
   const autoSelectDecision = resolveTelegramAutoSelectFamilyDecision({
     network: options?.network,
@@ -504,7 +530,10 @@ export function resolveTelegramTransport(
     : proxyFetch
       ? resolveWrappedFetch(proxyFetch)
       : undiciSourceFetch;
-  const dnsResultOrder = normalizeDnsResultOrder(dnsDecision.value);
+  // Sticky IPv4 fallback: if a previous polling session succeeded using
+  // the IPv4 fallback, start new transports with ipv4first DNS order.
+  const stickyDnsOverride = isStickyIpv4FallbackActive() ? ("ipv4first" as const) : undefined;
+  const dnsResultOrder = stickyDnsOverride ?? normalizeDnsResultOrder(dnsDecision.value);
   if (proxyFetch && !explicitProxyUrl) {
     return { fetch: sourceFetch, sourceFetch };
   }
@@ -572,6 +601,11 @@ export function resolveTelegramTransport(
           withDispatcherIfMissing(init, nextAttempt.createDispatcher()),
         );
         stickyAttemptIndex = nextIndex;
+        // Mark sticky IPv4 fallback so subsequent transport instances
+        // (e.g., after polling restart) start with ipv4first DNS order.
+        if (nextIndex > 0) {
+          markIpv4FallbackUsed();
+        }
         return response;
       } catch (caught) {
         err = caught;
@@ -588,12 +622,13 @@ export function resolveTelegramTransport(
     fetch: resolvedFetch,
     sourceFetch,
     dispatcherAttempts: transportAttempts.map((attempt) => attempt.exportAttempt),
+    apiEndpoint: options?.apiEndpoint || undefined,
   };
 }
 
 export function resolveTelegramFetch(
   proxyFetch?: typeof fetch,
-  options?: { network?: TelegramNetworkConfig },
+  options?: { network?: TelegramNetworkConfig; apiEndpoint?: string },
 ): typeof fetch {
   return resolveTelegramTransport(proxyFetch, options).fetch;
 }

@@ -71,9 +71,11 @@ export {
   unpinMessageTelegram,
 } from "./src/send.js";
 export {
+  autoLabelForumTopic,
   createTelegramThreadBindingManager,
   getTelegramThreadBindingManager,
   setTelegramThreadBindingIdleTimeoutBySessionKey,
   setTelegramThreadBindingMaxAgeBySessionKey,
 } from "./src/thread-bindings.js";
 export { resolveTelegramToken } from "./src/token.js";
+export { isStickyIpv4FallbackActive } from "./src/fetch.js";
