@@ -1,19 +1,13 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { Command, Option } from "commander";
+import { Command } from "commander";
 import { resolveStateDir } from "../config/paths.js";
-import { routeLogsToStderr } from "../logging/console.js";
-import { formatDocsLink } from "../terminal/links.js";
-import { theme } from "../terminal/theme.js";
 import { pathExists } from "../utils.js";
 import {
   buildFishOptionCompletionLine,
   buildFishSubcommandCompletionLine,
 } from "./completion-fish.js";
-import { getCoreCliCommandNames, registerCoreCliByName } from "./program/command-registry.js";
-import { getProgramContext } from "./program/program-context.js";
-import { getSubCliEntries, registerSubCliByName } from "./program/register.subclis.js";
 
 const COMPLETION_SHELLS = ["zsh", "bash", "powershell", "fish"] as const;
 type CompletionShell = (typeof COMPLETION_SHELLS)[number];
@@ -80,20 +74,6 @@ export function getCompletionScript(shell: CompletionShell, program: Command): s
     return generatePowerShellCompletion(program);
   }
   return generateFishCompletion(program);
-}
-
-async function writeCompletionCache(params: {
-  program: Command;
-  shells: CompletionShell[];
-  binName: string;
-}): Promise<void> {
-  const cacheDir = resolveCompletionCacheDir();
-  await fs.mkdir(cacheDir, { recursive: true });
-  for (const shell of params.shells) {
-    const script = getCompletionScript(shell, params.program);
-    const targetPath = resolveCompletionCachePath(shell, params.binName);
-    await fs.writeFile(targetPath, script, "utf-8");
-  }
 }
 
 function formatCompletionSourceLine(
@@ -226,75 +206,6 @@ export async function usesSlowDynamicCompletion(
     }
   }
   return false;
-}
-
-export function registerCompletionCli(program: Command) {
-  program
-    .command("completion")
-    .description("Generate shell completion script")
-    .addHelpText(
-      "after",
-      () =>
-        `\n${theme.muted("Docs:")} ${formatDocsLink("/cli/completion", "docs.deneb.ai/cli/completion")}\n`,
-    )
-    .addOption(
-      new Option("-s, --shell <shell>", "Shell to generate completion for (default: zsh)").choices(
-        COMPLETION_SHELLS,
-      ),
-    )
-    .option("-i, --install", "Install completion script to shell profile")
-    .option("--write-state", "Write completion scripts to $DENEB_STATE_DIR/completions (no stdout)")
-    .option("-y, --yes", "Skip confirmation (non-interactive)", false)
-    .action(async (options) => {
-      // Route logs to stderr so plugin loading messages do not corrupt
-      // the completion script written to stdout.
-      routeLogsToStderr();
-      const shell = options.shell ?? "zsh";
-
-      // Completion needs the full Commander command tree (including nested subcommands).
-      // Our CLI defaults to lazy registration for perf; force-register core commands here.
-      const ctx = getProgramContext(program);
-      if (ctx) {
-        for (const name of getCoreCliCommandNames()) {
-          await registerCoreCliByName(program, ctx, name);
-        }
-      }
-
-      // Eagerly register all subcommands to build the full tree
-      const entries = getSubCliEntries();
-      for (const entry of entries) {
-        // Skip completion command itself to avoid cycle if we were to add it to the list
-        if (entry.name === "completion") {
-          continue;
-        }
-        await registerSubCliByName(program, entry.name);
-      }
-
-      if (options.writeState) {
-        const writeShells = options.shell ? [shell] : [...COMPLETION_SHELLS];
-        await writeCompletionCache({
-          program,
-          shells: writeShells,
-          binName: program.name(),
-        });
-      }
-
-      if (options.install) {
-        const targetShell = options.shell ?? resolveShellFromEnv();
-        await installCompletion(targetShell, Boolean(options.yes), program.name());
-        return;
-      }
-
-      if (options.writeState) {
-        return;
-      }
-
-      if (!isCompletionShell(shell)) {
-        throw new Error(`Unsupported shell: ${shell}`);
-      }
-      const script = getCompletionScript(shell, program);
-      process.stdout.write(script + "\n");
-    });
 }
 
 export async function installCompletion(shell: string, yes: boolean, binName = "deneb") {
