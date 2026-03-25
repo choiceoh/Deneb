@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { withEnvAsync } from "../test-utils/env.js";
-import "./test-helpers/fast-core-tools.js";
 import { createDenebTools } from "./deneb-tools.js";
 
 vi.mock("./tools/gateway.js", () => ({

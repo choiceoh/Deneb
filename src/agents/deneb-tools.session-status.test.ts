@@ -98,7 +98,6 @@ vi.mock("../infra/provider-usage.js", () => ({
   formatUsageSummaryLine: () => null,
 }));
 
-import "./test-helpers/fast-core-tools.js";
 import { createDenebTools } from "./deneb-tools.js";
 
 function resetSessionStore(store: Record<string, unknown>) {
