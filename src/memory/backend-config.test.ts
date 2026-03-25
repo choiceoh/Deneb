@@ -21,11 +21,9 @@ describe("resolveMemoryBackendConfig", () => {
     } as DenebConfig;
     const resolved = resolveMemoryBackendConfig({ cfg, agentId: "main" });
     expect(resolved.backend).toBe("vega");
-    expect(resolved.vega?.command).toBe("vega");
     expect(resolved.vega?.searchMode).toBe("query");
     expect(resolved.vega?.update.intervalMs).toBeGreaterThan(0);
     expect(resolved.vega?.update.onBoot).toBe(true);
-    expect(resolved.vega?.update.commandTimeoutMs).toBe(120_000);
   });
 
   it("resolves vega search mode override", () => {

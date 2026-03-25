@@ -19,7 +19,6 @@ export type ResolvedMemoryBackendConfig = {
 // ── Vega defaults ──
 
 export type ResolvedVegaConfig = {
-  command: string;
   paths: string[];
   update: ResolvedVegaUpdateConfig;
   limits: ResolvedVegaLimitsConfig;
@@ -32,7 +31,6 @@ export type ResolvedVegaUpdateConfig = {
   intervalMs: number;
   embedIntervalMs: number;
   onBoot: boolean;
-  commandTimeoutMs: number;
 };
 
 export type ResolvedVegaLimitsConfig = {
@@ -51,8 +49,6 @@ const DEFAULT_VEGA_MAX_SNIPPET_CHARS = 2_500; // Slightly more (up from 2000)
 const DEFAULT_VEGA_MAX_INJECTED_CHARS = 10_000; // Slightly more (up from 8000)
 const DEFAULT_VEGA_UPDATE_INTERVAL_MS = 180_000; // 3 min (down from 5m)
 const DEFAULT_VEGA_EMBED_INTERVAL_MS = 900_000; // 15 min (down from 30m)
-const DEFAULT_VEGA_COMMAND_TIMEOUT_MS = 120_000;
-
 // GPU-accelerated rerank — use query mode for best recall
 const DEFAULT_VEGA_SEARCH_MODE: MemoryVegaSearchMode = "query";
 
@@ -86,7 +82,6 @@ export function resolveVegaConfig(
   cfg: MemoryVegaConfig | undefined,
   workspaceDir: string,
 ): ResolvedVegaConfig {
-  const command = cfg?.command?.trim() || "vega";
   const paths = (cfg?.paths ?? []).map((p) =>
     path.isAbsolute(p.path) ? p.path : path.resolve(workspaceDir, p.path),
   );
@@ -101,7 +96,6 @@ export function resolveVegaConfig(
     }
   }
   return {
-    command,
     paths,
     update: {
       intervalMs: resolveIntervalMs(cfg?.update?.interval, DEFAULT_VEGA_UPDATE_INTERVAL_MS),
@@ -110,10 +104,6 @@ export function resolveVegaConfig(
         DEFAULT_VEGA_EMBED_INTERVAL_MS,
       ),
       onBoot: cfg?.update?.onBoot ?? true,
-      commandTimeoutMs: resolveTimeoutMs(
-        cfg?.update?.commandTimeoutMs,
-        DEFAULT_VEGA_COMMAND_TIMEOUT_MS,
-      ),
     },
     limits: {
       maxResults: cfg?.limits?.maxResults ?? DEFAULT_VEGA_MAX_RESULTS,

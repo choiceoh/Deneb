@@ -68,7 +68,7 @@
 - `proto/` — shared Protobuf schemas (gateway frames, channel types, session models). Source of truth for cross-language types.
 - `extensions/` — channel and feature plugin packages (each is an independent package).
 - `ui/` — Lit-based web control UI (separate pnpm workspace).
-- `vega/` — Python project management tool (models, router, database, CLI).
+- `vega/` — **REMOVED** (migrated to Rust in `core-rs/vega/`). All Vega functionality now lives in the Rust `deneb-vega` crate.
 - `skills/` — user-facing skill plugins (github, weather, summarize, coding-agent, etc.).
 - `docs/` — Mintlify documentation site. Built output lives in `dist/`.
 - `scripts/` — build, dev, CI, audit, and release scripts.
@@ -282,7 +282,7 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 
 - **Go ↔ Rust:** CGo FFI (in-process, zero overhead). Go calls `deneb_*` C functions from `core-rs`.
 - **Go ↔ Node.js:** Unix domain socket + gateway frame protocol. Node.js runs as plugin host subprocess.
-- **Go ↔ Python:** Subprocess + JSONL/MCP (existing vega integration).
+- **Go ↔ Vega:** Rust FFI via `deneb-vega` crate (Python subprocess removed).
 - **CLI ↔ Gateway:** WebSocket (existing).
 - Proto schemas are the cross-language source of truth for frame types.
 

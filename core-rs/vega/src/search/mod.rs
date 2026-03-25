@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::VegaConfig;
 use crate::db::schema::init_db;
-use fts_search::{sqlite_search, SqliteSearchResult};
+use fts_search::sqlite_search;
 use fusion::{rerank_fusion, sqlite_rows_to_unified, ProjectScore, UnifiedResult};
 use query_analyzer::{analyze_query, normalize_query, QueryAnalysis, SearchRoute};
 
@@ -108,7 +108,9 @@ impl SearchRouter {
         let mut sqlite_result = sqlite_search(&conn, &query, extracted);
 
         // 3. Semantic search (when ML is available and route permits)
+        #[allow(unused_mut)]
         let mut semantic_count = 0;
+        #[allow(unused_mut)]
         let mut semantic_used = false;
 
         #[cfg(feature = "ml")]

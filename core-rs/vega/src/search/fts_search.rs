@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use rusqlite::{params_from_iter, Connection};
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 use super::query_analyzer::{normalize_keyword, ExtractedFields};
@@ -422,7 +422,7 @@ fn run_like_query(
         .iter()
         .map(|_| "c.content LIKE ?".to_string())
         .collect();
-    let mut like_params: Vec<String> = all_terms.iter().map(|t| format!("%{}%", t)).collect();
+    let like_params: Vec<String> = all_terms.iter().map(|t| format!("%{}%", t)).collect();
 
     let mut sql = format!(
         "SELECT DISTINCT c.id as chunk_id, p.id as project_id,

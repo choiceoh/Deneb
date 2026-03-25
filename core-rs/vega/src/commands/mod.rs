@@ -1,7 +1,25 @@
 //! Vega command registry and NL routing.
 //!
-//! Port of Python vega/core.py + vega/commands/ — priority commands.
-//! Commands: search, show, brief, upgrade, system, list, tags, timeline.
+//! Port of Python vega/core.py + vega/commands/ — complete command set.
+//! All Python commands have been ported to Rust.
+
+pub mod add_action;
+pub mod changelog;
+pub mod compare;
+pub mod contacts;
+pub mod cross;
+pub mod dashboard;
+pub mod health;
+pub mod mail_append;
+pub mod memory;
+pub mod person;
+pub mod pipeline;
+pub mod recent;
+pub mod sync_back;
+pub mod template;
+pub mod update;
+pub mod urgent;
+pub mod weekly;
 
 use std::collections::HashMap;
 
@@ -45,17 +63,38 @@ impl CommandResult {
 }
 
 /// Route patterns: NL query → command name.
+/// Full port of Python NL_ROUTES from core.py.
 static ROUTE_PATTERNS: &[(&str, &str)] = &[
-    (r"급한|긴급|위험|우선순위|blocked", "urgent"),
-    (r"연결고리|관련.*프로젝트|인력.*충돌", "cross"),
-    (r"브리프|한눈에.*요약", "brief"),
-    (r"최근.*활동|latest", "recent"),
-    (r"비교|차이", "compare"),
-    (r"현황|대시보드|전체.*상태", "dashboard"),
-    (r"뭐.*하고.*있|담당하는|포트폴리오", "person"),
-    (r"연락처|전화번호|담당자.*연락", "contacts"),
-    (r"금액|매출|파이프라인", "pipeline"),
-    (r"타임라인|이력|일정", "timeline"),
+    // 긴급/관심 필요
+    (r"급한|긴급|위험|관심.*필요|우선순위|blocked|막힌", "urgent"),
+    (r"마감|기한|납기|데드라인|언제까지", "urgent"),
+    (r"이번\s*달|다음\s*달|할\s*일|할일|액션\s*아이템|해야.*할", "urgent"),
+    // 크로스 분석
+    (r"연결고리|관련.*프로젝트|같은.*거래처|같은.*자재|인력.*충돌|시너지", "cross"),
+    (r"인력|팀\s*현황|인원|리소스", "cross"),
+    // 브리프/최근
+    (r"브리프|한눈에.*요약|빠른.*요약|간단.*브리핑", "brief"),
+    (r"최근.*활동|최근.*업데이트|최근.*변화|최신.*활동|latest", "recent"),
+    // 비교/통계
+    (r"비교|차이|다른점|공통점", "compare"),
+    (r"통계|분석|수치|평균|활동량|빈도", "stats"),
+    // 대시보드
+    (r"현황|대시보드|전체.*상태|프로젝트.*몇|요약", "dashboard"),
+    // 인물
+    (r"뭐\s*하고\s*있|맡은\s*거|담당하는|포트폴리오|업무.*현황", "person"),
+    // 연락처
+    (r"연락처|전화번호|이메일|담당자.*연락", "contacts"),
+    // 파이프라인
+    (r"금액|매출|파이프라인|수주.*금|얼마|비용|원가|예산|단가|견적", "pipeline"),
+    // 주간/변경
+    (r"주간|이번.*주|리포트|보고", "weekly"),
+    (r"뭐.*바뀌|변경", "changelog"),
+    // 타임라인/일정
+    (r"타임라인|이력|경과|순서|일정|스케줄|공정", "timeline"),
+    // 프로젝트 목록
+    (r"프로젝트.*목록|프로젝트.*리스트|전체.*프로젝트|몇.*개", "list"),
+    // 문제/이슈
+    (r"문제|이슈|결함|불량|장애|고장", "search"),
 ];
 
 /// Route a natural language query to a command name.
@@ -74,6 +113,7 @@ pub fn route_command(query: &str) -> &'static str {
 /// Execute a Vega command by name.
 pub fn execute(command: &str, args: &Value, config: &VegaConfig) -> CommandResult {
     match command {
+        // Core query commands (Phase 0)
         "search" => cmd_search(args, config),
         "show" => cmd_show(args, config),
         "brief" => cmd_brief(args, config),
@@ -83,6 +123,32 @@ pub fn execute(command: &str, args: &Value, config: &VegaConfig) -> CommandResul
         "tags" => cmd_tags(args, config),
         "timeline" => cmd_timeline(args, config),
         "embed" => cmd_embed(args, config),
+        // Ported query commands
+        "ask" => cmd_ask(args, config),
+        "urgent" => urgent::cmd_urgent(args, config),
+        "person" => person::cmd_person(args, config),
+        "compare" => compare::cmd_compare(args, config),
+        "stats" => compare::cmd_stats(args, config),
+        "recent" => recent::cmd_recent(args, config),
+        "cross" => cross::cmd_cross(args, config),
+        "contacts" => contacts::cmd_contacts(args, config),
+        "dashboard" => dashboard::cmd_dashboard(args, config),
+        "pipeline" => pipeline::cmd_pipeline(args, config),
+        "weekly" => weekly::cmd_weekly(args, config),
+        "changelog" => changelog::cmd_changelog(args, config),
+        // Write commands
+        "add-action" => add_action::cmd_add_action(args, config),
+        "mail-append" => mail_append::cmd_mail_append(args, config),
+        "update" => update::cmd_update(args, config),
+        "template" => template::cmd_template(args, config),
+        "sync-back" => sync_back::cmd_sync_back(args, config),
+        "health" => health::cmd_health(args, config),
+        // Memory backend commands
+        "memory-search" => memory::cmd_memory_search(args, config),
+        "memory-update" => memory::cmd_memory_update(args, config),
+        "memory-embed" => memory::cmd_memory_embed(args, config),
+        "memory-status" => memory::cmd_memory_status(args, config),
+        "memory-version" => memory::cmd_memory_version(args, config),
         _ => {
             // Try to route the command as a query
             let routed = route_command(command);
@@ -95,6 +161,69 @@ pub fn execute(command: &str, args: &Value, config: &VegaConfig) -> CommandResul
             }
         }
     }
+}
+
+/// ask: Unified NL endpoint — route query to best command, apply depth.
+fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
+    let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
+    if query.is_empty() {
+        return CommandResult::err("ask", "query 파라미터가 필요합니다");
+    }
+
+    let depth = args
+        .get("depth")
+        .and_then(|v| v.as_str())
+        .unwrap_or("normal");
+
+    // Session-based pronoun resolution
+    let resolved_query = {
+        let session_path = crate::session::VegaSession::session_path(&config.db_path);
+        let session = crate::session::VegaSession::load(&session_path);
+        if let Ok(conn) = Connection::open(&config.db_path) {
+            session
+                .resolve_pronouns(query, &conn)
+                .unwrap_or_else(|| query.to_string())
+        } else {
+            query.to_string()
+        }
+    };
+
+    // Smart route
+    let (command, _confidence) = crate::ai::smart_route(&resolved_query);
+
+    // Prevent infinite loop: ask → ask
+    let command = if command == "ask" { "search" } else { command };
+
+    // Execute inner command
+    let inner_args = json!({"query": resolved_query});
+    let mut result = execute(command, &inner_args, config);
+
+    // Apply depth
+    if depth != "normal" && result.success {
+        result.data = crate::ai::apply_depth(&result.data, command, depth);
+    }
+
+    // Add routing metadata
+    if result.success {
+        let meta = json!({
+            "routed_command": command,
+            "original_query": query,
+            "resolved_query": resolved_query,
+        });
+        if let Some(obj) = result.data.as_object_mut() {
+            obj.insert("_meta".to_string(), meta);
+        }
+    }
+
+    // Update session
+    if result.success {
+        let session_path = crate::session::VegaSession::session_path(&config.db_path);
+        let mut session = crate::session::VegaSession::load(&session_path);
+        session.update(command, &result.data);
+        let _ = session.save(&session_path);
+    }
+
+    result
 }
 
 /// Execute a NL query: route → command → execute.
@@ -540,6 +669,7 @@ fn cmd_timeline(args: &Value, config: &VegaConfig) -> CommandResult {
 }
 
 /// embed: Generate embeddings for chunks (requires ml feature).
+#[allow(unused_variables)]
 fn cmd_embed(_args: &Value, config: &VegaConfig) -> CommandResult {
     #[cfg(feature = "ml")]
     {
@@ -558,7 +688,7 @@ fn cmd_embed(_args: &Value, config: &VegaConfig) -> CommandResult {
         };
 
         // Build ML manager
-        let mut ml_configs = Vec::new();
+        let mut ml_configs: Vec<deneb_ml::ModelConfig> = Vec::new();
         if let Some(ref path) = config.model_embedder {
             ml_configs.push(deneb_ml::ModelConfig::embedder(
                 path.clone(),

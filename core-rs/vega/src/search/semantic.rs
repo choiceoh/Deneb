@@ -4,11 +4,12 @@
 //! deneb-ml's LocalEmbedder for embedding and LocalReranker for reranking.
 //! Without it, all functions return empty results.
 
-use rusqlite::{params, Connection};
+#[cfg(feature = "ml")]
+use rusqlite::params;
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 use super::fts_search::ChunkRow;
-use super::query_analyzer::ExtractedFields;
 
 /// Semantic search result for a single chunk.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -290,6 +291,7 @@ pub fn embed_chunks(
 // -- Utility functions --
 
 /// Convert a f32 vector to a byte blob (little-endian).
+#[allow(dead_code)]
 fn f32_vec_to_blob(vec: &[f32]) -> Vec<u8> {
     let mut blob = Vec::with_capacity(vec.len() * 4);
     for &v in vec {
@@ -299,6 +301,7 @@ fn f32_vec_to_blob(vec: &[f32]) -> Vec<u8> {
 }
 
 /// Convert a byte blob (little-endian) to a f32 vector.
+#[allow(dead_code)]
 fn blob_to_f32_vec(blob: &[u8]) -> Vec<f32> {
     blob.chunks_exact(4)
         .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
@@ -306,6 +309,7 @@ fn blob_to_f32_vec(blob: &[u8]) -> Vec<f32> {
 }
 
 /// Dot product of two f32 vectors (cosine similarity for L2-normalized vectors).
+#[allow(dead_code)]
 fn dot_product(a: &[f32], b: &[f32]) -> f64 {
     a.iter()
         .zip(b.iter())
@@ -313,6 +317,7 @@ fn dot_product(a: &[f32], b: &[f32]) -> f64 {
         .sum()
 }
 
+#[allow(dead_code)]
 fn truncate_str(s: &str, max: usize) -> &str {
     if s.len() <= max {
         return s;

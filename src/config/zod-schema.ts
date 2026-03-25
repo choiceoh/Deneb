@@ -55,7 +55,6 @@ const MemoryVegaUpdateSchema = z
   .object({
     interval: z.string().optional(),
     onBoot: z.boolean().optional(),
-    commandTimeoutMs: z.number().int().positive().optional(),
     embedInterval: z.string().optional(),
   })
   .strict();
@@ -71,7 +70,6 @@ const MemoryVegaLimitsSchema = z
 
 const MemoryVegaSchema = z
   .object({
-    command: z.string().optional(),
     paths: z.array(MemoryVegaPathSchema).optional(),
     update: MemoryVegaUpdateSchema.optional(),
     limits: MemoryVegaLimitsSchema.optional(),

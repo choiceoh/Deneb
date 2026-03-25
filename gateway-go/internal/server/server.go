@@ -98,7 +98,7 @@ type Server struct {
 	channelHealth   *monitoring.ChannelHealthMonitor
 	activity        *monitoring.ActivityTracker
 	channelEvents   *monitoring.ChannelEventTracker
-	vegaClient      *vega.Client
+	vegaBackend     vega.Backend
 
 	// Phase 3: Advanced workflow subsystems.
 	approvals  *approval.Store
@@ -434,9 +434,9 @@ func (s *Server) doShutdown() error {
 		s.authRateLimiter.Close()
 	}
 
-	// 11. Close Vega client.
-	if s.vegaClient != nil {
-		s.vegaClient.Close()
+	// 11. Close Vega backend.
+	if s.vegaBackend != nil {
+		s.vegaBackend.Close()
 	}
 
 	return httpErr
@@ -735,10 +735,10 @@ func (s *Server) SetDaemon(d *daemon.Daemon) {
 	s.daemon = d
 }
 
-// SetVega sets the Vega MCP client and registers its RPC methods.
-func (s *Server) SetVega(client *vega.Client) {
-	s.vegaClient = client
-	rpc.RegisterVegaMethods(s.dispatcher, rpc.VegaDeps{Client: client})
+// SetVega sets the Vega backend and registers its RPC methods.
+func (s *Server) SetVega(backend vega.Backend) {
+	s.vegaBackend = backend
+	rpc.RegisterVegaMethods(s.dispatcher, rpc.VegaDeps{Backend: backend})
 }
 
 // Broadcaster returns the event broadcaster for external use.
