@@ -491,8 +491,12 @@ function validateConfigObjectWithPluginsBase(
     opts?: { warnOnly?: boolean },
   ) => {
     if (LEGACY_REMOVED_PLUGIN_IDS.has(pluginId)) {
-      // Silently skip — these are former plugins now inlined into core.
-      // Config entries may persist until `deneb doctor` migrates them.
+      // Emit a warning so the user knows stale config can be cleaned up,
+      // but don't fail validation — these plugins were inlined into core.
+      warnings.push({
+        path,
+        message: `plugin removed: ${pluginId} (stale config entry ignored; remove it from plugins config)`,
+      });
       return;
     }
     if (opts?.warnOnly) {

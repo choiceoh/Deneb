@@ -38,10 +38,15 @@ function hasProviderCredential(
   return Boolean(fromConfig || readProviderEnvValue(provider.envVars));
 }
 
-function resolveSearchProvider(search?: WebSearchConfig): string {
-  const providers = resolvePluginWebSearchProviders({
-    bundledAllowlistCompat: true,
-  });
+function resolveSearchProvider(
+  search?: WebSearchConfig,
+  injectedProviders?: PluginWebSearchProviderEntry[],
+): string {
+  const providers =
+    injectedProviders ??
+    resolvePluginWebSearchProviders({
+      bundledAllowlistCompat: true,
+    });
   const raw =
     search && "provider" in search && typeof search.provider === "string"
       ? search.provider.trim().toLowerCase()

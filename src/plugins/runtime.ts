@@ -1,3 +1,4 @@
+import { setPluginRegistryFallback } from "../channels/dynamic-registry.js";
 import { createEmptyPluginRegistry } from "./registry-empty.js";
 import type { PluginRegistry } from "./registry.js";
 
@@ -34,7 +35,16 @@ export function setActivePluginRegistry(registry: PluginRegistry, cacheKey?: str
   }
   state.key = cacheKey ?? null;
   state.version += 1;
+
+  // Wire up the plugin registry fallback so normalizeChannelId() can resolve
+  // plugin-loaded channel IDs (e.g., msteams) that aren't in the static registry.
+  if (!pluginFallbackWired) {
+    pluginFallbackWired = true;
+    setPluginRegistryFallback(() => state.registry);
+  }
 }
+
+let pluginFallbackWired = false;
 
 export function getActivePluginRegistry(): PluginRegistry | null {
   return state.registry;

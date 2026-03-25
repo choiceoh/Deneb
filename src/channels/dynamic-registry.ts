@@ -29,6 +29,20 @@ const hooks: RegistrationHook[] = [];
 /** Cached reference to the Telegram channel registration for O(1) access. */
 let telegramChannelCache: ChannelRegistration | null = null;
 
+/**
+ * Optional fallback for normalizeChannelId: if a channel ID is not found in the
+ * static dynamic-registry, check the active plugin registry for plugin-loaded channels.
+ * Set by the plugin runtime during initialization to avoid circular imports.
+ */
+type PluginRegistryFallback = () => {
+  channels: Array<{ plugin: { id: string } }>;
+} | null;
+let pluginRegistryFallback: PluginRegistryFallback | null = null;
+
+export function setPluginRegistryFallback(fallback: PluginRegistryFallback): void {
+  pluginRegistryFallback = fallback;
+}
+
 /** Register a channel. Called at the top level of each channel extension's import. */
 export function registerChannel(entry: ChannelRegistration): void {
   if (registry.has(entry.id)) {
@@ -88,6 +102,16 @@ export function normalizeChannelId(raw?: string | null): string | null {
   // Direct lookup
   if (registry.has(key)) {
     return key;
+  }
+
+  // Fallback: check active plugin registry for dynamically loaded channel plugins.
+  // This covers plugin channels (e.g., msteams) that aren't in the static dynamic-registry
+  // but are loaded via the plugin system at runtime.
+  if (pluginRegistryFallback) {
+    const activeRegistry = pluginRegistryFallback();
+    if (activeRegistry?.channels.some((ch) => String(ch.plugin.id).toLowerCase() === key)) {
+      return key;
+    }
   }
   return null;
 }
