@@ -25,7 +25,7 @@ import {
   resolveOriginMessageProvider,
   resolveOriginMessageTo,
 } from "./origin-routing.js";
-import type { FollowupRun } from "./queue.js";
+import { enqueueFollowupRun, type FollowupRun } from "./queue.js";
 import {
   applyReplyThreading,
   filterMessagingToolDuplicates,
@@ -272,6 +272,22 @@ export function createFollowupRunner(params: {
           );
         }
         return;
+      }
+
+      // Re-queue orphaned user messages removed during the followup run.
+      if (runResult.orphanedUserPrompt?.trim() && sessionKey) {
+        const orphanedFollowup: FollowupRun = {
+          prompt: runResult.orphanedUserPrompt,
+          enqueuedAt: Date.now(),
+          summaryLine: runResult.orphanedUserPrompt.slice(0, 80),
+          originatingChannel: queued.originatingChannel,
+          originatingTo: queued.originatingTo,
+          originatingAccountId: queued.originatingAccountId,
+          originatingThreadId: queued.originatingThreadId,
+          originatingChatType: queued.originatingChatType,
+          run: queued.run,
+        };
+        enqueueFollowupRun(sessionKey, orphanedFollowup, { mode: "followup" }, "prompt");
       }
 
       const usage = runResult.meta?.agentMeta?.usage;

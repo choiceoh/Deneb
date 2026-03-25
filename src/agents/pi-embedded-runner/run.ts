@@ -480,6 +480,7 @@ export async function runEmbeddedPiAgent(
               messagingToolSentMediaUrls: attempt.messagingToolSentMediaUrls,
               messagingToolSentTargets: attempt.messagingToolSentTargets,
               successfulCronAdds: attempt.successfulCronAdds,
+              orphanedUserPrompt: attempt.orphanedUserPrompt,
             };
           }
 
@@ -527,6 +528,7 @@ export async function runEmbeddedPiAgent(
             messagingToolSentMediaUrls: attempt.messagingToolSentMediaUrls,
             messagingToolSentTargets: attempt.messagingToolSentTargets,
             successfulCronAdds: attempt.successfulCronAdds,
+            orphanedUserPrompt: attempt.orphanedUserPrompt,
           };
         }
       } finally {

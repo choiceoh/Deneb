@@ -993,8 +993,24 @@ export async function runEmbeddedAttempt(
         });
 
         // Repair orphaned trailing user messages so new prompts don't violate role ordering.
+        // Capture the text content so the caller can re-queue it instead of silently dropping it.
+        let orphanedUserPrompt: string | undefined;
         const leafEntry = sessionManager.getLeafEntry();
         if (leafEntry?.type === "message" && leafEntry.message.role === "user") {
+          const orphanedMsg = leafEntry.message as {
+            role: string;
+            content?: string | Array<{ type?: string; text?: string }>;
+          };
+          const rawContent = orphanedMsg.content;
+          if (typeof rawContent === "string") {
+            orphanedUserPrompt = rawContent;
+          } else if (Array.isArray(rawContent)) {
+            orphanedUserPrompt = rawContent
+              .filter((part) => part.type === "text" && typeof part.text === "string")
+              .map((part) => part.text!)
+              .join("\n");
+          }
+
           if (leafEntry.parentId) {
             sessionManager.branch(leafEntry.parentId);
           } else {
@@ -1002,10 +1018,18 @@ export async function runEmbeddedAttempt(
           }
           const sessionContext = sessionManager.buildSessionContext();
           activeSession.agent.replaceMessages(sessionContext.messages);
-          log.warn(
-            `Removed orphaned user message to prevent consecutive user turns. ` +
-              `runId=${params.runId} sessionId=${params.sessionId}`,
-          );
+          if (orphanedUserPrompt?.trim()) {
+            log.warn(
+              `Removed orphaned user message to prevent consecutive user turns (content preserved for re-queue). ` +
+                `runId=${params.runId} sessionId=${params.sessionId}`,
+            );
+          } else {
+            orphanedUserPrompt = undefined;
+            log.warn(
+              `Removed orphaned user message to prevent consecutive user turns. ` +
+                `runId=${params.runId} sessionId=${params.sessionId}`,
+            );
+          }
         }
         const transcriptLeafId =
           (sessionManager.getLeafEntry() as { id?: string } | null | undefined)?.id ?? null;
@@ -1426,6 +1450,7 @@ export async function runEmbeddedAttempt(
         // Client tool call detected (OpenResponses hosted tools)
         clientToolCall: clientToolCallDetected ?? undefined,
         yieldDetected: yieldDetected || undefined,
+        orphanedUserPrompt: orphanedUserPrompt?.trim() || undefined,
       };
     } finally {
       // Always tear down the session (and release the lock) before we leave this attempt.
