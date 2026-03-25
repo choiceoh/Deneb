@@ -12,7 +12,6 @@ import (
 type ToolDeps struct {
 	Deps
 	Processes *process.Manager
-	Forwarder Forwarder
 }
 
 // RegisterToolMethods registers tool-related RPC methods.
@@ -48,24 +47,9 @@ func toolsInvoke(deps ToolDeps) HandlerFunc {
 			return toolsExecLocal(ctx, req, deps, p.Tool, p.Args, p.DryRun)
 		}
 
-		// Forward all other tools to the Node.js bridge.
-		if deps.Forwarder == nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, "no bridge available for tool execution"))
-		}
-
-		forwardReq := &protocol.RequestFrame{
-			Type:   protocol.FrameTypeRequest,
-			ID:     req.ID,
-			Method: "tools.invoke",
-			Params: req.Params,
-		}
-		resp, err := deps.Forwarder.Forward(ctx, forwardReq)
-		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, "tool bridge error: "+err.Error()))
-		}
-		return resp
+		// Non-bash/exec tools are not available in standalone Go gateway.
+		return protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrUnavailable, "tool "+p.Tool+" not available in standalone mode"))
 	}
 }
 
@@ -116,27 +100,11 @@ func toolsExecLocal(ctx context.Context, req *protocol.RequestFrame, deps ToolDe
 }
 
 // toolsList handles "tools.list" — returns the available tool catalog.
-// Forwards to bridge for the full tool list.
-func toolsList(deps ToolDeps) HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if deps.Forwarder == nil {
-			resp := protocol.MustResponseOK(req.ID, map[string]any{
-				"tools": []any{},
-			})
-			return resp
-		}
-
-		forwardReq := &protocol.RequestFrame{
-			Type:   protocol.FrameTypeRequest,
-			ID:     req.ID,
-			Method: "tools.list",
-			Params: req.Params,
-		}
-		resp, err := deps.Forwarder.Forward(ctx, forwardReq)
-		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, "tool list bridge error: "+err.Error()))
-		}
+func toolsList(_ ToolDeps) HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
+			"tools": []any{},
+		})
 		return resp
 	}
 }

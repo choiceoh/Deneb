@@ -2,13 +2,9 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // ManagedCredential holds a provider credential with rotation metadata.
@@ -51,32 +47,21 @@ type AuthManager struct {
 	mu          sync.RWMutex
 	credentials map[string]*ManagedCredential
 	registry    *Registry
-	forwarder   Forwarder
 	logger      *slog.Logger
 	stopCh      chan struct{}
 }
 
 // NewAuthManager creates a new auth manager.
-// The forwarder can be nil initially and set later via SetForwarder.
-func NewAuthManager(registry *Registry, forwarder Forwarder, logger *slog.Logger) *AuthManager {
+func NewAuthManager(registry *Registry, logger *slog.Logger) *AuthManager {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &AuthManager{
 		credentials: make(map[string]*ManagedCredential),
 		registry:    registry,
-		forwarder:   forwarder,
 		logger:      logger,
 		stopCh:      make(chan struct{}),
 	}
-}
-
-// SetForwarder updates the bridge forwarder. This is called after
-// the server's bridge connection is established.
-func (am *AuthManager) SetForwarder(fwd Forwarder) {
-	am.mu.Lock()
-	defer am.mu.Unlock()
-	am.forwarder = fwd
 }
 
 // Store adds or updates a credential in the manager.
@@ -102,8 +87,8 @@ func (am *AuthManager) Resolve(providerID, profileID string) *ManagedCredential 
 }
 
 // Prepare resolves runtime auth for a provider. If the provider plugin
-// implements RuntimeAuthProvider, it delegates to that; otherwise it
-// forwards to the Node.js bridge.
+// implements RuntimeAuthProvider, it delegates locally; otherwise it
+// returns the provided API key as-is.
 func (am *AuthManager) Prepare(ctx context.Context, req RuntimeAuthContext) (*PreparedAuth, error) {
 	// Try local provider plugin first.
 	if am.registry != nil {
@@ -111,7 +96,7 @@ func (am *AuthManager) Prepare(ctx context.Context, req RuntimeAuthContext) (*Pr
 		if rap, ok := plugin.(RuntimeAuthProvider); ok {
 			prepared, err := rap.PrepareRuntimeAuth(ctx, req)
 			if err != nil {
-				am.logger.Warn("local provider auth prepare failed, falling back to bridge",
+				am.logger.Warn("local provider auth prepare failed",
 					"provider", req.Provider, "error", err)
 			} else if prepared != nil {
 				am.storePrepared(req.Provider, req.ProfileID, prepared)
@@ -120,41 +105,11 @@ func (am *AuthManager) Prepare(ctx context.Context, req RuntimeAuthContext) (*Pr
 		}
 	}
 
-	// Fall back to bridge.
-	am.mu.RLock()
-	fwd := am.forwarder
-	am.mu.RUnlock()
-
-	if fwd == nil {
-		return &PreparedAuth{
-			APIKey:  req.APIKey,
-			BaseURL: "",
-		}, nil
-	}
-
-	params, _ := json.Marshal(req)
-	fwdReq := &protocol.RequestFrame{
-		Type:   protocol.FrameTypeRequest,
-		ID:     fmt.Sprintf("auth-prepare-%s-%d", req.Provider, time.Now().UnixNano()),
-		Method: "providers.auth.prepare",
-		Params: params,
-	}
-
-	resp, err := fwd.Forward(ctx, fwdReq)
-	if err != nil {
-		return nil, fmt.Errorf("auth prepare bridge error: %w", err)
-	}
-	if !resp.OK {
-		return &PreparedAuth{APIKey: req.APIKey}, nil
-	}
-
-	var prepared PreparedAuth
-	if err := json.Unmarshal(resp.Payload, &prepared); err != nil {
-		return nil, fmt.Errorf("auth prepare decode: %w", err)
-	}
-
-	am.storePrepared(req.Provider, req.ProfileID, &prepared)
-	return &prepared, nil
+	// No local provider plugin found — passthrough with provided API key.
+	return &PreparedAuth{
+		APIKey:  req.APIKey,
+		BaseURL: "",
+	}, nil
 }
 
 // storePrepared updates the credential store after a successful auth preparation.
@@ -179,7 +134,7 @@ func (am *AuthManager) storePrepared(providerID, profileID string, prepared *Pre
 	am.credentials[key] = existing
 }
 
-// RefreshIfNeeded checks if a credential needs refresh and refreshes it via bridge.
+// RefreshIfNeeded checks if a credential needs refresh and refreshes it locally.
 func (am *AuthManager) RefreshIfNeeded(ctx context.Context, providerID, profileID string) error {
 	cred := am.Resolve(providerID, profileID)
 	if cred == nil || !cred.IsExpiringSoon(5*time.Minute) {

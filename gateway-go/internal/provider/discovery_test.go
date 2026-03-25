@@ -1,11 +1,7 @@
 package provider
 
 import (
-	"context"
-	"encoding/json"
 	"testing"
-
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 func TestNormalizeProviderID(t *testing.T) {
@@ -106,50 +102,5 @@ func TestRegistry_GetByNormalizedID(t *testing.T) {
 	p = r.GetByNormalizedID("nonexistent")
 	if p != nil {
 		t.Error("expected nil for unknown provider")
-	}
-}
-
-func TestRegistry_DiscoverFromBridge(t *testing.T) {
-	fwd := &mockForwarder{
-		handler: func(req *protocol.RequestFrame) (*protocol.ResponseFrame, error) {
-			payload, _ := json.Marshal(map[string]any{
-				"providers": []map[string]any{
-					{"id": "anthropic", "label": "Anthropic", "aliases": []string{"claude"}},
-					{"id": "openai", "label": "OpenAI"},
-				},
-			})
-			return &protocol.ResponseFrame{
-				ID:      req.ID,
-				OK:      true,
-				Payload: payload,
-			}, nil
-		},
-	}
-
-	r := NewRegistry()
-	err := r.DiscoverFromBridge(context.Background(), fwd)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(r.List()) != 2 {
-		t.Errorf("expected 2 providers, got %d", len(r.List()))
-	}
-
-	p := r.Get("anthropic")
-	if p == nil {
-		t.Fatal("expected anthropic provider")
-	}
-	if p.Label() != "Anthropic" {
-		t.Errorf("expected label Anthropic, got %q", p.Label())
-	}
-
-	// Check alias support.
-	ap, ok := p.(AliasProvider)
-	if !ok {
-		t.Fatal("expected AliasProvider interface")
-	}
-	if len(ap.Aliases()) != 1 || ap.Aliases()[0] != "claude" {
-		t.Errorf("expected alias [claude], got %v", ap.Aliases())
 	}
 }

@@ -2,11 +2,8 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 func TestManagedCredential_Expiry(t *testing.T) {
@@ -42,7 +39,7 @@ func TestManagedCredential_Expiry(t *testing.T) {
 }
 
 func TestAuthManager_StoreResolve(t *testing.T) {
-	am := NewAuthManager(nil, nil, nil)
+	am := NewAuthManager(nil, nil)
 
 	am.Store(&ManagedCredential{
 		ProviderID: "openai",
@@ -75,67 +72,15 @@ func TestAuthManager_StoreResolve(t *testing.T) {
 }
 
 func TestAuthManager_Resolve_NotFound(t *testing.T) {
-	am := NewAuthManager(nil, nil, nil)
+	am := NewAuthManager(nil, nil)
 	cred := am.Resolve("nonexistent", "")
 	if cred != nil {
 		t.Error("expected nil for unknown provider")
 	}
 }
 
-// mockForwarder implements Forwarder for testing.
-type mockForwarder struct {
-	handler func(req *protocol.RequestFrame) (*protocol.ResponseFrame, error)
-}
-
-func (m *mockForwarder) Forward(_ context.Context, req *protocol.RequestFrame) (*protocol.ResponseFrame, error) {
-	return m.handler(req)
-}
-
-func TestAuthManager_Prepare_ViaForwarder(t *testing.T) {
-	fwd := &mockForwarder{
-		handler: func(req *protocol.RequestFrame) (*protocol.ResponseFrame, error) {
-			payload, _ := json.Marshal(PreparedAuth{
-				APIKey:    "rotated-key",
-				BaseURL:   "https://api.example.com",
-				ExpiresAt: time.Now().Add(1 * time.Hour).UnixMilli(),
-			})
-			return &protocol.ResponseFrame{
-				ID:      req.ID,
-				OK:      true,
-				Payload: payload,
-			}, nil
-		},
-	}
-
-	am := NewAuthManager(nil, fwd, nil)
-
-	prepared, err := am.Prepare(context.Background(), RuntimeAuthContext{
-		Provider: "test-provider",
-		APIKey:   "old-key",
-		AuthMode: "oauth",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if prepared.APIKey != "rotated-key" {
-		t.Errorf("expected rotated-key, got %q", prepared.APIKey)
-	}
-	if prepared.BaseURL != "https://api.example.com" {
-		t.Errorf("expected base URL, got %q", prepared.BaseURL)
-	}
-
-	// Credential should be stored.
-	cred := am.Resolve("test-provider", "")
-	if cred == nil {
-		t.Fatal("expected stored credential after prepare")
-	}
-	if cred.APIKey != "rotated-key" {
-		t.Errorf("expected rotated-key in store, got %q", cred.APIKey)
-	}
-}
-
 func TestAuthManager_Prepare_NoForwarder(t *testing.T) {
-	am := NewAuthManager(nil, nil, nil)
+	am := NewAuthManager(nil, nil)
 
 	prepared, err := am.Prepare(context.Background(), RuntimeAuthContext{
 		Provider: "test",
@@ -150,7 +95,7 @@ func TestAuthManager_Prepare_NoForwarder(t *testing.T) {
 }
 
 func TestAuthManager_Stop(t *testing.T) {
-	am := NewAuthManager(nil, nil, nil)
+	am := NewAuthManager(nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

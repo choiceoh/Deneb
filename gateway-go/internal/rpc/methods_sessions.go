@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"time"
 
@@ -11,10 +10,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// SessionDeps extends Deps with a Forwarder for bridge-delegated session ops.
+// SessionDeps holds dependencies for session RPC methods.
 type SessionDeps struct {
 	Deps
-	Forwarder Forwarder
 }
 
 // RegisterSessionMethods registers Phase 3 session RPC methods.
@@ -31,7 +29,7 @@ func RegisterSessionMethods(d *Dispatcher, deps SessionDeps) {
 // ---------------------------------------------------------------------------
 
 func sessionsPatch(deps SessionDeps) HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			Key string `json:"key"`
 			session.PatchFields
@@ -46,14 +44,6 @@ func sessionsPatch(deps SessionDeps) HandlerFunc {
 		}
 
 		updated := deps.Sessions.Patch(key, p.PatchFields)
-
-		// Forward to bridge for persistent store update; bridge response
-		// includes resolved model info the Go layer doesn't have.
-		if resp := forwardToBridge(ctx, deps.Forwarder, req); resp != nil {
-			emitSessionLifecycle(deps.Deps, key, "patch")
-			return resp
-		}
-
 		emitSessionLifecycle(deps.Deps, key, "patch")
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"ok":    true,
@@ -69,7 +59,7 @@ func sessionsPatch(deps SessionDeps) HandlerFunc {
 // ---------------------------------------------------------------------------
 
 func sessionsReset(deps SessionDeps) HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			Key    string `json:"key"`
 			Reason string `json:"reason"`
@@ -87,14 +77,6 @@ func sessionsReset(deps SessionDeps) HandlerFunc {
 			reason = "new"
 		}
 
-		// Forward to bridge for transcript archival + persistent store reset.
-		if resp := forwardToBridge(ctx, deps.Forwarder, req); resp != nil {
-			deps.Sessions.ResetSession(key)
-			emitSessionLifecycle(deps.Deps, key, reason)
-			return resp
-		}
-
-		// Fallback: reset in-memory state only.
 		s := deps.Sessions.ResetSession(key)
 		if s == nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -116,7 +98,7 @@ func sessionsReset(deps SessionDeps) HandlerFunc {
 // ---------------------------------------------------------------------------
 
 func sessionsPreview(deps SessionDeps) HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			Keys []string `json:"keys"`
 		}
@@ -135,11 +117,6 @@ func sessionsPreview(deps SessionDeps) HandlerFunc {
 			return resp
 		}
 
-		if resp := forwardToBridge(ctx, deps.Forwarder, req); resp != nil {
-			return resp
-		}
-
-		// Fallback: return empty previews with "missing" status.
 		previews := make([]map[string]any, len(keys))
 		for i, k := range keys {
 			previews[i] = map[string]any{
@@ -161,7 +138,7 @@ func sessionsPreview(deps SessionDeps) HandlerFunc {
 // ---------------------------------------------------------------------------
 
 func sessionsResolve(deps SessionDeps) HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			Key            string `json:"key"`
 			SessionID      string `json:"sessionId"`
@@ -219,11 +196,6 @@ func sessionsResolve(deps SessionDeps) HandlerFunc {
 			return resp
 		}
 
-		// Fall back to bridge for persistent store lookup.
-		if resp := forwardToBridge(ctx, deps.Forwarder, req); resp != nil {
-			return resp
-		}
-
 		return protocol.NewResponseError(req.ID, protocol.NewError(
 			protocol.ErrNotFound, "session not found"))
 	}
@@ -266,7 +238,7 @@ func matchesAgentID(key, agentID string) bool {
 // ---------------------------------------------------------------------------
 
 func sessionsCompact(deps SessionDeps) HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			Key string `json:"key"`
 		}
@@ -279,26 +251,11 @@ func sessionsCompact(deps SessionDeps) HandlerFunc {
 			return errMissingKey(req.ID)
 		}
 
-		if resp := forwardToBridge(ctx, deps.Forwarder, req); resp != nil {
-			// If compaction succeeded, clear in-memory token fields.
-			var result struct {
-				Compacted bool `json:"compacted"`
-			}
-			if resp.Payload != nil {
-				_ = json.Unmarshal(resp.Payload, &result)
-			}
-			if result.Compacted {
-				deps.Sessions.ClearTokens(key)
-				emitSessionLifecycle(deps.Deps, key, "compact")
-			}
-			return resp
-		}
-
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"ok":        true,
 			"key":       key,
 			"compacted": false,
-			"reason":    "no bridge available",
+			"reason":    "compaction not yet implemented in Go gateway",
 		})
 		return resp
 	}
@@ -317,20 +274,6 @@ func requireKey(key string) string {
 func errMissingKey(reqID string) *protocol.ResponseFrame {
 	return protocol.NewResponseError(reqID, protocol.NewError(
 		protocol.ErrMissingParam, "key is required"))
-}
-
-// forwardToBridge forwards an RPC request to the Node.js bridge.
-// Returns the bridge response on success, or nil if the bridge is
-// unavailable or returns an error (caller should fall through to local logic).
-func forwardToBridge(ctx context.Context, fwd Forwarder, req *protocol.RequestFrame) *protocol.ResponseFrame {
-	if fwd == nil {
-		return nil
-	}
-	resp, err := fwd.Forward(ctx, req)
-	if err != nil || resp == nil || resp.Error != nil {
-		return nil
-	}
-	return resp
 }
 
 // emitSessionLifecycle emits a lifecycle change event if GatewaySubs is available.
