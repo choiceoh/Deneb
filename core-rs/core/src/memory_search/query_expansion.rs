@@ -606,7 +606,7 @@ fn contains_hiragana_katakana(s: &str) -> bool {
 
 #[inline]
 fn contains_cjk(s: &str) -> bool {
-    s.chars().any(|c| is_cjk_char(c))
+    s.chars().any(is_cjk_char)
 }
 
 #[inline]
@@ -722,7 +722,7 @@ fn tokenize(text: &str) -> Vec<String> {
             let stem = strip_korean_trailing_particle(segment);
             let stem_is_stop = stem
                 .as_ref()
-                .map_or(false, |s| STOP_WORDS_KO.contains(s.as_str()));
+                .is_some_and(|s| STOP_WORDS_KO.contains(s.as_str()));
             if !STOP_WORDS_KO.contains(segment) && !stem_is_stop {
                 tokens.push(segment.to_string());
             }

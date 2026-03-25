@@ -202,7 +202,7 @@ fn convert_headings(input: &str) -> String {
             let after_h = start + 2;
             if after_h < input.len() {
                 let level_byte = input.as_bytes()[after_h];
-                if level_byte >= b'1' && level_byte <= b'6' {
+                if (b'1'..=b'6').contains(&level_byte) {
                     let level = (level_byte - b'0') as usize;
                     // Find closing > of opening tag.
                     if let Some(gt) = input[after_h..].find('>') {
@@ -213,7 +213,7 @@ fn convert_headings(input: &str) -> String {
                             result.push_str(&input[cursor..start]);
                             let body = &input[body_start..body_end];
                             let label = normalize_whitespace(&strip_tags(body));
-                            let prefix = "#".repeat(level.min(6).max(1));
+                            let prefix = "#".repeat(level.clamp(1, 6));
                             result.push('\n');
                             result.push_str(&prefix);
                             result.push(' ');
@@ -406,8 +406,7 @@ fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)> {
     }
 
     // Decimal numeric: &#DDD;
-    if rest.starts_with("&#") {
-        let after = &rest[2..];
+    if let Some(after) = rest.strip_prefix("&#") {
         if let Some(semi) = after.find(';') {
             let dec_str = &after[..semi];
             if let Ok(code) = dec_str.parse::<u32>() {

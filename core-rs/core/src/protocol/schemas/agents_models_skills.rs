@@ -222,7 +222,7 @@ pub fn validate_skills_update_params(
                     if key.is_empty() {
                         e.push(ValidationError {
                             path: p.to_string(),
-                            message: format!("key must be non-empty, got \"\""),
+                            message: "key must be non-empty, got \"\"".to_string(),
                             keyword: "minLength",
                         });
                     }

@@ -78,10 +78,7 @@ pub fn memory_mmr_rerank(items_json: String, config_json: String) -> String {
         Ok(v) => v,
         Err(_) => return "[]".to_string(),
     };
-    let config: types::MmrConfig = match serde_json::from_str(&config_json) {
-        Ok(v) => v,
-        Err(_) => types::MmrConfig::default(),
-    };
+    let config: types::MmrConfig = serde_json::from_str(&config_json).unwrap_or_default();
 
     let indices = mmr::mmr_rerank(&items, &config);
     let reranked: Vec<&types::MmrItem> = indices

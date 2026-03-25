@@ -243,8 +243,7 @@ pub struct SummaryRecord {
 /// Estimate token count from text length (matches TypeScript `Math.ceil(text.length / 4)`).
 #[inline]
 pub fn estimate_tokens(text: &str) -> u64 {
-    let len = text.len() as u64;
-    (len + 3) / 4
+    (text.len() as u64).div_ceil(4)
 }
 
 /// Evaluate whether compaction is needed.
@@ -609,7 +608,7 @@ pub fn generate_summary_id(content: &str, now_ms: i64) -> String {
 pub fn deterministic_fallback(source: &str, input_tokens: u64) -> String {
     let trimmed = source.trim();
     if trimmed.is_empty() {
-        return format!("[Truncated from 0 tokens]");
+        return "[Truncated from 0 tokens]".to_string();
     }
     let truncated = if trimmed.len() > FALLBACK_MAX_CHARS {
         &trimmed[..safe_char_boundary(trimmed, FALLBACK_MAX_CHARS)]

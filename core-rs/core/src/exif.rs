@@ -82,10 +82,7 @@ pub fn read_jpeg_exif_orientation_impl(buf: &[u8]) -> Option<u8> {
                 if ifd0_offset > 10 * 1024 * 1024 {
                     return None; // Unreasonably large offset
                 }
-                let ifd0_start = match tiff_start.checked_add(ifd0_offset) {
-                    Some(v) => v,
-                    None => return None,
-                };
+                let ifd0_start = tiff_start.checked_add(ifd0_offset)?;
                 if buf.len() < ifd0_start + 2 {
                     return None;
                 }
@@ -113,7 +110,7 @@ pub fn read_jpeg_exif_orientation_impl(buf: &[u8]) -> Option<u8> {
         }
 
         // Skip other APP segments (0xE0-0xEF)
-        if marker >= 0xE0 && marker <= 0xEF {
+        if (0xE0..=0xEF).contains(&marker) {
             if offset + 3 >= buf.len() {
                 break;
             }

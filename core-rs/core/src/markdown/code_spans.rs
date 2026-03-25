@@ -11,19 +11,10 @@ use serde::{Deserialize, Serialize};
 // Types
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InlineCodeState {
     pub open: bool,
     pub ticks: usize,
-}
-
-impl Default for InlineCodeState {
-    fn default() -> Self {
-        Self {
-            open: false,
-            ticks: 0,
-        }
-    }
 }
 
 /// Result of building a code span index: the set of code regions and the
