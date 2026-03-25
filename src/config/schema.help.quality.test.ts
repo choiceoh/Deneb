@@ -376,11 +376,9 @@ const TARGET_KEYS = [
   "agents.defaults",
   "agents.list",
   "agents.defaults.compaction",
-  // compaction.mode, maxHistoryShare, recentTurnsPreserve, qualityGuard.*
+  // compaction.mode, maxHistoryShare, recentTurnsPreserve, qualityGuard.*,
+  // reserveTokens, keepRecentTokens, reserveTokensFloor, identifierPolicy
   // are system-managed — excluded from operational guidance checks.
-  "agents.defaults.compaction.reserveTokens",
-  "agents.defaults.compaction.keepRecentTokens",
-  "agents.defaults.compaction.reserveTokensFloor",
   "agents.defaults.compaction.identifierPolicy",
   "agents.defaults.compaction.identifierInstructions",
   "agents.defaults.compaction.postCompactionSections",
@@ -800,6 +798,16 @@ describe("config help copy quality", () => {
 
     const recentTurnsPreserve = FIELD_HELP["agents.defaults.compaction.recentTurnsPreserve"];
     expect(/system-managed|fixed/i.test(recentTurnsPreserve)).toBe(true);
+
+    // reserveTokens, keepRecentTokens, reserveTokensFloor are system-managed.
+    const reserveTokens = FIELD_HELP["agents.defaults.compaction.reserveTokens"];
+    expect(/system-managed/i.test(reserveTokens)).toBe(true);
+
+    const keepRecentTokens = FIELD_HELP["agents.defaults.compaction.keepRecentTokens"];
+    expect(/system-managed/i.test(keepRecentTokens)).toBe(true);
+
+    const reserveTokensFloor = FIELD_HELP["agents.defaults.compaction.reserveTokensFloor"];
+    expect(/system-managed|fixed/i.test(reserveTokensFloor)).toBe(true);
 
     const postCompactionSections = FIELD_HELP["agents.defaults.compaction.postCompactionSections"];
     expect(/Session Startup|Red Lines/i.test(postCompactionSections)).toBe(true);

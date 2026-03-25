@@ -177,17 +177,17 @@ export const AGENTS_HELP: Record<string, string> = {
     "Max image side length in pixels when sanitizing transcript/tool-result image payloads (default: 1200).",
   "agents.defaults.cliBackends": "Optional CLI backends for text-only fallback (claude-cli, etc.).",
   "agents.defaults.maxHistoryTurns":
-    "Maximum number of user turns to keep in context when no channel-specific historyLimit is configured. Prevents unbounded context growth in long-running sessions. Default: 100. Set 0 to disable the limit entirely.",
+    "System-managed: fixed at 100. This field is accepted in config for backward compatibility but ignored at runtime.",
   "agents.defaults.compaction":
     "Compaction tuning for when context nears token limits, including history share, reserve headroom, and pre-compaction memory flush behavior. Use this when long-running sessions need stable continuity under tight context windows.",
   "agents.defaults.compaction.mode":
     'System-managed: always "safeguard". This field is accepted in config for backward compatibility but ignored at runtime.',
   "agents.defaults.compaction.reserveTokens":
-    "Token headroom reserved for reply generation and tool output after compaction runs. Use higher reserves for verbose/tool-heavy sessions, and lower reserves when maximizing retained history matters more.",
+    "System-managed: uses Pi defaults with floor enforcement. This field is accepted in config for backward compatibility but ignored at runtime.",
   "agents.defaults.compaction.keepRecentTokens":
-    "Minimum token budget preserved from the most recent conversation window during compaction. Use higher values to protect immediate context continuity and lower values to keep more long-tail history.",
+    "System-managed: uses Pi defaults. This field is accepted in config for backward compatibility but ignored at runtime.",
   "agents.defaults.compaction.reserveTokensFloor":
-    "Minimum floor enforced for reserveTokens in Pi compaction paths (0 disables the floor guard). Use a non-zero floor to avoid over-aggressive compression under fluctuating token estimates.",
+    "System-managed: fixed at 20000. This field is accepted in config for backward compatibility but ignored at runtime.",
   "agents.defaults.compaction.maxHistoryShare":
     "System-managed: fixed at 0.5. This field is accepted in config for backward compatibility but ignored at runtime.",
   "agents.defaults.compaction.identifierPolicy":

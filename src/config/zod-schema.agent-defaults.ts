@@ -99,6 +99,7 @@ export const AgentDefaultsSchema = z
           })
           .strict()
           .optional(),
+        // Deprecated: accepted for backward compat but ignored at runtime (system constants).
         reserveTokens: z.number().int().nonnegative().optional(),
         keepRecentTokens: z.number().int().positive().optional(),
         reserveTokensFloor: z.number().int().nonnegative().optional(),

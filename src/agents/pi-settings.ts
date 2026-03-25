@@ -33,28 +33,15 @@ export function ensurePiCompactionReserveTokens(params: {
   return { didOverride: true, reserveTokens: minReserveTokens };
 }
 
-export function resolveCompactionReserveTokensFloor(cfg?: DenebConfig): number {
-  const raw = cfg?.agents?.defaults?.compaction?.reserveTokensFloor;
-  if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) {
-    return Math.floor(raw);
-  }
+// reserveTokensFloor is system-managed — always DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR.
+// User overrides are ignored to prevent quality degradation from bad compaction settings.
+export function resolveCompactionReserveTokensFloor(_cfg?: DenebConfig): number {
   return DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
 }
 
-function toNonNegativeInt(value: unknown): number | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    return undefined;
-  }
-  return Math.floor(value);
-}
-
-function toPositiveInt(value: unknown): number | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    return undefined;
-  }
-  return Math.floor(value);
-}
-
+// reserveTokens, keepRecentTokens, and reserveTokensFloor are system-managed.
+// Bad user values cause context loss during compaction (severe quality degradation).
+// The system enforces the floor and ignores user overrides for these fields.
 export function applyPiCompactionSettingsFromConfig(params: {
   settingsManager: PiSettingsManagerLike;
   cfg?: DenebConfig;
@@ -64,24 +51,14 @@ export function applyPiCompactionSettingsFromConfig(params: {
 } {
   const currentReserveTokens = params.settingsManager.getCompactionReserveTokens();
   const currentKeepRecentTokens = params.settingsManager.getCompactionKeepRecentTokens();
-  const compactionCfg = params.cfg?.agents?.defaults?.compaction;
+  const reserveTokensFloor = DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
 
-  const configuredReserveTokens = toNonNegativeInt(compactionCfg?.reserveTokens);
-  const configuredKeepRecentTokens = toPositiveInt(compactionCfg?.keepRecentTokens);
-  const reserveTokensFloor = resolveCompactionReserveTokensFloor(params.cfg);
-
-  const targetReserveTokens = Math.max(
-    configuredReserveTokens ?? currentReserveTokens,
-    reserveTokensFloor,
-  );
-  const targetKeepRecentTokens = configuredKeepRecentTokens ?? currentKeepRecentTokens;
+  // System-managed: always enforce the floor, ignore user-configured values.
+  const targetReserveTokens = Math.max(currentReserveTokens, reserveTokensFloor);
 
   const overrides: { reserveTokens?: number; keepRecentTokens?: number } = {};
   if (targetReserveTokens !== currentReserveTokens) {
     overrides.reserveTokens = targetReserveTokens;
-  }
-  if (targetKeepRecentTokens !== currentKeepRecentTokens) {
-    overrides.keepRecentTokens = targetKeepRecentTokens;
   }
 
   const didOverride = Object.keys(overrides).length > 0;
@@ -93,7 +70,7 @@ export function applyPiCompactionSettingsFromConfig(params: {
     didOverride,
     compaction: {
       reserveTokens: targetReserveTokens,
-      keepRecentTokens: targetKeepRecentTokens,
+      keepRecentTokens: currentKeepRecentTokens,
     },
   };
 }

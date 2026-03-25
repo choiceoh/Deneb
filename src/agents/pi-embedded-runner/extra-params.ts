@@ -84,12 +84,9 @@ function createStreamFnWithExtraParams(
   }
 
   const streamParams: CacheRetentionStreamOptions = {};
-  if (typeof extraParams.temperature === "number") {
-    streamParams.temperature = extraParams.temperature;
-  }
-  if (typeof extraParams.maxTokens === "number") {
-    streamParams.maxTokens = extraParams.maxTokens;
-  }
+  // temperature and maxTokens are system-managed — not user-configurable.
+  // Bad values cause severe quality degradation (incoherent output or truncated responses).
+  // The model's provider-optimized defaults are always used instead.
   const transport = extraParams.transport;
   if (transport === "sse" || transport === "websocket" || transport === "auto") {
     streamParams.transport = transport;
