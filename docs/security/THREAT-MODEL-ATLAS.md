@@ -586,7 +586,6 @@ T-EXEC-002 → T-EXFIL-001 → External exfiltration
 | ----------------------------------- | --------------------------- | ------------ |
 | `src/infra/exec-approvals.ts`       | Command approval logic      | **Critical** |
 | `src/gateway/auth.ts`               | Gateway authentication      | **Critical** |
-| `src/web/inbound/access-control.ts` | Channel access control      | **Critical** |
 | `src/infra/net/ssrf.ts`             | SSRF protection             | **Critical** |
 | `src/security/external-content.ts`  | Prompt injection mitigation | **Critical** |
 | `src/agents/sandbox/tool-policy.ts` | Tool policy enforcement     | **Critical** |

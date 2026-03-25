@@ -524,7 +524,7 @@ BlueBubbles is the recommended iMessage path (plugin-backed, configured under `c
 
 - Core key paths covered here: `channels.bluebubbles`, `channels.bluebubbles.dmPolicy`.
 - Optional `channels.bluebubbles.defaultAccount` overrides default account selection when it matches a configured account id.
-- Full BlueBubbles channel configuration is documented in [BlueBubbles](/channels/bluebubbles).
+- Full BlueBubbles channel configuration is documented in the BlueBubbles channel guide.
 
 ### iMessage
 
@@ -588,7 +588,7 @@ Microsoft Teams is extension-backed and configured under `channels.msteams`.
 ```
 
 - Core key paths covered here: `channels.msteams`, `channels.msteams.configWrites`.
-- Full Teams config (credentials, webhook, DM/group policy, per-team/per-channel overrides) is documented in [Microsoft Teams](/channels/msteams).
+- Full Teams config (credentials, webhook, DM/group policy, per-team/per-channel overrides) is documented in the Microsoft Teams channel guide.
 
 ### IRC
 
@@ -615,7 +615,7 @@ IRC is extension-backed and configured under `channels.irc`.
 
 - Core key paths covered here: `channels.irc`, `channels.irc.dmPolicy`, `channels.irc.configWrites`, `channels.irc.nickserv.*`.
 - Optional `channels.irc.defaultAccount` overrides default account selection when it matches a configured account id.
-- Full IRC channel configuration (host/port/TLS/channels/allowlists/mention gating) is documented in [IRC](/channels/irc).
+- Full IRC channel configuration (host/port/TLS/channels/allowlists/mention gating) is documented in the IRC channel guide.
 
 ### Multi-account (all channels)
 

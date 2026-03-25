@@ -82,7 +82,7 @@ Or tail while reproducing:
 tail -f /tmp/deneb/deneb-$(date +%F).log | rg "telegram http error"
 ```
 
-For remote gateways, you can also use `deneb logs --follow` (see [/cli/logs](/cli/logs)).
+For remote gateways, you can also use `deneb logs --follow`.
 
 ## Notes
 

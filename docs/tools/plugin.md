@@ -31,8 +31,7 @@ deneb plugins list
 deneb plugins install @deneb/matrix
 ```
 
-Npm specs are registry-only. See [install rules](/cli/plugins#install) for
-details on pinning, prerelease gating, and supported spec formats.
+Npm specs are registry-only. Use `--pin` to store an exact resolved name and version.
 
 3. Restart the Gateway, then configure under `plugins.entries.<id>.config`.
 
@@ -66,10 +65,10 @@ These are published to npm and installed with `deneb plugins install`:
 
 | Plugin          | Package           | Docs                               |
 | --------------- | ----------------- | ---------------------------------- |
-| Matrix          | `@deneb/matrix`   | [Matrix](/channels/matrix)         |
-| Microsoft Teams | `@deneb/msteams`  | [MS Teams](/channels/msteams)      |
-| Nostr           | `@deneb/nostr`    | [Nostr](/channels/nostr)           |
-| Zalo            | `@deneb/zalo`     | [Zalo](/channels/zalo)             |
+| Matrix          | `@deneb/matrix`   | Matrix                             |
+| Microsoft Teams | `@deneb/msteams`  | MS Teams                           |
+| Nostr           | `@deneb/nostr`    | Nostr                              |
+| Zalo            | `@deneb/zalo`     | Zalo                               |
 | Zalo Personal   | `@deneb/zalouser` | [Zalo Personal](/plugins/zalouser) |
 
 Microsoft Teams is plugin-only as of 2026.1.15.
@@ -291,8 +290,7 @@ deneb plugins disable <id>
 deneb plugins doctor
 ```
 
-See [`deneb plugins` CLI reference](/cli/plugins) for full details on each
-command (install rules, inspect output, marketplace installs, uninstall).
+Run `deneb plugins --help` for full details on each command.
 
 Plugins may also register their own top-level commands.
 

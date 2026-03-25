@@ -152,7 +152,7 @@ node allowlist/approvals).
 
 Related:
 
-- [Node host CLI](/cli/node)
+- `deneb node --help`
 - [Exec tool](/tools/exec)
 - [Exec approvals](/tools/exec-approvals)
 

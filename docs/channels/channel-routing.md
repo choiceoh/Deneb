@@ -88,7 +88,7 @@ Config:
 }
 ```
 
-See: [Broadcast Groups](/channels/broadcast-groups).
+See also: Broadcast Groups (configure via `bindings` with `broadcast: true`).
 
 ## Config overview
 

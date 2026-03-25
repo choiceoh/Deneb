@@ -112,7 +112,7 @@ These are typically low-volume calls but still hit provider APIs:
 - `deneb status --usage`
 - `deneb models status --json`
 
-See [Models CLI](/cli/models).
+Run `deneb models --help` for CLI details.
 
 ### 7) Compaction safeguard summarization
 
@@ -126,7 +126,7 @@ See [Session management + compaction](/reference/session-management-compaction).
 `deneb models scan` can probe OpenRouter models and uses `OPENROUTER_API_KEY` when
 probing is enabled.
 
-See [Models CLI](/cli/models).
+Run `deneb models --help` for CLI details.
 
 ### 9) Talk (speech)
 

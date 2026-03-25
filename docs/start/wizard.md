@@ -119,7 +119,7 @@ For the deeper technical reference, including RPC details, see
 
 ## Related docs
 
-- CLI command reference: [`deneb onboard`](/cli/onboard)
+- CLI command reference: `deneb onboard --help`
 - Onboarding overview: [Onboarding Overview](/start/onboarding-overview)
 - macOS app onboarding: [Onboarding](/start/onboarding)
 - Agent first-run ritual: [Agent Bootstrapping](/start/bootstrapping)
