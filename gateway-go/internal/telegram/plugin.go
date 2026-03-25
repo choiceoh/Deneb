@@ -46,11 +46,12 @@ func (p *Plugin) Meta() channel.Meta {
 // Capabilities implements channel.Plugin.
 func (p *Plugin) Capabilities() channel.Capabilities {
 	return channel.Capabilities{
-		ChatTypes: []string{"private", "group", "supergroup"},
-		Media:     true,
-		Threads:   true,
-		Edit:      true,
-		Reply:     true,
+		ChatTypes:      []string{"private", "group", "supergroup"},
+		Media:          true,
+		Threads:        true,
+		Edit:           true,
+		Reply:          true,
+		BlockStreaming: !p.config.IsBlockStreamingDisabled(),
 	}
 }
 
@@ -58,6 +59,11 @@ func (p *Plugin) Capabilities() channel.Capabilities {
 func (p *Plugin) Start(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	if !p.config.IsEnabled() {
+		p.status = channel.Status{Connected: false, Error: "account disabled"}
+		return nil
+	}
 
 	if p.config.BotToken == "" {
 		p.status = channel.Status{Connected: false, Error: "no bot token configured"}

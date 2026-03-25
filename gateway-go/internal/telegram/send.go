@@ -22,6 +22,10 @@ type SendOptions struct {
 	ReplyToMessageID int64
 	// Keyboard attaches an inline keyboard.
 	Keyboard *InlineKeyboardMarkup
+	// ChunkLimit overrides the max chunk size in characters (0 = default).
+	ChunkLimit int
+	// ChunkMode controls splitting: "newline" or "length" (default).
+	ChunkMode string
 }
 
 // SendResult holds the result of a send operation.
@@ -32,15 +36,22 @@ type SendResult struct {
 
 // SendText sends a text message, automatically chunking if needed.
 // Returns results for all chunks sent.
+// chunkLimit overrides the default max chunk size (0 = use MaxTextLength).
+// chunkMode controls splitting: "newline" splits on every newline, "length" (default) splits by size.
 func SendText(ctx context.Context, c *Client, chatID int64, text string, opts SendOptions) ([]SendResult, error) {
 	if text == "" {
 		return nil, fmt.Errorf("empty text")
 	}
 
 	maxLen := TextChunkLimit
-	var chunks []string
+	if opts.ChunkLimit > 0 && opts.ChunkLimit < maxLen {
+		maxLen = opts.ChunkLimit
+	}
 
-	if opts.ParseMode == "HTML" {
+	var chunks []string
+	if opts.ChunkMode == string(ChunkModeNewline) {
+		chunks = ChunkByNewline(text, maxLen)
+	} else if opts.ParseMode == "HTML" {
 		chunks = ChunkHTML(text, maxLen)
 	} else {
 		chunks = ChunkText(text, maxLen)

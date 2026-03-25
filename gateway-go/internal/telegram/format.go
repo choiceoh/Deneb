@@ -274,6 +274,52 @@ func ChunkText(text string, maxLen int) []string {
 	return chunks
 }
 
+// ChunkByNewline splits text on every newline boundary, merging consecutive
+// lines into chunks that stay under maxLen. This matches the TypeScript
+// chunkMode: "newline" behavior.
+func ChunkByNewline(text string, maxLen int) []string {
+	if len(text) <= maxLen {
+		return []string{text}
+	}
+
+	lines := strings.Split(text, "\n")
+	var chunks []string
+	var current strings.Builder
+
+	for _, line := range lines {
+		// If a single line exceeds maxLen, fall back to length-based chunking.
+		if len(line) > maxLen {
+			if current.Len() > 0 {
+				chunks = append(chunks, current.String())
+				current.Reset()
+			}
+			chunks = append(chunks, ChunkText(line, maxLen)...)
+			continue
+		}
+
+		needed := len(line)
+		if current.Len() > 0 {
+			needed++ // newline separator
+		}
+
+		if current.Len()+needed > maxLen {
+			chunks = append(chunks, current.String())
+			current.Reset()
+		}
+
+		if current.Len() > 0 {
+			current.WriteByte('\n')
+		}
+		current.WriteString(line)
+	}
+
+	if current.Len() > 0 {
+		chunks = append(chunks, current.String())
+	}
+
+	return chunks
+}
+
 // ChunkHTML splits HTML text into chunks, respecting tag boundaries.
 // This is a simplified version that avoids splitting inside HTML tags.
 func ChunkHTML(html string, maxLen int) []string {

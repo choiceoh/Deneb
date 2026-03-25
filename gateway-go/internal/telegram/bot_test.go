@@ -73,7 +73,7 @@ func TestBot_StartAndStop(t *testing.T) {
 }
 
 func TestBot_InboundMessageCallback(t *testing.T) {
-	var received *Update
+	receivedCh := make(chan *Update, 1)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -106,10 +106,13 @@ func TestBot_InboundMessageCallback(t *testing.T) {
 
 	c := NewClient(ClientConfig{Token: "test-token"})
 	c.baseURL = srv.URL + "/bottest-token"
-	cfg := &Config{BotToken: "test-token"}
+	cfg := &Config{BotToken: "test-token", DmPolicy: DmPolicyOpen}
 
-	bot := NewBot(c, cfg, func(ctx context.Context, update *Update) {
-		received = update
+	bot := NewBot(c, cfg, func(_ context.Context, update *Update) {
+		select {
+		case receivedCh <- update:
+		default:
+		}
 	}, testLogger())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -119,9 +122,10 @@ func TestBot_InboundMessageCallback(t *testing.T) {
 	}()
 
 	// Wait for the update to be processed.
-	deadline := time.Now().Add(2 * time.Second)
-	for received == nil && time.Now().Before(deadline) {
-		time.Sleep(50 * time.Millisecond)
+	var received *Update
+	select {
+	case received = <-receivedCh:
+	case <-time.After(2 * time.Second):
 	}
 
 	cancel()
@@ -177,38 +181,53 @@ func TestBot_AllowList(t *testing.T) {
 	bot, _, srv := newTestBotSetup(t, func(w http.ResponseWriter, r *http.Request) {})
 	defer srv.Close()
 
-	// No allowlist — all allowed.
+	// Default pairing policy + no allowlist → denied (fail-closed).
 	msg := &Message{From: &User{ID: 1}, Chat: Chat{Type: "private"}}
-	if !bot.isAllowed(msg) {
-		t.Error("expected message allowed with empty allowlist")
+	r := CheckAccess(bot.config, msg)
+	if r.Allowed {
+		t.Error("expected message denied with default pairing policy and no allowlist")
 	}
 
-	// With allowlist — only allowed users.
+	// With allowlist + default pairing policy — paired users allowed.
 	bot.config.AllowFrom = AllowList{IDs: []int64{42}}
-	if bot.isAllowed(msg) {
-		t.Error("expected message rejected for non-allowed user")
+	r = CheckAccess(bot.config, msg)
+	if r.Allowed {
+		t.Error("expected message rejected for non-paired user")
 	}
 	msg.From.ID = 42
-	if !bot.isAllowed(msg) {
-		t.Error("expected message allowed for allowed user")
+	r = CheckAccess(bot.config, msg)
+	if !r.Allowed {
+		t.Error("expected message allowed for paired user")
 	}
 
-	// Wildcard allows all.
+	// Open DM policy — all allowed.
+	bot.config.DmPolicy = DmPolicyOpen
+	msg.From.ID = 999
+	r = CheckAccess(bot.config, msg)
+	if !r.Allowed {
+		t.Error("expected message allowed with open DM policy")
+	}
+
+	// Wildcard allows all (allowlist policy).
+	bot.config.DmPolicy = DmPolicyAllowlist
 	bot.config.AllowFrom = AllowList{Wildcard: true}
 	msg.From.ID = 999
-	if !bot.isAllowed(msg) {
-		t.Error("expected message allowed with wildcard")
+	r = CheckAccess(bot.config, msg)
+	if !r.Allowed {
+		t.Error("expected message allowed with wildcard allowlist")
 	}
 
-	// Username matching.
+	// Username matching (allowlist policy).
 	bot.config.AllowFrom = AllowList{Usernames: []string{"peter"}}
 	msg.From.ID = 0
 	msg.From.Username = ""
-	if bot.isAllowed(msg) {
+	r = CheckAccess(bot.config, msg)
+	if r.Allowed {
 		t.Error("expected rejection when username is empty")
 	}
 	msg.From.Username = "Peter"
-	if !bot.isAllowed(msg) {
+	r = CheckAccess(bot.config, msg)
+	if !r.Allowed {
 		t.Error("expected case-insensitive username match")
 	}
 }
