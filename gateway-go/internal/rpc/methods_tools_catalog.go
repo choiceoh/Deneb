@@ -50,65 +50,96 @@ var catalogProfileOptions = []profileOption{
 	{ID: ProfileFull, Label: "Full"},
 }
 
-// coreToolCatalog mirrors the 22 core tools from src/agents/tool-catalog.ts.
-var coreToolCatalog = []ToolCatalogGroup{
-	{ID: "fs", Label: "Files", Source: "core", Tools: []ToolCatalogEntry{
-		{ID: "read", Label: "read", Description: "Read file contents", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
-		{ID: "write", Label: "write", Description: "Create or overwrite files", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
-		{ID: "edit", Label: "edit", Description: "Make precise edits", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
-		{ID: "apply_patch", Label: "apply_patch", Description: "Patch files (OpenAI)", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
+// coreTool is a compact definition; Source is always "core" and Label == ID.
+type coreTool struct {
+	ID          string
+	Description string
+	Profiles    []ToolProfileID
+}
+
+// coreSection defines a tool group before expansion.
+type coreSection struct {
+	ID    string
+	Label string
+	Tools []coreTool
+}
+
+// coreSections mirrors the 22 core tools from src/agents/tool-catalog.ts.
+// Source ("core") and Label (== ID) are filled in by buildCoreToolCatalog.
+var coreSections = []coreSection{
+	{"fs", "Files", []coreTool{
+		{"read", "Read file contents", []ToolProfileID{ProfileCoding}},
+		{"write", "Create or overwrite files", []ToolProfileID{ProfileCoding}},
+		{"edit", "Make precise edits", []ToolProfileID{ProfileCoding}},
+		{"apply_patch", "Patch files (OpenAI)", []ToolProfileID{ProfileCoding}},
 	}},
-	{ID: "runtime", Label: "Runtime", Source: "core", Tools: []ToolCatalogEntry{
-		{ID: "exec", Label: "exec", Description: "Run shell commands", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
-		{ID: "process", Label: "process", Description: "Manage background processes", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
+	{"runtime", "Runtime", []coreTool{
+		{"exec", "Run shell commands", []ToolProfileID{ProfileCoding}},
+		{"process", "Manage background processes", []ToolProfileID{ProfileCoding}},
 	}},
-	{ID: "web", Label: "Web", Source: "core", Tools: []ToolCatalogEntry{
-		{ID: "web_search", Label: "web_search", Description: "Search the web", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
-		{ID: "web_fetch", Label: "web_fetch", Description: "Fetch web content", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
+	{"web", "Web", []coreTool{
+		{"web_search", "Search the web", []ToolProfileID{ProfileCoding}},
+		{"web_fetch", "Fetch web content", []ToolProfileID{ProfileCoding}},
 	}},
-	{ID: "memory", Label: "Memory", Source: "core", Tools: []ToolCatalogEntry{
-		{ID: "memory_search", Label: "memory_search", Description: "Semantic search", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
-		{ID: "memory_get", Label: "memory_get", Description: "Read memory files", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
+	{"memory", "Memory", []coreTool{
+		{"memory_search", "Semantic search", []ToolProfileID{ProfileCoding}},
+		{"memory_get", "Read memory files", []ToolProfileID{ProfileCoding}},
 	}},
-	{ID: "sessions", Label: "Sessions", Source: "core", Tools: []ToolCatalogEntry{
-		{ID: "sessions_list", Label: "sessions_list", Description: "List sessions", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding, ProfileMessaging}},
-		{ID: "sessions_history", Label: "sessions_history", Description: "Session history", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding, ProfileMessaging}},
-		{ID: "sessions_send", Label: "sessions_send", Description: "Send to session", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding, ProfileMessaging}},
-		{ID: "sessions_spawn", Label: "sessions_spawn", Description: "Spawn sub-agent", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
-		{ID: "sessions_yield", Label: "sessions_yield", Description: "End turn to receive sub-agent results", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
-		{ID: "subagents", Label: "subagents", Description: "Manage sub-agents", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
-		{ID: "session_status", Label: "session_status", Description: "Session status", Source: "core", DefaultProfiles: []ToolProfileID{ProfileMinimal, ProfileCoding, ProfileMessaging}},
+	{"sessions", "Sessions", []coreTool{
+		{"sessions_list", "List sessions", []ToolProfileID{ProfileCoding, ProfileMessaging}},
+		{"sessions_history", "Session history", []ToolProfileID{ProfileCoding, ProfileMessaging}},
+		{"sessions_send", "Send to session", []ToolProfileID{ProfileCoding, ProfileMessaging}},
+		{"sessions_spawn", "Spawn sub-agent", []ToolProfileID{ProfileCoding}},
+		{"sessions_yield", "End turn to receive sub-agent results", []ToolProfileID{ProfileCoding}},
+		{"subagents", "Manage sub-agents", []ToolProfileID{ProfileCoding}},
+		{"session_status", "Session status", []ToolProfileID{ProfileMinimal, ProfileCoding, ProfileMessaging}},
 	}},
-	{ID: "ui", Label: "UI", Source: "core", Tools: []ToolCatalogEntry{}},
-	{ID: "messaging", Label: "Messaging", Source: "core", Tools: []ToolCatalogEntry{
-		{ID: "message", Label: "message", Description: "Send messages", Source: "core", DefaultProfiles: []ToolProfileID{ProfileMessaging}},
+	{"messaging", "Messaging", []coreTool{
+		{"message", "Send messages", []ToolProfileID{ProfileMessaging}},
 	}},
-	{ID: "automation", Label: "Automation", Source: "core", Tools: []ToolCatalogEntry{
-		{ID: "cron", Label: "cron", Description: "Schedule tasks", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
-		{ID: "gateway", Label: "gateway", Description: "Gateway control", Source: "core", DefaultProfiles: []ToolProfileID{}},
+	{"automation", "Automation", []coreTool{
+		{"cron", "Schedule tasks", []ToolProfileID{ProfileCoding}},
+		{"gateway", "Gateway control", []ToolProfileID{}},
 	}},
-	{ID: "nodes", Label: "Nodes", Source: "core", Tools: []ToolCatalogEntry{
-		{ID: "nodes", Label: "nodes", Description: "Nodes + devices", Source: "core", DefaultProfiles: []ToolProfileID{}},
+	{"nodes", "Nodes", []coreTool{
+		{"nodes", "Nodes + devices", []ToolProfileID{}},
 	}},
-	{ID: "media", Label: "Media", Source: "core", Tools: []ToolCatalogEntry{
-		{ID: "image", Label: "image", Description: "Image understanding", Source: "core", DefaultProfiles: []ToolProfileID{ProfileCoding}},
+	{"media", "Media", []coreTool{
+		{"image", "Image understanding", []ToolProfileID{ProfileCoding}},
 	}},
 }
 
-// nonEmptyCoreToolCatalog filters out groups with no tools.
-func nonEmptyCoreToolCatalog() []ToolCatalogGroup {
-	out := make([]ToolCatalogGroup, 0, len(coreToolCatalog))
-	for _, g := range coreToolCatalog {
-		if len(g.Tools) > 0 {
-			out = append(out, g)
+// buildCoreToolCatalog expands compact definitions into the full JSON-ready
+// catalog, filling in Source="core" and Label=ID, skipping empty sections.
+func buildCoreToolCatalog() []ToolCatalogGroup {
+	groups := make([]ToolCatalogGroup, 0, len(coreSections))
+	for _, sec := range coreSections {
+		if len(sec.Tools) == 0 {
+			continue
 		}
+		entries := make([]ToolCatalogEntry, len(sec.Tools))
+		for i, t := range sec.Tools {
+			entries[i] = ToolCatalogEntry{
+				ID:              t.ID,
+				Label:           t.ID,
+				Description:     t.Description,
+				Source:          "core",
+				DefaultProfiles: t.Profiles,
+			}
+		}
+		groups = append(groups, ToolCatalogGroup{
+			ID:    sec.ID,
+			Label: sec.Label,
+			Source: "core",
+			Tools: entries,
+		})
 	}
-	return out
+	return groups
 }
 
 func toolsCatalog() HandlerFunc {
-	// Pre-compute the filtered catalog once.
-	groups := nonEmptyCoreToolCatalog()
+	// Pre-compute the catalog once at registration time.
+	groups := buildCoreToolCatalog()
 
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {

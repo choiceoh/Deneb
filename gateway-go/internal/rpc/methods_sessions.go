@@ -324,13 +324,7 @@ func forwardToBridge(ctx context.Context, fwd Forwarder, req *protocol.RequestFr
 	if fwd == nil {
 		return nil
 	}
-	bridgeReq := &protocol.RequestFrame{
-		Type:   protocol.FrameTypeRequest,
-		ID:     req.ID,
-		Method: req.Method,
-		Params: req.Params,
-	}
-	resp, err := fwd.Forward(ctx, bridgeReq)
+	resp, err := fwd.Forward(ctx, req)
 	if err != nil || resp == nil || resp.Error != nil {
 		return nil
 	}
@@ -347,7 +341,7 @@ func emitSessionLifecycle(deps Deps, sessionKey, reason string) {
 	}
 }
 
-// normalizeKeys trims, deduplicates, and caps a list of session keys.
+// normalizeKeys trims whitespace from keys, drops empty entries, and caps at max.
 func normalizeKeys(raw []string, max int) []string {
 	keys := make([]string, 0, len(raw))
 	for _, k := range raw {
