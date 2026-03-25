@@ -346,6 +346,45 @@ func TestSessionsResolve_NotFound(t *testing.T) {
 	}
 }
 
+func TestSessionsResolve_ExcludesGlobalByDefault(t *testing.T) {
+	d, deps := sessionDispatcher(t)
+	deps.Sessions.Create("global-session", session.KindGlobal)
+	label := "global-label"
+	deps.Sessions.Patch("global-session", session.PatchFields{Label: &label})
+
+	// Without includeGlobal=true, global session should not be found by label.
+	_, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{"label": "global-label"})
+	if resp.OK {
+		t.Fatal("expected error: global session should be excluded by default")
+	}
+
+	// With includeGlobal=true, should find it.
+	payload, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{
+		"label":         "global-label",
+		"includeGlobal": true,
+	})
+	if !resp.OK {
+		t.Fatalf("expected ok with includeGlobal=true, got error: %+v", resp.Error)
+	}
+	if payload["key"] != "global-session" {
+		t.Errorf("expected key=global-session, got %v", payload["key"])
+	}
+}
+
+func TestSessionsResolve_KeyBypassesKindFilter(t *testing.T) {
+	d, deps := sessionDispatcher(t)
+	// Global sessions should still be found by direct key lookup.
+	deps.Sessions.Create("global-key", session.KindGlobal)
+
+	payload, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{"key": "global-key"})
+	if !resp.OK {
+		t.Fatalf("expected ok for direct key lookup of global, got error: %+v", resp.Error)
+	}
+	if payload["key"] != "global-key" {
+		t.Errorf("expected key=global-key, got %v", payload["key"])
+	}
+}
+
 // ---------------------------------------------------------------------------
 // sessions.compact — without bridge returns not-compacted
 // ---------------------------------------------------------------------------

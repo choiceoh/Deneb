@@ -240,12 +240,21 @@ func sessionsResolve(deps SessionDeps) HandlerFunc {
 		}
 
 		// Try in-memory resolution first.
+		// TS behavior: key lookup is direct (no kind filter); sessionId and
+		// label lookups apply includeGlobal/includeUnknown filters (default false).
 		var found *session.Session
 		switch {
 		case p.Key != "":
+			// Direct key lookup — no kind filtering (matches TS).
 			found = deps.Sessions.Get(strings.TrimSpace(p.Key))
 		case p.SessionID != "":
-			found = deps.Sessions.FindBySessionID(p.SessionID)
+			s := deps.Sessions.FindBySessionID(p.SessionID)
+			if s != nil {
+				filtered := filterSessions([]*session.Session{s}, p.AgentID, p.SpawnedBy, p.IncludeGlobal, p.IncludeUnknown)
+				if len(filtered) == 1 {
+					found = filtered[0]
+				}
+			}
 		case p.Label != "":
 			matches := deps.Sessions.FindByLabel(p.Label)
 			matches = filterSessions(matches, p.AgentID, p.SpawnedBy, p.IncludeGlobal, p.IncludeUnknown)
@@ -254,14 +263,6 @@ func sessionsResolve(deps SessionDeps) HandlerFunc {
 			} else if len(matches) > 1 {
 				return protocol.NewResponseError(req.ID, protocol.NewError(
 					protocol.ErrConflict, "ambiguous label: multiple sessions match"))
-			}
-		}
-
-		// Apply filters for key/sessionId lookups too.
-		if found != nil && (p.Key != "" || p.SessionID != "") {
-			filtered := filterSessions([]*session.Session{found}, p.AgentID, p.SpawnedBy, p.IncludeGlobal, p.IncludeUnknown)
-			if len(filtered) == 0 {
-				found = nil
 			}
 		}
 
@@ -293,16 +294,17 @@ func sessionsResolve(deps SessionDeps) HandlerFunc {
 }
 
 // filterSessions applies optional filters to a session list.
+// Globals and unknowns are excluded unless explicitly opted in (matching TS
+// behavior where includeGlobal/includeUnknown default to false).
 func filterSessions(sessions []*session.Session, agentID, spawnedBy string, includeGlobal, includeUnknown *bool) []*session.Session {
-	if agentID == "" && spawnedBy == "" && includeGlobal == nil && includeUnknown == nil {
-		return sessions
-	}
 	result := make([]*session.Session, 0, len(sessions))
 	for _, s := range sessions {
-		if includeGlobal != nil && !*includeGlobal && s.Kind == session.KindGlobal {
+		// Exclude globals unless explicitly includeGlobal=true.
+		if s.Kind == session.KindGlobal && (includeGlobal == nil || !*includeGlobal) {
 			continue
 		}
-		if includeUnknown != nil && !*includeUnknown && s.Kind == session.KindUnknown {
+		// Exclude unknowns unless explicitly includeUnknown=true.
+		if s.Kind == session.KindUnknown && (includeUnknown == nil || !*includeUnknown) {
 			continue
 		}
 		if spawnedBy != "" && s.SpawnedBy != spawnedBy {
