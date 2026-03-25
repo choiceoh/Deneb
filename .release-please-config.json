@@ -17,19 +17,40 @@
       "release-type": "rust",
       "component": "deneb-cli",
       "changelog-path": "cli-rs/CHANGELOG.md",
-      "package-name": "deneb-cli"
+      "package-name": "deneb-cli",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "key": "package.version"
+        }
+      ]
     },
     "core-rs/core": {
       "release-type": "rust",
       "component": "deneb-core",
       "changelog-path": "core-rs/core/CHANGELOG.md",
-      "package-name": "deneb-core"
+      "package-name": "deneb-core",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "key": "package.version"
+        }
+      ]
     },
     "core-rs-napi": {
       "release-type": "rust",
       "component": "deneb-core-napi",
       "changelog-path": "core-rs-napi/CHANGELOG.md",
-      "package-name": "deneb-core-napi"
+      "package-name": "deneb-core-napi",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "key": "package.version"
+        }
+      ]
     },
     "gateway-go": {
       "release-type": "go",
