@@ -33,11 +33,13 @@ type Dispatcher struct {
 	pool      *WorkerPool
 }
 
-// NewDispatcher creates an empty RPC dispatcher.
+// NewDispatcher creates an empty RPC dispatcher with a default worker pool
+// to prevent unbounded goroutine creation under burst load.
 func NewDispatcher(logger *slog.Logger) *Dispatcher {
 	return &Dispatcher{
 		handlers: make(map[string]HandlerFunc),
 		logger:   logger,
+		pool:     NewWorkerPool(0), // default: 2× CPU cores, clamped [4, 64]
 	}
 }
 

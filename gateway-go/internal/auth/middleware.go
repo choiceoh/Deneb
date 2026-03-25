@@ -4,6 +4,7 @@
 package auth
 
 import (
+	"crypto/subtle"
 	"net"
 	"net/http"
 	"strings"
@@ -125,11 +126,23 @@ func (rl *AuthRateLimiter) Check(ip string) (allowed bool, retryAfterMs int64) {
 	return true, 0
 }
 
+// maxRateLimitEntries caps the failure tracking map to prevent unbounded
+// growth during sustained brute-force attacks.
+const maxRateLimitEntries = 10000
+
 // RecordFailure records a failed auth attempt.
 func (rl *AuthRateLimiter) RecordFailure(ip string) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	now := time.Now().UnixMilli()
+
+	// Prevent unbounded map growth under DDoS.
+	if len(rl.failures) >= maxRateLimitEntries {
+		if _, exists := rl.failures[ip]; !exists {
+			return // silently drop new entries when at capacity
+		}
+	}
+
 	f := rl.failures[ip]
 	if f == nil {
 		rl.failures[ip] = &ipFailures{count: 1, firstAt: now}
@@ -242,14 +255,8 @@ func isLoopback(ip string) bool {
 	return parsed.IsLoopback()
 }
 
-// constantTimeEqual compares two strings in constant time.
+// constantTimeEqual compares two strings in constant time using crypto/subtle.
 func constantTimeEqual(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	var result byte
-	for i := 0; i < len(a); i++ {
-		result |= a[i] ^ b[i]
-	}
-	return result == 0
+	// subtle.ConstantTimeCompare handles length differences in constant time.
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }

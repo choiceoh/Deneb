@@ -251,6 +251,7 @@ func (h *PluginHost) readLoop() {
 				select {
 				case ch <- &resp:
 				default:
+					h.logger.Warn("bridge response dropped: caller already timed out", "id", resp.ID)
 				}
 			}
 
@@ -287,21 +288,28 @@ func (h *PluginHost) reconnectLoop() {
 
 		h.logger.Info("bridge reconnecting", "socket", h.socketPath, "backoff", backoff)
 
-		// Reset state for the new connection attempt.
-		// Safe because readLoop has exited (we're in its defer path)
-		// and no Forward() callers hold references to the old channel
-		// (they either returned or saw <-h.closed).
-		h.closeMu.Lock()
-		h.closed = make(chan struct{})
-		h.closeMu.Unlock()
-
-		// Clear stale pending entries from the previous connection.
-		// These callers have already returned via <-h.closed or ctx.Done().
+		// Drain pending entries: send error responses so Forward() callers
+		// unblock instead of waiting on a stale closed channel.
 		h.mu.Lock()
-		for id := range h.pending {
+		for id, ch := range h.pending {
+			errResp := &protocol.ResponseFrame{
+				Type:  protocol.FrameTypeResponse,
+				ID:    id,
+				OK:    false,
+				Error: protocol.NewError(protocol.ErrUnavailable, "bridge connection lost, reconnecting"),
+			}
+			select {
+			case ch <- errResp:
+			default:
+			}
 			delete(h.pending, id)
 		}
 		h.mu.Unlock()
+
+		// Reset closed channel for the new connection attempt.
+		h.closeMu.Lock()
+		h.closed = make(chan struct{})
+		h.closeMu.Unlock()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		err := h.dial(ctx)

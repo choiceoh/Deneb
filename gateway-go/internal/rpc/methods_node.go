@@ -281,10 +281,14 @@ func nodeInvoke(deps NodeDeps) HandlerFunc {
 			})
 		}
 
-		// Wait for the result with timeout.
+		// Wait for the result with timeout (capped at 5 minutes).
 		timeout := 30 * time.Second
 		if p.TimeoutMs > 0 {
 			timeout = time.Duration(p.TimeoutMs) * time.Millisecond
+			const maxTimeout = 5 * time.Minute
+			if timeout > maxTimeout {
+				timeout = maxTimeout
+			}
 		}
 
 		timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
