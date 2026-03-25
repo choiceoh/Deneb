@@ -206,8 +206,9 @@ pub fn is_safe_url(url: &str) -> bool {
         return false;
     }
 
-    // Normalize IPv6 brackets for consistent matching.
-    let host_normalized = host.trim_start_matches('[').trim_end_matches(']');
+    // Normalize IPv6 brackets and strip zone IDs for consistent matching.
+    let host_no_brackets = host.trim_start_matches('[').trim_end_matches(']');
+    let host_normalized = strip_ipv6_zone_id(host_no_brackets);
 
     // Block common private/internal hostnames and IPs.
     const BLOCKED_HOSTS: &[&str] = &[
@@ -255,7 +256,116 @@ pub fn is_safe_url(url: &str) -> bool {
         }
     }
 
+    // Block numeric IPv4 bypass techniques (octal, hex, decimal).
+    if is_numeric_private_ipv4(host_normalized) {
+        return false;
+    }
+
     true
+}
+
+/// Strip IPv6 zone ID (e.g., `fe80::1%25eth0` → `fe80::1`).
+/// Zone IDs appear as `%` or `%25` (URL-encoded) followed by an interface name.
+fn strip_ipv6_zone_id(host: &str) -> &str {
+    // Check URL-encoded `%25` first (more common in URLs), then raw `%`.
+    if let Some(pos) = host.find("%25") {
+        return &host[..pos];
+    }
+    if let Some(pos) = host.find('%') {
+        return &host[..pos];
+    }
+    host
+}
+
+/// Detect numeric IPv4 representations that resolve to private/loopback addresses.
+/// Handles: octal octets (0177.0.0.1), hex (0x7f000001), and single decimal (2130706433).
+fn is_numeric_private_ipv4(host: &str) -> bool {
+    // Single decimal integer (e.g., 2130706433 = 127.0.0.1).
+    if let Ok(num) = host.parse::<u32>() {
+        return is_private_ipv4_u32(num);
+    }
+
+    // Hex integer (e.g., 0x7f000001).
+    if let Some(hex) = host.strip_prefix("0x").or_else(|| host.strip_prefix("0X")) {
+        if let Ok(num) = u32::from_str_radix(hex, 16) {
+            return is_private_ipv4_u32(num);
+        }
+    }
+
+    // Octal/mixed-radix dotted notation (e.g., 0177.0.0.01).
+    let parts: Vec<&str> = host.split('.').collect();
+    if parts.len() == 4 && parts.iter().all(|p| !p.is_empty()) {
+        let mut octets = [0u8; 4];
+        let mut all_parsed = true;
+        for (i, part) in parts.iter().enumerate() {
+            match parse_octet_mixed_radix(part) {
+                Some(v) => octets[i] = v,
+                None => {
+                    all_parsed = false;
+                    break;
+                }
+            }
+        }
+        if all_parsed {
+            // Only flag if this notation differs from plain decimal
+            // (i.e., has octal/hex octets) AND resolves to a private IP.
+            let has_non_decimal = parts.iter().any(|p| {
+                p.starts_with("0x")
+                    || p.starts_with("0X")
+                    || (p.len() > 1 && p.starts_with('0') && p.chars().all(|c| c.is_ascii_digit()))
+            });
+            if has_non_decimal {
+                let ip = u32::from_be_bytes(octets);
+                return is_private_ipv4_u32(ip);
+            }
+        }
+    }
+
+    false
+}
+
+/// Parse a single octet that may be decimal, octal (0-prefix), or hex (0x-prefix).
+fn parse_octet_mixed_radix(s: &str) -> Option<u8> {
+    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        u8::from_str_radix(hex, 16).ok()
+    } else if s.len() > 1 && s.starts_with('0') && s.chars().all(|c| c.is_ascii_digit()) {
+        // Octal notation.
+        u8::from_str_radix(s, 8).ok()
+    } else {
+        s.parse::<u8>().ok()
+    }
+}
+
+/// Check if a 32-bit IPv4 address falls in private/loopback/link-local ranges.
+fn is_private_ipv4_u32(ip: u32) -> bool {
+    let a = (ip >> 24) as u8;
+    let b = (ip >> 16) as u8;
+
+    // 127.0.0.0/8 (loopback)
+    if a == 127 {
+        return true;
+    }
+    // 0.0.0.0
+    if ip == 0 {
+        return true;
+    }
+    // 10.0.0.0/8
+    if a == 10 {
+        return true;
+    }
+    // 172.16.0.0/12
+    if a == 172 && (16..=31).contains(&b) {
+        return true;
+    }
+    // 192.168.0.0/16
+    if a == 192 && b == 168 {
+        return true;
+    }
+    // 169.254.0.0/16 (link-local / cloud metadata)
+    if a == 169 && b == 254 {
+        return true;
+    }
+    false
 }
 
 #[cfg(test)]
@@ -386,6 +496,46 @@ mod tests {
     fn test_is_safe_url_metadata_ipv6() {
         // Cloud metadata via IPv4-mapped IPv6
         assert!(!is_safe_url("http://[::ffff:169.254.169.254]/"));
+    }
+
+    #[test]
+    fn test_is_safe_url_numeric_bypass() {
+        // Octal IPv4 (0177.0.0.1 = 127.0.0.1)
+        assert!(!is_safe_url("http://0177.0.0.1/"));
+        assert!(!is_safe_url("http://0177.0.0.01/admin"));
+
+        // Hex integer (0x7f000001 = 127.0.0.1)
+        assert!(!is_safe_url("http://0x7f000001/"));
+        assert!(!is_safe_url("http://0X7F000001/"));
+
+        // Decimal integer (2130706433 = 127.0.0.1)
+        assert!(!is_safe_url("http://2130706433/"));
+
+        // Octal for 10.0.0.1
+        assert!(!is_safe_url("http://012.0.0.01/"));
+
+        // Hex for 192.168.1.1 = 0xC0A80101
+        assert!(!is_safe_url("http://0xC0A80101/"));
+
+        // Decimal for 169.254.169.254 = 2852039166
+        assert!(!is_safe_url("http://2852039166/"));
+
+        // Public IP in decimal should pass (8.8.8.8 = 134744072)
+        assert!(is_safe_url("http://134744072/"));
+
+        // Normal dotted decimal (not octal) should still work through existing checks
+        assert!(!is_safe_url("http://127.0.0.1/"));
+        assert!(is_safe_url("http://8.8.8.8/"));
+    }
+
+    #[test]
+    fn test_is_safe_url_ipv6_zone_id() {
+        // IPv6 with zone ID (URL-encoded %25)
+        assert!(!is_safe_url("http://[fe80::1%25eth0]/"));
+        assert!(!is_safe_url("http://[::1%25lo]/"));
+
+        // IPv6 zone ID with raw %
+        assert!(!is_safe_url("http://[fe80::1%eth0]/"));
     }
 
     #[test]

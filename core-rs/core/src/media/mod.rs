@@ -4,14 +4,24 @@
 
 pub mod extensions;
 
-/// Detect MP4/M4A from ftyp box at offset 4. Shared helper to avoid duplication.
+/// Detect ISOBMFF-based formats from ftyp box at offset 4.
+/// Handles MP4, M4A, AVIF, HEIC/HEIF.
 #[inline]
 fn detect_ftyp(data: &[u8]) -> Option<&'static str> {
     if data.len() >= 8 && &data[4..8] == b"ftyp" {
         if data.len() >= 12 {
             let brand = &data[8..12];
+            // Audio containers
             if brand == b"M4A " || brand == b"M4B " {
                 return Some("audio/mp4");
+            }
+            // AVIF image
+            if brand == b"avif" || brand == b"avis" {
+                return Some("image/avif");
+            }
+            // HEIC/HEIF image
+            if brand == b"heic" || brand == b"heix" || brand == b"hevc" || brand == b"mif1" {
+                return Some("image/heic");
             }
         }
         return Some("video/mp4");
@@ -73,6 +83,16 @@ pub fn detect_mime(data: &[u8]) -> &'static str {
         b'I' => {
             if data.starts_with(b"ID3") {
                 return "audio/mpeg";
+            }
+            // TIFF little-endian: II\x2A\x00
+            if data.len() >= 4 && data[1] == b'I' && data[2] == 0x2A && data[3] == 0x00 {
+                return "image/tiff";
+            }
+        }
+        b'M' => {
+            // TIFF big-endian: MM\x00\x2A
+            if data.len() >= 4 && data[1] == b'M' && data[2] == 0x00 && data[3] == 0x2A {
+                return "image/tiff";
             }
         }
         b'O' => {
@@ -177,6 +197,38 @@ mod tests {
     #[test]
     fn test_json() {
         assert_eq!(detect_mime(b"{\"key\":\"value\"}"), "application/json");
+    }
+
+    #[test]
+    fn test_avif() {
+        // ftyp box with 'avif' brand
+        let data = [
+            0x00, 0x00, 0x00, 0x1C, b'f', b't', b'y', b'p', b'a', b'v', b'i', b'f',
+        ];
+        assert_eq!(detect_mime(&data), "image/avif");
+    }
+
+    #[test]
+    fn test_heic() {
+        // ftyp box with 'heic' brand
+        let data = [
+            0x00, 0x00, 0x00, 0x1C, b'f', b't', b'y', b'p', b'h', b'e', b'i', b'c',
+        ];
+        assert_eq!(detect_mime(&data), "image/heic");
+
+        // ftyp box with 'mif1' brand (HEIF)
+        let data_mif1 = [
+            0x00, 0x00, 0x00, 0x1C, b'f', b't', b'y', b'p', b'm', b'i', b'f', b'1',
+        ];
+        assert_eq!(detect_mime(&data_mif1), "image/heic");
+    }
+
+    #[test]
+    fn test_tiff() {
+        // TIFF little-endian
+        assert_eq!(detect_mime(&[b'I', b'I', 0x2A, 0x00, 0x08]), "image/tiff");
+        // TIFF big-endian
+        assert_eq!(detect_mime(&[b'M', b'M', 0x00, 0x2A, 0x00]), "image/tiff");
     }
 
     #[test]
