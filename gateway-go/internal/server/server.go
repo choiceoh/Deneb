@@ -812,6 +812,16 @@ func (s *Server) registerExtendedMethods() {
 		Forwarder: &lazyForwarder{server: s},
 	})
 
+	// Session state methods (patch/reset/preview/resolve/compact).
+	rpc.RegisterSessionMethods(s.dispatcher, rpc.SessionDeps{
+		Deps: rpc.Deps{
+			Sessions:    s.sessions,
+			Channels:    s.channels,
+			GatewaySubs: s.gatewaySubs,
+		},
+		Forwarder: &lazyForwarder{server: s},
+	})
+
 	// Daemon status method.
 	s.dispatcher.Register("daemon.status", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if s.daemon == nil {

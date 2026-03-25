@@ -43,6 +43,30 @@ type Session struct {
 	RuntimeMs      *int64    `json:"runtimeMs,omitempty"`
 	AbortedLastRun bool      `json:"abortedLastRun"`
 	CreatedAt      time.Time `json:"-"`
+
+	// Patchable/queryable fields (Phase 3).
+	SessionID            string `json:"sessionId,omitempty"`
+	Label                string `json:"label,omitempty"`
+	ThinkingLevel        string `json:"thinkingLevel,omitempty"`
+	FastMode             *bool  `json:"fastMode,omitempty"`
+	VerboseLevel         string `json:"verboseLevel,omitempty"`
+	ReasoningLevel       string `json:"reasoningLevel,omitempty"`
+	ElevatedLevel        string `json:"elevatedLevel,omitempty"`
+	ExecHost             string `json:"execHost,omitempty"`
+	ExecSecurity         string `json:"execSecurity,omitempty"`
+	ExecAsk              string `json:"execAsk,omitempty"`
+	ExecNode             string `json:"execNode,omitempty"`
+	ResponseUsage        string `json:"responseUsage,omitempty"`
+	SpawnedBy            string `json:"spawnedBy,omitempty"`
+	SendPolicy           string `json:"sendPolicy,omitempty"`
+	GroupActivation      string `json:"groupActivation,omitempty"`
+	SpawnedWorkspaceDir  string `json:"spawnedWorkspaceDir,omitempty"`
+	SpawnDepth           *int   `json:"spawnDepth,omitempty"`
+	SubagentRole         string `json:"subagentRole,omitempty"`
+	SubagentControlScope string `json:"subagentControlScope,omitempty"`
+	InputTokens          *int64 `json:"inputTokens,omitempty"`
+	OutputTokens         *int64 `json:"outputTokens,omitempty"`
+	TotalTokens          *int64 `json:"totalTokens,omitempty"`
 }
 
 // Manager tracks active sessions in memory.

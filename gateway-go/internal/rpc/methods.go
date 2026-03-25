@@ -104,6 +104,9 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 	// ML methods (Rust Phase 0 scaffolding).
 	d.Register("ml.embed", mlEmbed())
 	d.Register("ml.rerank", mlRerank())
+
+	// Tools catalog (static core tool definitions).
+	d.Register("tools.catalog", toolsCatalog())
 }
 
 func healthCheck(deps Deps) HandlerFunc {
