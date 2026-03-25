@@ -376,17 +376,13 @@ const TARGET_KEYS = [
   "agents.defaults",
   "agents.list",
   "agents.defaults.compaction",
-  "agents.defaults.compaction.mode",
+  // compaction.mode, maxHistoryShare, recentTurnsPreserve, qualityGuard.*
+  // are system-managed — excluded from operational guidance checks.
   "agents.defaults.compaction.reserveTokens",
   "agents.defaults.compaction.keepRecentTokens",
   "agents.defaults.compaction.reserveTokensFloor",
-  "agents.defaults.compaction.maxHistoryShare",
   "agents.defaults.compaction.identifierPolicy",
   "agents.defaults.compaction.identifierInstructions",
-  "agents.defaults.compaction.recentTurnsPreserve",
-  "agents.defaults.compaction.qualityGuard",
-  "agents.defaults.compaction.qualityGuard.enabled",
-  "agents.defaults.compaction.qualityGuard.maxRetries",
   "agents.defaults.compaction.postCompactionSections",
   "agents.defaults.compaction.timeoutSeconds",
   "agents.defaults.compaction.model",
@@ -444,7 +440,7 @@ const ENUM_EXPECTATIONS: Record<string, string[]> = {
   "logging.redactSensitive": ['"off"', '"tools"'],
   "cli.banner.taglineMode": ['"random"', '"default"', '"off"'],
   "update.channel": ['"stable"', '"beta"', '"dev"'],
-  "agents.defaults.compaction.mode": ['"default"', '"safeguard"'],
+  "agents.defaults.compaction.mode": ['"safeguard"'],
   "agents.defaults.compaction.identifierPolicy": ['"strict"', '"off"', '"custom"'],
 };
 
@@ -791,12 +787,12 @@ describe("config help copy quality", () => {
   });
 
   it("documents agent compaction safeguards and memory flush behavior", () => {
+    // System-managed fields now document their fixed nature.
     const mode = FIELD_HELP["agents.defaults.compaction.mode"];
-    expect(mode.includes('"default"')).toBe(true);
-    expect(mode.includes('"safeguard"')).toBe(true);
+    expect(/system-managed|safeguard/i.test(mode)).toBe(true);
 
     const historyShare = FIELD_HELP["agents.defaults.compaction.maxHistoryShare"];
-    expect(/0\\.1-0\\.9|fraction|share/i.test(historyShare)).toBe(true);
+    expect(/system-managed|0\.5/i.test(historyShare)).toBe(true);
 
     const identifierPolicy = FIELD_HELP["agents.defaults.compaction.identifierPolicy"];
     expect(identifierPolicy.includes('"strict"')).toBe(true);
@@ -804,8 +800,7 @@ describe("config help copy quality", () => {
     expect(identifierPolicy.includes('"custom"')).toBe(true);
 
     const recentTurnsPreserve = FIELD_HELP["agents.defaults.compaction.recentTurnsPreserve"];
-    expect(/recent.*turn|verbatim/i.test(recentTurnsPreserve)).toBe(true);
-    expect(/default:\s*3/i.test(recentTurnsPreserve)).toBe(true);
+    expect(/system-managed|fixed/i.test(recentTurnsPreserve)).toBe(true);
 
     const postCompactionSections = FIELD_HELP["agents.defaults.compaction.postCompactionSections"];
     expect(/Session Startup|Red Lines/i.test(postCompactionSections)).toBe(true);

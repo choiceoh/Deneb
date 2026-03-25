@@ -10,10 +10,8 @@ export type ContextPruningConfig = {
   mode?: ContextPruningMode;
   /** TTL to consider cache expired (duration string, default unit: minutes). */
   ttl?: string;
-  keepLastAssistants?: number;
-  softTrimRatio?: number;
-  hardClearRatio?: number;
-  minPrunableToolChars?: number;
+  // keepLastAssistants, softTrimRatio, hardClearRatio, minPrunableToolChars
+  // are system-managed constants — not user-configurable.
   tools?: ContextPruningToolMatch;
   softTrim?: {
     maxChars?: number;
@@ -84,18 +82,10 @@ export function computeEffectiveSettings(raw: unknown): EffectiveContextPruningS
     }
   }
 
-  if (typeof cfg.keepLastAssistants === "number" && Number.isFinite(cfg.keepLastAssistants)) {
-    s.keepLastAssistants = Math.max(0, Math.floor(cfg.keepLastAssistants));
-  }
-  if (typeof cfg.softTrimRatio === "number" && Number.isFinite(cfg.softTrimRatio)) {
-    s.softTrimRatio = Math.min(1, Math.max(0, cfg.softTrimRatio));
-  }
-  if (typeof cfg.hardClearRatio === "number" && Number.isFinite(cfg.hardClearRatio)) {
-    s.hardClearRatio = Math.min(1, Math.max(0, cfg.hardClearRatio));
-  }
-  if (typeof cfg.minPrunableToolChars === "number" && Number.isFinite(cfg.minPrunableToolChars)) {
-    s.minPrunableToolChars = Math.max(0, Math.floor(cfg.minPrunableToolChars));
-  }
+  // keepLastAssistants, softTrimRatio, hardClearRatio, minPrunableToolChars are
+  // system-managed constants — always use DEFAULT_CONTEXT_PRUNING_SETTINGS values
+  // to prevent quality degradation from user misconfiguration.
+
   if (cfg.tools) {
     s.tools = cfg.tools;
   }

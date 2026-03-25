@@ -4,7 +4,6 @@
  */
 import {
   applyAgentDefaults,
-  applyCompactionDefaults,
   applyContextPruningDefaults,
   applyLoggingDefaults,
   applyMessageDefaults,
@@ -46,10 +45,8 @@ export async function readConfigFileSnapshotInternal(
     const config = applyTalkApiKey(
       applyTalkConfigNormalization(
         applyModelDefaults(
-          applyCompactionDefaults(
-            applyContextPruningDefaults(
-              applyAgentDefaults(applySessionDefaults(applyMessageDefaults({}))),
-            ),
+          applyContextPruningDefaults(
+            applyAgentDefaults(applySessionDefaults(applyMessageDefaults({}))),
           ),
         ),
       ),

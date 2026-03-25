@@ -506,27 +506,5 @@ export function applyContextPruningDefaults(cfg: DenebConfig): DenebConfig {
   };
 }
 
-export function applyCompactionDefaults(cfg: DenebConfig): DenebConfig {
-  const defaults = cfg.agents?.defaults;
-  if (!defaults) {
-    return cfg;
-  }
-  const compaction = defaults?.compaction;
-  if (compaction?.mode) {
-    return cfg;
-  }
-
-  return {
-    ...cfg,
-    agents: {
-      ...cfg.agents,
-      defaults: {
-        ...defaults,
-        compaction: {
-          ...compaction,
-          mode: "safeguard",
-        },
-      },
-    },
-  };
-}
+// applyCompactionDefaults removed: compaction.mode is now a system constant ("safeguard")
+// and is no longer user-configurable. See extensions.ts for the hardcoded safeguard activation.

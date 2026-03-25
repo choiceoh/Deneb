@@ -361,9 +361,9 @@ describe("isOversizedForSummary", () => {
 describe("compaction-safeguard runtime registry", () => {
   it("stores and retrieves config by session manager identity", () => {
     const sm = {};
-    setCompactionSafeguardRuntime(sm, { maxHistoryShare: 0.3 });
+    setCompactionSafeguardRuntime(sm, { contextWindowTokens: 100000 });
     const runtime = getCompactionSafeguardRuntime(sm);
-    expect(runtime).toEqual({ maxHistoryShare: 0.3 });
+    expect(runtime).toEqual({ contextWindowTokens: 100000 });
   });
 
   it("returns null for unknown session manager", () => {
@@ -373,26 +373,26 @@ describe("compaction-safeguard runtime registry", () => {
 
   it("clears entry when value is null", () => {
     const sm = {};
-    setCompactionSafeguardRuntime(sm, { maxHistoryShare: 0.7 });
+    setCompactionSafeguardRuntime(sm, { contextWindowTokens: 100000 });
     expect(getCompactionSafeguardRuntime(sm)).not.toBeNull();
     setCompactionSafeguardRuntime(sm, null);
     expect(getCompactionSafeguardRuntime(sm)).toBeNull();
   });
 
   it("ignores non-object session managers", () => {
-    setCompactionSafeguardRuntime(null, { maxHistoryShare: 0.5 });
+    setCompactionSafeguardRuntime(null, { contextWindowTokens: 100000 });
     expect(getCompactionSafeguardRuntime(null)).toBeNull();
-    setCompactionSafeguardRuntime(undefined, { maxHistoryShare: 0.5 });
+    setCompactionSafeguardRuntime(undefined, { contextWindowTokens: 100000 });
     expect(getCompactionSafeguardRuntime(undefined)).toBeNull();
   });
 
   it("isolates different session managers", () => {
     const sm1 = {};
     const sm2 = {};
-    setCompactionSafeguardRuntime(sm1, { maxHistoryShare: 0.3 });
-    setCompactionSafeguardRuntime(sm2, { maxHistoryShare: 0.8 });
-    expect(getCompactionSafeguardRuntime(sm1)).toEqual({ maxHistoryShare: 0.3 });
-    expect(getCompactionSafeguardRuntime(sm2)).toEqual({ maxHistoryShare: 0.8 });
+    setCompactionSafeguardRuntime(sm1, { contextWindowTokens: 100000 });
+    setCompactionSafeguardRuntime(sm2, { contextWindowTokens: 200000 });
+    expect(getCompactionSafeguardRuntime(sm1)).toEqual({ contextWindowTokens: 100000 });
+    expect(getCompactionSafeguardRuntime(sm2)).toEqual({ contextWindowTokens: 200000 });
   });
 
   it("stores and retrieves model from runtime (fallback for compact.ts workflow)", () => {
@@ -414,34 +414,29 @@ describe("compaction-safeguard runtime registry", () => {
     const sm = {};
     const model = createAnthropicModelFixture();
     setCompactionSafeguardRuntime(sm, {
-      maxHistoryShare: 0.6,
       contextWindowTokens: 200000,
       model,
     });
     const retrieved = getCompactionSafeguardRuntime(sm);
     expect(retrieved).toEqual({
-      maxHistoryShare: 0.6,
       contextWindowTokens: 200000,
       model,
     });
   });
 
-  it("wires oversized safeguard runtime values when config validation is bypassed", () => {
+  it("always wires safeguard mode regardless of config", () => {
     const sessionManager = {} as unknown as Parameters<
       typeof buildEmbeddedExtensionFactories
     >[0]["sessionManager"];
     const cfg = {
       agents: {
         defaults: {
-          compaction: {
-            mode: "safeguard",
-            recentTurnsPreserve: 99,
-          },
+          compaction: {},
         },
       },
     } as DenebConfig;
 
-    buildEmbeddedExtensionFactories({
+    const factories = buildEmbeddedExtensionFactories({
       cfg,
       sessionManager,
       provider: "anthropic",
@@ -451,9 +446,10 @@ describe("compaction-safeguard runtime registry", () => {
       } as Parameters<typeof buildEmbeddedExtensionFactories>[0]["model"],
     });
 
+    // Safeguard extension is always included (mode is system-managed).
+    expect(factories.length).toBeGreaterThanOrEqual(1);
     const runtime = getCompactionSafeguardRuntime(sessionManager);
-    expect(runtime?.recentTurnsPreserve).toBe(99);
-    expect(resolveRecentTurnsPreserve(runtime?.recentTurnsPreserve)).toBe(12);
+    expect(runtime).not.toBeNull();
   });
 });
 
@@ -819,61 +815,15 @@ describe("compaction-safeguard recent-turn preservation", () => {
     expect(summary).not.toContain("N/A (identifier policy off).");
   });
 
-  it("uses structured instructions when summarizing dropped history chunks", async () => {
-    mockSummarizeWithFallback.mockReset();
-    mockSummarizeWithFallback.mockResolvedValue("mock summary");
-
-    const sessionManager = stubSessionManager();
-    const model = createAnthropicModelFixture();
-    setCompactionSafeguardRuntime(sessionManager, {
-      model,
-      maxHistoryShare: 0.1,
-      recentTurnsPreserve: 12,
-    });
-
-    const compactionHandler = createCompactionHandler();
-    const getApiKeyMock = vi.fn().mockResolvedValue("test-key");
-    const mockContext = createCompactionContext({
-      sessionManager,
-      getApiKeyMock,
-    });
-    const messagesToSummarize: AgentMessage[] = Array.from({ length: 4 }, (_unused, index) => ({
-      role: "user",
-      content: `msg-${index}-${"x".repeat(120_000)}`,
-      timestamp: index + 1,
-    }));
-    const event = {
-      preparation: {
-        messagesToSummarize,
-        turnPrefixMessages: [],
-        firstKeptEntryId: "entry-1",
-        tokensBefore: 400_000,
-        fileOps: {
-          read: [],
-          edited: [],
-          written: [],
-        },
-        settings: { reserveTokens: 4000 },
-        previousSummary: undefined,
-        isSplitTurn: false,
-      },
-      customInstructions: "Keep security caveats.",
-      signal: new AbortController().signal,
-    };
-
-    const result = (await compactionHandler(event, mockContext)) as {
-      cancel?: boolean;
-      compaction?: { summary?: string };
-    };
-
-    expect(result.cancel).not.toBe(true);
-    expect(mockSummarizeWithFallback).toHaveBeenCalled();
-    const droppedCall = mockSummarizeWithFallback.mock.calls[0]?.[0];
-    expect(droppedCall?.customInstructions).toContain(
+  it("builds structured instructions with required sections (unit)", () => {
+    // Verify structured instructions are built correctly (no need for integration
+    // test since maxHistoryShare and recentTurnsPreserve are now system constants).
+    const instructions = buildCompactionStructureInstructions("Keep security caveats.");
+    expect(instructions).toContain(
       "Produce a compact, factual summary with these exact section headings:",
     );
-    expect(droppedCall?.customInstructions).toContain("## Decisions");
-    expect(droppedCall?.customInstructions).toContain("Keep security caveats.");
+    expect(instructions).toContain("## Decisions");
+    expect(instructions).toContain("Keep security caveats.");
   });
 
   it("keeps required headings when all turns are preserved and history is carried forward", async () => {
@@ -883,7 +833,6 @@ describe("compaction-safeguard recent-turn preservation", () => {
     const model = createAnthropicModelFixture();
     setCompactionSafeguardRuntime(sessionManager, {
       model,
-      recentTurnsPreserve: 12,
     });
 
     const compactionHandler = createCompactionHandler();
@@ -1179,28 +1128,7 @@ describe("readWorkspaceContextForSummary", () => {
 
 // ── Performance stability clamping tests ──────────────────────────────────────
 
-const { clampMaxHistoryShare, clampContextWindowTokens, clampMaxChunkTokens, clampReserveTokens } =
-  __testing;
-
-describe("clampMaxHistoryShare", () => {
-  it("defaults to 0.5 when undefined", () => {
-    expect(clampMaxHistoryShare(undefined)).toBe(0.5);
-  });
-  it("clamps value below 0.1 to 0.1", () => {
-    expect(clampMaxHistoryShare(0)).toBe(0.1);
-    expect(clampMaxHistoryShare(-1)).toBe(0.1);
-    expect(clampMaxHistoryShare(0.05)).toBe(0.1);
-  });
-  it("clamps value above 0.9 to 0.9", () => {
-    expect(clampMaxHistoryShare(1)).toBe(0.9);
-    expect(clampMaxHistoryShare(5)).toBe(0.9);
-    expect(clampMaxHistoryShare(0.95)).toBe(0.9);
-  });
-  it("passes through values in range", () => {
-    expect(clampMaxHistoryShare(0.3)).toBe(0.3);
-    expect(clampMaxHistoryShare(0.7)).toBe(0.7);
-  });
-});
+const { clampContextWindowTokens, clampMaxChunkTokens, clampReserveTokens } = __testing;
 
 describe("clampContextWindowTokens", () => {
   it("uses model context window when undefined", () => {
