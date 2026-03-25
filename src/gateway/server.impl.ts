@@ -4,7 +4,6 @@ import { getActiveEmbeddedRunCount } from "../agents/pi-embedded-runner/runs.js"
 import { initSubagentRegistry } from "../agents/subagent/subagent-registry.js";
 import { getTotalPendingReplies } from "../auto-reply/reply/dispatcher-registry.js";
 import { type AutonomousServiceHandle, startAutonomousService } from "../autonomous/service.js";
-import type { CanvasHostServer } from "../canvas-host/server.js";
 import { type ChannelId, listChannelPlugins } from "../channels/plugins/index.js";
 import { createDefaultDeps } from "../cli/deps.js";
 import { resolveAgentMaxConcurrent, resolveSubagentMaxConcurrent } from "../config/agent-limits.js";
@@ -191,10 +190,6 @@ export type GatewayServerOptions = {
    */
   tailscale?: import("../config/config.js").GatewayTailscaleConfig;
   /**
-   * Test-only: allow canvas host startup even when NODE_ENV/VITEST would disable it.
-   */
-  allowCanvasHostInTests?: boolean;
-  /**
    * Test-only: override the setup wizard runner.
    */
   wizardRunner?: (
@@ -216,7 +211,7 @@ export async function startGatewayServer(
   // update-check subsystems at module evaluation time.
   const deferredModsPromise = minimalTestGateway ? null : loadDeferredGatewayModules();
 
-  // Ensure all default port derivations (canvas) see the actual runtime port.
+  // Ensure all default port derivations (browser) see the actual runtime port.
   process.env.DENEB_GATEWAY_PORT = String(port);
   logAcceptedEnvOption({
     key: "DENEB_RAW_STREAM",
@@ -435,8 +430,6 @@ export async function startGatewayServer(
   } = runtimeConfig;
   let hooksConfig = runtimeConfig.hooksConfig;
   let hookClientIpConfig = resolveHookClientIpConfig(cfgAtStart);
-  const canvasHostEnabled = runtimeConfig.canvasHostEnabled;
-
   // Create auth rate limiters used by connect/auth flows.
   const rateLimitConfig = cfgAtStart.gateway?.auth?.rateLimit;
   const { rateLimiter: authRateLimiter } = createGatewayAuthRateLimiters(rateLimitConfig);
@@ -500,7 +493,6 @@ export async function startGatewayServer(
   };
 
   const deps = createDefaultDeps();
-  let canvasHostServer: CanvasHostServer | null = null;
   const gatewayTls = await loadGatewayTlsRuntime(cfgAtStart.gateway?.tls, log.child("tls"));
   if (cfgAtStart.gateway?.tls?.enabled && !gatewayTls.enabled) {
     throw new Error(gatewayTls.error ?? "gateway tls: failed to enable");
@@ -575,9 +567,6 @@ export async function startGatewayServer(
   const nodeSubscribe = nodeSubscriptions.subscribe;
   const nodeUnsubscribe = nodeSubscriptions.unsubscribe;
   const nodeUnsubscribeAll = nodeSubscriptions.unsubscribeAll;
-  const broadcastVoiceWakeChanged = (triggers: string[]) => {
-    broadcast("voicewake.changed", { triggers }, { dropIfSlow: true });
-  };
   // Mobile node detection removed (iOS/Android support dropped).
   const hasMobileNodeConnected = () => false;
   // Lane concurrency (inlined from deleted server-lanes.ts).
@@ -743,8 +732,6 @@ export async function startGatewayServer(
     },
   });
 
-  const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)?.port;
-
   const gatewayRequestContext = buildGatewayRequestContext({
     deps,
     cron,
@@ -784,7 +771,6 @@ export async function startGatewayServer(
     stopChannel,
     markChannelLoggedOut,
     wizardRunner,
-    broadcastVoiceWakeChanged,
   });
 
   // Store the gateway context as a fallback for plugin subagent dispatch
@@ -795,10 +781,6 @@ export async function startGatewayServer(
   attachGatewayWsConnectionHandler({
     wss,
     clients,
-    port,
-    gatewayHost: bindHost ?? undefined,
-    canvasHostEnabled,
-    canvasHostServerPort,
     resolvedAuth,
     rateLimiter: authRateLimiter,
     gatewayMethods,
@@ -966,8 +948,6 @@ export async function startGatewayServer(
   const close = createGatewayCloseHandler({
     bonjourStop,
     tailscaleCleanup,
-    canvasHost: null,
-    canvasHostServer,
     releasePluginRouteRegistry,
     stopChannel,
     pluginServices,

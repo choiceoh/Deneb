@@ -133,8 +133,6 @@ var methodScopes = map[string]auth.Scope{
 	"wizard.status": auth.ScopeRead,
 
 	// --- Media ---
-	"voicewake.get":   auth.ScopeRead,
-	"voicewake.set":   auth.ScopeWrite,
 	"browser.request": auth.ScopeWrite,
 
 	// --- Web Login ---

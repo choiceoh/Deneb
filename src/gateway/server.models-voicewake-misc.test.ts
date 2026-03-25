@@ -6,16 +6,11 @@ import { WebSocket } from "ws";
 import { getChannelPlugin } from "../channels/plugins/index.js";
 import type { ChannelOutboundAdapter } from "../channels/plugins/types.js";
 import { clearConfigCache } from "../config/config.js";
-import { resolveCanvasHostUrl } from "../infra/canvas-host-url.js";
 import { GatewayLockError } from "../infra/gateway-lock.js";
 import { getActivePluginRegistry, setActivePluginRegistry } from "../plugins/runtime.js";
 import { createOutboundTestPlugin } from "../test-utils/channel-plugins.js";
-import { withEnvAsync } from "../test-utils/env.js";
-import { createTempHomeEnv } from "../test-utils/temp-home.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
 import { createRegistry } from "./server.e2e-registry-helpers.js";
 import {
-  connectOk,
   getFreePort,
   installGatewayTestHooks,
   occupyPort,
@@ -25,16 +20,13 @@ import {
   startConnectedServerWithClient,
   startGatewayServer,
   startServerWithClient,
-  testState,
-  testTailnetIPv4,
-  trackConnectChallengeNonce,
 } from "./test-helpers.js";
 
 installGatewayTestHooks({ scope: "suite" });
 
 let server: Awaited<ReturnType<typeof startServerWithClient>>["server"];
 let ws: WebSocket;
-let port: number;
+let _port: number;
 
 afterAll(async () => {
   ws.close();
@@ -45,7 +37,7 @@ beforeAll(async () => {
   const started = await startConnectedServerWithClient();
   server = started.server;
   ws = started.ws;
-  port = started.port;
+  _port = started.port;
 });
 
 const whatsappOutbound: ChannelOutboundAdapter = {
@@ -147,7 +139,7 @@ const expectedSortedCatalog = (): ModelCatalogRpcEntry[] => [
   },
 ];
 
-describe("gateway server models + voicewake", () => {
+describe("gateway server models", () => {
   const listModels = async () => rpcReq<{ models: ModelCatalogRpcEntry[] }>(ws, "models.list");
 
   const seedPiCatalog = () => {
@@ -185,15 +177,6 @@ describe("gateway server models + voicewake", () => {
     }
   };
 
-  const withTempHome = async <T>(fn: (homeDir: string) => Promise<T>): Promise<T> => {
-    const tempHome = await createTempHomeEnv("deneb-home-");
-    try {
-      return await fn(tempHome.home);
-    } finally {
-      await tempHome.restore();
-    }
-  };
-
   const expectAllowlistedModels = async (options: {
     primary: string;
     models: Record<string, object>;
@@ -216,93 +199,6 @@ describe("gateway server models + voicewake", () => {
       },
     );
   };
-
-  test(
-    "voicewake.get returns defaults and voicewake.set broadcasts",
-    { timeout: 20_000 },
-    async () => {
-      await withTempHome(async (homeDir) => {
-        const initial = await rpcReq<{ triggers: string[] }>(ws, "voicewake.get");
-        expect(initial.ok).toBe(true);
-        expect(initial.payload?.triggers).toEqual(["deneb", "claude", "computer"]);
-
-        const changedP = onceMessage(
-          ws,
-          (o) => o.type === "event" && o.event === "voicewake.changed",
-        );
-
-        const setRes = await rpcReq<{ triggers: string[] }>(ws, "voicewake.set", {
-          triggers: ["  hi  ", "", "there"],
-        });
-        expect(setRes.ok).toBe(true);
-        expect(setRes.payload?.triggers).toEqual(["hi", "there"]);
-
-        const changed = (await changedP) as { event?: string; payload?: unknown };
-        expect(changed.event).toBe("voicewake.changed");
-        expect((changed.payload as { triggers?: unknown } | undefined)?.triggers).toEqual([
-          "hi",
-          "there",
-        ]);
-
-        const after = await rpcReq<{ triggers: string[] }>(ws, "voicewake.get");
-        expect(after.ok).toBe(true);
-        expect(after.payload?.triggers).toEqual(["hi", "there"]);
-
-        const onDisk = JSON.parse(
-          await fs.readFile(path.join(homeDir, ".deneb", "settings", "voicewake.json"), "utf8"),
-        ) as { triggers?: unknown; updatedAtMs?: unknown };
-        expect(onDisk.triggers).toEqual(["hi", "there"]);
-        expect(typeof onDisk.updatedAtMs).toBe("number");
-      });
-    },
-  );
-
-  test("pushes voicewake.changed to nodes on connect and on updates", async () => {
-    await withTempHome(async () => {
-      const nodeWs = new WebSocket(`ws://127.0.0.1:${port}`);
-      trackConnectChallengeNonce(nodeWs);
-      await new Promise<void>((resolve) => nodeWs.once("open", resolve));
-      const firstEventP = onceMessage(
-        nodeWs,
-        (o) => o.type === "event" && o.event === "voicewake.changed",
-      );
-      await connectOk(nodeWs, {
-        role: "node",
-        client: {
-          id: GATEWAY_CLIENT_NAMES.NODE_HOST,
-          version: "1.0.0",
-          platform: "ios",
-          mode: GATEWAY_CLIENT_MODES.NODE,
-        },
-      });
-
-      const first = (await firstEventP) as { event?: string; payload?: unknown };
-      expect(first.event).toBe("voicewake.changed");
-      expect((first.payload as { triggers?: unknown } | undefined)?.triggers).toEqual([
-        "deneb",
-        "claude",
-        "computer",
-      ]);
-
-      const broadcastP = onceMessage(
-        nodeWs,
-        (o) => o.type === "event" && o.event === "voicewake.changed",
-      );
-      const setRes = await rpcReq<{ triggers: string[] }>(ws, "voicewake.set", {
-        triggers: ["deneb", "computer"],
-      });
-      expect(setRes.ok).toBe(true);
-
-      const broadcast = (await broadcastP) as { event?: string; payload?: unknown };
-      expect(broadcast.event).toBe("voicewake.changed");
-      expect((broadcast.payload as { triggers?: unknown } | undefined)?.triggers).toEqual([
-        "deneb",
-        "computer",
-      ]);
-
-      nodeWs.close();
-    });
-  });
 
   test("models.list returns model catalog", async () => {
     seedPiCatalog();
@@ -369,24 +265,6 @@ describe("gateway server models + voicewake", () => {
 });
 
 describe("gateway server misc", () => {
-  test("hello-ok advertises the gateway port for canvas host", async () => {
-    await withEnvAsync({ DENEB_GATEWAY_TOKEN: "secret" }, async () => {
-      testTailnetIPv4.value = "100.64.0.1";
-      testState.gatewayBind = "lan";
-      const canvasPort = await getFreePort();
-      testState.canvasHostPort = canvasPort;
-      await withEnvAsync({ DENEB_CANVAS_HOST_PORT: String(canvasPort) }, async () => {
-        const testPort = await getFreePort();
-        const canvasHostUrl = resolveCanvasHostUrl({
-          canvasPort,
-          requestHost: `100.64.0.1:${testPort}`,
-          localAddress: "127.0.0.1",
-        });
-        expect(canvasHostUrl).toBe(`http://100.64.0.1:${canvasPort}`);
-      });
-    });
-  });
-
   test("send dedupes by idempotencyKey", { timeout: 15_000 }, async () => {
     const prevRegistry = getActivePluginRegistry() ?? emptyRegistry;
     try {

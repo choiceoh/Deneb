@@ -772,9 +772,6 @@ This runs the smart gate, pushes, and creates the PR automatically. Options: `--
 - Lobster palette: use the shared CLI palette in `src/terminal/palette.ts` (no hardcoded colors); apply palette to onboarding/config prompts and other TTY UI output as needed.
 - When asked to open a “session” file, open the Pi session logs under `~/.deneb/agents/<agentId>/sessions/*.jsonl` (use the `agent=<id>` value in the Runtime line of the system prompt; newest unless a specific ID is given), not the default `sessions.json`. If logs are needed from another machine, SSH via Tailscale and read the same path there.
 - Do not rebuild the macOS app over SSH; rebuilds must be run directly on the Mac.
-- Voice wake forwarding tips:
-  - Command template should stay `deneb-mac agent --message "${text}" --thinking low`; `VoiceWakeForwarder` already shell-escapes `${text}`. Don’t add extra quotes.
-  - launchd PATH is minimal; ensure the app’s launch agent PATH includes standard system paths plus your pnpm bin (typically `$HOME/Library/pnpm`) so `pnpm`/`deneb` binaries resolve when invoked via `deneb-mac`.
 
 ## Collaboration / Safety Notes
 

@@ -134,7 +134,6 @@ async function withOnboardEnv(
         DENEB_SKIP_CHANNELS: "1",
         DENEB_SKIP_GMAIL_WATCHER: "1",
         DENEB_SKIP_CRON: "1",
-        DENEB_SKIP_CANVAS_HOST: "1",
         DENEB_GATEWAY_TOKEN: undefined,
         DENEB_GATEWAY_PASSWORD: undefined,
         CUSTOM_API_KEY: undefined,

@@ -65,8 +65,6 @@ var tsBaseMethods = []string{
 	"skills.install",
 	"skills.update",
 	"update.run",
-	"voicewake.get",
-	"voicewake.set",
 	"secrets.reload",
 	"secrets.resolve",
 	"sessions.list",
@@ -301,7 +299,7 @@ func TestBridgeForwardError(t *testing.T) {
 	req := &protocol.RequestFrame{
 		Type:   "req",
 		ID:     "bridge-err-1",
-		Method: "voicewake.get",
+		Method: "browser.request",
 		Params: json.RawMessage("{}"),
 	}
 	resp := d.Dispatch(context.Background(), req)

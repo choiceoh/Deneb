@@ -182,13 +182,6 @@ func (p *Publisher) PublishPresence(snap PresenceSnapshot) {
 	p.broadcaster.BroadcastWithOpts("presence", snap, BroadcastOpts{DropIfSlow: true})
 }
 
-// PublishVoiceWakeChanged broadcasts a voice wake trigger change.
-func (p *Publisher) PublishVoiceWakeChanged(triggers []string) {
-	p.broadcaster.Broadcast("voicewake.changed", map[string]any{
-		"triggers": triggers,
-	})
-}
-
 // PublishConfigChanged broadcasts a configuration change event.
 func (p *Publisher) PublishConfigChanged(section string) {
 	p.broadcaster.BroadcastWithOpts("config.changed", map[string]any{

@@ -8,7 +8,6 @@ import { agentsHandlers } from "./server-methods/agents/agents.js";
 import { channelsHandlers } from "./server-methods/channels/channels.js";
 import { chatHandlers } from "./server-methods/chat/chat.js";
 import { configHandlers } from "./server-methods/config/config.js";
-import { voicewakeHandlers } from "./server-methods/media/voicewake.js";
 import { webHandlers } from "./server-methods/media/web.js";
 import { sendHandlers } from "./server-methods/messaging/send.js";
 import { talkHandlers } from "./server-methods/messaging/talk.js";
@@ -44,7 +43,6 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
 export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...connectHandlers,
   ...logsHandlers,
-  ...voicewakeHandlers,
   ...healthHandlers,
   ...channelsHandlers,
   ...chatHandlers,

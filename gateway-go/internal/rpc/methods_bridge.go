@@ -52,8 +52,6 @@ func RegisterBridgeMethods(d *Dispatcher, deps BridgeDeps) {
 		"tools.catalog",
 
 		// Media
-		"voicewake.get",
-		"voicewake.set",
 		"browser.request",
 
 		// Web Login

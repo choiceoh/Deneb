@@ -15,8 +15,6 @@ describe("createGatewayCloseHandler", () => {
     const close = createGatewayCloseHandler({
       bonjourStop: null,
       tailscaleCleanup: null,
-      canvasHost: null,
-      canvasHostServer: null,
       stopChannel: vi.fn(async () => undefined),
       pluginServices: null,
       cron: { stop: vi.fn() },

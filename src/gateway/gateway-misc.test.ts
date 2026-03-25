@@ -3,7 +3,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, expect, it, test, vi } from "vitest";
-import { defaultVoiceWakeTriggers } from "../infra/voicewake.js";
 import { GatewayClient } from "./client.js";
 import { handleControlUiHttpRequest } from "./dashboard/control-ui.js";
 import { resolveNodeCommandAllowlist } from "./node-command-policy.js";
@@ -14,7 +13,7 @@ import { handleNodeInvokeResult } from "./server-methods/nodes/nodes.handlers.in
 import type { GatewayClient as GatewayMethodClient } from "./server-methods/types.js";
 import type { GatewayRequestContext, RespondFn } from "./server-methods/types.js";
 import { createNodeSubscriptionManager } from "./server-node-subscriptions.js";
-import { formatError, normalizeVoiceWakeTriggers } from "./server-utils.js";
+import { formatError } from "./server-utils.js";
 import type { GatewayWsClient } from "./server/ws-types.js";
 
 function makeControlUiResponse() {
@@ -322,18 +321,6 @@ describe("resolveNodeCommandAllowlist", () => {
     expect(allow.has("camera.snap")).toBe(true);
     expect(allow.has("screen.record")).toBe(true);
     expect(allow.has("camera.clip")).toBe(false);
-  });
-});
-
-describe("normalizeVoiceWakeTriggers", () => {
-  test("returns defaults when input is empty", () => {
-    expect(normalizeVoiceWakeTriggers([])).toEqual(defaultVoiceWakeTriggers());
-    expect(normalizeVoiceWakeTriggers(null)).toEqual(defaultVoiceWakeTriggers());
-  });
-
-  test("trims and limits entries", () => {
-    const result = normalizeVoiceWakeTriggers(["  hello  ", "", "world"]);
-    expect(result).toEqual(["hello", "world"]);
   });
 });
 

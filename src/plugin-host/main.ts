@@ -135,8 +135,6 @@ const FORWARDED_METHODS = [
   "talk.config",
   "talk.mode",
   "update.run",
-  "voicewake.get",
-  "voicewake.set",
   "secrets.reload",
   "secrets.resolve",
   "logs.tail",
