@@ -1,4 +1,3 @@
-import type { Skill } from "@mariozechner/pi-coding-agent";
 import { validateRegistryNpmSpec } from "../../infra/npm-registry-spec.js";
 import { parseFrontmatterBlock } from "../../markdown/frontmatter.js";
 import {
@@ -12,6 +11,7 @@ import {
   resolveDenebManifestOs,
   resolveDenebManifestRequires,
 } from "../../shared/frontmatter.js";
+import type { Skill } from "./types.js";
 import type {
   DenebSkillMetadata,
   ParsedSkillFrontmatter,

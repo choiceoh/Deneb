@@ -1,4 +1,15 @@
-import type { Skill } from "@mariozechner/pi-coding-agent";
+/**
+ * Skill type — previously imported from @mariozechner/pi-coding-agent.
+ * Now defined locally since skill loading moved to Go gateway.
+ */
+export type Skill = {
+  name: string;
+  description: string;
+  filePath: string;
+  baseDir: string;
+  source: string;
+  disableModelInvocation: boolean;
+};
 
 export type SkillInstallSpec = {
   id?: string;

@@ -79,10 +79,15 @@ var methodScopes = map[string]auth.Scope{
 	"agents.files.set":  auth.ScopeWrite,
 
 	// --- Skills ---
-	"skills.status":  auth.ScopeRead,
-	"skills.bins":    auth.ScopeRead,
-	"skills.install": auth.ScopeWrite,
-	"skills.update":  auth.ScopeWrite,
+	"skills.status":           auth.ScopeRead,
+	"skills.bins":             auth.ScopeRead,
+	"skills.install":          auth.ScopeWrite,
+	"skills.update":           auth.ScopeWrite,
+	"skills.snapshot":         auth.ScopeRead,
+	"skills.commands":         auth.ScopeRead,
+	"skills.discover":         auth.ScopeRead,
+	"skills.workspace_status": auth.ScopeRead,
+	"skills.entries":          auth.ScopeRead,
 	"tools.catalog":  auth.ScopeRead,
 
 	// --- Process (write) ---
