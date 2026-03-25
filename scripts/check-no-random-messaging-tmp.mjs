@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 
-import ts from "typescript";
 import { runCallsiteGuard } from "./lib/callsite-guard.mjs";
-import { runAsScript, toLine, unwrapExpression } from "./lib/ts-guard-utils.mjs";
+import {
+  parseSource,
+  runAsScript,
+  toLine,
+  unwrapExpression,
+  visitNode,
+} from "./lib/ts-guard-utils.mjs";
 
 const sourceRoots = [
   "src/channels",
@@ -13,34 +18,28 @@ const sourceRoots = [
 ];
 const allowedRelativePaths = new Set(["extensions/feishu/src/dedup.ts"]);
 
-function collectOsTmpdirImports(sourceFile) {
+function collectOsTmpdirImports(program) {
   const osModuleSpecifiers = new Set(["node:os", "os"]);
   const osNamespaceOrDefault = new Set();
   const namedTmpdir = new Set();
-  for (const statement of sourceFile.statements) {
-    if (!ts.isImportDeclaration(statement)) {
+  for (const statement of program.body) {
+    if (statement.type !== "ImportDeclaration" || !statement.source) {
       continue;
     }
-    if (!statement.importClause || !ts.isStringLiteral(statement.moduleSpecifier)) {
+    if (!osModuleSpecifiers.has(statement.source.value)) {
       continue;
     }
-    if (!osModuleSpecifiers.has(statement.moduleSpecifier.text)) {
-      continue;
-    }
-    const clause = statement.importClause;
-    if (clause.name) {
-      osNamespaceOrDefault.add(clause.name.text);
-    }
-    if (!clause.namedBindings) {
-      continue;
-    }
-    if (ts.isNamespaceImport(clause.namedBindings)) {
-      osNamespaceOrDefault.add(clause.namedBindings.name.text);
-      continue;
-    }
-    for (const element of clause.namedBindings.elements) {
-      if ((element.propertyName?.text ?? element.name.text) === "tmpdir") {
-        namedTmpdir.add(element.name.text);
+    for (const specifier of statement.specifiers ?? []) {
+      if (specifier.type === "ImportDefaultSpecifier") {
+        osNamespaceOrDefault.add(specifier.local.name);
+      } else if (specifier.type === "ImportNamespaceSpecifier") {
+        osNamespaceOrDefault.add(specifier.local.name);
+      } else if (specifier.type === "ImportSpecifier") {
+        const imported =
+          specifier.imported?.name ?? specifier.imported?.value ?? specifier.local.name;
+        if (imported === "tmpdir") {
+          namedTmpdir.add(specifier.local.name);
+        }
       }
     }
   }
@@ -48,28 +47,31 @@ function collectOsTmpdirImports(sourceFile) {
 }
 
 export function findMessagingTmpdirCallLines(content, fileName = "source.ts") {
-  const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true);
-  const { osNamespaceOrDefault, namedTmpdir } = collectOsTmpdirImports(sourceFile);
+  const { program, sourceText } = parseSource(fileName, content);
+  const { osNamespaceOrDefault, namedTmpdir } = collectOsTmpdirImports(program);
   const lines = [];
 
-  const visit = (node) => {
-    if (ts.isCallExpression(node)) {
-      const callee = unwrapExpression(node.expression);
+  visitNode(program, (node) => {
+    if (node.type === "CallExpression") {
+      const callee = unwrapExpression(node.callee);
+      if (!callee) {
+        return;
+      }
       if (
-        ts.isPropertyAccessExpression(callee) &&
-        callee.name.text === "tmpdir" &&
-        ts.isIdentifier(callee.expression) &&
-        osNamespaceOrDefault.has(callee.expression.text)
+        callee.type === "MemberExpression" &&
+        !callee.computed &&
+        callee.property?.type === "Identifier" &&
+        callee.property.name === "tmpdir" &&
+        callee.object?.type === "Identifier" &&
+        osNamespaceOrDefault.has(callee.object.name)
       ) {
-        lines.push(toLine(sourceFile, callee));
-      } else if (ts.isIdentifier(callee) && namedTmpdir.has(callee.text)) {
-        lines.push(toLine(sourceFile, callee));
+        lines.push(toLine(sourceText, callee));
+      } else if (callee.type === "Identifier" && namedTmpdir.has(callee.name)) {
+        lines.push(toLine(sourceText, callee));
       }
     }
-    ts.forEachChild(node, visit);
-  };
+  });
 
-  visit(sourceFile);
   return lines;
 }
 

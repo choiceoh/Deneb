@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import { parseSync } from "oxc-parser";
 
 const baseTestSuffixes = [".test.ts", ".test-utils.ts", ".test-harness.ts", ".e2e-harness.ts"];
 
@@ -108,34 +108,122 @@ export async function collectFileViolations(params) {
   return violations;
 }
 
-export function toLine(sourceFile, node) {
-  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+// --- oxc-parser based AST utilities ---
+
+/** Parse TypeScript source into an oxc ESTree AST. */
+export function parseSource(fileName, content) {
+  const result = parseSync(fileName, content);
+  return { program: result.program, sourceText: content };
 }
 
+/** Convert a byte offset to a 1-based line number. */
+export function offsetToLine(sourceText, offset) {
+  let line = 1;
+  for (let i = 0; i < offset && i < sourceText.length; i++) {
+    if (sourceText.charCodeAt(i) === 10) {
+      line++;
+    }
+  }
+  return line;
+}
+
+/**
+ * Compatibility shim: compute 1-based line number from an AST node.
+ * Works with both the old `toLine(sourceFile, node)` call pattern
+ * and the new oxc-based pattern.
+ */
+export function toLine(sourceTextOrFile, node) {
+  // sourceTextOrFile is the raw source string (new oxc path)
+  if (typeof sourceTextOrFile === "string") {
+    return offsetToLine(sourceTextOrFile, node.start);
+  }
+  // Legacy ts.SourceFile path — should not be reached after full migration
+  return sourceTextOrFile.getLineAndCharacterOfPosition(node.getStart(sourceTextOrFile)).line + 1;
+}
+
+/** Extract the source text slice for an AST node. */
+export function nodeText(sourceText, node) {
+  return sourceText.slice(node.start, node.end);
+}
+
+/** Get the text of a property name node (Identifier, StringLiteral, NumericLiteral). */
 export function getPropertyNameText(name) {
-  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
-    return name.text;
+  if (name.type === "Identifier") {
+    return name.name;
+  }
+  if (name.type === "StringLiteral" || name.type === "NumericLiteral") {
+    return typeof name.value === "number" ? String(name.value) : name.value;
+  }
+  // oxc Literal node
+  if (name.type === "Literal") {
+    return name.value != null ? String(name.value) : null;
   }
   return null;
 }
 
+/** Unwrap parenthesized, as, satisfies, and non-null expressions. */
 export function unwrapExpression(expression) {
   let current = expression;
   while (true) {
-    if (ts.isParenthesizedExpression(current)) {
-      current = current.expression;
-      continue;
+    if (!current) {
+      return current;
     }
-    if (ts.isAsExpression(current) || ts.isTypeAssertionExpression(current)) {
-      current = current.expression;
-      continue;
-    }
-    if (ts.isNonNullExpression(current)) {
+    const t = current.type;
+    if (
+      t === "ParenthesizedExpression" ||
+      t === "TSAsExpression" ||
+      t === "TSSatisfiesExpression" ||
+      t === "TSTypeAssertion" ||
+      t === "TSNonNullExpression" ||
+      t === "TSInstantiationExpression"
+    ) {
       current = current.expression;
       continue;
     }
     return current;
   }
+}
+
+/** Walk all descendant nodes of an AST node, calling visitor on each. */
+export function visitNode(node, visitor) {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  visitor(node);
+  for (const key of Object.keys(node)) {
+    if (key === "type" || key === "start" || key === "end") {
+      continue;
+    }
+    const value = node[key];
+    if (Array.isArray(value)) {
+      for (const child of value) {
+        if (child && typeof child === "object" && child.type) {
+          visitNode(child, visitor);
+        }
+      }
+    } else if (value && typeof value === "object" && value.type) {
+      visitNode(value, visitor);
+    }
+  }
+}
+
+/** Check if a node is an ImportExpression (dynamic import). */
+export function isImportExpression(node) {
+  return node.type === "ImportExpression";
+}
+
+/** Get the module specifier string from an import/export declaration. */
+export function getModuleSpecifier(node) {
+  if (node.type === "ImportDeclaration" && node.source) {
+    return node.source.value;
+  }
+  if (node.type === "ExportNamedDeclaration" && node.source) {
+    return node.source.value;
+  }
+  if (node.type === "ExportAllDeclaration" && node.source) {
+    return node.source.value;
+  }
+  return null;
 }
 
 export function isDirectExecution(importMetaUrl) {

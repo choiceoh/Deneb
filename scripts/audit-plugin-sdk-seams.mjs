@@ -3,8 +3,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import { parseSync } from "oxc-parser";
 import { optionalBundledClusterSet } from "./lib/optional-bundled-clusters.mjs";
+import { offsetToLine, visitNode } from "./lib/ts-guard-utils.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const srcRoot = path.join(repoRoot, "src");
@@ -63,8 +64,8 @@ async function walkCodeFiles(rootDir) {
   return out.toSorted((left, right) => normalizePath(left).localeCompare(normalizePath(right)));
 }
 
-function toLine(sourceFile, node) {
-  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+function toLine(sourceText, node) {
+  return offsetToLine(sourceText, node.start);
 }
 
 function resolveRelativeSpecifier(specifier, importerFile) {
@@ -101,7 +102,7 @@ function compareImports(left, right) {
   );
 }
 
-function collectPluginSdkImports(filePath, sourceFile) {
+function collectPluginSdkImports(filePath, program, sourceText) {
   const entries = [];
 
   function push(kind, specifierNode, specifier) {
@@ -113,33 +114,28 @@ function collectPluginSdkImports(filePath, sourceFile) {
       family: normalizePluginSdkFamily(resolvedPath),
       file: normalizePath(filePath),
       kind,
-      line: toLine(sourceFile, specifierNode),
+      line: toLine(sourceText, specifierNode),
       resolvedPath,
       specifier,
     });
   }
 
-  function visit(node) {
-    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-      push("import", node.moduleSpecifier, node.moduleSpecifier.text);
+  visitNode(program, (node) => {
+    if (node.type === "ImportDeclaration" && node.source) {
+      push("import", node.source, node.source.value);
+    } else if (node.type === "ExportNamedDeclaration" && node.source) {
+      push("export", node.source, node.source.value);
+    } else if (node.type === "ExportAllDeclaration" && node.source) {
+      push("export", node.source, node.source.value);
     } else if (
-      ts.isExportDeclaration(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier)
+      node.type === "ImportExpression" &&
+      node.source?.type === "Literal" &&
+      typeof node.source.value === "string"
     ) {
-      push("export", node.moduleSpecifier, node.moduleSpecifier.text);
-    } else if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length === 1 &&
-      ts.isStringLiteral(node.arguments[0])
-    ) {
-      push("dynamic-import", node.arguments[0], node.arguments[0].text);
+      push("dynamic-import", node.source, node.source.value);
     }
-    ts.forEachChild(node, visit);
-  }
+  });
 
-  visit(sourceFile);
   return entries;
 }
 
@@ -151,21 +147,13 @@ async function collectCorePluginSdkImports() {
       continue;
     }
     const source = await fs.readFile(filePath, "utf8");
-    const scriptKind =
-      filePath.endsWith(".tsx") || filePath.endsWith(".jsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-    const sourceFile = ts.createSourceFile(
-      filePath,
-      source,
-      ts.ScriptTarget.Latest,
-      true,
-      scriptKind,
-    );
-    inventory.push(...collectPluginSdkImports(filePath, sourceFile));
+    const result = parseSync(filePath, source);
+    inventory.push(...collectPluginSdkImports(filePath, result.program, source));
   }
   return inventory.toSorted(compareImports);
 }
 
-function collectOptionalClusterStaticImports(filePath, sourceFile) {
+function collectOptionalClusterStaticImports(filePath, program, sourceText) {
   const entries = [];
 
   function push(kind, specifierNode, specifier) {
@@ -184,26 +172,22 @@ function collectOptionalClusterStaticImports(filePath, sourceFile) {
       cluster,
       file: normalizePath(filePath),
       kind,
-      line: toLine(sourceFile, specifierNode),
+      line: toLine(sourceText, specifierNode),
       resolvedPath,
       specifier,
     });
   }
 
-  function visit(node) {
-    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-      push("import", node.moduleSpecifier, node.moduleSpecifier.text);
-    } else if (
-      ts.isExportDeclaration(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      push("export", node.moduleSpecifier, node.moduleSpecifier.text);
+  visitNode(program, (node) => {
+    if (node.type === "ImportDeclaration" && node.source) {
+      push("import", node.source, node.source.value);
+    } else if (node.type === "ExportNamedDeclaration" && node.source) {
+      push("export", node.source, node.source.value);
+    } else if (node.type === "ExportAllDeclaration" && node.source) {
+      push("export", node.source, node.source.value);
     }
-    ts.forEachChild(node, visit);
-  }
+  });
 
-  visit(sourceFile);
   return entries;
 }
 
@@ -216,16 +200,8 @@ async function collectOptionalClusterStaticLeaks() {
       continue;
     }
     const source = await fs.readFile(filePath, "utf8");
-    const scriptKind =
-      filePath.endsWith(".tsx") || filePath.endsWith(".jsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-    const sourceFile = ts.createSourceFile(
-      filePath,
-      source,
-      ts.ScriptTarget.Latest,
-      true,
-      scriptKind,
-    );
-    inventory.push(...collectOptionalClusterStaticImports(filePath, sourceFile));
+    const result = parseSync(filePath, source);
+    inventory.push(...collectOptionalClusterStaticImports(filePath, result.program, source));
   }
   return inventory.toSorted((left, right) => {
     return (

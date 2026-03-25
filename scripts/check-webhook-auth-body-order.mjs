@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 
 import path from "node:path";
-import ts from "typescript";
 import { runCallsiteGuard } from "./lib/callsite-guard.mjs";
-import { runAsScript, toLine, unwrapExpression } from "./lib/ts-guard-utils.mjs";
+import {
+  parseSource,
+  runAsScript,
+  toLine,
+  unwrapExpression,
+  visitNode,
+} from "./lib/ts-guard-utils.mjs";
 
 const sourceRoots = ["extensions"];
 const enforcedFiles = new Set(["extensions/googlechat/src/monitor.ts"]);
@@ -11,28 +16,33 @@ const blockedCallees = new Set(["readJsonBodyWithLimit", "readRequestBodyWithLim
 
 function getCalleeName(expression) {
   const callee = unwrapExpression(expression);
-  if (ts.isIdentifier(callee)) {
-    return callee.text;
+  if (!callee) {
+    return null;
   }
-  if (ts.isPropertyAccessExpression(callee)) {
-    return callee.name.text;
+  if (callee.type === "Identifier") {
+    return callee.name;
+  }
+  if (
+    callee.type === "MemberExpression" &&
+    !callee.computed &&
+    callee.property?.type === "Identifier"
+  ) {
+    return callee.property.name;
   }
   return null;
 }
 
 export function findBlockedWebhookBodyReadLines(content, fileName = "source.ts") {
-  const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true);
+  const { program, sourceText } = parseSource(fileName, content);
   const lines = [];
-  const visit = (node) => {
-    if (ts.isCallExpression(node)) {
-      const calleeName = getCalleeName(node.expression);
+  visitNode(program, (node) => {
+    if (node.type === "CallExpression") {
+      const calleeName = getCalleeName(node.callee);
       if (calleeName && blockedCallees.has(calleeName)) {
-        lines.push(toLine(sourceFile, node.expression));
+        lines.push(toLine(sourceText, node.callee));
       }
     }
-    ts.forEachChild(node, visit);
-  };
-  visit(sourceFile);
+  });
   return lines;
 }
 

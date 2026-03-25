@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -54,41 +54,57 @@ function collectRuntimeApiFiles(): string[] {
 
 function readExportStatements(path: string): string[] {
   const sourceText = readFileSync(resolve(ROOT_DIR, "..", path), "utf8");
-  const sourceFile = ts.createSourceFile(path, sourceText, ts.ScriptTarget.Latest, true);
+  const result = parseSync(path, sourceText);
+  const program = result.program as {
+    body: Array<{
+      type: string;
+      source?: { value: string; start: number; end: number };
+      specifiers?: Array<{
+        type: string;
+        local: { name: string };
+        exported: { name: string };
+      }>;
+      exportKind?: string;
+      declaration?: {
+        type: string;
+        start: number;
+        end: number;
+      };
+      start: number;
+      end: number;
+    }>;
+  };
 
-  return sourceFile.statements.flatMap((statement) => {
-    if (!ts.isExportDeclaration(statement)) {
-      const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) : undefined;
-      if (!modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) {
-        return [];
-      }
-      return [statement.getText(sourceFile).replaceAll(/\s+/g, " ").trim()];
+  return program.body.flatMap((statement) => {
+    // ExportNamedDeclaration with source (re-export)
+    if (statement.type === "ExportNamedDeclaration" && statement.source) {
+      const specifiers = (statement.specifiers ?? []).map((spec) => {
+        const imported = spec.local.name;
+        const exported = spec.exported.name;
+        const alias = imported !== exported ? `${imported} as ${exported}` : exported;
+        // Check if specifier is type-only
+        if ((spec as Record<string, unknown>).exportKind === "type") {
+          return `type ${alias}`;
+        }
+        return alias;
+      });
+      const exportPrefix = statement.exportKind === "type" ? "export type" : "export";
+      return [`${exportPrefix} { ${specifiers.join(", ")} } from "${statement.source.value}";`];
     }
 
-    const moduleSpecifier = statement.moduleSpecifier;
-    if (!moduleSpecifier || !ts.isStringLiteral(moduleSpecifier)) {
-      return [statement.getText(sourceFile).replaceAll(/\s+/g, " ").trim()];
+    // ExportNamedDeclaration with declaration (export function/class/const)
+    if (statement.type === "ExportNamedDeclaration" && statement.declaration) {
+      const text = sourceText.slice(statement.start, statement.end).replace(/\s+/g, " ").trim();
+      return [text];
     }
 
-    if (!statement.exportClause) {
-      const prefix = statement.isTypeOnly ? "export type *" : "export *";
-      return [`${prefix} from ${moduleSpecifier.getText(sourceFile)};`];
+    // ExportAllDeclaration
+    if (statement.type === "ExportAllDeclaration" && statement.source) {
+      const prefix = statement.exportKind === "type" ? "export type *" : "export *";
+      return [`${prefix} from "${statement.source.value}";`];
     }
 
-    if (!ts.isNamedExports(statement.exportClause)) {
-      return [statement.getText(sourceFile).replaceAll(/\s+/g, " ").trim()];
-    }
-
-    const specifiers = statement.exportClause.elements.map((element) => {
-      const imported = element.propertyName?.text;
-      const exported = element.name.text;
-      const alias = imported ? `${imported} as ${exported}` : exported;
-      return element.isTypeOnly ? `type ${alias}` : alias;
-    });
-    const exportPrefix = statement.isTypeOnly ? "export type" : "export";
-    return [
-      `${exportPrefix} { ${specifiers.join(", ")} } from ${moduleSpecifier.getText(sourceFile)};`,
-    ];
+    return [];
   });
 }
 

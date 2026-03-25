@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 
 import path from "node:path";
-import ts from "typescript";
 import { runCallsiteGuard } from "./lib/callsite-guard.mjs";
-import { runAsScript, toLine, unwrapExpression } from "./lib/ts-guard-utils.mjs";
+import {
+  parseSource,
+  runAsScript,
+  toLine,
+  unwrapExpression,
+  visitNode,
+} from "./lib/ts-guard-utils.mjs";
 
 const sourceRoots = ["src/gateway"];
 const enforcedFiles = new Set([
@@ -14,18 +19,16 @@ const enforcedFiles = new Set([
 ]);
 
 export function findLegacyAgentCommandCallLines(content, fileName = "source.ts") {
-  const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true);
+  const { program, sourceText } = parseSource(fileName, content);
   const lines = [];
-  const visit = (node) => {
-    if (ts.isCallExpression(node)) {
-      const callee = unwrapExpression(node.expression);
-      if (ts.isIdentifier(callee) && callee.text === "agentCommand") {
-        lines.push(toLine(sourceFile, callee));
+  visitNode(program, (node) => {
+    if (node.type === "CallExpression") {
+      const callee = unwrapExpression(node.callee);
+      if (callee?.type === "Identifier" && callee.name === "agentCommand") {
+        lines.push(toLine(sourceText, callee));
       }
     }
-    ts.forEachChild(node, visit);
-  };
-  visit(sourceFile);
+  });
   return lines;
 }
 
