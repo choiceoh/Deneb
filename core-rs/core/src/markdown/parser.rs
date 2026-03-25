@@ -832,6 +832,11 @@ pub fn markdown_to_ir_with_meta(markdown: &str, options: &ParseOptions) -> (Mark
                 }
                 TagEnd::TableHead => {
                     if let Some(ref mut table) = state.table {
+                        // pulldown-cmark 0.12+: TableHead contains cells directly
+                        // without a wrapping TableRow, so flush current_row as headers here.
+                        if table.in_header && !table.current_row.is_empty() {
+                            table.headers = std::mem::take(&mut table.current_row);
+                        }
                         table.in_header = false;
                     }
                 }
@@ -1248,6 +1253,22 @@ mod tests {
         );
         assert!(ir.text.contains("1"));
         assert!(ir.text.contains("2"));
+    }
+
+    #[test]
+    fn table_bullets_header_value_format() {
+        let ir = parse_with(
+            "| Name | Value |\n|------|-------|\n| A | 1 |\n| B | 2 |",
+            ParseOptions {
+                table_mode: TableMode::Bullets,
+                ..Default::default()
+            },
+        );
+        // First column is label (bold), other columns as "Header: Value" bullets
+        assert!(ir.text.contains("Value: 1"), "expected 'Value: 1' in {:?}", ir.text);
+        assert!(ir.text.contains("Value: 2"), "expected 'Value: 2' in {:?}", ir.text);
+        assert!(ir.text.contains("A"), "expected label 'A' in {:?}", ir.text);
+        assert!(ir.text.contains("B"), "expected label 'B' in {:?}", ir.text);
     }
 
     #[test]

@@ -126,6 +126,26 @@ export function detectMime(opts: {
   return detectMimeImpl(opts);
 }
 
+/**
+ * Scan a zip buffer for OOXML markers to refine `application/zip` to a specific
+ * Office Open XML type (xlsx, docx, pptx). Searches the raw buffer for known
+ * zip local file header filenames without full zip parsing.
+ */
+function sniffOoxmlFromZipBuffer(buffer: Buffer): string | undefined {
+  // Scan for internal path markers unique to each OOXML format.
+  // These appear as local file header filenames in the zip directory.
+  if (buffer.includes("xl/workbook.xml") || buffer.includes("xl/")) {
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  }
+  if (buffer.includes("word/document.xml") || buffer.includes("word/")) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+  if (buffer.includes("ppt/presentation.xml") || buffer.includes("ppt/")) {
+    return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  }
+  return undefined;
+}
+
 function isGenericMime(mime?: string): boolean {
   if (!mime) {
     return true;
@@ -148,6 +168,14 @@ function detectMimeImpl(opts: {
   // Prefer sniffed types, but don't let generic container types override a more
   // specific extension mapping (e.g. XLSX vs ZIP).
   if (sniffed && (!isGenericMime(sniffed) || !extMime)) {
+    // For zip-based files, try to refine to OOXML (xlsx/docx/pptx) by scanning
+    // the buffer for known internal filenames. This avoids full zip parsing.
+    if (sniffed === "application/zip" && opts.buffer) {
+      const refined = sniffOoxmlFromZipBuffer(opts.buffer);
+      if (refined) {
+        return refined;
+      }
+    }
     return sniffed;
   }
   if (extMime) {
