@@ -3,7 +3,7 @@
 # Orchestrates Rust (core-rs workspace), Go (gateway-go), and TypeScript (pnpm) builds.
 
 .PHONY: all rust rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
-       go go-ffi go-pure go-run go-test go-test-pure go-test-fuzz go-vet go-clean go-binary \
+       go go-ffi go-pure go-run go-test go-test-pure go-test-fuzz go-vet go-clean go-binary gateway-prod \
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
        cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 \
        cli-cross-win-x64 cli-cross-all \
@@ -77,6 +77,11 @@ go-vet:
 
 go-binary: rust go
 	cd gateway-go && go build -o ../dist/deneb-gateway ./cmd/gateway/
+
+# Build production gateway: Go binary + CLI, copies both to dist/.
+gateway-prod: go-binary cli
+	cp cli-rs/target/release/deneb dist/deneb-rs 2>/dev/null || true
+	@echo "Production gateway ready: dist/deneb-gateway + dist/deneb-rs"
 
 go-clean:
 	cd gateway-go && go clean ./...

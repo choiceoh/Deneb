@@ -82,7 +82,7 @@ pub enum Commands {
     /// Gateway management (status, call, usage-cost).
     Gateway(subcli::gateway_cmd::GatewayArgs),
 
-    /// Run the gateway server (delegates to Node.js).
+    /// Run the gateway server (Go binary with Node.js plugin host).
     #[command(name = "gateway-run")]
     GatewayRun(subcli::gateway_run::GatewayRunArgs),
 
