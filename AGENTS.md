@@ -188,7 +188,6 @@
 - `src/link-understanding/` — URL preview/extraction.
 - `src/acp/` — Agent Control Protocol implementation.
 - `src/interactive/` — interactive tool UI.
-- `src/i18n/` — internationalization.
 - `src/markdown/` — markdown utilities.
 - `src/providers/` — LLM/model provider integrations.
 - `src/wizard/` — interactive setup wizards.
@@ -352,16 +351,6 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 - Tables: standard Markdown tables for feature matrices, mode mappings, option lists. Use `✅` / `❌` for yes/no cells.
 - File conventions: all doc files are `.md` (Mintlify processes MDX syntax transparently). File naming: lowercase, hyphenated (`getting-started.md`, `voice-wake.md`).
 - Validation scripts: `pnpm docs:dev` (local preview), `pnpm docs:check-links` (link audit), `pnpm docs:spellcheck` (spell check; `pnpm docs:spellcheck:fix` to auto-fix), `pnpm format:docs` (format check; `pnpm format:docs:fix` to auto-fix).
-
-## Docs i18n (zh-CN)
-
-- `docs/zh-CN/**` is generated; do not edit unless the user explicitly asks.
-- Pipeline: update English docs → adjust glossary (`docs/.i18n/glossary.zh-CN.json`) → run `scripts/docs-i18n` → apply targeted fixes only if instructed.
-- Before rerunning `scripts/docs-i18n`, add glossary entries for any new technical terms, page titles, or short nav labels that must stay in English or use a fixed translation (for example `Doctor` or `Polls`).
-- `pnpm docs:check-i18n-glossary` enforces glossary coverage for changed English doc titles and short internal doc labels before translation reruns.
-- Translation memory: `docs/.i18n/zh-CN.tm.jsonl` (generated).
-- See `docs/.i18n/README.md`.
-- The pipeline can be slow/inefficient; if it’s dragging, ping @jospalmbier on Discord instead of hacking around it.
 
 ## exe.dev VM ops (general)
 
@@ -577,8 +566,7 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 | `pnpm docs:check-links`         | Audit documentation links                               |
 | `pnpm docs:spellcheck`          | Spell check docs                                        |
 | `pnpm docs:spellcheck:fix`      | Auto-fix doc spelling                                   |
-| `pnpm docs:check-i18n-glossary` | Check i18n glossary coverage                            |
-| `pnpm check:docs`               | Full docs check (format + lint + i18n glossary + links) |
+| `pnpm check:docs`               | Full docs check (format + lint + links)                 |
 | `pnpm config:docs:gen`          | Generate config doc baseline                            |
 | `pnpm config:docs:check`        | Check config doc baseline is up to date                 |
 | `pnpm docs:bin`                 | Build docs list for CLI                                 |

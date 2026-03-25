@@ -165,7 +165,6 @@
 
 - **CLAUDE.md** — 포괄적 모듈 맵, 아키텍처 플로우, 코딩 스타일, 전체 커맨드 레퍼런스
 - **Mintlify 외부 문서** — 채널/설치/프로바이더/보안/트러블슈팅
-- **다국어 지원** — 중국어 번역 (`docs/zh-CN/`)
 - **CONTRIBUTING.md**, **SECURITY.md** — PR/보안 가이드라인
 - **AI 에이전트 워크플로우 스크립트** — `dev-patch-impact.ts`, `dev-affected.ts`, `dev-commit-gate.ts`, `dev-create-pr.ts`
 

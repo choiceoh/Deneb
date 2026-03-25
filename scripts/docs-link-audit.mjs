@@ -63,8 +63,8 @@ for (const item of docsConfig.redirects || []) {
 const allFiles = walk(DOCS_DIR);
 const relAllFiles = new Set(allFiles.map((abs) => normalizeSlashes(path.relative(DOCS_DIR, abs))));
 
-function isGeneratedTranslatedDoc(relPath) {
-  return relPath.startsWith("zh-CN/");
+function isGeneratedTranslatedDoc(_relPath) {
+  return false;
 }
 
 const markdownFiles = allFiles.filter((abs) => {

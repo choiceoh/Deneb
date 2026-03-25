@@ -178,15 +178,6 @@ function generateSuggestions(files: string[], categories: Map<string, FileCatego
       action: "Check docs links",
       reason: "Doc files changed — verify root-relative links, no .md/.mdx extensions",
     });
-    // Check if zh-CN might need update
-    const enDocs = files.filter((f) => f.startsWith("docs/") && !f.includes("zh-CN"));
-    if (enDocs.length > 0) {
-      suggestions.push({
-        action: "Consider zh-CN translation update",
-        reason: `English docs changed (${enDocs.length} files)`,
-        command: "pnpm docs:check-i18n-glossary",
-      });
-    }
   }
 
   // Config changes
