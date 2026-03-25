@@ -6,6 +6,7 @@
 package transcript
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -146,6 +147,84 @@ func (w *Writer) AppendMessage(sessionKey string, msg json.RawMessage) error {
 	}
 
 	return nil
+}
+
+// PreviewItem is a lightweight representation of a transcript message for previews.
+type PreviewItem struct {
+	Role      string `json:"role,omitempty"`
+	Content   string `json:"content,omitempty"`
+	Type      string `json:"type,omitempty"`
+	Timestamp int64  `json:"timestamp,omitempty"`
+}
+
+// ReadPreview reads the last maxItems non-header messages from a session transcript.
+// Returns an empty slice (not error) if the transcript file does not exist.
+func (w *Writer) ReadPreview(sessionKey string, maxItems int) ([]PreviewItem, error) {
+	path, err := w.SessionPath(sessionKey)
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("transcript: open preview: %w", err)
+	}
+	defer f.Close()
+
+	// Read all non-header messages into a ring buffer of maxItems capacity.
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 512*1024), 10*1024*1024) // 10 MB max line
+	first := true
+	var ring []PreviewItem
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		if first {
+			first = false
+			continue // Skip header.
+		}
+
+		var msg struct {
+			Role      string `json:"role"`
+			Content   string `json:"content"`
+			Type      string `json:"type"`
+			Timestamp int64  `json:"timestamp"`
+		}
+		if err := json.Unmarshal(line, &msg); err != nil {
+			continue // Skip malformed lines.
+		}
+
+		item := PreviewItem{
+			Role:      msg.Role,
+			Content:   msg.Content,
+			Type:      msg.Type,
+			Timestamp: msg.Timestamp,
+		}
+		// Truncate long content for preview.
+		if len(item.Content) > 500 {
+			item.Content = item.Content[:497] + "..."
+		}
+
+		ring = append(ring, item)
+		if len(ring) > maxItems {
+			ring = ring[1:]
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("transcript: scan preview: %w", err)
+	}
+
+	if ring == nil {
+		return []PreviewItem{}, nil
+	}
+	return ring, nil
 }
 
 // AppendStructured marshals a value to JSON and appends it to the transcript.

@@ -85,7 +85,7 @@ func (e *Engine) Next(sessionID string, answer *Answer) (*Session, error) {
 		return nil, fmt.Errorf("wizard session %q is %s", sessionID, sess.Status)
 	}
 
-	// In the native Go implementation, wizard steps are driven by the bridge.
+	// Wizard steps are driven by the RPC handler.
 	// This provides the state tracking shell; actual step logic is delegated.
 	if answer != nil {
 		sess.StepID = answer.StepID

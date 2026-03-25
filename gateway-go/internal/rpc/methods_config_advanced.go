@@ -14,14 +14,37 @@ type ConfigAdvancedDeps struct {
 	Broadcaster BroadcastFunc
 }
 
-// RegisterConfigAdvancedMethods registers config.set, config.apply, config.patch,
-// config.schema, and config.schema.lookup RPC methods.
+// RegisterConfigAdvancedMethods registers config.get, config.set, config.apply,
+// config.patch, config.schema, and config.schema.lookup RPC methods.
 func RegisterConfigAdvancedMethods(d *Dispatcher, deps ConfigAdvancedDeps) {
+	d.Register("config.get", configGet())
 	d.Register("config.set", configSet(deps))
 	d.Register("config.apply", configApply(deps))
 	d.Register("config.patch", configPatch(deps))
 	d.Register("config.schema", configSchema(deps))
 	d.Register("config.schema.lookup", configSchemaLookup(deps))
+}
+
+// configGet handles "config.get" — returns the current gateway configuration snapshot.
+func configGet() HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		snapshot, err := config.LoadConfigFromDefaultPath()
+		if err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrUnavailable, "failed to load config: "+err.Error()))
+		}
+
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
+			"path":     snapshot.Path,
+			"exists":   snapshot.Exists,
+			"valid":    snapshot.Valid,
+			"hash":     snapshot.Hash,
+			"config":   snapshot.Config,
+			"issues":   snapshot.Issues,
+			"warnings": snapshot.Warnings,
+		})
+		return resp
+	}
 }
 
 func configSet(deps ConfigAdvancedDeps) HandlerFunc {

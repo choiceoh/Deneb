@@ -6,9 +6,8 @@ import "sync"
 // Mirrors proto/channel.proto ChannelAccountSnapshot and the TypeScript
 // ChannelAccountSnapshot type in src/channels/plugins/types.ts.
 //
-// The Go gateway maintains this snapshot and syncs it to the Plugin Host
-// via the plugin-host.channels.sync bridge method so TypeScript handlers
-// (e.g., channels.status) return accurate state.
+// The Go gateway maintains this snapshot for RPC handlers such as
+// channels.status to return accurate state.
 type AccountSnapshot struct {
 	AccountID         string `json:"accountId"`
 	Name              string `json:"name,omitempty"`
@@ -40,7 +39,7 @@ type AccountSnapshot struct {
 }
 
 // ChannelSnapshot holds the aggregated account snapshots for all channels.
-// This is the payload sent via the plugin-host.channels.sync bridge method.
+// This is the aggregated snapshot payload returned by channels.status.
 type ChannelSnapshot struct {
 	// Channels maps channel ID to its primary account snapshot.
 	Channels map[string]AccountSnapshot `json:"channels"`

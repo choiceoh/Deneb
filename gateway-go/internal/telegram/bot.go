@@ -132,8 +132,8 @@ func (b *Bot) pollLoop(ctx context.Context) error {
 			b.markSeen(u.UpdateID)
 
 			// Buffer message for poll RPC. DrainMessages() must be called regularly
-			// (typically by the Node.js bridge via RPC poll). If drain falls behind,
-			// oldest messages are discarded and a warning is logged.
+			// (typically via RPC poll). If drain falls behind, oldest messages are
+			// discarded and a warning is logged.
 			if u.Message != nil && CheckAccess(b.config, u.Message).Allowed {
 				b.msgMu.Lock()
 				b.messages = append(b.messages, u.Message)

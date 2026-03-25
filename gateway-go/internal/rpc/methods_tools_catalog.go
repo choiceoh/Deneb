@@ -144,8 +144,8 @@ func toolsCatalog() HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			AgentID string `json:"agentId"`
-			// IncludePlugins is accepted but ignored; plugin tools require the
-			// Node.js bridge and are not available in the Go-native catalog.
+			// IncludePlugins is accepted but ignored; plugin tools are not
+			// available in the standalone Go gateway catalog.
 			IncludePlugins *bool `json:"includePlugins"`
 		}
 		if len(req.Params) > 0 {

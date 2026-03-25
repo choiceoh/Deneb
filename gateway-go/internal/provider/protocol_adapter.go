@@ -36,7 +36,7 @@ func (a *ProtocolAdapter) ListProviders() []protocol.ProviderMeta {
 }
 
 // ListCatalogEntries returns an empty list; catalog discovery requires
-// async context and is populated by the Node.js bridge at runtime.
+// async context and is populated at runtime via provider registration.
 func (a *ProtocolAdapter) ListCatalogEntries() []protocol.ProviderCatalogEntry {
 	return nil
 }
