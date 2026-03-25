@@ -8,7 +8,7 @@ title: "Personal Assistant Setup"
 
 # Building a personal assistant with Deneb
 
-Deneb is a WhatsApp + Telegram + Discord + iMessage gateway for **Pi** agents. Plugins add Mattermost. This guide is the "personal assistant" setup: one dedicated WhatsApp number that behaves like your always-on agent.
+Deneb is a multi-language gateway (Go server + Rust core + Node.js plugin host) for **Pi** agents, connecting messaging channels like Telegram, WhatsApp, Discord, Slack, iMessage, and more. This guide is the "personal assistant" setup: one dedicated messaging account that behaves like your always-on agent.
 
 ## ⚠️ Safety first
 

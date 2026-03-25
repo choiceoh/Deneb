@@ -67,7 +67,7 @@ Default mode is `gateway.reload.mode="hybrid"`.
 
 ## Runtime model
 
-- One always-on process for routing, control plane, and channel connections.
+- The Gateway runs as a **Go server** (primary process) with a **Node.js plugin host** (subprocess) and **Rust core** (linked via CGo FFI). See [Architecture](/concepts/architecture) for the full runtime diagram.
 - Single multiplexed port for:
   - WebSocket control/RPC
   - HTTP APIs (OpenAI-compatible, Responses, tools invoke)

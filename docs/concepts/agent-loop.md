@@ -17,8 +17,8 @@ wired end-to-end.
 
 ## Entry points
 
-- Gateway RPC: `agent` and `agent.wait`.
-- CLI: `agent` command.
+- Gateway RPC: `agent` and `agent.wait` (dispatched by the Go gateway, forwarded to the Node.js plugin host for execution).
+- CLI: `agent` command (connects to gateway via WebSocket).
 
 ## How it works (high-level)
 
