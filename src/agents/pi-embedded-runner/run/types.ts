@@ -66,4 +66,6 @@ export type EmbeddedRunAttemptResult = {
   clientToolCall?: { name: string; params: Record<string, unknown> };
   /** True when sessions_yield tool was called during this attempt. */
   yieldDetected?: boolean;
+  /** Text content of an orphaned user message that was removed to fix role ordering. */
+  orphanedUserPrompt?: string;
 };

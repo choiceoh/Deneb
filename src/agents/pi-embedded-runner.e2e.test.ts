@@ -264,4 +264,11 @@ describe("runEmbeddedPiAgent", () => {
     expect(result.meta.error).toBeUndefined();
     expect(result.payloads?.length ?? 0).toBeGreaterThan(0);
   });
+
+  it("preserves orphaned user message text for re-queue", async () => {
+    const result = await runWithOrphanedSingleUserMessage("save this message", nextSessionKey());
+
+    expect(result.meta.error).toBeUndefined();
+    expect(result.orphanedUserPrompt).toBe("save this message");
+  });
 });

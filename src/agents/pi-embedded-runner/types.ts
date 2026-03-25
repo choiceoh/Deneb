@@ -74,6 +74,8 @@ export type EmbeddedPiRunResult = {
   messagingToolSentTargets?: MessagingToolSend[];
   // Count of successful cron.add tool calls in this run.
   successfulCronAdds?: number;
+  /** Text content of an orphaned user message removed during the run to fix role ordering. */
+  orphanedUserPrompt?: string;
 };
 
 export type EmbeddedPiCompactResult = {

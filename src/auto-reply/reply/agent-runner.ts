@@ -389,6 +389,24 @@ export async function runReplyAgent(params: {
     } = runOutcome;
     let { didLogHeartbeatStrip, autoCompactionCount } = runOutcome;
 
+    // Re-queue orphaned user messages that were removed to fix role ordering.
+    // Without this, messages that arrived during an active run and were steered
+    // but not processed would be silently dropped.
+    if (runResult.orphanedUserPrompt?.trim()) {
+      const orphanedFollowup: FollowupRun = {
+        prompt: runResult.orphanedUserPrompt,
+        enqueuedAt: Date.now(),
+        summaryLine: runResult.orphanedUserPrompt.slice(0, 80),
+        originatingChannel: followupRun.originatingChannel,
+        originatingTo: followupRun.originatingTo,
+        originatingAccountId: followupRun.originatingAccountId,
+        originatingThreadId: followupRun.originatingThreadId,
+        originatingChatType: followupRun.originatingChatType,
+        run: followupRun.run,
+      };
+      enqueueFollowupRun(queueKey, orphanedFollowup, resolvedQueue, "prompt");
+    }
+
     if (
       shouldInjectGroupIntro &&
       activeSessionEntry &&
