@@ -451,8 +451,8 @@ export type GatewayConfig = {
    */
   channelMaxRestartsPerHour?: number;
   /**
-   * Gateway runtime implementation. When set to "go", the CLI spawns the Go
-   * gateway binary instead of the TypeScript gateway. Default: "node".
+   * Gateway runtime implementation. When set to "node", the CLI runs the
+   * TypeScript gateway directly instead of the Go gateway. Default: "go".
    */
   runtime?: "node" | "go";
 };
