@@ -4,6 +4,50 @@
 - In chat replies, file references must be repo-root relative only (example: `extensions/bluebubbles/src/channel.ts:80`); never absolute paths or `~/...`.
 - Do not edit files covered by security-focused `CODEOWNERS` rules unless a listed owner explicitly asked for the change or is already reviewing it with you. Treat those paths as restricted surfaces, not drive-by cleanup.
 
+## Project Philosophy & Deployment Context (MUST READ)
+
+> **All AI agents MUST read and internalize this section before making any changes.** This defines the fundamental constraints and design principles for the entire project.
+
+### Deployment Environment
+- **Single operator, single user.** This instance serves exactly one person. There is no multi-tenant, multi-user, or team deployment. Ignore code paths related to user isolation, permission separation, or multi-user auth.
+- **Hardware:** NVIDIA DGX Spark (local server). All services run on this single machine.
+- **Sole I/O surface:** Telegram on Android (Samsung Galaxy S25). This is the only channel in active use. Optimize exclusively for this path. Other channels exist in the codebase but are not deployment targets.
+
+### Development Model
+- All development is done via **vibe coding** — the sole developer works entirely through Claude Code and AI agents. There is no separate human-written code workflow.
+- Prioritize **depth over breadth**: optimize the narrow supported surface (Telegram + DGX Spark + single user) rather than expanding to new platforms or channels.
+
+### Design Principles
+- **High completeness and cohesion.** Every feature that ships must be fully finished and tightly integrated, not partially implemented.
+- **Opinionated defaults over user configuration.** Follow an Apple-like philosophy: lock down settings at the program level to deliver a stable, predictable UX. Avoid exposing configuration knobs that let the user degrade their own experience. Robustness comes from fewer moving parts, not more options.
+- **Narrow scope, deep quality.** When choosing between supporting more things shallowly or fewer things well, always choose the latter.
+
+### AI Agent Development Guidelines
+- Since all development is vibe-coded, always leave sufficient context and comments so the next AI session can seamlessly pick up the work.
+- Break complex logic into small, well-named functions so AI agents can easily understand and modify them.
+
+### Single-User Optimization
+- Multi-user/multi-tenant code paths can be ignored (auth separation, user isolation, concurrent access, etc.).
+- Prefer simple sequential processing over concurrency/race-condition handling.
+- Minimize settings migration and onboarding flows — the operator configures directly.
+
+### Telegram-Only Optimization
+- Optimize for Telegram Bot API constraints: 4096-char message limit, MarkdownV2 parse mode, inline keyboards.
+- Prioritize perfect Telegram behavior over cross-channel compatibility.
+- Respect Telegram file size limits (50 MB for media uploads).
+
+### DGX Spark Hardware Utilization
+- Local GPU inference is available — minimize external API calls and consider local model utilization.
+- Memory and GPU resources are abundant — leverage aggressive caching and preloading.
+
+### Korean Language First
+- The primary user is Korean-speaking. Default to Korean for UI text, responses, and user-facing messages.
+- No i18n framework needed — keep it simple with a single language.
+
+### Deployment Simplification
+- Single server (DGX Spark) direct deployment — no CI/CD pipeline or container orchestration needed.
+- Deployment is simply `git pull` + restart.
+
 ## Project Structure & Module Organization
 
 ### Top-Level Directory Map
