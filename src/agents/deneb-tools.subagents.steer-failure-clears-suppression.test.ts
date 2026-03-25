@@ -11,7 +11,6 @@ import {
   listSubagentRunsForRequester,
   resetSubagentRegistryForTests,
 } from "./subagent/subagent-registry.js";
-import "./test-helpers/fast-core-tools.js";
 import { createSubagentsTool } from "./tools/subagents-tool.js";
 
 describe("deneb-tools: subagents steer failure", () => {

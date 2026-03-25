@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import "./test-helpers/fast-core-tools.js";
 import * as sessionsHarness from "./deneb-tools.subagents.sessions-spawn.test-harness.js";
 import { resetSubagentRegistryForTests } from "./subagent/subagent-registry.js";
 
