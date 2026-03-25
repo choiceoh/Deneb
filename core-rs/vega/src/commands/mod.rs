@@ -86,6 +86,7 @@ pub fn execute(
         "list" => cmd_list(args, config),
         "tags" => cmd_tags(args, config),
         "timeline" => cmd_timeline(args, config),
+        "embed" => cmd_embed(args, config),
         _ => {
             // Try to route the command as a query
             let routed = route_command(command);
@@ -534,6 +535,42 @@ fn cmd_timeline(args: &Value, config: &VegaConfig) -> CommandResult {
             "count": entries.len(),
         }),
     )
+}
+
+/// embed: Generate embeddings for chunks (requires ml feature).
+fn cmd_embed(_args: &Value, config: &VegaConfig) -> CommandResult {
+    #[cfg(feature = "ml")]
+    {
+        use crate::search::semantic;
+
+        if !config.has_ml() {
+            return CommandResult::err("embed", "ML 모델이 설정되지 않았습니다 (VEGA_MODEL_EMBEDDER)");
+        }
+
+        let conn = match open_db(config) {
+            Ok(c) => c,
+            Err(e) => return CommandResult::err("embed", &e),
+        };
+
+        // Build ML manager
+        let mut ml_configs = Vec::new();
+        if let Some(ref path) = config.model_embedder {
+            ml_configs.push(deneb_ml::ModelConfig::embedder(path.clone(), config.model_unload_ttl));
+        }
+        let mgr = deneb_ml::ModelManager::new(ml_configs);
+
+        match semantic::embed_chunks(&conn, "qwen3-embedding-8b", &mgr) {
+            Ok(count) => CommandResult::ok("embed", json!({
+                "embedded_chunks": count,
+            })),
+            Err(e) => CommandResult::err("embed", &format!("임베딩 실패: {}", e)),
+        }
+    }
+
+    #[cfg(not(feature = "ml"))]
+    {
+        CommandResult::err("embed", "ML 기능이 비활성화되어 있습니다 (feature: ml)")
+    }
 }
 
 // -- Helpers --

@@ -305,6 +305,7 @@ name = "deneb-vega"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "deneb-ml",
  "log",
  "md5",
  "once_cell",

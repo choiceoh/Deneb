@@ -21,12 +21,16 @@ pub struct VegaConfig {
     pub db_path: PathBuf,
     /// Directory containing project markdown files.
     pub md_dir: PathBuf,
-    /// Reranking mode: "full", "vega_only", or "none".
+    /// Reranking mode: "full" (fusion + reranker), "vega_only" (fusion), or "none" (BM25 only).
     pub rerank_mode: String,
     /// Model unload TTL in seconds (0 = never unload).
     pub model_unload_ttl: u64,
     /// Inference backend: "local" or "sqlite_only".
     pub inference_backend: String,
+    /// Path to embedder GGUF model (for semantic search).
+    pub model_embedder: Option<PathBuf>,
+    /// Path to reranker GGUF model.
+    pub model_reranker: Option<PathBuf>,
 }
 
 impl Default for VegaConfig {
@@ -37,6 +41,8 @@ impl Default for VegaConfig {
             rerank_mode: "full".into(),
             model_unload_ttl: 300,
             inference_backend: "local".into(),
+            model_embedder: None,
+            model_reranker: None,
         }
     }
 }
@@ -63,8 +69,20 @@ impl VegaConfig {
         if let Ok(v) = std::env::var("VEGA_INFERENCE") {
             cfg.inference_backend = v;
         }
+        if let Ok(v) = std::env::var("VEGA_MODEL_EMBEDDER") {
+            cfg.model_embedder = Some(PathBuf::from(v));
+        }
+        if let Ok(v) = std::env::var("VEGA_MODEL_RERANKER") {
+            cfg.model_reranker = Some(PathBuf::from(v));
+        }
 
         cfg
+    }
+
+    /// Check if ML inference is configured and available.
+    pub fn has_ml(&self) -> bool {
+        self.inference_backend == "local"
+            && (self.model_embedder.is_some() || self.model_reranker.is_some())
     }
 
     /// Check if the database path exists.

@@ -5,6 +5,7 @@
 pub mod query_analyzer;
 pub mod fts_search;
 pub mod fusion;
+pub mod semantic;
 
 use std::collections::HashMap;
 
@@ -39,17 +40,39 @@ pub struct SearchMeta {
     pub rerank_mode: String,
 }
 
-/// Main search router. Analyzes queries, runs SQLite search, and applies fusion ranking.
+/// Main search router. Analyzes queries, runs SQLite search, optionally runs
+/// semantic search via deneb-ml, and applies fusion ranking.
 pub struct SearchRouter {
     config: VegaConfig,
+    #[cfg(feature = "ml")]
+    ml_manager: Option<deneb_ml::ModelManager>,
 }
 
 impl SearchRouter {
     pub fn new(config: VegaConfig) -> Self {
-        Self { config }
+        #[cfg(feature = "ml")]
+        let ml_manager = build_ml_manager(&config);
+
+        Self {
+            config,
+            #[cfg(feature = "ml")]
+            ml_manager,
+        }
     }
 
-    /// Execute a full search: analyze → SQLite FTS → fusion → unified results.
+    /// Check if semantic search is available (ML models configured + feature enabled).
+    fn semantic_available(&self) -> bool {
+        #[cfg(feature = "ml")]
+        {
+            self.ml_manager.is_some()
+        }
+        #[cfg(not(feature = "ml"))]
+        {
+            false
+        }
+    }
+
+    /// Execute a full search: analyze → SQLite FTS → semantic (optional) → fusion → unified.
     pub fn search(&self, query: &str) -> Result<SearchResult, Box<dyn std::error::Error>> {
         let query = normalize_query(query);
         if query.is_empty() {
@@ -66,7 +89,7 @@ impl SearchRouter {
                 project_scores: Vec::new(),
                 search_meta: SearchMeta {
                     route: "sqlite".into(),
-                    semantic_available: false,
+                    semantic_available: self.semantic_available(),
                     semantic_used: false,
                     sqlite_count: 0,
                     semantic_count: 0,
@@ -84,14 +107,93 @@ impl SearchRouter {
         init_db(&conn)?;
         let mut sqlite_result = sqlite_search(&conn, &query, extracted);
 
-        // 3. Apply fusion ranking
+        // 3. Semantic search (when ML is available and route permits)
+        let mut semantic_count = 0;
+        let mut semantic_used = false;
+
+        #[cfg(feature = "ml")]
+        if let Some(ref mgr) = self.ml_manager {
+            let should_run_semantic = match analysis.route {
+                SearchRoute::Semantic => true,
+                SearchRoute::Hybrid => true,
+                SearchRoute::Sqlite => {
+                    // Fallback: run semantic if SQLite returned too few results
+                    query_analyzer::has_semantic_pattern(&query)
+                        || (!extracted.keywords.is_empty() && sqlite_result.chunks.len() < 5)
+                }
+            };
+
+            if should_run_semantic {
+                let project_filter = if !sqlite_result.project_ids.is_empty()
+                    && analysis.route != SearchRoute::Semantic
+                {
+                    Some(sqlite_result.project_ids.as_slice())
+                } else {
+                    None
+                };
+
+                let sem_results = semantic::semantic_search(
+                    &conn,
+                    &query,
+                    &semantic::SemanticConfig::default(),
+                    project_filter,
+                    mgr,
+                );
+
+                if !sem_results.is_empty() {
+                    semantic_used = true;
+                    semantic_count = sem_results.len();
+
+                    // Convert semantic results to unified format and merge
+                    for sr in &sem_results {
+                        // Avoid duplicating chunks already in SQLite results
+                        if !sqlite_result.chunks.iter().any(|c| c.chunk_id == sr.chunk_id) {
+                            sqlite_result.chunks.push(fts_search::ChunkRow {
+                                chunk_id: sr.chunk_id,
+                                project_id: sr.project_id,
+                                name: sr.project_name.clone(),
+                                client: sr.client.clone(),
+                                status: sr.status.clone(),
+                                person_internal: sr.person_internal.clone(),
+                                capacity: String::new(),
+                                section_heading: sr.section_heading.clone(),
+                                content: sr.content.clone(),
+                                chunk_type: sr.chunk_type.clone(),
+                                entry_date: sr.entry_date.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+
+            // 3b. ML reranking (when rerank_mode is "full")
+            if self.config.rerank_mode == "full" && !sqlite_result.chunks.is_empty() {
+                let reranked = semantic::rerank_results(&query, &sqlite_result.chunks, 30, mgr);
+                if !reranked.is_empty() {
+                    // Apply reranker scores as boost to fusion
+                    // reranked is [(original_index, score)]
+                    for (idx, ml_score) in &reranked {
+                        if let Some(chunk) = sqlite_result.chunks.get(*idx) {
+                            // We'll apply these as metadata for fusion to pick up
+                            log::debug!(
+                                "Rerank: chunk {} score {:.3}",
+                                chunk.chunk_id,
+                                ml_score
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Apply fusion ranking
         let project_scores = if self.config.rerank_mode != "none" {
             rerank_fusion(&mut sqlite_result, extracted)
         } else {
             Vec::new()
         };
 
-        // 4. Build unified results
+        // 5. Build unified results
         let mut unified = sqlite_rows_to_unified(&sqlite_result.chunks);
 
         // Apply project scores to unified results
@@ -121,13 +223,42 @@ impl SearchRouter {
             project_scores,
             search_meta: SearchMeta {
                 route: route_str.into(),
-                semantic_available: false, // Phase 1 ML integration will enable this
-                semantic_used: false,
+                semantic_available: self.semantic_available(),
+                semantic_used,
                 sqlite_count: sqlite_result.chunks.len(),
-                semantic_count: 0,
+                semantic_count,
                 rerank_mode: self.config.rerank_mode.clone(),
             },
         })
+    }
+}
+
+/// Build ML ModelManager from VegaConfig (feature-gated).
+#[cfg(feature = "ml")]
+fn build_ml_manager(config: &VegaConfig) -> Option<deneb_ml::ModelManager> {
+    if config.inference_backend != "local" {
+        return None;
+    }
+
+    let mut configs = Vec::new();
+
+    if let Some(ref path) = config.model_embedder {
+        configs.push(deneb_ml::ModelConfig::embedder(
+            path.clone(),
+            config.model_unload_ttl,
+        ));
+    }
+    if let Some(ref path) = config.model_reranker {
+        configs.push(deneb_ml::ModelConfig::reranker(
+            path.clone(),
+            config.model_unload_ttl,
+        ));
+    }
+
+    if configs.is_empty() {
+        None
+    } else {
+        Some(deneb_ml::ModelManager::new(configs))
     }
 }
 

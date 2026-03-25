@@ -301,7 +301,7 @@ fn vega_execute_impl(cmd_json: &str) -> String {
     let command = parsed.get("command").and_then(|v| v.as_str()).unwrap_or("search");
     let args = parsed.get("args").cloned().unwrap_or(serde_json::Value::Null);
 
-    // Build config from JSON or env
+    // Build config from JSON or env (model paths are read from env by from_env())
     let config = if let Some(cfg) = parsed.get("config") {
         let mut vc = deneb_vega::config::VegaConfig::from_env();
         if let Some(p) = cfg.get("db_path").and_then(|v| v.as_str()) {
@@ -312,6 +312,12 @@ fn vega_execute_impl(cmd_json: &str) -> String {
         }
         if let Some(m) = cfg.get("rerank_mode").and_then(|v| v.as_str()) {
             vc.rerank_mode = m.to_string();
+        }
+        if let Some(p) = cfg.get("model_embedder").and_then(|v| v.as_str()) {
+            vc.model_embedder = Some(std::path::PathBuf::from(p));
+        }
+        if let Some(p) = cfg.get("model_reranker").and_then(|v| v.as_str()) {
+            vc.model_reranker = Some(std::path::PathBuf::from(p));
         }
         vc
     } else {
