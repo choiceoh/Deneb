@@ -1023,7 +1023,7 @@ func (s *Server) registerNativeSystemMethods(denebDir string) {
 func (s *Server) wireTelegramChatHandler() {
 	// Set reply function: delivers assistant responses back to Telegram.
 	s.chatHandler.SetReplyFunc(func(ctx context.Context, delivery *chat.DeliveryContext, text string) error {
-		if delivery == nil || (delivery.Channel != "" && delivery.Channel != "telegram") {
+		if delivery == nil || delivery.Channel != "telegram" {
 			return nil
 		}
 		client := s.telegramPlug.Client()
@@ -1050,7 +1050,7 @@ func (s *Server) wireTelegramChatHandler() {
 		chatID := fmt.Sprintf("%d", msg.Chat.ID)
 		sessionKey := "telegram:" + chatID
 
-		req, err := protocol.NewRequestFrame("tg-"+chatID, "chat.send", map[string]any{
+		req, err := protocol.NewRequestFrame("tg-"+chatID+"-"+strconv.FormatInt(msg.MessageID, 10), "chat.send", map[string]any{
 			"sessionKey": sessionKey,
 			"message":    msg.Text,
 			"delivery": map[string]any{
@@ -1063,7 +1063,9 @@ func (s *Server) wireTelegramChatHandler() {
 			return
 		}
 
-		resp := s.chatHandler.Send(context.Background(), req)
+		sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer sendCancel()
+		resp := s.chatHandler.Send(sendCtx, req)
 		if resp != nil && !resp.OK {
 			s.logger.Warn("chat.send failed for telegram message",
 				"chatId", chatID,
