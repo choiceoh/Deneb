@@ -7,12 +7,15 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // SessionDeps holds dependencies for session RPC methods.
 type SessionDeps struct {
 	Deps
+	Transcripts *transcript.Writer
+	Compressor  *transcript.Compressor
 }
 
 // RegisterSessionMethods registers Phase 3 session RPC methods.
@@ -94,13 +97,16 @@ func sessionsReset(deps SessionDeps) HandlerFunc {
 }
 
 // ---------------------------------------------------------------------------
-// sessions.preview — forwarded to bridge (file I/O heavy)
+// sessions.preview — loads transcript preview from JSONL files
 // ---------------------------------------------------------------------------
 
 func sessionsPreview(deps SessionDeps) HandlerFunc {
+	const defaultMaxItems = 10
+
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			Keys []string `json:"keys"`
+			Keys     []string `json:"keys"`
+			MaxItems int      `json:"maxItems,omitempty"`
 		}
 		if len(req.Params) > 0 {
 			_ = unmarshalParams(req.Params, &p)
@@ -108,6 +114,10 @@ func sessionsPreview(deps SessionDeps) HandlerFunc {
 
 		ts := time.Now().UnixMilli()
 		keys := normalizeKeys(p.Keys, 64)
+		maxItems := p.MaxItems
+		if maxItems <= 0 || maxItems > 50 {
+			maxItems = defaultMaxItems
+		}
 
 		if len(keys) == 0 {
 			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
@@ -119,10 +129,21 @@ func sessionsPreview(deps SessionDeps) HandlerFunc {
 
 		previews := make([]map[string]any, len(keys))
 		for i, k := range keys {
+			status := "missing"
+			var items any = []any{}
+
+			if deps.Transcripts != nil {
+				preview, err := deps.Transcripts.ReadPreview(k, maxItems)
+				if err == nil && preview != nil {
+					status = "ok"
+					items = preview
+				}
+			}
+
 			previews[i] = map[string]any{
 				"key":    k,
-				"status": "missing",
-				"items":  []any{},
+				"status": status,
+				"items":  items,
 			}
 		}
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
@@ -234,7 +255,7 @@ func matchesAgentID(key, agentID string) bool {
 }
 
 // ---------------------------------------------------------------------------
-// sessions.compact — forwarded to bridge (file I/O heavy)
+// sessions.compact — compresses session transcript via Compressor
 // ---------------------------------------------------------------------------
 
 func sessionsCompact(deps SessionDeps) HandlerFunc {
@@ -251,11 +272,32 @@ func sessionsCompact(deps SessionDeps) HandlerFunc {
 			return errMissingKey(req.ID)
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
-			"ok":        true,
+		if deps.Compressor == nil || deps.Transcripts == nil {
+			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+				"ok":        true,
+				"key":       key,
+				"compacted": false,
+				"reason":    "transcript compressor not available",
+			})
+			return resp
+		}
+
+		result, err := deps.Compressor.Compact(key, deps.Transcripts)
+		if err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrUnavailable, "compaction failed: "+err.Error()))
+		}
+
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
+			"ok":        result.OK,
 			"key":       key,
-			"compacted": false,
-			"reason":    "compaction not yet implemented in Go gateway",
+			"compacted": result.Compacted,
+			"reason":    result.Reason,
+			"stats": map[string]any{
+				"originalMessages": result.OriginalMessages,
+				"retainedMessages": result.RetainedMessages,
+				"summaryCount":     result.SummaryCount,
+			},
 		})
 		return resp
 	}

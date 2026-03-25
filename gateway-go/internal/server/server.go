@@ -117,6 +117,10 @@ type Server struct {
 
 	// Phase 4: Native agent execution.
 	jobTracker *agent.JobTracker
+
+	// Phase 5: Enhanced RPC subsystems.
+	heartbeatState *rpc.HeartbeatState
+	presenceStore  *rpc.PresenceStore
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
@@ -681,12 +685,18 @@ func (s *Server) registerExtendedMethods() {
 	})
 
 	// Session state methods (patch/reset/preview/resolve/compact).
+	var sessionCompressor *transcript.Compressor
+	if s.transcript != nil {
+		sessionCompressor = transcript.NewCompressor(transcript.DefaultCompactionConfig(), s.logger)
+	}
 	sessionDeps := rpc.SessionDeps{
 		Deps: rpc.Deps{
 			Sessions:    s.sessions,
 			Channels:    s.channels,
 			GatewaySubs: s.gatewaySubs,
 		},
+		Transcripts: s.transcript,
+		Compressor:  sessionCompressor,
 	}
 	rpc.RegisterSessionMethods(s.dispatcher, sessionDeps)
 
@@ -743,7 +753,7 @@ func (s *Server) GatewaySubscriptions() *events.GatewayEventSubscriptions {
 
 // registerPhase2Methods registers chat, config, monitoring, and event subscription methods.
 func (s *Server) registerPhase2Methods() {
-	// Chat methods — native agent execution with bridge fallback.
+	// Chat methods — native agent execution.
 	broadcastFn := func(event string, payload any) (int, []error) {
 		return s.broadcaster.Broadcast(event, payload)
 	}
@@ -824,7 +834,33 @@ func (s *Server) registerPhase2Methods() {
 	// Event subscription methods.
 	rpc.RegisterEventsMethods(s.dispatcher, rpc.EventsDeps{Broadcaster: s.broadcaster, Logger: s.logger})
 
-	// Stub handlers for methods that were previously bridge-forwarded.
+	// Gateway identity method.
+	rpc.RegisterIdentityMethods(s.dispatcher, s.version)
+
+	// Heartbeat methods (last-heartbeat, set-heartbeats).
+	if s.heartbeatState == nil {
+		s.heartbeatState = rpc.NewHeartbeatState()
+	}
+	rpc.RegisterHeartbeatMethods(s.dispatcher, rpc.HeartbeatDeps{
+		State:       s.heartbeatState,
+		Broadcaster: broadcastFn,
+	})
+
+	// System presence methods (system-presence, system-event).
+	if s.presenceStore == nil {
+		s.presenceStore = rpc.NewPresenceStore()
+	}
+	rpc.RegisterPresenceMethods(s.dispatcher, rpc.PresenceDeps{
+		Store:       s.presenceStore,
+		Broadcaster: broadcastFn,
+	})
+
+	// Models list method.
+	rpc.RegisterModelsMethods(s.dispatcher, rpc.ModelsDeps{
+		Providers: s.providers,
+	})
+
+	// Stub handlers for methods not available in standalone mode.
 	stubUnavailable := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		return protocol.NewResponseError(req.ID, protocol.NewError(
 			protocol.ErrUnavailable, req.Method+" not available in standalone mode"))
@@ -929,8 +965,8 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 	})
 }
 
-// registerNativeSystemMethods registers Phase 4 RPC methods that were migrated
-// from bridge forwarding to native Go: usage, logs, doctor, maintenance, update.
+// registerNativeSystemMethods registers native Go system RPC methods:
+// usage, logs, doctor, maintenance, update.
 func (s *Server) registerNativeSystemMethods(denebDir string) {
 	rpc.RegisterUsageMethods(s.dispatcher, rpc.UsageDeps{
 		Tracker: s.usageTracker,

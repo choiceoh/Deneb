@@ -22,8 +22,7 @@ func RegisterToolMethods(d *Dispatcher, deps ToolDeps) {
 }
 
 // toolsInvoke handles "tools.invoke" — executes a tool by name.
-// For now, this validates params and forwards to the bridge. Native execution
-// using the process manager is supported for bash/exec tools.
+// Native execution via the process manager is supported for bash/exec tools.
 func toolsInvoke(deps ToolDeps) HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
@@ -100,10 +99,26 @@ func toolsExecLocal(ctx context.Context, req *protocol.RequestFrame, deps ToolDe
 }
 
 // toolsList handles "tools.list" — returns the available tool catalog.
+// Enumerates core tools from the static catalog (same source as tools.catalog).
 func toolsList(_ ToolDeps) HandlerFunc {
+	// Pre-compute the flat tool list at registration time.
+	groups := buildCoreToolCatalog()
+	tools := make([]map[string]any, 0, 24)
+	for _, g := range groups {
+		for _, t := range g.Tools {
+			tools = append(tools, map[string]any{
+				"id":          t.ID,
+				"label":       t.Label,
+				"description": t.Description,
+				"source":      t.Source,
+				"group":       g.ID,
+			})
+		}
+	}
+
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		resp := protocol.MustResponseOK(req.ID, map[string]any{
-			"tools": []any{},
+			"tools": tools,
 		})
 		return resp
 	}

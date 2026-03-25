@@ -18,7 +18,7 @@ type SessionExecDeps struct {
 }
 
 // RegisterSessionExecMethods registers native Go handlers for session execution
-// and agent methods that were previously bridge-forwarded to Node.js.
+// and agent methods.
 func RegisterSessionExecMethods(d *Dispatcher, deps SessionExecDeps) {
 	if deps.Chat == nil {
 		return

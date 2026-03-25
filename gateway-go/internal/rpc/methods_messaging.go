@@ -16,7 +16,7 @@ type MessagingDeps struct {
 }
 
 // RegisterMessagingMethods registers the send and poll RPC methods.
-// These replace the bridge-forwarded versions when a native Telegram plugin is available.
+// These use the native Telegram plugin for message delivery.
 func RegisterMessagingMethods(d *Dispatcher, deps MessagingDeps) {
 	d.Register("send", messagingSend(deps))
 	d.Register("poll", messagingPoll(deps))

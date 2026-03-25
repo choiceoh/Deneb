@@ -67,7 +67,7 @@ func applyDmPolicy(policy DmPolicy, sender *User, chatAllowFrom, accountAllowFro
 		return AccessResult{Allowed: false, Reason: "dm policy: sender not in allowlist"}
 	case DmPolicyPairing:
 		// Pairing mode: allow if sender is in the allowlist (already paired),
-		// otherwise reject (pairing flow is handled at a higher layer via Node.js bridge).
+		// otherwise reject (pairing flow is handled at a higher layer).
 		if matchesAnyAllowList(sender, chatAllowFrom, accountAllowFrom) {
 			return AccessResult{Allowed: true}
 		}
