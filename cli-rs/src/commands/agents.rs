@@ -241,9 +241,7 @@ async fn cmd_add(
     };
 
     // Normalize ID from name: lowercase, replace spaces/underscores with hyphens
-    let agent_id = agent_name
-        .to_lowercase()
-        .replace([' ', '_'], "-");
+    let agent_id = agent_name.to_lowercase().replace([' ', '_'], "-");
 
     // Load config and check for duplicates
     let config_path = config::resolve_config_path();

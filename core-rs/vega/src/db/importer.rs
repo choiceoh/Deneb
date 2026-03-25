@@ -45,7 +45,11 @@ pub fn import_files(config: &VegaConfig) -> Result<ImportStats, Box<dyn std::err
 
     for fpath in &md_files {
         let fpath_str = fpath.to_string_lossy().to_string();
-        let fname = fpath.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let fname = fpath
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
 
         match import_single_file(&conn, fpath) {
             Ok(UpsertResult::Skipped) => {
@@ -82,9 +86,16 @@ pub fn import_files(config: &VegaConfig) -> Result<ImportStats, Box<dyn std::err
 }
 
 /// Import a single .md file (insert-only, skips if already exists).
-fn import_single_file(conn: &Connection, fpath: &Path) -> Result<UpsertResult, Box<dyn std::error::Error>> {
+fn import_single_file(
+    conn: &Connection,
+    fpath: &Path,
+) -> Result<UpsertResult, Box<dyn std::error::Error>> {
     let fpath_str = fpath.to_string_lossy().to_string();
-    let fname = fpath.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let fname = fpath
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
 
     // Check if already imported
     let exists: bool = conn.query_row(
@@ -103,7 +114,10 @@ fn import_single_file(conn: &Connection, fpath: &Path) -> Result<UpsertResult, B
 
     let meta = extract_table_meta(text);
     let (sections, comm_entries) = split_sections(text);
-    let section_pairs: Vec<(String, String)> = sections.iter().map(|s| (s.heading.clone(), s.body.clone())).collect();
+    let section_pairs: Vec<(String, String)> = sections
+        .iter()
+        .map(|s| (s.heading.clone(), s.body.clone()))
+        .collect();
     let tags = extract_tags(&meta, &section_pairs);
 
     let project_name = meta
@@ -168,7 +182,11 @@ pub fn import_incremental(config: &VegaConfig) -> Result<ImportStats, Box<dyn st
 
     for fpath in &md_files {
         let fpath_str = fpath.to_string_lossy().to_string();
-        let fname = fpath.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let fname = fpath
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
         current_files.insert(fpath_str.clone());
         current_files.insert(fname.clone());
 
@@ -204,7 +222,11 @@ pub fn upsert_md_file(
     existing_hashes: &HashMap<String, String>,
 ) -> Result<UpsertResult, Box<dyn std::error::Error>> {
     let fpath_str = fpath.to_string_lossy().to_string();
-    let fname = fpath.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let fname = fpath
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
 
     let text = std::fs::read_to_string(fpath)?;
     let text = text.replace("\r\n", "\n");
@@ -221,7 +243,10 @@ pub fn upsert_md_file(
 
     let meta = extract_table_meta(text);
     let (sections, comm_entries) = split_sections(text);
-    let section_pairs: Vec<(String, String)> = sections.iter().map(|s| (s.heading.clone(), s.body.clone())).collect();
+    let section_pairs: Vec<(String, String)> = sections
+        .iter()
+        .map(|s| (s.heading.clone(), s.body.clone()))
+        .collect();
     let tags = extract_tags(&meta, &section_pairs);
 
     let project_name = meta
@@ -303,7 +328,10 @@ pub fn upsert_md_file(
     }
 
     // Update file hash
-    conn.execute("DELETE FROM file_hashes WHERE source_file=?1", params![fname])?;
+    conn.execute(
+        "DELETE FROM file_hashes WHERE source_file=?1",
+        params![fname],
+    )?;
     conn.execute(
         "INSERT OR REPLACE INTO file_hashes (source_file, content_hash, updated_at)
          VALUES (?1, ?2, ?3)",
@@ -314,7 +342,10 @@ pub fn upsert_md_file(
 }
 
 /// Delete a project and all related data by source file key.
-pub fn delete_project_by_source(conn: &Connection, source_key: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn delete_project_by_source(
+    conn: &Connection,
+    source_key: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let basename = Path::new(source_key)
         .file_name()
         .unwrap_or_default()
@@ -338,7 +369,10 @@ pub fn delete_project_by_source(conn: &Connection, source_key: &str) -> Result<(
         conn.execute("DELETE FROM chunks WHERE project_id=?1", params![pid])?;
         conn.execute("DELETE FROM projects WHERE id=?1", params![pid])?;
     }
-    conn.execute("DELETE FROM file_hashes WHERE source_file=?1", params![source_key])?;
+    conn.execute(
+        "DELETE FROM file_hashes WHERE source_file=?1",
+        params![source_key],
+    )?;
     Ok(())
 }
 
@@ -356,14 +390,25 @@ fn insert_sections_and_tags(
         conn.execute(
             "INSERT INTO chunks (project_id, section_heading, content, chunk_type, entry_date)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![pid, section.heading, section.body, ctype, section.entry_date],
+            params![
+                pid,
+                section.heading,
+                section.body,
+                ctype,
+                section.entry_date
+            ],
         )?;
         let cid = conn.last_insert_rowid();
 
         for tag in tags {
-            conn.execute("INSERT OR IGNORE INTO tags (name) VALUES (?1)", params![tag])?;
+            conn.execute(
+                "INSERT OR IGNORE INTO tags (name) VALUES (?1)",
+                params![tag],
+            )?;
             let tag_id: Option<i64> = conn
-                .query_row("SELECT id FROM tags WHERE name=?1", params![tag], |r| r.get(0))
+                .query_row("SELECT id FROM tags WHERE name=?1", params![tag], |r| {
+                    r.get(0)
+                })
                 .ok();
             if let Some(tid) = tag_id {
                 conn.execute(
@@ -428,13 +473,19 @@ mod tests {
 
         // Verify chunks
         let chunk_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM chunks WHERE project_id=1", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM chunks WHERE project_id=1", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert!(chunk_count >= 2, "Should have at least 2 sections");
 
         // Verify comm log
         let comm_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM comm_log WHERE project_id=1", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM comm_log WHERE project_id=1",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(comm_count, 1);
 

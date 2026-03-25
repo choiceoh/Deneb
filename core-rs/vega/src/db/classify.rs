@@ -15,14 +15,20 @@ pub fn classify_section(heading: &str, content: &str) -> &'static str {
 
     // Heading-based classification
     let heading_rules: &[(&[&str], &str)] = &[
-        (&["현재 상황", "현재상황", "개요", "프로젝트 개요"], "status"),
+        (
+            &["현재 상황", "현재상황", "개요", "프로젝트 개요"],
+            "status",
+        ),
         (&["다음 예상", "액션"], "next_action"),
         (&["이력"], "history"),
         (&["로그 20"], "comm_log"),
         (&["기술", "사양", "사업 기본"], "technical"),
         (&["이슈", "리스크", "문제", "화재"], "issue"),
         (&["일정", "마일스톤", "공정"], "schedule"),
-        (&["경제성", "투자비", "공사비", "운영비", "재무"], "financial"),
+        (
+            &["경제성", "투자비", "공사비", "운영비", "재무"],
+            "financial",
+        ),
         (&["인허가", "규제"], "permit"),
         (&["결론", "요약", "종합"], "summary"),
         (&["관련 메일", "메일"], "comm_log"),
@@ -85,7 +91,13 @@ pub fn extract_tags(
     all_text.push(' ');
     all_text.push_str(&meta.get("name").cloned().unwrap_or_default().to_lowercase());
     all_text.push(' ');
-    all_text.push_str(&meta.get("biz_type").cloned().unwrap_or_default().to_lowercase());
+    all_text.push_str(
+        &meta
+            .get("biz_type")
+            .cloned()
+            .unwrap_or_default()
+            .to_lowercase(),
+    );
 
     // Technical fields with _ prefix → tags
     for (key, val) in meta {
@@ -103,11 +115,25 @@ pub fn extract_tags(
         ("설비리스", &["설비리스", "리스사업", "임대차"]),
         ("ESS", &["ess", "bess", "에너지저장"]),
         ("해저케이블", &["해저케이블", "submarine cable", "154kv"]),
-        ("모듈", &["모듈", "module", "진코", "jinko", "ja solar", "트리나", "한화"]),
+        (
+            "모듈",
+            &[
+                "모듈",
+                "module",
+                "진코",
+                "jinko",
+                "ja solar",
+                "트리나",
+                "한화",
+            ],
+        ),
         ("인버터", &["인버터", "inverter", "화웨이", "huawei", "pcs"]),
         ("구조검토", &["구조검토", "구조계산", "구조물"]),
         ("TPO방수", &["tpo", "방수", "현대l&c"]),
-        ("환경공단", &["환경공단", "탄소중립", "감축설비", "지원사업"]),
+        (
+            "환경공단",
+            &["환경공단", "탄소중립", "감축설비", "지원사업"],
+        ),
         ("PF금융", &["pf", "팩토링", "대출", "금융조건", "펀드"]),
         ("CU헷징", &["헷징", "hedging", "lme"]),
         ("MC4화재", &["mc4", "커넥터 화재", "소손"]),

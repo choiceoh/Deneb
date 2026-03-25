@@ -72,11 +72,7 @@ pub fn route_command(query: &str) -> &'static str {
 }
 
 /// Execute a Vega command by name.
-pub fn execute(
-    command: &str,
-    args: &Value,
-    config: &VegaConfig,
-) -> CommandResult {
+pub fn execute(command: &str, args: &Value, config: &VegaConfig) -> CommandResult {
     match command {
         "search" => cmd_search(args, config),
         "show" => cmd_show(args, config),
@@ -495,7 +491,9 @@ fn cmd_timeline(args: &Value, config: &VegaConfig) -> CommandResult {
             let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
             match find_project_id(config, query) {
                 Some(id) => id,
-                None => return CommandResult::err("timeline", "프로젝트 ID 또는 이름이 필요합니다"),
+                None => {
+                    return CommandResult::err("timeline", "프로젝트 ID 또는 이름이 필요합니다")
+                }
             }
         }
     };
@@ -506,7 +504,11 @@ fn cmd_timeline(args: &Value, config: &VegaConfig) -> CommandResult {
     };
 
     let name: String = conn
-        .query_row("SELECT name FROM projects WHERE id=?1", params![project_id], |r| r.get(0))
+        .query_row(
+            "SELECT name FROM projects WHERE id=?1",
+            params![project_id],
+            |r| r.get(0),
+        )
         .unwrap_or_default();
 
     let mut stmt = conn
@@ -544,7 +546,10 @@ fn cmd_embed(_args: &Value, config: &VegaConfig) -> CommandResult {
         use crate::search::semantic;
 
         if !config.has_ml() {
-            return CommandResult::err("embed", "ML 모델이 설정되지 않았습니다 (VEGA_MODEL_EMBEDDER)");
+            return CommandResult::err(
+                "embed",
+                "ML 모델이 설정되지 않았습니다 (VEGA_MODEL_EMBEDDER)",
+            );
         }
 
         let conn = match open_db(config) {
@@ -555,14 +560,20 @@ fn cmd_embed(_args: &Value, config: &VegaConfig) -> CommandResult {
         // Build ML manager
         let mut ml_configs = Vec::new();
         if let Some(ref path) = config.model_embedder {
-            ml_configs.push(deneb_ml::ModelConfig::embedder(path.clone(), config.model_unload_ttl));
+            ml_configs.push(deneb_ml::ModelConfig::embedder(
+                path.clone(),
+                config.model_unload_ttl,
+            ));
         }
         let mgr = deneb_ml::ModelManager::new(ml_configs);
 
         match semantic::embed_chunks(&conn, "qwen3-embedding-8b", &mgr) {
-            Ok(count) => CommandResult::ok("embed", json!({
-                "embedded_chunks": count,
-            })),
+            Ok(count) => CommandResult::ok(
+                "embed",
+                json!({
+                    "embedded_chunks": count,
+                }),
+            ),
             Err(e) => CommandResult::err("embed", &format!("임베딩 실패: {}", e)),
         }
     }
@@ -588,7 +599,11 @@ fn find_project_id(config: &VegaConfig, query: &str) -> Option<i64> {
     // Try exact ID
     if let Ok(id) = query.parse::<i64>() {
         let exists: bool = conn
-            .query_row("SELECT COUNT(*) > 0 FROM projects WHERE id=?1", params![id], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM projects WHERE id=?1",
+                params![id],
+                |r| r.get(0),
+            )
             .unwrap_or(false);
         if exists {
             return Some(id);

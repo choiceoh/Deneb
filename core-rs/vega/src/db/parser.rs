@@ -33,8 +33,7 @@ static HEADING_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^(#{1,3})\s+(.+)"
 static TABLE_ROW_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?m)^\|\s*\*?\*?(.+?)\*?\*?\s*\|\s*(.+?)\s*\|").unwrap());
 
-static STATUS_EMOJI_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[🟢🟡🟠🔴⚪]").unwrap());
+static STATUS_EMOJI_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[🟢🟡🟠🔴⚪]").unwrap());
 
 static DATE_HEADING_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^(20\d{2}[-/]\d{2}[-/]\d{2})").unwrap());
@@ -125,7 +124,10 @@ pub fn split_sections(text: &str) -> (Vec<Section>, Vec<CommEntry>) {
     let heading_matches: Vec<_> = HEADING_RE.find_iter(text).collect();
 
     // Text before first heading
-    let first_start = heading_matches.first().map(|m| m.start()).unwrap_or(text.len());
+    let first_start = heading_matches
+        .first()
+        .map(|m| m.start())
+        .unwrap_or(text.len());
     let intro = &text[..first_start];
     if !intro.trim().is_empty() {
         // Skip table rows, keep remaining text
@@ -186,7 +188,11 @@ pub fn split_sections(text: &str) -> (Vec<Section>, Vec<CommEntry>) {
 /// 3. - **subject**
 /// 4. - plain text → merge into previous entry's summary
 fn parse_comm_block(date_str: &str, body: &str, comm_entries: &mut Vec<CommEntry>) {
-    let patterns: [&Lazy<Regex>; 3] = [&COMM_PAT_BOLD_SENDER, &COMM_PAT_PLAIN_SENDER, &COMM_PAT_BOLD_ONLY];
+    let patterns: [&Lazy<Regex>; 3] = [
+        &COMM_PAT_BOLD_SENDER,
+        &COMM_PAT_PLAIN_SENDER,
+        &COMM_PAT_BOLD_ONLY,
+    ];
 
     let mut current_subject: Option<String> = None;
     let mut current_sender: Option<String> = None;

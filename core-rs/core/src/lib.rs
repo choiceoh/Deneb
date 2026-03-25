@@ -298,8 +298,14 @@ fn vega_execute_impl(cmd_json: &str) -> String {
         Err(e) => return format!(r#"{{"error":"invalid_json","detail":"{}"}}"#, e),
     };
 
-    let command = parsed.get("command").and_then(|v| v.as_str()).unwrap_or("search");
-    let args = parsed.get("args").cloned().unwrap_or(serde_json::Value::Null);
+    let command = parsed
+        .get("command")
+        .and_then(|v| v.as_str())
+        .unwrap_or("search");
+    let args = parsed
+        .get("args")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
 
     // Build config from JSON or env (model paths are read from env by from_env())
     let config = if let Some(cfg) = parsed.get("config") {
@@ -325,7 +331,8 @@ fn vega_execute_impl(cmd_json: &str) -> String {
     };
 
     let result = deneb_vega::commands::execute(command, &args, &config);
-    serde_json::to_string(&result).unwrap_or_else(|e| format!(r#"{{"error":"serialize","detail":"{}"}}"#, e))
+    serde_json::to_string(&result)
+        .unwrap_or_else(|e| format!(r#"{{"error":"serialize","detail":"{}"}}"#, e))
 }
 
 #[cfg(not(feature = "vega"))]
@@ -383,7 +390,10 @@ fn vega_search_impl(query_json: &str) -> String {
         }
     };
 
-    let query = parsed.get("query").and_then(|v| v.as_str()).unwrap_or(query_json);
+    let query = parsed
+        .get("query")
+        .and_then(|v| v.as_str())
+        .unwrap_or(query_json);
 
     let config = if let Some(cfg) = parsed.get("config") {
         let mut vc = deneb_vega::config::VegaConfig::from_env();
