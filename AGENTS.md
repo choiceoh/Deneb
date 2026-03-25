@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 - Repo: https://github.com/deneb/deneb
-- In chat replies, file references must be repo-root relative only (example: `extensions/bluebubbles/src/channel.ts:80`); never absolute paths or `~/...`.
+- In chat replies, file references must be repo-root relative only (example: `extensions/telegram/src/channel.ts:80`); never absolute paths or `~/...`.
 - Do not edit files covered by security-focused `CODEOWNERS` rules unless a listed owner explicitly asked for the change or is already reviewing it with you. Treat those paths as restricted surfaces, not drive-by cleanup.
 
 ## Project Philosophy & Deployment Context (MUST READ)
@@ -312,7 +312,7 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 - Messaging channels: always consider **all** built-in + extension channels when refactoring shared logic (routing, allowlists, pairing, command gating, onboarding, docs).
   - Core channel docs: `docs/channels/`
   - Core channel code: `src/telegram`, `src/discord`, `src/slack`, `src/signal`, `src/imessage`, `src/web` (WhatsApp web), `src/channels`, `src/routing`
-  - Extensions (channel plugins): `extensions/*` (e.g. `extensions/msteams`, `extensions/matrix`, `extensions/zalo`, `extensions/zalouser`, `extensions/voice-call`)
+  - Extensions (channel plugins): `extensions/*` (e.g. `extensions/telegram`)
 - When adding channels/extensions/apps/docs, update `.github/labeler.yml` and create matching GitHub labels (use existing channel/extension label colors).
 
 ## Docs Linking (Mintlify)

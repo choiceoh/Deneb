@@ -45,23 +45,6 @@ function addDiscordNameBasedEntries(params: {
   }
 }
 
-function addZalouserMutableGroupEntries(params: {
-  target: Set<string>;
-  groups: unknown;
-  source: string;
-  isZalouserMutableGroupEntry: (value: string) => boolean;
-}): void {
-  if (!params.groups || typeof params.groups !== "object" || Array.isArray(params.groups)) {
-    return;
-  }
-  for (const key of Object.keys(params.groups as Record<string, unknown>)) {
-    if (!params.isZalouserMutableGroupEntry(key)) {
-      continue;
-    }
-    params.target.add(`${params.source}:${key}`);
-  }
-}
-
 async function collectInvalidTelegramAllowFromEntries(params: {
   entries: unknown;
   target: Set<string>;
@@ -319,52 +302,6 @@ async function collectDiscordFindings(ctx: {
           "Add your user id to channels.discord.allowFrom (or approve yourself via pairing), or configure channels.discord.guilds.<id>.users.",
       });
     }
-  }
-  return findings;
-}
-
-async function collectZalouserFindings(ctx: {
-  account: unknown;
-  accountId: string;
-  orderedAccountIds: string[];
-  hasExplicitAccountPath: boolean;
-}): Promise<SecurityAuditFinding[]> {
-  const findings: SecurityAuditFinding[] = [];
-  const { isZalouserMutableGroupEntry } = await loadAuditChannelRuntimeModule();
-  const zalouserCfg = extractAccountConfig(ctx.account);
-  const dangerousNameMatchingEnabled = isDangerousNameMatchingEnabled(zalouserCfg);
-  const zalouserPathPrefix =
-    ctx.orderedAccountIds.length > 1 || ctx.hasExplicitAccountPath
-      ? `channels.zalouser.accounts.${ctx.accountId}`
-      : "channels.zalouser";
-  const mutableGroupEntries = new Set<string>();
-  addZalouserMutableGroupEntries({
-    target: mutableGroupEntries,
-    groups: zalouserCfg.groups,
-    source: `${zalouserPathPrefix}.groups`,
-    isZalouserMutableGroupEntry,
-  });
-  if (mutableGroupEntries.size > 0) {
-    const examples = Array.from(mutableGroupEntries).slice(0, 5);
-    const more =
-      mutableGroupEntries.size > examples.length
-        ? ` (+${mutableGroupEntries.size - examples.length} more)`
-        : "";
-    findings.push({
-      checkId: "channels.zalouser.groups.mutable_entries",
-      severity: dangerousNameMatchingEnabled ? "info" : "warn",
-      title: dangerousNameMatchingEnabled
-        ? "Zalouser group routing uses break-glass name matching"
-        : "Zalouser group routing contains mutable group entries",
-      detail: dangerousNameMatchingEnabled
-        ? "Zalouser group-name routing is explicitly enabled via dangerouslyAllowNameMatching. This mutable-identity mode is operator-selected break-glass behavior and out-of-scope for vulnerability reports by itself. " +
-          `Found: ${examples.join(", ")}${more}.`
-        : "Zalouser group auth is ID-only by default, so unresolved group-name or slug entries are ignored for auth and can drift from the intended trusted group. " +
-          `Found: ${examples.join(", ")}${more}.`,
-      remediation: dangerousNameMatchingEnabled
-        ? "Prefer stable Zalo group IDs (for example group:<id> or provider-native g- ids), then disable dangerouslyAllowNameMatching."
-        : "Prefer stable Zalo group IDs in channels.zalouser.groups, or explicitly opt in with dangerouslyAllowNameMatching=true if you accept mutable group-name matching.",
-    });
   }
   return findings;
 }
@@ -816,17 +753,6 @@ export async function collectChannelSecurityFindings(params: {
         findings.push(
           ...(await collectDiscordFindings({
             cfg: params.cfg,
-            account,
-            accountId,
-            orderedAccountIds,
-            hasExplicitAccountPath,
-          })),
-        );
-      }
-
-      if (plugin.id === "zalouser") {
-        findings.push(
-          ...(await collectZalouserFindings({
             account,
             accountId,
             orderedAccountIds,

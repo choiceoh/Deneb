@@ -162,7 +162,7 @@ describe("loadPluginManifestRegistry", () => {
   it("reports explicit installed globals as the effective duplicate winner", () => {
     const bundledDir = makeTempDir();
     const globalDir = makeTempDir();
-    const manifest = { id: "zalouser", configSchema: { type: "object" } };
+    const manifest = { id: "nostr", configSchema: { type: "object" } };
     writeManifest(bundledDir, manifest);
     writeManifest(globalDir, manifest);
 
@@ -171,7 +171,7 @@ describe("loadPluginManifestRegistry", () => {
       config: {
         plugins: {
           installs: {
-            zalouser: {
+            nostr: {
               source: "npm",
               installPath: globalDir,
             },
@@ -180,12 +180,12 @@ describe("loadPluginManifestRegistry", () => {
       },
       candidates: [
         createPluginCandidate({
-          idHint: "zalouser",
+          idHint: "nostr",
           rootDir: bundledDir,
           origin: "bundled",
         }),
         createPluginCandidate({
-          idHint: "zalouser",
+          idHint: "nostr",
           rootDir: globalDir,
           origin: "global",
         }),

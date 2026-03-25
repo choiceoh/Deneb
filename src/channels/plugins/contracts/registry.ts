@@ -237,7 +237,7 @@ export const threadingContractRegistry: ThreadingContractEntry[] = surfaceContra
     plugin: entry.plugin,
   }));
 
-const directoryPresenceOnlyIds = new Set(["whatsapp", "zalouser"]);
+const directoryPresenceOnlyIds = new Set(["whatsapp"]);
 
 export const directoryContractRegistry: DirectoryContractEntry[] = surfaceContractRegistry
   .filter((entry) => entry.surfaces.includes("directory"))

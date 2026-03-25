@@ -25,7 +25,7 @@ native Deneb plugin registers against one or more capability types:
 | Media understanding | `api.registerMediaUnderstandingProvider(...)` | `openai`, `google`        |
 | Image generation    | `api.registerImageGenerationProvider(...)`    | `openai`, `google`        |
 | Web search          | `api.registerWebSearchProvider(...)`          | `google`                  |
-| Channel / messaging | `api.registerChannel(...)`                    | `msteams`, `matrix`       |
+| Channel / messaging | `api.registerChannel(...)`                    | `matrix`, `line`          |
 
 A plugin that registers zero capabilities but provides hooks, tools, or
 services is a **legacy hook-only** plugin. That pattern is still fully supported.
@@ -948,6 +948,10 @@ authoring plugins:
   `extensions/<id>/index.js` is the bundled plugin entry,
   and `extensions/<id>/setup-entry.js` is the setup plugin entry.
 - `deneb/plugin-sdk/telegram` for Telegram channel plugin types and shared channel-facing helpers. Built-in Telegram implementation internals stay private to the bundled extension.
+- `deneb/plugin-sdk/discord` for Discord channel plugin types and shared channel-facing helpers. Built-in Discord implementation internals stay private to the bundled extension.
+- `deneb/plugin-sdk/slack` for Slack channel plugin types and shared channel-facing helpers. Built-in Slack implementation internals stay private to the bundled extension.
+- `deneb/plugin-sdk/imessage` for iMessage channel plugin types and shared channel-facing helpers. Built-in iMessage implementation internals stay private to the bundled extension.
+- `deneb/plugin-sdk/whatsapp` for WhatsApp channel plugin types and shared channel-facing helpers. Built-in WhatsApp implementation internals stay private to the bundled extension.
 
 Compatibility note:
 

@@ -148,10 +148,6 @@ Control how group/room messages are handled per channel:
       groupPolicy: "disabled",
       groupAllowFrom: ["chat_id:123"],
     },
-    msteams: {
-      groupPolicy: "disabled",
-      groupAllowFrom: ["user@org.com"],
-    },
     discord: {
       groupPolicy: "allowlist",
       guilds: {

@@ -28,11 +28,11 @@ describe("formatPluginSourceForTable", () => {
     const out = formatPluginSourceForTable(
       {
         origin: "bundled",
-        source: path.join(roots.stock, "bluebubbles", "index.ts"),
+        source: path.join(roots.stock, "telegram", "index.ts"),
       },
       roots,
     );
-    expect(out.value).toBe("stock:bluebubbles/index.ts");
+    expect(out.value).toBe("stock:telegram/index.ts");
     expect(out.rootKey).toBe("stock");
   });
 
@@ -54,11 +54,11 @@ describe("formatPluginSourceForTable", () => {
     const out = formatPluginSourceForTable(
       {
         origin: "global",
-        source: path.join(roots.global, "zalo", "index.js"),
+        source: path.join(roots.global, "matrix", "index.js"),
       },
       roots,
     );
-    expect(out.value).toBe("global:zalo/index.js");
+    expect(out.value).toBe("global:matrix/index.js");
     expect(out.rootKey).toBe("global");
   });
 

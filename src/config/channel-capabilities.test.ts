@@ -88,20 +88,20 @@ describe("resolveChannelCapabilities", () => {
     setActivePluginRegistry(
       createTestRegistry([
         {
-          pluginId: "msteams",
+          pluginId: "mattermost",
           source: "test",
-          plugin: createMSTeamsPlugin(),
+          plugin: createMattermostPlugin(),
         },
       ]),
     );
     const cfg = {
-      channels: { msteams: { capabilities: [" polls ", ""] } },
+      channels: { mattermost: { capabilities: [" polls ", ""] } },
     } satisfies Partial<DenebConfig>;
 
     expect(
       resolveChannelCapabilities({
         cfg,
-        channel: "msteams",
+        channel: "mattermost",
       }),
     ).toEqual(["polls"]);
   });
@@ -164,4 +164,4 @@ const baseRegistry = createTestRegistry([
   { pluginId: "telegram", source: "test", plugin: createStubPlugin("telegram") },
 ]);
 
-const createMSTeamsPlugin = (): ChannelPlugin => createStubPlugin("msteams");
+const createMattermostPlugin = (): ChannelPlugin => createStubPlugin("mattermost");

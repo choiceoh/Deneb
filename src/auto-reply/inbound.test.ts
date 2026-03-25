@@ -536,7 +536,7 @@ describe("resolveGroupRequireMention", () => {
   it("preserves plugin-backed channel requireMention resolution", () => {
     const cfg: DenebConfig = {
       channels: {
-        bluebubbles: {
+        telegram: {
           groups: {
             "chat:primary": { requireMention: false },
           },
@@ -544,12 +544,12 @@ describe("resolveGroupRequireMention", () => {
       },
     };
     const ctx: TemplateContext = {
-      Provider: "bluebubbles",
-      From: "bluebubbles:group:chat:primary",
+      Provider: "telegram",
+      From: "telegram:group:chat:primary",
     };
     const groupResolution: GroupKeyResolution = {
-      key: "bluebubbles:group:chat:primary",
-      channel: "bluebubbles",
+      key: "telegram:group:chat:primary",
+      channel: "telegram",
       id: "chat:primary",
       chatType: "group",
     };

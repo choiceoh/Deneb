@@ -45,9 +45,9 @@ describe("bundled plugin sources", () => {
         },
         {
           origin: "bundled",
-          rootDir: "/app/extensions/msteams",
-          packageName: "@deneb/msteams",
-          packageManifest: { install: { npmSpec: "@deneb/msteams" } },
+          rootDir: "/app/extensions/mattermost",
+          packageName: "@deneb/mattermost",
+          packageManifest: { install: { npmSpec: "@deneb/mattermost" } },
         },
       ],
       diagnostics: [],
@@ -57,8 +57,8 @@ describe("bundled plugin sources", () => {
       if (rootDir === "/app/extensions/feishu") {
         return { ok: true, manifest: { id: "feishu" } };
       }
-      if (rootDir === "/app/extensions/msteams") {
-        return { ok: true, manifest: { id: "msteams" } };
+      if (rootDir === "/app/extensions/mattermost") {
+        return { ok: true, manifest: { id: "mattermost" } };
       }
       return {
         ok: false,
@@ -69,7 +69,7 @@ describe("bundled plugin sources", () => {
 
     const map = resolveBundledPluginSources({});
 
-    expect(Array.from(map.keys())).toEqual(["feishu", "msteams"]);
+    expect(Array.from(map.keys())).toEqual(["feishu", "mattermost"]);
     expect(map.get("feishu")).toEqual({
       pluginId: "feishu",
       localPath: "/app/extensions/feishu",

@@ -145,7 +145,7 @@ describe("channelsCapabilitiesCommand", () => {
 
   it("prints Teams Graph permission hints when present", async () => {
     const plugin = buildPlugin({
-      id: "msteams",
+      id: "mattermost",
       probe: {
         ok: true,
         appId: "app-id",
@@ -168,12 +168,12 @@ describe("channelsCapabilitiesCommand", () => {
     vi.mocked(getChannelPlugin).mockReturnValue(plugin);
     mocks.resolveInstallableChannelPlugin.mockResolvedValue({
       cfg: { channels: {} },
-      channelId: "msteams",
+      channelId: "mattermost",
       plugin,
       configChanged: false,
     });
 
-    await channelsCapabilitiesCommand({ channel: "msteams" }, runtime);
+    await channelsCapabilitiesCommand({ channel: "mattermost" }, runtime);
 
     const output = logs.join("\n");
     expect(output).toContain("ChannelMessage.Read.All (channel history)");

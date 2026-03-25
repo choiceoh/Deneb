@@ -21,9 +21,7 @@ See the Signal channel for setup and endpoints.
 
 ## Pattern B: stdio child process (legacy: imsg)
 
-> **Note:** For new iMessage setups, use BlueBubbles instead.
-
-- Deneb spawns `imsg rpc` as a child process (legacy iMessage integration).
+- Deneb spawns `imsg rpc` as a child process (iMessage integration).
 - JSON-RPC is line-delimited over stdin/stdout (one JSON object per line).
 - No TCP port, no daemon required.
 

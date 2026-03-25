@@ -121,32 +121,32 @@ describe("channelsAddCommand", () => {
     configMocks.readConfigFileSnapshot.mockResolvedValue({ ...baseConfigSnapshot });
     setActivePluginRegistry(createTestRegistry());
     const catalogEntry: ChannelPluginCatalogEntry = {
-      id: "msteams",
-      pluginId: "@deneb/msteams-plugin",
+      id: "mattermost",
+      pluginId: "@deneb/mattermost-plugin",
       meta: {
-        id: "msteams",
-        label: "Microsoft Teams",
-        selectionLabel: "Microsoft Teams",
-        docsPath: "/channels/msteams",
+        id: "mattermost",
+        label: "Mattermost",
+        selectionLabel: "Mattermost",
+        docsPath: "/channels/mattermost",
         blurb: "teams channel",
       },
       install: {
-        npmSpec: "@deneb/msteams",
+        npmSpec: "@deneb/mattermost",
       },
     };
     catalogMocks.listChannelPluginCatalogEntries.mockReturnValue([catalogEntry]);
-    const scopedMSTeamsPlugin = {
+    const scopedMattermostPlugin = {
       ...createChannelTestPluginBase({
-        id: "msteams",
-        label: "Microsoft Teams",
-        docsPath: "/channels/msteams",
+        id: "mattermost",
+        label: "Mattermost",
+        docsPath: "/channels/mattermost",
       }),
       setup: {
         applyAccountConfig: vi.fn(({ cfg, input }) => ({
           ...cfg,
           channels: {
             ...cfg.channels,
-            msteams: {
+            mattermost: {
               enabled: true,
               tenantId: input.token,
             },
@@ -155,12 +155,14 @@ describe("channelsAddCommand", () => {
       },
     };
     vi.mocked(loadChannelSetupPluginRegistrySnapshotForChannel).mockReturnValue(
-      createTestRegistry([{ pluginId: "msteams", plugin: scopedMSTeamsPlugin, source: "test" }]),
+      createTestRegistry([
+        { pluginId: "mattermost", plugin: scopedMattermostPlugin, source: "test" },
+      ]),
     );
 
     await channelsAddCommand(
       {
-        channel: "msteams",
+        channel: "mattermost",
         account: "default",
         token: "tenant-scoped",
       },
@@ -173,14 +175,14 @@ describe("channelsAddCommand", () => {
     );
     expect(loadChannelSetupPluginRegistrySnapshotForChannel).toHaveBeenCalledWith(
       expect.objectContaining({
-        channel: "msteams",
-        pluginId: "@deneb/msteams-plugin",
+        channel: "mattermost",
+        pluginId: "@deneb/mattermost-plugin",
       }),
     );
     expect(configMocks.writeConfigFile).toHaveBeenCalledWith(
       expect.objectContaining({
         channels: {
-          msteams: {
+          mattermost: {
             enabled: true,
             tenantId: "tenant-scoped",
           },
@@ -195,41 +197,41 @@ describe("channelsAddCommand", () => {
     configMocks.readConfigFileSnapshot.mockResolvedValue({ ...baseConfigSnapshot });
     setActivePluginRegistry(createTestRegistry());
     const catalogEntry: ChannelPluginCatalogEntry = {
-      id: "msteams",
-      pluginId: "@deneb/msteams-plugin",
+      id: "mattermost",
+      pluginId: "@deneb/mattermost-plugin",
       meta: {
-        id: "msteams",
-        label: "Microsoft Teams",
-        selectionLabel: "Microsoft Teams",
-        docsPath: "/channels/msteams",
+        id: "mattermost",
+        label: "Mattermost",
+        selectionLabel: "Mattermost",
+        docsPath: "/channels/mattermost",
         blurb: "teams channel",
       },
       install: {
-        npmSpec: "@deneb/msteams",
+        npmSpec: "@deneb/mattermost",
       },
     };
     catalogMocks.listChannelPluginCatalogEntries.mockReturnValue([catalogEntry]);
     manifestRegistryMocks.loadPluginManifestRegistry.mockReturnValue({
       plugins: [
         {
-          id: "@deneb/msteams-plugin",
-          channels: ["msteams"],
+          id: "@deneb/mattermost-plugin",
+          channels: ["mattermost"],
         } as never,
       ],
       diagnostics: [],
     });
-    const scopedMSTeamsPlugin = {
+    const scopedMattermostPlugin = {
       ...createChannelTestPluginBase({
-        id: "msteams",
-        label: "Microsoft Teams",
-        docsPath: "/channels/msteams",
+        id: "mattermost",
+        label: "Mattermost",
+        docsPath: "/channels/mattermost",
       }),
       setup: {
         applyAccountConfig: vi.fn(({ cfg, input }) => ({
           ...cfg,
           channels: {
             ...cfg.channels,
-            msteams: {
+            mattermost: {
               enabled: true,
               tenantId: input.token,
             },
@@ -238,12 +240,14 @@ describe("channelsAddCommand", () => {
       },
     };
     vi.mocked(loadChannelSetupPluginRegistrySnapshotForChannel).mockReturnValue(
-      createTestRegistry([{ pluginId: "msteams", plugin: scopedMSTeamsPlugin, source: "test" }]),
+      createTestRegistry([
+        { pluginId: "mattermost", plugin: scopedMattermostPlugin, source: "test" },
+      ]),
     );
 
     await channelsAddCommand(
       {
-        channel: "msteams",
+        channel: "mattermost",
         account: "default",
         token: "tenant-installed",
       },
@@ -254,14 +258,14 @@ describe("channelsAddCommand", () => {
     expect(ensureChannelSetupPluginInstalled).not.toHaveBeenCalled();
     expect(loadChannelSetupPluginRegistrySnapshotForChannel).toHaveBeenCalledWith(
       expect.objectContaining({
-        channel: "msteams",
-        pluginId: "@deneb/msteams-plugin",
+        channel: "mattermost",
+        pluginId: "@deneb/mattermost-plugin",
       }),
     );
     expect(configMocks.writeConfigFile).toHaveBeenCalledWith(
       expect.objectContaining({
         channels: {
-          msteams: {
+          mattermost: {
             enabled: true,
             tenantId: "tenant-installed",
           },
@@ -274,17 +278,17 @@ describe("channelsAddCommand", () => {
     configMocks.readConfigFileSnapshot.mockResolvedValue({ ...baseConfigSnapshot });
     setActivePluginRegistry(createTestRegistry());
     const catalogEntry: ChannelPluginCatalogEntry = {
-      id: "msteams",
-      pluginId: "@deneb/msteams-plugin",
+      id: "mattermost",
+      pluginId: "@deneb/mattermost-plugin",
       meta: {
-        id: "msteams",
-        label: "Microsoft Teams",
-        selectionLabel: "Microsoft Teams",
-        docsPath: "/channels/msteams",
+        id: "mattermost",
+        label: "Mattermost",
+        selectionLabel: "Mattermost",
+        docsPath: "/channels/mattermost",
         blurb: "teams channel",
       },
       install: {
-        npmSpec: "@deneb/msteams",
+        npmSpec: "@deneb/mattermost",
       },
     };
     catalogMocks.listChannelPluginCatalogEntries.mockReturnValue([catalogEntry]);
@@ -299,16 +303,16 @@ describe("channelsAddCommand", () => {
           pluginId: "@vendor/teams-runtime",
           plugin: {
             ...createChannelTestPluginBase({
-              id: "msteams",
-              label: "Microsoft Teams",
-              docsPath: "/channels/msteams",
+              id: "mattermost",
+              label: "Mattermost",
+              docsPath: "/channels/mattermost",
             }),
             setup: {
               applyAccountConfig: vi.fn(({ cfg, input }) => ({
                 ...cfg,
                 channels: {
                   ...cfg.channels,
-                  msteams: {
+                  mattermost: {
                     enabled: true,
                     tenantId: input.token,
                   },
@@ -323,7 +327,7 @@ describe("channelsAddCommand", () => {
 
     await channelsAddCommand(
       {
-        channel: "msteams",
+        channel: "mattermost",
         account: "default",
         token: "tenant-scoped",
       },
@@ -333,7 +337,7 @@ describe("channelsAddCommand", () => {
 
     expect(loadChannelSetupPluginRegistrySnapshotForChannel).toHaveBeenCalledWith(
       expect.objectContaining({
-        channel: "msteams",
+        channel: "mattermost",
         pluginId: "@vendor/teams-runtime",
       }),
     );

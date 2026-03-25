@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { DenebConfig } from "../config/config.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
-import { createMSTeamsTestPlugin, createTestRegistry } from "../test-utils/channel-plugins.js";
+import { createMattermostTestPlugin, createTestRegistry } from "../test-utils/channel-plugins.js";
 import { createIMessageTestPlugin } from "../test-utils/imessage-test-plugin.js";
 import {
   extractHookToken,
@@ -128,16 +128,16 @@ describe("gateway hooks helpers", () => {
     setActivePluginRegistry(
       createTestRegistry([
         {
-          pluginId: "msteams",
+          pluginId: "mattermost",
           source: "test",
-          plugin: createMSTeamsTestPlugin({ aliases: ["teams"] }),
+          plugin: createMattermostTestPlugin({ aliases: ["mm"] }),
         },
       ]),
     );
-    const teams = normalizeAgentPayload({ message: "yo", channel: "teams" });
-    expect(teams.ok).toBe(true);
-    if (teams.ok) {
-      expect(teams.value.channel).toBe("msteams");
+    const mm = normalizeAgentPayload({ message: "yo", channel: "mm" });
+    expect(mm.ok).toBe(true);
+    if (mm.ok) {
+      expect(mm.value.channel).toBe("mattermost");
     }
 
     const bad = normalizeAgentPayload({ message: "yo", channel: "sms" });

@@ -51,14 +51,14 @@ describe("formatOutboundDeliverySummary", () => {
         expected: "✅ Sent via Slack. Message ID: s1 (room room-1)",
       },
       {
-        name: "msteams with conversation detail",
-        channel: "msteams" as const,
+        name: "mattermost with conversation detail",
+        channel: "mattermost" as const,
         result: {
-          channel: "msteams" as const,
+          channel: "mattermost" as const,
           messageId: "t1",
           conversationId: "conv-1",
         },
-        expected: "✅ Sent via msteams. Message ID: t1 (conversation conv-1)",
+        expected: "✅ Sent via mattermost. Message ID: t1 (conversation conv-1)",
       },
     ];
 

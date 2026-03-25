@@ -584,14 +584,7 @@ export function createAccountScopedGroupAccessSection<TResolved>(params: {
   };
 }
 
-type AccountScopedChannel =
-  | "bluebubbles"
-  | "discord"
-  | "imessage"
-  | "line"
-  | "signal"
-  | "slack"
-  | "telegram";
+type AccountScopedChannel = "discord" | "imessage" | "line" | "signal" | "slack" | "telegram";
 
 export function patchLegacyDmChannelConfig(params: {
   cfg: DenebConfig;

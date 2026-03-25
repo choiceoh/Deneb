@@ -39,10 +39,9 @@ For a complete map of the docs, see [Docs hubs](/start/hubs).
 - [WebChat](/web/webchat)
 - [Control UI (browser)](/web/control-ui)
 - [Telegram](/channels/telegram)
-- Discord
-- Mattermost (plugin)
-- BlueBubbles (iMessage)
-- iMessage (legacy)
+- [Discord](/channels/discord)
+- [Mattermost (plugin)](/channels/mattermost)
+- [iMessage](/channels/imessage)
 - [Groups](/channels/groups)
 - [WhatsApp group messages](/channels/group-messages)
 - [Media images](/nodes/images)

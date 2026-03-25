@@ -109,7 +109,7 @@ describe("runMessageAction media behavior", () => {
   describe("sendAttachment hydration", () => {
     const cfg = {
       channels: {
-        bluebubbles: {
+        telegram: {
           enabled: true,
           serverUrl: "http://localhost:1234",
           password: "test-password",
@@ -117,13 +117,13 @@ describe("runMessageAction media behavior", () => {
       },
     } as DenebConfig;
     const attachmentPlugin: ChannelPlugin = {
-      id: "bluebubbles",
+      id: "telegram",
       meta: {
-        id: "bluebubbles",
-        label: "BlueBubbles",
-        selectionLabel: "BlueBubbles",
-        docsPath: "/channels/bluebubbles",
-        blurb: "BlueBubbles test plugin.",
+        id: "telegram",
+        label: "Telegram",
+        selectionLabel: "Telegram",
+        docsPath: "/channels/telegram",
+        blurb: "Telegram test plugin.",
       },
       capabilities: { chatTypes: ["direct", "group"], media: true },
       config: {
@@ -149,7 +149,7 @@ describe("runMessageAction media behavior", () => {
       setActivePluginRegistry(
         createTestRegistry([
           {
-            pluginId: "bluebubbles",
+            pluginId: "telegram",
             source: "test",
             plugin: attachmentPlugin,
           },
@@ -189,7 +189,7 @@ describe("runMessageAction media behavior", () => {
         await fs.writeFile(outsidePath, "secret", "utf8");
 
         const actionParams: Record<string, unknown> = {
-          channel: "bluebubbles",
+          channel: "telegram",
           target: params.target,
           media: outsidePath,
         };
@@ -214,7 +214,7 @@ describe("runMessageAction media behavior", () => {
         cfg,
         action: "sendAttachment",
         params: {
-          channel: "bluebubbles",
+          channel: "telegram",
           target: "+15551234567",
           media: "https://example.com/pic.png",
           message: "caption",
@@ -266,7 +266,7 @@ describe("runMessageAction media behavior", () => {
             cfg,
             action: testCase.action,
             params: {
-              channel: "bluebubbles",
+              channel: "telegram",
               target: testCase.target,
               media: testCase.media,
               ...(testCase.message ? { message: testCase.message } : {}),

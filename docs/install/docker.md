@@ -324,8 +324,8 @@ Notes:
 
 ### Pre-install extension dependencies (optional)
 
-Extensions with their own `package.json` (e.g. `diagnostics-otel`, `matrix`,
-`msteams`) install their npm dependencies on first load. To bake those
+Extensions with their own `package.json` (e.g. `diagnostics-otel`, `matrix`)
+install their npm dependencies on first load. To bake those
 dependencies into the image instead, set `DENEB_EXTENSIONS` before
 running `docker-setup.sh`:
 
