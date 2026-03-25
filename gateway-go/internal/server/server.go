@@ -297,6 +297,17 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	s.StartMonitoring(ctx)
 	s.startProcessPruner(ctx)
 
+	// Auto-start all registered channel plugins.
+	if s.channelLifecycle != nil {
+		s.safeGo("channels:start-all", func() {
+			if errs := s.channelLifecycle.StartAll(ctx); len(errs) > 0 {
+				for id, err := range errs {
+					s.logger.Warn("channel auto-start failed", "channel", id, "error", err)
+				}
+			}
+		})
+	}
+
 	// Fire gateway.start hooks.
 	if s.hooks != nil {
 		addr := ln.Addr().String()
