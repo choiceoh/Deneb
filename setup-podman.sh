@@ -141,19 +141,12 @@ generate_token_hex_32() {
     openssl rand -hex 32
     return 0
   fi
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - <<'PY'
-import secrets
-print(secrets.token_hex(32))
-PY
-    return 0
-  fi
   if command -v od >/dev/null 2>&1; then
     # 32 random bytes -> 64 lowercase hex chars
     od -An -N32 -tx1 /dev/urandom | tr -d " \n"
     return 0
   fi
-  echo "Missing dependency: need openssl or python3 (or od) to generate DENEB_GATEWAY_TOKEN." >&2
+  echo "Missing dependency: need openssl or od to generate DENEB_GATEWAY_TOKEN." >&2
   exit 1
 }
 

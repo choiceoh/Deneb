@@ -38,32 +38,6 @@ read_config_gateway_token() {
   if [[ ! -f "$config_path" ]]; then
     return 0
   fi
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - "$config_path" <<'PY'
-import json
-import sys
-
-path = sys.argv[1]
-try:
-    with open(path, "r", encoding="utf-8") as f:
-        cfg = json.load(f)
-except Exception:
-    raise SystemExit(0)
-
-gateway = cfg.get("gateway")
-if not isinstance(gateway, dict):
-    raise SystemExit(0)
-auth = gateway.get("auth")
-if not isinstance(auth, dict):
-    raise SystemExit(0)
-token = auth.get("token")
-if isinstance(token, str):
-    token = token.strip()
-    if token:
-        print(token)
-PY
-    return 0
-  fi
   if command -v node >/dev/null 2>&1; then
     node - "$config_path" <<'NODE'
 const fs = require("node:fs");
@@ -262,12 +236,11 @@ if [[ -z "${DENEB_GATEWAY_TOKEN:-}" ]]; then
       echo "Reusing gateway token from $ROOT_DIR/.env"
     elif command -v openssl >/dev/null 2>&1; then
       DENEB_GATEWAY_TOKEN="$(openssl rand -hex 32)"
+    elif command -v od >/dev/null 2>&1; then
+      DENEB_GATEWAY_TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
     else
-      DENEB_GATEWAY_TOKEN="$(python3 - <<'PY'
-import secrets
-print(secrets.token_hex(32))
-PY
-)"
+      echo "Missing dependency: need openssl or od to generate DENEB_GATEWAY_TOKEN." >&2
+      exit 1
     fi
   fi
 fi

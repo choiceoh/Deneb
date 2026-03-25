@@ -1,11 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 
-/** @typedef {{ runNode: boolean; runWindows: boolean; runSkillsPython: boolean }} ChangedScope */
+/** @typedef {{ runNode: boolean; runWindows: boolean }} ChangedScope */
 
 const DOCS_PATH_RE = /^(docs\/|.*\.mdx?$)/;
-const SKILLS_PYTHON_SCOPE_RE = /^skills\//;
-const CI_WORKFLOW_SCOPE_RE = /^\.github\/workflows\/ci\.yml$/;
 const NODE_SCOPE_RE =
   /^(src\/|test\/|extensions\/|packages\/|scripts\/|ui\/|\.github\/|deneb\.mjs$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig.*\.json$|vitest.*\.ts$|tsdown\.config\.ts$|\.oxlintrc\.json$|\.oxfmtrc\.jsonc$)/;
 const WINDOWS_SCOPE_RE =
@@ -20,13 +18,11 @@ export function detectChangedScope(changedPaths) {
     return {
       runNode: true,
       runWindows: true,
-      runSkillsPython: true,
     };
   }
 
   let runNode = false;
   let runWindows = false;
-  let runSkillsPython = false;
   let hasNonDocs = false;
 
   for (const rawPath of changedPaths) {
@@ -41,14 +37,6 @@ export function detectChangedScope(changedPaths) {
 
     hasNonDocs = true;
 
-    if (SKILLS_PYTHON_SCOPE_RE.test(path)) {
-      runSkillsPython = true;
-    }
-
-    if (CI_WORKFLOW_SCOPE_RE.test(path)) {
-      runSkillsPython = true;
-    }
-
     if (NODE_SCOPE_RE.test(path)) {
       runNode = true;
     }
@@ -62,7 +50,7 @@ export function detectChangedScope(changedPaths) {
     runNode = true;
   }
 
-  return { runNode, runWindows, runSkillsPython };
+  return { runNode, runWindows };
 }
 
 /**
@@ -94,7 +82,6 @@ export function writeGitHubOutput(scope, outputPath = process.env.GITHUB_OUTPUT)
   }
   appendFileSync(outputPath, `run_node=${scope.runNode}\n`, "utf8");
   appendFileSync(outputPath, `run_windows=${scope.runWindows}\n`, "utf8");
-  appendFileSync(outputPath, `run_skills_python=${scope.runSkillsPython}\n`, "utf8");
 }
 
 function isDirectRun() {
@@ -127,7 +114,6 @@ if (isDirectRun()) {
       writeGitHubOutput({
         runNode: true,
         runWindows: true,
-        runSkillsPython: true,
       });
       process.exit(0);
     }
@@ -136,7 +122,6 @@ if (isDirectRun()) {
     writeGitHubOutput({
       runNode: true,
       runWindows: true,
-      runSkillsPython: true,
     });
   }
 }
