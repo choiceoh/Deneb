@@ -16,7 +16,6 @@ export type PluginStatusReport = PluginRegistry & {
 
 export type PluginCapabilityKind =
   | "text-inference"
-  | "speech"
   | "media-understanding"
   | "image-generation"
   | "web-search"

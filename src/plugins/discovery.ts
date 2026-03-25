@@ -16,10 +16,7 @@ import type { PluginBundleFormat, PluginDiagnostic, PluginFormat, PluginOrigin }
 
 const EXTENSION_EXTS = new Set([".ts", ".js", ".mts", ".cts", ".mjs", ".cjs"]);
 
-const CANONICAL_PACKAGE_ID_ALIASES: Record<string, string> = {
-  "elevenlabs-speech": "elevenlabs",
-  "microsoft-speech": "microsoft",
-};
+const CANONICAL_PACKAGE_ID_ALIASES: Record<string, string> = {};
 
 export type PluginCandidate = {
   idHint: string;

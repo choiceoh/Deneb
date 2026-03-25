@@ -218,7 +218,6 @@ const TARGET_KEYS = [
   "messages.inbound",
   "messages.inbound.byChannel",
   "messages.removeAckAfterReply",
-  "messages.tts",
   "channels",
   "channels.defaults",
   "channels.defaults.groupPolicy",

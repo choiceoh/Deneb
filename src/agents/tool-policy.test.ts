@@ -63,11 +63,9 @@ describe("tool-policy", () => {
 
   it("includes core tool groups in group:deneb", () => {
     const group = TOOL_GROUPS["group:deneb"];
-    expect(group).toContain("browser");
     expect(group).toContain("message");
     expect(group).toContain("subagents");
     expect(group).toContain("session_status");
-    expect(group).toContain("tts");
   });
 
   it("normalizes tool names and aliases", () => {

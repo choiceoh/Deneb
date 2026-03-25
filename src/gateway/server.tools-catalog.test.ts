@@ -5,7 +5,7 @@ import { withServer } from "./test-with-server.js";
 installGatewayTestHooks({ scope: "suite" });
 
 describe("gateway tools.catalog", () => {
-  it("returns core catalog data and includes tts", async () => {
+  it("returns core catalog data with media group", async () => {
     await withServer(async (ws) => {
       await connectOk(ws, { token: "secret", scopes: ["operator.read"] });
       const res = await rpcReq<{
@@ -20,9 +20,7 @@ describe("gateway tools.catalog", () => {
       expect(res.ok).toBe(true);
       expect(res.payload?.agentId).toBeTruthy();
       const mediaGroup = res.payload?.groups?.find((group) => group.id === "media");
-      expect(mediaGroup?.tools?.some((tool) => tool.id === "tts" && tool.source === "core")).toBe(
-        true,
-      );
+      expect(mediaGroup).toBeTruthy();
     });
   });
 
