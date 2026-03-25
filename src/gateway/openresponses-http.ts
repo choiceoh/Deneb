@@ -22,7 +22,6 @@ import {
   DEFAULT_INPUT_TIMEOUT_MS,
   extractFileContentFromSource,
   extractImageContentFromSource,
-  normalizeMimeList,
   resolveInputFileLimits,
   type InputFileLimits,
   type InputImageLimits,
@@ -32,7 +31,6 @@ import { defaultRuntime } from "../runtime.js";
 import { resolveAssistantStreamDeltaText } from "./agent-event-assistant-text.js";
 import type { AuthRateLimiter } from "./auth/auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "./auth/auth.js";
-import { normalizeInputHostnameAllowlist } from "./auth/input-allowlist.js";
 import { sendJson, setSseHeaders, writeDone } from "./http/http-common.js";
 import { handleGatewayPostJsonEndpoint } from "./http/http-endpoint-helpers.js";
 import { resolveGatewayRequestContext } from "./http/http-utils.js";
@@ -71,28 +69,21 @@ type ResolvedResponsesLimits = {
 };
 
 function resolveResponsesLimits(
-  config: GatewayHttpResponsesConfig | undefined,
+  _config: GatewayHttpResponsesConfig | undefined,
 ): ResolvedResponsesLimits {
-  const files = config?.files;
-  const images = config?.images;
-  const fileLimits = resolveInputFileLimits(files);
+  const fileLimits = resolveInputFileLimits(undefined);
   return {
-    maxBodyBytes: config?.maxBodyBytes ?? DEFAULT_BODY_BYTES,
-    maxUrlParts:
-      typeof config?.maxUrlParts === "number"
-        ? Math.max(0, Math.floor(config.maxUrlParts))
-        : DEFAULT_MAX_URL_PARTS,
+    maxBodyBytes: DEFAULT_BODY_BYTES,
+    maxUrlParts: DEFAULT_MAX_URL_PARTS,
     files: {
       ...fileLimits,
-      urlAllowlist: normalizeInputHostnameAllowlist(files?.urlAllowlist),
     },
     images: {
-      allowUrl: images?.allowUrl ?? true,
-      urlAllowlist: normalizeInputHostnameAllowlist(images?.urlAllowlist),
-      allowedMimes: normalizeMimeList(images?.allowedMimes, DEFAULT_INPUT_IMAGE_MIMES),
-      maxBytes: images?.maxBytes ?? DEFAULT_INPUT_IMAGE_MAX_BYTES,
-      maxRedirects: images?.maxRedirects ?? DEFAULT_INPUT_MAX_REDIRECTS,
-      timeoutMs: images?.timeoutMs ?? DEFAULT_INPUT_TIMEOUT_MS,
+      allowUrl: true,
+      allowedMimes: new Set(DEFAULT_INPUT_IMAGE_MIMES),
+      maxBytes: DEFAULT_INPUT_IMAGE_MAX_BYTES,
+      maxRedirects: DEFAULT_INPUT_MAX_REDIRECTS,
+      timeoutMs: DEFAULT_INPUT_TIMEOUT_MS,
     },
   };
 }
@@ -271,9 +262,7 @@ export async function handleOpenResponsesHttpRequest(
   const limits = resolveResponsesLimits(opts.config);
   const maxBodyBytes =
     opts.maxBodyBytes ??
-    (opts.config?.maxBodyBytes
-      ? limits.maxBodyBytes
-      : Math.max(limits.maxBodyBytes, limits.files.maxBytes * 2, limits.images.maxBytes * 2));
+    Math.max(limits.maxBodyBytes, limits.files.maxBytes * 2, limits.images.maxBytes * 2);
   const handled = await handleGatewayPostJsonEndpoint(req, res, {
     pathname: "/v1/responses",
     auth: opts.auth,

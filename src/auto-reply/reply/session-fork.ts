@@ -12,11 +12,7 @@ import { resolveSessionFilePath, type SessionEntry } from "../../config/sessions
  */
 const DEFAULT_PARENT_FORK_MAX_TOKENS = 100_000;
 
-export function resolveParentForkMaxTokens(cfg: DenebConfig): number {
-  const configured = cfg.session?.parentForkMaxTokens;
-  if (typeof configured === "number" && Number.isFinite(configured) && configured >= 0) {
-    return Math.floor(configured);
-  }
+export function resolveParentForkMaxTokens(_cfg: DenebConfig): number {
   return DEFAULT_PARENT_FORK_MAX_TOKENS;
 }
 

@@ -99,12 +99,10 @@ function sanitizeMimeType(value?: string): string | undefined {
   return match?.[1];
 }
 
-function resolveFileLimits(cfg: DenebConfig) {
-  const files = cfg.gateway?.http?.endpoints?.responses?.files;
-  const allowedMimesConfigured = Boolean(files?.allowedMimes?.length);
+function resolveFileLimits(_cfg: DenebConfig) {
   return {
-    ...resolveInputFileLimits(files),
-    allowedMimesConfigured,
+    ...resolveInputFileLimits(undefined),
+    allowedMimesConfigured: false,
   };
 }
 
