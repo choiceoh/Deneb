@@ -31,6 +31,7 @@ import { startHeartbeatRunner, type HeartbeatRunner } from "../infra/heartbeat-r
 import { ensureDenebCliOnPath } from "../infra/path-env.js";
 import { setGatewaySigusr1RestartPolicy, setPreRestartDeferralCheck } from "../infra/restart.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
+import { loadGatewayTlsRuntime } from "../infra/tls/gateway.js";
 import { startDiagnosticHeartbeat, stopDiagnosticHeartbeat } from "../logging/diagnostic.js";
 import { createSubsystemLogger, runtimeForLogger } from "../logging/subsystem.js";
 import { resolveConfiguredDeferredChannelPluginIds } from "../plugins/channel-plugin-ids.js";
@@ -111,8 +112,7 @@ import {
 } from "./server/health-state.js";
 import { resolveHookClientIpConfig } from "./server/hooks.js";
 import { createReadinessChecker } from "./server/readiness.js";
-import { loadGatewayTlsRuntime } from "./server/tls.js";
-import { attachGatewayWsHandlers } from "./ws/server-ws-runtime.js";
+import { attachGatewayWsConnectionHandler } from "./server/ws-connection.js";
 
 // Deferred imports: these modules are only needed for non-minimal gateway startup.
 // Lazy-loading them avoids pulling in tailscale, skills,
@@ -782,7 +782,7 @@ export async function startGatewayServer(
   // scope is set via AsyncLocalStorage.
   setFallbackGatewayContext(gatewayRequestContext);
 
-  attachGatewayWsHandlers({
+  attachGatewayWsConnectionHandler({
     wss,
     clients,
     port,
@@ -803,7 +803,7 @@ export async function startGatewayServer(
       ...secretsHandlers,
     },
     broadcast,
-    context: gatewayRequestContext,
+    buildRequestContext: () => gatewayRequestContext,
   });
   logGatewayStartup({
     cfg: cfgAtStart,
