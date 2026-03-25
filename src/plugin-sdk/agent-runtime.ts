@@ -21,7 +21,6 @@ export * from "../agents/tools/web-shared.js";
 export * from "../agents/tools/web-fetch-utils.js";
 // Intentional public runtime surface: channel plugins use ingress agent helpers directly.
 export * from "../agents/agent-command.js";
-export * from "../tts/tts.js";
 
 export {
   CLAUDE_CLI_PROFILE_ID,

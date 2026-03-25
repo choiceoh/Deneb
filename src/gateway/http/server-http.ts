@@ -9,8 +9,6 @@ import { createServer as createHttpsServer } from "node:https";
 import type { TlsOptions } from "node:tls";
 import type { WebSocketServer } from "ws";
 import { resolveAgentAvatar } from "../../agents/identity-avatar.js";
-import { CANVAS_WS_PATH, handleA2uiHttpRequest } from "../../canvas-host/a2ui.js";
-import type { CanvasHostHandler } from "../../canvas-host/server.js";
 import { loadConfig } from "../../config/config.js";
 import type { createSubsystemLogger } from "../../logging/subsystem.js";
 import { safeEqualSecret } from "../../security/secret-equal.js";
@@ -23,10 +21,8 @@ import {
 import {
   authorizeHttpGatewayConnect,
   isLocalDirectRequest,
-  type GatewayAuthResult,
   type ResolvedGatewayAuth,
 } from "../auth/auth.js";
-import { normalizeCanvasScopedUrl } from "../canvas-capability.js";
 import {
   handleControlUiAvatarRequest,
   handleControlUiHttpRequest,
@@ -55,11 +51,7 @@ import { resolveRequestClientIp } from "../net.js";
 import { handleOpenAiHttpRequest } from "../openai-http.js";
 import { handleOpenResponsesHttpRequest } from "../openresponses-http.js";
 import { DEDUPE_MAX, DEDUPE_TTL_MS } from "../server-constants.js";
-import {
-  authorizeCanvasRequest,
-  enforcePluginRouteGatewayAuth,
-  isCanvasPath,
-} from "../server/http-auth.js";
+import { enforcePluginRouteGatewayAuth } from "../server/http-auth.js";
 import {
   isProtectedPluginRoutePathFromContext,
   resolvePluginRoutePathContext,
@@ -71,7 +63,7 @@ import type { GatewayWsClient } from "../server/ws-types.js";
 import { handleSessionKillHttpRequest } from "../session/session-kill-http.js";
 import { handleSessionHistoryHttpRequest } from "../session/sessions-history-http.js";
 import { handleToolsInvokeHttpRequest } from "../tools-invoke-http.js";
-import { sendGatewayAuthFailure, setDefaultSecurityHeaders } from "./http-common.js";
+import { setDefaultSecurityHeaders } from "./http-common.js";
 import { getBearerToken } from "./http-utils.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
@@ -255,35 +247,6 @@ async function handleGatewayProbeRequest(
   res.statusCode = statusCode;
   res.end(method === "HEAD" ? undefined : body);
   return true;
-}
-
-function writeUpgradeAuthFailure(
-  socket: { write: (chunk: string) => void },
-  auth: GatewayAuthResult,
-) {
-  if (auth.rateLimited) {
-    const retryAfterSeconds =
-      auth.retryAfterMs && auth.retryAfterMs > 0 ? Math.ceil(auth.retryAfterMs / 1000) : undefined;
-    socket.write(
-      [
-        "HTTP/1.1 429 Too Many Requests",
-        retryAfterSeconds ? `Retry-After: ${retryAfterSeconds}` : undefined,
-        "Content-Type: application/json; charset=utf-8",
-        "Connection: close",
-        "",
-        JSON.stringify({
-          error: {
-            message: "Too many failed authentication attempts. Please try again later.",
-            type: "rate_limited",
-          },
-        }),
-      ]
-        .filter(Boolean)
-        .join("\r\n"),
-    );
-    return;
-  }
-  socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
 }
 
 export type HooksRequestHandler = (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
@@ -714,7 +677,6 @@ export function createHooksRequestHandler(
 }
 
 export function createGatewayHttpServer(opts: {
-  canvasHost: CanvasHostHandler | null;
   clients: Set<GatewayWsClient>;
   controlUiEnabled: boolean;
   controlUiBasePath: string;
@@ -734,8 +696,7 @@ export function createGatewayHttpServer(opts: {
   tlsOptions?: TlsOptions;
 }): HttpServer {
   const {
-    canvasHost,
-    clients,
+    clients: _clients,
     controlUiEnabled,
     controlUiBasePath,
     controlUiRoot,
@@ -773,14 +734,6 @@ export function createGatewayHttpServer(opts: {
       const configSnapshot = loadConfig();
       const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
       const allowRealIpFallback = configSnapshot.gateway?.allowRealIpFallback === true;
-      const scopedCanvas = normalizeCanvasScopedUrl(req.url ?? "/");
-      if (scopedCanvas.malformedScopedPath) {
-        sendGatewayAuthFailure(res, { ok: false, reason: "unauthorized" });
-        return;
-      }
-      if (scopedCanvas.rewrittenUrl) {
-        req.url = scopedCanvas.rewrittenUrl;
-      }
       const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
       const mattermostSlashCallbackPaths = resolveMattermostSlashCallbackPaths(configSnapshot);
       const pluginPathContext = handlePluginRequest
@@ -846,39 +799,6 @@ export function createGatewayHttpServer(opts: {
               allowRealIpFallback,
               rateLimiter,
             }),
-        });
-      }
-      if (canvasHost) {
-        requestStages.push({
-          name: "canvas-auth",
-          run: async () => {
-            if (!isCanvasPath(requestPath)) {
-              return false;
-            }
-            const ok = await authorizeCanvasRequest({
-              req,
-              auth: resolvedAuth,
-              trustedProxies,
-              allowRealIpFallback,
-              clients,
-              canvasCapability: scopedCanvas.capability,
-              malformedScopedPath: scopedCanvas.malformedScopedPath,
-              rateLimiter,
-            });
-            if (!ok.ok) {
-              sendGatewayAuthFailure(res, ok);
-              return true;
-            }
-            return false;
-          },
-        });
-        requestStages.push({
-          name: "a2ui",
-          run: () => handleA2uiHttpRequest(req, res),
-        });
-        requestStages.push({
-          name: "canvas-http",
-          run: () => canvasHost.handleHttpRequest(req, res),
         });
       }
       // Plugin routes run before the Control UI SPA catch-all so explicitly
@@ -954,50 +874,13 @@ export function createGatewayHttpServer(opts: {
 export function attachGatewayUpgradeHandler(opts: {
   httpServer: HttpServer;
   wss: WebSocketServer;
-  canvasHost: CanvasHostHandler | null;
-  clients: Set<GatewayWsClient>;
   resolvedAuth: ResolvedGatewayAuth;
   /** Optional rate limiter for auth brute-force protection. */
   rateLimiter?: AuthRateLimiter;
 }) {
-  const { httpServer, wss, canvasHost, clients, resolvedAuth, rateLimiter } = opts;
+  const { httpServer, wss } = opts;
   httpServer.on("upgrade", (req, socket, head) => {
     void (async () => {
-      const scopedCanvas = normalizeCanvasScopedUrl(req.url ?? "/");
-      if (scopedCanvas.malformedScopedPath) {
-        writeUpgradeAuthFailure(socket, { ok: false, reason: "unauthorized" });
-        socket.destroy();
-        return;
-      }
-      if (scopedCanvas.rewrittenUrl) {
-        req.url = scopedCanvas.rewrittenUrl;
-      }
-      if (canvasHost) {
-        const url = new URL(req.url ?? "/", "http://localhost");
-        if (url.pathname === CANVAS_WS_PATH) {
-          const configSnapshot = loadConfig();
-          const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
-          const allowRealIpFallback = configSnapshot.gateway?.allowRealIpFallback === true;
-          const ok = await authorizeCanvasRequest({
-            req,
-            auth: resolvedAuth,
-            trustedProxies,
-            allowRealIpFallback,
-            clients,
-            canvasCapability: scopedCanvas.capability,
-            malformedScopedPath: scopedCanvas.malformedScopedPath,
-            rateLimiter,
-          });
-          if (!ok.ok) {
-            writeUpgradeAuthFailure(socket, ok);
-            socket.destroy();
-            return;
-          }
-        }
-        if (canvasHost.handleUpgrade(req, socket, head)) {
-          return;
-        }
-      }
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit("connection", ws, req);
       });

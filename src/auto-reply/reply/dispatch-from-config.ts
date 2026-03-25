@@ -41,7 +41,6 @@ import {
 } from "../../plugins/conversation-binding.js";
 import { getGlobalHookRunner, getGlobalPluginRegistry } from "../../plugins/hook-runner-global.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
-import { maybeApplyTtsToPayload, normalizeTtsAutoMode, resolveTtsConfig } from "../../tts/tts.js";
 import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../../utils/message-channel.js";
 import { getReplyFromConfig } from "../reply.js";
 import type { FinalizedMsgContext } from "../templating.js";
@@ -201,7 +200,6 @@ export async function dispatchReplyFromConfig(params: {
   const routeThreadId =
     ctx.MessageThreadId ?? parseSessionThreadInfo(acpDispatchSessionKey).threadId;
   const inboundAudio = isInboundAudioContext(ctx);
-  const sessionTtsAuto = normalizeTtsAutoMode(sessionStoreEntry.entry?.ttsAuto);
   const hookRunner = getGlobalHookRunner();
 
   // Extract message context for hooks (plugin and internal)
@@ -243,7 +241,6 @@ export async function dispatchReplyFromConfig(params: {
   );
   const shouldSuppressTyping =
     shouldRouteToOriginating || originatingChannel === INTERNAL_MESSAGE_CHANNEL;
-  const ttsChannel = shouldRouteToOriginating ? originatingChannel : currentSurface;
 
   /**
    * Helper to send a payload via route-reply (async).
@@ -499,8 +496,8 @@ export async function dispatchReplyFromConfig(params: {
       dispatcher,
       sessionKey: acpDispatchSessionKey,
       inboundAudio,
-      sessionTtsAuto,
-      ttsChannel,
+      sessionTtsAuto: undefined,
+      ttsChannel: undefined,
       shouldRouteToOriginating,
       originatingChannel,
       originatingTo,
@@ -513,12 +510,6 @@ export async function dispatchReplyFromConfig(params: {
     if (acpDispatch) {
       return acpDispatch;
     }
-
-    // Track accumulated block text for TTS generation after streaming completes.
-    // When block streaming succeeds, there's no final reply, so we need to generate
-    // TTS audio separately from the accumulated block content.
-    let accumulatedBlockText = "";
-    let blockCount = 0;
 
     const resolveToolDeliveryPayload = (payload: ReplyPayload): ReplyPayload | null => {
       if (
@@ -566,15 +557,7 @@ export async function dispatchReplyFromConfig(params: {
         suppressTyping: typing.suppressTyping,
         onToolResult: (payload: ReplyPayload) => {
           const run = async () => {
-            const ttsPayload = await maybeApplyTtsToPayload({
-              payload,
-              cfg,
-              channel: ttsChannel,
-              kind: "tool",
-              inboundAudio,
-              ttsAuto: sessionTtsAuto,
-            });
-            const deliveryPayload = resolveToolDeliveryPayload(ttsPayload);
+            const deliveryPayload = resolveToolDeliveryPayload(payload);
             if (!deliveryPayload) {
               return;
             }
@@ -594,26 +577,10 @@ export async function dispatchReplyFromConfig(params: {
             if (shouldSuppressReasoningPayload(payload)) {
               return;
             }
-            // Accumulate block text for TTS generation after streaming
-            if (payload.text) {
-              if (accumulatedBlockText.length > 0) {
-                accumulatedBlockText += "\n";
-              }
-              accumulatedBlockText += payload.text;
-              blockCount++;
-            }
-            const ttsPayload = await maybeApplyTtsToPayload({
-              payload,
-              cfg,
-              channel: ttsChannel,
-              kind: "block",
-              inboundAudio,
-              ttsAuto: sessionTtsAuto,
-            });
             if (shouldRouteToOriginating) {
-              await sendPayloadAsync(ttsPayload, context?.abortSignal, false);
+              await sendPayloadAsync(payload, context?.abortSignal, false);
             } else {
-              dispatcher.sendBlockReply(ttsPayload);
+              dispatcher.sendBlockReply(payload);
             }
           };
           return run();
@@ -632,8 +599,8 @@ export async function dispatchReplyFromConfig(params: {
         dispatcher,
         sessionKey: acpDispatchSessionKey,
         inboundAudio,
-        sessionTtsAuto,
-        ttsChannel,
+        sessionTtsAuto: undefined,
+        ttsChannel: undefined,
         shouldRouteToOriginating,
         originatingChannel,
         originatingTo,
@@ -658,18 +625,10 @@ export async function dispatchReplyFromConfig(params: {
       if (shouldSuppressReasoningPayload(reply)) {
         continue;
       }
-      const ttsReply = await maybeApplyTtsToPayload({
-        payload: reply,
-        cfg,
-        channel: ttsChannel,
-        kind: "final",
-        inboundAudio,
-        ttsAuto: sessionTtsAuto,
-      });
       if (shouldRouteToOriginating && originatingChannel && originatingTo) {
         // Route final reply to originating channel.
         const result = await routeReply({
-          payload: ttsReply,
+          payload: reply,
           channel: originatingChannel,
           to: originatingTo,
           sessionKey: ctx.SessionKey,
@@ -689,66 +648,7 @@ export async function dispatchReplyFromConfig(params: {
           routedFinalCount += 1;
         }
       } else {
-        queuedFinal = dispatcher.sendFinalReply(ttsReply) || queuedFinal;
-      }
-    }
-
-    const ttsMode = resolveTtsConfig(cfg).mode ?? "final";
-    // Generate TTS-only reply after block streaming completes (when there's no final reply).
-    // This handles the case where block streaming succeeds and drops final payloads,
-    // but we still want TTS audio to be generated from the accumulated block content.
-    if (
-      ttsMode === "final" &&
-      replies.length === 0 &&
-      blockCount > 0 &&
-      accumulatedBlockText.trim()
-    ) {
-      try {
-        const ttsSyntheticReply = await maybeApplyTtsToPayload({
-          payload: { text: accumulatedBlockText },
-          cfg,
-          channel: ttsChannel,
-          kind: "final",
-          inboundAudio,
-          ttsAuto: sessionTtsAuto,
-        });
-        // Only send if TTS was actually applied (mediaUrl exists)
-        if (ttsSyntheticReply.mediaUrl) {
-          // Send TTS-only payload (no text, just audio) so it doesn't duplicate the block content
-          const ttsOnlyPayload: ReplyPayload = {
-            mediaUrl: ttsSyntheticReply.mediaUrl,
-            audioAsVoice: ttsSyntheticReply.audioAsVoice,
-          };
-          if (shouldRouteToOriginating && originatingChannel && originatingTo) {
-            const result = await routeReply({
-              payload: ttsOnlyPayload,
-              channel: originatingChannel,
-              to: originatingTo,
-              sessionKey: ctx.SessionKey,
-              accountId: ctx.AccountId,
-              threadId: routeThreadId,
-              cfg,
-              isGroup,
-              groupId,
-            });
-            queuedFinal = result.ok || queuedFinal;
-            if (result.ok) {
-              routedFinalCount += 1;
-            }
-            if (!result.ok) {
-              logVerbose(
-                `dispatch-from-config: route-reply (tts-only) failed: ${result.error ?? "unknown error"}`,
-              );
-            }
-          } else {
-            const didQueue = dispatcher.sendFinalReply(ttsOnlyPayload);
-            queuedFinal = didQueue || queuedFinal;
-          }
-        }
-      } catch (err) {
-        logVerbose(
-          `dispatch-from-config: accumulated block TTS failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        queuedFinal = dispatcher.sendFinalReply(reply) || queuedFinal;
       }
     }
 

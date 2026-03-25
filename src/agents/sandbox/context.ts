@@ -1,14 +1,10 @@
 import fs from "node:fs/promises";
-import { DEFAULT_BROWSER_EVALUATE_ENABLED } from "../../browser/constants.js";
-import { ensureBrowserControlAuth, resolveBrowserControlAuth } from "../../browser/control-auth.js";
 import type { DenebConfig } from "../../config/config.js";
-import { loadConfig } from "../../config/config.js";
 import { defaultRuntime } from "../../runtime.js";
 import { resolveUserPath } from "../../utils.js";
 import { syncSkillsToWorkspace } from "../skills.js";
 import { DEFAULT_AGENT_WORKSPACE_DIR } from "../workspace/workspace.js";
 import { requireSandboxBackendFactory } from "./backend.js";
-import { ensureSandboxBrowser } from "./browser.js";
 import { resolveSandboxConfigForAgent } from "./config.js";
 import { createSandboxFsBridge } from "./fs-bridge.js";
 import { maybePruneSandboxes } from "./prune.js";
@@ -151,42 +147,6 @@ export async function resolveSandboxContext(params: {
     configLabelKind: backend.configLabelKind ?? "Image",
   });
 
-  const evaluateEnabled =
-    params.config?.browser?.evaluateEnabled ?? DEFAULT_BROWSER_EVALUATE_ENABLED;
-
-  const bridgeAuth = cfg.browser.enabled
-    ? await (async () => {
-        // Sandbox browser bridge server runs on a loopback TCP port; always wire up
-        // the same auth that loopback browser clients will send (token/password).
-        const cfgForAuth = params.config ?? loadConfig();
-        let browserAuth = resolveBrowserControlAuth(cfgForAuth);
-        try {
-          const ensured = await ensureBrowserControlAuth({ cfg: cfgForAuth });
-          browserAuth = ensured.auth;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : JSON.stringify(error);
-          defaultRuntime.error?.(`Sandbox browser auth ensure failed: ${message}`);
-        }
-        return browserAuth;
-      })()
-    : undefined;
-  if (resolvedCfg.browser.enabled && backend.capabilities?.browser !== true) {
-    throw new Error(
-      `Sandbox backend "${resolvedCfg.backend}" does not support browser sandboxes yet.`,
-    );
-  }
-  const browser =
-    resolvedCfg.browser.enabled && backend.capabilities?.browser === true
-      ? await ensureSandboxBrowser({
-          scopeKey,
-          workspaceDir,
-          agentWorkspaceDir,
-          cfg: resolvedCfg,
-          evaluateEnabled,
-          bridgeAuth,
-        })
-      : null;
-
   const sandboxContext: SandboxContext = {
     enabled: true,
     backendId: backend.id,
@@ -201,7 +161,7 @@ export async function resolveSandboxContext(params: {
     docker: resolvedCfg.docker,
     tools: resolvedCfg.tools,
     browserAllowHostControl: resolvedCfg.browser.allowHostControl,
-    browser: browser ?? undefined,
+    browser: undefined,
     backend,
   };
 

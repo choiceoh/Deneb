@@ -6,7 +6,6 @@
  */
 import { resolveSandboxConfigForAgent } from "../agents/sandbox/config.js";
 import { isToolAllowedByPolicies } from "../agents/tool-policy-match.js";
-import { resolveBrowserConfig } from "../browser/config.js";
 import type { DenebConfig } from "../config/config.js";
 import {
   resolveAgentModelFallbackValues,
@@ -306,12 +305,8 @@ export function isWebFetchEnabled(cfg: DenebConfig): boolean {
   return true;
 }
 
-export function isBrowserEnabled(cfg: DenebConfig): boolean {
-  try {
-    return resolveBrowserConfig(cfg.browser, cfg).enabled;
-  } catch {
-    return true;
-  }
+export function isBrowserEnabled(_cfg: DenebConfig): boolean {
+  return false;
 }
 
 // --------------------------------------------------------------------------

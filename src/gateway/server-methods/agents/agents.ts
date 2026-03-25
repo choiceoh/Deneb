@@ -18,7 +18,6 @@ import {
   ensureAgentWorkspace,
   isWorkspaceSetupCompleted,
 } from "../../../agents/workspace/workspace.js";
-import { movePathToTrash } from "../../../browser/trash.js";
 import {
   applyAgentConfig,
   findAgentEntryIndex,
@@ -397,14 +396,9 @@ async function moveToTrashBestEffort(pathname: string): Promise<void> {
     return;
   }
   try {
-    await fs.access(pathname);
+    await fs.rm(pathname, { recursive: true, force: true });
   } catch {
-    return;
-  }
-  try {
-    await movePathToTrash(pathname);
-  } catch {
-    // Best-effort: path may already be gone or trash unavailable.
+    // Best-effort: path may already be gone.
   }
 }
 

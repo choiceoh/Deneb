@@ -2,7 +2,6 @@ import { hasPotentialConfiguredChannels } from "../channels/config-presence.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { DenebConfig } from "../config/config.js";
 import { resolveConfigPath, resolveStateDir } from "../config/paths.js";
-import { collectBrowserControlFindings } from "./audit-browser.js";
 import {
   collectElevatedFindings,
   collectExecRuntimeFindings,
@@ -189,7 +188,6 @@ export async function runSecurityAudit(opts: SecurityAuditOptions): Promise<Secu
   findings.push(...auditNonDeep.collectSyncedFolderFindings({ stateDir, configPath }));
 
   findings.push(...collectGatewayConfigFindings(cfg, context.sourceConfig, env));
-  findings.push(...collectBrowserControlFindings(cfg, env));
   findings.push(...collectLoggingFindings(cfg));
   findings.push(...collectElevatedFindings(cfg));
   findings.push(...collectExecRuntimeFindings(cfg));

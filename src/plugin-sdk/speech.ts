@@ -1,7 +1,8 @@
-// Public speech-provider builders for bundled or third-party plugins.
-
-export { buildElevenLabsSpeechProvider } from "../tts/providers/elevenlabs.js";
-export { buildMicrosoftSpeechProvider } from "../tts/providers/microsoft.js";
-export { buildOpenAISpeechProvider } from "../tts/providers/openai.js";
-export { parseTtsDirectives } from "../tts/tts-core.js";
-export type { SpeechVoiceOption } from "../tts/provider-types.js";
+// TTS removed — stub file retained for plugin-sdk export compatibility.
+export type SpeechVoiceOption = { id: string; name: string };
+export function parseTtsDirectives(_text: string): {
+  text: string;
+  directives: Record<string, string>;
+} {
+  return { text: _text, directives: {} };
+}

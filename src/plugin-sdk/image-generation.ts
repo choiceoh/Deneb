@@ -1,14 +1,2 @@
-// Public image-generation helpers and types for provider plugins.
-
-export type {
-  GeneratedImageAsset,
-  ImageGenerationProvider,
-  ImageGenerationResolution,
-  ImageGenerationRequest,
-  ImageGenerationResult,
-  ImageGenerationSourceImage,
-} from "../image-generation/types.js";
-
-export { buildFalImageGenerationProvider } from "../image-generation/providers/fal.js";
-export { buildGoogleImageGenerationProvider } from "../image-generation/providers/google.js";
-export { buildOpenAIImageGenerationProvider } from "../image-generation/providers/openai.js";
+// Image generation removed — stub retained for plugin-sdk export compatibility.
+export type ImageGenerationStub = Record<string, never>;

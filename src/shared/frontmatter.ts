@@ -1,5 +1,5 @@
 import JSON5 from "json5";
-import { MANIFEST_KEY } from "../compat/legacy-names.js";
+const MANIFEST_KEY = "deneb" as const;
 import { parseBooleanValue } from "../utils/boolean.js";
 
 export function normalizeStringList(input: unknown): string[] {

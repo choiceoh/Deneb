@@ -137,7 +137,6 @@ export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
 ensureDenebCliOnPath();
 
 const log = createSubsystemLogger("gateway");
-const logCanvas = log.child("canvas");
 const logTailscale = log.child("tailscale");
 const logChannels = log.child("channels");
 const logBrowser = log.child("browser");
@@ -156,7 +155,6 @@ const logPlugins = log.child("plugins");
 const logWsControl = log.child("ws");
 const logSecrets = log.child("secrets");
 const gatewayRuntime = runtimeForLogger(log);
-const canvasRuntime = runtimeForLogger(logCanvas);
 
 export type GatewayServer = {
   close: (opts?: { reason?: string; restartExpectedMs?: number | null }) => Promise<void>;
@@ -513,7 +511,6 @@ export async function startGatewayServer(
     startedAt: serverStartedAt,
   });
   const {
-    canvasHost,
     releasePluginRouteRegistry,
     httpServer,
     httpServers,
@@ -550,10 +547,6 @@ export async function startGatewayServer(
     getHookClientIpConfig: () => hookClientIpConfig,
     pluginRegistry,
     deps,
-    canvasRuntime,
-    canvasHostEnabled,
-    allowCanvasHostInTests: opts.allowCanvasHostInTests,
-    logCanvas,
     log,
     logHooks,
     logPlugins,
@@ -794,7 +787,7 @@ export async function startGatewayServer(
     clients,
     port,
     gatewayHost: bindHost ?? undefined,
-    canvasHostEnabled: Boolean(canvasHost),
+    canvasHostEnabled,
     canvasHostServerPort,
     resolvedAuth,
     rateLimiter: authRateLimiter,
@@ -987,7 +980,7 @@ export async function startGatewayServer(
   const close = createGatewayCloseHandler({
     bonjourStop,
     tailscaleCleanup,
-    canvasHost,
+    canvasHost: null,
     canvasHostServer,
     releasePluginRouteRegistry,
     stopChannel,

@@ -57,7 +57,6 @@ export type {
 export type { DenebConfig } from "../config/config.js";
 /** @deprecated Use DenebConfig instead */
 export type { DenebConfig as ClawdbotConfig } from "../config/config.js";
-export * from "./image-generation.js";
 export type { SecretInput, SecretRef } from "../config/types.secrets.js";
 export type { RuntimeEnv } from "../runtime.js";
 export type { HookEntry } from "../hooks/types.js";

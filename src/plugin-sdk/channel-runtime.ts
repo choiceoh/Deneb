@@ -2,7 +2,6 @@
 // surface instead of reaching into src/channels or adjacent infra modules.
 
 export * from "../channels/ack-reactions.js";
-export * from "../channels/allowlists/resolve-utils.js";
 export * from "../channels/channel-config.js";
 export * from "../channels/chat-type.js";
 export * from "../channels/command-gating.js";
