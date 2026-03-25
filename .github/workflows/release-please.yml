@@ -1,0 +1,25 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: .release-please-config.json
+
+      - name: Print outputs
+        run: |
+          echo "release-created: ${{ steps.release.outputs.release-created }}"
+          echo "tag: ${{ steps.release.outputs.tag }}"
+          echo "version: ${{ steps.release.outputs.version }}"

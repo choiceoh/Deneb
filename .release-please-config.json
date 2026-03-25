@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "component": "deneb",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "package.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    },
+    "cli-rs": {
+      "release-type": "rust",
+      "component": "deneb-cli",
+      "changelog-path": "cli-rs/CHANGELOG.md",
+      "package-name": "deneb-cli"
+    },
+    "core-rs/core": {
+      "release-type": "rust",
+      "component": "deneb-core",
+      "changelog-path": "core-rs/core/CHANGELOG.md",
+      "package-name": "deneb-core"
+    },
+    "core-rs-napi": {
+      "release-type": "rust",
+      "component": "deneb-core-napi",
+      "changelog-path": "core-rs-napi/CHANGELOG.md",
+      "package-name": "deneb-core-napi"
+    },
+    "gateway-go": {
+      "release-type": "go",
+      "component": "deneb-gateway",
+      "changelog-path": "gateway-go/CHANGELOG.md"
+    }
+  },
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "perf", "section": "Performance" },
+    { "type": "refactor", "section": "Refactor" },
+    { "type": "docs", "section": "Documentation" },
+    { "type": "test", "section": "Tests" },
+    { "type": "chore", "section": "Misc" },
+    { "type": "ci", "section": "CI/CD", "hidden": true },
+    { "type": "build", "section": "Build", "hidden": true }
+  ],
+  "plugins": [
+    {
+      "type": "linked-versions",
+      "group-name": "deneb",
+      "components": ["deneb", "deneb-cli", "deneb-core", "deneb-core-napi", "deneb-gateway"]
+    }
+  ]
+}
