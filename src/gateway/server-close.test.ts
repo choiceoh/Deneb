@@ -13,7 +13,6 @@ describe("createGatewayCloseHandler", () => {
   it("unsubscribes lifecycle listeners during shutdown", async () => {
     const lifecycleUnsub = vi.fn();
     const close = createGatewayCloseHandler({
-      bonjourStop: null,
       tailscaleCleanup: null,
       stopChannel: vi.fn(async () => undefined),
       pluginServices: null,

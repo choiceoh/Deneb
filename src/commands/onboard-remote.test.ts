@@ -1,25 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DenebConfig } from "../config/config.js";
-import type { GatewayBonjourBeacon } from "../infra/bonjour-discovery.js";
 import { captureEnv } from "../test-utils/env.js";
 import type { WizardPrompter } from "../wizard/prompts.js";
 import { createWizardPrompter } from "./test-wizard-helpers.js";
-
-const discoverGatewayBeacons = vi.hoisted(() => vi.fn<() => Promise<GatewayBonjourBeacon[]>>());
-const resolveWideAreaDiscoveryDomain = vi.hoisted(() => vi.fn(() => undefined));
-const detectBinary = vi.hoisted(() => vi.fn<(name: string) => Promise<boolean>>());
-
-vi.mock("../infra/bonjour-discovery.js", () => ({
-  discoverGatewayBeacons,
-}));
-
-vi.mock("../infra/widearea-dns.js", () => ({
-  resolveWideAreaDiscoveryDomain,
-}));
-
-vi.mock("./onboard-helpers.js", () => ({
-  detectBinary,
-}));
 
 const { promptRemoteGatewayConfig } = await import("./onboard-remote.js");
 
@@ -60,51 +43,6 @@ describe("promptRemoteGatewayConfig", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     envSnapshot.restore();
-    detectBinary.mockResolvedValue(false);
-    discoverGatewayBeacons.mockResolvedValue([]);
-    resolveWideAreaDiscoveryDomain.mockReturnValue(undefined);
-  });
-
-  it("defaults discovered direct remote URLs to wss://", async () => {
-    detectBinary.mockResolvedValue(true);
-    discoverGatewayBeacons.mockResolvedValue([
-      {
-        instanceName: "gateway",
-        displayName: "Gateway",
-        host: "gateway.tailnet.ts.net",
-        port: 18789,
-      },
-    ]);
-
-    const text: WizardPrompter["text"] = vi.fn(async (params) => {
-      if (params.message === "Gateway WebSocket URL") {
-        expect(params.initialValue).toBe("wss://gateway.tailnet.ts.net:18789");
-        expect(params.validate?.(String(params.initialValue))).toBeUndefined();
-        return String(params.initialValue);
-      }
-      if (params.message === "Gateway token") {
-        return "token-123";
-      }
-      return "";
-    }) as WizardPrompter["text"];
-
-    const { next, prompter } = await runRemotePrompt({
-      text,
-      confirm: true,
-      selectResponses: {
-        "Select gateway": "0",
-        "Connection method": "direct",
-        "Gateway auth": "token",
-      },
-    });
-
-    expect(next.gateway?.mode).toBe("remote");
-    expect(next.gateway?.remote?.url).toBe("wss://gateway.tailnet.ts.net:18789");
-    expect(next.gateway?.remote?.token).toBe("token-123");
-    expect(prompter.note).toHaveBeenCalledWith(
-      expect.stringContaining("Direct remote access defaults to TLS."),
-      "Direct remote",
-    );
   });
 
   it("validates insecure ws:// remote URLs and allows only loopback ws:// by default", async () => {

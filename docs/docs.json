@@ -188,10 +188,6 @@
       "destination": "/tools/exec"
     },
     {
-      "source": "/bonjour",
-      "destination": "/gateway/bonjour"
-    },
-    {
       "source": "/browser",
       "destination": "/tools/browser"
     },
@@ -1128,12 +1124,7 @@
                   },
                   {
                     "group": "Networking and discovery",
-                    "pages": [
-                      "gateway/network-model",
-                      "gateway/pairing",
-                      "gateway/discovery",
-                      "gateway/bonjour"
-                    ]
+                    "pages": ["gateway/network-model", "gateway/pairing", "gateway/discovery"]
                   }
                 ]
               },
@@ -1613,8 +1604,7 @@
                     "pages": [
                       "zh-CN/gateway/network-model",
                       "zh-CN/gateway/pairing",
-                      "zh-CN/gateway/discovery",
-                      "zh-CN/gateway/bonjour"
+                      "zh-CN/gateway/discovery"
                     ]
                   }
                 ]
