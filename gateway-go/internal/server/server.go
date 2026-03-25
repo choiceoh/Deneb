@@ -784,9 +784,11 @@ func (s *Server) registerPhase2Methods() {
 	chatCfg.Transcript = transcriptStore
 	chatCfg.Tools = chat.NewToolRegistry()
 	chatCfg.JobTracker = s.jobTracker
+	chatCfg.DefaultModel = "zai/glm-5-turbo"
 	if s.authManager != nil {
 		chatCfg.AuthManager = s.authManager
 	}
+	chatCfg.ProviderConfigs = loadProviderConfigs(s.logger)
 
 	s.chatHandler = chat.NewHandler(
 		s.sessions,
@@ -1099,6 +1101,29 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 		return nil
 	}
 	return root.Channels.Telegram
+}
+
+// loadProviderConfigs reads LLM provider configs (apiKey, baseUrl, api) from deneb.json.
+func loadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
+		return nil
+	}
+
+	var root struct {
+		Models struct {
+			Providers map[string]chat.ProviderConfig `json:"providers"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		logger.Warn("failed to parse provider configs", "error", err)
+		return nil
+	}
+
+	if len(root.Models.Providers) > 0 {
+		logger.Info("loaded provider configs", "count", len(root.Models.Providers))
+	}
+	return root.Models.Providers
 }
 
 // resolveDenebDir returns the path to ~/.deneb.

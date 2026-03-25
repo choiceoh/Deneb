@@ -45,8 +45,9 @@ type runDeps struct {
 	broadcast    BroadcastFunc          // optional
 	broadcastRaw BroadcastRawFunc       // optional
 	jobTracker   *agent.JobTracker      // optional
-	replyFunc    ReplyFunc              // optional; delivers response to originating channel
-	logger       *slog.Logger           // required (defaults to slog.Default)
+	replyFunc       ReplyFunc              // optional; delivers response to originating channel
+	providerConfigs map[string]ProviderConfig // optional; config-based provider credentials
+	logger          *slog.Logger             // required (defaults to slog.Default)
 
 	contextCfg    ContextConfig
 	compactionCfg CompactionConfig
@@ -142,7 +143,7 @@ func executeAgentRun(
 		}
 	}
 
-	// 3. Resolve model.
+	// 3. Resolve model and provider.
 	model := params.Model
 	if model == "" {
 		model = deps.defaultModel
@@ -151,19 +152,14 @@ func executeAgentRun(
 		model = defaultModel
 	}
 
-	// 4. Resolve API key from provider auth manager.
-	apiKey, baseURL, err := resolveAPIKey(deps.authManager, logger)
-	if err != nil {
-		return nil, fmt.Errorf("resolve API key: %w", err)
-	}
+	// Parse provider prefix from model (e.g., "zai/glm-5-turbo" → provider="zai", model="glm-5-turbo").
+	providerID, modelName := parseModelID(model)
+	model = modelName
 
-	// Create LLM client (use resolved key, or fall back to pre-configured client).
-	client := deps.llmClient
-	if apiKey != "" {
-		client = llm.NewClient(baseURL, apiKey, llm.WithLogger(logger))
-	}
+	// 4. Resolve LLM client from provider config, auth manager, or pre-configured client.
+	client, apiType := resolveClient(deps, providerID, logger)
 	if client == nil {
-		return nil, fmt.Errorf("no LLM client available")
+		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
 	}
 
 	// 5. Build tool list from registry.
@@ -193,6 +189,7 @@ func executeAgentRun(
 		System:    systemPrompt,
 		Tools:     tools,
 		MaxTokens: maxTokens,
+		APIType:   apiType,
 	}
 
 	// 7. Set up delta emitter for streaming.
@@ -337,28 +334,65 @@ func emitJobEvent(deps runDeps, runID, phase string, aborted bool, errMsg string
 	})
 }
 
-// resolveAPIKey retrieves the Anthropic API key from the provider auth manager.
-func resolveAPIKey(authManager *provider.AuthManager, logger *slog.Logger) (apiKey, baseURL string, err error) {
-	if authManager == nil {
-		return "", "", nil // Will use pre-configured client.
+// parseModelID splits a "provider/model" string into provider and model name.
+// If no prefix, returns empty provider and the original model string.
+func parseModelID(model string) (providerID, modelName string) {
+	if i := strings.IndexByte(model, '/'); i > 0 {
+		return model[:i], model[i+1:]
+	}
+	return "", model
+}
+
+// resolveClient creates an LLM client from provider configs, auth manager,
+// or falls back to the pre-configured client. Returns the client and API type
+// ("anthropic" or "openai").
+func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.Client, string) {
+	// 1. Try provider config from deneb.json.
+	if deps.providerConfigs != nil && providerID != "" {
+		if cfg, ok := deps.providerConfigs[providerID]; ok && cfg.APIKey != "" {
+			apiType := cfg.API
+			if apiType == "" {
+				apiType = inferAPIType(providerID)
+			}
+			client := llm.NewClient(cfg.BaseURL, cfg.APIKey, llm.WithLogger(logger))
+			logger.Info("using provider from config", "provider", providerID, "apiType", apiType)
+			return client, apiType
+		}
 	}
 
-	cred := authManager.Resolve("anthropic", "")
-	if cred == nil {
-		logger.Warn("no Anthropic credential found in auth manager")
-		return "", "", nil
+	// 2. Try auth manager (Anthropic credentials).
+	if deps.authManager != nil {
+		target := providerID
+		if target == "" {
+			target = "anthropic"
+		}
+		cred := deps.authManager.Resolve(target, "")
+		if cred != nil && !cred.IsExpired() && cred.APIKey != "" {
+			base := cred.BaseURL
+			if base == "" {
+				base = llm.DefaultAnthropicBaseURL
+			}
+			return llm.NewClient(base, cred.APIKey, llm.WithLogger(logger)), "anthropic"
+		}
 	}
 
-	if cred.IsExpired() {
-		logger.Warn("Anthropic credential is expired")
-		return "", "", nil
+	// 3. Fall back to pre-configured client.
+	if deps.llmClient != nil {
+		return deps.llmClient, "anthropic"
 	}
 
-	base := cred.BaseURL
-	if base == "" {
-		base = llm.DefaultAnthropicBaseURL
+	return nil, ""
+}
+
+// inferAPIType guesses the API type from the provider ID.
+func inferAPIType(providerID string) string {
+	switch providerID {
+	case "anthropic":
+		return "anthropic"
+	default:
+		// Most providers (zai, sglang, openai, etc.) use OpenAI-compatible API.
+		return "openai"
 	}
-	return cred.APIKey, base, nil
 }
 
 // isContextOverflow checks if an error indicates a context window overflow.
