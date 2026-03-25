@@ -42,15 +42,9 @@ type AuthRateLimitConfig = Parameters<typeof createAuthRateLimiter>[0];
 
 export function createGatewayAuthRateLimiters(rateLimitConfig: AuthRateLimitConfig | undefined): {
   rateLimiter?: AuthRateLimiter;
-  browserRateLimiter: AuthRateLimiter;
 } {
   const rateLimiter = rateLimitConfig ? createAuthRateLimiter(rateLimitConfig) : undefined;
-  // Browser-origin WS auth attempts always use loopback-non-exempt throttling.
-  const browserRateLimiter = createAuthRateLimiter({
-    ...rateLimitConfig,
-    exemptLoopback: false,
-  });
-  return { rateLimiter, browserRateLimiter };
+  return { rateLimiter };
 }
 
 // ── Auth surface diagnostics ────────────────────────────────────────

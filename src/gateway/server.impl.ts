@@ -69,7 +69,6 @@ import {
   type AutoMaintenanceServiceHandle,
   startAutoMaintenanceService,
 } from "./server-auto-maintenance.js";
-import type { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import { createChannelManager } from "./server-channels.js";
 import {
   createSessionEventSubscriberRegistry,
@@ -134,7 +133,6 @@ ensureDenebCliOnPath();
 
 const log = createSubsystemLogger("gateway");
 const logChannels = log.child("channels");
-const logBrowser = log.child("browser");
 
 let cachedChannelRuntime: ReturnType<typeof createPluginRuntime>["channel"] | null = null;
 
@@ -170,7 +168,7 @@ export type GatewayServerOptions = {
    */
   host?: string;
   /**
-   * If false, do not serve the browser Control UI.
+   * If false, do not serve the Control UI.
    * Default: config `gateway.controlUi.enabled` (or true when absent).
    */
   controlUiEnabled?: boolean;
@@ -218,7 +216,7 @@ export async function startGatewayServer(
   // update-check subsystems at module evaluation time.
   const deferredModsPromise = minimalTestGateway ? null : loadDeferredGatewayModules();
 
-  // Ensure all default port derivations (browser/canvas) see the actual runtime port.
+  // Ensure all default port derivations (canvas) see the actual runtime port.
   process.env.DENEB_GATEWAY_PORT = String(port);
   logAcceptedEnvOption({
     key: "DENEB_RAW_STREAM",
@@ -441,8 +439,7 @@ export async function startGatewayServer(
 
   // Create auth rate limiters used by connect/auth flows.
   const rateLimitConfig = cfgAtStart.gateway?.auth?.rateLimit;
-  const { rateLimiter: authRateLimiter, browserRateLimiter: browserAuthRateLimiter } =
-    createGatewayAuthRateLimiters(rateLimitConfig);
+  const { rateLimiter: authRateLimiter } = createGatewayAuthRateLimiters(rateLimitConfig);
 
   let controlUiRootState: ControlUiRootState | undefined;
   if (controlUiRootOverride) {
@@ -804,7 +801,6 @@ export async function startGatewayServer(
     canvasHostServerPort,
     resolvedAuth,
     rateLimiter: authRateLimiter,
-    browserRateLimiter: browserAuthRateLimiter,
     gatewayMethods,
     events: GATEWAY_EVENTS,
     logGateway: log,
@@ -840,7 +836,6 @@ export async function startGatewayServer(
   // Tailscale exposure is handled by the Go gateway natively.
   const tailscaleCleanup = null;
 
-  let browserControl: Awaited<ReturnType<typeof startBrowserControlServerIfEnabled>> = null;
   if (!minimalTestGateway) {
     if (deferredConfiguredChannelPluginIds.length > 0) {
       ({ pluginRegistry } = loadGatewayPlugins({
@@ -852,7 +847,7 @@ export async function startGatewayServer(
         logDiagnostics: false,
       }));
     }
-    ({ browserControl, pluginServices } = await startGatewaySidecars({
+    ({ pluginServices } = await startGatewaySidecars({
       cfg: cfgAtStart,
       pluginRegistry,
       defaultWorkspaceDir,
@@ -861,7 +856,6 @@ export async function startGatewayServer(
       log,
       logHooks,
       logChannels,
-      logBrowser,
     }));
   }
 
@@ -902,7 +896,6 @@ export async function startGatewayServer(
             hookClientIpConfig,
             heartbeatRunner,
             cronState,
-            browserControl,
             channelHealthMonitor,
           }),
           setState: (nextState) => {
@@ -912,13 +905,11 @@ export async function startGatewayServer(
             cronState = nextState.cronState;
             cron = cronState.cron;
             cronStorePath = cronState.storePath;
-            browserControl = nextState.browserControl;
             channelHealthMonitor = nextState.channelHealthMonitor;
           },
           startChannel,
           stopChannel,
           logHooks,
-          logBrowser,
           logChannels,
           logCron,
           logReload,
@@ -996,7 +987,6 @@ export async function startGatewayServer(
     chatRunState,
     clients,
     configReloader,
-    browserControl,
     wss,
     httpServer,
     httpServers,
@@ -1019,7 +1009,6 @@ export async function startGatewayServer(
       }
       skillsChangeUnsub();
       authRateLimiter?.dispose();
-      browserAuthRateLimiter.dispose();
       stopModelPricingRefresh();
       channelHealthMonitor?.stop();
       selfWatchdog?.stop();

@@ -15,7 +15,6 @@ export {
 } from "./tool-policy-shared.js";
 export type { ToolProfileId } from "./tool-policy-shared.js";
 
-// Keep tool-policy browser-safe: do not import tools/common at runtime.
 function wrapOwnerOnlyToolExecution(tool: AnyAgentTool, senderIsOwner: boolean): AnyAgentTool {
   if (tool.ownerOnly !== true || senderIsOwner || !tool.execute) {
     return tool;

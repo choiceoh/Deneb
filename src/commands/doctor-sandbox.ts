@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  DEFAULT_SANDBOX_BROWSER_IMAGE,
   DEFAULT_SANDBOX_COMMON_IMAGE,
   DEFAULT_SANDBOX_IMAGE,
   resolveSandboxScope,
@@ -99,11 +98,6 @@ function resolveSandboxBackend(cfg: DenebConfig): string {
   return backend || "docker";
 }
 
-function resolveSandboxBrowserImage(cfg: DenebConfig): string {
-  const image = cfg.agents?.defaults?.sandbox?.browser?.image?.trim();
-  return image ? image : DEFAULT_SANDBOX_BROWSER_IMAGE;
-}
-
 function updateSandboxDockerImage(cfg: DenebConfig, image: string): DenebConfig {
   return {
     ...cfg,
@@ -115,25 +109,6 @@ function updateSandboxDockerImage(cfg: DenebConfig, image: string): DenebConfig 
           ...cfg.agents?.defaults?.sandbox,
           docker: {
             ...cfg.agents?.defaults?.sandbox?.docker,
-            image,
-          },
-        },
-      },
-    },
-  };
-}
-
-function updateSandboxBrowserImage(cfg: DenebConfig, image: string): DenebConfig {
-  return {
-    ...cfg,
-    agents: {
-      ...cfg.agents,
-      defaults: {
-        ...cfg.agents?.defaults,
-        sandbox: {
-          ...cfg.agents?.defaults?.sandbox,
-          browser: {
-            ...cfg.agents?.defaults?.sandbox?.browser,
             image,
           },
         },
@@ -192,12 +167,6 @@ export async function maybeRepairSandboxImages(
   }
   const backend = resolveSandboxBackend(cfg);
   if (backend !== "docker") {
-    if (sandbox.browser?.enabled) {
-      note(
-        `Sandbox backend "${backend}" selected. Docker browser health checks are skipped; browser sandbox currently requires the docker backend.`,
-        "Sandbox",
-      );
-    }
     return cfg;
   }
 
@@ -239,22 +208,6 @@ export async function maybeRepairSandboxImages(
     prompter,
   );
 
-  if (sandbox.browser?.enabled) {
-    await handleMissingSandboxImage(
-      {
-        kind: "browser",
-        image: resolveSandboxBrowserImage(cfg),
-        buildScript: "scripts/sandbox-browser-setup.sh",
-        updateConfig: (image) => {
-          next = updateSandboxBrowserImage(next, image);
-          changes.push(`Updated agents.defaults.sandbox.browser.image → ${image}`);
-        },
-      },
-      runtime,
-      prompter,
-    );
-  }
-
   if (changes.length > 0) {
     note(changes.join("\n"), "Doctor changes");
   }
@@ -286,9 +239,6 @@ export function noteSandboxScopeWarnings(cfg: DenebConfig) {
     const overrides: string[] = [];
     if (agentSandbox.docker && Object.keys(agentSandbox.docker).length > 0) {
       overrides.push("docker");
-    }
-    if (agentSandbox.browser && Object.keys(agentSandbox.browser).length > 0) {
-      overrides.push("browser");
     }
     if (agentSandbox.prune && Object.keys(agentSandbox.prune).length > 0) {
       overrides.push("prune");

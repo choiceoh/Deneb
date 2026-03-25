@@ -27,7 +27,6 @@ export function resolveHandshakeBrowserSecurityContext(params: {
   requestOrigin?: string;
   clientIp: string | undefined;
   rateLimiter?: AuthRateLimiter;
-  browserRateLimiter?: AuthRateLimiter;
 }): HandshakeBrowserSecurityContext {
   const hasBrowserOriginHeader = Boolean(
     params.requestOrigin && params.requestOrigin.trim() !== "",
@@ -39,10 +38,7 @@ export function resolveHandshakeBrowserSecurityContext(params: {
       hasBrowserOriginHeader && isLoopbackAddress(params.clientIp)
         ? BROWSER_ORIGIN_LOOPBACK_RATE_LIMIT_IP
         : params.clientIp,
-    authRateLimiter:
-      hasBrowserOriginHeader && params.browserRateLimiter
-        ? params.browserRateLimiter
-        : params.rateLimiter,
+    authRateLimiter: params.rateLimiter,
   };
 }
 

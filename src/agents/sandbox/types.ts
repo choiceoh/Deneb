@@ -29,23 +29,6 @@ export type SandboxToolPolicyResolved = {
 
 export type SandboxWorkspaceAccess = "none" | "ro" | "rw";
 
-export type SandboxBrowserConfig = {
-  enabled: boolean;
-  image: string;
-  containerPrefix: string;
-  network: string;
-  cdpPort: number;
-  cdpSourceRange?: string;
-  vncPort: number;
-  noVncPort: number;
-  headless: boolean;
-  enableNoVnc: boolean;
-  allowHostControl: boolean;
-  autoStart: boolean;
-  autoStartTimeoutMs: number;
-  binds?: string[];
-};
-
 export type SandboxPruneConfig = {
   idleHours: number;
   maxAgeDays: number;
@@ -75,15 +58,8 @@ export type SandboxConfig = {
   workspaceRoot: string;
   docker: SandboxDockerConfig;
   ssh: SandboxSshConfig;
-  browser: SandboxBrowserConfig;
   tools: SandboxToolPolicy;
   prune: SandboxPruneConfig;
-};
-
-export type SandboxBrowserContext = {
-  bridgeUrl: string;
-  noVncUrl?: string;
-  containerName: string;
 };
 
 export type SandboxContext = {
@@ -99,8 +75,6 @@ export type SandboxContext = {
   containerWorkdir: string;
   docker: SandboxDockerConfig;
   tools: SandboxToolPolicy;
-  browserAllowHostControl: boolean;
-  browser?: SandboxBrowserContext;
   fsBridge?: SandboxFsBridge;
   backend?: SandboxBackendHandle;
 };

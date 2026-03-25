@@ -3,15 +3,12 @@
  *
  * These functions perform I/O (filesystem, config reads) to detect security issues.
  * Implementation split by domain:
- * - audit-extra.async.sandbox.ts: Docker/sandbox container checks
  * - audit-extra.async.plugins.ts: Plugin trust, install integrity, code safety
  * - audit-extra.async.skills.ts: Workspace skill symlink escape and code safety
  * - audit-extra.async.filesystem.ts: Config include and state directory permission checks
  * - audit-extra.async.helpers.ts: Shared helpers (plugin dirs, code scanning, etc.)
  */
 export type { SecurityAuditFinding } from "./audit-extra-shared.js";
-
-export { collectSandboxBrowserHashLabelFindings } from "./audit-extra.async.sandbox.js";
 
 export {
   collectPluginsTrustFindings,

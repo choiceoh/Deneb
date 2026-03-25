@@ -108,67 +108,6 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
     }
   };
 
-  const normalizeLegacyBrowserProfiles = () => {
-    const rawBrowser = next.browser;
-    if (!isRecord(rawBrowser)) {
-      return;
-    }
-
-    const browser = structuredClone(rawBrowser);
-    let browserChanged = false;
-
-    if ("relayBindHost" in browser) {
-      delete browser.relayBindHost;
-      browserChanged = true;
-      changes.push(
-        "Removed browser.relayBindHost (legacy Chrome extension relay setting; host-local Chrome now uses Chrome MCP existing-session attach).",
-      );
-    }
-
-    const rawProfiles = browser.profiles;
-    if (!isRecord(rawProfiles)) {
-      if (!browserChanged) {
-        return;
-      }
-      next = { ...next, browser };
-      return;
-    }
-
-    const profiles = { ...rawProfiles };
-    let profilesChanged = false;
-    for (const [profileName, rawProfile] of Object.entries(rawProfiles)) {
-      if (!isRecord(rawProfile)) {
-        continue;
-      }
-      const rawDriver = typeof rawProfile.driver === "string" ? rawProfile.driver.trim() : "";
-      if (rawDriver !== "extension") {
-        continue;
-      }
-      profiles[profileName] = {
-        ...rawProfile,
-        driver: "existing-session",
-      };
-      profilesChanged = true;
-      changes.push(
-        `Moved browser.profiles.${profileName}.driver "extension" → "existing-session" (Chrome MCP attach).`,
-      );
-    }
-
-    if (profilesChanged) {
-      browser.profiles = profiles;
-      browserChanged = true;
-    }
-
-    if (!browserChanged) {
-      return;
-    }
-
-    next = {
-      ...next,
-      browser,
-    };
-  };
-
   const seedMissingDefaultAccountsFromSingleAccountBase = () => {
     const channels = next.channels as Record<string, unknown> | undefined;
     if (!channels) {
@@ -241,50 +180,6 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
 
   normalizeTelegramStreamingAliases();
   seedMissingDefaultAccountsFromSingleAccountBase();
-  normalizeLegacyBrowserProfiles();
-
-  const normalizeBrowserSsrFPolicyAlias = () => {
-    const rawBrowser = next.browser;
-    if (!isRecord(rawBrowser)) {
-      return;
-    }
-    const rawSsrFPolicy = rawBrowser.ssrfPolicy;
-    if (!isRecord(rawSsrFPolicy) || !("allowPrivateNetwork" in rawSsrFPolicy)) {
-      return;
-    }
-
-    const legacyAllowPrivateNetwork = rawSsrFPolicy.allowPrivateNetwork;
-    const currentDangerousAllowPrivateNetwork = rawSsrFPolicy.dangerouslyAllowPrivateNetwork;
-
-    let resolvedDangerousAllowPrivateNetwork: unknown = currentDangerousAllowPrivateNetwork;
-    if (
-      typeof legacyAllowPrivateNetwork === "boolean" ||
-      typeof currentDangerousAllowPrivateNetwork === "boolean"
-    ) {
-      // Preserve runtime behavior while collapsing to the canonical key.
-      resolvedDangerousAllowPrivateNetwork =
-        legacyAllowPrivateNetwork === true || currentDangerousAllowPrivateNetwork === true;
-    } else if (currentDangerousAllowPrivateNetwork === undefined) {
-      resolvedDangerousAllowPrivateNetwork = legacyAllowPrivateNetwork;
-    }
-
-    const nextSsrFPolicy: Record<string, unknown> = { ...rawSsrFPolicy };
-    delete nextSsrFPolicy.allowPrivateNetwork;
-    if (resolvedDangerousAllowPrivateNetwork !== undefined) {
-      nextSsrFPolicy.dangerouslyAllowPrivateNetwork = resolvedDangerousAllowPrivateNetwork;
-    }
-
-    const migratedBrowser = { ...next.browser } as Record<string, unknown>;
-    migratedBrowser.ssrfPolicy = nextSsrFPolicy;
-
-    next = {
-      ...next,
-      browser: migratedBrowser as DenebConfig["browser"],
-    };
-    changes.push(
-      `Moved browser.ssrfPolicy.allowPrivateNetwork → browser.ssrfPolicy.dangerouslyAllowPrivateNetwork (${String(resolvedDangerousAllowPrivateNetwork)}).`,
-    );
-  };
 
   const normalizeLegacyNanoBananaSkill = () => {
     type ModelProviderEntry = Partial<
@@ -410,7 +305,6 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
     }
   };
 
-  normalizeBrowserSsrFPolicyAlias();
   normalizeLegacyNanoBananaSkill();
 
   // Migrate lossless-claw plugin entry: move top-level Aurora keys into its
