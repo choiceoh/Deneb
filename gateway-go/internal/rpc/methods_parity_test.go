@@ -2,8 +2,6 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"sort"
 	"testing"
 
@@ -143,7 +141,7 @@ func fullDispatcher() *Dispatcher {
 		Hooks:     hooks.NewRegistry(testLogger()),
 	})
 
-	// Phase 3: Native workflow methods (previously bridge-forwarded).
+	// Phase 3: Native workflow methods.
 	broadcastFn := func(event string, payload any) (int, []error) { return 0, nil }
 	RegisterApprovalMethods(d, ApprovalDeps{Store: approval.NewStore(), Broadcaster: broadcastFn})
 	RegisterNodeMethods(d, NodeDeps{Nodes: node.NewManager(), Broadcaster: broadcastFn})
@@ -156,7 +154,10 @@ func fullDispatcher() *Dispatcher {
 	RegisterSecretMethods(d, SecretDeps{Resolver: secret.NewResolver()})
 	RegisterTalkMethods(d, TalkDeps{Talk: talk.NewState()})
 
-	// Phase 4: Native system methods (migrated from bridge).
+	// Session state methods (patch/reset/preview/resolve/compact).
+	RegisterSessionMethods(d, SessionDeps{Deps: deps})
+
+	// Phase 4: Native system methods.
 	RegisterUsageMethods(d, UsageDeps{Tracker: usage.New()})
 	RegisterLogsMethods(d, LogsDeps{LogDir: "/tmp"})
 	RegisterDoctorMethods(d, DoctorDeps{})
@@ -166,14 +167,22 @@ func fullDispatcher() *Dispatcher {
 
 	// Phase 4: Native session execution / agent methods.
 	RegisterSessionExecMethods(d, SessionExecDeps{
-		Chat:       chat.NewHandler(session.NewManager(), nil, nil, testLogger(), chat.DefaultHandlerConfig()),
+		Chat:       chat.NewHandler(session.NewManager(), nil, testLogger(), chat.DefaultHandlerConfig()),
 		Agents:     agent.NewStore(),
 		JobTracker: agent.NewJobTracker(testLogger()),
 	})
 
-	// Bridge methods with a nil-returning forwarder (for registration only).
-	RegisterBridgeMethods(d, BridgeDeps{
-		ForwarderFunc: func() Forwarder { return nil },
+	// Stub handlers for formerly bridge-forwarded methods.
+	stubUnavailable := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		return protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrUnavailable, req.Method+" not available in standalone mode"))
+	}
+	d.Register("browser.request", stubUnavailable)
+	d.Register("web.login.start", stubUnavailable)
+	d.Register("web.login.wait", stubUnavailable)
+	d.Register("channels.logout", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"ok": true})
+		return resp
 	})
 
 	// Stub for methods registered outside the rpc package (events, chat, server inline).
@@ -251,84 +260,6 @@ func TestScopeCoverage(t *testing.T) {
 		for _, m := range uncovered {
 			t.Errorf("  - %s", m)
 		}
-	}
-}
-
-// TestBridgeForwardSuccess verifies bridge-forwarded methods delegate to the forwarder.
-func TestBridgeForwardSuccess(t *testing.T) {
-	d := NewDispatcher(testLogger())
-	fwd := &mockForwarder{}
-	RegisterBridgeMethods(d, BridgeDeps{
-		ForwarderFunc: func() Forwarder { return fwd },
-	})
-
-	// Pick a bridge-forwarded method (still forwarded after Phase 4 port).
-	req := &protocol.RequestFrame{
-		Type:   "req",
-		ID:     "bridge-1",
-		Method: "tools.catalog",
-		Params: json.RawMessage("{}"),
-	}
-	resp := d.Dispatch(context.Background(), req)
-
-	if !fwd.called {
-		t.Error("forwarder should have been called for bridge method")
-	}
-	if !resp.OK {
-		t.Errorf("expected OK response, got error: %+v", resp.Error)
-	}
-}
-
-// TestBridgeForwardNilBridge verifies graceful error when bridge is not connected.
-func TestBridgeForwardNilBridge(t *testing.T) {
-	d := NewDispatcher(testLogger())
-	RegisterBridgeMethods(d, BridgeDeps{
-		ForwarderFunc: func() Forwarder { return nil },
-	})
-
-	req := &protocol.RequestFrame{
-		Type:   "req",
-		ID:     "bridge-nil-1",
-		Method: "tools.catalog",
-		Params: json.RawMessage("{}"),
-	}
-	resp := d.Dispatch(context.Background(), req)
-
-	if resp.OK {
-		t.Error("expected error when bridge is nil")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrDependencyFailed {
-		t.Errorf("expected DEPENDENCY_FAILED error, got: %+v", resp.Error)
-	}
-}
-
-// mockFailingForwarder returns an error on Forward.
-type mockFailingForwarder struct{}
-
-func (m *mockFailingForwarder) Forward(_ context.Context, _ *protocol.RequestFrame) (*protocol.ResponseFrame, error) {
-	return nil, errors.New("connection lost")
-}
-
-// TestBridgeForwardError verifies error handling when bridge returns an error.
-func TestBridgeForwardError(t *testing.T) {
-	d := NewDispatcher(testLogger())
-	RegisterBridgeMethods(d, BridgeDeps{
-		ForwarderFunc: func() Forwarder { return &mockFailingForwarder{} },
-	})
-
-	req := &protocol.RequestFrame{
-		Type:   "req",
-		ID:     "bridge-err-1",
-		Method: "browser.request",
-		Params: json.RawMessage("{}"),
-	}
-	resp := d.Dispatch(context.Background(), req)
-
-	if resp.OK {
-		t.Error("expected error response when forward fails")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrDependencyFailed {
-		t.Errorf("expected DEPENDENCY_FAILED error, got: %+v", resp.Error)
 	}
 }
 

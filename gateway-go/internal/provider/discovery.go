@@ -1,13 +1,7 @@
 package provider
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
 	"strings"
-	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // NormalizeProviderID normalizes a provider identifier to its canonical form.
@@ -82,70 +76,3 @@ type AliasProvider interface {
 	Aliases() []string
 }
 
-// Forwarder sends requests to the Node.js plugin host.
-type Forwarder interface {
-	Forward(ctx context.Context, req *protocol.RequestFrame) (*protocol.ResponseFrame, error)
-}
-
-// DiscoverFromBridge queries the Node.js plugin host for available providers
-// and registers stub plugins for each discovered provider.
-func (r *Registry) DiscoverFromBridge(ctx context.Context, fwd Forwarder) error {
-	if fwd == nil {
-		return nil
-	}
-
-	params, _ := json.Marshal(map[string]any{})
-	req := &protocol.RequestFrame{
-		Type:   protocol.FrameTypeRequest,
-		ID:     fmt.Sprintf("discover-providers-%d", time.Now().UnixNano()),
-		Method: "providers.list",
-		Params: params,
-	}
-
-	resp, err := fwd.Forward(ctx, req)
-	if err != nil {
-		return err
-	}
-	if !resp.OK {
-		return nil // Non-fatal: bridge may not support this method yet.
-	}
-
-	var result struct {
-		Providers []struct {
-			ID      string       `json:"id"`
-			Label   string       `json:"label"`
-			Auth    []AuthMethod `json:"auth,omitempty"`
-			Aliases []string     `json:"aliases,omitempty"`
-		} `json:"providers"`
-	}
-	if err := json.Unmarshal(resp.Payload, &result); err != nil {
-		return nil // Non-fatal: unexpected shape.
-	}
-
-	for _, p := range result.Providers {
-		if r.Get(p.ID) != nil {
-			continue // Already registered.
-		}
-		_ = r.Register(&bridgeStubPlugin{
-			id:      p.ID,
-			label:   p.Label,
-			auth:    p.Auth,
-			aliases: p.Aliases,
-		})
-	}
-	return nil
-}
-
-// bridgeStubPlugin is a lightweight provider plugin registered from bridge discovery.
-// It implements Plugin and AliasProvider but delegates actual work to the bridge.
-type bridgeStubPlugin struct {
-	id      string
-	label   string
-	auth    []AuthMethod
-	aliases []string
-}
-
-func (p *bridgeStubPlugin) ID() string             { return p.id }
-func (p *bridgeStubPlugin) Label() string           { return p.label }
-func (p *bridgeStubPlugin) AuthMethods() []AuthMethod { return p.auth }
-func (p *bridgeStubPlugin) Aliases() []string       { return p.aliases }

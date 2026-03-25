@@ -16,7 +16,6 @@ func testSessionDeps() SessionDeps {
 			Channels: channel.NewRegistry(),
 			// GatewaySubs left nil — emitSessionLifecycle safely no-ops.
 		},
-		Forwarder: nil, // no bridge in unit tests
 	}
 }
 
