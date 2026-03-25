@@ -1,6 +1,6 @@
 import type { ReplyToMode } from "deneb/plugin-sdk/config-runtime";
 import type { TelegramAccountConfig } from "deneb/plugin-sdk/config-runtime";
-import { danger } from "deneb/plugin-sdk/runtime-env";
+import { danger, logVerbose } from "deneb/plugin-sdk/runtime-env";
 import type { RuntimeEnv } from "deneb/plugin-sdk/runtime-env";
 import type { TelegramBotDeps } from "./bot-deps.js";
 import {
@@ -83,6 +83,11 @@ export const createTelegramMessageProcessor = (deps: TelegramMessageProcessorDep
       upsertPairingRequest: telegramDeps.upsertChannelPairingRequest,
     });
     if (!context) {
+      const chatId = primaryCtx.message?.chat?.id;
+      const text = (primaryCtx.message?.text ?? primaryCtx.message?.caption ?? "").slice(0, 80);
+      logVerbose(
+        `telegram: processMessage dropped (no context) chatId=${chatId ?? "unknown"} text="${text}"`,
+      );
       return;
     }
     try {
