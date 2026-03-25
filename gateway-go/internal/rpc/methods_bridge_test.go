@@ -32,12 +32,6 @@ var tsBaseMethods = []string{
 	"status",
 	"usage.status",
 	"usage.cost",
-	"tts.status",
-	"tts.providers",
-	"tts.enable",
-	"tts.disable",
-	"tts.convert",
-	"tts.setProvider",
 	"config.get",
 	"config.set",
 	"config.apply",
@@ -307,7 +301,7 @@ func TestBridgeForwardError(t *testing.T) {
 	req := &protocol.RequestFrame{
 		Type:   "req",
 		ID:     "bridge-err-1",
-		Method: "tts.status",
+		Method: "voicewake.get",
 		Params: json.RawMessage("{}"),
 	}
 	resp := d.Dispatch(context.Background(), req)

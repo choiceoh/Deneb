@@ -1,5 +1,4 @@
 import type { DenebConfig } from "../config/config.js";
-import { collectTtsApiKeyAssignments } from "./runtime-config-collectors-tts.js";
 import { evaluateGatewayAuthSurfaceStates } from "./runtime-gateway-auth-surfaces.js";
 import {
   collectSecretInputAssignment,
@@ -275,23 +274,6 @@ function collectGatewayAssignments(params: {
   }
 }
 
-function collectMessagesTtsAssignments(params: {
-  config: DenebConfig;
-  defaults: SecretDefaults | undefined;
-  context: ResolverContext;
-}): void {
-  const messages = params.config.messages as Record<string, unknown> | undefined;
-  if (!isRecord(messages) || !isRecord(messages.tts)) {
-    return;
-  }
-  collectTtsApiKeyAssignments({
-    tts: messages.tts,
-    pathPrefix: "messages.tts",
-    defaults: params.defaults,
-    context: params.context,
-  });
-}
-
 function collectCronAssignments(params: {
   config: DenebConfig;
   defaults: SecretDefaults | undefined;
@@ -424,6 +406,5 @@ export function collectCoreConfigAssignments(params: {
   collectTalkAssignments(params);
   collectGatewayAssignments(params);
   collectSandboxSshAssignments(params);
-  collectMessagesTtsAssignments(params);
   collectCronAssignments(params);
 }

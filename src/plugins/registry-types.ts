@@ -22,7 +22,6 @@ import type {
   PluginHookRegistration as TypedPluginHookRegistration,
   MediaUnderstandingProviderPlugin,
   ProviderPlugin,
-  SpeechProviderPlugin,
   WebSearchProviderPlugin,
 } from "./types.js";
 
@@ -87,8 +86,6 @@ export type PluginOwnedProviderRegistration<T extends { id: string }> = {
   rootDir?: string;
 };
 
-export type PluginSpeechProviderRegistration =
-  PluginOwnedProviderRegistration<SpeechProviderPlugin>;
 export type PluginMediaUnderstandingProviderRegistration =
   PluginOwnedProviderRegistration<MediaUnderstandingProviderPlugin>;
 export type PluginImageGenerationProviderRegistration =
@@ -149,7 +146,6 @@ export type PluginRecord = {
   hookNames: string[];
   channelIds: string[];
   providerIds: string[];
-  speechProviderIds: string[];
   mediaUnderstandingProviderIds: string[];
   imageGenerationProviderIds: string[];
   webSearchProviderIds: string[];
@@ -172,7 +168,6 @@ export type PluginRegistry = {
   channels: PluginChannelRegistration[];
   channelSetups: PluginChannelSetupRegistration[];
   providers: PluginProviderRegistration[];
-  speechProviders: PluginSpeechProviderRegistration[];
   mediaUnderstandingProviders: PluginMediaUnderstandingProviderRegistration[];
   imageGenerationProviders: PluginImageGenerationProviderRegistration[];
   webSearchProviders: PluginWebSearchProviderRegistration[];

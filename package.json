@@ -515,7 +515,6 @@
     "jszip": "^3.10.1",
     "linkedom": "^0.18.12",
     "markdown-it": "^14.1.0",
-    "node-edge-tts": "^1.2.10",
     "openai": "^6.32.0",
     "osc-progress": "^0.3.0",
     "pdfjs-dist": "^5.5.207",

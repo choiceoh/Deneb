@@ -4,14 +4,12 @@ import type {
   MediaUnderstandingProviderPlugin,
   DenebPluginApi,
   ProviderPlugin,
-  SpeechProviderPlugin,
   WebSearchProviderPlugin,
 } from "./types.js";
 
 export type CapturedPluginRegistration = {
   api: DenebPluginApi;
   providers: ProviderPlugin[];
-  speechProviders: SpeechProviderPlugin[];
   mediaUnderstandingProviders: MediaUnderstandingProviderPlugin[];
   imageGenerationProviders: ImageGenerationProviderPlugin[];
   webSearchProviders: WebSearchProviderPlugin[];
@@ -20,7 +18,6 @@ export type CapturedPluginRegistration = {
 
 export function createCapturedPluginRegistration(): CapturedPluginRegistration {
   const providers: ProviderPlugin[] = [];
-  const speechProviders: SpeechProviderPlugin[] = [];
   const mediaUnderstandingProviders: MediaUnderstandingProviderPlugin[] = [];
   const imageGenerationProviders: ImageGenerationProviderPlugin[] = [];
   const webSearchProviders: WebSearchProviderPlugin[] = [];
@@ -28,7 +25,6 @@ export function createCapturedPluginRegistration(): CapturedPluginRegistration {
 
   return {
     providers,
-    speechProviders,
     mediaUnderstandingProviders,
     imageGenerationProviders,
     webSearchProviders,
@@ -36,9 +32,6 @@ export function createCapturedPluginRegistration(): CapturedPluginRegistration {
     api: {
       registerProvider(provider: ProviderPlugin) {
         providers.push(provider);
-      },
-      registerSpeechProvider(provider: SpeechProviderPlugin) {
-        speechProviders.push(provider);
       },
       registerMediaUnderstandingProvider(provider: MediaUnderstandingProviderPlugin) {
         mediaUnderstandingProviders.push(provider);

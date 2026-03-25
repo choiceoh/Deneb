@@ -8,7 +8,6 @@ const LAZY_RUNTIME_REFLECTION_KEYS = [
   "subagent",
   "system",
   "media",
-  "tts",
   "stt",
   "tools",
   "channel",

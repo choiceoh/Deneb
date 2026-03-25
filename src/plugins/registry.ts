@@ -46,7 +46,6 @@ import type {
   PluginHookName,
   PluginHookHandlerMap,
   PluginHookRegistration as TypedPluginHookRegistration,
-  SpeechProviderPlugin,
   WebSearchProviderPlugin,
 } from "./types.js";
 
@@ -58,7 +57,6 @@ export type {
   PluginChannelRegistration,
   PluginChannelSetupRegistration,
   PluginProviderRegistration,
-  PluginSpeechProviderRegistration,
   PluginMediaUnderstandingProviderRegistration,
   PluginImageGenerationProviderRegistration,
   PluginWebSearchProviderRegistration,
@@ -455,16 +453,6 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     } as R);
   };
 
-  const registerSpeechProvider = (record: PluginRecord, provider: SpeechProviderPlugin) => {
-    registerUniqueProviderLike({
-      record,
-      provider,
-      kindLabel: "speech provider",
-      registrations: registry.speechProviders,
-      ownedIds: record.speechProviderIds,
-    });
-  };
-
   const registerMediaUnderstandingProvider = (
     record: PluginRecord,
     provider: MediaUnderstandingProviderPlugin,
@@ -753,10 +741,6 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       registerChannel: (registration) => registerChannel(record, registration, registrationMode),
       registerProvider:
         registrationMode === "full" ? (provider) => registerProvider(record, provider) : () => {},
-      registerSpeechProvider:
-        registrationMode === "full"
-          ? (provider) => registerSpeechProvider(record, provider)
-          : () => {},
       registerMediaUnderstandingProvider:
         registrationMode === "full"
           ? (provider) => registerMediaUnderstandingProvider(record, provider)
@@ -842,7 +826,6 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     registerTool,
     registerChannel,
     registerProvider,
-    registerSpeechProvider,
     registerMediaUnderstandingProvider,
     registerImageGenerationProvider,
     registerWebSearchProvider,

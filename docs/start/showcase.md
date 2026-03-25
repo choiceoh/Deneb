@@ -129,14 +129,6 @@ Desktop app to manage skills/commands across Agents, Claude, Codex, and Deneb.
   <img src="/assets/showcase/agents-ui.jpg" alt="Agents UI app" />
 </Card>
 
-<Card title="Telegram Voice Notes (papla.media)" icon="microphone" href="https://papla.media/docs">
-  **Community** • `voice` `tts` `telegram`
-
-Wraps papla.media TTS and sends results as Telegram voice notes (no annoying autoplay).
-
-  <img src="/assets/showcase/papla-tts.jpg" alt="Telegram voice note output from TTS" />
-</Card>
-
 <Card title="CodexMonitor" icon="eye" href="https://clawhub.com/odrobnik/codexmonitor">
   **@odrobnik** • `devtools` `codex` `brew`
 
