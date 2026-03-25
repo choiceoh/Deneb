@@ -190,7 +190,8 @@ func (c *Client) doCall(ctx context.Context, method string, body io.Reader) (jso
 	return apiResp.Result, nil
 }
 
-// Upload sends a multipart/form-data request for file uploads.
+// Upload sends a multipart/form-data request for file uploads with automatic retry.
+// Retries only on pre-connect errors (uploads are non-idempotent).
 func (c *Client) Upload(ctx context.Context, method string, fieldName string, fileName string, fileData io.Reader, params map[string]string) (json.RawMessage, error) {
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
@@ -215,12 +216,17 @@ func (c *Client) Upload(ctx context.Context, method string, fieldName string, fi
 		return nil, fmt.Errorf("close multipart writer: %w", err)
 	}
 
+	return c.uploadWithRetry(ctx, method, buf.Bytes(), w.FormDataContentType())
+}
+
+// doUpload executes a single upload HTTP request (no retry).
+func (c *Client) doUpload(ctx context.Context, method string, body []byte, contentType string) (json.RawMessage, error) {
 	url := c.baseURL + "/" + method
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &buf)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create upload request: %w", err)
 	}
-	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Content-Type", contentType)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -247,6 +253,47 @@ func (c *Client) Upload(ctx context.Context, method string, fieldName string, fi
 	}
 
 	return apiResp.Result, nil
+}
+
+// uploadWithRetry wraps doUpload with the same retry logic as callWithRetry.
+// Only retries on pre-connect errors since uploads are non-idempotent.
+func (c *Client) uploadWithRetry(ctx context.Context, method string, body []byte, contentType string) (json.RawMessage, error) {
+	var lastErr error
+	for attempt := 0; attempt <= c.maxRetries; attempt++ {
+		if attempt > 0 {
+			delay := retryDelay(attempt, lastErr)
+			c.logger.Info("retrying telegram upload",
+				"method", method,
+				"attempt", attempt,
+				"delay", delay,
+				"error", lastErr,
+			)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		result, err := c.doUpload(ctx, method, body, contentType)
+		if err == nil {
+			return result, nil
+		}
+
+		lastErr = err
+
+		// API errors are not retried.
+		var apiErr *APIError
+		if isAPIError(err, &apiErr) {
+			return nil, err
+		}
+
+		// Only retry pre-connect errors (upload is non-idempotent).
+		if !IsPreConnectError(err) {
+			return nil, err
+		}
+	}
+	return nil, fmt.Errorf("telegram upload %s: max retries exceeded: %w", method, lastErr)
 }
 
 // --- Convenience methods ---

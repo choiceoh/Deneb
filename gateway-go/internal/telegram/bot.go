@@ -131,12 +131,19 @@ func (b *Bot) pollLoop(ctx context.Context) error {
 			}
 			b.markSeen(u.UpdateID)
 
-			// Buffer message for poll RPC.
+			// Buffer message for poll RPC. DrainMessages() must be called regularly
+			// (typically by the Node.js bridge via RPC poll). If drain falls behind,
+			// oldest messages are discarded and a warning is logged.
 			if u.Message != nil && b.isAllowed(u.Message) {
 				b.msgMu.Lock()
 				b.messages = append(b.messages, u.Message)
-				if len(b.messages) > 1000 {
-					b.messages = b.messages[len(b.messages)-500:]
+				if len(b.messages) > MaxMessageBuffer {
+					trimmed := len(b.messages) - MessageBufferTrimTarget
+					b.messages = b.messages[trimmed:]
+					b.logger.Warn("message buffer trimmed; drain may be too slow",
+						"trimmed", trimmed,
+						"remaining", MessageBufferTrimTarget,
+					)
 				}
 				b.msgMu.Unlock()
 			}
@@ -237,34 +244,28 @@ func (b *Bot) isAllowed(msg *Message) bool {
 
 	// DM messages: check allowFrom.
 	if msg.Chat.Type == "private" {
-		if len(b.config.AllowFrom) == 0 {
-			return true
-		}
-		for _, id := range b.config.AllowFrom {
-			if id == msg.From.ID {
-				return true
-			}
-		}
-		return false
+		return matchesAllowList(&b.config.AllowFrom, msg.From)
 	}
 
-	// Group messages: check groupAllowFrom.
-	if len(b.config.GroupAllowFrom) == 0 {
-		// Fall back to allowFrom for groups if groupAllowFrom not set.
-		if len(b.config.AllowFrom) == 0 {
-			return true
-		}
-		for _, id := range b.config.AllowFrom {
-			if id == msg.From.ID {
-				return true
-			}
-		}
-		return false
+	// Group messages: check groupAllowFrom, fall back to allowFrom.
+	list := &b.config.GroupAllowFrom
+	if list.IsEmpty() {
+		list = &b.config.AllowFrom
 	}
-	for _, id := range b.config.GroupAllowFrom {
-		if id == msg.From.ID {
-			return true
-		}
+	return matchesAllowList(list, msg.From)
+}
+
+// matchesAllowList checks if a user matches the given AllowList.
+// An empty list allows all users.
+func matchesAllowList(list *AllowList, user *User) bool {
+	if list.IsEmpty() || list.AllowsAll() {
+		return true
+	}
+	if list.ContainsID(user.ID) {
+		return true
+	}
+	if user.Username != "" && list.ContainsUsername(user.Username) {
+		return true
 	}
 	return false
 }

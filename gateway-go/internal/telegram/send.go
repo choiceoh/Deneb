@@ -37,7 +37,7 @@ func SendText(ctx context.Context, c *Client, chatID int64, text string, opts Se
 		return nil, fmt.Errorf("empty text")
 	}
 
-	maxLen := MaxTextLength
+	maxLen := TextChunkLimit
 	var chunks []string
 
 	if opts.ParseMode == "HTML" {

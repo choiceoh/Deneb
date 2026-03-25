@@ -24,15 +24,23 @@ const (
 
 	// DedupeTTLMs is the TTL for deduplication entries in milliseconds (5 min).
 	DedupeTTLMs = 300_000
+
+	// MaxMessageBuffer is the hard cap on buffered inbound messages.
+	// Kept small for single-user deployment; DrainMessages() should be called regularly.
+	MaxMessageBuffer = 200
+
+	// MessageBufferTrimTarget is the number of messages kept when the buffer is trimmed.
+	MessageBufferTrimTarget = 100
 )
 
 // Update represents an incoming update from Telegram.
 type Update struct {
-	UpdateID      int64          `json:"update_id"`
-	Message       *Message       `json:"message,omitempty"`
-	EditedMessage *Message       `json:"edited_message,omitempty"`
-	ChannelPost   *Message       `json:"channel_post,omitempty"`
-	CallbackQuery *CallbackQuery `json:"callback_query,omitempty"`
+	UpdateID        int64            `json:"update_id"`
+	Message         *Message         `json:"message,omitempty"`
+	EditedMessage   *Message         `json:"edited_message,omitempty"`
+	ChannelPost     *Message         `json:"channel_post,omitempty"`
+	CallbackQuery   *CallbackQuery   `json:"callback_query,omitempty"`
+	MessageReaction *MessageReaction `json:"message_reaction,omitempty"`
 }
 
 // Message represents a Telegram message.
@@ -187,6 +195,24 @@ type CallbackQuery struct {
 	From    User     `json:"from"`
 	Message *Message `json:"message,omitempty"`
 	Data    string   `json:"data,omitempty"`
+}
+
+// ReactionType represents a reaction emoji or custom emoji.
+type ReactionType struct {
+	Type          string `json:"type"`                       // "emoji" or "custom_emoji"
+	Emoji         string `json:"emoji,omitempty"`             // Standard emoji character
+	CustomEmojiID string `json:"custom_emoji_id,omitempty"`   // Custom emoji ID
+}
+
+// MessageReaction represents a change in message reactions.
+type MessageReaction struct {
+	MessageID   int64          `json:"message_id"`
+	Chat        Chat           `json:"chat"`
+	User        *User          `json:"user,omitempty"`
+	ActorChat   *Chat          `json:"actor_chat,omitempty"`
+	Date        int64          `json:"date"`
+	OldReaction []ReactionType `json:"old_reaction"`
+	NewReaction []ReactionType `json:"new_reaction"`
 }
 
 // InlineKeyboardMarkup represents an inline keyboard.

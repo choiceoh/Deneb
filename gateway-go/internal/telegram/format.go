@@ -7,6 +7,8 @@ import (
 
 // Telegram message limits.
 const (
+	// MaxTextLength is the Telegram API hard limit for message text (4096 chars).
+	// For outbound chunking, use TextChunkLimit (4000) which leaves headroom for HTML overhead.
 	MaxTextLength    = 4096
 	MaxCaptionLength = 1024
 )
