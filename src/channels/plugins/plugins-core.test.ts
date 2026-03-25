@@ -36,7 +36,7 @@ import {
 } from "../../test-utils/channel-plugins.js";
 import { withEnvAsync } from "../../test-utils/env.js";
 import { INTERNAL_MESSAGE_CHANNEL } from "../../utils/message-channel.js";
-import { getChannelPluginCatalogEntry, listChannelPluginCatalogEntries } from "./catalog.js";
+import { listChannelPluginCatalogEntries } from "./catalog.js";
 import {
   authorizeConfigWrite,
   canBypassConfigWritePolicy,
