@@ -254,7 +254,6 @@ export function collectConfiguredModelPricingRefs(config: DenebConfig): ModelRef
   addResolvedModelRef({ raw: config.agents?.defaults?.compaction?.model, aliasIndex, refs });
   addResolvedModelRef({ raw: config.agents?.defaults?.heartbeat?.model, aliasIndex, refs });
   addModelListLike({ value: config.tools?.subagents?.model, aliasIndex, refs });
-  addResolvedModelRef({ raw: config.messages?.tts?.summaryModel, aliasIndex, refs });
   addResolvedModelRef({ raw: config.hooks?.gmail?.model, aliasIndex, refs });
 
   for (const agent of config.agents?.list ?? []) {

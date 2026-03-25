@@ -16,7 +16,6 @@ import {
 } from "../../../infra/device-pairing.js";
 import { recordRemoteNodeInfo, refreshRemoteNodeBins } from "../../../infra/skills-remote.js";
 import { upsertPresence } from "../../../infra/system-presence.js";
-import { loadVoiceWakeConfig } from "../../../infra/voicewake.js";
 import { rawDataToString } from "../../../infra/ws.js";
 import type { createSubsystemLogger } from "../../../logging/subsystem.js";
 import { roleScopesAllow } from "../../../shared/operator-scope-compat.js";
@@ -27,11 +26,6 @@ import type { GatewayAuthResult, ResolvedGatewayAuth } from "../../auth/auth.js"
 import { isLocalDirectRequest } from "../../auth/auth.js";
 import { checkBrowserOrigin } from "../../auth/origin-check.js";
 import { parseGatewayRole } from "../../auth/role-policy.js";
-import {
-  buildCanvasScopedHostUrl,
-  CANVAS_CAPABILITY_TTL_MS,
-  mintCanvasCapabilityToken,
-} from "../../canvas-capability.js";
 import {
   isLocalishHost,
   isLoopbackAddress,
@@ -135,7 +129,6 @@ export function attachGatewayWsMessageHandler(params: {
   requestHost?: string;
   requestOrigin?: string;
   requestUserAgent?: string;
-  canvasHostUrl?: string;
   connectNonce: string;
   resolvedAuth: ResolvedGatewayAuth;
   /** Optional rate limiter for auth brute-force protection. */
@@ -168,7 +161,6 @@ export function attachGatewayWsMessageHandler(params: {
     requestHost,
     requestOrigin,
     requestUserAgent,
-    canvasHostUrl,
     connectNonce,
     resolvedAuth,
     rateLimiter,
@@ -929,15 +921,6 @@ export function attachGatewayWsMessageHandler(params: {
           snapshot.health = cachedHealth;
           snapshot.stateVersion.health = getHealthVersion();
         }
-        const canvasCapability =
-          role === "node" && canvasHostUrl ? mintCanvasCapabilityToken() : undefined;
-        const canvasCapabilityExpiresAtMs = canvasCapability
-          ? Date.now() + CANVAS_CAPABILITY_TTL_MS
-          : undefined;
-        const scopedCanvasHostUrl =
-          canvasHostUrl && canvasCapability
-            ? (buildCanvasScopedHostUrl(canvasHostUrl, canvasCapability) ?? canvasHostUrl)
-            : canvasHostUrl;
         const helloOk = {
           type: "hello-ok",
           protocol: PROTOCOL_VERSION,
@@ -947,7 +930,6 @@ export function attachGatewayWsMessageHandler(params: {
           },
           features: { methods: gatewayMethods, events },
           snapshot,
-          canvasHostUrl: scopedCanvasHostUrl,
           auth: deviceToken
             ? {
                 deviceToken: deviceToken.token,
@@ -970,9 +952,6 @@ export function attachGatewayWsMessageHandler(params: {
           connId,
           presenceKey,
           clientIp: reportedClientIp,
-          canvasHostUrl,
-          canvasCapability,
-          canvasCapabilityExpiresAtMs,
         };
         setSocketMaxPayload(socket, MAX_PAYLOAD_BYTES);
         setClient(nextClient);
@@ -1001,17 +980,6 @@ export function attachGatewayWsMessageHandler(params: {
               `remote bin probe failed for ${nodeSession.nodeId}: ${formatForLog(err)}`,
             ),
           );
-          void loadVoiceWakeConfig()
-            .then((cfg) => {
-              context.nodeRegistry.sendEvent(nodeSession.nodeId, "voicewake.changed", {
-                triggers: cfg.triggers,
-              });
-            })
-            .catch((err) =>
-              logGateway.warn(
-                `voicewake snapshot failed for ${nodeSession.nodeId}: ${formatForLog(err)}`,
-              ),
-            );
         }
 
         logWs("out", "hello-ok", {

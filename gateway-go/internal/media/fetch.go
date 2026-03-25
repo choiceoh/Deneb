@@ -1,7 +1,6 @@
-// Package media provides media fetching with SSRF protection, TTS provider
-// orchestration, and voice wake configuration for the Go gateway.
+// Package media provides media fetching with SSRF protection for the Go gateway.
 //
-// This mirrors media processing logic from src/media/, src/tts/, and
+// This mirrors media processing logic from src/media/ and
 // src/gateway/server-methods/media/ in the TypeScript codebase.
 package media
 

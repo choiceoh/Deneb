@@ -10,7 +10,6 @@ import type { ReasoningLevel } from "../../../auto-reply/thinking.shared.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import type { DenebConfig } from "../../../config/config.js";
 import type { SessionSystemPromptReport } from "../../../config/sessions/types.js";
-import { buildTtsSystemPromptHint } from "../../../tts/tts.js";
 import { normalizeMessageChannel } from "../../../utils/message-channel.js";
 import { isReasoningTagProvider } from "../../../utils/provider-utils.js";
 import type { ExecElevatedDefaults } from "../../bash-tools/bash-tools.exec-types.js";
@@ -220,7 +219,6 @@ export function resolveSystemPromptContext(
     ? ["Reminder: commit your changes in this workspace after edits."]
     : undefined;
 
-  const ttsHint = input.config ? buildTtsSystemPromptHint(input.config) : undefined;
   const ownerDisplay = resolveOwnerDisplaySetting(input.config);
   const heartbeatPrompt = isDefaultAgent
     ? resolveHeartbeatPrompt(input.config?.agents?.defaults?.heartbeat?.prompt)
@@ -239,7 +237,6 @@ export function resolveSystemPromptContext(
     heartbeatPrompt,
     skillsPrompt: input.skillsPrompt,
     docsPath: input.docsPath ?? undefined,
-    ttsHint,
     workspaceNotes,
     reactionGuidance,
     promptMode,

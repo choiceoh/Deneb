@@ -57,10 +57,6 @@ vi.mock("../../infra/skills-remote.js", () => ({
   getRemoteSkillEligibility: vi.fn(() => false),
 }));
 
-vi.mock("../../tts/tts.js", () => ({
-  buildTtsSystemPromptHint: vi.fn(() => undefined),
-}));
-
 import { resolveCommandsSystemPromptBundle } from "./commands-system-prompt.js";
 
 function makeParams(): HandleCommandsParams {

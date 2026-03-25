@@ -221,49 +221,6 @@ function buildChatCommands(): ChatCommandDefinition[] {
       ],
     }),
     defineChatCommand({
-      key: "tts",
-      nativeName: "tts",
-      description: "Control text-to-speech (TTS).",
-      textAlias: "/tts",
-      category: "media",
-      args: [
-        {
-          name: "action",
-          description: "TTS action",
-          type: "string",
-          choices: [
-            { value: "on", label: "On" },
-            { value: "off", label: "Off" },
-            { value: "status", label: "Status" },
-            { value: "provider", label: "Provider" },
-            { value: "limit", label: "Limit" },
-            { value: "summary", label: "Summary" },
-            { value: "audio", label: "Audio" },
-            { value: "help", label: "Help" },
-          ],
-        },
-        {
-          name: "value",
-          description: "Provider, limit, or text",
-          type: "string",
-          captureRemaining: true,
-        },
-      ],
-      argsMenu: {
-        arg: "action",
-        title:
-          "TTS Actions:\n" +
-          "• On – Enable TTS for responses\n" +
-          "• Off – Disable TTS\n" +
-          "• Status – Show current settings\n" +
-          "• Provider – Set voice provider (edge, elevenlabs, openai)\n" +
-          "• Limit – Set max characters for TTS\n" +
-          "• Summary – Toggle AI summary for long texts\n" +
-          "• Audio – Generate TTS from custom text\n" +
-          "• Help – Show usage guide",
-      },
-    }),
-    defineChatCommand({
       key: "whoami",
       nativeName: "whoami",
       description: "Show your sender id.",

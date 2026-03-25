@@ -19,9 +19,6 @@ export type GatewayClient = {
   connect: ConnectParams;
   connId?: string;
   clientIp?: string;
-  canvasHostUrl?: string;
-  canvasCapability?: string;
-  canvasCapabilityExpiresAtMs?: number;
   /** Internal-only auth context that cannot be supplied through gateway RPC payloads. */
   internal?: {
     allowModelOverride?: boolean;
@@ -98,7 +95,6 @@ export type GatewayRequestContext = {
     runtime: import("../../runtime.js").RuntimeEnv,
     prompter: import("../../wizard/prompts.js").WizardPrompter,
   ) => Promise<void>;
-  broadcastVoiceWakeChanged: (triggers: string[]) => void;
   autoMaintenance?: AutoMaintenanceServiceHandle;
 };
 

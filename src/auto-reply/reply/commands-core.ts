@@ -37,7 +37,6 @@ import {
   handleUsageCommand,
 } from "./commands-session.js";
 import { handleSubagentsCommand } from "./commands-subagents.js";
-import { handleTtsCommands } from "./commands-tts.js";
 import type {
   CommandHandler,
   CommandHandlerResult,
@@ -184,7 +183,6 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       handleUsageCommand,
       handleSessionCommand,
       handleRestartCommand,
-      handleTtsCommands,
       handleHelpCommand,
       handleCommandsListCommand,
       handleStatusCommand,

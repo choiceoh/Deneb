@@ -28,7 +28,6 @@ import {
   type SessionScope,
   updateSessionStore,
 } from "../../config/sessions.js";
-import type { TtsAutoMode } from "../../config/types.tts.js";
 import { archiveSessionTranscripts } from "../../gateway/session/session-utils.fs.js";
 import { resolveConversationIdFromTargets } from "../../infra/outbound/conversation-id.js";
 import { deliverSessionMaintenanceWarning } from "../../infra/session-maintenance-warning.js";
@@ -194,7 +193,6 @@ export async function initSessionState(params: {
   let persistedThinking: string | undefined;
   let persistedVerbose: string | undefined;
   let persistedReasoning: string | undefined;
-  let persistedTtsAuto: TtsAutoMode | undefined;
   let persistedModelOverride: string | undefined;
   let persistedProviderOverride: string | undefined;
   let persistedAuthProfileOverride: string | undefined;
@@ -325,7 +323,6 @@ export async function initSessionState(params: {
     persistedThinking = entry.thinkingLevel;
     persistedVerbose = entry.verboseLevel;
     persistedReasoning = entry.reasoningLevel;
-    persistedTtsAuto = entry.ttsAuto;
     persistedModelOverride = entry.modelOverride;
     persistedProviderOverride = entry.providerOverride;
     persistedAuthProfileOverride = entry.authProfileOverride;
@@ -338,13 +335,12 @@ export async function initSessionState(params: {
     systemSent = false;
     abortedLastRun = false;
     // When a reset trigger (/new, /reset) starts a new session, carry over
-    // user-set behavior overrides (verbose, thinking, reasoning, ttsAuto)
+    // user-set behavior overrides (verbose, thinking, reasoning)
     // so the user doesn't have to re-enable them every time.
     if (resetTriggered && entry) {
       persistedThinking = entry.thinkingLevel;
       persistedVerbose = entry.verboseLevel;
       persistedReasoning = entry.reasoningLevel;
-      persistedTtsAuto = entry.ttsAuto;
       persistedModelOverride = entry.modelOverride;
       persistedProviderOverride = entry.providerOverride;
       persistedAuthProfileOverride = entry.authProfileOverride;
@@ -397,7 +393,6 @@ export async function initSessionState(params: {
     thinkingLevel: persistedThinking ?? baseEntry?.thinkingLevel,
     verboseLevel: persistedVerbose ?? baseEntry?.verboseLevel,
     reasoningLevel: persistedReasoning ?? baseEntry?.reasoningLevel,
-    ttsAuto: persistedTtsAuto ?? baseEntry?.ttsAuto,
     responseUsage: baseEntry?.responseUsage,
     modelOverride: persistedModelOverride ?? baseEntry?.modelOverride,
     providerOverride: persistedProviderOverride ?? baseEntry?.providerOverride,

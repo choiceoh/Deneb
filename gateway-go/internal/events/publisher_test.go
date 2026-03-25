@@ -78,22 +78,6 @@ func TestPublisher_PublishAgentEvent_Sequencing(t *testing.T) {
 	pub.seqMu.Unlock()
 }
 
-func TestPublisher_PublishVoiceWakeChanged(t *testing.T) {
-	b := NewBroadcaster()
-	sub := &mockSubscriber{
-		id: "conn-1", authed: true, role: "operator",
-		scopes: []string{ScopeRead},
-	}
-	b.Subscribe(sub, Filter{})
-
-	pub := NewPublisher(b, nil, nil)
-	pub.PublishVoiceWakeChanged([]string{"deneb", "claude"})
-
-	if len(sub.received) != 1 {
-		t.Errorf("expected 1 event, got %d", len(sub.received))
-	}
-}
-
 func TestPublisher_EmptySessionKeySkipped(t *testing.T) {
 	b := NewBroadcaster()
 	pub := NewPublisher(b, nil, nil)

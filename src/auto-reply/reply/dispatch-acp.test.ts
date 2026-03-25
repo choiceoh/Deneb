@@ -34,14 +34,6 @@ const messageActionMocks = vi.hoisted(() => ({
   runMessageAction: vi.fn(async (_params: unknown) => ({ ok: true as const })),
 }));
 
-const ttsMocks = vi.hoisted(() => ({
-  maybeApplyTtsToPayload: vi.fn(async (paramsUnknown: unknown) => {
-    const params = paramsUnknown as { payload: unknown };
-    return params.payload;
-  }),
-  resolveTtsConfig: vi.fn((_cfg: DenebConfig) => ({ mode: "final" })),
-}));
-
 const sessionMetaMocks = vi.hoisted(() => ({
   readAcpSessionEntry: vi.fn<
     (params: { sessionKey: string; cfg?: DenebConfig }) => AcpSessionStoreEntry | null
@@ -69,11 +61,6 @@ vi.mock("./route-reply.js", () => ({
 
 vi.mock("../../infra/outbound/message-action-runner.js", () => ({
   runMessageAction: (params: unknown) => messageActionMocks.runMessageAction(params),
-}));
-
-vi.mock("../../tts/tts.js", () => ({
-  maybeApplyTtsToPayload: (params: unknown) => ttsMocks.maybeApplyTtsToPayload(params),
-  resolveTtsConfig: (cfg: DenebConfig) => ttsMocks.resolveTtsConfig(cfg),
 }));
 
 vi.mock("../../acp/runtime/session-meta.js", () => ({
@@ -225,9 +212,6 @@ describe("tryDispatchAcpReply", () => {
     routeMocks.routeReply.mockResolvedValue({ ok: true, messageId: "mock" });
     messageActionMocks.runMessageAction.mockReset();
     messageActionMocks.runMessageAction.mockResolvedValue({ ok: true as const });
-    ttsMocks.maybeApplyTtsToPayload.mockClear();
-    ttsMocks.resolveTtsConfig.mockReset();
-    ttsMocks.resolveTtsConfig.mockReturnValue({ mode: "final" });
     sessionMetaMocks.readAcpSessionEntry.mockReset();
     sessionMetaMocks.readAcpSessionEntry.mockReturnValue(null);
     bindingServiceMocks.listBySession.mockReset();

@@ -15,8 +15,8 @@ export * from "./types-provider.js";
 // Web search provider types
 export * from "./types-web-search.js";
 
-// Speech, media understanding, and image generation provider types
-export * from "./types-speech-media.js";
+// Media understanding and image generation provider types
+export * from "./types-media.js";
 
 // Plugin commands and conversation binding types
 export * from "./types-commands.js";

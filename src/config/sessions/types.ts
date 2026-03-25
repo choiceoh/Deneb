@@ -3,7 +3,6 @@ import type { Skill } from "@mariozechner/pi-coding-agent";
 import type { ChatType } from "../../channels/chat-type.js";
 import type { ChannelId } from "../../channels/plugins/types.js";
 import type { DeliveryContext } from "../../utils/delivery-context.js";
-import type { TtsAutoMode } from "../types.tts.js";
 
 export type SessionScope = "per-sender" | "global";
 
@@ -114,7 +113,6 @@ export type SessionEntry = {
   verboseLevel?: string;
   reasoningLevel?: string;
   elevatedLevel?: string;
-  ttsAuto?: TtsAutoMode;
   execHost?: string;
   execSecurity?: string;
   execAsk?: string;

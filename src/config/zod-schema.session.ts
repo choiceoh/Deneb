@@ -9,7 +9,6 @@ import {
   NativeCommandsSettingSchema,
   QueueSchema,
   TypingModeSchema,
-  TtsConfigSchema,
 } from "./zod-schema.core.js";
 import { sensitive } from "./zod-schema.sensitive.js";
 
@@ -187,7 +186,6 @@ export const MessagesSchema = z
       .strict()
       .optional(),
     suppressToolErrors: z.boolean().optional(),
-    tts: TtsConfigSchema,
   })
   .strict()
   .optional();

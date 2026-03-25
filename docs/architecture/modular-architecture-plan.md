@@ -43,7 +43,7 @@ The plan is organized into 5 phases, from low-risk structural improvements to fu
 | `src/gateway/`        | 266   | 67K        | 9+ modules                      | HIGH   |
 | `src/auto-reply/`     | ~40   | ~12K       | config, channels, agents, infra | MEDIUM |
 | `src/infra/outbound/` | ~70   | ~18K       | gateway/call, channels, config  | MEDIUM |
-| `src/plugins/`        | ~30   | ~8K        | config, media, tts, web-search  | LOW    |
+| `src/plugins/`        | ~30   | ~8K        | config, media, web-search       | LOW    |
 | `src/routing/`        | ~20   | ~6K        | config, agents, channels        | MEDIUM |
 | `src/channels/`       | ~25   | ~7K        | (minimal)                       | LOW    |
 | `src/agents/`         | ~35   | ~10K       | config, routing                 | MEDIUM |

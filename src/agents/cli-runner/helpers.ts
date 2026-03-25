@@ -8,7 +8,6 @@ import { KeyedAsyncQueue } from "deneb/plugin-sdk/keyed-async-queue";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
 import type { DenebConfig } from "../../config/config.js";
 import type { CliBackendConfig } from "../../config/types.js";
-import { buildTtsSystemPromptHint } from "../../tts/tts.js";
 import { isRecord } from "../../utils.js";
 import { buildModelAliasLines } from "../models/model-alias-lines.js";
 import { resolveDefaultModelForAgent } from "../models/model-selection.js";
@@ -71,7 +70,6 @@ export function buildSystemPrompt(params: {
       shell: detectRuntimeShell(),
     },
   });
-  const ttsHint = params.config ? buildTtsSystemPromptHint(params.config) : undefined;
   const ownerDisplay = resolveOwnerDisplaySetting(params.config);
   return buildAgentSystemPrompt({
     workspaceDir: params.workspaceDir,
@@ -91,7 +89,6 @@ export function buildSystemPrompt(params: {
     userTime,
     userTimeFormat,
     contextFiles: params.contextFiles,
-    ttsHint,
     memoryCitationsMode: params.config?.memory?.citations,
   });
 }

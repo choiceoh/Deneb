@@ -128,7 +128,6 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Images](/nodes/images)
 - [Audio](/nodes/audio)
 - [Location command](/nodes/location-command)
-- [Voice wake](/nodes/voicewake)
 - [Talk mode](/nodes/talk)
 
 ## Platforms
@@ -145,7 +144,6 @@ Use these hubs to discover every page, including deep dives and reference docs t
 
 - [macOS dev setup](/platforms/mac/dev-setup)
 - [macOS menu bar](/platforms/mac/menu-bar)
-- [macOS voice wake](/platforms/mac/voicewake)
 - [macOS voice overlay](/platforms/mac/voice-overlay)
 - [macOS WebChat](/platforms/mac/webchat)
 - [macOS Canvas](/platforms/mac/canvas)

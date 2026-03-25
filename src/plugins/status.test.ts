@@ -38,7 +38,6 @@ describe("buildPluginStatusReport", () => {
       diagnostics: [],
       channels: [],
       providers: [],
-      speechProviders: [],
       mediaUnderstandingProviders: [],
       imageGenerationProviders: [],
       webSearchProviders: [],
@@ -109,7 +108,6 @@ describe("buildPluginStatusReport", () => {
           hookNames: [],
           channelIds: [],
           providerIds: ["google"],
-          speechProviderIds: [],
           mediaUnderstandingProviderIds: ["google"],
           imageGenerationProviderIds: ["google"],
           webSearchProviderIds: ["google"],
@@ -126,7 +124,6 @@ describe("buildPluginStatusReport", () => {
       channels: [],
       channelSetups: [],
       providers: [],
-      speechProviders: [],
       mediaUnderstandingProviders: [],
       imageGenerationProviders: [],
       webSearchProviders: [],
@@ -194,7 +191,7 @@ describe("buildPluginStatusReport", () => {
           hookNames: [],
           channelIds: [],
           providerIds: [],
-          speechProviderIds: [],
+
           mediaUnderstandingProviderIds: [],
           imageGenerationProviderIds: [],
           webSearchProviderIds: [],
@@ -218,7 +215,7 @@ describe("buildPluginStatusReport", () => {
           hookNames: [],
           channelIds: [],
           providerIds: ["microsoft"],
-          speechProviderIds: [],
+
           mediaUnderstandingProviderIds: [],
           imageGenerationProviderIds: [],
           webSearchProviderIds: ["microsoft"],
@@ -235,7 +232,7 @@ describe("buildPluginStatusReport", () => {
       channels: [],
       channelSetups: [],
       providers: [],
-      speechProviders: [],
+
       mediaUnderstandingProviders: [],
       imageGenerationProviders: [],
       webSearchProviders: [],
@@ -293,7 +290,7 @@ describe("buildPluginStatusReport", () => {
           hookNames: [],
           channelIds: [],
           providerIds: [],
-          speechProviderIds: [],
+
           mediaUnderstandingProviderIds: [],
           imageGenerationProviderIds: [],
           webSearchProviderIds: [],
@@ -310,7 +307,7 @@ describe("buildPluginStatusReport", () => {
       channels: [],
       channelSetups: [],
       providers: [],
-      speechProviders: [],
+
       mediaUnderstandingProviders: [],
       imageGenerationProviders: [],
       webSearchProviders: [],
@@ -352,7 +349,7 @@ describe("buildPluginStatusReport", () => {
           hookNames: [],
           channelIds: [],
           providerIds: [],
-          speechProviderIds: [],
+
           mediaUnderstandingProviderIds: [],
           imageGenerationProviderIds: [],
           webSearchProviderIds: [],
@@ -376,7 +373,7 @@ describe("buildPluginStatusReport", () => {
           hookNames: [],
           channelIds: [],
           providerIds: ["legacy-only"],
-          speechProviderIds: [],
+
           mediaUnderstandingProviderIds: [],
           imageGenerationProviderIds: [],
           webSearchProviderIds: [],
@@ -393,7 +390,7 @@ describe("buildPluginStatusReport", () => {
       channels: [],
       channelSetups: [],
       providers: [],
-      speechProviders: [],
+
       mediaUnderstandingProviders: [],
       imageGenerationProviders: [],
       webSearchProviders: [],
@@ -458,7 +455,7 @@ describe("buildPluginStatusReport", () => {
           hookNames: [],
           channelIds: [],
           providerIds: ["modern"],
-          speechProviderIds: [],
+
           mediaUnderstandingProviderIds: [],
           imageGenerationProviderIds: [],
           webSearchProviderIds: [],
@@ -475,7 +472,7 @@ describe("buildPluginStatusReport", () => {
       channels: [],
       channelSetups: [],
       providers: [],
-      speechProviders: [],
+
       mediaUnderstandingProviders: [],
       imageGenerationProviders: [],
       webSearchProviders: [],
@@ -512,7 +509,7 @@ describe("buildPluginStatusReport", () => {
           hookNames: [],
           channelIds: [],
           providerIds: [],
-          speechProviderIds: [],
+
           mediaUnderstandingProviderIds: [],
           imageGenerationProviderIds: [],
           webSearchProviderIds: [],
@@ -529,7 +526,7 @@ describe("buildPluginStatusReport", () => {
       channels: [],
       channelSetups: [],
       providers: [],
-      speechProviders: [],
+
       mediaUnderstandingProviders: [],
       imageGenerationProviders: [],
       webSearchProviders: [],
@@ -566,7 +563,7 @@ describe("buildPluginStatusReport", () => {
           hookNames: [],
           channelIds: [],
           providerIds: ["plain"],
-          speechProviderIds: [],
+
           mediaUnderstandingProviderIds: [],
           imageGenerationProviderIds: [],
           webSearchProviderIds: [],
@@ -583,7 +580,7 @@ describe("buildPluginStatusReport", () => {
       channels: [],
       channelSetups: [],
       providers: [],
-      speechProviders: [],
+
       mediaUnderstandingProviders: [],
       imageGenerationProviders: [],
       webSearchProviders: [],

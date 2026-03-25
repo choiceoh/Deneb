@@ -303,7 +303,6 @@ Plugins export either:
 - `on(...)` for typed lifecycle hooks
 - `registerChannel`
 - `registerProvider`
-- `registerSpeechProvider`
 - `registerMediaUnderstandingProvider`
 - `registerWebSearchProvider`
 - `registerHttpRoute`

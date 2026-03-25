@@ -76,7 +76,6 @@ export type BuildGatewayRequestContextParams = {
   stopChannel: (channel: ChannelId, accountId?: string) => Promise<void>;
   markChannelLoggedOut: (channelId: ChannelId, cleared: boolean, accountId?: string) => void;
   wizardRunner: GatewayRequestContext["wizardRunner"];
-  broadcastVoiceWakeChanged: (triggers: string[]) => void;
   autoMaintenance?: AutoMaintenanceServiceHandle;
 };
 
@@ -122,7 +121,6 @@ export function buildGatewayRequestContext(
     stopChannel,
     markChannelLoggedOut,
     wizardRunner,
-    broadcastVoiceWakeChanged,
     autoMaintenance,
   } = params;
 
@@ -184,7 +182,6 @@ export function buildGatewayRequestContext(
     stopChannel,
     markChannelLoggedOut,
     wizardRunner,
-    broadcastVoiceWakeChanged,
     autoMaintenance,
   };
 }

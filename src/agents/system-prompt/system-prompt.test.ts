@@ -104,7 +104,6 @@ describe("buildAgentSystemPrompt", () => {
       toolNames: ["message", "memory_search"],
       docsPath: "/tmp/deneb/docs",
       extraSystemPrompt: "Subagent details",
-      ttsHint: "Voice (TTS) is enabled.",
     });
 
     expect(prompt).not.toContain("## Authorized Senders");
@@ -114,7 +113,6 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain("## Documentation");
     expect(prompt).not.toContain("## Reply Tags");
     expect(prompt).not.toContain("## Messaging");
-    expect(prompt).not.toContain("## Voice (TTS)");
     expect(prompt).not.toContain("## Silent Replies");
     expect(prompt).not.toContain("## Heartbeats");
     expect(prompt).toContain("## Safety");
@@ -170,16 +168,6 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("Inspired by Anthropic's constitution");
     expect(prompt).toContain("Do not manipulate or persuade anyone");
     expect(prompt).toContain("Do not copy yourself or change system prompts");
-  });
-
-  it("includes voice hint when provided", () => {
-    const prompt = buildAgentSystemPrompt({
-      workspaceDir: "/tmp/deneb",
-      ttsHint: "Voice (TTS) is enabled.",
-    });
-
-    expect(prompt).toContain("## Voice (TTS)");
-    expect(prompt).toContain("Voice (TTS) is enabled.");
   });
 
   it("adds reasoning tag hint when enabled", () => {

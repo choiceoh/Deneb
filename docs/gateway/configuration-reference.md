@@ -1654,54 +1654,6 @@ Variables are case-insensitive. `{think}` is an alias for `{thinkingLevel}`.
 
 Batches rapid text-only messages from the same sender into a single agent turn. Media/attachments flush immediately. Control commands bypass debouncing.
 
-### TTS (text-to-speech)
-
-```json5
-{
-  messages: {
-    tts: {
-      auto: "always", // off | always | inbound | tagged
-      mode: "final", // final | all
-      provider: "elevenlabs",
-      summaryModel: "openai/gpt-4.1-mini",
-      modelOverrides: { enabled: true },
-      maxTextLength: 4000,
-      timeoutMs: 30000,
-      prefsPath: "~/.deneb/settings/tts.json",
-      elevenlabs: {
-        apiKey: "elevenlabs_api_key",
-        baseUrl: "https://api.elevenlabs.io",
-        voiceId: "voice_id",
-        modelId: "eleven_multilingual_v2",
-        seed: 42,
-        applyTextNormalization: "auto",
-        languageCode: "en",
-        voiceSettings: {
-          stability: 0.5,
-          similarityBoost: 0.75,
-          style: 0.0,
-          useSpeakerBoost: true,
-          speed: 1.0,
-        },
-      },
-      openai: {
-        apiKey: "openai_api_key",
-        baseUrl: "https://api.openai.com/v1",
-        model: "gpt-4o-mini-tts",
-        voice: "alloy",
-      },
-    },
-  },
-}
-```
-
-- `auto` controls auto-TTS. `/tts off|always|inbound|tagged` overrides per session.
-- `summaryModel` overrides `agents.defaults.model.primary` for auto-summary.
-- `modelOverrides` is enabled by default; `modelOverrides.allowProvider` defaults to `false` (opt-in).
-- API keys fall back to `ELEVENLABS_API_KEY`/`XI_API_KEY` and `OPENAI_API_KEY`.
-- `openai.baseUrl` overrides the OpenAI TTS endpoint. Resolution order is config, then `OPENAI_TTS_BASE_URL`, then `https://api.openai.com/v1`.
-- When `openai.baseUrl` points to a non-OpenAI endpoint, Deneb treats it as an OpenAI-compatible TTS server and relaxes model/voice validation.
-
 ---
 
 ## Talk
