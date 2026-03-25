@@ -11,14 +11,17 @@ impl Palette {
         Style::new().color256(202) // #FF5A2D approx
     }
 
+    #[allow(dead_code)]
     pub fn accent_bright() -> Style {
         Style::new().color256(209) // #FF7A3D approx
     }
 
+    #[allow(dead_code)]
     pub fn accent_dim() -> Style {
         Style::new().color256(166) // #D14A22 approx
     }
 
+    #[allow(dead_code)]
     pub fn info() -> Style {
         Style::new().color256(209) // #FF8A5B approx
     }
@@ -43,6 +46,7 @@ impl Palette {
         Style::new().bold()
     }
 
+    #[allow(dead_code)]
     pub fn dim() -> Style {
         Style::new().dim()
     }

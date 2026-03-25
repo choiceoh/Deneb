@@ -8,8 +8,10 @@
 // after the Go gateway signals that the bridge is ready.
 
 import { listChannelPlugins } from "../channels/plugins/index.js";
+import type { ChannelGatewayContext } from "../channels/plugins/types.adapters.js";
 import type { ChannelAccountSnapshot } from "../channels/plugins/types.js";
 import { loadConfig } from "../config/config.js";
+import type { DenebConfig } from "../config/types.deneb.js";
 import { computeBackoff, sleepWithAbort, type BackoffPolicy } from "../infra/backoff.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { RuntimeEnv } from "../runtime.js";
@@ -167,9 +169,9 @@ export async function startAllChannels(): Promise<{
 type RunChannelParams = {
   channelId: string;
   accountId: string;
-  startAccount: (ctx: Record<string, unknown>) => Promise<void>;
+  startAccount: (ctx: ChannelGatewayContext) => Promise<unknown>;
   account: unknown;
-  cfg: unknown;
+  cfg: DenebConfig;
   runtimeEnv: RuntimeEnv;
   abort: AbortController;
   log: ReturnType<typeof createSubsystemLogger>;
