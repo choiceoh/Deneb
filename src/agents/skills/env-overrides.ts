@@ -2,11 +2,20 @@ import type { DenebConfig } from "../../config/config.js";
 import { normalizeResolvedSecretInputString } from "../../config/types.secrets.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { sanitizeEnvVars, validateEnvVarValue } from "../sandbox/sanitize-env-vars.js";
-import { resolveSkillConfig } from "./config.js";
-import { resolveSkillKey } from "./frontmatter.js";
 import type { SkillEntry, SkillSnapshot } from "./types.js";
 
 const log = createSubsystemLogger("env-overrides");
+
+/** Resolve the skill-specific config entry from the top-level config. */
+function resolveSkillConfig(config: DenebConfig | undefined, skillKey: string) {
+  const entry = config?.skills?.entries?.[skillKey];
+  return entry && typeof entry === "object" ? entry : undefined;
+}
+
+/** Resolve the skill key, preferring metadata.skillKey over the skill name. */
+function resolveSkillKey(skill: SkillEntry["skill"], entry: SkillEntry) {
+  return entry?.metadata?.skillKey ?? skill.name;
+}
 
 type EnvUpdate = { key: string };
 type SkillConfig = NonNullable<ReturnType<typeof resolveSkillConfig>>;

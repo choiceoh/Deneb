@@ -29,6 +29,7 @@ func RegisterSkillMethods(d *Dispatcher, deps SkillDeps) {
 	d.Register("skills.commands", skillsCommands(deps))
 	d.Register("skills.discover", skillsDiscover(deps))
 	d.Register("skills.workspace_status", skillsWorkspaceStatus(deps))
+	d.Register("skills.entries", skillsEntries(deps))
 }
 
 func skillsStatus(deps SkillDeps) HandlerFunc {
@@ -271,6 +272,57 @@ func skillsDiscover(deps SkillDeps) HandlerFunc {
 		return protocol.MustResponseOK(req.ID, map[string]any{
 			"ok":    true,
 			"count": len(entries),
+		})
+	}
+}
+
+// skillsEntries returns the full discovered skill entries for a workspace.
+// Used by TS consumers that need the raw SkillEntry objects (e.g., skills-status, skills-install).
+func skillsEntries(_ SkillDeps) HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			WorkspaceDir     string            `json:"workspaceDir"`
+			BundledSkillsDir string            `json:"bundledSkillsDir,omitempty"`
+			ManagedSkillsDir string            `json:"managedSkillsDir,omitempty"`
+			ExtraDirs        []string          `json:"extraDirs,omitempty"`
+			PluginSkillDirs  []string          `json:"pluginSkillDirs,omitempty"`
+			SkillConfigs     map[string]skills.SkillConfig `json:"skillConfigs,omitempty"`
+			AllowBundled     []string          `json:"allowBundled,omitempty"`
+			SkillFilter      []string          `json:"skillFilter,omitempty"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}
+		if p.WorkspaceDir == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "workspaceDir is required"))
+		}
+
+		entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{
+			WorkspaceDir:     p.WorkspaceDir,
+			BundledSkillsDir: p.BundledSkillsDir,
+			ManagedSkillsDir: p.ManagedSkillsDir,
+			ExtraDirs:        p.ExtraDirs,
+			PluginSkillDirs:  p.PluginSkillDirs,
+		})
+
+		// Optionally filter by eligibility.
+		if p.SkillConfigs != nil || p.AllowBundled != nil {
+			ctx := skills.DefaultEligibilityContext()
+			if p.SkillConfigs != nil {
+				ctx.SkillConfigs = p.SkillConfigs
+			}
+			if p.AllowBundled != nil {
+				ctx.AllowBundled = p.AllowBundled
+			}
+			entries = skills.FilterEligibleSkills(entries, ctx)
+		}
+
+		entries = skills.FilterBySkillFilter(entries, p.SkillFilter)
+
+		return protocol.MustResponseOK(req.ID, map[string]any{
+			"entries": entries,
 		})
 	}
 }

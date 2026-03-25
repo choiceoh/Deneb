@@ -8,10 +8,19 @@
  * @module
  */
 
-import type { SkillCommandSpec, SkillSnapshot } from "./types.js";
+import type { Skill, SkillCommandSpec, SkillEntry, SkillSnapshot } from "./types.js";
 
 // Re-export types that consumers need.
-export type { SkillCommandSpec, SkillSnapshot } from "./types.js";
+export type {
+  DenebSkillMetadata,
+  Skill,
+  SkillCommandSpec,
+  SkillEligibilityContext,
+  SkillEntry,
+  SkillInstallSpec,
+  SkillSnapshot,
+  SkillsInstallPreferences,
+} from "./types.js";
 
 /**
  * Options for loading a skill snapshot from the Go gateway.
@@ -23,7 +32,10 @@ export type SkillSnapshotOptions = {
   extraDirs?: string[];
   pluginSkillDirs?: string[];
   skillFilter?: string[];
-  skillConfigs?: Record<string, { enabled?: boolean; apiKey?: string; env?: Record<string, string> }>;
+  skillConfigs?: Record<
+    string,
+    { enabled?: boolean; apiKey?: string; env?: Record<string, string> }
+  >;
   allowBundled?: string[];
   configValues?: Record<string, boolean>;
   envVars?: Record<string, string>;
@@ -39,7 +51,10 @@ export type SkillCommandsOptions = {
   extraDirs?: string[];
   pluginSkillDirs?: string[];
   skillFilter?: string[];
-  skillConfigs?: Record<string, { enabled?: boolean; apiKey?: string; env?: Record<string, string> }>;
+  skillConfigs?: Record<
+    string,
+    { enabled?: boolean; apiKey?: string; env?: Record<string, string> }
+  >;
   allowBundled?: string[];
   reservedNames?: string[];
 };
@@ -126,9 +141,7 @@ export async function loadSkillSnapshot(opts: SkillSnapshotOptions): Promise<Ski
  * Load skill command specs from the Go gateway.
  * Returns slash command specifications for eligible skills.
  */
-export async function loadSkillCommands(
-  opts: SkillCommandsOptions,
-): Promise<SkillCommandSpec[]> {
+export async function loadSkillCommands(opts: SkillCommandsOptions): Promise<SkillCommandSpec[]> {
   const result = await callRpc<{ commands: SkillCommandSpec[] }>(
     "skills.commands",
     opts as unknown as Record<string, unknown>,
@@ -151,7 +164,10 @@ export async function getSkillStatus(
   opts?: {
     bundledSkillsDir?: string;
     extraDirs?: string[];
-    skillConfigs?: Record<string, { enabled?: boolean; apiKey?: string; env?: Record<string, string> }>;
+    skillConfigs?: Record<
+      string,
+      { enabled?: boolean; apiKey?: string; env?: Record<string, string> }
+    >;
     allowBundled?: string[];
   },
 ): Promise<SkillStatusReport> {
@@ -176,4 +192,30 @@ export async function discoverSkills(
     workspaceDir,
     ...opts,
   });
+}
+
+/**
+ * Load raw skill entries from the Go gateway.
+ * Returns the full SkillEntry objects needed by consumers like skills-status and skills-install.
+ */
+export async function loadSkillEntries(
+  workspaceDir: string,
+  opts?: {
+    bundledSkillsDir?: string;
+    managedSkillsDir?: string;
+    extraDirs?: string[];
+    pluginSkillDirs?: string[];
+    skillConfigs?: Record<
+      string,
+      { enabled?: boolean; apiKey?: string; env?: Record<string, string> }
+    >;
+    allowBundled?: string[];
+    skillFilter?: string[];
+  },
+): Promise<SkillEntry[]> {
+  const result = await callRpc<{ entries: SkillEntry[] }>("skills.entries", {
+    workspaceDir,
+    ...opts,
+  });
+  return result.entries ?? [];
 }

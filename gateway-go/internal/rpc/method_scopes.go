@@ -87,6 +87,7 @@ var methodScopes = map[string]auth.Scope{
 	"skills.commands":         auth.ScopeRead,
 	"skills.discover":         auth.ScopeRead,
 	"skills.workspace_status": auth.ScopeRead,
+	"skills.entries":          auth.ScopeRead,
 	"tools.catalog":  auth.ScopeRead,
 
 	// --- Process (write) ---
