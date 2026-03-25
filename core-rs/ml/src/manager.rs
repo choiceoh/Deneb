@@ -278,14 +278,12 @@ impl ModelManager {
 
     #[cfg(feature = "llama")]
     fn load_model(config: &ModelConfig) -> Result<LoadedModel, MlError> {
-        use llama_cpp_2::model::LlamaModel;
-        use llama_cpp_2::model::params::LlamaModelParams;
         use llama_cpp_2::llama_backend::LlamaBackend;
+        use llama_cpp_2::model::params::LlamaModelParams;
+        use llama_cpp_2::model::LlamaModel;
 
         if !config.path.is_file() {
-            return Err(MlError::ModelNotFound(
-                config.path.display().to_string(),
-            ));
+            return Err(MlError::ModelNotFound(config.path.display().to_string()));
         }
 
         // Initialize backend (idempotent via once_cell internally).

@@ -308,11 +308,7 @@ pub mod napi_exports {
         end: u32,
     ) -> Vec<JsStyleSpan> {
         let internal = to_internal(spans);
-        to_js(slice_style_spans(
-            &internal,
-            start as usize,
-            end as usize,
-        ))
+        to_js(slice_style_spans(&internal, start as usize, end as usize))
     }
 
     #[napi]

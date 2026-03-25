@@ -164,7 +164,10 @@ fn clean_candidate(raw: &str) -> &str {
     // Strip trailing punctuation.
     while !s.is_empty() {
         let last = s.as_bytes()[s.len() - 1];
-        if matches!(last, b'`' | b'"' | b'\'' | b'\\' | b'}' | b')' | b']' | b',') {
+        if matches!(
+            last,
+            b'`' | b'"' | b'\'' | b'\\' | b'}' | b')' | b']' | b','
+        ) {
             s = &s[..s.len() - 1];
         } else {
             break;
@@ -443,7 +446,8 @@ mod tests {
 
     #[test]
     fn single_url_token() {
-        let result = split_media_from_output("Here is an image\nMEDIA: https://example.com/image.png");
+        let result =
+            split_media_from_output("Here is an image\nMEDIA: https://example.com/image.png");
         assert_eq!(result.media_urls, vec!["https://example.com/image.png"]);
         assert!(result.media_url.is_some());
         assert!(result.text.contains("Here is an image"));

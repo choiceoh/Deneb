@@ -81,7 +81,9 @@ pub fn extension_for_mime(mime: &str) -> &'static str {
 
 /// Get the media category for a MIME type.
 pub fn category_for_mime(mime: &str) -> MediaCategory {
-    lookup_mime(mime).map(|(_, cat)| cat).unwrap_or(MediaCategory::Unknown)
+    lookup_mime(mime)
+        .map(|(_, cat)| cat)
+        .unwrap_or(MediaCategory::Unknown)
 }
 
 /// Look up MIME info from the mapping table in a single pass.
@@ -142,7 +144,10 @@ mod tests {
         assert_eq!(category_for_mime("image/png"), MediaCategory::Image);
         assert_eq!(category_for_mime("audio/flac"), MediaCategory::Audio);
         assert_eq!(category_for_mime("video/webm"), MediaCategory::Video);
-        assert_eq!(category_for_mime("application/pdf"), MediaCategory::Document);
+        assert_eq!(
+            category_for_mime("application/pdf"),
+            MediaCategory::Document
+        );
         assert_eq!(category_for_mime("application/zip"), MediaCategory::Archive);
         assert_eq!(category_for_mime("application/json"), MediaCategory::Text);
     }

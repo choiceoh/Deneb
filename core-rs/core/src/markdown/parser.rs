@@ -328,11 +328,7 @@ impl RenderState {
         }
         let start = link.label_start;
         let end = self.text_len();
-        self.links_mut().push(LinkSpan {
-            start,
-            end,
-            href,
-        });
+        self.links_mut().push(LinkSpan { start, end, href });
     }
 
     fn close_remaining_styles(&mut self) {
@@ -416,7 +412,9 @@ fn preprocess_spoilers(text: &str) -> String {
 
 fn trim_cell(cell: &TableCell) -> TableCell {
     let text = &cell.text;
-    let start = text.find(|c: char| !c.is_whitespace()).unwrap_or(text.len());
+    let start = text
+        .find(|c: char| !c.is_whitespace())
+        .unwrap_or(text.len());
     let end = text
         .rfind(|c: char| !c.is_whitespace())
         .map(|i| i + text[i..].chars().next().unwrap().len_utf8())
@@ -1125,7 +1123,10 @@ mod tests {
     fn code_block() {
         let ir = parse("```\ncode\n```");
         assert!(ir.text.contains("code"));
-        assert!(ir.styles.iter().any(|s| s.style == MarkdownStyle::CodeBlock));
+        assert!(ir
+            .styles
+            .iter()
+            .any(|s| s.style == MarkdownStyle::CodeBlock));
     }
 
     #[test]
@@ -1210,23 +1211,14 @@ mod tests {
             },
         );
         assert_eq!(ir.text.trim(), "hidden");
-        assert!(ir
-            .styles
-            .iter()
-            .any(|s| s.style == MarkdownStyle::Spoiler));
+        assert!(ir.styles.iter().any(|s| s.style == MarkdownStyle::Spoiler));
     }
 
     #[test]
     fn nested_styles() {
         let ir = parse("**bold *and italic***");
-        assert!(ir
-            .styles
-            .iter()
-            .any(|s| s.style == MarkdownStyle::Bold));
-        assert!(ir
-            .styles
-            .iter()
-            .any(|s| s.style == MarkdownStyle::Italic));
+        assert!(ir.styles.iter().any(|s| s.style == MarkdownStyle::Bold));
+        assert!(ir.styles.iter().any(|s| s.style == MarkdownStyle::Italic));
     }
 
     #[test]
@@ -1265,8 +1257,16 @@ mod tests {
             },
         );
         // First column is label (bold), other columns as "Header: Value" bullets
-        assert!(ir.text.contains("Value: 1"), "expected 'Value: 1' in {:?}", ir.text);
-        assert!(ir.text.contains("Value: 2"), "expected 'Value: 2' in {:?}", ir.text);
+        assert!(
+            ir.text.contains("Value: 1"),
+            "expected 'Value: 1' in {:?}",
+            ir.text
+        );
+        assert!(
+            ir.text.contains("Value: 2"),
+            "expected 'Value: 2' in {:?}",
+            ir.text
+        );
         assert!(ir.text.contains("A"), "expected label 'A' in {:?}", ir.text);
         assert!(ir.text.contains("B"), "expected label 'B' in {:?}", ir.text);
     }

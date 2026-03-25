@@ -945,7 +945,9 @@ pub unsafe extern "C" fn deneb_extract_links(
             #[serde(default = "default_max_links")]
             max_links: usize,
         }
-        fn default_max_links() -> usize { 5 }
+        fn default_max_links() -> usize {
+            5
+        }
 
         let config: ConfigInput = match serde_json::from_str(config_str) {
             Ok(c) => c,
@@ -1014,10 +1016,7 @@ pub unsafe extern "C" fn deneb_html_to_markdown(
 /// # Safety
 /// `input_ptr` must be valid UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn deneb_base64_estimate(
-    input_ptr: *const u8,
-    input_len: usize,
-) -> i64 {
+pub unsafe extern "C" fn deneb_base64_estimate(input_ptr: *const u8, input_len: usize) -> i64 {
     if input_ptr.is_null() {
         return -1;
     }
@@ -1164,7 +1163,10 @@ pub unsafe extern "C" fn deneb_markdown_to_ir(
             markdown::parser::ParseOptions::default()
         };
         let (ir, has_tables) = markdown::parser::markdown_to_ir_with_meta(md_str, &options);
-        let has_code_blocks = ir.styles.iter().any(|s| s.style == markdown::spans::MarkdownStyle::CodeBlock);
+        let has_code_blocks = ir
+            .styles
+            .iter()
+            .any(|s| s.style == markdown::spans::MarkdownStyle::CodeBlock);
         #[derive(serde::Serialize)]
         struct IrOutput<'a> {
             text: &'a str,
@@ -1510,9 +1512,8 @@ mod tests {
     fn test_vega_execute_stub() {
         let cmd = r#"{"command":"search","query":"test"}"#;
         let mut out = [0u8; 256];
-        let len = unsafe {
-            deneb_vega_execute(cmd.as_ptr(), cmd.len(), out.as_mut_ptr(), out.len())
-        };
+        let len =
+            unsafe { deneb_vega_execute(cmd.as_ptr(), cmd.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
         let result = std::str::from_utf8(&out[..len as usize]).unwrap();
         assert!(result.contains("vega_not_implemented"));
@@ -1522,9 +1523,8 @@ mod tests {
     fn test_vega_search_stub() {
         let query = r#"{"query":"test"}"#;
         let mut out = [0u8; 256];
-        let len = unsafe {
-            deneb_vega_search(query.as_ptr(), query.len(), out.as_mut_ptr(), out.len())
-        };
+        let len =
+            unsafe { deneb_vega_search(query.as_ptr(), query.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
         let result = std::str::from_utf8(&out[..len as usize]).unwrap();
         assert!(result.contains("results"));
@@ -1534,9 +1534,8 @@ mod tests {
     fn test_ml_embed_stub() {
         let input = r#"{"texts":["hello world"]}"#;
         let mut out = [0u8; 256];
-        let len = unsafe {
-            deneb_ml_embed(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len())
-        };
+        let len =
+            unsafe { deneb_ml_embed(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
         let result = std::str::from_utf8(&out[..len as usize]).unwrap();
         assert!(result.contains("embeddings"));
@@ -1546,9 +1545,8 @@ mod tests {
     fn test_ml_rerank_stub() {
         let input = r#"{"query":"test","documents":["doc1","doc2"]}"#;
         let mut out = [0u8; 256];
-        let len = unsafe {
-            deneb_ml_rerank(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len())
-        };
+        let len =
+            unsafe { deneb_ml_rerank(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
         let result = std::str::from_utf8(&out[..len as usize]).unwrap();
         assert!(result.contains("ranked"));
@@ -1561,9 +1559,12 @@ mod tests {
         let mut out = [0u8; 1024];
         let len = unsafe {
             deneb_extract_links(
-                text.as_ptr(), text.len(),
-                config.as_ptr(), config.len(),
-                out.as_mut_ptr(), out.len(),
+                text.as_ptr(),
+                text.len(),
+                config.as_ptr(),
+                config.len(),
+                out.as_mut_ptr(),
+                out.len(),
             )
         };
         assert!(len > 0);
@@ -1574,7 +1575,8 @@ mod tests {
 
     #[test]
     fn test_html_to_markdown_ffi() {
-        let html = "<html><head><title>Test</title></head><body><h1>Hello</h1><p>World</p></body></html>";
+        let html =
+            "<html><head><title>Test</title></head><body><h1>Hello</h1><p>World</p></body></html>";
         let mut out = [0u8; 4096];
         let len = unsafe {
             deneb_html_to_markdown(html.as_ptr(), html.len(), out.as_mut_ptr(), out.len())

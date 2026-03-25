@@ -2,11 +2,7 @@
 
 use crate::protocol::validation::*;
 
-fn validate_empty_object(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
+fn validate_empty_object(value: &serde_json::Value, path: &str, errors: &mut Vec<ValidationError>) {
     if !require_object(value, path, errors) {
         return;
     }

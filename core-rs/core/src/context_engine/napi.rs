@@ -5,18 +5,18 @@
 //! 2. **Expand engine** — DAG traversal with token budgeting
 //! 3. **Pure functions** — grep/describe delegated directly to host
 
-use super::assembler::{AssemblyEngine, AssemblyResponse};
 #[cfg(test)]
 use super::assembler::AssemblyCommand;
+use super::assembler::{AssemblyEngine, AssemblyResponse};
+#[cfg(test)]
+use super::retrieval::RetrievalCommand;
 use super::retrieval::{
     DescribeEngine, ExpandEngine, GrepEngine, GrepMode, GrepScope, RetrievalResponse,
 };
-#[cfg(test)]
-use super::retrieval::RetrievalCommand;
 use super::{estimate_tokens, AuroraConfig};
-use std::sync::Mutex;
 #[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::*;
+use std::sync::Mutex;
 
 // ── Handle stores ────────────────────────────────────────────────────────────
 
@@ -62,11 +62,7 @@ impl ContextEngineStore {
 
 /// Create a new assembly engine. Returns a handle (u32).
 #[cfg_attr(feature = "napi_binding", napi)]
-pub fn context_assembly_new(
-    conversation_id: u32,
-    token_budget: u32,
-    fresh_tail_count: u32,
-) -> u32 {
+pub fn context_assembly_new(conversation_id: u32, token_budget: u32, fresh_tail_count: u32) -> u32 {
     let engine = AssemblyEngine::new(
         conversation_id as u64,
         token_budget as u64,
@@ -289,8 +285,7 @@ pub fn context_resolve_config(config_json: String) -> String {
     match serde_json::from_str::<AuroraConfig>(&config_json) {
         Ok(config) => {
             let validated = config.validated();
-            serde_json::to_string(&validated)
-                .unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+            serde_json::to_string(&validated).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
         }
         Err(e) => {
             // Return defaults on parse failure
@@ -323,7 +318,8 @@ mod tests {
         assert!(matches!(cmd, AssemblyCommand::FetchContextItems { .. }));
 
         // Empty items → Done
-        let resp = serde_json::to_string(&AssemblyResponse::ContextItems { items: vec![] }).unwrap();
+        let resp =
+            serde_json::to_string(&AssemblyResponse::ContextItems { items: vec![] }).unwrap();
         let cmd_json = context_assembly_step(handle, resp);
         let cmd: AssemblyCommand = serde_json::from_str(&cmd_json).unwrap();
         assert!(matches!(cmd, AssemblyCommand::Done { .. }));

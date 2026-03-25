@@ -302,7 +302,12 @@ pub fn validate_wake_params(
     let obj = value.as_object().unwrap();
     check_no_additional_properties(obj, &["mode", "text"], path, errors);
     if check_required(obj, "mode", path, errors) {
-        check_string_enum(&obj["mode"], &format!("{path}/mode"), &["now", "next-heartbeat"], errors);
+        check_string_enum(
+            &obj["mode"],
+            &format!("{path}/mode"),
+            &["now", "next-heartbeat"],
+            errors,
+        );
     }
     if check_required(obj, "text", path, errors) {
         check_non_empty_string(&obj["text"], &format!("{path}/text"), errors);

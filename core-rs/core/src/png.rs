@@ -2,7 +2,6 @@
 ///
 /// Ports `crc32`, `pngChunk`, `fillPixel`, and `encodePngRgba` from
 /// `src/media/png-encode.ts`.
-
 use flate2::Compression;
 #[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::Buffer;
@@ -63,16 +62,7 @@ fn png_chunk(chunk_type: &[u8; 4], data: &[u8]) -> Vec<u8> {
 }
 
 /// Write a pixel to an RGBA buffer. Ignores out-of-bounds writes.
-pub fn fill_pixel_impl(
-    buf: &mut [u8],
-    x: i32,
-    y: i32,
-    width: i32,
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
-) {
+pub fn fill_pixel_impl(buf: &mut [u8], x: i32, y: i32, width: i32, r: u8, g: u8, b: u8, a: u8) {
     if x < 0 || y < 0 || x >= width {
         return;
     }
@@ -195,7 +185,10 @@ mod tests {
         // 1x1 red pixel
         let buffer = vec![255, 0, 0, 255];
         let png = encode_png_rgba_impl(&buffer, 1, 1);
-        assert_eq!(&png[0..8], &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        assert_eq!(
+            &png[0..8],
+            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        );
     }
 
     #[test]

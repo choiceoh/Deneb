@@ -45,11 +45,7 @@ impl LocalReranker {
     /// Score each document against the query, returning relevance scores (0.0–1.0).
     ///
     /// Returns one `RankedDocument` per input document, in the original order.
-    pub fn rerank(
-        &self,
-        query: &str,
-        documents: &[&str],
-    ) -> Result<Vec<RankedDocument>, MlError> {
+    pub fn rerank(&self, query: &str, documents: &[&str]) -> Result<Vec<RankedDocument>, MlError> {
         if documents.is_empty() {
             return Ok(vec![]);
         }
@@ -85,7 +81,11 @@ impl LocalReranker {
         k: usize,
     ) -> Result<Vec<RankedDocument>, MlError> {
         let mut ranked = self.rerank(query, documents)?;
-        ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        ranked.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         ranked.truncate(k);
         Ok(ranked)
     }
@@ -101,8 +101,7 @@ impl LocalReranker {
         use llama_cpp_2::context::params::LlamaContextParams;
         use llama_cpp_2::llama_batch::LlamaBatch;
 
-        let ctx_params = LlamaContextParams::default()
-            .with_n_ctx(std::num::NonZeroU32::new(512));
+        let ctx_params = LlamaContextParams::default().with_n_ctx(std::num::NonZeroU32::new(512));
         let mut ctx = model
             .new_context(None, ctx_params)
             .map_err(|e| MlError::InferenceFailed(format!("context creation: {e}")))?;
@@ -158,8 +157,7 @@ impl LocalReranker {
             .map_err(|e| MlError::InferenceFailed(format!("decode: {e}")))?;
 
         // Get logits for the last token position and find "yes" token logprob.
-        let logits = ctx
-            .candidates_ith(tokens.len() as i32 - 1);
+        let logits = ctx.candidates_ith(tokens.len() as i32 - 1);
 
         // Find the "yes" and "no" token IDs.
         let yes_id = model

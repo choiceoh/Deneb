@@ -498,9 +498,7 @@ pub fn validate_sessions_usage_params(
     static DATE_RE: once_cell::sync::Lazy<regex::Regex> =
         once_cell::sync::Lazy::new(|| regex::Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap());
     static UTC_OFFSET_RE: once_cell::sync::Lazy<regex::Regex> =
-        once_cell::sync::Lazy::new(|| {
-            regex::Regex::new(r"^UTC[+-]\d{1,2}(?::[0-5]\d)?$").unwrap()
-        });
+        once_cell::sync::Lazy::new(|| regex::Regex::new(r"^UTC[+-]\d{1,2}(?::[0-5]\d)?$").unwrap());
 
     check_optional(obj, "key", path, errors, |v, p, e| {
         check_non_empty_string(v, p, e);
@@ -566,8 +564,12 @@ mod tests {
     fn test_sessions_send_missing_required() {
         let mut errors = Vec::new();
         validate_sessions_send_params(&json!({}), "", &mut errors);
-        assert!(errors.iter().any(|e| e.keyword == "required" && e.path.contains("key")));
-        assert!(errors.iter().any(|e| e.keyword == "required" && e.path.contains("message")));
+        assert!(errors
+            .iter()
+            .any(|e| e.keyword == "required" && e.path.contains("key")));
+        assert!(errors
+            .iter()
+            .any(|e| e.keyword == "required" && e.path.contains("message")));
     }
 
     #[test]
@@ -589,7 +591,10 @@ mod tests {
             "",
             &mut errors,
         );
-        assert!(errors.is_empty(), "null values should be accepted for nullable fields");
+        assert!(
+            errors.is_empty(),
+            "null values should be accepted for nullable fields"
+        );
     }
 
     #[test]
@@ -606,19 +611,11 @@ mod tests {
     #[test]
     fn test_sessions_usage_date_pattern() {
         let mut errors = Vec::new();
-        validate_sessions_usage_params(
-            &json!({"startDate": "2024-01-15"}),
-            "",
-            &mut errors,
-        );
+        validate_sessions_usage_params(&json!({"startDate": "2024-01-15"}), "", &mut errors);
         assert!(errors.is_empty());
 
         let mut errors = Vec::new();
-        validate_sessions_usage_params(
-            &json!({"startDate": "not-a-date"}),
-            "",
-            &mut errors,
-        );
+        validate_sessions_usage_params(&json!({"startDate": "not-a-date"}), "", &mut errors);
         assert!(errors.iter().any(|e| e.keyword == "pattern"));
     }
 }

@@ -69,19 +69,17 @@ pub fn merge_hybrid_results(params: &MergeParams) -> Vec<MergedResult> {
         .collect();
 
     // Apply temporal decay (pure path-based only, no filesystem)
-    let decay_config = params
-        .temporal_decay
-        .as_ref()
-        .cloned()
-        .unwrap_or_default();
+    let decay_config = params.temporal_decay.as_ref().cloned().unwrap_or_default();
 
     if decay_config.enabled {
-        let now_ms = params.now_ms.unwrap_or_else(|| {
-            chrono::Utc::now().timestamp_millis() as f64
-        });
+        let now_ms = params
+            .now_ms
+            .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as f64);
         for result in &mut merged {
             // Try to extract date from path
-            if let Some((year, month, day)) = temporal_decay::parse_memory_date_from_path(&result.path) {
+            if let Some((year, month, day)) =
+                temporal_decay::parse_memory_date_from_path(&result.path)
+            {
                 let ts_ms = temporal_decay::date_to_ms(year, month, day);
                 let age = temporal_decay::age_in_days_from_ms(ts_ms, now_ms);
                 result.score = temporal_decay::apply_temporal_decay_to_score(
@@ -166,7 +164,10 @@ mod tests {
     #[test]
     fn test_merge_vector_only() {
         let params = MergeParams {
-            vector: vec![make_vector("a", "file.md", 0.9), make_vector("b", "file.md", 0.7)],
+            vector: vec![
+                make_vector("a", "file.md", 0.9),
+                make_vector("b", "file.md", 0.7),
+            ],
             keyword: vec![],
             vector_weight: 0.7,
             text_weight: 0.3,

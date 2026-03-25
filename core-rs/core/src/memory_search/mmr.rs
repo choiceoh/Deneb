@@ -149,11 +149,7 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
 
 /// Apply MMR re-ranking to hybrid search results.
 /// Returns reordered indices based on path:startLine:index IDs.
-pub fn mmr_rerank_hybrid(
-    scores: &[f64],
-    snippets: &[&str],
-    config: &MmrConfig,
-) -> Vec<usize> {
+pub fn mmr_rerank_hybrid(scores: &[f64], snippets: &[&str], config: &MmrConfig) -> Vec<usize> {
     if scores.is_empty() {
         return vec![];
     }

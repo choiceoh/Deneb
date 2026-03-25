@@ -142,39 +142,25 @@ pub enum RetrievalCommand {
     },
 
     /// Fetch summary lineage for describe.
-    FetchLineage {
-        summary_id: String,
-    },
+    FetchLineage { summary_id: String },
 
     /// Fetch a summary record for expand.
-    FetchSummary {
-        summary_id: String,
-    },
+    FetchSummary { summary_id: String },
 
     /// Fetch children of a summary for expand.
-    FetchChildren {
-        summary_id: String,
-    },
+    FetchChildren { summary_id: String },
 
     /// Fetch source messages of a leaf summary for expand.
-    FetchSourceMessages {
-        summary_id: String,
-    },
+    FetchSourceMessages { summary_id: String },
 
     /// Grep operation complete.
-    GrepDone {
-        result: GrepResult,
-    },
+    GrepDone { result: GrepResult },
 
     /// Describe operation complete.
-    DescribeDone {
-        result: DescribeResult,
-    },
+    DescribeDone { result: DescribeResult },
 
     /// Expand operation complete.
-    ExpandDone {
-        result: ExpandResult,
-    },
+    ExpandDone { result: ExpandResult },
 }
 
 /// Response from the host after executing a retrieval command.
@@ -206,14 +192,10 @@ pub enum RetrievalResponse {
     },
 
     /// Children of a summary.
-    Children {
-        children: Vec<ExpandChild>,
-    },
+    Children { children: Vec<ExpandChild> },
 
     /// Source messages of a leaf summary.
-    SourceMessages {
-        messages: Vec<ExpandMessage>,
-    },
+    SourceMessages { messages: Vec<ExpandMessage> },
 }
 
 // ── Grep engine ──────────────────────────────────────────────────────────────
@@ -404,12 +386,7 @@ pub struct ExpandEngine {
 }
 
 impl ExpandEngine {
-    pub fn new(
-        summary_id: String,
-        max_depth: u32,
-        include_messages: bool,
-        token_cap: u64,
-    ) -> Self {
+    pub fn new(summary_id: String, max_depth: u32, include_messages: bool, token_cap: u64) -> Self {
         Self {
             root_summary_id: summary_id,
             max_depth,

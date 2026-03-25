@@ -140,7 +140,11 @@ fn match_fence_line(line: &str) -> Option<(&str, &str, &str)> {
         return None;
     }
 
-    Some((&line[..indent_len], &line[indent_len..marker_end], &line[marker_end..]))
+    Some((
+        &line[..indent_len],
+        &line[indent_len..marker_end],
+        &line[marker_end..],
+    ))
 }
 
 // ---------------------------------------------------------------------------

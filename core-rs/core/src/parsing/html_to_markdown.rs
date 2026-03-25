@@ -283,8 +283,16 @@ fn convert_breaks(input: &str) -> String {
 
     let br_hr_tags = ["<br>", "<br/>", "<br />", "<hr>", "<hr/>", "<hr />"];
     let block_close_tags = [
-        "</p>", "</div>", "</section>", "</article>", "</header>", "</footer>",
-        "</table>", "</tr>", "</ul>", "</ol>",
+        "</p>",
+        "</div>",
+        "</section>",
+        "</article>",
+        "</header>",
+        "</footer>",
+        "</table>",
+        "</tr>",
+        "</ul>",
+        "</ol>",
     ];
 
     while cursor < input.len() {

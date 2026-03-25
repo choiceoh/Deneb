@@ -23,19 +23,14 @@ pub const GATEWAY_CLIENT_IDS: &[&str] = &[
 // Gateway client modes — src/gateway/protocol/client-info.ts
 // ---------------------------------------------------------------------------
 
-pub const GATEWAY_CLIENT_MODES: &[&str] = &[
-    "webchat", "cli", "ui", "backend", "node", "probe", "test",
-];
+pub const GATEWAY_CLIENT_MODES: &[&str] =
+    &["webchat", "cli", "ui", "backend", "node", "probe", "test"];
 
 // ---------------------------------------------------------------------------
 // Input provenance kinds — src/sessions/input-provenance.ts
 // ---------------------------------------------------------------------------
 
-pub const INPUT_PROVENANCE_KINDS: &[&str] = &[
-    "external_user",
-    "inter_session",
-    "internal_system",
-];
+pub const INPUT_PROVENANCE_KINDS: &[&str] = &["external_user", "inter_session", "internal_system"];
 
 // ---------------------------------------------------------------------------
 // Session label — src/sessions/session-label.ts
@@ -60,8 +55,7 @@ pub const SECRET_PROVIDER_ALIAS_PATTERN: &str = r"^[a-z][a-z0-9_-]{0,63}$";
 pub const ENV_SECRET_REF_ID_PATTERN: &str = r"^[A-Z][A-Z0-9_]{0,127}$";
 
 /// `FILE_SECRET_REF_ID_PATTERN` — src/secrets/ref-contract.ts
-pub const FILE_SECRET_REF_ID_PATTERN: &str =
-    r"^(?:value|/(?:[^~]|~0|~1)*(?:/(?:[^~]|~0|~1)*)*)$";
+pub const FILE_SECRET_REF_ID_PATTERN: &str = r"^(?:value|/(?:[^~]|~0|~1)*(?:/(?:[^~]|~0|~1)*)*)$";
 
 /// `EXEC_SECRET_REF_ID_JSON_SCHEMA_PATTERN` — src/secrets/ref-contract.ts
 pub const EXEC_SECRET_REF_ID_PATTERN: &str =

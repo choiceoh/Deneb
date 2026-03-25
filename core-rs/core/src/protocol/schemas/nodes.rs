@@ -59,22 +59,14 @@ pub fn validate_node_pair_request_params(
     });
 }
 
-fn validate_empty(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
+fn validate_empty(value: &serde_json::Value, path: &str, errors: &mut Vec<ValidationError>) {
     if !require_object(value, path, errors) {
         return;
     }
     check_no_additional_properties(value.as_object().unwrap(), &[], path, errors);
 }
 
-fn validate_request_id(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
+fn validate_request_id(value: &serde_json::Value, path: &str, errors: &mut Vec<ValidationError>) {
     if !require_object(value, path, errors) {
         return;
     }

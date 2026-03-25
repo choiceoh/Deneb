@@ -99,10 +99,7 @@ where
     for (idx, span) in styled.iter().enumerate() {
         boundaries.insert(span.start);
         boundaries.insert(span.end);
-        starts_at
-            .entry(span.start)
-            .or_default()
-            .push((idx, span));
+        starts_at.entry(span.start).or_default().push((idx, span));
     }
     // Sort each bucket: wider spans first, then by style rank
     for bucket in starts_at.values_mut() {
@@ -123,7 +120,10 @@ where
             if let Some(rendered) = build_link(link, text) {
                 boundaries.insert(rendered.start);
                 boundaries.insert(rendered.end);
-                link_starts.entry(rendered.start).or_default().push(rendered);
+                link_starts
+                    .entry(rendered.start)
+                    .or_default()
+                    .push(rendered);
             }
         }
     }
@@ -183,13 +183,11 @@ where
                         OpenItem::Link(_) => 0,
                         OpenItem::Style(_) => 1,
                     };
-                    kind_a.cmp(&kind_b).then_with(|| {
-                        match (&a.1, &b.1) {
-                            (OpenItem::Style(sa), OpenItem::Style(sb)) => {
-                                style_rank(sa.style).cmp(&style_rank(sb.style))
-                            }
-                            _ => a.0.cmp(&b.0),
+                    kind_a.cmp(&kind_b).then_with(|| match (&a.1, &b.1) {
+                        (OpenItem::Style(sa), OpenItem::Style(sb)) => {
+                            style_rank(sa.style).cmp(&style_rank(sb.style))
                         }
+                        _ => a.0.cmp(&b.0),
                     })
                 })
             });

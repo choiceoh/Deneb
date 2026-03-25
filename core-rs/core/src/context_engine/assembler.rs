@@ -196,7 +196,8 @@ impl AssemblyEngine {
         let mut evictable_tokens: u64 = 0;
 
         for item in evictable.iter().rev() {
-            if evictable_tokens + item.token_count > remaining_budget && !selected_evictable.is_empty()
+            if evictable_tokens + item.token_count > remaining_budget
+                && !selected_evictable.is_empty()
             {
                 // Budget exhausted — stop including older items
                 break;
@@ -380,8 +381,7 @@ mod tests {
         let mut engine = AssemblyEngine::new(1, 10_000, 8);
         let _ = engine.start();
 
-        let items: Vec<AssemblyContextItem> =
-            (0..5).map(|i| make_message_item(i, 100)).collect();
+        let items: Vec<AssemblyContextItem> = (0..5).map(|i| make_message_item(i, 100)).collect();
 
         let cmd = engine.step(AssemblyResponse::ContextItems { items });
         // No summaries → straight to Done
@@ -408,8 +408,7 @@ mod tests {
         // Evictable (items 0,1,2): walk newest first → item 2 (100), item 1 (100 would exceed 150+100=200 > 150... wait)
         // Actually: evictable_tokens starts at 0, item 2 = 100, now 100 < 150, continue
         // item 1 = 100, 100 + 100 = 200 > 150 and selected is non-empty, so stop
-        let items: Vec<AssemblyContextItem> =
-            (0..5).map(|i| make_message_item(i, 100)).collect();
+        let items: Vec<AssemblyContextItem> = (0..5).map(|i| make_message_item(i, 100)).collect();
 
         let cmd = engine.step(AssemblyResponse::ContextItems { items });
         match cmd {
@@ -434,8 +433,7 @@ mod tests {
         let mut engine = AssemblyEngine::new(1, 50, 2);
         let _ = engine.start();
 
-        let items: Vec<AssemblyContextItem> =
-            (0..3).map(|i| make_message_item(i, 100)).collect();
+        let items: Vec<AssemblyContextItem> = (0..3).map(|i| make_message_item(i, 100)).collect();
 
         let cmd = engine.step(AssemblyResponse::ContextItems { items });
         match cmd {

@@ -329,7 +329,9 @@ pub fn check_string_enum(
         Some(s) => {
             errors.push(ValidationError {
                 path: path.to_string(),
-                message: format!("must be equal to one of the allowed values: {allowed:?}, got \"{s}\""),
+                message: format!(
+                    "must be equal to one of the allowed values: {allowed:?}, got \"{s}\""
+                ),
                 keyword: "enum",
             });
             false
@@ -536,12 +538,8 @@ fn lookup_validator(method: &str) -> Option<ValidatorFn> {
         "agents.files.list" => {
             Some(schemas::agents_models_skills::validate_agents_files_list_params)
         }
-        "agents.files.get" => {
-            Some(schemas::agents_models_skills::validate_agents_files_get_params)
-        }
-        "agents.files.set" => {
-            Some(schemas::agents_models_skills::validate_agents_files_set_params)
-        }
+        "agents.files.get" => Some(schemas::agents_models_skills::validate_agents_files_get_params),
+        "agents.files.set" => Some(schemas::agents_models_skills::validate_agents_files_set_params),
         "models.list" => Some(schemas::agents_models_skills::validate_models_list_params),
         "skills.status" => Some(schemas::agents_models_skills::validate_skills_status_params),
         "skills.bins" => Some(schemas::agents_models_skills::validate_skills_bins_params),
@@ -575,12 +573,8 @@ fn lookup_validator(method: &str) -> Option<ValidatorFn> {
         "cron.runs" => Some(schemas::cron::validate_cron_runs_params),
 
         // Exec approvals
-        "exec.approvals.get" => {
-            Some(schemas::exec_approvals::validate_exec_approvals_get_params)
-        }
-        "exec.approvals.set" => {
-            Some(schemas::exec_approvals::validate_exec_approvals_set_params)
-        }
+        "exec.approvals.get" => Some(schemas::exec_approvals::validate_exec_approvals_get_params),
+        "exec.approvals.set" => Some(schemas::exec_approvals::validate_exec_approvals_set_params),
         "exec.approval.request" => {
             Some(schemas::exec_approvals::validate_exec_approval_request_params)
         }
@@ -625,7 +619,10 @@ mod tests {
     #[test]
     fn test_validate_params_valid_sessions_list() {
         let result = validate_params("sessions.list", "{}").unwrap();
-        assert!(result.valid, "empty object should be valid for sessions.list (all fields optional)");
+        assert!(
+            result.valid,
+            "empty object should be valid for sessions.list (all fields optional)"
+        );
     }
 
     #[test]

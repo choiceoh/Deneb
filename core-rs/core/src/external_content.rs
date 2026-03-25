@@ -1,3 +1,5 @@
+#[cfg(feature = "napi_binding")]
+use napi::bindgen_prelude::*;
 /// Prompt injection detection and marker sanitization.
 ///
 /// Ports the CPU-intensive parts of `src/security/external-content.ts`:
@@ -7,11 +9,8 @@
 ///
 /// The wrapping functions (`wrapExternalContent`, `buildSafeExternalPrompt`) remain
 /// in TypeScript since they use `crypto.randomBytes` and string templating.
-
 use once_cell::sync::Lazy;
 use regex::Regex;
-#[cfg(feature = "napi_binding")]
-use napi::bindgen_prelude::*;
 
 // ---------------------------------------------------------------------------
 // Suspicious patterns (compiled once)
@@ -80,10 +79,10 @@ const FULLWIDTH_ASCII_OFFSET: u32 = 0xFEE0;
 /// Map of Unicode angle bracket homoglyphs to ASCII equivalents.
 fn angle_bracket_map(code: u32) -> Option<char> {
     match code {
-        0xFF1C | 0x2329 | 0x3008 | 0x2039 | 0x27E8 | 0xFE64 | 0x00AB | 0x300A | 0x27EA
-        | 0x27EC | 0x27EE | 0x276C | 0x276E | 0x02C2 => Some('<'),
-        0xFF1E | 0x232A | 0x3009 | 0x203A | 0x27E9 | 0xFE65 | 0x00BB | 0x300B | 0x27EB
-        | 0x27ED | 0x27EF | 0x276D | 0x276F | 0x02C3 => Some('>'),
+        0xFF1C | 0x2329 | 0x3008 | 0x2039 | 0x27E8 | 0xFE64 | 0x00AB | 0x300A | 0x27EA | 0x27EC
+        | 0x27EE | 0x276C | 0x276E | 0x02C2 => Some('<'),
+        0xFF1E | 0x232A | 0x3009 | 0x203A | 0x27E9 | 0xFE65 | 0x00BB | 0x300B | 0x27EB | 0x27ED
+        | 0x27EF | 0x276D | 0x276F | 0x02C3 => Some('>'),
         _ => None,
     }
 }

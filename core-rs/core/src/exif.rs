@@ -111,8 +111,7 @@ pub fn read_jpeg_exif_orientation_impl(buf: &[u8]) -> Option<u8> {
             if offset + 3 >= buf.len() {
                 break;
             }
-            let segment_length =
-                u16::from_be_bytes([buf[offset + 2], buf[offset + 3]]) as usize;
+            let segment_length = u16::from_be_bytes([buf[offset + 2], buf[offset + 3]]) as usize;
             offset += 2 + segment_length;
             continue;
         }
@@ -180,16 +179,16 @@ mod tests {
         // APP1 length (will be filled)
         let length_pos = buf.len();
         buf.extend_from_slice(&[0x00, 0x00]); // placeholder
-        // "Exif\0\0"
+                                              // "Exif\0\0"
         buf.extend_from_slice(b"Exif\0\0");
         let tiff_start = buf.len();
         // TIFF header (big-endian)
         buf.extend_from_slice(b"MM");
         buf.extend_from_slice(&[0x00, 0x2A]); // magic
         buf.extend_from_slice(&[0x00, 0x00, 0x00, 0x08]); // IFD0 offset = 8
-        // IFD0
+                                                          // IFD0
         buf.extend_from_slice(&[0x00, 0x01]); // 1 entry
-        // Entry: orientation tag
+                                              // Entry: orientation tag
         buf.extend_from_slice(&[0x01, 0x12]); // tag 0x0112
         buf.extend_from_slice(&[0x00, 0x03]); // type SHORT
         buf.extend_from_slice(&[0x00, 0x00, 0x00, 0x01]); // count 1
@@ -217,9 +216,9 @@ mod tests {
         buf.extend_from_slice(b"II");
         buf.extend_from_slice(&[0x2A, 0x00]); // magic LE
         buf.extend_from_slice(&[0x08, 0x00, 0x00, 0x00]); // IFD0 offset = 8
-        // IFD0
+                                                          // IFD0
         buf.extend_from_slice(&[0x01, 0x00]); // 1 entry (LE)
-        // Entry: orientation tag
+                                              // Entry: orientation tag
         buf.extend_from_slice(&[0x12, 0x01]); // tag 0x0112 (LE)
         buf.extend_from_slice(&[0x03, 0x00]); // type SHORT (LE)
         buf.extend_from_slice(&[0x01, 0x00, 0x00, 0x00]); // count 1 (LE)
