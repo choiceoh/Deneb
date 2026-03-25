@@ -36,6 +36,7 @@ const MIME_MAP: &[(&str, &str, MediaCategory)] = &[
     ("image/tiff", "tiff", MediaCategory::Image),
     ("image/heic", "heic", MediaCategory::Image),
     ("image/heif", "heif", MediaCategory::Image),
+    ("image/avif", "avif", MediaCategory::Image),
     // Audio
     ("audio/mpeg", "mp3", MediaCategory::Audio),
     ("audio/ogg", "ogg", MediaCategory::Audio),

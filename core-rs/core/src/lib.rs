@@ -41,19 +41,12 @@ const FFI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
 
 // FFI error code constants — used across all `extern "C"` functions.
 // Positive values are function-specific; negative values are shared errors.
-#[allow(dead_code)]
 const FFI_ERR_NULL_PTR: i32 = -1;
-#[allow(dead_code)]
 const FFI_ERR_INVALID_UTF8: i32 = -2;
-#[allow(dead_code)]
 const FFI_ERR_OUTPUT_TOO_SMALL: i32 = -3;
-#[allow(dead_code)]
 const FFI_ERR_INPUT_TOO_LARGE: i32 = -4;
-#[allow(dead_code)]
 const FFI_ERR_JSON: i32 = -5;
-#[allow(dead_code)]
 const FFI_ERR_OVERFLOW: i32 = -6;
-#[allow(dead_code)]
 const FFI_ERR_PANIC: i32 = -99;
 
 /// Wraps an FFI body in catch_unwind to prevent Rust panics from aborting
@@ -78,16 +71,16 @@ fn ffi_catch(panic_rc: i32, f: impl FnOnce() -> i32) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn deneb_validate_frame(json_ptr: *const u8, json_len: usize) -> i32 {
     if json_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if json_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let slice = std::slice::from_raw_parts(json_ptr, json_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let json_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         match protocol::validate_frame(json_str) {
             Ok(_) => 0,
@@ -109,7 +102,7 @@ pub unsafe extern "C" fn deneb_constant_time_eq(
     b_len: usize,
 ) -> i32 {
     if a_ptr.is_null() || b_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     let a = std::slice::from_raw_parts(a_ptr, a_len);
     let b = std::slice::from_raw_parts(b_ptr, b_len);
@@ -135,13 +128,13 @@ pub unsafe extern "C" fn deneb_detect_mime(
     out_len: usize,
 ) -> i32 {
     if data_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     let data = std::slice::from_raw_parts(data_ptr, data_len);
     let mime = media::detect_mime(data);
     let mime_bytes = mime.as_bytes();
     if mime_bytes.len() > out_len {
-        return -2;
+        return FFI_ERR_OUTPUT_TOO_SMALL;
     }
     std::ptr::copy_nonoverlapping(mime_bytes.as_ptr(), out_ptr, mime_bytes.len());
     mime_bytes.len() as i32
@@ -155,16 +148,16 @@ pub unsafe extern "C" fn deneb_detect_mime(
 #[no_mangle]
 pub unsafe extern "C" fn deneb_validate_session_key(key_ptr: *const u8, key_len: usize) -> i32 {
     if key_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if key_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let slice = std::slice::from_raw_parts(key_ptr, key_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let key_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         if security::is_valid_session_key(key_str) {
             0
@@ -189,22 +182,22 @@ pub unsafe extern "C" fn deneb_sanitize_html(
     out_len: usize,
 ) -> i32 {
     if input_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if input_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let input_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let sanitized = security::sanitize_html(input_str);
         let bytes = sanitized.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -3; // output buffer too small
+            return FFI_ERR_OUTPUT_TOO_SMALL; // output buffer too small
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -219,17 +212,17 @@ pub unsafe extern "C" fn deneb_sanitize_html(
 #[no_mangle]
 pub unsafe extern "C" fn deneb_is_safe_url(url_ptr: *const u8, url_len: usize) -> i32 {
     if url_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     // URLs should not be extremely long; cap at 8 KB.
     if url_len > 8192 {
         return 1; // treat oversized URLs as unsafe
     }
     let slice = std::slice::from_raw_parts(url_ptr, url_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let url_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         if security::is_safe_url(url_str) {
             0
@@ -247,17 +240,17 @@ pub unsafe extern "C" fn deneb_is_safe_url(url_ptr: *const u8, url_len: usize) -
 #[no_mangle]
 pub unsafe extern "C" fn deneb_validate_error_code(code_ptr: *const u8, code_len: usize) -> i32 {
     if code_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     // Cap input length for consistency with other FFI functions.
     if code_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let slice = std::slice::from_raw_parts(code_ptr, code_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let code_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         if protocol::error_codes::is_valid_error_code(code_str) {
             0
@@ -290,22 +283,22 @@ pub unsafe extern "C" fn deneb_vega_execute(
     out_len: usize,
 ) -> i32 {
     if cmd_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if cmd_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let slice = std::slice::from_raw_parts(cmd_ptr, cmd_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let cmd_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let result_json = vega_execute_impl(cmd_str);
         let result_bytes = result_json.as_bytes();
         if result_bytes.len() > out_slice.len() {
-            return -3;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..result_bytes.len()].copy_from_slice(result_bytes);
         result_bytes.len() as i32
@@ -379,22 +372,22 @@ pub unsafe extern "C" fn deneb_vega_search(
     out_len: usize,
 ) -> i32 {
     if query_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if query_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let slice = std::slice::from_raw_parts(query_ptr, query_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let query_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let result_json = vega_search_impl(query_str);
         let result_bytes = result_json.as_bytes();
         if result_bytes.len() > out_slice.len() {
-            return -3;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..result_bytes.len()].copy_from_slice(result_bytes);
         result_bytes.len() as i32
@@ -481,12 +474,12 @@ fn write_json_response(out_slice: &mut [u8], value: &impl serde::Serialize) -> i
     match serde_json::to_vec(value) {
         Ok(bytes) => {
             if bytes.len() > out_slice.len() {
-                return -3;
+                return FFI_ERR_OUTPUT_TOO_SMALL;
             }
             out_slice[..bytes.len()].copy_from_slice(&bytes);
             bytes.len() as i32
         }
-        Err(_) => -5,
+        Err(_) => FFI_ERR_JSON,
     }
 }
 
@@ -508,24 +501,24 @@ pub unsafe extern "C" fn deneb_ml_embed(
     out_len: usize,
 ) -> i32 {
     if input_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if input_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let input_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
 
         #[cfg(feature = "ml")]
         {
             let req: EmbedRequest = match serde_json::from_str(input_str) {
                 Ok(r) => r,
-                Err(_) => return -2,
+                Err(_) => return FFI_ERR_INVALID_UTF8,
             };
             let text_refs: Vec<&str> = req.texts.iter().map(|s| s.as_str()).collect();
 
@@ -572,24 +565,24 @@ pub unsafe extern "C" fn deneb_ml_rerank(
     out_len: usize,
 ) -> i32 {
     if input_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if input_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let input_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
 
         #[cfg(feature = "ml")]
         {
             let req: RerankRequest = match serde_json::from_str(input_str) {
                 Ok(r) => r,
-                Err(_) => return -2,
+                Err(_) => return FFI_ERR_INVALID_UTF8,
             };
             let doc_refs: Vec<&str> = req.documents.iter().map(|s| s.as_str()).collect();
 
@@ -670,23 +663,23 @@ pub unsafe extern "C" fn deneb_validate_params(
     errors_out_len: usize,
 ) -> i32 {
     if method_ptr.is_null() || json_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     // Cap both method name and JSON payload lengths.
     if json_len > FFI_MAX_INPUT_LEN || method_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let method_slice = std::slice::from_raw_parts(method_ptr, method_len);
     let json_slice = std::slice::from_raw_parts(json_ptr, json_len);
 
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let method_str = match std::str::from_utf8(method_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let json_str = match std::str::from_utf8(json_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
 
         match protocol::validation::validate_params(method_str, json_str) {
@@ -711,7 +704,7 @@ pub unsafe extern "C" fn deneb_validate_params(
                 }
             }
             Err(protocol::validation::ValidateParamsError::UnknownMethod(_)) => -3,
-            Err(protocol::validation::ValidateParamsError::InvalidJson(_)) => -5,
+            Err(protocol::validation::ValidateParamsError::InvalidJson(_)) => FFI_ERR_JSON,
         }
     })
 }
@@ -738,30 +731,30 @@ pub unsafe extern "C" fn deneb_compaction_evaluate(
     out_len: usize,
 ) -> i32 {
     if config_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if config_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let config_slice = std::slice::from_raw_parts(config_ptr, config_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let config_str = match std::str::from_utf8(config_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let config: compaction::CompactionConfig = match serde_json::from_str(config_str) {
             Ok(c) => c,
-            Err(_) => return -3,
+            Err(_) => return FFI_ERR_JSON,
         };
         let decision = compaction::evaluate(&config, stored_tokens, live_tokens, token_budget);
         let json = match serde_json::to_string(&decision) {
             Ok(j) => j,
-            Err(_) => return -5,
+            Err(_) => return FFI_ERR_JSON,
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -784,20 +777,20 @@ pub unsafe extern "C" fn deneb_compaction_sweep_new(
     now_ms: i64,
 ) -> i64 {
     if config_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR as i64;
     }
     if config_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE as i64;
     }
     let config_slice = std::slice::from_raw_parts(config_ptr, config_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let config_str = match std::str::from_utf8(config_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         // Validate u64→u32 narrowing to prevent silent truncation.
         if conversation_id > u32::MAX as u64 || token_budget > u32::MAX as u64 {
-            return -4;
+            return FFI_ERR_INPUT_TOO_LARGE;
         }
         let handle = compaction::napi::compaction_sweep_new(
             config_str.to_string(),
@@ -809,7 +802,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_new(
         );
         // Validate handle fits in i32 to prevent truncation in i32→i64 cast chain.
         if handle > i32::MAX as u32 {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         handle as i32
     }) as i64
@@ -827,14 +820,14 @@ pub unsafe extern "C" fn deneb_compaction_sweep_start(
     out_len: usize,
 ) -> i32 {
     if out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let json = compaction::napi::compaction_sweep_start(handle);
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -855,22 +848,22 @@ pub unsafe extern "C" fn deneb_compaction_sweep_step(
     out_len: usize,
 ) -> i32 {
     if resp_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if resp_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let resp_slice = std::slice::from_raw_parts(resp_ptr, resp_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let resp_str = match std::str::from_utf8(resp_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let json = compaction::napi::compaction_sweep_step(handle, resp_str.to_string());
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -934,23 +927,23 @@ pub unsafe extern "C" fn deneb_memory_build_fts_query(
     out_len: usize,
 ) -> i32 {
     if raw_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if raw_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let slice = std::slice::from_raw_parts(raw_ptr, raw_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let raw_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         match memory_search::fts::build_fts_query(raw_str) {
             Some(query) => {
                 let bytes = query.as_bytes();
                 if bytes.len() > out_slice.len() {
-                    return -3;
+                    return FFI_ERR_OUTPUT_TOO_SMALL;
                 }
                 out_slice[..bytes.len()].copy_from_slice(bytes);
                 bytes.len() as i32
@@ -974,30 +967,30 @@ pub unsafe extern "C" fn deneb_memory_merge_hybrid_results(
     out_len: usize,
 ) -> i32 {
     if params_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if params_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let slice = std::slice::from_raw_parts(params_ptr, params_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let params_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let params: memory_search::types::MergeParams = match serde_json::from_str(params_str) {
             Ok(p) => p,
-            Err(_) => return -3,
+            Err(_) => return FFI_ERR_JSON,
         };
         let results = memory_search::merge::merge_hybrid_results(&params);
         let json = match serde_json::to_string(&results) {
             Ok(j) => j,
-            Err(_) => return -5,
+            Err(_) => return FFI_ERR_JSON,
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1017,26 +1010,26 @@ pub unsafe extern "C" fn deneb_memory_extract_keywords(
     out_len: usize,
 ) -> i32 {
     if query_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if query_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let slice = std::slice::from_raw_parts(query_ptr, query_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let query_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let keywords = memory_search::query_expansion::extract_keywords(query_str);
         let json = match serde_json::to_string(&keywords) {
             Ok(j) => j,
-            Err(_) => return -5,
+            Err(_) => return FFI_ERR_JSON,
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1064,22 +1057,22 @@ pub unsafe extern "C" fn deneb_extract_links(
     out_len: usize,
 ) -> i32 {
     if text_ptr.is_null() || config_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if text_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let text_slice = std::slice::from_raw_parts(text_ptr, text_len);
     let config_slice = std::slice::from_raw_parts(config_ptr, config_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let text_str = match std::str::from_utf8(text_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let config_str = match std::str::from_utf8(config_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
 
         #[derive(serde::Deserialize)]
@@ -1093,7 +1086,7 @@ pub unsafe extern "C" fn deneb_extract_links(
 
         let config: ConfigInput = match serde_json::from_str(config_str) {
             Ok(c) => c,
-            Err(_) => return -5,
+            Err(_) => return FFI_ERR_JSON,
         };
         let cfg = parsing::url_extract::ExtractLinksConfig {
             max_links: config.max_links,
@@ -1101,11 +1094,11 @@ pub unsafe extern "C" fn deneb_extract_links(
         let urls = parsing::url_extract::extract_links(text_str, &cfg);
         let json = match serde_json::to_string(&urls) {
             Ok(j) => j,
-            Err(_) => return -5,
+            Err(_) => return FFI_ERR_JSON,
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1126,26 +1119,26 @@ pub unsafe extern "C" fn deneb_html_to_markdown(
     out_len: usize,
 ) -> i32 {
     if html_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if html_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let html_slice = std::slice::from_raw_parts(html_ptr, html_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let html_str = match std::str::from_utf8(html_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let result = parsing::html_to_markdown::html_to_markdown(html_str);
         let json = match serde_json::to_string(&result) {
             Ok(j) => j,
-            Err(_) => return -5,
+            Err(_) => return FFI_ERR_JSON,
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1160,20 +1153,20 @@ pub unsafe extern "C" fn deneb_html_to_markdown(
 #[no_mangle]
 pub unsafe extern "C" fn deneb_base64_estimate(input_ptr: *const u8, input_len: usize) -> i64 {
     if input_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR as i64;
     }
     if input_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE as i64;
     }
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let input_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2_i64,
+            Err(_) => return FFI_ERR_INVALID_UTF8 as i64,
         };
         parsing::base64_util::estimate_base64_decoded_bytes(input_str) as i64
     }))
-    .unwrap_or(-99)
+    .unwrap_or(FFI_ERR_PANIC as i64)
 }
 
 /// C FFI: Canonicalize a base64 string (strip whitespace, validate).
@@ -1190,23 +1183,23 @@ pub unsafe extern "C" fn deneb_base64_canonicalize(
     out_len: usize,
 ) -> i32 {
     if input_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if input_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let input_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         match parsing::base64_util::canonicalize_base64(input_str) {
             Some(canonical) => {
                 let bytes = canonical.as_bytes();
                 if bytes.len() > out_slice.len() {
-                    return -6;
+                    return FFI_ERR_OVERFLOW;
                 }
                 out_slice[..bytes.len()].copy_from_slice(bytes);
                 bytes.len() as i32
@@ -1230,26 +1223,26 @@ pub unsafe extern "C" fn deneb_parse_media_tokens(
     out_len: usize,
 ) -> i32 {
     if text_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if text_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let text_slice = std::slice::from_raw_parts(text_ptr, text_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let text_str = match std::str::from_utf8(text_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let result = parsing::media_tokens::split_media_from_output(text_str);
         let json = match serde_json::to_string(&result) {
             Ok(j) => j,
-            Err(_) => return -5,
+            Err(_) => return FFI_ERR_JSON,
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1278,26 +1271,26 @@ pub unsafe extern "C" fn deneb_markdown_to_ir(
     out_len: usize,
 ) -> i32 {
     if md_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if md_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let md_slice = std::slice::from_raw_parts(md_ptr, md_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let md_str = match std::str::from_utf8(md_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let options = if !opts_ptr.is_null() && opts_len > 0 {
             let opts_bytes = std::slice::from_raw_parts(opts_ptr, opts_len);
             match std::str::from_utf8(opts_bytes) {
                 Ok(s) => match serde_json::from_str::<markdown::parser::ParseOptions>(s) {
                     Ok(o) => o,
-                    Err(_) => return -5,
+                    Err(_) => return FFI_ERR_JSON,
                 },
-                Err(_) => return -2,
+                Err(_) => return FFI_ERR_INVALID_UTF8,
             }
         } else {
             markdown::parser::ParseOptions::default()
@@ -1324,11 +1317,11 @@ pub unsafe extern "C" fn deneb_markdown_to_ir(
         };
         let json = match serde_json::to_string(&output) {
             Ok(j) => j,
-            Err(_) => return -5,
+            Err(_) => return FFI_ERR_JSON,
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1349,26 +1342,26 @@ pub unsafe extern "C" fn deneb_markdown_detect_fences(
     out_len: usize,
 ) -> i32 {
     if text_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if text_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let text_slice = std::slice::from_raw_parts(text_ptr, text_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let text_str = match std::str::from_utf8(text_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let fences = markdown::fences::parse_fence_spans(text_str);
         let json = match serde_json::to_string(&fences) {
             Ok(j) => j,
-            Err(_) => return -5,
+            Err(_) => return FFI_ERR_JSON,
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1406,14 +1399,14 @@ pub unsafe extern "C" fn deneb_context_assembly_start(
     out_len: usize,
 ) -> i32 {
     if out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let json = context_engine::napi::context_assembly_start(handle);
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1434,22 +1427,22 @@ pub unsafe extern "C" fn deneb_context_assembly_step(
     out_len: usize,
 ) -> i32 {
     if resp_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if resp_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let resp_slice = std::slice::from_raw_parts(resp_ptr, resp_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let resp_str = match std::str::from_utf8(resp_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let json = context_engine::napi::context_assembly_step(handle, resp_str.to_string());
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1496,14 +1489,14 @@ pub unsafe extern "C" fn deneb_context_expand_start(
     out_len: usize,
 ) -> i32 {
     if out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let json = context_engine::napi::context_expand_start(handle);
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1523,22 +1516,22 @@ pub unsafe extern "C" fn deneb_context_expand_step(
     out_len: usize,
 ) -> i32 {
     if resp_ptr.is_null() || out_ptr.is_null() {
-        return -1;
+        return FFI_ERR_NULL_PTR;
     }
     if resp_len > FFI_MAX_INPUT_LEN {
-        return -4;
+        return FFI_ERR_INPUT_TOO_LARGE;
     }
     let resp_slice = std::slice::from_raw_parts(resp_ptr, resp_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(-99, move || {
+    ffi_catch(FFI_ERR_PANIC, move || {
         let resp_str = match std::str::from_utf8(resp_slice) {
             Ok(s) => s,
-            Err(_) => return -2,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let json = context_engine::napi::context_expand_step(handle, resp_str.to_string());
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return -6;
+            return FFI_ERR_OVERFLOW;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
