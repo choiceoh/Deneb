@@ -33,6 +33,10 @@ type BroadcastFunc func(event string, payload any) (int, []error)
 // BroadcastRawFunc sends pre-serialized event data to all matching subscribers.
 type BroadcastRawFunc func(event string, data []byte) int
 
+// ReplyFunc delivers the assistant response back to the originating channel.
+// Called with the delivery context (channel + recipient) and the response text.
+type ReplyFunc func(ctx context.Context, delivery *DeliveryContext, text string) error
+
 // DeliveryContext carries channel routing information for a chat message.
 type DeliveryContext struct {
 	Channel   string `json:"channel,omitempty"`
@@ -88,6 +92,8 @@ type Handler struct {
 	defaultModel  string
 	defaultSystem string
 	maxTokens     int
+
+	replyFunc   ReplyFunc // optional: delivers response to originating channel
 
 	abortMu     sync.Mutex
 	abortMap    map[string]*AbortEntry // clientRunId -> entry
@@ -167,6 +173,13 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 // SetBroadcastRaw sets the raw broadcast function for streaming event relay.
 func (h *Handler) SetBroadcastRaw(fn BroadcastRawFunc) {
 	h.broadcastRaw = fn
+}
+
+// SetReplyFunc sets the function that delivers assistant responses back to the
+// originating channel (e.g., Telegram). Called after each successful agent run
+// when a DeliveryContext is present.
+func (h *Handler) SetReplyFunc(fn ReplyFunc) {
+	h.replyFunc = fn
 }
 
 // HandleBtw processes a side question (/btw) without affecting the main
@@ -492,6 +505,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		broadcast:     h.broadcast,
 		broadcastRaw:  h.broadcastRaw,
 		jobTracker:    h.jobTracker,
+		replyFunc:     h.replyFunc,
 		logger:        h.logger,
 		contextCfg:    h.contextCfg,
 		compactionCfg: h.compactionCfg,
