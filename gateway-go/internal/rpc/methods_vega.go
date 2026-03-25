@@ -9,20 +9,20 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// VegaDeps holds the Vega client for RPC method registration.
+// VegaDeps holds the Vega backend for RPC method registration.
 type VegaDeps struct {
-	Client *vega.Client
+	Backend vega.Backend
 }
 
-// RegisterVegaMethods registers Vega MCP tool methods on the dispatcher.
-// These forward requests to the Python Vega subprocess.
+// RegisterVegaMethods registers Vega RPC methods on the dispatcher.
+// These forward requests to the Rust FFI Vega backend.
 func RegisterVegaMethods(d *Dispatcher, deps VegaDeps) {
-	if deps.Client == nil {
+	if deps.Backend == nil {
 		return
 	}
 
-	// Map RPC method names to Vega tool names.
-	vegaTools := map[string]string{
+	// Map RPC method names to Vega command names.
+	vegaCommands := map[string]string{
 		"vega.ask":         "ask",
 		"vega.update":      "update",
 		"vega.add-action":  "add-action",
@@ -30,15 +30,15 @@ func RegisterVegaMethods(d *Dispatcher, deps VegaDeps) {
 		"vega.version":     "version",
 	}
 
-	for method, tool := range vegaTools {
+	for method, cmd := range vegaCommands {
 		m := method
-		t := tool
-		d.Register(m, vegaToolHandler(deps.Client, t))
+		c := cmd
+		d.Register(m, vegaBackendHandler(deps.Backend, c))
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Vega FFI RPC methods (Rust FFI — Phase 0 scaffolding)
+// Vega FFI RPC methods (Rust FFI)
 // ---------------------------------------------------------------------------
 
 func vegaFFIExecute() HandlerFunc {
@@ -73,20 +73,25 @@ func vegaFFISearch() HandlerFunc {
 	}
 }
 
-func vegaToolHandler(client *vega.Client, tool string) HandlerFunc {
+// vegaBackendHandler creates an RPC handler that executes a Vega command
+// via the Backend interface (Rust FFI).
+func vegaBackendHandler(backend vega.Backend, cmd string) HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		params := req.Params
-		if len(params) == 0 {
-			params = json.RawMessage("{}")
+		// Parse params as a generic map for the Backend.Execute call.
+		var args map[string]any
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &args); err != nil {
+				return protocol.NewResponseError(req.ID, protocol.NewError(
+					protocol.ErrMissingParam, "invalid params: "+err.Error()))
+			}
 		}
 
-		result, err := client.Call(ctx, tool, params)
+		result, err := backend.Execute(ctx, cmd, args)
 		if err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, "vega: "+err.Error()))
 		}
 
-		// result is already json.RawMessage; wrap it in a response.
 		resp := protocol.MustResponseOKRaw(req.ID, result)
 		return resp
 	}

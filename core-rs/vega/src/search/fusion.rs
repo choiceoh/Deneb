@@ -56,9 +56,11 @@ fn negate_date_str(date_str: &str) -> String {
         .collect()
 }
 
+#[allow(dead_code)]
 static NON_PROJECT_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)(INDEX|README|CLAUDE|CHANGELOG|LICENSE|\.github)").unwrap());
 
+#[allow(dead_code)]
 static BACKUP_DIR_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?:^|[-/])(?:backup|bak|old)(?:[-/]|$)|(?:^|/)vega-v\d+[-/.]|(?:^|/)tools-backup")
         .unwrap()

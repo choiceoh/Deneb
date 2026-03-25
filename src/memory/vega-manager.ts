@@ -1,15 +1,15 @@
 /**
- * VegaMemoryManager — subprocess-based memory backend for Vega.
+ * VegaMemoryManager — memory backend for Vega.
  *
- * Vega handles all indexing, embedding, and search internally.
- * This manager just calls the Vega CLI.
+ * Previously called the Vega Python CLI via subprocess. Now stubbed out
+ * pending migration to the Go gateway RPC layer, where Vega runs via
+ * Rust FFI (core-rs) through the gateway.
  */
 
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { ResolvedVegaConfig } from "./backend-config.js";
-import { resolveCliSpawnInvocation, runCliCommand } from "./cli-process.js";
 import { isFileMissingError, statRegularFile } from "./fs-utils.js";
 import { deriveScopeChannel, deriveScopeChatType, isScopeAllowed } from "./session-scope.js";
 import type {
@@ -21,8 +21,6 @@ import type {
 } from "./types.js";
 
 const log = createSubsystemLogger("memory");
-
-const MAX_VEGA_OUTPUT_CHARS = 200_000;
 
 /** Vega capabilities reported by memory-version / memory-status (v1.48+). */
 export type VegaCapabilities = {
@@ -59,10 +57,6 @@ export class VegaMemoryManager implements MemorySearchManager {
   private readonly workspaceDir: string;
   private readonly agentId: string;
   private readonly vega: ResolvedVegaConfig;
-  private readonly env: NodeJS.ProcessEnv;
-  private updateTimer: ReturnType<typeof setInterval> | null = null;
-  private lastUpdateAt: number | null = null;
-  private lastEmbedAt: number | null = null;
   private closed = false;
 
   /** Cached Vega version info (populated on first status refresh). */
@@ -76,34 +70,11 @@ export class VegaMemoryManager implements MemorySearchManager {
     this.workspaceDir = params.workspaceDir;
     this.agentId = params.agentId;
     this.vega = params.resolved;
-    this.env = {
-      ...process.env,
-      NO_COLOR: "1",
-      // Pass through user-configured env vars for Vega subprocess
-      ...params.resolved.env,
-    };
   }
 
   private async initialize(): Promise<void> {
-    // Probe Vega version in background (non-blocking)
-    void this.probeVersion().catch((err) => {
-      log.warn(`vega version probe failed: ${String(err)}`);
-    });
-
-    if (this.vega.update.onBoot) {
-      void this.runUpdate("boot").catch((err) => {
-        log.warn(`vega boot update failed: ${String(err)}`);
-      });
-    }
-    if (this.vega.update.intervalMs > 0) {
-      this.updateTimer = setInterval(() => {
-        void this.runUpdate("interval").catch((err) => {
-          log.warn(`vega update failed (${String(err)})`);
-        });
-      }, this.vega.update.intervalMs);
-      // Don't keep the Node.js process alive just for update polling
-      this.updateTimer.unref();
-    }
+    // TODO: Probe Vega version via gateway RPC instead of subprocess
+    log.info("vega memory manager initialized (gateway RPC integration pending)");
   }
 
   async search(
@@ -120,30 +91,10 @@ export class VegaMemoryManager implements MemorySearchManager {
       return [];
     }
 
-    const limit = Math.min(
-      this.vega.limits.maxResults,
-      opts?.maxResults ?? this.vega.limits.maxResults,
-    );
-
-    try {
-      const args = ["memory-search", trimmed, "--json", "--limit", String(limit)];
-
-      // Pass searchMode if Vega supports it (v1.48+ or always — older Vega ignores unknown flags)
-      if (this.vega.searchMode) {
-        args.push("--mode", this.vega.searchMode);
-      }
-
-      const result = await this.runVega(args, { timeoutMs: this.vega.limits.timeoutMs });
-
-      const parsed = this.parseSearchResults(result.stdout);
-      const minScore = opts?.minScore ?? 0;
-      const filtered = parsed.filter((r) => r.score >= minScore);
-      return this.clampByInjectedChars(filtered, limit);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      log.warn(`vega search failed: ${message}`);
-      throw err;
-    }
+    // TODO: Route search through gateway RPC instead of subprocess.
+    // The gateway will call Vega via Rust FFI (core-rs).
+    log.warn("vega search is a no-op — gateway RPC integration pending");
+    return [];
   }
 
   async readFile(params: {
@@ -185,14 +136,9 @@ export class VegaMemoryManager implements MemorySearchManager {
     }
   }
 
-  private cachedStatus: MemoryProviderStatus | null = null;
-
-  private ensureStatus(): MemoryProviderStatus {
-    if (this.cachedStatus) {
-      return this.cachedStatus;
-    }
-    // Return static status while first async refresh is pending
-    const base: MemoryProviderStatus = {
+  status(): MemoryProviderStatus {
+    // TODO: Fetch live status from gateway RPC instead of subprocess.
+    return {
       backend: "vega",
       provider: "vega",
       model: "vega",
@@ -204,68 +150,10 @@ export class VegaMemoryManager implements MemorySearchManager {
       dirty: false,
       custom: {
         vega: {
-          lastUpdateAt: this.lastUpdateAt,
+          lastUpdateAt: null,
         },
       },
     };
-    this.cachedStatus = base;
-    // Fire-and-forget async refresh
-    void this.refreshStatus().catch(() => {});
-    return base;
-  }
-
-  private async refreshStatus(): Promise<void> {
-    try {
-      const result = await this.runVega(["memory-status", "--json"], { timeoutMs: 10_000 });
-      const parsed = this.parseStatusResponse(result.stdout);
-
-      // Extract version info if present (v1.48+)
-      if (parsed.version) {
-        this.vegaVersion = {
-          version: parsed.version,
-          protocolVersion: parsed.protocolVersion ?? 0,
-          capabilities: parsed.capabilities ?? {
-            semanticSearch: false,
-            reranking: false,
-            searchModes: ["search"],
-          },
-        };
-      }
-
-      const semanticAvailable =
-        this.vegaVersion?.capabilities.semanticSearch ?? parsed.embedded !== undefined;
-
-      this.cachedStatus = {
-        backend: "vega",
-        provider: "vega",
-        model: parsed.model ?? "vega",
-        files: parsed.files ?? 0,
-        chunks: parsed.chunks ?? 0,
-        workspaceDir: this.workspaceDir,
-        vector: { enabled: true, available: semanticAvailable },
-        sources: ["memory"],
-        dirty: false,
-        custom: {
-          vega: {
-            lastUpdateAt: this.lastUpdateAt,
-            dbPath: parsed.dbPath,
-            embedded: parsed.embedded,
-            // v1.48+: extended info
-            version: this.vegaVersion?.version,
-            protocolVersion: this.vegaVersion?.protocolVersion,
-            capabilities: this.vegaVersion?.capabilities,
-            models: parsed.models,
-            counts: parsed.counts,
-          },
-        },
-      };
-    } catch {
-      // Keep last known status
-    }
-  }
-
-  status(): MemoryProviderStatus {
-    return this.ensureStatus();
   }
 
   /** Return cached Vega version info, or null if not yet probed. */
@@ -279,12 +167,13 @@ export class VegaMemoryManager implements MemorySearchManager {
     sessionFiles?: string[];
     progress?: (update: MemorySyncProgressUpdate) => void;
   }): Promise<void> {
+    // TODO: Trigger sync via gateway RPC instead of subprocess.
     if (params?.progress) {
       params.progress({ completed: 0, total: 1, label: "Updating Vega index…" });
     }
-    await this.runUpdate(params?.reason ?? "manual", params?.force);
+    log.warn("vega sync is a no-op — gateway RPC integration pending");
     if (params?.progress) {
-      params.progress({ completed: 1, total: 1, label: "Vega index updated" });
+      params.progress({ completed: 1, total: 1, label: "Vega index update skipped (stub)" });
     }
   }
 
@@ -308,274 +197,9 @@ export class VegaMemoryManager implements MemorySearchManager {
       return;
     }
     this.closed = true;
-    if (this.updateTimer) {
-      clearInterval(this.updateTimer);
-      this.updateTimer = null;
-    }
   }
 
   // ── Private helpers ──
-
-  /**
-   * Probe Vega version via the lightweight memory-version command.
-   * Falls back to memory-status if memory-version is not available (pre-v1.48).
-   */
-  private async probeVersion(): Promise<void> {
-    try {
-      const result = await this.runVega(["memory-version", "--json"], { timeoutMs: 5_000 });
-      const parsed = this.parseVersionResponse(result.stdout);
-      if (parsed) {
-        this.vegaVersion = parsed;
-        log.info(
-          `vega version: ${parsed.version} (protocol=${parsed.protocolVersion}, semantic=${String(parsed.capabilities.semanticSearch)})`,
-        );
-        return;
-      }
-    } catch {
-      // memory-version not available — fall through
-    }
-
-    // Fallback: extract version from memory-status (v1.48+)
-    try {
-      const result = await this.runVega(["memory-status", "--json"], { timeoutMs: 10_000 });
-      const parsed = this.parseStatusResponse(result.stdout);
-      if (parsed.version) {
-        this.vegaVersion = {
-          version: parsed.version,
-          protocolVersion: parsed.protocolVersion ?? 0,
-          capabilities: parsed.capabilities ?? {
-            semanticSearch: false,
-            reranking: false,
-            searchModes: ["search"],
-          },
-        };
-        log.info(`vega version (via status): ${parsed.version}`);
-      }
-    } catch {
-      log.warn("vega version probe failed (both memory-version and memory-status)");
-    }
-  }
-
-  private async runVega(
-    args: string[],
-    opts?: { timeoutMs?: number; discardStdout?: boolean },
-  ): Promise<{ stdout: string; stderr: string }> {
-    return await runCliCommand({
-      commandSummary: `vega ${args.join(" ")}`,
-      spawnInvocation: resolveCliSpawnInvocation({
-        command: this.vega.command,
-        args,
-      }),
-      env: this.env,
-      cwd: this.workspaceDir,
-      timeoutMs: opts?.timeoutMs,
-      maxOutputChars: MAX_VEGA_OUTPUT_CHARS,
-      discardStdout: opts?.discardStdout,
-    });
-  }
-
-  private async runUpdate(reason: string, force?: boolean): Promise<void> {
-    if (this.closed) {
-      return;
-    }
-    if (!force && this.lastUpdateAt) {
-      const elapsed = Date.now() - this.lastUpdateAt;
-      // Debounce: skip if updated within last 15 seconds
-      if (elapsed < 15_000) {
-        return;
-      }
-    }
-
-    try {
-      await this.runVega(force ? ["memory-update", "--force"] : ["memory-update"], {
-        timeoutMs: this.vega.update.commandTimeoutMs,
-      });
-      this.lastUpdateAt = Date.now();
-    } catch (err) {
-      log.warn(`vega update failed (${reason}): ${String(err)}`);
-      throw err;
-    }
-
-    // Embed after update if needed
-    if (this.shouldRunEmbed(force)) {
-      try {
-        await this.runVega(force ? ["memory-embed", "--force"] : ["memory-embed"], {
-          timeoutMs: this.vega.update.commandTimeoutMs,
-        });
-        this.lastEmbedAt = Date.now();
-      } catch (err) {
-        log.warn(`vega embed failed (${reason}): ${String(err)}`);
-      }
-    }
-  }
-
-  private shouldRunEmbed(force?: boolean): boolean {
-    if (force) {
-      return true;
-    }
-    if (this.lastEmbedAt === null) {
-      return true;
-    }
-    const interval = this.vega.update.embedIntervalMs;
-    if (interval <= 0) {
-      return false;
-    }
-    return Date.now() - this.lastEmbedAt > interval;
-  }
-
-  private parseSearchResults(stdout: string): MemorySearchResult[] {
-    const trimmed = stdout.trim();
-    if (!trimmed || trimmed === "[]") {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (!Array.isArray(parsed)) {
-        return [];
-      }
-
-      const results: MemorySearchResult[] = [];
-      for (const item of parsed) {
-        if (!item || typeof item !== "object") {
-          continue;
-        }
-        const path = typeof item.path === "string" ? item.path.trim() : "";
-        if (!path) {
-          continue;
-        }
-        results.push({
-          path,
-          startLine: typeof item.startLine === "number" ? item.startLine : 1,
-          endLine: typeof item.endLine === "number" ? item.endLine : 1,
-          score: typeof item.score === "number" ? item.score : 0,
-          snippet: typeof item.snippet === "string" ? item.snippet : "",
-          source: item.source === "sessions" ? "sessions" : "memory",
-        });
-      }
-      return results;
-    } catch {
-      log.warn("vega search returned invalid JSON");
-      return [];
-    }
-  }
-
-  private clampByInjectedChars(results: MemorySearchResult[], limit: number): MemorySearchResult[] {
-    const budget = this.vega.limits.maxInjectedChars;
-    if (!budget || budget <= 0) {
-      return results.slice(0, limit);
-    }
-
-    let remaining = budget;
-    const clamped: MemorySearchResult[] = [];
-    for (const entry of results) {
-      if (remaining <= 0 || clamped.length >= limit) {
-        break;
-      }
-      const snippet = entry.snippet ?? "";
-      if (snippet.length <= remaining) {
-        clamped.push(entry);
-        remaining -= snippet.length;
-      } else {
-        clamped.push({ ...entry, snippet: snippet.slice(0, Math.max(0, remaining)) });
-        break;
-      }
-    }
-    return clamped;
-  }
-
-  private parseVersionResponse(stdout: string): VegaVersionInfo | null {
-    const trimmed = stdout.trim();
-    if (!trimmed) {
-      return null;
-    }
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (!parsed || typeof parsed !== "object" || typeof parsed.version !== "string") {
-        return null;
-      }
-      return {
-        version: parsed.version,
-        protocolVersion: typeof parsed.protocolVersion === "number" ? parsed.protocolVersion : 0,
-        capabilities: this.parseCapabilities(parsed.capabilities),
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  private parseCapabilities(raw: unknown): VegaCapabilities {
-    const defaults: VegaCapabilities = {
-      semanticSearch: false,
-      reranking: false,
-      searchModes: ["search"],
-    };
-    if (!raw || typeof raw !== "object") {
-      return defaults;
-    }
-    const obj = raw as Record<string, unknown>;
-    return {
-      semanticSearch: typeof obj.semanticSearch === "boolean" ? obj.semanticSearch : false,
-      reranking: typeof obj.reranking === "boolean" ? obj.reranking : false,
-      rerankMode: typeof obj.rerankMode === "string" ? obj.rerankMode : undefined,
-      inferenceBackend: typeof obj.inferenceBackend === "string" ? obj.inferenceBackend : undefined,
-      searchModes: Array.isArray(obj.searchModes)
-        ? obj.searchModes.filter((s): s is string => typeof s === "string")
-        : ["search"],
-      schemaVersion: typeof obj.schemaVersion === "number" ? obj.schemaVersion : undefined,
-    };
-  }
-
-  private parseStatusResponse(stdout: string): {
-    files?: number;
-    chunks?: number;
-    embedded?: number;
-    model?: string;
-    dbPath?: string;
-    // v1.48+ fields
-    version?: string;
-    protocolVersion?: number;
-    capabilities?: VegaCapabilities;
-    models?: Record<string, string | null>;
-    counts?: Record<string, number>;
-  } {
-    const trimmed = stdout.trim();
-    if (!trimmed) {
-      return {};
-    }
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (!parsed || typeof parsed !== "object") {
-        return {};
-      }
-      return {
-        files: typeof parsed.files === "number" ? parsed.files : undefined,
-        chunks: typeof parsed.chunks === "number" ? parsed.chunks : undefined,
-        embedded: typeof parsed.embedded === "number" ? parsed.embedded : undefined,
-        model: typeof parsed.model === "string" ? parsed.model : undefined,
-        dbPath: typeof parsed.dbPath === "string" ? parsed.dbPath : undefined,
-        // v1.48+ extended fields
-        version: typeof parsed.version === "string" ? parsed.version : undefined,
-        protocolVersion:
-          typeof parsed.protocolVersion === "number" ? parsed.protocolVersion : undefined,
-        capabilities:
-          parsed.capabilities && typeof parsed.capabilities === "object"
-            ? this.parseCapabilities(parsed.capabilities)
-            : undefined,
-        models:
-          parsed.models && typeof parsed.models === "object"
-            ? (parsed.models as Record<string, string | null>)
-            : undefined,
-        counts:
-          parsed.counts && typeof parsed.counts === "object"
-            ? (parsed.counts as Record<string, number>)
-            : undefined,
-      };
-    } catch {
-      log.warn("vega status returned invalid JSON");
-      return {};
-    }
-  }
 
   private resolveReadPath(relPath: string): string {
     if (relPath.startsWith("..") || path.isAbsolute(relPath)) {
