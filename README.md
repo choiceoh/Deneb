@@ -26,7 +26,7 @@ Most AI agent frameworks hit the same wall: when conversations grow long, contex
 | **Context recall**     | Vector search only       | Semantic search + DAG expansion + memory files |
 | **Compaction latency** | Blocks on LLM call       | Background observer pre-computes summaries     |
 | **Memory persistence** | Session-scoped           | Workspace files + JSONL transcripts + LCM DAG  |
-| **Codebase size**      | 500K–1M+ lines           | ~846K lines — auditable               |
+| **Codebase size**      | 500K–1M+ lines           | ~846K lines — auditable                        |
 | **Local LLM**          | Optional                 | First-class: SGLang, Ollama, vLLM support      |
 
 ### Intentional Simplification
@@ -172,4 +172,3 @@ pnpm format:fix # Auto-format (oxfmt --write)
 MIT
 
 ---
-

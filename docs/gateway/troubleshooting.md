@@ -121,12 +121,12 @@ Common signatures:
 
 Use `error.details.code` from the failed `connect` response to pick the next action:
 
-| Detail code                  | Meaning                                                  | Recommended action                                                                                                                                                   |
-| ---------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AUTH_TOKEN_MISSING`         | Client did not send a required shared token.             | Paste/set token in the client and retry. For dashboard paths: `deneb config get gateway.auth.token` then paste into Control UI settings.                             |
-| `AUTH_TOKEN_MISMATCH`        | Shared token did not match gateway auth token.           | If `canRetryWithDeviceToken=true`, allow one trusted retry. If still failing, rotate the device token with `deneb devices`. |
-| `AUTH_DEVICE_TOKEN_MISMATCH` | Cached per-device token is stale or revoked.             | Rotate/re-approve device token with `deneb devices`, then reconnect.                                                                                    |
-| `PAIRING_REQUIRED`           | Device identity is known but not approved for this role. | Approve pending request: `deneb devices list` then `deneb devices approve <requestId>`.                                                                              |
+| Detail code                  | Meaning                                                  | Recommended action                                                                                                                       |
+| ---------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `AUTH_TOKEN_MISSING`         | Client did not send a required shared token.             | Paste/set token in the client and retry. For dashboard paths: `deneb config get gateway.auth.token` then paste into Control UI settings. |
+| `AUTH_TOKEN_MISMATCH`        | Shared token did not match gateway auth token.           | If `canRetryWithDeviceToken=true`, allow one trusted retry. If still failing, rotate the device token with `deneb devices`.              |
+| `AUTH_DEVICE_TOKEN_MISMATCH` | Cached per-device token is stale or revoked.             | Rotate/re-approve device token with `deneb devices`, then reconnect.                                                                     |
+| `PAIRING_REQUIRED`           | Device identity is known but not approved for this role. | Approve pending request: `deneb devices list` then `deneb devices approve <requestId>`.                                                  |
 
 Device auth v2 migration check:
 
@@ -147,6 +147,7 @@ Related:
 - [/web/control-ui](/web/control-ui)
 - [/gateway/authentication](/gateway/authentication)
 - [/gateway/remote](/gateway/remote)
+
 ## Gateway service not running
 
 Use this when service is installed but process does not stay up.
