@@ -12,11 +12,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
 	"github.com/choiceoh/deneb/gateway-go/internal/node"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
+	"github.com/choiceoh/deneb/gateway-go/internal/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -151,6 +153,14 @@ func fullDispatcher() *Dispatcher {
 	RegisterSecretMethods(d, SecretDeps{Resolver: secret.NewResolver()})
 	RegisterTalkMethods(d, TalkDeps{Talk: talk.NewState()})
 
+	// Phase 4: Native system methods (migrated from bridge).
+	RegisterUsageMethods(d, UsageDeps{Tracker: usage.New()})
+	RegisterLogsMethods(d, LogsDeps{LogDir: "/tmp"})
+	RegisterDoctorMethods(d, DoctorDeps{})
+	RegisterMaintenanceMethods(d, MaintenanceDeps{Runner: maintenance.NewRunner("/tmp")})
+	RegisterUpdateMethods(d, UpdateDeps{})
+	RegisterMessagingMethods(d, MessagingDeps{})
+
 	// Bridge methods with a nil-returning forwarder (for registration only).
 	RegisterBridgeMethods(d, BridgeDeps{
 		ForwarderFunc: func() Forwarder { return nil },
@@ -242,11 +252,11 @@ func TestBridgeForwardSuccess(t *testing.T) {
 		ForwarderFunc: func() Forwarder { return fwd },
 	})
 
-	// Pick a bridge-forwarded method (still forwarded after Phase 3 port).
+	// Pick a bridge-forwarded method (still forwarded after Phase 4 port).
 	req := &protocol.RequestFrame{
 		Type:   "req",
 		ID:     "bridge-1",
-		Method: "send",
+		Method: "agent",
 		Params: json.RawMessage("{}"),
 	}
 	resp := d.Dispatch(context.Background(), req)
@@ -269,7 +279,7 @@ func TestBridgeForwardNilBridge(t *testing.T) {
 	req := &protocol.RequestFrame{
 		Type:   "req",
 		ID:     "bridge-nil-1",
-		Method: "send",
+		Method: "agent",
 		Params: json.RawMessage("{}"),
 	}
 	resp := d.Dispatch(context.Background(), req)

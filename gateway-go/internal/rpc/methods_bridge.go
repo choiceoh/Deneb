@@ -39,9 +39,8 @@ func RegisterBridgeMethods(d *Dispatcher, deps BridgeDeps) {
 		"sessions.preview",
 		"sessions.resolve",
 
-		// Messaging
-		"send",
-		"poll",
+		// Note: send and poll have been migrated to native Go handlers
+		// (RegisterMessagingMethods) with Telegram support + bridge fallback.
 
 		// Agent
 		"agent",
@@ -58,17 +57,8 @@ func RegisterBridgeMethods(d *Dispatcher, deps BridgeDeps) {
 		"web.login.start",
 		"web.login.wait",
 
-		// Usage
-		"usage.status",
-		"usage.cost",
-
-		// System (heavy — delegated to TS)
-		"update.run",
-		"doctor.memory.status",
-		"logs.tail",
-		"maintenance.run",
-		"maintenance.status",
-		"maintenance.summary",
+		// Note: usage.status, usage.cost, update.run, doctor.memory.status,
+		// logs.tail, maintenance.* have been migrated to native Go handlers.
 	}
 
 	for _, m := range methods {
