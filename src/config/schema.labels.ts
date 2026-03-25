@@ -423,12 +423,13 @@ export const FIELD_LABELS: Record<string, string> = {
   "agents.defaults.humanDelay.minMs": "Human Delay Min (ms)",
   "agents.defaults.humanDelay.maxMs": "Human Delay Max (ms)",
   "agents.defaults.cliBackends": "CLI Backends",
-  "agents.defaults.maxHistoryTurns": "Max History Turns",
+  "agents.defaults.maxHistoryTurns": "Max History Turns (system-managed)",
   "agents.defaults.compaction": "Compaction",
   "agents.defaults.compaction.mode": "Compaction Mode (system-managed)",
-  "agents.defaults.compaction.reserveTokens": "Compaction Reserve Tokens",
-  "agents.defaults.compaction.keepRecentTokens": "Compaction Keep Recent Tokens",
-  "agents.defaults.compaction.reserveTokensFloor": "Compaction Reserve Token Floor",
+  "agents.defaults.compaction.reserveTokens": "Compaction Reserve Tokens (system-managed)",
+  "agents.defaults.compaction.keepRecentTokens": "Compaction Keep Recent Tokens (system-managed)",
+  "agents.defaults.compaction.reserveTokensFloor":
+    "Compaction Reserve Token Floor (system-managed)",
   "agents.defaults.compaction.maxHistoryShare": "Compaction Max History Share (system-managed)",
   "agents.defaults.compaction.identifierPolicy": "Compaction Identifier Policy (system-managed)",
   "agents.defaults.compaction.identifierInstructions":

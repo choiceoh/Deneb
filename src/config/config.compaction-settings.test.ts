@@ -9,6 +9,7 @@ describe("config compaction settings", () => {
         agents: {
           defaults: {
             compaction: {
+              // reserveTokensFloor is now system-managed (accepted but ignored at runtime).
               reserveTokensFloor: 12_345,
               // identifierPolicy, identifierInstructions, memoryFlush.enabled,
               // and truncateAfterCompaction are system-managed but accepted for backward compat.
@@ -27,10 +28,8 @@ describe("config compaction settings", () => {
       async () => {
         const cfg = loadConfig();
 
-        expect(cfg.agents?.defaults?.compaction?.reserveTokensFloor).toBe(12_345);
-        expect(cfg.agents?.defaults?.compaction?.reserveTokens).toBeUndefined();
-        expect(cfg.agents?.defaults?.compaction?.keepRecentTokens).toBeUndefined();
         // Deprecated fields are stored but ignored at runtime.
+        expect(cfg.agents?.defaults?.compaction?.reserveTokensFloor).toBe(12_345);
         expect(cfg.agents?.defaults?.compaction?.identifierPolicy).toBe("custom");
         expect(cfg.agents?.defaults?.compaction?.identifierInstructions).toBe(
           "Keep ticket IDs unchanged.",
@@ -45,7 +44,7 @@ describe("config compaction settings", () => {
     );
   });
 
-  it("preserves pi compaction override values", async () => {
+  it("accepts deprecated reserveTokens/keepRecentTokens (system-managed, ignored at runtime)", async () => {
     await withTempHomeConfig(
       {
         agents: {
@@ -58,6 +57,7 @@ describe("config compaction settings", () => {
         },
       },
       async () => {
+        // Config loads without crashing — fields are accepted but ignored at runtime.
         const cfg = loadConfig();
         expect(cfg.agents?.defaults?.compaction?.reserveTokens).toBe(15_000);
         expect(cfg.agents?.defaults?.compaction?.keepRecentTokens).toBe(12_000);

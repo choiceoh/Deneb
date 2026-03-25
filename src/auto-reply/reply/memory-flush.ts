@@ -124,9 +124,8 @@ export function resolveMemoryFlushSettings(cfg?: DenebConfig): MemoryFlushSettin
   const systemPrompt = ensureMemoryFlushSafetyHints(
     defaults?.systemPrompt?.trim() || DEFAULT_MEMORY_FLUSH_SYSTEM_PROMPT,
   );
-  const reserveTokensFloor =
-    normalizeNonNegativeInt(cfg?.agents?.defaults?.compaction?.reserveTokensFloor) ??
-    DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
+  // reserveTokensFloor is system-managed — always use the default.
+  const reserveTokensFloor = DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
 
   return {
     enabled: true,
