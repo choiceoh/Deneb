@@ -9,17 +9,17 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// SessionDeps holds the dependencies for native session and agent RPC methods.
-type SessionDeps struct {
+// SessionExecDeps holds the dependencies for native session execution
+// and agent RPC methods (sessions.send/steer/abort, agent, agent.identity.get, agent.wait).
+type SessionExecDeps struct {
 	Chat       *chat.Handler
 	Agents     *agent.Store
 	JobTracker *agent.JobTracker
 }
 
-// RegisterSessionMethods registers native Go handlers for sessions.send,
-// sessions.steer, sessions.abort, agent, agent.identity.get, and agent.wait.
-// These methods were previously bridge-forwarded to Node.js.
-func RegisterSessionMethods(d *Dispatcher, deps SessionDeps) {
+// RegisterSessionExecMethods registers native Go handlers for session execution
+// and agent methods that were previously bridge-forwarded to Node.js.
+func RegisterSessionExecMethods(d *Dispatcher, deps SessionExecDeps) {
 	if deps.Chat == nil {
 		return
 	}
@@ -37,8 +37,6 @@ func RegisterSessionMethods(d *Dispatcher, deps SessionDeps) {
 
 	// Agent run method — delegates to sessions.send with agent context.
 	d.Register("agent", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		// The "agent" RPC method is a thin wrapper around sessions.send.
-		// It unpacks agent-specific params and delegates.
 		return deps.Chat.SessionsSend(ctx, req)
 	})
 
@@ -49,7 +47,7 @@ func RegisterSessionMethods(d *Dispatcher, deps SessionDeps) {
 	d.Register("agent.wait", agentWait(deps))
 }
 
-func agentIdentityGet(deps SessionDeps) HandlerFunc {
+func agentIdentityGet(deps SessionExecDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			AgentID string `json:"agentId"`
@@ -83,7 +81,7 @@ func agentIdentityGet(deps SessionDeps) HandlerFunc {
 	}
 }
 
-func agentWait(deps SessionDeps) HandlerFunc {
+func agentWait(deps SessionExecDeps) HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			RunID        string `json:"runId"`

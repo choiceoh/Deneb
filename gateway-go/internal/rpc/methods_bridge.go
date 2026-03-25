@@ -20,19 +20,16 @@ type BridgeDeps struct {
 // rather than falling through to the dispatcher's default forwarder (which
 // would require ScopeAdmin for unknown methods).
 //
-// Note: Methods that have been ported to native Go (exec.approvals.*, node.*,
-// device.*, cron advanced, agents.*, config advanced, skills.*, wizard.*,
-// secrets.*, talk.*) are no longer bridge-forwarded — they are registered
-// by their respective Register*Methods functions.
+// Note: Methods that have been ported to native Go are no longer bridge-forwarded:
+// exec.approvals.*, node.*, device.*, cron advanced, agents.*, config advanced,
+// skills.*, wizard.*, secrets.*, talk.*, sessions.send/steer/abort,
+// agent, agent.identity.get, agent.wait.
 func RegisterBridgeMethods(d *Dispatcher, deps BridgeDeps) {
 	methods := []string{
 		// Channels
 		"channels.logout",
 
-		// Sessions (messaging/lifecycle)
-		"sessions.send",
-		"sessions.steer",
-		"sessions.abort",
+		// Sessions (remaining bridge-forwarded methods)
 		"sessions.patch",
 		"sessions.reset",
 		"sessions.compact",
@@ -41,11 +38,6 @@ func RegisterBridgeMethods(d *Dispatcher, deps BridgeDeps) {
 
 		// Note: send and poll have been migrated to native Go handlers
 		// (RegisterMessagingMethods) with Telegram support + bridge fallback.
-
-		// Agent
-		"agent",
-		"agent.identity.get",
-		"agent.wait",
 
 		// Tools (catalog only — invoke/list/status are native)
 		"tools.catalog",

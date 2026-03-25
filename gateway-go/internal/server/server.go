@@ -115,6 +115,9 @@ type Server struct {
 	usageTracker *usage.Tracker
 	maintRunner  *maintenance.Runner
 	telegramPlug *telegram.Plugin
+
+	// Phase 4: Native agent execution.
+	jobTracker *agent.JobTracker
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
@@ -227,6 +230,7 @@ func New(addr string, opts ...Option) *Server {
 	s.wizardEng = wizard.NewEngine()
 	s.secrets = secret.NewResolver()
 	s.talkState = talk.NewState()
+	s.jobTracker = agent.NewJobTracker(s.logger)
 
 	// Phase 4: Native system methods (migrated from bridge).
 	s.usageTracker = usage.New()
@@ -888,18 +892,44 @@ func (s *Server) GatewaySubscriptions() *events.GatewayEventSubscriptions {
 
 // registerPhase2Methods registers chat, config, monitoring, and event subscription methods.
 func (s *Server) registerPhase2Methods() {
-	// Chat methods — forward heavy work to Node.js bridge.
+	// Chat methods — native agent execution with bridge fallback.
 	broadcastFn := func(event string, payload any) (int, []error) {
 		return s.broadcaster.Broadcast(event, payload)
 	}
+
+	// Determine transcript base directory.
+	transcriptDir := ""
+	if home, err := os.UserHomeDir(); err == nil {
+		transcriptDir = home + "/.deneb/transcripts"
+	}
+	var transcriptStore chat.TranscriptStore
+	if transcriptDir != "" {
+		transcriptStore = chat.NewFileTranscriptStore(transcriptDir)
+	}
+
+	chatCfg := chat.DefaultHandlerConfig()
+	chatCfg.Transcript = transcriptStore
+	chatCfg.Tools = chat.NewToolRegistry()
+	chatCfg.JobTracker = s.jobTracker
+	if s.authManager != nil {
+		chatCfg.AuthManager = s.authManager
+	}
+
 	s.chatHandler = chat.NewHandler(
 		s.sessions,
-		s.bridge, // may be nil; chat.send will error gracefully
+		s.bridge, // may be nil; native agent execution is preferred
 		broadcastFn,
 		s.logger,
-		chat.DefaultHandlerConfig(),
+		chatCfg,
 	)
 	rpc.RegisterChatMethods(s.dispatcher, rpc.ChatDeps{Chat: s.chatHandler})
+
+	// Native session execution / agent methods (Phase 4).
+	rpc.RegisterSessionExecMethods(s.dispatcher, rpc.SessionExecDeps{
+		Chat:       s.chatHandler,
+		Agents:     s.agents,
+		JobTracker: s.jobTracker,
+	})
 
 	// Config reload method with bridge forwarding and Go subsystem propagation.
 	rpc.RegisterConfigReloadMethod(s.dispatcher, rpc.ConfigReloadDeps{

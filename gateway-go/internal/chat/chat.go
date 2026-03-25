@@ -4,9 +4,9 @@
 // codebase. The Go gateway handles chat message orchestration, history
 // retrieval, abort signaling, and message injection.
 //
-// Heavy LLM work (agent invocation, tool execution) is forwarded to the
-// Node.js plugin host via the bridge. The Go gateway owns message routing,
-// sanitization, history budgeting, and session transcript persistence.
+// Session execution (sessions.send/steer/abort) runs natively in Go:
+// the LLM agent loop, tool execution, context assembly, and compaction
+// are handled without bridging to Node.js.
 package chat
 
 import (
@@ -20,6 +20,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -78,6 +81,20 @@ type Handler struct {
 	broadcastRaw BroadcastRawFunc
 	logger       *slog.Logger
 
+	// Native agent execution deps.
+	llmClient   *llm.Client
+	transcript  TranscriptStore
+	tools       *ToolRegistry
+	authManager *provider.AuthManager
+	jobTracker  *agent.JobTracker
+
+	// Agent run configuration.
+	contextCfg    ContextConfig
+	compactionCfg CompactionConfig
+	defaultModel  string
+	defaultSystem string
+	maxTokens     int
+
 	abortMu     sync.Mutex
 	abortMap    map[string]*AbortEntry // clientRunId -> entry
 	done        chan struct{}          // signals abortGCLoop to stop
@@ -95,6 +112,18 @@ type HandlerConfig struct {
 	MaxHistoryBytes int
 	MaxHistoryCount int
 	MaxMessageBytes int
+
+	// Native agent execution config.
+	LLMClient     *llm.Client
+	Transcript    TranscriptStore
+	Tools         *ToolRegistry
+	AuthManager   *provider.AuthManager
+	JobTracker    *agent.JobTracker
+	ContextCfg    ContextConfig
+	CompactionCfg CompactionConfig
+	DefaultModel  string
+	DefaultSystem string
+	MaxTokens     int
 }
 
 // DefaultHandlerConfig returns sensible defaults.
@@ -103,19 +132,35 @@ func DefaultHandlerConfig() HandlerConfig {
 		MaxHistoryBytes: 2 * 1024 * 1024, // 2 MB
 		MaxHistoryCount: 200,
 		MaxMessageBytes: 128 * 1024, // 128 KB
+		ContextCfg:      DefaultContextConfig(),
+		CompactionCfg:   DefaultCompactionConfig(),
+		MaxTokens:       8192,
 	}
 }
 
 // NewHandler creates a new chat handler.
 func NewHandler(sessions *session.Manager, forwarder Forwarder, broadcast BroadcastFunc, logger *slog.Logger, cfg HandlerConfig) *Handler {
 	if cfg.MaxHistoryBytes == 0 {
-		cfg = DefaultHandlerConfig()
+		defaults := DefaultHandlerConfig()
+		cfg.MaxHistoryBytes = defaults.MaxHistoryBytes
+		cfg.MaxHistoryCount = defaults.MaxHistoryCount
+		cfg.MaxMessageBytes = defaults.MaxMessageBytes
 	}
 	h := &Handler{
 		sessions:        sessions,
 		forwarder:       forwarder,
 		broadcast:       broadcast,
 		logger:          logger,
+		llmClient:       cfg.LLMClient,
+		transcript:      cfg.Transcript,
+		tools:           cfg.Tools,
+		authManager:     cfg.AuthManager,
+		jobTracker:      cfg.JobTracker,
+		contextCfg:      cfg.ContextCfg,
+		compactionCfg:   cfg.CompactionCfg,
+		defaultModel:    cfg.DefaultModel,
+		defaultSystem:   cfg.DefaultSystem,
+		maxTokens:       cfg.MaxTokens,
 		abortMap:        make(map[string]*AbortEntry),
 		done:            make(chan struct{}),
 		maxHistoryBytes: cfg.MaxHistoryBytes,
@@ -151,9 +196,8 @@ func (h *Handler) Close() {
 // --- RPC method handlers ---
 
 // Send handles "chat.send" — the primary message ingestion endpoint.
-// Sanitizes input, resolves delivery context, forwards to the agent via bridge,
-// and broadcasts session events.
-func (h *Handler) Send(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+// Sanitizes input, starts an async agent run, and immediately returns.
+func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	var p struct {
 		SessionKey  string           `json:"sessionKey"`
 		Message     string           `json:"message"`
@@ -175,34 +219,163 @@ func (h *Handler) Send(ctx context.Context, req *protocol.RequestFrame) *protoco
 			protocol.ErrMissingParam, "message or attachments required"))
 	}
 
-	// Sanitize input.
-	p.Message = sanitizeInput(p.Message)
+	return h.startAsyncRun(req.ID, RunParams{
+		SessionKey:  p.SessionKey,
+		Message:     sanitizeInput(p.Message),
+		Attachments: p.Attachments,
+		Delivery:    p.Delivery,
+		ClientRunID: p.ClientRunID,
+		Model:       p.Model,
+	}, false)
+}
 
-	// Ensure session exists.
-	sess := h.sessions.Get(p.SessionKey)
-	if sess == nil {
-		sess = h.sessions.Create(p.SessionKey, session.KindDirect)
+// SessionsSend handles "sessions.send" — interrupts any active run, then starts a new one.
+func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	var p struct {
+		Key            string           `json:"key"`
+		Message        string           `json:"message"`
+		Thinking       string           `json:"thinking,omitempty"`
+		Attachments    []ChatAttachment `json:"attachments,omitempty"`
+		TimeoutMs      int              `json:"timeoutMs,omitempty"`
+		IdempotencyKey string           `json:"idempotencyKey,omitempty"`
+	}
+	if err := json.Unmarshal(req.Params, &p); err != nil {
+		return protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrInvalidRequest, "invalid sessions.send params: "+err.Error()))
+	}
+	if p.Key == "" {
+		return protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrMissingParam, "key is required"))
 	}
 
-	// Check if session is already running (prevent concurrent sends).
-	if sess.Status == session.StatusRunning {
+	// Interrupt any active run for this session.
+	h.interruptActiveRun(p.Key)
+
+	runID := p.IdempotencyKey
+	if runID == "" {
+		runID = fmt.Sprintf("run_%d", time.Now().UnixNano())
+	}
+
+	return h.startAsyncRun(req.ID, RunParams{
+		SessionKey:  p.Key,
+		Message:     sanitizeInput(p.Message),
+		Attachments: p.Attachments,
+		ClientRunID: runID,
+	}, false)
+}
+
+// SessionsSteer handles "sessions.steer" — patches session config, then starts a run.
+func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	var p struct {
+		Key          string `json:"key"`
+		Message      string `json:"message,omitempty"`
+		Thinking     string `json:"thinking,omitempty"`
+		Model        string `json:"model,omitempty"`
+		SystemPrompt string `json:"systemPrompt,omitempty"`
+	}
+	if err := json.Unmarshal(req.Params, &p); err != nil {
 		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrConflict, "session is already running"))
+			protocol.ErrInvalidRequest, "invalid sessions.steer params: "+err.Error()))
+	}
+	if p.Key == "" {
+		return protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrMissingParam, "key is required"))
+	}
+
+	// Interrupt any active run for this session.
+	h.interruptActiveRun(p.Key)
+
+	runID := fmt.Sprintf("steer_%d", time.Now().UnixNano())
+
+	return h.startAsyncRun(req.ID, RunParams{
+		SessionKey:  p.Key,
+		Message:     sanitizeInput(p.Message),
+		Model:       p.Model,
+		System:      p.SystemPrompt,
+		ClientRunID: runID,
+	}, true)
+}
+
+// SessionsAbort handles "sessions.abort" — cancels an active run by key or runId.
+func (h *Handler) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	var p struct {
+		Key   string `json:"key"`
+		RunID string `json:"runId,omitempty"`
+	}
+	if err := json.Unmarshal(req.Params, &p); err != nil {
+		return protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrInvalidRequest, "invalid sessions.abort params: "+err.Error()))
+	}
+	if p.Key == "" && p.RunID == "" {
+		return protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrMissingParam, "key or runId is required"))
+	}
+
+	h.abortMu.Lock()
+	var abortedRunID string
+	if p.RunID != "" {
+		if entry, ok := h.abortMap[p.RunID]; ok {
+			entry.CancelFn()
+			abortedRunID = p.RunID
+			delete(h.abortMap, p.RunID)
+		}
+	} else {
+		for id, entry := range h.abortMap {
+			if entry.SessionKey == p.Key {
+				entry.CancelFn()
+				abortedRunID = id
+				delete(h.abortMap, id)
+			}
+		}
+	}
+	h.abortMu.Unlock()
+
+	if abortedRunID == "" {
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"ok":     true,
+			"status": "no-active-run",
+		})
+		return resp
+	}
+
+	if p.Key != "" {
+		h.sessions.ApplyLifecycleEvent(p.Key, session.LifecycleEvent{
+			Phase: session.PhaseEnd,
+			Ts:    time.Now().UnixMilli(),
+		})
+	}
+
+	resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		"ok":           true,
+		"abortedRunId": abortedRunID,
+		"status":       "aborted",
+	})
+	return resp
+}
+
+// startAsyncRun is the shared logic for Send/SessionsSend/SessionsSteer.
+// It validates the session, creates abort context, and spawns the agent goroutine.
+func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *protocol.ResponseFrame {
+	// Ensure session exists.
+	sess := h.sessions.Get(params.SessionKey)
+	if sess == nil {
+		sess = h.sessions.Create(params.SessionKey, session.KindDirect)
 	}
 
 	// Transition session to running.
-	h.sessions.ApplyLifecycleEvent(p.SessionKey, session.LifecycleEvent{
+	h.sessions.ApplyLifecycleEvent(params.SessionKey, session.LifecycleEvent{
 		Phase: session.PhaseStart,
 		Ts:    time.Now().UnixMilli(),
 	})
 
-	// Create abort context for this run.
-	runCtx, runCancel := context.WithCancel(ctx)
-	if p.ClientRunID != "" {
+	// Create a background context (not tied to the RPC request lifetime).
+	runCtx, runCancel := context.WithCancel(context.Background())
+
+	if params.ClientRunID != "" {
 		h.abortMu.Lock()
-		h.abortMap[p.ClientRunID] = &AbortEntry{
-			SessionKey: p.SessionKey,
-			ClientRun:  p.ClientRunID,
+		h.abortMap[params.ClientRunID] = &AbortEntry{
+			SessionKey: params.SessionKey,
+			ClientRun:  params.ClientRunID,
 			CancelFn:   runCancel,
 			ExpiresAt:  time.Now().Add(30 * time.Minute),
 		}
@@ -211,75 +384,63 @@ func (h *Handler) Send(ctx context.Context, req *protocol.RequestFrame) *protoco
 
 	// Broadcast session start event.
 	if h.broadcast != nil {
+		reason := "message_sent"
+		if isSteer {
+			reason = "steered"
+		}
 		h.broadcast("sessions.changed", map[string]any{
-			"sessionKey": p.SessionKey,
-			"reason":     "message_sent",
+			"sessionKey": params.SessionKey,
+			"reason":     reason,
 			"status":     "running",
 		})
 	}
 
-	// Forward to Node.js agent via bridge.
-	if h.forwarder == nil {
-		runCancel()
-		h.cleanupAbort(p.ClientRunID)
-		h.sessions.ApplyLifecycleEvent(p.SessionKey, session.LifecycleEvent{
-			Phase: session.PhaseError,
-			Ts:    time.Now().UnixMilli(),
-		})
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrDependencyFailed, "no agent bridge available"))
-	}
+	// Spawn async agent run.
+	deps := h.buildRunDeps()
+	go func() {
+		defer runCancel()
+		defer h.cleanupAbort(params.ClientRunID)
+		runAgentAsync(runCtx, params, deps)
+	}()
 
-	// Build the forwarded request with sanitized params.
-	forwardParams, _ := json.Marshal(map[string]any{
-		"sessionKey":  p.SessionKey,
-		"message":     p.Message,
-		"attachments": p.Attachments,
-		"delivery":    p.Delivery,
-		"clientRunId": p.ClientRunID,
-		"model":       p.Model,
+	// Immediately return with runId.
+	resp, _ := protocol.NewResponseOK(reqID, map[string]any{
+		"runId":  params.ClientRunID,
+		"status": "started",
 	})
-	forwardReq := &protocol.RequestFrame{
-		Type:   protocol.FrameTypeRequest,
-		ID:     req.ID,
-		Method: "chat.send",
-		Params: forwardParams,
-	}
-	resp, err := h.forwarder.Forward(runCtx, forwardReq)
-	runCancel()
-	h.cleanupAbort(p.ClientRunID)
-
-	if err != nil {
-		h.logger.Error("chat.send bridge forward failed", "session", p.SessionKey, "error", err)
-		h.sessions.ApplyLifecycleEvent(p.SessionKey, session.LifecycleEvent{
-			Phase: session.PhaseError,
-			Ts:    time.Now().UnixMilli(),
-		})
-		if h.broadcast != nil {
-			h.broadcast("sessions.changed", map[string]any{
-				"sessionKey": p.SessionKey,
-				"reason":     "error",
-				"status":     "failed",
-			})
-		}
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrDependencyFailed, "agent bridge error: "+err.Error()))
-	}
-
-	// Mark session done.
-	h.sessions.ApplyLifecycleEvent(p.SessionKey, session.LifecycleEvent{
-		Phase: session.PhaseEnd,
-		Ts:    time.Now().UnixMilli(),
-	})
-	if h.broadcast != nil {
-		h.broadcast("sessions.changed", map[string]any{
-			"sessionKey": p.SessionKey,
-			"reason":     "completed",
-			"status":     "done",
-		})
-	}
-
 	return resp
+}
+
+// interruptActiveRun cancels all active runs for a session key.
+func (h *Handler) interruptActiveRun(sessionKey string) {
+	h.abortMu.Lock()
+	for id, entry := range h.abortMap {
+		if entry.SessionKey == sessionKey {
+			entry.CancelFn()
+			delete(h.abortMap, id)
+		}
+	}
+	h.abortMu.Unlock()
+}
+
+// buildRunDeps assembles the dependency struct for runAgentAsync.
+func (h *Handler) buildRunDeps() runDeps {
+	return runDeps{
+		sessions:      h.sessions,
+		llmClient:     h.llmClient,
+		transcript:    h.transcript,
+		tools:         h.tools,
+		authManager:   h.authManager,
+		broadcast:     h.broadcast,
+		broadcastRaw:  h.broadcastRaw,
+		jobTracker:    h.jobTracker,
+		logger:        h.logger,
+		contextCfg:    h.contextCfg,
+		compactionCfg: h.compactionCfg,
+		defaultModel:  h.defaultModel,
+		defaultSystem: h.defaultSystem,
+		maxTokens:     h.maxTokens,
+	}
 }
 
 // History handles "chat.history" — returns capped, sanitized transcript.
@@ -403,7 +564,7 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 	return resp
 }
 
-// Inject handles "chat.inject" — injects an assistant message directly into the transcript.
+// Inject handles "chat.inject" — injects a message directly into the transcript.
 func (h *Handler) Inject(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	var p struct {
 		SessionKey string `json:"sessionKey"`
@@ -422,16 +583,39 @@ func (h *Handler) Inject(ctx context.Context, req *protocol.RequestFrame) *proto
 		p.Role = "assistant"
 	}
 
-	// Forward to Node.js for transcript persistence.
+	content := sanitizeInput(p.Content)
+
+	// Use native transcript store if available.
+	if h.transcript != nil {
+		msg := ChatMessage{
+			Role:      p.Role,
+			Content:   content,
+			Timestamp: time.Now().UnixMilli(),
+		}
+		if err := h.transcript.Append(p.SessionKey, msg); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrDependencyFailed, "transcript write error: "+err.Error()))
+		}
+		if h.broadcast != nil {
+			h.broadcast("sessions.changed", map[string]any{
+				"sessionKey": p.SessionKey,
+				"reason":     "injected",
+			})
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"injected": true})
+		return resp
+	}
+
+	// Fall back to bridge forwarding.
 	if h.forwarder == nil {
 		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrDependencyFailed, "no agent bridge available"))
+			protocol.ErrDependencyFailed, "no transcript store or bridge available"))
 	}
 
 	forwardParams, _ := json.Marshal(map[string]any{
 		"sessionKey": p.SessionKey,
 		"role":       p.Role,
-		"content":    sanitizeInput(p.Content),
+		"content":    content,
 	})
 	forwardReq := &protocol.RequestFrame{
 		Type:   protocol.FrameTypeRequest,
