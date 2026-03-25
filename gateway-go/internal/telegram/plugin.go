@@ -71,7 +71,9 @@ func (p *Plugin) Start(ctx context.Context) error {
 	}
 
 	// Create HTTP client with IPv4-fallback transport.
-	timeout := time.Duration(p.config.EffectiveTimeout()) * time.Second
+	// HTTP client timeout must exceed the long-poll timeout (DefaultPollTimeout)
+	// to prevent the client from killing the connection before Telegram responds.
+	timeout := time.Duration(p.config.EffectiveTimeout()+DefaultPollTimeout+15) * time.Second
 	httpClient := NewTelegramHTTPClient(timeout, p.logger)
 	if p.config.Proxy != "" {
 		proxyURL, err := url.Parse(p.config.Proxy)
