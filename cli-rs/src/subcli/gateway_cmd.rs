@@ -127,16 +127,16 @@ pub async fn run(args: &GatewayArgs) -> Result<(), CliError> {
             password,
             timeout,
         } => {
-            cmd_call(
+            cmd_call(CmdCallParams {
                 method,
-                params.as_deref(),
-                *json,
-                *expect_final,
-                url.as_deref(),
-                token.as_deref(),
-                password.as_deref(),
-                *timeout,
-            )
+                params_str: params.as_deref(),
+                json: *json,
+                expect_final: *expect_final,
+                url: url.as_deref(),
+                token: token.as_deref(),
+                password: password.as_deref(),
+                timeout: *timeout,
+            })
             .await
         }
         GatewayCommand::UsageCost {
@@ -231,18 +231,19 @@ async fn cmd_status(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn cmd_call(
-    method: &str,
-    params_str: Option<&str>,
+struct CmdCallParams<'a> {
+    method: &'a str,
+    params_str: Option<&'a str>,
     json: bool,
     expect_final: bool,
-    url: Option<&str>,
-    token: Option<&str>,
-    password: Option<&str>,
+    url: Option<&'a str>,
+    token: Option<&'a str>,
+    password: Option<&'a str>,
     timeout: u64,
-) -> Result<(), CliError> {
-    let params: Option<serde_json::Value> = match params_str {
+}
+
+async fn cmd_call(p: CmdCallParams<'_>) -> Result<(), CliError> {
+    let params: Option<serde_json::Value> = match p.params_str {
         Some(s) => Some(
             serde_json::from_str(s)
                 .map_err(|e| CliError::User(format!("invalid JSON params: {e}")))?,
@@ -251,17 +252,17 @@ async fn cmd_call(
     };
 
     let result = call_gateway(CallOptions {
-        url: url.map(|s| s.to_string()),
-        token: token.map(|s| s.to_string()),
-        password: password.map(|s| s.to_string()),
-        method: method.to_string(),
+        url: p.url.map(|s| s.to_string()),
+        token: p.token.map(|s| s.to_string()),
+        password: p.password.map(|s| s.to_string()),
+        method: p.method.to_string(),
         params,
-        timeout_ms: timeout,
-        expect_final,
+        timeout_ms: p.timeout,
+        expect_final: p.expect_final,
     })
     .await?;
 
-    if is_json_mode(json) || result.is_object() || result.is_array() {
+    if is_json_mode(p.json) || result.is_object() || result.is_array() {
         println!("{}", serde_json::to_string_pretty(&result)?);
     } else {
         println!("{result}");

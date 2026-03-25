@@ -165,16 +165,16 @@ pub async fn run(args: &PluginsArgs) -> Result<(), CliError> {
             password,
             timeout,
         } => {
-            rpc_action(
-                "plugins.enable",
-                serde_json::json!({"id": id}),
-                *json,
+            rpc_action(RpcActionParams {
+                method: "plugins.enable",
+                params: serde_json::json!({"id": id}),
+                json: *json,
                 url,
                 token,
                 password,
-                *timeout,
-                &format!("Plugin '{id}' enabled."),
-            )
+                timeout: *timeout,
+                success_msg: &format!("Plugin '{id}' enabled."),
+            })
             .await
         }
         PluginsCommand::Disable {
@@ -185,16 +185,16 @@ pub async fn run(args: &PluginsArgs) -> Result<(), CliError> {
             password,
             timeout,
         } => {
-            rpc_action(
-                "plugins.disable",
-                serde_json::json!({"id": id}),
-                *json,
+            rpc_action(RpcActionParams {
+                method: "plugins.disable",
+                params: serde_json::json!({"id": id}),
+                json: *json,
                 url,
                 token,
                 password,
-                *timeout,
-                &format!("Plugin '{id}' disabled."),
-            )
+                timeout: *timeout,
+                success_msg: &format!("Plugin '{id}' disabled."),
+            })
             .await
         }
         PluginsCommand::Install {
@@ -205,16 +205,16 @@ pub async fn run(args: &PluginsArgs) -> Result<(), CliError> {
             password,
             timeout,
         } => {
-            rpc_action(
-                "plugins.install",
-                serde_json::json!({"source": source}),
-                *json,
+            rpc_action(RpcActionParams {
+                method: "plugins.install",
+                params: serde_json::json!({"source": source}),
+                json: *json,
                 url,
                 token,
                 password,
-                *timeout,
-                &format!("Plugin '{source}' installed."),
-            )
+                timeout: *timeout,
+                success_msg: &format!("Plugin '{source}' installed."),
+            })
             .await
         }
         PluginsCommand::Uninstall {
@@ -226,16 +226,16 @@ pub async fn run(args: &PluginsArgs) -> Result<(), CliError> {
             password,
             timeout,
         } => {
-            rpc_action(
-                "plugins.uninstall",
-                serde_json::json!({"id": id, "force": force}),
-                *json,
+            rpc_action(RpcActionParams {
+                method: "plugins.uninstall",
+                params: serde_json::json!({"id": id, "force": force}),
+                json: *json,
                 url,
                 token,
                 password,
-                *timeout,
-                &format!("Plugin '{id}' uninstalled."),
-            )
+                timeout: *timeout,
+                success_msg: &format!("Plugin '{id}' uninstalled."),
+            })
             .await
         }
     }
@@ -272,13 +272,12 @@ fn print_plugins_table(result: &serde_json::Value) {
 async fn rpc_simple(
     method: &str,
     params: serde_json::Value,
-    json: bool,
+    _json: bool,
     url: &Option<String>,
     token: &Option<String>,
     password: &Option<String>,
     timeout: u64,
 ) -> Result<(), CliError> {
-    let json_mode = is_json_mode(json);
     let result = call_gateway(CallOptions {
         url: url.clone(),
         token: token.clone(),
@@ -289,38 +288,33 @@ async fn rpc_simple(
         expect_final: false,
     })
     .await?;
-    // TODO: rich formatting for non-JSON mode (currently same output)
-    #[allow(clippy::if_same_then_else)]
-    if json_mode {
-        println!("{}", serde_json::to_string_pretty(&result)?);
-    } else {
-        println!("{}", serde_json::to_string_pretty(&result)?);
-    }
+    println!("{}", serde_json::to_string_pretty(&result)?);
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn rpc_action(
-    method: &str,
+struct RpcActionParams<'a> {
+    method: &'a str,
     params: serde_json::Value,
     json: bool,
-    url: &Option<String>,
-    token: &Option<String>,
-    password: &Option<String>,
+    url: &'a Option<String>,
+    token: &'a Option<String>,
+    password: &'a Option<String>,
     timeout: u64,
-    success_msg: &str,
-) -> Result<(), CliError> {
-    let json_mode = is_json_mode(json);
+    success_msg: &'a str,
+}
+
+async fn rpc_action(p: RpcActionParams<'_>) -> Result<(), CliError> {
+    let json_mode = is_json_mode(p.json);
     let result = crate::terminal::progress::with_spinner(
         "Working...",
         !json_mode,
         call_gateway(CallOptions {
-            url: url.clone(),
-            token: token.clone(),
-            password: password.clone(),
-            method: method.to_string(),
-            params: Some(params),
-            timeout_ms: timeout,
+            url: p.url.clone(),
+            token: p.token.clone(),
+            password: p.password.clone(),
+            method: p.method.to_string(),
+            params: Some(p.params),
+            timeout_ms: p.timeout,
             expect_final: false,
         }),
     )
@@ -328,7 +322,7 @@ async fn rpc_action(
     if json_mode {
         println!("{}", serde_json::to_string_pretty(&result)?);
     } else {
-        println!("{}", Palette::success().apply_to(success_msg));
+        println!("{}", Palette::success().apply_to(p.success_msg));
     }
     Ok(())
 }

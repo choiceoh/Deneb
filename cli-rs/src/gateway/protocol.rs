@@ -49,10 +49,13 @@ pub struct ResponseFrame {
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub struct EventFrame {
+    #[allow(dead_code)]
     pub event: String,
     #[serde(default)]
+    #[allow(dead_code)]
     pub payload: Option<serde_json::Value>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub seq: Option<u64>,
 }
 
@@ -80,8 +83,8 @@ pub enum GatewayFrame {
 }
 
 /// Connect params sent in the WebSocket URL query or initial hello.
-#[derive(Debug, Default, Serialize)]
 #[allow(dead_code)]
+#[derive(Debug, Default, Serialize)]
 pub struct ConnectParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
