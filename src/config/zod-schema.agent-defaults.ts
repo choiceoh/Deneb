@@ -56,6 +56,7 @@ export const AgentDefaultsSchema = z
       .object({
         mode: z.union([z.literal("off"), z.literal("cache-ttl")]).optional(),
         ttl: z.string().optional(),
+        // Deprecated: accepted for backward compat but ignored at runtime (system constants).
         keepLastAssistants: z.number().int().nonnegative().optional(),
         softTrimRatio: z.number().min(0).max(1).optional(),
         hardClearRatio: z.number().min(0).max(1).optional(),
@@ -87,16 +88,9 @@ export const AgentDefaultsSchema = z
       .optional(),
     compaction: z
       .object({
+        // Deprecated: accepted for backward compat but ignored at runtime (system constants).
         mode: z.union([z.literal("default"), z.literal("safeguard")]).optional(),
-        reserveTokens: z.number().int().nonnegative().optional(),
-        keepRecentTokens: z.number().int().positive().optional(),
-        reserveTokensFloor: z.number().int().nonnegative().optional(),
         maxHistoryShare: z.number().min(0.1).max(0.9).optional(),
-        customInstructions: z.string().optional(),
-        identifierPolicy: z
-          .union([z.literal("strict"), z.literal("off"), z.literal("custom")])
-          .optional(),
-        identifierInstructions: z.string().optional(),
         recentTurnsPreserve: z.number().int().min(0).max(12).optional(),
         qualityGuard: z
           .object({
@@ -105,6 +99,14 @@ export const AgentDefaultsSchema = z
           })
           .strict()
           .optional(),
+        reserveTokens: z.number().int().nonnegative().optional(),
+        keepRecentTokens: z.number().int().positive().optional(),
+        reserveTokensFloor: z.number().int().nonnegative().optional(),
+        customInstructions: z.string().optional(),
+        identifierPolicy: z
+          .union([z.literal("strict"), z.literal("off"), z.literal("custom")])
+          .optional(),
+        identifierInstructions: z.string().optional(),
         postIndexSync: z.enum(["off", "async", "await"]).optional(),
         postCompactionSections: z.array(z.string()).optional(),
         model: z.string().optional(),

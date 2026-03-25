@@ -26,13 +26,11 @@ function buildSafeguardFactories(cfg: DenebConfig) {
 }
 
 describe("buildEmbeddedExtensionFactories", () => {
-  it("registers safeguard extension and runtime when mode is safeguard", () => {
+  it("always registers safeguard extension and runtime (mode is system-managed)", () => {
     const cfg = {
       agents: {
         defaults: {
-          compaction: {
-            mode: "safeguard",
-          },
+          compaction: {},
         },
       },
     } as DenebConfig;

@@ -58,9 +58,7 @@ function buildContextPruningFactory(params: {
   return contextPruningExtension;
 }
 
-function resolveCompactionMode(cfg?: DenebConfig): "default" | "safeguard" {
-  return cfg?.agents?.defaults?.compaction?.mode === "safeguard" ? "safeguard" : "default";
-}
+// Compaction mode is always "safeguard" — not user-configurable to prevent quality degradation.
 
 export function buildEmbeddedExtensionFactories(params: {
   cfg: DenebConfig | undefined;
@@ -70,7 +68,7 @@ export function buildEmbeddedExtensionFactories(params: {
   model: Model<Api> | undefined;
 }): ExtensionFactory[] {
   const factories: ExtensionFactory[] = [];
-  if (resolveCompactionMode(params.cfg) === "safeguard") {
+  {
     const compactionCfg = params.cfg?.agents?.defaults?.compaction;
     const contextWindowInfo = resolveContextWindowInfo({
       cfg: params.cfg,
@@ -79,21 +77,14 @@ export function buildEmbeddedExtensionFactories(params: {
       modelContextWindow: params.model?.contextWindow,
       defaultTokens: DEFAULT_CONTEXT_TOKENS,
     });
-    // Clamp maxHistoryShare to stable bounds so extreme config values cannot
-    // degrade compaction performance (zero-budget pruning or summarizer overload).
-    const rawMaxHistoryShare = compactionCfg?.maxHistoryShare;
-    const clampedMaxHistoryShare =
-      typeof rawMaxHistoryShare === "number"
-        ? Math.min(0.9, Math.max(0.1, rawMaxHistoryShare))
-        : undefined;
+    // maxHistoryShare and recentTurnsPreserve are system constants —
+    // no longer read from user config to prevent quality degradation.
     setCompactionSafeguardRuntime(params.sessionManager, {
-      maxHistoryShare: clampedMaxHistoryShare,
       contextWindowTokens: contextWindowInfo.tokens,
       identifierPolicy: compactionCfg?.identifierPolicy,
       identifierInstructions: compactionCfg?.identifierInstructions,
       customInstructions: compactionCfg?.customInstructions,
       model: params.model,
-      recentTurnsPreserve: compactionCfg?.recentTurnsPreserve,
     });
     factories.push(compactionSafeguardExtension);
   }

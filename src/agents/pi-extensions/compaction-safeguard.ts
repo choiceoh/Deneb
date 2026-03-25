@@ -69,13 +69,13 @@ export function composeSplitTurnInstructions(
 // ── Runtime registry ─────────────────────────────────────────────────────────
 
 export type CompactionSafeguardRuntimeValue = {
-  maxHistoryShare?: number;
+  // maxHistoryShare and recentTurnsPreserve are system constants (not user-configurable).
+  // They are defined as SYSTEM_MAX_HISTORY_SHARE and DEFAULT_RECENT_TURNS_PRESERVE below.
   contextWindowTokens?: number;
   identifierPolicy?: AgentCompactionIdentifierPolicy;
   identifierInstructions?: string;
   customInstructions?: string;
   model?: Model<Api>;
-  recentTurnsPreserve?: number;
 };
 
 const registry = createSessionManagerRuntimeRegistry<CompactionSafeguardRuntimeValue>();
@@ -98,10 +98,8 @@ const MAX_UNTRUSTED_INSTRUCTION_CHARS = 4000;
 // ── Performance stability bounds ─────────────────────────────────────────────
 // These ensure compaction runs predictably regardless of config values.
 
-/** Minimum maxHistoryShare to prevent zero-budget pruning loops. */
-const MIN_MAX_HISTORY_SHARE = 0.1;
-/** Maximum maxHistoryShare to prevent the summarizer from being overwhelmed. */
-const MAX_MAX_HISTORY_SHARE = 0.9;
+/** System-managed maxHistoryShare — not user-configurable to prevent quality degradation. */
+const SYSTEM_MAX_HISTORY_SHARE = 0.5;
 /** Floor for context window tokens to avoid degenerate chunk calculations. */
 const MIN_CONTEXT_WINDOW_TOKENS = 4096;
 /** Floor for maxChunkTokens to prevent excessive micro-chunking. */
@@ -121,15 +119,6 @@ const POLICY_OFF_EXACT_IDENTIFIERS_INSTRUCTION =
   "For ## Exact identifiers, include identifiers only when needed for continuity; do not enforce literal-preservation rules.";
 
 // ── Performance stability helpers ─────────────────────────────────────────────
-
-function clampMaxHistoryShare(value: number | undefined): number {
-  const raw = value ?? 0.5;
-  const clamped = Math.min(MAX_MAX_HISTORY_SHARE, Math.max(MIN_MAX_HISTORY_SHARE, raw));
-  if (clamped !== raw) {
-    log.warn(`compaction-safeguard: clamped maxHistoryShare ${raw} → ${clamped}`);
-  }
-  return clamped;
-}
 
 function clampContextWindowTokens(value: number | undefined, modelContextWindow: number): number {
   const raw = value ?? modelContextWindow;
@@ -701,13 +690,15 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
       );
       const turnPrefixMessages = preparation.turnPrefixMessages ?? [];
       let messagesToSummarize = preparation.messagesToSummarize;
-      const recentTurnsPreserve = resolveRecentTurnsPreserve(runtime?.recentTurnsPreserve);
+      // recentTurnsPreserve is a system constant — not read from user config.
+      const recentTurnsPreserve = DEFAULT_RECENT_TURNS_PRESERVE;
       const structuredInstructions = buildCompactionStructureInstructions(
         customInstructions,
         summarizationInstructions,
       );
 
-      const maxHistoryShare = clampMaxHistoryShare(runtime?.maxHistoryShare);
+      // maxHistoryShare is a system constant — not read from user config.
+      const maxHistoryShare = SYSTEM_MAX_HISTORY_SHARE;
 
       const tokensBefore =
         typeof preparation.tokensBefore === "number" && Number.isFinite(preparation.tokensBefore)
@@ -870,7 +861,6 @@ export const __testing = {
   readWorkspaceContextForSummary,
   resolveCompactionInstructions,
   composeSplitTurnInstructions,
-  clampMaxHistoryShare,
   clampContextWindowTokens,
   clampMaxChunkTokens,
   clampReserveTokens,

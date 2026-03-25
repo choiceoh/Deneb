@@ -9,14 +9,9 @@ describe("config compaction settings", () => {
         agents: {
           defaults: {
             compaction: {
-              mode: "safeguard",
               reserveTokensFloor: 12_345,
               identifierPolicy: "custom",
               identifierInstructions: "Keep ticket IDs unchanged.",
-              qualityGuard: {
-                enabled: true,
-                maxRetries: 2,
-              },
               memoryFlush: {
                 enabled: false,
                 softThresholdTokens: 1234,
@@ -31,15 +26,12 @@ describe("config compaction settings", () => {
         const cfg = loadConfig();
 
         expect(cfg.agents?.defaults?.compaction?.reserveTokensFloor).toBe(12_345);
-        expect(cfg.agents?.defaults?.compaction?.mode).toBe("safeguard");
         expect(cfg.agents?.defaults?.compaction?.reserveTokens).toBeUndefined();
         expect(cfg.agents?.defaults?.compaction?.keepRecentTokens).toBeUndefined();
         expect(cfg.agents?.defaults?.compaction?.identifierPolicy).toBe("custom");
         expect(cfg.agents?.defaults?.compaction?.identifierInstructions).toBe(
           "Keep ticket IDs unchanged.",
         );
-        expect(cfg.agents?.defaults?.compaction?.qualityGuard?.enabled).toBe(true);
-        expect(cfg.agents?.defaults?.compaction?.qualityGuard?.maxRetries).toBe(2);
         expect(cfg.agents?.defaults?.compaction?.memoryFlush?.enabled).toBe(false);
         expect(cfg.agents?.defaults?.compaction?.memoryFlush?.softThresholdTokens).toBe(1234);
         expect(cfg.agents?.defaults?.compaction?.memoryFlush?.prompt).toBe("Write notes.");
@@ -70,27 +62,7 @@ describe("config compaction settings", () => {
     );
   });
 
-  it("defaults compaction mode to safeguard", async () => {
-    await withTempHomeConfig(
-      {
-        agents: {
-          defaults: {
-            compaction: {
-              reserveTokensFloor: 9000,
-            },
-          },
-        },
-      },
-      async () => {
-        const cfg = loadConfig();
-
-        expect(cfg.agents?.defaults?.compaction?.mode).toBe("safeguard");
-        expect(cfg.agents?.defaults?.compaction?.reserveTokensFloor).toBe(9000);
-      },
-    );
-  });
-
-  it("preserves recent turn safeguard values through loadConfig()", async () => {
+  it("accepts deprecated system-managed fields without crashing (backward compat)", async () => {
     await withTempHomeConfig(
       {
         agents: {
@@ -98,33 +70,20 @@ describe("config compaction settings", () => {
             compaction: {
               mode: "safeguard",
               recentTurnsPreserve: 4,
-            },
-          },
-        },
-      },
-      async () => {
-        const cfg = loadConfig();
-        expect(cfg.agents?.defaults?.compaction?.recentTurnsPreserve).toBe(4);
-      },
-    );
-  });
-
-  it("preserves oversized quality guard retry values for runtime clamping", async () => {
-    await withTempHomeConfig(
-      {
-        agents: {
-          defaults: {
-            compaction: {
+              maxHistoryShare: 0.6,
               qualityGuard: {
-                maxRetries: 99,
+                enabled: true,
+                maxRetries: 2,
               },
+              reserveTokensFloor: 9000,
             },
           },
         },
       },
       async () => {
+        // Config loads without crashing — deprecated fields are accepted but ignored at runtime.
         const cfg = loadConfig();
-        expect(cfg.agents?.defaults?.compaction?.qualityGuard?.maxRetries).toBe(99);
+        expect(cfg.agents?.defaults?.compaction?.reserveTokensFloor).toBe(9000);
       },
     );
   });

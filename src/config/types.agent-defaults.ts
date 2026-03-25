@@ -25,10 +25,16 @@ export type AgentContextPruningConfig = {
   mode?: "off" | "cache-ttl";
   /** TTL to consider cache expired (duration string, default unit: minutes). */
   ttl?: string;
+  // ── Deprecated (system-managed, ignored at runtime) ────────────────────────
+  /** @deprecated System-managed: fixed at 3. */
   keepLastAssistants?: number;
+  /** @deprecated System-managed: fixed at 0.3. */
   softTrimRatio?: number;
+  /** @deprecated System-managed: fixed at 0.5. */
   hardClearRatio?: number;
+  /** @deprecated System-managed: fixed at 50000. */
   minPrunableToolChars?: number;
+  // ── Active config fields ───────────────────────────────────────────────────
   tools?: {
     allow?: string[];
     deny?: string[];
@@ -301,37 +307,34 @@ export type AgentDefaultsConfig = {
   sandbox?: AgentSandboxConfig;
 };
 
-export type AgentCompactionMode = "default" | "safeguard";
+// compaction.mode is system-managed: always "safeguard". Not user-configurable.
 export type AgentCompactionPostIndexSyncMode = "off" | "async" | "await";
 export type AgentCompactionIdentifierPolicy = "strict" | "off" | "custom";
-export type AgentCompactionQualityGuardConfig = {
-  /** Enable compaction summary quality audits and regeneration retries. Default: false. */
-  enabled?: boolean;
-  /** Maximum regeneration retries after a failed quality audit. Default: 1 when enabled. */
-  maxRetries?: number;
-};
 
 export type AgentCompactionConfig = {
-  /** Compaction summarization mode. */
-  mode?: AgentCompactionMode;
+  // ── Deprecated (system-managed, ignored at runtime) ────────────────────────
+  // These fields are accepted in config for backward compat but never read.
+  /** @deprecated System-managed: always "safeguard". */
+  mode?: "default" | "safeguard";
+  /** @deprecated System-managed: fixed at 0.5. */
+  maxHistoryShare?: number;
+  /** @deprecated System-managed: fixed at 3. */
+  recentTurnsPreserve?: number;
+  /** @deprecated System-managed: always enabled with maxRetries=1. */
+  qualityGuard?: { enabled?: boolean; maxRetries?: number };
+  // ── Active config fields ───────────────────────────────────────────────────
   /** Pi reserve tokens target before floor enforcement. */
   reserveTokens?: number;
   /** Pi keepRecentTokens budget used for cut-point selection. */
   keepRecentTokens?: number;
   /** Minimum reserve tokens enforced for Pi compaction (0 disables the floor). */
   reserveTokensFloor?: number;
-  /** Max share of context window for history during safeguard pruning (0.1–0.9, default 0.5). */
-  maxHistoryShare?: number;
   /** Additional compaction-summary instructions that can preserve language or persona continuity. */
   customInstructions?: string;
-  /** Preserve this many most-recent user/assistant turns verbatim in compaction summary context. */
-  recentTurnsPreserve?: number;
   /** Identifier-preservation instruction policy for compaction summaries. */
   identifierPolicy?: AgentCompactionIdentifierPolicy;
   /** Custom identifier-preservation instructions used when identifierPolicy is "custom". */
   identifierInstructions?: string;
-  /** Optional quality-audit retries for safeguard compaction summaries. */
-  qualityGuard?: AgentCompactionQualityGuardConfig;
   /** Post-compaction session memory index sync mode. */
   postIndexSync?: AgentCompactionPostIndexSyncMode;
   /** Pre-compaction memory flush (agentic turn). Default: enabled. */
