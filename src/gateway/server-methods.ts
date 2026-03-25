@@ -8,7 +8,6 @@ import { agentsHandlers } from "./server-methods/agents/agents.js";
 import { channelsHandlers } from "./server-methods/channels/channels.js";
 import { chatHandlers } from "./server-methods/chat/chat.js";
 import { configHandlers } from "./server-methods/config/config.js";
-import { browserHandlers } from "./server-methods/media/browser.js";
 import { ttsHandlers } from "./server-methods/media/tts.js";
 import { voicewakeHandlers } from "./server-methods/media/voicewake.js";
 import { webHandlers } from "./server-methods/media/web.js";
@@ -68,7 +67,6 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...agentHandlers,
   ...agentsHandlers,
   ...autoMaintenanceHandlers,
-  ...browserHandlers,
 };
 
 export async function handleGatewayRequest(

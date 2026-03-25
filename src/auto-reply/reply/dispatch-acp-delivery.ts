@@ -1,9 +1,7 @@
 import { hasOutboundReplyContent } from "deneb/plugin-sdk/reply-payload";
 import type { DenebConfig } from "../../config/config.js";
-import type { TtsAutoMode } from "../../config/types.tts.js";
 import { logVerbose } from "../../globals.js";
 import { runMessageAction } from "../../infra/outbound/message-action-runner.js";
-import { maybeApplyTtsToPayload } from "../../tts/tts.js";
 import type { FinalizedMsgContext } from "../templating.js";
 import type { ReplyPayload } from "../types.js";
 import type { ReplyDispatcher, ReplyDispatchKind } from "./reply-dispatcher.js";
@@ -48,7 +46,7 @@ export function createAcpDispatchDeliveryCoordinator(params: {
   ctx: FinalizedMsgContext;
   dispatcher: ReplyDispatcher;
   inboundAudio: boolean;
-  sessionTtsAuto?: TtsAutoMode;
+  sessionTtsAuto?: string;
   ttsChannel?: string;
   shouldRouteToOriginating: boolean;
   originatingChannel?: string;
@@ -132,26 +130,17 @@ export function createAcpDispatchDeliveryCoordinator(params: {
       await startReplyLifecycleOnce();
     }
 
-    const ttsPayload = await maybeApplyTtsToPayload({
-      payload,
-      cfg: params.cfg,
-      channel: params.ttsChannel,
-      kind,
-      inboundAudio: params.inboundAudio,
-      ttsAuto: params.sessionTtsAuto,
-    });
-
     if (params.shouldRouteToOriginating && params.originatingChannel && params.originatingTo) {
       const toolCallId = meta?.toolCallId?.trim();
       if (kind === "tool" && meta?.allowEdit === true && toolCallId) {
-        const edited = await tryEditToolMessage(ttsPayload, toolCallId);
+        const edited = await tryEditToolMessage(payload, toolCallId);
         if (edited) {
           return true;
         }
       }
 
       const result = await routeReply({
-        payload: ttsPayload,
+        payload: payload,
         channel: params.originatingChannel,
         to: params.originatingTo,
         sessionKey: params.ctx.SessionKey,
@@ -179,12 +168,12 @@ export function createAcpDispatchDeliveryCoordinator(params: {
     }
 
     if (kind === "tool") {
-      return params.dispatcher.sendToolResult(ttsPayload);
+      return params.dispatcher.sendToolResult(payload);
     }
     if (kind === "block") {
-      return params.dispatcher.sendBlockReply(ttsPayload);
+      return params.dispatcher.sendBlockReply(payload);
     }
-    return params.dispatcher.sendFinalReply(ttsPayload);
+    return params.dispatcher.sendFinalReply(payload);
   };
 
   return {

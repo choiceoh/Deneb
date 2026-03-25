@@ -9,7 +9,6 @@ import type { ToolFsPolicy } from "./tool-fs-policy.js";
 import { createAgentsListTool } from "./tools/agents-list-tool.js";
 import { createAutoMaintenanceTool } from "./tools/auto-maintenance-tool.js";
 import { createAutonomousTool } from "./tools/autonomous-tool.js";
-import { createBrowserTool } from "./tools/browser-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";
 import { createGatewayTool } from "./tools/gateway-tool.js";
@@ -141,11 +140,6 @@ export function createDenebTools(
         requesterSenderId: options?.requesterSenderId ?? undefined,
       });
   const tools: AnyAgentTool[] = [
-    createBrowserTool({
-      sandboxBridgeUrl: options?.sandboxBrowserBridgeUrl,
-      allowHostControl: options?.allowHostBrowserControl,
-      agentSessionKey: options?.agentSessionKey,
-    }),
     createNodesTool({
       agentSessionKey: options?.agentSessionKey,
       agentChannel: options?.agentChannel,
