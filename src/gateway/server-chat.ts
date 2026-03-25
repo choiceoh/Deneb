@@ -98,7 +98,7 @@ function isSilentReplyLeadFragment(text: string): boolean {
   return SILENT_REPLY_TOKEN.startsWith(normalized);
 }
 
-// Delegated to chat-text-merge.ts for testability and tool-boundary fix (OpenClaw #36957).
+// Delegated to chat-text-merge.ts for testability and tool-boundary fix.
 const resolveMergedAssistantText = _resolveMergedAssistantText;
 
 export type ChatRunEntry = {

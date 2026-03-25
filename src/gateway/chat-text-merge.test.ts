@@ -74,7 +74,7 @@ describe("resolveMergedAssistantText", () => {
     ).toBe("Hello");
   });
 
-  // OpenClaw #36957: tool-boundary text retention
+  // Tool-boundary text retention
   it("preserves pre-tool text when post-tool segment is completely disjoint", () => {
     const result = resolveMergedAssistantText({
       previousText: "Here is my analysis:",

@@ -4,7 +4,7 @@
  * Extracted from server-chat.ts so that the merge logic—especially the
  * tool-boundary retention fix—can be unit-tested in isolation.
  *
- * Port of OpenClaw #36957: preserve pre-tool-call text when a fresh
+ * Preserve pre-tool-call text when a fresh
  * post-tool segment arrives that does not overlap with the existing buffer.
  */
 
@@ -60,7 +60,7 @@ export function resolveMergedAssistantText(params: {
     if (previousText.startsWith(nextText) && !nextDelta) {
       return previousText;
     }
-    // Tool-boundary retention (OpenClaw #36957): nextText is a fresh
+    // Tool-boundary retention: nextText is a fresh
     // post-tool segment that does not overlap with the pre-tool buffer.
     // Concatenate so the earlier text is not lost.
     if (nextDelta) {
