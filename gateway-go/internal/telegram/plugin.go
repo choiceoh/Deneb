@@ -13,13 +13,14 @@ import (
 
 // Plugin implements the channel.Plugin interface for Telegram.
 type Plugin struct {
-	mu     sync.Mutex
-	client *Client
-	bot    *Bot
-	config *Config
-	logger *slog.Logger
+	mu      sync.Mutex
+	client  *Client
+	bot     *Bot
+	config  *Config
+	logger  *slog.Logger
 	status  channel.Status
 	botUser *User
+	handler UpdateHandler // stored until bot is created in Start()
 }
 
 // NewPlugin creates a new Telegram channel plugin.
@@ -104,7 +105,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 
 	// Start polling in background.
 	// Use a detached context so polling survives beyond the RPC request that triggered Start.
-	p.bot = NewBot(p.client, p.config, nil, p.logger)
+	p.bot = NewBot(p.client, p.config, p.handler, p.logger)
 	go func() {
 		if err := p.bot.Start(context.Background()); err != nil {
 			p.logger.Error("telegram polling error", "error", err)
@@ -148,12 +149,13 @@ func (p *Plugin) Bot() *Bot {
 	return p.bot
 }
 
-// SetHandler sets the update handler on the running bot.
-// This allows wiring the handler after plugin creation (e.g., when the chat
-// handler is available). Safe to call while the bot is polling.
+// SetHandler sets the update handler. If the bot is already running, the
+// handler is applied immediately. Otherwise it is stored and applied when
+// Start() creates the bot.
 func (p *Plugin) SetHandler(h UpdateHandler) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.handler = h
 	if p.bot != nil {
 		p.bot.SetHandler(h)
 	}
