@@ -232,10 +232,10 @@ impl AssemblyEngine {
         let is_deep = stats.max_depth >= 2 || stats.condensed_count >= 2;
 
         if !is_deep {
-            return Some(MINIMAL_LCM_GUIDANCE.to_string());
+            return Some(MINIMAL_AURORA_GUIDANCE.to_string());
         }
 
-        Some(FULL_LCM_GUIDANCE.to_string())
+        Some(FULL_AURORA_GUIDANCE.to_string())
     }
 
     // ── Terminal ──────────────────────────────────────────────────────────────
@@ -274,42 +274,42 @@ impl AssemblyEngine {
 
 // ── System prompt guidance constants ─────────────────────────────────────────
 
-const MINIMAL_LCM_GUIDANCE: &str = "\
-## Context Recall (LCM)
+const MINIMAL_AURORA_GUIDANCE: &str = "\
+## Context Recall (Aurora)
 
 Some earlier conversation has been summarized. If you need details from \
 summarized sections, use the available recall tools:
 
-1. `lcm_grep` — Search messages and summaries (regex or full-text)
-2. `lcm_describe` — Inspect a summary's lineage and metadata
-3. `lcm_expand_query` — Deep recall via sub-agent expansion (~120s)
+1. `aurora_grep` — Search messages and summaries (regex or full-text)
+2. `aurora_describe` — Inspect a summary's lineage and metadata
+3. `aurora_expand_query` — Deep recall via sub-agent expansion (~120s)
 
 Do not guess from summaries — expand or search first when precision matters.";
 
-const FULL_LCM_GUIDANCE: &str = "\
-## Context Recall (LCM)
+const FULL_AURORA_GUIDANCE: &str = "\
+## Context Recall (Aurora)
 
 Significant conversation history has been hierarchically summarized. \
 Condensed summaries compress multiple layers of earlier context.
 
 ### Recall Workflow (cheapest → most thorough)
 
-1. **`lcm_grep`** — Regex or full-text search across messages and summaries. \
+1. **`aurora_grep`** — Regex or full-text search across messages and summaries. \
    Use `scope: \"both\"` for broad searches, `scope: \"messages\"` for exact quotes.
 
-2. **`lcm_describe`** — Inspect a summary's lineage: parents, children, \
+2. **`aurora_describe`** — Inspect a summary's lineage: parents, children, \
    descendant counts, time range. Cheap metadata lookup.
 
-3. **`lcm_expand_query`** — Deep recall that spawns a bounded sub-agent to \
+3. **`aurora_expand_query`** — Deep recall that spawns a bounded sub-agent to \
    traverse the summary DAG and answer your question (~120s). Use when:
    - You need details spanning a wide time range
    - Multiple summary layers must be traversed
-   - `lcm_grep` results are insufficient
+   - `aurora_grep` results are insufficient
 
 ### Usage Patterns
 
-- `lcm_expand_query` with `summaryIds`: expand specific summaries
-- `lcm_expand_query` with `query`: search-then-expand in one call
+- `aurora_expand_query` with `summaryIds`: expand specific summaries
+- `aurora_expand_query` with `query`: search-then-expand in one call
 - Add `maxTokens`, `conversationId`, or `allConversations` for scoping
 
 ### Precision Rules
@@ -544,7 +544,7 @@ mod tests {
             AssemblyCommand::Done { result } => {
                 let guidance = result.system_prompt_addition.unwrap();
                 // Shallow → minimal guidance
-                assert!(guidance.contains("Context Recall (LCM)"));
+                assert!(guidance.contains("Context Recall (Aurora)"));
                 assert!(!guidance.contains("Precision Rules"));
             }
             _ => panic!("Expected Done"),

@@ -2,7 +2,7 @@
 // and summarizing older messages while preserving recent conversation context.
 //
 // This mirrors the compression logic from the TypeScript codebase that uses
-// LCM (Long Context Memory) for compacting session transcripts.
+// Aurora context engine for compacting session transcripts.
 package transcript
 
 import (
@@ -114,7 +114,7 @@ func (c *Compressor) ShouldCompact(sessionKey string, w *Writer) (bool, string) 
 // messages and producing a compressed file. Older messages are summarized into
 // a single summary entry.
 //
-// This is a basic compaction strategy; the full LCM sweep engine in core-rs
+// This is a basic compaction strategy; the full Aurora sweep engine in core-rs
 // handles the advanced hierarchical compaction via FFI.
 func (c *Compressor) Compact(sessionKey string, w *Writer) (*CompactionResult, error) {
 	c.mu.Lock()

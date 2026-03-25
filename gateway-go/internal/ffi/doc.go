@@ -36,7 +36,7 @@
 //   - MarkdownToPlainText: Markdown stripping convenience
 //
 // Context Engine:
-//   - ContextAssemblyNew/Start/Step: LCM context assembly
+//   - ContextAssemblyNew/Start/Step: Aurora context assembly
 //   - ContextExpandNew/Start/Step: Memory retrieval expansion
 //   - ContextEngineDrop: Handle cleanup
 //

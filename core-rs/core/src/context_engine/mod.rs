@@ -1,8 +1,8 @@
-//! Context engine — Rust implementation of the LCM context management system.
+//! Context engine — Rust implementation of the Aurora context management system.
 //!
 //! This module provides:
 //! - Core types matching TypeScript `context-engine/types.ts`
-//! - LCM configuration with three-tier resolution (env > plugin > defaults)
+//! - Aurora configuration with three-tier resolution (env > plugin > defaults)
 //! - Context assembly state machine (DAG-aware token budgeting)
 //! - Retrieval operations (grep, describe, expand) via step-based I/O protocol
 //!
@@ -104,20 +104,20 @@ pub struct ContextEngineInfo {
     pub accepts_session_key: Option<bool>,
 }
 
-// ── LCM Configuration ────────────────────────────────────────────────────────
+// ── Aurora Configuration ─────────────────────────────────────────────────────
 
-/// LCM context engine configuration.
+/// Aurora context engine configuration.
 ///
-/// Matches TypeScript `LcmConfig` with three-tier resolution:
+/// Matches TypeScript `AuroraConfig` with three-tier resolution:
 /// env vars > plugin config > hardcoded defaults.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LcmConfig {
-    /// Whether LCM is enabled (default: true).
+pub struct AuroraConfig {
+    /// Whether Aurora is enabled (default: true).
     #[serde(default = "default_true")]
     pub enabled: bool,
 
-    /// Path to the LCM SQLite database.
+    /// Path to the Aurora SQLite database.
     #[serde(default = "default_database_path")]
     pub database_path: String,
 
@@ -182,7 +182,7 @@ fn default_true() -> bool {
     true
 }
 fn default_database_path() -> String {
-    "~/.deneb/lcm.db".to_string()
+    "~/.deneb/aurora.db".to_string()
 }
 fn default_context_threshold() -> f64 {
     0.75
@@ -218,7 +218,7 @@ fn default_timezone() -> String {
     "UTC".to_string()
 }
 
-impl Default for LcmConfig {
+impl Default for AuroraConfig {
     fn default() -> Self {
         Self {
             enabled: true,
@@ -241,7 +241,7 @@ impl Default for LcmConfig {
     }
 }
 
-impl LcmConfig {
+impl AuroraConfig {
     /// Clamp context_threshold to [0.1, 1.0].
     pub fn validated(mut self) -> Self {
         self.context_threshold = self.context_threshold.clamp(0.1, 1.0);
@@ -301,8 +301,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_lcm_config_defaults() {
-        let config = LcmConfig::default();
+    fn test_aurora_config_defaults() {
+        let config = AuroraConfig::default();
         assert!(config.enabled);
         assert_eq!(config.context_threshold, 0.75);
         assert_eq!(config.fresh_tail_count, 32);
@@ -314,31 +314,31 @@ mod tests {
     }
 
     #[test]
-    fn test_lcm_config_serde_roundtrip() {
-        let config = LcmConfig::default();
+    fn test_aurora_config_serde_roundtrip() {
+        let config = AuroraConfig::default();
         let json = serde_json::to_string(&config).unwrap();
-        let parsed: LcmConfig = serde_json::from_str(&json).unwrap();
+        let parsed: AuroraConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.context_threshold, 0.75);
         assert_eq!(parsed.fresh_tail_count, 32);
     }
 
     #[test]
-    fn test_lcm_config_partial_json() {
+    fn test_aurora_config_partial_json() {
         let json = r#"{"contextThreshold": 0.5, "freshTailCount": 16}"#;
-        let config: LcmConfig = serde_json::from_str(json).unwrap();
+        let config: AuroraConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.context_threshold, 0.5);
         assert_eq!(config.fresh_tail_count, 16);
         assert_eq!(config.leaf_chunk_tokens, 30_000); // default
     }
 
     #[test]
-    fn test_lcm_config_validated_clamp() {
-        let mut config = LcmConfig::default();
+    fn test_aurora_config_validated_clamp() {
+        let mut config = AuroraConfig::default();
         config.context_threshold = 2.0;
         let validated = config.validated();
         assert_eq!(validated.context_threshold, 1.0);
 
-        let mut config2 = LcmConfig::default();
+        let mut config2 = AuroraConfig::default();
         config2.context_threshold = 0.01;
         let validated2 = config2.validated();
         assert_eq!(validated2.context_threshold, 0.1);
@@ -354,15 +354,15 @@ mod tests {
     #[test]
     fn test_context_engine_info_serde() {
         let info = ContextEngineInfo {
-            id: "lcm".to_string(),
-            name: "LCM Context Engine".to_string(),
+            id: "aurora".to_string(),
+            name: "Aurora Context Engine".to_string(),
             version: Some("1.0.0".to_string()),
             owns_compaction: Some(true),
             accepts_session_key: Some(true),
         };
         let json = serde_json::to_string(&info).unwrap();
         let parsed: ContextEngineInfo = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.id, "lcm");
+        assert_eq!(parsed.id, "aurora");
         assert_eq!(parsed.accepts_session_key, Some(true));
     }
 

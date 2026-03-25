@@ -133,7 +133,7 @@ export default function register(api) {
       return {
         messages: buildContext(messages, tokenBudget),
         estimatedTokens: countTokens(messages),
-        systemPromptAddition: "Use lcm_grep to search history...",
+        systemPromptAddition: "Use aurora_grep to search history...",
       };
     },
 
