@@ -205,21 +205,21 @@ time; it does not replace the compose/setup workflow.
 
 ### Shell Helpers (optional)
 
-For easier day-to-day Docker management, install `ClawDock`:
+For easier day-to-day Docker management, install `DenebDock`:
 
 ```bash
-mkdir -p ~/.clawdock && curl -sL https://raw.githubusercontent.com/deneb/deneb/main/scripts/shell-helpers/clawdock-helpers.sh -o ~/.clawdock/clawdock-helpers.sh
+mkdir -p ~/.deneb-dock && curl -sL https://raw.githubusercontent.com/deneb/deneb/main/scripts/shell-helpers/deneb-dock-helpers.sh -o ~/.deneb-dock/deneb-dock-helpers.sh
 ```
 
 **Add to your shell config (zsh):**
 
 ```bash
-echo 'source ~/.clawdock/clawdock-helpers.sh' >> ~/.zshrc && source ~/.zshrc
+echo 'source ~/.deneb-dock/deneb-dock-helpers.sh' >> ~/.zshrc && source ~/.zshrc
 ```
 
-Then use `clawdock-start`, `clawdock-stop`, `clawdock-dashboard`, etc. Run `clawdock-help` for all commands.
+Then use `deneb-dock-start`, `deneb-dock-stop`, `deneb-dock-dashboard`, etc. Run `deneb-dock-help` for all commands.
 
-See [`ClawDock` Helper README](https://github.com/deneb/deneb/blob/main/scripts/shell-helpers/README.md) for details.
+See [`DenebDock` Helper README](https://github.com/deneb/deneb/blob/main/scripts/shell-helpers/README.md) for details.
 
 ### Manual flow (compose)
 

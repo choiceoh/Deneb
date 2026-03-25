@@ -19,6 +19,6 @@ describe("shared/assistant-identity-values", () => {
 
   it("returns an empty string when truncating to a zero-length limit", () => {
     expect(coerceIdentityValue("  Deneb  ", 0)).toBe("");
-    expect(coerceIdentityValue("  Deneb  ", -1)).toBe("OpenCla");
+    expect(coerceIdentityValue("  Deneb  ", -1)).toBe("Dene");
   });
 });
