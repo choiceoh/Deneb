@@ -16,8 +16,8 @@ SELF_DIR = Path(__file__).parent
 DB_PATH = os.environ.get('DB_PATH', str(SELF_DIR / "projects.db"))
 
 
-def _find_path(env_var, local_candidates, openclaw_globs=None, check_fn=os.path.isfile, use_which=None):
-    """공통 경로 탐색: 환경변수 → 로컬 후보 → OpenClaw 글롭 → which → None"""
+def _find_path(env_var, local_candidates, fallback_globs=None, check_fn=os.path.isfile, use_which=None):
+    """공통 경로 탐색: 환경변수 → 로컬 후보 → 폴백 글롭 → which → None"""
     import glob as _glob
     env_val = os.environ.get(env_var, '')
     if env_val and check_fn(env_val):
@@ -25,7 +25,7 @@ def _find_path(env_var, local_candidates, openclaw_globs=None, check_fn=os.path.
     for c in local_candidates:
         if c and check_fn(c):
             return c
-    for pattern in (openclaw_globs or []):
+    for pattern in (fallback_globs or []):
         for match in _glob.glob(os.path.expanduser(pattern)):
             if check_fn(match):
                 return match
@@ -45,8 +45,8 @@ def _check_md_dir(path):
 MD_DIR = _find_path(
     'MD_DIR',
     [str(SELF_DIR / "projects")],
-    ['~/.openclaw/agents/main/knowledge/projects',
-     '~/.openclaw/*/knowledge/projects'],
+    ['~/.deneb/agents/main/knowledge/projects',
+     '~/.deneb/*/knowledge/projects'],
     check_fn=lambda p: os.path.isdir(p) and (p == str(SELF_DIR / "projects") or _check_md_dir(p)),
 ) or str(SELF_DIR / "projects")
 
