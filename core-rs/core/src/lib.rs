@@ -41,12 +41,19 @@ const FFI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
 
 // FFI error code constants — used across all `extern "C"` functions.
 // Positive values are function-specific; negative values are shared errors.
+#[allow(dead_code)]
 const FFI_ERR_NULL_PTR: i32 = -1;
+#[allow(dead_code)]
 const FFI_ERR_INVALID_UTF8: i32 = -2;
+#[allow(dead_code)]
 const FFI_ERR_OUTPUT_TOO_SMALL: i32 = -3;
+#[allow(dead_code)]
 const FFI_ERR_INPUT_TOO_LARGE: i32 = -4;
+#[allow(dead_code)]
 const FFI_ERR_JSON: i32 = -5;
+#[allow(dead_code)]
 const FFI_ERR_OVERFLOW: i32 = -6;
+#[allow(dead_code)]
 const FFI_ERR_PANIC: i32 = -99;
 
 /// Wraps an FFI body in catch_unwind to prevent Rust panics from aborting
@@ -455,12 +462,14 @@ fn vega_search_impl(_query_json: &str) -> String {
 
 /// JSON request for the embed FFI.
 #[derive(serde::Deserialize)]
+#[allow(dead_code)]
 struct EmbedRequest {
     texts: Vec<String>,
 }
 
 /// JSON request for the rerank FFI.
 #[derive(serde::Deserialize)]
+#[allow(dead_code)]
 struct RerankRequest {
     query: String,
     documents: Vec<String>,
@@ -900,12 +909,10 @@ pub unsafe extern "C" fn deneb_memory_cosine_similarity(
     }
     let a = std::slice::from_raw_parts(a_ptr, a_len);
     let b = std::slice::from_raw_parts(b_ptr, b_len);
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         memory_search::cosine::cosine_similarity(a, b)
-    })) {
-        Ok(v) => v,
-        Err(_) => 0.0,
-    }
+    }))
+    .unwrap_or(0.0)
 }
 
 /// C FFI: BM25 rank to score conversion.
@@ -1159,16 +1166,14 @@ pub unsafe extern "C" fn deneb_base64_estimate(input_ptr: *const u8, input_len: 
         return -4;
     }
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let input_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
             Err(_) => return -2_i64,
         };
         parsing::base64_util::estimate_base64_decoded_bytes(input_str) as i64
-    })) {
-        Ok(v) => v,
-        Err(_) => -99,
-    }
+    }))
+    .unwrap_or(-99)
 }
 
 /// C FFI: Canonicalize a base64 string (strip whitespace, validate).

@@ -626,13 +626,13 @@ fn render_table_as_code(state: &mut RenderState) {
 
     let append_row = |state: &mut RenderState, cells: &[TableCell], widths: &[usize]| {
         state.text.push('|');
-        for i in 0..column_count {
+        for (i, width) in widths.iter().enumerate().take(column_count) {
             state.text.push(' ');
             if let Some(cell) = cells.get(i) {
                 append_cell_text_only(state, cell);
             }
             let cell_len = cells.get(i).map(|c| c.text.len()).unwrap_or(0);
-            let pad = widths[i].saturating_sub(cell_len);
+            let pad = width.saturating_sub(cell_len);
             if pad > 0 {
                 state.text.extend(std::iter::repeat_n(' ', pad));
             }

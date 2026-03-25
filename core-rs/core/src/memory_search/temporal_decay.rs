@@ -41,7 +41,7 @@ pub fn parse_memory_date_from_path(file_path: &str) -> Option<(i32, u32, u32)> {
     let day: u32 = caps.get(3)?.as_str().parse().ok()?;
 
     // Validate the date
-    if month < 1 || month > 12 || day < 1 || day > 31 {
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
         return None;
     }
 

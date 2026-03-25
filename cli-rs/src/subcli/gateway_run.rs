@@ -195,10 +195,7 @@ fn find_go_binary() -> Option<PathBuf> {
     }
 
     // 4. Check PATH.
-    if let Ok(output) = Command::new("which")
-        .arg("deneb-gateway")
-        .output()
-    {
+    if let Ok(output) = Command::new("which").arg("deneb-gateway").output() {
         if output.status.success() {
             let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path_str.is_empty() {

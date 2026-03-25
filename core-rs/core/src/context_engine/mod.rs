@@ -290,8 +290,7 @@ pub struct SummaryStats {
 /// Estimate token count from text length (ceil(len / 4)).
 #[inline]
 pub fn estimate_tokens(text: &str) -> u64 {
-    let len = text.len() as u64;
-    (len + 3) / 4
+    (text.len() as u64).div_ceil(4)
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

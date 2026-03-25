@@ -74,7 +74,7 @@ pub fn canonicalize_base64(input: &str) -> Option<String> {
         cleaned.push(b as char);
     }
 
-    if cleaned.is_empty() || cleaned.len() % 4 != 0 {
+    if cleaned.is_empty() || !cleaned.len().is_multiple_of(4) {
         return None;
     }
 

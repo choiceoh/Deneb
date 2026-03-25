@@ -28,6 +28,9 @@ pub struct RenderLink {
     pub close: String,
 }
 
+/// Builder function that converts a link span into a rendered link.
+pub type BuildLinkFn = Box<dyn Fn(&LinkSpan, &str) -> Option<RenderLink>>;
+
 /// Options for rendering MarkdownIR with markers.
 pub struct RenderOptions<F>
 where
@@ -35,7 +38,7 @@ where
 {
     pub style_markers: RenderStyleMap,
     pub escape_text: F,
-    pub build_link: Option<Box<dyn Fn(&LinkSpan, &str) -> Option<RenderLink>>>,
+    pub build_link: Option<BuildLinkFn>,
 }
 
 // ---------------------------------------------------------------------------

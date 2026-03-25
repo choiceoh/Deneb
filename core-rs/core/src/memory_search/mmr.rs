@@ -126,9 +126,8 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
             // Use original score as tiebreaker
             if mmr_score > best_mmr_score
                 || (mmr_score == best_mmr_score
-                    && best_idx.map_or(true, |bi: usize| {
-                        items[candidate_idx].score > items[bi].score
-                    }))
+                    && best_idx
+                        .is_none_or(|bi: usize| items[candidate_idx].score > items[bi].score))
             {
                 best_mmr_score = mmr_score;
                 best_idx = Some(candidate_idx);

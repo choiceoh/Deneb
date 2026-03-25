@@ -41,7 +41,7 @@ impl DangerousPatterns {
             b"onload=",
         ];
         Self {
-            finders: PATTERNS.iter().map(|p| memmem::Finder::new(p)).collect(),
+            finders: PATTERNS.iter().map(memmem::Finder::new).collect(),
         }
     }
 
@@ -220,10 +220,7 @@ pub fn is_safe_url(url: &str) -> bool {
         "metadata.google.internal",
         "169.254.169.254",
     ];
-    if BLOCKED_HOSTS
-        .iter()
-        .any(|&b| host_normalized == b)
-    {
+    if BLOCKED_HOSTS.contains(&host_normalized) {
         return false;
     }
 
@@ -245,9 +242,7 @@ pub fn is_safe_url(url: &str) -> bool {
     }
 
     // Block private IPv4 ranges (10.x, 172.16-31.x, 192.168.x).
-    if host_normalized.starts_with("10.")
-        || host_normalized.starts_with("192.168.")
-    {
+    if host_normalized.starts_with("10.") || host_normalized.starts_with("192.168.") {
         return false;
     }
     if host_normalized.starts_with("172.") {

@@ -62,7 +62,8 @@ fn png_chunk(chunk_type: &[u8; 4], data: &[u8]) -> Vec<u8> {
 }
 
 /// Write a pixel to an RGBA buffer. Ignores out-of-bounds writes.
-pub fn fill_pixel_impl(buf: &mut [u8], x: i32, y: i32, width: i32, r: u8, g: u8, b: u8, a: u8) {
+/// `rgba` is `[r, g, b, a]`.
+pub fn fill_pixel_impl(buf: &mut [u8], x: i32, y: i32, width: i32, rgba: [u8; 4]) {
     if x < 0 || y < 0 || x >= width || width <= 0 {
         return;
     }
@@ -78,10 +79,10 @@ pub fn fill_pixel_impl(buf: &mut [u8], x: i32, y: i32, width: i32, r: u8, g: u8,
     if idx + 3 >= buf.len() {
         return;
     }
-    buf[idx] = r;
-    buf[idx + 1] = g;
-    buf[idx + 2] = b;
-    buf[idx + 3] = a;
+    buf[idx] = rgba[0];
+    buf[idx + 1] = rgba[1];
+    buf[idx + 2] = rgba[2];
+    buf[idx + 3] = rgba[3];
 }
 
 /// Encode an RGBA buffer as a PNG image.
@@ -92,7 +93,10 @@ pub fn encode_png_rgba_impl(buffer: &[u8], width: u32, height: u32) -> Vec<u8> {
         Some(s) => s,
         None => return Vec::new(),
     };
-    let raw_len = match stride.checked_add(1).and_then(|s| s.checked_mul(height as usize)) {
+    let raw_len = match stride
+        .checked_add(1)
+        .and_then(|s| s.checked_mul(height as usize))
+    {
         Some(l) => l,
         None => return Vec::new(),
     };
@@ -111,8 +115,13 @@ pub fn encode_png_rgba_impl(buffer: &[u8], width: u32, height: u32) -> Vec<u8> {
 
     // PNG IDAT uses zlib (deflate with zlib header)
     let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), Compression::default());
-    encoder.write_all(&raw).expect("deflate write");
-    let compressed = encoder.finish().expect("deflate finish");
+    if encoder.write_all(&raw).is_err() {
+        return Vec::new();
+    }
+    let compressed = match encoder.finish() {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
 
     // Build PNG
     let signature: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
@@ -181,7 +190,7 @@ mod tests {
     #[test]
     fn fill_pixel_basic() {
         let mut buf = vec![0u8; 4 * 4]; // 2x2 image
-        fill_pixel_impl(&mut buf, 1, 0, 2, 255, 128, 64, 255);
+        fill_pixel_impl(&mut buf, 1, 0, 2, [255, 128, 64, 255]);
         assert_eq!(buf[4], 255); // R
         assert_eq!(buf[5], 128); // G
         assert_eq!(buf[6], 64); // B
@@ -191,8 +200,8 @@ mod tests {
     #[test]
     fn fill_pixel_out_of_bounds() {
         let mut buf = vec![0u8; 16];
-        fill_pixel_impl(&mut buf, -1, 0, 2, 255, 0, 0, 255);
-        fill_pixel_impl(&mut buf, 0, -1, 2, 255, 0, 0, 255);
+        fill_pixel_impl(&mut buf, -1, 0, 2, [255, 0, 0, 255]);
+        fill_pixel_impl(&mut buf, 0, -1, 2, [255, 0, 0, 255]);
         assert!(buf.iter().all(|&b| b == 0)); // No writes
     }
 
@@ -223,14 +232,14 @@ mod tests {
     fn fill_pixel_overflow_safe() {
         // Large y * width would overflow i32; should not panic or corrupt.
         let mut buf = vec![0u8; 16];
-        fill_pixel_impl(&mut buf, 0, 70_000, 70_000, 255, 0, 0, 255);
+        fill_pixel_impl(&mut buf, 0, 70_000, 70_000, [255, 0, 0, 255]);
         assert!(buf.iter().all(|&b| b == 0)); // No writes
     }
 
     #[test]
     fn fill_pixel_zero_width() {
         let mut buf = vec![0u8; 16];
-        fill_pixel_impl(&mut buf, 0, 0, 0, 255, 0, 0, 255);
+        fill_pixel_impl(&mut buf, 0, 0, 0, [255, 0, 0, 255]);
         assert!(buf.iter().all(|&b| b == 0));
     }
 

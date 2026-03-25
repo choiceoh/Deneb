@@ -185,11 +185,7 @@ impl AssemblyEngine {
         // Fresh tail tokens (always included)
         let fresh_tail_tokens: u64 = fresh_tail.iter().map(|item| item.token_count).sum();
 
-        let remaining_budget = if self.token_budget > fresh_tail_tokens {
-            self.token_budget - fresh_tail_tokens
-        } else {
-            0
-        };
+        let remaining_budget = self.token_budget.saturating_sub(fresh_tail_tokens);
 
         // Walk evictable newest→oldest, accumulating tokens
         let mut selected_evictable: Vec<&AssemblyContextItem> = Vec::new();
