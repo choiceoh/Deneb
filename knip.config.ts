@@ -2,7 +2,6 @@ const rootEntries = [
   "deneb.mjs!",
   "src/index.ts!",
   "src/entry.ts!",
-  "src/cli/daemon-cli.ts!",
   "src/infra/warning-filter.ts!",
   "extensions/telegram/src/audit.ts!",
   "extensions/telegram/src/token.ts!",
