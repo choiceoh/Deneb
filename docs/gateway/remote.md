@@ -117,7 +117,7 @@ Gateway credential resolution follows one shared contract across call/probe/stat
   - password: `DENEB_GATEWAY_PASSWORD` -> `gateway.remote.password` -> `gateway.auth.password`
 - Node-host local-mode exception: `gateway.remote.token` / `gateway.remote.password` are ignored.
 - Remote probe/status token checks are strict by default: they use `gateway.remote.token` only (no local token fallback) when targeting remote mode.
-- Legacy `CLAWDBOT_GATEWAY_*` env vars are only used by compatibility call paths; probe/status/auth resolution uses `DENEB_GATEWAY_*` only.
+- Legacy pre-rebrand `CLAWDBOT_GATEWAY_*` env vars are only used by compatibility call paths; probe/status/auth resolution uses `DENEB_GATEWAY_*` only.
 
 ## Chat UI over SSH
 

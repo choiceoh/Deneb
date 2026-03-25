@@ -32,7 +32,7 @@ Notes:
   The installer will `git pull --rebase` **only** if the repo is clean.
 
 - For **global installs**, the script uses `npm install -g deneb@latest` under the hood.
-- Legacy note: `clawdbot` remains available as a compatibility shim.
+- Legacy note: the pre-rebrand `clawdbot` CLI binary remains available as a compatibility shim.
 
 ## Before you update
 
@@ -272,4 +272,4 @@ git pull
 
 - Run `deneb doctor` again and read the output carefully (it often tells you the fix).
 - Check: [Troubleshooting](/gateway/troubleshooting)
-- Ask in Discord: [https://discord.gg/clawd](https://discord.gg/clawd)
+- Ask in Discord: [https://discord.gg/deneb](https://discord.gg/deneb)
