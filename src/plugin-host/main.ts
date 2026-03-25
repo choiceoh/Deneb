@@ -81,6 +81,24 @@ registry.register("plugin-host.channels.sync", async (_method, params) => {
   return { ok: true, payload: { synced: true } };
 });
 
+// Register a channels.start-all method. The Go gateway calls this after bridge
+// setup to boot all configured channel plugins (Telegram, etc.) inside the
+// Plugin Host process. Each channel's startAccount() hook runs as a long-lived
+// task with auto-restart on failure.
+registry.register("plugin-host.channels.start-all", async () => {
+  try {
+    await ensureGatewayContext();
+    const { startAllChannels } = await import("./channel-starter.js");
+    const result = await startAllChannels();
+    return { ok: true, payload: result };
+  } catch (err) {
+    return {
+      ok: false,
+      error: { code: "UNAVAILABLE", message: `channel startup failed: ${String(err)}` },
+    };
+  }
+});
+
 // --- Gateway method forwarding ---
 // Methods that the Go gateway forwards to us are routed to the actual
 // TypeScript gateway method handlers via a headless gateway context.
