@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -33,6 +34,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/node"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
@@ -43,6 +46,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
+	"github.com/choiceoh/deneb/gateway-go/internal/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -105,6 +109,11 @@ type Server struct {
 	wizardEng  *wizard.Engine
 	secrets    *secret.Resolver
 	talkState  *talk.State
+
+	// Phase 4: Native system methods (migrated from bridge).
+	usageTracker *usage.Tracker
+	maintRunner  *maintenance.Runner
+	telegramPlug *telegram.Plugin
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
@@ -218,6 +227,11 @@ func New(addr string, opts ...Option) *Server {
 	s.secrets = secret.NewResolver()
 	s.talkState = talk.NewState()
 
+	// Phase 4: Native system methods (migrated from bridge).
+	s.usageTracker = usage.New()
+	denebDir := resolveDenebDir()
+	s.maintRunner = maintenance.NewRunner(denebDir)
+
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.registerBuiltinMethods()
 	rpc.RegisterBuiltinMethods(s.dispatcher, rpc.Deps{
@@ -229,6 +243,7 @@ func New(addr string, opts ...Option) *Server {
 	s.registerExtendedMethods()
 	s.registerPhase2Methods()
 	s.registerAdvancedWorkflowMethods()
+	s.registerNativeSystemMethods(denebDir)
 
 	// Wire provider RPC methods if a provider registry is configured.
 	if s.providers != nil {
@@ -978,6 +993,79 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 	rpc.RegisterTalkMethods(s.dispatcher, rpc.TalkDeps{
 		Talk: s.talkState,
 	})
+}
+
+// registerNativeSystemMethods registers Phase 4 RPC methods that were migrated
+// from bridge forwarding to native Go: usage, logs, doctor, maintenance, update.
+func (s *Server) registerNativeSystemMethods(denebDir string) {
+	rpc.RegisterUsageMethods(s.dispatcher, rpc.UsageDeps{
+		Tracker: s.usageTracker,
+	})
+
+	rpc.RegisterLogsMethods(s.dispatcher, rpc.LogsDeps{
+		LogDir: filepath.Join(denebDir, "logs"),
+	})
+
+	rpc.RegisterDoctorMethods(s.dispatcher, rpc.DoctorDeps{})
+
+	rpc.RegisterMaintenanceMethods(s.dispatcher, rpc.MaintenanceDeps{
+		Runner: s.maintRunner,
+	})
+
+	rpc.RegisterUpdateMethods(s.dispatcher, rpc.UpdateDeps{
+		DenebDir: denebDir,
+	})
+
+	// Telegram native channel plugin + messaging methods.
+	// Loads Telegram config from deneb.json if available.
+	if s.runtimeCfg != nil {
+		tgCfg := loadTelegramConfig(s.runtimeCfg)
+		if tgCfg != nil && tgCfg.BotToken != "" {
+			s.telegramPlug = telegram.NewPlugin(tgCfg, s.logger)
+			s.channels.Register(s.telegramPlug)
+		}
+	}
+	rpc.RegisterMessagingMethods(s.dispatcher, rpc.MessagingDeps{
+		TelegramPlugin: s.telegramPlug,
+		Forwarder: func() rpc.Forwarder {
+			if s.bridge != nil {
+				return s.bridge
+			}
+			return nil
+		}(),
+	})
+}
+
+// loadTelegramConfig extracts Telegram channel config from deneb.json.
+// Returns nil if Telegram is not configured.
+func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || !snapshot.Valid {
+		return nil
+	}
+
+	// Extract channels.telegram from raw config JSON.
+	if snapshot.Raw == "" {
+		return nil
+	}
+
+	var root struct {
+		Channels struct {
+			Telegram *telegram.Config `json:"telegram"`
+		} `json:"channels"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		return nil
+	}
+	return root.Channels.Telegram
+}
+
+// resolveDenebDir returns the path to ~/.deneb.
+func resolveDenebDir() string {
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".deneb")
+	}
+	return "/tmp/deneb"
 }
 
 // StartMonitoring starts the watchdog and channel health monitor goroutines.
