@@ -33,7 +33,7 @@ func RegisterPluginMethods(d *Dispatcher, deps PluginDeps) {
 func pluginsList(deps PluginDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		plugins := deps.PluginRegistry.ListPlugins()
-		resp, _ := protocol.NewResponseOK(req.ID, plugins)
+		resp := protocol.MustResponseOK(req.ID, plugins)
 		return resp
 	}
 }
@@ -52,7 +52,7 @@ func pluginsSnapshot(deps PluginDeps) HandlerFunc {
 			Health:     health,
 			SnapshotAt: time.Now().UnixMilli(),
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, snapshot)
+		resp := protocol.MustResponseOK(req.ID, snapshot)
 		return resp
 	}
 }

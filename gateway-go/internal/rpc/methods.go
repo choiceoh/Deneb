@@ -111,7 +111,7 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 
 func healthCheck(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"status":       "ok",
 			"runtime":      "go",
 			"ffi":          ffi.Available,
@@ -124,7 +124,7 @@ func healthCheck(deps Deps) HandlerFunc {
 
 func sessionsList(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, deps.Sessions.List())
+		resp := protocol.MustResponseOK(req.ID, deps.Sessions.List())
 		return resp
 	}
 }
@@ -143,7 +143,7 @@ func sessionsGet(deps Deps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrNotFound, "session not found: "+truncateForError(p.Key)))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, s)
+		resp := protocol.MustResponseOK(req.ID, s)
 		return resp
 	}
 }
@@ -171,14 +171,14 @@ func sessionsDelete(deps Deps) HandlerFunc {
 				Reason:     "deleted",
 			})
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"deleted": found})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"deleted": found})
 		return resp
 	}
 }
 
 func channelsList(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, deps.Channels.List())
+		resp := protocol.MustResponseOK(req.ID, deps.Channels.List())
 		return resp
 	}
 }
@@ -197,7 +197,7 @@ func channelsGet(deps Deps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrNotFound, "channel not found: "+truncateForError(p.ID)))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"id":           ch.ID(),
 			"meta":         ch.Meta(),
 			"capabilities": ch.Capabilities(),
@@ -209,14 +209,14 @@ func channelsGet(deps Deps) HandlerFunc {
 
 func channelsStatus(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, deps.Channels.StatusAll())
+		resp := protocol.MustResponseOK(req.ID, deps.Channels.StatusAll())
 		return resp
 	}
 }
 
 func systemInfo() HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"runtime":      "go",
 			"version":      "0.1.0",
 			"goVersion":    runtime.Version(),
@@ -245,12 +245,12 @@ func protocolValidate() HandlerFunc {
 			backend = "rust"
 		}
 		if err != nil {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			resp := protocol.MustResponseOK(req.ID, map[string]any{
 				"valid": false, "error": err.Error(), "backend": backend,
 			})
 			return resp
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"valid": true, "backend": backend,
 		})
 		return resp
@@ -266,7 +266,7 @@ func mediaDetectMIME() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"mime": ffi.DetectMIME(p.Data),
 		})
 		return resp
@@ -276,13 +276,13 @@ func mediaDetectMIME() HandlerFunc {
 func channelsHealth(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if deps.ChannelLifecycle == nil {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			resp := protocol.MustResponseOK(req.ID, map[string]any{
 				"channels": []any{},
 			})
 			return resp
 		}
 		health := deps.ChannelLifecycle.HealthCheck()
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"channels": health,
 		})
 		return resp
@@ -299,7 +299,7 @@ func securityValidateSessionKey() HandlerFunc {
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
 		err := ffi.ValidateSessionKey(p.Key)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"valid": err == nil,
 		})
 		return resp
@@ -315,7 +315,7 @@ func securitySanitizeHTML() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"output": ffi.SanitizeHTML(p.Input),
 		})
 		return resp
@@ -331,7 +331,7 @@ func securityIsSafeURL() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"safe": ffi.IsSafeURL(p.URL),
 		})
 		return resp
@@ -347,7 +347,7 @@ func securityValidateErrorCode() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"valid": ffi.ValidateErrorCode(p.Code),
 		})
 		return resp
@@ -376,7 +376,7 @@ func parsingExtractLinks() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"urls": urls,
 		})
 		return resp
@@ -401,7 +401,7 @@ func parsingHtmlToMarkdown() HandlerFunc {
 		if title != "" {
 			result["title"] = title
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, result)
+		resp := protocol.MustResponseOK(req.ID, result)
 		return resp
 	}
 }
@@ -420,7 +420,7 @@ func parsingBase64Estimate() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"estimated_bytes": estimated,
 		})
 		return resp
@@ -441,7 +441,7 @@ func parsingBase64Canonicalize() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"canonical": canonical,
 		})
 		return resp
@@ -470,7 +470,7 @@ func parsingMediaTokens() HandlerFunc {
 		if audioAsVoice {
 			result["audio_as_voice"] = true
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, result)
+		resp := protocol.MustResponseOK(req.ID, result)
 		return resp
 	}
 }
@@ -490,7 +490,7 @@ func memoryCosineSimilarity() HandlerFunc {
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
 		similarity := ffi.MemoryCosineSimilarity(p.A, p.B)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"similarity": similarity,
 		})
 		return resp
@@ -506,7 +506,7 @@ func memoryBm25RankToScore() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params"))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"score": ffi.MemoryBm25RankToScore(p.Rank),
 		})
 		return resp
@@ -527,7 +527,7 @@ func memoryBuildFtsQuery() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"query": query,
 		})
 		return resp
@@ -545,7 +545,7 @@ func memoryMergeHybridResults() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"results": results,
 		})
 		return resp
@@ -566,7 +566,7 @@ func memoryExtractKeywords() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"keywords": keywords,
 		})
 		return resp
@@ -593,7 +593,7 @@ func markdownToIR() HandlerFunc {
 				protocol.ErrInvalidRequest, err.Error()))
 		}
 		// ir is already JSON; wrap in the response directly.
-		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(ir))
+		resp := protocol.MustResponseOK(req.ID, json.RawMessage(ir))
 		return resp
 	}
 }
@@ -612,7 +612,7 @@ func markdownDetectFences() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"fences": fences,
 		})
 		return resp
@@ -654,7 +654,7 @@ func protocolValidateParams() HandlerFunc {
 		if errorsJSON != nil {
 			result["errors"] = json.RawMessage(errorsJSON)
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, result)
+		resp := protocol.MustResponseOK(req.ID, result)
 		return resp
 	}
 }

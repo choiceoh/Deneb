@@ -72,7 +72,7 @@ func toolsInvoke(deps ToolDeps) HandlerFunc {
 // toolsExecLocal executes a bash/exec tool locally using the process manager.
 func toolsExecLocal(ctx context.Context, req *protocol.RequestFrame, deps ToolDeps, tool string, args map[string]any, dryRun bool) *protocol.ResponseFrame {
 	if dryRun {
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"tool":   tool,
 			"dryRun": true,
 			"args":   args,
@@ -111,7 +111,7 @@ func toolsExecLocal(ctx context.Context, req *protocol.RequestFrame, deps ToolDe
 		TimeoutMs:  timeoutMs,
 	})
 
-	resp, _ := protocol.NewResponseOK(req.ID, result)
+	resp := protocol.MustResponseOK(req.ID, result)
 	return resp
 }
 
@@ -120,7 +120,7 @@ func toolsExecLocal(ctx context.Context, req *protocol.RequestFrame, deps ToolDe
 func toolsList(deps ToolDeps) HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if deps.Forwarder == nil {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			resp := protocol.MustResponseOK(req.ID, map[string]any{
 				"tools": []any{},
 			})
 			return resp
@@ -163,7 +163,7 @@ func toolsStatus(deps ToolDeps) HandlerFunc {
 				protocol.ErrNotFound, "tool execution not found"))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, tracked)
+		resp := protocol.MustResponseOK(req.ID, tracked)
 		return resp
 	}
 }

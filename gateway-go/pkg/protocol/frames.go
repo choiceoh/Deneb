@@ -135,6 +135,27 @@ func NewResponseOKRaw(id string, payload json.RawMessage) (*ResponseFrame, error
 	}, nil
 }
 
+// MustResponseOK creates a success ResponseFrame, falling back to an error
+// response if payload marshaling fails. Use this instead of discarding the
+// error from NewResponseOK.
+func MustResponseOK(id string, payload any) *ResponseFrame {
+	resp, err := NewResponseOK(id, payload)
+	if err != nil {
+		return NewResponseError(id, NewError(ErrUnavailable, "response marshal failed"))
+	}
+	return resp
+}
+
+// MustResponseOKRaw creates a success ResponseFrame from pre-encoded JSON,
+// falling back to an error response on failure.
+func MustResponseOKRaw(id string, payload json.RawMessage) *ResponseFrame {
+	resp, err := NewResponseOKRaw(id, payload)
+	if err != nil {
+		return NewResponseError(id, NewError(ErrUnavailable, "response marshal failed"))
+	}
+	return resp
+}
+
 // NewResponseError creates an error ResponseFrame.
 func NewResponseError(id string, err *ErrorShape) *ResponseFrame {
 	return &ResponseFrame{

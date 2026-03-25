@@ -23,7 +23,7 @@ func mlEmbed() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
+		resp := protocol.MustResponseOK(req.ID, json.RawMessage(result))
 		return resp
 	}
 }
@@ -39,7 +39,7 @@ func mlRerank() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
+		resp := protocol.MustResponseOK(req.ID, json.RawMessage(result))
 		return resp
 	}
 }

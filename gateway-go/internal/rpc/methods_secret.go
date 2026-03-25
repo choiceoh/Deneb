@@ -26,7 +26,7 @@ func RegisterSecretMethods(d *Dispatcher, deps SecretDeps) {
 func secretsReload(deps SecretDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		result := deps.Resolver.Reload()
-		resp, _ := protocol.NewResponseOK(req.ID, result)
+		resp := protocol.MustResponseOK(req.ID, result)
 		return resp
 	}
 }
@@ -47,7 +47,7 @@ func secretsResolve(deps SecretDeps) HandlerFunc {
 		}
 
 		result := deps.Resolver.Resolve(p.CommandName, p.TargetIDs)
-		resp, _ := protocol.NewResponseOK(req.ID, result)
+		resp := protocol.MustResponseOK(req.ID, result)
 		return resp
 	}
 }

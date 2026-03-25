@@ -79,7 +79,7 @@ func processExec(deps ExtendedDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, result)
+		resp := protocol.MustResponseOK(req.ID, result)
 		return resp
 	}
 }
@@ -97,7 +97,7 @@ func processKill(deps ExtendedDeps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrNotFound, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"killed": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"killed": true})
 		return resp
 	}
 }
@@ -116,14 +116,14 @@ func processGet(deps ExtendedDeps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrNotFound, "process not found"))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, tracked)
+		resp := protocol.MustResponseOK(req.ID, tracked)
 		return resp
 	}
 }
 
 func processList(deps ExtendedDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, deps.Processes.List())
+		resp := protocol.MustResponseOK(req.ID, deps.Processes.List())
 		return resp
 	}
 }
@@ -132,7 +132,7 @@ func processList(deps ExtendedDeps) HandlerFunc {
 
 func cronList(deps ExtendedDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, deps.Cron.List())
+		resp := protocol.MustResponseOK(req.ID, deps.Cron.List())
 		return resp
 	}
 }
@@ -151,7 +151,7 @@ func cronGet(deps ExtendedDeps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrNotFound, "cron task not found"))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, status)
+		resp := protocol.MustResponseOK(req.ID, status)
 		return resp
 	}
 }
@@ -166,7 +166,7 @@ func cronUnregister(deps ExtendedDeps) HandlerFunc {
 				protocol.ErrMissingParam, "id is required"))
 		}
 		found := deps.Cron.Unregister(p.ID)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"removed": found})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"removed": found})
 		return resp
 	}
 }
@@ -175,7 +175,7 @@ func cronUnregister(deps ExtendedDeps) HandlerFunc {
 
 func hooksList(deps ExtendedDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, deps.Hooks.List())
+		resp := protocol.MustResponseOK(req.ID, deps.Hooks.List())
 		return resp
 	}
 }
@@ -191,7 +191,7 @@ func hooksRegister(deps ExtendedDeps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrConflict, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"registered": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"registered": true})
 		return resp
 	}
 }
@@ -206,7 +206,7 @@ func hooksUnregister(deps ExtendedDeps) HandlerFunc {
 				protocol.ErrMissingParam, "id is required"))
 		}
 		found := deps.Hooks.Unregister(p.ID)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"removed": found})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"removed": found})
 		return resp
 	}
 }
@@ -226,7 +226,7 @@ func hooksFire(deps ExtendedDeps) HandlerFunc {
 				protocol.ErrMissingParam, "event is required"))
 		}
 		results := deps.Hooks.Fire(ctx, p.Event, p.Env)
-		resp, _ := protocol.NewResponseOK(req.ID, results)
+		resp := protocol.MustResponseOK(req.ID, results)
 		return resp
 	}
 }
@@ -262,7 +262,7 @@ func agentStatus(deps ExtendedDeps) HandlerFunc {
 			result["cronTasks"] = len(deps.Cron.List())
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, result)
+		resp := protocol.MustResponseOK(req.ID, result)
 		return resp
 	}
 }
@@ -295,7 +295,7 @@ func sessionsCreate(deps ExtendedDeps) HandlerFunc {
 				Reason:     "created",
 			})
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, s)
+		resp := protocol.MustResponseOK(req.ID, s)
 		return resp
 	}
 }
@@ -364,7 +364,7 @@ func sessionsLifecycle(deps ExtendedDeps) HandlerFunc {
 			}
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, s)
+		resp := protocol.MustResponseOK(req.ID, s)
 		return resp
 	}
 }

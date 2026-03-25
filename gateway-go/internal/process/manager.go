@@ -14,6 +14,8 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 )
 
 // RunStatus represents the current state of a managed process.
@@ -133,7 +135,7 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	}
 
 	// Build command.
-	timeout := 60 * time.Second
+	timeout := timeouts.ProcessExec
 	if req.TimeoutMs > 0 {
 		timeout = time.Duration(req.TimeoutMs) * time.Millisecond
 	}

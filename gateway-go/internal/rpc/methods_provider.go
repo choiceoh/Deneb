@@ -61,7 +61,7 @@ func providersList(deps ProviderDeps) HandlerFunc {
 			providers = append(providers, serializePlugin(snap[id]))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"providers": providers,
 		})
 		return resp
@@ -84,7 +84,7 @@ func providersGet(deps ProviderDeps) HandlerFunc {
 				protocol.ErrNotFound, "provider not found: "+p.ID))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, serializePlugin(plugin))
+		resp := protocol.MustResponseOK(req.ID, serializePlugin(plugin))
 		return resp
 	}
 }
@@ -105,7 +105,7 @@ func providersCatalog(deps ProviderDeps) HandlerFunc {
 			if cp, ok := plugin.(provider.CatalogProvider); ok {
 				result, err := cp.Catalog(ctx, provider.CatalogContext{})
 				if err == nil && result != nil {
-					resp, _ := protocol.NewResponseOK(req.ID, result)
+					resp := protocol.MustResponseOK(req.ID, result)
 					return resp
 				}
 			}
@@ -126,7 +126,7 @@ func providersCatalog(deps ProviderDeps) HandlerFunc {
 		}
 
 		// Empty catalog fallback.
-		resp, _ := protocol.NewResponseOK(req.ID, provider.CatalogResult{
+		resp := protocol.MustResponseOK(req.ID, provider.CatalogResult{
 			Entries: []provider.CatalogEntry{},
 		})
 		return resp
@@ -146,7 +146,7 @@ func providersAuthPrepare(deps ProviderDeps) HandlerFunc {
 		}
 
 		if deps.AuthManager == nil {
-			resp, _ := protocol.NewResponseOK(req.ID, provider.PreparedAuth{
+			resp := protocol.MustResponseOK(req.ID, provider.PreparedAuth{
 				APIKey: p.APIKey,
 			})
 			return resp
@@ -158,7 +158,7 @@ func providersAuthPrepare(deps ProviderDeps) HandlerFunc {
 				protocol.ErrDependencyFailed, "auth prepare failed: "+err.Error()))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, prepared)
+		resp := protocol.MustResponseOK(req.ID, prepared)
 		return resp
 	}
 }

@@ -38,7 +38,7 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 			Logger:      deps.Logger,
 		}
 		events.HandleNodeEvent(nodeCtx, p.NodeID, p.Event)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
 		return resp
 	})
 
@@ -52,7 +52,7 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 				protocol.ErrMissingParam, "connId is required"))
 		}
 		deps.Broadcaster.SubscribeSessionEvents(p.ConnID)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"subscribed": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"subscribed": true})
 		return resp
 	}
 	unsubscribeSession := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
@@ -64,7 +64,7 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 				protocol.ErrMissingParam, "connId is required"))
 		}
 		deps.Broadcaster.UnsubscribeSessionEvents(p.ConnID)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"unsubscribed": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"unsubscribed": true})
 		return resp
 	}
 	subscribeMessages := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
@@ -77,7 +77,7 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 				protocol.ErrMissingParam, "connId and sessionKey are required"))
 		}
 		deps.Broadcaster.SubscribeSessionMessageEvents(p.ConnID, p.SessionKey)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"subscribed": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"subscribed": true})
 		return resp
 	}
 	unsubscribeMessages := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
@@ -90,7 +90,7 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 				protocol.ErrMissingParam, "connId and sessionKey are required"))
 		}
 		deps.Broadcaster.UnsubscribeSessionMessageEvents(p.ConnID, p.SessionKey)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"unsubscribed": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"unsubscribed": true})
 		return resp
 	}
 

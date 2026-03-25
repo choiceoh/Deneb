@@ -31,7 +31,7 @@ func talkConfig(deps TalkDeps) HandlerFunc {
 		_ = json.Unmarshal(req.Params, &p)
 
 		cfg := deps.Talk.GetConfig(p.IncludeSecrets)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"config": cfg})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"config": cfg})
 		return resp
 	}
 }
@@ -48,7 +48,7 @@ func talkMode(deps TalkDeps) HandlerFunc {
 		}
 
 		result := deps.Talk.SetMode(p.Enabled, p.Phase)
-		resp, _ := protocol.NewResponseOK(req.ID, result)
+		resp := protocol.MustResponseOK(req.ID, result)
 		return resp
 	}
 }

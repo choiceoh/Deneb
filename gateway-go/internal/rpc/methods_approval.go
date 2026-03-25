@@ -102,7 +102,7 @@ func execApprovalRequest(deps ApprovalDeps) HandlerFunc {
 		}
 
 		if p.TwoPhase {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			resp := protocol.MustResponseOK(req.ID, map[string]any{
 				"status":      "accepted",
 				"id":          created.ID,
 				"createdAtMs": created.CreatedAtMs,
@@ -111,7 +111,7 @@ func execApprovalRequest(deps ApprovalDeps) HandlerFunc {
 			return resp
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, created)
+		resp := protocol.MustResponseOK(req.ID, created)
 		return resp
 	}
 }
@@ -132,7 +132,7 @@ func execApprovalWaitDecision(deps ApprovalDeps) HandlerFunc {
 				protocol.ErrNotFound, "approval request not found"))
 		}
 		if existing.Decision != nil {
-			resp, _ := protocol.NewResponseOK(req.ID, existing)
+			resp := protocol.MustResponseOK(req.ID, existing)
 			return resp
 		}
 
@@ -145,7 +145,7 @@ func execApprovalWaitDecision(deps ApprovalDeps) HandlerFunc {
 				return protocol.NewResponseError(req.ID, protocol.NewError(
 					protocol.ErrNotFound, "approval request expired"))
 			}
-			resp, _ := protocol.NewResponseOK(req.ID, result)
+			resp := protocol.MustResponseOK(req.ID, result)
 			return resp
 		case <-ctx.Done():
 			return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -194,7 +194,7 @@ func execApprovalResolve(deps ApprovalDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
 		return resp
 	}
 }
@@ -208,7 +208,7 @@ func execApprovalsGet(deps ApprovalDeps) HandlerFunc {
 				LoadedAt: 0,
 			}
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, snapshot)
+		resp := protocol.MustResponseOK(req.ID, snapshot)
 		return resp
 	}
 }
@@ -226,7 +226,7 @@ func execApprovalsSet(deps ApprovalDeps) HandlerFunc {
 
 		deps.Store.SetGlobalSnapshot(p.File, p.BaseHash)
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
 		return resp
 	}
 }
@@ -248,7 +248,7 @@ func execApprovalsNodeGet(deps ApprovalDeps) HandlerFunc {
 				LoadedAt: 0,
 			}
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, snapshot)
+		resp := protocol.MustResponseOK(req.ID, snapshot)
 		return resp
 	}
 }
@@ -271,7 +271,7 @@ func execApprovalsNodeSet(deps ApprovalDeps) HandlerFunc {
 
 		deps.Store.SetNodeSnapshot(p.NodeID, p.File, p.BaseHash)
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
 		return resp
 	}
 }

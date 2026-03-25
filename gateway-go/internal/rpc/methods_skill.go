@@ -35,7 +35,7 @@ func skillsStatus(deps SkillDeps) HandlerFunc {
 		_ = json.Unmarshal(req.Params, &p)
 
 		status := deps.Skills.GetStatus(p.AgentID)
-		resp, _ := protocol.NewResponseOK(req.ID, status)
+		resp := protocol.MustResponseOK(req.ID, status)
 		return resp
 	}
 }
@@ -46,7 +46,7 @@ func skillsBins(deps SkillDeps) HandlerFunc {
 		if bins == nil {
 			bins = make([]string, 0)
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"bins": bins})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"bins": bins})
 		return resp
 	}
 }
@@ -76,7 +76,7 @@ func skillsInstall(deps SkillDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, result)
+		resp := protocol.MustResponseOK(req.ID, result)
 		return resp
 	}
 }
@@ -115,7 +115,7 @@ func skillsUpdate(deps SkillDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"ok":       true,
 			"skillKey": p.SkillKey,
 			"config":   updated.Config,

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 )
 
 // ConnectorConfig configures an HTTP connector for a provider API.
@@ -33,13 +35,11 @@ type Connector struct {
 	logger *slog.Logger
 }
 
-const defaultTimeoutMs = 30_000
-
 // NewConnector creates a new provider HTTP connector.
 func NewConnector(cfg ConnectorConfig, logger *slog.Logger) *Connector {
 	timeout := time.Duration(cfg.TimeoutMs) * time.Millisecond
 	if timeout <= 0 {
-		timeout = time.Duration(defaultTimeoutMs) * time.Millisecond
+		timeout = timeouts.ProviderHTTP
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -112,6 +112,8 @@ func (c *Connector) JSON(ctx context.Context, method, path string, reqBody, resp
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return &ConnectorError{
 			StatusCode: resp.StatusCode,
+			Method:     method,
+			Path:       path,
 			Body:       string(errBody),
 		}
 	}
@@ -155,11 +157,13 @@ func applyAuth(req *http.Request, key, authMode string) {
 // ConnectorError represents a non-2xx HTTP response from a provider.
 type ConnectorError struct {
 	StatusCode int
+	Method     string
+	Path       string
 	Body       string
 }
 
 func (e *ConnectorError) Error() string {
-	return fmt.Sprintf("provider returned HTTP %d: %s", e.StatusCode, e.Body)
+	return fmt.Sprintf("provider %s %s returned HTTP %d: %s", e.Method, e.Path, e.StatusCode, e.Body)
 }
 
 // ExpandEnvVars expands ${VAR} references in a string using os.Getenv.

@@ -47,11 +47,11 @@ func ValidateFrame(json string) error {
 	switch rc {
 	case 0:
 		return nil
-	case -1:
+	case rcNullPointer:
 		return errors.New("ffi: null pointer")
-	case -2:
+	case rcInvalidUTF8:
 		return errors.New("ffi: invalid UTF-8")
-	case -3:
+	case rcValidationFail:
 		return errors.New("ffi: frame validation failed")
 	default:
 		return errors.New("ffi: unknown error")
@@ -102,11 +102,11 @@ func ValidateSessionKey(key string) error {
 	switch rc {
 	case 0:
 		return nil
-	case -1:
+	case rcNullPointer:
 		return errors.New("ffi: null pointer")
-	case -2:
+	case rcInvalidUTF8:
 		return errors.New("ffi: invalid UTF-8")
-	case -3:
+	case rcValidationFail:
 		return errors.New("ffi: invalid session key")
 	default:
 		return errors.New("ffi: unknown error")
@@ -173,15 +173,15 @@ func ValidateParams(method, json string) (valid bool, errorsJSON []byte, err err
 	switch {
 	case rc == 0:
 		return true, nil, nil
-	case rc == -1:
+	case rc == rcNullPointer:
 		return false, nil, errors.New("ffi: null pointer")
-	case rc == -2:
+	case rc == rcInvalidUTF8:
 		return false, nil, errors.New("ffi: invalid UTF-8")
-	case rc == -3:
+	case rc == rcValidationFail:
 		return false, nil, errors.New("ffi: unknown method")
-	case rc == -4:
+	case rc == rcInputTooLarge:
 		return false, nil, errors.New("ffi: input too large")
-	case rc == -5:
+	case rc == rcJSONError:
 		return false, nil, errors.New("ffi: invalid JSON")
 	case rc > 0:
 		// rc is the number of bytes written to the output buffer (JSON error array).

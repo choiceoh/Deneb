@@ -35,7 +35,7 @@ func agentsList(deps AgentsDeps) HandlerFunc {
 		if agents == nil {
 			agents = make([]*agent.Agent, 0)
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"agents": agents})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"agents": agents})
 		return resp
 	}
 }
@@ -73,7 +73,7 @@ func agentsCreate(deps AgentsDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"agent": created})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"agent": created})
 		return resp
 	}
 }
@@ -106,7 +106,7 @@ func agentsUpdate(deps AgentsDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"agent": updated})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"agent": updated})
 		return resp
 	}
 }
@@ -134,7 +134,7 @@ func agentsDelete(deps AgentsDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"removed": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"removed": true})
 		return resp
 	}
 }
@@ -158,7 +158,7 @@ func agentsFilesList(deps AgentsDeps) HandlerFunc {
 			files = make([]*agent.FileEntry, 0)
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"files": files})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"files": files})
 		return resp
 	}
 }
@@ -184,7 +184,7 @@ func agentsFilesGet(deps AgentsDeps) HandlerFunc {
 				protocol.ErrNotFound, err.Error()))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, file)
+		resp := protocol.MustResponseOK(req.ID, file)
 		return resp
 	}
 }
@@ -211,7 +211,7 @@ func agentsFilesSet(deps AgentsDeps) HandlerFunc {
 				protocol.ErrNotFound, err.Error()))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, file)
+		resp := protocol.MustResponseOK(req.ID, file)
 		return resp
 	}
 }

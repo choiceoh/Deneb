@@ -42,7 +42,7 @@ func wizardStart(deps WizardDeps) HandlerFunc {
 		}
 
 		session := deps.Engine.Start(p.Mode, p.Workspace)
-		resp, _ := protocol.NewResponseOK(req.ID, session)
+		resp := protocol.MustResponseOK(req.ID, session)
 		return resp
 	}
 }
@@ -68,7 +68,7 @@ func wizardNext(deps WizardDeps) HandlerFunc {
 				protocol.ErrNotFound, err.Error()))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, session)
+		resp := protocol.MustResponseOK(req.ID, session)
 		return resp
 	}
 }
@@ -89,7 +89,7 @@ func wizardCancel(deps WizardDeps) HandlerFunc {
 				protocol.ErrNotFound, err.Error()))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"status": session.Status,
 		})
 		return resp
@@ -112,7 +112,7 @@ func wizardStatus(deps WizardDeps) HandlerFunc {
 				protocol.ErrNotFound, err.Error()))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"status": session.Status,
 			"error":  session.Error,
 		})

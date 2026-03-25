@@ -53,7 +53,7 @@ func cronWake(deps CronAdvancedDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"nextHeartbeatAtMs": nextHeartbeat,
 			"mode":              p.Mode,
 		})
@@ -67,7 +67,7 @@ func cronStatus(deps CronAdvancedDeps) HandlerFunc {
 		nextRun := deps.Cron.NextRunAt()
 		taskCount := len(deps.Cron.List())
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"running":       running,
 			"nextRunAtMs":   nextRun,
 			"taskCount":     taskCount,
@@ -120,7 +120,7 @@ func cronAdd(deps CronAdvancedDeps) HandlerFunc {
 			deps.Broadcaster("cron.changed", map[string]any{"action": "added", "id": p.Name})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"id":       p.Name,
 			"name":     p.Name,
 			"schedule": p.Schedule,
@@ -161,7 +161,7 @@ func cronUpdate(deps CronAdvancedDeps) HandlerFunc {
 		}
 
 		status := deps.Cron.Get(id)
-		resp, _ := protocol.NewResponseOK(req.ID, status)
+		resp := protocol.MustResponseOK(req.ID, status)
 		return resp
 	}
 }
@@ -192,7 +192,7 @@ func cronRemove(deps CronAdvancedDeps) HandlerFunc {
 			deps.Broadcaster("cron.changed", map[string]any{"action": "removed", "id": id})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"removed": removed})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"removed": removed})
 		return resp
 	}
 }
@@ -224,7 +224,7 @@ func cronRun(deps CronAdvancedDeps) HandlerFunc {
 				protocol.ErrNotFound, err.Error()))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, result)
+		resp := protocol.MustResponseOK(req.ID, result)
 		return resp
 	}
 }
@@ -262,7 +262,7 @@ func cronRuns(deps CronAdvancedDeps) HandlerFunc {
 
 		runs := deps.Cron.Runs(id, limit, offset)
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"runs":  runs,
 			"total": len(runs),
 		})
