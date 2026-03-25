@@ -1,45 +1,13 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "include-v-in-tag": true,
-  "include-component-in-tag": false,
   "separate-pull-requests": false,
-  "group-pull-request-title-pattern": "chore: release v${version}",
   "pull-request-title-pattern": "chore: release v${version}",
   "packages": {
     ".": {
       "release-type": "node",
       "component": "deneb",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "json",
-          "path": "package.json",
-          "jsonpath": "$.version"
-        }
-      ]
-    },
-    "cli-rs": {
-      "release-type": "rust",
-      "component": "deneb-cli",
-      "changelog-path": "cli-rs/CHANGELOG.md",
-      "package-name": "deneb-cli"
-    },
-    "core-rs/core": {
-      "release-type": "rust",
-      "component": "deneb-core",
-      "changelog-path": "core-rs/core/CHANGELOG.md",
-      "package-name": "deneb-core"
-    },
-    "core-rs-napi": {
-      "release-type": "rust",
-      "component": "deneb-core-napi",
-      "changelog-path": "core-rs-napi/CHANGELOG.md",
-      "package-name": "deneb-core-rs-napi"
-    },
-    "gateway-go": {
-      "release-type": "go",
-      "component": "deneb-gateway",
-      "changelog-path": "gateway-go/CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md"
     }
   },
   "changelog-sections": [
@@ -52,12 +20,5 @@
     { "type": "chore", "section": "Misc", "hidden": true },
     { "type": "ci", "section": "CI/CD", "hidden": true },
     { "type": "build", "section": "Build", "hidden": true }
-  ],
-  "plugins": [
-    {
-      "type": "linked-versions",
-      "group-name": "deneb",
-      "components": ["deneb", "deneb-cli", "deneb-core", "deneb-core-napi", "deneb-gateway"]
-    }
   ]
 }
