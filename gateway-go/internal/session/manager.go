@@ -56,6 +56,11 @@ type Session struct {
 	ElevatedLevel  string `json:"elevatedLevel,omitempty"`
 	ResponseUsage  string `json:"responseUsage,omitempty"`
 
+	// Per-agent model defaults for mode-specific model selection.
+	ThinkingModel  string `json:"thinkingModel,omitempty"`
+	FastModel      string `json:"fastModel,omitempty"`
+	ReasoningModel string `json:"reasoningModel,omitempty"`
+
 	// Execution environment.
 	ExecHost     string `json:"execHost,omitempty"`
 	ExecSecurity string `json:"execSecurity,omitempty"`

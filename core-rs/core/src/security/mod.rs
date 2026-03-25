@@ -172,6 +172,30 @@ pub fn sanitize_html(input: &str) -> String {
 pub fn is_safe_url(url: &str) -> bool {
     // Quick byte-level scheme check (case-insensitive, no alloc).
     let bytes = url.as_bytes();
+
+    // Defense-in-depth: explicitly reject file:// URLs and UNC/network paths.
+    // The scheme check below already covers file://, but explicit rejection
+    // provides clearer intent, better error tracing, and protects against
+    // future refactors that might weaken the scheme allowlist.
+    if bytes.len() >= 5 {
+        let mut lower5 = [0u8; 5];
+        for (i, b) in bytes[..5].iter().enumerate() {
+            lower5[i] = b.to_ascii_lowercase();
+        }
+        if &lower5 == b"file:" {
+            return false;
+        }
+    }
+    // UNC paths: \\host\share or //host/share (Windows SMB, NFS).
+    // URLs like http://example.com start with 'h', not '/' or '\', so they
+    // won't match here. Only bare //host/share without a scheme is caught.
+    if bytes.len() >= 2
+        && ((bytes[0] == b'\\' && bytes[1] == b'\\')
+            || (bytes[0] == b'/' && bytes[1] == b'/'))
+    {
+        return false;
+    }
+
     let scheme_len = if bytes.len() >= 8 && bytes[..8].eq_ignore_ascii_case(b"https://") {
         8
     } else if bytes.len() >= 7 && bytes[..7].eq_ignore_ascii_case(b"http://") {
@@ -536,6 +560,24 @@ mod tests {
 
         // IPv6 zone ID with raw %
         assert!(!is_safe_url("http://[fe80::1%eth0]/"));
+    }
+
+    #[test]
+    fn test_file_url_blocked() {
+        assert!(!is_safe_url("file:///etc/passwd"));
+        assert!(!is_safe_url("FILE:///etc/passwd"));
+        assert!(!is_safe_url("File:///etc/passwd"));
+        assert!(!is_safe_url("file://localhost/etc/passwd"));
+        assert!(!is_safe_url("file:///C:/Windows/System32"));
+        assert!(!is_safe_url("file:\\\\C:\\Windows\\System32"));
+    }
+
+    #[test]
+    fn test_unc_path_blocked() {
+        assert!(!is_safe_url("\\\\server\\share"));
+        assert!(!is_safe_url("\\\\?\\UNC\\server\\share"));
+        assert!(!is_safe_url("//server/share"));
+        assert!(!is_safe_url("//169.254.169.254/latest/meta-data"));
     }
 
     #[test]

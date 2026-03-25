@@ -150,6 +150,15 @@ var blockedHosts = map[string]bool{
 
 // IsSafeURL is a pure-Go fallback for SSRF URL validation.
 func IsSafeURL(rawURL string) bool {
+	// Explicit file:// and UNC path blocking (defense-in-depth).
+	lower := strings.ToLower(rawURL)
+	if strings.HasPrefix(lower, "file:") {
+		return false
+	}
+	if strings.HasPrefix(rawURL, "\\\\") || (strings.HasPrefix(rawURL, "//") && !strings.Contains(rawURL, "://")) {
+		return false
+	}
+
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return false

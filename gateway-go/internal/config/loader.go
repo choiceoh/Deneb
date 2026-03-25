@@ -189,6 +189,30 @@ func LoadConfigFromDefaultPath() (*ConfigSnapshot, error) {
 	return LoadConfig(ResolveConfigPath())
 }
 
+// ConfiguredChannelIDs extracts the top-level keys from the "channels"
+// object in the raw config JSON. These represent the configured channel
+// plugins (e.g., "telegram", "discord"). Used for lazy loading: only
+// configured channels are started at boot.
+func ConfiguredChannelIDs(snap *ConfigSnapshot) []string {
+	if snap == nil || snap.Raw == "" {
+		return nil
+	}
+	var raw struct {
+		Channels map[string]json.RawMessage `json:"channels"`
+	}
+	if err := json.Unmarshal([]byte(snap.Raw), &raw); err != nil {
+		return nil
+	}
+	if len(raw.Channels) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(raw.Channels))
+	for k := range raw.Channels {
+		ids = append(ids, k)
+	}
+	return ids
+}
+
 // validateConfig performs basic structural validation on the config.
 func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) {
 	if cfg.Gateway != nil {

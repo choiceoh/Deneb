@@ -45,6 +45,8 @@ var methodScopes = map[string]auth.Scope{
 	"sessions.reset":                auth.ScopeWrite,
 	"sessions.delete":               auth.ScopeWrite,
 	"sessions.compact":              auth.ScopeWrite,
+	"sessions.repair":               auth.ScopeWrite,
+	"sessions.overflow_check":       auth.ScopeRead,
 	"sessions.lifecycle":            auth.ScopeWrite,
 
 	// --- Channels (read/write/admin) ---
@@ -114,6 +116,7 @@ var methodScopes = map[string]auth.Scope{
 	"chat.history": auth.ScopeRead,
 	"chat.abort":   auth.ScopeWrite,
 	"chat.inject":  auth.ScopeWrite,
+	"chat.btw":     auth.ScopeWrite,
 
 	// --- Monitoring (read) ---
 	"monitoring.channel_health": auth.ScopeRead,

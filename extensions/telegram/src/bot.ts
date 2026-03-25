@@ -156,6 +156,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
     opts.telegramTransport ??
     resolveTelegramTransport(opts.proxyFetch, {
       network: telegramCfg.network,
+      apiEndpoint: telegramCfg.apiEndpoint,
     });
   const shouldProvideFetch = Boolean(telegramTransport.fetch);
   // grammY's ApiClientOptions types still track `node-fetch` types; Node 22+ global fetch
@@ -230,11 +231,13 @@ export function createTelegramBot(opts: TelegramBotOptions) {
     typeof telegramCfg?.timeoutSeconds === "number" && Number.isFinite(telegramCfg.timeoutSeconds)
       ? Math.max(1, Math.floor(telegramCfg.timeoutSeconds))
       : undefined;
+  const apiRoot = telegramTransport.apiEndpoint || undefined;
   const client: ApiClientOptions | undefined =
-    finalFetch || timeoutSeconds
+    finalFetch || timeoutSeconds || apiRoot
       ? {
           ...(finalFetch ? { fetch: finalFetch } : {}),
           ...(timeoutSeconds ? { timeoutSeconds } : {}),
+          ...(apiRoot ? { apiRoot } : {}),
         }
       : undefined;
 

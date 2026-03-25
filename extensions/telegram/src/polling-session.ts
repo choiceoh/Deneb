@@ -17,6 +17,12 @@ const TELEGRAM_POLL_RESTART_POLICY = {
 const POLL_STALL_THRESHOLD_MS = 60_000;
 const POLL_WATCHDOG_INTERVAL_MS = 15_000;
 const POLL_STOP_GRACE_MS = 15_000;
+/** Hard timeout for individual getUpdates requests. If a single call
+ *  exceeds this, the fetch is aborted and the polling cycle restarts
+ *  via the existing backoff mechanism. Telegram long-polling timeout
+ *  is typically 30s; 90s allows for slow networks while still catching
+ *  truly stuck connections. */
+const GETUPDATE_HARD_TIMEOUT_MS = 90_000;
 
 const waitForGracefulStop = async (stop: () => Promise<void>) => {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -197,6 +203,22 @@ export class TelegramPollingSession {
           hasReceivedUpdate = true;
           this.#restartAttempts = 0;
         }
+        // Hard timeout: abort stuck getUpdates requests that exceed
+        // GETUPDATE_HARD_TIMEOUT_MS. The existing watchdog detects stalls
+        // at 60s, but the actual HTTP request may hang indefinitely without
+        // this abort. The polling restart backoff handles recovery.
+        const hardAbort = new AbortController();
+        const hardTimer = setTimeout(() => hardAbort.abort(), GETUPDATE_HARD_TIMEOUT_MS);
+        hardTimer.unref?.();
+        // Combine with any existing signal (abort signal from runner).
+        // Cast through unknown to bridge grammY's abort-controller AbortSignal
+        // and Node's native AbortSignal; they are runtime-compatible.
+        const combinedSignal = signal
+          ? AbortSignal.any([signal as unknown as AbortSignal, hardAbort.signal])
+          : hardAbort.signal;
+        return prev(method, payload, combinedSignal as typeof signal).finally(() =>
+          clearTimeout(hardTimer),
+        );
       }
       return prev(method, payload, signal);
     });

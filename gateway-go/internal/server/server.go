@@ -833,14 +833,18 @@ func (s *Server) registerExtendedMethods() {
 	})
 
 	// Session state methods (patch/reset/preview/resolve/compact).
-	rpc.RegisterSessionMethods(s.dispatcher, rpc.SessionDeps{
+	sessionDeps := rpc.SessionDeps{
 		Deps: rpc.Deps{
 			Sessions:    s.sessions,
 			Channels:    s.channels,
 			GatewaySubs: s.gatewaySubs,
 		},
 		Forwarder: &lazyForwarder{server: s},
-	})
+	}
+	rpc.RegisterSessionMethods(s.dispatcher, sessionDeps)
+
+	// Session repair and overflow check methods.
+	rpc.RegisterSessionRepairMethods(s.dispatcher, sessionDeps)
 
 	// Daemon status method.
 	s.dispatcher.Register("daemon.status", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
@@ -923,6 +927,12 @@ func (s *Server) registerPhase2Methods() {
 		chatCfg,
 	)
 	rpc.RegisterChatMethods(s.dispatcher, rpc.ChatDeps{Chat: s.chatHandler})
+
+	// Side-question (/btw) method — thin Go routing with bridge delegation.
+	rpc.RegisterChatBtwMethods(s.dispatcher, rpc.ChatBtwDeps{
+		Forwarder:   s.bridge,
+		Broadcaster: broadcastFn,
+	})
 
 	// Native session execution / agent methods (Phase 4).
 	rpc.RegisterSessionExecMethods(s.dispatcher, rpc.SessionExecDeps{

@@ -23,6 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
+	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/server"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -154,8 +155,11 @@ func main() {
 		}
 		if spawnResult != nil {
 			defer spawnResult.Shutdown()
+			// Prewarm primary model before channels start accepting messages.
+			// Runs concurrently; channels wait 5s anyway, giving prewarm time to complete.
+			go provider.PrewarmModel(ctx, spawnResult.Host, logger)
 			// Start channel plugins in the Plugin Host after the bridge is ready.
-			go startPluginHostChannels(ctx, spawnResult.Host, logger)
+			go startPluginHostChannels(ctx, spawnResult.Host, logger, config.ConfiguredChannelIDs(bootstrap.Snapshot))
 		}
 
 		logger.Info("deneb gateway starting (daemon mode)", "addr", addr, "pid", os.Getpid())
@@ -179,8 +183,11 @@ func main() {
 	}
 	if spawnResult != nil {
 		defer spawnResult.Shutdown()
+		// Prewarm primary model before channels start accepting messages.
+		// Runs concurrently; channels wait 5s anyway, giving prewarm time to complete.
+		go provider.PrewarmModel(ctx, spawnResult.Host, logger)
 		// Start channel plugins in the Plugin Host after the bridge is ready.
-		go startPluginHostChannels(ctx, spawnResult.Host, logger)
+		go startPluginHostChannels(ctx, spawnResult.Host, logger, config.ConfiguredChannelIDs(bootstrap.Snapshot))
 	}
 
 	logger.Info("deneb gateway starting", "addr", addr)
@@ -224,10 +231,11 @@ func setupBridge(ctx context.Context, srv *server.Server, socketPath, pluginHost
 	return nil, nil
 }
 
-// startPluginHostChannels asks the Plugin Host to start all configured channel
-// plugins (Telegram, etc.). It waits briefly for the Plugin Host's gateway
-// context to initialize before sending the request.
-func startPluginHostChannels(ctx context.Context, host *bridge.PluginHost, logger *slog.Logger) {
+// startPluginHostChannels asks the Plugin Host to start only the configured
+// channel plugins. Unconfigured plugins are skipped (lazy loading), reducing
+// boot time and memory usage. Channels can still be configured later via
+// `deneb channels setup` which triggers a targeted channel reload.
+func startPluginHostChannels(ctx context.Context, host *bridge.PluginHost, logger *slog.Logger, configuredChannels []string) {
 	// Give the Plugin Host a moment to finish gateway context initialization.
 	select {
 	case <-time.After(5 * time.Second):
@@ -238,10 +246,19 @@ func startPluginHostChannels(ctx context.Context, host *bridge.PluginHost, logge
 	startCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	// Pass configured channel IDs so only those plugins are loaded at boot.
+	// If empty, all channels start (backwards-compatible).
+	var params map[string]any
+	if len(configuredChannels) > 0 {
+		params = map[string]any{"channels": configuredChannels}
+		logger.Info("starting configured channels only", "channels", configuredChannels)
+	}
+
 	resp, err := host.Forward(startCtx, &protocol.RequestFrame{
 		Type:   "req",
 		ID:     "go-channel-start",
 		Method: "plugin-host.channels.start-all",
+		Params: params,
 	})
 	if err != nil {
 		logger.Error("failed to start plugin host channels", "error", err)

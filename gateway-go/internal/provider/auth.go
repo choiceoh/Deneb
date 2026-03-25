@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -54,6 +55,11 @@ type AuthManager struct {
 	forwarder   Forwarder
 	logger      *slog.Logger
 	stopCh      chan struct{}
+
+	// File-state-based cache invalidation fields.
+	authFilePath  string
+	lastAuthMtime int64 // Unix nano of last known mtime
+	lastAuthSize  int64 // File size at last read
 }
 
 // NewAuthManager creates a new auth manager.
@@ -77,6 +83,41 @@ func (am *AuthManager) SetForwarder(fwd Forwarder) {
 	am.mu.Lock()
 	defer am.mu.Unlock()
 	am.forwarder = fwd
+}
+
+// SetAuthFilePath sets the path to the auth store file for cache invalidation.
+func (am *AuthManager) SetAuthFilePath(path string) {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	am.authFilePath = path
+}
+
+// hasAuthFileChanged checks if the auth store file has been modified
+// since the last read. Returns true if the file should be reloaded.
+func (am *AuthManager) hasAuthFileChanged() bool {
+	if am.authFilePath == "" {
+		return false
+	}
+	info, err := os.Stat(am.authFilePath)
+	if err != nil {
+		return true // File missing or inaccessible → force reload
+	}
+	mtime := info.ModTime().UnixNano()
+	size := info.Size()
+	return mtime != am.lastAuthMtime || size != am.lastAuthSize
+}
+
+// markAuthFileRead updates the cached file state after a successful read.
+func (am *AuthManager) markAuthFileRead() {
+	if am.authFilePath == "" {
+		return
+	}
+	info, err := os.Stat(am.authFilePath)
+	if err != nil {
+		return
+	}
+	am.lastAuthMtime = info.ModTime().UnixNano()
+	am.lastAuthSize = info.Size()
 }
 
 // Store adds or updates a credential in the manager.
