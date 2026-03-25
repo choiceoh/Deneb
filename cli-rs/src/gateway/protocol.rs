@@ -71,6 +71,7 @@ pub struct ErrorShape {
 /// A gateway frame that can be either a response or an event.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
+#[allow(dead_code)]
 pub enum GatewayFrame {
     #[serde(rename = "res")]
     Response(ResponseFrame),

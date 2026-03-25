@@ -2,6 +2,7 @@ use console::Style;
 
 /// Lobster palette tokens for CLI theming.
 /// Kept in sync with `src/terminal/palette.ts`.
+#[allow(dead_code)]
 pub struct Palette;
 
 #[allow(dead_code)]
