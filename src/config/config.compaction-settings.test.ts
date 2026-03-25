@@ -3,13 +3,15 @@ import { loadConfig } from "./config.js";
 import { withTempHomeConfig } from "./test-helpers.js";
 
 describe("config compaction settings", () => {
-  it("preserves memory flush config values", async () => {
+  it("accepts compaction config values including deprecated system-managed fields", async () => {
     await withTempHomeConfig(
       {
         agents: {
           defaults: {
             compaction: {
               reserveTokensFloor: 12_345,
+              // identifierPolicy, identifierInstructions, memoryFlush.enabled,
+              // and truncateAfterCompaction are system-managed but accepted for backward compat.
               identifierPolicy: "custom",
               identifierInstructions: "Keep ticket IDs unchanged.",
               memoryFlush: {
@@ -28,6 +30,7 @@ describe("config compaction settings", () => {
         expect(cfg.agents?.defaults?.compaction?.reserveTokensFloor).toBe(12_345);
         expect(cfg.agents?.defaults?.compaction?.reserveTokens).toBeUndefined();
         expect(cfg.agents?.defaults?.compaction?.keepRecentTokens).toBeUndefined();
+        // Deprecated fields are stored but ignored at runtime.
         expect(cfg.agents?.defaults?.compaction?.identifierPolicy).toBe("custom");
         expect(cfg.agents?.defaults?.compaction?.identifierInstructions).toBe(
           "Keep ticket IDs unchanged.",

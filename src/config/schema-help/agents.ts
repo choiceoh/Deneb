@@ -191,9 +191,9 @@ export const AGENTS_HELP: Record<string, string> = {
   "agents.defaults.compaction.maxHistoryShare":
     "System-managed: fixed at 0.5. This field is accepted in config for backward compatibility but ignored at runtime.",
   "agents.defaults.compaction.identifierPolicy":
-    'Identifier-preservation policy for compaction summaries: "strict" prepends built-in opaque-identifier retention guidance (default), "off" disables this prefix, and "custom" uses identifierInstructions. Keep "strict" unless you have a specific compatibility need.',
+    'System-managed: always "strict". This field is accepted in config for backward compatibility but ignored at runtime.',
   "agents.defaults.compaction.identifierInstructions":
-    'Custom identifier-preservation instruction text used when identifierPolicy="custom". Keep this explicit and safety-focused so compaction summaries do not rewrite opaque IDs, URLs, hosts, or ports.',
+    'System-managed: identifierPolicy is always "strict", so custom instructions are not applied. This field is accepted in config for backward compatibility but ignored at runtime.',
   "agents.defaults.compaction.recentTurnsPreserve":
     "System-managed: fixed at 3. This field is accepted in config for backward compatibility but ignored at runtime.",
   "agents.defaults.compaction.qualityGuard":
@@ -211,11 +211,11 @@ export const AGENTS_HELP: Record<string, string> = {
   "agents.defaults.compaction.model":
     "Optional provider/model override used only for compaction summarization. Set this when you want compaction to run on a different model than the session default, and leave it unset to keep using the primary agent model.",
   "agents.defaults.compaction.truncateAfterCompaction":
-    "When enabled, rewrites the session JSONL file after compaction to remove entries that were summarized. Prevents unbounded file growth in long-running sessions with many compaction cycles. Default: true.",
+    "System-managed: always true. This field is accepted in config for backward compatibility but ignored at runtime.",
   "agents.defaults.compaction.memoryFlush":
     "Pre-compaction memory flush settings that run an agentic memory write before heavy compaction. Keep enabled for long sessions so salient context is persisted before aggressive trimming.",
   "agents.defaults.compaction.memoryFlush.enabled":
-    "Enables pre-compaction memory flush before the runtime performs stronger history reduction near token limits. Keep enabled unless you intentionally disable memory side effects in constrained environments.",
+    "System-managed: always true. This field is accepted in config for backward compatibility but ignored at runtime.",
   "agents.defaults.compaction.memoryFlush.softThresholdTokens":
     "Threshold distance to compaction (in tokens) that triggers pre-compaction memory flush execution. Use earlier thresholds for safer persistence, or tighter thresholds for lower flush frequency.",
   "agents.defaults.compaction.memoryFlush.forceFlushTranscriptBytes":

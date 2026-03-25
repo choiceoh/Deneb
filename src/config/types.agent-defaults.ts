@@ -331,9 +331,9 @@ export type AgentCompactionConfig = {
   reserveTokensFloor?: number;
   /** Additional compaction-summary instructions that can preserve language or persona continuity. */
   customInstructions?: string;
-  /** Identifier-preservation instruction policy for compaction summaries. */
+  /** @deprecated System-managed: always "strict". */
   identifierPolicy?: AgentCompactionIdentifierPolicy;
-  /** Custom identifier-preservation instructions used when identifierPolicy is "custom". */
+  /** @deprecated System-managed: not used (identifierPolicy is always "strict"). */
   identifierInstructions?: string;
   /** Post-compaction session memory index sync mode. */
   postIndexSync?: AgentCompactionPostIndexSyncMode;
@@ -351,11 +351,7 @@ export type AgentCompactionConfig = {
   model?: string;
   /** Maximum time in seconds for a single compaction operation (default: 900). */
   timeoutSeconds?: number;
-  /**
-   * Truncate the session JSONL file after compaction to remove entries that
-   * were summarized. Prevents unbounded file growth in long-running sessions.
-   * Default: true.
-   */
+  /** @deprecated System-managed: always true. */
   truncateAfterCompaction?: boolean;
   /** Background compression observer for proactive pre-computed summaries. */
   observer?: AgentCompactionObserverConfig;
@@ -375,7 +371,7 @@ export type AgentCompactionObserverConfig = {
 };
 
 export type AgentCompactionMemoryFlushConfig = {
-  /** Enable the pre-compaction memory flush (default: true). */
+  /** @deprecated System-managed: always true. */
   enabled?: boolean;
   /** Run the memory flush when context is within this many tokens of the compaction threshold. */
   softThresholdTokens?: number;
