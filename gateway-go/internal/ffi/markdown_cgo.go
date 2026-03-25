@@ -28,9 +28,10 @@ func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) 
 	}
 
 	// Output is typically larger than input due to JSON structure.
-	outSize := len(markdown) * 4
-	if outSize < 8192 {
-		outSize = 8192
+	// Use 6x multiplier with 16 KB floor to handle complex markdown safely.
+	outSize := len(markdown) * 6
+	if outSize < 16384 {
+		outSize = 16384
 	}
 	out := make([]byte, outSize)
 

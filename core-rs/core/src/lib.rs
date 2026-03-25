@@ -402,8 +402,9 @@ pub unsafe extern "C" fn deneb_ml_rerank(
 // ---------------------------------------------------------------------------
 
 /// C FFI: Validate RPC parameters for a given method name.
-/// Returns 0 if valid, positive N if validation failed (N errors written to `errors_out`),
-/// negative on error (-1 = null ptr, -2 = invalid UTF-8, -3 = unknown method, -4 = input too large).
+/// Returns 0 if valid, positive N = bytes written to `errors_out` (JSON error array),
+/// negative on error (-1 = null ptr, -2 = invalid UTF-8, -3 = unknown method,
+/// -4 = input too large, -5 = invalid JSON).
 ///
 /// # Safety
 /// All pointers must be valid for their respective lengths.
@@ -442,14 +443,20 @@ pub unsafe extern "C" fn deneb_validate_params(
                     0
                 } else {
                     // Write errors as JSON to output buffer.
+                    // Return bytes written (not error count) so callers can
+                    // slice the buffer precisely without scanning for `]`.
                     let json_bytes =
                         serde_json::to_vec(&result.errors).unwrap_or_default();
                     if !errors_out.is_null() && !json_bytes.is_empty() {
                         let write_len = json_bytes.len().min(errors_out_len);
                         let out = std::slice::from_raw_parts_mut(errors_out, errors_out_len);
                         out[..write_len].copy_from_slice(&json_bytes[..write_len]);
+                        write_len as i32
+                    } else {
+                        // No output buffer or empty errors; report 1 byte to
+                        // signal failure even though nothing was written.
+                        1
                     }
-                    result.errors.len() as i32
                 }
             }
             Err(protocol::validation::ValidateParamsError::UnknownMethod(_)) => -3,

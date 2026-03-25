@@ -184,19 +184,8 @@ func ValidateParams(method, json string) (valid bool, errorsJSON []byte, err err
 	case rc == -5:
 		return false, nil, errors.New("ffi: invalid JSON")
 	case rc > 0:
-		// rc is the number of errors; errors are written as JSON to out.
-		// Find the actual JSON length (scan for closing bracket).
-		jsonEnd := 0
-		for i := len(out) - 1; i >= 0; i-- {
-			if out[i] == ']' {
-				jsonEnd = i + 1
-				break
-			}
-		}
-		if jsonEnd == 0 {
-			return false, nil, errors.New("ffi: validation failed but no error output")
-		}
-		return false, out[:jsonEnd], nil
+		// rc is the number of bytes written to the output buffer (JSON error array).
+		return false, out[:rc], nil
 	default:
 		return false, nil, errors.New("ffi: unknown error")
 	}
