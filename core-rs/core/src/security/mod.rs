@@ -7,6 +7,12 @@ use memchr::memmem;
 
 /// Constant-time byte comparison to prevent timing attacks.
 /// Both slices must be the same length for equality.
+///
+/// **Note:** The early return on length mismatch leaks whether the lengths
+/// differ. This is acceptable because all callers compare fixed-length values
+/// (session tokens, API keys) where the expected length is not secret.
+/// If variable-length secret comparison is ever needed, this function must
+/// be revised to avoid the length-dependent branch.
 pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
@@ -83,16 +89,18 @@ fn is_strippable_control(c: char) -> bool {
 }
 
 /// Sanitize a string by removing control characters (except newline/tab/CR).
-/// Returns the input unchanged (zero-alloc) if no control characters are present.
-pub fn sanitize_control_chars(input: &str) -> String {
+/// Returns the input unchanged (zero-alloc via Cow) if no control characters are present.
+pub fn sanitize_control_chars(input: &str) -> std::borrow::Cow<'_, str> {
     // Fast path: scan for any strippable control chars before allocating.
     if !input.chars().any(is_strippable_control) {
-        return input.to_string();
+        return std::borrow::Cow::Borrowed(input);
     }
-    input
-        .chars()
-        .filter(|c| !is_strippable_control(*c))
-        .collect()
+    std::borrow::Cow::Owned(
+        input
+            .chars()
+            .filter(|c| !is_strippable_control(*c))
+            .collect(),
+    )
 }
 
 /// Maximum session key length (matches TypeScript ChatSendSessionKeyString).
@@ -152,7 +160,9 @@ pub fn sanitize_html(input: &str) -> String {
             _ => out.push(b),
         }
     }
-    // Safety: input is valid UTF-8 and we only replaced ASCII bytes with ASCII sequences.
+    // SAFETY: input is valid UTF-8 and we only replaced single-byte ASCII characters
+    // (< > & " ') with ASCII-only entity sequences (e.g., "&lt;"). Non-ASCII bytes
+    // are passed through unchanged, so the output remains valid UTF-8.
     unsafe { String::from_utf8_unchecked(out) }
 }
 
@@ -178,8 +188,17 @@ pub fn is_safe_url(url: &str) -> bool {
         Some(pos) => &authority[pos + 1..],
         None => authority,
     };
-    // Strip port — only lowercase the host portion (small string).
-    let host_raw = after_userinfo.split(':').next().unwrap_or("");
+    // Strip port — handle IPv6 bracket notation correctly.
+    // IPv6 URLs look like [::1]:8080, so only split on ':' after closing bracket.
+    let host_raw = if after_userinfo.starts_with('[') {
+        // IPv6: host is everything inside brackets (inclusive).
+        match after_userinfo.find(']') {
+            Some(end) => &after_userinfo[..=end],
+            None => after_userinfo,
+        }
+    } else {
+        after_userinfo.split(':').next().unwrap_or("")
+    };
     // Stack-allocated lowercase for typical hostnames (≤253 bytes per RFC).
     let host = host_raw.to_ascii_lowercase();
 
@@ -187,25 +206,52 @@ pub fn is_safe_url(url: &str) -> bool {
         return false;
     }
 
+    // Normalize IPv6 brackets for consistent matching.
+    let host_normalized = host.trim_start_matches('[').trim_end_matches(']');
+
     // Block common private/internal hostnames and IPs.
     const BLOCKED_HOSTS: &[&str] = &[
         "localhost",
         "127.0.0.1",
         "0.0.0.0",
-        "[::1]",
+        "::1",
+        "::0",
+        "0000:0000:0000:0000:0000:0000:0000:0001",
         "metadata.google.internal",
         "169.254.169.254",
     ];
-    if BLOCKED_HOSTS.iter().any(|&b| host.as_str() == b) {
+    if BLOCKED_HOSTS
+        .iter()
+        .any(|&b| host_normalized == b)
+    {
         return false;
     }
 
-    // Block private IP ranges (10.x, 172.16-31.x, 192.168.x).
-    if host.starts_with("10.") || host.starts_with("192.168.") {
+    // Block IPv4-mapped IPv6 loopback (e.g., ::ffff:127.0.0.1).
+    if host_normalized.starts_with("::ffff:127.")
+        || host_normalized.starts_with("::ffff:10.")
+        || host_normalized.starts_with("::ffff:192.168.")
+        || host_normalized.starts_with("::ffff:169.254.")
+    {
         return false;
     }
-    if host.starts_with("172.") {
-        if let Some(second) = host.split('.').nth(1) {
+
+    // Block IPv6 private ranges: fc00::/7 (ULA) and fe80::/10 (link-local).
+    if host_normalized.starts_with("fc")
+        || host_normalized.starts_with("fd")
+        || host_normalized.starts_with("fe80")
+    {
+        return false;
+    }
+
+    // Block private IPv4 ranges (10.x, 172.16-31.x, 192.168.x).
+    if host_normalized.starts_with("10.")
+        || host_normalized.starts_with("192.168.")
+    {
+        return false;
+    }
+    if host_normalized.starts_with("172.") {
+        if let Some(second) = host_normalized.split('.').nth(1) {
             if let Ok(n) = second.parse::<u8>() {
                 if (16..=31).contains(&n) {
                     return false;
@@ -319,6 +365,32 @@ mod tests {
         assert!(!is_safe_url("http://user:pass@127.0.0.1/"));
         assert!(!is_safe_url("http://anything@10.0.0.1/secret"));
         assert!(is_safe_url("http://user@example.com/")); // public host with userinfo is ok
+    }
+
+    #[test]
+    fn test_is_safe_url_ipv6() {
+        // IPv6 loopback variants
+        assert!(!is_safe_url("http://[::1]/"));
+        assert!(!is_safe_url("http://[::1]:8080/path"));
+
+        // IPv4-mapped IPv6
+        assert!(!is_safe_url("http://[::ffff:127.0.0.1]/"));
+        assert!(!is_safe_url("http://[::ffff:10.0.0.1]/"));
+        assert!(!is_safe_url("http://[::ffff:192.168.1.1]/"));
+
+        // IPv6 ULA (fc00::/7) and link-local (fe80::/10)
+        assert!(!is_safe_url("http://[fd12:3456::1]/"));
+        assert!(!is_safe_url("http://[fc00::1]/"));
+        assert!(!is_safe_url("http://[fe80::1]/"));
+
+        // Public IPv6 should pass
+        assert!(is_safe_url("http://[2001:db8::1]/"));
+    }
+
+    #[test]
+    fn test_is_safe_url_metadata_ipv6() {
+        // Cloud metadata via IPv4-mapped IPv6
+        assert!(!is_safe_url("http://[::ffff:169.254.169.254]/"));
     }
 
     #[test]

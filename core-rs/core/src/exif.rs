@@ -77,9 +77,15 @@ pub fn read_jpeg_exif_orientation_impl(buf: &[u8]) -> Option<u8> {
                     })
                 };
 
-                // Read IFD0 offset
+                // Read IFD0 offset (validate against reasonable EXIF size limit).
                 let ifd0_offset = read_u32(tiff_start + 4)? as usize;
-                let ifd0_start = tiff_start + ifd0_offset;
+                if ifd0_offset > 10 * 1024 * 1024 {
+                    return None; // Unreasonably large offset
+                }
+                let ifd0_start = match tiff_start.checked_add(ifd0_offset) {
+                    Some(v) => v,
+                    None => return None,
+                };
                 if buf.len() < ifd0_start + 2 {
                     return None;
                 }
@@ -112,7 +118,11 @@ pub fn read_jpeg_exif_orientation_impl(buf: &[u8]) -> Option<u8> {
                 break;
             }
             let segment_length = u16::from_be_bytes([buf[offset + 2], buf[offset + 3]]) as usize;
-            offset += 2 + segment_length;
+            // Use checked_add to prevent wrap-around on crafted segment lengths.
+            offset = match offset.checked_add(2 + segment_length) {
+                Some(next) => next,
+                None => break,
+            };
             continue;
         }
 
@@ -229,6 +239,19 @@ mod tests {
         buf[length_pos + 1] = (app1_len & 0xFF) as u8;
 
         assert_eq!(read_jpeg_exif_orientation_impl(&buf), Some(3));
+    }
+
+    #[test]
+    fn handles_crafted_large_segment_length() {
+        // JPEG with APP0 segment claiming max length (0xFFFF) but buffer is short.
+        // Should not panic or loop infinitely.
+        let buf = vec![
+            0xFF, 0xD8, // SOI
+            0xFF, 0xE0, // APP0
+            0xFF, 0xFF, // segment length = 65535 (way past buffer end)
+            0x00, 0x00, 0x00, 0x00,
+        ];
+        assert_eq!(read_jpeg_exif_orientation_impl(&buf), None);
     }
 
     #[test]

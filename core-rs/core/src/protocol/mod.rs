@@ -115,9 +115,24 @@ pub struct EventFrame {
     pub state_version: Option<StateVersion>,
 }
 
+/// Maximum length for short string fields (id, method, event) to prevent DoS.
+const MAX_SHORT_FIELD_LEN: usize = 256;
+
 fn validate_non_empty(value: &Option<String>, field: &'static str) -> Result<String, FrameError> {
     match value {
-        Some(s) if !s.is_empty() => Ok(s.clone()),
+        Some(s) if !s.is_empty() => {
+            if s.len() > MAX_SHORT_FIELD_LEN {
+                return Err(FrameError::InvalidField {
+                    field,
+                    reason: format!(
+                        "exceeds maximum length ({} > {})",
+                        s.len(),
+                        MAX_SHORT_FIELD_LEN
+                    ),
+                });
+            }
+            Ok(s.clone())
+        }
         Some(_) => Err(FrameError::InvalidField {
             field,
             reason: "must be non-empty".to_string(),
@@ -436,6 +451,21 @@ mod tests {
     fn test_extra_fields_ignored() {
         let json = r#"{"type":"req","id":"1","method":"test","unknown_field":42}"#;
         assert!(validate_frame(json).is_ok());
+    }
+
+    #[test]
+    fn test_oversized_id_rejected() {
+        let long_id = "x".repeat(300);
+        let json = format!(r#"{{"type":"req","id":"{}","method":"test"}}"#, long_id);
+        let err = validate_frame(&json).unwrap_err();
+        assert!(err.to_string().contains("maximum length"));
+    }
+
+    #[test]
+    fn test_oversized_method_rejected() {
+        let long_method = "m".repeat(300);
+        let json = format!(r#"{{"type":"req","id":"1","method":"{}"}}"#, long_method);
+        assert!(validate_frame(&json).is_err());
     }
 
     #[test]
