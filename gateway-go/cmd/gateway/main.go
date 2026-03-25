@@ -24,6 +24,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/server"
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 func main() {
@@ -149,6 +150,8 @@ func main() {
 		spawnResult := setupBridge(ctx, srv, *bridgeSocket, *pluginHostCmd, logger)
 		if spawnResult != nil {
 			defer spawnResult.Shutdown()
+			// Start channel plugins in the Plugin Host after the bridge is ready.
+			go startPluginHostChannels(ctx, spawnResult.Host, logger)
 		}
 
 		logger.Info("deneb gateway starting (daemon mode)", "addr", addr, "pid", os.Getpid())
@@ -168,6 +171,8 @@ func main() {
 	spawnResult := setupBridge(ctx, srv, *bridgeSocket, *pluginHostCmd, logger)
 	if spawnResult != nil {
 		defer spawnResult.Shutdown()
+		// Start channel plugins in the Plugin Host after the bridge is ready.
+		go startPluginHostChannels(ctx, spawnResult.Host, logger)
 	}
 
 	logger.Info("deneb gateway starting", "addr", addr)
@@ -209,6 +214,36 @@ func setupBridge(ctx context.Context, srv *server.Server, socketPath, pluginHost
 	}
 
 	return nil
+}
+
+// startPluginHostChannels asks the Plugin Host to start all configured channel
+// plugins (Telegram, etc.). It waits briefly for the Plugin Host's gateway
+// context to initialize before sending the request.
+func startPluginHostChannels(ctx context.Context, host *bridge.PluginHost, logger *slog.Logger) {
+	// Give the Plugin Host a moment to finish gateway context initialization.
+	select {
+	case <-time.After(5 * time.Second):
+	case <-ctx.Done():
+		return
+	}
+
+	startCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	resp, err := host.Forward(startCtx, &protocol.RequestFrame{
+		Type:   "req",
+		ID:     "go-channel-start",
+		Method: "plugin-host.channels.start-all",
+	})
+	if err != nil {
+		logger.Error("failed to start plugin host channels", "error", err)
+		return
+	}
+	if resp != nil && !resp.OK {
+		logger.Error("plugin host channel startup failed", "error", resp.Error)
+		return
+	}
+	logger.Info("plugin host channels started")
 }
 
 func parseLogLevel(s string) slog.Level {
