@@ -40,7 +40,7 @@ func RegisterConfigReloadMethod(d *Dispatcher, deps ...ConfigReloadDeps) {
 				protocol.ErrUnavailable, "config reload failed: "+err.Error()))
 		}
 		if !snapshot.Valid {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			resp := protocol.MustResponseOK(req.ID, map[string]any{
 				"valid":  false,
 				"issues": snapshot.Issues,
 			})
@@ -71,7 +71,7 @@ func RegisterConfigReloadMethod(d *Dispatcher, deps ...ConfigReloadDeps) {
 			}
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"valid":               true,
 			"path":                snapshot.Path,
 			"config":              snapshot.Config,

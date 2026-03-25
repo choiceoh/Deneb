@@ -62,7 +62,7 @@ func channelStart(deps ChannelLifecycleDeps) HandlerFunc {
 				protocol.ErrUnavailable, "channel start failed: "+err.Error()))
 		}
 		emitChannelLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "started")
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"started": true, "id": p.ID})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"started": true, "id": p.ID})
 		return resp
 	}
 }
@@ -81,7 +81,7 @@ func channelStop(deps ChannelLifecycleDeps) HandlerFunc {
 				protocol.ErrUnavailable, "channel stop failed: "+err.Error()))
 		}
 		emitChannelLifecycleEvent(deps, p.ID, hooks.EventChannelDisconnect, "stopped")
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"stopped": true, "id": p.ID})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"stopped": true, "id": p.ID})
 		return resp
 	}
 }
@@ -100,7 +100,7 @@ func channelRestart(deps ChannelLifecycleDeps) HandlerFunc {
 				protocol.ErrUnavailable, "channel restart failed: "+err.Error()))
 		}
 		emitChannelLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "restarted")
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"restarted": true, "id": p.ID})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"restarted": true, "id": p.ID})
 		return resp
 	}
 }

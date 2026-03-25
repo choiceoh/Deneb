@@ -28,7 +28,7 @@ func contextAssemblyNew() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"handle": handle})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"handle": handle})
 		return resp
 	}
 }
@@ -47,7 +47,7 @@ func contextAssemblyStart() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
+		resp := protocol.MustResponseOK(req.ID, json.RawMessage(result))
 		return resp
 	}
 }
@@ -71,7 +71,7 @@ func contextAssemblyStep() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
+		resp := protocol.MustResponseOK(req.ID, json.RawMessage(result))
 		return resp
 	}
 }
@@ -97,7 +97,7 @@ func contextExpandNew() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"handle": handle})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"handle": handle})
 		return resp
 	}
 }
@@ -116,7 +116,7 @@ func contextExpandStart() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
+		resp := protocol.MustResponseOK(req.ID, json.RawMessage(result))
 		return resp
 	}
 }
@@ -140,7 +140,7 @@ func contextExpandStep() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
+		resp := protocol.MustResponseOK(req.ID, json.RawMessage(result))
 		return resp
 	}
 }
@@ -155,7 +155,7 @@ func contextEngineDrop() HandlerFunc {
 				protocol.ErrMissingParam, "handle is required"))
 		}
 		ffi.ContextEngineDrop(p.Handle)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"dropped": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"dropped": true})
 		return resp
 	}
 }

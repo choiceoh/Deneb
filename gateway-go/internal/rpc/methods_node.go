@@ -61,7 +61,7 @@ func nodePairRequest(deps NodeDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"requestId": created.RequestID,
 		})
 		return resp
@@ -77,7 +77,7 @@ func nodePairList(deps NodeDeps) HandlerFunc {
 		if paired == nil {
 			paired = make([]*node.PairedNode, 0)
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"pending": pending,
 			"paired":  paired,
 		})
@@ -107,7 +107,7 @@ func nodePairApprove(deps NodeDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"node": paired})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"node": paired})
 		return resp
 	}
 }
@@ -134,7 +134,7 @@ func nodePairReject(deps NodeDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"nodeId": nodeID})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"nodeId": nodeID})
 		return resp
 	}
 }
@@ -159,7 +159,7 @@ func nodePairVerify(deps NodeDeps) HandlerFunc {
 		if valid {
 			result["nodeId"] = p.NodeID
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, result)
+		resp := protocol.MustResponseOK(req.ID, result)
 		return resp
 	}
 }
@@ -170,7 +170,7 @@ func nodeList(deps NodeDeps) HandlerFunc {
 		if nodes == nil {
 			nodes = []node.NodeInfo{}
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"ts":    time.Now().UnixMilli(),
 			"nodes": nodes,
 		})
@@ -194,7 +194,7 @@ func nodeDescribe(deps NodeDeps) HandlerFunc {
 				protocol.ErrNotFound, "node not found"))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"ts":    time.Now().UnixMilli(),
 			"nodeId": info.NodeID,
 			"displayName":     info.DisplayName,
@@ -234,7 +234,7 @@ func nodeRename(deps NodeDeps) HandlerFunc {
 				protocol.ErrNotFound, err.Error()))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"nodeId":      p.NodeID,
 			"displayName": p.DisplayName,
 		})
@@ -300,7 +300,7 @@ func nodeInvoke(deps NodeDeps) HandlerFunc {
 				return protocol.NewResponseError(req.ID, protocol.NewError(
 					protocol.ErrUnavailable, "invoke returned nil result"))
 			}
-			resp, _ := protocol.NewResponseOK(req.ID, result)
+			resp := protocol.MustResponseOK(req.ID, result)
 			return resp
 		case <-timeoutCtx.Done():
 			return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -337,7 +337,7 @@ func nodeInvokeResult(deps NodeDeps) HandlerFunc {
 		}
 		resolved := deps.Nodes.ResolveInvoke(p.IdempotencyKey, result)
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"resolved": resolved})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"resolved": resolved})
 		return resp
 	}
 }
@@ -349,7 +349,7 @@ func nodeCanvasCapabilityRefresh(deps NodeDeps) HandlerFunc {
 			hostURL = "http://localhost:3100"
 		}
 		cap := deps.Nodes.RefreshCanvasCapability(hostURL)
-		resp, _ := protocol.NewResponseOK(req.ID, cap)
+		resp := protocol.MustResponseOK(req.ID, cap)
 		return resp
 	}
 }
@@ -367,7 +367,7 @@ func nodePendingPull(deps NodeDeps) HandlerFunc {
 		if actions == nil {
 			actions = make([]*node.PendingAction, 0)
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"nodeId":  p.NodeID,
 			"actions": actions,
 		})
@@ -391,7 +391,7 @@ func nodePendingAck(deps NodeDeps) HandlerFunc {
 		}
 
 		ackedIDs, remaining := deps.Nodes.AckActions(p.NodeID, p.IDs)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"nodeId":         p.NodeID,
 			"ackedIds":       ackedIDs,
 			"remainingCount": remaining,
@@ -412,7 +412,7 @@ func nodePendingDrain(deps NodeDeps) HandlerFunc {
 		if items == nil {
 			items = make([]*node.PendingAction, 0)
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"nodeId":  p.NodeID,
 			"items":   items,
 			"hasMore": hasMore,
@@ -456,7 +456,7 @@ func nodePendingEnqueue(deps NodeDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"nodeId":        p.NodeID,
 			"queued":        queued,
 			"wakeTriggered": p.Wake,
@@ -485,7 +485,7 @@ func nodeEvent(deps NodeDeps) HandlerFunc {
 			deps.Broadcaster("node.event."+p.Event, p.Payload)
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
 		return resp
 	}
 }

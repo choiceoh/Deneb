@@ -52,7 +52,7 @@ func vegaFFIExecute() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
+		resp := protocol.MustResponseOK(req.ID, json.RawMessage(result))
 		return resp
 	}
 }
@@ -68,7 +68,7 @@ func vegaFFISearch() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, err.Error()))
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
+		resp := protocol.MustResponseOK(req.ID, json.RawMessage(result))
 		return resp
 	}
 }
@@ -87,7 +87,7 @@ func vegaToolHandler(client *vega.Client, tool string) HandlerFunc {
 		}
 
 		// result is already json.RawMessage; wrap it in a response.
-		resp, _ := protocol.NewResponseOKRaw(req.ID, result)
+		resp := protocol.MustResponseOKRaw(req.ID, result)
 		return resp
 	}
 }

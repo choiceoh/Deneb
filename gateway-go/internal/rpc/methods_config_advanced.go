@@ -68,7 +68,7 @@ func configSet(deps ConfigAdvancedDeps) HandlerFunc {
 			deps.Broadcaster("config.changed", map[string]any{"hash": newHash})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"ok":   true,
 			"hash": newHash,
 		})
@@ -126,7 +126,7 @@ func configApply(deps ConfigAdvancedDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"ok":   true,
 			"hash": newHash,
 		})
@@ -206,7 +206,7 @@ func configPatch(deps ConfigAdvancedDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"ok":   true,
 			"hash": newHash,
 		})
@@ -217,7 +217,7 @@ func configPatch(deps ConfigAdvancedDeps) HandlerFunc {
 func configSchema(_ ConfigAdvancedDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		schema := config.GetSchema()
-		resp, _ := protocol.NewResponseOK(req.ID, schema)
+		resp := protocol.MustResponseOK(req.ID, schema)
 		return resp
 	}
 }
@@ -234,10 +234,10 @@ func configSchemaLookup(_ ConfigAdvancedDeps) HandlerFunc {
 
 		node := config.LookupSchema(p.Path)
 		if node == nil {
-			resp, _ := protocol.NewResponseOK(req.ID, nil)
+			resp := protocol.MustResponseOK(req.ID, nil)
 			return resp
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, node)
+		resp := protocol.MustResponseOK(req.ID, node)
 		return resp
 	}
 }

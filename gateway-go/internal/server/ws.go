@@ -16,14 +16,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
+	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"nhooyr.io/websocket"
-)
-
-const (
-	// dispatchTimeout bounds how long a single RPC handler can run before
-	// being canceled. Prevents a stuck handler from blocking the message loop.
-	dispatchTimeout = 30 * time.Second
 )
 
 // jsonBufPool reduces GC pressure for writeFrame by reusing marshal buffers.
@@ -325,7 +320,7 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 		}
 
 		// Dispatch with a per-request timeout to prevent stuck handlers.
-		dispatchCtx, dispatchCancel := context.WithTimeout(ctx, dispatchTimeout)
+		dispatchCtx, dispatchCancel := context.WithTimeout(ctx, timeouts.RPCDispatch)
 		resp := s.dispatcher.Dispatch(dispatchCtx, &req)
 		dispatchCancel()
 

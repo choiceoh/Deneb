@@ -17,20 +17,20 @@ type MonitoringDeps struct {
 func RegisterMonitoringMethods(d *Dispatcher, deps MonitoringDeps) {
 	d.Register("monitoring.channel_health", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if deps.ChannelHealth == nil {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"channels": []any{}})
+			resp := protocol.MustResponseOK(req.ID, map[string]any{"channels": []any{}})
 			return resp
 		}
 		snapshot := deps.ChannelHealth.HealthSnapshot()
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"channels": snapshot})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"channels": snapshot})
 		return resp
 	})
 
 	d.Register("monitoring.activity", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if deps.Activity == nil {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"lastActivityMs": 0})
+			resp := protocol.MustResponseOK(req.ID, map[string]any{"lastActivityMs": 0})
 			return resp
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"lastActivityMs": deps.Activity.LastActivityAt(),
 		})
 		return resp

@@ -304,7 +304,7 @@ func (h *Handler) History(ctx context.Context, req *protocol.RequestFrame) *prot
 
 	// Forward to Node.js to read transcript from disk.
 	if h.forwarder == nil {
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"messages": []ChatMessage{},
 			"total":    0,
 		})
@@ -399,7 +399,7 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 		}
 	}
 
-	resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"aborted": true})
+	resp := protocol.MustResponseOK(req.ID, map[string]bool{"aborted": true})
 	return resp
 }
 
@@ -496,7 +496,7 @@ func (h *Handler) budgetHistory(reqID string, payload json.RawMessage) *protocol
 		Total    int               `json:"total"`
 	}
 	if err := json.Unmarshal(payload, &parsed); err != nil {
-		resp, _ := protocol.NewResponseOK(reqID, map[string]any{
+		resp := protocol.MustResponseOK(reqID, map[string]any{
 			"messages":  []any{},
 			"total":     0,
 			"truncated": true,
@@ -535,7 +535,7 @@ func (h *Handler) budgetHistory(reqID string, payload json.RawMessage) *protocol
 		budgeted[len(reversed)-1-i] = msg
 	}
 
-	resp, _ := protocol.NewResponseOK(reqID, map[string]any{
+	resp := protocol.MustResponseOK(reqID, map[string]any{
 		"messages":       budgeted,
 		"total":          parsed.Total,
 		"truncatedCount": truncatedCount,

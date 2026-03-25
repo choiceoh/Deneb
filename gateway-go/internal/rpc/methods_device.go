@@ -34,7 +34,7 @@ func devicePairList(deps DeviceDeps) HandlerFunc {
 		if pairs == nil {
 			pairs = make([]*device.PairEntry, 0)
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"pairs": pairs})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"pairs": pairs})
 		return resp
 	}
 }
@@ -61,7 +61,7 @@ func devicePairApprove(deps DeviceDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"device": dev})
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"device": dev})
 		return resp
 	}
 }
@@ -81,7 +81,7 @@ func devicePairReject(deps DeviceDeps) HandlerFunc {
 				protocol.ErrNotFound, err.Error()))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
 		return resp
 	}
 }
@@ -107,7 +107,7 @@ func devicePairRemove(deps DeviceDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
 		return resp
 	}
 }
@@ -128,7 +128,7 @@ func deviceTokenRotate(deps DeviceDeps) HandlerFunc {
 				protocol.ErrNotFound, err.Error()))
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"deviceId": p.DeviceID,
 			"token":    newToken,
 		})
@@ -157,7 +157,7 @@ func deviceTokenRevoke(deps DeviceDeps) HandlerFunc {
 			})
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
 		return resp
 	}
 }

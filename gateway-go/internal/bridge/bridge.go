@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -107,11 +108,8 @@ func (h *PluginHost) dial(ctx context.Context) error {
 	return nil
 }
 
-const (
-	// defaultForwardTimeout is the maximum time to wait for a bridge response
-	// if the caller's context has no deadline.
-	defaultForwardTimeout = 60 * time.Second
-)
+// defaultForwardTimeout references the centralized bridge forward timeout.
+var defaultForwardTimeout = timeouts.BridgeForward
 
 // Forward sends an RPC request to the Plugin Host and waits for the response.
 // If the caller's context has no deadline, a default 60-second timeout is applied.
@@ -277,7 +275,7 @@ func (h *PluginHost) readLoop() {
 // exponential backoff: 1s, 2s, 4s, ..., capped at 30s.
 func (h *PluginHost) reconnectLoop() {
 	backoff := 1 * time.Second
-	const maxBackoff = 30 * time.Second
+	maxBackoff := timeouts.BridgeReconnectMax
 
 	for {
 		select {
@@ -311,7 +309,7 @@ func (h *PluginHost) reconnectLoop() {
 		h.closed = make(chan struct{})
 		h.closeMu.Unlock()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), timeouts.BridgeDial)
 		err := h.dial(ctx)
 		cancel()
 

@@ -12,11 +12,13 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 )
 
 const (
 	// socketWaitTimeout is how long to wait for the Plugin Host socket to appear.
-	socketWaitTimeout = 10 * time.Second
+	socketWaitTimeout = timeouts.SocketWait
 	// socketPollInterval is the polling interval while waiting for the socket.
 	socketPollInterval = 100 * time.Millisecond
 	// respawnDelay is the backoff before restarting a crashed Plugin Host.

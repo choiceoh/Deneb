@@ -45,6 +45,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
+	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -764,7 +765,7 @@ func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
 		Params: req.Params,
 	}
 
-	dispatchCtx, dispatchCancel := context.WithTimeout(r.Context(), dispatchTimeout)
+	dispatchCtx, dispatchCancel := context.WithTimeout(r.Context(), timeouts.RPCDispatch)
 	resp := s.dispatcher.Dispatch(dispatchCtx, frame)
 	dispatchCancel()
 
@@ -840,10 +841,10 @@ func (s *Server) registerExtendedMethods() {
 	// Daemon status method.
 	s.dispatcher.Register("daemon.status", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if s.daemon == nil {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]string{"state": "not_configured"})
+			resp := protocol.MustResponseOK(req.ID, map[string]string{"state": "not_configured"})
 			return resp
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, s.daemon.Status())
+		resp := protocol.MustResponseOK(req.ID, s.daemon.Status())
 		return resp
 	})
 
@@ -858,7 +859,7 @@ func (s *Server) registerExtendedMethods() {
 				protocol.ErrMissingParam, "event is required"))
 		}
 		sent, _ := s.broadcaster.Broadcast(p.Event, p.Payload)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]int{"sent": sent})
+		resp := protocol.MustResponseOK(req.ID, map[string]int{"sent": sent})
 		return resp
 	})
 }
@@ -1201,7 +1202,7 @@ func (s *Server) startProcessPruner(ctx context.Context) {
 // registerBuiltinMethods registers the core RPC methods handled natively in Go.
 func (s *Server) registerBuiltinMethods() {
 	s.dispatcher.Register("health", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"status": "ok",
 			"uptime": time.Since(s.startedAt).Milliseconds(),
 		})
@@ -1209,7 +1210,7 @@ func (s *Server) registerBuiltinMethods() {
 	})
 
 	s.dispatcher.Register("status", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"version":     s.version,
 			"channels":    s.channels.StatusAll(),
 			"sessions":    s.sessions.Count(),
@@ -1220,7 +1221,7 @@ func (s *Server) registerBuiltinMethods() {
 
 	// gateway.identity.get: returns the gateway's identity and runtime information.
 	s.dispatcher.Register("gateway.identity.get", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"version": s.version,
 			"runtime": "go",
 			"uptime":  time.Since(s.startedAt).Milliseconds(),
@@ -1236,7 +1237,7 @@ func (s *Server) registerBuiltinMethods() {
 		if s.activity != nil {
 			ts = s.activity.LastActivityAt()
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"lastHeartbeatMs": ts,
 		})
 		return resp
@@ -1245,7 +1246,7 @@ func (s *Server) registerBuiltinMethods() {
 	// set-heartbeats: configure heartbeat settings (accepted but no-op in Go gateway;
 	// the tick broadcaster runs at a fixed 1000ms interval).
 	s.dispatcher.Register("set-heartbeats", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]bool{"ok": true})
+		resp := protocol.MustResponseOK(req.ID, map[string]bool{"ok": true})
 		return resp
 	})
 
@@ -1263,7 +1264,7 @@ func (s *Server) registerBuiltinMethods() {
 			payload = p.Payload
 		}
 		sent, _ := s.broadcaster.Broadcast("presence", payload)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]int{"sent": sent})
+		resp := protocol.MustResponseOK(req.ID, map[string]int{"sent": sent})
 		return resp
 	})
 
@@ -1282,17 +1283,17 @@ func (s *Server) registerBuiltinMethods() {
 				protocol.ErrMissingParam, "event is required"))
 		}
 		sent, _ := s.broadcaster.Broadcast(p.Event, p.Payload)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]int{"sent": sent})
+		resp := protocol.MustResponseOK(req.ID, map[string]int{"sent": sent})
 		return resp
 	})
 
 	// models.list: return provider model list if available.
 	s.dispatcher.Register("models.list", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if s.providers == nil {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{"models": []any{}})
+			resp := protocol.MustResponseOK(req.ID, map[string]any{"models": []any{}})
 			return resp
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"models": s.providers.List(),
 		})
 		return resp
@@ -1301,10 +1302,10 @@ func (s *Server) registerBuiltinMethods() {
 	// config.get: returns the resolved runtime config for diagnostics.
 	s.dispatcher.Register("config.get", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if s.runtimeCfg == nil {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]string{"status": "not_loaded"})
+			resp := protocol.MustResponseOK(req.ID, map[string]string{"status": "not_loaded"})
 			return resp
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"bindHost":       s.runtimeCfg.BindHost,
 			"port":           s.runtimeCfg.Port,
 			"authMode":       s.runtimeCfg.AuthMode,
