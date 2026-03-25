@@ -215,6 +215,14 @@ func TestVegaFFIExecute_MissingParams(t *testing.T) {
 	}
 }
 
+func TestVegaFFISearch_MissingParams(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "vega.ffi.search", nil)
+	if resp.OK {
+		t.Error("expected error for missing params")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // ML FFI RPC tests
 // ---------------------------------------------------------------------------
@@ -232,6 +240,22 @@ func TestMLRerank(t *testing.T) {
 	resp := dispatch(t, d, "ml.rerank", map[string]any{"query": "test", "docs": []string{"a", "b"}})
 	if !resp.OK {
 		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+}
+
+func TestMLEmbed_MissingParams(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "ml.embed", nil)
+	if resp.OK {
+		t.Error("expected error for missing params")
+	}
+}
+
+func TestMLRerank_MissingParams(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "ml.rerank", nil)
+	if resp.OK {
+		t.Error("expected error for missing params")
 	}
 }
 
@@ -293,6 +317,28 @@ func TestContextAssemblyStart_MissingHandle(t *testing.T) {
 	}
 }
 
+func TestContextExpandNew_MissingSummaryID(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "context.expand.new", map[string]any{
+		"max_depth": 3,
+		"token_cap": 1024,
+	})
+	if resp.OK {
+		t.Error("expected error for missing summary_id")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("expected MISSING_PARAM, got %+v", resp.Error)
+	}
+}
+
+func TestContextExpandStart_MissingHandle(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "context.expand.start", map[string]any{})
+	if resp.OK {
+		t.Error("expected error for missing handle")
+	}
+}
+
 func TestContextEngineDrop_MissingHandle(t *testing.T) {
 	d := testDispatcher()
 	resp := dispatch(t, d, "context.engine.drop", map[string]any{})
@@ -314,6 +360,21 @@ func TestCompactionEvaluate(t *testing.T) {
 	})
 	if !resp.OK {
 		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+}
+
+func TestCompactionSweepNew(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "compaction.sweep.new", map[string]any{
+		"conversation_id": 1,
+		"token_budget":    8000,
+	})
+	// noffi returns an error (sweep not available), which is expected.
+	if !ffi.Available && resp.OK {
+		t.Error("expected error without FFI")
+	}
+	if ffi.Available && !resp.OK {
+		t.Fatalf("expected ok with FFI, got error: %+v", resp.Error)
 	}
 }
 

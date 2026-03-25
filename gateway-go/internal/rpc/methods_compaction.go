@@ -30,7 +30,7 @@ func compactionEvaluate() HandlerFunc {
 		result, err := ffi.CompactionEvaluate(p.Config, p.StoredTokens, p.LiveTokens, p.TokenBudget)
 		if err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrInvalidRequest, err.Error()))
+				protocol.ErrDependencyFailed, err.Error()))
 		}
 		resp, _ := protocol.NewResponseOK(req.ID, json.RawMessage(result))
 		return resp
