@@ -37,16 +37,28 @@ func dispatch(t *testing.T, d *Dispatcher, method string, params any) *protocol.
 func TestBuiltinMethodsRegistered(t *testing.T) {
 	d := testDispatcher()
 	methods := d.Methods()
-	if len(methods) < 14 {
-		t.Errorf("expected at least 14 built-in methods, got %d: %v", len(methods), methods)
+	if len(methods) < 30 {
+		t.Errorf("expected at least 30 built-in methods, got %d: %v", len(methods), methods)
 	}
 	expected := []string{
 		"health.check", "sessions.get", "sessions.list", "sessions.delete",
 		"channels.list", "channels.get", "channels.status", "channels.health",
-		"system.info", "protocol.validate",
+		"system.info", "protocol.validate", "protocol.validate_params",
 		"security.validate_session_key", "security.sanitize_html",
 		"security.is_safe_url", "security.validate_error_code",
 		"media.detect_mime",
+		// Compaction sweep lifecycle.
+		"compaction.evaluate",
+		"compaction.sweep.new", "compaction.sweep.start",
+		"compaction.sweep.step", "compaction.sweep.drop",
+		// Context engine lifecycle.
+		"context.assembly.new", "context.assembly.start", "context.assembly.step",
+		"context.expand.new", "context.expand.start", "context.expand.step",
+		"context.engine.drop",
+		// Vega FFI (Phase 0 scaffolding).
+		"vega.ffi.execute", "vega.ffi.search",
+		// ML FFI (Phase 0 scaffolding).
+		"ml.embed", "ml.rerank",
 	}
 	set := make(map[string]bool)
 	for _, m := range methods {
