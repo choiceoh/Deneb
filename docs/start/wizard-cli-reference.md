@@ -114,9 +114,6 @@ What you set:
 
 <Note>
 - If gateway is loopback-only, use SSH tunneling or a tailnet.
-- Discovery hints:
-  - macOS: Bonjour (`dns-sd`)
-  - Linux: Avahi (`avahi-browse`)
 </Note>
 
 ## Auth and model options

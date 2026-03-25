@@ -2663,40 +2663,6 @@ Auth: `Authorization: Bearer <token>` or `x-deneb-token: <token>`.
 
 ---
 
-## Discovery
-
-### mDNS (Bonjour)
-
-```json5
-{
-  discovery: {
-    mdns: {
-      mode: "minimal", // minimal | full | off
-    },
-  },
-}
-```
-
-- `minimal` (default): omit `cliPath` + `sshPort` from TXT records.
-- `full`: include `cliPath` + `sshPort`.
-- Hostname defaults to `deneb`. Override with `DENEB_MDNS_HOSTNAME`.
-
-### Wide-area (DNS-SD)
-
-```json5
-{
-  discovery: {
-    wideArea: { enabled: true },
-  },
-}
-```
-
-Writes a unicast DNS-SD zone under `~/.deneb/dns/`. For cross-network discovery, pair with a DNS server (CoreDNS recommended) + Tailscale split DNS.
-
-Setup: `deneb dns setup --apply`.
-
----
-
 ## Environment
 
 ### `env` (inline env vars)

@@ -35,7 +35,6 @@ Local trust:
 ## Discovery + transports
 
 - [Discovery & transports](/gateway/discovery)
-- [Bonjour / mDNS](/gateway/bonjour)
 - [Remote access (SSH)](/gateway/remote)
 - [Tailscale](/gateway/tailscale)
 

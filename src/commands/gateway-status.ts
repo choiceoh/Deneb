@@ -2,8 +2,6 @@ import { parseTimeoutMsWithFallback } from "../cli/parse-timeout.js";
 import { withProgress } from "../cli/progress.js";
 import { readBestEffortConfig, resolveGatewayPort } from "../config/config.js";
 import { probeGateway } from "../gateway/monitoring/probe.js";
-import { discoverGatewayBeacons } from "../infra/bonjour-discovery.js";
-import { resolveWideAreaDiscoveryDomain } from "../infra/widearea-dns.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { colorize, isRich, theme } from "../terminal/theme.js";
 import {
@@ -51,16 +49,9 @@ export async function gatewayStatusCommand(
   const cfg = await readBestEffortConfig();
   const rich = isRich() && opts.json !== true;
   const overallTimeoutMs = parseTimeoutMsWithFallback(opts.timeout, 3000);
-  const wideAreaDomain = resolveWideAreaDiscoveryDomain();
 
   const baseTargets = resolveTargets(cfg, opts.url);
   const network = buildNetworkHints(cfg);
-
-  const discoveryTimeoutMs = Math.min(1200, overallTimeoutMs);
-  const discoveryPromise = discoverGatewayBeacons({
-    timeoutMs: discoveryTimeoutMs,
-    wideAreaDomain,
-  });
 
   let sshTarget = sanitizeSshTarget(opts.ssh) ?? sanitizeSshTarget(cfg.gateway?.remote?.sshTarget);
   let sshIdentity =
@@ -84,7 +75,7 @@ export async function gatewayStatusCommand(
     }
   }
 
-  const { discovery, probed } = await withProgress(
+  const { probed } = await withProgress(
     {
       label: "Inspecting gateways…",
       indeterminate: true,
@@ -112,32 +103,7 @@ export async function gatewayStatusCommand(
         }
       };
 
-      const discoveryTask = discoveryPromise.catch(() => []);
-      const tunnelTask = sshTarget ? tryStartTunnel() : Promise.resolve(null);
-
-      const [discovery, tunnelFirst] = await Promise.all([discoveryTask, tunnelTask]);
-
-      if (!sshTarget && opts.sshAuto) {
-        const user = process.env.USER?.trim() || "";
-        const candidates = discovery
-          .map((b) => {
-            const host = b.tailnetDns || b.lanHost || b.host;
-            if (!host?.trim()) {
-              return null;
-            }
-            const sshPort = typeof b.sshPort === "number" && b.sshPort > 0 ? b.sshPort : 22;
-            const base = user ? `${user}@${host.trim()}` : host.trim();
-            return sshPort !== 22 ? `${base}:${sshPort}` : base;
-          })
-          .filter((candidate): candidate is string => Boolean(candidate));
-        const { parseSshTarget } = await loadSshTunnelModule();
-        const validCandidates = candidates.filter((candidate) =>
-          Boolean(parseSshTarget(candidate)),
-        );
-        if (validCandidates.length > 0) {
-          sshTarget = validCandidates[0] ?? null;
-        }
-      }
+      const tunnelFirst = sshTarget ? await tryStartTunnel() : null;
 
       const tunnel =
         tunnelFirst ||
@@ -194,7 +160,7 @@ export async function gatewayStatusCommand(
           }),
         );
 
-        return { discovery, probed };
+        return { probed };
       } finally {
         if (tunnel) {
           try {
@@ -273,25 +239,6 @@ export async function gatewayStatusCommand(
           primaryTargetId: primary?.target.id ?? null,
           warnings,
           network,
-          discovery: {
-            timeoutMs: discoveryTimeoutMs,
-            count: discovery.length,
-            beacons: discovery.map((b) => ({
-              instanceName: b.instanceName,
-              displayName: b.displayName ?? null,
-              domain: b.domain ?? null,
-              host: b.host ?? null,
-              lanHost: b.lanHost ?? null,
-              tailnetDns: b.tailnetDns ?? null,
-              gatewayPort: b.gatewayPort ?? null,
-              sshPort: b.sshPort ?? null,
-              wsUrl: (() => {
-                const host = b.tailnetDns || b.lanHost || b.host;
-                const port = b.gatewayPort ?? 18789;
-                return host ? `ws://${host}:${port}` : null;
-              })(),
-            })),
-          },
           targets: probed.map((p) => ({
             id: p.target.id,
             kind: p.target.kind,
@@ -340,24 +287,6 @@ export async function gatewayStatusCommand(
   }
 
   runtime.log("");
-  runtime.log(colorize(rich, theme.heading, "Discovery (this machine)"));
-  const discoveryDomains = wideAreaDomain ? `local. + ${wideAreaDomain}` : "local.";
-  runtime.log(
-    discovery.length > 0
-      ? `Found ${discovery.length} gateway(s) via Bonjour (${discoveryDomains})`
-      : `Found 0 gateways via Bonjour (${discoveryDomains})`,
-  );
-  if (discovery.length === 0) {
-    runtime.log(
-      colorize(
-        rich,
-        theme.muted,
-        "Tip: if the gateway is remote, mDNS won’t cross networks; use Wide-Area Bonjour (split DNS) or SSH tunnels.",
-      ),
-    );
-  }
-
-  runtime.log("");
   runtime.log(colorize(rich, theme.heading, "Targets"));
   for (const p of probed) {
     runtime.log(renderTargetHeader(p.target, rich));
@@ -373,16 +302,6 @@ export async function gatewayStatusCommand(
       const platform = p.self.platform ? ` · ${p.self.platform}` : "";
       const version = p.self.version ? ` · app ${p.self.version}` : "";
       runtime.log(`  ${colorize(rich, theme.info, "Gateway")}: ${host}${ip}${platform}${version}`);
-    }
-    if (p.configSummary) {
-      const c = p.configSummary;
-      const wideArea =
-        c.discovery.wideAreaEnabled === true
-          ? "enabled"
-          : c.discovery.wideAreaEnabled === false
-            ? "disabled"
-            : "unknown";
-      runtime.log(`  ${colorize(rich, theme.info, "Wide-area discovery")}: ${wideArea}`);
     }
     runtime.log("");
   }
