@@ -249,8 +249,12 @@ pub unsafe extern "C" fn deneb_validate_error_code(code_ptr: *const u8, code_len
 // ---------------------------------------------------------------------------
 
 /// C FFI: Execute a Vega command.
-/// Takes a JSON command string, writes JSON result to output buffer.
+/// Takes a JSON command string `{"command":"search","args":{...}}`,
+/// writes JSON result to output buffer.
 /// Returns bytes written on success, negative on error.
+///
+/// When the `vega` feature is enabled, dispatches to deneb-vega command registry.
+/// Otherwise returns a phase-0 stub response.
 ///
 /// # Safety
 /// `cmd_ptr` must point to valid UTF-8 of `cmd_len` bytes.
@@ -271,22 +275,67 @@ pub unsafe extern "C" fn deneb_vega_execute(
     let slice = std::slice::from_raw_parts(cmd_ptr, cmd_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(-99, move || {
-        let _cmd_str = match std::str::from_utf8(slice) {
+        let cmd_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
             Err(_) => return -2,
         };
-        // Phase 0: return a stub "not implemented" JSON response.
-        let stub = br#"{"error":"vega_not_implemented","phase":0}"#;
-        if stub.len() > out_slice.len() {
+        let result_json = vega_execute_impl(cmd_str);
+        let result_bytes = result_json.as_bytes();
+        if result_bytes.len() > out_slice.len() {
             return -3;
         }
-        out_slice[..stub.len()].copy_from_slice(stub);
-        stub.len() as i32
+        out_slice[..result_bytes.len()].copy_from_slice(result_bytes);
+        result_bytes.len() as i32
     })
 }
 
+/// Internal Vega execute dispatch.
+#[cfg(feature = "vega")]
+fn vega_execute_impl(cmd_json: &str) -> String {
+    // Parse command JSON: {"command": "search", "args": {...}, "config": {...}}
+    let parsed: serde_json::Value = match serde_json::from_str(cmd_json) {
+        Ok(v) => v,
+        Err(e) => return format!(r#"{{"error":"invalid_json","detail":"{}"}}"#, e),
+    };
+
+    let command = parsed.get("command").and_then(|v| v.as_str()).unwrap_or("search");
+    let args = parsed.get("args").cloned().unwrap_or(serde_json::Value::Null);
+
+    // Build config from JSON or env (model paths are read from env by from_env())
+    let config = if let Some(cfg) = parsed.get("config") {
+        let mut vc = deneb_vega::config::VegaConfig::from_env();
+        if let Some(p) = cfg.get("db_path").and_then(|v| v.as_str()) {
+            vc.db_path = std::path::PathBuf::from(p);
+        }
+        if let Some(p) = cfg.get("md_dir").and_then(|v| v.as_str()) {
+            vc.md_dir = std::path::PathBuf::from(p);
+        }
+        if let Some(m) = cfg.get("rerank_mode").and_then(|v| v.as_str()) {
+            vc.rerank_mode = m.to_string();
+        }
+        if let Some(p) = cfg.get("model_embedder").and_then(|v| v.as_str()) {
+            vc.model_embedder = Some(std::path::PathBuf::from(p));
+        }
+        if let Some(p) = cfg.get("model_reranker").and_then(|v| v.as_str()) {
+            vc.model_reranker = Some(std::path::PathBuf::from(p));
+        }
+        vc
+    } else {
+        deneb_vega::config::VegaConfig::from_env()
+    };
+
+    let result = deneb_vega::commands::execute(command, &args, &config);
+    serde_json::to_string(&result).unwrap_or_else(|e| format!(r#"{{"error":"serialize","detail":"{}"}}"#, e))
+}
+
+#[cfg(not(feature = "vega"))]
+fn vega_execute_impl(_cmd_json: &str) -> String {
+    r#"{"error":"vega_not_implemented","phase":0}"#.to_string()
+}
+
 /// C FFI: Execute a Vega search query.
-/// Takes a JSON query string, writes JSON results to output buffer.
+/// Takes a JSON query string `{"query":"검색어","config":{...}}`,
+/// writes JSON results to output buffer.
 /// Returns bytes written on success, negative on error.
 ///
 /// # Safety
@@ -308,17 +357,69 @@ pub unsafe extern "C" fn deneb_vega_search(
     let slice = std::slice::from_raw_parts(query_ptr, query_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(-99, move || {
-        let _query_str = match std::str::from_utf8(slice) {
+        let query_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
             Err(_) => return -2,
         };
-        let stub = br#"{"results":[],"phase":0}"#;
-        if stub.len() > out_slice.len() {
+        let result_json = vega_search_impl(query_str);
+        let result_bytes = result_json.as_bytes();
+        if result_bytes.len() > out_slice.len() {
             return -3;
         }
-        out_slice[..stub.len()].copy_from_slice(stub);
-        stub.len() as i32
+        out_slice[..result_bytes.len()].copy_from_slice(result_bytes);
+        result_bytes.len() as i32
     })
+}
+
+/// Internal Vega search dispatch.
+#[cfg(feature = "vega")]
+fn vega_search_impl(query_json: &str) -> String {
+    // Parse: {"query": "검색어", "config": {"db_path": "..."}}
+    let parsed: serde_json::Value = match serde_json::from_str(query_json) {
+        Ok(v) => v,
+        Err(_) => {
+            // Treat raw string as direct query text
+            return vega_search_direct(query_json);
+        }
+    };
+
+    let query = parsed.get("query").and_then(|v| v.as_str()).unwrap_or(query_json);
+
+    let config = if let Some(cfg) = parsed.get("config") {
+        let mut vc = deneb_vega::config::VegaConfig::from_env();
+        if let Some(p) = cfg.get("db_path").and_then(|v| v.as_str()) {
+            vc.db_path = std::path::PathBuf::from(p);
+        }
+        if let Some(p) = cfg.get("md_dir").and_then(|v| v.as_str()) {
+            vc.md_dir = std::path::PathBuf::from(p);
+        }
+        vc
+    } else {
+        deneb_vega::config::VegaConfig::from_env()
+    };
+
+    vega_search_with_config(query, &config)
+}
+
+#[cfg(feature = "vega")]
+fn vega_search_direct(query: &str) -> String {
+    let config = deneb_vega::config::VegaConfig::from_env();
+    vega_search_with_config(query, &config)
+}
+
+#[cfg(feature = "vega")]
+fn vega_search_with_config(query: &str, config: &deneb_vega::config::VegaConfig) -> String {
+    let router = deneb_vega::search::SearchRouter::new(config.clone());
+    match router.search(query) {
+        Ok(result) => serde_json::to_string(&result)
+            .unwrap_or_else(|e| format!(r#"{{"error":"serialize","detail":"{}"}}"#, e)),
+        Err(e) => format!(r#"{{"error":"search_failed","detail":"{}"}}"#, e),
+    }
+}
+
+#[cfg(not(feature = "vega"))]
+fn vega_search_impl(_query_json: &str) -> String {
+    r#"{"results":[],"phase":0}"#.to_string()
 }
 
 // ---------------------------------------------------------------------------

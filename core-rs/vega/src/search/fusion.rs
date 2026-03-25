@@ -1,0 +1,325 @@
+//! Result fusion and re-ranking for Vega hybrid search.
+//!
+//! Port of Python vega/search/router.py — _rerank_fusion section.
+//! Combines SQLite FTS results with semantic search results using project-level scoring.
+
+use std::collections::HashMap;
+
+use once_cell::sync::Lazy;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+
+use super::fts_search::{ChunkRow, SqliteSearchResult};
+use super::query_analyzer::ExtractedFields;
+
+/// Unified search result in Vega canonical format.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnifiedResult {
+    pub project_id: i64,
+    pub project_name: String,
+    pub client: String,
+    pub status: String,
+    pub person: String,
+    pub content: String,
+    pub heading: String,
+    pub score: f64,
+    pub source: String, // "sqlite" | "semantic"
+    pub entry_date: String,
+    pub chunk_type: String,
+    #[serde(default)]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Per-project score entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectScore {
+    pub project_id: i64,
+    pub project_name: String,
+    pub score: f64,
+}
+
+/// Negate a date string for reverse-chronological sort key.
+/// Each digit d → (9-d), empty → "z" (sorts last).
+fn negate_date_str(date_str: &str) -> String {
+    if date_str.is_empty() {
+        return "z".to_string();
+    }
+    date_str
+        .chars()
+        .map(|c| {
+            if c.is_ascii_digit() {
+                char::from(b'0' + (9 - (c as u8 - b'0')))
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
+static NON_PROJECT_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)(INDEX|README|CLAUDE|CHANGELOG|LICENSE|\.github)").unwrap());
+
+static BACKUP_DIR_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"(?:^|[-/])(?:backup|bak|old)(?:[-/]|$)|(?:^|/)vega-v\d+[-/.]|(?:^|/)tools-backup",
+    )
+    .unwrap()
+});
+
+/// Score SQLite chunk results per-project.
+fn score_sqlite_chunks(
+    chunks: &[ChunkRow],
+    extracted: &ExtractedFields,
+) -> (HashMap<i64, f64>, HashMap<i64, String>, HashMap<String, i64>) {
+    let mut project_scores: HashMap<i64, f64> = HashMap::new();
+    let mut project_chunk_count: HashMap<i64, usize> = HashMap::new();
+    let mut name_by_id: HashMap<i64, String> = HashMap::new();
+    let mut id_by_name: HashMap<String, i64> = HashMap::new();
+
+    for (rank, row) in chunks.iter().enumerate() {
+        let pid = row.project_id;
+        name_by_id.insert(pid, row.name.clone());
+        if !row.name.is_empty() {
+            id_by_name.insert(row.name.clone(), pid);
+        }
+
+        let mut score = (60.0 - rank as f64).max(0.0);
+
+        let haystack = format!(
+            "{} {} {} {} {} {}",
+            row.name, row.client, row.status, row.person_internal, row.section_heading, row.content
+        )
+        .to_lowercase();
+
+        // Token match bonuses
+        for group in [
+            ("structural", &extracted.clients),
+            ("structural", &extracted.persons),
+            ("structural", &extracted.statuses),
+            ("structural", &extracted.tags),
+            ("keywords", &extracted.keywords),
+        ] {
+            for token in group.1 {
+                if !token.is_empty() && haystack.contains(&token.to_lowercase()) {
+                    if group.0 == "structural" {
+                        score += 8.0;
+                    } else {
+                        // Longer keywords get higher weight
+                        score += 4.0 + (token.chars().count().saturating_sub(2) as f64) * 2.0;
+                    }
+                }
+            }
+        }
+
+        let current = project_scores.entry(pid).or_insert(0.0);
+        *current = current.max(score);
+        *project_chunk_count.entry(pid).or_insert(0) += 1;
+    }
+
+    // Multi-chunk bonus: more matching chunks → higher relevance
+    for (pid, count) in &project_chunk_count {
+        if *count > 1 {
+            if let Some(s) = project_scores.get_mut(pid) {
+                *s += (*count as f64 - 1.0) * 3.0;
+            }
+        }
+    }
+
+    // Project name direct match bonus
+    let all_tokens: Vec<&String> = extracted
+        .keywords
+        .iter()
+        .chain(&extracted.clients)
+        .chain(&extracted.persons)
+        .collect();
+
+    for (pid, name) in &name_by_id {
+        if name.is_empty() || !project_scores.contains_key(pid) {
+            continue;
+        }
+        let name_lower = name.to_lowercase();
+        let name_words: Vec<&str> = name_lower.split_whitespace().filter(|w| w.chars().count() >= 2).collect();
+
+        let mut best_bonus = 0.0f64;
+        for token in &all_tokens {
+            let tl = token.to_lowercase();
+            if tl == name_lower || (!name_words.is_empty() && tl == name_words[0]) {
+                best_bonus = best_bonus.max(30.0);
+            } else if name_lower.contains(&tl) {
+                best_bonus = best_bonus.max(20.0);
+            }
+        }
+        if best_bonus > 0.0 {
+            if let Some(s) = project_scores.get_mut(pid) {
+                *s += best_bonus;
+            }
+        }
+    }
+
+    (project_scores, name_by_id, id_by_name)
+}
+
+/// Convert SQLite chunk rows to unified result format.
+pub fn sqlite_rows_to_unified(chunks: &[ChunkRow]) -> Vec<UnifiedResult> {
+    chunks
+        .iter()
+        .map(|r| UnifiedResult {
+            project_id: r.project_id,
+            project_name: r.name.clone(),
+            client: r.client.clone(),
+            status: r.status.clone(),
+            person: r.person_internal.clone(),
+            content: r.content.clone(),
+            heading: r.section_heading.clone(),
+            score: 0.0,
+            source: "sqlite".into(),
+            entry_date: r.entry_date.clone(),
+            chunk_type: r.chunk_type.clone(),
+            metadata: HashMap::new(),
+        })
+        .collect()
+}
+
+/// Perform fusion scoring and re-ranking on combined search results.
+///
+/// Takes SQLite search results and returns:
+/// - Re-sorted chunks by project score
+/// - Project score list
+/// - Unified results
+pub fn rerank_fusion(
+    sqlite_results: &mut SqliteSearchResult,
+    extracted: &ExtractedFields,
+) -> Vec<ProjectScore> {
+    let (project_scores, name_by_id, _id_by_name) =
+        score_sqlite_chunks(&sqlite_results.chunks, extracted);
+
+    // Sort projects by score descending
+    let mut ranked: Vec<(i64, f64)> = project_scores.iter().map(|(&k, &v)| (k, v)).collect();
+    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    let order: HashMap<i64, usize> = ranked.iter().enumerate().map(|(i, (pid, _))| (*pid, i)).collect();
+
+    // Re-sort chunks by project rank, then by date (newest first)
+    sqlite_results.chunks.sort_by(|a, b| {
+        let ord_a = order.get(&a.project_id).copied().unwrap_or(usize::MAX);
+        let ord_b = order.get(&b.project_id).copied().unwrap_or(usize::MAX);
+        ord_a
+            .cmp(&ord_b)
+            .then_with(|| negate_date_str(&a.entry_date).cmp(&negate_date_str(&b.entry_date)))
+            .then_with(|| a.chunk_id.cmp(&b.chunk_id))
+    });
+
+    // Update project_ids and project_names to ranked order
+    sqlite_results.project_ids = ranked.iter().map(|(pid, _)| *pid).collect();
+    sqlite_results.project_names = ranked
+        .iter()
+        .filter_map(|(pid, _)| name_by_id.get(pid).cloned())
+        .collect();
+
+    // Build project scores list
+    ranked
+        .iter()
+        .map(|(pid, score)| ProjectScore {
+            project_id: *pid,
+            project_name: name_by_id.get(pid).cloned().unwrap_or_default(),
+            score: (*score * 100.0).round() / 100.0,
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_negate_date_str() {
+        assert_eq!(negate_date_str("2026-03-20"), "7973-96-79");
+        assert_eq!(negate_date_str(""), "z");
+    }
+
+    #[test]
+    fn test_score_sqlite_chunks() {
+        let chunks = vec![
+            ChunkRow {
+                chunk_id: 1,
+                project_id: 1,
+                name: "비금도 태양광".into(),
+                client: "한국전력".into(),
+                status: "진행중".into(),
+                person_internal: "김대희".into(),
+                capacity: "100MW".into(),
+                section_heading: "현재 상황".into(),
+                content: "해저케이블 설치".into(),
+                chunk_type: "status".into(),
+                entry_date: "2025-03-01".into(),
+            },
+            ChunkRow {
+                chunk_id: 2,
+                project_id: 1,
+                name: "비금도 태양광".into(),
+                client: "한국전력".into(),
+                status: "진행중".into(),
+                person_internal: "김대희".into(),
+                capacity: "100MW".into(),
+                section_heading: "기술".into(),
+                content: "EPC 시공".into(),
+                chunk_type: "technical".into(),
+                entry_date: "".into(),
+            },
+        ];
+
+        let extracted = ExtractedFields {
+            clients: vec!["비금도".into()],
+            keywords: vec!["해저케이블".into()],
+            ..Default::default()
+        };
+
+        let (scores, name_by_id, _) = score_sqlite_chunks(&chunks, &extracted);
+        assert!(scores.contains_key(&1));
+        assert!(scores[&1] > 0.0);
+        assert_eq!(name_by_id[&1], "비금도 태양광");
+    }
+
+    #[test]
+    fn test_rerank_fusion() {
+        let mut result = SqliteSearchResult {
+            chunks: vec![
+                ChunkRow {
+                    chunk_id: 1,
+                    project_id: 1,
+                    name: "A".into(),
+                    client: "".into(),
+                    status: "".into(),
+                    person_internal: "".into(),
+                    capacity: "".into(),
+                    section_heading: "".into(),
+                    content: "test".into(),
+                    chunk_type: "other".into(),
+                    entry_date: "2025-01-01".into(),
+                },
+                ChunkRow {
+                    chunk_id: 2,
+                    project_id: 2,
+                    name: "B".into(),
+                    client: "".into(),
+                    status: "".into(),
+                    person_internal: "".into(),
+                    capacity: "".into(),
+                    section_heading: "".into(),
+                    content: "keyword match".into(),
+                    chunk_type: "other".into(),
+                    entry_date: "2025-02-01".into(),
+                },
+            ],
+            ..Default::default()
+        };
+
+        let extracted = ExtractedFields {
+            keywords: vec!["keyword".into()],
+            ..Default::default()
+        };
+
+        let scores = rerank_fusion(&mut result, &extracted);
+        assert!(!scores.is_empty());
+    }
+}

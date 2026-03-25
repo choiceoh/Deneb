@@ -7,9 +7,25 @@ description = "Deneb Vega — project search engine (Rust port of Python vega/)"
 [lib]
 crate-type = ["rlib"]
 
+[features]
+default = []
+# Enable ML-powered semantic search (embeddings + reranking).
+ml = ["dep:deneb-ml"]
+
 [dependencies]
-serde.workspace = true
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
 rusqlite = { version = "0.33", features = ["bundled", "vtab"] }
 regex.workspace = true
+log = "0.4"
+md5 = "0.7"
+chrono = { version = "0.4", features = ["serde"] }
+walkdir = "2"
+once_cell = "1"
+
+# Optional ML inference for semantic search
+deneb-ml = { path = "../ml", optional = true }
+
+[dev-dependencies]
+tempfile = "3"
