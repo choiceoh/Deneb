@@ -111,6 +111,10 @@ type DirectConfig struct {
 
 // SessionThreadBindingsConfig controls session-to-thread binding behavior.
 type SessionThreadBindingsConfig struct {
+	// Enabled toggles thread binding on/off (maps to deneb.json "enabled").
+	Enabled *bool `json:"enabled,omitempty"`
+	// SpawnSubagentSessions controls whether bound threads spawn sub-agent sessions.
+	SpawnSubagentSessions *bool `json:"spawnSubagentSessions,omitempty"`
 	// Mode controls binding behavior: "off", "auto", "explicit".
 	Mode string `json:"mode,omitempty"`
 }
