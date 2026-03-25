@@ -15,10 +15,6 @@
       "durationMs": 1300,
       "testCount": 20
     },
-    "src/cli/update-cli.test.ts": {
-      "durationMs": 5400,
-      "testCount": 210
-    },
     "src/agents/pi-embedded-runner.test.ts": {
       "durationMs": 5200,
       "testCount": 140
@@ -102,10 +98,6 @@
     "src/config/schema.tags.test.ts": {
       "durationMs": 2600,
       "testCount": 70
-    },
-    "src/cli/daemon-cli.coverage.test.ts": {
-      "durationMs": 2500,
-      "testCount": 50
     },
     "extensions/slack/src/monitor/slash.test.ts": {
       "durationMs": 2400,
