@@ -51,9 +51,7 @@ export async function gatewayStatusCommand(
   const cfg = await readBestEffortConfig();
   const rich = isRich() && opts.json !== true;
   const overallTimeoutMs = parseTimeoutMsWithFallback(opts.timeout, 3000);
-  const wideAreaDomain = resolveWideAreaDiscoveryDomain({
-    configDomain: cfg.discovery?.wideArea?.domain,
-  });
+  const wideAreaDomain = resolveWideAreaDiscoveryDomain();
 
   const baseTargets = resolveTargets(cfg, opts.url);
   const network = buildNetworkHints(cfg);

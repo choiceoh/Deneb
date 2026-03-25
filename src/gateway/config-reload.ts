@@ -57,12 +57,7 @@ export function resolveGatewayReloadSettings(cfg: DenebConfig): GatewayReloadSet
     rawMode === "off" || rawMode === "restart" || rawMode === "hot" || rawMode === "hybrid"
       ? rawMode
       : DEFAULT_RELOAD_SETTINGS.mode;
-  const debounceRaw = cfg.gateway?.reload?.debounceMs;
-  const debounceMs =
-    typeof debounceRaw === "number" && Number.isFinite(debounceRaw)
-      ? Math.max(0, Math.floor(debounceRaw))
-      : DEFAULT_RELOAD_SETTINGS.debounceMs;
-  return { mode, debounceMs };
+  return { mode, debounceMs: DEFAULT_RELOAD_SETTINGS.debounceMs };
 }
 
 export type GatewayConfigReloader = {

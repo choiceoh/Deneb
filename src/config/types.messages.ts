@@ -1,4 +1,4 @@
-import type { QueueDropPolicy, QueueMode, QueueModeByProvider } from "./types.queue.js";
+import type { QueueMode, QueueModeByProvider } from "./types.queue.js";
 
 export type GroupChatConfig = {
   mentionPatterns?: string[];
@@ -15,8 +15,6 @@ export type QueueConfig = {
   debounceMs?: number;
   /** Per-channel debounce overrides (ms). */
   debounceMsByChannel?: InboundDebounceByProvider;
-  cap?: number;
-  drop?: QueueDropPolicy;
 };
 
 export type InboundDebounceByProvider = Record<string, number>;
@@ -60,26 +58,13 @@ export type StatusReactionsEmojiConfig = {
   compacting?: string;
 };
 
-export type StatusReactionsTimingConfig = {
-  /** Debounce interval for intermediate states (ms). Default: 700. */
-  debounceMs?: number;
-  /** Soft stall warning timeout (ms). Default: 25000. */
-  stallSoftMs?: number;
-  /** Hard stall warning timeout (ms). Default: 60000. */
-  stallHardMs?: number;
-  /** How long to hold done emoji before cleanup (ms). Default: 1500. */
-  doneHoldMs?: number;
-  /** How long to hold error emoji before cleanup (ms). Default: 2500. */
-  errorHoldMs?: number;
-};
+// StatusReactionsTimingConfig removed: timing parameters hardcoded as constants.
 
 export type StatusReactionsConfig = {
   /** Enable lifecycle status reactions (default: false). */
   enabled?: boolean;
   /** Override default emojis. */
   emojis?: StatusReactionsEmojiConfig;
-  /** Override default timing. */
-  timing?: StatusReactionsTimingConfig;
 };
 
 export type MessagesConfig = {
@@ -107,8 +92,6 @@ export type MessagesConfig = {
   responsePrefix?: string;
   groupChat?: GroupChatConfig;
   queue?: QueueConfig;
-  /** Debounce rapid inbound messages per sender (global + per-channel overrides). */
-  inbound?: InboundDebounceConfig;
   /** Emoji reaction used to acknowledge inbound messages (empty disables). */
   ackReaction?: string;
   /** When to send ack reactions. Default: "group-mentions". */

@@ -15,27 +15,11 @@ export type GatewayTlsConfig = {
   caPath?: string;
 };
 
-export type WideAreaDiscoveryConfig = {
+// Discovery config removed: mDNS mode hardcoded to "minimal", wide-area discovery disabled.
+// See channel-health-monitor.ts for health monitoring defaults.
+
+export type CanvasHostConfig = {
   enabled?: boolean;
-  /** Optional unicast DNS-SD domain (e.g. "deneb.internal"). */
-  domain?: string;
-};
-
-export type MdnsDiscoveryMode = "off" | "minimal" | "full";
-
-export type MdnsDiscoveryConfig = {
-  /**
-   * mDNS/Bonjour discovery broadcast mode (default: minimal).
-   * - off: disable mDNS entirely
-   * - minimal: omit cliPath/sshPort from TXT records
-   * - full: include cliPath/sshPort in TXT records
-   */
-  mode?: MdnsDiscoveryMode;
-};
-
-export type DiscoveryConfig = {
-  wideArea?: WideAreaDiscoveryConfig;
-  mdns?: MdnsDiscoveryConfig;
 };
 
 export type TalkProviderConfig = {
@@ -199,15 +183,6 @@ export type GatewayReloadMode = "off" | "restart" | "hot" | "hybrid";
 export type GatewayReloadConfig = {
   /** Reload strategy for config changes (default: hybrid). */
   mode?: GatewayReloadMode;
-  /** Debounce window for config reloads (ms). Default: 300. */
-  debounceMs?: number;
-  /**
-   * Maximum time (ms) to wait for in-flight operations to complete before
-   * forcing a SIGUSR1 restart. Default: 300000 (5 minutes).
-   * Lower values risk aborting active subagent LLM calls.
-   * @see https://github.com/deneb/deneb/issues/47711
-   */
-  deferralTimeoutMs?: number;
 };
 
 export type GatewayHttpChatCompletionsConfig = {
@@ -216,41 +191,6 @@ export type GatewayHttpChatCompletionsConfig = {
    * Default: false when absent.
    */
   enabled?: boolean;
-  /**
-   * Max request body size in bytes for `/v1/chat/completions`.
-   * Default: 20MB.
-   */
-  maxBodyBytes?: number;
-  /**
-   * Max number of `image_url` parts processed from the latest user message.
-   * Default: 8.
-   */
-  maxImageParts?: number;
-  /**
-   * Max cumulative decoded image bytes for all `image_url` parts in one request.
-   * Default: 20MB.
-   */
-  maxTotalImageBytes?: number;
-  /** Image input controls for `image_url` parts. */
-  images?: GatewayHttpChatCompletionsImagesConfig;
-};
-
-export type GatewayHttpChatCompletionsImagesConfig = {
-  /** Allow URL fetches for `image_url` parts. Default: false. */
-  allowUrl?: boolean;
-  /**
-   * Optional hostname allowlist for URL fetches.
-   * Supports exact hosts and `*.example.com` wildcards.
-   */
-  urlAllowlist?: string[];
-  /** Allowed MIME types (case-insensitive). */
-  allowedMimes?: string[];
-  /** Max bytes per image. Default: 10MB. */
-  maxBytes?: number;
-  /** Max redirects when fetching a URL. Default: 3. */
-  maxRedirects?: number;
-  /** Fetch timeout in ms. Default: 10s. */
-  timeoutMs?: number;
 };
 
 export type GatewayHttpResponsesConfig = {
@@ -259,69 +199,6 @@ export type GatewayHttpResponsesConfig = {
    * Default: false when absent.
    */
   enabled?: boolean;
-  /**
-   * Max request body size in bytes for `/v1/responses`.
-   * Default: 20MB.
-   */
-  maxBodyBytes?: number;
-  /**
-   * Max number of URL-based `input_file` + `input_image` parts per request.
-   * Default: 8.
-   */
-  maxUrlParts?: number;
-  /** File inputs (input_file). */
-  files?: GatewayHttpResponsesFilesConfig;
-  /** Image inputs (input_image). */
-  images?: GatewayHttpResponsesImagesConfig;
-};
-
-export type GatewayHttpResponsesFilesConfig = {
-  /** Allow URL fetches for input_file. Default: true. */
-  allowUrl?: boolean;
-  /**
-   * Optional hostname allowlist for URL fetches.
-   * Supports exact hosts and `*.example.com` wildcards.
-   */
-  urlAllowlist?: string[];
-  /** Allowed MIME types (case-insensitive). */
-  allowedMimes?: string[];
-  /** Max bytes per file. Default: 5MB. */
-  maxBytes?: number;
-  /** Max decoded characters per file. Default: 200k. */
-  maxChars?: number;
-  /** Max redirects when fetching a URL. Default: 3. */
-  maxRedirects?: number;
-  /** Fetch timeout in ms. Default: 10s. */
-  timeoutMs?: number;
-  /** PDF handling (application/pdf). */
-  pdf?: GatewayHttpResponsesPdfConfig;
-};
-
-export type GatewayHttpResponsesPdfConfig = {
-  /** Max pages to parse/render. Default: 4. */
-  maxPages?: number;
-  /** Max pixels per rendered page. Default: 4M. */
-  maxPixels?: number;
-  /** Minimum extracted text length to skip rasterization. Default: 200 chars. */
-  minTextChars?: number;
-};
-
-export type GatewayHttpResponsesImagesConfig = {
-  /** Allow URL fetches for input_image. Default: true. */
-  allowUrl?: boolean;
-  /**
-   * Optional hostname allowlist for URL fetches.
-   * Supports exact hosts and `*.example.com` wildcards.
-   */
-  urlAllowlist?: string[];
-  /** Allowed MIME types (case-insensitive). */
-  allowedMimes?: string[];
-  /** Max bytes per image. Default: 10MB. */
-  maxBytes?: number;
-  /** Max redirects when fetching a URL. Default: 3. */
-  maxRedirects?: number;
-  /** Fetch timeout in ms. Default: 10s. */
-  timeoutMs?: number;
 };
 
 export type GatewayHttpEndpointsConfig = {
@@ -344,20 +221,7 @@ export type GatewayHttpConfig = {
   securityHeaders?: GatewayHttpSecurityHeadersConfig;
 };
 
-export type GatewayPushApnsRelayConfig = {
-  /** Base HTTPS URL for the external iOS APNs relay service. */
-  baseUrl?: string;
-  /** Timeout in milliseconds for relay send requests (default: 10000). */
-  timeoutMs?: number;
-};
-
-export type GatewayPushApnsConfig = {
-  relay?: GatewayPushApnsRelayConfig;
-};
-
-export type GatewayPushConfig = {
-  apns?: GatewayPushApnsConfig;
-};
+// GatewayPushConfig removed: APNs relay config hardcoded as constants.
 
 export type GatewayNodesConfig = {
   /** Additional node.invoke commands to allow on the gateway. */
@@ -400,7 +264,6 @@ export type GatewayConfig = {
   reload?: GatewayReloadConfig;
   tls?: GatewayTlsConfig;
   http?: GatewayHttpConfig;
-  push?: GatewayPushConfig;
   nodes?: GatewayNodesConfig;
   /**
    * IPs of trusted reverse proxies (e.g. Traefik, nginx). When a connection
@@ -415,24 +278,6 @@ export type GatewayConfig = {
   allowRealIpFallback?: boolean;
   /** Tool access restrictions for HTTP /tools/invoke endpoint. */
   tools?: GatewayToolsConfig;
-  /**
-   * Channel health monitor interval in minutes.
-   * Periodically checks channel health and restarts unhealthy channels.
-   * Set to 0 to disable. Default: 5.
-   */
-  channelHealthCheckMinutes?: number;
-  /**
-   * Stale event threshold in minutes for the channel health monitor.
-   * A connected channel that receives no events for this duration is treated
-   * as a stale socket and restarted. Default: 30.
-   */
-  channelStaleEventThresholdMinutes?: number;
-  /**
-   * Maximum number of health-monitor-initiated channel restarts per hour.
-   * Once this limit is reached, the monitor skips further restarts until
-   * the rolling window expires. Default: 10.
-   */
-  channelMaxRestartsPerHour?: number;
   /**
    * Gateway runtime implementation. When set to "node", the CLI runs the
    * TypeScript gateway directly instead of the Go gateway. Default: "go".

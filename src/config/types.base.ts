@@ -117,18 +117,8 @@ export type SessionConfig = {
   store?: string;
   typingIntervalSeconds?: number;
   typingMode?: TypingMode;
-  /**
-   * Max parent transcript token count allowed for thread/session forking.
-   * If parent totalTokens is above this value, Deneb skips parent fork and
-   * starts a fresh thread session instead. Set to 0 to disable this guard.
-   */
-  parentForkMaxTokens?: number;
   mainKey?: string;
   sendPolicy?: SessionSendPolicyConfig;
-  agentToAgent?: {
-    /** Max ping-pong turns between requester/target (0–5). Default: 5. */
-    maxPingPongTurns?: number;
-  };
   /** Shared defaults for thread-bound session routing across channels/providers. */
   threadBindings?: SessionThreadBindingsConfig;
   /** Automatic session store maintenance (pruning, capping, file rotation). */
@@ -211,19 +201,11 @@ export type DiagnosticsConfig = {
   cacheTrace?: DiagnosticsCacheTraceConfig;
 };
 
-export type WebReconnectConfig = {
-  initialMs?: number;
-  maxMs?: number;
-  factor?: number;
-  jitter?: number;
-  maxAttempts?: number; // 0 = unlimited
-};
+// WebReconnectConfig removed: reconnect parameters hardcoded as constants.
 
 export type WebConfig = {
   /** If false, do not start the WhatsApp web provider. Default: true. */
   enabled?: boolean;
-  heartbeatSeconds?: number;
-  reconnect?: WebReconnectConfig;
 };
 
 // Provider docking: allowlists keyed by provider id (and internal "webchat").

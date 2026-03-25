@@ -13,7 +13,6 @@ import {
   DEFAULT_INPUT_MAX_REDIRECTS,
   DEFAULT_INPUT_TIMEOUT_MS,
   extractImageContentFromSource,
-  normalizeMimeList,
   type InputImageLimits,
   type InputImageSource,
 } from "../media/input-files.js";
@@ -25,7 +24,6 @@ import {
 } from "./agent-prompt.js";
 import type { AuthRateLimiter } from "./auth/auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "./auth/auth.js";
-import { normalizeInputHostnameAllowlist } from "./auth/input-allowlist.js";
 import { sendJson, setSseHeaders, writeDone } from "./http/http-common.js";
 import { handleGatewayPostJsonEndpoint } from "./http/http-endpoint-helpers.js";
 import { resolveGatewayRequestContext } from "./http/http-utils.js";
@@ -72,27 +70,13 @@ type ResolvedOpenAiChatCompletionsLimits = {
 };
 
 function resolveOpenAiChatCompletionsLimits(
-  config: GatewayHttpChatCompletionsConfig | undefined,
+  _config: GatewayHttpChatCompletionsConfig | undefined,
 ): ResolvedOpenAiChatCompletionsLimits {
-  const imageConfig = config?.images;
   return {
-    maxBodyBytes: config?.maxBodyBytes ?? DEFAULT_OPENAI_CHAT_COMPLETIONS_BODY_BYTES,
-    maxImageParts:
-      typeof config?.maxImageParts === "number"
-        ? Math.max(0, Math.floor(config.maxImageParts))
-        : DEFAULT_OPENAI_MAX_IMAGE_PARTS,
-    maxTotalImageBytes:
-      typeof config?.maxTotalImageBytes === "number"
-        ? Math.max(1, Math.floor(config.maxTotalImageBytes))
-        : DEFAULT_OPENAI_MAX_TOTAL_IMAGE_BYTES,
-    images: {
-      allowUrl: imageConfig?.allowUrl ?? DEFAULT_OPENAI_IMAGE_LIMITS.allowUrl,
-      urlAllowlist: normalizeInputHostnameAllowlist(imageConfig?.urlAllowlist),
-      allowedMimes: normalizeMimeList(imageConfig?.allowedMimes, DEFAULT_INPUT_IMAGE_MIMES),
-      maxBytes: imageConfig?.maxBytes ?? DEFAULT_INPUT_IMAGE_MAX_BYTES,
-      maxRedirects: imageConfig?.maxRedirects ?? DEFAULT_INPUT_MAX_REDIRECTS,
-      timeoutMs: imageConfig?.timeoutMs ?? DEFAULT_INPUT_TIMEOUT_MS,
-    },
+    maxBodyBytes: DEFAULT_OPENAI_CHAT_COMPLETIONS_BODY_BYTES,
+    maxImageParts: DEFAULT_OPENAI_MAX_IMAGE_PARTS,
+    maxTotalImageBytes: DEFAULT_OPENAI_MAX_TOTAL_IMAGE_BYTES,
+    images: { ...DEFAULT_OPENAI_IMAGE_LIMITS },
   };
 }
 

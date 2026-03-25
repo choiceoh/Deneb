@@ -102,8 +102,6 @@ export function collectGatewayConfigFindings(
   const hasTailscaleAuth = auth.allowTailscale && tailscaleMode === "serve";
   const hasGatewayAuth = hasSharedSecret || hasTailscaleAuth;
   const allowRealIpFallback = cfg.gateway?.allowRealIpFallback === true;
-  const mdnsMode = cfg.discovery?.mdns?.mode ?? "minimal";
-
   // HTTP /tools/invoke is intended for narrow automation, not session orchestration/admin operations.
   // If operators opt-in to re-enabling these tools over HTTP, warn loudly so the choice is explicit.
   const gatewayToolsAllowRaw = Array.isArray(cfg.gateway?.tools?.allow)
@@ -229,19 +227,7 @@ export function collectGatewayConfigFindings(
     });
   }
 
-  if (mdnsMode === "full") {
-    const exposed = bind !== "loopback";
-    findings.push({
-      checkId: "discovery.mdns_full_mode",
-      severity: exposed ? "critical" : "warn",
-      title: "mDNS full mode can leak host metadata",
-      detail:
-        'discovery.mdns.mode="full" publishes cliPath/sshPort in local-network TXT records. ' +
-        "This can reveal usernames, filesystem layout, and management ports.",
-      remediation:
-        'Prefer discovery.mdns.mode="minimal" (recommended) or "off", especially when gateway.bind is not loopback.',
-    });
-  }
+  // mDNS mode is hardcoded to "minimal" — no audit needed.
 
   if (tailscaleMode === "funnel") {
     findings.push({

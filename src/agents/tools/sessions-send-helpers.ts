@@ -8,7 +8,6 @@ import type { DenebConfig } from "../../config/config.js";
 const ANNOUNCE_SKIP_TOKEN = "ANNOUNCE_SKIP";
 const REPLY_SKIP_TOKEN = "REPLY_SKIP";
 const DEFAULT_PING_PONG_TURNS = 5;
-const MAX_PING_PONG_TURNS = 5;
 
 export type AnnounceTarget = {
   channel: string;
@@ -148,12 +147,6 @@ export function isReplySkip(text?: string) {
   return (text ?? "").trim() === REPLY_SKIP_TOKEN;
 }
 
-export function resolvePingPongTurns(cfg?: DenebConfig) {
-  const raw = cfg?.session?.agentToAgent?.maxPingPongTurns;
-  const fallback = DEFAULT_PING_PONG_TURNS;
-  if (typeof raw !== "number" || !Number.isFinite(raw)) {
-    return fallback;
-  }
-  const rounded = Math.floor(raw);
-  return Math.max(0, Math.min(MAX_PING_PONG_TURNS, rounded));
+export function resolvePingPongTurns(_cfg?: DenebConfig) {
+  return DEFAULT_PING_PONG_TURNS;
 }

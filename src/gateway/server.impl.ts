@@ -660,20 +660,9 @@ export async function startGatewayServer(
       }
     : startHeartbeatRunner({ cfg: cfgAtStart });
 
-  const healthCheckMinutes = cfgAtStart.gateway?.channelHealthCheckMinutes;
-  const healthCheckDisabled = healthCheckMinutes === 0;
-  const staleEventThresholdMinutes = cfgAtStart.gateway?.channelStaleEventThresholdMinutes;
-  const maxRestartsPerHour = cfgAtStart.gateway?.channelMaxRestartsPerHour;
-  let channelHealthMonitor = healthCheckDisabled
-    ? null
-    : startChannelHealthMonitor({
-        channelManager,
-        checkIntervalMs: (healthCheckMinutes ?? 5) * 60_000,
-        ...(staleEventThresholdMinutes != null && {
-          staleEventThresholdMs: staleEventThresholdMinutes * 60_000,
-        }),
-        ...(maxRestartsPerHour != null && { maxRestartsPerHour }),
-      });
+  let channelHealthMonitor = startChannelHealthMonitor({
+    channelManager,
+  });
 
   if (!minimalTestGateway) {
     void cron.start().catch((err) => logCron.error(`failed to start: ${String(err)}`));
@@ -895,21 +884,7 @@ export async function startGatewayServer(
           logChannels,
           logCron,
           logReload,
-          createHealthMonitor: (opts: {
-            checkIntervalMs: number;
-            staleEventThresholdMs?: number;
-            maxRestartsPerHour?: number;
-          }) =>
-            startChannelHealthMonitor({
-              channelManager,
-              checkIntervalMs: opts.checkIntervalMs,
-              ...(opts.staleEventThresholdMs != null && {
-                staleEventThresholdMs: opts.staleEventThresholdMs,
-              }),
-              ...(opts.maxRestartsPerHour != null && {
-                maxRestartsPerHour: opts.maxRestartsPerHour,
-              }),
-            }),
+          createHealthMonitor: () => startChannelHealthMonitor({ channelManager }),
         });
 
         return startGatewayConfigReloader({

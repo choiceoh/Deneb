@@ -521,16 +521,6 @@ export const QueueSchema = z
     byChannel: QueueModeBySurfaceSchema,
     debounceMs: z.number().int().nonnegative().optional(),
     debounceMsByChannel: DebounceMsBySurfaceSchema,
-    cap: z.number().int().positive().optional(),
-    drop: QueueDropSchema.optional(),
-  })
-  .strict()
-  .optional();
-
-export const InboundDebounceSchema = z
-  .object({
-    debounceMs: z.number().int().nonnegative().optional(),
-    byChannel: DebounceMsBySurfaceSchema,
   })
   .strict()
   .optional();

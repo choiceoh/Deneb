@@ -21,7 +21,18 @@ import {
   SessionSendPolicySchema,
 } from "./zod-schema.session.js";
 
-const NodeHostSchema = z.object({}).strict().optional();
+const NodeHostSchema = z
+  .object({
+    browserProxy: z
+      .object({
+        enabled: z.boolean().optional(),
+        allowProfiles: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .optional();
 
 const LoggingLevelSchema = z.union([
   z.literal("silent"),
@@ -87,7 +98,7 @@ const HttpUrlSchema = z
     return protocol === "http:" || protocol === "https:";
   }, "Expected http:// or https:// URL");
 
-const ResponsesEndpointUrlFetchShape = {
+const _ResponsesEndpointUrlFetchShape = {
   allowUrl: z.boolean().optional(),
   urlAllowlist: z.array(z.string()).optional(),
   allowedMimes: z.array(z.string()).optional(),
@@ -310,6 +321,58 @@ export const DenebSchema = z
       })
       .strict()
       .optional(),
+    browser: z
+      .object({
+        enabled: z.boolean().optional(),
+        evaluateEnabled: z.boolean().optional(),
+        cdpUrl: z.string().optional(),
+        color: z.string().optional(),
+        executablePath: z.string().optional(),
+        headless: z.boolean().optional(),
+        noSandbox: z.boolean().optional(),
+        attachOnly: z.boolean().optional(),
+        defaultProfile: z.string().optional(),
+        ssrfPolicy: z
+          .object({
+            allowPrivateNetwork: z.boolean().optional(),
+            dangerouslyAllowPrivateNetwork: z.boolean().optional(),
+            allowedHostnames: z.array(z.string()).optional(),
+            hostnameAllowlist: z.array(z.string()).optional(),
+          })
+          .strict()
+          .optional(),
+        profiles: z
+          .record(
+            z
+              .string()
+              .regex(/^[a-z0-9-]+$/, "Profile names must be alphanumeric with hyphens only"),
+            z
+              .object({
+                cdpPort: z.number().int().min(1).max(65535).optional(),
+                cdpUrl: z.string().optional(),
+                userDataDir: z.string().optional(),
+                driver: z
+                  .union([z.literal("deneb"), z.literal("clawd"), z.literal("existing-session")])
+                  .optional(),
+                attachOnly: z.boolean().optional(),
+                color: HexColorSchema,
+              })
+              .strict()
+              .refine(
+                (value) => value.driver === "existing-session" || value.cdpPort || value.cdpUrl,
+                {
+                  message: "Profile must set cdpPort or cdpUrl",
+                },
+              )
+              .refine((value) => value.driver === "existing-session" || !value.userDataDir, {
+                message: 'Profile userDataDir is only supported with driver="existing-session"',
+              }),
+          )
+          .optional(),
+        extraArgs: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
     ui: z
       .object({
         seamColor: HexColorSchema.optional(),
@@ -510,36 +573,13 @@ export const DenebSchema = z
     web: z
       .object({
         enabled: z.boolean().optional(),
-        heartbeatSeconds: z.number().int().positive().optional(),
-        reconnect: z
-          .object({
-            initialMs: z.number().positive().optional(),
-            maxMs: z.number().positive().optional(),
-            factor: z.number().positive().optional(),
-            jitter: z.number().min(0).max(1).optional(),
-            maxAttempts: z.number().int().min(0).optional(),
-          })
-          .strict()
-          .optional(),
       })
       .strict()
       .optional(),
     channels: ChannelsSchema,
-    discovery: z
+    canvasHost: z
       .object({
-        wideArea: z
-          .object({
-            enabled: z.boolean().optional(),
-            domain: z.string().optional(),
-          })
-          .strict()
-          .optional(),
-        mdns: z
-          .object({
-            mode: z.enum(["off", "minimal", "full"]).optional(),
-          })
-          .strict()
-          .optional(),
+        enabled: z.boolean().optional(),
       })
       .strict()
       .optional(),
@@ -612,9 +652,6 @@ export const DenebSchema = z
           })
           .strict()
           .optional(),
-        channelHealthCheckMinutes: z.number().int().min(0).optional(),
-        channelStaleEventThresholdMinutes: z.number().int().min(1).optional(),
-        channelMaxRestartsPerHour: z.number().int().min(1).optional(),
         tailscale: z
           .object({
             mode: z.union([z.literal("off"), z.literal("serve"), z.literal("funnel")]).optional(),
@@ -644,8 +681,6 @@ export const DenebSchema = z
                 z.literal("hybrid"),
               ])
               .optional(),
-            debounceMs: z.number().int().min(0).optional(),
-            deferralTimeoutMs: z.number().int().min(0).optional(),
           })
           .strict()
           .optional(),
@@ -665,44 +700,12 @@ export const DenebSchema = z
                 chatCompletions: z
                   .object({
                     enabled: z.boolean().optional(),
-                    maxBodyBytes: z.number().int().positive().optional(),
-                    maxImageParts: z.number().int().nonnegative().optional(),
-                    maxTotalImageBytes: z.number().int().positive().optional(),
-                    images: z
-                      .object({
-                        ...ResponsesEndpointUrlFetchShape,
-                      })
-                      .strict()
-                      .optional(),
                   })
                   .strict()
                   .optional(),
                 responses: z
                   .object({
                     enabled: z.boolean().optional(),
-                    maxBodyBytes: z.number().int().positive().optional(),
-                    maxUrlParts: z.number().int().nonnegative().optional(),
-                    files: z
-                      .object({
-                        ...ResponsesEndpointUrlFetchShape,
-                        maxChars: z.number().int().positive().optional(),
-                        pdf: z
-                          .object({
-                            maxPages: z.number().int().positive().optional(),
-                            maxPixels: z.number().int().positive().optional(),
-                            minTextChars: z.number().int().nonnegative().optional(),
-                          })
-                          .strict()
-                          .optional(),
-                      })
-                      .strict()
-                      .optional(),
-                    images: z
-                      .object({
-                        ...ResponsesEndpointUrlFetchShape,
-                      })
-                      .strict()
-                      .optional(),
                   })
                   .strict()
                   .optional(),
@@ -718,23 +721,6 @@ export const DenebSchema = z
           })
           .strict()
           .optional(),
-        push: z
-          .object({
-            apns: z
-              .object({
-                relay: z
-                  .object({
-                    baseUrl: z.string().optional(),
-                    timeoutMs: z.number().int().positive().optional(),
-                  })
-                  .strict()
-                  .optional(),
-              })
-              .strict()
-              .optional(),
-          })
-          .strict()
-          .optional(),
         nodes: z
           .object({
             allowCommands: z.array(z.string()).optional(),
@@ -744,21 +730,6 @@ export const DenebSchema = z
           .optional(),
       })
       .strict()
-      .superRefine((gateway, ctx) => {
-        const effectiveHealthCheckMinutes = gateway.channelHealthCheckMinutes ?? 5;
-        if (
-          gateway.channelStaleEventThresholdMinutes != null &&
-          effectiveHealthCheckMinutes !== 0 &&
-          gateway.channelStaleEventThresholdMinutes < effectiveHealthCheckMinutes
-        ) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["channelStaleEventThresholdMinutes"],
-            message:
-              "channelStaleEventThresholdMinutes should be >= channelHealthCheckMinutes to avoid delayed stale detection",
-          });
-        }
-      })
       .optional(),
     memory: MemorySchema,
     mcp: McpConfigSchema,
@@ -769,7 +740,6 @@ export const DenebSchema = z
           .object({
             extraDirs: z.array(z.string()).optional(),
             watch: z.boolean().optional(),
-            watchDebounceMs: z.number().int().min(0).optional(),
           })
           .strict()
           .optional(),
@@ -779,16 +749,6 @@ export const DenebSchema = z
             nodeManager: z
               .union([z.literal("npm"), z.literal("pnpm"), z.literal("yarn"), z.literal("bun")])
               .optional(),
-          })
-          .strict()
-          .optional(),
-        limits: z
-          .object({
-            maxCandidatesPerRoot: z.number().int().min(1).optional(),
-            maxSkillsLoadedPerSource: z.number().int().min(1).optional(),
-            maxSkillsInPrompt: z.number().int().min(0).optional(),
-            maxSkillsPromptChars: z.number().int().min(0).optional(),
-            maxSkillFileBytes: z.number().int().min(0).optional(),
           })
           .strict()
           .optional(),

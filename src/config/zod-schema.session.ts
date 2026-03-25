@@ -5,7 +5,6 @@ import { ElevatedAllowFromSchema } from "./zod-schema.agent-runtime.js";
 import { createAllowDenyChannelRulesSchema } from "./zod-schema.allowdeny.js";
 import {
   GroupChatSchema,
-  InboundDebounceSchema,
   NativeCommandsSettingSchema,
   QueueSchema,
   TypingModeSchema,
@@ -51,15 +50,8 @@ export const SessionSchema = z
     store: z.string().optional(),
     typingIntervalSeconds: z.number().int().positive().optional(),
     typingMode: TypingModeSchema.optional(),
-    parentForkMaxTokens: z.number().int().nonnegative().optional(),
     mainKey: z.string().optional(),
     sendPolicy: SessionSendPolicySchema.optional(),
-    agentToAgent: z
-      .object({
-        maxPingPongTurns: z.number().int().min(0).max(5).optional(),
-      })
-      .strict()
-      .optional(),
     threadBindings: z
       .object({
         enabled: z.boolean().optional(),
@@ -149,7 +141,6 @@ export const MessagesSchema = z
     responsePrefix: z.string().optional(),
     groupChat: GroupChatSchema,
     queue: QueueSchema,
-    inbound: InboundDebounceSchema,
     ackReaction: z.string().optional(),
     ackReactionScope: z
       .enum(["group-mentions", "group-all", "direct", "all", "off", "none"])
@@ -169,16 +160,6 @@ export const MessagesSchema = z
             stallSoft: z.string().optional(),
             stallHard: z.string().optional(),
             compacting: z.string().optional(),
-          })
-          .strict()
-          .optional(),
-        timing: z
-          .object({
-            debounceMs: z.number().int().min(0).optional(),
-            stallSoftMs: z.number().int().min(0).optional(),
-            stallHardMs: z.number().int().min(0).optional(),
-            doneHoldMs: z.number().int().min(0).optional(),
-            errorHoldMs: z.number().int().min(0).optional(),
           })
           .strict()
           .optional(),

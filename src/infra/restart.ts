@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { loadConfig } from "../config/config.js";
 import { resolveGatewaySystemdServiceName } from "../daemon/constants.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { cleanStaleGatewayProcessesSync, findGatewayPidsOnPortSync } from "./restart-stale-pids.js";
@@ -403,10 +402,8 @@ export function scheduleGatewaySigusr1Restart(opts?: {
         emitGatewayRestart();
         return;
       }
-      const cfg = loadConfig();
       deferGatewayRestartUntilIdle({
         getPendingCount: pendingCheck,
-        maxWaitMs: cfg.gateway?.reload?.deferralTimeoutMs,
       });
     },
     Math.max(0, requestedDueAt - nowMs),
