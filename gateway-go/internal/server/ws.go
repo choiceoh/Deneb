@@ -316,6 +316,11 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 		// Deduplicate: reject requests with recently-seen IDs.
 		if !s.dedupe.Check(req.ID) {
 			s.logger.Debug("duplicate request", "connId", client.connID, "id", req.ID)
+			errResp := protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrConflict, "duplicate request ID"))
+			if err := s.writeFrame(ctx, client, errResp); err != nil {
+				return
+			}
 			continue
 		}
 

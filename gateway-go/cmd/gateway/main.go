@@ -147,7 +147,11 @@ func main() {
 		defer d.Stop()
 
 		// Connect bridge (spawn or direct socket).
-		spawnResult := setupBridge(ctx, srv, *bridgeSocket, *pluginHostCmd, logger)
+		spawnResult, bridgeErr := setupBridge(ctx, srv, *bridgeSocket, *pluginHostCmd, logger)
+		if bridgeErr != nil {
+			logger.Error("bridge setup failed", "error", bridgeErr)
+			os.Exit(1)
+		}
 		if spawnResult != nil {
 			defer spawnResult.Shutdown()
 			// Start channel plugins in the Plugin Host after the bridge is ready.
@@ -168,7 +172,11 @@ func main() {
 	defer stop()
 
 	// Connect bridge (spawn or direct socket).
-	spawnResult := setupBridge(ctx, srv, *bridgeSocket, *pluginHostCmd, logger)
+	spawnResult, bridgeErr := setupBridge(ctx, srv, *bridgeSocket, *pluginHostCmd, logger)
+	if bridgeErr != nil {
+		logger.Error("bridge setup failed", "error", bridgeErr)
+		os.Exit(1)
+	}
 	if spawnResult != nil {
 		defer spawnResult.Shutdown()
 		// Start channel plugins in the Plugin Host after the bridge is ready.
@@ -185,7 +193,8 @@ func main() {
 
 // setupBridge configures the Plugin Host bridge, either by spawning a child
 // process (--plugin-host-cmd) or connecting to an existing socket (--bridge).
-func setupBridge(ctx context.Context, srv *server.Server, socketPath, pluginHostCmd string, logger *slog.Logger) *bridge.SpawnResult {
+// Returns an error instead of calling os.Exit to allow proper cleanup.
+func setupBridge(ctx context.Context, srv *server.Server, socketPath, pluginHostCmd string, logger *slog.Logger) (*bridge.SpawnResult, error) {
 	if pluginHostCmd != "" {
 		// Spawn the Plugin Host as a child process.
 		result, err := bridge.SpawnPluginHost(ctx, bridge.SpawnConfig{
@@ -193,11 +202,10 @@ func setupBridge(ctx context.Context, srv *server.Server, socketPath, pluginHost
 			Logger:  logger,
 		})
 		if err != nil {
-			logger.Error("failed to spawn plugin host", "error", err)
-			os.Exit(1)
+			return nil, fmt.Errorf("failed to spawn plugin host: %w", err)
 		}
 		srv.SetBridge(result.Host)
-		return result
+		return result, nil
 	}
 
 	if socketPath != "" {
@@ -213,7 +221,7 @@ func setupBridge(ctx context.Context, srv *server.Server, socketPath, pluginHost
 		srv.SetBridge(b)
 	}
 
-	return nil
+	return nil, nil
 }
 
 // startPluginHostChannels asks the Plugin Host to start all configured channel

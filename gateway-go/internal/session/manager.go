@@ -78,9 +78,9 @@ func (m *Manager) Get(key string) *Session {
 	return &cp
 }
 
-// Set stores or updates a session.
+// Set stores or updates a session. Ignores sessions with empty keys.
 func (m *Manager) Set(s *Session) {
-	if s == nil {
+	if s == nil || s.Key == "" {
 		return
 	}
 	m.mu.Lock()
@@ -139,7 +139,11 @@ func (m *Manager) Count() int {
 
 // Create creates a new session with the given key and kind.
 // Returns a snapshot copy safe for concurrent use.
+// Returns nil if key is empty.
 func (m *Manager) Create(key string, kind Kind) *Session {
+	if key == "" {
+		return nil
+	}
 	m.mu.Lock()
 	now := time.Now()
 	s := &Session{

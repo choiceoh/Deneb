@@ -80,6 +80,7 @@ type Handler struct {
 
 	abortMu     sync.Mutex
 	abortMap    map[string]*AbortEntry // clientRunId -> entry
+	done        chan struct{}          // signals abortGCLoop to stop
 
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
@@ -116,6 +117,7 @@ func NewHandler(sessions *session.Manager, forwarder Forwarder, broadcast Broadc
 		broadcast:       broadcast,
 		logger:          logger,
 		abortMap:        make(map[string]*AbortEntry),
+		done:            make(chan struct{}),
 		maxHistoryBytes: cfg.MaxHistoryBytes,
 		maxHistoryCount: cfg.MaxHistoryCount,
 		maxMessageBytes: cfg.MaxMessageBytes,
@@ -129,8 +131,15 @@ func (h *Handler) SetBroadcastRaw(fn BroadcastRawFunc) {
 	h.broadcastRaw = fn
 }
 
-// Close stops background goroutines.
+// Close stops background goroutines and cancels all active abort entries.
 func (h *Handler) Close() {
+	// Signal abortGCLoop to exit.
+	select {
+	case <-h.done:
+	default:
+		close(h.done)
+	}
+
 	h.abortMu.Lock()
 	defer h.abortMu.Unlock()
 	for _, entry := range h.abortMap {
@@ -344,14 +353,17 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 
 	h.abortMu.Lock()
 	var found bool
+	var resolvedKey string
 	if p.ClientRunID != "" {
 		if entry, ok := h.abortMap[p.ClientRunID]; ok {
+			resolvedKey = entry.SessionKey
 			entry.CancelFn()
 			delete(h.abortMap, p.ClientRunID)
 			found = true
 		}
 	} else {
 		// Abort by session key — cancel all runs for the session.
+		resolvedKey = p.SessionKey
 		for id, entry := range h.abortMap {
 			if entry.SessionKey == p.SessionKey {
 				entry.CancelFn()
@@ -367,10 +379,10 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 			protocol.ErrNotFound, "no active run found"))
 	}
 
-	// Transition session to killed.
-	key := p.SessionKey
-	if key == "" && p.ClientRunID != "" {
-		// Already cleaned up, session key was in the entry.
+	// Transition session to killed. Use the key from the abort entry
+	// (not params) when aborting by clientRunId.
+	key := resolvedKey
+	if key == "" {
 		key = p.SessionKey
 	}
 	if key != "" {
@@ -455,19 +467,25 @@ func (h *Handler) cleanupAbort(clientRunID string) {
 }
 
 // abortGCLoop periodically cleans up expired abort entries.
+// Exits when h.done is closed (via Close()).
 func (h *Handler) abortGCLoop() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-	for range ticker.C {
-		h.abortMu.Lock()
-		now := time.Now()
-		for id, entry := range h.abortMap {
-			if now.After(entry.ExpiresAt) {
-				entry.CancelFn()
-				delete(h.abortMap, id)
+	for {
+		select {
+		case <-h.done:
+			return
+		case <-ticker.C:
+			h.abortMu.Lock()
+			now := time.Now()
+			for id, entry := range h.abortMap {
+				if now.After(entry.ExpiresAt) {
+					entry.CancelFn()
+					delete(h.abortMap, id)
+				}
 			}
+			h.abortMu.Unlock()
 		}
-		h.abortMu.Unlock()
 	}
 }
 
@@ -488,7 +506,8 @@ func (h *Handler) budgetHistory(reqID string, payload json.RawMessage) *protocol
 	}
 
 	// Keep messages from the end (most recent) until budget exhausted.
-	budgeted := make([]json.RawMessage, 0, len(parsed.Messages))
+	// Collect in reverse order, then reverse once to avoid O(n²) prepend.
+	reversed := make([]json.RawMessage, 0, len(parsed.Messages))
 	totalBytes := 0
 	truncatedCount := 0
 	for i := len(parsed.Messages) - 1; i >= 0; i-- {
@@ -507,8 +526,13 @@ func (h *Handler) budgetHistory(reqID string, payload json.RawMessage) *protocol
 		if totalBytes+msgBytes > h.maxHistoryBytes {
 			break
 		}
-		budgeted = append([]json.RawMessage{parsed.Messages[i]}, budgeted...)
+		reversed = append(reversed, parsed.Messages[i])
 		totalBytes += msgBytes
+	}
+	// Reverse to restore chronological order.
+	budgeted := make([]json.RawMessage, len(reversed))
+	for i, msg := range reversed {
+		budgeted[len(reversed)-1-i] = msg
 	}
 
 	resp, _ := protocol.NewResponseOK(reqID, map[string]any{

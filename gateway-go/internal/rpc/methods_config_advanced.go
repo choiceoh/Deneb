@@ -177,7 +177,8 @@ func configPatch(deps ConfigAdvancedDeps) HandlerFunc {
 		// Merge patch into current config.
 		var current map[string]any
 		if err := json.Unmarshal([]byte(snapshot.Raw), &current); err != nil {
-			current = make(map[string]any)
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrUnavailable, "failed to parse current config: "+err.Error()))
 		}
 		for k, v := range patch {
 			current[k] = v

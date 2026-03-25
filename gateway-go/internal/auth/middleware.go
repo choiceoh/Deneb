@@ -125,11 +125,23 @@ func (rl *AuthRateLimiter) Check(ip string) (allowed bool, retryAfterMs int64) {
 	return true, 0
 }
 
+// maxRateLimitEntries caps the failure tracking map to prevent unbounded
+// growth during sustained brute-force attacks.
+const maxRateLimitEntries = 10000
+
 // RecordFailure records a failed auth attempt.
 func (rl *AuthRateLimiter) RecordFailure(ip string) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	now := time.Now().UnixMilli()
+
+	// Prevent unbounded map growth under DDoS.
+	if len(rl.failures) >= maxRateLimitEntries {
+		if _, exists := rl.failures[ip]; !exists {
+			return // silently drop new entries when at capacity
+		}
+	}
+
 	f := rl.failures[ip]
 	if f == nil {
 		rl.failures[ip] = &ipFailures{count: 1, firstAt: now}
