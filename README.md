@@ -1,12 +1,8 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/choiceoh/Deneb/master/ui/public/favicon.svg" alt="⭐ Deneb" width="120" height="120">
-</p>
-
 <h1 align="center">Deneb</h1>
 
 <p align="center">
   <strong>Self-Hosted AI Agent with Lossless Memory</strong><br>
-  <a href="https://github.com/choiceoh/Deneb/releases"><img src="https://img.shields.io/badge/version-3.5.7-blue" alt="Version"></a>
+  <a href="https://github.com/choiceoh/Deneb/releases"><img src="https://img.shields.io/badge/version-3.7.0-blue" alt="Version"></a>
   <a href="https://github.com/choiceoh/Deneb/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.x-3178c6" alt="TypeScript"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22.16+-339933" alt="Node.js"></a>
@@ -14,7 +10,7 @@
 
 ---
 
-**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. Deneb is a lean ~440K-line server engine with a custom Lossless Context Management (LCM) system — DAG-based compaction, proactive background summarization, and full memory recall across sessions.
+**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. Deneb is a ~846K-line server engine with a custom Lossless Context Management (LCM) system — DAG-based compaction, proactive background summarization, and full memory recall across sessions.
 
 **Memory-first, local-first, lean-first.**
 
@@ -30,7 +26,7 @@ Most AI agent frameworks hit the same wall: when conversations grow long, contex
 | **Context recall**     | Vector search only       | Semantic search + DAG expansion + memory files |
 | **Compaction latency** | Blocks on LLM call       | Background observer pre-computes summaries     |
 | **Memory persistence** | Session-scoped           | Workspace files + JSONL transcripts + LCM DAG  |
-| **Codebase size**      | 500K–1M+ lines           | ~440K lines — lean and auditable               |
+| **Codebase size**      | 500K–1M+ lines           | ~846K lines — auditable               |
 | **Local LLM**          | Optional                 | First-class: SGLang, Ollama, vLLM support      |
 
 ### Intentional Simplification
@@ -40,7 +36,7 @@ We deliberately support fewer channels and architectures — **a smaller surface
 Rather than spreading thin across many channels and a broad user base, we focus on delivering the best possible experience to a focused group of users. This means:
 
 - **One channel done right** (Telegram) > eight channels done halfway
-- **~440K lines of auditable code** > 1M+ lines nobody can fully understand
+- **~846K lines of auditable code** > 1M+ lines nobody can fully understand
 - **Every feature battle-tested in production** before landing in the repo
 - **Faster iteration** — fewer platforms to test, fewer edge cases to chase
 
@@ -140,7 +136,7 @@ node deneb.mjs gateway
 ## 📁 Architecture
 
 ```
-Deneb/                          (~440K lines TypeScript)
+Deneb/                          (~846K lines TypeScript)
 ├── src/
 │   ├── context-engine/lcm/     # LCM engine — compaction, observer, DAG
 │   ├── autonomous/             # Autonomous loop engine
@@ -152,13 +148,12 @@ Deneb/                          (~440K lines TypeScript)
 │   ├── gateway/                # Gateway server & daemon
 │   ├── plugin-sdk/             # Plugin SDK
 │   ├── secrets/                # Credential management
-│   ├── infra/outbound/         # LLM provider adapters
+│   ├── infra/outbound/         # Message delivery & routing
 │   ├── routing/                # Message routing
 │   ├── tts/                    # Text-to-speech
 │   └── web-search/             # Web search integration
-├── extensions/                 # Channel extensions (Telegram, Discord, Slack, etc.)
-├── vega/                       # Vega QMD backend
-└── ui/                         # Web dashboard
+├── extensions/                 # Channel extensions (Telegram)
+└── vega/                       # Vega QMD backend
 ```
 
 ## 🛠️ Development
@@ -178,6 +173,3 @@ MIT
 
 ---
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/choiceoh/Deneb/master/ui/public/favicon.svg" alt="⭐" width="40" height="40">
-</p>

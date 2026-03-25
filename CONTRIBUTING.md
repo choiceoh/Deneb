@@ -46,21 +46,6 @@ If a review bot leaves review conversations on your PR, you are expected to hand
 
 This applies to both human-authored and AI-assisted PRs.
 
-## Control UI Decorators
-
-The Control UI uses Lit with **legacy** decorators (current Rollup parsing does not support
-`accessor` fields required for standard decorators). When adding reactive fields, keep the
-legacy style:
-
-```ts
-@state() foo = "bar";
-@property({ type: Number }) count = 0;
-```
-
-The root `tsconfig.json` is configured for legacy decorators (`experimentalDecorators: true`)
-with `useDefineForClassFields: false`. Avoid flipping these unless you are also updating the UI
-build tooling to support standard decorators.
-
 ## AI/Vibe-Coded PRs Welcome! 🤖
 
 Built with Codex, Claude, or other AI tools? **Awesome - just mark it!**
