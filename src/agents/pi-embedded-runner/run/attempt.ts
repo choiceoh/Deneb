@@ -928,6 +928,7 @@ export async function runEmbeddedAttempt(
       let promptError: unknown = null;
       let promptErrorSource: "prompt" | "compaction" | null = null;
       const prePromptMessageCount = activeSession.messages.length;
+      let orphanedUserPrompt: string | undefined;
       try {
         const promptStartedAt = Date.now();
 
@@ -994,7 +995,6 @@ export async function runEmbeddedAttempt(
 
         // Repair orphaned trailing user messages so new prompts don't violate role ordering.
         // Capture the text content so the caller can re-queue it instead of silently dropping it.
-        let orphanedUserPrompt: string | undefined;
         const leafEntry = sessionManager.getLeafEntry();
         if (leafEntry?.type === "message" && leafEntry.message.role === "user") {
           const orphanedMsg = leafEntry.message as {

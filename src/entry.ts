@@ -198,11 +198,11 @@ export function tryHandleRootHelpFastPath(
     }
     return true;
   }
-  import("./cli/program/root-help.js")
-    .then(({ outputRootHelp }) => {
-      outputRootHelp();
-    })
-    .catch(handleError);
+  // CLI command tree removed; show a minimal help message.
+  console.log(
+    "deneb — CLI command tree is not available. Use the gateway or agent runtime directly.",
+  );
+  process.exitCode = 0;
   return true;
 }
 

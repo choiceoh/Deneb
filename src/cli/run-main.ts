@@ -5,16 +5,8 @@ import { formatUncaughtError } from "../infra/errors.js";
 import { isMainModule } from "../infra/is-main.js";
 import { ensureDenebCliOnPath } from "../infra/path-env.js";
 import { assertSupportedRuntime } from "../infra/runtime-guard.js";
-import { enableConsoleCapture } from "../logging.js";
-import {
-  getCommandPathWithRootOptions,
-  getPrimaryCommand,
-  hasHelpOrVersion,
-  isRootHelpInvocation,
-} from "./argv.js";
-import { loadCliDotEnv } from "./dotenv.js";
+import { getCommandPathWithRootOptions, hasHelpOrVersion } from "./argv.js";
 import { applyCliProfileEnv, parseCliProfileArgs } from "./profile.js";
-import { tryRouteCli } from "./route.js";
 
 async function closeCliMemoryManagers(): Promise<void> {
   try {
@@ -34,24 +26,6 @@ export function rewriteUpdateFlagArgv(argv: string[]): string[] {
   const next = [...argv];
   next.splice(index, 1, "update");
   return next;
-}
-
-export function shouldRegisterPrimarySubcommand(argv: string[]): boolean {
-  return !hasHelpOrVersion(argv);
-}
-
-export function shouldSkipPluginCommandRegistration(params: {
-  argv: string[];
-  primary: string | null;
-  hasBuiltinPrimary: boolean;
-}): boolean {
-  if (params.hasBuiltinPrimary) {
-    return true;
-  }
-  if (!params.primary) {
-    return hasHelpOrVersion(params.argv);
-  }
-  return false;
 }
 
 export function shouldEnsureCliPath(argv: string[]): boolean {
@@ -74,50 +48,30 @@ export function shouldEnsureCliPath(argv: string[]): boolean {
   return true;
 }
 
-export function shouldUseRootHelpFastPath(argv: string[]): boolean {
-  return isRootHelpInvocation(argv);
-}
-
+/**
+ * CLI command tree has been removed. This stub preserves the runCli export
+ * so that src/index.ts (legacy entry) continues to resolve, but all CLI
+ * commands are unavailable. The gateway and agent runtime do not depend on
+ * the CLI command tree — they use src/commands/ and src/gateway/ directly.
+ */
 export async function runCli(argv: string[] = process.argv) {
-  let normalizedArgv = argv;
-  const parsedProfile = parseCliProfileArgs(normalizedArgv);
+  const parsedProfile = parseCliProfileArgs(argv);
   if (!parsedProfile.ok) {
     throw new Error(parsedProfile.error);
   }
   if (parsedProfile.profile) {
     applyCliProfileEnv({ profile: parsedProfile.profile });
   }
-  normalizedArgv = parsedProfile.argv;
 
-  loadCliDotEnv({ quiet: true });
   normalizeEnv();
-  if (shouldEnsureCliPath(normalizedArgv)) {
+  if (shouldEnsureCliPath(argv)) {
     ensureDenebCliOnPath();
   }
 
-  // Enforce the minimum supported runtime before doing any work.
   assertSupportedRuntime();
 
   try {
-    if (shouldUseRootHelpFastPath(normalizedArgv)) {
-      const { outputRootHelp } = await import("./program/root-help.js");
-      outputRootHelp();
-      return;
-    }
-
-    if (await tryRouteCli(normalizedArgv)) {
-      return;
-    }
-
-    // Capture all console output into structured logs while keeping stdout/stderr behavior.
-    enableConsoleCapture();
-
-    const { buildProgram } = await import("./program.js");
-    const program = buildProgram();
     const { installUnhandledRejectionHandler } = await import("../infra/unhandled-rejections.js");
-
-    // Global error handlers to prevent silent crashes from unhandled rejections/exceptions.
-    // These log the error and exit gracefully instead of crashing without trace.
     installUnhandledRejectionHandler();
 
     process.on("uncaughtException", (error) => {
@@ -125,40 +79,10 @@ export async function runCli(argv: string[] = process.argv) {
       process.exit(1);
     });
 
-    const parseArgv = rewriteUpdateFlagArgv(normalizedArgv);
-    // Register the primary command (builtin or subcli) so help and command parsing
-    // are correct even with lazy command registration.
-    const primary = getPrimaryCommand(parseArgv);
-    if (primary) {
-      const { getProgramContext } = await import("./program/program-context.js");
-      const ctx = getProgramContext(program);
-      if (ctx) {
-        const { registerCoreCliByName } = await import("./program/command-registry.js");
-        await registerCoreCliByName(program, ctx, primary, parseArgv);
-      }
-      const { registerSubCliByName } = await import("./program/register.subclis.js");
-      await registerSubCliByName(program, primary);
-    }
-
-    const hasBuiltinPrimary =
-      primary !== null && program.commands.some((command) => command.name() === primary);
-    const shouldSkipPluginRegistration = shouldSkipPluginCommandRegistration({
-      argv: parseArgv,
-      primary,
-      hasBuiltinPrimary,
-    });
-    if (!shouldSkipPluginRegistration) {
-      // Register plugin CLI commands before parsing
-      const { registerPluginCliCommands } = await import("../plugins/cli.js");
-      const { loadValidatedConfigForPluginRegistration } =
-        await import("./program/register.subclis.js");
-      const config = await loadValidatedConfigForPluginRegistration();
-      if (config) {
-        registerPluginCliCommands(program, config);
-      }
-    }
-
-    await program.parseAsync(parseArgv);
+    console.error(
+      "[deneb] CLI command tree is not available. Use the gateway or agent runtime directly.",
+    );
+    process.exit(1);
   } finally {
     await closeCliMemoryManagers();
   }
