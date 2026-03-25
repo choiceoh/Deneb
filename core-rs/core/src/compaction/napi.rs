@@ -4,16 +4,16 @@
 //! 1. **Pure functions** — stateless helpers callable from Node.js
 //! 2. **Sweep engine** — handle-based state machine for full compaction sweeps
 
+#[cfg(test)]
+use super::sweep::SweepCommand;
+use super::sweep::{SweepEngine, SweepResponse};
 use super::{
     build_condensed_source_text, build_leaf_source_text, deterministic_fallback, estimate_tokens,
     evaluate, generate_summary_id, resolve_fresh_tail_ordinal, timestamp, CompactionConfig,
     CompactionError, ContextItem, MessageRecord, SummaryRecord,
 };
-use super::sweep::{SweepEngine, SweepResponse};
 #[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::*;
-#[cfg(test)]
-use super::sweep::SweepCommand;
 use std::sync::Mutex;
 
 // ── Handle store ────────────────────────────────────────────────────────────

@@ -114,14 +114,28 @@ pub enum SweepCommand {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum SweepResponse {
-    ContextItems { items: Vec<ContextItem> },
-    Messages { messages: HashMap<u64, MessageRecord> },
-    Summaries { summaries: HashMap<String, SummaryRecord> },
-    TokenCount { count: u64 },
-    DistinctDepths { depths: Vec<u32> },
-    SummaryText { text: String },
+    ContextItems {
+        items: Vec<ContextItem>,
+    },
+    Messages {
+        messages: HashMap<u64, MessageRecord>,
+    },
+    Summaries {
+        summaries: HashMap<String, SummaryRecord>,
+    },
+    TokenCount {
+        count: u64,
+    },
+    DistinctDepths {
+        depths: Vec<u32>,
+    },
+    SummaryText {
+        text: String,
+    },
     PersistOk,
-    PersistError { error: String },
+    PersistError {
+        error: String,
+    },
 }
 
 // ── Internal state ──────────────────────────────────────────────────────────
@@ -303,7 +317,8 @@ impl SweepEngine {
             self.tokens_before = count;
             self.previous_tokens = count;
 
-            let threshold = (self.config.context_threshold * self.token_budget as f64).floor() as u64;
+            let threshold =
+                (self.config.context_threshold * self.token_budget as f64).floor() as u64;
 
             if !self.force && count <= threshold {
                 self.phase = Phase::Done;
@@ -545,8 +560,18 @@ impl SweepEngine {
         let earliest_at = msgs.iter().map(|m| m.created_at).min();
         let latest_at = msgs.iter().map(|m| m.created_at).max();
 
-        let start_ordinal = self.current_chunk_ordinals.iter().copied().min().unwrap_or(0);
-        let end_ordinal = self.current_chunk_ordinals.iter().copied().max().unwrap_or(0);
+        let start_ordinal = self
+            .current_chunk_ordinals
+            .iter()
+            .copied()
+            .min()
+            .unwrap_or(0);
+        let end_ordinal = self
+            .current_chunk_ordinals
+            .iter()
+            .copied()
+            .max()
+            .unwrap_or(0);
 
         self.created_summary_id = Some(summary_id.clone());
         self.previous_summary_content = Some(self.current_summary_content.clone());
@@ -643,9 +668,7 @@ impl SweepEngine {
             if !summary_ids.is_empty() {
                 // Need to fetch missing summaries before evaluating candidates
                 self.phase = Phase::CondensedFetchSummaries;
-                return SweepCommand::FetchSummaries {
-                    summary_ids,
-                };
+                return SweepCommand::FetchSummaries { summary_ids };
             }
 
             // All summaries cached — find candidate
@@ -767,10 +790,7 @@ impl SweepEngine {
         self.emit_condensed_summarize()
     }
 
-    fn handle_condensed_fetch_prior_summaries(
-        &mut self,
-        response: SweepResponse,
-    ) -> SweepCommand {
+    fn handle_condensed_fetch_prior_summaries(&mut self, response: SweepResponse) -> SweepCommand {
         if let SweepResponse::Summaries { summaries } = response {
             for (id, s) in summaries {
                 self.summaries.insert(id, s);
@@ -900,8 +920,18 @@ impl SweepEngine {
             .map(|s| s.latest_at.unwrap_or(s.created_at))
             .max();
 
-        let start_ordinal = self.current_chunk_ordinals.iter().copied().min().unwrap_or(0);
-        let end_ordinal = self.current_chunk_ordinals.iter().copied().max().unwrap_or(0);
+        let start_ordinal = self
+            .current_chunk_ordinals
+            .iter()
+            .copied()
+            .min()
+            .unwrap_or(0);
+        let end_ordinal = self
+            .current_chunk_ordinals
+            .iter()
+            .copied()
+            .max()
+            .unwrap_or(0);
 
         self.created_summary_id = Some(summary_id.clone());
         self.current_pass_tokens_before = self.previous_tokens;

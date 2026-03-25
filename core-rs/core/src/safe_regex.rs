@@ -119,15 +119,27 @@ fn read_quantifier(source: &[u8], index: usize) -> Option<QuantifierRead> {
     match ch {
         b'*' => {
             let consumed = lazy_extra(index);
-            Some(QuantifierRead { consumed, min_repeat: 0, max_repeat: None })
+            Some(QuantifierRead {
+                consumed,
+                min_repeat: 0,
+                max_repeat: None,
+            })
         }
         b'+' => {
             let consumed = lazy_extra(index);
-            Some(QuantifierRead { consumed, min_repeat: 1, max_repeat: None })
+            Some(QuantifierRead {
+                consumed,
+                min_repeat: 1,
+                max_repeat: None,
+            })
         }
         b'?' => {
             let consumed = lazy_extra(index);
-            Some(QuantifierRead { consumed, min_repeat: 0, max_repeat: Some(1) })
+            Some(QuantifierRead {
+                consumed,
+                min_repeat: 0,
+                max_repeat: Some(1),
+            })
         }
         b'{' => parse_brace_quantifier(source, index),
         _ => None,
@@ -145,7 +157,10 @@ fn parse_brace_quantifier(source: &[u8], index: usize) -> Option<QuantifierRead>
     if i == digit_start {
         return None;
     }
-    let min_repeat: usize = std::str::from_utf8(&source[digit_start..i]).ok()?.parse().ok()?;
+    let min_repeat: usize = std::str::from_utf8(&source[digit_start..i])
+        .ok()?
+        .parse()
+        .ok()?;
 
     let mut max_repeat: Option<usize> = Some(min_repeat);
     if i < source.len() && source[i] == b',' {
@@ -157,7 +172,12 @@ fn parse_brace_quantifier(source: &[u8], index: usize) -> Option<QuantifierRead>
         max_repeat = if i == max_start {
             None
         } else {
-            Some(std::str::from_utf8(&source[max_start..i]).ok()?.parse().ok()?)
+            Some(
+                std::str::from_utf8(&source[max_start..i])
+                    .ok()?
+                    .parse()
+                    .ok()?,
+            )
         };
     }
 
@@ -175,7 +195,11 @@ fn parse_brace_quantifier(source: &[u8], index: usize) -> Option<QuantifierRead>
         }
     }
 
-    Some(QuantifierRead { consumed: i - index, min_repeat, max_repeat })
+    Some(QuantifierRead {
+        consumed: i - index,
+        min_repeat,
+        max_repeat,
+    })
 }
 
 // ---------------------------------------------------------------------------

@@ -42,7 +42,10 @@ impl DangerousPatterns {
     fn matches(&self, haystack: &[u8]) -> bool {
         // Fast reject: all patterns start with '<', 'j', 'd', or 'o'.
         // If none of these bytes exist (case-insensitive), skip the expensive lowercase+search.
-        if !haystack.iter().any(|&b| matches!(b.to_ascii_lowercase(), b'<' | b'j' | b'd' | b'o')) {
+        if !haystack
+            .iter()
+            .any(|&b| matches!(b.to_ascii_lowercase(), b'<' | b'j' | b'd' | b'o'))
+        {
             return false;
         }
         // Stack buffer for small inputs; heap only for large.
@@ -86,7 +89,10 @@ pub fn sanitize_control_chars(input: &str) -> String {
     if !input.chars().any(is_strippable_control) {
         return input.to_string();
     }
-    input.chars().filter(|c| !is_strippable_control(*c)).collect()
+    input
+        .chars()
+        .filter(|c| !is_strippable_control(*c))
+        .collect()
 }
 
 /// Maximum session key length (matches TypeScript ChatSendSessionKeyString).
@@ -105,7 +111,9 @@ pub fn is_valid_session_key(key: &str) -> bool {
             return false;
         }
         // Check for control chars at byte level (faster than char iteration).
-        return !key.bytes().any(|b| b.is_ascii_control() && b != b'\n' && b != b'\t' && b != b'\r');
+        return !key
+            .bytes()
+            .any(|b| b.is_ascii_control() && b != b'\n' && b != b'\t' && b != b'\r');
     }
     // Non-ASCII: single-pass char count + control check.
     let mut count = 0usize;
@@ -126,7 +134,10 @@ pub fn is_valid_session_key(key: &str) -> bool {
 /// Operates at byte level since all HTML-special chars are ASCII.
 pub fn sanitize_html(input: &str) -> String {
     // Fast path: no special chars — avoid allocation entirely.
-    if !input.bytes().any(|b| matches!(b, b'<' | b'>' | b'&' | b'"' | b'\'')) {
+    if !input
+        .bytes()
+        .any(|b| matches!(b, b'<' | b'>' | b'&' | b'"' | b'\''))
+    {
         return input.to_string();
     }
     // All escapable characters are single-byte ASCII, so we can work at byte level.
@@ -151,13 +162,9 @@ pub fn sanitize_html(input: &str) -> String {
 pub fn is_safe_url(url: &str) -> bool {
     // Quick byte-level scheme check (case-insensitive, no alloc).
     let bytes = url.as_bytes();
-    let scheme_len = if bytes.len() >= 8
-        && bytes[..8].eq_ignore_ascii_case(b"https://")
-    {
+    let scheme_len = if bytes.len() >= 8 && bytes[..8].eq_ignore_ascii_case(b"https://") {
         8
-    } else if bytes.len() >= 7
-        && bytes[..7].eq_ignore_ascii_case(b"http://")
-    {
+    } else if bytes.len() >= 7 && bytes[..7].eq_ignore_ascii_case(b"http://") {
         7
     } else {
         return false;

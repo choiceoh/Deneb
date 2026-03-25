@@ -301,7 +301,11 @@ pub fn resolve_incremental_max_depth(config: &CompactionConfig) -> u32 {
 }
 
 /// Resolve the required fanout for a given depth and trigger type.
-pub fn resolve_fanout_for_depth(config: &CompactionConfig, target_depth: u32, hard_trigger: bool) -> u32 {
+pub fn resolve_fanout_for_depth(
+    config: &CompactionConfig,
+    target_depth: u32,
+    hard_trigger: bool,
+) -> u32 {
     if hard_trigger {
         config.condensed_min_fanout_hard.max(1)
     } else if target_depth == 0 {
@@ -325,10 +329,7 @@ pub fn resolve_max_sweep_iterations(config: &CompactionConfig) -> u32 {
 
 /// Resolve the timezone string (defaults to "UTC").
 pub fn resolve_timezone(config: &CompactionConfig) -> &str {
-    config
-        .timezone
-        .as_deref()
-        .unwrap_or("UTC")
+    config.timezone.as_deref().unwrap_or("UTC")
 }
 
 /// Compute the ordinal boundary for protected fresh messages.
@@ -349,7 +350,9 @@ pub fn resolve_fresh_tail_ordinal(items: &[ContextItem], fresh_tail_count: u32) 
         return u64::MAX;
     }
 
-    let tail_start_idx = raw_message_items.len().saturating_sub(fresh_tail_count as usize);
+    let tail_start_idx = raw_message_items
+        .len()
+        .saturating_sub(fresh_tail_count as usize);
     raw_message_items
         .get(tail_start_idx)
         .map(|item| item.ordinal)
@@ -536,8 +539,13 @@ pub fn find_shallowest_condensation_candidate<'a>(
 
     for &target_depth in depth_levels {
         let fanout = resolve_fanout_for_depth(config, target_depth, hard_trigger);
-        let (chunk, tokens) =
-            select_condensed_chunk(items, summaries, target_depth, fresh_tail_ordinal, chunk_limit);
+        let (chunk, tokens) = select_condensed_chunk(
+            items,
+            summaries,
+            target_depth,
+            fresh_tail_ordinal,
+            chunk_limit,
+        );
 
         if (chunk.len() as u32) < fanout {
             continue;
@@ -719,10 +727,7 @@ fn safe_char_boundary(s: &str, max_bytes: usize) -> usize {
 
 /// Encode bytes as hex string.
 fn hex_encode(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .map(|b| format!("{:02x}", b))
-        .collect()
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────

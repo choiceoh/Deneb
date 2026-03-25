@@ -281,11 +281,7 @@ mod tests {
     #[test]
     fn test_skills_install_valid() {
         let mut e = Vec::new();
-        validate_skills_install_params(
-            &json!({"name": "weather", "installId": "i1"}),
-            "",
-            &mut e,
-        );
+        validate_skills_install_params(&json!({"name": "weather", "installId": "i1"}), "", &mut e);
         assert!(e.is_empty());
     }
 }

@@ -7,7 +7,18 @@ description = "Local ML inference for Deneb (GGUF models via llama.cpp)"
 [lib]
 crate-type = ["rlib"]
 
+[features]
+default = []
+# Enable local GGUF inference via llama-cpp-2. Requires llama.cpp build deps.
+# On DGX Spark: cargo build --features cuda
+llama = ["dep:llama-cpp-2"]
+cuda = ["llama", "llama-cpp-2/cuda"]
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+once_cell.workspace = true
+
+# Local GGUF inference (optional — heavy native dep)
+llama-cpp-2 = { version = "0.1", optional = true }

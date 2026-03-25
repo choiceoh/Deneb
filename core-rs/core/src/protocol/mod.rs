@@ -27,10 +27,7 @@ pub enum FrameError {
     MissingField(&'static str),
 
     #[error("invalid field value: {field} — {reason}")]
-    InvalidField {
-        field: &'static str,
-        reason: String,
-    },
+    InvalidField { field: &'static str, reason: String },
 }
 
 /// Discriminator for gateway frames.

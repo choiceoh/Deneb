@@ -72,9 +72,6 @@ mod tests {
     #[test]
     fn test_underscores_preserved() {
         let result = build_fts_query("my_var another_var");
-        assert_eq!(
-            result,
-            Some("\"my_var\" AND \"another_var\"".to_string())
-        );
+        assert_eq!(result, Some("\"my_var\" AND \"another_var\"".to_string()));
     }
 }

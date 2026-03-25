@@ -106,7 +106,10 @@ pub fn detect_mime(data: &[u8]) -> &'static str {
             if data.starts_with(b"<?xml") || data.starts_with(b"<svg") {
                 return "application/xml";
             }
-            if data.starts_with(b"<!DOCTYPE") || data.starts_with(b"<html") || data.starts_with(b"<HTML") {
+            if data.starts_with(b"<!DOCTYPE")
+                || data.starts_with(b"<html")
+                || data.starts_with(b"<HTML")
+            {
                 return "text/html";
             }
         }
@@ -164,7 +167,9 @@ mod tests {
 
     #[test]
     fn test_mp4() {
-        let data = [0x00, 0x00, 0x00, 0x1C, b'f', b't', b'y', b'p', b'i', b's', b'o', b'm'];
+        let data = [
+            0x00, 0x00, 0x00, 0x1C, b'f', b't', b'y', b'p', b'i', b's', b'o', b'm',
+        ];
         assert_eq!(detect_mime(&data), "video/mp4");
     }
 
@@ -175,7 +180,10 @@ mod tests {
 
     #[test]
     fn test_unknown() {
-        assert_eq!(detect_mime(&[0x00, 0x01, 0x02, 0x03]), "application/octet-stream");
+        assert_eq!(
+            detect_mime(&[0x00, 0x01, 0x02, 0x03]),
+            "application/octet-stream"
+        );
     }
 
     #[test]

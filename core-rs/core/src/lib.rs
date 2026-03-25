@@ -322,12 +322,44 @@ pub unsafe extern "C" fn deneb_vega_search(
 }
 
 // ---------------------------------------------------------------------------
-// ML FFI exports (Phase 0 scaffolding — full implementation in Phase 1)
+// ML FFI exports — delegates to deneb-ml when the `ml` feature is enabled.
+// Without it, returns a JSON error indicating the backend is unavailable.
 // ---------------------------------------------------------------------------
 
+/// JSON request for the embed FFI.
+#[derive(serde::Deserialize)]
+struct EmbedRequest {
+    texts: Vec<String>,
+}
+
+/// JSON request for the rerank FFI.
+#[derive(serde::Deserialize)]
+struct RerankRequest {
+    query: String,
+    documents: Vec<String>,
+}
+
+/// Write a JSON response to the output buffer. Returns bytes written or -3 if
+/// the buffer is too small.
+fn write_json_response(out_slice: &mut [u8], value: &impl serde::Serialize) -> i32 {
+    match serde_json::to_vec(value) {
+        Ok(bytes) => {
+            if bytes.len() > out_slice.len() {
+                return -3;
+            }
+            out_slice[..bytes.len()].copy_from_slice(&bytes);
+            bytes.len() as i32
+        }
+        Err(_) => -5,
+    }
+}
+
 /// C FFI: Generate text embeddings.
-/// Takes a JSON request (text array), writes JSON result (vectors) to output buffer.
+/// Takes a JSON request (`{"texts":["..."]}`), writes JSON result to output buffer.
 /// Returns bytes written on success, negative on error.
+///
+/// When the `ml` feature is enabled, uses deneb-ml for real inference.
+/// Otherwise returns `{"error":"ml backend unavailable"}`.
 ///
 /// # Safety
 /// `input_ptr` must point to valid UTF-8 of `input_len` bytes.
@@ -348,21 +380,49 @@ pub unsafe extern "C" fn deneb_ml_embed(
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(-99, move || {
-        let _input_str = match std::str::from_utf8(slice) {
+        let input_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
             Err(_) => return -2,
         };
-        let stub = br#"{"embeddings":[],"phase":0}"#;
-        if stub.len() > out_slice.len() {
-            return -3;
+
+        #[cfg(feature = "ml")]
+        {
+            let req: EmbedRequest = match serde_json::from_str(input_str) {
+                Ok(r) => r,
+                Err(_) => return -2,
+            };
+            let text_refs: Vec<&str> = req.texts.iter().map(|s| s.as_str()).collect();
+
+            // Build manager from env config (reuses VegaConfig TTL defaults).
+            let mgr = ml_manager_from_env();
+            let embedder = deneb_ml::LocalEmbedder::new(mgr);
+
+            match embedder.embed(&text_refs) {
+                Ok(result) => {
+                    let response = serde_json::json!({
+                        "embeddings": result.vectors,
+                        "dim": result.dim,
+                    });
+                    write_json_response(out_slice, &response)
+                }
+                Err(e) => {
+                    let response = serde_json::json!({"error": e.to_string()});
+                    write_json_response(out_slice, &response)
+                }
+            }
         }
-        out_slice[..stub.len()].copy_from_slice(stub);
-        stub.len() as i32
+
+        #[cfg(not(feature = "ml"))]
+        {
+            let _ = input_str;
+            let response = serde_json::json!({"error": "ml backend unavailable"});
+            write_json_response(out_slice, &response)
+        }
     })
 }
 
 /// C FFI: Rerank documents against a query.
-/// Takes a JSON request (query + documents), writes JSON ranked results.
+/// Takes a JSON request (`{"query":"...","documents":["..."]}`), writes JSON ranked results.
 /// Returns bytes written on success, negative on error.
 ///
 /// # Safety
@@ -384,17 +444,72 @@ pub unsafe extern "C" fn deneb_ml_rerank(
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(-99, move || {
-        let _input_str = match std::str::from_utf8(slice) {
+        let input_str = match std::str::from_utf8(slice) {
             Ok(s) => s,
             Err(_) => return -2,
         };
-        let stub = br#"{"ranked":[],"phase":0}"#;
-        if stub.len() > out_slice.len() {
-            return -3;
+
+        #[cfg(feature = "ml")]
+        {
+            let req: RerankRequest = match serde_json::from_str(input_str) {
+                Ok(r) => r,
+                Err(_) => return -2,
+            };
+            let doc_refs: Vec<&str> = req.documents.iter().map(|s| s.as_str()).collect();
+
+            let mgr = ml_manager_from_env();
+            let reranker = deneb_ml::LocalReranker::new(mgr);
+
+            match reranker.rerank(&req.query, &doc_refs) {
+                Ok(results) => {
+                    let ranked: Vec<serde_json::Value> = results
+                        .iter()
+                        .map(|r| serde_json::json!({"index": r.index, "score": r.score}))
+                        .collect();
+                    let response = serde_json::json!({"ranked": ranked});
+                    write_json_response(out_slice, &response)
+                }
+                Err(e) => {
+                    let response = serde_json::json!({"error": e.to_string()});
+                    write_json_response(out_slice, &response)
+                }
+            }
         }
-        out_slice[..stub.len()].copy_from_slice(stub);
-        stub.len() as i32
+
+        #[cfg(not(feature = "ml"))]
+        {
+            let _ = input_str;
+            let response = serde_json::json!({"error": "ml backend unavailable"});
+            write_json_response(out_slice, &response)
+        }
     })
+}
+
+/// Build an ML ModelManager from environment variables.
+/// Uses the same env vars as VegaConfig + model path env vars.
+#[cfg(feature = "ml")]
+fn ml_manager_from_env() -> deneb_ml::ModelManager {
+    use deneb_ml::{ModelConfig, ModelManager};
+    use std::path::PathBuf;
+
+    let ttl: u64 = std::env::var("VEGA_MODEL_TTL")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(300);
+
+    let mut configs = Vec::new();
+
+    if let Ok(path) = std::env::var("VEGA_MODEL_EMBEDDER") {
+        configs.push(ModelConfig::embedder(PathBuf::from(path), ttl));
+    }
+    if let Ok(path) = std::env::var("VEGA_MODEL_RERANKER") {
+        configs.push(ModelConfig::reranker(PathBuf::from(path), ttl));
+    }
+    if let Ok(path) = std::env::var("VEGA_MODEL_EXPANDER") {
+        configs.push(ModelConfig::expander(PathBuf::from(path), ttl));
+    }
+
+    ModelManager::new(configs)
 }
 
 // ---------------------------------------------------------------------------
@@ -445,8 +560,7 @@ pub unsafe extern "C" fn deneb_validate_params(
                     // Write errors as JSON to output buffer.
                     // Return bytes written (not error count) so callers can
                     // slice the buffer precisely without scanning for `]`.
-                    let json_bytes =
-                        serde_json::to_vec(&result.errors).unwrap_or_default();
+                    let json_bytes = serde_json::to_vec(&result.errors).unwrap_or_default();
                     if !errors_out.is_null() && !json_bytes.is_empty() {
                         let write_len = json_bytes.len().min(errors_out_len);
                         let out = std::slice::from_raw_parts_mut(errors_out, errors_out_len);
@@ -830,7 +944,9 @@ pub unsafe extern "C" fn deneb_extract_links(
             #[serde(default = "default_max_links")]
             max_links: usize,
         }
-        fn default_max_links() -> usize { 5 }
+        fn default_max_links() -> usize {
+            5
+        }
 
         let config: ConfigInput = match serde_json::from_str(config_str) {
             Ok(c) => c,
@@ -899,10 +1015,7 @@ pub unsafe extern "C" fn deneb_html_to_markdown(
 /// # Safety
 /// `input_ptr` must be valid UTF-8.
 #[no_mangle]
-pub unsafe extern "C" fn deneb_base64_estimate(
-    input_ptr: *const u8,
-    input_len: usize,
-) -> i64 {
+pub unsafe extern "C" fn deneb_base64_estimate(input_ptr: *const u8, input_len: usize) -> i64 {
     if input_ptr.is_null() {
         return -1;
     }
@@ -1049,7 +1162,10 @@ pub unsafe extern "C" fn deneb_markdown_to_ir(
             markdown::parser::ParseOptions::default()
         };
         let (ir, has_tables) = markdown::parser::markdown_to_ir_with_meta(md_str, &options);
-        let has_code_blocks = ir.styles.iter().any(|s| s.style == markdown::spans::MarkdownStyle::CodeBlock);
+        let has_code_blocks = ir
+            .styles
+            .iter()
+            .any(|s| s.style == markdown::spans::MarkdownStyle::CodeBlock);
         #[derive(serde::Serialize)]
         struct IrOutput<'a> {
             text: &'a str,
@@ -1395,9 +1511,8 @@ mod tests {
     fn test_vega_execute_stub() {
         let cmd = r#"{"command":"search","query":"test"}"#;
         let mut out = [0u8; 256];
-        let len = unsafe {
-            deneb_vega_execute(cmd.as_ptr(), cmd.len(), out.as_mut_ptr(), out.len())
-        };
+        let len =
+            unsafe { deneb_vega_execute(cmd.as_ptr(), cmd.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
         let result = std::str::from_utf8(&out[..len as usize]).unwrap();
         assert!(result.contains("vega_not_implemented"));
@@ -1407,9 +1522,8 @@ mod tests {
     fn test_vega_search_stub() {
         let query = r#"{"query":"test"}"#;
         let mut out = [0u8; 256];
-        let len = unsafe {
-            deneb_vega_search(query.as_ptr(), query.len(), out.as_mut_ptr(), out.len())
-        };
+        let len =
+            unsafe { deneb_vega_search(query.as_ptr(), query.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
         let result = std::str::from_utf8(&out[..len as usize]).unwrap();
         assert!(result.contains("results"));
@@ -1419,9 +1533,8 @@ mod tests {
     fn test_ml_embed_stub() {
         let input = r#"{"texts":["hello world"]}"#;
         let mut out = [0u8; 256];
-        let len = unsafe {
-            deneb_ml_embed(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len())
-        };
+        let len =
+            unsafe { deneb_ml_embed(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
         let result = std::str::from_utf8(&out[..len as usize]).unwrap();
         assert!(result.contains("embeddings"));
@@ -1431,9 +1544,8 @@ mod tests {
     fn test_ml_rerank_stub() {
         let input = r#"{"query":"test","documents":["doc1","doc2"]}"#;
         let mut out = [0u8; 256];
-        let len = unsafe {
-            deneb_ml_rerank(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len())
-        };
+        let len =
+            unsafe { deneb_ml_rerank(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
         let result = std::str::from_utf8(&out[..len as usize]).unwrap();
         assert!(result.contains("ranked"));
@@ -1446,9 +1558,12 @@ mod tests {
         let mut out = [0u8; 1024];
         let len = unsafe {
             deneb_extract_links(
-                text.as_ptr(), text.len(),
-                config.as_ptr(), config.len(),
-                out.as_mut_ptr(), out.len(),
+                text.as_ptr(),
+                text.len(),
+                config.as_ptr(),
+                config.len(),
+                out.as_mut_ptr(),
+                out.len(),
             )
         };
         assert!(len > 0);
@@ -1459,7 +1574,8 @@ mod tests {
 
     #[test]
     fn test_html_to_markdown_ffi() {
-        let html = "<html><head><title>Test</title></head><body><h1>Hello</h1><p>World</p></body></html>";
+        let html =
+            "<html><head><title>Test</title></head><body><h1>Hello</h1><p>World</p></body></html>";
         let mut out = [0u8; 4096];
         let len = unsafe {
             deneb_html_to_markdown(html.as_ptr(), html.len(), out.as_mut_ptr(), out.len())

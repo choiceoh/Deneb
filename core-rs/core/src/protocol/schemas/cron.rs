@@ -143,19 +143,20 @@ fn validate_cron_schedule(
         Some("every") => {
             check_no_additional_properties(obj, &["kind", "everyMs", "anchorMs"], path, errors);
             if check_required(obj, "everyMs", path, errors) {
-                check_integer(&obj["everyMs"], &format!("{path}/everyMs"), Some(1), None, errors);
+                check_integer(
+                    &obj["everyMs"],
+                    &format!("{path}/everyMs"),
+                    Some(1),
+                    None,
+                    errors,
+                );
             }
             check_optional(obj, "anchorMs", path, errors, |v, p, e| {
                 check_integer(v, p, Some(0), None, e);
             });
         }
         Some("cron") => {
-            check_no_additional_properties(
-                obj,
-                &["kind", "expr", "tz", "staggerMs"],
-                path,
-                errors,
-            );
+            check_no_additional_properties(obj, &["kind", "expr", "tz", "staggerMs"], path, errors);
             if check_required(obj, "expr", path, errors) {
                 check_non_empty_string(&obj["expr"], &format!("{path}/expr"), errors);
             }
@@ -208,11 +209,7 @@ fn validate_cron_session_target(
     }
 }
 
-fn validate_cron_payload(
-    value: &serde_json::Value,
-    path: &str,
-    errors: &mut Vec<ValidationError>,
-) {
+fn validate_cron_payload(value: &serde_json::Value, path: &str, errors: &mut Vec<ValidationError>) {
     if !require_object(value, path, errors) {
         return;
     }

@@ -101,9 +101,7 @@ pub fn validate_config_schema_lookup_params(
         check_non_empty_string(&obj["path"], &p_path, errors);
         check_max_length(&obj["path"], &p_path, 1024, errors);
         static PATH_RE: once_cell::sync::Lazy<regex::Regex> =
-            once_cell::sync::Lazy::new(|| {
-                regex::Regex::new(r"^[A-Za-z0-9_./\[\]\-*]+$").unwrap()
-            });
+            once_cell::sync::Lazy::new(|| regex::Regex::new(r"^[A-Za-z0-9_./\[\]\-*]+$").unwrap());
         check_pattern(&obj["path"], &p_path, &PATH_RE, errors);
     }
 }

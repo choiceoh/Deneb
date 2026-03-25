@@ -74,7 +74,10 @@ impl ErrorCode {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            Self::AgentTimeout | Self::Unavailable | Self::NodeDisconnected | Self::DependencyFailed
+            Self::AgentTimeout
+                | Self::Unavailable
+                | Self::NodeDisconnected
+                | Self::DependencyFailed
         )
     }
 }
@@ -139,7 +142,10 @@ mod tests {
     fn test_discriminants_unique() {
         let mut seen = std::collections::HashSet::new();
         for code in ALL_ERROR_CODES {
-            assert!(seen.insert(*code as i32), "duplicate discriminant for {code}");
+            assert!(
+                seen.insert(*code as i32),
+                "duplicate discriminant for {code}"
+            );
         }
     }
 

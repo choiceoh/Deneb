@@ -93,8 +93,14 @@ fn match_markdown_link(bytes: &[u8], start: usize) -> Option<usize> {
 }
 
 fn trim_ascii(bytes: &[u8]) -> &[u8] {
-    let start = bytes.iter().position(|&b| b != b' ' && b != b'\t').unwrap_or(bytes.len());
-    let end = bytes.iter().rposition(|&b| b != b' ' && b != b'\t').map_or(start, |e| e + 1);
+    let start = bytes
+        .iter()
+        .position(|&b| b != b' ' && b != b'\t')
+        .unwrap_or(bytes.len());
+    let end = bytes
+        .iter()
+        .rposition(|&b| b != b' ' && b != b'\t')
+        .map_or(start, |e| e + 1);
     &bytes[start..end]
 }
 
@@ -141,7 +147,11 @@ fn find_bare_urls(text: &str) -> Vec<&str> {
 /// Check if a raw URL string is allowed (valid URL, http/https scheme, passes SSRF check).
 fn is_allowed_url(raw: &str) -> bool {
     // Quick scheme check before attempting full parse.
-    if !raw.starts_with("http://") && !raw.starts_with("https://") && !raw.starts_with("HTTP://") && !raw.starts_with("HTTPS://") {
+    if !raw.starts_with("http://")
+        && !raw.starts_with("https://")
+        && !raw.starts_with("HTTP://")
+        && !raw.starts_with("HTTPS://")
+    {
         // Case-insensitive prefix check.
         let lower = raw.get(..8).map(|s| s.to_ascii_lowercase());
         if !matches!(lower.as_deref(), Some("https://") | Some("http://\x00")) {

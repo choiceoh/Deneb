@@ -25,7 +25,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let proto_dir = proto_dir.canonicalize()?;
 
-    let proto_names = ["gateway", "channel", "session", "plugin", "provider", "agent"];
+    let proto_names = [
+        "gateway", "channel", "session", "plugin", "provider", "agent",
+    ];
     let mut protos = Vec::with_capacity(proto_names.len());
 
     for name in &proto_names {
@@ -57,7 +59,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Note: ErrorShape intentionally excluded — it contains google.protobuf.Value
     // (prost_types::Value) which doesn't implement Serialize.
     config.type_attribute(".deneb.gateway.StateVersion", "#[derive(serde::Serialize)]");
-    config.type_attribute(".deneb.gateway.PresenceEntry", "#[derive(serde::Serialize)]");
+    config.type_attribute(
+        ".deneb.gateway.PresenceEntry",
+        "#[derive(serde::Serialize)]",
+    );
     config.type_attribute(".deneb.plugin", "#[derive(serde::Serialize)]");
     config.type_attribute(".deneb.provider", "#[derive(serde::Serialize)]");
     config.type_attribute(".deneb.agent", "#[derive(serde::Serialize)]");

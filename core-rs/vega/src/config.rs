@@ -81,11 +81,7 @@ impl VegaConfig {
             .map(|entries| {
                 entries
                     .filter_map(|e| e.ok())
-                    .any(|e| {
-                        e.path()
-                            .extension()
-                            .is_some_and(|ext| ext == "md")
-                    })
+                    .any(|e| e.path().extension().is_some_and(|ext| ext == "md"))
             })
             .unwrap_or(false)
     }
