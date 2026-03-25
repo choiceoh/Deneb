@@ -13,7 +13,7 @@ on:
       - "scripts/proto-gen.sh"
       - "scripts/error-code-sync-check.sh"
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - "proto/**"
       - "core-rs/core/build.rs"

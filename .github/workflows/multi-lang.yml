@@ -6,7 +6,7 @@ name: Multi-Language CI
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - "core-rs/**"
       - "core-rs-napi/**"
