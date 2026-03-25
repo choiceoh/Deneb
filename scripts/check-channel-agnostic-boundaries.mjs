@@ -2,13 +2,15 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import ts from "typescript";
 import {
   collectTypeScriptFiles,
   getPropertyNameText,
+  nodeText,
+  parseSource,
   resolveRepoRoot,
   runAsScript,
   toLine,
+  visitNode,
 } from "./lib/ts-guard-utils.mjs";
 
 const repoRoot = resolveRepoRoot(import.meta.url);
@@ -50,31 +52,30 @@ const channelIds = [
 
 const channelIdSet = new Set(channelIds);
 const channelSegmentRe = new RegExp(`(^|[._/-])(?:${channelIds.join("|")})([._/-]|$)`);
-const comparisonOperators = new Set([
-  ts.SyntaxKind.EqualsEqualsEqualsToken,
-  ts.SyntaxKind.ExclamationEqualsEqualsToken,
-  ts.SyntaxKind.EqualsEqualsToken,
-  ts.SyntaxKind.ExclamationEqualsToken,
-]);
+const comparisonOperators = new Set(["===", "!==", "==", "!="]);
 
 const allowedViolations = new Set([]);
 
 function isChannelsPropertyAccess(node) {
-  if (ts.isPropertyAccessExpression(node)) {
-    return node.name.text === "channels";
+  if (node.type === "MemberExpression" && !node.computed && node.property?.type === "Identifier") {
+    return node.property.name === "channels";
   }
-  if (ts.isElementAccessExpression(node) && ts.isStringLiteral(node.argumentExpression)) {
-    return node.argumentExpression.text === "channels";
+  if (node.type === "MemberExpression" && node.computed && node.property?.type === "Literal") {
+    return node.property.value === "channels";
   }
   return false;
 }
 
 function readStringLiteral(node) {
-  if (ts.isStringLiteral(node)) {
-    return node.text;
+  if (node.type === "Literal" && typeof node.value === "string") {
+    return node.value;
   }
-  if (ts.isNoSubstitutionTemplateLiteral(node)) {
-    return node.text;
+  if (
+    node.type === "TemplateLiteral" &&
+    node.quasis?.length === 1 &&
+    node.expressions?.length === 0
+  ) {
+    return node.quasis[0].value?.cooked ?? null;
   }
   return null;
 }
@@ -92,16 +93,41 @@ const userFacingChannelNameRe =
   /\b(?:discord|telegram|slack|signal|imessage|whatsapp|google\s*chat|irc|line|matrix)\b/i;
 const systemMarkLiteral = "⚙️";
 
-function isModuleSpecifierStringNode(node) {
-  const parent = node.parent;
-  if (ts.isImportDeclaration(parent) || ts.isExportDeclaration(parent)) {
-    return true;
+function isModuleSpecifierNode(node, parentMap) {
+  const parent = parentMap.get(node);
+  if (!parent) {
+    return false;
   }
-  return (
-    ts.isCallExpression(parent) &&
-    parent.expression.kind === ts.SyntaxKind.ImportKeyword &&
-    parent.arguments[0] === node
-  );
+  if (
+    parent.type === "ImportDeclaration" ||
+    parent.type === "ExportNamedDeclaration" ||
+    parent.type === "ExportAllDeclaration"
+  ) {
+    return parent.source === node;
+  }
+  return parent.type === "ImportExpression" && parent.source === node;
+}
+
+function buildParentMap(program) {
+  const map = new Map();
+  visitNode(program, (node) => {
+    for (const key of Object.keys(node)) {
+      if (key === "type" || key === "start" || key === "end") {
+        continue;
+      }
+      const value = node[key];
+      if (Array.isArray(value)) {
+        for (const child of value) {
+          if (child && typeof child === "object" && child.type) {
+            map.set(child, node);
+          }
+        }
+      } else if (value && typeof value === "object" && value.type) {
+        map.set(value, node);
+      }
+    }
+  });
+  return map;
 }
 
 export function findChannelAgnosticBoundaryViolations(
@@ -115,111 +141,109 @@ export function findChannelAgnosticBoundaryViolations(
   const checkChannelAssignments = options.checkChannelAssignments ?? true;
   const moduleSpecifierMatcher = options.moduleSpecifierMatcher ?? matchesChannelModuleSpecifier;
 
-  const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true);
+  const { program, sourceText } = parseSource(fileName, content);
   const violations = [];
 
-  const visit = (node) => {
-    if (
-      checkModuleSpecifiers &&
-      ts.isImportDeclaration(node) &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      const specifier = node.moduleSpecifier.text;
+  visitNode(program, (node) => {
+    // Import declarations
+    if (checkModuleSpecifiers && node.type === "ImportDeclaration" && node.source) {
+      const specifier = node.source.value;
       if (moduleSpecifierMatcher(specifier)) {
         violations.push({
-          line: toLine(sourceFile, node.moduleSpecifier),
+          line: toLine(sourceText, node.source),
           reason: `imports channel module "${specifier}"`,
         });
       }
     }
 
-    if (
-      checkModuleSpecifiers &&
-      ts.isExportDeclaration(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      const specifier = node.moduleSpecifier.text;
+    // Export declarations with source
+    if (checkModuleSpecifiers && node.type === "ExportNamedDeclaration" && node.source) {
+      const specifier = node.source.value;
       if (moduleSpecifierMatcher(specifier)) {
         violations.push({
-          line: toLine(sourceFile, node.moduleSpecifier),
+          line: toLine(sourceText, node.source),
           reason: `re-exports channel module "${specifier}"`,
         });
       }
     }
 
+    // Dynamic imports
     if (
       checkModuleSpecifiers &&
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length > 0 &&
-      ts.isStringLiteral(node.arguments[0])
+      node.type === "ImportExpression" &&
+      node.source?.type === "Literal" &&
+      typeof node.source.value === "string"
     ) {
-      const specifier = node.arguments[0].text;
+      const specifier = node.source.value;
       if (moduleSpecifierMatcher(specifier)) {
         violations.push({
-          line: toLine(sourceFile, node.arguments[0]),
+          line: toLine(sourceText, node.source),
           reason: `dynamically imports channel module "${specifier}"`,
         });
       }
     }
 
+    // Config path: channels.<channelId>
     if (
       checkConfigPaths &&
-      ts.isPropertyAccessExpression(node) &&
-      channelIdSet.has(node.name.text)
+      node.type === "MemberExpression" &&
+      !node.computed &&
+      node.property?.type === "Identifier" &&
+      channelIdSet.has(node.property.name)
     ) {
-      if (isChannelsPropertyAccess(node.expression)) {
+      if (isChannelsPropertyAccess(node.object)) {
         violations.push({
-          line: toLine(sourceFile, node.name),
-          reason: `references config path "channels.${node.name.text}"`,
+          line: toLine(sourceText, node.property),
+          reason: `references config path "channels.${node.property.name}"`,
         });
       }
     }
 
+    // Config path: channels["<channelId>"]
     if (
       checkConfigPaths &&
-      ts.isElementAccessExpression(node) &&
-      ts.isStringLiteral(node.argumentExpression) &&
-      channelIdSet.has(node.argumentExpression.text)
+      node.type === "MemberExpression" &&
+      node.computed &&
+      node.property?.type === "Literal" &&
+      typeof node.property.value === "string" &&
+      channelIdSet.has(node.property.value)
     ) {
-      if (isChannelsPropertyAccess(node.expression)) {
+      if (isChannelsPropertyAccess(node.object)) {
         violations.push({
-          line: toLine(sourceFile, node.argumentExpression),
-          reason: `references config path "channels[${JSON.stringify(node.argumentExpression.text)}]"`,
+          line: toLine(sourceText, node.property),
+          reason: `references config path "channels[${JSON.stringify(node.property.value)}]"`,
         });
       }
     }
 
+    // Channel comparison
     if (
       checkChannelComparisons &&
-      ts.isBinaryExpression(node) &&
-      comparisonOperators.has(node.operatorToken.kind)
+      node.type === "BinaryExpression" &&
+      comparisonOperators.has(node.operator)
     ) {
       if (isChannelLiteralNode(node.left) || isChannelLiteralNode(node.right)) {
-        const leftText = node.left.getText(sourceFile);
-        const rightText = node.right.getText(sourceFile);
+        const leftText = nodeText(sourceText, node.left);
+        const rightText = nodeText(sourceText, node.right);
         violations.push({
-          line: toLine(sourceFile, node.operatorToken),
-          reason: `compares with channel id literal (${leftText} ${node.operatorToken.getText(sourceFile)} ${rightText})`,
+          line: toLine(sourceText, node),
+          reason: `compares with channel id literal (${leftText} ${node.operator} ${rightText})`,
         });
       }
     }
 
-    if (checkChannelAssignments && ts.isPropertyAssignment(node)) {
-      const propName = getPropertyNameText(node.name);
-      if (propName === "channel" && isChannelLiteralNode(node.initializer)) {
+    // Channel assignment
+    if (checkChannelAssignments && node.type === "Property") {
+      const propName = getPropertyNameText(node.key);
+      if (propName === "channel" && isChannelLiteralNode(node.value)) {
         violations.push({
-          line: toLine(sourceFile, node.initializer),
-          reason: `assigns channel id literal to "channel" (${node.initializer.getText(sourceFile)})`,
+          line: toLine(sourceText, node.value),
+          reason: `assigns channel id literal to "channel" (${nodeText(sourceText, node.value)})`,
         });
       }
     }
+  });
 
-    ts.forEachChild(node, visit);
-  };
-
-  visit(sourceFile);
   return violations;
 }
 
@@ -234,40 +258,38 @@ export function findChannelCoreReverseDependencyViolations(content, fileName = "
 }
 
 export function findAcpUserFacingChannelNameViolations(content, fileName = "source.ts") {
-  const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true);
+  const { program, sourceText } = parseSource(fileName, content);
+  const parentMap = buildParentMap(program);
   const violations = [];
 
-  const visit = (node) => {
+  visitNode(program, (node) => {
     const text = readStringLiteral(node);
-    if (text && userFacingChannelNameRe.test(text) && !isModuleSpecifierStringNode(node)) {
+    if (text && userFacingChannelNameRe.test(text) && !isModuleSpecifierNode(node, parentMap)) {
       violations.push({
-        line: toLine(sourceFile, node),
+        line: toLine(sourceText, node),
         reason: `user-facing text references channel name (${JSON.stringify(text)})`,
       });
     }
-    ts.forEachChild(node, visit);
-  };
+  });
 
-  visit(sourceFile);
   return violations;
 }
 
 export function findSystemMarkLiteralViolations(content, fileName = "source.ts") {
-  const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true);
+  const { program, sourceText } = parseSource(fileName, content);
+  const parentMap = buildParentMap(program);
   const violations = [];
 
-  const visit = (node) => {
+  visitNode(program, (node) => {
     const text = readStringLiteral(node);
-    if (text && text.includes(systemMarkLiteral) && !isModuleSpecifierStringNode(node)) {
+    if (text && text.includes(systemMarkLiteral) && !isModuleSpecifierNode(node, parentMap)) {
       violations.push({
-        line: toLine(sourceFile, node),
+        line: toLine(sourceText, node),
         reason: `hardcoded system mark literal (${JSON.stringify(text)})`,
       });
     }
-    ts.forEachChild(node, visit);
-  };
+  });
 
-  visit(sourceFile);
   return violations;
 }
 

@@ -1,26 +1,33 @@
 #!/usr/bin/env node
 
-import ts from "typescript";
 import { runCallsiteGuard } from "./lib/callsite-guard.mjs";
-import { runAsScript, toLine, unwrapExpression } from "./lib/ts-guard-utils.mjs";
+import {
+  parseSource,
+  runAsScript,
+  toLine,
+  unwrapExpression,
+  visitNode,
+} from "./lib/ts-guard-utils.mjs";
 
 const sourceRoots = ["src", "extensions"];
 
 function isDeprecatedRegisterHttpHandlerCall(expression) {
   const callee = unwrapExpression(expression);
-  return ts.isPropertyAccessExpression(callee) && callee.name.text === "registerHttpHandler";
+  return (
+    callee?.type === "MemberExpression" &&
+    callee.property?.type === "Identifier" &&
+    callee.property.name === "registerHttpHandler"
+  );
 }
 
 export function findDeprecatedRegisterHttpHandlerLines(content, fileName = "source.ts") {
-  const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true);
+  const { program, sourceText } = parseSource(fileName, content);
   const lines = [];
-  const visit = (node) => {
-    if (ts.isCallExpression(node) && isDeprecatedRegisterHttpHandlerCall(node.expression)) {
-      lines.push(toLine(sourceFile, node.expression));
+  visitNode(program, (node) => {
+    if (node.type === "CallExpression" && isDeprecatedRegisterHttpHandlerCall(node.callee)) {
+      lines.push(toLine(sourceText, node.callee));
     }
-    ts.forEachChild(node, visit);
-  };
-  visit(sourceFile);
+  });
   return lines;
 }
 

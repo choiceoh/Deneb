@@ -3,11 +3,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import { parseSync } from "oxc-parser";
 import {
   collectTypeScriptFilesFromRoots,
+  offsetToLine,
   resolveSourceRoots,
-  toLine,
+  visitNode,
 } from "./lib/ts-guard-utils.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -61,13 +62,7 @@ async function collectViolations() {
 
   for (const filePath of files) {
     const sourceText = readFileSync(filePath, "utf8");
-    const sourceFile = ts.createSourceFile(
-      filePath,
-      sourceText,
-      ts.ScriptTarget.Latest,
-      true,
-      filePath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-    );
+    const result = parseSync(filePath, sourceText);
 
     function push(kind, specifierNode, specifier) {
       const subpath = parsePluginSdkSubpath(specifier);
@@ -88,7 +83,7 @@ async function collectViolations() {
 
       violations.push({
         file: normalizePath(filePath),
-        line: toLine(sourceFile, specifierNode),
+        line: offsetToLine(sourceText, specifierNode.start),
         kind,
         specifier,
         subpath,
@@ -96,27 +91,21 @@ async function collectViolations() {
       });
     }
 
-    function visit(node) {
-      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-        push("import", node.moduleSpecifier, node.moduleSpecifier.text);
+    visitNode(result.program, (node) => {
+      if (node.type === "ImportDeclaration" && node.source) {
+        push("import", node.source, node.source.value);
+      } else if (node.type === "ExportNamedDeclaration" && node.source) {
+        push("export", node.source, node.source.value);
+      } else if (node.type === "ExportAllDeclaration" && node.source) {
+        push("export", node.source, node.source.value);
       } else if (
-        ts.isExportDeclaration(node) &&
-        node.moduleSpecifier &&
-        ts.isStringLiteral(node.moduleSpecifier)
+        node.type === "ImportExpression" &&
+        node.source?.type === "Literal" &&
+        typeof node.source.value === "string"
       ) {
-        push("export", node.moduleSpecifier, node.moduleSpecifier.text);
-      } else if (
-        ts.isCallExpression(node) &&
-        node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-        node.arguments.length === 1 &&
-        ts.isStringLiteral(node.arguments[0])
-      ) {
-        push("dynamic-import", node.arguments[0], node.arguments[0].text);
+        push("dynamic-import", node.source, node.source.value);
       }
-      ts.forEachChild(node, visit);
-    }
-
-    visit(sourceFile);
+    });
   }
 
   return violations.toSorted(compareEntries);

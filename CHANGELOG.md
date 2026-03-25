@@ -2,10 +2,9 @@
 
 ## [3.10.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.9.0...deneb-v3.10.0) (2026-03-25)
 
-
 ### Features
 
-* port 11 OpenClaw 3.22/3.23 features (security, performance, Telegram) ([#294](https://github.com/choiceoh/Deneb/issues/294)) ([9ab2fe6](https://github.com/choiceoh/Deneb/commit/9ab2fe6976238aab43bccd0035786a2de4fbfa15))
+- port 11 OpenClaw 3.22/3.23 features (security, performance, Telegram) ([#294](https://github.com/choiceoh/Deneb/issues/294)) ([9ab2fe6](https://github.com/choiceoh/Deneb/commit/9ab2fe6976238aab43bccd0035786a2de4fbfa15))
 
 ## [3.9.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.8.0...deneb-v3.9.0) (2026-03-25)
 

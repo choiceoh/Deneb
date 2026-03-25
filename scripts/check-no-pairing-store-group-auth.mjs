@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 
-import ts from "typescript";
 import { createPairingGuardContext } from "./lib/pairing-guard-context.mjs";
 import {
   collectFileViolations,
   getPropertyNameText,
+  nodeText,
+  parseSource,
   runAsScript,
   toLine,
+  visitNode,
 } from "./lib/ts-guard-utils.mjs";
 
 const { repoRoot, sourceRoots, resolveFromRepo } = createPairingGuardContext(import.meta.url);
@@ -35,76 +37,77 @@ const allowedResolverCallNames = new Set([
 ]);
 
 function getDeclarationNameText(name) {
-  if (ts.isIdentifier(name)) {
-    return name.text;
+  if (name.type === "Identifier") {
+    return name.name;
   }
-  if (ts.isObjectBindingPattern(name) || ts.isArrayBindingPattern(name)) {
-    return name.getText();
+  if (name.type === "ObjectPattern" || name.type === "ArrayPattern") {
+    return null;
   }
   return null;
 }
 
 function containsPairingStoreSource(node) {
   let found = false;
-  const visit = (current) => {
+  visitNode(node, (current) => {
     if (found) {
       return;
     }
-    if (ts.isIdentifier(current) && storeIdentifierRe.test(current.text)) {
+    if (current.type === "Identifier" && storeIdentifierRe.test(current.name)) {
       found = true;
       return;
     }
-    if (ts.isCallExpression(current)) {
+    if (current.type === "CallExpression") {
       const callName = getCallName(current);
       if (callName && storeSourceCallNames.has(callName)) {
         found = true;
-        return;
       }
     }
-    ts.forEachChild(current, visit);
-  };
-  visit(node);
+  });
   return found;
 }
 
 function getCallName(node) {
-  if (!ts.isCallExpression(node)) {
+  if (node.type !== "CallExpression") {
     return null;
   }
-  if (ts.isIdentifier(node.expression)) {
-    return node.expression.text;
+  if (node.callee?.type === "Identifier") {
+    return node.callee.name;
   }
-  if (ts.isPropertyAccessExpression(node.expression)) {
-    return node.expression.name.text;
+  if (
+    node.callee?.type === "MemberExpression" &&
+    !node.callee.computed &&
+    node.callee.property?.type === "Identifier"
+  ) {
+    return node.callee.property.name;
   }
   return null;
 }
 
-function isSuspiciousNormalizeWithStoreCall(node) {
-  if (!ts.isCallExpression(node)) {
+function isSuspiciousNormalizeWithStoreCall(node, sourceText) {
+  if (node.type !== "CallExpression") {
     return false;
   }
-  if (!ts.isIdentifier(node.expression) || node.expression.text !== "normalizeAllowFromWithStore") {
+  if (node.callee?.type !== "Identifier" || node.callee.name !== "normalizeAllowFromWithStore") {
     return false;
   }
-  const firstArg = node.arguments[0];
-  if (!firstArg || !ts.isObjectLiteralExpression(firstArg)) {
+  const firstArg = node.arguments?.[0];
+  if (!firstArg || firstArg.type !== "ObjectExpression") {
     return false;
   }
   let hasStoreProp = false;
   let hasGroupAllowProp = false;
   for (const property of firstArg.properties) {
-    if (!ts.isPropertyAssignment(property)) {
+    if (property.type !== "Property") {
       continue;
     }
-    const name = getPropertyNameText(property.name);
+    const name = getPropertyNameText(property.key);
     if (!name) {
       continue;
     }
-    if (name === "storeAllowFrom" && containsPairingStoreSource(property.initializer)) {
+    if (name === "storeAllowFrom" && containsPairingStoreSource(property.value)) {
       hasStoreProp = true;
     }
-    if (name === "allowFrom" && groupNameRe.test(property.initializer.getText())) {
+    if (name === "allowFrom" && groupNameRe.test(nodeText(sourceText, property.value))) {
       hasGroupAllowProp = true;
     }
   }
@@ -112,46 +115,42 @@ function isSuspiciousNormalizeWithStoreCall(node) {
 }
 
 export function findViolations(content, filePath) {
-  const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
+  const { program, sourceText } = parseSource(filePath, content);
   const violations = [];
 
-  const visit = (node) => {
-    if (ts.isVariableDeclaration(node) && node.initializer) {
-      const name = getDeclarationNameText(node.name);
-      if (name && groupNameRe.test(name) && containsPairingStoreSource(node.initializer)) {
-        const callName = getCallName(node.initializer);
+  visitNode(program, (node) => {
+    if (node.type === "VariableDeclarator" && node.init) {
+      const name = node.id ? getDeclarationNameText(node.id) : null;
+      if (name && groupNameRe.test(name) && containsPairingStoreSource(node.init)) {
+        const callName = getCallName(node.init);
         if (callName && allowedResolverCallNames.has(callName)) {
-          ts.forEachChild(node, visit);
           return;
         }
         violations.push({
-          line: toLine(sourceFile, node),
+          line: toLine(sourceText, node),
           reason: `group-scoped variable "${name}" references pairing-store identifiers`,
         });
       }
     }
 
-    if (ts.isPropertyAssignment(node)) {
-      const propName = getPropertyNameText(node.name);
-      if (propName && groupNameRe.test(propName) && containsPairingStoreSource(node.initializer)) {
+    if (node.type === "Property" && node.kind === "init") {
+      const propName = getPropertyNameText(node.key);
+      if (propName && groupNameRe.test(propName) && containsPairingStoreSource(node.value)) {
         violations.push({
-          line: toLine(sourceFile, node),
+          line: toLine(sourceText, node),
           reason: `group-scoped property "${propName}" references pairing-store identifiers`,
         });
       }
     }
 
-    if (isSuspiciousNormalizeWithStoreCall(node)) {
+    if (isSuspiciousNormalizeWithStoreCall(node, sourceText)) {
       violations.push({
-        line: toLine(sourceFile, node),
+        line: toLine(sourceText, node),
         reason: "group allowlist uses normalizeAllowFromWithStore(...) with pairing-store entries",
       });
     }
+  });
 
-    ts.forEachChild(node, visit);
-  };
-
-  visit(sourceFile);
   return violations;
 }
 

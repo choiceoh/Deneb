@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 
-import ts from "typescript";
 import { runCallsiteGuard } from "./lib/callsite-guard.mjs";
-import { runAsScript, toLine, unwrapExpression } from "./lib/ts-guard-utils.mjs";
+import {
+  parseSource,
+  runAsScript,
+  toLine,
+  unwrapExpression,
+  visitNode,
+} from "./lib/ts-guard-utils.mjs";
 
 const sourceRoots = ["src/channels", "src/routing", "src/line", "extensions"];
 
@@ -12,29 +17,31 @@ const allowedRawFetchCallsites = new Set(["extensions/telegram/src/api-fetch.ts:
 
 function isRawFetchCall(expression) {
   const callee = unwrapExpression(expression);
-  if (ts.isIdentifier(callee)) {
-    return callee.text === "fetch";
+  if (!callee) {
+    return false;
   }
-  if (ts.isPropertyAccessExpression(callee)) {
+  if (callee.type === "Identifier") {
+    return callee.name === "fetch";
+  }
+  if (callee.type === "MemberExpression" && !callee.computed) {
     return (
-      ts.isIdentifier(callee.expression) &&
-      callee.expression.text === "globalThis" &&
-      callee.name.text === "fetch"
+      callee.object?.type === "Identifier" &&
+      callee.object.name === "globalThis" &&
+      callee.property?.type === "Identifier" &&
+      callee.property.name === "fetch"
     );
   }
   return false;
 }
 
 export function findRawFetchCallLines(content, fileName = "source.ts") {
-  const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true);
+  const { program, sourceText } = parseSource(fileName, content);
   const lines = [];
-  const visit = (node) => {
-    if (ts.isCallExpression(node) && isRawFetchCall(node.expression)) {
-      lines.push(toLine(sourceFile, node.expression));
+  visitNode(program, (node) => {
+    if (node.type === "CallExpression" && isRawFetchCall(node.callee)) {
+      lines.push(toLine(sourceText, node.callee));
     }
-    ts.forEachChild(node, visit);
-  };
-  visit(sourceFile);
+  });
   return lines;
 }
 

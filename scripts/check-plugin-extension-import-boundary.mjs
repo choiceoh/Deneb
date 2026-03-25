@@ -3,12 +3,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import { parseSync } from "oxc-parser";
 import {
   collectTypeScriptFilesFromRoots,
+  offsetToLine,
   resolveSourceRoots,
   runAsScript,
-  toLine,
+  visitNode,
 } from "./lib/ts-guard-utils.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -81,34 +82,30 @@ function pushEntry(entries, entry) {
   entries.push(entry);
 }
 
-function scanImportBoundaryViolations(sourceFile, filePath) {
+function scanImportBoundaryViolations(program, sourceText, filePath) {
   const entries = [];
 
-  function visit(node) {
-    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-      const specifier = node.moduleSpecifier.text;
+  visitNode(program, (node) => {
+    if (node.type === "ImportDeclaration" && node.source) {
+      const specifier = node.source.value;
       const resolvedPath = resolveSpecifier(specifier, filePath);
       if (resolvedPath?.startsWith("extensions/")) {
         pushEntry(entries, {
           file: normalizePath(filePath),
-          line: toLine(sourceFile, node.moduleSpecifier),
+          line: offsetToLine(sourceText, node.source.start),
           kind: "import",
           specifier,
           resolvedPath,
           reason: classifyResolvedExtensionReason("import", resolvedPath),
         });
       }
-    } else if (
-      ts.isExportDeclaration(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      const specifier = node.moduleSpecifier.text;
+    } else if (node.type === "ExportNamedDeclaration" && node.source) {
+      const specifier = node.source.value;
       const resolvedPath = resolveSpecifier(specifier, filePath);
       if (resolvedPath?.startsWith("extensions/")) {
         pushEntry(entries, {
           file: normalizePath(filePath),
-          line: toLine(sourceFile, node.moduleSpecifier),
+          line: offsetToLine(sourceText, node.source.start),
           kind: "export",
           specifier,
           resolvedPath,
@@ -116,17 +113,16 @@ function scanImportBoundaryViolations(sourceFile, filePath) {
         });
       }
     } else if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length === 1 &&
-      ts.isStringLiteral(node.arguments[0])
+      node.type === "ImportExpression" &&
+      node.source?.type === "Literal" &&
+      typeof node.source.value === "string"
     ) {
-      const specifier = node.arguments[0].text;
+      const specifier = node.source.value;
       const resolvedPath = resolveSpecifier(specifier, filePath);
       if (resolvedPath?.startsWith("extensions/")) {
         pushEntry(entries, {
           file: normalizePath(filePath),
-          line: toLine(sourceFile, node.arguments[0]),
+          line: offsetToLine(sourceText, node.source.start),
           kind: "dynamic-import",
           specifier,
           resolvedPath,
@@ -134,22 +130,19 @@ function scanImportBoundaryViolations(sourceFile, filePath) {
         });
       }
     }
+  });
 
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
   return entries;
 }
 
-function scanWebSearchRegistrySmells(sourceFile, filePath) {
+function scanWebSearchRegistrySmells(sourceText, filePath) {
   const relativeFile = normalizePath(filePath);
   if (relativeFile !== "src/plugins/web-search-providers.ts") {
     return [];
   }
 
   const entries = [];
-  const lines = sourceFile.text.split(/\r?\n/);
+  const lines = sourceText.split(/\r?\n/);
   for (const [index, line] of lines.entries()) {
     const lineNumber = index + 1;
 
@@ -205,15 +198,9 @@ export async function collectPluginExtensionImportBoundaryInventory() {
   const inventory = [];
   for (const filePath of files) {
     const source = await fs.readFile(filePath, "utf8");
-    const sourceFile = ts.createSourceFile(
-      filePath,
-      source,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS,
-    );
-    inventory.push(...scanImportBoundaryViolations(sourceFile, filePath));
-    inventory.push(...scanWebSearchRegistrySmells(sourceFile, filePath));
+    const result = parseSync(filePath, source);
+    inventory.push(...scanImportBoundaryViolations(result.program, source, filePath));
+    inventory.push(...scanWebSearchRegistrySmells(source, filePath));
   }
 
   return inventory.toSorted(compareEntries);

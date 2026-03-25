@@ -3,12 +3,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import { parseSync } from "oxc-parser";
 import {
   collectTypeScriptFilesFromRoots,
+  offsetToLine,
   resolveSourceRoots,
   runAsScript,
-  toLine,
+  visitNode,
 } from "./lib/ts-guard-utils.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -43,7 +44,7 @@ function pushEntry(entries, entry) {
   entries.push(entry);
 }
 
-function scanPluginSdkExtensionFacadeSmells(sourceFile, filePath) {
+function scanPluginSdkExtensionFacadeSmells(program, sourceText, filePath) {
   const relativeFile = normalizePath(filePath);
   if (!relativeFile.startsWith("src/plugin-sdk/")) {
     return [];
@@ -51,19 +52,18 @@ function scanPluginSdkExtensionFacadeSmells(sourceFile, filePath) {
 
   const entries = [];
 
-  function visit(node) {
+  visitNode(program, (node) => {
     if (
-      ts.isExportDeclaration(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier)
+      (node.type === "ExportNamedDeclaration" || node.type === "ExportAllDeclaration") &&
+      node.source
     ) {
-      const specifier = node.moduleSpecifier.text;
+      const specifier = node.source.value;
       const resolvedPath = resolveSpecifier(specifier, filePath);
       if (resolvedPath?.startsWith("extensions/")) {
         pushEntry(entries, {
           category: "plugin-sdk-extension-facade",
           file: relativeFile,
-          line: toLine(sourceFile, node.moduleSpecifier),
+          line: offsetToLine(sourceText, node.source.start),
           kind: "export",
           specifier,
           resolvedPath,
@@ -71,15 +71,12 @@ function scanPluginSdkExtensionFacadeSmells(sourceFile, filePath) {
         });
       }
     }
+  });
 
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
   return entries;
 }
 
-function scanRuntimeTypeImplementationSmells(sourceFile, filePath) {
+function scanRuntimeTypeImplementationSmells(program, sourceText, filePath) {
   const relativeFile = normalizePath(filePath);
   if (!/^src\/plugins\/runtime\/types(?:-[^/]+)?\.ts$/.test(relativeFile)) {
     return [];
@@ -87,39 +84,36 @@ function scanRuntimeTypeImplementationSmells(sourceFile, filePath) {
 
   const entries = [];
 
-  function visit(node) {
-    if (
-      ts.isImportTypeNode(node) &&
-      ts.isLiteralTypeNode(node.argument) &&
-      ts.isStringLiteral(node.argument.literal)
-    ) {
-      const specifier = node.argument.literal.text;
-      const resolvedPath = resolveSpecifier(specifier, filePath);
-      if (
-        resolvedPath &&
-        (/^src\/plugins\/runtime\/runtime-[^/]+\.ts$/.test(resolvedPath) ||
-          /^extensions\/[^/]+\/runtime-api\.[^/]+$/.test(resolvedPath))
-      ) {
-        pushEntry(entries, {
-          category: "runtime-type-implementation-edge",
-          file: relativeFile,
-          line: toLine(sourceFile, node.argument.literal),
-          kind: "import-type",
-          specifier,
-          resolvedPath,
-          reason: "runtime type file references implementation shim directly",
-        });
+  // oxc parses `import("./path")` type nodes as TSImportType
+  visitNode(program, (node) => {
+    if (node.type === "TSImportType" && node.argument?.type === "TSLiteralType") {
+      const literal = node.argument.literal;
+      if (literal?.type === "Literal" && typeof literal.value === "string") {
+        const specifier = literal.value;
+        const resolvedPath = resolveSpecifier(specifier, filePath);
+        if (
+          resolvedPath &&
+          (/^src\/plugins\/runtime\/runtime-[^/]+\.ts$/.test(resolvedPath) ||
+            /^extensions\/[^/]+\/runtime-api\.[^/]+$/.test(resolvedPath))
+        ) {
+          pushEntry(entries, {
+            category: "runtime-type-implementation-edge",
+            file: relativeFile,
+            line: offsetToLine(sourceText, literal.start),
+            kind: "import-type",
+            specifier,
+            resolvedPath,
+            reason: "runtime type file references implementation shim directly",
+          });
+        }
       }
     }
+  });
 
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
   return entries;
 }
 
-function scanRuntimeServiceLocatorSmells(sourceFile, filePath) {
+function scanRuntimeServiceLocatorSmells(program, sourceText, filePath) {
   const relativeFile = normalizePath(filePath);
   if (
     !relativeFile.startsWith("src/plugin-sdk/") &&
@@ -133,46 +127,46 @@ function scanRuntimeServiceLocatorSmells(sourceFile, filePath) {
   const runtimeStoreCalls = [];
   const mutableStateNodes = [];
 
-  for (const statement of sourceFile.statements) {
-    if (ts.isFunctionDeclaration(statement) && statement.name) {
-      const isExported = statement.modifiers?.some(
-        (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
-      );
-      if (isExported) {
-        exportedNames.add(statement.name.text);
-      }
-    } else if (ts.isVariableStatement(statement)) {
-      const isExported = statement.modifiers?.some(
-        (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
-      );
-      for (const declaration of statement.declarationList.declarations) {
-        if (ts.isIdentifier(declaration.name) && isExported) {
-          exportedNames.add(declaration.name.text);
+  for (const statement of program.body) {
+    if (statement.type === "FunctionDeclaration" && statement.id) {
+      // Check if it's an export (ExportNamedDeclaration wraps it, or check top-level)
+      // In oxc ESTree, exported functions are wrapped in ExportNamedDeclaration
+    }
+
+    if (statement.type === "ExportNamedDeclaration" && statement.declaration) {
+      const decl = statement.declaration;
+      if (decl.type === "FunctionDeclaration" && decl.id) {
+        exportedNames.add(decl.id.name);
+      } else if (decl.type === "VariableDeclaration") {
+        for (const declarator of decl.declarations) {
+          if (declarator.id?.type === "Identifier") {
+            exportedNames.add(declarator.id.name);
+          }
         }
-        if (
-          !isExported &&
-          (statement.declarationList.flags & ts.NodeFlags.Let) !== 0 &&
-          ts.isIdentifier(declaration.name)
-        ) {
-          mutableStateNodes.push(declaration.name);
+        // Check for mutable (let) — exported let is mutable but exported
+        // The original only flagged non-exported let
+      }
+    }
+
+    // Non-exported variable statements
+    if (statement.type === "VariableDeclaration" && statement.kind === "let") {
+      for (const declarator of statement.declarations) {
+        if (declarator.id?.type === "Identifier") {
+          mutableStateNodes.push(declarator.id);
         }
       }
     }
   }
 
-  function visit(node) {
+  visitNode(program, (node) => {
     if (
-      ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === "createPluginRuntimeStore"
+      node.type === "CallExpression" &&
+      node.callee?.type === "Identifier" &&
+      node.callee.name === "createPluginRuntimeStore"
     ) {
-      runtimeStoreCalls.push(node.expression);
+      runtimeStoreCalls.push(node.callee);
     }
-
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
+  });
 
   const getterNames = [...exportedNames].filter((name) => /^get[A-Z]/.test(name));
   const setterNames = [...exportedNames].filter((name) => /^set[A-Z]/.test(name));
@@ -182,7 +176,7 @@ function scanRuntimeServiceLocatorSmells(sourceFile, filePath) {
       pushEntry(entries, {
         category: "runtime-service-locator",
         file: relativeFile,
-        line: toLine(sourceFile, callNode),
+        line: offsetToLine(sourceText, callNode.start),
         kind: "runtime-store",
         specifier: "createPluginRuntimeStore",
         resolvedPath: relativeFile,
@@ -196,9 +190,9 @@ function scanRuntimeServiceLocatorSmells(sourceFile, filePath) {
       pushEntry(entries, {
         category: "runtime-service-locator",
         file: relativeFile,
-        line: toLine(sourceFile, identifier),
+        line: offsetToLine(sourceText, identifier.start),
         kind: "mutable-state",
-        specifier: identifier.text,
+        specifier: identifier.name,
         resolvedPath: relativeFile,
         reason: `module-global mutable state backs exported runtime accessors (${getterNames.join(", ")} / ${setterNames.join(", ")})`,
       });
@@ -216,16 +210,10 @@ export async function collectArchitectureSmells() {
   const inventory = [];
   for (const filePath of files) {
     const source = await fs.readFile(filePath, "utf8");
-    const sourceFile = ts.createSourceFile(
-      filePath,
-      source,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS,
-    );
-    inventory.push(...scanPluginSdkExtensionFacadeSmells(sourceFile, filePath));
-    inventory.push(...scanRuntimeTypeImplementationSmells(sourceFile, filePath));
-    inventory.push(...scanRuntimeServiceLocatorSmells(sourceFile, filePath));
+    const result = parseSync(filePath, source);
+    inventory.push(...scanPluginSdkExtensionFacadeSmells(result.program, source, filePath));
+    inventory.push(...scanRuntimeTypeImplementationSmells(result.program, source, filePath));
+    inventory.push(...scanRuntimeServiceLocatorSmells(result.program, source, filePath));
   }
 
   return inventory.toSorted(compareEntries);

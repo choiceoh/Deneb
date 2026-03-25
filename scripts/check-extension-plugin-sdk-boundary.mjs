@@ -3,7 +3,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import { parseSync } from "oxc-parser";
+import { offsetToLine, visitNode } from "./lib/ts-guard-utils.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const extensionsRoot = path.join(repoRoot, "extensions");
@@ -87,8 +88,8 @@ async function collectExtensionSourceFiles(rootDir) {
   return out.toSorted((left, right) => normalizePath(left).localeCompare(normalizePath(right)));
 }
 
-function toLine(sourceFile, node) {
-  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+function toLine(sourceText, node) {
+  return offsetToLine(sourceText, node.start);
 }
 
 function resolveSpecifier(specifier, importerFile) {
@@ -162,7 +163,7 @@ function shouldReport(mode, resolvedPath) {
   return !resolvedPath.startsWith("src/plugin-sdk/");
 }
 
-function collectFromSourceFile(mode, sourceFile, filePath) {
+function collectFromProgram(mode, program, sourceText, filePath) {
   const entries = [];
   const extensionRoot = resolveExtensionRoot(filePath);
 
@@ -180,7 +181,7 @@ function collectFromSourceFile(mode, sourceFile, filePath) {
     }
     entries.push({
       file: normalizePath(filePath),
-      line: toLine(sourceFile, specifierNode),
+      line: toLine(sourceText, specifierNode),
       kind,
       specifier,
       resolvedPath,
@@ -188,27 +189,22 @@ function collectFromSourceFile(mode, sourceFile, filePath) {
     });
   }
 
-  function visit(node) {
-    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-      push("import", node.moduleSpecifier, node.moduleSpecifier.text);
+  visitNode(program, (node) => {
+    if (node.type === "ImportDeclaration" && node.source) {
+      push("import", node.source, node.source.value);
+    } else if (node.type === "ExportNamedDeclaration" && node.source) {
+      push("export", node.source, node.source.value);
+    } else if (node.type === "ExportAllDeclaration" && node.source) {
+      push("export", node.source, node.source.value);
     } else if (
-      ts.isExportDeclaration(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier)
+      node.type === "ImportExpression" &&
+      node.source?.type === "Literal" &&
+      typeof node.source.value === "string"
     ) {
-      push("export", node.moduleSpecifier, node.moduleSpecifier.text);
-    } else if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length === 1 &&
-      ts.isStringLiteral(node.arguments[0])
-    ) {
-      push("dynamic-import", node.arguments[0], node.arguments[0].text);
+      push("dynamic-import", node.source, node.source.value);
     }
-    ts.forEachChild(node, visit);
-  }
+  });
 
-  visit(sourceFile);
   return entries;
 }
 
@@ -220,16 +216,8 @@ export async function collectExtensionPluginSdkBoundaryInventory(mode) {
   const inventory = [];
   for (const filePath of files) {
     const source = await fs.readFile(filePath, "utf8");
-    const scriptKind =
-      filePath.endsWith(".tsx") || filePath.endsWith(".jsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-    const sourceFile = ts.createSourceFile(
-      filePath,
-      source,
-      ts.ScriptTarget.Latest,
-      true,
-      scriptKind,
-    );
-    inventory.push(...collectFromSourceFile(mode, sourceFile, filePath));
+    const result = parseSync(filePath, source);
+    inventory.push(...collectFromProgram(mode, result.program, source, filePath));
   }
   return inventory.toSorted(compareEntries);
 }
