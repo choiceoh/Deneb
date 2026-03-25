@@ -64,9 +64,7 @@ function isOpenAIProvider(provider?: string) {
   return normalized === "openai" || normalized === "openai-codex";
 }
 
-const TOOL_DENY_BY_MESSAGE_PROVIDER: Readonly<Record<string, readonly string[]>> = {
-  voice: ["tts"],
-};
+const TOOL_DENY_BY_MESSAGE_PROVIDER: Readonly<Record<string, readonly string[]>> = {};
 const TOOL_DENY_FOR_XAI_PROVIDERS = new Set(["web_search"]);
 const MEMORY_FLUSH_ALLOWED_TOOL_NAMES = new Set(["read", "write"]);
 

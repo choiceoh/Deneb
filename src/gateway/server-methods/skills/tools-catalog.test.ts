@@ -67,7 +67,7 @@ describe("tools.catalog handler", () => {
     expect(call?.[2]?.message).toContain("unknown agent id");
   });
 
-  it("returns core groups including tts and excludes plugins when includePlugins=false", async () => {
+  it("returns core groups and excludes plugins when includePlugins=false", async () => {
     const { respond, invoke } = createInvokeParams({ includePlugins: false });
     await invoke();
     const call = respond.mock.calls[0] as RespondCall | undefined;
@@ -85,7 +85,7 @@ describe("tools.catalog handler", () => {
     expect(payload?.agentId).toBe("main");
     expect(payload?.groups.some((group) => group.source === "plugin")).toBe(false);
     const media = payload?.groups.find((group) => group.id === "media");
-    expect(media?.tools.some((tool) => tool.id === "tts" && tool.source === "core")).toBe(true);
+    expect(media).toBeTruthy();
   });
 
   it("includes plugin groups with plugin metadata", async () => {

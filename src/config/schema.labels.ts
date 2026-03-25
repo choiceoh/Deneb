@@ -632,7 +632,6 @@ export const FIELD_LABELS: Record<string, string> = {
   "messages.statusReactions.timing": "Status Reaction Timing",
   "messages.inbound.debounceMs": "Inbound Message Debounce (ms)",
   "messages.inbound.byChannel": "Inbound Debounce by Channel (ms)",
-  "messages.tts": "Message Text-to-Speech",
   "talk.provider": "Talk Active Provider",
   "talk.providers": "Talk Provider Settings",
   "talk.providers.*.voiceId": "Talk Provider Voice ID",

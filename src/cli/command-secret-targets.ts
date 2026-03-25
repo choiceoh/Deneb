@@ -26,7 +26,6 @@ const COMMAND_SECRET_TARGETS = {
     "agents.defaults.memorySearch.remote.",
     "agents.list[].memorySearch.remote.",
     "skills.entries.",
-    "messages.tts.",
     "tools.web.search",
     "tools.web.fetch.firecrawl.",
   ]),

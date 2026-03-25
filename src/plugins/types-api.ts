@@ -184,7 +184,6 @@ export type DenebPluginApi = {
   registerService: (service: DenebPluginService) => void;
   /** Register a native model/provider plugin (text inference capability). */
   registerProvider: (provider: ProviderPlugin) => void;
-  /** Register a speech synthesis provider (speech capability). */
   /** Register a media understanding provider (media understanding capability). */
   registerMediaUnderstandingProvider: (provider: MediaUnderstandingProviderPlugin) => void;
   /** Register an image generation provider (image generation capability). */
