@@ -54,7 +54,8 @@ static PERSON_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
 
 static STATUS_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
     vec![
-        Regex::new(r"(진행중|진행\s?중|완료|준공|설계|시공|계약|검토|대기|마무리|긴급|급한|위급)").unwrap(),
+        Regex::new(r"(진행중|진행\s?중|완료|준공|설계|시공|계약|검토|대기|마무리|긴급|급한|위급)")
+            .unwrap(),
         Regex::new(r"(상태가|현재\s?상황|현황)").unwrap(),
     ]
 });
@@ -93,10 +94,33 @@ static SEMANTIC_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
 /// Query stopwords (pure filler only — domain terms are preserved).
 static QUERY_STOPWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     [
-        "프로젝트", "검색", "찾아", "찾아줘", "보여", "보여줘", "알려", "알려줘",
-        "문의", "내용", "알아봐", "알아봐줘", "인가", "인가요", "정리",
-        "대해", "대해서", "관해", "관해서", "좀", "그", "뭐", "뭐가",
-        "어떤", "무슨", "몇", "개",
+        "프로젝트",
+        "검색",
+        "찾아",
+        "찾아줘",
+        "보여",
+        "보여줘",
+        "알려",
+        "알려줘",
+        "문의",
+        "내용",
+        "알아봐",
+        "알아봐줘",
+        "인가",
+        "인가요",
+        "정리",
+        "대해",
+        "대해서",
+        "관해",
+        "관해서",
+        "좀",
+        "그",
+        "뭐",
+        "뭐가",
+        "어떤",
+        "무슨",
+        "몇",
+        "개",
     ]
     .into_iter()
     .collect()
@@ -112,14 +136,11 @@ static TRAILING_ENDINGS: Lazy<Regex> = Lazy::new(|| {
 
 static SUFFIX_CLEANUP: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(해줘|알려줘|보여줘|뭐야|좀|요)\s*$").unwrap());
-static TRAILING_PUNCT: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[?？！!.。]+$").unwrap());
-static TOKEN_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9&+/.\-]+").unwrap());
+static TRAILING_PUNCT: Lazy<Regex> = Lazy::new(|| Regex::new(r"[?？！!.。]+$").unwrap());
+static TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9&+/.\-]+").unwrap());
 static STRIP_NONALPHA: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[^가-힣A-Za-z0-9]+|[^가-힣A-Za-z0-9]+$").unwrap());
-static HAS_ALNUM: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[가-힣a-zA-Z0-9]").unwrap());
+static HAS_ALNUM: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣a-zA-Z0-9]").unwrap());
 
 /// Normalize a query: remove trailing punctuation, then filler suffixes.
 pub fn normalize_query(query: &str) -> String {
@@ -198,7 +219,9 @@ pub fn analyze_query(query: &str) -> QueryAnalysis {
 
     // Non-structural person terms to exclude from extracted persons
     let person_filler: HashSet<&str> = ["누가", "담당자", "담당"].into_iter().collect();
-    let status_filler: HashSet<&str> = ["상태가", "현재상황", "현재 상황", "현황"].into_iter().collect();
+    let status_filler: HashSet<&str> = ["상태가", "현재상황", "현재 상황", "현황"]
+        .into_iter()
+        .collect();
 
     // Client patterns
     for pat in CLIENT_PATTERNS.iter() {
@@ -274,15 +297,26 @@ pub fn analyze_query(query: &str) -> QueryAnalysis {
 
     let (route, confidence, reason) = if total == 0 {
         if has_keywords {
-            (SearchRoute::Hybrid, 0.6, "키워드 감지 → SQLite + 의미 검색 병행".into())
+            (
+                SearchRoute::Hybrid,
+                0.6,
+                "키워드 감지 → SQLite + 의미 검색 병행".into(),
+            )
         } else {
-            (SearchRoute::Sqlite, 0.5, "특정 패턴 없음 → SQLite 전문검색으로 처리".into())
+            (
+                SearchRoute::Sqlite,
+                0.5,
+                "특정 패턴 없음 → SQLite 전문검색으로 처리".into(),
+            )
         }
     } else if structural_score > 0 && semantic_score > 0 {
         (
             SearchRoute::Hybrid,
             0.8,
-            format!("구조화({}) + 의미({}) → 혼합 검색", structural_score, semantic_score),
+            format!(
+                "구조화({}) + 의미({}) → 혼합 검색",
+                structural_score, semantic_score
+            ),
         )
     } else if structural_score > 0 {
         if has_keywords {
@@ -305,7 +339,10 @@ pub fn analyze_query(query: &str) -> QueryAnalysis {
             (
                 SearchRoute::Hybrid,
                 0.75,
-                format!("의미({}) + 키워드 → SQLite + 의미 검색 병행", semantic_score),
+                format!(
+                    "의미({}) + 키워드 → SQLite + 의미 검색 병행",
+                    semantic_score
+                ),
             )
         } else {
             let conf = (0.7 + semantic_score as f64 * 0.05).min(0.95);
@@ -333,13 +370,19 @@ mod tests {
     fn test_analyze_client_query() {
         let analysis = analyze_query("비금도 현재 상황");
         assert!(analysis.extracted.clients.contains(&"비금도".to_string()));
-        assert!(matches!(analysis.route, SearchRoute::Sqlite | SearchRoute::Hybrid));
+        assert!(matches!(
+            analysis.route,
+            SearchRoute::Sqlite | SearchRoute::Hybrid
+        ));
     }
 
     #[test]
     fn test_analyze_semantic_query() {
         let analysis = analyze_query("해저케이블 기술적 방식은 어떻게 되나");
-        assert!(matches!(analysis.route, SearchRoute::Semantic | SearchRoute::Hybrid));
+        assert!(matches!(
+            analysis.route,
+            SearchRoute::Semantic | SearchRoute::Hybrid
+        ));
     }
 
     #[test]

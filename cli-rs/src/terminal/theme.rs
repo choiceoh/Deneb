@@ -1,4 +1,5 @@
 /// Check if the terminal supports rich output (colors, unicode).
+#[allow(dead_code)]
 pub fn is_rich() -> bool {
     // Respect NO_COLOR convention (https://no-color.org/)
     if std::env::var("NO_COLOR").is_ok() {

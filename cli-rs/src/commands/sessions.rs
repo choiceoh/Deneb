@@ -147,7 +147,7 @@ pub async fn run(args: &SessionsArgs) -> Result<(), CliError> {
             .unwrap_or("-".to_string());
         let tokens = entry
             .total_tokens
-            .map(|t| format_tokens(t))
+            .map(format_tokens)
             .unwrap_or_else(|| "-".to_string());
 
         let display_key = if key.len() > 30 {

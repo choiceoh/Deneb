@@ -24,6 +24,7 @@ fn expand_tilde(path: &str) -> PathBuf {
 }
 
 /// Check if an environment variable is set to a truthy value (1, true, yes).
+#[allow(dead_code)]
 pub fn is_truthy_env(key: &str) -> bool {
     std::env::var(key)
         .ok()

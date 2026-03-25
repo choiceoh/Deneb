@@ -63,15 +63,13 @@ static FTS_RESERVED: Lazy<HashSet<&'static str>> =
 static SPECIAL_CHARS: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[&|!@#$%^*()\-+=\[\]{}<>?/\\~`]").unwrap());
 
-static HAS_ALNUM: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[가-힣a-zA-Z0-9]").unwrap());
+static HAS_ALNUM: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣a-zA-Z0-9]").unwrap());
 
 static KO_JOSA: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(은|는|이|가|을|를|의|에|에서|으로|로|와|과|만|까지|부터|에게|한테|께|보다|처럼|같이|에서도|까지도|만도|부터도|라고|이라고|이란)$").unwrap()
 });
 
-static TOKEN_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9&+/.\-]+").unwrap());
+static TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9&+/.\-]+").unwrap());
 
 /// Sanitize a single FTS5 search term.
 fn sanitize_fts_single(term: &str) -> Option<String> {
@@ -115,9 +113,18 @@ fn build_fts_queries(terms: &[String]) -> (Option<String>, Option<String>) {
     if safe.is_empty() {
         return (None, None);
     }
-    let strong: Vec<&String> = safe.iter().filter(|t| is_strong_term(t.trim_matches('"'))).collect();
+    let strong: Vec<&String> = safe
+        .iter()
+        .filter(|t| is_strong_term(t.trim_matches('"')))
+        .collect();
     let strict = if strong.len() >= 2 {
-        Some(strong[..strong.len().min(4)].iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" AND "))
+        Some(
+            strong[..strong.len().min(4)]
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(" AND "),
+        )
     } else if !safe.is_empty() {
         Some(safe[0].clone())
     } else {
@@ -203,7 +210,10 @@ pub fn sqlite_search(
     let fts_terms = &extracted.keywords;
     let (strict_fts, broad_fts) = if !fts_terms.is_empty() {
         build_fts_queries(fts_terms)
-    } else if extracted.clients.is_empty() && extracted.persons.is_empty() && extracted.statuses.is_empty() {
+    } else if extracted.clients.is_empty()
+        && extracted.persons.is_empty()
+        && extracted.statuses.is_empty()
+    {
         let s = sanitize_fts_single(query);
         (s.clone(), s)
     } else {
@@ -211,7 +221,14 @@ pub fn sqlite_search(
     };
 
     // Run chunk query with FTS
-    result.chunks = run_chunk_query(conn, query, &conditions, &params, extracted, strict_fts.as_deref());
+    result.chunks = run_chunk_query(
+        conn,
+        query,
+        &conditions,
+        &params,
+        extracted,
+        strict_fts.as_deref(),
+    );
     if !result.chunks.is_empty() {
         result.match_methods.push("fts5_strict".into());
     }
@@ -227,7 +244,8 @@ pub fn sqlite_search(
             if strict_fts.as_deref() != Some(broad.as_str()) {
                 let existing_ids: HashSet<i64> = result.chunks.iter().map(|r| r.chunk_id).collect();
                 let before = result.chunks.len();
-                let broad_results = run_chunk_query(conn, query, &conditions, &params, extracted, Some(broad));
+                let broad_results =
+                    run_chunk_query(conn, query, &conditions, &params, extracted, Some(broad));
                 for row in broad_results {
                     if !existing_ids.contains(&row.chunk_id) {
                         result.chunks.push(row);
@@ -400,7 +418,10 @@ fn run_like_query(
         }
     }
 
-    let like_conds: Vec<String> = all_terms.iter().map(|_| "c.content LIKE ?".to_string()).collect();
+    let like_conds: Vec<String> = all_terms
+        .iter()
+        .map(|_| "c.content LIKE ?".to_string())
+        .collect();
     let mut like_params: Vec<String> = all_terms.iter().map(|t| format!("%{}%", t)).collect();
 
     let mut sql = format!(
@@ -434,8 +455,15 @@ fn run_comm_query(
     };
 
     let comm_fts_query = if comm_terms.len() > 1 {
-        let safe: Vec<String> = comm_terms.iter().filter_map(|t| sanitize_fts_single(t)).collect();
-        if safe.is_empty() { None } else { Some(safe.join(" OR ")) }
+        let safe: Vec<String> = comm_terms
+            .iter()
+            .filter_map(|t| sanitize_fts_single(t))
+            .collect();
+        if safe.is_empty() {
+            None
+        } else {
+            Some(safe.join(" OR "))
+        }
     } else if !comm_terms.is_empty() {
         sanitize_fts_single(comm_terms[0])
     } else {
@@ -459,7 +487,10 @@ fn run_comm_query(
 
     if !project_ids.is_empty() {
         let placeholders: Vec<String> = project_ids.iter().map(|id| id.to_string()).collect();
-        sql.push_str(&format!(" AND cl.project_id IN ({})", placeholders.join(",")));
+        sql.push_str(&format!(
+            " AND cl.project_id IN ({})",
+            placeholders.join(",")
+        ));
     } else if !extracted.clients.is_empty() {
         let mut cl_conds = Vec::new();
         for cl in &extracted.clients {
@@ -479,9 +510,16 @@ fn run_comm_query(
 
 // -- Query execution helpers --
 
-fn execute_chunk_query(conn: &Connection, sql: &str, params: &[String]) -> Result<Vec<ChunkRow>, rusqlite::Error> {
+fn execute_chunk_query(
+    conn: &Connection,
+    sql: &str,
+    params: &[String],
+) -> Result<Vec<ChunkRow>, rusqlite::Error> {
     let mut stmt = conn.prepare(sql)?;
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p as &dyn rusqlite::types::ToSql).collect();
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params
+        .iter()
+        .map(|p| p as &dyn rusqlite::types::ToSql)
+        .collect();
     let rows = stmt.query_map(param_refs.as_slice(), |row| {
         Ok(ChunkRow {
             chunk_id: row.get(0)?,
@@ -500,9 +538,16 @@ fn execute_chunk_query(conn: &Connection, sql: &str, params: &[String]) -> Resul
     rows.collect()
 }
 
-fn execute_comm_query(conn: &Connection, sql: &str, params: &[String]) -> Result<Vec<CommRow>, rusqlite::Error> {
+fn execute_comm_query(
+    conn: &Connection,
+    sql: &str,
+    params: &[String],
+) -> Result<Vec<CommRow>, rusqlite::Error> {
     let mut stmt = conn.prepare(sql)?;
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p as &dyn rusqlite::types::ToSql).collect();
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params
+        .iter()
+        .map(|p| p as &dyn rusqlite::types::ToSql)
+        .collect();
     let rows = stmt.query_map(param_refs.as_slice(), |row| {
         Ok(CommRow {
             id: row.get(0)?,
@@ -562,7 +607,10 @@ mod tests {
             ..Default::default()
         };
         let result = sqlite_search(&conn, "해저케이블", &extracted);
-        assert!(!result.chunks.is_empty(), "Should find chunks via FTS or LIKE");
+        assert!(
+            !result.chunks.is_empty(),
+            "Should find chunks via FTS or LIKE"
+        );
     }
 
     #[test]
@@ -581,7 +629,10 @@ mod tests {
     fn test_sanitize_fts() {
         assert_eq!(sanitize_fts_single("AND"), Some("\"AND\"".into()));
         assert_eq!(sanitize_fts_single("O&M"), Some("\"O&M\"".into()));
-        assert_eq!(sanitize_fts_single("test:value"), Some("\"test:value\"".into()));
+        assert_eq!(
+            sanitize_fts_single("test:value"),
+            Some("\"test:value\"".into())
+        );
         assert_eq!(sanitize_fts_single(""), None);
         assert_eq!(sanitize_fts_single("비금도"), Some("비금도".into()));
     }

@@ -6,7 +6,9 @@ use crate::env::get_env_trimmed;
 pub struct ConnectionDetails {
     pub url: String,
     pub url_source: String,
+    #[allow(dead_code)]
     pub bind_detail: Option<String>,
+    #[allow(dead_code)]
     pub remote_fallback_note: Option<String>,
 }
 

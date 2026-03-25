@@ -2,9 +2,9 @@
 //!
 //! Port of Python vega/search/router.py.
 
-pub mod query_analyzer;
 pub mod fts_search;
 pub mod fusion;
+pub mod query_analyzer;
 pub mod semantic;
 
 use std::collections::HashMap;
@@ -14,9 +14,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::VegaConfig;
 use crate::db::schema::init_db;
-use query_analyzer::{analyze_query, normalize_query, QueryAnalysis, SearchRoute};
 use fts_search::{sqlite_search, SqliteSearchResult};
 use fusion::{rerank_fusion, sqlite_rows_to_unified, ProjectScore, UnifiedResult};
+use query_analyzer::{analyze_query, normalize_query, QueryAnalysis, SearchRoute};
 
 /// Full search result returned by SearchRouter.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,7 +147,11 @@ impl SearchRouter {
                     // Convert semantic results to unified format and merge
                     for sr in &sem_results {
                         // Avoid duplicating chunks already in SQLite results
-                        if !sqlite_result.chunks.iter().any(|c| c.chunk_id == sr.chunk_id) {
+                        if !sqlite_result
+                            .chunks
+                            .iter()
+                            .any(|c| c.chunk_id == sr.chunk_id)
+                        {
                             sqlite_result.chunks.push(fts_search::ChunkRow {
                                 chunk_id: sr.chunk_id,
                                 project_id: sr.project_id,
@@ -175,11 +179,7 @@ impl SearchRouter {
                     for (idx, ml_score) in &reranked {
                         if let Some(chunk) = sqlite_result.chunks.get(*idx) {
                             // We'll apply these as metadata for fusion to pick up
-                            log::debug!(
-                                "Rerank: chunk {} score {:.3}",
-                                chunk.chunk_id,
-                                ml_score
-                            );
+                            log::debug!("Rerank: chunk {} score {:.3}", chunk.chunk_id, ml_score);
                         }
                     }
                 }

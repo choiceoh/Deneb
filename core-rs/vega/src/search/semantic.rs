@@ -79,7 +79,10 @@ pub fn semantic_search(
     if let Some(pids) = project_filter {
         if !pids.is_empty() {
             let placeholders: Vec<String> = pids.iter().map(|id| id.to_string()).collect();
-            sql.push_str(&format!(" WHERE c.project_id IN ({})", placeholders.join(",")));
+            sql.push_str(&format!(
+                " WHERE c.project_id IN ({})",
+                placeholders.join(",")
+            ));
         }
     }
 
@@ -105,7 +108,10 @@ pub fn semantic_search(
         let chunk_type: String = row.get::<_, Option<String>>(9)?.unwrap_or_default();
         let entry_date: String = row.get::<_, Option<String>>(10)?.unwrap_or_default();
 
-        Ok((chunk_id, emb_blob, project_id, name, client, status, person, heading, content, chunk_type, entry_date))
+        Ok((
+            chunk_id, emb_blob, project_id, name, client, status, person, heading, content,
+            chunk_type, entry_date,
+        ))
     });
 
     let rows = match rows {
@@ -117,7 +123,19 @@ pub fn semantic_search(
     };
 
     for row in rows.flatten() {
-        let (chunk_id, emb_blob, project_id, name, client, status, person, heading, content, chunk_type, entry_date) = row;
+        let (
+            chunk_id,
+            emb_blob,
+            project_id,
+            name,
+            client,
+            status,
+            person,
+            heading,
+            content,
+            chunk_type,
+            entry_date,
+        ) = row;
 
         // Decode embedding blob (f32 little-endian)
         let chunk_vec = blob_to_f32_vec(&emb_blob);
@@ -146,7 +164,11 @@ pub fn semantic_search(
     }
 
     // Sort by score descending, take top_k
-    results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    results.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     results.truncate(config.top_k);
     results
 }
@@ -204,11 +226,7 @@ pub fn rerank_results(
 
 /// Rerank (no-op without ml feature).
 #[cfg(not(feature = "ml"))]
-pub fn rerank_results(
-    _query: &str,
-    _chunks: &[ChunkRow],
-    _top_k: usize,
-) -> Vec<(usize, f64)> {
+pub fn rerank_results(_query: &str, _chunks: &[ChunkRow], _top_k: usize) -> Vec<(usize, f64)> {
     Vec::new()
 }
 

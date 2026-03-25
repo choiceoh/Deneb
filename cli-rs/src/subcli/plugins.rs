@@ -289,6 +289,8 @@ async fn rpc_simple(
         expect_final: false,
     })
     .await?;
+    // TODO: rich formatting for non-JSON mode (currently same output)
+    #[allow(clippy::if_same_then_else)]
     if json_mode {
         println!("{}", serde_json::to_string_pretty(&result)?);
     } else {
@@ -297,6 +299,7 @@ async fn rpc_simple(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn rpc_action(
     method: &str,
     params: serde_json::Value,

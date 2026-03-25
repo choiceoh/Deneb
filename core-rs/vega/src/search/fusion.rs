@@ -60,17 +60,19 @@ static NON_PROJECT_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)(INDEX|README|CLAUDE|CHANGELOG|LICENSE|\.github)").unwrap());
 
 static BACKUP_DIR_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r"(?:^|[-/])(?:backup|bak|old)(?:[-/]|$)|(?:^|/)vega-v\d+[-/.]|(?:^|/)tools-backup",
-    )
-    .unwrap()
+    Regex::new(r"(?:^|[-/])(?:backup|bak|old)(?:[-/]|$)|(?:^|/)vega-v\d+[-/.]|(?:^|/)tools-backup")
+        .unwrap()
 });
 
 /// Score SQLite chunk results per-project.
 fn score_sqlite_chunks(
     chunks: &[ChunkRow],
     extracted: &ExtractedFields,
-) -> (HashMap<i64, f64>, HashMap<i64, String>, HashMap<String, i64>) {
+) -> (
+    HashMap<i64, f64>,
+    HashMap<i64, String>,
+    HashMap<String, i64>,
+) {
     let mut project_scores: HashMap<i64, f64> = HashMap::new();
     let mut project_chunk_count: HashMap<i64, usize> = HashMap::new();
     let mut name_by_id: HashMap<i64, String> = HashMap::new();
@@ -138,7 +140,10 @@ fn score_sqlite_chunks(
             continue;
         }
         let name_lower = name.to_lowercase();
-        let name_words: Vec<&str> = name_lower.split_whitespace().filter(|w| w.chars().count() >= 2).collect();
+        let name_words: Vec<&str> = name_lower
+            .split_whitespace()
+            .filter(|w| w.chars().count() >= 2)
+            .collect();
 
         let mut best_bonus = 0.0f64;
         for token in &all_tokens {
@@ -197,7 +202,11 @@ pub fn rerank_fusion(
     let mut ranked: Vec<(i64, f64)> = project_scores.iter().map(|(&k, &v)| (k, v)).collect();
     ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    let order: HashMap<i64, usize> = ranked.iter().enumerate().map(|(i, (pid, _))| (*pid, i)).collect();
+    let order: HashMap<i64, usize> = ranked
+        .iter()
+        .enumerate()
+        .map(|(i, (pid, _))| (*pid, i))
+        .collect();
 
     // Re-sort chunks by project rank, then by date (newest first)
     sqlite_results.chunks.sort_by(|a, b| {

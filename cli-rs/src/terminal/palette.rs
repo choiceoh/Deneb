@@ -4,6 +4,7 @@ use console::Style;
 /// Kept in sync with `src/terminal/palette.ts`.
 pub struct Palette;
 
+#[allow(dead_code)]
 impl Palette {
     pub fn accent() -> Style {
         Style::new().color256(202) // #FF5A2D approx

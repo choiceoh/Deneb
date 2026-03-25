@@ -16,6 +16,7 @@ pub enum CliError {
     Config(String),
 
     #[error("config file not found: {0}")]
+    #[allow(dead_code)]
     ConfigNotFound(String),
 
     #[error("{0}")]

@@ -166,16 +166,6 @@ fn handle_response(resp: ResponseFrame, method: &str) -> Result<serde_json::Valu
     }
 }
 
-impl Default for crate::gateway::protocol::ErrorShape {
-    fn default() -> Self {
-        Self {
-            code: None,
-            message: None,
-            details: None,
-        }
-    }
-}
-
 /// Build the WebSocket URL with auth token as a query parameter.
 fn build_ws_url(base_url: &str, auth: &crate::gateway::auth::GatewayAuth) -> String {
     let mut url = base_url.to_string();

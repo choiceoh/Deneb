@@ -24,6 +24,7 @@ impl RequestFrame {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_scopes(mut self, scopes: Vec<String>) -> Self {
         self.scopes = Some(scopes);
         self
@@ -46,6 +47,7 @@ pub struct ResponseFrame {
 
 /// Incoming event frame from the gateway (not request-correlated).
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct EventFrame {
     pub event: String,
     #[serde(default)]
@@ -55,13 +57,14 @@ pub struct EventFrame {
 }
 
 /// Error shape in a gateway response.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct ErrorShape {
     #[serde(default)]
     pub code: Option<String>,
     #[serde(default)]
     pub message: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub details: Option<serde_json::Value>,
 }
 
@@ -72,11 +75,12 @@ pub enum GatewayFrame {
     #[serde(rename = "res")]
     Response(ResponseFrame),
     #[serde(rename = "evt")]
-    Event(EventFrame),
+    Event(#[allow(dead_code)] EventFrame),
 }
 
 /// Connect params sent in the WebSocket URL query or initial hello.
 #[derive(Debug, Default, Serialize)]
+#[allow(dead_code)]
 pub struct ConnectParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
@@ -93,4 +97,5 @@ pub struct ConnectParams {
 }
 
 /// Protocol version supported by this CLI.
+#[allow(dead_code)]
 pub const PROTOCOL_VERSION: u32 = 1;
