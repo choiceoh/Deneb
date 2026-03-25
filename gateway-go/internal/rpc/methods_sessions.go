@@ -40,31 +40,18 @@ func sessionsPatch(deps SessionDeps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
 		}
-		key := normalizeKey(p.Key)
+		key := requireKey(p.Key)
 		if key == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "key is required"))
+			return errMissingKey(req.ID)
 		}
 
-		// Apply patch to in-memory session.
 		updated := deps.Sessions.Patch(key, p.PatchFields)
 
-		// Forward to bridge for persistent store update.
-		if deps.Forwarder != nil {
-			forwardReq := &protocol.RequestFrame{
-				Type:   protocol.FrameTypeRequest,
-				ID:     req.ID,
-				Method: "sessions.patch",
-				Params: req.Params,
-			}
-			bridgeResp, err := deps.Forwarder.Forward(ctx, forwardReq)
-			if err == nil && bridgeResp != nil && bridgeResp.Error == nil {
-				// Bridge succeeded — emit lifecycle and return bridge response
-				// (which includes resolved model info).
-				emitSessionLifecycle(deps.Deps, key, "patch")
-				return bridgeResp
-			}
-			// On bridge failure, fall through to return in-memory result.
+		// Forward to bridge for persistent store update; bridge response
+		// includes resolved model info the Go layer doesn't have.
+		if resp := forwardToBridge(ctx, deps.Forwarder, req); resp != nil {
+			emitSessionLifecycle(deps.Deps, key, "patch")
+			return resp
 		}
 
 		emitSessionLifecycle(deps.Deps, key, "patch")
@@ -91,10 +78,9 @@ func sessionsReset(deps SessionDeps) HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
 		}
-		key := normalizeKey(p.Key)
+		key := requireKey(p.Key)
 		if key == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "key is required"))
+			return errMissingKey(req.ID)
 		}
 		reason := "reset"
 		if p.Reason == "new" {
@@ -102,20 +88,10 @@ func sessionsReset(deps SessionDeps) HandlerFunc {
 		}
 
 		// Forward to bridge for transcript archival + persistent store reset.
-		if deps.Forwarder != nil {
-			forwardReq := &protocol.RequestFrame{
-				Type:   protocol.FrameTypeRequest,
-				ID:     req.ID,
-				Method: "sessions.reset",
-				Params: req.Params,
-			}
-			bridgeResp, err := deps.Forwarder.Forward(ctx, forwardReq)
-			if err == nil && bridgeResp != nil && bridgeResp.Error == nil {
-				// Also reset in-memory state.
-				deps.Sessions.ResetSession(key)
-				emitSessionLifecycle(deps.Deps, key, reason)
-				return bridgeResp
-			}
+		if resp := forwardToBridge(ctx, deps.Forwarder, req); resp != nil {
+			deps.Sessions.ResetSession(key)
+			emitSessionLifecycle(deps.Deps, key, reason)
+			return resp
 		}
 
 		// Fallback: reset in-memory state only.
@@ -142,24 +118,13 @@ func sessionsReset(deps SessionDeps) HandlerFunc {
 func sessionsPreview(deps SessionDeps) HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			Keys     []string `json:"keys"`
-			Limit    *int     `json:"limit"`
-			MaxChars *int     `json:"maxChars"`
+			Keys []string `json:"keys"`
 		}
 		if len(req.Params) > 0 {
 			_ = unmarshalParams(req.Params, &p)
 		}
 
-		// Normalize keys.
-		keys := make([]string, 0, len(p.Keys))
-		for _, k := range p.Keys {
-			if trimmed := strings.TrimSpace(k); trimmed != "" {
-				keys = append(keys, trimmed)
-			}
-		}
-		if len(keys) > 64 {
-			keys = keys[:64]
-		}
+		keys := normalizeKeys(p.Keys, 64)
 		if len(keys) == 0 {
 			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 				"ts":       time.Now().UnixMilli(),
@@ -168,18 +133,8 @@ func sessionsPreview(deps SessionDeps) HandlerFunc {
 			return resp
 		}
 
-		// Forward to bridge — transcript file I/O is Node.js managed.
-		if deps.Forwarder != nil {
-			forwardReq := &protocol.RequestFrame{
-				Type:   protocol.FrameTypeRequest,
-				ID:     req.ID,
-				Method: "sessions.preview",
-				Params: req.Params,
-			}
-			bridgeResp, err := deps.Forwarder.Forward(ctx, forwardReq)
-			if err == nil && bridgeResp != nil {
-				return bridgeResp
-			}
+		if resp := forwardToBridge(ctx, deps.Forwarder, req); resp != nil {
+			return resp
 		}
 
 		// Fallback: return empty previews with "missing" status.
@@ -219,17 +174,7 @@ func sessionsResolve(deps SessionDeps) HandlerFunc {
 				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
 		}
 
-		// Count how many identifiers were provided.
-		idCount := 0
-		if p.Key != "" {
-			idCount++
-		}
-		if p.SessionID != "" {
-			idCount++
-		}
-		if p.Label != "" {
-			idCount++
-		}
+		idCount := boolCount(p.Key != "", p.SessionID != "", p.Label != "")
 		if idCount == 0 {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrMissingParam, "one of key, sessionId, or label is required"))
@@ -239,25 +184,23 @@ func sessionsResolve(deps SessionDeps) HandlerFunc {
 				protocol.ErrInvalidRequest, "provide exactly one of key, sessionId, or label"))
 		}
 
-		// Try in-memory resolution first.
 		// TS behavior: key lookup is direct (no kind filter); sessionId and
 		// label lookups apply includeGlobal/includeUnknown filters (default false).
 		var found *session.Session
 		switch {
 		case p.Key != "":
-			// Direct key lookup — no kind filtering (matches TS).
 			found = deps.Sessions.Get(strings.TrimSpace(p.Key))
 		case p.SessionID != "":
-			s := deps.Sessions.FindBySessionID(p.SessionID)
-			if s != nil {
-				filtered := filterSessions([]*session.Session{s}, p.AgentID, p.SpawnedBy, p.IncludeGlobal, p.IncludeUnknown)
-				if len(filtered) == 1 {
+			if s := deps.Sessions.FindBySessionID(p.SessionID); s != nil {
+				if filtered := filterSessions([]*session.Session{s}, p.AgentID, p.SpawnedBy, p.IncludeGlobal, p.IncludeUnknown); len(filtered) == 1 {
 					found = filtered[0]
 				}
 			}
 		case p.Label != "":
-			matches := deps.Sessions.FindByLabel(p.Label)
-			matches = filterSessions(matches, p.AgentID, p.SpawnedBy, p.IncludeGlobal, p.IncludeUnknown)
+			matches := filterSessions(
+				deps.Sessions.FindByLabel(p.Label),
+				p.AgentID, p.SpawnedBy, p.IncludeGlobal, p.IncludeUnknown,
+			)
 			if len(matches) == 1 {
 				found = matches[0]
 			} else if len(matches) > 1 {
@@ -275,17 +218,8 @@ func sessionsResolve(deps SessionDeps) HandlerFunc {
 		}
 
 		// Fall back to bridge for persistent store lookup.
-		if deps.Forwarder != nil {
-			forwardReq := &protocol.RequestFrame{
-				Type:   protocol.FrameTypeRequest,
-				ID:     req.ID,
-				Method: "sessions.resolve",
-				Params: req.Params,
-			}
-			bridgeResp, err := deps.Forwarder.Forward(ctx, forwardReq)
-			if err == nil && bridgeResp != nil {
-				return bridgeResp
-			}
+		if resp := forwardToBridge(ctx, deps.Forwarder, req); resp != nil {
+			return resp
 		}
 
 		return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -299,32 +233,30 @@ func sessionsResolve(deps SessionDeps) HandlerFunc {
 func filterSessions(sessions []*session.Session, agentID, spawnedBy string, includeGlobal, includeUnknown *bool) []*session.Session {
 	result := make([]*session.Session, 0, len(sessions))
 	for _, s := range sessions {
-		// Exclude globals unless explicitly includeGlobal=true.
-		if s.Kind == session.KindGlobal && (includeGlobal == nil || !*includeGlobal) {
+		if s.Kind == session.KindGlobal && !isTrue(includeGlobal) {
 			continue
 		}
-		// Exclude unknowns unless explicitly includeUnknown=true.
-		if s.Kind == session.KindUnknown && (includeUnknown == nil || !*includeUnknown) {
+		if s.Kind == session.KindUnknown && !isTrue(includeUnknown) {
 			continue
 		}
 		if spawnedBy != "" && s.SpawnedBy != spawnedBy {
 			continue
 		}
-		// agentID filter: match against the session key prefix convention.
-		// Session keys for non-default agents are prefixed with "agent:<agentId>:".
-		if agentID != "" {
-			prefix := "agent:" + agentID + ":"
-			keyMatchesAgent := strings.HasPrefix(s.Key, prefix)
-			if agentID == "default" {
-				keyMatchesAgent = !strings.HasPrefix(s.Key, "agent:")
-			}
-			if !keyMatchesAgent {
-				continue
-			}
+		if agentID != "" && !matchesAgentID(s.Key, agentID) {
+			continue
 		}
 		result = append(result, s)
 	}
 	return result
+}
+
+// matchesAgentID checks if a session key belongs to the given agent.
+// Non-default agents use keys prefixed with "agent:<agentId>:".
+func matchesAgentID(key, agentID string) bool {
+	if agentID == "default" {
+		return !strings.HasPrefix(key, "agent:")
+	}
+	return strings.HasPrefix(key, "agent:"+agentID+":")
 }
 
 // ---------------------------------------------------------------------------
@@ -334,45 +266,32 @@ func filterSessions(sessions []*session.Session, agentID, spawnedBy string, incl
 func sessionsCompact(deps SessionDeps) HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			Key      string `json:"key"`
-			MaxLines *int   `json:"maxLines"`
+			Key string `json:"key"`
 		}
 		if err := unmarshalParams(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
 		}
-		key := normalizeKey(p.Key)
+		key := requireKey(p.Key)
 		if key == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "key is required"))
+			return errMissingKey(req.ID)
 		}
 
-		// Forward to bridge for transcript file compaction.
-		if deps.Forwarder != nil {
-			forwardReq := &protocol.RequestFrame{
-				Type:   protocol.FrameTypeRequest,
-				ID:     req.ID,
-				Method: "sessions.compact",
-				Params: req.Params,
+		if resp := forwardToBridge(ctx, deps.Forwarder, req); resp != nil {
+			// If compaction succeeded, clear in-memory token fields.
+			var result struct {
+				Compacted bool `json:"compacted"`
 			}
-			bridgeResp, err := deps.Forwarder.Forward(ctx, forwardReq)
-			if err == nil && bridgeResp != nil && bridgeResp.Error == nil {
-				// If compaction succeeded, clear in-memory token fields.
-				var result struct {
-					Compacted bool `json:"compacted"`
-				}
-				if bridgeResp.Payload != nil {
-					_ = json.Unmarshal(bridgeResp.Payload, &result)
-				}
-				if result.Compacted {
-					deps.Sessions.ClearTokens(key)
-					emitSessionLifecycle(deps.Deps, key, "compact")
-				}
-				return bridgeResp
+			if resp.Payload != nil {
+				_ = json.Unmarshal(resp.Payload, &result)
 			}
+			if result.Compacted {
+				deps.Sessions.ClearTokens(key)
+				emitSessionLifecycle(deps.Deps, key, "compact")
+			}
+			return resp
 		}
 
-		// Without bridge, return not-compacted.
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"ok":        true,
 			"key":       key,
@@ -387,9 +306,35 @@ func sessionsCompact(deps SessionDeps) HandlerFunc {
 // Helpers
 // ---------------------------------------------------------------------------
 
-// normalizeKey trims whitespace from a session key.
-func normalizeKey(key string) string {
+// requireKey trims whitespace from a session key; returns "" if empty.
+func requireKey(key string) string {
 	return strings.TrimSpace(key)
+}
+
+// errMissingKey returns a standard MISSING_PARAM error for the key field.
+func errMissingKey(reqID string) *protocol.ResponseFrame {
+	return protocol.NewResponseError(reqID, protocol.NewError(
+		protocol.ErrMissingParam, "key is required"))
+}
+
+// forwardToBridge forwards an RPC request to the Node.js bridge.
+// Returns the bridge response on success, or nil if the bridge is
+// unavailable or returns an error (caller should fall through to local logic).
+func forwardToBridge(ctx context.Context, fwd Forwarder, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	if fwd == nil {
+		return nil
+	}
+	bridgeReq := &protocol.RequestFrame{
+		Type:   protocol.FrameTypeRequest,
+		ID:     req.ID,
+		Method: req.Method,
+		Params: req.Params,
+	}
+	resp, err := fwd.Forward(ctx, bridgeReq)
+	if err != nil || resp == nil || resp.Error != nil {
+		return nil
+	}
+	return resp
 }
 
 // emitSessionLifecycle emits a lifecycle change event if GatewaySubs is available.
@@ -400,4 +345,34 @@ func emitSessionLifecycle(deps Deps, sessionKey, reason string) {
 			Reason:     reason,
 		})
 	}
+}
+
+// normalizeKeys trims, deduplicates, and caps a list of session keys.
+func normalizeKeys(raw []string, max int) []string {
+	keys := make([]string, 0, len(raw))
+	for _, k := range raw {
+		if trimmed := strings.TrimSpace(k); trimmed != "" {
+			keys = append(keys, trimmed)
+		}
+	}
+	if len(keys) > max {
+		keys = keys[:max]
+	}
+	return keys
+}
+
+// isTrue returns true only if the pointer is non-nil and points to true.
+func isTrue(p *bool) bool {
+	return p != nil && *p
+}
+
+// boolCount returns how many of the given booleans are true.
+func boolCount(vals ...bool) int {
+	n := 0
+	for _, v := range vals {
+		if v {
+			n++
+		}
+	}
+	return n
 }

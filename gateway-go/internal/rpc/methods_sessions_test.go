@@ -278,11 +278,9 @@ func TestSessionsResolve_ByKey(t *testing.T) {
 
 func TestSessionsResolve_BySessionID(t *testing.T) {
 	d, deps := sessionDispatcher(t)
-	s := deps.Sessions.Create("sid-session", session.KindDirect)
-	// Set sessionId via patch.
-	deps.Sessions.Patch("sid-session", session.PatchFields{})
-	// Directly set sessionId (Patch doesn't cover it, so use Set).
-	s = deps.Sessions.Get("sid-session")
+	deps.Sessions.Create("sid-session", session.KindDirect)
+	// SessionID isn't a patch field, so set it directly via Get+Set.
+	s := deps.Sessions.Get("sid-session")
 	s.SessionID = "uuid-123"
 	deps.Sessions.Set(s)
 

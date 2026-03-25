@@ -26,93 +26,64 @@ type PatchFields struct {
 	GroupActivation      *string `json:"groupActivation,omitempty"`
 }
 
+// patchStr sets dst to *src if src is non-nil and differs.
+func patchStr(dst *string, src *string) bool {
+	if src != nil && *src != *dst {
+		*dst = *src
+		return true
+	}
+	return false
+}
+
+// patchBool sets dst to a copy of *src if src is non-nil and differs.
+func patchBool(dst **bool, src *bool) bool {
+	if src == nil {
+		return false
+	}
+	if *dst == nil || **dst != *src {
+		v := *src
+		*dst = &v
+		return true
+	}
+	return false
+}
+
+// patchInt sets dst to a copy of *src if src is non-nil and differs.
+func patchInt(dst **int, src *int) bool {
+	if src == nil {
+		return false
+	}
+	if *dst == nil || **dst != *src {
+		v := *src
+		*dst = &v
+		return true
+	}
+	return false
+}
+
 // ApplyPatch applies non-nil fields from the patch to the session in place.
 // Returns true if any field was changed.
 func (s *Session) ApplyPatch(p PatchFields) bool {
 	changed := false
-
-	if p.Label != nil && *p.Label != s.Label {
-		s.Label = *p.Label
-		changed = true
-	}
-	if p.Model != nil && *p.Model != s.Model {
-		s.Model = *p.Model
-		changed = true
-	}
-	if p.ThinkingLevel != nil && *p.ThinkingLevel != s.ThinkingLevel {
-		s.ThinkingLevel = *p.ThinkingLevel
-		changed = true
-	}
-	if p.FastMode != nil {
-		if s.FastMode == nil || *p.FastMode != *s.FastMode {
-			v := *p.FastMode
-			s.FastMode = &v
-			changed = true
-		}
-	}
-	if p.VerboseLevel != nil && *p.VerboseLevel != s.VerboseLevel {
-		s.VerboseLevel = *p.VerboseLevel
-		changed = true
-	}
-	if p.ReasoningLevel != nil && *p.ReasoningLevel != s.ReasoningLevel {
-		s.ReasoningLevel = *p.ReasoningLevel
-		changed = true
-	}
-	if p.ElevatedLevel != nil && *p.ElevatedLevel != s.ElevatedLevel {
-		s.ElevatedLevel = *p.ElevatedLevel
-		changed = true
-	}
-	if p.ExecHost != nil && *p.ExecHost != s.ExecHost {
-		s.ExecHost = *p.ExecHost
-		changed = true
-	}
-	if p.ExecSecurity != nil && *p.ExecSecurity != s.ExecSecurity {
-		s.ExecSecurity = *p.ExecSecurity
-		changed = true
-	}
-	if p.ExecAsk != nil && *p.ExecAsk != s.ExecAsk {
-		s.ExecAsk = *p.ExecAsk
-		changed = true
-	}
-	if p.ExecNode != nil && *p.ExecNode != s.ExecNode {
-		s.ExecNode = *p.ExecNode
-		changed = true
-	}
-	if p.ResponseUsage != nil && *p.ResponseUsage != s.ResponseUsage {
-		s.ResponseUsage = *p.ResponseUsage
-		changed = true
-	}
-	if p.SpawnedBy != nil && *p.SpawnedBy != s.SpawnedBy {
-		s.SpawnedBy = *p.SpawnedBy
-		changed = true
-	}
-	if p.SpawnedWorkspaceDir != nil && *p.SpawnedWorkspaceDir != s.SpawnedWorkspaceDir {
-		s.SpawnedWorkspaceDir = *p.SpawnedWorkspaceDir
-		changed = true
-	}
-	if p.SpawnDepth != nil {
-		if s.SpawnDepth == nil || *p.SpawnDepth != *s.SpawnDepth {
-			v := *p.SpawnDepth
-			s.SpawnDepth = &v
-			changed = true
-		}
-	}
-	if p.SubagentRole != nil && *p.SubagentRole != s.SubagentRole {
-		s.SubagentRole = *p.SubagentRole
-		changed = true
-	}
-	if p.SubagentControlScope != nil && *p.SubagentControlScope != s.SubagentControlScope {
-		s.SubagentControlScope = *p.SubagentControlScope
-		changed = true
-	}
-	if p.SendPolicy != nil && *p.SendPolicy != s.SendPolicy {
-		s.SendPolicy = *p.SendPolicy
-		changed = true
-	}
-	if p.GroupActivation != nil && *p.GroupActivation != s.GroupActivation {
-		s.GroupActivation = *p.GroupActivation
-		changed = true
-	}
+	changed = patchStr(&s.Label, p.Label) || changed
+	changed = patchStr(&s.Model, p.Model) || changed
+	changed = patchStr(&s.ThinkingLevel, p.ThinkingLevel) || changed
+	changed = patchBool(&s.FastMode, p.FastMode) || changed
+	changed = patchStr(&s.VerboseLevel, p.VerboseLevel) || changed
+	changed = patchStr(&s.ReasoningLevel, p.ReasoningLevel) || changed
+	changed = patchStr(&s.ElevatedLevel, p.ElevatedLevel) || changed
+	changed = patchStr(&s.ExecHost, p.ExecHost) || changed
+	changed = patchStr(&s.ExecSecurity, p.ExecSecurity) || changed
+	changed = patchStr(&s.ExecAsk, p.ExecAsk) || changed
+	changed = patchStr(&s.ExecNode, p.ExecNode) || changed
+	changed = patchStr(&s.ResponseUsage, p.ResponseUsage) || changed
+	changed = patchStr(&s.SpawnedBy, p.SpawnedBy) || changed
+	changed = patchStr(&s.SpawnedWorkspaceDir, p.SpawnedWorkspaceDir) || changed
+	changed = patchInt(&s.SpawnDepth, p.SpawnDepth) || changed
+	changed = patchStr(&s.SubagentRole, p.SubagentRole) || changed
+	changed = patchStr(&s.SubagentControlScope, p.SubagentControlScope) || changed
+	changed = patchStr(&s.SendPolicy, p.SendPolicy) || changed
+	changed = patchStr(&s.GroupActivation, p.GroupActivation) || changed
 
 	if changed {
 		s.UpdatedAt = time.Now().UnixMilli()
@@ -181,8 +152,7 @@ func (m *Manager) FindBySessionID(sessionID string) *Session {
 	return nil
 }
 
-// FindByLabel scans all sessions for one matching the given label.
-// Returns nil if not found, or the first match if multiple exist.
+// FindByLabel returns all sessions matching the given label.
 func (m *Manager) FindByLabel(label string) []*Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
