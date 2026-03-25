@@ -9,6 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
@@ -16,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/node"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
@@ -77,6 +79,7 @@ var tsBaseMethods = []string{
 	"sessions.preview",
 	"sessions.create",
 	"sessions.send",
+	"sessions.steer",
 	"sessions.abort",
 	"sessions.patch",
 	"sessions.reset",
@@ -160,6 +163,13 @@ func fullDispatcher() *Dispatcher {
 	RegisterMaintenanceMethods(d, MaintenanceDeps{Runner: maintenance.NewRunner("/tmp")})
 	RegisterUpdateMethods(d, UpdateDeps{})
 	RegisterMessagingMethods(d, MessagingDeps{})
+
+	// Phase 4: Native session execution / agent methods.
+	RegisterSessionExecMethods(d, SessionExecDeps{
+		Chat:       chat.NewHandler(session.NewManager(), nil, nil, testLogger(), chat.DefaultHandlerConfig()),
+		Agents:     agent.NewStore(),
+		JobTracker: agent.NewJobTracker(testLogger()),
+	})
 
 	// Bridge methods with a nil-returning forwarder (for registration only).
 	RegisterBridgeMethods(d, BridgeDeps{
@@ -256,7 +266,7 @@ func TestBridgeForwardSuccess(t *testing.T) {
 	req := &protocol.RequestFrame{
 		Type:   "req",
 		ID:     "bridge-1",
-		Method: "agent",
+		Method: "tools.catalog",
 		Params: json.RawMessage("{}"),
 	}
 	resp := d.Dispatch(context.Background(), req)
@@ -279,7 +289,7 @@ func TestBridgeForwardNilBridge(t *testing.T) {
 	req := &protocol.RequestFrame{
 		Type:   "req",
 		ID:     "bridge-nil-1",
-		Method: "agent",
+		Method: "tools.catalog",
 		Params: json.RawMessage("{}"),
 	}
 	resp := d.Dispatch(context.Background(), req)

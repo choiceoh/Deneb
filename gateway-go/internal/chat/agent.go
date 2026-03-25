@@ -12,18 +12,20 @@ import (
 
 // AgentConfig configures the agent execution loop.
 type AgentConfig struct {
-	MaxTurns int           // Maximum tool-call turns before stopping. Default: 25.
-	Timeout  time.Duration // Maximum wall time for the entire agent run. Default: 5m.
-	Model    string
-	System   string
-	Tools    []llm.Tool
+	MaxTurns  int           // Maximum tool-call turns before stopping. Default: 25.
+	Timeout   time.Duration // Maximum wall time for the entire agent run. Default: 10m.
+	Model     string
+	System    string
+	Tools     []llm.Tool
+	MaxTokens int // Max output tokens per LLM call. Default: 8192.
 }
 
 // DefaultAgentConfig returns sensible defaults.
 func DefaultAgentConfig() AgentConfig {
 	return AgentConfig{
-		MaxTurns: 25,
-		Timeout:  5 * time.Minute,
+		MaxTurns:  25,
+		Timeout:   10 * time.Minute,
+		MaxTokens: 8192,
 	}
 }
 
@@ -53,7 +55,10 @@ func RunAgent(
 		cfg.MaxTurns = 25
 	}
 	if cfg.Timeout <= 0 {
-		cfg.Timeout = 5 * time.Minute
+		cfg.Timeout = 10 * time.Minute
+	}
+	if cfg.MaxTokens <= 0 {
+		cfg.MaxTokens = 8192
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -71,7 +76,7 @@ func RunAgent(
 			Model:     cfg.Model,
 			Messages:  messages,
 			System:    cfg.System,
-			MaxTokens: 4096,
+			MaxTokens: cfg.MaxTokens,
 			Tools:     cfg.Tools,
 			Stream:    true,
 		}
@@ -247,9 +252,3 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, emitDelta
 	}
 }
 
-func stopReasonFromCtx(ctx context.Context) string {
-	if ctx.Err() == context.DeadlineExceeded {
-		return "timeout"
-	}
-	return "aborted"
-}
