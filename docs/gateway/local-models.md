@@ -144,9 +144,36 @@ vLLM, LiteLLM, OAI-proxy, or custom gateways work if they expose an OpenAI-style
 
 Keep `models.mode: "merge"` so hosted models stay available as fallbacks.
 
+## GPU detection and hardware profiles
+
+Deneb auto-detects NVIDIA GPUs at startup via `nvidia-smi` and selects a hardware profile that tunes concurrency, memory, and media acceleration for local inference.
+
+| Profile              | Detection                       | Agent concurrency | FFmpeg accel      |
+| -------------------- | ------------------------------- | ----------------- | ----------------- |
+| **DGX Spark (GB10)** | Grace Blackwell GPU             | 10                | CUDA (h264_nvenc) |
+| **Desktop GPU**      | Consumer NVIDIA (RTX 3090/4090) | 8                 | CUDA (h264_nvenc) |
+| **CPU-only**         | No NVIDIA GPU detected          | 4                 | Software          |
+
+Override detection with `DENEB_GPU_ACCEL`:
+
+```bash
+# Force DGX Spark profile
+export DENEB_GPU_ACCEL=dgx-spark
+
+# Force CPU-only (disable GPU acceleration)
+export DENEB_GPU_ACCEL=none
+```
+
+The hardware profile also adjusts: V8 heap size, SQLite cache/mmap, embedding batch concurrency, image worker count, and FFmpeg buffer/timeout settings.
+
+<Tip>
+On a DGX Spark with 128 GB unified memory, Deneb automatically enables aggressive caching, high embedding batch concurrency (8), and CUDA-accelerated media encoding.
+</Tip>
+
 ## Troubleshooting
 
 - Gateway can reach the proxy? `curl http://127.0.0.1:1234/v1/models`.
 - LM Studio model unloaded? Reload; cold start is a common “hanging” cause.
 - Context errors? Lower `contextWindow` or raise your server limit.
+- GPU not detected? Check `nvidia-smi` from the gateway host. Set `DENEB_GPU_ACCEL` to force a profile.
 - Safety: local models skip provider-side filters; keep agents narrow and compaction on to limit prompt injection blast radius.

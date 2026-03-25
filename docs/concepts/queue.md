@@ -81,7 +81,7 @@ Defaults: `debounceMs: 1000`, `cap: 20`, `drop: summarize`.
 - Default lane (`main`) is process-wide for inbound + main heartbeats; set `agents.defaults.maxConcurrent` to allow multiple sessions in parallel.
 - Additional lanes may exist (e.g. `cron`, `subagent`) so background jobs can run in parallel without blocking inbound replies.
 - Per-session lanes guarantee that only one agent run touches a given session at a time.
-- No external dependencies or background worker threads; pure TypeScript + promises.
+- No external dependencies; queue scheduling uses pure TypeScript + promises. CPU-bound work (image resize, embedding batching) runs in a separate worker pool sized by the hardware profile, but the queue itself is single-threaded.
 
 ## Troubleshooting
 

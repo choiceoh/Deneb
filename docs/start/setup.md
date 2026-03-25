@@ -13,7 +13,7 @@ If you are setting up for the first time, start with [Getting Started](/start/ge
 For onboarding details, see [Onboarding (CLI)](/start/wizard).
 </Note>
 
-Last updated: 2026-01-01
+Last updated: 2026-03-25
 
 ## TL;DR
 
@@ -25,6 +25,9 @@ Last updated: 2026-01-01
 
 - Node `>=22`
 - `pnpm`
+- Go `>=1.24` (for the Go gateway server)
+- Rust stable (for the Rust core library; install via [rustup](https://rustup.rs))
+- `buf` and `protoc` (for protobuf codegen; see `make proto`)
 - Docker (optional; only for containerized setup/e2e — see [Docker](/install/docker))
 
 ## Tailoring strategy (so updates do not hurt)
