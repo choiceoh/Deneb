@@ -114,8 +114,8 @@ describe("sliceUtf16Safe", () => {
 
 describe("splitShellArgs", () => {
   it("splits whitespace and respects quotes", () => {
-    expect(splitShellArgs(`qmd --foo "bar baz"`)).toEqual(["qmd", "--foo", "bar baz"]);
-    expect(splitShellArgs(`qmd --foo 'bar baz'`)).toEqual(["qmd", "--foo", "bar baz"]);
+    expect(splitShellArgs(`vega --foo "bar baz"`)).toEqual(["vega", "--foo", "bar baz"]);
+    expect(splitShellArgs(`vega --foo 'bar baz'`)).toEqual(["vega", "--foo", "bar baz"]);
   });
 
   it("supports backslash escapes inside double quotes", () => {

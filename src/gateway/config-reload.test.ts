@@ -30,8 +30,8 @@ describe("diffConfigPaths", () => {
   it("does not report unchanged arrays of objects as changed", () => {
     const prev = {
       memory: {
-        qmd: {
-          paths: [{ path: "~/docs", pattern: "**/*.md", name: "docs" }],
+        vega: {
+          paths: [{ path: "~/docs", name: "docs" }],
           scope: {
             rules: [{ when: { channel: "slack" }, include: ["docs"] }],
           },
@@ -40,8 +40,8 @@ describe("diffConfigPaths", () => {
     };
     const next = {
       memory: {
-        qmd: {
-          paths: [{ path: "~/docs", pattern: "**/*.md", name: "docs" }],
+        vega: {
+          paths: [{ path: "~/docs", name: "docs" }],
           scope: {
             rules: [{ when: { channel: "slack" }, include: ["docs"] }],
           },
@@ -54,19 +54,19 @@ describe("diffConfigPaths", () => {
   it("reports changed arrays of objects", () => {
     const prev = {
       memory: {
-        qmd: {
-          paths: [{ path: "~/docs", pattern: "**/*.md", name: "docs" }],
+        vega: {
+          paths: [{ path: "~/docs", name: "docs" }],
         },
       },
     };
     const next = {
       memory: {
-        qmd: {
-          paths: [{ path: "~/docs", pattern: "**/*.txt", name: "docs" }],
+        vega: {
+          paths: [{ path: "~/notes", name: "docs" }],
         },
       },
     };
-    expect(diffConfigPaths(prev, next)).toContain("memory.qmd.paths");
+    expect(diffConfigPaths(prev, next)).toContain("memory.vega.paths");
   });
 });
 

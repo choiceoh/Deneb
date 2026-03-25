@@ -1,17 +1,20 @@
+import type { SessionSendPolicyConfig } from "../config/types.base.js";
 import { parseAgentSessionKey } from "../sessions/session-key-utils.js";
-import type { ResolvedQmdConfig } from "./backend-config.js";
 
-type ParsedQmdSessionScope = {
+type ParsedSessionScope = {
   channel?: string;
   chatType?: "channel" | "group" | "direct";
   normalizedKey?: string;
 };
 
-export function isQmdScopeAllowed(scope: ResolvedQmdConfig["scope"], sessionKey?: string): boolean {
+export function isScopeAllowed(
+  scope: SessionSendPolicyConfig | undefined,
+  sessionKey?: string,
+): boolean {
   if (!scope) {
     return true;
   }
-  const parsed = parseQmdSessionScope(sessionKey);
+  const parsed = parseSessionScope(sessionKey);
   const channel = parsed.channel;
   const chatType = parsed.chatType;
   const normalizedKey = parsed.normalizedKey ?? "";
@@ -50,21 +53,21 @@ export function isQmdScopeAllowed(scope: ResolvedQmdConfig["scope"], sessionKey?
   return fallback === "allow";
 }
 
-export function deriveQmdScopeChannel(key?: string): string | undefined {
-  return parseQmdSessionScope(key).channel;
+export function deriveScopeChannel(key?: string): string | undefined {
+  return parseSessionScope(key).channel;
 }
 
-export function deriveQmdScopeChatType(key?: string): "channel" | "group" | "direct" | undefined {
-  return parseQmdSessionScope(key).chatType;
+export function deriveScopeChatType(key?: string): "channel" | "group" | "direct" | undefined {
+  return parseSessionScope(key).chatType;
 }
 
-function parseQmdSessionScope(key?: string): ParsedQmdSessionScope {
-  const normalized = normalizeQmdSessionKey(key);
+function parseSessionScope(key?: string): ParsedSessionScope {
+  const normalized = normalizeSessionKey(key);
   if (!normalized) {
     return {};
   }
   const parts = normalized.split(":").filter(Boolean);
-  let chatType: ParsedQmdSessionScope["chatType"];
+  let chatType: ParsedSessionScope["chatType"];
   if (
     parts.length >= 2 &&
     (parts[1] === "group" || parts[1] === "channel" || parts[1] === "direct" || parts[1] === "dm")
@@ -89,7 +92,7 @@ function parseQmdSessionScope(key?: string): ParsedQmdSessionScope {
   return { normalizedKey: normalized, chatType: "direct" };
 }
 
-function normalizeQmdSessionKey(key?: string): string | undefined {
+function normalizeSessionKey(key?: string): string | undefined {
   if (!key) {
     return undefined;
   }

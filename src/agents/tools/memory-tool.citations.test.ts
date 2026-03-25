@@ -59,14 +59,14 @@ describe("memory search citations", () => {
     expect(details.results[0]?.citation).toBeUndefined();
   });
 
-  it("clamps decorated snippets to qmd injected budget", async () => {
-    setMemoryBackend("qmd");
+  it("clamps decorated snippets to vega injected budget", async () => {
+    setMemoryBackend("vega");
     const cfg = asDenebConfig({
-      memory: { citations: "on", backend: "qmd", qmd: { limits: { maxInjectedChars: 20 } } },
+      memory: { citations: "on", backend: "vega", vega: { limits: { maxInjectedChars: 20 } } },
       agents: { list: [{ id: "main", default: true }] },
     });
     const tool = createMemorySearchToolOrThrow({ config: cfg });
-    const result = await tool.execute("call_citations_qmd", { query: "notes" });
+    const result = await tool.execute("call_citations_vega", { query: "notes" });
     const details = result.details as { results: Array<{ snippet: string; citation?: string }> };
     expect(details.results[0]?.snippet.length).toBeLessThanOrEqual(20);
   });

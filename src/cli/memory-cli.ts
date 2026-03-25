@@ -303,31 +303,7 @@ async function summarizeIndexArtifact(manager: MemoryManager): Promise<string | 
     return null;
   }
 
-  // QMD backend
-  if (status.backend !== "qmd") {
-    return null;
-  }
-  const dbPath = status.dbPath?.trim();
-  if (!dbPath) {
-    return null;
-  }
-  let stat: fsSync.Stats;
-  try {
-    stat = await fs.stat(dbPath);
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") {
-      throw new Error(`QMD index file not found: ${shortenHomePath(dbPath)}`, { cause: err });
-    }
-    throw new Error(
-      `QMD index file check failed: ${shortenHomePath(dbPath)} (${code ?? "error"})`,
-      { cause: err },
-    );
-  }
-  if (!stat.isFile() || stat.size <= 0) {
-    throw new Error(`QMD index file is empty: ${shortenHomePath(dbPath)}`);
-  }
-  return `QMD index: ${shortenHomePath(dbPath)} (${stat.size} bytes)`;
+  return null;
 }
 
 async function scanMemorySources(params: {

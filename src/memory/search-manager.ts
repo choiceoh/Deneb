@@ -1,7 +1,7 @@
 import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import type { DenebConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import type { ResolvedQmdConfig, ResolvedVegaConfig } from "./backend-config.js";
+import type { ResolvedVegaConfig } from "./backend-config.js";
 import { resolveMemoryBackendConfig } from "./backend-config.js";
 import type {
   MemoryEmbeddingProbeResult,
@@ -10,7 +10,7 @@ import type {
 } from "./types.js";
 
 const log = createSubsystemLogger("memory");
-const QMD_MANAGER_CACHE = new Map<string, MemorySearchManager>();
+const MANAGER_CACHE = new Map<string, MemorySearchManager>();
 let managerRuntimePromise: Promise<typeof import("./manager-runtime.js")> | null = null;
 
 function loadManagerRuntime() {
@@ -35,7 +35,7 @@ async function tryCreateBackendManager(params: {
 }): Promise<MemorySearchManagerResult | null> {
   const statusOnly = params.purpose === "status";
   if (!statusOnly && params.cacheKey) {
-    const cached = QMD_MANAGER_CACHE.get(params.cacheKey);
+    const cached = MANAGER_CACHE.get(params.cacheKey);
     if (cached) {
       return { manager: cached };
     }
@@ -57,12 +57,12 @@ async function tryCreateBackendManager(params: {
         },
         () => {
           if (cacheKey) {
-            QMD_MANAGER_CACHE.delete(cacheKey);
+            MANAGER_CACHE.delete(cacheKey);
           }
         },
       );
       if (cacheKey) {
-        QMD_MANAGER_CACHE.set(cacheKey, wrapper);
+        MANAGER_CACHE.set(cacheKey, wrapper);
       }
       return { manager: wrapper };
     }
@@ -106,30 +106,6 @@ export async function getMemorySearchManager(params: {
     }
   }
 
-  if (resolved.backend === "qmd" && resolved.qmd) {
-    const statusOnly = params.purpose === "status";
-    const result = await tryCreateBackendManager({
-      cfg: params.cfg,
-      agentId: params.agentId,
-      purpose: params.purpose,
-      cacheKey: !statusOnly ? buildQmdCacheKey(params.agentId, resolved.qmd) : undefined,
-      backendLabel: "qmd",
-      createPrimary: async () => {
-        const { QmdMemoryManager } = await import("./qmd-manager.js");
-        return await QmdMemoryManager.create({
-          cfg: params.cfg,
-          agentId: params.agentId,
-          resolved,
-          mode: statusOnly ? "status" : "full",
-        });
-      },
-      fallbackParams: params,
-    });
-    if (result) {
-      return result;
-    }
-  }
-
   try {
     const { MemoryIndexManager } = await loadManagerRuntime();
     const manager = await MemoryIndexManager.get(params);
@@ -141,13 +117,13 @@ export async function getMemorySearchManager(params: {
 }
 
 export async function closeAllMemorySearchManagers(): Promise<void> {
-  const managers = Array.from(QMD_MANAGER_CACHE.values());
-  QMD_MANAGER_CACHE.clear();
+  const managers = Array.from(MANAGER_CACHE.values());
+  MANAGER_CACHE.clear();
   for (const manager of managers) {
     try {
       await manager.close?.();
     } catch (err) {
-      log.warn(`failed to close qmd memory manager: ${String(err)}`);
+      log.warn(`failed to close memory manager: ${String(err)}`);
     }
   }
   if (managerRuntimePromise !== null) {
@@ -180,9 +156,9 @@ class FallbackMemoryManager implements MemorySearchManager {
       } catch (err) {
         this.primaryFailed = true;
         this.lastError = err instanceof Error ? err.message : String(err);
-        log.warn(`qmd memory failed; switching to builtin index: ${this.lastError}`);
+        log.warn(`vega memory failed; switching to builtin index: ${this.lastError}`);
         await this.deps.primary.close?.().catch(() => {});
-        // Evict the failed wrapper so the next request can retry QMD with a fresh manager.
+        // Evict the failed wrapper so the next request can retry with a fresh manager.
         this.evictCacheEntry();
       }
     }
@@ -209,7 +185,7 @@ class FallbackMemoryManager implements MemorySearchManager {
       return this.deps.primary.status();
     }
     const fallbackStatus = this.fallback?.status();
-    const fallbackInfo = { from: "qmd", reason: this.lastError ?? "unknown" };
+    const fallbackInfo = { from: "vega", reason: this.lastError ?? "unknown" };
     if (fallbackStatus) {
       const custom = fallbackStatus.custom ?? {};
       return {
@@ -299,10 +275,6 @@ class FallbackMemoryManager implements MemorySearchManager {
     this.cacheEvicted = true;
     this.onClose?.();
   }
-}
-
-function buildQmdCacheKey(agentId: string, config: ResolvedQmdConfig): string {
-  return `${agentId}:${JSON.stringify(config)}`;
 }
 
 function buildVegaCacheKey(agentId: string, config: ResolvedVegaConfig): string {

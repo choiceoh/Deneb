@@ -153,7 +153,8 @@ Deneb/                          (~846K lines TypeScript)
 │   ├── tts/                    # Text-to-speech
 │   └── web-search/             # Web search integration
 ├── extensions/                 # Channel extensions (Telegram)
-└── vega/                       # Vega QMD backend
+├── vega/                       # Vega memory backend
+└── ui/                         # Web dashboard
 ```
 
 ## 🛠️ Development

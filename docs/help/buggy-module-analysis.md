@@ -34,17 +34,7 @@ Analysis of Deneb codebase modules with the highest bug risk, evaluated by code 
   - Partial state residue when async operations fail during context orchestration
 - **Recommendation**: Pair with `compaction.ts` testing. Add engine-level tests simulating concurrent session access, compaction timeout, and subagent-end notification races.
 
-#### 3. `src/memory/qmd-manager.ts` — 1,903 LOC
-
-- **Risk indicators**: Largest file in codebase, test file exists (2,807 lines) but gaps remain, 20 catch clauses with 3 silent
-- **Bug risks**:
-  - **Embed queue deadlock**: `qmdEmbedQueueTail` promise-chain lock — if a task throws synchronously before the `try` block, `release()` never fires, permanently deadlocking all subsequent embed operations for the process lifetime.
-  - **Silent retry storm**: Retry loop with `QMD_EMBED_BACKOFF_MAX_MS = 1 hour` — a persistent failure silently retries for up to an hour before any user feedback.
-  - **Fragile error matching**: `shouldRepairNullByteCollectionError` and `shouldRepairDuplicateDocumentConstraint` use string matching on qmd CLI subprocess error messages. If CLI changes error format, repairs silently stop triggering.
-  - FTS rebuild failure with no recovery (recently fixed in #147 — may recur)
-- **Recommendation**: Split into focused sub-modules (collection management, embedding lifecycle, search, export). Pin error-message patterns to version-checked constants. Add timeout/circuit-breaker to embed queue.
-
-#### 4. `src/gateway/server-methods/sessions/sessions.ts` — 1,146 LOC
+#### 3. `src/gateway/server-methods/sessions/sessions.ts` — 1,146 LOC
 
 - **Risk indicators**: Core session CRUD path, multiple recent fixes (#131, #133), only 2 try/catch for 20 await calls
 - **Bug risks**:
@@ -133,7 +123,7 @@ Analysis of Deneb codebase modules with the highest bug risk, evaluated by code 
 
 ### Concurrency and Shared Mutable State
 
-The codebase makes heavy use of module-level `Map` and `Set` instances as shared state (`subagentRuns`, `activeTurnBySession`, `pendingLifecycleErrorByRunId`, `qmdEmbedQueueTail`). These are accessed from multiple async code paths without formal synchronization beyond promise-chain queuing.
+The codebase makes heavy use of module-level `Map` and `Set` instances as shared state (`subagentRuns`, `activeTurnBySession`, `pendingLifecycleErrorByRunId`). These are accessed from multiple async code paths without formal synchronization beyond promise-chain queuing.
 
 - **SessionActorQueue**: Serializes per-actor, not globally. `pendingBySession` Map sync missing, deadlock if `onSettle` callback fails.
 - **RuntimeCache**: get-check-set not atomic, no safety guarantees during eviction.
@@ -145,9 +135,9 @@ The codebase makes heavy use of module-level `Map` and `Set` instances as shared
 
 Two opposite anti-patterns coexist:
 
-- **Over-defensive**: `qmd-manager.ts` (25 try/catch wrapping nearly every operation) masks root causes, makes debugging difficult.
+- **Over-defensive**: some modules wrap nearly every operation in try/catch, masking root causes and making debugging difficult.
 - **Under-defensive**: `message-handler.ts` (1 try/catch for 1,114 LOC of untrusted network input) and `sessions.ts` (2 for 1,146 LOC) leave most async paths unguarded.
-- **Silent catch `{}`**: Found across critical paths — `compaction.ts` (3), `audit-extra.async.ts` (4), `qmd-manager.ts` (3). These produce false successes in security scans and invisible context loss.
+- **Silent catch `{}`**: Found across critical paths — `compaction.ts` (3), `audit-extra.async.ts` (4). These produce false successes in security scans and invisible context loss.
 
 **Recommended standard**: (1) RPC/WebSocket handlers get mandatory top-level error boundary with safe client-facing error shapes. (2) Internal modules use targeted try/catch only where recovery is possible. (3) Ban bare `catch {}` — require `catch { /* intentional: <reason> */ }` with mandatory comment.
 
@@ -171,15 +161,13 @@ Two opposite anti-patterns coexist:
 
 ## Prioritized Action Items
 
-| Priority | Action                                                         | Modules                                                   | Expected Impact                                                      |
-| -------- | -------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------- |
-| P0       | Add compaction integration tests                               | `compaction.ts`, `engine.ts`                              | Prevents silent context loss — the most user-visible bug category    |
-| P0       | Add error boundary to WS message handler                       | `message-handler.ts`                                      | Prevents connection crashes from malformed input                     |
-| P1       | Extract subagent registry mutable state into testable class    | `subagent-registry.ts`                                    | Enables direct testing, eliminates `var` TDZ workaround              |
-| P1       | Replace silent `catch {}` with logged/finding-emitting catches | `audit-extra.async.ts`, `compaction.ts`, `qmd-manager.ts` | Eliminates false-negative security audits and invisible context loss |
-| P1       | Add embed queue timeout/circuit-breaker                        | `qmd-manager.ts`                                          | Prevents permanent deadlock and hour-long silent retry storms        |
-| P2       | Add session-method-level error boundaries                      | `sessions.ts`                                             | Standardizes RPC error responses, prevents stack trace leaks         |
-| P2       | Add concurrency tests for ACP manager                          | `manager.core.ts`                                         | Catches activeTurn identity and eviction TOCTOU races                |
-| P2       | Split `qmd-manager.ts` below 700 LOC                           | `qmd-manager.ts`                                          | Reduces merge conflicts, enables focused testing                     |
-| P3       | Reduce `attempt.ts` import fan-out                             | `attempt.ts`                                              | Reduces coupling surface and breakage risk                           |
-| P3       | Add persistent outbox for subagent announcements               | `subagent-announce.ts`                                    | Prevents dropped completion notifications during gateway hiccups     |
+| Priority | Action                                                         | Modules                                 | Expected Impact                                                      |
+| -------- | -------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------- |
+| P0       | Add compaction integration tests                               | `compaction.ts`, `engine.ts`            | Prevents silent context loss — the most user-visible bug category    |
+| P0       | Add error boundary to WS message handler                       | `message-handler.ts`                    | Prevents connection crashes from malformed input                     |
+| P1       | Extract subagent registry mutable state into testable class    | `subagent-registry.ts`                  | Enables direct testing, eliminates `var` TDZ workaround              |
+| P1       | Replace silent `catch {}` with logged/finding-emitting catches | `audit-extra.async.ts`, `compaction.ts` | Eliminates false-negative security audits and invisible context loss |
+| P2       | Add session-method-level error boundaries                      | `sessions.ts`                           | Standardizes RPC error responses, prevents stack trace leaks         |
+| P2       | Add concurrency tests for ACP manager                          | `manager.core.ts`                       | Catches activeTurn identity and eviction TOCTOU races                |
+| P3       | Reduce `attempt.ts` import fan-out                             | `attempt.ts`                            | Reduces coupling surface and breakage risk                           |
+| P3       | Add persistent outbox for subagent announcements               | `subagent-announce.ts`                  | Prevents dropped completion notifications during gateway hiccups     |
