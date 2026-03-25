@@ -124,10 +124,12 @@ func sessionsPreview(deps SessionDeps) HandlerFunc {
 			_ = unmarshalParams(req.Params, &p)
 		}
 
+		ts := time.Now().UnixMilli()
 		keys := normalizeKeys(p.Keys, 64)
+
 		if len(keys) == 0 {
 			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
-				"ts":       time.Now().UnixMilli(),
+				"ts":       ts,
 				"previews": []any{},
 			})
 			return resp
@@ -147,7 +149,7 @@ func sessionsPreview(deps SessionDeps) HandlerFunc {
 			}
 		}
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
-			"ts":       time.Now().UnixMilli(),
+			"ts":       ts,
 			"previews": previews,
 		})
 		return resp

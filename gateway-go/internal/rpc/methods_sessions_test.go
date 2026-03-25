@@ -83,6 +83,23 @@ func TestToolsCatalog_CustomAgentID(t *testing.T) {
 	}
 }
 
+func TestToolsCatalog_CoreToolCount(t *testing.T) {
+	d, _ := sessionDispatcher(t)
+	payload, resp := dispatchJSON(t, d, "tools.catalog", nil)
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+	groups := payload["groups"].([]any)
+	total := 0
+	for _, g := range groups {
+		total += len(g.(map[string]any)["tools"].([]any))
+	}
+	// Must match the 22 core tools from src/agents/tool-catalog.ts.
+	if total != 22 {
+		t.Errorf("expected 22 core tools, got %d", total)
+	}
+}
+
 func TestToolsCatalog_FiltersEmptyGroups(t *testing.T) {
 	d, _ := sessionDispatcher(t)
 	payload, resp := dispatchJSON(t, d, "tools.catalog", nil)
@@ -330,6 +347,52 @@ func TestSessionsResolve_MultipleIdentifiers(t *testing.T) {
 	})
 	if resp.OK {
 		t.Fatal("expected error for multiple identifiers")
+	}
+}
+
+func TestSessionsResolve_AmbiguousLabel(t *testing.T) {
+	d, deps := sessionDispatcher(t)
+	label := "dup-label"
+	deps.Sessions.Create("s1", session.KindDirect)
+	deps.Sessions.Patch("s1", session.PatchFields{Label: &label})
+	deps.Sessions.Create("s2", session.KindDirect)
+	deps.Sessions.Patch("s2", session.PatchFields{Label: &label})
+
+	_, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{"label": "dup-label"})
+	if resp.OK {
+		t.Fatal("expected error for ambiguous label")
+	}
+	if resp.Error.Code != protocol.ErrConflict {
+		t.Errorf("expected CONFLICT error, got %v", resp.Error.Code)
+	}
+}
+
+func TestSessionsResolve_AgentIDFilter(t *testing.T) {
+	d, deps := sessionDispatcher(t)
+	label := "agent-label"
+	// Default agent session.
+	deps.Sessions.Create("my-session", session.KindDirect)
+	deps.Sessions.Patch("my-session", session.PatchFields{Label: &label})
+	// Non-default agent session with same label.
+	deps.Sessions.Create("agent:other:my-session", session.KindDirect)
+	deps.Sessions.Patch("agent:other:my-session", session.PatchFields{Label: &label})
+
+	// Without agentId filter, ambiguous.
+	_, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{"label": "agent-label"})
+	if resp.OK {
+		t.Fatal("expected conflict without agent filter")
+	}
+
+	// With agentId=default, only the default agent session matches.
+	payload, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{
+		"label":   "agent-label",
+		"agentId": "default",
+	})
+	if !resp.OK {
+		t.Fatalf("expected ok with agentId filter, got error: %+v", resp.Error)
+	}
+	if payload["key"] != "my-session" {
+		t.Errorf("expected key=my-session, got %v", payload["key"])
 	}
 }
 

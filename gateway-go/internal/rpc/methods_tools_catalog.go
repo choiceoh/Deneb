@@ -143,10 +143,11 @@ func toolsCatalog() HandlerFunc {
 
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			AgentID        string `json:"agentId"`
-			IncludePlugins *bool  `json:"includePlugins"`
+			AgentID string `json:"agentId"`
+			// IncludePlugins is accepted but ignored; plugin tools require the
+			// Node.js bridge and are not available in the Go-native catalog.
+			IncludePlugins *bool `json:"includePlugins"`
 		}
-		// Params are optional; ignore parse errors.
 		if len(req.Params) > 0 {
 			_ = unmarshalParams(req.Params, &p)
 		}
