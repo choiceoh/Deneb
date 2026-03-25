@@ -208,7 +208,10 @@ func handleContextOverflow(
 	logger *slog.Logger,
 ) ([]llm.Message, error) {
 	// Evaluate whether compaction would help.
-	decision, err := evaluateCompaction(compCfg, ctxCfg.TokenBudget, ctxCfg.TokenBudget, ctxCfg.TokenBudget)
+	// We know context overflowed, so estimate stored tokens at ~120% of budget
+	// to ensure the threshold check triggers compaction.
+	estimatedStored := ctxCfg.TokenBudget + ctxCfg.TokenBudget/5
+	decision, err := evaluateCompaction(compCfg, estimatedStored, estimatedStored, ctxCfg.TokenBudget)
 	if err != nil {
 		logger.Warn("compaction evaluation failed", "error", err)
 	}

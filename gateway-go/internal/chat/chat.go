@@ -219,6 +219,9 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 			protocol.ErrMissingParam, "message or attachments required"))
 	}
 
+	// Interrupt any active run on this session to prevent concurrent runs.
+	h.interruptActiveRun(p.SessionKey)
+
 	return h.startAsyncRun(req.ID, RunParams{
 		SessionKey:  p.SessionKey,
 		Message:     sanitizeInput(p.Message),
@@ -313,13 +316,16 @@ func (h *Handler) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *
 
 	h.abortMu.Lock()
 	var abortedRunID string
+	var sessionKey string
 	if p.RunID != "" {
 		if entry, ok := h.abortMap[p.RunID]; ok {
 			entry.CancelFn()
 			abortedRunID = p.RunID
+			sessionKey = entry.SessionKey
 			delete(h.abortMap, p.RunID)
 		}
 	} else {
+		sessionKey = p.Key
 		for id, entry := range h.abortMap {
 			if entry.SessionKey == p.Key {
 				entry.CancelFn()
@@ -338,8 +344,9 @@ func (h *Handler) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *
 		return resp
 	}
 
-	if p.Key != "" {
-		h.sessions.ApplyLifecycleEvent(p.Key, session.LifecycleEvent{
+	// Transition session out of running state.
+	if sessionKey != "" {
+		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
 		})
@@ -395,11 +402,32 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 		})
 	}
 
-	// Spawn async agent run.
+	// Spawn async agent run with panic recovery.
 	deps := h.buildRunDeps()
 	go func() {
 		defer runCancel()
 		defer h.cleanupAbort(params.ClientRunID)
+		defer func() {
+			if r := recover(); r != nil {
+				h.logger.Error("panic in agent run",
+					"session", params.SessionKey,
+					"runId", params.ClientRunID,
+					"panic", r,
+				)
+				// Ensure session transitions out of running state.
+				h.sessions.ApplyLifecycleEvent(params.SessionKey, session.LifecycleEvent{
+					Phase: session.PhaseError,
+					Ts:    time.Now().UnixMilli(),
+				})
+				if h.broadcast != nil {
+					h.broadcast("sessions.changed", map[string]any{
+						"sessionKey": params.SessionKey,
+						"reason":     "panic",
+						"status":     "failed",
+					})
+				}
+			}
+		}()
 		runAgentAsync(runCtx, params, deps)
 	}()
 
@@ -523,7 +551,6 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 			found = true
 		}
 	} else {
-		// Abort by session key — cancel all runs for the session.
 		resolvedKey = p.SessionKey
 		for id, entry := range h.abortMap {
 			if entry.SessionKey == p.SessionKey {
@@ -540,8 +567,7 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 			protocol.ErrNotFound, "no active run found"))
 	}
 
-	// Transition session to killed. Use the key from the abort entry
-	// (not params) when aborting by clientRunId.
+	// Transition session to killed.
 	key := resolvedKey
 	if key == "" {
 		key = p.SessionKey
