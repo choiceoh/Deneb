@@ -23,28 +23,12 @@ jobs:
 
       - name: Fail on tabs in workflow files
         run: |
-          python - <<'PY'
-          from __future__ import annotations
-
-          import pathlib
-          import sys
-
-          root = pathlib.Path(".github/workflows")
-          bad: list[str] = []
-          for path in sorted(root.rglob("*.yml")):
-            if b"\t" in path.read_bytes():
-              bad.append(str(path))
-
-          for path in sorted(root.rglob("*.yaml")):
-            if b"\t" in path.read_bytes():
-              bad.append(str(path))
-
-          if bad:
-            print("Tabs found in workflow file(s):")
-            for path in bad:
-              print(f"- {path}")
-            sys.exit(1)
-          PY
+          bad=$(grep -rlP '\t' .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null || true)
+          if [[ -n "$bad" ]]; then
+            echo "Tabs found in workflow file(s):"
+            echo "$bad" | while IFS= read -r f; do echo "- $f"; done
+            exit 1
+          fi
 
   actionlint:
     if: github.event_name != 'workflow_dispatch'
@@ -70,7 +54,7 @@ jobs:
         run: actionlint
 
       - name: Disallow direct inputs interpolation in composite run blocks
-        run: python3 scripts/check-composite-action-input-interpolation.py
+        run: go run scripts/check-composite-action-input-interpolation.go
 
   config-docs-drift:
     if: github.event_name == 'workflow_dispatch'

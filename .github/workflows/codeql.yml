@@ -26,17 +26,10 @@ jobs:
           - language: javascript-typescript
             runs_on: blacksmith-16vcpu-ubuntu-2404
             needs_node: true
-            needs_python: false
             config_file: ./.github/codeql/codeql-javascript-typescript.yml
           - language: actions
             runs_on: blacksmith-16vcpu-ubuntu-2404
             needs_node: false
-            needs_python: false
-            config_file: ""
-          - language: python
-            runs_on: blacksmith-16vcpu-ubuntu-2404
-            needs_node: false
-            needs_python: true
             config_file: ""
     steps:
       - name: Checkout
@@ -50,12 +43,6 @@ jobs:
         with:
           install-bun: "false"
           use-sticky-disk: "false"
-
-      - name: Setup Python
-        if: matrix.needs_python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
