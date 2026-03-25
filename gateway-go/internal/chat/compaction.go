@@ -11,6 +11,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
+// Compaction defaults.
+const (
+	defaultContextThreshold = 0.75
+)
+
 // CompactionConfig configures compaction behavior.
 type CompactionConfig struct {
 	ContextThreshold float64 `json:"contextThreshold"` // fraction of budget (default 0.75)
@@ -20,8 +25,8 @@ type CompactionConfig struct {
 // DefaultCompactionConfig returns sensible defaults.
 func DefaultCompactionConfig() CompactionConfig {
 	return CompactionConfig{
-		ContextThreshold: 0.75,
-		FreshTailCount:   32,
+		ContextThreshold: defaultContextThreshold,
+		FreshTailCount:   defaultFreshTailCount,
 	}
 }
 

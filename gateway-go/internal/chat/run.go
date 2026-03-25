@@ -254,32 +254,12 @@ func handleRunSuccess(
 		}
 	}
 
-	// Broadcast completion.
 	if broadcaster != nil {
 		broadcaster.EmitComplete(result.Text, result.Usage)
 	}
 
-	// Update session lifecycle.
-	deps.sessions.ApplyLifecycleEvent(params.SessionKey, session.LifecycleEvent{
-		Phase: session.PhaseEnd,
-		Ts:    now,
-	})
-	if deps.broadcast != nil {
-		deps.broadcast("sessions.changed", map[string]any{
-			"sessionKey": params.SessionKey,
-			"reason":     "completed",
-			"status":     "done",
-		})
-	}
-
-	// Emit lifecycle end event for job tracker.
-	if deps.jobTracker != nil {
-		deps.jobTracker.OnLifecycleEvent(agent.LifecycleEvent{
-			RunID: params.ClientRunID,
-			Phase: "end",
-			Ts:    now,
-		})
-	}
+	finishRun(deps, params, session.PhaseEnd, "completed", "done", now)
+	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
 	logger.Info("agent run completed",
 		"stopReason", result.StopReason,
@@ -306,49 +286,45 @@ func handleRunError(
 		if broadcaster != nil {
 			broadcaster.EmitAborted("")
 		}
-		deps.sessions.ApplyLifecycleEvent(params.SessionKey, session.LifecycleEvent{
-			Phase: session.PhaseEnd,
-			Ts:    now,
-		})
-		if deps.broadcast != nil {
-			deps.broadcast("sessions.changed", map[string]any{
-				"sessionKey": params.SessionKey,
-				"reason":     "aborted",
-				"status":     "killed",
-			})
-		}
+		finishRun(deps, params, session.PhaseEnd, "aborted", "killed", now)
+		emitJobEvent(deps, params.ClientRunID, "end", true, err.Error(), now)
 	} else {
 		logger.Error("agent run failed", "error", err)
 		if broadcaster != nil {
 			broadcaster.EmitError(err.Error())
 		}
-		deps.sessions.ApplyLifecycleEvent(params.SessionKey, session.LifecycleEvent{
-			Phase: session.PhaseError,
-			Ts:    now,
-		})
-		if deps.broadcast != nil {
-			deps.broadcast("sessions.changed", map[string]any{
-				"sessionKey": params.SessionKey,
-				"reason":     "error",
-				"status":     "failed",
-			})
-		}
+		finishRun(deps, params, session.PhaseError, "error", "failed", now)
+		emitJobEvent(deps, params.ClientRunID, "error", false, err.Error(), now)
 	}
+}
 
-	// Emit lifecycle event for job tracker.
-	if deps.jobTracker != nil {
-		phase := "error"
-		if aborted {
-			phase = "end"
-		}
-		deps.jobTracker.OnLifecycleEvent(agent.LifecycleEvent{
-			RunID:   params.ClientRunID,
-			Phase:   phase,
-			Aborted: aborted,
-			Error:   err.Error(),
-			Ts:      now,
+// finishRun transitions the session out of running and broadcasts the change.
+func finishRun(deps runDeps, params RunParams, phase session.LifecyclePhase, reason, status string, ts int64) {
+	deps.sessions.ApplyLifecycleEvent(params.SessionKey, session.LifecycleEvent{
+		Phase: phase,
+		Ts:    ts,
+	})
+	if deps.broadcast != nil {
+		deps.broadcast("sessions.changed", map[string]any{
+			"sessionKey": params.SessionKey,
+			"reason":     reason,
+			"status":     status,
 		})
 	}
+}
+
+// emitJobEvent notifies the job tracker of a lifecycle phase change.
+func emitJobEvent(deps runDeps, runID, phase string, aborted bool, errMsg string, ts int64) {
+	if deps.jobTracker == nil {
+		return
+	}
+	deps.jobTracker.OnLifecycleEvent(agent.LifecycleEvent{
+		RunID:   runID,
+		Phase:   phase,
+		Aborted: aborted,
+		Error:   errMsg,
+		Ts:      ts,
+	})
 }
 
 // resolveAPIKey retrieves the Anthropic API key from the provider auth manager.

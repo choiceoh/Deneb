@@ -491,7 +491,24 @@ func (h *Handler) History(ctx context.Context, req *protocol.RequestFrame) *prot
 		limit = h.maxHistoryCount
 	}
 
-	// Forward to Node.js to read transcript from disk.
+	// Use native transcript store when available.
+	if h.transcript != nil {
+		msgs, total, err := h.transcript.Load(p.SessionKey, limit)
+		if err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrDependencyFailed, "transcript load error: "+err.Error()))
+		}
+		if msgs == nil {
+			msgs = []ChatMessage{}
+		}
+		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			"messages": msgs,
+			"total":    total,
+		})
+		return resp
+	}
+
+	// Fall back to bridge forwarding.
 	if h.forwarder == nil {
 		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"messages": []ChatMessage{},
@@ -716,14 +733,13 @@ func (h *Handler) budgetHistory(reqID string, payload json.RawMessage) *protocol
 	}
 
 	// Keep messages from the end (most recent) until budget exhausted.
-	// Collect in reverse order, then reverse once to avoid O(n²) prepend.
+	// Collect in reverse, then flip to preserve chronological order.
 	reversed := make([]json.RawMessage, 0, len(parsed.Messages))
 	totalBytes := 0
 	truncatedCount := 0
 	for i := len(parsed.Messages) - 1; i >= 0; i-- {
 		msgBytes := len(parsed.Messages[i])
 		if msgBytes > h.maxMessageBytes {
-			// Replace oversized message with placeholder.
 			placeholder, _ := json.Marshal(map[string]any{
 				"role":      "system",
 				"content":   fmt.Sprintf("[message truncated: %d bytes]", msgBytes),
@@ -740,13 +756,12 @@ func (h *Handler) budgetHistory(reqID string, payload json.RawMessage) *protocol
 		totalBytes += msgBytes
 	}
 	// Reverse to restore chronological order.
-	budgeted := make([]json.RawMessage, len(reversed))
-	for i, msg := range reversed {
-		budgeted[len(reversed)-1-i] = msg
+	for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
+		reversed[i], reversed[j] = reversed[j], reversed[i]
 	}
 
 	resp := protocol.MustResponseOK(reqID, map[string]any{
-		"messages":       budgeted,
+		"messages":       reversed,
 		"total":          parsed.Total,
 		"truncatedCount": truncatedCount,
 		"budgeted":       true,
