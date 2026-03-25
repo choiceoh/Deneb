@@ -10,7 +10,7 @@
 
 ---
 
-**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. Deneb is a ~846K-line server engine with a custom Lossless Context Management (LCM) system — DAG-based compaction, proactive background summarization, and full memory recall across sessions.
+**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. Deneb is a ~846K-line server engine with a custom Aurora context engine — DAG-based compaction, proactive background summarization, and full memory recall across sessions.
 
 **Memory-first, local-first, lean-first.**
 
@@ -20,14 +20,14 @@ Most AI agent frameworks hit the same wall: when conversations grow long, contex
 
 ### What's Different
 
-|                        | Typical Agent Framework  | Deneb                                          |
-| ---------------------- | ------------------------ | ---------------------------------------------- |
-| **Long conversations** | Summarize → lose details | DAG-based compaction preserves everything      |
-| **Context recall**     | Vector search only       | Semantic search + DAG expansion + memory files |
-| **Compaction latency** | Blocks on LLM call       | Background observer pre-computes summaries     |
-| **Memory persistence** | Session-scoped           | Workspace files + JSONL transcripts + LCM DAG  |
-| **Codebase size**      | 500K–1M+ lines           | ~846K lines — auditable                        |
-| **Local LLM**          | Optional                 | First-class: SGLang, Ollama, vLLM support      |
+|                        | Typical Agent Framework  | Deneb                                            |
+| ---------------------- | ------------------------ | ------------------------------------------------ |
+| **Long conversations** | Summarize → lose details | DAG-based compaction preserves everything        |
+| **Context recall**     | Vector search only       | Semantic search + DAG expansion + memory files   |
+| **Compaction latency** | Blocks on LLM call       | Background observer pre-computes summaries       |
+| **Memory persistence** | Session-scoped           | Workspace files + JSONL transcripts + Aurora DAG |
+| **Codebase size**      | 500K–1M+ lines           | ~846K lines — auditable                          |
+| **Local LLM**          | Optional                 | First-class: SGLang, Ollama, vLLM support        |
 
 ### Intentional Simplification
 
@@ -44,14 +44,14 @@ Deneb is a focused agent engine that remembers everything and runs on a single G
 
 ## ⭐ Key Features
 
-### 🧠 Lossless Context Management (LCM)
+### 🧠 Aurora Context Engine
 
 The core differentiator. A DAG-structured summary system that compresses conversations without losing details.
 
 - **DAG-based compaction** — Summaries reference each other in a directed acyclic graph, enabling deep recall of any past detail
 - **Custom identifier preservation** — Project names, amounts, dates, and technical terms survive compression intact
 - **Background observer** — Proactively pre-computes summaries using local LLM, so compaction is instant when triggered
-- **Multi-layer recall** — `lcm_grep` → `lcm_describe` → `lcm_expand` → `lcm_expand_query` for progressively deeper memory retrieval
+- **Multi-layer recall** — `aurora_grep` → `aurora_describe` → `aurora_expand` → `aurora_expand_query` for progressively deeper memory retrieval
 - **Quality guard** — Automatic retry with conservative settings if summary quality drops
 
 ### 🤖 Autonomous Loop Engine
@@ -88,7 +88,7 @@ We chose to ship one channel that works perfectly over eight that sort of work.
 | Browser    | Playwright automation and scraping           |
 | PDF        | Native PDF analysis with vision models       |
 | Image      | Multi-image analysis with vision models      |
-| Memory     | Semantic search + LCM expansion              |
+| Memory     | Semantic search + Aurora expansion           |
 | Cron       | Scheduled tasks, heartbeats, morning letters |
 | Sub-agents | Spawn bounded sub-agents for complex tasks   |
 | MCP        | Model Context Protocol tool integration      |
@@ -138,7 +138,7 @@ node deneb.mjs gateway
 ```
 Deneb/                          (~846K lines TypeScript)
 ├── src/
-│   ├── context-engine/lcm/     # LCM engine — compaction, observer, DAG
+│   ├── context-engine/aurora/   # Aurora engine — compaction, observer, DAG
 │   ├── autonomous/             # Autonomous loop engine
 │   ├── agents/                 # Agent loop, sessions, compaction
 │   ├── cron/                   # Scheduled tasks & heartbeat
@@ -153,7 +153,8 @@ Deneb/                          (~846K lines TypeScript)
 │   ├── tts/                    # Text-to-speech
 │   └── web-search/             # Web search integration
 ├── extensions/                 # Channel extensions (Telegram)
-└── vega/                       # Vega QMD backend
+├── vega/                       # Vega memory backend
+└── ui/                         # Web dashboard
 ```
 
 ## 🛠️ Development

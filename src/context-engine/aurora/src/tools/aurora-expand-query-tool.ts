@@ -6,7 +6,6 @@ import {
   revokeDelegatedExpansionGrantForSession,
 } from "../expansion-auth.js";
 import type { AuroraDependencies } from "../types.js";
-import { jsonResult, type AnyAgentTool } from "./common.js";
 import { resolveAuroraConversationScope } from "./aurora-conversation-scope.js";
 import {
   normalizeSummaryIds,
@@ -20,6 +19,7 @@ import {
   resolveNextExpansionDepth,
   stampDelegatedExpansionContext,
 } from "./aurora-expansion-recursion-guard.js";
+import { jsonResult, type AnyAgentTool } from "./common.js";
 
 const DELEGATED_WAIT_TIMEOUT_MS = 120_000;
 const GATEWAY_TIMEOUT_MS = 10_000;

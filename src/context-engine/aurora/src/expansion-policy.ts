@@ -1,6 +1,9 @@
 export type AuroraExpansionRoutingIntent = "query_probe" | "explicit_expand";
 
-export type AuroraExpansionRoutingAction = "answer_directly" | "expand_shallow" | "delegate_traversal";
+export type AuroraExpansionRoutingAction =
+  | "answer_directly"
+  | "expand_shallow"
+  | "delegate_traversal";
 
 export type AuroraExpansionTokenRiskLevel = "low" | "moderate" | "high";
 

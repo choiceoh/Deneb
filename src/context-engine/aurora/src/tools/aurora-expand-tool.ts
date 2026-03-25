@@ -8,14 +8,14 @@ import {
 import { decideAuroraExpansionRouting } from "../expansion-policy.js";
 import { ExpansionOrchestrator, distillForSubagent, type ExpansionResult } from "../expansion.js";
 import type { AuroraDependencies } from "../types.js";
-import type { AnyAgentTool } from "./common.js";
-import { jsonResult } from "./common.js";
 import { resolveAuroraConversationScope } from "./aurora-conversation-scope.js";
 import {
   normalizeSummaryIds,
   runDelegatedExpansionLoop,
   type DelegatedExpansionLoopResult,
 } from "./aurora-expand-tool.delegation.js";
+import type { AnyAgentTool } from "./common.js";
+import { jsonResult } from "./common.js";
 
 const AuroraExpandSchema = Type.Object({
   summaryIds: Type.Optional(
