@@ -184,13 +184,32 @@ func TestBot_AllowList(t *testing.T) {
 	}
 
 	// With allowlist — only allowed users.
-	bot.config.AllowFrom = []int64{42}
+	bot.config.AllowFrom = AllowList{IDs: []int64{42}}
 	if bot.isAllowed(msg) {
 		t.Error("expected message rejected for non-allowed user")
 	}
 	msg.From.ID = 42
 	if !bot.isAllowed(msg) {
 		t.Error("expected message allowed for allowed user")
+	}
+
+	// Wildcard allows all.
+	bot.config.AllowFrom = AllowList{Wildcard: true}
+	msg.From.ID = 999
+	if !bot.isAllowed(msg) {
+		t.Error("expected message allowed with wildcard")
+	}
+
+	// Username matching.
+	bot.config.AllowFrom = AllowList{Usernames: []string{"peter"}}
+	msg.From.ID = 0
+	msg.From.Username = ""
+	if bot.isAllowed(msg) {
+		t.Error("expected rejection when username is empty")
+	}
+	msg.From.Username = "Peter"
+	if !bot.isAllowed(msg) {
+		t.Error("expected case-insensitive username match")
 	}
 }
 
