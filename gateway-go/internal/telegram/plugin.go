@@ -64,22 +64,25 @@ func (p *Plugin) Start(ctx context.Context) error {
 		return nil
 	}
 
-	// Create HTTP client with optional proxy.
-	httpClient := &http.Client{
-		Timeout: time.Duration(p.config.EffectiveTimeout()) * time.Second,
-	}
+	// Create HTTP client with IPv4-fallback transport.
+	timeout := time.Duration(p.config.EffectiveTimeout()) * time.Second
+	httpClient := NewTelegramHTTPClient(timeout, p.logger)
 	if p.config.Proxy != "" {
 		proxyURL, err := url.Parse(p.config.Proxy)
 		if err != nil {
 			p.status = channel.Status{Connected: false, Error: "invalid proxy URL: " + err.Error()}
 			return nil
 		}
-		httpClient.Transport = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+		// Overlay proxy on the existing transport.
+		if transport, ok := httpClient.Transport.(*http.Transport); ok {
+			transport.Proxy = http.ProxyURL(proxyURL)
+		}
 	}
 
 	p.client = NewClient(ClientConfig{
 		Token:      p.config.BotToken,
 		HTTPClient: httpClient,
+		Logger:     p.logger,
 	})
 
 	// Verify bot token.
