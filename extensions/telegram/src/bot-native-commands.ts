@@ -109,6 +109,12 @@ export type RegisterTelegramHandlerParams = {
     messageThreadId?: number,
   ) => { groupConfig?: TelegramGroupConfig; topicConfig?: TelegramTopicConfig };
   shouldSkipUpdate: (ctx: TelegramUpdateKeyContext) => boolean;
+  /** Track update IDs that are pending inside a debounce buffer so the offset
+   *  watermark does not advance past them until the flush completes. */
+  debounceWatermark?: {
+    hold: (updateId: number) => void;
+    release: (updateId: number) => void;
+  };
   processMessage: (
     ctx: TelegramContext,
     allMedia: TelegramMediaRef[],

@@ -256,6 +256,19 @@ export function createTelegramBot(opts: TelegramBotOptions) {
   const pendingUpdateIds = new Set<number>();
   let highestCompletedUpdateId: number | null = initialUpdateId;
   let highestPersistedUpdateId: number | null = initialUpdateId;
+  // Update IDs held by the inbound debounce buffer — their flush has not
+  // completed yet so the watermark must not advance past them.
+  const pendingDebounceUpdateIds = new Set<number>();
+  const debounceWatermark = {
+    hold: (updateId: number) => {
+      pendingDebounceUpdateIds.add(updateId);
+    },
+    release: (updateId: number) => {
+      pendingDebounceUpdateIds.delete(updateId);
+      maybePersistSafeWatermark();
+    },
+  };
+
   const maybePersistSafeWatermark = () => {
     if (typeof opts.updateOffset?.onUpdateId !== "function") {
       return;
@@ -264,15 +277,15 @@ export function createTelegramBot(opts: TelegramBotOptions) {
       return;
     }
     let safe = highestCompletedUpdateId;
-    if (pendingUpdateIds.size > 0) {
-      let minPending: number | null = null;
-      for (const id of pendingUpdateIds) {
-        if (minPending === null || id < minPending) {
-          minPending = id;
+    // Consider both middleware-pending and debounce-pending updates.
+    const allPending = [pendingUpdateIds, pendingDebounceUpdateIds];
+    for (const set of allPending) {
+      if (set.size > 0) {
+        for (const id of set) {
+          if (safe > id - 1) {
+            safe = id - 1;
+          }
         }
-      }
-      if (minPending !== null) {
-        safe = Math.min(safe, minPending - 1);
       }
     }
     if (highestPersistedUpdateId !== null && safe <= highestPersistedUpdateId) {
@@ -543,6 +556,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
     resolveGroupPolicy,
     resolveTelegramGroupConfig,
     shouldSkipUpdate,
+    debounceWatermark,
     processMessage,
     logger,
     telegramDeps,

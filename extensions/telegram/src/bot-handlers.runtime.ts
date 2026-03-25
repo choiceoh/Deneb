@@ -102,6 +102,7 @@ export const registerTelegramHandlers = ({
   resolveGroupPolicy,
   resolveTelegramGroupConfig,
   shouldSkipUpdate,
+  debounceWatermark,
   processMessage,
   logger,
   telegramDeps = defaultTelegramBotDeps,
@@ -144,6 +145,8 @@ export const registerTelegramHandlers = ({
     debounceKey: string | null;
     debounceLane: TelegramDebounceLane;
     botUsername?: string;
+    /** Telegram update_id used for watermark tracking. */
+    updateId?: number;
   };
   const resolveTelegramDebounceLane = (msg: Message): TelegramDebounceLane => {
     const forwardMeta = msg as {
@@ -175,6 +178,30 @@ export const registerTelegramHandlers = ({
     entities: undefined,
     ...(params.date != null ? { date: params.date } : {}),
   });
+  /** Merge entities from debounced entries, adjusting offsets for combined text. */
+  const mergeEntriesEntities = (
+    entries: TelegramDebounceEntry[],
+  ): Array<{ type: string; offset: number; length: number; [k: string]: unknown }> => {
+    const result: Array<{ type: string; offset: number; length: number; [k: string]: unknown }> =
+      [];
+    let offset = 0;
+    for (const entry of entries) {
+      const text = entry.msg.text ?? entry.msg.caption ?? "";
+      const entities = (entry.msg.entities ?? entry.msg.caption_entities ?? []) as Array<{
+        type: string;
+        offset: number;
+        length: number;
+        [k: string]: unknown;
+      }>;
+      for (const ent of entities) {
+        result.push({ ...ent, offset: offset + ent.offset });
+      }
+      if (text) {
+        offset += text.length + 1; // +1 for the "\n" joiner
+      }
+    }
+    return result;
+  };
   const buildSyntheticContext = (
     ctx: Pick<TelegramContext, "me"> & { getFile?: unknown },
     message: Message,
@@ -185,6 +212,27 @@ export const registerTelegramHandlers = ({
         : async () => ({});
     return { message, me: ctx.me, getFile };
   };
+  // Per-conversation promise chain so debounce flushes for the same chat are
+  // serialized, preventing concurrent processMessage calls that race on session
+  // state.  Mirrors the textFragmentProcessing / mediaGroupProcessing pattern.
+  const debounceFlushChains = new Map<string, Promise<void>>();
+  const serializedProcessMessage = async (
+    conversationKey: string,
+    run: () => Promise<void>,
+  ): Promise<void> => {
+    const prev = debounceFlushChains.get(conversationKey) ?? Promise.resolve();
+    const next = prev.then(run, run);
+    debounceFlushChains.set(conversationKey, next);
+    try {
+      await next;
+    } finally {
+      // Clean up the chain entry if it's still ours (prevents unbounded growth).
+      if (debounceFlushChains.get(conversationKey) === next) {
+        debounceFlushChains.delete(conversationKey);
+      }
+    }
+  };
+
   const inboundDebouncer = createInboundDebouncer<TelegramDebounceEntry>({
     debounceMs,
     resolveDebounceMs: (entry) =>
@@ -212,39 +260,76 @@ export const registerTelegramHandlers = ({
       if (!last) {
         return;
       }
-      if (entries.length === 1) {
-        const replyMedia = await resolveReplyMediaForMessage(last.ctx, last.msg);
-        await processMessage(last.ctx, last.allMedia, last.storeAllowFrom, undefined, replyMedia);
-        return;
+      // Derive a conversation key for serialization from the debounce key
+      // (which already encodes account + chat + sender + lane).
+      const conversationKey = last.debounceKey ?? `telegram:${last.msg.chat.id}`;
+      try {
+        await serializedProcessMessage(conversationKey, async () => {
+          if (entries.length === 1) {
+            const replyMedia = await resolveReplyMediaForMessage(last.ctx, last.msg);
+            await processMessage(
+              last.ctx,
+              last.allMedia,
+              last.storeAllowFrom,
+              undefined,
+              replyMedia,
+            );
+            return;
+          }
+          const combinedText = entries
+            .map((entry) => entry.msg.text ?? entry.msg.caption ?? "")
+            .filter(Boolean)
+            .join("\n");
+          const combinedMedia = entries.flatMap((entry) => entry.allMedia);
+          if (!combinedText.trim() && combinedMedia.length === 0) {
+            return;
+          }
+          const first = entries[0];
+          const baseCtx = first.ctx;
+          // Merge entities from all entries so mention detection works on
+          // combined messages (entities stripped by buildSyntheticTextMessage).
+          const mergedEntities = mergeEntriesEntities(entries);
+          const syntheticMessage = buildSyntheticTextMessage({
+            base: first.msg,
+            text: combinedText,
+            date: last.msg.date ?? first.msg.date,
+          });
+          if (mergedEntities.length > 0) {
+            (syntheticMessage as { entities?: typeof mergedEntities }).entities = mergedEntities;
+          }
+          const messageIdOverride = last.msg.message_id ? String(last.msg.message_id) : undefined;
+          const syntheticCtx = buildSyntheticContext(baseCtx, syntheticMessage);
+          const replyMedia = await resolveReplyMediaForMessage(baseCtx, syntheticMessage);
+          await processMessage(
+            syntheticCtx,
+            combinedMedia,
+            first.storeAllowFrom,
+            messageIdOverride ? { messageIdOverride } : undefined,
+            replyMedia,
+          );
+        });
+      } finally {
+        // Release watermark holds so the offset can advance past these updates.
+        if (debounceWatermark) {
+          for (const entry of entries) {
+            if (typeof entry.updateId === "number") {
+              debounceWatermark.release(entry.updateId);
+            }
+          }
+        }
       }
-      const combinedText = entries
-        .map((entry) => entry.msg.text ?? entry.msg.caption ?? "")
-        .filter(Boolean)
-        .join("\n");
-      const combinedMedia = entries.flatMap((entry) => entry.allMedia);
-      if (!combinedText.trim() && combinedMedia.length === 0) {
-        return;
-      }
-      const first = entries[0];
-      const baseCtx = first.ctx;
-      const syntheticMessage = buildSyntheticTextMessage({
-        base: first.msg,
-        text: combinedText,
-        date: last.msg.date ?? first.msg.date,
-      });
-      const messageIdOverride = last.msg.message_id ? String(last.msg.message_id) : undefined;
-      const syntheticCtx = buildSyntheticContext(baseCtx, syntheticMessage);
-      const replyMedia = await resolveReplyMediaForMessage(baseCtx, syntheticMessage);
-      await processMessage(
-        syntheticCtx,
-        combinedMedia,
-        first.storeAllowFrom,
-        messageIdOverride ? { messageIdOverride } : undefined,
-        replyMedia,
-      );
     },
     onError: (err, items) => {
       runtime.error?.(danger(`telegram debounce flush failed: ${String(err)}`));
+      // Ensure watermark holds are released for failed items so the offset
+      // tracking does not stall indefinitely.
+      if (debounceWatermark) {
+        for (const item of items) {
+          if (typeof item.updateId === "number") {
+            debounceWatermark.release(item.updateId);
+          }
+        }
+      }
       const chatId = items[0]?.msg.chat.id;
       if (chatId != null) {
         const threadId = items[0]?.msg.message_thread_id;
@@ -859,6 +944,7 @@ export const registerTelegramHandlers = ({
     dmThreadId?: number;
     storeAllowFrom: string[];
     sendOversizeWarning: boolean;
+    updateId?: number;
     oversizeLogMessage: string;
   }) => {
     const {
@@ -1026,6 +1112,12 @@ export const registerTelegramHandlers = ({
     const debounceKey = senderId
       ? `telegram:${accountId ?? "default"}:${conversationKey}:${senderId}:${debounceLane}`
       : null;
+    // Hold the watermark so the update offset is not persisted past this update
+    // until the debounce flush actually completes processing.
+    const entryUpdateId = params.updateId;
+    if (typeof entryUpdateId === "number" && debounceWatermark) {
+      debounceWatermark.hold(entryUpdateId);
+    }
     await inboundDebouncer.enqueue({
       ctx,
       msg,
@@ -1034,6 +1126,7 @@ export const registerTelegramHandlers = ({
       debounceKey,
       debounceLane,
       botUsername: ctx.me?.username,
+      updateId: entryUpdateId,
     });
   };
   bot.on("callback_query", async (ctx) => {
@@ -1654,6 +1747,9 @@ export const registerTelegramHandlers = ({
         }
       }
 
+      const updateId =
+        (event.ctxForDedupe as { update?: { update_id?: number } }).update?.update_id ??
+        (event.ctxForDedupe as { update_id?: number }).update_id;
       await processInboundMessage({
         ctx: event.ctx,
         msg: event.msg,
@@ -1663,6 +1759,7 @@ export const registerTelegramHandlers = ({
         storeAllowFrom,
         sendOversizeWarning: event.sendOversizeWarning,
         oversizeLogMessage: event.oversizeLogMessage,
+        updateId: typeof updateId === "number" ? updateId : undefined,
       });
     } catch (err) {
       runtime.error?.(danger(`${event.errorMessage}: ${String(err)}`));
