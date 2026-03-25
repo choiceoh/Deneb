@@ -12,14 +12,45 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release-created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
     steps:
+      # Use a PAT so the release PR triggers other CI workflows.
+      # Set RELEASE_PLEASE_TOKEN as a repo secret with a fine-grained PAT
+      # (contents: write, pull-requests: write).
+      # Falls back to the default GITHUB_TOKEN if the secret is not set.
       - uses: googleapis/release-please-action@v4
         id: release
         with:
           config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Print outputs
+      - name: Print release info
+        if: steps.release.outputs.release_created == 'true'
         run: |
-          echo "release-created: ${{ steps.release.outputs.release-created }}"
-          echo "tag: ${{ steps.release.outputs.tag }}"
-          echo "version: ${{ steps.release.outputs.version }}"
+          echo "## Release v${{ steps.release.outputs.version }} created" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Tag:** ${{ steps.release.outputs.tag_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version:** ${{ steps.release.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # Post-release: tag-triggered jobs can be added here.
+  # The DGX Spark deployment model is `git pull` + restart,
+  # so no CI/CD publish step is needed. This job creates a
+  # GitHub release summary for visibility.
+  post-release:
+    needs: release-please
+    if: needs.release-please.outputs.release-created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate release summary
+        run: |
+          echo "## Release ${{ needs.release-please.outputs.tag }} published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy on DGX Spark:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo "git pull origin main && deneb gateway restart" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

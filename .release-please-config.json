@@ -1,5 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "include-v-in-tag": true,
+  "include-component-in-tag": false,
+  "separate-pull-requests": false,
+  "group-pull-request-title-pattern": "chore: release v${version}",
+  "pull-request-title-pattern": "chore: release v${version}",
   "packages": {
     ".": {
       "release-type": "node",
@@ -17,19 +22,40 @@
       "release-type": "rust",
       "component": "deneb-cli",
       "changelog-path": "cli-rs/CHANGELOG.md",
-      "package-name": "deneb-cli"
+      "package-name": "deneb-cli",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "key": "package.version"
+        }
+      ]
     },
     "core-rs/core": {
       "release-type": "rust",
       "component": "deneb-core",
       "changelog-path": "core-rs/core/CHANGELOG.md",
-      "package-name": "deneb-core"
+      "package-name": "deneb-core",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "key": "package.version"
+        }
+      ]
     },
     "core-rs-napi": {
       "release-type": "rust",
       "component": "deneb-core-napi",
       "changelog-path": "core-rs-napi/CHANGELOG.md",
-      "package-name": "deneb-core-napi"
+      "package-name": "deneb-core-napi",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "key": "package.version"
+        }
+      ]
     },
     "gateway-go": {
       "release-type": "go",
@@ -41,10 +67,10 @@
     { "type": "feat", "section": "Features" },
     { "type": "fix", "section": "Bug Fixes" },
     { "type": "perf", "section": "Performance" },
-    { "type": "refactor", "section": "Refactor" },
-    { "type": "docs", "section": "Documentation" },
-    { "type": "test", "section": "Tests" },
-    { "type": "chore", "section": "Misc" },
+    { "type": "refactor", "section": "Refactor", "hidden": true },
+    { "type": "docs", "section": "Documentation", "hidden": true },
+    { "type": "test", "section": "Tests", "hidden": true },
+    { "type": "chore", "section": "Misc", "hidden": true },
     { "type": "ci", "section": "CI/CD", "hidden": true },
     { "type": "build", "section": "Build", "hidden": true }
   ],
