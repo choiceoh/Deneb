@@ -7,8 +7,21 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
+// Stream event names matching the TypeScript wire format.
+const (
+	eventChat     = "chat"
+	eventDelta    = "chat.delta"
+	eventTool     = "chat.tool"
+)
+
+// Limits for broadcast payloads.
+const (
+	maxBroadcastResultLen = 4096
+)
+
 // streamBroadcaster relays agent streaming events to WebSocket clients
-// via the gateway's raw broadcast function.
+// via the gateway's raw broadcast function. All methods are safe to call
+// when broadcastRaw is nil (they silently no-op).
 type streamBroadcaster struct {
 	broadcastRaw BroadcastRawFunc
 	sessionKey   string
@@ -16,7 +29,6 @@ type streamBroadcaster struct {
 	seq          atomic.Int64
 }
 
-// newStreamBroadcaster creates a broadcaster bound to a specific run.
 func newStreamBroadcaster(broadcastRaw BroadcastRawFunc, sessionKey, clientRunID string) *streamBroadcaster {
 	return &streamBroadcaster{
 		broadcastRaw: broadcastRaw,
@@ -27,55 +39,38 @@ func newStreamBroadcaster(broadcastRaw BroadcastRawFunc, sessionKey, clientRunID
 
 // EmitDelta broadcasts a streaming text delta to WS clients.
 func (sb *streamBroadcaster) EmitDelta(text string) {
-	if sb.broadcastRaw == nil || text == "" {
+	if text == "" {
 		return
 	}
-	sb.emit("chat.delta", map[string]any{
-		"sessionKey":  sb.sessionKey,
-		"clientRunId": sb.clientRunID,
-		"delta":       text,
+	sb.emit(eventDelta, map[string]any{
+		"delta": text,
 	})
 }
 
 // EmitToolStart broadcasts a tool invocation start event.
 func (sb *streamBroadcaster) EmitToolStart(name, toolUseID string) {
-	if sb.broadcastRaw == nil {
-		return
-	}
-	sb.emit("chat.tool", map[string]any{
-		"sessionKey":  sb.sessionKey,
-		"clientRunId": sb.clientRunID,
-		"state":       "started",
-		"tool":        name,
-		"toolUseId":   toolUseID,
+	sb.emit(eventTool, map[string]any{
+		"state":     "started",
+		"tool":      name,
+		"toolUseId": toolUseID,
 	})
 }
 
 // EmitToolResult broadcasts a tool execution result event.
 func (sb *streamBroadcaster) EmitToolResult(toolUseID, result string, isError bool) {
-	if sb.broadcastRaw == nil {
-		return
-	}
-	sb.emit("chat.tool", map[string]any{
-		"sessionKey":  sb.sessionKey,
-		"clientRunId": sb.clientRunID,
-		"state":       "completed",
-		"toolUseId":   toolUseID,
-		"result":      truncateForBroadcast(result, 4096),
-		"isError":     isError,
+	sb.emit(eventTool, map[string]any{
+		"state":     "completed",
+		"toolUseId": toolUseID,
+		"result":    truncateForBroadcast(result, maxBroadcastResultLen),
+		"isError":   isError,
 	})
 }
 
 // EmitComplete broadcasts the final chat completion event.
 func (sb *streamBroadcaster) EmitComplete(text string, usage llm.TokenUsage) {
-	if sb.broadcastRaw == nil {
-		return
-	}
-	sb.emit("chat", map[string]any{
-		"sessionKey":  sb.sessionKey,
-		"clientRunId": sb.clientRunID,
-		"state":       "done",
-		"text":        text,
+	sb.emit(eventChat, map[string]any{
+		"state": "done",
+		"text":  text,
 		"usage": map[string]int{
 			"inputTokens":  usage.InputTokens,
 			"outputTokens": usage.OutputTokens,
@@ -85,43 +80,35 @@ func (sb *streamBroadcaster) EmitComplete(text string, usage llm.TokenUsage) {
 
 // EmitError broadcasts an error event for the run.
 func (sb *streamBroadcaster) EmitError(errMsg string) {
-	if sb.broadcastRaw == nil {
-		return
-	}
-	sb.emit("chat", map[string]any{
-		"sessionKey":  sb.sessionKey,
-		"clientRunId": sb.clientRunID,
-		"state":       "error",
-		"error":       errMsg,
+	sb.emit(eventChat, map[string]any{
+		"state": "error",
+		"error": errMsg,
 	})
 }
 
 // EmitStarted broadcasts that the agent run has started.
 func (sb *streamBroadcaster) EmitStarted() {
-	if sb.broadcastRaw == nil {
-		return
-	}
-	sb.emit("chat", map[string]any{
-		"sessionKey":  sb.sessionKey,
-		"clientRunId": sb.clientRunID,
-		"state":       "started",
+	sb.emit(eventChat, map[string]any{
+		"state": "started",
 	})
 }
 
 // EmitAborted broadcasts that the agent run was aborted.
 func (sb *streamBroadcaster) EmitAborted(partialText string) {
-	if sb.broadcastRaw == nil {
-		return
-	}
-	sb.emit("chat", map[string]any{
-		"sessionKey":  sb.sessionKey,
-		"clientRunId": sb.clientRunID,
-		"state":       "aborted",
-		"text":        partialText,
+	sb.emit(eventChat, map[string]any{
+		"state": "aborted",
+		"text":  partialText,
 	})
 }
 
+// emit is the shared broadcast path. It injects common fields (sessionKey,
+// clientRunId, seq) and serializes to JSON. No-ops when broadcastRaw is nil.
 func (sb *streamBroadcaster) emit(event string, payload map[string]any) {
+	if sb.broadcastRaw == nil {
+		return
+	}
+	payload["sessionKey"] = sb.sessionKey
+	payload["clientRunId"] = sb.clientRunID
 	payload["seq"] = sb.seq.Add(1)
 	data, err := json.Marshal(map[string]any{
 		"event":   event,

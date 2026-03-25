@@ -144,10 +144,7 @@ func handleSweepCommand(cmdJSON json.RawMessage, msgs []ChatMessage, logger *slo
 		// Return messages eligible for compaction (all except tail).
 		items := make([]map[string]any, len(msgs))
 		for i, msg := range msgs {
-			tokenCount := len(msg.Content) / 4
-			if tokenCount < 1 {
-				tokenCount = 1
-			}
+			tokenCount := estimateTokens(msg.Content)
 			items[i] = map[string]any{
 				"ordinal":    i,
 				"messageId":  i,
@@ -189,7 +186,7 @@ func handleSweepCommand(cmdJSON json.RawMessage, msgs []ChatMessage, logger *slo
 		return map[string]any{
 			"type":    "summary",
 			"text":    summary,
-			"tokenCount": len(summary) / 4,
+			"tokenCount": estimateTokens(summary),
 		}, nil
 
 	default:
@@ -202,7 +199,6 @@ func handleSweepCommand(cmdJSON json.RawMessage, msgs []ChatMessage, logger *slo
 func handleContextOverflow(
 	store TranscriptStore,
 	sessionKey string,
-	systemPrompt string,
 	ctxCfg ContextConfig,
 	compCfg CompactionConfig,
 	logger *slog.Logger,
@@ -223,7 +219,7 @@ func handleContextOverflow(
 		}
 		if swept {
 			// Reload with reduced context.
-			result, err := assembleContext(store, sessionKey, systemPrompt, ctxCfg, logger)
+			result, err := assembleContext(store, sessionKey, ctxCfg, logger)
 			if err != nil {
 				return nil, fmt.Errorf("reassemble after compaction: %w", err)
 			}
@@ -237,7 +233,7 @@ func handleContextOverflow(
 	if reducedCfg.MaxMessages > 10 {
 		reducedCfg.MaxMessages /= 2
 	}
-	result, err := assembleContext(store, sessionKey, systemPrompt, reducedCfg, logger)
+	result, err := assembleContext(store, sessionKey, reducedCfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("reassemble with reduced budget: %w", err)
 	}

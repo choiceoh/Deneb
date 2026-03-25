@@ -252,4 +252,3 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, emitDelta
 	}
 }
 
-// stopReasonFromCtx is defined in run.go.

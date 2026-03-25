@@ -24,19 +24,29 @@ type RunParams struct {
 	Delivery    *DeliveryContext
 }
 
-// runDeps holds the dependencies the async run needs from the Handler.
-type runDeps struct {
-	sessions    *session.Manager
-	llmClient   *llm.Client
-	transcript  TranscriptStore
-	tools       *ToolRegistry
-	authManager *provider.AuthManager
-	broadcast   BroadcastFunc
-	broadcastRaw BroadcastRawFunc
-	jobTracker  *agent.JobTracker
-	logger      *slog.Logger
+// Agent run defaults.
+const (
+	defaultMaxTokens        = 8192
+	defaultMaxTurns         = 25
+	defaultAgentTimeout     = 10 * time.Minute
+	defaultModel            = "claude-sonnet-4-20250514"
+	maxCompactionRetries    = 2
+)
 
-	// Configuration.
+// runDeps holds the dependencies the async run needs from the Handler.
+// Optional fields (may be nil): transcript, tools, authManager,
+// broadcast, broadcastRaw, jobTracker. Required: sessions, logger.
+type runDeps struct {
+	sessions     *session.Manager       // required
+	llmClient    *llm.Client            // optional; resolved from authManager if nil
+	transcript   TranscriptStore        // optional; history unavailable without it
+	tools        *ToolRegistry          // optional; no tool use if nil
+	authManager  *provider.AuthManager  // optional; uses pre-configured client if nil
+	broadcast    BroadcastFunc          // optional
+	broadcastRaw BroadcastRawFunc       // optional
+	jobTracker   *agent.JobTracker      // optional
+	logger       *slog.Logger           // required (defaults to slog.Default)
+
 	contextCfg    ContextConfig
 	compactionCfg CompactionConfig
 	defaultModel  string
@@ -116,7 +126,7 @@ func executeAgentRun(
 
 	var messages []llm.Message
 	if deps.transcript != nil {
-		result, err := assembleContext(deps.transcript, params.SessionKey, systemPrompt, deps.contextCfg, logger)
+		result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger)
 		if err != nil {
 			logger.Warn("context assembly failed, using message only", "error", err)
 		} else {
@@ -137,7 +147,7 @@ func executeAgentRun(
 		model = deps.defaultModel
 	}
 	if model == "" {
-		model = "claude-sonnet-4-20250514"
+		model = defaultModel
 	}
 
 	// 4. Resolve API key from provider auth manager.
@@ -158,24 +168,26 @@ func executeAgentRun(
 	// 5. Build tool list from registry.
 	var tools []llm.Tool
 	if deps.tools != nil {
-		for _, name := range deps.tools.Names() {
-			tools = append(tools, llm.Tool{
+		names := deps.tools.Names()
+		tools = make([]llm.Tool, len(names))
+		for i, name := range names {
+			tools[i] = llm.Tool{
 				Name:        name,
 				Description: "Tool: " + name,
 				InputSchema: map[string]any{"type": "object"},
-			})
+			}
 		}
 	}
 
 	// 6. Build agent config.
 	maxTokens := deps.maxTokens
 	if maxTokens <= 0 {
-		maxTokens = 8192
+		maxTokens = defaultMaxTokens
 	}
 
 	cfg := AgentConfig{
-		MaxTurns:  25,
-		Timeout:   10 * time.Minute,
+		MaxTurns:  defaultMaxTurns,
+		Timeout:   defaultAgentTimeout,
 		Model:     model,
 		System:    systemPrompt,
 		Tools:     tools,
@@ -189,7 +201,6 @@ func executeAgentRun(
 	}
 
 	// 8. Execute agent loop with compaction retry.
-	const maxCompactionRetries = 2
 	var agentResult *AgentResult
 
 	for attempt := 0; attempt <= maxCompactionRetries; attempt++ {
@@ -204,7 +215,7 @@ func executeAgentRun(
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
 				logger.Info("context overflow, attempting compaction", "error", runErr)
 				compactedMsgs, compErr := handleContextOverflow(
-					deps.transcript, params.SessionKey, systemPrompt,
+					deps.transcript, params.SessionKey,
 					deps.contextCfg, deps.compactionCfg, logger,
 				)
 				if compErr != nil {

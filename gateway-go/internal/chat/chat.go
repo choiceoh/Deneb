@@ -134,7 +134,7 @@ func DefaultHandlerConfig() HandlerConfig {
 		MaxMessageBytes: 128 * 1024, // 128 KB
 		ContextCfg:      DefaultContextConfig(),
 		CompactionCfg:   DefaultCompactionConfig(),
-		MaxTokens:       8192,
+		MaxTokens:       defaultMaxTokens,
 	}
 }
 
