@@ -424,6 +424,16 @@ fn trim_cell(cell: &TableCell) -> TableCell {
         return cell.clone();
     }
 
+    // Guard against start > end (e.g., all-whitespace cell where
+    // find returns text.len() but rfind-based end returns 0).
+    if start >= end {
+        return TableCell {
+            text: String::new(),
+            styles: Vec::new(),
+            links: Vec::new(),
+        };
+    }
+
     let trimmed_text = &text[start..end];
     let trimmed_len = trimmed_text.len();
 

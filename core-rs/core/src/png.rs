@@ -63,10 +63,18 @@ fn png_chunk(chunk_type: &[u8; 4], data: &[u8]) -> Vec<u8> {
 
 /// Write a pixel to an RGBA buffer. Ignores out-of-bounds writes.
 pub fn fill_pixel_impl(buf: &mut [u8], x: i32, y: i32, width: i32, r: u8, g: u8, b: u8, a: u8) {
-    if x < 0 || y < 0 || x >= width {
+    if x < 0 || y < 0 || x >= width || width <= 0 {
         return;
     }
-    let idx = ((y * width + x) * 4) as usize;
+    // Use checked arithmetic to prevent integer overflow on large dimensions.
+    let idx = match (y as i64)
+        .checked_mul(width as i64)
+        .and_then(|v| v.checked_add(x as i64))
+        .and_then(|v| v.checked_mul(4))
+    {
+        Some(v) if v >= 0 => v as usize,
+        _ => return,
+    };
     if idx + 3 >= buf.len() {
         return;
     }
@@ -77,9 +85,17 @@ pub fn fill_pixel_impl(buf: &mut [u8], x: i32, y: i32, width: i32, r: u8, g: u8,
 }
 
 /// Encode an RGBA buffer as a PNG image.
+/// Returns an empty Vec if dimensions would cause integer overflow.
 pub fn encode_png_rgba_impl(buffer: &[u8], width: u32, height: u32) -> Vec<u8> {
-    let stride = (width * 4) as usize;
-    let raw_len = (stride + 1) * height as usize;
+    // Use checked arithmetic to prevent overflow on large dimensions.
+    let stride = match (width as usize).checked_mul(4) {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+    let raw_len = match stride.checked_add(1).and_then(|s| s.checked_mul(height as usize)) {
+        Some(l) => l,
+        None => return Vec::new(),
+    };
     let mut raw = vec![0u8; raw_len];
 
     for row in 0..height as usize {
@@ -201,6 +217,35 @@ mod tests {
         assert!(png.windows(4).any(|w| w == b"IDAT"));
         assert!(png.windows(4).any(|w| w == b"IEND"));
         let _ = png_str;
+    }
+
+    #[test]
+    fn fill_pixel_overflow_safe() {
+        // Large y * width would overflow i32; should not panic or corrupt.
+        let mut buf = vec![0u8; 16];
+        fill_pixel_impl(&mut buf, 0, 70_000, 70_000, 255, 0, 0, 255);
+        assert!(buf.iter().all(|&b| b == 0)); // No writes
+    }
+
+    #[test]
+    fn fill_pixel_zero_width() {
+        let mut buf = vec![0u8; 16];
+        fill_pixel_impl(&mut buf, 0, 0, 0, 255, 0, 0, 255);
+        assert!(buf.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn encode_png_overflow_returns_empty() {
+        // (stride + 1) * height overflows usize; should return empty, not panic.
+        // width=1073741824 → stride=4294967296 (overflows u32 but not usize on 64-bit),
+        // so use width that causes stride.checked_mul(4) to exceed usize on any platform.
+        // On 64-bit: width * 4 fits but (stride+1) * height can overflow.
+        let result = encode_png_rgba_impl(&[], u32::MAX, u32::MAX);
+        // Either returns empty (overflow caught) or doesn't panic.
+        // On 64-bit, u32::MAX * 4 = 17179869180 which fits usize but the
+        // vec allocation will fail. Our checked_mul catches stride overflow
+        // before we try to allocate.
+        assert!(result.is_empty());
     }
 
     #[test]

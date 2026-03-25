@@ -4,6 +4,21 @@
 
 pub mod extensions;
 
+/// Detect MP4/M4A from ftyp box at offset 4. Shared helper to avoid duplication.
+#[inline]
+fn detect_ftyp(data: &[u8]) -> Option<&'static str> {
+    if data.len() >= 8 && &data[4..8] == b"ftyp" {
+        if data.len() >= 12 {
+            let brand = &data[8..12];
+            if brand == b"M4A " || brand == b"M4B " {
+                return Some("audio/mp4");
+            }
+        }
+        return Some("video/mp4");
+    }
+    None
+}
+
 /// Detect MIME type from the first bytes of a file (magic byte sniffing).
 /// Uses first-byte dispatch to minimize comparisons.
 pub fn detect_mime(data: &[u8]) -> &'static str {
@@ -46,15 +61,8 @@ pub fn detect_mime(data: &[u8]) -> &'static str {
             if data.starts_with(&[0x00, 0x00, 0x01, 0x00]) {
                 return "image/x-icon";
             }
-            // MP4/M4A: ftyp at offset 4
-            if data.len() >= 8 && &data[4..8] == b"ftyp" {
-                if data.len() >= 12 {
-                    let brand = &data[8..12];
-                    if brand == b"M4A " || brand == b"M4B " {
-                        return "audio/mp4";
-                    }
-                }
-                return "video/mp4";
+            if let Some(mime) = detect_ftyp(data) {
+                return mime;
             }
         }
         b'B' => {
@@ -76,9 +84,8 @@ pub fn detect_mime(data: &[u8]) -> &'static str {
             if data.starts_with(b"fLaC") {
                 return "audio/flac";
             }
-            // ftyp with non-zero box size
-            if data.len() >= 8 && &data[4..8] == b"ftyp" {
-                return "video/mp4";
+            if let Some(mime) = detect_ftyp(data) {
+                return mime;
             }
         }
         0x1A => {
@@ -117,14 +124,8 @@ pub fn detect_mime(data: &[u8]) -> &'static str {
     }
 
     // Fallback: check ftyp at offset 4 for non-zero first byte MP4 variants.
-    if data.len() >= 8 && &data[4..8] == b"ftyp" {
-        if data.len() >= 12 {
-            let brand = &data[8..12];
-            if brand == b"M4A " || brand == b"M4B " {
-                return "audio/mp4";
-            }
-        }
-        return "video/mp4";
+    if let Some(mime) = detect_ftyp(data) {
+        return mime;
     }
 
     "application/octet-stream"

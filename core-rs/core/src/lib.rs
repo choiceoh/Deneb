@@ -39,6 +39,16 @@ pub mod safe_regex;
 /// Prevents DoS via pathologically large inputs.
 const FFI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
 
+// FFI error code constants — used across all `extern "C"` functions.
+// Positive values are function-specific; negative values are shared errors.
+const FFI_ERR_NULL_PTR: i32 = -1;
+const FFI_ERR_INVALID_UTF8: i32 = -2;
+const FFI_ERR_OUTPUT_TOO_SMALL: i32 = -3;
+const FFI_ERR_INPUT_TOO_LARGE: i32 = -4;
+const FFI_ERR_JSON: i32 = -5;
+const FFI_ERR_OVERFLOW: i32 = -6;
+const FFI_ERR_PANIC: i32 = -99;
+
 /// Wraps an FFI body in catch_unwind to prevent Rust panics from aborting
 /// the Go process. Returns `panic_rc` if the closure panics.
 ///
@@ -232,16 +242,22 @@ pub unsafe extern "C" fn deneb_validate_error_code(code_ptr: *const u8, code_len
     if code_ptr.is_null() {
         return -1;
     }
-    let slice = std::slice::from_raw_parts(code_ptr, code_len);
-    let code_str = match std::str::from_utf8(slice) {
-        Ok(s) => s,
-        Err(_) => return -2,
-    };
-    if protocol::error_codes::is_valid_error_code(code_str) {
-        0
-    } else {
-        1
+    // Cap input length for consistency with other FFI functions.
+    if code_len > FFI_MAX_INPUT_LEN {
+        return -4;
     }
+    let slice = std::slice::from_raw_parts(code_ptr, code_len);
+    ffi_catch(-99, move || {
+        let code_str = match std::str::from_utf8(slice) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        if protocol::error_codes::is_valid_error_code(code_str) {
+            0
+        } else {
+            1
+        }
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -647,7 +663,8 @@ pub unsafe extern "C" fn deneb_validate_params(
     if method_ptr.is_null() || json_ptr.is_null() {
         return -1;
     }
-    if json_len > FFI_MAX_INPUT_LEN {
+    // Cap both method name and JSON payload lengths.
+    if json_len > FFI_MAX_INPUT_LEN || method_len > FFI_MAX_INPUT_LEN {
         return -4;
     }
     let method_slice = std::slice::from_raw_parts(method_ptr, method_len);
@@ -669,19 +686,19 @@ pub unsafe extern "C" fn deneb_validate_params(
                     0
                 } else {
                     // Write errors as JSON to output buffer.
-                    // Return bytes written (not error count) so callers can
-                    // slice the buffer precisely without scanning for `]`.
+                    // Returns the TOTAL required bytes (snprintf convention) so
+                    // callers can detect truncation: if retval > errors_out_len,
+                    // the output was truncated.
                     let json_bytes = serde_json::to_vec(&result.errors).unwrap_or_default();
+                    let total_len = json_bytes.len();
                     if !errors_out.is_null() && !json_bytes.is_empty() {
-                        let write_len = json_bytes.len().min(errors_out_len);
+                        let write_len = total_len.min(errors_out_len);
                         let out = std::slice::from_raw_parts_mut(errors_out, errors_out_len);
                         out[..write_len].copy_from_slice(&json_bytes[..write_len]);
-                        write_len as i32
-                    } else {
-                        // No output buffer or empty errors; report 1 byte to
-                        // signal failure even though nothing was written.
-                        1
                     }
+                    // Always return total required bytes so caller can detect
+                    // truncation (total > buffer size) or no-buffer case.
+                    total_len.max(1) as i32
                 }
             }
             Err(protocol::validation::ValidateParamsError::UnknownMethod(_)) => -3,
@@ -769,6 +786,10 @@ pub unsafe extern "C" fn deneb_compaction_sweep_new(
             Ok(s) => s,
             Err(_) => return -2,
         };
+        // Validate u64→u32 narrowing to prevent silent truncation.
+        if conversation_id > u32::MAX as u64 || token_budget > u32::MAX as u64 {
+            return -4;
+        }
         let handle = compaction::napi::compaction_sweep_new(
             config_str.to_string(),
             conversation_id as u32,
@@ -777,6 +798,10 @@ pub unsafe extern "C" fn deneb_compaction_sweep_new(
             hard_trigger != 0,
             now_ms as f64,
         );
+        // Validate handle fits in i32 to prevent truncation in i32→i64 cast chain.
+        if handle > i32::MAX as u32 {
+            return -6;
+        }
         handle as i32
     }) as i64
 }
@@ -1648,7 +1673,11 @@ mod tests {
             unsafe { deneb_ml_embed(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
         let result = std::str::from_utf8(&out[..len as usize]).unwrap();
-        assert!(result.contains("embeddings"));
+        // With ml feature: returns embeddings; without: returns error stub.
+        assert!(
+            result.contains("embeddings") || result.contains("ml backend unavailable"),
+            "unexpected embed response: {result}"
+        );
     }
 
     #[test]
@@ -1659,7 +1688,11 @@ mod tests {
             unsafe { deneb_ml_rerank(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
         let result = std::str::from_utf8(&out[..len as usize]).unwrap();
-        assert!(result.contains("ranked"));
+        // With ml feature: returns ranked results; without: returns error stub.
+        assert!(
+            result.contains("ranked") || result.contains("ml backend unavailable"),
+            "unexpected rerank response: {result}"
+        );
     }
 
     #[test]

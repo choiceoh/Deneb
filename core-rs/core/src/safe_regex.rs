@@ -214,7 +214,7 @@ fn tokenize_pattern(source: &[u8]) -> Vec<PatternToken> {
     while i < source.len() {
         let ch = source[i];
 
-        if ch == b'\\' {
+        if ch == b'\\' && i + 1 < source.len() {
             i += 2; // skip escaped char
             tokens.push(PatternToken::Simple);
             continue;
@@ -269,9 +269,6 @@ fn analyze_tokens_for_nested_repetition(tokens: &[PatternToken]) -> bool {
                     min_length: 1.0,
                     max_length: 1.0,
                 };
-                if ts.contains_repetition {
-                    frame.contains_repetition = true;
-                }
                 frame.branch_min_length = add_length(frame.branch_min_length, ts.min_length);
                 frame.branch_max_length = add_length(frame.branch_max_length, ts.max_length);
                 frame.last_token = Some(ts);
@@ -436,6 +433,12 @@ mod tests {
     fn handles_escaped_chars() {
         assert!(!has_nested_repetition_impl("\\(a+\\)+"));
         assert!(!has_nested_repetition_impl("a\\+b\\+"));
+    }
+
+    #[test]
+    fn handles_trailing_backslash() {
+        // Pattern ending with lone backslash should not panic.
+        assert!(!has_nested_repetition_impl("foo\\"));
     }
 
     #[test]
