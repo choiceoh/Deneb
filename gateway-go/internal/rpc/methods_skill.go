@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
+	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -14,8 +15,7 @@ type SkillDeps struct {
 	Broadcaster BroadcastFunc
 }
 
-// RegisterSkillMethods registers skills.status, skills.bins, skills.install,
-// and skills.update RPC methods.
+// RegisterSkillMethods registers all skills.* RPC methods.
 func RegisterSkillMethods(d *Dispatcher, deps SkillDeps) {
 	if deps.Skills == nil {
 		return
@@ -25,6 +25,10 @@ func RegisterSkillMethods(d *Dispatcher, deps SkillDeps) {
 	d.Register("skills.bins", skillsBins(deps))
 	d.Register("skills.install", skillsInstall(deps))
 	d.Register("skills.update", skillsUpdate(deps))
+	d.Register("skills.snapshot", skillsSnapshot(deps))
+	d.Register("skills.commands", skillsCommands(deps))
+	d.Register("skills.discover", skillsDiscover(deps))
+	d.Register("skills.workspace_status", skillsWorkspaceStatus(deps))
 }
 
 func skillsStatus(deps SkillDeps) HandlerFunc {
@@ -121,5 +125,192 @@ func skillsUpdate(deps SkillDeps) HandlerFunc {
 			"config":   updated.Config,
 		})
 		return resp
+	}
+}
+
+// skillsSnapshot returns a full skill snapshot (prompt + metadata + version)
+// for a workspace. This is the primary endpoint used by TypeScript consumers.
+func skillsSnapshot(_ SkillDeps) HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			WorkspaceDir     string            `json:"workspaceDir"`
+			BundledSkillsDir string            `json:"bundledSkillsDir,omitempty"`
+			ManagedSkillsDir string            `json:"managedSkillsDir,omitempty"`
+			ExtraDirs        []string          `json:"extraDirs,omitempty"`
+			PluginSkillDirs  []string          `json:"pluginSkillDirs,omitempty"`
+			SkillFilter      []string          `json:"skillFilter,omitempty"`
+			SkillConfigs     map[string]skills.SkillConfig `json:"skillConfigs,omitempty"`
+			AllowBundled     []string          `json:"allowBundled,omitempty"`
+			ConfigValues     map[string]bool   `json:"configValues,omitempty"`
+			EnvVars          map[string]string `json:"envVars,omitempty"`
+			RemoteNote       string            `json:"remoteNote,omitempty"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}
+		if p.WorkspaceDir == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "workspaceDir is required"))
+		}
+
+		eligCtx := skills.DefaultEligibilityContext()
+		if p.SkillConfigs != nil {
+			eligCtx.SkillConfigs = p.SkillConfigs
+		}
+		if p.AllowBundled != nil {
+			eligCtx.AllowBundled = p.AllowBundled
+		}
+		if p.ConfigValues != nil {
+			eligCtx.ConfigValues = p.ConfigValues
+		}
+		if p.EnvVars != nil {
+			eligCtx.EnvVars = p.EnvVars
+		}
+
+		snapshot := skills.BuildWorkspaceSkillSnapshot(skills.SnapshotConfig{
+			DiscoverConfig: skills.DiscoverConfig{
+				WorkspaceDir:     p.WorkspaceDir,
+				BundledSkillsDir: p.BundledSkillsDir,
+				ManagedSkillsDir: p.ManagedSkillsDir,
+				ExtraDirs:        p.ExtraDirs,
+				PluginSkillDirs:  p.PluginSkillDirs,
+			},
+			SkillFilter: p.SkillFilter,
+			Eligibility: eligCtx,
+			RemoteNote:  p.RemoteNote,
+		})
+
+		return protocol.MustResponseOK(req.ID, snapshot)
+	}
+}
+
+// skillsCommands returns slash command specs derived from eligible skills.
+func skillsCommands(_ SkillDeps) HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			WorkspaceDir     string            `json:"workspaceDir"`
+			BundledSkillsDir string            `json:"bundledSkillsDir,omitempty"`
+			ExtraDirs        []string          `json:"extraDirs,omitempty"`
+			PluginSkillDirs  []string          `json:"pluginSkillDirs,omitempty"`
+			SkillFilter      []string          `json:"skillFilter,omitempty"`
+			SkillConfigs     map[string]skills.SkillConfig `json:"skillConfigs,omitempty"`
+			AllowBundled     []string          `json:"allowBundled,omitempty"`
+			ReservedNames    []string          `json:"reservedNames,omitempty"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}
+		if p.WorkspaceDir == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "workspaceDir is required"))
+		}
+
+		entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{
+			WorkspaceDir:     p.WorkspaceDir,
+			BundledSkillsDir: p.BundledSkillsDir,
+			ExtraDirs:        p.ExtraDirs,
+			PluginSkillDirs:  p.PluginSkillDirs,
+		})
+
+		eligCtx := skills.DefaultEligibilityContext()
+		if p.SkillConfigs != nil {
+			eligCtx.SkillConfigs = p.SkillConfigs
+		}
+		if p.AllowBundled != nil {
+			eligCtx.AllowBundled = p.AllowBundled
+		}
+		eligible := skills.FilterEligibleSkills(entries, eligCtx)
+		eligible = skills.FilterBySkillFilter(eligible, p.SkillFilter)
+
+		reserved := make(map[string]bool)
+		for _, name := range p.ReservedNames {
+			reserved[name] = true
+		}
+		specs := skills.BuildSkillCommandSpecs(eligible, reserved)
+
+		return protocol.MustResponseOK(req.ID, map[string]any{
+			"commands": specs,
+		})
+	}
+}
+
+// skillsDiscover triggers skill re-discovery and returns counts.
+func skillsDiscover(deps SkillDeps) HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			WorkspaceDir     string   `json:"workspaceDir"`
+			BundledSkillsDir string   `json:"bundledSkillsDir,omitempty"`
+			ExtraDirs        []string `json:"extraDirs,omitempty"`
+			PluginSkillDirs  []string `json:"pluginSkillDirs,omitempty"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}
+		if p.WorkspaceDir == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "workspaceDir is required"))
+		}
+
+		entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{
+			WorkspaceDir:     p.WorkspaceDir,
+			BundledSkillsDir: p.BundledSkillsDir,
+			ExtraDirs:        p.ExtraDirs,
+			PluginSkillDirs:  p.PluginSkillDirs,
+		})
+
+		if deps.Broadcaster != nil {
+			deps.Broadcaster("skills.changed", map[string]any{
+				"action": "discovered",
+				"count":  len(entries),
+			})
+		}
+
+		return protocol.MustResponseOK(req.ID, map[string]any{
+			"ok":    true,
+			"count": len(entries),
+		})
+	}
+}
+
+// skillsWorkspaceStatus returns a full skill status report for a workspace.
+func skillsWorkspaceStatus(_ SkillDeps) HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			WorkspaceDir     string            `json:"workspaceDir"`
+			BundledSkillsDir string            `json:"bundledSkillsDir,omitempty"`
+			ExtraDirs        []string          `json:"extraDirs,omitempty"`
+			SkillConfigs     map[string]skills.SkillConfig `json:"skillConfigs,omitempty"`
+			AllowBundled     []string          `json:"allowBundled,omitempty"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}
+		if p.WorkspaceDir == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "workspaceDir is required"))
+		}
+
+		eligCtx := skills.DefaultEligibilityContext()
+		if p.SkillConfigs != nil {
+			eligCtx.SkillConfigs = p.SkillConfigs
+		}
+		if p.AllowBundled != nil {
+			eligCtx.AllowBundled = p.AllowBundled
+		}
+
+		status := skills.BuildWorkspaceSkillStatus(
+			skills.DiscoverConfig{
+				WorkspaceDir:     p.WorkspaceDir,
+				BundledSkillsDir: p.BundledSkillsDir,
+				ExtraDirs:        p.ExtraDirs,
+			},
+			eligCtx,
+		)
+
+		return protocol.MustResponseOK(req.ID, status)
 	}
 }

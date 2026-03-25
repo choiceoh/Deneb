@@ -14,8 +14,10 @@ import (
 
 // Skill represents a loaded skill entry from disk.
 type Skill struct {
-	Name string `json:"name"`
-	Dir  string `json:"dir"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Dir         string `json:"dir"`
+	FilePath    string `json:"filePath,omitempty"`
 	// Source indicates where the skill was discovered.
 	Source SkillSource `json:"source"`
 }
@@ -29,6 +31,8 @@ const (
 	SourceWorkspace SkillSource = "workspace"
 	SourcePlugin    SkillSource = "plugin"
 	SourceExtra     SkillSource = "extra"
+	SourcePersonal  SkillSource = "agents-skills-personal"
+	SourceProject   SkillSource = "agents-skills-project"
 )
 
 // SkillEntry is a fully resolved skill with parsed metadata.
