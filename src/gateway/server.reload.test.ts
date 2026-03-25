@@ -88,7 +88,7 @@ const hoisted = vi.hoisted(() => {
           cliPath: null,
           dbPath: null,
         },
-        msteams: {
+        mattermost: {
           running: false,
           lastStartAt: null,
           lastStopAt: null,
@@ -102,7 +102,7 @@ const hoisted = vi.hoisted(() => {
         slack: {},
         signal: {},
         imessage: {},
-        msteams: {},
+        mattermost: {},
       },
     })),
     startChannels: vi.fn(async () => {}),

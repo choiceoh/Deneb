@@ -88,7 +88,7 @@ describe("config plugin validation", () => {
   let suiteHome = "";
   let badPluginDir = "";
   let enumPluginDir = "";
-  let bluebubblesPluginDir = "";
+  let telegramPluginDir = "";
   let voiceCallSchemaPluginDir = "";
   let bundlePluginDir = "";
   let manifestlessClaudeBundleDir = "";
@@ -112,7 +112,7 @@ describe("config plugin validation", () => {
     await mkdirSafe(suiteHome);
     badPluginDir = path.join(suiteHome, "bad-plugin");
     enumPluginDir = path.join(suiteHome, "enum-plugin");
-    bluebubblesPluginDir = path.join(suiteHome, "bluebubbles-plugin");
+    telegramPluginDir = path.join(suiteHome, "telegram-plugin");
     await writePluginFixture({
       dir: badPluginDir,
       id: "bad-plugin",
@@ -140,9 +140,9 @@ describe("config plugin validation", () => {
       },
     });
     await writePluginFixture({
-      dir: bluebubblesPluginDir,
-      id: "bluebubbles-plugin",
-      channels: ["bluebubbles"],
+      dir: telegramPluginDir,
+      id: "telegram-plugin",
+      channels: ["telegram"],
       schema: { type: "object" },
     });
     bundlePluginDir = path.join(suiteHome, "bundle-plugin");
@@ -178,7 +178,7 @@ describe("config plugin validation", () => {
         load: {
           paths: [
             badPluginDir,
-            bluebubblesPluginDir,
+            telegramPluginDir,
             bundlePluginDir,
             manifestlessClaudeBundleDir,
             ...(hasVoiceCallExtension ? [voiceCallSchemaPluginDir] : []),
@@ -491,8 +491,8 @@ describe("config plugin validation", () => {
 
   it("accepts plugin heartbeat targets", async () => {
     const res = validateInSuite({
-      agents: { defaults: { heartbeat: { target: "bluebubbles" } }, list: [{ id: "pi" }] },
-      plugins: { enabled: false, load: { paths: [bluebubblesPluginDir] } },
+      agents: { defaults: { heartbeat: { target: "telegram" } }, list: [{ id: "pi" }] },
+      plugins: { enabled: false, load: { paths: [telegramPluginDir] } },
     });
     expect(res.ok).toBe(true);
   });

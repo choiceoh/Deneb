@@ -1,5 +1,5 @@
 import { type ChannelGroupContext } from "deneb/plugin-sdk/channel-runtime";
-// GroupToolPolicyConfig imported from the zalouser SDK surface which re-exports it.
+// GroupToolPolicyConfig definition (inline, previously from plugin-sdk).
 type GroupToolPolicyConfig = { allow?: string[]; alsoAllow?: string[]; deny?: string[] };
 
 // Inline stubs for removed channel-policy module.

@@ -63,15 +63,10 @@ marketplace source with `--marketplace`.
 
 These are published to npm and installed with `deneb plugins install`:
 
-| Plugin          | Package           | Docs                               |
-| --------------- | ----------------- | ---------------------------------- |
-| Matrix          | `@deneb/matrix`   | Matrix                             |
-| Microsoft Teams | `@deneb/msteams`  | MS Teams                           |
-| Nostr           | `@deneb/nostr`    | Nostr                              |
-| Zalo            | `@deneb/zalo`     | Zalo                               |
-| Zalo Personal   | `@deneb/zalouser` | [Zalo Personal](/plugins/zalouser) |
-
-Microsoft Teams is plugin-only as of 2026.1.15.
+| Plugin | Package         | Docs                       |
+| ------ | --------------- | -------------------------- |
+| Matrix | `@deneb/matrix` | [Matrix](/channels/matrix) |
+| Nostr  | `@deneb/nostr`  | [Nostr](/channels/nostr)   |
 
 Packaged installs also ship install-on-demand metadata for heavyweight official
 plugins. Today that includes WhatsApp and `memory-lancedb`: onboarding,

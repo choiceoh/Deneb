@@ -46,11 +46,11 @@ describe("plugin runtime route registry", () => {
     const startupRegistry = createEmptyPluginRegistry();
     const explicitRegistry = createEmptyPluginRegistry();
     startupRegistry.httpRoutes.push({
-      path: "/bluebubbles-webhook",
+      path: "/telegram-webhook",
       auth: "plugin",
       match: "exact",
       handler: () => true,
-      pluginId: "bluebubbles",
+      pluginId: "telegram",
       source: "test",
     });
     explicitRegistry.httpRoutes.push({

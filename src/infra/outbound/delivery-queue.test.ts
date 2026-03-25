@@ -180,7 +180,7 @@ describe("delivery-queue", () => {
       "Bot was blocked by the user",
       "Forbidden: bot was kicked from the group chat",
       "chat_id is empty",
-      "Outbound not configured for channel: msteams",
+      "Outbound not configured for channel: mattermost",
     ])("returns true for permanent error: %s", (msg) => {
       expect(isPermanentDeliveryError(msg)).toBe(true);
     });
@@ -382,7 +382,7 @@ describe("delivery-queue", () => {
 
     it("moves entries to failed/ immediately on permanent delivery errors", async () => {
       const id = await enqueueDelivery(
-        { channel: "msteams", to: "user:abc", payloads: [{ text: "hi" }] },
+        { channel: "mattermost", to: "user:abc", payloads: [{ text: "hi" }] },
         tmpDir,
       );
       const deliver = vi

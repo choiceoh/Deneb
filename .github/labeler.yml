@@ -13,11 +13,6 @@
           - "proto/**"
           - "scripts/proto-gen.sh"
           - "src/protocol/generated/**"
-"channel: bluebubbles":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/bluebubbles/**"
-          - "docs/channels/bluebubbles.md"
 "channel: irc":
   - changed-files:
       - any-glob-to-any-file:
@@ -38,11 +33,6 @@
       - any-glob-to-any-file:
           - "extensions/mattermost/**"
           - "docs/channels/mattermost.md"
-"channel: msteams":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/msteams/**"
-          - "docs/channels/msteams.md"
 "channel: nextcloud-talk":
   - changed-files:
       - any-glob-to-any-file:
@@ -68,17 +58,6 @@
       - any-glob-to-any-file:
           - "extensions/tlon/**"
           - "docs/channels/tlon.md"
-"channel: zalo":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/zalo/**"
-          - "docs/channels/zalo.md"
-"channel: zalouser":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/zalouser/**"
-          - "docs/channels/zalouser.md"
-
 "app: web-ui":
   - changed-files:
       - any-glob-to-any-file:
@@ -149,10 +128,6 @@
           - "docs/cli/security.md"
           - "docs/gateway/security.md"
 
-"extensions: memory-core":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/memory-core/**"
 "extensions: qwen-portal-auth":
   - changed-files:
       - any-glob-to-any-file:

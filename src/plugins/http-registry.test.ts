@@ -184,13 +184,13 @@ describe("registerPluginHttpRoute", () => {
     setActivePluginRegistry(laterActiveRegistry);
 
     const unregister = registerPluginHttpRoute({
-      path: "/bluebubbles-webhook",
+      path: "/telegram-webhook",
       auth: "plugin",
       handler: vi.fn(),
     });
 
     expect(startupRegistry.httpRoutes).toHaveLength(1);
-    expect(startupRegistry.httpRoutes[0]?.path).toBe("/bluebubbles-webhook");
+    expect(startupRegistry.httpRoutes[0]?.path).toBe("/telegram-webhook");
     expect(laterActiveRegistry.httpRoutes).toHaveLength(0);
 
     unregister();

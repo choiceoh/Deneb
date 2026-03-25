@@ -72,10 +72,6 @@ export const LEGACY_CONFIG_RULES: LegacyConfigRule[] = [
     message: "imessage config moved to channels.imessage (auto-migrated on load).",
   },
   {
-    path: ["msteams"],
-    message: "msteams config moved to channels.msteams (auto-migrated on load).",
-  },
-  {
     path: ["session", "threadBindings"],
     message:
       "session.threadBindings.ttlHours was renamed to session.threadBindings.idleHours (auto-migrated on load).",

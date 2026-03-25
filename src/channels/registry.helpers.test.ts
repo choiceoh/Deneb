@@ -27,7 +27,7 @@ describe("channel registry helpers", () => {
 
   it("does not include MS Teams by default", () => {
     const channels = listChatChannels();
-    expect(channels.some((channel) => channel.id === "msteams")).toBe(false);
+    expect(channels.some((channel) => channel.id === "mattermost")).toBe(false);
   });
 
   it("formats selection lines with docs labels", () => {

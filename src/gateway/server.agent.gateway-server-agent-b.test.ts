@@ -41,13 +41,13 @@ afterAll(async () => {
   await server.close();
 });
 
-const createMSTeamsPlugin = (params?: { aliases?: string[] }): ChannelPlugin => ({
-  id: "msteams",
+const createMattermostPlugin = (params?: { aliases?: string[] }): ChannelPlugin => ({
+  id: "mattermost",
   meta: {
-    id: "msteams",
-    label: "Microsoft Teams",
-    selectionLabel: "Microsoft Teams (Bot Framework)",
-    docsPath: "/channels/msteams",
+    id: "mattermost",
+    label: "Mattermost",
+    selectionLabel: "Mattermost (Self-hosted)",
+    docsPath: "/channels/mattermost",
     blurb: "Bot Framework; enterprise support.",
     aliases: params?.aliases,
   },
@@ -157,23 +157,23 @@ describe("gateway server agent", () => {
   test("agent errors when deliver=true and last-channel plugin is unavailable", async () => {
     const registry = createRegistry([
       {
-        pluginId: "msteams",
+        pluginId: "mattermost",
         source: "test",
-        plugin: createMSTeamsPlugin(),
+        plugin: createMattermostPlugin(),
       },
     ]);
     setRegistry(registry);
     await writeMainSessionEntry({
-      sessionId: "sess-teams",
-      lastChannel: "msteams",
-      lastTo: "conversation:teams-123",
+      sessionId: "sess-mm",
+      lastChannel: "mattermost",
+      lastTo: "conversation:mm-123",
     });
     const res = await rpcReq(ws, "agent", {
       message: "hi",
       sessionKey: "main",
       channel: "last",
       deliver: true,
-      idempotencyKey: "idem-agent-last-msteams",
+      idempotencyKey: "idem-agent-last-mattermost",
     });
     expect(res.ok).toBe(false);
     expect(res.error?.code).toBe("INVALID_REQUEST");
@@ -181,12 +181,12 @@ describe("gateway server agent", () => {
     expect(vi.mocked(agentCommand)).not.toHaveBeenCalled();
   });
 
-  test("agent accepts channel aliases (imsg/teams)", async () => {
+  test("agent accepts channel aliases (imsg/mm)", async () => {
     const registry = createRegistry([
       {
-        pluginId: "msteams",
+        pluginId: "mattermost",
         source: "test",
-        plugin: createMSTeamsPlugin({ aliases: ["teams"] }),
+        plugin: createMattermostPlugin({ aliases: ["mm"] }),
       },
     ]);
     setRegistry(registry);
@@ -207,8 +207,8 @@ describe("gateway server agent", () => {
     const resTeams = await rpcReq(ws, "agent", {
       message: "hi",
       sessionKey: "main",
-      channel: "teams",
-      to: "conversation:teams-abc",
+      channel: "mm",
+      to: "conversation:mm-abc",
       deliver: false,
       idempotencyKey: "idem-agent-teams",
     });
@@ -216,9 +216,9 @@ describe("gateway server agent", () => {
 
     expectAgentRoutingCall({ channel: "imessage", deliver: true, fromEnd: 2 });
     expectAgentRoutingCall({
-      channel: "msteams",
+      channel: "mattermost",
       deliver: false,
-      to: "conversation:teams-abc",
+      to: "conversation:mm-abc",
       fromEnd: 1,
     });
   });

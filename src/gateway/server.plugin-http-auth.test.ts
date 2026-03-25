@@ -437,7 +437,7 @@ describe("gateway plugin HTTP auth boundary", () => {
   test("passes POST webhook routes through root-mounted control ui to plugins", async () => {
     const handlePluginRequest = vi.fn(async (req: IncomingMessage, res: ServerResponse) => {
       const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
-      if (req.method !== "POST" || pathname !== "/bluebubbles-webhook") {
+      if (req.method !== "POST" || pathname !== "/telegram-webhook") {
         return false;
       }
       res.statusCode = 200;
@@ -451,7 +451,7 @@ describe("gateway plugin HTTP auth boundary", () => {
       handlePluginRequest,
       run: async (server) => {
         const response = await sendRequest(server, {
-          path: "/bluebubbles-webhook",
+          path: "/telegram-webhook",
           method: "POST",
         });
 

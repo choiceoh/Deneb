@@ -6,7 +6,6 @@ type LegacyOutboundSendDeps = {
   sendSignal?: unknown;
   sendIMessage?: unknown;
   sendMatrix?: unknown;
-  sendMSTeams?: unknown;
 };
 
 /**
@@ -24,7 +23,6 @@ const LEGACY_SEND_DEP_KEYS = {
   signal: "sendSignal",
   imessage: "sendIMessage",
   matrix: "sendMatrix",
-  msteams: "sendMSTeams",
 } as const satisfies Record<string, keyof LegacyOutboundSendDeps>;
 
 export function resolveOutboundSendDep<T>(

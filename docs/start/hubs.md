@@ -72,13 +72,12 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Model providers hub](/providers/models)
 - WhatsApp
 - [Telegram](/channels/telegram)
-- Slack
-- Discord
-- Mattermost (plugin)
-- Signal
-- BlueBubbles (iMessage)
-- iMessage (legacy)
-- Location parsing
+- [Slack](/channels/slack)
+- [Discord](/channels/discord)
+- [Mattermost](/channels/mattermost) (plugin)
+- [Signal](/channels/signal)
+- [iMessage](/channels/imessage)
+- [Location parsing](/channels/location)
 - [WebChat](/web/webchat)
 - [Webhooks](/automation/webhook)
 - [Gmail Pub/Sub](/automation/gmail-pubsub)
@@ -171,7 +170,6 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Plugin bundles](/plugins/bundles)
 - [Community plugins](/plugins/community)
 - [Capability cookbook](/tools/capability-cookbook)
-- [Zalo user plugin](/plugins/zalouser)
 
 ## Workspace + templates
 

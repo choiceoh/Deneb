@@ -592,7 +592,7 @@ describe("promptParsedAllowFromForAccount", () => {
     const next = await promptParsedAllowFromForAccount({
       cfg: {
         channels: {
-          bluebubbles: {
+          telegram: {
             accounts: {
               alt: {
                 allowFrom: ["old"],
@@ -604,25 +604,25 @@ describe("promptParsedAllowFromForAccount", () => {
       accountId: "alt",
       defaultAccountId: DEFAULT_ACCOUNT_ID,
       prompter,
-      noteTitle: "BlueBubbles allowlist",
+      noteTitle: "Telegram allowlist",
       noteLines: ["line"],
       message: "msg",
       placeholder: "placeholder",
       parseEntries: (raw) =>
         parseSetupEntriesWithParser(raw, (entry) => ({ value: entry.toLowerCase() })),
       getExistingAllowFrom: ({ cfg, accountId }) =>
-        cfg.channels?.bluebubbles?.accounts?.[accountId]?.allowFrom ?? [],
+        cfg.channels?.telegram?.accounts?.[accountId]?.allowFrom ?? [],
       applyAllowFrom: ({ cfg, accountId, allowFrom }) =>
         patchChannelConfigForAccount({
           cfg,
-          channel: "bluebubbles",
+          channel: "telegram",
           accountId,
           patch: { allowFrom },
         }),
     });
 
-    expect(next.channels?.bluebubbles?.accounts?.alt?.allowFrom).toEqual(["alice"]);
-    expect(prompter.note).toHaveBeenCalledWith("line", "BlueBubbles allowlist");
+    expect(next.channels?.telegram?.accounts?.alt?.allowFrom).toEqual(["alice"]);
+    expect(prompter.note).toHaveBeenCalledWith("line", "Telegram allowlist");
   });
 
   it("can merge parsed values with existing entries", async () => {
@@ -1113,12 +1113,12 @@ describe("setTopLevelChannelAllowFrom", () => {
   it("writes allowFrom and can force enabled state", () => {
     const next = setTopLevelChannelAllowFrom({
       cfg: {},
-      channel: "msteams",
+      channel: "mattermost",
       allowFrom: ["user-1"],
       enabled: true,
     });
-    expect(next.channels?.msteams?.allowFrom).toEqual(["user-1"]);
-    expect(next.channels?.msteams?.enabled).toBe(true);
+    expect(next.channels?.mattermost?.allowFrom).toEqual(["user-1"]);
+    expect(next.channels?.mattermost?.enabled).toBe(true);
   });
 });
 
@@ -1335,13 +1335,13 @@ describe("createNestedChannelAllowFromSetter", () => {
 describe("createTopLevelChannelAllowFromSetter", () => {
   it("reuses the shared top-level allowFrom writer", () => {
     const setAllowFrom = createTopLevelChannelAllowFromSetter({
-      channel: "msteams",
+      channel: "mattermost",
       enabled: true,
     });
     const next = setAllowFrom({}, ["user-1"]);
 
-    expect(next.channels?.msteams?.allowFrom).toEqual(["user-1"]);
-    expect(next.channels?.msteams?.enabled).toBe(true);
+    expect(next.channels?.mattermost?.allowFrom).toEqual(["user-1"]);
+    expect(next.channels?.mattermost?.enabled).toBe(true);
   });
 });
 

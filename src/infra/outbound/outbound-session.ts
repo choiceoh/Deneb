@@ -222,48 +222,6 @@ function resolveMatrixSession(
   };
 }
 
-function resolveMSTeamsSession(
-  params: ResolveOutboundSessionRouteParams,
-): OutboundSessionRoute | null {
-  let trimmed = params.target.trim();
-  if (!trimmed) {
-    return null;
-  }
-  trimmed = trimmed.replace(/^(msteams|teams):/i, "").trim();
-
-  const lower = trimmed.toLowerCase();
-  const isUser = lower.startsWith("user:");
-  const rawId = stripKindPrefix(trimmed);
-  if (!rawId) {
-    return null;
-  }
-  const conversationId = rawId.split(";")[0] ?? rawId;
-  const isChannel = !isUser && /@thread\.tacv2/i.test(conversationId);
-  const peer: RoutePeer = {
-    kind: isUser ? "direct" : isChannel ? "channel" : "group",
-    id: conversationId,
-  };
-  const baseSessionKey = buildBaseSessionKey({
-    cfg: params.cfg,
-    agentId: params.agentId,
-    channel: "msteams",
-    accountId: params.accountId,
-    peer,
-  });
-  return {
-    sessionKey: baseSessionKey,
-    baseSessionKey,
-    peer,
-    chatType: isUser ? "direct" : isChannel ? "channel" : "group",
-    from: isUser
-      ? `msteams:${conversationId}`
-      : isChannel
-        ? `msteams:channel:${conversationId}`
-        : `msteams:group:${conversationId}`,
-    to: isUser ? `user:${conversationId}` : `conversation:${conversationId}`,
-  };
-}
-
 function resolveMattermostSession(
   params: ResolveOutboundSessionRouteParams,
 ): OutboundSessionRoute | null {
@@ -310,47 +268,6 @@ function resolveMattermostSession(
   };
 }
 
-function resolveBlueBubblesSession(
-  params: ResolveOutboundSessionRouteParams,
-): OutboundSessionRoute | null {
-  const stripped = stripProviderPrefix(params.target, "bluebubbles");
-  const lower = stripped.toLowerCase();
-  const isGroup =
-    lower.startsWith("chat_id:") ||
-    lower.startsWith("chat_guid:") ||
-    lower.startsWith("chat_identifier:") ||
-    lower.startsWith("group:");
-  const rawPeerId = isGroup
-    ? stripKindPrefix(stripped)
-    : stripped.replace(/^(imessage|sms|auto):/i, "");
-  // BlueBubbles inbound group ids omit chat_* prefixes; strip them to align sessions.
-  const peerId = isGroup
-    ? rawPeerId.replace(/^(chat_id|chat_guid|chat_identifier):/i, "")
-    : rawPeerId;
-  if (!peerId) {
-    return null;
-  }
-  const peer: RoutePeer = {
-    kind: isGroup ? "group" : "direct",
-    id: peerId,
-  };
-  const baseSessionKey = buildBaseSessionKey({
-    cfg: params.cfg,
-    agentId: params.agentId,
-    channel: "bluebubbles",
-    accountId: params.accountId,
-    peer,
-  });
-  return {
-    sessionKey: baseSessionKey,
-    baseSessionKey,
-    peer,
-    chatType: isGroup ? "group" : "direct",
-    from: isGroup ? `group:${peerId}` : `bluebubbles:${peerId}`,
-    to: `bluebubbles:${stripped}`,
-  };
-}
-
 function resolveNextcloudTalkSession(
   params: ResolveOutboundSessionRouteParams,
 ): OutboundSessionRoute | null {
@@ -379,48 +296,6 @@ function resolveNextcloudTalkSession(
     from: `nextcloud-talk:room:${trimmed}`,
     to: `nextcloud-talk:${trimmed}`,
   };
-}
-
-function resolveZaloSession(
-  params: ResolveOutboundSessionRouteParams,
-): OutboundSessionRoute | null {
-  return resolveZaloLikeSession(params, "zalo", /^(zl):/i);
-}
-
-function resolveZaloLikeSession(
-  params: ResolveOutboundSessionRouteParams,
-  channel: "zalo" | "zalouser",
-  aliasPrefix: RegExp,
-): OutboundSessionRoute | null {
-  const trimmed = stripProviderPrefix(params.target, channel).replace(aliasPrefix, "").trim();
-  if (!trimmed) {
-    return null;
-  }
-  const isGroup = trimmed.toLowerCase().startsWith("group:");
-  const peerId = stripKindPrefix(trimmed);
-  const peer: RoutePeer = { kind: isGroup ? "group" : "direct", id: peerId };
-  const baseSessionKey = buildBaseSessionKey({
-    cfg: params.cfg,
-    agentId: params.agentId,
-    channel,
-    accountId: params.accountId,
-    peer,
-  });
-  return {
-    sessionKey: baseSessionKey,
-    baseSessionKey,
-    peer,
-    chatType: isGroup ? "group" : "direct",
-    from: isGroup ? `${channel}:group:${peerId}` : `${channel}:${peerId}`,
-    to: `${channel}:${peerId}`,
-  };
-}
-
-function resolveZalouserSession(
-  params: ResolveOutboundSessionRouteParams,
-): OutboundSessionRoute | null {
-  // Keep DM vs group aligned with inbound sessions for Zalo Personal.
-  return resolveZaloLikeSession(params, "zalouser", /^(zlu):/i);
 }
 
 function resolveNostrSession(
@@ -618,12 +493,8 @@ type OutboundSessionResolver = (
 const OUTBOUND_SESSION_RESOLVERS: Partial<Record<ChannelId, OutboundSessionResolver>> = {
   whatsapp: resolveWhatsAppSession,
   matrix: resolveMatrixSession,
-  msteams: resolveMSTeamsSession,
   mattermost: resolveMattermostSession,
-  bluebubbles: resolveBlueBubblesSession,
   "nextcloud-talk": resolveNextcloudTalkSession,
-  zalo: resolveZaloSession,
-  zalouser: resolveZalouserSession,
   nostr: resolveNostrSession,
   tlon: resolveTlonSession,
   feishu: resolveFeishuSession,

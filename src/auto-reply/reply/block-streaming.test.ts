@@ -47,7 +47,7 @@ describe("resolveEffectiveBlockStreamingConfig", () => {
   it("honors newline chunkMode for plugin channels even before the plugin registry is loaded", () => {
     const cfg = {
       channels: {
-        bluebubbles: {
+        telegram: {
           chunkMode: "newline",
         },
       },
@@ -64,7 +64,7 @@ describe("resolveEffectiveBlockStreamingConfig", () => {
 
     const resolved = resolveEffectiveBlockStreamingConfig({
       cfg,
-      provider: "bluebubbles",
+      provider: "telegram",
     });
 
     expect(resolved.chunking.flushOnParagraph).toBe(true);

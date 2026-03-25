@@ -394,34 +394,34 @@ describe("setupChannels", () => {
     setActivePluginRegistry(createEmptyPluginRegistry());
     catalogMocks.listChannelPluginCatalogEntries.mockReturnValue([
       {
-        id: "msteams",
-        pluginId: "@deneb/msteams-plugin",
+        id: "mattermost",
+        pluginId: "@deneb/mattermost-plugin",
         meta: {
-          id: "msteams",
-          label: "Microsoft Teams",
-          selectionLabel: "Microsoft Teams",
-          docsPath: "/channels/msteams",
-          blurb: "teams channel",
+          id: "mattermost",
+          label: "Mattermost",
+          selectionLabel: "Mattermost",
+          docsPath: "/channels/mattermost",
+          blurb: "open-source messaging",
         },
         install: {
-          npmSpec: "@deneb/msteams",
+          npmSpec: "@deneb/mattermost",
         },
       } satisfies ChannelPluginCatalogEntry,
     ]);
     vi.mocked(loadChannelSetupPluginRegistrySnapshotForChannel).mockImplementation(
       ({ channel }: { channel: string }) => {
         const registry = createEmptyPluginRegistry();
-        if (channel === "msteams") {
+        if (channel === "mattermost") {
           registry.channels.push({
-            pluginId: "@deneb/msteams-plugin",
+            pluginId: "@deneb/mattermost-plugin",
             source: "test",
             plugin: {
-              id: "msteams",
+              id: "mattermost",
               meta: {
-                id: "msteams",
+                id: "mattermost",
                 label: "Microsoft Teams",
                 selectionLabel: "Microsoft Teams",
-                docsPath: "/channels/msteams",
+                docsPath: "/channels/mattermost",
                 blurb: "teams channel",
               },
               capabilities: { chatTypes: ["direct"] },
@@ -439,10 +439,10 @@ describe("setupChannels", () => {
     const select = vi.fn(async ({ message, options }: { message: string; options: unknown[] }) => {
       if (message === "Select a channel") {
         const entries = options as Array<{ value: string; hint?: string }>;
-        const msteams = entries.find((entry) => entry.value === "msteams");
-        expect(msteams).toBeDefined();
-        expect(msteams?.hint ?? "").not.toContain("plugin");
-        expect(msteams?.hint ?? "").not.toContain("install");
+        const mattermost = entries.find((entry) => entry.value === "mattermost");
+        expect(mattermost).toBeDefined();
+        expect(mattermost?.hint ?? "").not.toContain("plugin");
+        expect(mattermost?.hint ?? "").not.toContain("install");
         return "__done__";
       }
       return "__done__";
@@ -457,13 +457,13 @@ describe("setupChannels", () => {
     await runSetupChannels(
       {
         channels: {
-          msteams: {
+          mattermost: {
             tenantId: "tenant-1",
           },
         },
         plugins: {
           entries: {
-            "@deneb/msteams-plugin": { enabled: true },
+            "@deneb/mattermost-plugin": { enabled: true },
           },
         },
       } as DenebConfig,
@@ -472,8 +472,8 @@ describe("setupChannels", () => {
 
     expect(loadChannelSetupPluginRegistrySnapshotForChannel).toHaveBeenCalledWith(
       expect.objectContaining({
-        channel: "msteams",
-        pluginId: "@deneb/msteams-plugin",
+        channel: "mattermost",
+        pluginId: "@deneb/mattermost-plugin",
       }),
     );
     expect(multiselect).not.toHaveBeenCalled();
@@ -483,25 +483,25 @@ describe("setupChannels", () => {
     setActivePluginRegistry(createEmptyPluginRegistry());
     catalogMocks.listChannelPluginCatalogEntries.mockReturnValue([
       {
-        id: "msteams",
-        pluginId: "@deneb/msteams-plugin",
+        id: "mattermost",
+        pluginId: "@deneb/mattermost-plugin",
         meta: {
-          id: "msteams",
-          label: "Microsoft Teams",
-          selectionLabel: "Microsoft Teams",
-          docsPath: "/channels/msteams",
-          blurb: "teams channel",
+          id: "mattermost",
+          label: "Mattermost",
+          selectionLabel: "Mattermost",
+          docsPath: "/channels/mattermost",
+          blurb: "open-source messaging",
         },
         install: {
-          npmSpec: "@deneb/msteams",
+          npmSpec: "@deneb/mattermost",
         },
       } satisfies ChannelPluginCatalogEntry,
     ]);
     manifestRegistryMocks.loadPluginManifestRegistry.mockReturnValue({
       plugins: [
         {
-          id: "@deneb/msteams-plugin",
-          channels: ["msteams"],
+          id: "@deneb/mattermost-plugin",
+          channels: ["mattermost"],
         } as never,
       ],
       diagnostics: [],
@@ -509,17 +509,17 @@ describe("setupChannels", () => {
     vi.mocked(loadChannelSetupPluginRegistrySnapshotForChannel).mockImplementation(
       ({ channel }: { channel: string }) => {
         const registry = createEmptyPluginRegistry();
-        if (channel === "msteams") {
+        if (channel === "mattermost") {
           registry.channelSetups.push({
-            pluginId: "@deneb/msteams-plugin",
+            pluginId: "@deneb/mattermost-plugin",
             source: "test",
             plugin: {
-              id: "msteams",
+              id: "mattermost",
               meta: {
-                id: "msteams",
+                id: "mattermost",
                 label: "Microsoft Teams",
                 selectionLabel: "Microsoft Teams",
-                docsPath: "/channels/msteams",
+                docsPath: "/channels/mattermost",
                 blurb: "teams channel",
               },
               capabilities: { chatTypes: ["direct"] },
@@ -528,7 +528,7 @@ describe("setupChannels", () => {
                 resolveAccount: () => ({ accountId: "default" }),
               },
               setupWizard: {
-                channel: "msteams",
+                channel: "mattermost",
                 status: {
                   configuredLabel: "configured",
                   unconfiguredLabel: "installed",
@@ -550,7 +550,7 @@ describe("setupChannels", () => {
     const select = vi.fn(async ({ message }: { message: string }) => {
       if (message === "Select a channel") {
         channelSelectionCount += 1;
-        return channelSelectionCount === 1 ? "msteams" : "__done__";
+        return channelSelectionCount === 1 ? "mattermost" : "__done__";
       }
       return "__done__";
     });
@@ -566,8 +566,8 @@ describe("setupChannels", () => {
     expect(ensureChannelSetupPluginInstalled).not.toHaveBeenCalled();
     expect(loadChannelSetupPluginRegistrySnapshotForChannel).toHaveBeenCalledWith(
       expect.objectContaining({
-        channel: "msteams",
-        pluginId: "@deneb/msteams-plugin",
+        channel: "mattermost",
+        pluginId: "@deneb/mattermost-plugin",
       }),
     );
     expect(multiselect).not.toHaveBeenCalled();
@@ -580,14 +580,14 @@ describe("setupChannels", () => {
         ...cfg,
         channels: {
           ...cfg.channels,
-          msteams: {
-            ...(cfg.channels?.msteams as Record<string, unknown> | undefined),
+          mattermost: {
+            ...(cfg.channels?.mattermost as Record<string, unknown> | undefined),
             accounts: {
-              ...(cfg.channels?.msteams as { accounts?: Record<string, unknown> } | undefined)
+              ...(cfg.channels?.mattermost as { accounts?: Record<string, unknown> } | undefined)
                 ?.accounts,
               [accountId]: {
                 ...(
-                  cfg.channels?.msteams as
+                  cfg.channels?.mattermost as
                     | {
                         accounts?: Record<string, Record<string, unknown>>;
                       }
@@ -603,29 +603,29 @@ describe("setupChannels", () => {
     vi.mocked(loadChannelSetupPluginRegistrySnapshotForChannel).mockImplementation(
       ({ channel }: { channel: string }) => {
         const registry = createEmptyPluginRegistry();
-        if (channel === "msteams") {
+        if (channel === "mattermost") {
           registry.channels.push({
-            pluginId: "msteams",
+            pluginId: "mattermost",
             source: "test",
             plugin: {
-              id: "msteams",
+              id: "mattermost",
               meta: {
-                id: "msteams",
+                id: "mattermost",
                 label: "Microsoft Teams",
                 selectionLabel: "Microsoft Teams",
-                docsPath: "/channels/msteams",
+                docsPath: "/channels/mattermost",
                 blurb: "teams channel",
               },
               capabilities: { chatTypes: ["direct"] },
               config: {
                 listAccountIds: (cfg: DenebConfig) =>
                   Object.keys(
-                    (cfg.channels?.msteams as { accounts?: Record<string, unknown> } | undefined)
+                    (cfg.channels?.mattermost as { accounts?: Record<string, unknown> } | undefined)
                       ?.accounts ?? {},
                   ),
                 resolveAccount: (cfg: DenebConfig, accountId: string) =>
                   (
-                    cfg.channels?.msteams as
+                    cfg.channels?.mattermost as
                       | {
                           accounts?: Record<string, Record<string, unknown>>;
                         }
@@ -634,12 +634,14 @@ describe("setupChannels", () => {
                 setAccountEnabled,
               },
               setupWizard: {
-                channel: "msteams",
+                channel: "mattermost",
                 status: {
                   configuredLabel: "configured",
                   unconfiguredLabel: "needs setup",
                   resolveConfigured: ({ cfg }: { cfg: DenebConfig }) =>
-                    Boolean((cfg.channels?.msteams as { tenantId?: string } | undefined)?.tenantId),
+                    Boolean(
+                      (cfg.channels?.mattermost as { tenantId?: string } | undefined)?.tenantId,
+                    ),
                   resolveStatusLines: async () => [],
                   resolveSelectionHint: async () => "configured",
                 },
@@ -657,7 +659,7 @@ describe("setupChannels", () => {
     const select = vi.fn(async ({ message, options }: { message: string; options: unknown[] }) => {
       if (message === "Select a channel") {
         channelSelectionCount += 1;
-        return channelSelectionCount === 1 ? "msteams" : "__done__";
+        return channelSelectionCount === 1 ? "mattermost" : "__done__";
       }
       if (message.includes("already configured")) {
         return "disable";
@@ -679,7 +681,7 @@ describe("setupChannels", () => {
     const next = await runSetupChannels(
       {
         channels: {
-          msteams: {
+          mattermost: {
             tenantId: "tenant-1",
             accounts: {
               default: { enabled: true },
@@ -689,7 +691,7 @@ describe("setupChannels", () => {
         },
         plugins: {
           entries: {
-            msteams: { enabled: true },
+            mattermost: { enabled: true },
           },
         },
       } as DenebConfig,
@@ -698,14 +700,14 @@ describe("setupChannels", () => {
     );
 
     expect(loadChannelSetupPluginRegistrySnapshotForChannel).toHaveBeenCalledWith(
-      expect.objectContaining({ channel: "msteams" }),
+      expect.objectContaining({ channel: "mattermost" }),
     );
     expect(setAccountEnabled).toHaveBeenCalledWith(
       expect.objectContaining({ accountId: "work", enabled: false }),
     );
     expect(
       (
-        next.channels?.msteams as
+        next.channels?.mattermost as
           | {
               accounts?: Record<string, { enabled?: boolean }>;
             }

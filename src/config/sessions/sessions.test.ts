@@ -457,19 +457,19 @@ describe("appendAssistantMessageToSessionTranscript", () => {
   it("finds session entry using normalized (lowercased) key", async () => {
     const sessionId = "test-session-normalized";
     // Store key is lowercase (as written by updateSessionStore/normalizeStoreSessionKey)
-    const storeKey = "agent:main:bluebubbles:direct:+15551234567";
+    const storeKey = "agent:main:telegram:direct:+15551234567";
     const store = {
       [storeKey]: {
         sessionId,
         chatType: "direct",
-        channel: "bluebubbles",
+        channel: "telegram",
       },
     };
     fs.writeFileSync(fixture.storePath(), JSON.stringify(store), "utf-8");
 
     // Pass a mixed-case key — append should still find the entry via normalization
     const result = await appendAssistantMessageToSessionTranscript({
-      sessionKey: "agent:main:BlueBubbles:direct:+15551234567",
+      sessionKey: "agent:main:Telegram:direct:+15551234567",
       text: "Hello normalized!",
       storePath: fixture.storePath(),
     });

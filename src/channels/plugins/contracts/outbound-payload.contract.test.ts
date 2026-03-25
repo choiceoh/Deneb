@@ -1,12 +1,6 @@
 import { describe, vi } from "vitest";
-import { discordOutbound } from "../../../../extensions/discord/src/outbound-adapter.js";
-import { whatsappOutbound } from "../../../../extensions/whatsapp/src/outbound-adapter.js";
-import { zaloPlugin } from "../../../../extensions/zalo/src/channel.js";
-import { sendMessageZalo } from "../../../../extensions/zalo/src/send.js";
-import "./../../../../extensions/zalouser/src/accounts.test-mocks.js";
-import { zalouserPlugin } from "../../../../extensions/zalouser/src/channel.js";
-import { setZalouserRuntime } from "../../../../extensions/zalouser/src/runtime.js";
-import { sendMessageZalouser } from "../../../../extensions/zalouser/src/send.js";
+import { discordOutbound } from "../../../../test/channel-outbounds.js";
+import { whatsappOutbound } from "../../../../test/channel-outbounds.js";
 import { slackOutbound } from "../../../../test/channel-outbounds.js";
 import type { ReplyPayload } from "../../../auto-reply/types.js";
 import { createDirectTextMediaOutbound } from "../outbound/direct-text-media.js";
@@ -15,22 +9,10 @@ import {
   primeChannelOutboundSendMock,
 } from "./suites.js";
 
-vi.mock("../../../../extensions/zalo/src/send.js", () => ({
-  sendMessageZalo: vi.fn().mockResolvedValue({ ok: true, messageId: "zl-1" }),
-}));
-
-vi.mock("../../../../extensions/zalouser/src/send.js", () => ({
-  sendMessageZalouser: vi.fn().mockResolvedValue({ ok: true, messageId: "zlu-1" }),
-  sendReactionZalouser: vi.fn().mockResolvedValue({ ok: true }),
-}));
-
 type PayloadHarnessParams = {
   payload: ReplyPayload;
   sendResults?: Array<{ messageId: string }>;
 };
-
-const mockedSendZalo = vi.mocked(sendMessageZalo);
-const mockedSendZalouser = vi.mocked(sendMessageZalouser);
 
 function createSlackHarness(params: PayloadHarnessParams) {
   const sendSlack = vi.fn();
@@ -142,60 +124,6 @@ describe("channel outbound payload contract", () => {
       channel: "whatsapp",
       chunking: { mode: "split", longTextLength: 5000, maxChunkLength: 4000 },
       createHarness: createWhatsAppHarness,
-    });
-  });
-
-  describe("zalo", () => {
-    installChannelOutboundPayloadContractSuite({
-      channel: "zalo",
-      chunking: { mode: "split", longTextLength: 3000, maxChunkLength: 2000 },
-      createHarness: ({ payload, sendResults }) => {
-        primeChannelOutboundSendMock(mockedSendZalo, { ok: true, messageId: "zl-1" }, sendResults);
-        return {
-          run: async () =>
-            await zaloPlugin.outbound!.sendPayload!({
-              cfg: {},
-              to: "123456789",
-              text: "",
-              payload,
-            }),
-          sendMock: mockedSendZalo,
-          to: "123456789",
-        };
-      },
-    });
-  });
-
-  describe("zalouser", () => {
-    installChannelOutboundPayloadContractSuite({
-      channel: "zalouser",
-      chunking: { mode: "passthrough", longTextLength: 3000 },
-      createHarness: ({ payload, sendResults }) => {
-        setZalouserRuntime({
-          channel: {
-            text: {
-              resolveChunkMode: vi.fn(() => "length"),
-              resolveTextChunkLimit: vi.fn(() => 1200),
-            },
-          },
-        } as never);
-        primeChannelOutboundSendMock(
-          mockedSendZalouser,
-          { ok: true, messageId: "zlu-1" },
-          sendResults,
-        );
-        return {
-          run: async () =>
-            await zalouserPlugin.outbound!.sendPayload!({
-              cfg: {},
-              to: "user:987654321",
-              text: "",
-              payload,
-            }),
-          sendMock: mockedSendZalouser,
-          to: "987654321",
-        };
-      },
     });
   });
 

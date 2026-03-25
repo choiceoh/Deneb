@@ -596,11 +596,11 @@ describe("message tool description", () => {
     setActivePluginRegistry(createTestRegistry([]));
   });
 
-  const bluebubblesPlugin = createChannelPlugin({
-    id: "bluebubbles",
-    label: "BlueBubbles",
-    docsPath: "/channels/bluebubbles",
-    blurb: "BlueBubbles test plugin.",
+  const telegramExtPlugin = createChannelPlugin({
+    id: "telegram",
+    label: "Telegram",
+    docsPath: "/channels/telegram",
+    blurb: "Telegram test plugin.",
     describeMessageTool: ({ currentChannelId }) => {
       const all: ChannelMessageActionName[] = [
         "react",
@@ -610,8 +610,7 @@ describe("message tool description", () => {
         "leaveGroup",
       ];
       const lowered = currentChannelId?.toLowerCase() ?? "";
-      const isDmTarget =
-        lowered.includes("chat_guid:imessage;-;") || lowered.includes("chat_guid:sms;-;");
+      const isDmTarget = lowered.startsWith("telegram:") && !lowered.includes("group:");
       return {
         actions: isDmTarget
           ? all.filter(
@@ -626,30 +625,21 @@ describe("message tool description", () => {
     },
     messaging: {
       normalizeTarget: (raw) => {
-        const trimmed = raw.trim().replace(/^bluebubbles:/i, "");
-        const lower = trimmed.toLowerCase();
-        if (lower.startsWith("chat_guid:")) {
-          const guid = trimmed.slice("chat_guid:".length);
-          const parts = guid.split(";");
-          if (parts.length === 3 && parts[1] === "-") {
-            return parts[2]?.trim() || trimmed;
-          }
-          return `chat_guid:${guid}`;
-        }
+        const trimmed = raw.trim().replace(/^telegram:/i, "");
         return trimmed;
       },
     },
   });
 
-  it("hides BlueBubbles group actions for DM targets", () => {
+  it("hides Telegram group actions for DM targets", () => {
     setActivePluginRegistry(
-      createTestRegistry([{ pluginId: "bluebubbles", source: "test", plugin: bluebubblesPlugin }]),
+      createTestRegistry([{ pluginId: "telegram", source: "test", plugin: telegramExtPlugin }]),
     );
 
     const tool = createMessageTool({
       config: {} as never,
-      currentChannelProvider: "bluebubbles",
-      currentChannelId: "bluebubbles:chat_guid:iMessage;-;+15551234567",
+      currentChannelProvider: "telegram",
+      currentChannelId: "telegram:123456789",
     });
 
     expect(tool.description).not.toContain("renameGroup");
@@ -718,15 +708,15 @@ describe("message tool description", () => {
 
   it("does not include 'Other configured channels' when only one channel is configured", () => {
     setActivePluginRegistry(
-      createTestRegistry([{ pluginId: "bluebubbles", source: "test", plugin: bluebubblesPlugin }]),
+      createTestRegistry([{ pluginId: "telegram", source: "test", plugin: telegramExtPlugin }]),
     );
 
     const tool = createMessageTool({
       config: {} as never,
-      currentChannelProvider: "bluebubbles",
+      currentChannelProvider: "telegram",
     });
 
-    expect(tool.description).toContain("Current channel (bluebubbles) supports:");
+    expect(tool.description).toContain("Current channel (telegram) supports:");
     expect(tool.description).not.toContain("Other configured channels");
   });
 });

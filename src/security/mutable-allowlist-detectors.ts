@@ -56,16 +56,6 @@ export function isGoogleChatMutableAllowEntry(raw: string): boolean {
   return withoutUsers.includes("@");
 }
 
-export function isMSTeamsMutableAllowEntry(raw: string): boolean {
-  const text = raw.trim();
-  if (!text || text === "*") {
-    return false;
-  }
-
-  const withoutPrefix = text.replace(/^(msteams|user):/i, "").trim();
-  return /\s/.test(withoutPrefix) || withoutPrefix.includes("@");
-}
-
 export function isMattermostMutableAllowEntry(raw: string): boolean {
   const text = raw.trim();
   if (!text || text === "*") {
@@ -98,25 +88,4 @@ export function isIrcMutableAllowEntry(raw: string): boolean {
     .trim();
 
   return !normalized.includes("!") && !normalized.includes("@");
-}
-
-export function isZalouserMutableGroupEntry(raw: string): boolean {
-  const text = raw.trim();
-  if (!text || text === "*") {
-    return false;
-  }
-
-  const normalized = text
-    .replace(/^(zalouser|zlu):/i, "")
-    .replace(/^group:/i, "")
-    .trim();
-
-  if (!normalized) {
-    return false;
-  }
-  if (/^\d+$/.test(normalized)) {
-    return false;
-  }
-
-  return !/^g-\S+$/i.test(normalized);
 }

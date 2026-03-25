@@ -221,7 +221,7 @@ describe("delivery-queue", () => {
       "Bot was blocked by the user",
       "Forbidden: bot was kicked from the group chat",
       "chat_id is empty",
-      "Outbound not configured for channel: msteams",
+      "Outbound not configured for channel: mattermost",
     ])("returns true for permanent error: %s", (msg) => {
       expect(isPermanentDeliveryError(msg)).toBe(true);
     });
@@ -429,7 +429,7 @@ describe("delivery-queue", () => {
 
     it("moves entries to failed/ immediately on permanent delivery errors", async () => {
       const id = await enqueueDelivery(
-        { channel: "msteams", to: "user:abc", payloads: [{ text: "hi" }] },
+        { channel: "mattermost", to: "user:abc", payloads: [{ text: "hi" }] },
         tmpDir,
       );
       const deliver = vi
@@ -1002,11 +1002,11 @@ describe("resolveOutboundSessionRoute", () => {
       {
         name: "MSTeams conversation target",
         cfg: baseConfig,
-        channel: "msteams",
+        channel: "mattermost",
         target: "conversation:19:meeting_abc@thread.tacv2",
         expected: {
-          sessionKey: "agent:main:msteams:channel:19:meeting_abc@thread.tacv2",
-          from: "msteams:channel:19:meeting_abc@thread.tacv2",
+          sessionKey: "agent:main:mattermost:channel:19:meeting_abc@thread.tacv2",
+          from: "mattermost:channel:19:meeting_abc@thread.tacv2",
           to: "conversation:19:meeting_abc@thread.tacv2",
           chatType: "channel",
         },
@@ -1095,35 +1095,15 @@ describe("resolveOutboundSessionRoute", () => {
         },
       },
       {
-        name: "BlueBubbles chat_* prefix stripping",
+        name: "Telegram topic group outbound",
         cfg: baseConfig,
-        channel: "bluebubbles",
-        target: "chat_guid:ABC123",
+        channel: "telegram",
+        target: "-100999888:topic:42",
         expected: {
-          sessionKey: "agent:main:bluebubbles:group:abc123",
-          from: "group:ABC123",
-        },
-      },
-      {
-        name: "Zalo direct target",
-        cfg: perChannelPeerCfg,
-        channel: "zalo",
-        target: "zl:123456",
-        expected: {
-          sessionKey: "agent:main:zalo:direct:123456",
-          from: "zalo:123456",
-          to: "zalo:123456",
-          chatType: "direct",
-        },
-      },
-      {
-        name: "Zalo Personal DM target",
-        cfg: perChannelPeerCfg,
-        channel: "zalouser",
-        target: "123456",
-        expected: {
-          sessionKey: "agent:main:zalouser:direct:123456",
-          chatType: "direct",
+          sessionKey: "agent:main:telegram:group:-100999888:topic:42",
+          from: "telegram:group:-100999888:topic:42",
+          to: "telegram:-100999888",
+          threadId: 42,
         },
       },
       {

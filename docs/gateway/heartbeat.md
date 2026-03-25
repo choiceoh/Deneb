@@ -94,7 +94,7 @@ and logged; a message that is only `HEARTBEAT_OK` is dropped.
         includeReasoning: false, // default: false (deliver separate Reasoning: message when available)
         lightContext: false, // default: false; true keeps only HEARTBEAT.md from workspace bootstrap files
         isolatedSession: false, // default: false; true runs each heartbeat in a fresh session (no conversation history)
-        target: "last", // default: none | options: last | none | <channel id> (core or plugin, e.g. "bluebubbles")
+        target: "last", // default: none | options: last | none | <channel id> (core or plugin, e.g. "telegram")
         to: "+15551234567", // optional channel-specific override
         accountId: "ops-bot", // optional multi-account channel id
         prompt: "Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.",
@@ -222,7 +222,7 @@ Use `accountId` to target a specific account on multi-account channels like Tele
   - Session key formats: see [Sessions](/concepts/session) and [Groups](/channels/groups).
 - `target`:
   - `last`: deliver to the last used external channel.
-  - explicit channel: `whatsapp` / `telegram` / `discord` / `googlechat` / `slack` / `msteams` / `signal` / `imessage`.
+  - explicit channel: `whatsapp` / `telegram` / `discord` / `googlechat` / `slack` / `signal` / `imessage`.
   - `none` (default): run the heartbeat but **do not deliver** externally.
 - `directPolicy`: controls direct/DM delivery behavior:
   - `allow` (default): allow direct/DM heartbeat delivery.

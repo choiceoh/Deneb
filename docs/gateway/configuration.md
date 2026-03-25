@@ -79,13 +79,12 @@ When validation fails:
 
     - WhatsApp — `channels.whatsapp`
     - [Telegram](/channels/telegram) — `channels.telegram`
-    - Discord — `channels.discord`
-    - Slack — `channels.slack`
-    - Signal — `channels.signal`
-    - iMessage — `channels.imessage`
-    - Google Chat — `channels.googlechat`
-    - Mattermost — `channels.mattermost`
-    - MS Teams — `channels.msteams`
+    - [Discord](/channels/discord) — `channels.discord`
+    - [Slack](/channels/slack) — `channels.slack`
+    - [Signal](/channels/signal) — `channels.signal`
+    - [iMessage](/channels/imessage) — `channels.imessage`
+    - [Google Chat](/channels/googlechat) — `channels.googlechat`
+    - [Mattermost](/channels/mattermost) — `channels.mattermost`
 
     All channels share the same DM policy pattern:
 

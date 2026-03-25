@@ -19,7 +19,7 @@ const ALLOWED_EXTENSION_PUBLIC_SURFACES = new Set([
   "setup-api.js",
   "setup-entry.js",
 ]);
-const GUARDED_CHANNEL_EXTENSIONS = new Set(["matrix", "mattermost", "msteams", "telegram"]);
+const GUARDED_CHANNEL_EXTENSIONS = new Set(["matrix", "mattermost", "telegram"]);
 
 type GuardedSource = {
   path: string;

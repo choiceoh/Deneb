@@ -586,7 +586,6 @@ export const QueueModeBySurfaceSchema = z
     mattermost: QueueModeSchema.optional(),
     signal: QueueModeSchema.optional(),
     imessage: QueueModeSchema.optional(),
-    msteams: QueueModeSchema.optional(),
     webchat: QueueModeSchema.optional(),
   })
   .strict()
