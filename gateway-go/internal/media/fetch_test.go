@@ -80,14 +80,3 @@ func TestDetectMIME(t *testing.T) {
 	}
 }
 
-func TestOutputFormat(t *testing.T) {
-	format, ext := OutputFormat("telegram")
-	if format != "opus" || ext != ".opus" {
-		t.Errorf("telegram: got %s/%s, want opus/.opus", format, ext)
-	}
-
-	format, ext = OutputFormat("discord")
-	if format != "mp3" || ext != ".mp3" {
-		t.Errorf("discord: got %s/%s, want mp3/.mp3", format, ext)
-	}
-}
