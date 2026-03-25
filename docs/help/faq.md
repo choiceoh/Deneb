@@ -144,7 +144,7 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
   - [What model do you recommend?](#what-model-do-you-recommend)
   - [How do I switch models without wiping my config?](#how-do-i-switch-models-without-wiping-my-config)
   - [Can I use self-hosted models (llama.cpp, vLLM, Ollama)?](#can-i-use-selfhosted-models-llamacpp-vllm-ollama)
-  - [What do Deneb, Flawd, and Krill use for models?](#what-do-deneb-flawd-and-krill-use-for-models)
+  - [What models does the gateway use?](#what-models-does-the-gateway-use)
   - [How do I switch models on the fly (without restarting)?](#how-do-i-switch-models-on-the-fly-without-restarting)
   - [Can I use GPT 5.2 for daily tasks and Codex 5.3 for coding](#can-i-use-gpt-52-for-daily-tasks-and-codex-53-for-coding)
   - [Why do I see "Model … is not allowed" and then no reply?](#why-do-i-see-model-is-not-allowed-and-then-no-reply)
@@ -2138,9 +2138,9 @@ If you did overwrite config, restore from backup or re-run `deneb doctor` to rep
 
 Docs: [Models](/concepts/models), [Doctor](/gateway/doctor).
 
-### What do Deneb, Flawd, and Krill use for models
+### What models does the gateway use
 
-- These deployments can differ and may change over time; there is no fixed provider recommendation.
+- The active model can differ and may change over time; there is no fixed provider recommendation.
 - Check the current runtime setting on each gateway with `deneb models status`.
 - For security-sensitive/tool-enabled agents, use the strongest latest-generation model available.
 
@@ -3004,4 +3004,4 @@ You can add options like `debounce:2s cap:25 drop:summarize` for followup modes.
 
 ---
 
-Still stuck? Ask in [Discord](https://discord.com/invite/clawd) or open a [GitHub discussion](https://github.com/deneb/deneb/discussions).
+Still stuck? Open a [GitHub discussion](https://github.com/deneb/deneb/discussions).
