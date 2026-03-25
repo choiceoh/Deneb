@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -20,6 +19,11 @@ const (
 	prewarmMaxRetries = 2
 )
 
+// RPCDispatcher can dispatch RPC requests. Implemented by server.Server.
+type RPCDispatcher interface {
+	DispatchRPC(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame
+}
+
 // PrewarmModel sends a minimal inference request to the primary model provider
 // to trigger model loading and warm up inference caches. This is especially
 // beneficial on DGX Spark with local GPU inference, where the first request
@@ -28,8 +32,8 @@ const (
 // This function is designed to be called as a goroutine during gateway startup,
 // before channel plugins begin accepting messages. Failures are logged but
 // do not block startup.
-func PrewarmModel(ctx context.Context, host *bridge.PluginHost, logger *slog.Logger) {
-	if host == nil {
+func PrewarmModel(ctx context.Context, dispatcher RPCDispatcher, logger *slog.Logger) {
+	if dispatcher == nil {
 		return
 	}
 
@@ -47,7 +51,7 @@ func PrewarmModel(ctx context.Context, host *bridge.PluginHost, logger *slog.Log
 			"prompt":    "warmup",
 			"maxTokens": 1,
 		})
-		resp, err := host.Forward(prewarmCtx, &protocol.RequestFrame{
+		resp := dispatcher.DispatchRPC(prewarmCtx, &protocol.RequestFrame{
 			Type:   "req",
 			ID:     "go-model-prewarm",
 			Method: "provider.prewarm",
@@ -55,20 +59,17 @@ func PrewarmModel(ctx context.Context, host *bridge.PluginHost, logger *slog.Log
 		})
 		cancel()
 
-		if err != nil {
-			logger.Warn("model prewarm attempt failed",
-				"attempt", attempt+1,
-				"error", err,
-			)
+		if resp == nil {
+			logger.Warn("model prewarm returned nil response", "attempt", attempt+1)
 			continue
 		}
 
-		if resp != nil && resp.OK {
+		if resp.OK {
 			logger.Info("primary model prewarmed successfully")
 			return
 		}
 
-		if resp != nil && resp.Error != nil {
+		if resp.Error != nil {
 			logger.Warn("model prewarm returned error",
 				"attempt", attempt+1,
 				"error", resp.Error,

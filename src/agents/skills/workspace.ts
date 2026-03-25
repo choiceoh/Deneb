@@ -1,11 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  formatSkillsForPrompt,
-  loadSkillsFromDir,
-  type Skill,
-} from "@mariozechner/pi-coding-agent";
+import { formatSkillsForPrompt, loadSkillsFromDir } from "@mariozechner/pi-coding-agent";
 import type { DenebConfig } from "../../config/config.js";
 import { isPathInside } from "../../infra/path-guards.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
@@ -21,6 +17,7 @@ import {
 } from "./frontmatter.js";
 import { resolvePluginSkillDirs } from "./plugin-skills.js";
 import { serializeByKey } from "./serialize.js";
+import type { Skill } from "./types.js";
 import type {
   ParsedSkillFrontmatter,
   SkillEligibilityContext,

@@ -6,7 +6,6 @@ import type { HeartbeatRunner } from "../infra/heartbeat-runner.js";
 import type { PluginServicesHandle } from "../plugins/services.js";
 
 export function createGatewayCloseHandler(params: {
-  bonjourStop: (() => Promise<void>) | null;
   tailscaleCleanup: (() => Promise<void>) | null;
   releasePluginRouteRegistry?: (() => void) | null;
   stopChannel: (name: ChannelId, accountId?: string) => Promise<void>;
@@ -39,13 +38,6 @@ export function createGatewayCloseHandler(params: {
         typeof opts?.restartExpectedMs === "number" && Number.isFinite(opts.restartExpectedMs)
           ? Math.max(0, Math.floor(opts.restartExpectedMs))
           : null;
-      if (params.bonjourStop) {
-        try {
-          await params.bonjourStop();
-        } catch {
-          /* ignore */
-        }
-      }
       if (params.tailscaleCleanup) {
         await params.tailscaleCleanup();
       }

@@ -13,8 +13,6 @@ import (
 type MessagingDeps struct {
 	// TelegramPlugin is the native Telegram channel plugin (nil if not configured).
 	TelegramPlugin *telegram.Plugin
-	// Forwarder falls back to bridge for non-Telegram channels.
-	Forwarder Forwarder
 }
 
 // RegisterMessagingMethods registers the send and poll RPC methods.
@@ -101,16 +99,7 @@ func messagingSend(deps MessagingDeps) HandlerFunc {
 			return resp
 		}
 
-		// Fall back to bridge for other channels.
-		if deps.Forwarder != nil {
-			resp, err := deps.Forwarder.Forward(ctx, req)
-			if err != nil {
-				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrDependencyFailed, "bridge forward failed: "+err.Error()))
-			}
-			return resp
-		}
-
+		// No other channels available in standalone Go gateway.
 		return protocol.NewResponseError(req.ID, protocol.NewError(
 			protocol.ErrUnavailable, "no channel available for sending"))
 	}
@@ -130,16 +119,6 @@ func messagingPoll(deps MessagingDeps) HandlerFunc {
 				})
 				return resp
 			}
-		}
-
-		// Fall back to bridge.
-		if deps.Forwarder != nil {
-			resp, err := deps.Forwarder.Forward(ctx, req)
-			if err != nil {
-				return protocol.NewResponseError(req.ID, protocol.NewError(
-					protocol.ErrDependencyFailed, "bridge forward failed: "+err.Error()))
-			}
-			return resp
 		}
 
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{

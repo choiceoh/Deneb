@@ -1,32 +1,14 @@
 import type { DenebConfig } from "../config/config.js";
 import type { SecretInput } from "../config/types.secrets.js";
 import { isSecureWebSocketUrl } from "../gateway/net.js";
-import type { GatewayBonjourBeacon } from "../infra/bonjour-discovery.js";
-import { discoverGatewayBeacons } from "../infra/bonjour-discovery.js";
-import { resolveWideAreaDiscoveryDomain } from "../infra/widearea-dns.js";
 import type { WizardPrompter } from "../wizard/prompts.js";
 import {
   promptSecretRefForSetup,
   resolveSecretInputModeForEnvSelection,
 } from "./auth-choice.apply-helpers.js";
-import { detectBinary } from "./onboard-helpers.js";
 import type { SecretInputMode } from "./onboard-types.js";
 
 const DEFAULT_GATEWAY_URL = "ws://127.0.0.1:18789";
-
-function pickHost(beacon: GatewayBonjourBeacon): string | undefined {
-  // Security: TXT is unauthenticated. Prefer the resolved service endpoint host.
-  return beacon.host || beacon.tailnetDns || beacon.lanHost;
-}
-
-function buildLabel(beacon: GatewayBonjourBeacon): string {
-  const host = pickHost(beacon);
-  // Security: Prefer the resolved service endpoint port.
-  const port = beacon.port ?? beacon.gatewayPort ?? 18789;
-  const title = beacon.displayName ?? beacon.instanceName;
-  const hint = host ? `${host}:${port}` : "host unknown";
-  return `${title} (${hint})`;
-}
 
 function ensureWsUrl(value: string): string {
   const trimmed = value.trim();
@@ -59,90 +41,7 @@ export async function promptRemoteGatewayConfig(
   prompter: WizardPrompter,
   options?: { secretInputMode?: SecretInputMode },
 ): Promise<DenebConfig> {
-  let selectedBeacon: GatewayBonjourBeacon | null = null;
-  let suggestedUrl = cfg.gateway?.remote?.url ?? DEFAULT_GATEWAY_URL;
-
-  const hasBonjourTool = (await detectBinary("dns-sd")) || (await detectBinary("avahi-browse"));
-  const wantsDiscover = hasBonjourTool
-    ? await prompter.confirm({
-        message: "Discover gateway on LAN (Bonjour)?",
-        initialValue: true,
-      })
-    : false;
-
-  if (!hasBonjourTool) {
-    await prompter.note(
-      [
-        "Bonjour discovery requires dns-sd (macOS) or avahi-browse (Linux).",
-        "Docs: https://docs.deneb.ai/gateway/discovery",
-      ].join("\n"),
-      "Discovery",
-    );
-  }
-
-  if (wantsDiscover) {
-    const wideAreaDomain = resolveWideAreaDiscoveryDomain();
-    const spin = prompter.progress("Searching for gateways…");
-    const beacons = await discoverGatewayBeacons({ timeoutMs: 2000, wideAreaDomain });
-    spin.stop(beacons.length > 0 ? `Found ${beacons.length} gateway(s)` : "No gateways found");
-
-    if (beacons.length > 0) {
-      const selection = await prompter.select({
-        message: "Select gateway",
-        options: [
-          ...beacons.map((beacon, index) => ({
-            value: String(index),
-            label: buildLabel(beacon),
-          })),
-          { value: "manual", label: "Enter URL manually" },
-        ],
-      });
-      if (selection !== "manual") {
-        const idx = Number.parseInt(String(selection), 10);
-        selectedBeacon = Number.isFinite(idx) ? (beacons[idx] ?? null) : null;
-      }
-    }
-  }
-
-  if (selectedBeacon) {
-    const host = pickHost(selectedBeacon);
-    const port = selectedBeacon.port ?? selectedBeacon.gatewayPort ?? 18789;
-    if (host) {
-      const mode = await prompter.select({
-        message: "Connection method",
-        options: [
-          {
-            value: "direct",
-            label: `Direct gateway WS (${host}:${port})`,
-          },
-          { value: "ssh", label: "SSH tunnel (loopback)" },
-        ],
-      });
-      if (mode === "direct") {
-        suggestedUrl = `wss://${host}:${port}`;
-        await prompter.note(
-          [
-            "Direct remote access defaults to TLS.",
-            `Using: ${suggestedUrl}`,
-            "If your gateway is loopback-only, choose SSH tunnel and keep ws://127.0.0.1:18789.",
-          ].join("\n"),
-          "Direct remote",
-        );
-      } else {
-        suggestedUrl = DEFAULT_GATEWAY_URL;
-        await prompter.note(
-          [
-            "Start a tunnel before using the CLI:",
-            `ssh -N -L 18789:127.0.0.1:18789 <user>@${host}${
-              selectedBeacon.sshPort ? ` -p ${selectedBeacon.sshPort}` : ""
-            }`,
-            "Docs: https://docs.deneb.ai/gateway/remote",
-          ].join("\n"),
-          "SSH tunnel",
-        );
-      }
-    }
-  }
+  const suggestedUrl = cfg.gateway?.remote?.url ?? DEFAULT_GATEWAY_URL;
 
   const urlInput = await prompter.text({
     message: "Gateway WebSocket URL",

@@ -550,7 +550,6 @@ export async function startGatewayServer(
     logPlugins,
     getReadiness,
   });
-  let bonjourStop: (() => Promise<void>) | null = null;
   const nodeRegistry = new NodeRegistry();
   const nodePresenceTimers = new Map<string, ReturnType<typeof setInterval>>();
   const nodeSubscriptions = createNodeSubscriptionManager();
@@ -921,7 +920,6 @@ export async function startGatewayServer(
       })();
 
   const close = createGatewayCloseHandler({
-    bonjourStop,
     tailscaleCleanup,
     releasePluginRouteRegistry,
     stopChannel,

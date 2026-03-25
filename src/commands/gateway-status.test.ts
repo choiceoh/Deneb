@@ -11,9 +11,6 @@ const readBestEffortConfig = vi.fn(async () => ({
   },
 }));
 const resolveGatewayPort = vi.fn((_cfg?: unknown) => 18789);
-const discoverGatewayBeacons = vi.fn(
-  async (_opts?: unknown): Promise<Array<{ tailnetDns: string }>> => [],
-);
 const pickPrimaryTailnetIPv4 = vi.fn(() => "100.64.0.10");
 const sshStop = vi.fn(async () => {});
 const resolveSshConfig = vi.fn(
@@ -115,10 +112,6 @@ const probeGateway = vi.fn(async (opts: { url: string }): Promise<GatewayProbeRe
 vi.mock("../config/config.js", () => ({
   readBestEffortConfig,
   resolveGatewayPort,
-}));
-
-vi.mock("../infra/bonjour-discovery.js", () => ({
-  discoverGatewayBeacons,
 }));
 
 vi.mock("../infra/tailnet.js", () => ({
@@ -565,24 +558,6 @@ describe("gateway-status command", () => {
     const parsed = JSON.parse(runtimeLogs.join("\n")) as Record<string, unknown>;
     const targets = parsed.targets as Array<Record<string, unknown>>;
     expect(targets.some((t) => t.kind === "sshTunnel")).toBe(true);
-  });
-
-  it("skips invalid ssh-auto discovery targets", async () => {
-    const { runtime } = createRuntimeCapture();
-    await withEnvAsync({ USER: "steipete" }, async () => {
-      readBestEffortConfig.mockResolvedValueOnce(makeRemoteGatewayConfig("", "", "ltok"));
-      discoverGatewayBeacons.mockResolvedValueOnce([
-        { tailnetDns: "-V" },
-        { tailnetDns: "goodhost" },
-      ]);
-
-      startSshPortForward.mockClear();
-      await runGatewayStatus(runtime, { timeout: "1000", json: true, sshAuto: true });
-
-      expect(startSshPortForward).toHaveBeenCalledTimes(1);
-      const call = startSshPortForward.mock.calls[0]?.[0] as { target: string };
-      expect(call.target).toBe("steipete@goodhost");
-    });
   });
 
   it("infers SSH target from gateway.remote.url and ssh config", async () => {

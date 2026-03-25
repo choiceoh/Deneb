@@ -14,7 +14,6 @@ type ProviderDeps struct {
 	Deps
 	Providers   *provider.Registry
 	AuthManager *provider.AuthManager
-	Forwarder   Forwarder
 }
 
 // RegisterProviderMethods registers provider-related RPC methods.
@@ -108,20 +107,6 @@ func providersCatalog(deps ProviderDeps) HandlerFunc {
 					resp := protocol.MustResponseOK(req.ID, result)
 					return resp
 				}
-			}
-		}
-
-		// Forward to bridge for catalog discovery.
-		if deps.Forwarder != nil {
-			forwardReq := &protocol.RequestFrame{
-				Type:   protocol.FrameTypeRequest,
-				ID:     req.ID,
-				Method: "providers.catalog",
-				Params: req.Params,
-			}
-			resp, err := deps.Forwarder.Forward(ctx, forwardReq)
-			if err == nil {
-				return resp
 			}
 		}
 

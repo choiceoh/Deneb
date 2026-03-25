@@ -27,11 +27,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// Forwarder sends requests to the Node.js plugin host for agent invocation.
-type Forwarder interface {
-	Forward(ctx context.Context, req *protocol.RequestFrame) (*protocol.ResponseFrame, error)
-}
-
 // BroadcastFunc sends an event to all matching subscribers.
 type BroadcastFunc func(event string, payload any) (int, []error)
 
@@ -76,7 +71,6 @@ type AbortEntry struct {
 // Handler manages chat RPC methods.
 type Handler struct {
 	sessions     *session.Manager
-	forwarder    Forwarder
 	broadcast    BroadcastFunc
 	broadcastRaw BroadcastRawFunc
 	logger       *slog.Logger
@@ -139,7 +133,7 @@ func DefaultHandlerConfig() HandlerConfig {
 }
 
 // NewHandler creates a new chat handler.
-func NewHandler(sessions *session.Manager, forwarder Forwarder, broadcast BroadcastFunc, logger *slog.Logger, cfg HandlerConfig) *Handler {
+func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog.Logger, cfg HandlerConfig) *Handler {
 	if cfg.MaxHistoryBytes == 0 {
 		defaults := DefaultHandlerConfig()
 		cfg.MaxHistoryBytes = defaults.MaxHistoryBytes
@@ -148,7 +142,6 @@ func NewHandler(sessions *session.Manager, forwarder Forwarder, broadcast Broadc
 	}
 	h := &Handler{
 		sessions:        sessions,
-		forwarder:       forwarder,
 		broadcast:       broadcast,
 		logger:          logger,
 		llmClient:       cfg.LLMClient,
@@ -174,6 +167,43 @@ func NewHandler(sessions *session.Manager, forwarder Forwarder, broadcast Broadc
 // SetBroadcastRaw sets the raw broadcast function for streaming event relay.
 func (h *Handler) SetBroadcastRaw(fn BroadcastRawFunc) {
 	h.broadcastRaw = fn
+}
+
+// HandleBtw processes a side question (/btw) without affecting the main
+// session context. It dispatches a lightweight chat.send-style request
+// with the side question, using the fast model default.
+func (h *Handler) HandleBtw(_ context.Context, sessionKey, question string) (string, error) {
+	// Build a side-question request and dispatch through Send.
+	// The answer is returned directly without persisting to the main transcript.
+	req, err := protocol.NewRequestFrame("btw-internal", "chat.send", map[string]any{
+		"sessionKey": sessionKey,
+		"message":    question,
+		"btw":        true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("btw request build failed: %w", err)
+	}
+
+	resp := h.Send(context.Background(), req)
+	if resp == nil {
+		return "", fmt.Errorf("btw returned nil response")
+	}
+	if !resp.OK {
+		msg := "unknown error"
+		if resp.Error != nil {
+			msg = resp.Error.Message
+		}
+		return "", fmt.Errorf("btw failed: %s", msg)
+	}
+
+	// Extract text from response payload.
+	var result struct {
+		Text string `json:"text"`
+	}
+	if len(resp.Payload) > 0 {
+		_ = json.Unmarshal(resp.Payload, &result)
+	}
+	return result.Text, nil
 }
 
 // Close stops background goroutines and cancels all active abort entries.
@@ -472,7 +502,7 @@ func (h *Handler) buildRunDeps() runDeps {
 }
 
 // History handles "chat.history" — returns capped, sanitized transcript.
-func (h *Handler) History(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	var p struct {
 		SessionKey string `json:"sessionKey"`
 		Limit      int    `json:"limit,omitempty"`
@@ -508,37 +538,11 @@ func (h *Handler) History(ctx context.Context, req *protocol.RequestFrame) *prot
 		return resp
 	}
 
-	// Fall back to bridge forwarding.
-	if h.forwarder == nil {
-		resp := protocol.MustResponseOK(req.ID, map[string]any{
-			"messages": []ChatMessage{},
-			"total":    0,
-		})
-		return resp
-	}
-
-	forwardParams, _ := json.Marshal(map[string]any{
-		"sessionKey": p.SessionKey,
-		"limit":      limit,
+	// No transcript store available — return empty history.
+	resp := protocol.MustResponseOK(req.ID, map[string]any{
+		"messages": []ChatMessage{},
+		"total":    0,
 	})
-	forwardReq := &protocol.RequestFrame{
-		Type:   protocol.FrameTypeRequest,
-		ID:     req.ID,
-		Method: "chat.history",
-		Params: forwardParams,
-	}
-	resp, err := h.forwarder.Forward(ctx, forwardReq)
-	if err != nil {
-		h.logger.Error("chat.history bridge forward failed", "session", p.SessionKey, "error", err)
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrDependencyFailed, "bridge error: "+err.Error()))
-	}
-
-	// Budget enforcement: cap total response bytes.
-	if len(resp.Payload) > h.maxHistoryBytes {
-		resp = h.budgetHistory(req.ID, resp.Payload)
-	}
-
 	return resp
 }
 
@@ -608,7 +612,7 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 }
 
 // Inject handles "chat.inject" — injects a message directly into the transcript.
-func (h *Handler) Inject(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+func (h *Handler) Inject(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	var p struct {
 		SessionKey string `json:"sessionKey"`
 		Role       string `json:"role"`
@@ -649,37 +653,9 @@ func (h *Handler) Inject(ctx context.Context, req *protocol.RequestFrame) *proto
 		return resp
 	}
 
-	// Fall back to bridge forwarding.
-	if h.forwarder == nil {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrDependencyFailed, "no transcript store or bridge available"))
-	}
-
-	forwardParams, _ := json.Marshal(map[string]any{
-		"sessionKey": p.SessionKey,
-		"role":       p.Role,
-		"content":    content,
-	})
-	forwardReq := &protocol.RequestFrame{
-		Type:   protocol.FrameTypeRequest,
-		ID:     req.ID,
-		Method: "chat.inject",
-		Params: forwardParams,
-	}
-	resp, err := h.forwarder.Forward(ctx, forwardReq)
-	if err != nil {
-		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrDependencyFailed, "bridge error: "+err.Error()))
-	}
-
-	if h.broadcast != nil {
-		h.broadcast("sessions.changed", map[string]any{
-			"sessionKey": p.SessionKey,
-			"reason":     "injected",
-		})
-	}
-
-	return resp
+	// No transcript store available.
+	return protocol.NewResponseError(req.ID, protocol.NewError(
+		protocol.ErrDependencyFailed, "no transcript store available"))
 }
 
 // --- Helpers ---

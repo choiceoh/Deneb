@@ -24,8 +24,7 @@ Legacy `bridge.*` config keys are no longer part of the config schema.
   full gateway API surface.
 - **Pairing + node identity**: node admission is owned by the gateway and tied
   to a per-node token.
-- **Discovery UX**: nodes can discover gateways via Bonjour on LAN, or connect
-  directly over a tailnet.
+- **Discovery UX**: nodes can discover gateways via a tailnet or manual configuration.
 - **Loopback WS**: the full WS control plane stays local unless tunneled via SSH.
 
 ## Transport
@@ -34,10 +33,7 @@ Legacy `bridge.*` config keys are no longer part of the config schema.
 - Optional TLS (when `bridge.tls.enabled` is true).
 - Legacy default listener port was `18790` (current builds do not start a TCP bridge).
 
-When TLS is enabled, discovery TXT records include `bridgeTls=1` plus
-`bridgeTlsSha256` as a non-secret hint. Note that Bonjour/mDNS TXT records are
-unauthenticated; clients must not treat the advertised fingerprint as an
-authoritative pin without explicit user intent or other out-of-band verification.
+When TLS is enabled, the `bridgeTls=1` flag and `bridgeTlsSha256` fingerprint hint are available. Clients must not treat an advertised fingerprint as an authoritative pin without explicit user intent or other out-of-band verification.
 
 ## Handshake + pairing
 
@@ -82,8 +78,6 @@ Payload fields (all optional unless noted):
 - Bind the bridge to a tailnet IP: `bridge.bind: "tailnet"` in
   `~/.deneb/deneb.json`.
 - Clients connect via MagicDNS name or tailnet IP.
-- Bonjour does **not** cross networks; use manual host/port or wide-area DNS‑SD
-  when needed.
 
 ## Versioning
 

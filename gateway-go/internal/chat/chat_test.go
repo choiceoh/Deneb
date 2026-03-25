@@ -6,31 +6,12 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-type mockForwarder struct {
-	lastReq *protocol.RequestFrame
-	resp    *protocol.ResponseFrame
-	err     error
-}
-
-func (m *mockForwarder) Forward(_ context.Context, req *protocol.RequestFrame) (*protocol.ResponseFrame, error) {
-	m.lastReq = req
-	if m.err != nil {
-		return nil, m.err
-	}
-	if m.resp != nil {
-		return m.resp, nil
-	}
-	resp, _ := protocol.NewResponseOK(req.ID, map[string]string{"status": "ok"})
-	return resp, nil
-}
-
-func newTestHandler(forwarder Forwarder) *Handler {
+func newTestHandler() *Handler {
 	sessions := session.NewManager()
 	broadcastFn := func(event string, payload any) (int, []error) { return 0, nil }
-	return NewHandler(sessions, forwarder, broadcastFn, nil, DefaultHandlerConfig())
+	return NewHandler(sessions, broadcastFn, nil, DefaultHandlerConfig())
 }
 
 func makeReq(id, method string, params any) *protocol.RequestFrame {

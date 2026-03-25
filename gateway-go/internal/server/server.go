@@ -23,7 +23,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
-	"github.com/choiceoh/deneb/gateway-go/internal/bridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
@@ -69,7 +68,6 @@ type Server struct {
 	sessions    *session.Manager
 	channels         *channel.Registry
 	channelLifecycle *channel.LifecycleManager
-	bridge           *bridge.PluginHost
 	keyCache         *session.KeyCache
 	dedupe           *dedupe.Tracker
 	broadcaster *events.Broadcaster
@@ -161,6 +159,13 @@ func (s *Server) RuntimeConfig() *config.GatewayRuntimeConfig {
 	return s.runtimeCfg
 }
 
+// DispatchRPC dispatches an RPC request through the server's dispatcher.
+// This allows internal components (e.g., model prewarm) to invoke RPC
+// methods without going through HTTP/WebSocket.
+func (s *Server) DispatchRPC(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	return s.dispatcher.Dispatch(ctx, req)
+}
+
 // WithAuthValidator sets the auth validator for token-based authentication.
 // If not set, the server operates in no-auth mode (all connections are trusted).
 func WithAuthValidator(v *auth.Validator) Option {
@@ -216,9 +221,9 @@ func New(addr string, opts ...Option) *Server {
 	s.channelEvents = monitoring.NewChannelEventTracker()
 	s.authRateLimiter = auth.NewAuthRateLimiter(10, 60*1000, 5*60*1000)
 
-	// Provider auth manager (bridge will be wired later via SetBridge).
+	// Provider auth manager.
 	if s.providers != nil {
-		s.authManager = provider.NewAuthManager(s.providers, nil, s.logger)
+		s.authManager = provider.NewAuthManager(s.providers, s.logger)
 	}
 
 	// Phase 3: Advanced workflow subsystems.
@@ -264,146 +269,6 @@ func New(addr string, opts ...Option) *Server {
 	return s
 }
 
-// SetBridge sets the Plugin Host bridge for forwarding unhandled RPC methods.
-// Also wires bridge event forwarding to the chat handler, broadcaster,
-// and auth manager.
-func (s *Server) SetBridge(b *bridge.PluginHost) {
-	s.bridge = b
-	s.dispatcher.SetForwarder(b)
-
-	// Wire bridge into auth manager for credential refresh.
-	if s.authManager != nil {
-		s.authManager.SetForwarder(b)
-	}
-
-	// Wire raw broadcast to chat handler for streaming event relay.
-	if s.chatHandler != nil {
-		s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
-			return s.broadcaster.BroadcastRaw(event, data)
-		})
-	}
-
-	// Wire process approval callback via bridge forward.
-	if s.processes != nil {
-		s.processes.SetApprover(func(req process.ExecRequest) bool {
-			if !b.IsRunning() {
-				return false
-			}
-			// Truncate command in approval payload to prevent OOM on marshal.
-			cmd := req.Command
-			if len(cmd) > 4096 {
-				cmd = cmd[:4096]
-			}
-			params, err := json.Marshal(map[string]any{
-				"id":      req.ID,
-				"command": cmd,
-				"args":    req.Args,
-			})
-			if err != nil {
-				s.logger.Error("approval params marshal failed", "id", req.ID, "error", err)
-				return false
-			}
-			approvalReq := &protocol.RequestFrame{
-				Type:   protocol.FrameTypeRequest,
-				ID:     "approval-" + req.ID,
-				Method: "exec.approve",
-				Params: params,
-			}
-			approvalCtx, approvalCancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer approvalCancel()
-			resp, err := b.Forward(approvalCtx, approvalReq)
-			if err != nil {
-				s.logger.Warn("process approval forward failed", "id", req.ID, "error", err)
-				return false
-			}
-			return resp.OK
-		})
-	}
-
-	// Wire bridge events: chat events go to chatHandler, lifecycle/agent events
-	// to gatewaySubs, and everything else to broadcaster.
-	// Wrapped in panic recovery so a single bad event doesn't kill the bridge read loop.
-	b.SetEventHandler(func(ev *protocol.EventFrame) {
-		defer func() {
-			if r := recover(); r != nil {
-				s.logger.Error("panic in bridge event handler", "event", ev.Event, "panic", r)
-			}
-		}()
-
-		// Track activity on all bridge events.
-		if s.activity != nil {
-			s.activity.Touch()
-		}
-
-		switch {
-		case s.chatHandler != nil && (ev.Event == "chat" || ev.Event == "chat.delta"):
-			s.chatHandler.HandleBridgeEvent(ev)
-
-		case ev.Event == "agent" || ev.Event == "agent.event":
-			if s.gatewaySubs != nil {
-				s.gatewaySubs.EmitAgent(events.AgentEvent{
-					Kind:    ev.Event,
-					Payload: ev.Payload,
-				})
-			}
-			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
-
-		case ev.Event == "heartbeat":
-			if s.gatewaySubs != nil {
-				s.gatewaySubs.EmitHeartbeat(events.HeartbeatEvent{
-					Ts: time.Now().UnixMilli(),
-				})
-			}
-			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
-
-		case ev.Event == "channel.event":
-			// Track per-channel event timestamps for health monitoring.
-			if s.channelEvents != nil && len(ev.Payload) > 0 {
-				var chEvt struct {
-					ChannelID string `json:"channelId"`
-				}
-				if json.Unmarshal(ev.Payload, &chEvt) == nil && chEvt.ChannelID != "" {
-					s.channelEvents.Touch(chEvt.ChannelID)
-				}
-			}
-			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
-
-		case ev.Event == "session.transcript":
-			if s.gatewaySubs != nil && len(ev.Payload) > 0 {
-				var update events.TranscriptUpdate
-				if json.Unmarshal(ev.Payload, &update) == nil {
-					s.gatewaySubs.EmitTranscript(update)
-				}
-			}
-
-		default:
-			s.broadcaster.BroadcastRaw(ev.Event, mustMarshalEvent(ev))
-		}
-	})
-}
-
-// lazyForwarder defers to the server's bridge, which is set after construction.
-// This allows RPC handlers registered at server creation to forward to the bridge
-// that gets connected later via SetBridge.
-type lazyForwarder struct {
-	server *Server
-}
-
-func (lf *lazyForwarder) Forward(ctx context.Context, req *protocol.RequestFrame) (*protocol.ResponseFrame, error) {
-	if lf.server.bridge == nil {
-		return nil, fmt.Errorf("bridge not connected")
-	}
-	return lf.server.bridge.Forward(ctx, req)
-}
-
-// mustMarshalEvent marshals an event frame to JSON bytes.
-func mustMarshalEvent(ev *protocol.EventFrame) []byte {
-	data, err := json.Marshal(ev)
-	if err != nil {
-		return []byte("{}")
-	}
-	return data
-}
 
 // initAndListen creates the HTTP server, binds to the address, and starts
 // background subsystems (tick broadcaster, monitoring, process pruner, hooks).
@@ -561,11 +426,6 @@ func (s *Server) doShutdown() error {
 		s.vegaClient.Close()
 	}
 
-	// 12. Close Plugin Host bridge last (in-flight forwards finish first).
-	if s.bridge != nil {
-		s.bridge.Close()
-	}
-
 	return httpErr
 }
 
@@ -600,17 +460,6 @@ func (s *Server) buildMux() *http.ServeMux {
 
 	mux.HandleFunc("GET /{$}", s.handleRoot)
 	return mux
-}
-
-// bridgeStatus returns the current bridge connection state as a string.
-func (s *Server) bridgeStatus() string {
-	if s.bridge == nil {
-		return "not_configured"
-	}
-	if s.bridge.IsRunning() {
-		return "connected"
-	}
-	return "disconnected"
 }
 
 // handleHealth responds with gateway health status including subsystem state.
@@ -665,7 +514,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"uptime":          time.Since(s.startedAt).Milliseconds(),
 		"connections":     s.clientCnt.Load(),
 		"sessions":        s.sessions.Count(),
-		"bridge":          s.bridgeStatus(),
 		"rust_core":       s.rustFFI,
 		"auth_mode":       authMode,
 		"providers":       providerCount,
@@ -811,7 +659,7 @@ func (s *Server) registerExtendedMethods() {
 		Broadcaster: s.broadcaster,
 	})
 
-	// Provider methods. Use lazyForwarder so bridge wired later via SetBridge works.
+	// Provider methods.
 	rpc.RegisterProviderMethods(s.dispatcher, rpc.ProviderDeps{
 		Deps: rpc.Deps{
 			Sessions: s.sessions,
@@ -819,7 +667,6 @@ func (s *Server) registerExtendedMethods() {
 		},
 		Providers:   s.providers,
 		AuthManager: s.authManager,
-		Forwarder:   &lazyForwarder{server: s},
 	})
 
 	// Tool methods.
@@ -829,7 +676,6 @@ func (s *Server) registerExtendedMethods() {
 			Channels: s.channels,
 		},
 		Processes: s.processes,
-		Forwarder: &lazyForwarder{server: s},
 	})
 
 	// Session state methods (patch/reset/preview/resolve/compact).
@@ -839,7 +685,6 @@ func (s *Server) registerExtendedMethods() {
 			Channels:    s.channels,
 			GatewaySubs: s.gatewaySubs,
 		},
-		Forwarder: &lazyForwarder{server: s},
 	}
 	rpc.RegisterSessionMethods(s.dispatcher, sessionDeps)
 
@@ -921,16 +766,20 @@ func (s *Server) registerPhase2Methods() {
 
 	s.chatHandler = chat.NewHandler(
 		s.sessions,
-		s.bridge, // may be nil; native agent execution is preferred
 		broadcastFn,
 		s.logger,
 		chatCfg,
 	)
 	rpc.RegisterChatMethods(s.dispatcher, rpc.ChatDeps{Chat: s.chatHandler})
 
-	// Side-question (/btw) method — thin Go routing with bridge delegation.
+	// Wire raw broadcast directly to chat handler for streaming event relay.
+	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
+		return s.broadcaster.BroadcastRaw(event, data)
+	})
+
+	// Side-question (/btw) method — routes through chat handler natively.
 	rpc.RegisterChatBtwMethods(s.dispatcher, rpc.ChatBtwDeps{
-		Forwarder:   s.bridge,
+		Chat:        s.chatHandler,
 		Broadcaster: broadcastFn,
 	})
 
@@ -941,10 +790,8 @@ func (s *Server) registerPhase2Methods() {
 		JobTracker: s.jobTracker,
 	})
 
-	// Config reload method with bridge forwarding and Go subsystem propagation.
+	// Config reload method with Go subsystem propagation.
 	rpc.RegisterConfigReloadMethod(s.dispatcher, rpc.ConfigReloadDeps{
-		Forwarder: s.bridge,
-		Logger:    s.logger,
 		OnReloaded: func(_ *config.ConfigSnapshot) {
 			// Notify hooks of config change.
 			if s.hooks != nil {
@@ -975,15 +822,17 @@ func (s *Server) registerPhase2Methods() {
 	// Event subscription methods.
 	rpc.RegisterEventsMethods(s.dispatcher, rpc.EventsDeps{Broadcaster: s.broadcaster, Logger: s.logger})
 
-	// Bridge-forwarded methods for full TS parity.
-	// Uses ForwarderFunc closure so the bridge can be set after server init via SetBridge.
-	rpc.RegisterBridgeMethods(s.dispatcher, rpc.BridgeDeps{
-		ForwarderFunc: func() rpc.Forwarder {
-			if s.bridge != nil {
-				return s.bridge
-			}
-			return nil
-		},
+	// Stub handlers for methods that were previously bridge-forwarded.
+	stubUnavailable := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		return protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrUnavailable, req.Method+" not available in standalone mode"))
+	}
+	s.dispatcher.Register("browser.request", stubUnavailable)
+	s.dispatcher.Register("web.login.start", stubUnavailable)
+	s.dispatcher.Register("web.login.wait", stubUnavailable)
+	s.dispatcher.Register("channels.logout", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		resp := protocol.MustResponseOK(req.ID, map[string]any{"ok": true, "loggedOut": false})
+		return resp
 	})
 }
 
@@ -998,6 +847,38 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 		Store:       s.approvals,
 		Broadcaster: broadcastFn,
 	})
+
+	// Wire process approval callback using the Go approval store directly.
+	// When a tool execution requires approval, create an approval request,
+	// broadcast it to WS clients, and wait for a decision.
+	if s.processes != nil {
+		s.processes.SetApprover(func(req process.ExecRequest) bool {
+			ar := s.approvals.CreateRequest(approval.CreateRequestParams{
+				Command:     req.Command,
+				CommandArgv: req.Args,
+				Cwd:         req.WorkingDir,
+			})
+			broadcastFn("exec.approval.requested", map[string]any{
+				"id":      ar.ID,
+				"command": req.Command,
+				"args":    req.Args,
+			})
+			// Wait for decision with timeout.
+			waitCh := s.approvals.WaitForDecision(ar.ID)
+			timer := time.NewTimer(30 * time.Second)
+			defer timer.Stop()
+			select {
+			case <-waitCh:
+				resolved := s.approvals.Get(ar.ID)
+				if resolved != nil && resolved.Decision != nil {
+					return *resolved.Decision == approval.DecisionAllowOnce || *resolved.Decision == approval.DecisionAllowAlways
+				}
+				return false
+			case <-timer.C:
+				return false
+			}
+		})
+	}
 
 	canvasHost := ""
 	if s.runtimeCfg != nil {
@@ -1078,12 +959,6 @@ func (s *Server) registerNativeSystemMethods(denebDir string) {
 	}
 	rpc.RegisterMessagingMethods(s.dispatcher, rpc.MessagingDeps{
 		TelegramPlugin: s.telegramPlug,
-		Forwarder: func() rpc.Forwarder {
-			if s.bridge != nil {
-				return s.bridge
-			}
-			return nil
-		}(),
 	})
 }
 
@@ -1265,7 +1140,6 @@ func (s *Server) registerBuiltinMethods() {
 			"version": s.version,
 			"runtime": "go",
 			"uptime":  time.Since(s.startedAt).Milliseconds(),
-			"bridge":  s.bridgeStatus(),
 			"rustFFI": s.rustFFI,
 		})
 		return resp

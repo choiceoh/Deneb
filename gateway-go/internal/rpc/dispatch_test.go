@@ -41,29 +41,16 @@ func TestDispatchUnknownMethodNoForwarder(t *testing.T) {
 	}
 }
 
-type mockForwarder struct {
-	called bool
-}
-
-func (m *mockForwarder) Forward(ctx context.Context, req *protocol.RequestFrame) (*protocol.ResponseFrame, error) {
-	m.called = true
-	resp, _ := protocol.NewResponseOK(req.ID, map[string]string{"forwarded": "true"})
-	return resp, nil
-}
-
-func TestDispatchForwardsToBridge(t *testing.T) {
+func TestDispatchUnknownMethodReturnsNotFound(t *testing.T) {
 	d := NewDispatcher(testLogger())
-	fwd := &mockForwarder{}
-	d.SetForwarder(fwd)
-
-	req := &protocol.RequestFrame{Type: "req", ID: "3", Method: "sessions.list"}
+	req := &protocol.RequestFrame{Type: "req", ID: "3", Method: "unknown.forwarded"}
 	resp := d.Dispatch(context.Background(), req)
 
-	if !fwd.called {
-		t.Error("forwarder should have been called")
+	if resp.OK {
+		t.Error("expected error for unknown method")
 	}
-	if !resp.OK {
-		t.Errorf("expected OK response from forwarder, got: %+v", resp.Error)
+	if resp.Error == nil || resp.Error.Code != protocol.ErrNotFound {
+		t.Errorf("expected NOT_FOUND error, got: %+v", resp.Error)
 	}
 }
 

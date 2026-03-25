@@ -2,14 +2,18 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // ChatBtwDeps holds the dependencies for the chat.btw RPC method.
 type ChatBtwDeps struct {
-	Forwarder   Forwarder
+	// Chat is the native chat handler for processing side questions.
+	Chat interface {
+		// HandleBtw processes a side question and returns the answer text.
+		// Returns empty string if the handler doesn't support /btw yet.
+		HandleBtw(ctx context.Context, sessionKey, question string) (string, error)
+	}
 	Broadcaster BroadcastFunc
 }
 
@@ -19,8 +23,7 @@ func RegisterChatBtwMethods(d *Dispatcher, deps ChatBtwDeps) {
 }
 
 // handleChatBtw processes a side question without affecting the main session
-// context. The question is forwarded to the TypeScript runtime which handles
-// LLM interaction, transcript branching, and response generation.
+// context. In native Go mode, this routes through the chat handler directly.
 //
 // Params:
 //   - question (string, required): The side question to answer.
@@ -46,51 +49,30 @@ func handleChatBtw(deps ChatBtwDeps) HandlerFunc {
 				protocol.ErrMissingParam, "sessionKey is required"))
 		}
 
-		// Forward to TypeScript runtime via bridge.
-		// The TS side handles: session transcript branching, LLM call with
-		// thinking=off, tool-less response generation.
-		if deps.Forwarder == nil {
+		if deps.Chat == nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "bridge not available"))
+				protocol.ErrUnavailable, "chat handler not available"))
 		}
 
-		bridgeReq, err := protocol.NewRequestFrame(req.ID+"-btw", "chat.btw", map[string]any{
-			"question":   p.Question,
-			"sessionKey": p.SessionKey,
-		})
+		// Process side question through native chat handler.
+		text, err := deps.Chat.HandleBtw(ctx, p.SessionKey, p.Question)
 		if err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrUnavailable, "failed to build bridge request: "+err.Error()))
-		}
-
-		bridgeResp, err := deps.Forwarder.Forward(ctx, bridgeReq)
-		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, "btw bridge call failed: "+err.Error()))
+				protocol.ErrDependencyFailed, "btw failed: "+err.Error()))
 		}
 
 		// Broadcast side_result event to connected clients.
-		if bridgeResp != nil && bridgeResp.OK && deps.Broadcaster != nil {
-			// Extract text from the bridge response payload for the event.
-			var result map[string]any
-			if len(bridgeResp.Payload) > 0 {
-				_ = json.Unmarshal(bridgeResp.Payload, &result)
-			}
-			text, _ := result["text"].(string)
-			ts := result["ts"]
-			deps.Broadcaster("chat.side_result", map[string]any{
+		if deps.Broadcaster != nil {
+			_, _ = deps.Broadcaster("chat.side_result", map[string]any{
 				"kind":       "btw",
 				"sessionKey": p.SessionKey,
 				"question":   p.Question,
 				"text":       text,
-				"ts":         ts,
 			})
 		}
 
-		// Re-wrap response with the original request ID.
-		if bridgeResp != nil {
-			bridgeResp.ID = req.ID
-		}
-		return bridgeResp
+		return protocol.MustResponseOK(req.ID, map[string]any{
+			"text": text,
+		})
 	}
 }

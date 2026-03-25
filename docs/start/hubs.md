@@ -59,7 +59,6 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Timezone handling](/concepts/timezone)
 - [Presence](/concepts/presence)
 - [Discovery + transports](/gateway/discovery)
-- [Bonjour](/gateway/bonjour)
 - [Channel routing](/channels/channel-routing)
 - [Groups](/channels/groups)
 - [Group messages](/channels/group-messages)
