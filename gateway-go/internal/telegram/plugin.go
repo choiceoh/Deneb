@@ -146,5 +146,16 @@ func (p *Plugin) Bot() *Bot {
 	return p.bot
 }
 
+// SetHandler sets the update handler on the running bot.
+// This allows wiring the handler after plugin creation (e.g., when the chat
+// handler is available). Safe to call while the bot is polling.
+func (p *Plugin) SetHandler(h UpdateHandler) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.bot != nil {
+		p.bot.SetHandler(h)
+	}
+}
+
 // Ensure Plugin satisfies the channel.Plugin interface at compile time.
 var _ channel.Plugin = (*Plugin)(nil)

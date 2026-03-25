@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1009,6 +1010,69 @@ func (s *Server) registerNativeSystemMethods(denebDir string) {
 	rpc.RegisterMessagingMethods(s.dispatcher, rpc.MessagingDeps{
 		TelegramPlugin: s.telegramPlug,
 	})
+
+	// Wire Telegram update handler → chat.send pipeline.
+	if s.telegramPlug != nil && s.chatHandler != nil {
+		s.wireTelegramChatHandler()
+	}
+}
+
+// wireTelegramChatHandler connects the Telegram polling handler to the chat
+// handler so incoming messages are automatically processed by the LLM agent
+// and responses are sent back to Telegram.
+func (s *Server) wireTelegramChatHandler() {
+	// Set reply function: delivers assistant responses back to Telegram.
+	s.chatHandler.SetReplyFunc(func(ctx context.Context, delivery *chat.DeliveryContext, text string) error {
+		if delivery == nil || (delivery.Channel != "" && delivery.Channel != "telegram") {
+			return nil
+		}
+		client := s.telegramPlug.Client()
+		if client == nil {
+			return fmt.Errorf("telegram client not connected")
+		}
+		chatID, err := strconv.ParseInt(delivery.To, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
+		}
+		opts := telegram.SendOptions{ParseMode: "HTML"}
+		html := telegram.FormatHTML(text)
+		_, err = telegram.SendText(ctx, client, chatID, html, opts)
+		return err
+	})
+
+	// Set update handler: routes incoming Telegram messages to chat.send.
+	s.telegramPlug.SetHandler(func(_ context.Context, update *telegram.Update) {
+		msg := update.Message
+		if msg == nil || msg.Text == "" {
+			return
+		}
+
+		chatID := fmt.Sprintf("%d", msg.Chat.ID)
+		sessionKey := "telegram:" + chatID
+
+		req, err := protocol.NewRequestFrame("tg-"+chatID, "chat.send", map[string]any{
+			"sessionKey": sessionKey,
+			"message":    msg.Text,
+			"delivery": map[string]any{
+				"channel": "telegram",
+				"to":      chatID,
+			},
+		})
+		if err != nil {
+			s.logger.Error("failed to build chat.send request", "error", err)
+			return
+		}
+
+		resp := s.chatHandler.Send(context.Background(), req)
+		if resp != nil && !resp.OK {
+			s.logger.Warn("chat.send failed for telegram message",
+				"chatId", chatID,
+				"error", resp.Error,
+			)
+		}
+	})
+
+	s.logger.Info("telegram chat handler wired")
 }
 
 // loadTelegramConfig extracts Telegram channel config from deneb.json.
