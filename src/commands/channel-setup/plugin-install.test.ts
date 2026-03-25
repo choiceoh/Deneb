@@ -339,7 +339,7 @@ describe("ensureChannelSetupPluginInstalled", () => {
       hookNames: [],
       channelIds: [],
       providerIds: [],
-      speechProviderIds: [],
+
       mediaUnderstandingProviderIds: [],
       imageGenerationProviderIds: [],
       webSearchProviderIds: [],

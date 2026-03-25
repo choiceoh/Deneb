@@ -39,7 +39,7 @@ describe("noteWorkspaceStatus", () => {
           hookNames: [],
           channelIds: [],
           providerIds: [],
-          speechProviderIds: [],
+
           mediaUnderstandingProviderIds: [],
           imageGenerationProviderIds: [],
           webSearchProviderIds: [],
@@ -56,7 +56,7 @@ describe("noteWorkspaceStatus", () => {
       channels: [],
       channelSetups: [],
       providers: [],
-      speechProviders: [],
+
       mediaUnderstandingProviders: [],
       imageGenerationProviders: [],
       webSearchProviders: [],
@@ -120,7 +120,7 @@ describe("noteWorkspaceStatus", () => {
           hookNames: [],
           channelIds: [],
           providerIds: [],
-          speechProviderIds: [],
+
           mediaUnderstandingProviderIds: [],
           imageGenerationProviderIds: [],
           webSearchProviderIds: [],
@@ -137,7 +137,7 @@ describe("noteWorkspaceStatus", () => {
       channels: [],
       channelSetups: [],
       providers: [],
-      speechProviders: [],
+
       mediaUnderstandingProviders: [],
       imageGenerationProviders: [],
       webSearchProviders: [],
@@ -186,7 +186,7 @@ describe("noteWorkspaceStatus", () => {
           hookNames: [],
           channelIds: [],
           providerIds: ["modern"],
-          speechProviderIds: [],
+
           mediaUnderstandingProviderIds: [],
           imageGenerationProviderIds: [],
           webSearchProviderIds: [],
@@ -203,7 +203,7 @@ describe("noteWorkspaceStatus", () => {
       channels: [],
       channelSetups: [],
       providers: [],
-      speechProviders: [],
+
       mediaUnderstandingProviders: [],
       imageGenerationProviders: [],
       webSearchProviders: [],

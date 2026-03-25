@@ -8,7 +8,6 @@ import {
   providerContractLoadError,
   providerContractPluginIds,
   providerContractRegistry,
-  speechProviderContractRegistry,
   webSearchProviderContractRegistry,
 } from "./registry.js";
 
@@ -24,11 +23,6 @@ describe("plugin contract registry", () => {
 
   it("does not duplicate bundled web search provider ids", () => {
     const ids = webSearchProviderContractRegistry.map((entry) => entry.provider.id);
-    expect(ids).toEqual([...new Set(ids)]);
-  });
-
-  it("does not duplicate bundled speech provider ids", () => {
-    const ids = speechProviderContractRegistry.map((entry) => entry.provider.id);
     expect(ids).toEqual([...new Set(ids)]);
   });
 
@@ -61,11 +55,10 @@ describe("plugin contract registry", () => {
     expect(ids).toEqual([...new Set(ids)]);
   });
 
-  it("tracks every provider, speech, media, image, or web search plugin in the registration registry", () => {
+  it("tracks every provider, media, image, or web search plugin in the registration registry", () => {
     const expectedPluginIds = [
       ...new Set([
         ...providerContractRegistry.map((entry) => entry.pluginId),
-        ...speechProviderContractRegistry.map((entry) => entry.pluginId),
         ...mediaUnderstandingProviderContractRegistry.map((entry) => entry.pluginId),
         ...imageGenerationProviderContractRegistry.map((entry) => entry.pluginId),
         ...webSearchProviderContractRegistry.map((entry) => entry.pluginId),
