@@ -134,7 +134,7 @@ func (b *Bot) pollLoop(ctx context.Context) error {
 			// Buffer message for poll RPC. DrainMessages() must be called regularly
 			// (typically by the Node.js bridge via RPC poll). If drain falls behind,
 			// oldest messages are discarded and a warning is logged.
-			if u.Message != nil && b.isAllowed(u.Message) {
+			if u.Message != nil && CheckAccess(b.config, u.Message).Allowed {
 				b.msgMu.Lock()
 				b.messages = append(b.messages, u.Message)
 				if len(b.messages) > MaxMessageBuffer {
@@ -233,39 +233,4 @@ func (eb *ExponentialBackoff) Wait(ctx context.Context) error {
 // Reset resets the backoff to its initial value.
 func (eb *ExponentialBackoff) Reset() {
 	eb.current = 0
-}
-
-// isAllowed checks if the message sender is in the allow list.
-// If no allow list is configured, all messages are allowed.
-func (b *Bot) isAllowed(msg *Message) bool {
-	if msg.From == nil {
-		return false
-	}
-
-	// DM messages: check allowFrom.
-	if msg.Chat.Type == "private" {
-		return matchesAllowList(&b.config.AllowFrom, msg.From)
-	}
-
-	// Group messages: check groupAllowFrom, fall back to allowFrom.
-	list := &b.config.GroupAllowFrom
-	if list.IsEmpty() {
-		list = &b.config.AllowFrom
-	}
-	return matchesAllowList(list, msg.From)
-}
-
-// matchesAllowList checks if a user matches the given AllowList.
-// An empty list allows all users.
-func matchesAllowList(list *AllowList, user *User) bool {
-	if list.IsEmpty() || list.AllowsAll() {
-		return true
-	}
-	if list.ContainsID(user.ID) {
-		return true
-	}
-	if user.Username != "" && list.ContainsUsername(user.Username) {
-		return true
-	}
-	return false
 }

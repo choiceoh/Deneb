@@ -201,3 +201,34 @@ func TestUTF16Len(t *testing.T) {
 		t.Errorf("UTF16Len('😀') = %d, want 2", got)
 	}
 }
+
+func TestChunkByNewline(t *testing.T) {
+	// Short text — no chunking.
+	chunks := ChunkByNewline("hello\nworld", 100)
+	if len(chunks) != 1 {
+		t.Fatalf("expected 1 chunk, got %d", len(chunks))
+	}
+	if chunks[0] != "hello\nworld" {
+		t.Errorf("expected original text, got %q", chunks[0])
+	}
+
+	// Lines that fit in separate chunks.
+	chunks = ChunkByNewline("aaa\nbbb\nccc", 5)
+	if len(chunks) != 3 {
+		t.Fatalf("expected 3 chunks, got %d: %v", len(chunks), chunks)
+	}
+
+	// Lines that can be merged.
+	chunks = ChunkByNewline("aa\nbb\ncc\ndd", 6)
+	// "aa\nbb" = 5 chars, "cc\ndd" = 5 chars → 2 chunks.
+	if len(chunks) != 2 {
+		t.Fatalf("expected 2 chunks, got %d: %v", len(chunks), chunks)
+	}
+
+	// Single line exceeding maxLen falls back to length-based chunking.
+	long := strings.Repeat("x", 20)
+	chunks = ChunkByNewline(long, 10)
+	if len(chunks) != 2 {
+		t.Fatalf("expected 2 chunks for long line, got %d", len(chunks))
+	}
+}
