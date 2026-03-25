@@ -1,6 +1,6 @@
-# ClawDock <!-- omit in toc -->
+# DenebDock <!-- omit in toc -->
 
-Stop typing `docker-compose` commands. Just type `clawdock-start`.
+Stop typing `docker-compose` commands. Just type `deneb-dock-start`.
 
 Inspired by Simon Willison's [Running Deneb in Docker](https://til.simonwillison.net/llms/deneb-docker).
 
@@ -25,102 +25,102 @@ Inspired by Simon Willison's [Running Deneb in Docker](https://til.simonwillison
 **Install:**
 
 ```bash
-mkdir -p ~/.clawdock && curl -sL https://raw.githubusercontent.com/deneb/deneb/main/scripts/shell-helpers/clawdock-helpers.sh -o ~/.clawdock/clawdock-helpers.sh
+mkdir -p ~/.deneb-dock && curl -sL https://raw.githubusercontent.com/deneb/deneb/main/scripts/shell-helpers/deneb-dock-helpers.sh -o ~/.deneb-dock/deneb-dock-helpers.sh
 ```
 
 ```bash
-echo 'source ~/.clawdock/clawdock-helpers.sh' >> ~/.zshrc && source ~/.zshrc
+echo 'source ~/.deneb-dock/deneb-dock-helpers.sh' >> ~/.zshrc && source ~/.zshrc
 ```
 
 **See what you get:**
 
 ```bash
-clawdock-help
+deneb-dock-help
 ```
 
-On first command, ClawDock auto-detects your Deneb directory:
+On first command, DenebDock auto-detects your Deneb directory:
 
 - Checks common paths (`~/deneb`, `~/workspace/deneb`, etc.)
 - If found, asks you to confirm
-- Saves to `~/.clawdock/config`
+- Saves to `~/.deneb-dock/config`
 
 **First time setup:**
 
 ```bash
-clawdock-start
+deneb-dock-start
 ```
 
 ```bash
-clawdock-fix-token
+deneb-dock-fix-token
 ```
 
 ```bash
-clawdock-dashboard
+deneb-dock-dashboard
 ```
 
 If you see "pairing required":
 
 ```bash
-clawdock-devices
+deneb-dock-devices
 ```
 
 And approve the request for the specific device:
 
 ```bash
-clawdock-approve <request-id>
+deneb-dock-approve <request-id>
 ```
 
 ## Available Commands
 
 ### Basic Operations
 
-| Command            | Description                     |
-| ------------------ | ------------------------------- |
-| `clawdock-start`   | Start the gateway               |
-| `clawdock-stop`    | Stop the gateway                |
-| `clawdock-restart` | Restart the gateway             |
-| `clawdock-status`  | Check container status          |
-| `clawdock-logs`    | View live logs (follows output) |
+| Command              | Description                     |
+| -------------------- | ------------------------------- |
+| `deneb-dock-start`   | Start the gateway               |
+| `deneb-dock-stop`    | Stop the gateway                |
+| `deneb-dock-restart` | Restart the gateway             |
+| `deneb-dock-status`  | Check container status          |
+| `deneb-dock-logs`    | View live logs (follows output) |
 
 ### Container Access
 
-| Command                   | Description                                    |
-| ------------------------- | ---------------------------------------------- |
-| `clawdock-shell`          | Interactive shell inside the gateway container |
-| `clawdock-cli <command>`  | Run Deneb CLI commands                         |
-| `clawdock-exec <command>` | Execute arbitrary commands in the container    |
+| Command                     | Description                                    |
+| --------------------------- | ---------------------------------------------- |
+| `deneb-dock-shell`          | Interactive shell inside the gateway container |
+| `deneb-dock-cli <command>`  | Run Deneb CLI commands                         |
+| `deneb-dock-exec <command>` | Execute arbitrary commands in the container    |
 
 ### Web UI & Devices
 
-| Command                 | Description                                |
-| ----------------------- | ------------------------------------------ |
-| `clawdock-dashboard`    | Open web UI in browser with authentication |
-| `clawdock-devices`      | List device pairing requests               |
-| `clawdock-approve <id>` | Approve a device pairing request           |
+| Command                   | Description                                |
+| ------------------------- | ------------------------------------------ |
+| `deneb-dock-dashboard`    | Open web UI in browser with authentication |
+| `deneb-dock-devices`      | List device pairing requests               |
+| `deneb-dock-approve <id>` | Approve a device pairing request           |
 
 ### Setup & Configuration
 
-| Command              | Description                                       |
-| -------------------- | ------------------------------------------------- |
-| `clawdock-fix-token` | Configure gateway authentication token (run once) |
+| Command                | Description                                       |
+| ---------------------- | ------------------------------------------------- |
+| `deneb-dock-fix-token` | Configure gateway authentication token (run once) |
 
 ### Maintenance
 
-| Command            | Description                                      |
-| ------------------ | ------------------------------------------------ |
-| `clawdock-rebuild` | Rebuild the Docker image                         |
-| `clawdock-clean`   | Remove all containers and volumes (destructive!) |
+| Command              | Description                                      |
+| -------------------- | ------------------------------------------------ |
+| `deneb-dock-rebuild` | Rebuild the Docker image                         |
+| `deneb-dock-clean`   | Remove all containers and volumes (destructive!) |
 
 ### Utilities
 
-| Command              | Description                               |
-| -------------------- | ----------------------------------------- |
-| `clawdock-health`    | Run gateway health check                  |
-| `clawdock-token`     | Display the gateway authentication token  |
-| `clawdock-cd`        | Jump to the Deneb project directory       |
-| `clawdock-config`    | Open the Deneb config directory           |
-| `clawdock-workspace` | Open the workspace directory              |
-| `clawdock-help`      | Show all available commands with examples |
+| Command                | Description                               |
+| ---------------------- | ----------------------------------------- |
+| `deneb-dock-health`    | Run gateway health check                  |
+| `deneb-dock-token`     | Display the gateway authentication token  |
+| `deneb-dock-cd`        | Jump to the Deneb project directory       |
+| `deneb-dock-config`    | Open the Deneb config directory           |
+| `deneb-dock-workspace` | Open the workspace directory              |
+| `deneb-dock-help`      | Show all available commands with examples |
 
 ## Common Workflows
 
@@ -129,19 +129,19 @@ clawdock-approve <request-id>
 **Restart the gateway:**
 
 ```bash
-clawdock-restart
+deneb-dock-restart
 ```
 
 **Check container status:**
 
 ```bash
-clawdock-status
+deneb-dock-status
 ```
 
 **View live logs:**
 
 ```bash
-clawdock-logs
+deneb-dock-logs
 ```
 
 ### Set Up WhatsApp Bot
@@ -149,7 +149,7 @@ clawdock-logs
 **Shell into the container:**
 
 ```bash
-clawdock-shell
+deneb-dock-shell
 ```
 
 **Inside the container, login to WhatsApp:**
@@ -171,13 +171,13 @@ deneb status
 **Check for pending pairing requests:**
 
 ```bash
-clawdock-devices
+deneb-dock-devices
 ```
 
 **Copy the Request ID from the "Pending" table, then approve:**
 
 ```bash
-clawdock-approve <request-id>
+deneb-dock-approve <request-id>
 ```
 
 Then refresh your browser.
@@ -187,7 +187,7 @@ Then refresh your browser.
 If you see "gateway token mismatch" errors:
 
 ```bash
-clawdock-fix-token
+deneb-dock-fix-token
 ```
 
 This will:
@@ -216,11 +216,11 @@ docker ps
 **Test with fresh config (mimics first-time install):**
 
 ```bash
-unset CLAWDOCK_DIR && rm -f ~/.clawdock/config && source scripts/shell-helpers/clawdock-helpers.sh
+unset DENEB_DOCK_DIR && rm -f ~/.deneb-dock/config && source scripts/shell-helpers/deneb-dock-helpers.sh
 ```
 
 Then run any command to trigger auto-detect:
 
 ```bash
-clawdock-start
+deneb-dock-start
 ```
