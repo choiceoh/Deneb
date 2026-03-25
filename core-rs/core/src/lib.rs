@@ -560,8 +560,7 @@ pub unsafe extern "C" fn deneb_validate_params(
                     // Write errors as JSON to output buffer.
                     // Return bytes written (not error count) so callers can
                     // slice the buffer precisely without scanning for `]`.
-                    let json_bytes =
-                        serde_json::to_vec(&result.errors).unwrap_or_default();
+                    let json_bytes = serde_json::to_vec(&result.errors).unwrap_or_default();
                     if !errors_out.is_null() && !json_bytes.is_empty() {
                         let write_len = json_bytes.len().min(errors_out_len);
                         let out = std::slice::from_raw_parts_mut(errors_out, errors_out_len);
