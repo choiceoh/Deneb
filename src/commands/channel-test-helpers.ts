@@ -5,7 +5,7 @@ import { getChannelSetupWizardAdapter } from "./channel-setup/registry.js";
 import type { ChannelSetupWizardAdapter } from "./channel-setup/types.js";
 import type { ChannelChoice } from "./onboard-types.js";
 
-// Removed extensions (matrix, msteams, nostr, tlon) — no longer bundled.
+// Only Telegram extension is bundled; other channels available as installable plugins.
 
 type ChannelSetupWizardAdapterPatch = Partial<
   Pick<

@@ -209,14 +209,14 @@ describe("memory flush settings", () => {
     expect(settings?.systemPrompt).toContain("MEMORY.md");
   });
 
-  it("respects disable flag", () => {
-    expect(
-      resolveMemoryFlushSettings({
-        agents: {
-          defaults: { compaction: { memoryFlush: { enabled: false } } },
-        },
-      }),
-    ).toBeNull();
+  it("ignores deprecated enabled:false (system-managed: always true)", () => {
+    const settings = resolveMemoryFlushSettings({
+      agents: {
+        defaults: { compaction: { memoryFlush: { enabled: false } } },
+      },
+    });
+    expect(settings).not.toBeNull();
+    expect(settings?.enabled).toBe(true);
   });
 
   it("appends NO_REPLY hint when missing", () => {

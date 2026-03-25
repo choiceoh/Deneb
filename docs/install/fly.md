@@ -440,16 +440,15 @@ If you need webhook callbacks (Twilio, Telnyx, etc.) without public exposure:
 2. **Tailscale Funnel** - Expose specific paths via Tailscale
 3. **Outbound-only** - Some providers (Twilio) work fine for outbound calls without webhooks
 
-Example voice-call config with ngrok:
+Example plugin config with ngrok tunnel:
 
 ```json
 {
   "plugins": {
     "entries": {
-      "voice-call": {
+      "example-plugin": {
         "enabled": true,
         "config": {
-          "provider": "twilio",
           "tunnel": { "provider": "ngrok" },
           "webhookSecurity": {
             "allowedHosts": ["example.ngrok.app"]

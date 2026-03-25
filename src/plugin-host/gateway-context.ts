@@ -254,7 +254,6 @@ export async function createHeadlessGatewayContext(): Promise<HeadlessGatewayCon
     markChannelLoggedOut: NOOP as unknown as GatewayRequestContext["markChannelLoggedOut"],
 
     wizardRunner: NOOP_ASYNC as unknown as GatewayRequestContext["wizardRunner"],
-    broadcastVoiceWakeChanged: NOOP,
     autoMaintenance: undefined,
   };
 

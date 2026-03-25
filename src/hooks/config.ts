@@ -10,8 +10,6 @@ import { resolveHookKey } from "./frontmatter.js";
 import type { HookEligibilityContext, HookEntry } from "./types.js";
 
 const DEFAULT_CONFIG_VALUES: Record<string, boolean> = {
-  "browser.enabled": true,
-  "browser.evaluateEnabled": true,
   "workspace.dir": true,
 };
 

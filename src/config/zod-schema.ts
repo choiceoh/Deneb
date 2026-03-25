@@ -21,71 +21,7 @@ import {
   SessionSendPolicySchema,
 } from "./zod-schema.session.js";
 
-const BrowserSnapshotDefaultsSchema = z
-  .object({
-    mode: z.literal("efficient").optional(),
-  })
-  .strict()
-  .optional();
-
-const NodeHostSchema = z
-  .object({
-    browserProxy: z
-      .object({
-        enabled: z.boolean().optional(),
-        allowProfiles: z.array(z.string()).optional(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict()
-  .optional();
-
-const MemoryQmdPathSchema = z
-  .object({
-    path: z.string(),
-    name: z.string().optional(),
-    pattern: z.string().optional(),
-  })
-  .strict();
-
-const MemoryQmdSessionSchema = z
-  .object({
-    enabled: z.boolean().optional(),
-    exportDir: z.string().optional(),
-    retentionDays: z.number().int().nonnegative().optional(),
-  })
-  .strict();
-
-const MemoryQmdUpdateSchema = z
-  .object({
-    interval: z.string().optional(),
-    debounceMs: z.number().int().nonnegative().optional(),
-    onBoot: z.boolean().optional(),
-    waitForBootSync: z.boolean().optional(),
-    embedInterval: z.string().optional(),
-    commandTimeoutMs: z.number().int().nonnegative().optional(),
-    updateTimeoutMs: z.number().int().nonnegative().optional(),
-    embedTimeoutMs: z.number().int().nonnegative().optional(),
-  })
-  .strict();
-
-const MemoryQmdLimitsSchema = z
-  .object({
-    maxResults: z.number().int().positive().optional(),
-    maxSnippetChars: z.number().int().positive().optional(),
-    maxInjectedChars: z.number().int().positive().optional(),
-    timeoutMs: z.number().int().nonnegative().optional(),
-  })
-  .strict();
-
-const MemoryQmdMcporterSchema = z
-  .object({
-    enabled: z.boolean().optional(),
-    serverName: z.string().optional(),
-    startDaemon: z.boolean().optional(),
-  })
-  .strict();
+const NodeHostSchema = z.object({}).strict().optional();
 
 const LoggingLevelSchema = z.union([
   z.literal("silent"),
@@ -96,20 +32,6 @@ const LoggingLevelSchema = z.union([
   z.literal("debug"),
   z.literal("trace"),
 ]);
-
-const MemoryQmdSchema = z
-  .object({
-    command: z.string().optional(),
-    mcporter: MemoryQmdMcporterSchema.optional(),
-    searchMode: z.union([z.literal("query"), z.literal("search"), z.literal("vsearch")]).optional(),
-    includeDefaultMemory: z.boolean().optional(),
-    paths: z.array(MemoryQmdPathSchema).optional(),
-    sessions: MemoryQmdSessionSchema.optional(),
-    update: MemoryQmdUpdateSchema.optional(),
-    limits: MemoryQmdLimitsSchema.optional(),
-    scope: SessionSendPolicySchema.optional(),
-  })
-  .strict();
 
 const MemoryVegaPathSchema = z
   .object({
@@ -150,9 +72,8 @@ const MemoryVegaSchema = z
 
 const MemorySchema = z
   .object({
-    backend: z.union([z.literal("builtin"), z.literal("qmd"), z.literal("vega")]).optional(),
+    backend: z.union([z.literal("builtin"), z.literal("vega")]).optional(),
     citations: z.union([z.literal("auto"), z.literal("on"), z.literal("off")]).optional(),
-    qmd: MemoryQmdSchema.optional(),
     vega: MemoryVegaSchema.optional(),
   })
   .strict()
@@ -389,62 +310,6 @@ export const DenebSchema = z
       })
       .strict()
       .optional(),
-    browser: z
-      .object({
-        enabled: z.boolean().optional(),
-        evaluateEnabled: z.boolean().optional(),
-        cdpUrl: z.string().optional(),
-        remoteCdpTimeoutMs: z.number().int().nonnegative().optional(),
-        remoteCdpHandshakeTimeoutMs: z.number().int().nonnegative().optional(),
-        color: z.string().optional(),
-        executablePath: z.string().optional(),
-        headless: z.boolean().optional(),
-        noSandbox: z.boolean().optional(),
-        attachOnly: z.boolean().optional(),
-        cdpPortRangeStart: z.number().int().min(1).max(65535).optional(),
-        defaultProfile: z.string().optional(),
-        snapshotDefaults: BrowserSnapshotDefaultsSchema,
-        ssrfPolicy: z
-          .object({
-            allowPrivateNetwork: z.boolean().optional(),
-            dangerouslyAllowPrivateNetwork: z.boolean().optional(),
-            allowedHostnames: z.array(z.string()).optional(),
-            hostnameAllowlist: z.array(z.string()).optional(),
-          })
-          .strict()
-          .optional(),
-        profiles: z
-          .record(
-            z
-              .string()
-              .regex(/^[a-z0-9-]+$/, "Profile names must be alphanumeric with hyphens only"),
-            z
-              .object({
-                cdpPort: z.number().int().min(1).max(65535).optional(),
-                cdpUrl: z.string().optional(),
-                userDataDir: z.string().optional(),
-                driver: z
-                  .union([z.literal("deneb"), z.literal("clawd"), z.literal("existing-session")])
-                  .optional(),
-                attachOnly: z.boolean().optional(),
-                color: HexColorSchema,
-              })
-              .strict()
-              .refine(
-                (value) => value.driver === "existing-session" || value.cdpPort || value.cdpUrl,
-                {
-                  message: "Profile must set cdpPort or cdpUrl",
-                },
-              )
-              .refine((value) => value.driver === "existing-session" || !value.userDataDir, {
-                message: 'Profile userDataDir is only supported with driver="existing-session"',
-              }),
-          )
-          .optional(),
-        extraArgs: z.array(z.string()).optional(),
-      })
-      .strict()
-      .optional(),
     ui: z
       .object({
         seamColor: HexColorSchema.optional(),
@@ -678,15 +543,6 @@ export const DenebSchema = z
       })
       .strict()
       .optional(),
-    canvasHost: z
-      .object({
-        enabled: z.boolean().optional(),
-        root: z.string().optional(),
-        port: z.number().int().positive().optional(),
-        liveReload: z.boolean().optional(),
-      })
-      .strict()
-      .optional(),
     talk: TalkSchema.optional(),
     gateway: z
       .object({
@@ -881,15 +737,6 @@ export const DenebSchema = z
           .optional(),
         nodes: z
           .object({
-            browser: z
-              .object({
-                mode: z
-                  .union([z.literal("auto"), z.literal("manual"), z.literal("off")])
-                  .optional(),
-                node: z.string().optional(),
-              })
-              .strict()
-              .optional(),
             allowCommands: z.array(z.string()).optional(),
             denyCommands: z.array(z.string()).optional(),
           })

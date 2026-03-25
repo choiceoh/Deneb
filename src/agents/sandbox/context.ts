@@ -160,8 +160,6 @@ export async function resolveSandboxContext(params: {
     containerWorkdir: backend.workdir,
     docker: resolvedCfg.docker,
     tools: resolvedCfg.tools,
-    browserAllowHostControl: resolvedCfg.browser.allowHostControl,
-    browser: undefined,
     backend,
   };
 

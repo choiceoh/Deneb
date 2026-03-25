@@ -63,7 +63,7 @@ describe("channelsRemoveCommand", () => {
       ...baseConfigSnapshot,
       config: {
         channels: {
-          msteams: {
+          mattermost: {
             enabled: true,
             tenantId: "tenant-1",
           },
@@ -71,36 +71,36 @@ describe("channelsRemoveCommand", () => {
       },
     });
     const catalogEntry: ChannelPluginCatalogEntry = {
-      id: "msteams",
-      pluginId: "@deneb/msteams-plugin",
+      id: "mattermost",
+      pluginId: "@deneb/mattermost-plugin",
       meta: {
-        id: "msteams",
+        id: "mattermost",
         label: "Microsoft Teams",
         selectionLabel: "Microsoft Teams",
-        docsPath: "/channels/msteams",
+        docsPath: "/channels/mattermost",
         blurb: "teams channel",
       },
       install: {
-        npmSpec: "@deneb/msteams",
+        npmSpec: "@deneb/mattermost",
       },
     };
     catalogMocks.listChannelPluginCatalogEntries.mockReturnValue([catalogEntry]);
     const scopedPlugin = {
       ...createChannelTestPluginBase({
-        id: "msteams",
+        id: "mattermost",
         label: "Microsoft Teams",
-        docsPath: "/channels/msteams",
+        docsPath: "/channels/mattermost",
       }),
       config: {
         ...createChannelTestPluginBase({
-          id: "msteams",
+          id: "mattermost",
           label: "Microsoft Teams",
-          docsPath: "/channels/msteams",
+          docsPath: "/channels/mattermost",
         }).config,
         deleteAccount: vi.fn(({ cfg }: { cfg: Record<string, unknown> }) => {
           const channels = (cfg.channels as Record<string, unknown> | undefined) ?? {};
           const nextChannels = { ...channels };
-          delete nextChannels.msteams;
+          delete nextChannels.mattermost;
           return {
             ...cfg,
             channels: nextChannels,
@@ -113,7 +113,7 @@ describe("channelsRemoveCommand", () => {
       .mockReturnValueOnce(
         createTestRegistry([
           {
-            pluginId: "@deneb/msteams-plugin",
+            pluginId: "@deneb/mattermost-plugin",
             plugin: scopedPlugin,
             source: "test",
           },
@@ -122,7 +122,7 @@ describe("channelsRemoveCommand", () => {
 
     await channelsRemoveCommand(
       {
-        channel: "msteams",
+        channel: "mattermost",
         account: "default",
         delete: true,
       },
@@ -137,14 +137,14 @@ describe("channelsRemoveCommand", () => {
     );
     expect(loadChannelSetupPluginRegistrySnapshotForChannel).toHaveBeenCalledWith(
       expect.objectContaining({
-        channel: "msteams",
-        pluginId: "@deneb/msteams-plugin",
+        channel: "mattermost",
+        pluginId: "@deneb/mattermost-plugin",
       }),
     );
     expect(configMocks.writeConfigFile).toHaveBeenCalledWith(
       expect.not.objectContaining({
         channels: expect.objectContaining({
-          msteams: expect.anything(),
+          mattermost: expect.anything(),
         }),
       }),
     );

@@ -229,11 +229,6 @@ export async function runSecurityAudit(opts: SecurityAuditOptions): Promise<Secu
       })),
     );
     findings.push(...(await auditNonDeep.collectWorkspaceSkillSymlinkEscapeFindings({ cfg })));
-    findings.push(
-      ...(await auditNonDeep.collectSandboxBrowserHashLabelFindings({
-        execDockerRawFn: context.execDockerRawFn,
-      })),
-    );
     findings.push(...(await auditNonDeep.collectPluginsTrustFindings({ cfg, stateDir })));
     if (context.deep) {
       const auditDeep = await loadAuditDeepModule();

@@ -120,9 +120,9 @@ const createStubPluginRegistry = (): PluginRegistry => ({
       plugin: createStubChannelPlugin({ id: "imessage", label: "iMessage" }),
     },
     {
-      pluginId: "msteams",
+      pluginId: "mattermost",
       source: "test",
-      plugin: createStubChannelPlugin({ id: "msteams", label: "Microsoft Teams" }),
+      plugin: createStubChannelPlugin({ id: "mattermost", label: "Mattermost" }),
     },
     {
       pluginId: "matrix",
@@ -130,24 +130,24 @@ const createStubPluginRegistry = (): PluginRegistry => ({
       plugin: createStubChannelPlugin({ id: "matrix", label: "Matrix" }),
     },
     {
-      pluginId: "zalo",
+      pluginId: "nostr",
       source: "test",
-      plugin: createStubChannelPlugin({ id: "zalo", label: "Zalo" }),
+      plugin: createStubChannelPlugin({ id: "nostr", label: "Nostr" }),
     },
     {
-      pluginId: "zalouser",
+      pluginId: "feishu",
       source: "test",
-      plugin: createStubChannelPlugin({ id: "zalouser", label: "Zalo Personal" }),
+      plugin: createStubChannelPlugin({ id: "feishu", label: "Feishu" }),
     },
     {
-      pluginId: "bluebubbles",
+      pluginId: "line",
       source: "test",
-      plugin: createStubChannelPlugin({ id: "bluebubbles", label: "BlueBubbles" }),
+      plugin: createStubChannelPlugin({ id: "line", label: "LINE" }),
     },
   ],
   channelSetups: [],
   providers: [],
-  speechProviders: [],
+
   mediaUnderstandingProviders: [],
   imageGenerationProviders: [],
   webSearchProviders: [],
@@ -233,7 +233,6 @@ export const testState = {
   gatewayAuth: undefined as Record<string, unknown> | undefined,
   gatewayControlUi: undefined as Record<string, unknown> | undefined,
   hooksConfig: undefined as HooksConfig | undefined,
-  canvasHostPort: undefined as number | undefined,
   legacyIssues: [] as Array<{ path: string; message: string }>,
   legacyParsed: {} as Record<string, unknown>,
   migrationConfig: null as Record<string, unknown> | null,
@@ -458,17 +457,6 @@ vi.mock("../config/config.js", async () => {
     }
     const gateway = Object.keys(fileGateway).length > 0 ? fileGateway : undefined;
 
-    const fileCanvasHost =
-      baseConfig.canvasHost &&
-      typeof baseConfig.canvasHost === "object" &&
-      !Array.isArray(baseConfig.canvasHost)
-        ? ({ ...(baseConfig.canvasHost as Record<string, unknown>) } as Record<string, unknown>)
-        : {};
-    if (typeof testState.canvasHostPort === "number") {
-      fileCanvasHost.port = testState.canvasHostPort;
-    }
-    const canvasHost = Object.keys(fileCanvasHost).length > 0 ? fileCanvasHost : undefined;
-
     const hooks = testState.hooksConfig ?? (baseConfig.hooks as HooksConfig | undefined);
 
     const fileCron =
@@ -490,7 +478,6 @@ vi.mock("../config/config.js", async () => {
       channels,
       session,
       gateway,
-      canvasHost,
       hooks,
       cron,
     } as DenebConfig;

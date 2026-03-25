@@ -157,17 +157,6 @@ function buildMessagingSection(params: {
   ];
 }
 
-function buildVoiceSection(params: { isMinimal: boolean; ttsHint?: string }) {
-  if (params.isMinimal) {
-    return [];
-  }
-  const hint = params.ttsHint?.trim();
-  if (!hint) {
-    return [];
-  }
-  return ["## Voice (TTS)", hint, ""];
-}
-
 function buildDocsSection(params: { docsPath?: string; isMinimal: boolean; readToolName: string }) {
   const docsPath = params.docsPath?.trim();
   if (!docsPath || params.isMinimal) {
@@ -206,7 +195,6 @@ export function buildAgentSystemPrompt(params: {
   heartbeatPrompt?: string;
   docsPath?: string;
   workspaceNotes?: string[];
-  ttsHint?: string;
   /** Controls which hardcoded sections to include. Defaults to "full". */
   promptMode?: PromptMode;
   /** Whether ACP-specific routing guidance should be included. Defaults to true. */
@@ -249,7 +237,6 @@ export function buildAgentSystemPrompt(params: {
     web_search: "Search the web (Brave API)",
     web_fetch: "Fetch and extract readable content from a URL",
     // Channel docking: add login tools here when a channel needs interactive linking.
-    browser: "Control web browser",
     nodes: "List/describe/notify/camera/screen on paired nodes",
     cron: "Manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
     message: "Send messages and channel actions",
@@ -278,7 +265,6 @@ export function buildAgentSystemPrompt(params: {
     "process",
     "web_search",
     "web_fetch",
-    "browser",
     "nodes",
     "cron",
     "message",
@@ -428,7 +414,6 @@ export function buildAgentSystemPrompt(params: {
           "- apply_patch: apply multi-file patches",
           `- ${execToolName}: run shell commands (supports background via yieldMs/background)`,
           `- ${processToolName}: manage background exec sessions`,
-          "- browser: control Deneb's dedicated browser",
           "- nodes: list/describe/notify/camera/screen on paired nodes",
           "- cron: manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
           "- sessions_list: list sessions",
@@ -527,15 +512,6 @@ export function buildAgentSystemPrompt(params: {
                   : ""
               }`
             : "",
-          params.sandboxInfo.browserBridgeUrl ? "Sandbox browser: enabled." : "",
-          params.sandboxInfo.browserNoVncUrl
-            ? `Sandbox browser observer (noVNC): ${sanitizeForPromptLiteral(params.sandboxInfo.browserNoVncUrl)}`
-            : "",
-          params.sandboxInfo.hostBrowserAllowed === true
-            ? "Host browser control: allowed."
-            : params.sandboxInfo.hostBrowserAllowed === false
-              ? "Host browser control: blocked."
-              : "",
           params.sandboxInfo.elevated?.allowed
             ? "Elevated exec is available for this session."
             : "",
@@ -569,7 +545,6 @@ export function buildAgentSystemPrompt(params: {
       runtimeChannel,
       messageToolHints: params.messageToolHints,
     }),
-    ...buildVoiceSection({ isMinimal, ttsHint: params.ttsHint }),
   ];
 
   if (extraSystemPrompt) {

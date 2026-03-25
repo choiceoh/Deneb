@@ -133,7 +133,6 @@ describe("onboard (non-interactive): gateway and remote auth", () => {
       "DENEB_SKIP_CHANNELS",
       "DENEB_SKIP_GMAIL_WATCHER",
       "DENEB_SKIP_CRON",
-      "DENEB_SKIP_CANVAS_HOST",
       "DENEB_SKIP_BROWSER_CONTROL_SERVER",
       "DENEB_GATEWAY_TOKEN",
       "DENEB_GATEWAY_PASSWORD",
@@ -141,7 +140,6 @@ describe("onboard (non-interactive): gateway and remote auth", () => {
     process.env.DENEB_SKIP_CHANNELS = "1";
     process.env.DENEB_SKIP_GMAIL_WATCHER = "1";
     process.env.DENEB_SKIP_CRON = "1";
-    process.env.DENEB_SKIP_CANVAS_HOST = "1";
     process.env.DENEB_SKIP_BROWSER_CONTROL_SERVER = "1";
     delete process.env.DENEB_GATEWAY_TOKEN;
     delete process.env.DENEB_GATEWAY_PASSWORD;

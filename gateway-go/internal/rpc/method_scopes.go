@@ -132,15 +132,7 @@ var methodScopes = map[string]auth.Scope{
 	"wizard.cancel": auth.ScopeWrite,
 	"wizard.status": auth.ScopeRead,
 
-	// --- TTS / Media ---
-	"tts.status":      auth.ScopeRead,
-	"tts.providers":   auth.ScopeRead,
-	"tts.enable":      auth.ScopeWrite,
-	"tts.disable":     auth.ScopeWrite,
-	"tts.convert":     auth.ScopeWrite,
-	"tts.setProvider": auth.ScopeWrite,
-	"voicewake.get":   auth.ScopeRead,
-	"voicewake.set":   auth.ScopeWrite,
+	// --- Media ---
 	"browser.request": auth.ScopeWrite,
 
 	// --- Web Login ---

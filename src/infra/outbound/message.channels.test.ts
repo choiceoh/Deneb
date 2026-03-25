@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChannelOutboundAdapter, ChannelPlugin } from "../../channels/plugins/types.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
-import { createMSTeamsTestPlugin, createTestRegistry } from "../../test-utils/channel-plugins.js";
+import {
+  createMattermostTestPlugin,
+  createTestRegistry,
+} from "../../test-utils/channel-plugins.js";
 import { createIMessageTestPlugin } from "../../test-utils/imessage-test-plugin.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../utils/message-channel.js";
 
@@ -108,28 +111,28 @@ describe("sendMessage channel normalization", () => {
       name: "normalizes Teams aliases",
       registry: createTestRegistry([
         {
-          pluginId: "msteams",
+          pluginId: "mattermost",
           source: "test",
-          plugin: createMSTeamsTestPlugin({
-            outbound: createMSTeamsOutbound(),
-            aliases: ["teams"],
+          plugin: createMattermostTestPlugin({
+            outbound: createMattermostOutbound(),
+            aliases: ["mm"],
           }),
         },
       ]),
       params: {
-        to: "conversation:19:abc@thread.tacv2",
-        channel: "teams",
+        to: "channel:abc123",
+        channel: "mm",
         deps: {
-          sendMSTeams: vi.fn(async () => ({
+          sendMattermost: vi.fn(async () => ({
             messageId: "m1",
             conversationId: "c1",
           })),
         },
       },
-      assertDeps: (deps: { sendMSTeams?: ReturnType<typeof vi.fn> }) => {
-        expect(deps.sendMSTeams).toHaveBeenCalledWith("conversation:19:abc@thread.tacv2", "hi");
+      assertDeps: (deps: { sendMattermost?: ReturnType<typeof vi.fn> }) => {
+        expect(deps.sendMattermost).toHaveBeenCalledWith("channel:abc123", "hi");
       },
-      expectedChannel: "msteams",
+      expectedChannel: "mattermost",
     },
     {
       name: "normalizes iMessage aliases",
@@ -216,11 +219,11 @@ describe("sendPoll channel normalization", () => {
     setRegistry(
       createTestRegistry([
         {
-          pluginId: "msteams",
+          pluginId: "mattermost",
           source: "test",
-          plugin: createMSTeamsTestPlugin({
-            aliases: ["teams"],
-            outbound: createMSTeamsOutbound({ includePoll: true }),
+          plugin: createMattermostTestPlugin({
+            aliases: ["mm"],
+            outbound: createMattermostOutbound({ includePoll: true }),
           }),
         },
       ]),
@@ -228,7 +231,7 @@ describe("sendPoll channel normalization", () => {
 
     const result = await sendPoll({
       cfg: {},
-      to: "conversation:19:abc@thread.tacv2",
+      to: "channel:abc123",
       question: "Lunch?",
       options: ["Pizza", "Sushi"],
       channel: "Teams",
@@ -237,8 +240,8 @@ describe("sendPoll channel normalization", () => {
     const call = callGatewayMock.mock.calls[0]?.[0] as {
       params?: Record<string, unknown>;
     };
-    expect(call?.params?.channel).toBe("msteams");
-    expect(result.channel).toBe("msteams");
+    expect(call?.params?.channel).toBe("mattermost");
+    expect(result.channel).toBe("mattermost");
   });
 });
 
@@ -307,32 +310,32 @@ describe("gateway url override hardening", () => {
 
 const emptyRegistry = createTestRegistry([]);
 
-const createMSTeamsOutbound = (opts?: { includePoll?: boolean }): ChannelOutboundAdapter => ({
+const createMattermostOutbound = (opts?: { includePoll?: boolean }): ChannelOutboundAdapter => ({
   deliveryMode: "direct",
   sendText: async ({ deps, to, text }) => {
-    const send = deps?.sendMSTeams as
+    const send = deps?.sendMattermost as
       | ((to: string, text: string, opts?: unknown) => Promise<{ messageId: string }>)
       | undefined;
     if (!send) {
-      throw new Error("sendMSTeams missing");
+      throw new Error("sendMattermost missing");
     }
     const result = await send(to, text);
-    return { channel: "msteams", ...result };
+    return { channel: "mattermost", ...result };
   },
   sendMedia: async ({ deps, to, text, mediaUrl }) => {
-    const send = deps?.sendMSTeams as
+    const send = deps?.sendMattermost as
       | ((to: string, text: string, opts?: unknown) => Promise<{ messageId: string }>)
       | undefined;
     if (!send) {
-      throw new Error("sendMSTeams missing");
+      throw new Error("sendMattermost missing");
     }
     const result = await send(to, text, { mediaUrl });
-    return { channel: "msteams", ...result };
+    return { channel: "mattermost", ...result };
   },
   ...(opts?.includePoll
     ? {
         pollMaxOptions: 12,
-        sendPoll: async () => ({ channel: "msteams", messageId: "p1" }),
+        sendPoll: async () => ({ channel: "mattermost", messageId: "p1" }),
       }
     : {}),
 });

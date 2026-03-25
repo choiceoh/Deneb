@@ -14,7 +14,6 @@ function derivePort(base: number, offset: number, fallback: number): number {
 
 export const DEFAULT_BRIDGE_PORT = 18790;
 export const DEFAULT_BROWSER_CONTROL_PORT = 18791;
-export const DEFAULT_CANVAS_HOST_PORT = 18793;
 export const DEFAULT_BROWSER_CDP_PORT_RANGE_START = 18800;
 export const DEFAULT_BROWSER_CDP_PORT_RANGE_END = 18899;
 

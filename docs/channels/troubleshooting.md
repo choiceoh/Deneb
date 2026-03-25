@@ -78,20 +78,19 @@ See also: `deneb channels status --probe` and `deneb logs --channel discord`.
 
 See also: `deneb channels status --probe` and `deneb logs --channel slack`.
 
-## iMessage and BlueBubbles
+## iMessage
 
-### iMessage and BlueBubbles failure signatures
+### iMessage failure signatures
 
-| Symptom                          | Fastest check                                                     | Fix                                                   |
-| -------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------- |
-| No inbound events                | Verify webhook/server reachability and app permissions            | Fix webhook URL or BlueBubbles server state.          |
-| Can send but no receive on macOS | Check macOS privacy permissions for Messages automation           | Re-grant TCC permissions and restart channel process. |
-| DM sender blocked                | `deneb pairing list imessage` or `deneb pairing list bluebubbles` | Approve pairing or update allowlist.                  |
+| Symptom                          | Fastest check                                           | Fix                                                   |
+| -------------------------------- | ------------------------------------------------------- | ----------------------------------------------------- |
+| No inbound events                | Verify webhook/server reachability and app permissions  | Fix webhook URL or server state.                      |
+| Can send but no receive on macOS | Check macOS privacy permissions for Messages automation | Re-grant TCC permissions and restart channel process. |
+| DM sender blocked                | `deneb pairing list imessage`                           | Approve pairing or update allowlist.                  |
 
 Full troubleshooting:
 
-- Check macOS Privacy and Security (TCC) permissions for iMessage.
-- Check BlueBubbles server status and webhook configuration.
+- [/channels/imessage#troubleshooting-macos-privacy-and-security-tcc](/channels/imessage#troubleshooting-macos-privacy-and-security-tcc)
 
 ## Signal
 

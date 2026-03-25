@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 - Repo: https://github.com/deneb/deneb
-- In chat replies, file references must be repo-root relative only (example: `extensions/bluebubbles/src/channel.ts:80`); never absolute paths or `~/...`.
+- In chat replies, file references must be repo-root relative only (example: `extensions/telegram/src/channel.ts:80`); never absolute paths or `~/...`.
 - Do not edit files covered by security-focused `CODEOWNERS` rules unless a listed owner explicitly asked for the change or is already reviewing it with you. Treat those paths as restricted surfaces, not drive-by cleanup.
 
 ## Project Philosophy & Deployment Context (MUST READ)
@@ -188,7 +188,6 @@
 - `src/link-understanding/` — URL preview/extraction.
 - `src/acp/` — Agent Control Protocol implementation.
 - `src/interactive/` — interactive tool UI.
-- `src/i18n/` — internationalization.
 - `src/markdown/` — markdown utilities.
 - `src/providers/` — LLM/model provider integrations.
 - `src/wizard/` — interactive setup wizards.
@@ -313,7 +312,7 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 - Messaging channels: always consider **all** built-in + extension channels when refactoring shared logic (routing, allowlists, pairing, command gating, onboarding, docs).
   - Core channel docs: `docs/channels/`
   - Core channel code: `src/telegram`, `src/discord`, `src/slack`, `src/signal`, `src/imessage`, `src/web` (WhatsApp web), `src/channels`, `src/routing`
-  - Extensions (channel plugins): `extensions/*` (e.g. `extensions/msteams`, `extensions/matrix`, `extensions/zalo`, `extensions/zalouser`, `extensions/voice-call`)
+  - Extensions (channel plugins): `extensions/*` (e.g. `extensions/telegram`)
 - When adding channels/extensions/apps/docs, update `.github/labeler.yml` and create matching GitHub labels (use existing channel/extension label colors).
 
 ## Docs Linking (Mintlify)
@@ -352,16 +351,6 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 - Tables: standard Markdown tables for feature matrices, mode mappings, option lists. Use `✅` / `❌` for yes/no cells.
 - File conventions: all doc files are `.md` (Mintlify processes MDX syntax transparently). File naming: lowercase, hyphenated (`getting-started.md`, `voice-wake.md`).
 - Validation scripts: `pnpm docs:dev` (local preview), `pnpm docs:check-links` (link audit), `pnpm docs:spellcheck` (spell check; `pnpm docs:spellcheck:fix` to auto-fix), `pnpm format:docs` (format check; `pnpm format:docs:fix` to auto-fix).
-
-## Docs i18n (zh-CN)
-
-- `docs/zh-CN/**` is generated; do not edit unless the user explicitly asks.
-- Pipeline: update English docs → adjust glossary (`docs/.i18n/glossary.zh-CN.json`) → run `scripts/docs-i18n` → apply targeted fixes only if instructed.
-- Before rerunning `scripts/docs-i18n`, add glossary entries for any new technical terms, page titles, or short nav labels that must stay in English or use a fixed translation (for example `Doctor` or `Polls`).
-- `pnpm docs:check-i18n-glossary` enforces glossary coverage for changed English doc titles and short internal doc labels before translation reruns.
-- Translation memory: `docs/.i18n/zh-CN.tm.jsonl` (generated).
-- See `docs/.i18n/README.md`.
-- The pipeline can be slow/inefficient; if it’s dragging, ping @jospalmbier on Discord instead of hacking around it.
 
 ## exe.dev VM ops (general)
 
@@ -571,18 +560,17 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 
 ### Documentation
 
-| Command                         | Description                                             |
-| ------------------------------- | ------------------------------------------------------- |
-| `pnpm docs:dev`                 | Run Mintlify local preview                              |
-| `pnpm docs:check-links`         | Audit documentation links                               |
-| `pnpm docs:spellcheck`          | Spell check docs                                        |
-| `pnpm docs:spellcheck:fix`      | Auto-fix doc spelling                                   |
-| `pnpm docs:check-i18n-glossary` | Check i18n glossary coverage                            |
-| `pnpm check:docs`               | Full docs check (format + lint + i18n glossary + links) |
-| `pnpm config:docs:gen`          | Generate config doc baseline                            |
-| `pnpm config:docs:check`        | Check config doc baseline is up to date                 |
-| `pnpm docs:bin`                 | Build docs list for CLI                                 |
-| `pnpm docs:list`                | List all doc pages                                      |
+| Command                    | Description                             |
+| -------------------------- | --------------------------------------- |
+| `pnpm docs:dev`            | Run Mintlify local preview              |
+| `pnpm docs:check-links`    | Audit documentation links               |
+| `pnpm docs:spellcheck`     | Spell check docs                        |
+| `pnpm docs:spellcheck:fix` | Auto-fix doc spelling                   |
+| `pnpm check:docs`          | Full docs check (format + lint + links) |
+| `pnpm config:docs:gen`     | Generate config doc baseline            |
+| `pnpm config:docs:check`   | Check config doc baseline is up to date |
+| `pnpm docs:bin`            | Build docs list for CLI                 |
+| `pnpm docs:list`           | List all doc pages                      |
 
 ### Code Generation / Sync
 
@@ -784,9 +772,6 @@ This runs the smart gate, pushes, and creates the PR automatically. Options: `--
 - Lobster palette: use the shared CLI palette in `src/terminal/palette.ts` (no hardcoded colors); apply palette to onboarding/config prompts and other TTY UI output as needed.
 - When asked to open a “session” file, open the Pi session logs under `~/.deneb/agents/<agentId>/sessions/*.jsonl` (use the `agent=<id>` value in the Runtime line of the system prompt; newest unless a specific ID is given), not the default `sessions.json`. If logs are needed from another machine, SSH via Tailscale and read the same path there.
 - Do not rebuild the macOS app over SSH; rebuilds must be run directly on the Mac.
-- Voice wake forwarding tips:
-  - Command template should stay `deneb-mac agent --message "${text}" --thinking low`; `VoiceWakeForwarder` already shell-escapes `${text}`. Don’t add extra quotes.
-  - launchd PATH is minimal; ensure the app’s launch agent PATH includes standard system paths plus your pnpm bin (typically `$HOME/Library/pnpm`) so `pnpm`/`deneb` binaries resolve when invoked via `deneb-mac`.
 
 ## Collaboration / Safety Notes
 

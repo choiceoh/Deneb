@@ -26,7 +26,6 @@ import { prepareProviderRuntimeAuth } from "../../plugins/provider-runtime.js";
 import { type enqueueCommand, enqueueCommandInLane } from "../../process/command-queue.js";
 import { isCronSessionKey, isSubagentSessionKey } from "../../routing/session-key.js";
 import { emitSessionTranscriptUpdate } from "../../sessions/transcript-events.js";
-import { buildTtsSystemPromptHint } from "../../tts/tts.js";
 import { resolveUserPath } from "../../utils.js";
 import { normalizeMessageChannel } from "../../utils/message-channel.js";
 import { isReasoningTagProvider } from "../../utils/provider-utils.js";
@@ -738,7 +737,6 @@ export async function compactEmbeddedPiSessionDirect(
       cwd: process.cwd(),
       moduleUrl: import.meta.url,
     });
-    const ttsHint = params.config ? buildTtsSystemPromptHint(params.config) : undefined;
     const ownerDisplay = resolveOwnerDisplaySetting(params.config);
     const appendPrompt = buildEmbeddedSystemPrompt({
       workspaceDir: effectiveWorkspace,
@@ -754,7 +752,6 @@ export async function compactEmbeddedPiSessionDirect(
         : undefined,
       skillsPrompt,
       docsPath: docsPath ?? undefined,
-      ttsHint,
       promptMode,
       acpEnabled: params.config?.acp?.enabled !== false,
       runtimeInfo,
@@ -1008,23 +1005,22 @@ export async function compactEmbeddedPiSessionDirect(
           hookCtx,
         );
         // Truncate session file to remove compacted entries (#39953)
-        if (params.config?.agents?.defaults?.compaction?.truncateAfterCompaction !== false) {
-          try {
-            const truncResult = await truncateSessionAfterCompaction({
-              sessionFile: params.sessionFile,
-            });
-            if (truncResult.truncated) {
-              log.info(
-                `[compaction] post-compaction truncation removed ${truncResult.entriesRemoved} entries ` +
-                  `(sessionKey=${params.sessionKey ?? params.sessionId})`,
-              );
-            }
-          } catch (err) {
-            log.warn("[compaction] post-compaction truncation failed", {
-              errorMessage: err instanceof Error ? err.message : String(err),
-              errorStack: err instanceof Error ? err.stack : undefined,
-            });
+        // truncateAfterCompaction is system-managed: always true.
+        try {
+          const truncResult = await truncateSessionAfterCompaction({
+            sessionFile: params.sessionFile,
+          });
+          if (truncResult.truncated) {
+            log.info(
+              `[compaction] post-compaction truncation removed ${truncResult.entriesRemoved} entries ` +
+                `(sessionKey=${params.sessionKey ?? params.sessionId})`,
+            );
           }
+        } catch (err) {
+          log.warn("[compaction] post-compaction truncation failed", {
+            errorMessage: err instanceof Error ? err.message : String(err),
+            errorStack: err instanceof Error ? err.stack : undefined,
+          });
         }
         return {
           ok: true,

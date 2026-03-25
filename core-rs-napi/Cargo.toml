@@ -1,6 +1,6 @@
 [package]
 name = "deneb-core-rs-napi"
-version = "0.1.0"
+version = "3.8.0"
 edition = "2021"
 description = "napi-rs bridge for deneb-core — exposes Rust functions to Node.js"
 

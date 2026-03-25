@@ -41,13 +41,13 @@ describe("attachChannelToResults", () => {
 
 describe("buildChannelSendResult", () => {
   it("normalizes raw send results", () => {
-    const result = buildChannelSendResult("zalo", {
+    const result = buildChannelSendResult("matrix", {
       ok: false,
       messageId: null,
       error: "boom",
     });
 
-    expect(result.channel).toBe("zalo");
+    expect(result.channel).toBe("matrix");
     expect(result.ok).toBe(false);
     expect(result.messageId).toBe("");
     expect(result.error).toEqual(new Error("boom"));
@@ -99,19 +99,19 @@ describe("createAttachedChannelResultAdapter", () => {
 describe("createRawChannelSendResultAdapter", () => {
   it("normalizes raw send results", async () => {
     const adapter = createRawChannelSendResultAdapter({
-      channel: "zalo",
+      channel: "matrix",
       sendText: async () => ({ ok: true, messageId: "m1" }),
       sendMedia: async () => ({ ok: false, error: "boom" }),
     });
 
     await expect(adapter.sendText!({ cfg: {} as never, to: "x", text: "hi" })).resolves.toEqual({
-      channel: "zalo",
+      channel: "matrix",
       ok: true,
       messageId: "m1",
       error: undefined,
     });
     await expect(adapter.sendMedia!({ cfg: {} as never, to: "x", text: "hi" })).resolves.toEqual({
-      channel: "zalo",
+      channel: "matrix",
       ok: false,
       messageId: "",
       error: new Error("boom"),

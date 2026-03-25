@@ -30,7 +30,6 @@ vi.mock("../config/config.js", async (importOriginal) => {
   };
 });
 
-import "./test-helpers/fast-core-tools.js";
 import { createDenebTools } from "./deneb-tools.js";
 
 const waitForCalls = async (getCount: () => number, count: number, timeoutMs = 500) => {

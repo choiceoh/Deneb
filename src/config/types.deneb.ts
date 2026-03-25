@@ -4,16 +4,10 @@ import type { ApprovalsConfig } from "./types.approvals.js";
 import type { AuthConfig } from "./types.auth.js";
 import type { AutonomousConfig } from "./types.autonomous.js";
 import type { DiagnosticsConfig, LoggingConfig, SessionConfig, WebConfig } from "./types.base.js";
-import type { BrowserConfig } from "./types.browser.js";
 import type { ChannelsConfig } from "./types.channels.js";
 import type { CliConfig } from "./types.cli.js";
 import type { CronConfig } from "./types.cron.js";
-import type {
-  CanvasHostConfig,
-  DiscoveryConfig,
-  GatewayConfig,
-  TalkConfig,
-} from "./types.gateway.js";
+import type { DiscoveryConfig, GatewayConfig, TalkConfig } from "./types.gateway.js";
 import type { HooksConfig } from "./types.hooks.js";
 import type { McpConfig } from "./types.mcp.js";
 import type { MemoryConfig } from "./types.memory.js";
@@ -81,7 +75,6 @@ export type DenebConfig = {
       betaCheckIntervalHours?: number;
     };
   };
-  browser?: BrowserConfig;
   ui?: {
     /** Accent color for Deneb UI chrome (hex). */
     seamColor?: string;
@@ -117,7 +110,6 @@ export type DenebConfig = {
   autonomous?: AutonomousConfig;
   hooks?: HooksConfig;
   discovery?: DiscoveryConfig;
-  canvasHost?: CanvasHostConfig;
   talk?: TalkConfig;
   gateway?: GatewayConfig;
   memory?: MemoryConfig;

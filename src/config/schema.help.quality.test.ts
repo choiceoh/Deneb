@@ -31,7 +31,6 @@ const ROOT_SECTIONS = [
   "web",
   "channels",
   "discovery",
-  "canvasHost",
   "talk",
   "gateway",
   "memory",
@@ -41,33 +40,6 @@ const ROOT_SECTIONS = [
 const TARGET_KEYS = [
   "memory.citations",
   "memory.backend",
-  "memory.qmd.searchMode",
-  "memory.qmd.scope",
-  "memory.qmd.includeDefaultMemory",
-  "memory.qmd.mcporter.enabled",
-  "memory.qmd.mcporter.serverName",
-  "memory.qmd.command",
-  "memory.qmd.mcporter",
-  "memory.qmd.mcporter.startDaemon",
-  "memory.qmd.paths",
-  "memory.qmd.paths.path",
-  "memory.qmd.paths.pattern",
-  "memory.qmd.paths.name",
-  "memory.qmd.sessions.enabled",
-  "memory.qmd.sessions.exportDir",
-  "memory.qmd.sessions.retentionDays",
-  "memory.qmd.update.interval",
-  "memory.qmd.update.debounceMs",
-  "memory.qmd.update.onBoot",
-  "memory.qmd.update.waitForBootSync",
-  "memory.qmd.update.embedInterval",
-  "memory.qmd.update.commandTimeoutMs",
-  "memory.qmd.update.updateTimeoutMs",
-  "memory.qmd.update.embedTimeoutMs",
-  "memory.qmd.limits.maxResults",
-  "memory.qmd.limits.maxSnippetChars",
-  "memory.qmd.limits.maxInjectedChars",
-  "memory.qmd.limits.timeoutMs",
   "agents.defaults.memorySearch.provider",
   "agents.defaults.memorySearch.fallback",
   "agents.defaults.memorySearch.sources",
@@ -301,11 +273,6 @@ const TARGET_KEYS = [
   "discovery.wideArea.enabled",
   "discovery.mdns",
   "discovery.mdns.mode",
-  "canvasHost",
-  "canvasHost.enabled",
-  "canvasHost.root",
-  "canvasHost.port",
-  "canvasHost.liveReload",
   "talk",
   "talk.voiceId",
   "talk.voiceAliases",
@@ -376,11 +343,9 @@ const TARGET_KEYS = [
   "agents.defaults",
   "agents.list",
   "agents.defaults.compaction",
-  // compaction.mode, maxHistoryShare, recentTurnsPreserve, qualityGuard.*
+  // compaction.mode, maxHistoryShare, recentTurnsPreserve, qualityGuard.*,
+  // reserveTokens, keepRecentTokens, reserveTokensFloor, identifierPolicy
   // are system-managed — excluded from operational guidance checks.
-  "agents.defaults.compaction.reserveTokens",
-  "agents.defaults.compaction.keepRecentTokens",
-  "agents.defaults.compaction.reserveTokensFloor",
   "agents.defaults.compaction.identifierPolicy",
   "agents.defaults.compaction.identifierInstructions",
   "agents.defaults.compaction.postCompactionSections",
@@ -395,8 +360,7 @@ const TARGET_KEYS = [
 
 const ENUM_EXPECTATIONS: Record<string, string[]> = {
   "memory.citations": ['"auto"', '"on"', '"off"'],
-  "memory.backend": ['"builtin"', '"qmd"'],
-  "memory.qmd.searchMode": ['"query"', '"search"', '"vsearch"'],
+  "memory.backend": ['"builtin"', '"vega"'],
   "models.mode": ['"merge"', '"replace"'],
   "models.providers.*.auth": ['"api-key"', '"token"', '"oauth"', '"aws-sdk"'],
   "gateway.reload.mode": ['"off"', '"restart"', '"hot"', '"hybrid"'],
@@ -441,7 +405,7 @@ const ENUM_EXPECTATIONS: Record<string, string[]> = {
   "cli.banner.taglineMode": ['"random"', '"default"', '"off"'],
   "update.channel": ['"stable"', '"beta"', '"dev"'],
   "agents.defaults.compaction.mode": ['"safeguard"'],
-  "agents.defaults.compaction.identifierPolicy": ['"strict"', '"off"', '"custom"'],
+  "agents.defaults.compaction.identifierPolicy": ['"strict"'],
 };
 
 const TOOLS_HOOKS_TARGET_KEYS = [
@@ -631,9 +595,6 @@ describe("config help copy quality", () => {
   });
 
   it("includes concrete examples on path and interval fields", () => {
-    expect(FIELD_HELP["memory.qmd.paths.pattern"].includes("**/*.md")).toBe(true);
-    expect(FIELD_HELP["memory.qmd.update.interval"].includes("5m")).toBe(true);
-    expect(FIELD_HELP["memory.qmd.update.embedInterval"].includes("60m")).toBe(true);
     expect(FIELD_HELP["agents.defaults.memorySearch.store.path"]).toContain(
       "~/.deneb/memory/{agentId}.sqlite",
     );
@@ -794,13 +755,22 @@ describe("config help copy quality", () => {
     const historyShare = FIELD_HELP["agents.defaults.compaction.maxHistoryShare"];
     expect(/system-managed|0\.5/i.test(historyShare)).toBe(true);
 
+    // identifierPolicy is system-managed — help text documents its fixed nature.
     const identifierPolicy = FIELD_HELP["agents.defaults.compaction.identifierPolicy"];
-    expect(identifierPolicy.includes('"strict"')).toBe(true);
-    expect(identifierPolicy.includes('"off"')).toBe(true);
-    expect(identifierPolicy.includes('"custom"')).toBe(true);
+    expect(/system-managed|strict/i.test(identifierPolicy)).toBe(true);
 
     const recentTurnsPreserve = FIELD_HELP["agents.defaults.compaction.recentTurnsPreserve"];
     expect(/system-managed|fixed/i.test(recentTurnsPreserve)).toBe(true);
+
+    // reserveTokens, keepRecentTokens, reserveTokensFloor are system-managed.
+    const reserveTokens = FIELD_HELP["agents.defaults.compaction.reserveTokens"];
+    expect(/system-managed/i.test(reserveTokens)).toBe(true);
+
+    const keepRecentTokens = FIELD_HELP["agents.defaults.compaction.keepRecentTokens"];
+    expect(/system-managed/i.test(keepRecentTokens)).toBe(true);
+
+    const reserveTokensFloor = FIELD_HELP["agents.defaults.compaction.reserveTokensFloor"];
+    expect(/system-managed|fixed/i.test(reserveTokensFloor)).toBe(true);
 
     const postCompactionSections = FIELD_HELP["agents.defaults.compaction.postCompactionSections"];
     expect(/Session Startup|Red Lines/i.test(postCompactionSections)).toBe(true);
@@ -810,7 +780,8 @@ describe("config help copy quality", () => {
     const compactionModel = FIELD_HELP["agents.defaults.compaction.model"];
     expect(/provider\/model|different model|primary agent model/i.test(compactionModel)).toBe(true);
 
+    // memoryFlush.enabled is system-managed — help text documents its fixed nature.
     const flush = FIELD_HELP["agents.defaults.compaction.memoryFlush.enabled"];
-    expect(/pre-compaction|memory flush|token/i.test(flush)).toBe(true);
+    expect(/system-managed|always true/i.test(flush)).toBe(true);
   });
 });

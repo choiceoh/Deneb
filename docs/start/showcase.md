@@ -12,7 +12,7 @@ read_when:
 Real projects from the community. See what people are building with Deneb.
 
 <Info>
-**Want to be featured?** Share your project in [#showcase on Discord](https://discord.gg/clawd) or [tag @deneb on X](https://x.com/deneb).
+**Want to be featured?** Share your project in [#showcase on Discord](https://discord.gg/deneb) or [tag @deneb on X](https://x.com/deneb).
 </Info>
 
 ## 🎥 Deneb in Action
@@ -127,14 +127,6 @@ Hotkey a screen region → Gemini vision → instant Markdown in your clipboard.
 Desktop app to manage skills/commands across Agents, Claude, Codex, and Deneb.
 
   <img src="/assets/showcase/agents-ui.jpg" alt="Agents UI app" />
-</Card>
-
-<Card title="Telegram Voice Notes (papla.media)" icon="microphone" href="https://papla.media/docs">
-  **Community** • `voice` `tts` `telegram`
-
-Wraps papla.media TTS and sends results as Telegram voice notes (no annoying autoplay).
-
-  <img src="/assets/showcase/papla-tts.jpg" alt="Telegram voice note output from TTS" />
 </Card>
 
 <Card title="CodexMonitor" icon="eye" href="https://clawhub.com/odrobnik/codexmonitor">
@@ -408,7 +400,7 @@ Have something to share? We'd love to feature it!
 
 <Steps>
   <Step title="Share It">
-    Post in [#showcase on Discord](https://discord.gg/clawd) or [tweet @deneb](https://x.com/deneb)
+    Post in [#showcase on Discord](https://discord.gg/deneb) or [tweet @deneb](https://x.com/deneb)
   </Step>
   <Step title="Include Details">
     Tell us what it does, link to the repo/demo, share a screenshot if you have one

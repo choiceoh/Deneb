@@ -144,7 +144,7 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
   - [What model do you recommend?](#what-model-do-you-recommend)
   - [How do I switch models without wiping my config?](#how-do-i-switch-models-without-wiping-my-config)
   - [Can I use self-hosted models (llama.cpp, vLLM, Ollama)?](#can-i-use-selfhosted-models-llamacpp-vllm-ollama)
-  - [What do Deneb, Flawd, and Krill use for models?](#what-do-deneb-flawd-and-krill-use-for-models)
+  - [What models does the gateway use?](#what-models-does-the-gateway-use)
   - [How do I switch models on the fly (without restarting)?](#how-do-i-switch-models-on-the-fly-without-restarting)
   - [Can I use GPT 5.2 for daily tasks and Codex 5.3 for coding](#can-i-use-gpt-52-for-daily-tasks-and-codex-53-for-coding)
   - [Why do I see "Model … is not allowed" and then no reply?](#why-do-i-see-model-is-not-allowed-and-then-no-reply)
@@ -801,21 +801,21 @@ Pick region-pinned endpoints. OpenRouter exposes US-hosted options for MiniMax, 
 No. Deneb runs on macOS or Linux (Windows via WSL2). A Mac mini is optional - some people
 buy one as an always-on host, but a small VPS, home server, or Raspberry Pi-class box works too.
 
-You only need a Mac **for macOS-only tools**. For iMessage, use BlueBubbles (recommended) - the BlueBubbles server runs on any Mac, and the Gateway can run on Linux or elsewhere. If you want other macOS-only tools, run the Gateway on a Mac or pair a macOS node.
+You only need a Mac **for macOS-only tools**. For iMessage, use the built-in [iMessage](/channels/imessage) channel (requires a Mac signed into Messages). If you want other macOS-only tools, run the Gateway on a Mac or pair a macOS node.
 
-Docs: [Nodes](/nodes), [Mac remote mode](/platforms/mac/remote).
+Docs: [iMessage](/channels/imessage), [Nodes](/nodes), [Mac remote mode](/platforms/mac/remote).
 
 ### Do I need a Mac mini for iMessage support
 
 You need **some macOS device** signed into Messages. It does **not** have to be a Mac mini -
-any Mac works. **Use BlueBubbles** (recommended) for iMessage - the BlueBubbles server runs on macOS, while the Gateway can run on Linux or elsewhere.
+any Mac works. iMessage is a [built-in channel](/channels/imessage) that requires the Gateway to run on macOS (or connect to a Mac via SSH).
 
 Common setups:
 
-- Run the Gateway on Linux/VPS, and run the BlueBubbles server on any Mac signed into Messages.
-- Run everything on the Mac if you want the simplest single‑machine setup.
+- Run the Gateway on a Mac signed into Messages.
+- Run the Gateway on Linux/VPS and use an SSH wrapper to reach a Mac signed into Messages.
 
-Docs: [Nodes](/nodes),
+Docs: [iMessage](/channels/imessage), [Nodes](/nodes),
 [Mac remote mode](/platforms/mac/remote).
 
 ### If I buy a Mac mini to run Deneb can I connect it to my MacBook Pro
@@ -2138,9 +2138,9 @@ If you did overwrite config, restore from backup or re-run `deneb doctor` to rep
 
 Docs: [Models](/concepts/models), [Doctor](/gateway/doctor).
 
-### What do Deneb, Flawd, and Krill use for models
+### What models does the gateway use
 
-- These deployments can differ and may change over time; there is no fixed provider recommendation.
+- The active model can differ and may change over time; there is no fixed provider recommendation.
 - Check the current runtime setting on each gateway with `deneb models status`.
 - For security-sensitive/tool-enabled agents, use the strongest latest-generation model available.
 
@@ -3004,4 +3004,4 @@ You can add options like `debounce:2s cap:25 drop:summarize` for followup modes.
 
 ---
 
-Still stuck? Ask in [Discord](https://discord.com/invite/clawd) or open a [GitHub discussion](https://github.com/deneb/deneb/discussions).
+Still stuck? Open a [GitHub discussion](https://github.com/deneb/deneb/discussions).

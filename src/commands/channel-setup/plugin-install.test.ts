@@ -70,19 +70,19 @@ import {
 } from "./plugin-install.js";
 
 const baseEntry: ChannelPluginCatalogEntry = {
-  id: "zalo",
-  pluginId: "zalo",
+  id: "matrix",
+  pluginId: "matrix",
   meta: {
-    id: "zalo",
-    label: "Zalo",
-    selectionLabel: "Zalo (Bot API)",
-    docsPath: "/channels/zalo",
-    docsLabel: "zalo",
+    id: "matrix",
+    label: "Matrix",
+    selectionLabel: "Matrix (Protocol)",
+    docsPath: "/channels/matrix",
+    docsLabel: "matrix",
     blurb: "Test",
   },
   install: {
-    npmSpec: "@deneb/zalo",
-    localPath: "extensions/zalo",
+    npmSpec: "@deneb/matrix",
+    localPath: "extensions/matrix",
   },
 };
 
@@ -95,7 +95,9 @@ beforeEach(() => {
 function mockRepoLocalPathExists() {
   vi.mocked(fs.existsSync).mockImplementation((value) => {
     const raw = String(value);
-    return raw.endsWith(`${path.sep}.git`) || raw.endsWith(`${path.sep}extensions${path.sep}zalo`);
+    return (
+      raw.endsWith(`${path.sep}.git`) || raw.endsWith(`${path.sep}extensions${path.sep}matrix`)
+    );
   });
 }
 
@@ -120,7 +122,7 @@ async function runInitialValueForChannel(channel: "dev" | "beta") {
 function expectPluginLoadedFromLocalPath(
   result: Awaited<ReturnType<typeof ensureChannelSetupPluginInstalled>>,
 ) {
-  const expectedPath = path.resolve(process.cwd(), "extensions/zalo");
+  const expectedPath = path.resolve(process.cwd(), "extensions/matrix");
   expect(result.installed).toBe(true);
   expect(result.cfg.plugins?.load?.paths).toContain(expectedPath);
 }
@@ -135,8 +137,8 @@ describe("ensureChannelSetupPluginInstalled", () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     installPluginFromNpmSpec.mockResolvedValue({
       ok: true,
-      pluginId: "zalo",
-      targetDir: "/tmp/zalo",
+      pluginId: "matrix",
+      targetDir: "/tmp/matrix",
       extensions: [],
     });
 
@@ -148,13 +150,13 @@ describe("ensureChannelSetupPluginInstalled", () => {
     });
 
     expect(result.installed).toBe(true);
-    expect(result.cfg.plugins?.entries?.zalo?.enabled).toBe(true);
-    expect(result.cfg.plugins?.allow).toContain("zalo");
-    expect(result.cfg.plugins?.installs?.zalo?.source).toBe("npm");
-    expect(result.cfg.plugins?.installs?.zalo?.spec).toBe("@deneb/zalo");
-    expect(result.cfg.plugins?.installs?.zalo?.installPath).toBe("/tmp/zalo");
+    expect(result.cfg.plugins?.entries?.matrix?.enabled).toBe(true);
+    expect(result.cfg.plugins?.allow).toContain("matrix");
+    expect(result.cfg.plugins?.installs?.matrix?.source).toBe("npm");
+    expect(result.cfg.plugins?.installs?.matrix?.spec).toBe("@deneb/matrix");
+    expect(result.cfg.plugins?.installs?.matrix?.installPath).toBe("/tmp/matrix");
     expect(installPluginFromNpmSpec).toHaveBeenCalledWith(
-      expect.objectContaining({ spec: "@deneb/zalo" }),
+      expect.objectContaining({ spec: "@deneb/matrix" }),
     );
   });
 
@@ -174,7 +176,7 @@ describe("ensureChannelSetupPluginInstalled", () => {
     });
 
     expectPluginLoadedFromLocalPath(result);
-    expect(result.cfg.plugins?.entries?.zalo?.enabled).toBe(true);
+    expect(result.cfg.plugins?.entries?.matrix?.enabled).toBe(true);
   });
 
   it("uses the catalog plugin id for local-path installs", async () => {
@@ -190,15 +192,15 @@ describe("ensureChannelSetupPluginInstalled", () => {
       entry: {
         ...baseEntry,
         id: "teams",
-        pluginId: "@deneb/msteams-plugin",
+        pluginId: "@deneb/nostr-plugin",
       },
       prompter,
       runtime,
     });
 
     expect(result.installed).toBe(true);
-    expect(result.pluginId).toBe("@deneb/msteams-plugin");
-    expect(result.cfg.plugins?.entries?.["@deneb/msteams-plugin"]?.enabled).toBe(true);
+    expect(result.pluginId).toBe("@deneb/nostr-plugin");
+    expect(result.cfg.plugins?.entries?.["@deneb/nostr-plugin"]?.enabled).toBe(true);
   });
 
   it("defaults to local on dev channel when local path exists", async () => {
@@ -220,9 +222,9 @@ describe("ensureChannelSetupPluginInstalled", () => {
         [
           "zalo",
           {
-            pluginId: "zalo",
-            localPath: "/opt/deneb/extensions/zalo",
-            npmSpec: "@deneb/zalo",
+            pluginId: "matrix",
+            localPath: "/opt/deneb/extensions/matrix",
+            npmSpec: "@deneb/matrix",
           },
         ],
       ]),
@@ -241,7 +243,7 @@ describe("ensureChannelSetupPluginInstalled", () => {
         options: expect.arrayContaining([
           expect.objectContaining({
             value: "local",
-            hint: "/opt/deneb/extensions/zalo",
+            hint: "/opt/deneb/extensions/matrix",
           }),
         ]),
       }),
@@ -337,7 +339,7 @@ describe("ensureChannelSetupPluginInstalled", () => {
       hookNames: [],
       channelIds: [],
       providerIds: [],
-      speechProviderIds: [],
+
       mediaUnderstandingProviderIds: [],
       imageGenerationProviderIds: [],
       webSearchProviderIds: [],
@@ -395,8 +397,8 @@ describe("ensureChannelSetupPluginInstalled", () => {
     loadChannelSetupPluginRegistrySnapshotForChannel({
       cfg,
       runtime,
-      channel: "msteams",
-      pluginId: "@deneb/msteams-plugin",
+      channel: "nostr",
+      pluginId: "@deneb/nostr-plugin",
       workspaceDir: "/tmp/deneb-workspace",
     });
 
@@ -405,7 +407,7 @@ describe("ensureChannelSetupPluginInstalled", () => {
         config: cfg,
         workspaceDir: "/tmp/deneb-workspace",
         cache: false,
-        onlyPluginIds: ["@deneb/msteams-plugin"],
+        onlyPluginIds: ["@deneb/nostr-plugin"],
         includeSetupOnlyChannelPlugins: true,
         activate: false,
       }),

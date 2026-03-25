@@ -23,11 +23,8 @@ const WELL_KNOWN_CHANNEL_PREFIXES = [
   "telegram",
   "whatsapp",
   "matrix",
-  "msteams",
-  "bluebubbles",
   "line",
   "nostr",
-  "zalo",
 ];
 
 const SENDER_PREFIXES = [

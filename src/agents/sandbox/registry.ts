@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { writeJsonAtomic } from "../../infra/json-files.js";
 import { acquireSessionWriteLock } from "../session-write-lock.js";
-import { SANDBOX_BROWSER_REGISTRY_PATH, SANDBOX_REGISTRY_PATH } from "./constants.js";
+import { SANDBOX_REGISTRY_PATH } from "./constants.js";
 
 export type SandboxRegistryEntry = {
   containerName: string;
@@ -17,21 +17,6 @@ export type SandboxRegistryEntry = {
 
 type SandboxRegistry = {
   entries: SandboxRegistryEntry[];
-};
-
-export type SandboxBrowserRegistryEntry = {
-  containerName: string;
-  sessionKey: string;
-  createdAtMs: number;
-  lastUsedAtMs: number;
-  image: string;
-  configHash?: string;
-  cdpPort: number;
-  noVncPort?: number;
-};
-
-type SandboxBrowserRegistry = {
-  entries: SandboxBrowserRegistryEntry[];
 };
 
 type RegistryReadMode = "strict" | "fallback";
@@ -181,31 +166,4 @@ export async function removeRegistryEntry(containerName: string) {
     }
     return next;
   });
-}
-
-export async function readBrowserRegistry(): Promise<SandboxBrowserRegistry> {
-  return await readRegistryFromFile<SandboxBrowserRegistryEntry>(
-    SANDBOX_BROWSER_REGISTRY_PATH,
-    "fallback",
-  );
-}
-
-export async function updateBrowserRegistry(entry: SandboxBrowserRegistryEntry) {
-  await withRegistryMutation<SandboxBrowserRegistryEntry>(
-    SANDBOX_BROWSER_REGISTRY_PATH,
-    (entries) => upsertEntry(entries, entry),
-  );
-}
-
-export async function removeBrowserRegistryEntry(containerName: string) {
-  await withRegistryMutation<SandboxBrowserRegistryEntry>(
-    SANDBOX_BROWSER_REGISTRY_PATH,
-    (entries) => {
-      const next = removeEntry(entries, containerName);
-      if (next.length === entries.length) {
-        return null;
-      }
-      return next;
-    },
-  );
 }

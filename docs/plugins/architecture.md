@@ -18,14 +18,13 @@ user-facing setup, discovery, and configuration, see [Plugins](/tools/plugin).
 Capabilities are the public **native plugin** model inside Deneb. Every
 native Deneb plugin registers against one or more capability types:
 
-| Capability          | Registration method                           | Example plugins           |
-| ------------------- | --------------------------------------------- | ------------------------- |
-| Text inference      | `api.registerProvider(...)`                   | `openai`, `anthropic`     |
-| Speech              | `api.registerSpeechProvider(...)`             | `elevenlabs`, `microsoft` |
-| Media understanding | `api.registerMediaUnderstandingProvider(...)` | `openai`, `google`        |
-| Image generation    | `api.registerImageGenerationProvider(...)`    | `openai`, `google`        |
-| Web search          | `api.registerWebSearchProvider(...)`          | `google`                  |
-| Channel / messaging | `api.registerChannel(...)`                    | `msteams`, `matrix`       |
+| Capability          | Registration method                           | Example plugins       |
+| ------------------- | --------------------------------------------- | --------------------- |
+| Text inference      | `api.registerProvider(...)`                   | `openai`, `anthropic` |
+| Media understanding | `api.registerMediaUnderstandingProvider(...)` | `openai`, `google`    |
+| Image generation    | `api.registerImageGenerationProvider(...)`    | `openai`, `google`    |
+| Web search          | `api.registerWebSearchProvider(...)`          | `google`              |
+| Channel / messaging | `api.registerChannel(...)`                    | `matrix`, `line`      |
 
 A plugin that registers zero capabilities but provides hooks, tools, or
 services is a **legacy hook-only** plugin. That pattern is still fully supported.
@@ -267,7 +266,6 @@ own all of its surfaces in one place:
 ```ts
 import type { DenebPluginDefinition } from "deneb/plugin-sdk";
 import {
-  buildOpenAISpeechProvider,
   createPluginBackedWebSearchProvider,
   describeImageWithModel,
   transcribeOpenAiCompatibleAudio,
@@ -281,13 +279,6 @@ const plugin: DenebPluginDefinition = {
       id: "exampleai",
       // auth/model catalog/runtime hooks
     });
-
-    api.registerSpeechProvider(
-      buildOpenAISpeechProvider({
-        id: "exampleai",
-        // vendor speech config
-      }),
-    );
 
     api.registerMediaUnderstandingProvider({
       id: "exampleai",
@@ -367,12 +358,12 @@ There are two layers of enforcement:
 
 1. **runtime registration enforcement**
    The plugin registry validates registrations as plugins load. Examples:
-   duplicate provider ids, duplicate speech provider ids, and malformed
+   duplicate provider ids, and malformed
    registrations produce plugin diagnostics instead of undefined behavior.
 2. **contract tests**
    Bundled plugins are captured in contract registries during test runs so
    Deneb can assert ownership explicitly. Today this is used for model
-   providers, speech providers, web search providers, and bundled registration
+   providers, web search providers, and bundled registration
    ownership.
 
 The practical effect is that Deneb knows, up front, which plugin owns which
@@ -723,61 +714,6 @@ api.registerProvider({
 
 ## Runtime helpers
 
-Plugins can access selected core helpers via `api.runtime`. For TTS:
-
-```ts
-const clip = await api.runtime.tts.textToSpeech({
-  text: "Hello from Deneb",
-  cfg: api.config,
-});
-
-const result = await api.runtime.tts.textToSpeechTelephony({
-  text: "Hello from Deneb",
-  cfg: api.config,
-});
-
-const voices = await api.runtime.tts.listVoices({
-  provider: "elevenlabs",
-  cfg: api.config,
-});
-```
-
-Notes:
-
-- `textToSpeech` returns the normal core TTS output payload for file/voice-note surfaces.
-- Uses core `messages.tts` configuration and provider selection.
-- Returns PCM audio buffer + sample rate. Plugins must resample/encode for providers.
-- `listVoices` is optional per provider. Use it for vendor-owned voice pickers or setup flows.
-- Voice listings can include richer metadata such as locale, gender, and personality tags for provider-aware pickers.
-- OpenAI and ElevenLabs support telephony today. Microsoft does not.
-
-Plugins can also register speech providers via `api.registerSpeechProvider(...)`.
-
-```ts
-api.registerSpeechProvider({
-  id: "acme-speech",
-  label: "Acme Speech",
-  isConfigured: ({ config }) => Boolean(config.messages?.tts),
-  synthesize: async (req) => {
-    return {
-      audioBuffer: Buffer.from([]),
-      outputFormat: "mp3",
-      fileExtension: ".mp3",
-      voiceCompatible: false,
-    };
-  },
-});
-```
-
-Notes:
-
-- Keep TTS policy, fallback, and reply delivery in core.
-- Use speech providers for vendor-owned synthesis behavior.
-- Legacy Microsoft `edge` input is normalized to the `microsoft` provider id.
-- The preferred ownership model is company-oriented: one vendor plugin can own
-  text, speech, image, and future media providers as Deneb adds those
-  capability contracts.
-
 For image/audio/video understanding, plugins register one typed
 media-understanding provider instead of a generic key/value bag:
 
@@ -948,6 +884,10 @@ authoring plugins:
   `extensions/<id>/index.js` is the bundled plugin entry,
   and `extensions/<id>/setup-entry.js` is the setup plugin entry.
 - `deneb/plugin-sdk/telegram` for Telegram channel plugin types and shared channel-facing helpers. Built-in Telegram implementation internals stay private to the bundled extension.
+- `deneb/plugin-sdk/discord` for Discord channel plugin types and shared channel-facing helpers. Built-in Discord implementation internals stay private to the bundled extension.
+- `deneb/plugin-sdk/slack` for Slack channel plugin types and shared channel-facing helpers. Built-in Slack implementation internals stay private to the bundled extension.
+- `deneb/plugin-sdk/imessage` for iMessage channel plugin types and shared channel-facing helpers. Built-in iMessage implementation internals stay private to the bundled extension.
+- `deneb/plugin-sdk/whatsapp` for WhatsApp channel plugin types and shared channel-facing helpers. Built-in WhatsApp implementation internals stay private to the bundled extension.
 
 Compatibility note:
 

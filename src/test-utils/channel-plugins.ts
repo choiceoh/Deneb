@@ -17,8 +17,8 @@ type TestChannelRegistration = {
  * Create a PluginRegistry populated with the given channel registrations.
  * Use when a test needs to override the default plugin registry
  * (e.g., to add a custom channel stub or clear channels entirely).
- * The default registry in test/setup.ts covers Discord, Slack, Telegram,
- * WhatsApp, Signal, and iMessage; only create a custom one when needed.
+ * The default registry in test/setup.ts covers Telegram;
+ * only create a custom one when needed.
  */
 export const createTestRegistry = (channels: TestChannelRegistration[] = []): PluginRegistry => ({
   plugins: [],
@@ -33,7 +33,6 @@ export const createTestRegistry = (channels: TestChannelRegistration[] = []): Pl
     enabled: true,
   })),
   providers: [],
-  speechProviders: [],
   mediaUnderstandingProviders: [],
   imageGenerationProviders: [],
   webSearchProviders: [],
@@ -69,32 +68,32 @@ export const createChannelTestPluginBase = (params: {
   },
 });
 
-export const createMSTeamsTestPluginBase = (): Pick<
+export const createMattermostTestPluginBase = (): Pick<
   ChannelPlugin,
   "id" | "meta" | "capabilities" | "config"
 > => {
   const base = createChannelTestPluginBase({
-    id: "msteams",
-    label: "Microsoft Teams",
-    docsPath: "/channels/msteams",
+    id: "mattermost",
+    label: "Mattermost",
+    docsPath: "/channels/mattermost",
     config: { listAccountIds: () => [], resolveAccount: () => ({}) },
   });
   return {
     ...base,
     meta: {
       ...base.meta,
-      selectionLabel: "Microsoft Teams (Bot Framework)",
-      blurb: "Bot Framework; enterprise support.",
-      aliases: ["teams"],
+      selectionLabel: "Mattermost (Self-hosted)",
+      blurb: "Open-source team messaging.",
+      aliases: ["mm"],
     },
   };
 };
 
-export const createMSTeamsTestPlugin = (params?: {
+export const createMattermostTestPlugin = (params?: {
   aliases?: string[];
   outbound?: ChannelOutboundAdapter;
 }): ChannelPlugin => {
-  const base = createMSTeamsTestPluginBase();
+  const base = createMattermostTestPluginBase();
   return {
     ...base,
     meta: {

@@ -24,15 +24,15 @@ describe("parseExplicitTargetForChannel", () => {
     setActivePluginRegistry(
       createTestRegistry([
         {
-          pluginId: "msteams",
+          pluginId: "mattermost",
           source: "test",
           plugin: {
-            id: "msteams",
+            id: "mattermost",
             meta: {
-              id: "msteams",
+              id: "mattermost",
               label: "Microsoft Teams",
               selectionLabel: "Microsoft Teams",
-              docsPath: "/channels/msteams",
+              docsPath: "/channels/mattermost",
               blurb: "test stub",
             },
             capabilities: { chatTypes: ["direct"] },
@@ -51,7 +51,7 @@ describe("parseExplicitTargetForChannel", () => {
       ]),
     );
 
-    expect(parseExplicitTargetForChannel("msteams", "team-room")).toEqual({
+    expect(parseExplicitTargetForChannel("mattermost", "team-room")).toEqual({
       to: "TEAM-ROOM",
       chatType: "direct",
     });

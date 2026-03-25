@@ -46,10 +46,7 @@ export function limitHistoryTurns(
  * Resolution order:
  *   1. Per-DM/per-channel override from channel config
  *   2. Provider-level dmHistoryLimit / historyLimit
- *   3. Global agents.defaults.maxHistoryTurns
- *   4. DEFAULT_MAX_HISTORY_TURNS (100)
- *
- * Returns 0 only when the user explicitly sets it to 0 (disable).
+ *   3. DEFAULT_MAX_HISTORY_TURNS (100, system-managed)
  */
 export function getHistoryLimitFromSessionKey(
   sessionKey: string | undefined,
@@ -60,13 +57,8 @@ export function getHistoryLimitFromSessionKey(
     return channelLimit;
   }
 
-  // Fall back to the global maxHistoryTurns default.
-  const globalLimit = config?.agents?.defaults?.maxHistoryTurns;
-  if (globalLimit !== undefined) {
-    // Explicit 0 means "disable limit"
-    return globalLimit === 0 ? undefined : globalLimit;
-  }
-
+  // maxHistoryTurns is system-managed — always DEFAULT_MAX_HISTORY_TURNS.
+  // Disabling or setting too low causes severe quality degradation from context loss.
   return DEFAULT_MAX_HISTORY_TURNS;
 }
 

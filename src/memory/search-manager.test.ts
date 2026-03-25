@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DenebConfig } from "../config/config.js";
 
 function createManagerStatus(params: {
-  backend: "qmd" | "builtin";
+  backend: "vega" | "builtin";
   provider: string;
   model: string;
   requestedProvider: string;
@@ -30,7 +30,7 @@ function createManagerStatus(params: {
 }
 
 function createManagerMock(params: {
-  backend: "qmd" | "builtin";
+  backend: "vega" | "builtin";
   provider: string;
   model: string;
   requestedProvider: string;
@@ -65,10 +65,10 @@ function createManagerMock(params: {
 
 const mockPrimary = vi.hoisted(() => ({
   ...createManagerMock({
-    backend: "qmd",
-    provider: "qmd",
-    model: "qmd",
-    requestedProvider: "qmd",
+    backend: "vega",
+    provider: "vega",
+    model: "vega",
+    requestedProvider: "vega",
     withMemorySourceCounts: true,
   }),
 }));
@@ -96,8 +96,8 @@ const fallbackSearch = fallbackManager.search;
 const mockMemoryIndexGet = vi.hoisted(() => vi.fn(async () => fallbackManager));
 const mockCloseAllMemoryIndexManagers = vi.hoisted(() => vi.fn(async () => {}));
 
-vi.mock("./qmd-manager.js", () => ({
-  QmdMemoryManager: {
+vi.mock("./vega-manager.js", () => ({
+  VegaMemoryManager: {
     create: vi.fn(async () => mockPrimary),
   },
 }));
@@ -109,17 +109,17 @@ vi.mock("./manager-runtime.js", () => ({
   closeAllMemoryIndexManagers: mockCloseAllMemoryIndexManagers,
 }));
 
-import { QmdMemoryManager } from "./qmd-manager.js";
 import { closeAllMemorySearchManagers, getMemorySearchManager } from "./search-manager.js";
+import { VegaMemoryManager } from "./vega-manager.js";
 // oxlint-disable-next-line typescript/unbound-method -- mocked static function
-const createQmdManagerMock = vi.mocked(QmdMemoryManager.create);
+const createVegaManagerMock = vi.mocked(VegaMemoryManager.create);
 
 type SearchManagerResult = Awaited<ReturnType<typeof getMemorySearchManager>>;
 type SearchManager = NonNullable<SearchManagerResult["manager"]>;
 
-function createQmdCfg(agentId: string): DenebConfig {
+function createVegaCfg(agentId: string): DenebConfig {
   return {
-    memory: { backend: "qmd", qmd: {} },
+    memory: { backend: "vega", vega: {} },
     agents: { list: [{ id: agentId, default: true, workspace: "/tmp/workspace" }] },
   };
 }
@@ -132,8 +132,8 @@ function requireManager(result: SearchManagerResult): SearchManager {
   return result.manager;
 }
 
-async function createFailedQmdSearchHarness(params: { agentId: string; errorMessage: string }) {
-  const cfg = createQmdCfg(params.agentId);
+async function createFailedVegaSearchHarness(params: { agentId: string; errorMessage: string }) {
+  const cfg = createVegaCfg(params.agentId);
   mockPrimary.search.mockRejectedValueOnce(new Error(params.errorMessage));
   const first = await getMemorySearchManager({ cfg, agentId: params.agentId });
   return { cfg, manager: requireManager(first), firstResult: first };
@@ -158,30 +158,30 @@ beforeEach(async () => {
   mockCloseAllMemoryIndexManagers.mockClear();
   mockMemoryIndexGet.mockClear();
   mockMemoryIndexGet.mockResolvedValue(fallbackManager);
-  createQmdManagerMock.mockClear();
+  createVegaManagerMock.mockClear();
 });
 
 describe("getMemorySearchManager caching", () => {
-  it("reuses the same QMD manager instance for repeated calls", async () => {
-    const cfg = createQmdCfg("main");
+  it("reuses the same Vega manager instance for repeated calls", async () => {
+    const cfg = createVegaCfg("main");
 
     const first = await getMemorySearchManager({ cfg, agentId: "main" });
     const second = await getMemorySearchManager({ cfg, agentId: "main" });
 
     expect(first.manager).toBe(second.manager);
     // oxlint-disable-next-line typescript/unbound-method
-    expect(createQmdManagerMock).toHaveBeenCalledTimes(1);
+    expect(createVegaManagerMock).toHaveBeenCalledTimes(1);
   });
 
-  it("evicts failed qmd wrapper so next call retries qmd", async () => {
+  it("evicts failed vega wrapper so next call retries vega", async () => {
     const retryAgentId = "retry-agent";
     const {
       cfg,
       manager: firstManager,
       firstResult: first,
-    } = await createFailedQmdSearchHarness({
+    } = await createFailedVegaSearchHarness({
       agentId: retryAgentId,
-      errorMessage: "qmd query failed",
+      errorMessage: "vega query failed",
     });
 
     const fallbackResults = await firstManager.search("hello");
@@ -192,12 +192,12 @@ describe("getMemorySearchManager caching", () => {
     requireManager(second);
     expect(second.manager).not.toBe(first.manager);
     // oxlint-disable-next-line typescript/unbound-method
-    expect(createQmdManagerMock).toHaveBeenCalledTimes(2);
+    expect(createVegaManagerMock).toHaveBeenCalledTimes(2);
   });
 
-  it("does not cache status-only qmd managers", async () => {
+  it("does not cache status-only vega managers", async () => {
     const agentId = "status-agent";
-    const cfg = createQmdCfg(agentId);
+    const cfg = createVegaCfg(agentId);
 
     const first = await getMemorySearchManager({ cfg, agentId, purpose: "status" });
     const second = await getMemorySearchManager({ cfg, agentId, purpose: "status" });
@@ -205,17 +205,11 @@ describe("getMemorySearchManager caching", () => {
     requireManager(first);
     requireManager(second);
     // oxlint-disable-next-line typescript/unbound-method
-    expect(createQmdManagerMock).toHaveBeenCalledTimes(2);
+    expect(createVegaManagerMock).toHaveBeenCalledTimes(2);
     // oxlint-disable-next-line typescript/unbound-method
-    expect(createQmdManagerMock).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ agentId, mode: "status" }),
-    );
+    expect(createVegaManagerMock).toHaveBeenNthCalledWith(1, expect.objectContaining({ agentId }));
     // oxlint-disable-next-line typescript/unbound-method
-    expect(createQmdManagerMock).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ agentId, mode: "status" }),
-    );
+    expect(createVegaManagerMock).toHaveBeenNthCalledWith(2, expect.objectContaining({ agentId }));
   });
 
   it("does not evict a newer cached wrapper when closing an older failed wrapper", async () => {
@@ -224,9 +218,9 @@ describe("getMemorySearchManager caching", () => {
       cfg,
       manager: firstManager,
       firstResult: first,
-    } = await createFailedQmdSearchHarness({
+    } = await createFailedVegaSearchHarness({
       agentId: retryAgentId,
-      errorMessage: "qmd query failed",
+      errorMessage: "vega query failed",
     });
     await firstManager.search("hello");
 
@@ -239,14 +233,14 @@ describe("getMemorySearchManager caching", () => {
     const third = await getMemorySearchManager({ cfg, agentId: retryAgentId });
     expect(third.manager).toBe(secondManager);
     // oxlint-disable-next-line typescript/unbound-method
-    expect(createQmdManagerMock).toHaveBeenCalledTimes(2);
+    expect(createVegaManagerMock).toHaveBeenCalledTimes(2);
   });
 
-  it("falls back to builtin search when qmd fails with sqlite busy", async () => {
+  it("falls back to builtin search when vega fails with sqlite busy", async () => {
     const retryAgentId = "retry-agent-busy";
-    const { manager: firstManager } = await createFailedQmdSearchHarness({
+    const { manager: firstManager } = await createFailedVegaSearchHarness({
       agentId: retryAgentId,
-      errorMessage: "qmd index busy while reading results: SQLITE_BUSY: database is locked",
+      errorMessage: "vega index busy while reading results: SQLITE_BUSY: database is locked",
     });
 
     const results = await firstManager.search("hello");
@@ -255,19 +249,19 @@ describe("getMemorySearchManager caching", () => {
     expect(fallbackSearch).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps original qmd error when fallback manager initialization fails", async () => {
+  it("keeps original vega error when fallback manager initialization fails", async () => {
     const retryAgentId = "retry-agent-no-fallback-auth";
-    const { manager: firstManager } = await createFailedQmdSearchHarness({
+    const { manager: firstManager } = await createFailedVegaSearchHarness({
       agentId: retryAgentId,
-      errorMessage: "qmd query failed",
+      errorMessage: "vega query failed",
     });
     mockMemoryIndexGet.mockRejectedValueOnce(new Error("No API key found for provider openai"));
 
-    await expect(firstManager.search("hello")).rejects.toThrow("qmd query failed");
+    await expect(firstManager.search("hello")).rejects.toThrow("vega query failed");
   });
 
   it("closes cached managers on global teardown", async () => {
-    const cfg = createQmdCfg("teardown-agent");
+    const cfg = createVegaCfg("teardown-agent");
     const first = await getMemorySearchManager({ cfg, agentId: "teardown-agent" });
     const firstManager = requireManager(first);
 
@@ -280,14 +274,14 @@ describe("getMemorySearchManager caching", () => {
     expect(second.manager).toBeTruthy();
     expect(second.manager).not.toBe(firstManager);
     // oxlint-disable-next-line typescript/unbound-method
-    expect(createQmdManagerMock).toHaveBeenCalledTimes(2);
+    expect(createVegaManagerMock).toHaveBeenCalledTimes(2);
   });
 
   it("closes builtin index managers on teardown after runtime is loaded", async () => {
     const retryAgentId = "teardown-with-fallback";
-    const { manager } = await createFailedQmdSearchHarness({
+    const { manager } = await createFailedVegaSearchHarness({
       agentId: retryAgentId,
-      errorMessage: "qmd query failed",
+      errorMessage: "vega query failed",
     });
     await manager.search("hello");
 

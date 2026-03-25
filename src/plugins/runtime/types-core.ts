@@ -46,11 +46,6 @@ export type PluginRuntimeCore = {
     getImageMetadata: typeof import("../../media/image-ops.js").getImageMetadata;
     resizeToJpeg: typeof import("../../media/image-ops.js").resizeToJpeg;
   };
-  tts: {
-    textToSpeech: typeof import("../../tts/runtime.js").textToSpeech;
-    textToSpeechTelephony: typeof import("../../tts/runtime.js").textToSpeechTelephony;
-    listVoices: typeof import("../../tts/runtime.js").listSpeechVoices;
-  };
   mediaUnderstanding: {
     runFile: typeof import("../../media-understanding/runtime.js").runMediaUnderstandingFile;
     describeImageFile: typeof import("../../media-understanding/runtime.js").describeImageFile;

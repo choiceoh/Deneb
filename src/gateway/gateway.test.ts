@@ -40,7 +40,7 @@ describe("gateway e2e", () => {
         "DENEB_SKIP_CHANNELS",
         "DENEB_SKIP_GMAIL_WATCHER",
         "DENEB_SKIP_CRON",
-        "DENEB_SKIP_CANVAS_HOST",
+
         "DENEB_SKIP_BROWSER_CONTROL_SERVER",
       ]);
 
@@ -51,7 +51,7 @@ describe("gateway e2e", () => {
       process.env.DENEB_SKIP_CHANNELS = "1";
       process.env.DENEB_SKIP_GMAIL_WATCHER = "1";
       process.env.DENEB_SKIP_CRON = "1";
-      process.env.DENEB_SKIP_CANVAS_HOST = "1";
+
       process.env.DENEB_SKIP_BROWSER_CONTROL_SERVER = "1";
 
       const token = nextGatewayId("test-token");
@@ -139,14 +139,14 @@ describe("gateway e2e", () => {
         "DENEB_SKIP_CHANNELS",
         "DENEB_SKIP_GMAIL_WATCHER",
         "DENEB_SKIP_CRON",
-        "DENEB_SKIP_CANVAS_HOST",
+
         "DENEB_SKIP_BROWSER_CONTROL_SERVER",
       ]);
 
       process.env.DENEB_SKIP_CHANNELS = "1";
       process.env.DENEB_SKIP_GMAIL_WATCHER = "1";
       process.env.DENEB_SKIP_CRON = "1";
-      process.env.DENEB_SKIP_CANVAS_HOST = "1";
+
       process.env.DENEB_SKIP_BROWSER_CONTROL_SERVER = "1";
       delete process.env.DENEB_GATEWAY_TOKEN;
 

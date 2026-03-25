@@ -85,3 +85,7 @@ core-rs/npm/
 .proto-gen.lock
 .proto-gen.hash
 native/package-lock.json
+
+# Generated docs (recreate via pnpm config:docs:gen)
+docs/.generated/config-baseline.json
+docs/.generated/config-baseline.jsonl

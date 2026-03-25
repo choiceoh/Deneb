@@ -38,16 +38,6 @@ export type DiscoveryConfig = {
   mdns?: MdnsDiscoveryConfig;
 };
 
-export type CanvasHostConfig = {
-  enabled?: boolean;
-  /** Directory to serve (default: ~/.deneb/workspace/canvas). */
-  root?: string;
-  /** HTTP port to listen on (default: 18793). */
-  port?: number;
-  /** Enable live-reload file watching + WS reloads (default: true). */
-  liveReload?: boolean;
-};
-
 export type TalkProviderConfig = {
   /** Default voice ID for the provider's Talk mode implementation. */
   voiceId?: string;
@@ -370,13 +360,6 @@ export type GatewayPushConfig = {
 };
 
 export type GatewayNodesConfig = {
-  /** Browser routing policy for node-hosted browser proxies. */
-  browser?: {
-    /** Routing mode (default: auto). */
-    mode?: "auto" | "manual" | "off";
-    /** Pin to a specific node id/name (optional). */
-    node?: string;
-  };
   /** Additional node.invoke commands to allow on the gateway. */
   allowCommands?: string[];
   /** Commands to deny even if they appear in the defaults or node claims. */
@@ -451,8 +434,8 @@ export type GatewayConfig = {
    */
   channelMaxRestartsPerHour?: number;
   /**
-   * Gateway runtime implementation. When set to "go", the CLI spawns the Go
-   * gateway binary instead of the TypeScript gateway. Default: "node".
+   * Gateway runtime implementation. When set to "node", the CLI runs the
+   * TypeScript gateway directly instead of the Go gateway. Default: "go".
    */
   runtime?: "node" | "go";
 };

@@ -1,20 +1,8 @@
 import { hashTextSha256 } from "./hash.js";
-import type { SandboxBrowserConfig, SandboxDockerConfig, SandboxWorkspaceAccess } from "./types.js";
+import type { SandboxDockerConfig, SandboxWorkspaceAccess } from "./types.js";
 
 type SandboxHashInput = {
   docker: SandboxDockerConfig;
-  workspaceAccess: SandboxWorkspaceAccess;
-  workspaceDir: string;
-  agentWorkspaceDir: string;
-};
-
-type SandboxBrowserHashInput = {
-  docker: SandboxDockerConfig;
-  browser: Pick<
-    SandboxBrowserConfig,
-    "cdpPort" | "cdpSourceRange" | "vncPort" | "noVncPort" | "headless" | "enableNoVnc"
-  >;
-  securityEpoch: string;
   workspaceAccess: SandboxWorkspaceAccess;
   workspaceDir: string;
   agentWorkspaceDir: string;
@@ -42,10 +30,6 @@ function normalizeForHash(value: unknown): unknown {
 }
 
 export function computeSandboxConfigHash(input: SandboxHashInput): string {
-  return computeHash(input);
-}
-
-export function computeSandboxBrowserConfigHash(input: SandboxBrowserHashInput): string {
   return computeHash(input);
 }
 

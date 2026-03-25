@@ -17,8 +17,6 @@ export function collectAttackSurfaceSummaryFindings(cfg: DenebConfig): SecurityA
   const elevated = cfg.tools?.elevated?.enabled !== false;
   const webhooksEnabled = cfg.hooks?.enabled === true;
   const internalHooksEnabled = cfg.hooks?.internal?.enabled === true;
-  const browserEnabled = cfg.browser?.enabled ?? true;
-
   const detail =
     `groups: open=${group.open}, allowlist=${group.allowlist}` +
     `\n` +
@@ -27,8 +25,6 @@ export function collectAttackSurfaceSummaryFindings(cfg: DenebConfig): SecurityA
     `hooks.webhooks: ${webhooksEnabled ? "enabled" : "disabled"}` +
     `\n` +
     `hooks.internal: ${internalHooksEnabled ? "enabled" : "disabled"}` +
-    `\n` +
-    `browser control: ${browserEnabled ? "enabled" : "disabled"}` +
     `\n` +
     "trust model: personal assistant (one trusted operator boundary), not hostile multi-tenant on one shared gateway";
 

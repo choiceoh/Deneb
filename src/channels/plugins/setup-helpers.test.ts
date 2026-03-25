@@ -18,18 +18,18 @@ describe("applySetupAccountConfigPatch", () => {
     const next = applySetupAccountConfigPatch({
       cfg: asConfig({
         channels: {
-          zalo: {
+          matrix: {
             webhookPath: "/old",
             enabled: false,
           },
         },
       }),
-      channelKey: "zalo",
+      channelKey: "matrix",
       accountId: DEFAULT_ACCOUNT_ID,
       patch: { webhookPath: "/new", botToken: "tok" },
     });
 
-    expect(next.channels?.zalo).toMatchObject({
+    expect(next.channels?.matrix).toMatchObject({
       enabled: true,
       webhookPath: "/new",
       botToken: "tok",
@@ -40,7 +40,7 @@ describe("applySetupAccountConfigPatch", () => {
     const next = applySetupAccountConfigPatch({
       cfg: asConfig({
         channels: {
-          zalo: {
+          matrix: {
             enabled: false,
             accounts: {
               work: { botToken: "old", enabled: false },
@@ -48,12 +48,12 @@ describe("applySetupAccountConfigPatch", () => {
           },
         },
       }),
-      channelKey: "zalo",
+      channelKey: "matrix",
       accountId: "work",
       patch: { botToken: "new" },
     });
 
-    expect(next.channels?.zalo).toMatchObject({
+    expect(next.channels?.matrix).toMatchObject({
       enabled: true,
       accounts: {
         work: { enabled: false, botToken: "new" },
@@ -65,19 +65,19 @@ describe("applySetupAccountConfigPatch", () => {
     const next = applySetupAccountConfigPatch({
       cfg: asConfig({
         channels: {
-          zalo: {
+          matrix: {
             accounts: {
               personal: { botToken: "personal-token" },
             },
           },
         },
       }),
-      channelKey: "zalo",
+      channelKey: "matrix",
       accountId: "Work Team",
       patch: { botToken: "work-token" },
     });
 
-    expect(next.channels?.zalo).toMatchObject({
+    expect(next.channels?.matrix).toMatchObject({
       accounts: {
         personal: { botToken: "personal-token" },
         "work-team": { enabled: true, botToken: "work-token" },
@@ -89,17 +89,17 @@ describe("applySetupAccountConfigPatch", () => {
 describe("createPatchedAccountSetupAdapter", () => {
   it("stores default-account patch at channel root", () => {
     const adapter = createPatchedAccountSetupAdapter({
-      channelKey: "zalo",
+      channelKey: "matrix",
       buildPatch: (input) => ({ botToken: input.token }),
     });
 
     const next = adapter.applyAccountConfig({
-      cfg: asConfig({ channels: { zalo: { enabled: false } } }),
+      cfg: asConfig({ channels: { matrix: { enabled: false } } }),
       accountId: DEFAULT_ACCOUNT_ID,
       input: { name: "Personal", token: "tok" },
     });
 
-    expect(next.channels?.zalo).toMatchObject({
+    expect(next.channels?.matrix).toMatchObject({
       enabled: true,
       name: "Personal",
       botToken: "tok",
@@ -108,14 +108,14 @@ describe("createPatchedAccountSetupAdapter", () => {
 
   it("migrates base name into the default account before patching a named account", () => {
     const adapter = createPatchedAccountSetupAdapter({
-      channelKey: "zalo",
+      channelKey: "matrix",
       buildPatch: (input) => ({ botToken: input.token }),
     });
 
     const next = adapter.applyAccountConfig({
       cfg: asConfig({
         channels: {
-          zalo: {
+          matrix: {
             name: "Personal",
             accounts: {
               work: { botToken: "old" },
@@ -127,14 +127,14 @@ describe("createPatchedAccountSetupAdapter", () => {
       input: { name: "Work", token: "new" },
     });
 
-    expect(next.channels?.zalo).toMatchObject({
+    expect(next.channels?.matrix).toMatchObject({
       accounts: {
         default: { name: "Personal" },
         work: { botToken: "old" },
         "work-team": { enabled: true, name: "Work", botToken: "new" },
       },
     });
-    expect(next.channels?.zalo).not.toHaveProperty("name");
+    expect(next.channels?.matrix).not.toHaveProperty("name");
   });
 
   it("can store the default account in accounts.default", () => {
@@ -280,24 +280,24 @@ describe("prepareScopedSetupConfig", () => {
     const next = prepareScopedSetupConfig({
       cfg: asConfig({
         channels: {
-          bluebubbles: {
+          telegram: {
             name: "Personal",
           },
         },
       }),
-      channelKey: "bluebubbles",
+      channelKey: "telegram",
       accountId: "Work Team",
       name: "Work",
       migrateBaseName: true,
     });
 
-    expect(next.channels?.bluebubbles).toMatchObject({
+    expect(next.channels?.telegram).toMatchObject({
       accounts: {
         default: { name: "Personal" },
         "work-team": { name: "Work" },
       },
     });
-    expect(next.channels?.bluebubbles).not.toHaveProperty("name");
+    expect(next.channels?.telegram).not.toHaveProperty("name");
   });
 
   it("keeps the base shape for the default account when migration is disabled", () => {

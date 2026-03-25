@@ -432,10 +432,6 @@
       "destination": "/platforms/mac/voice-overlay"
     },
     {
-      "source": "/mac/voicewake",
-      "destination": "/platforms/mac/voicewake"
-    },
-    {
       "source": "/mac/webchat",
       "destination": "/platforms/mac/webchat"
     },
@@ -638,10 +634,6 @@
     {
       "source": "/updating",
       "destination": "/install/updating"
-    },
-    {
-      "source": "/voicewake",
-      "destination": "/nodes/voicewake"
     },
     {
       "source": "/webchat",
@@ -955,7 +947,6 @@
                   "plugins/architecture",
                   "plugins/community",
                   "plugins/bundles",
-                  "plugins/zalouser",
                   "plugins/manifest",
                   "plugins/agent-tools",
                   "tools/capability-cookbook",
@@ -985,9 +976,7 @@
                   "nodes/audio",
                   "nodes/camera",
                   "nodes/talk",
-                  "nodes/voicewake",
-                  "nodes/location-command",
-                  "tts"
+                  "nodes/location-command"
                 ]
               }
             ]
@@ -1070,7 +1059,6 @@
                 "pages": [
                   "platforms/mac/dev-setup",
                   "platforms/mac/menu-bar",
-                  "platforms/mac/voicewake",
                   "platforms/mac/voice-overlay",
                   "platforms/mac/webchat",
                   "platforms/mac/canvas",
@@ -1463,7 +1451,6 @@
                 "group": "扩展",
                 "pages": [
                   "zh-CN/plugins/architecture",
-                  "zh-CN/plugins/zalouser",
                   "zh-CN/plugins/manifest",
                   "zh-CN/plugins/agent-tools",
                   "zh-CN/prose"
@@ -1492,9 +1479,7 @@
                   "zh-CN/nodes/audio",
                   "zh-CN/nodes/camera",
                   "zh-CN/nodes/talk",
-                  "zh-CN/nodes/voicewake",
-                  "zh-CN/nodes/location-command",
-                  "zh-CN/tts"
+                  "zh-CN/nodes/location-command"
                 ]
               }
             ]
@@ -1562,7 +1547,6 @@
                 "pages": [
                   "zh-CN/platforms/mac/dev-setup",
                   "zh-CN/platforms/mac/menu-bar",
-                  "zh-CN/platforms/mac/voicewake",
                   "zh-CN/platforms/mac/voice-overlay",
                   "zh-CN/platforms/mac/webchat",
                   "zh-CN/platforms/mac/canvas",

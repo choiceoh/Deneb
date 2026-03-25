@@ -131,13 +131,13 @@ function buildConfigForDenebTarget(entry: SecretRegistryEntry, envId: string): D
   if (entry.id === "channels.slack.accounts.*.signingSecret") {
     setPathCreateStrict(config, ["channels", "slack", "accounts", "sample", "mode"], "http");
   }
-  if (entry.id === "channels.zalo.webhookSecret") {
-    setPathCreateStrict(config, ["channels", "zalo", "webhookUrl"], "https://example.com/hook");
+  if (entry.id === "channels.matrix.webhookSecret") {
+    setPathCreateStrict(config, ["channels", "matrix", "webhookUrl"], "https://example.com/hook");
   }
-  if (entry.id === "channels.zalo.accounts.*.webhookSecret") {
+  if (entry.id === "channels.matrix.accounts.*.webhookSecret") {
     setPathCreateStrict(
       config,
-      ["channels", "zalo", "accounts", "sample", "webhookUrl"],
+      ["channels", "matrix", "accounts", "sample", "webhookUrl"],
       "https://example.com/hook",
     );
   }

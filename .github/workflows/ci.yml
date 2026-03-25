@@ -192,12 +192,12 @@ jobs:
             task: test
             shard_index: 1
             shard_count: 2
-            command: pnpm canvas:a2ui:bundle && pnpm test
+            command: pnpm test
           - runtime: node
             task: test
             shard_index: 2
             shard_count: 2
-            command: pnpm canvas:a2ui:bundle && pnpm test
+            command: pnpm test
           - runtime: node
             task: extensions
             command: pnpm test:extensions
@@ -212,7 +212,7 @@ jobs:
             command: pnpm protocol:check
           - runtime: bun
             task: test
-            command: pnpm canvas:a2ui:bundle && bunx vitest run --config vitest.unit.config.ts
+            command: bunx vitest run --config vitest.unit.config.ts
     steps:
       - name: Skip bun lane on pull requests
         if: github.event_name == 'pull_request' && matrix.runtime == 'bun'
@@ -765,10 +765,6 @@ jobs:
         run: |
           echo "DENEB_TEST_SHARDS=${{ matrix.shard_count }}" >> "$GITHUB_ENV"
           echo "DENEB_TEST_SHARD_INDEX=${{ matrix.shard_index }}" >> "$GITHUB_ENV"
-
-      - name: Build A2UI bundle (Windows)
-        if: matrix.task == 'test'
-        run: pnpm canvas:a2ui:bundle
 
       - name: Run ${{ matrix.task }} (${{ matrix.runtime }})
         run: ${{ matrix.command }}

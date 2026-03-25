@@ -96,7 +96,7 @@ Notes:
 - In local mode, node host intentionally ignores `gateway.remote.token` / `gateway.remote.password`.
 - In remote mode, `gateway.remote.token` / `gateway.remote.password` are eligible per remote precedence rules.
 - If active local `gateway.auth.*` SecretRefs are configured but unresolved, node-host auth fails closed.
-- Legacy `CLAWDBOT_GATEWAY_*` env vars are intentionally ignored by node-host auth resolution.
+- Legacy `CLAWDBOT_GATEWAY_*` env vars (pre-rebrand) are intentionally ignored by node-host auth resolution.
 
 ### Start a node host (service)
 

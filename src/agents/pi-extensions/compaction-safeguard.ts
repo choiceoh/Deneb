@@ -4,11 +4,9 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, FileOperations } from "@mariozechner/pi-coding-agent";
 import { extractSections } from "../../auto-reply/reply/post-compaction-context.js";
-import type { AgentCompactionIdentifierPolicy } from "../../config/types.agent-defaults.js";
 import { openBoundaryFile } from "../../infra/boundary-file-read.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import {
-  type CompactionSummarizationInstructions,
   SAFETY_MARGIN,
   SUMMARIZATION_OVERHEAD_TOKENS,
   computeAdaptiveChunkRatio,
@@ -69,11 +67,10 @@ export function composeSplitTurnInstructions(
 // ── Runtime registry ─────────────────────────────────────────────────────────
 
 export type CompactionSafeguardRuntimeValue = {
-  // maxHistoryShare and recentTurnsPreserve are system constants (not user-configurable).
-  // They are defined as SYSTEM_MAX_HISTORY_SHARE and DEFAULT_RECENT_TURNS_PRESERVE below.
+  // maxHistoryShare, recentTurnsPreserve, and identifierPolicy are system constants
+  // (not user-configurable). See SYSTEM_MAX_HISTORY_SHARE, DEFAULT_RECENT_TURNS_PRESERVE,
+  // and STRICT_EXACT_IDENTIFIERS_INSTRUCTION below.
   contextWindowTokens?: number;
-  identifierPolicy?: AgentCompactionIdentifierPolicy;
-  identifierInstructions?: string;
   customInstructions?: string;
   model?: Model<Api>;
 };
@@ -115,8 +112,6 @@ const REQUIRED_SUMMARY_SECTIONS = [
 ] as const;
 const STRICT_EXACT_IDENTIFIERS_INSTRUCTION =
   "For ## Exact identifiers, preserve literal values exactly as seen (IDs, URLs, file paths, ports, hashes, dates, times).";
-const POLICY_OFF_EXACT_IDENTIFIERS_INSTRUCTION =
-  "For ## Exact identifiers, include identifiers only when needed for continuity; do not enforce literal-preservation rules.";
 
 // ── Performance stability helpers ─────────────────────────────────────────────
 
@@ -480,34 +475,13 @@ function wrapUntrustedInstructionBlock(label: string, text: string): string {
   });
 }
 
-function resolveExactIdentifierSectionInstruction(
-  summarizationInstructions?: CompactionSummarizationInstructions,
-): string {
-  const policy = summarizationInstructions?.identifierPolicy ?? "strict";
-  if (policy === "off") {
-    return POLICY_OFF_EXACT_IDENTIFIERS_INSTRUCTION;
-  }
-  if (policy === "custom") {
-    const custom = summarizationInstructions?.identifierInstructions?.trim();
-    if (custom) {
-      const customBlock = wrapUntrustedInstructionBlock(
-        "For ## Exact identifiers, apply this operator-defined policy text",
-        custom,
-      );
-      if (customBlock) {
-        return customBlock;
-      }
-    }
-  }
+// identifierPolicy is system-managed: always "strict".
+function resolveExactIdentifierSectionInstruction(): string {
   return STRICT_EXACT_IDENTIFIERS_INSTRUCTION;
 }
 
-function buildCompactionStructureInstructions(
-  customInstructions?: string,
-  summarizationInstructions?: CompactionSummarizationInstructions,
-): string {
-  const identifierSectionInstruction =
-    resolveExactIdentifierSectionInstruction(summarizationInstructions);
+function buildCompactionStructureInstructions(customInstructions?: string): string {
+  const identifierSectionInstruction = resolveExactIdentifierSectionInstruction();
   const sectionsTemplate = [
     "Produce a compact, factual summary with these exact section headings:",
     ...REQUIRED_SUMMARY_SECTIONS,
@@ -658,10 +632,7 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
       eventInstructions,
       runtime?.customInstructions,
     );
-    const summarizationInstructions = {
-      identifierPolicy: runtime?.identifierPolicy,
-      identifierInstructions: runtime?.identifierInstructions,
-    };
+    // identifierPolicy is system-managed: always "strict". No user override.
     const model = ctx.model ?? runtime?.model;
     if (!model) {
       if (!missedModelWarningSessions.has(ctx.sessionManager)) {
@@ -692,10 +663,7 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
       let messagesToSummarize = preparation.messagesToSummarize;
       // recentTurnsPreserve is a system constant — not read from user config.
       const recentTurnsPreserve = DEFAULT_RECENT_TURNS_PRESERVE;
-      const structuredInstructions = buildCompactionStructureInstructions(
-        customInstructions,
-        summarizationInstructions,
-      );
+      const structuredInstructions = buildCompactionStructureInstructions(customInstructions);
 
       // maxHistoryShare is a system constant — not read from user config.
       const maxHistoryShare = SYSTEM_MAX_HISTORY_SHARE;
@@ -752,7 +720,6 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
                   maxChunkTokens: droppedMaxChunkTokens,
                   contextWindow: contextWindowTokens,
                   customInstructions: structuredInstructions,
-                  summarizationInstructions,
                   previousSummary: preparation.previousSummary,
                 });
               } catch (droppedError) {
@@ -798,7 +765,6 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
         reserveTokens,
         maxChunkTokens,
         contextWindow: contextWindowTokens,
-        summarizationInstructions,
       };
 
       let summary =

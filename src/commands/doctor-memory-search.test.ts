@@ -115,9 +115,9 @@ describe("noteMemorySearchHealth", () => {
     expect(note).not.toHaveBeenCalled();
   });
 
-  it("does not warn when QMD backend is active", async () => {
+  it("does not warn when Vega backend is active", async () => {
     resolveMemoryBackendConfig.mockReturnValue({
-      backend: "qmd",
+      backend: "vega",
       citations: "auto",
     });
     resolveMemorySearchConfig.mockReturnValue({

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import "./test-helpers/fast-core-tools.js";
 import { createDenebTools } from "./deneb-tools.js";
 
 function readToolByName() {

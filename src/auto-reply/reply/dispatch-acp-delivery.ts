@@ -46,8 +46,6 @@ export function createAcpDispatchDeliveryCoordinator(params: {
   ctx: FinalizedMsgContext;
   dispatcher: ReplyDispatcher;
   inboundAudio: boolean;
-  sessionTtsAuto?: string;
-  ttsChannel?: string;
   shouldRouteToOriginating: boolean;
   originatingChannel?: string;
   originatingTo?: string;

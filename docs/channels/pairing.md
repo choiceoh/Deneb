@@ -85,9 +85,8 @@ Stored under `~/.deneb/devices/`:
 - Updating safely (run doctor): [Updating](/install/updating)
 - Channel configs:
   - Telegram: [Telegram](/channels/telegram)
-  - WhatsApp
-  - Signal
-  - BlueBubbles (iMessage)
-  - iMessage (legacy)
-  - Discord
-  - Slack
+  - WhatsApp: [WhatsApp](/channels/whatsapp)
+  - Signal: [Signal](/channels/signal)
+  - iMessage: [iMessage](/channels/imessage)
+  - Discord: [Discord](/channels/discord)
+  - Slack: [Slack](/channels/slack)

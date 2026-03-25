@@ -142,7 +142,6 @@ export function buildPluginStatusReport(params?: {
 function buildCapabilityEntries(plugin: PluginRegistry["plugins"][number]) {
   return [
     { kind: "text-inference" as const, ids: plugin.providerIds },
-    { kind: "speech" as const, ids: plugin.speechProviderIds },
     { kind: "media-understanding" as const, ids: plugin.mediaUnderstandingProviderIds },
     { kind: "image-generation" as const, ids: plugin.imageGenerationProviderIds },
     { kind: "web-search" as const, ids: plugin.webSearchProviderIds },

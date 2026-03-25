@@ -4,9 +4,9 @@ import { getActiveEmbeddedRunCount } from "../agents/pi-embedded-runner/runs.js"
 import { initSubagentRegistry } from "../agents/subagent/subagent-registry.js";
 import { getTotalPendingReplies } from "../auto-reply/reply/dispatcher-registry.js";
 import { type AutonomousServiceHandle, startAutonomousService } from "../autonomous/service.js";
-import type { CanvasHostServer } from "../canvas-host/server.js";
 import { type ChannelId, listChannelPlugins } from "../channels/plugins/index.js";
 import { createDefaultDeps } from "../cli/deps.js";
+import { resolveAgentMaxConcurrent, resolveSubagentMaxConcurrent } from "../config/agent-limits.js";
 import { isRestartEnabled } from "../config/commands.js";
 import {
   type DenebConfig,
@@ -27,10 +27,12 @@ import {
 } from "../infra/control-ui-assets.js";
 import { isDiagnosticsEnabled } from "../infra/diagnostic-events.js";
 import { logAcceptedEnvOption } from "../infra/env.js";
+import { PERF } from "../infra/hardware-profile.js";
 import { startHeartbeatRunner, type HeartbeatRunner } from "../infra/heartbeat-runner.js";
 import { ensureDenebCliOnPath } from "../infra/path-env.js";
 import { setGatewaySigusr1RestartPolicy, setPreRestartDeferralCheck } from "../infra/restart.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
+import { loadGatewayTlsRuntime } from "../infra/tls/gateway.js";
 import { startDiagnosticHeartbeat, stopDiagnosticHeartbeat } from "../logging/diagnostic.js";
 import { createSubsystemLogger, runtimeForLogger } from "../logging/subsystem.js";
 import { resolveConfiguredDeferredChannelPluginIds } from "../plugins/channel-plugin-ids.js";
@@ -38,7 +40,9 @@ import { getGlobalHookRunner, runGlobalGatewayStopSafely } from "../plugins/hook
 import { createEmptyPluginRegistry } from "../plugins/registry.js";
 import { createPluginRuntime } from "../plugins/runtime/index.js";
 import type { PluginServicesHandle } from "../plugins/services.js";
+import { setCommandLaneConcurrency } from "../process/command-queue.js";
 import { getTotalQueueSize } from "../process/command-queue.js";
+import { CommandLane } from "../process/lanes.js";
 import type { RuntimeEnv } from "../runtime.js";
 import type { CommandSecretAssignment } from "../secrets/command-config.js";
 import {
@@ -59,16 +63,11 @@ import {
 import { ExecApprovalManager } from "./exec-approval-manager.js";
 import { startGatewayModelPricingRefresh } from "./model-pricing-cache.js";
 import { startChannelHealthMonitor } from "./monitoring/channel-health-monitor.js";
-import {
-  startGatewaySelfWatchdog,
-  type GatewaySelfWatchdog,
-} from "./monitoring/gateway-self-watchdog.js";
 import { NodeRegistry } from "./node-registry.js";
 import {
   type AutoMaintenanceServiceHandle,
   startAutoMaintenanceService,
 } from "./server-auto-maintenance.js";
-import type { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import { createChannelManager } from "./server-channels.js";
 import {
   createSessionEventSubscriberRegistry,
@@ -84,7 +83,6 @@ import {
 } from "./server-config-bootstrap.js";
 import { buildGatewayCronService } from "./server-cron.js";
 import { createGatewayEventSubscriptions } from "./server-event-subscriptions.js";
-import { applyGatewayLaneConcurrency } from "./server-lanes.js";
 import { startGatewayMaintenanceTimers } from "./server-maintenance.js";
 import { GATEWAY_EVENTS, listGatewayMethods } from "./server-methods-list.js";
 import { coreGatewayHandlers } from "./server-methods.js";
@@ -98,10 +96,7 @@ import { createGatewayReloadHandlers } from "./server-reload-handlers.js";
 import { buildGatewayRequestContext } from "./server-request-context.js";
 import { resolveGatewayRuntimeConfig } from "./server-runtime-config.js";
 import { createGatewayRuntimeState } from "./server-runtime-state.js";
-import { logGatewayStartup } from "./server-startup-log.js";
 import { startGatewaySidecars } from "./server-startup.js";
-import { startGatewayTailscaleExposure } from "./server-tailscale.js";
-import { createWizardSessionTracker } from "./server-wizard-sessions.js";
 import {
   getHealthCache,
   getHealthVersion,
@@ -111,8 +106,7 @@ import {
 } from "./server/health-state.js";
 import { resolveHookClientIpConfig } from "./server/hooks.js";
 import { createReadinessChecker } from "./server/readiness.js";
-import { loadGatewayTlsRuntime } from "./server/tls.js";
-import { attachGatewayWsHandlers } from "./ws/server-ws-runtime.js";
+import { attachGatewayWsConnectionHandler } from "./server/ws-connection.js";
 
 // Deferred imports: these modules are only needed for non-minimal gateway startup.
 // Lazy-loading them avoids pulling in tailscale, skills,
@@ -137,9 +131,7 @@ export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
 ensureDenebCliOnPath();
 
 const log = createSubsystemLogger("gateway");
-const logTailscale = log.child("tailscale");
 const logChannels = log.child("channels");
-const logBrowser = log.child("browser");
 
 let cachedChannelRuntime: ReturnType<typeof createPluginRuntime>["channel"] | null = null;
 
@@ -175,7 +167,7 @@ export type GatewayServerOptions = {
    */
   host?: string;
   /**
-   * If false, do not serve the browser Control UI.
+   * If false, do not serve the Control UI.
    * Default: config `gateway.controlUi.enabled` (or true when absent).
    */
   controlUiEnabled?: boolean;
@@ -198,10 +190,6 @@ export type GatewayServerOptions = {
    */
   tailscale?: import("../config/config.js").GatewayTailscaleConfig;
   /**
-   * Test-only: allow canvas host startup even when NODE_ENV/VITEST would disable it.
-   */
-  allowCanvasHostInTests?: boolean;
-  /**
    * Test-only: override the setup wizard runner.
    */
   wizardRunner?: (
@@ -223,7 +211,7 @@ export async function startGatewayServer(
   // update-check subsystems at module evaluation time.
   const deferredModsPromise = minimalTestGateway ? null : loadDeferredGatewayModules();
 
-  // Ensure all default port derivations (browser/canvas) see the actual runtime port.
+  // Ensure all default port derivations (browser) see the actual runtime port.
   process.env.DENEB_GATEWAY_PORT = String(port);
   logAcceptedEnvOption({
     key: "DENEB_RAW_STREAM",
@@ -437,17 +425,14 @@ export async function startGatewayServer(
     controlUiBasePath,
     controlUiRoot: controlUiRootOverride,
     resolvedAuth,
-    tailscaleConfig,
-    tailscaleMode,
+    tailscaleConfig: _tailscaleConfig,
+    tailscaleMode: _tailscaleMode,
   } = runtimeConfig;
   let hooksConfig = runtimeConfig.hooksConfig;
   let hookClientIpConfig = resolveHookClientIpConfig(cfgAtStart);
-  const canvasHostEnabled = runtimeConfig.canvasHostEnabled;
-
   // Create auth rate limiters used by connect/auth flows.
   const rateLimitConfig = cfgAtStart.gateway?.auth?.rateLimit;
-  const { rateLimiter: authRateLimiter, browserRateLimiter: browserAuthRateLimiter } =
-    createGatewayAuthRateLimiters(rateLimitConfig);
+  const { rateLimiter: authRateLimiter } = createGatewayAuthRateLimiters(rateLimitConfig);
 
   let controlUiRootState: ControlUiRootState | undefined;
   if (controlUiRootOverride) {
@@ -491,10 +476,23 @@ export async function startGatewayServer(
   }
 
   const wizardRunner = opts.wizardRunner ?? runSetupWizard;
-  const { wizardSessions, findRunningWizard, purgeWizardSession } = createWizardSessionTracker();
+  const wizardSessions = new Map<string, import("../wizard/session.js").WizardSession>();
+  const findRunningWizard = (): string | null => {
+    for (const [id, session] of wizardSessions) {
+      if (session.getStatus() === "running") {
+        return id;
+      }
+    }
+    return null;
+  };
+  const purgeWizardSession = (id: string) => {
+    const session = wizardSessions.get(id);
+    if (session && session.getStatus() !== "running") {
+      wizardSessions.delete(id);
+    }
+  };
 
   const deps = createDefaultDeps();
-  let canvasHostServer: CanvasHostServer | null = null;
   const gatewayTls = await loadGatewayTlsRuntime(cfgAtStart.gateway?.tls, log.child("tls"));
   if (cfgAtStart.gateway?.tls?.enabled && !gatewayTls.enabled) {
     throw new Error(gatewayTls.error ?? "gateway tls: failed to enable");
@@ -569,12 +567,13 @@ export async function startGatewayServer(
   const nodeSubscribe = nodeSubscriptions.subscribe;
   const nodeUnsubscribe = nodeSubscriptions.unsubscribe;
   const nodeUnsubscribeAll = nodeSubscriptions.unsubscribeAll;
-  const broadcastVoiceWakeChanged = (triggers: string[]) => {
-    broadcast("voicewake.changed", { triggers }, { dropIfSlow: true });
-  };
   // Mobile node detection removed (iOS/Android support dropped).
   const hasMobileNodeConnected = () => false;
-  applyGatewayLaneConcurrency(cfgAtStart);
+  // Lane concurrency (inlined from deleted server-lanes.ts).
+  setCommandLaneConcurrency(CommandLane.Cron, cfgAtStart.cron?.maxConcurrentRuns ?? 1);
+  setCommandLaneConcurrency(CommandLane.Main, resolveAgentMaxConcurrent(cfgAtStart));
+  setCommandLaneConcurrency(CommandLane.Subagent, resolveSubagentMaxConcurrent(cfgAtStart));
+  setCommandLaneConcurrency(CommandLane.PluginLoad, PERF.imageWorkerCount);
 
   let cronState = buildGatewayCronService({
     cfg: cfgAtStart,
@@ -733,8 +732,6 @@ export async function startGatewayServer(
     },
   });
 
-  const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)?.port;
-
   const gatewayRequestContext = buildGatewayRequestContext({
     deps,
     cron,
@@ -774,7 +771,6 @@ export async function startGatewayServer(
     stopChannel,
     markChannelLoggedOut,
     wizardRunner,
-    broadcastVoiceWakeChanged,
   });
 
   // Store the gateway context as a fallback for plugin subagent dispatch
@@ -782,16 +778,11 @@ export async function startGatewayServer(
   // scope is set via AsyncLocalStorage.
   setFallbackGatewayContext(gatewayRequestContext);
 
-  attachGatewayWsHandlers({
+  attachGatewayWsConnectionHandler({
     wss,
     clients,
-    port,
-    gatewayHost: bindHost ?? undefined,
-    canvasHostEnabled,
-    canvasHostServerPort,
     resolvedAuth,
     rateLimiter: authRateLimiter,
-    browserRateLimiter: browserAuthRateLimiter,
     gatewayMethods,
     events: GATEWAY_EVENTS,
     logGateway: log,
@@ -803,17 +794,14 @@ export async function startGatewayServer(
       ...secretsHandlers,
     },
     broadcast,
-    context: gatewayRequestContext,
+    buildRequestContext: () => gatewayRequestContext,
   });
-  logGatewayStartup({
-    cfg: cfgAtStart,
-    bindHost,
-    bindHosts: httpBindHosts,
-    port,
-    tlsEnabled: gatewayTls.enabled,
-    log,
-    isNixMode,
-  });
+  {
+    const scheme = gatewayTls.enabled ? "wss" : "ws";
+    const hosts = httpBindHosts?.length ? httpBindHosts : [bindHost];
+    const endpoints = hosts.map((h) => `${scheme}://${h.includes(":") ? `[${h}]` : h}:${port}`);
+    log.info(`listening on ${endpoints.join(", ")} (PID ${process.pid})`);
+  }
   let stopGatewayUpdateCheck: () => void = () => {};
   if (!minimalTestGateway) {
     const deferred = await deferredModsPromise!;
@@ -827,17 +815,9 @@ export async function startGatewayServer(
       },
     });
   }
-  const tailscaleCleanup = minimalTestGateway
-    ? null
-    : await startGatewayTailscaleExposure({
-        tailscaleMode,
-        resetOnExit: tailscaleConfig.resetOnExit,
-        port,
-        controlUiBasePath,
-        logTailscale,
-      });
+  // Tailscale exposure is handled by the Go gateway natively.
+  const tailscaleCleanup = null;
 
-  let browserControl: Awaited<ReturnType<typeof startBrowserControlServerIfEnabled>> = null;
   if (!minimalTestGateway) {
     if (deferredConfiguredChannelPluginIds.length > 0) {
       ({ pluginRegistry } = loadGatewayPlugins({
@@ -849,7 +829,7 @@ export async function startGatewayServer(
         logDiagnostics: false,
       }));
     }
-    ({ browserControl, pluginServices } = await startGatewaySidecars({
+    ({ pluginServices } = await startGatewaySidecars({
       cfg: cfgAtStart,
       pluginRegistry,
       defaultWorkspaceDir,
@@ -858,7 +838,6 @@ export async function startGatewayServer(
       log,
       logHooks,
       logChannels,
-      logBrowser,
     }));
   }
 
@@ -868,16 +847,8 @@ export async function startGatewayServer(
     autonomousHandle = await startAutonomousService({ cfg: cfgAtStart, deps });
   }
 
-  // Start self-health watchdog for auto-recovery when gateway gets stuck.
-  let selfWatchdog: GatewaySelfWatchdog | null = null;
-  if (!minimalTestGateway) {
-    selfWatchdog = startGatewaySelfWatchdog({
-      isServerListening: () => !!httpServer?.listening,
-      getExpectedChannelCount: () => channelManager.getExpectedRunningCount(),
-      getConnectedChannelCount: () => channelManager.getConnectedCount(),
-      getLastActivityAt: () => channelManager.getLastEventAt(),
-    });
-  }
+  // Self-health watchdog is handled by the Go gateway natively.
+  const selfWatchdog = null as { stop: () => void; touch: () => void } | null;
 
   // Start auto-maintenance service (periodic health checks + cleanup).
   let autoMaintenanceHandle: AutoMaintenanceServiceHandle | null = null;
@@ -907,7 +878,6 @@ export async function startGatewayServer(
             hookClientIpConfig,
             heartbeatRunner,
             cronState,
-            browserControl,
             channelHealthMonitor,
           }),
           setState: (nextState) => {
@@ -917,13 +887,11 @@ export async function startGatewayServer(
             cronState = nextState.cronState;
             cron = cronState.cron;
             cronStorePath = cronState.storePath;
-            browserControl = nextState.browserControl;
             channelHealthMonitor = nextState.channelHealthMonitor;
           },
           startChannel,
           stopChannel,
           logHooks,
-          logBrowser,
           logChannels,
           logCron,
           logReload,
@@ -980,8 +948,6 @@ export async function startGatewayServer(
   const close = createGatewayCloseHandler({
     bonjourStop,
     tailscaleCleanup,
-    canvasHost: null,
-    canvasHostServer,
     releasePluginRouteRegistry,
     stopChannel,
     pluginServices,
@@ -1001,7 +967,6 @@ export async function startGatewayServer(
     chatRunState,
     clients,
     configReloader,
-    browserControl,
     wss,
     httpServer,
     httpServers,
@@ -1024,7 +989,6 @@ export async function startGatewayServer(
       }
       skillsChangeUnsub();
       authRateLimiter?.dispose();
-      browserAuthRateLimiter.dispose();
       stopModelPricingRefresh();
       channelHealthMonitor?.stop();
       selfWatchdog?.stop();

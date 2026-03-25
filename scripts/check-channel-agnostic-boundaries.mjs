@@ -35,21 +35,17 @@ const systemMarkLiteralGuardSources = [
 ];
 
 const channelIds = [
-  "bluebubbles",
   "discord",
   "googlechat",
   "imessage",
   "irc",
   "line",
   "matrix",
-  "msteams",
   "signal",
   "slack",
   "telegram",
   "web",
   "whatsapp",
-  "zalo",
-  "zalouser",
 ];
 
 const channelIdSet = new Set(channelIds);
@@ -93,7 +89,7 @@ function matchesChannelModuleSpecifier(specifier) {
 }
 
 const userFacingChannelNameRe =
-  /\b(?:discord|telegram|slack|signal|imessage|whatsapp|google\s*chat|irc|line|zalo|matrix|msteams|bluebubbles)\b/i;
+  /\b(?:discord|telegram|slack|signal|imessage|whatsapp|google\s*chat|irc|line|matrix)\b/i;
 const systemMarkLiteral = "⚙️";
 
 function isModuleSpecifierStringNode(node) {

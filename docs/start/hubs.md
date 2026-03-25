@@ -72,13 +72,12 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Model providers hub](/providers/models)
 - WhatsApp
 - [Telegram](/channels/telegram)
-- Slack
-- Discord
-- Mattermost (plugin)
-- Signal
-- BlueBubbles (iMessage)
-- iMessage (legacy)
-- Location parsing
+- [Slack](/channels/slack)
+- [Discord](/channels/discord)
+- [Mattermost](/channels/mattermost) (plugin)
+- [Signal](/channels/signal)
+- [iMessage](/channels/imessage)
+- [Location parsing](/channels/location)
 - [WebChat](/web/webchat)
 - [Webhooks](/automation/webhook)
 - [Gmail Pub/Sub](/automation/gmail-pubsub)
@@ -129,7 +128,6 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Images](/nodes/images)
 - [Audio](/nodes/audio)
 - [Location command](/nodes/location-command)
-- [Voice wake](/nodes/voicewake)
 - [Talk mode](/nodes/talk)
 
 ## Platforms
@@ -146,7 +144,6 @@ Use these hubs to discover every page, including deep dives and reference docs t
 
 - [macOS dev setup](/platforms/mac/dev-setup)
 - [macOS menu bar](/platforms/mac/menu-bar)
-- [macOS voice wake](/platforms/mac/voicewake)
 - [macOS voice overlay](/platforms/mac/voice-overlay)
 - [macOS WebChat](/platforms/mac/webchat)
 - [macOS Canvas](/platforms/mac/canvas)
@@ -171,7 +168,6 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Plugin bundles](/plugins/bundles)
 - [Community plugins](/plugins/community)
 - [Capability cookbook](/tools/capability-cookbook)
-- [Zalo user plugin](/plugins/zalouser)
 
 ## Workspace + templates
 

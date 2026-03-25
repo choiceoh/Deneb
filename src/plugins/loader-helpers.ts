@@ -47,7 +47,6 @@ export function createPluginRecord(params: {
     hookNames: [],
     channelIds: [],
     providerIds: [],
-    speechProviderIds: [],
     mediaUnderstandingProviderIds: [],
     imageGenerationProviderIds: [],
     webSearchProviderIds: [],

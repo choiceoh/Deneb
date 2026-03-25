@@ -38,11 +38,6 @@ function verifyNodeToken(_token: string): { valid: boolean; nodeId?: string } {
 
 async function renamePairedNode(_nodeId: string, _name: string): Promise<void> {}
 import { sleep } from "../../../utils.js";
-import {
-  buildCanvasScopedHostUrl,
-  CANVAS_CAPABILITY_TTL_MS,
-  mintCanvasCapabilityToken,
-} from "../../canvas-capability.js";
 import { isNodeCommandAllowed, resolveNodeCommandAllowlist } from "../../node-command-policy.js";
 import { sanitizeNodeInvokeParamsForForwarding } from "../../node-invoke-sanitize.js";
 import {
@@ -544,51 +539,6 @@ export const nodeHandlers: GatewayRequestHandlers = {
       );
     });
   },
-  "node.canvas.capability.refresh": async ({ params, respond, client }) => {
-    if (!validateNodeListParams(params)) {
-      respondInvalidParams({
-        respond,
-        method: "node.canvas.capability.refresh",
-        validator: validateNodeListParams,
-      });
-      return;
-    }
-    const baseCanvasHostUrl = client?.canvasHostUrl?.trim() ?? "";
-    if (!baseCanvasHostUrl) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.NODE_DISCONNECTED, "canvas host unavailable for this node session"),
-      );
-      return;
-    }
-
-    const canvasCapability = mintCanvasCapabilityToken();
-    const canvasCapabilityExpiresAtMs = Date.now() + CANVAS_CAPABILITY_TTL_MS;
-    const scopedCanvasHostUrl = buildCanvasScopedHostUrl(baseCanvasHostUrl, canvasCapability);
-    if (!scopedCanvasHostUrl) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.NODE_DISCONNECTED, "failed to mint scoped canvas host URL"),
-      );
-      return;
-    }
-
-    if (client) {
-      client.canvasCapability = canvasCapability;
-      client.canvasCapabilityExpiresAtMs = canvasCapabilityExpiresAtMs;
-    }
-    respond(
-      true,
-      {
-        canvasCapability,
-        canvasCapabilityExpiresAtMs,
-        canvasHostUrl: scopedCanvasHostUrl,
-      },
-      undefined,
-    );
-  },
   "node.pending.pull": async ({ params, respond, client }) => {
     if (!validateNodeListParams(params)) {
       respondInvalidParams({
@@ -909,7 +859,6 @@ export const nodeHandlers: GatewayRequestHandlers = {
         nodeSendToSession: context.nodeSendToSession,
         nodeSubscribe: context.nodeSubscribe,
         nodeUnsubscribe: context.nodeUnsubscribe,
-        broadcastVoiceWakeChanged: context.broadcastVoiceWakeChanged,
         addChatRun: context.addChatRun,
         removeChatRun: context.removeChatRun,
         chatAbortControllers: context.chatAbortControllers,

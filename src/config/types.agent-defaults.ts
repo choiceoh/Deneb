@@ -10,7 +10,10 @@ import type { MemorySearchConfig } from "./types.tools.js";
 
 export type AgentModelEntryConfig = {
   alias?: string;
-  /** Provider-specific API parameters (e.g., GLM-4.7 thinking mode). */
+  /**
+   * Provider-specific API parameters (e.g., GLM-4.7 thinking mode).
+   * Note: temperature and maxTokens are system-managed and ignored if set here.
+   */
   params?: Record<string, unknown>;
   /** Enable streaming for this model (default: true, false for Ollama to avoid SDK issue #1205). */
   streaming?: boolean;
@@ -175,11 +178,7 @@ export type AgentDefaultsConfig = {
   contextTokens?: number;
   /** Optional CLI backends for text-only fallback (claude-cli, etc.). */
   cliBackends?: Record<string, CliBackendConfig>;
-  /**
-   * Maximum number of user turns to keep in context when no channel-specific
-   * historyLimit is configured. Prevents unbounded context growth in
-   * long-running sessions. Default: 100. Set 0 to disable.
-   */
+  /** @deprecated System-managed: fixed at 100. */
   maxHistoryTurns?: number;
   /** Opt-in: prune old tool results from the LLM context to reduce token usage. */
   contextPruning?: AgentContextPruningConfig;
@@ -323,17 +322,17 @@ export type AgentCompactionConfig = {
   /** @deprecated System-managed: always enabled with maxRetries=1. */
   qualityGuard?: { enabled?: boolean; maxRetries?: number };
   // ── Active config fields ───────────────────────────────────────────────────
-  /** Pi reserve tokens target before floor enforcement. */
+  /** @deprecated System-managed: uses Pi defaults with floor enforcement. */
   reserveTokens?: number;
-  /** Pi keepRecentTokens budget used for cut-point selection. */
+  /** @deprecated System-managed: uses Pi defaults. */
   keepRecentTokens?: number;
-  /** Minimum reserve tokens enforced for Pi compaction (0 disables the floor). */
+  /** @deprecated System-managed: fixed at 20000. */
   reserveTokensFloor?: number;
   /** Additional compaction-summary instructions that can preserve language or persona continuity. */
   customInstructions?: string;
-  /** Identifier-preservation instruction policy for compaction summaries. */
+  /** @deprecated System-managed: always "strict". */
   identifierPolicy?: AgentCompactionIdentifierPolicy;
-  /** Custom identifier-preservation instructions used when identifierPolicy is "custom". */
+  /** @deprecated System-managed: not used (identifierPolicy is always "strict"). */
   identifierInstructions?: string;
   /** Post-compaction session memory index sync mode. */
   postIndexSync?: AgentCompactionPostIndexSyncMode;
@@ -351,11 +350,7 @@ export type AgentCompactionConfig = {
   model?: string;
   /** Maximum time in seconds for a single compaction operation (default: 900). */
   timeoutSeconds?: number;
-  /**
-   * Truncate the session JSONL file after compaction to remove entries that
-   * were summarized. Prevents unbounded file growth in long-running sessions.
-   * Default: true.
-   */
+  /** @deprecated System-managed: always true. */
   truncateAfterCompaction?: boolean;
   /** Background compression observer for proactive pre-computed summaries. */
   observer?: AgentCompactionObserverConfig;
@@ -375,7 +370,7 @@ export type AgentCompactionObserverConfig = {
 };
 
 export type AgentCompactionMemoryFlushConfig = {
-  /** Enable the pre-compaction memory flush (default: true). */
+  /** @deprecated System-managed: always true. */
   enabled?: boolean;
   /** Run the memory flush when context is within this many tokens of the compaction threshold. */
   softThresholdTokens?: number;

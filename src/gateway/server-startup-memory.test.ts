@@ -11,10 +11,10 @@ vi.mock("../memory/index.js", () => ({
 
 import { startGatewayMemoryBackend } from "./server-startup-memory.js";
 
-function createQmdConfig(agents: DenebConfig["agents"]): DenebConfig {
+function createVegaConfig(agents: DenebConfig["agents"]): DenebConfig {
   return {
     agents,
-    memory: { backend: "qmd", qmd: {} },
+    memory: { backend: "vega", vega: {} },
   } as DenebConfig;
 }
 
@@ -27,7 +27,7 @@ describe("startGatewayMemoryBackend", () => {
     getMemorySearchManagerMock.mockClear();
   });
 
-  it("skips initialization when memory backend is not qmd", async () => {
+  it("skips initialization when memory backend is not vega", async () => {
     const cfg = {
       agents: { list: [{ id: "main", default: true }] },
       memory: { backend: "builtin" },
@@ -41,8 +41,8 @@ describe("startGatewayMemoryBackend", () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  it("initializes qmd backend for each configured agent", async () => {
-    const cfg = createQmdConfig({ list: [{ id: "ops", default: true }, { id: "main" }] });
+  it("initializes vega backend for each configured agent", async () => {
+    const cfg = createVegaConfig({ list: [{ id: "ops", default: true }, { id: "main" }] });
     const log = createGatewayLogMock();
     getMemorySearchManagerMock.mockResolvedValue({ manager: { search: vi.fn() } });
 
@@ -53,34 +53,32 @@ describe("startGatewayMemoryBackend", () => {
     expect(getMemorySearchManagerMock).toHaveBeenNthCalledWith(2, { cfg, agentId: "main" });
     expect(log.info).toHaveBeenNthCalledWith(
       1,
-      'qmd memory startup initialization armed for agent "ops"',
+      'memory startup initialization armed for agent "ops"',
     );
     expect(log.info).toHaveBeenNthCalledWith(
       2,
-      'qmd memory startup initialization armed for agent "main"',
+      'memory startup initialization armed for agent "main"',
     );
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  it("logs a warning when qmd manager init fails and continues with other agents", async () => {
-    const cfg = createQmdConfig({ list: [{ id: "main", default: true }, { id: "ops" }] });
+  it("logs a warning when vega manager init fails and continues with other agents", async () => {
+    const cfg = createVegaConfig({ list: [{ id: "main", default: true }, { id: "ops" }] });
     const log = createGatewayLogMock();
     getMemorySearchManagerMock
-      .mockResolvedValueOnce({ manager: null, error: "qmd missing" })
+      .mockResolvedValueOnce({ manager: null, error: "vega missing" })
       .mockResolvedValueOnce({ manager: { search: vi.fn() } });
 
     await startGatewayMemoryBackend({ cfg, log });
 
     expect(log.warn).toHaveBeenCalledWith(
-      'qmd memory startup initialization failed for agent "main": qmd missing',
+      'memory startup initialization failed for agent "main": vega missing',
     );
-    expect(log.info).toHaveBeenCalledWith(
-      'qmd memory startup initialization armed for agent "ops"',
-    );
+    expect(log.info).toHaveBeenCalledWith('memory startup initialization armed for agent "ops"');
   });
 
   it("skips agents with memory search disabled", async () => {
-    const cfg = createQmdConfig({
+    const cfg = createVegaConfig({
       defaults: { memorySearch: { enabled: true } },
       list: [
         { id: "main", default: true },
@@ -94,9 +92,7 @@ describe("startGatewayMemoryBackend", () => {
 
     expect(getMemorySearchManagerMock).toHaveBeenCalledTimes(1);
     expect(getMemorySearchManagerMock).toHaveBeenCalledWith({ cfg, agentId: "main" });
-    expect(log.info).toHaveBeenCalledWith(
-      'qmd memory startup initialization armed for agent "main"',
-    );
+    expect(log.info).toHaveBeenCalledWith('memory startup initialization armed for agent "main"');
     expect(log.warn).not.toHaveBeenCalled();
   });
 });

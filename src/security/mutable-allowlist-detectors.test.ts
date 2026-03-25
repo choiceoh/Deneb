@@ -3,10 +3,8 @@ import {
   isDiscordMutableAllowEntry,
   isSlackMutableAllowEntry,
   isGoogleChatMutableAllowEntry,
-  isMSTeamsMutableAllowEntry,
   isMattermostMutableAllowEntry,
   isIrcMutableAllowEntry,
-  isZalouserMutableGroupEntry,
 } from "./mutable-allowlist-detectors.js";
 
 describe("isDiscordMutableAllowEntry", () => {
@@ -86,25 +84,6 @@ describe("isGoogleChatMutableAllowEntry", () => {
   });
 });
 
-describe("isMSTeamsMutableAllowEntry", () => {
-  it("returns true for entries with spaces (display names)", () => {
-    expect(isMSTeamsMutableAllowEntry("John Doe")).toBe(true);
-  });
-
-  it("returns true for entries with @ (email)", () => {
-    expect(isMSTeamsMutableAllowEntry("user@company.com")).toBe(true);
-  });
-
-  it("returns false for plain IDs", () => {
-    expect(isMSTeamsMutableAllowEntry("abc123def456")).toBe(false);
-  });
-
-  it("returns false for wildcard/empty", () => {
-    expect(isMSTeamsMutableAllowEntry("*")).toBe(false);
-    expect(isMSTeamsMutableAllowEntry("")).toBe(false);
-  });
-});
-
 describe("isMattermostMutableAllowEntry", () => {
   it("returns false for 26-char alphanumeric IDs (stable)", () => {
     expect(isMattermostMutableAllowEntry("abcdefghijklmnopqrstuvwxyz")).toBe(false);
@@ -141,28 +120,5 @@ describe("isIrcMutableAllowEntry", () => {
   it("returns false for wildcard/empty", () => {
     expect(isIrcMutableAllowEntry("*")).toBe(false);
     expect(isIrcMutableAllowEntry("")).toBe(false);
-  });
-});
-
-describe("isZalouserMutableGroupEntry", () => {
-  it("returns false for numeric group IDs (stable)", () => {
-    expect(isZalouserMutableGroupEntry("12345678")).toBe(false);
-  });
-
-  it("returns false for g- prefixed IDs", () => {
-    expect(isZalouserMutableGroupEntry("g-abc123")).toBe(false);
-  });
-
-  it("returns true for group names (mutable)", () => {
-    expect(isZalouserMutableGroupEntry("My Group Name")).toBe(true);
-  });
-
-  it("returns false for prefixed numeric IDs", () => {
-    expect(isZalouserMutableGroupEntry("zalouser:group:12345")).toBe(false);
-  });
-
-  it("returns false for wildcard/empty", () => {
-    expect(isZalouserMutableGroupEntry("*")).toBe(false);
-    expect(isZalouserMutableGroupEntry("")).toBe(false);
   });
 });

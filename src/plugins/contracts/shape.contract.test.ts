@@ -17,7 +17,7 @@ function createPluginRecord(id: string, name: string): PluginRecord {
     hookNames: [],
     channelIds: [],
     providerIds: [],
-    speechProviderIds: [],
+
     mediaUnderstandingProviderIds: [],
     imageGenerationProviderIds: [],
     webSearchProviderIds: [],

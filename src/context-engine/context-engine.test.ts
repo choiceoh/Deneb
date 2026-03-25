@@ -356,16 +356,16 @@ describe("Registry tests", () => {
     expect(getContextEngineFactory("public-owner-guard")).toBe(ownedFactory);
   });
 
-  it("public registerContextEngine reserves the default lcm id", () => {
-    const lcmAttempt = (
+  it("public registerContextEngine reserves the default aurora id", () => {
+    const auroraAttempt = (
       registerContextEngine as unknown as (
         id: string,
         factory: ContextEngineFactory,
         opts?: { owner?: string },
       ) => ContextEngineRegistrationResult
-    )("lcm", () => new MockContextEngine(), { owner: "core" });
+    )("aurora", () => new MockContextEngine(), { owner: "core" });
 
-    expect(lcmAttempt).toEqual({
+    expect(auroraAttempt).toEqual({
       ok: false,
       existingOwner: "core",
     });
@@ -482,11 +482,11 @@ describe("Legacy sessionKey compatibility", () => {
 
 describe("Default engine selection", () => {
   beforeEach(() => {
-    // Register a lightweight LCM stub (default engine) so we don't need SQLite.
+    // Register a lightweight Aurora stub (default engine) so we don't need SQLite.
     registerContextEngineForOwner(
-      "lcm",
+      "aurora",
       () => ({
-        info: { id: "lcm", name: "LCM Stub", version: "0.0.0", ownsCompaction: true },
+        info: { id: "aurora", name: "Aurora Stub", version: "0.0.0", ownsCompaction: true },
         async ingest() {
           return { ingested: true };
         },
@@ -518,9 +518,9 @@ describe("Default engine selection", () => {
     });
   });
 
-  it("resolveContextEngine() with no config returns the default ('lcm') engine", async () => {
+  it("resolveContextEngine() with no config returns the default ('aurora') engine", async () => {
     const engine = await resolveContextEngine();
-    expect(engine.info.id).toBe("lcm");
+    expect(engine.info.id).toBe("aurora");
   });
 
   it("resolveContextEngine() with config contextEngine='test-engine' returns the custom engine", async () => {
@@ -552,14 +552,14 @@ describe("Invalid engine fallback", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("Initialization guard", () => {
-  it("ensureContextEnginesInitialized() is idempotent and registers the LCM engine", async () => {
+  it("ensureContextEnginesInitialized() is idempotent and registers the Aurora engine", async () => {
     const { ensureContextEnginesInitialized } = await import("./init.js");
 
     expect(() => ensureContextEnginesInitialized()).not.toThrow();
     expect(() => ensureContextEnginesInitialized()).not.toThrow();
 
     const ids = listContextEngineIds();
-    expect(ids).toContain("lcm");
+    expect(ids).toContain("aurora");
   });
 });
 
@@ -572,7 +572,7 @@ describe("Initialization guard", () => {
 // resolveContextEngine() imported from chunk B.
 //
 // These tests exercise the invariant that failed in 2026.3.7 when
-// the LCM engine registered successfully but resolution could not find it.
+// the Aurora engine registered successfully but resolution could not find it.
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("Bundle chunk isolation (#40096)", () => {

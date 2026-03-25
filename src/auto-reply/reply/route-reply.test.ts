@@ -1,6 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mattermostPlugin } from "../../../extensions/mattermost/src/channel.js";
-import { slackPlugin } from "../../../extensions/slack/src/channel.js";
 import {
   discordOutbound,
   imessageOutbound,
@@ -20,10 +18,6 @@ import { SILENT_REPLY_TOKEN } from "../tokens.js";
 const mocks = vi.hoisted(() => ({
   sendMessageDiscord: vi.fn(async () => ({ messageId: "m1", channelId: "c1" })),
   sendMessageIMessage: vi.fn(async () => ({ messageId: "ok" })),
-  sendMessageMSTeams: vi.fn(async (_params: unknown) => ({
-    messageId: "m1",
-    conversationId: "c1",
-  })),
   sendMessageSignal: vi.fn(async () => ({ messageId: "t1" })),
   sendMessageSlack: vi.fn(async () => ({ messageId: "m1", channelId: "c1" })),
   sendMessageTelegram: vi.fn(async () => ({ messageId: "m1", chatId: "c1" })),
@@ -59,9 +53,6 @@ vi.mock("../../../extensions/discord/src/send.js", () => ({
   sendPollDiscord: mocks.sendMessageDiscord,
   sendWebhookMessageDiscord: vi.fn(),
 }));
-vi.mock("../../../extensions/mattermost/src/mattermost/send.js", () => ({
-  sendMessageMattermost: mocks.sendMessageMattermost,
-}));
 vi.mock("../../infra/outbound/deliver-runtime.js", async () => {
   const actual = await vi.importActual<typeof import("../../infra/outbound/deliver-runtime.js")>(
     "../../infra/outbound/deliver-runtime.js",
@@ -91,7 +82,7 @@ const createRegistry = (channels: PluginRegistry["channels"]): PluginRegistry =>
     enabled: true,
   })),
   providers: [],
-  speechProviders: [],
+
   mediaUnderstandingProviders: [],
   imageGenerationProviders: [],
   webSearchProviders: [],
@@ -103,26 +94,26 @@ const createRegistry = (channels: PluginRegistry["channels"]): PluginRegistry =>
   diagnostics: [],
 });
 
-const createMSTeamsOutbound = (): ChannelOutboundAdapter => ({
+const createMattermostOutbound = (): ChannelOutboundAdapter => ({
   deliveryMode: "direct",
   sendText: async ({ cfg, to, text }) => {
-    const result = await mocks.sendMessageMSTeams({ cfg, to, text });
-    return { channel: "msteams", ...result };
+    const result = await mocks.sendMessageMattermost({ cfg, to, text });
+    return { channel: "mattermost", ...result };
   },
   sendMedia: async ({ cfg, to, text, mediaUrl }) => {
-    const result = await mocks.sendMessageMSTeams({ cfg, to, text, mediaUrl });
-    return { channel: "msteams", ...result };
+    const result = await mocks.sendMessageMattermost({ cfg, to, text, mediaUrl });
+    return { channel: "mattermost", ...result };
   },
 });
 
-const createMSTeamsPlugin = (params: { outbound: ChannelOutboundAdapter }): ChannelPlugin => ({
-  id: "msteams",
+const createMattermostPlugin = (params: { outbound: ChannelOutboundAdapter }): ChannelPlugin => ({
+  id: "mattermost",
   meta: {
-    id: "msteams",
-    label: "Microsoft Teams",
-    selectionLabel: "Microsoft Teams (Bot Framework)",
-    docsPath: "/channels/msteams",
-    blurb: "Bot Framework; enterprise support.",
+    id: "mattermost",
+    label: "Mattermost",
+    selectionLabel: "Mattermost (Self-hosted)",
+    docsPath: "/channels/mattermost",
+    blurb: "Open-source team messaging.",
   },
   capabilities: { chatTypes: ["direct"] },
   config: {
@@ -463,32 +454,32 @@ describe("routeReply", () => {
   });
 
   it("routes MS Teams via proactive sender", async () => {
-    mocks.sendMessageMSTeams.mockClear();
+    mocks.sendMessageMattermost.mockClear();
     setActivePluginRegistry(
       createRegistry([
         {
-          pluginId: "msteams",
+          pluginId: "mattermost",
           source: "test",
-          plugin: createMSTeamsPlugin({
-            outbound: createMSTeamsOutbound(),
+          plugin: createMattermostPlugin({
+            outbound: createMattermostOutbound(),
           }),
         },
       ]),
     );
     const cfg = {
       channels: {
-        msteams: {
+        mattermost: {
           enabled: true,
         },
       },
     } as unknown as DenebConfig;
     await routeReply({
       payload: { text: "hi" },
-      channel: "msteams",
+      channel: "mattermost",
       to: "conversation:19:abc@thread.tacv2",
       cfg,
     });
-    expect(mocks.sendMessageMSTeams).toHaveBeenCalledWith(
+    expect(mocks.sendMessageMattermost).toHaveBeenCalledWith(
       expect.objectContaining({
         cfg,
         to: "conversation:19:abc@thread.tacv2",
@@ -553,8 +544,6 @@ const defaultRegistry = createTestRegistry([
     pluginId: "slack",
     plugin: {
       ...createOutboundTestPlugin({ id: "slack", outbound: slackOutbound, label: "Slack" }),
-      messaging: slackPlugin.messaging,
-      threading: slackPlugin.threading,
     },
     source: "test",
   },
@@ -587,15 +576,15 @@ const defaultRegistry = createTestRegistry([
     source: "test",
   },
   {
-    pluginId: "msteams",
-    plugin: createMSTeamsPlugin({
-      outbound: createMSTeamsOutbound(),
+    pluginId: "mattermost",
+    plugin: createMattermostPlugin({
+      outbound: createMattermostOutbound(),
     }),
     source: "test",
   },
   {
     pluginId: "mattermost",
-    plugin: mattermostPlugin,
+    plugin: createMattermostPlugin({ outbound: createMattermostOutbound() }),
     source: "test",
   },
 ]);

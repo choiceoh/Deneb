@@ -108,67 +108,6 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
     }
   };
 
-  const normalizeLegacyBrowserProfiles = () => {
-    const rawBrowser = next.browser;
-    if (!isRecord(rawBrowser)) {
-      return;
-    }
-
-    const browser = structuredClone(rawBrowser);
-    let browserChanged = false;
-
-    if ("relayBindHost" in browser) {
-      delete browser.relayBindHost;
-      browserChanged = true;
-      changes.push(
-        "Removed browser.relayBindHost (legacy Chrome extension relay setting; host-local Chrome now uses Chrome MCP existing-session attach).",
-      );
-    }
-
-    const rawProfiles = browser.profiles;
-    if (!isRecord(rawProfiles)) {
-      if (!browserChanged) {
-        return;
-      }
-      next = { ...next, browser };
-      return;
-    }
-
-    const profiles = { ...rawProfiles };
-    let profilesChanged = false;
-    for (const [profileName, rawProfile] of Object.entries(rawProfiles)) {
-      if (!isRecord(rawProfile)) {
-        continue;
-      }
-      const rawDriver = typeof rawProfile.driver === "string" ? rawProfile.driver.trim() : "";
-      if (rawDriver !== "extension") {
-        continue;
-      }
-      profiles[profileName] = {
-        ...rawProfile,
-        driver: "existing-session",
-      };
-      profilesChanged = true;
-      changes.push(
-        `Moved browser.profiles.${profileName}.driver "extension" → "existing-session" (Chrome MCP attach).`,
-      );
-    }
-
-    if (profilesChanged) {
-      browser.profiles = profiles;
-      browserChanged = true;
-    }
-
-    if (!browserChanged) {
-      return;
-    }
-
-    next = {
-      ...next,
-      browser,
-    };
-  };
-
   const seedMissingDefaultAccountsFromSingleAccountBase = () => {
     const channels = next.channels as Record<string, unknown> | undefined;
     if (!channels) {
@@ -241,50 +180,6 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
 
   normalizeTelegramStreamingAliases();
   seedMissingDefaultAccountsFromSingleAccountBase();
-  normalizeLegacyBrowserProfiles();
-
-  const normalizeBrowserSsrFPolicyAlias = () => {
-    const rawBrowser = next.browser;
-    if (!isRecord(rawBrowser)) {
-      return;
-    }
-    const rawSsrFPolicy = rawBrowser.ssrfPolicy;
-    if (!isRecord(rawSsrFPolicy) || !("allowPrivateNetwork" in rawSsrFPolicy)) {
-      return;
-    }
-
-    const legacyAllowPrivateNetwork = rawSsrFPolicy.allowPrivateNetwork;
-    const currentDangerousAllowPrivateNetwork = rawSsrFPolicy.dangerouslyAllowPrivateNetwork;
-
-    let resolvedDangerousAllowPrivateNetwork: unknown = currentDangerousAllowPrivateNetwork;
-    if (
-      typeof legacyAllowPrivateNetwork === "boolean" ||
-      typeof currentDangerousAllowPrivateNetwork === "boolean"
-    ) {
-      // Preserve runtime behavior while collapsing to the canonical key.
-      resolvedDangerousAllowPrivateNetwork =
-        legacyAllowPrivateNetwork === true || currentDangerousAllowPrivateNetwork === true;
-    } else if (currentDangerousAllowPrivateNetwork === undefined) {
-      resolvedDangerousAllowPrivateNetwork = legacyAllowPrivateNetwork;
-    }
-
-    const nextSsrFPolicy: Record<string, unknown> = { ...rawSsrFPolicy };
-    delete nextSsrFPolicy.allowPrivateNetwork;
-    if (resolvedDangerousAllowPrivateNetwork !== undefined) {
-      nextSsrFPolicy.dangerouslyAllowPrivateNetwork = resolvedDangerousAllowPrivateNetwork;
-    }
-
-    const migratedBrowser = { ...next.browser } as Record<string, unknown>;
-    migratedBrowser.ssrfPolicy = nextSsrFPolicy;
-
-    next = {
-      ...next,
-      browser: migratedBrowser as DenebConfig["browser"],
-    };
-    changes.push(
-      `Moved browser.ssrfPolicy.allowPrivateNetwork → browser.ssrfPolicy.dangerouslyAllowPrivateNetwork (${String(resolvedDangerousAllowPrivateNetwork)}).`,
-    );
-  };
 
   const normalizeLegacyNanoBananaSkill = () => {
     type ModelProviderEntry = Partial<
@@ -410,12 +305,11 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
     }
   };
 
-  normalizeBrowserSsrFPolicyAlias();
   normalizeLegacyNanoBananaSkill();
 
-  // Migrate lossless-claw plugin entry: move top-level LCM keys into its
+  // Migrate lossless-claw plugin entry: move top-level Aurora keys into its
   // .config sub-object so PluginEntrySchema (.strict()) passes.
-  const LCM_CONFIG_KEYS = new Set([
+  const AURORA_CONFIG_KEYS = new Set([
     "leafTargetTokens",
     "condensedTargetTokens",
     "incrementalMaxDepth",
@@ -438,26 +332,26 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
     "timezone",
     "pruneHeartbeatOk",
   ]);
-  const lcmEntry = (next.plugins as Record<string, unknown> | undefined)?.entries as
+  const auroraEntry = (next.plugins as Record<string, unknown> | undefined)?.entries as
     | Record<string, Record<string, unknown>>
     | undefined;
-  const lcmRaw = lcmEntry?.["lossless-claw"];
-  if (isRecord(lcmRaw)) {
+  const auroraRaw = auroraEntry?.["lossless-claw"];
+  if (isRecord(auroraRaw)) {
     const movedKeys: string[] = [];
-    const existingConfig = isRecord(lcmRaw.config) ? { ...lcmRaw.config } : {};
-    for (const key of Object.keys(lcmRaw)) {
-      if (!LCM_CONFIG_KEYS.has(key)) {
+    const existingConfig = isRecord(auroraRaw.config) ? { ...auroraRaw.config } : {};
+    for (const key of Object.keys(auroraRaw)) {
+      if (!AURORA_CONFIG_KEYS.has(key)) {
         continue;
       }
       if (!(key in existingConfig)) {
-        existingConfig[key] = lcmRaw[key];
+        existingConfig[key] = auroraRaw[key];
       }
       movedKeys.push(key);
     }
     if (movedKeys.length > 0) {
       const cleaned: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(lcmRaw)) {
-        if (!LCM_CONFIG_KEYS.has(k)) {
+      for (const [k, v] of Object.entries(auroraRaw)) {
+        if (!AURORA_CONFIG_KEYS.has(k)) {
           cleaned[k] = v;
         }
       }
@@ -467,7 +361,7 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
         plugins: {
           ...(next.plugins as Record<string, unknown>),
           entries: {
-            ...lcmEntry,
+            ...auroraEntry,
             "lossless-claw": cleaned,
           },
         },
@@ -478,23 +372,23 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
     }
   }
 
-  // Migrate lossless-claw plugin entry to the canonical "lcm" entry.
-  // After nativization the engine reads from plugins.entries.lcm.config,
+  // Migrate lossless-claw plugin entry to the canonical "aurora" entry.
+  // After nativization the engine reads from plugins.entries.aurora.config,
   // so move the legacy entry there to complete the migration.
   const updatedEntries = (next.plugins as Record<string, unknown> | undefined)?.entries as
     | Record<string, Record<string, unknown>>
     | undefined;
-  const legacyLcm = updatedEntries?.["lossless-claw"];
-  if (isRecord(legacyLcm)) {
-    const existingLcmEntry = updatedEntries?.["lcm"];
-    const mergedLcmEntry = isRecord(existingLcmEntry)
-      ? { ...legacyLcm, ...existingLcmEntry }
-      : { ...legacyLcm };
-    // Merge config sub-objects: existing lcm.config takes precedence over legacy.
-    if (isRecord(legacyLcm.config) || isRecord(existingLcmEntry?.config)) {
-      const legacyCfg = isRecord(legacyLcm.config) ? legacyLcm.config : {};
-      const existCfg = isRecord(existingLcmEntry?.config) ? existingLcmEntry.config : {};
-      mergedLcmEntry.config = { ...legacyCfg, ...existCfg };
+  const legacyAurora = updatedEntries?.["lossless-claw"];
+  if (isRecord(legacyAurora)) {
+    const existingAuroraEntry = updatedEntries?.["aurora"];
+    const mergedAuroraEntry = isRecord(existingAuroraEntry)
+      ? { ...legacyAurora, ...existingAuroraEntry }
+      : { ...legacyAurora };
+    // Merge config sub-objects: existing aurora.config takes precedence over legacy.
+    if (isRecord(legacyAurora.config) || isRecord(existingAuroraEntry?.config)) {
+      const legacyCfg = isRecord(legacyAurora.config) ? legacyAurora.config : {};
+      const existCfg = isRecord(existingAuroraEntry?.config) ? existingAuroraEntry.config : {};
+      mergedAuroraEntry.config = { ...legacyCfg, ...existCfg };
     }
     const { "lossless-claw": _removed, ...restEntries } = updatedEntries!;
     next = {
@@ -503,11 +397,11 @@ export function normalizeCompatibilityConfigValues(cfg: DenebConfig): {
         ...(next.plugins as Record<string, unknown>),
         entries: {
           ...restEntries,
-          lcm: mergedLcmEntry,
+          aurora: mergedAuroraEntry,
         },
       },
     };
-    changes.push("Migrated plugins.entries.lossless-claw to plugins.entries.lcm.");
+    changes.push("Migrated plugins.entries.lossless-claw to plugins.entries.aurora.");
   }
 
   return { config: next, changes };

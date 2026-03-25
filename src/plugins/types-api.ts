@@ -13,12 +13,11 @@ import type {
 } from "./types-commands.js";
 import type { PluginHookName, PluginHookHandlerMap } from "./types-hooks.js";
 import type { PluginInteractiveHandlerRegistration } from "./types-interactive.js";
-import type { ProviderPlugin } from "./types-provider.js";
 import type {
-  SpeechProviderPlugin,
   MediaUnderstandingProviderPlugin,
   ImageGenerationProviderPlugin,
-} from "./types-speech-media.js";
+} from "./types-media.js";
+import type { ProviderPlugin } from "./types-provider.js";
 import type { WebSearchProviderPlugin } from "./types-web-search.js";
 
 export type PluginLogger = {
@@ -186,7 +185,6 @@ export type DenebPluginApi = {
   /** Register a native model/provider plugin (text inference capability). */
   registerProvider: (provider: ProviderPlugin) => void;
   /** Register a speech synthesis provider (speech capability). */
-  registerSpeechProvider: (provider: SpeechProviderPlugin) => void;
   /** Register a media understanding provider (media understanding capability). */
   registerMediaUnderstandingProvider: (provider: MediaUnderstandingProviderPlugin) => void;
   /** Register an image generation provider (image generation capability). */

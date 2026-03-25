@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { DenebConfig } from "../config/config.js";
-import "./test-helpers/fast-core-tools.js";
 import { createDenebTools } from "./deneb-tools.js";
 
 async function withTempAgentDir<T>(run: (agentDir: string) => Promise<T>): Promise<T> {

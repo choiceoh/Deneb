@@ -1,7 +1,6 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { estimateTokens, generateSummary } from "@mariozechner/pi-coding-agent";
-import type { AgentCompactionIdentifierPolicy } from "../config/types.agent-defaults.js";
 import { retryAsync } from "../infra/retry.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { DEFAULT_CONTEXT_TOKENS } from "./defaults.js";
@@ -14,45 +13,20 @@ export const MIN_CHUNK_RATIO = 0.15;
 export const SAFETY_MARGIN = 1.2; // 20% buffer for estimateTokens() inaccuracy
 const DEFAULT_SUMMARY_FALLBACK = "No prior history.";
 
+// identifierPolicy is system-managed: always "strict". Identifier preservation
+// instructions are always included in compaction prompts.
 const IDENTIFIER_PRESERVATION_INSTRUCTIONS =
   "Preserve all opaque identifiers exactly as written (no shortening or reconstruction), " +
   "including UUIDs, hashes, IDs, tokens, API keys, hostnames, IPs, ports, URLs, and file names.";
 
-export type CompactionSummarizationInstructions = {
-  identifierPolicy?: AgentCompactionIdentifierPolicy;
-  identifierInstructions?: string;
-};
-
-function resolveIdentifierPreservationInstructions(
-  instructions?: CompactionSummarizationInstructions,
-): string | undefined {
-  const policy = instructions?.identifierPolicy ?? "strict";
-  if (policy === "off") {
-    return undefined;
-  }
-  if (policy === "custom") {
-    const custom = instructions?.identifierInstructions?.trim();
-    return custom && custom.length > 0 ? custom : IDENTIFIER_PRESERVATION_INSTRUCTIONS;
-  }
-  return IDENTIFIER_PRESERVATION_INSTRUCTIONS;
-}
-
 export function buildCompactionSummarizationInstructions(
   customInstructions?: string,
-  instructions?: CompactionSummarizationInstructions,
 ): string | undefined {
   const custom = customInstructions?.trim();
-  const identifierPreservation = resolveIdentifierPreservationInstructions(instructions);
-  if (!identifierPreservation && !custom) {
-    return undefined;
-  }
   if (!custom) {
-    return identifierPreservation;
+    return IDENTIFIER_PRESERVATION_INSTRUCTIONS;
   }
-  if (!identifierPreservation) {
-    return `Additional focus:\n${custom}`;
-  }
-  return `${identifierPreservation}\n\nAdditional focus:\n${custom}`;
+  return `${IDENTIFIER_PRESERVATION_INSTRUCTIONS}\n\nAdditional focus:\n${custom}`;
 }
 
 export function estimateMessagesTokens(messages: AgentMessage[]): number {
@@ -156,7 +130,6 @@ export async function summarizeWithFallback(params: {
   maxChunkTokens: number;
   contextWindow: number;
   customInstructions?: string;
-  summarizationInstructions?: CompactionSummarizationInstructions;
   previousSummary?: string;
 }): Promise<string> {
   const { messages, contextWindow } = params;
@@ -167,10 +140,7 @@ export async function summarizeWithFallback(params: {
 
   // SECURITY: never feed toolResult.details into summarization prompts.
   const safeMessages = stripToolResultDetails(messages);
-  const effectiveInstructions = buildCompactionSummarizationInstructions(
-    params.customInstructions,
-    params.summarizationInstructions,
-  );
+  const effectiveInstructions = buildCompactionSummarizationInstructions(params.customInstructions);
 
   // Try full sequential summarization first
   try {

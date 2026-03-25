@@ -17,7 +17,6 @@ vi.mock("../config/config.js", async (importOriginal) => {
   };
 });
 
-import "./test-helpers/fast-core-tools.js";
 import { createDenebTools } from "./deneb-tools.js";
 
 function getSessionsHistoryTool(options?: { sandboxed?: boolean }) {

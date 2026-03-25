@@ -9,7 +9,6 @@ import { createDenebTools } from "../deneb-tools.js";
 import { applyXaiModelCompat } from "../models/model-compat.js";
 import { findUnsupportedSchemaKeywords } from "../pi-embedded-runner/google.js";
 import { createHostSandboxFsBridge } from "../test-helpers/host-sandbox-fs-bridge.js";
-import { createBrowserTool } from "../tools/browser-tool.js";
 import { __testing, createDenebCodingTools } from "./pi-tools.js";
 import { createDenebReadTool, createSandboxedReadTool } from "./pi-tools.read.js";
 
@@ -152,16 +151,6 @@ describe("createDenebCodingTools", () => {
     });
   });
 
-  it("keeps browser tool schema OpenAI-compatible without normalization", () => {
-    const browser = createBrowserTool();
-    const schema = browser.parameters as { type?: unknown; anyOf?: unknown };
-    expect(schema.type).toBe("object");
-    expect(schema.anyOf).toBeUndefined();
-  });
-  it("mentions user browser profile in browser tool description", () => {
-    const browser = createBrowserTool();
-    expect(browser.description).toMatch(/profile="user"/i);
-  });
   it("keeps browser tool schema properties after normalization", () => {
     const browser = defaultTools.find((tool) => tool.name === "browser");
     expect(browser).toBeDefined();

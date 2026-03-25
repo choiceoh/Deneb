@@ -17,7 +17,7 @@ export function createMockPluginRegistry(
         hookNames: [],
         channelIds: [],
         providerIds: [],
-        speechProviderIds: [],
+
         mediaUnderstandingProviderIds: [],
         imageGenerationProviderIds: [],
         webSearchProviderIds: [],
@@ -42,7 +42,7 @@ export function createMockPluginRegistry(
     channels: [],
     channelSetups: [],
     providers: [],
-    speechProviders: [],
+
     mediaUnderstandingProviders: [],
     imageGenerationProviders: [],
     webSearchProviders: [],

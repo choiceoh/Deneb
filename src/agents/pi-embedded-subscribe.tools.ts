@@ -134,7 +134,6 @@ export function extractToolResultText(result: unknown): string | undefined {
 // Plugin/MCP tools are intentionally excluded to prevent untrusted file reads.
 const TRUSTED_TOOL_RESULT_MEDIA = new Set([
   "apply_patch",
-  "browser",
   "cron",
   "edit",
   "exec",

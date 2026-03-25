@@ -7,7 +7,6 @@ type PiToolsSandboxContextParams = {
   workspaceAccess?: SandboxWorkspaceAccess;
   fsBridge?: SandboxFsBridge;
   tools?: SandboxToolPolicy;
-  browserAllowHostControl?: boolean;
   sessionKey?: string;
   containerName?: string;
   containerWorkdir?: string;
@@ -41,6 +40,5 @@ export function createPiToolsSandboxContext(params: PiToolsSandboxContextParams)
       ...params.dockerOverrides,
     },
     tools: params.tools ?? { allow: [], deny: [] },
-    browserAllowHostControl: params.browserAllowHostControl ?? false,
   };
 }

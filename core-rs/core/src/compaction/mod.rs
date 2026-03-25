@@ -1,4 +1,4 @@
-//! Context compaction engine — Rust implementation of the LCM hierarchical
+//! Context compaction engine — Rust implementation of the Aurora hierarchical
 //! summarization algorithm.
 //!
 //! This module provides:

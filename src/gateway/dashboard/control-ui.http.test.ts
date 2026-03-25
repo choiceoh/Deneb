@@ -397,7 +397,7 @@ describe("handleControlUiHttpRequest", () => {
   it("does not handle POST to root-mounted paths (plugin webhook passthrough)", async () => {
     await withControlUiRoot({
       fn: async (tmp) => {
-        for (const webhookPath of ["/bluebubbles-webhook", "/custom-webhook", "/callback"]) {
+        for (const webhookPath of ["/telegram-webhook", "/custom-webhook", "/callback"]) {
           const { res } = makeMockHttpResponse();
           const handled = handleControlUiHttpRequest(
             { url: webhookPath, method: "POST" } as IncomingMessage,
@@ -417,7 +417,7 @@ describe("handleControlUiHttpRequest", () => {
       fn: async (tmp) => {
         const { res } = makeMockHttpResponse();
         const handled = handleControlUiHttpRequest(
-          { url: "/bluebubbles-webhook", method: "POST" } as IncomingMessage,
+          { url: "/telegram-webhook", method: "POST" } as IncomingMessage,
           res,
           { basePath: "/deneb", root: { kind: "resolved", path: tmp } },
         );
@@ -460,7 +460,7 @@ describe("handleControlUiHttpRequest", () => {
     await withControlUiRoot({
       fn: async (tmp) => {
         const { handled, end } = runControlUiRequest({
-          url: "/webhook/bluebubbles",
+          url: "/webhook/telegram",
           method: "POST",
           rootPath: tmp,
         });

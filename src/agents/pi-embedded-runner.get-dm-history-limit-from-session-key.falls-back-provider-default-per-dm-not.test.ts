@@ -28,13 +28,13 @@ describe("getDmHistoryLimitFromSessionKey", () => {
   it("handles userId with colons (e.g., email)", () => {
     const config = {
       channels: {
-        msteams: {
+        mattermost: {
           dmHistoryLimit: 10,
           dms: { "user@example.com": { historyLimit: 7 } },
         },
       },
     } as DenebConfig;
-    expect(getDmHistoryLimitFromSessionKey("msteams:dm:user@example.com", config)).toBe(7);
+    expect(getDmHistoryLimitFromSessionKey("mattermost:dm:user@example.com", config)).toBe(7);
   });
   it("returns undefined when per-DM historyLimit is not set", () => {
     const config = {

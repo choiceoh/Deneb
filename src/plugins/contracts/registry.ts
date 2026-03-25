@@ -4,7 +4,6 @@ import type {
   ImageGenerationProviderPlugin,
   MediaUnderstandingProviderPlugin,
   ProviderPlugin,
-  SpeechProviderPlugin,
   WebSearchProviderPlugin,
 } from "../types.js";
 
@@ -24,7 +23,6 @@ type WebSearchProviderContractEntry = CapabilityContractEntry<WebSearchProviderP
   credentialValue: unknown;
 };
 
-type SpeechProviderContractEntry = CapabilityContractEntry<SpeechProviderPlugin>;
 type MediaUnderstandingProviderContractEntry =
   CapabilityContractEntry<MediaUnderstandingProviderPlugin>;
 type ImageGenerationProviderContractEntry = CapabilityContractEntry<ImageGenerationProviderPlugin>;
@@ -32,7 +30,6 @@ type ImageGenerationProviderContractEntry = CapabilityContractEntry<ImageGenerat
 type PluginRegistrationContractEntry = {
   pluginId: string;
   providerIds: string[];
-  speechProviderIds: string[];
   mediaUnderstandingProviderIds: string[];
   imageGenerationProviderIds: string[];
   webSearchProviderIds: string[];
@@ -40,8 +37,6 @@ type PluginRegistrationContractEntry = {
 };
 
 const bundledWebSearchPlugins: Array<RegistrablePlugin & { credentialValue: unknown }> = [];
-
-const bundledSpeechPlugins: RegistrablePlugin[] = [];
 
 const bundledMediaUnderstandingPlugins: RegistrablePlugin[] = [];
 
@@ -134,7 +129,6 @@ function createLazyArrayView<T>(load: () => T[]): T[] {
 
 let providerContractRegistryCache: ProviderContractEntry[] | null = null;
 let webSearchProviderContractRegistryCache: WebSearchProviderContractEntry[] | null = null;
-let speechProviderContractRegistryCache: SpeechProviderContractEntry[] | null = null;
 let mediaUnderstandingProviderContractRegistryCache:
   | MediaUnderstandingProviderContractEntry[]
   | null = null;
@@ -255,16 +249,6 @@ function loadWebSearchProviderContractRegistry(): WebSearchProviderContractEntry
   return webSearchProviderContractRegistryCache;
 }
 
-function loadSpeechProviderContractRegistry(): SpeechProviderContractEntry[] {
-  if (!speechProviderContractRegistryCache) {
-    speechProviderContractRegistryCache = buildCapabilityContractRegistry({
-      plugins: bundledSpeechPlugins,
-      select: (captured) => captured.speechProviders,
-    });
-  }
-  return speechProviderContractRegistryCache;
-}
-
 function loadMediaUnderstandingProviderContractRegistry(): MediaUnderstandingProviderContractEntry[] {
   if (!mediaUnderstandingProviderContractRegistryCache) {
     mediaUnderstandingProviderContractRegistryCache = buildCapabilityContractRegistry({
@@ -288,10 +272,6 @@ function loadImageGenerationProviderContractRegistry(): ImageGenerationProviderC
 export const webSearchProviderContractRegistry: WebSearchProviderContractEntry[] =
   createLazyArrayView(loadWebSearchProviderContractRegistry);
 
-export const speechProviderContractRegistry: SpeechProviderContractEntry[] = createLazyArrayView(
-  loadSpeechProviderContractRegistry,
-);
-
 export const mediaUnderstandingProviderContractRegistry: MediaUnderstandingProviderContractEntry[] =
   createLazyArrayView(loadMediaUnderstandingProviderContractRegistry);
 
@@ -301,7 +281,6 @@ export const imageGenerationProviderContractRegistry: ImageGenerationProviderCon
 const bundledProviderPlugins = dedupePlugins<RegistrablePlugin>([]);
 
 const bundledPluginRegistrationList = dedupePlugins([
-  ...bundledSpeechPlugins,
   ...bundledMediaUnderstandingPlugins,
   ...bundledImageGenerationPlugins,
   ...bundledWebSearchPlugins,
@@ -321,7 +300,6 @@ function upsertPluginRegistrationContractEntry(
     return;
   }
   existing.providerIds = mergeIds(existing.providerIds, next.providerIds);
-  existing.speechProviderIds = mergeIds(existing.speechProviderIds, next.speechProviderIds);
   existing.mediaUnderstandingProviderIds = mergeIds(
     existing.mediaUnderstandingProviderIds,
     next.mediaUnderstandingProviderIds,
@@ -351,7 +329,6 @@ function mergeProviderContractRegistrations(
     upsertPluginRegistrationContractEntry(registrationEntries, {
       pluginId,
       providerIds: providerIds.toSorted((left, right) => left.localeCompare(right)),
-      speechProviderIds: [],
       mediaUnderstandingProviderIds: [],
       imageGenerationProviderIds: [],
       webSearchProviderIds: [],
@@ -368,7 +345,6 @@ function loadPluginRegistrationContractRegistry(): PluginRegistrationContractEnt
       upsertPluginRegistrationContractEntry(entries, {
         pluginId: plugin.id,
         providerIds: captured.providers.map((provider) => provider.id),
-        speechProviderIds: captured.speechProviders.map((provider) => provider.id),
         mediaUnderstandingProviderIds: captured.mediaUnderstandingProviders.map(
           (provider) => provider.id,
         ),

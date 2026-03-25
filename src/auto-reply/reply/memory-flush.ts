@@ -112,10 +112,7 @@ const normalizeNonNegativeInt = (value: unknown): number | null => {
 
 export function resolveMemoryFlushSettings(cfg?: DenebConfig): MemoryFlushSettings | null {
   const defaults = cfg?.agents?.defaults?.compaction?.memoryFlush;
-  const enabled = defaults?.enabled ?? true;
-  if (!enabled) {
-    return null;
-  }
+  // memoryFlush.enabled is system-managed: always true.
   const softThresholdTokens =
     normalizeNonNegativeInt(defaults?.softThresholdTokens) ?? DEFAULT_MEMORY_FLUSH_SOFT_TOKENS;
   const forceFlushTranscriptBytes =
@@ -127,12 +124,11 @@ export function resolveMemoryFlushSettings(cfg?: DenebConfig): MemoryFlushSettin
   const systemPrompt = ensureMemoryFlushSafetyHints(
     defaults?.systemPrompt?.trim() || DEFAULT_MEMORY_FLUSH_SYSTEM_PROMPT,
   );
-  const reserveTokensFloor =
-    normalizeNonNegativeInt(cfg?.agents?.defaults?.compaction?.reserveTokensFloor) ??
-    DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
+  // reserveTokensFloor is system-managed — always use the default.
+  const reserveTokensFloor = DEFAULT_PI_COMPACTION_RESERVE_TOKENS_FLOOR;
 
   return {
-    enabled,
+    enabled: true,
     softThresholdTokens,
     forceFlushTranscriptBytes,
     prompt: ensureNoReplyHint(prompt),

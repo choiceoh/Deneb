@@ -505,27 +505,6 @@ When Mattermost native commands are enabled:
 - `channels.signal.configWrites`: allow or deny Signal-initiated config writes.
 - Optional `channels.signal.defaultAccount` overrides default account selection when it matches a configured account id.
 
-### BlueBubbles
-
-BlueBubbles is the recommended iMessage path (plugin-backed, configured under `channels.bluebubbles`).
-
-```json5
-{
-  channels: {
-    bluebubbles: {
-      enabled: true,
-      dmPolicy: "pairing",
-      // serverUrl, password, webhookPath, group controls, and advanced actions:
-      // see /channels/bluebubbles
-    },
-  },
-}
-```
-
-- Core key paths covered here: `channels.bluebubbles`, `channels.bluebubbles.dmPolicy`.
-- Optional `channels.bluebubbles.defaultAccount` overrides default account selection when it matches a configured account id.
-- Full BlueBubbles channel configuration is documented in the BlueBubbles channel guide.
-
 ### iMessage
 
 Deneb spawns `imsg rpc` (JSON-RPC over stdio). No daemon or port required.
@@ -569,26 +548,6 @@ exec ssh -T gateway-host imsg "$@"
 ```
 
 </Accordion>
-
-### Microsoft Teams
-
-Microsoft Teams is extension-backed and configured under `channels.msteams`.
-
-```json5
-{
-  channels: {
-    msteams: {
-      enabled: true,
-      configWrites: true,
-      // appId, appPassword, tenantId, webhook, team/channel policies:
-      // see /channels/msteams
-    },
-  },
-}
-```
-
-- Core key paths covered here: `channels.msteams`, `channels.msteams.configWrites`.
-- Full Teams config (credentials, webhook, DM/group policy, per-team/per-channel overrides) is documented in the Microsoft Teams channel guide.
 
 ### IRC
 
@@ -693,7 +652,7 @@ Group messages default to **require mention** (metadata mention or safe regex pa
 
 Resolution: per-DM override → provider default → no limit (all retained).
 
-Supported: `telegram`, `whatsapp`, `discord`, `slack`, `signal`, `imessage`, `msteams`.
+Supported: `telegram`, `whatsapp`, `discord`, `slack`, `signal`, `imessage`.
 
 #### Self-chat mode
 
@@ -1695,54 +1654,6 @@ Variables are case-insensitive. `{think}` is an alias for `{thinkingLevel}`.
 
 Batches rapid text-only messages from the same sender into a single agent turn. Media/attachments flush immediately. Control commands bypass debouncing.
 
-### TTS (text-to-speech)
-
-```json5
-{
-  messages: {
-    tts: {
-      auto: "always", // off | always | inbound | tagged
-      mode: "final", // final | all
-      provider: "elevenlabs",
-      summaryModel: "openai/gpt-4.1-mini",
-      modelOverrides: { enabled: true },
-      maxTextLength: 4000,
-      timeoutMs: 30000,
-      prefsPath: "~/.deneb/settings/tts.json",
-      elevenlabs: {
-        apiKey: "elevenlabs_api_key",
-        baseUrl: "https://api.elevenlabs.io",
-        voiceId: "voice_id",
-        modelId: "eleven_multilingual_v2",
-        seed: 42,
-        applyTextNormalization: "auto",
-        languageCode: "en",
-        voiceSettings: {
-          stability: 0.5,
-          similarityBoost: 0.75,
-          style: 0.0,
-          useSpeakerBoost: true,
-          speed: 1.0,
-        },
-      },
-      openai: {
-        apiKey: "openai_api_key",
-        baseUrl: "https://api.openai.com/v1",
-        model: "gpt-4o-mini-tts",
-        voice: "alloy",
-      },
-    },
-  },
-}
-```
-
-- `auto` controls auto-TTS. `/tts off|always|inbound|tagged` overrides per session.
-- `summaryModel` overrides `agents.defaults.model.primary` for auto-summary.
-- `modelOverrides` is enabled by default; `modelOverrides.allowProvider` defaults to `false` (opt-in).
-- API keys fall back to `ELEVENLABS_API_KEY`/`XI_API_KEY` and `OPENAI_API_KEY`.
-- `openai.baseUrl` overrides the OpenAI TTS endpoint. Resolution order is config, then `OPENAI_TTS_BASE_URL`, then `https://api.openai.com/v1`.
-- When `openai.baseUrl` points to a non-OpenAI endpoint, Deneb treats it as an OpenAI-compatible TTS server and relaxes model/voice validation.
-
 ---
 
 ## Talk
@@ -2397,18 +2308,18 @@ See [Local Models](/gateway/local-models). TL;DR: run MiniMax M2.5 via LM Studio
 {
   plugins: {
     enabled: true,
-    allow: ["voice-call"],
+    allow: ["my-plugin"],
     deny: [],
     load: {
-      paths: ["~/Projects/oss/voice-call-extension"],
+      paths: ["~/Projects/oss/my-plugin"],
     },
     entries: {
-      "voice-call": {
+      "my-plugin": {
         enabled: true,
         hooks: {
           allowPromptInjection: false,
         },
-        config: { provider: "twilio" },
+        config: { key: "value" },
       },
     },
   },

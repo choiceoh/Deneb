@@ -127,9 +127,6 @@ importers:
       markdown-it:
         specifier: ^14.1.0
         version: 14.1.0
-      node-edge-tts:
-        specifier: ^1.2.10
-        version: 1.2.10
       node-llama-cpp:
         specifier: 3.16.2
         version: 3.16.2(typescript@5.9.3)
@@ -142,9 +139,6 @@ importers:
       pdfjs-dist:
         specifier: ^5.5.207
         version: 5.5.207
-      playwright-core:
-        specifier: 1.58.2
-        version: 1.58.2
       qrcode-terminal:
         specifier: ^0.12.0
         version: 0.12.0
@@ -3536,10 +3530,6 @@ packages:
 
   node-api-headers@1.8.0:
     resolution: {integrity: sha512-jfnmiKWjRAGbdD1yQS28bknFM1tbHC1oucyuMPjmkEs+kpiu76aRs40WlTmBmyEgzDM76ge1DQ7XJ3R5deiVjQ==}
-
-  node-edge-tts@1.2.10:
-    resolution: {integrity: sha512-bV2i4XU54D45+US0Zm1HcJRkifuB3W438dWyuJEHLQdKxnuqlI1kim2MOvR6Q3XUQZvfF9PoDyR1Rt7aeXhPdQ==}
-    hasBin: true
 
   node-fetch@2.7.0:
     resolution: {integrity: sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A==}
@@ -8215,16 +8205,6 @@ snapshots:
 
   node-api-headers@1.8.0: {}
 
-  node-edge-tts@1.2.10:
-    dependencies:
-      https-proxy-agent: 7.0.6
-      ws: 8.19.0
-      yargs: 17.7.2
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
   node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
@@ -8502,7 +8482,8 @@ snapshots:
 
   pkce-challenge@5.0.1: {}
 
-  playwright-core@1.58.2: {}
+  playwright-core@1.58.2:
+    optional: true
 
   playwright@1.58.2:
     dependencies:

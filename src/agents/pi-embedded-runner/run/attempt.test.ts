@@ -1050,7 +1050,7 @@ describe("buildAfterTurnRuntimeContext", () => {
         messageProvider: "slack",
         agentAccountId: "acct-1",
         authProfileId: "openai:p1",
-        config: { plugins: { slots: { contextEngine: "lcm" } } } as DenebConfig,
+        config: { plugins: { slots: { contextEngine: "aurora" } } } as DenebConfig,
         skillsSnapshot: undefined,
         senderIsOwner: true,
         provider: "openai-codex",

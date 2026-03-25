@@ -316,7 +316,7 @@ export function listContextEngineIds(): string[] {
  *
  * Resolution order:
  *   1. `config.plugins.slots.contextEngine` (explicit slot override)
- *   2. Default slot value ("lcm")
+ *   2. Default slot value ("aurora")
  *
  * Throws if the resolved engine id has no registered factory.
  */

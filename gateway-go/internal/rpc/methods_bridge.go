@@ -51,15 +51,7 @@ func RegisterBridgeMethods(d *Dispatcher, deps BridgeDeps) {
 		// Tools (catalog only — invoke/list/status are native)
 		"tools.catalog",
 
-		// TTS / Media
-		"tts.status",
-		"tts.enable",
-		"tts.disable",
-		"tts.convert",
-		"tts.setProvider",
-		"tts.providers",
-		"voicewake.get",
-		"voicewake.set",
+		// Media
 		"browser.request",
 
 		// Web Login

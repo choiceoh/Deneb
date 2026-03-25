@@ -52,7 +52,7 @@ read_when:
 | `media/`              | 477    | --    | MIME detection (21 formats, zero-alloc)          |
 | `markdown/`           | 2,849  | 54    | Markdown parsing/rendering with SIMD             |
 | `memory_search/`      | 2,800+ | 91    | Cosine (AVX2), BM25, FTS, MMR, temporal decay    |
-| `compaction/`         | 2,444  | 45    | LCM hierarchical summarization state machine     |
+| `compaction/`         | 2,444  | 45    | Aurora hierarchical summarization state machine  |
 | `context_engine/`     | 2,335  | 35    | Assembly + retrieval (grep/describe/expand)      |
 | `parsing/`            | 1,490  | 35    | URL extraction, HTML-to-MD, base64, media tokens |
 | `exif.rs`             | 258    | --    | JPEG EXIF orientation (pure binary)              |

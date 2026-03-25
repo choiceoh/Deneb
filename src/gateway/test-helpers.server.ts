@@ -51,7 +51,6 @@ const GATEWAY_TEST_ENV_KEYS = [
   "DENEB_CONFIG_PATH",
   "DENEB_SKIP_BROWSER_CONTROL_SERVER",
   "DENEB_SKIP_GMAIL_WATCHER",
-  "DENEB_SKIP_CANVAS_HOST",
   "DENEB_BUNDLED_PLUGINS_DIR",
   "DENEB_SKIP_CHANNELS",
   "DENEB_SKIP_PROVIDERS",
@@ -104,7 +103,6 @@ async function setupGatewayTestHome() {
 function applyGatewaySkipEnv() {
   process.env.DENEB_SKIP_BROWSER_CONTROL_SERVER = "1";
   process.env.DENEB_SKIP_GMAIL_WATCHER = "1";
-  process.env.DENEB_SKIP_CANVAS_HOST = "1";
   process.env.DENEB_SKIP_CHANNELS = "1";
   process.env.DENEB_SKIP_PROVIDERS = "1";
   process.env.DENEB_SKIP_CRON = "1";
@@ -141,7 +139,6 @@ async function resetGatewayTestState(options: { uniqueConfigRoot: boolean }) {
   testState.gatewayAuth = { mode: "token", token: "test-gateway-token-1234567890" };
   testState.gatewayControlUi = undefined;
   testState.hooksConfig = undefined;
-  testState.canvasHostPort = undefined;
   testState.legacyIssues = [];
   testState.legacyParsed = {};
   testState.migrationConfig = null;

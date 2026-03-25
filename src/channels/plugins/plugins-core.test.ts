@@ -30,13 +30,13 @@ import type { LineProbeResult } from "../../line/types.js";
 import { setActivePluginRegistry } from "../../plugins/runtime.js";
 import {
   createChannelTestPluginBase,
-  createMSTeamsTestPluginBase,
+  createMattermostTestPluginBase,
   createOutboundTestPlugin,
   createTestRegistry,
 } from "../../test-utils/channel-plugins.js";
 import { withEnvAsync } from "../../test-utils/env.js";
 import { INTERNAL_MESSAGE_CHANNEL } from "../../utils/message-channel.js";
-import { getChannelPluginCatalogEntry, listChannelPluginCatalogEntries } from "./catalog.js";
+import { listChannelPluginCatalogEntries } from "./catalog.js";
 import {
   authorizeConfigWrite,
   canBypassConfigWritePolicy,
@@ -116,15 +116,9 @@ describe("channel plugin registry", () => {
 });
 
 describe("channel plugin catalog", () => {
-  it("includes Microsoft Teams", () => {
-    const entry = getChannelPluginCatalogEntry("msteams");
-    expect(entry?.install.npmSpec).toBe("@deneb/msteams");
-    expect(entry?.meta.aliases).toContain("teams");
-  });
-
   it("lists plugin catalog entries", () => {
     const ids = listChannelPluginCatalogEntries().map((entry) => entry.id);
-    expect(ids).toContain("msteams");
+    expect(ids.length).toBeGreaterThan(0);
   });
 
   it("includes external catalog entries", () => {
@@ -331,44 +325,44 @@ describe("channel plugin catalog", () => {
 
 const emptyRegistry = createTestRegistry([]);
 
-const msteamsOutbound: ChannelOutboundAdapter = {
+const mattermostOutbound: ChannelOutboundAdapter = {
   deliveryMode: "direct",
-  sendText: async () => ({ channel: "msteams", messageId: "m1" }),
-  sendMedia: async () => ({ channel: "msteams", messageId: "m2" }),
+  sendText: async () => ({ channel: "mattermost", messageId: "m1" }),
+  sendMedia: async () => ({ channel: "mattermost", messageId: "m2" }),
 };
 
-const msteamsPlugin: ChannelPlugin = {
-  ...createMSTeamsTestPluginBase(),
-  outbound: msteamsOutbound,
+const mattermostPlugin: ChannelPlugin = {
+  ...createMattermostTestPluginBase(),
+  outbound: mattermostOutbound,
 };
 
 const registryWithMSTeams = createTestRegistry([
-  { pluginId: "msteams", plugin: msteamsPlugin, source: "test" },
+  { pluginId: "mattermost", plugin: mattermostPlugin, source: "test" },
 ]);
 
-const msteamsOutboundV2: ChannelOutboundAdapter = {
+const mattermostOutboundV2: ChannelOutboundAdapter = {
   deliveryMode: "direct",
-  sendText: async () => ({ channel: "msteams", messageId: "m3" }),
-  sendMedia: async () => ({ channel: "msteams", messageId: "m4" }),
+  sendText: async () => ({ channel: "mattermost", messageId: "m3" }),
+  sendMedia: async () => ({ channel: "mattermost", messageId: "m4" }),
 };
 
-const msteamsPluginV2 = createOutboundTestPlugin({
-  id: "msteams",
+const mattermostPluginV2 = createOutboundTestPlugin({
+  id: "mattermost",
   label: "Microsoft Teams",
-  outbound: msteamsOutboundV2,
+  outbound: mattermostOutboundV2,
 });
 
 const registryWithMSTeamsV2 = createTestRegistry([
-  { pluginId: "msteams", plugin: msteamsPluginV2, source: "test-v2" },
+  { pluginId: "mattermost", plugin: mattermostPluginV2, source: "test-v2" },
 ]);
 
 const mstNoOutboundPlugin = createChannelTestPluginBase({
-  id: "msteams",
+  id: "mattermost",
   label: "Microsoft Teams",
 });
 
 const registryWithMSTeamsNoOutbound = createTestRegistry([
-  { pluginId: "msteams", plugin: mstNoOutboundPlugin, source: "test-no-outbound" },
+  { pluginId: "mattermost", plugin: mstNoOutboundPlugin, source: "test-no-outbound" },
 ]);
 
 function makeSlackConfigWritesCfg(accountIdKey: string) {
@@ -422,33 +416,33 @@ describe("channel plugin loader", () => {
 
   it("loads channel plugins from the active registry", async () => {
     setActivePluginRegistry(registryWithMSTeams);
-    const plugin = await loadChannelPlugin("msteams");
-    expect(plugin).toBe(msteamsPlugin);
+    const plugin = await loadChannelPlugin("mattermost");
+    expect(plugin).toBe(mattermostPlugin);
   });
 
   it("loads outbound adapters from registered plugins", async () => {
     setActivePluginRegistry(registryWithMSTeams);
-    const outbound = await loadChannelOutboundAdapter("msteams");
-    expect(outbound).toBe(msteamsOutbound);
+    const outbound = await loadChannelOutboundAdapter("mattermost");
+    expect(outbound).toBe(mattermostOutbound);
   });
 
   it("refreshes cached plugin values when registry changes", async () => {
     setActivePluginRegistry(registryWithMSTeams);
-    expect(await loadChannelPlugin("msteams")).toBe(msteamsPlugin);
+    expect(await loadChannelPlugin("mattermost")).toBe(mattermostPlugin);
     setActivePluginRegistry(registryWithMSTeamsV2);
-    expect(await loadChannelPlugin("msteams")).toBe(msteamsPluginV2);
+    expect(await loadChannelPlugin("mattermost")).toBe(mattermostPluginV2);
   });
 
   it("refreshes cached outbound values when registry changes", async () => {
     setActivePluginRegistry(registryWithMSTeams);
-    expect(await loadChannelOutboundAdapter("msteams")).toBe(msteamsOutbound);
+    expect(await loadChannelOutboundAdapter("mattermost")).toBe(mattermostOutbound);
     setActivePluginRegistry(registryWithMSTeamsV2);
-    expect(await loadChannelOutboundAdapter("msteams")).toBe(msteamsOutboundV2);
+    expect(await loadChannelOutboundAdapter("mattermost")).toBe(mattermostOutboundV2);
   });
 
   it("returns undefined when plugin has no outbound adapter", async () => {
     setActivePluginRegistry(registryWithMSTeamsNoOutbound);
-    expect(await loadChannelOutboundAdapter("msteams")).toBeUndefined();
+    expect(await loadChannelOutboundAdapter("mattermost")).toBeUndefined();
   });
 });
 
