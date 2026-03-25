@@ -389,6 +389,7 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 | `make go`          | Build Go gateway                                   |
 | `make go-test`     | Run Go tests (`go test ./...`)                     |
 | `make go-run`      | Run Go gateway locally                             |
+| `make go-dev`      | Run Go gateway in dev mode (auto-restart on SIGUSR1) |
 | `make test`        | Run Rust + Go tests                                |
 | `make check`       | Full check: proto-check + rust-test + go-test + ts |
 | `make clean`       | Clean Rust + Go build artifacts                    |

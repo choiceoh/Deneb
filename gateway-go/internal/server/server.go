@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
@@ -1019,8 +1020,11 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			return 0
 		},
 		OnRestartNeeded: func(reason string) {
-			s.logger.Warn("watchdog restart requested", "reason", reason)
-			// In production, this would send SIGUSR1 to trigger graceful restart.
+			s.logger.Warn("watchdog restart requested, sending SIGUSR1", "reason", reason)
+			// Send SIGUSR1 to self to trigger graceful restart via main's signal handler.
+			if p, err := os.FindProcess(os.Getpid()); err == nil {
+				_ = p.Signal(syscall.SIGUSR1)
+			}
 		},
 	}, monitoring.DefaultWatchdogConfig(), s.logger)
 	s.safeGo("watchdog", func() { s.watchdog.Run(ctx) })

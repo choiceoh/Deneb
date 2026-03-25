@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
@@ -19,6 +20,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/server"
 )
+
+// ExitCodeRestart is the exit code used to signal that the gateway should be
+// restarted (e.g., after receiving SIGUSR1). Wrapper scripts can check for
+// this code to implement auto-restart loops. Matches EX_TEMPFAIL from sysexits.h.
+const ExitCodeRestart = 75
 
 func main() {
 	configPath := flag.String("config", "", "Path to deneb.json config file")
@@ -122,40 +128,64 @@ func main() {
 
 		srv.SetDaemon(d)
 
-		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-		defer stop()
+		exitCode := runWithSignals(func(ctx context.Context) error {
+			if err := d.Start(func() {}); err != nil {
+				return fmt.Errorf("daemon start failed: %w", err)
+			}
 
-		if err := d.Start(stop); err != nil {
-			logger.Error("daemon start failed", "error", err)
-			os.Exit(1)
-		}
-		defer d.Stop()
+			go provider.PrewarmModel(ctx, srv, logger)
+			logger.Info("deneb gateway starting (daemon mode)", "addr", addr, "pid", os.Getpid())
+			return srv.Run(ctx)
+		}, logger)
 
-		// Prewarm primary model before accepting requests.
-		go provider.PrewarmModel(ctx, srv, logger)
-
-		logger.Info("deneb gateway starting (daemon mode)", "addr", addr, "pid", os.Getpid())
-
-		if err := srv.Run(ctx); err != nil {
-			logger.Error("gateway error", "error", err)
-			os.Exit(1)
-		}
-		return
+		// Explicitly stop daemon before os.Exit (defers won't run).
+		d.Stop()
+		os.Exit(exitCode)
 	}
 
 	// Non-daemon mode.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	exitCode := runWithSignals(func(ctx context.Context) error {
+		go provider.PrewarmModel(ctx, srv, logger)
+		logger.Info("deneb gateway starting", "addr", addr)
+		return srv.Run(ctx)
+	}, logger)
+	os.Exit(exitCode)
+}
 
-	// Prewarm primary model before accepting requests.
-	go provider.PrewarmModel(ctx, srv, logger)
+// runWithSignals runs the given function with a context that is cancelled on
+// SIGINT, SIGTERM, or SIGUSR1. Returns ExitCodeRestart (75) if SIGUSR1 was
+// received, 1 on error, or 0 on clean shutdown.
+func runWithSignals(run func(ctx context.Context) error, logger *slog.Logger) int {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	logger.Info("deneb gateway starting", "addr", addr)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGUSR1)
+	defer signal.Stop(sigCh)
 
-	if err := srv.Run(ctx); err != nil {
+	var restartRequested atomic.Bool
+
+	go func() {
+		sig := <-sigCh
+		if sig == syscall.SIGUSR1 {
+			logger.Info("received SIGUSR1, initiating graceful restart")
+			restartRequested.Store(true)
+		} else {
+			logger.Info("received shutdown signal", "signal", sig)
+		}
+		cancel()
+	}()
+
+	if err := run(ctx); err != nil {
 		logger.Error("gateway error", "error", err)
-		os.Exit(1)
+		return 1
 	}
+
+	if restartRequested.Load() {
+		logger.Info("exiting for restart", "exitCode", ExitCodeRestart)
+		return ExitCodeRestart
+	}
+	return 0
 }
 
 func parseLogLevel(s string) slog.Level {

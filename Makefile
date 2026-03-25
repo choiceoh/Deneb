@@ -3,7 +3,7 @@
 # Orchestrates Rust (core-rs workspace), Go (gateway-go), and TypeScript (pnpm) builds.
 
 .PHONY: all rust rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
-       go go-ffi go-pure go-run go-test go-test-pure go-test-fuzz go-vet go-clean go-binary gateway-prod \
+       go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-clean go-binary gateway-prod \
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
        cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 \
        cli-cross-win-x64 cli-cross-all \
@@ -62,6 +62,22 @@ go-pure:
 
 go-run: go
 	cd gateway-go && go run ./cmd/gateway/
+
+# Dev mode: build and run gateway with auto-restart on SIGUSR1 (exit code 75).
+# Uses go build instead of go run to avoid signal forwarding issues.
+go-dev:
+	@echo "Starting Go gateway in dev mode (auto-restart on SIGUSR1)..."
+	@while true; do \
+		cd gateway-go && go build -o /tmp/deneb-gateway-dev ./cmd/gateway/ && /tmp/deneb-gateway-dev $(ARGS); \
+		EXIT=$$?; \
+		if [ $$EXIT -eq 75 ]; then \
+			echo "[go-dev] Restarting gateway (SIGUSR1)..."; \
+			sleep 0.5; \
+			continue; \
+		fi; \
+		echo "[go-dev] Gateway exited with code $$EXIT"; \
+		exit $$EXIT; \
+	done
 
 go-test:
 	cd gateway-go && go test -race -count=1 ./...
@@ -196,6 +212,7 @@ info:
 	@echo "  make rust       - Build Rust core crate (release, CGo)"
 	@echo "  make rust-all   - Build all Rust workspace crates"
 	@echo "  make go         - Build Go gateway"
+	@echo "  make go-dev     - Run Go gateway in dev mode (auto-restart on SIGUSR1)"
 	@echo "  make cli        - Build Rust CLI (release)"
 	@echo "  make go-binary  - Build Go gateway binary to dist/"
 	@echo "  make ts         - Build TypeScript (pnpm)"
