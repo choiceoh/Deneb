@@ -245,7 +245,7 @@ export async function buildFileEntry(
       }
       throw err;
     }
-    const mimeType = await detectMime({ buffer: buffer.subarray(0, 512), filePath: absPath });
+    const mimeType = detectMime({ buffer: buffer.subarray(0, 512), filePath: absPath });
     if (!mimeType || !mimeType.startsWith(`${modality}/`)) {
       return null;
     }

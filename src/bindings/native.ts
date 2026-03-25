@@ -1,6 +1,6 @@
 /**
- * Lazy loader for the optional @deneb/native Rust addon.
- * Falls back gracefully when the addon is not available or has an ABI mismatch.
+ * Loader for the required @deneb/native Rust addon.
+ * Throws if the addon is unavailable or has an ABI mismatch.
  *
  * This is the single entry point for loading the unified native addon.
  * Both loadNative() (gitignore/exif/png) and loadCoreRs() (protocol/security/media)
@@ -70,45 +70,41 @@ let rawLoaded = false;
 /**
  * Load the raw @deneb/native addon once, with shape validation and smoke tests.
  * Shared by both loadNative() and loadCoreRs() to avoid duplicate require() calls.
+ * Throws if the addon is unavailable or fails validation.
  * @internal Exported for core-rs.ts only — not part of the public API.
  */
-export function loadRawAddon(): Record<string, unknown> | null {
+export function loadRawAddon(): Record<string, unknown> {
   if (rawLoaded) {
+    if (!rawAddon) {
+      throw new Error("@deneb/native addon failed to load (cached failure)");
+    }
     return rawAddon;
   }
   rawLoaded = true;
-  try {
-    const require = createRequire(import.meta.url);
-    const mod = require("@deneb/native") as Record<string, unknown>;
-    // Runtime shape validation: ensure all expected functions are present.
-    for (const [name, kind] of ALL_EXPECTED_EXPORTS) {
-      if (typeof mod[name] !== kind) {
-        rawAddon = null;
-        return rawAddon;
-      }
+  const require = createRequire(import.meta.url);
+  const mod = require("@deneb/native") as Record<string, unknown>;
+  // Runtime shape validation: ensure all expected functions are present.
+  for (const [name, kind] of ALL_EXPECTED_EXPORTS) {
+    if (typeof mod[name] !== kind) {
+      throw new Error(`@deneb/native addon missing export: ${name} (expected ${kind})`);
     }
-    // Smoke tests: verify known outputs to catch ABI mismatches from stale builds.
-    const candidate = mod as unknown as NativeModule & { detectMime(data: Buffer): string };
-    if (candidate.crc32(Buffer.from("IEND")) !== 0xae42_6082) {
-      rawAddon = null;
-      return rawAddon;
-    }
-    if (candidate.detectMime(PNG_MAGIC) !== "image/png") {
-      rawAddon = null;
-      return rawAddon;
-    }
-    rawAddon = mod;
-  } catch {
-    rawAddon = null;
   }
+  // Smoke tests: verify known outputs to catch ABI mismatches from stale builds.
+  const candidate = mod as unknown as NativeModule & { detectMime(data: Buffer): string };
+  if (candidate.crc32(Buffer.from("IEND")) !== 0xae42_6082) {
+    throw new Error("@deneb/native addon ABI mismatch: crc32 smoke test failed");
+  }
+  if (candidate.detectMime(PNG_MAGIC) !== "image/png") {
+    throw new Error("@deneb/native addon ABI mismatch: detectMime smoke test failed");
+  }
+  rawAddon = mod;
   return rawAddon;
 }
 
 /**
  * Load native addon functions (gitignore, EXIF, PNG).
- * Returns null if the addon is unavailable. Result is cached.
+ * Throws if the addon is unavailable.
  */
-export function loadNative(): NativeModule | null {
-  const raw = loadRawAddon();
-  return raw ? (raw as unknown as NativeModule) : null;
+export function loadNative(): NativeModule {
+  return loadRawAddon() as unknown as NativeModule;
 }

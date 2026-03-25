@@ -107,10 +107,10 @@ export class MediaAttachmentCache {
         entry.bufferMime =
           entry.bufferMime ??
           entry.attachment.mime ??
-          (await detectMime({
+          detectMime({
             buffer,
             filePath: entry.resolvedPath,
-          }));
+          });
         entry.bufferFileName =
           path.basename(entry.resolvedPath) || `media-${params.attachmentIndex + 1}`;
         return {
@@ -138,10 +138,10 @@ export class MediaAttachmentCache {
       entry.bufferMime =
         entry.attachment.mime ??
         fetched.contentType ??
-        (await detectMime({
+        detectMime({
           buffer: fetched.buffer,
           filePath: fetched.fileName ?? url,
-        }));
+        });
       entry.bufferFileName = fetched.fileName ?? `media-${params.attachmentIndex + 1}`;
       return {
         buffer: fetched.buffer,

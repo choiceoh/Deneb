@@ -1,35 +1,12 @@
 /**
- * Minimal PNG encoder for generating simple RGBA images without native dependencies.
+ * PNG encoding via native Rust addon.
  * Used for QR codes, live probes, and other programmatic image generation.
- *
- * When @deneb/native is available, CRC32 and full PNG encoding are accelerated via Rust.
  */
-import { deflateSync } from "node:zlib";
 import { loadNative } from "../bindings/native.js";
-
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i += 1) {
-    let c = i;
-    for (let k = 0; k < 8; k += 1) {
-      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    }
-    table[i] = c >>> 0;
-  }
-  return table;
-})();
 
 /** Compute CRC32 checksum for a buffer (used in PNG chunk encoding). */
 export function crc32(buf: Buffer): number {
-  const native = loadNative();
-  if (native) {
-    return native.crc32(buf);
-  }
-  let crc = 0xffffffff;
-  for (let i = 0; i < buf.length; i += 1) {
-    crc = CRC_TABLE[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
+  return loadNative().crc32(buf);
 }
 
 /** Create a PNG chunk with type, data, and CRC. */
@@ -69,39 +46,5 @@ export function fillPixel(
 
 /** Encode an RGBA buffer as a PNG image. */
 export function encodePngRgba(buffer: Buffer, width: number, height: number): Buffer {
-  // Try native Rust encoder first.
-  const native = loadNative();
-  if (native) {
-    try {
-      return native.encodePngRgba(buffer, width, height);
-    } catch {
-      // Fall through to TS implementation.
-    }
-  }
-
-  const stride = width * 4;
-  const raw = Buffer.alloc((stride + 1) * height);
-  for (let row = 0; row < height; row += 1) {
-    const rawOffset = row * (stride + 1);
-    raw[rawOffset] = 0; // filter: none
-    buffer.copy(raw, rawOffset + 1, row * stride, row * stride + stride);
-  }
-  const compressed = deflateSync(raw);
-
-  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8; // bit depth
-  ihdr[9] = 6; // color type RGBA
-  ihdr[10] = 0; // compression
-  ihdr[11] = 0; // filter
-  ihdr[12] = 0; // interlace
-
-  return Buffer.concat([
-    signature,
-    pngChunk("IHDR", ihdr),
-    pngChunk("IDAT", compressed),
-    pngChunk("IEND", Buffer.alloc(0)),
-  ]);
+  return loadNative().encodePngRgba(buffer, width, height);
 }

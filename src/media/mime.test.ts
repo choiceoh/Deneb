@@ -37,7 +37,7 @@ describe("mime detection", () => {
       mainMime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       partPath: "/word/document.xml",
     });
-    const mime = await detectMime({ buffer: buf, filePath: "/tmp/file.bin" });
+    const mime = detectMime({ buffer: buf, filePath: "/tmp/file.bin" });
     expect(mime).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
   });
 
@@ -46,7 +46,7 @@ describe("mime detection", () => {
       mainMime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       partPath: "/ppt/presentation.xml",
     });
-    const mime = await detectMime({ buffer: buf, filePath: "/tmp/file.bin" });
+    const mime = detectMime({ buffer: buf, filePath: "/tmp/file.bin" });
     expect(mime).toBe("application/vnd.openxmlformats-officedocument.presentationml.presentation");
   });
 
@@ -55,7 +55,7 @@ describe("mime detection", () => {
     zip.file("hello.txt", "hi");
     const buf = await zip.generateAsync({ type: "nodebuffer" });
 
-    const mime = await detectMime({
+    const mime = detectMime({
       buffer: buf,
       filePath: "/tmp/file.xlsx",
     });
@@ -63,7 +63,7 @@ describe("mime detection", () => {
   });
 
   it("uses extension mapping for JavaScript assets", async () => {
-    const mime = await detectMime({
+    const mime = detectMime({
       filePath: "/tmp/a2ui.bundle.js",
     });
     expect(mime).toBe("text/javascript");

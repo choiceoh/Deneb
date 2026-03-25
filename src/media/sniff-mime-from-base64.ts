@@ -1,6 +1,6 @@
 import { detectMime } from "./mime.js";
 
-export async function sniffMimeFromBase64(base64: string): Promise<string | undefined> {
+export function sniffMimeFromBase64(base64: string): string | undefined {
   const trimmed = base64.trim();
   if (!trimmed) {
     return undefined;
@@ -14,7 +14,7 @@ export async function sniffMimeFromBase64(base64: string): Promise<string | unde
 
   try {
     const head = Buffer.from(trimmed.slice(0, sliceLen), "base64");
-    return await detectMime({ buffer: head });
+    return detectMime({ buffer: head });
   } catch {
     return undefined;
   }

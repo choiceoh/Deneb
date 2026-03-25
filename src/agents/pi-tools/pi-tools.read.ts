@@ -313,7 +313,7 @@ async function normalizeReadImageResult(
     throw new Error(`read: image payload is empty (${filePath})`);
   }
 
-  const sniffed = await sniffMimeFromBase64(image.data);
+  const sniffed = sniffMimeFromBase64(image.data);
   if (!sniffed) {
     return result;
   }
@@ -680,7 +680,7 @@ function createSandboxReadOperations(params: SandboxToolParams) {
     },
     detectImageMimeType: async (absolutePath: string) => {
       const buffer = await params.bridge.readFile({ filePath: absolutePath, cwd: params.root });
-      const mime = await detectMime({ buffer, filePath: absolutePath });
+      const mime = detectMime({ buffer, filePath: absolutePath });
       return mime && mime.startsWith("image/") ? mime : undefined;
     },
   } as const;

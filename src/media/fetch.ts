@@ -244,7 +244,7 @@ export async function fetchRemoteMedia(options: FetchMediaOptions): Promise<Fetc
 
     const filePathForMime =
       headerFileName && path.extname(headerFileName) ? headerFileName : (filePathHint ?? finalUrl);
-    const contentType = await detectMime({
+    const contentType = detectMime({
       buffer,
       headerMime: res.headers.get("content-type"),
       filePath: filePathForMime,

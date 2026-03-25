@@ -21,8 +21,7 @@ export function requireSessionKey(key: unknown, respond: RespondFn): string | nu
     return null;
   }
   // Native Rust validation: rejects keys with control chars or exceeding 512 chars.
-  const native = loadCoreRs();
-  if (native && !native.validateSessionKey(normalized)) {
+  if (!loadCoreRs().validateSessionKey(normalized)) {
     respond(false, undefined, errorShape(ErrorCodes.VALIDATION_FAILED, "invalid session key"));
     return null;
   }
