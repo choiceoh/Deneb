@@ -59,19 +59,20 @@ func sessionsPatch(deps SessionDeps) HandlerFunc {
 			}
 			bridgeResp, err := deps.Forwarder.Forward(ctx, forwardReq)
 			if err == nil && bridgeResp != nil && bridgeResp.Error == nil {
-				// Bridge succeeded — return bridge response (has resolved model info).
+				// Bridge succeeded — emit lifecycle and return bridge response
+				// (which includes resolved model info).
+				emitSessionLifecycle(deps.Deps, key, "patch")
 				return bridgeResp
 			}
 			// On bridge failure, fall through to return in-memory result.
 		}
 
+		emitSessionLifecycle(deps.Deps, key, "patch")
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"ok":    true,
 			"key":   key,
 			"entry": updated,
 		})
-
-		emitSessionLifecycle(deps.Deps, key, "patch")
 		return resp
 	}
 }
@@ -286,11 +287,8 @@ func sessionsResolve(deps SessionDeps) HandlerFunc {
 			}
 		}
 
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
-			"ok":    false,
-			"error": map[string]string{"code": "NOT_FOUND", "message": "session not found"},
-		})
-		return resp
+		return protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrNotFound, "session not found"))
 	}
 }
 

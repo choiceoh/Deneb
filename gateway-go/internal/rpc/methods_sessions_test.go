@@ -337,13 +337,12 @@ func TestSessionsResolve_MultipleIdentifiers(t *testing.T) {
 
 func TestSessionsResolve_NotFound(t *testing.T) {
 	d, _ := sessionDispatcher(t)
-	payload, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{"key": "nope"})
-	if !resp.OK {
-		// Without bridge, returns ok:false in payload.
-		t.Fatalf("expected ok response (with ok:false in payload)")
+	_, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{"key": "nope"})
+	if resp.OK {
+		t.Fatal("expected error response for not-found session")
 	}
-	if payload["ok"] != false {
-		t.Errorf("expected ok=false in payload for not-found, got %v", payload["ok"])
+	if resp.Error == nil || resp.Error.Code != protocol.ErrNotFound {
+		t.Errorf("expected NOT_FOUND error, got %+v", resp.Error)
 	}
 }
 
