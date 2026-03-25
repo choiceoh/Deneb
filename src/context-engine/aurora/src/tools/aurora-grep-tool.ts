@@ -2,9 +2,12 @@ import { Type } from "@sinclair/typebox";
 import { formatTimestamp } from "../compaction.js";
 import type { AuroraContextEngine } from "../engine.js";
 import type { AuroraDependencies } from "../types.js";
+import {
+  parseIsoTimestampParam,
+  resolveAuroraConversationScope,
+} from "./aurora-conversation-scope.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult } from "./common.js";
-import { parseIsoTimestampParam, resolveAuroraConversationScope } from "./aurora-conversation-scope.js";
 
 const MAX_RESULT_CHARS = 40_000; // ~10k tokens
 

@@ -745,7 +745,9 @@ export async function createAuroraSummarize(params: {
 
   const { provider, model } = resolved;
   if (!provider || !model) {
-    console.error(`[aurora] createAuroraSummarize: empty provider="${provider}" or model="${model}"`);
+    console.error(
+      `[aurora] createAuroraSummarize: empty provider="${provider}" or model="${model}"`,
+    );
     return undefined;
   }
   const authProfileId =

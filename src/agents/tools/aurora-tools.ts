@@ -7,11 +7,11 @@
 
 import type { DenebConfig } from "../../config/config.js";
 import { getOrCreateAuroraSingleton } from "../../context-engine/aurora/index.js";
-import type { AnyAgentTool } from "../../context-engine/aurora/src/tools/common.js";
 import { createAuroraDescribeTool } from "../../context-engine/aurora/src/tools/aurora-describe-tool.js";
 import { createAuroraExpandQueryTool } from "../../context-engine/aurora/src/tools/aurora-expand-query-tool.js";
 import { createAuroraExpandTool } from "../../context-engine/aurora/src/tools/aurora-expand-tool.js";
 import { createAuroraGrepTool } from "../../context-engine/aurora/src/tools/aurora-grep-tool.js";
+import type { AnyAgentTool } from "../../context-engine/aurora/src/tools/common.js";
 
 export function resolveAuroraTools(params: {
   sessionKey?: string;

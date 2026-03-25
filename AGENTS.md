@@ -560,17 +560,17 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 
 ### Documentation
 
-| Command                         | Description                                             |
-| ------------------------------- | ------------------------------------------------------- |
-| `pnpm docs:dev`                 | Run Mintlify local preview                              |
-| `pnpm docs:check-links`         | Audit documentation links                               |
-| `pnpm docs:spellcheck`          | Spell check docs                                        |
-| `pnpm docs:spellcheck:fix`      | Auto-fix doc spelling                                   |
-| `pnpm check:docs`               | Full docs check (format + lint + links)                 |
-| `pnpm config:docs:gen`          | Generate config doc baseline                            |
-| `pnpm config:docs:check`        | Check config doc baseline is up to date                 |
-| `pnpm docs:bin`                 | Build docs list for CLI                                 |
-| `pnpm docs:list`                | List all doc pages                                      |
+| Command                    | Description                             |
+| -------------------------- | --------------------------------------- |
+| `pnpm docs:dev`            | Run Mintlify local preview              |
+| `pnpm docs:check-links`    | Audit documentation links               |
+| `pnpm docs:spellcheck`     | Spell check docs                        |
+| `pnpm docs:spellcheck:fix` | Auto-fix doc spelling                   |
+| `pnpm check:docs`          | Full docs check (format + lint + links) |
+| `pnpm config:docs:gen`     | Generate config doc baseline            |
+| `pnpm config:docs:check`   | Check config doc baseline is up to date |
+| `pnpm docs:bin`            | Build docs list for CLI                 |
+| `pnpm docs:list`           | List all doc pages                      |
 
 ### Code Generation / Sync
 

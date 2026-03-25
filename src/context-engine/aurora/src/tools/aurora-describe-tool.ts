@@ -6,9 +6,9 @@ import {
   resolveDelegatedExpansionGrantId,
 } from "../expansion-auth.js";
 import type { AuroraDependencies } from "../types.js";
+import { resolveAuroraConversationScope } from "./aurora-conversation-scope.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult } from "./common.js";
-import { resolveAuroraConversationScope } from "./aurora-conversation-scope.js";
 
 const AuroraDescribeSchema = Type.Object({
   id: Type.String({

@@ -94,7 +94,9 @@ export function resolveAuroraConfig(
 
   return {
     enabled:
-      env.AURORA_ENABLED !== undefined ? env.AURORA_ENABLED !== "false" : (toBool(pc.enabled) ?? true),
+      env.AURORA_ENABLED !== undefined
+        ? env.AURORA_ENABLED !== "false"
+        : (toBool(pc.enabled) ?? true),
     databasePath:
       env.AURORA_DATABASE_PATH ??
       toStr(pc.dbPath) ??
@@ -114,8 +116,10 @@ export function resolveAuroraConfig(
     incrementalMaxDepth:
       toNumber(env.AURORA_INCREMENTAL_MAX_DEPTH) ?? toNumber(pc.incrementalMaxDepth) ?? 0,
     // DGX SPARK: moderately larger chunks — GPU can handle more context per pass
-    leafChunkTokens: toNumber(env.AURORA_LEAF_CHUNK_TOKENS) ?? toNumber(pc.leafChunkTokens) ?? 30000,
-    leafTargetTokens: toNumber(env.AURORA_LEAF_TARGET_TOKENS) ?? toNumber(pc.leafTargetTokens) ?? 1500,
+    leafChunkTokens:
+      toNumber(env.AURORA_LEAF_CHUNK_TOKENS) ?? toNumber(pc.leafChunkTokens) ?? 30000,
+    leafTargetTokens:
+      toNumber(env.AURORA_LEAF_TARGET_TOKENS) ?? toNumber(pc.leafTargetTokens) ?? 1500,
     condensedTargetTokens:
       toNumber(env.AURORA_CONDENSED_TARGET_TOKENS) ?? toNumber(pc.condensedTargetTokens) ?? 2500,
     maxExpandTokens: toNumber(env.AURORA_MAX_EXPAND_TOKENS) ?? toNumber(pc.maxExpandTokens) ?? 6000,
