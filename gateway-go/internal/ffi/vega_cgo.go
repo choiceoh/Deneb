@@ -12,7 +12,10 @@ extern int deneb_vega_search(
 	unsigned char *out_ptr, unsigned long out_len);
 */
 import "C"
-import "unsafe"
+import (
+	"errors"
+	"unsafe"
+)
 
 const vegaOutBufSize = 64 * 1024 // 64 KB output buffer
 
@@ -20,7 +23,7 @@ const vegaOutBufSize = 64 * 1024 // 64 KB output buffer
 // Returns the raw JSON response bytes.
 func VegaExecute(cmd string) ([]byte, error) {
 	if len(cmd) == 0 {
-		return nil, ffiError("vega_execute", -1)
+		return nil, errors.New("ffi: vega_execute: empty input")
 	}
 	cmdPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(cmd)))
 	out := make([]byte, vegaOutBufSize)
@@ -37,7 +40,7 @@ func VegaExecute(cmd string) ([]byte, error) {
 // Returns the raw JSON results bytes.
 func VegaSearch(query string) ([]byte, error) {
 	if len(query) == 0 {
-		return nil, ffiError("vega_search", -1)
+		return nil, errors.New("ffi: vega_search: empty input")
 	}
 	queryPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(query)))
 	out := make([]byte, vegaOutBufSize)

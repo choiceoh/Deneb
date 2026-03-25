@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -183,6 +184,152 @@ func TestSessionsDelete_RunningBlocked(t *testing.T) {
 	}
 	if sm.Get("run-1") != nil {
 		t.Error("session should have been deleted with force")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Vega FFI RPC tests
+// ---------------------------------------------------------------------------
+
+func TestVegaFFIExecute(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "vega.ffi.execute", map[string]string{"cmd": "test"})
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+}
+
+func TestVegaFFISearch(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "vega.ffi.search", map[string]string{"query": "test"})
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+}
+
+func TestVegaFFIExecute_MissingParams(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "vega.ffi.execute", nil)
+	if resp.OK {
+		t.Error("expected error for missing params")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ML FFI RPC tests
+// ---------------------------------------------------------------------------
+
+func TestMLEmbed(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "ml.embed", map[string]any{"texts": []string{"hello"}})
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+}
+
+func TestMLRerank(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "ml.rerank", map[string]any{"query": "test", "docs": []string{"a", "b"}})
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Protocol validate_params RPC tests
+// ---------------------------------------------------------------------------
+
+func TestProtocolValidateParams_MissingMethod(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "protocol.validate_params", map[string]string{
+		"params": `{"key":"value"}`,
+	})
+	if resp.OK {
+		t.Error("expected error for missing method")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("expected MISSING_PARAM, got %+v", resp.Error)
+	}
+}
+
+func TestProtocolValidateParams_MissingParams(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "protocol.validate_params", map[string]string{
+		"method": "health.check",
+	})
+	if resp.OK {
+		t.Error("expected error for missing params")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("expected MISSING_PARAM, got %+v", resp.Error)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Context engine RPC tests
+// ---------------------------------------------------------------------------
+
+func TestContextAssemblyNew_ReturnsHandle(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "context.assembly.new", map[string]any{
+		"conversation_id":  1,
+		"token_budget":     4096,
+		"fresh_tail_count": 10,
+	})
+	// noffi returns an error (context engine not available), which is expected.
+	if !ffi.Available && resp.OK {
+		t.Error("expected error without FFI")
+	}
+	if ffi.Available && !resp.OK {
+		t.Fatalf("expected ok with FFI, got error: %+v", resp.Error)
+	}
+}
+
+func TestContextAssemblyStart_MissingHandle(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "context.assembly.start", map[string]any{})
+	if resp.OK {
+		t.Error("expected error for missing handle")
+	}
+}
+
+func TestContextEngineDrop_MissingHandle(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "context.engine.drop", map[string]any{})
+	if resp.OK {
+		t.Error("expected error for missing handle")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Compaction sweep RPC tests
+// ---------------------------------------------------------------------------
+
+func TestCompactionEvaluate(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "compaction.evaluate", map[string]any{
+		"stored_tokens": 5000,
+		"live_tokens":   3000,
+		"token_budget":  8000,
+	})
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+}
+
+func TestCompactionSweepStart_MissingHandle(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "compaction.sweep.start", map[string]any{})
+	if resp.OK {
+		t.Error("expected error for missing handle")
+	}
+}
+
+func TestCompactionSweepDrop_MissingHandle(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "compaction.sweep.drop", map[string]any{})
+	if resp.OK {
+		t.Error("expected error for missing handle")
 	}
 }
 

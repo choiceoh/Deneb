@@ -12,7 +12,10 @@ extern int deneb_ml_rerank(
 	unsigned char *out_ptr, unsigned long out_len);
 */
 import "C"
-import "unsafe"
+import (
+	"errors"
+	"unsafe"
+)
 
 const mlOutBufSize = 256 * 1024 // 256 KB output buffer (embeddings can be large)
 
@@ -20,7 +23,7 @@ const mlOutBufSize = 256 * 1024 // 256 KB output buffer (embeddings can be large
 // Takes a JSON request (text array), returns JSON result (vectors).
 func MLEmbed(input string) ([]byte, error) {
 	if len(input) == 0 {
-		return nil, ffiError("ml_embed", -1)
+		return nil, errors.New("ffi: ml_embed: empty input")
 	}
 	inputPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(input)))
 	out := make([]byte, mlOutBufSize)
@@ -37,7 +40,7 @@ func MLEmbed(input string) ([]byte, error) {
 // Takes a JSON request (query + documents), returns JSON ranked results.
 func MLRerank(input string) ([]byte, error) {
 	if len(input) == 0 {
-		return nil, ffiError("ml_rerank", -1)
+		return nil, errors.New("ffi: ml_rerank: empty input")
 	}
 	inputPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(input)))
 	out := make([]byte, mlOutBufSize)

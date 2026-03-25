@@ -643,7 +643,11 @@ func protocolValidateParams() HandlerFunc {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrDependencyFailed, err.Error()))
 		}
-		result := map[string]any{"valid": valid}
+		backend := "go-fallback"
+		if ffi.Available {
+			backend = "rust"
+		}
+		result := map[string]any{"valid": valid, "backend": backend}
 		if errorsJSON != nil {
 			result["errors"] = json.RawMessage(errorsJSON)
 		}
