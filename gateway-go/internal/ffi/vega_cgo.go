@@ -17,38 +17,36 @@ import (
 	"unsafe"
 )
 
-const vegaOutBufSize = 256 * 1024 // 256 KB output buffer (large result sets)
+const vegaOutBufSize = 256 * 1024 // 256 KB default output buffer (grows on demand)
 
 // VegaExecute executes a Vega command via the Rust FFI.
-// Returns the raw JSON response bytes.
+// Returns the raw JSON response bytes. The output buffer grows automatically.
 func VegaExecute(cmd string) ([]byte, error) {
 	if len(cmd) == 0 {
 		return nil, errors.New("ffi: vega_execute: empty input")
 	}
 	cmdPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(cmd)))
-	out := make([]byte, vegaOutBufSize)
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
-
-	rc := C.deneb_vega_execute(cmdPtr, C.ulong(len(cmd)), outPtr, C.ulong(len(out)))
-	if rc < 0 {
-		return nil, ffiError("vega_execute", int(rc))
-	}
-	return out[:rc], nil
+	return ffiCallWithGrow("vega_execute", vegaOutBufSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_vega_execute(
+				cmdPtr, C.ulong(len(cmd)),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
 }
 
 // VegaSearch executes a Vega search query via the Rust FFI.
-// Returns the raw JSON results bytes.
+// Returns the raw JSON results bytes. The output buffer grows automatically.
 func VegaSearch(query string) ([]byte, error) {
 	if len(query) == 0 {
 		return nil, errors.New("ffi: vega_search: empty input")
 	}
 	queryPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(query)))
-	out := make([]byte, vegaOutBufSize)
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
-
-	rc := C.deneb_vega_search(queryPtr, C.ulong(len(query)), outPtr, C.ulong(len(out)))
-	if rc < 0 {
-		return nil, ffiError("vega_search", int(rc))
-	}
-	return out[:rc], nil
+	return ffiCallWithGrow("vega_search", vegaOutBufSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_vega_search(
+				queryPtr, C.ulong(len(query)),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
 }

@@ -19,6 +19,7 @@ type Deps struct {
 	Channels         *channel.Registry
 	ChannelLifecycle *channel.LifecycleManager
 	GatewaySubs      *events.GatewayEventSubscriptions
+	Version          string // Server version string (from --version flag).
 }
 
 // unmarshalParams safely unmarshals request params, handling nil/empty params.
@@ -51,7 +52,7 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 	d.Register("channels.list", channelsList(deps))
 	d.Register("channels.get", channelsGet(deps))
 	d.Register("channels.status", channelsStatus(deps))
-	d.Register("system.info", systemInfo())
+	d.Register("system.info", systemInfo(deps))
 	d.Register("channels.health", channelsHealth(deps))
 	d.Register("protocol.validate", protocolValidate())
 	// Note: constant_time_eq is intentionally not exposed as an RPC method
@@ -214,11 +215,15 @@ func channelsStatus(deps Deps) HandlerFunc {
 	}
 }
 
-func systemInfo() HandlerFunc {
+func systemInfo(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		version := deps.Version
+		if version == "" {
+			version = "unknown"
+		}
 		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"runtime":      "go",
-			"version":      "0.1.0",
+			"version":      version,
 			"goVersion":    runtime.Version(),
 			"os":           runtime.GOOS,
 			"arch":         runtime.GOARCH,

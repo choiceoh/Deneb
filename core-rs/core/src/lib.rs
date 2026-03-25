@@ -41,12 +41,14 @@ const FFI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
 
 // FFI error code constants — used across all `extern "C"` functions.
 // Positive values are function-specific; negative values are shared errors.
+// These MUST stay in sync with gateway-go/internal/ffi/errors.go.
 const FFI_ERR_NULL_PTR: i32 = -1;
 const FFI_ERR_INVALID_UTF8: i32 = -2;
 const FFI_ERR_OUTPUT_TOO_SMALL: i32 = -3;
 const FFI_ERR_INPUT_TOO_LARGE: i32 = -4;
 const FFI_ERR_JSON: i32 = -5;
 const FFI_ERR_OVERFLOW: i32 = -6;
+const FFI_ERR_VALIDATION: i32 = -7;
 const FFI_ERR_PANIC: i32 = -99;
 
 /// Wraps an FFI body in catch_unwind to prevent Rust panics from aborting
@@ -84,7 +86,7 @@ pub unsafe extern "C" fn deneb_validate_frame(json_ptr: *const u8, json_len: usi
         };
         match protocol::validate_frame(json_str) {
             Ok(_) => 0,
-            Err(_) => -3,
+            Err(_) => FFI_ERR_VALIDATION,
         }
     })
 }
@@ -703,7 +705,7 @@ pub unsafe extern "C" fn deneb_validate_params(
                     total_len.max(1) as i32
                 }
             }
-            Err(protocol::validation::ValidateParamsError::UnknownMethod(_)) => -3,
+            Err(protocol::validation::ValidateParamsError::UnknownMethod(_)) => FFI_ERR_VALIDATION,
             Err(protocol::validation::ValidateParamsError::InvalidJson(_)) => FFI_ERR_JSON,
         }
     })
@@ -1204,7 +1206,7 @@ pub unsafe extern "C" fn deneb_base64_canonicalize(
                 out_slice[..bytes.len()].copy_from_slice(bytes);
                 bytes.len() as i32
             }
-            None => -3, // invalid base64
+            None => FFI_ERR_VALIDATION, // invalid base64
         }
     })
 }

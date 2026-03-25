@@ -3,8 +3,10 @@
 package ffi
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -47,16 +49,11 @@ func ValidateFrame(jsonStr string) error {
 	return nil
 }
 
-// ConstantTimeEq is a pure-Go fallback using XOR accumulation.
+// ConstantTimeEq is a pure-Go fallback using crypto/subtle.
+// Unlike a naive XOR loop, subtle.ConstantTimeCompare handles length
+// mismatches in constant time, preventing timing side-channel leaks.
 func ConstantTimeEq(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	var diff byte
-	for i := range a {
-		diff |= a[i] ^ b[i]
-	}
-	return diff == 0
+	return subtle.ConstantTimeCompare(a, b) == 1
 }
 
 // DetectMIME is a pure-Go fallback for common MIME types.
@@ -138,23 +135,27 @@ func SanitizeHTML(input string) string {
 	return b.String()
 }
 
-// blockedHosts are hostnames that should not be accessed.
+// blockedHosts are hostnames that should not be accessed (SSRF protection).
 var blockedHosts = map[string]bool{
-	"localhost":                true,
-	"127.0.0.1":               true,
-	"0.0.0.0":                 true,
-	"[::1]":                   true,
+	"localhost":                 true,
+	"127.0.0.1":                true,
+	"0.0.0.0":                  true,
+	"[::1]":                    true,
+	"::1":                      true,
 	"metadata.google.internal": true,
-	"169.254.169.254":         true,
+	"169.254.169.254":          true,
+}
+
+// blockedSchemes are URL schemes that should never be followed.
+var blockedSchemes = map[string]bool{
+	"file": true, "ftp": true, "gopher": true, "dict": true, "data": true,
+	"ldap": true, "ldaps": true, "tftp": true, "telnet": true,
 }
 
 // IsSafeURL is a pure-Go fallback for SSRF URL validation.
+// Blocks private/loopback IPs, cloud metadata endpoints, and dangerous schemes.
 func IsSafeURL(rawURL string) bool {
-	// Explicit file:// and UNC path blocking (defense-in-depth).
-	lower := strings.ToLower(rawURL)
-	if strings.HasPrefix(lower, "file:") {
-		return false
-	}
+	// Explicit UNC path blocking (defense-in-depth).
 	if strings.HasPrefix(rawURL, "\\\\") || (strings.HasPrefix(rawURL, "//") && !strings.Contains(rawURL, "://")) {
 		return false
 	}
@@ -163,7 +164,11 @@ func IsSafeURL(rawURL string) bool {
 	if err != nil {
 		return false
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
+	scheme := strings.ToLower(u.Scheme)
+	if blockedSchemes[scheme] {
+		return false
+	}
+	if scheme != "http" && scheme != "https" {
 		return false
 	}
 	// url.Hostname() already strips userinfo and port.
@@ -174,7 +179,22 @@ func IsSafeURL(rawURL string) bool {
 	if blockedHosts[host] {
 		return false
 	}
-	// Block private IP ranges.
+
+	// Parse as IP to check private/reserved ranges.
+	ip := net.ParseIP(host)
+	if ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return false
+		}
+		// Block CGNAT range 100.64.0.0/10.
+		if ip4 := ip.To4(); ip4 != nil && ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127 {
+			return false
+		}
+		return true
+	}
+
+	// Host is a hostname — check common private IP prefixes as strings.
 	if strings.HasPrefix(host, "10.") || strings.HasPrefix(host, "192.168.") {
 		return false
 	}
@@ -182,6 +202,19 @@ func IsSafeURL(rawURL string) bool {
 		parts := strings.SplitN(host, ".", 3)
 		if len(parts) >= 2 {
 			if n, err := strconv.Atoi(parts[1]); err == nil && n >= 16 && n <= 31 {
+				return false
+			}
+		}
+	}
+	// Block link-local range 169.254.x.x.
+	if strings.HasPrefix(host, "169.254.") {
+		return false
+	}
+	// Block CGNAT range 100.64-127.x.x.
+	if strings.HasPrefix(host, "100.") {
+		parts := strings.SplitN(host, ".", 3)
+		if len(parts) >= 2 {
+			if n, err := strconv.Atoi(parts[1]); err == nil && n >= 64 && n <= 127 {
 				return false
 			}
 		}
@@ -198,10 +231,12 @@ var knownErrorCodes = map[string]bool{
 	"DEPENDENCY_FAILED": true, "FEATURE_DISABLED": true,
 }
 
-// ValidateParams is a pure-Go fallback that always returns valid=false with
-// an "unavailable" error since schema validation requires the Rust library.
+// ValidateParams is a pure-Go fallback that always returns an error.
+// Schema validation requires the Rust FFI library (jsonschema crate).
+// In no_ffi builds, callers should treat all params as unvalidated and
+// rely on application-level validation instead.
 func ValidateParams(method, jsonStr string) (valid bool, errorsJSON []byte, err error) {
-	return false, nil, errors.New("ffi: schema validation requires Rust FFI (not available)")
+	return false, nil, errors.New("ffi: schema validation requires Rust FFI (not available in no_ffi build)")
 }
 
 // ValidateErrorCode is a pure-Go fallback for error code validation.

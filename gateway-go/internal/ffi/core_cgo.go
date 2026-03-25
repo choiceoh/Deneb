@@ -51,7 +51,7 @@ func ValidateFrame(json string) error {
 		return errors.New("ffi: null pointer")
 	case rcInvalidUTF8:
 		return errors.New("ffi: invalid UTF-8")
-	case rcValidationFail:
+	case rcValidation:
 		return errors.New("ffi: frame validation failed")
 	default:
 		return errors.New("ffi: unknown error")
@@ -106,7 +106,7 @@ func ValidateSessionKey(key string) error {
 		return errors.New("ffi: null pointer")
 	case rcInvalidUTF8:
 		return errors.New("ffi: invalid UTF-8")
-	case rcValidationFail:
+	case rcValidation:
 		return errors.New("ffi: invalid session key")
 	default:
 		return errors.New("ffi: unknown error")
@@ -177,7 +177,7 @@ func ValidateParams(method, json string) (valid bool, errorsJSON []byte, err err
 		return false, nil, errors.New("ffi: null pointer")
 	case rc == rcInvalidUTF8:
 		return false, nil, errors.New("ffi: invalid UTF-8")
-	case rc == rcValidationFail:
+	case rc == rcValidation:
 		return false, nil, errors.New("ffi: unknown method")
 	case rc == rcInputTooLarge:
 		return false, nil, errors.New("ffi: input too large")

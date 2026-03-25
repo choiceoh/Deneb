@@ -5,6 +5,10 @@ edition = "2021"
 description = "Deneb core library — protocol validation, security, and media processing"
 
 [lib]
+# cdylib: Node.js native addon (via napi-rs, requires "napi_binding" feature).
+# staticlib: Go gateway CGo linking (built with --no-default-features).
+# rlib: workspace crate consumers (vega, ml).
+# TODO: Remove cdylib once TypeScript/napi-rs bindings are fully retired.
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [features]

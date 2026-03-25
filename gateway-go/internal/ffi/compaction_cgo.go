@@ -29,7 +29,7 @@ import (
 	"unsafe"
 )
 
-const compactionOutBufSize = 1024 * 1024 // 1 MB default output buffer
+const compactionOutBufSize = 1024 * 1024 // 1 MB default output buffer (grows on demand)
 
 // CompactionEvaluate evaluates whether compaction is needed.
 // Returns the JSON-encoded CompactionDecision.
@@ -81,35 +81,40 @@ func CompactionSweepNew(configJSON string, conversationID, tokenBudget uint64, f
 }
 
 // CompactionSweepStart starts a sweep and returns the first command JSON.
+// The output buffer grows automatically if the Rust side signals it is too small.
 func CompactionSweepStart(handle uint32) (json.RawMessage, error) {
-	out := make([]byte, compactionOutBufSize)
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
-
-	rc := C.deneb_compaction_sweep_start(C.uint(handle), outPtr, C.ulong(len(out)))
-	if rc < 0 {
-		return nil, ffiError("compaction_sweep_start", int(rc))
+	data, err := ffiCallWithGrow("compaction_sweep_start", compactionOutBufSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_compaction_sweep_start(
+				C.uint(handle),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err != nil {
+		return nil, err
 	}
-	return json.RawMessage(out[:rc]), nil
+	return json.RawMessage(data), nil
 }
 
 // CompactionSweepStep advances the sweep with a host response and returns the next command.
+// The output buffer grows automatically if the Rust side signals it is too small.
 func CompactionSweepStep(handle uint32, responseJSON []byte) (json.RawMessage, error) {
 	if len(responseJSON) == 0 {
 		return nil, errors.New("ffi: empty response JSON")
 	}
 	respPtr := (*C.uchar)(unsafe.Pointer(&responseJSON[0]))
-	out := make([]byte, compactionOutBufSize)
-	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
-
-	rc := C.deneb_compaction_sweep_step(
-		C.uint(handle),
-		respPtr, C.ulong(len(responseJSON)),
-		outPtr, C.ulong(len(out)),
-	)
-	if rc < 0 {
-		return nil, ffiError("compaction_sweep_step", int(rc))
+	data, err := ffiCallWithGrow("compaction_sweep_step", compactionOutBufSize,
+		func(outPtr unsafe.Pointer, outLen int) int {
+			return int(C.deneb_compaction_sweep_step(
+				C.uint(handle),
+				respPtr, C.ulong(len(responseJSON)),
+				(*C.uchar)(outPtr), C.ulong(outLen),
+			))
+		})
+	if err != nil {
+		return nil, err
 	}
-	return json.RawMessage(out[:rc]), nil
+	return json.RawMessage(data), nil
 }
 
 // CompactionSweepDrop releases a sweep engine's resources.
