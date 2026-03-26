@@ -131,6 +131,14 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		agentMessage = msgCtx.BodyForAgent
 	}
 
+	// Interactive replies: extract reply context when user replies to a message.
+	if rc := ExtractReplyContext(msg, p.server.telegramPlug.BotUserID()); rc != nil {
+		msgCtx.ReplyToID = rc.ReplyToID
+		if prefix := FormatReplyPrefix(rc); prefix != "" {
+			agentMessage = prefix + "\n" + agentMessage
+		}
+	}
+
 	// Enrich message with fetched link content.
 	if linkSummary := EnrichMessageWithLinks(
 		context.Background(), agentMessage, defaultLinkFetcher, p.logger,
@@ -139,16 +147,22 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	// Dispatch to chat.send with the preprocessed message.
+	delivery := map[string]any{
+		"channel": "telegram",
+		"to":      chatID,
+	}
+	// Pass the triggering message ID for [[reply_to_current]] support.
+	if msg.MessageID != 0 {
+		delivery["messageId"] = strconv.FormatInt(msg.MessageID, 10)
+	}
+
 	req, err := protocol.NewRequestFrame(
 		"tg-"+chatID+"-"+strconv.FormatInt(msg.MessageID, 10),
 		"chat.send",
 		map[string]any{
 			"sessionKey": sessionKey,
 			"message":    agentMessage,
-			"delivery": map[string]any{
-				"channel": "telegram",
-				"to":      chatID,
-			},
+			"delivery":   delivery,
 		},
 	)
 	if err != nil {
