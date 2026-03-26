@@ -4,6 +4,7 @@
 //! All Python commands have been ported to Rust.
 
 pub mod add_action;
+pub mod brief;
 pub mod changelog;
 pub mod compare;
 pub mod contacts;
@@ -116,7 +117,7 @@ pub fn execute(command: &str, args: &Value, config: &VegaConfig) -> CommandResul
         // Core query commands (Phase 0)
         "search" => cmd_search(args, config),
         "show" => cmd_show(args, config),
-        "brief" => cmd_brief(args, config),
+        "brief" => brief::cmd_brief(args, config),
         "system" => cmd_system(args, config),
         "upgrade" => cmd_upgrade(args, config),
         "list" => cmd_list(args, config),
@@ -163,60 +164,102 @@ pub fn execute(command: &str, args: &Value, config: &VegaConfig) -> CommandResul
     }
 }
 
-/// ask: Unified NL endpoint — route query to best command, apply depth.
+/// ask: Unified NL endpoint — full E-1 through E-7 framework.
+/// E-1: NL routing, E-2: depth, E-3: AI hints, E-4: bundle, E-5: session, E-7: auto-correct.
 fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
     let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
     if query.is_empty() {
         return CommandResult::err("ask", "query 파라미터가 필요합니다");
     }
 
-    let depth = args
-        .get("depth")
-        .and_then(|v| v.as_str())
-        .unwrap_or("normal");
+    let depth = args.get("depth").and_then(|v| v.as_str()).unwrap_or("normal");
+    let fmt = args.get("format").and_then(|v| v.as_str()).unwrap_or("summary");
 
-    // Session-based pronoun resolution
+    // E-5: Session-based pronoun resolution
     let resolved_query = {
         let session_path = crate::session::VegaSession::session_path(&config.db_path);
         let session = crate::session::VegaSession::load(&session_path);
         if let Ok(conn) = Connection::open(&config.db_path) {
-            session
-                .resolve_pronouns(query, &conn)
-                .unwrap_or_else(|| query.to_string())
+            session.resolve_pronouns(query, &conn).unwrap_or_else(|| query.to_string())
         } else {
             query.to_string()
         }
     };
 
-    // Smart route
-    let (command, _confidence) = crate::ai::smart_route(&resolved_query);
-
-    // Prevent infinite loop: ask → ask
+    // E-1: Smart route
+    let (command, confidence) = crate::ai::smart_route(&resolved_query);
     let command = if command == "ask" { "search" } else { command };
 
     // Execute inner command
     let inner_args = json!({"query": resolved_query});
     let mut result = execute(command, &inner_args, config);
 
-    // Apply depth
+    // E-7: Auto-correction on failure or 0 results
+    if !result.success || (result.success && command == "search"
+        && result.data.get("result_count").and_then(|rc| rc.get("projects"))
+            .and_then(|v| v.as_i64()).unwrap_or(-1) == 0)
+    {
+        let conn = Connection::open(&config.db_path).ok();
+        if let Some((corrected_cmd, corrected_query)) =
+            crate::ai::try_auto_correct(command, &resolved_query, &result.data, conn.as_ref())
+        {
+            let corrected_args = json!({"query": corrected_query});
+            let corrected = execute(corrected_cmd, &corrected_args, config);
+            if corrected.success {
+                result = corrected;
+                if let Some(obj) = result.data.as_object_mut() {
+                    obj.insert("_meta".into(), json!({
+                        "routed_command": command,
+                        "auto_corrected_to": corrected_cmd,
+                        "original_query": query,
+                        "resolved_query": resolved_query,
+                        "confidence": confidence,
+                    }));
+                }
+                // E-5: Update session with corrected result
+                let session_path = crate::session::VegaSession::session_path(&config.db_path);
+                let mut session = crate::session::VegaSession::load(&session_path);
+                session.update(corrected_cmd, &result.data);
+                let _ = session.save(&session_path);
+                return result;
+            }
+        }
+    }
+
+    // E-2: Apply depth
     if depth != "normal" && result.success {
         result.data = crate::ai::apply_depth(&result.data, command, depth);
     }
 
-    // Add routing metadata
-    if result.success {
-        let meta = json!({
-            "routed_command": command,
-            "original_query": query,
-            "resolved_query": resolved_query,
-        });
-        if let Some(obj) = result.data.as_object_mut() {
-            obj.insert("_meta".to_string(), meta);
-        }
+    // E-6: Apply format
+    if fmt != "summary" && result.success {
+        result.data = crate::ai::apply_format(&result.data, command, fmt);
     }
 
-    // Update session
     if result.success {
+        // E-3: AI behavioral hints (compute before mutable borrow)
+        let ai_hint = crate::ai::build_ai_hint(command, &result.data);
+        let has_hints = ai_hint.get("hints").and_then(|v| v.as_array()).map(|a| !a.is_empty()).unwrap_or(false);
+
+        // E-4: Proactive data bundle (compute before mutable borrow)
+        let bundle = if depth != "brief" {
+            let conn = Connection::open(&config.db_path).ok();
+            let b = crate::ai::build_bundle(command, &result.data, conn.as_ref());
+            if b.as_object().map(|o| !o.is_empty()).unwrap_or(false) { Some(b) } else { None }
+        } else { None };
+
+        if let Some(obj) = result.data.as_object_mut() {
+            obj.insert("_meta".into(), json!({
+                "routed_command": command,
+                "original_query": query,
+                "resolved_query": resolved_query,
+                "confidence": confidence,
+            }));
+            if has_hints { obj.insert("_ai_hint".into(), ai_hint); }
+            if let Some(b) = bundle { obj.insert("_bundle".into(), b); }
+        }
+
+        // E-5: Update session
         let session_path = crate::session::VegaSession::session_path(&config.db_path);
         let mut session = crate::session::VegaSession::load(&session_path);
         session.update(command, &result.data);
@@ -236,6 +279,8 @@ pub fn execute_query(query: &str, config: &VegaConfig) -> CommandResult {
 // -- Command implementations --
 
 /// search: Full hybrid search with fusion ranking.
+/// Port of Python vega/commands/search.py with match_reasons, follow_up_hint,
+/// suggestions, auto_brief, and communications truncation.
 fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
     let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
     if query.is_empty() {
@@ -245,6 +290,8 @@ fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
     let router = SearchRouter::new(config.clone());
     match router.search(query) {
         Ok(result) => {
+            let query_lower = query.to_lowercase();
+
             // Group by project
             let mut projects: Vec<Value> = Vec::new();
             let mut seen_pids: HashMap<i64, usize> = HashMap::new();
@@ -259,7 +306,23 @@ fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
                                     "content": truncate(&item.content, 300),
                                     "type": item.chunk_type,
                                     "date": item.entry_date,
+                                    "source": item.source,
                                 }));
+                            }
+                        }
+                        // Track sources
+                        if let Some(sources) = proj.get_mut("sources") {
+                            if let Some(arr) = sources.as_array_mut() {
+                                let src = json!(item.source);
+                                if !arr.contains(&src) {
+                                    arr.push(src);
+                                }
+                            }
+                        }
+                        // Update score to max
+                        if let Some(cur_score) = proj.get("score").and_then(|v| v.as_f64()) {
+                            if item.score > cur_score {
+                                proj["score"] = json!(item.score);
                             }
                         }
                     }
@@ -277,13 +340,108 @@ fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
                             "content": truncate(&item.content, 300),
                             "type": item.chunk_type,
                             "date": item.entry_date,
+                            "source": item.source,
                         }],
                         "sources": [item.source],
                     }));
                 }
             }
 
-            // Comms
+            // Add match_reasons per project
+            for proj in &mut projects {
+                let mut reasons = Vec::new();
+                let name_lower = proj
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+
+                if !name_lower.is_empty()
+                    && name_lower.len() >= 2
+                    && (name_lower.contains(&query_lower) || query_lower.contains(&name_lower))
+                {
+                    reasons.push("프로젝트명");
+                }
+
+                let sources: Vec<String> = proj
+                    .get("sources")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                if sources.iter().any(|s| s == "sqlite") {
+                    let has_comm = proj
+                        .get("sections")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .any(|s| s.get("type").and_then(|v| v.as_str()) == Some("comm_log"))
+                        })
+                        .unwrap_or(false);
+                    if has_comm {
+                        reasons.push("커뮤니케이션");
+                    }
+                    if !has_comm
+                        || proj
+                            .get("sections")
+                            .and_then(|v| v.as_array())
+                            .map(|a| a.len())
+                            .unwrap_or(0)
+                            > 1
+                    {
+                        reasons.push("본문");
+                    }
+                }
+                if sources.iter().any(|s| s == "semantic") {
+                    reasons.push("의미검색");
+                }
+                if reasons.is_empty() {
+                    reasons.push("키워드");
+                }
+                proj["match_reasons"] = json!(reasons);
+            }
+
+            // Matched keywords from analysis
+            let extracted = &result.analysis.extracted;
+            let mut all_keywords: Vec<String> = Vec::new();
+            all_keywords.extend(extracted.keywords.iter().cloned());
+            all_keywords.extend(extracted.clients.iter().cloned());
+            all_keywords.extend(extracted.persons.iter().cloned());
+            all_keywords.extend(extracted.statuses.iter().cloned());
+            if all_keywords.is_empty() {
+                all_keywords.extend(query.split_whitespace().map(String::from));
+            }
+
+            let mut matched_kw: Vec<String> = Vec::new();
+            for kw in &all_keywords {
+                let kw_lower = kw.to_lowercase();
+                for proj in &projects {
+                    let text = format!(
+                        "{} {}",
+                        proj.get("name").and_then(|v| v.as_str()).unwrap_or(""),
+                        proj.get("sections")
+                            .and_then(|v| v.as_array())
+                            .map(|arr| arr
+                                .iter()
+                                .filter_map(|s| s.get("content").and_then(|v| v.as_str()))
+                                .collect::<Vec<_>>()
+                                .join(" "))
+                            .unwrap_or_default()
+                    )
+                    .to_lowercase();
+                    if text.contains(&kw_lower) && !matched_kw.contains(kw) {
+                        matched_kw.push(kw.clone());
+                        break;
+                    }
+                }
+            }
+
+            // Communications with truncation info
+            let total_comms = result.comms.len();
             let comms: Vec<Value> = result
                 .comms
                 .iter()
@@ -298,22 +456,78 @@ fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
                 })
                 .collect();
 
-            CommandResult::ok(
-                "search",
-                json!({
-                    "projects": projects,
-                    "communications": comms,
-                    "result_count": {
-                        "projects": projects.len(),
-                        "communications": comms.len(),
-                    },
-                    "search_meta": result.search_meta,
-                    "analysis": {
-                        "route": result.search_meta.route,
-                        "reason": result.analysis.reason,
-                    },
-                }),
-            )
+            // Build response
+            let mut data = json!({
+                "query": query,
+                "projects": projects,
+                "communications": comms,
+                "result_count": {
+                    "projects": projects.len(),
+                    "communications": comms.len(),
+                },
+                "matched_keywords": matched_kw,
+                "search_meta": result.search_meta,
+                "analysis": {
+                    "route": result.search_meta.route,
+                    "reason": result.analysis.reason,
+                },
+            });
+
+            // Communications truncation note
+            if total_comms > 10 {
+                data["communications_total"] = json!(total_comms);
+                data["communications_note"] =
+                    json!(format!("최신 10건 표시 (전체 {}건)", total_comms));
+            }
+
+            // Follow-up hint based on result count
+            let proj_count = projects.len();
+            if proj_count == 0 {
+                // Zero results: suggestions + alternative commands
+                if let Ok(conn) = Connection::open(&config.db_path) {
+                    let suggestions =
+                        crate::utils::build_search_suggestions(&conn, query, 8);
+                    if !suggestions.is_empty() {
+                        data["suggestions"] = serde_json::to_value(&suggestions).unwrap_or_default();
+                    }
+                    // Auto-brief fallback via fuzzy match
+                    if let Some((fz_pid, _name, fz_conf)) =
+                        crate::utils::find_project_id_in_text(&conn, query, 0.6)
+                    {
+                        if let Ok(auto_brief) = brief::build_single_brief(&conn, fz_pid) {
+                            let mut ab = auto_brief;
+                            ab["_match_confidence"] = json!(fz_conf);
+                            data["_auto_brief"] = ab;
+                        }
+                    }
+                }
+                data["alternative_commands"] = json!(["list", "dashboard"]);
+                data["follow_up_hint"] = json!(
+                    "검색 결과 없음. show <ID>, brief <프로젝트명> 형태로 직접 조회해보세요."
+                );
+            } else if proj_count == 1 {
+                let top_id = projects[0].get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+                data["follow_up_hint"] =
+                    json!(format!("show {} / brief {} / timeline {}", top_id, top_id, top_id));
+                // Auto-brief for single match
+                if let Ok(conn) = Connection::open(&config.db_path) {
+                    if let Ok(auto_brief) = brief::build_single_brief(&conn, top_id) {
+                        data["_auto_brief"] = auto_brief;
+                    }
+                }
+            } else if proj_count > 5 {
+                let top_id = projects[0].get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+                data["follow_up_hint"] = json!(format!(
+                    "결과 {}건. show {} / brief {} 로 상세 확인",
+                    proj_count, top_id, top_id
+                ));
+            } else {
+                let top_id = projects[0].get("id").and_then(|v| v.as_i64()).unwrap_or(0);
+                data["follow_up_hint"] =
+                    json!(format!("show {} / brief {} / timeline {}", top_id, top_id, top_id));
+            }
+
+            CommandResult::ok("search", data)
         }
         Err(e) => CommandResult::err("search", &format!("검색 오류: {}", e)),
     }
@@ -427,42 +641,6 @@ fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
             "communications": comms,
         }),
     )
-}
-
-/// brief: Quick project overview summary.
-fn cmd_brief(args: &Value, config: &VegaConfig) -> CommandResult {
-    let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
-    if query.is_empty() {
-        return CommandResult::err("brief", "검색어가 필요합니다");
-    }
-
-    let router = SearchRouter::new(config.clone());
-    match router.search(query) {
-        Ok(result) => {
-            let briefs: Vec<Value> = result
-                .project_scores
-                .iter()
-                .take(5)
-                .map(|ps| {
-                    let sections: Vec<&_> = result
-                        .unified
-                        .iter()
-                        .filter(|u| u.project_id == ps.project_id)
-                        .take(2)
-                        .collect();
-                    json!({
-                        "id": ps.project_id,
-                        "name": ps.project_name,
-                        "score": ps.score,
-                        "summary": sections.first().map(|s| truncate(&s.content, 200)).unwrap_or_default(),
-                    })
-                })
-                .collect();
-
-            CommandResult::ok("brief", json!({ "briefs": briefs }))
-        }
-        Err(e) => CommandResult::err("brief", &format!("검색 오류: {}", e)),
-    }
 }
 
 /// system: Database health and stats.
@@ -740,13 +918,21 @@ fn find_project_id(config: &VegaConfig, query: &str) -> Option<i64> {
         }
     }
 
-    // Try LIKE search
-    conn.query_row(
-        "SELECT id FROM projects WHERE name LIKE ?1 LIMIT 1",
-        params![format!("%{}%", query)],
-        |r| r.get(0),
-    )
-    .ok()
+    // Try LIKE search (with proper escaping)
+    let escaped = crate::utils::escape_like(query);
+    let like_result = conn
+        .query_row(
+            "SELECT id FROM projects WHERE name LIKE ?1 ESCAPE '\\' LIMIT 1",
+            params![format!("%{}%", escaped)],
+            |r| r.get::<_, i64>(0),
+        )
+        .ok();
+    if like_result.is_some() {
+        return like_result;
+    }
+
+    // Fuzzy fallback: match against all project names
+    crate::utils::find_project_id_in_text(&conn, query, 0.55).map(|(id, _, _)| id)
 }
 
 fn truncate(s: &str, max: usize) -> String {

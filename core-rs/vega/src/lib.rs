@@ -11,3 +11,4 @@ pub mod editor;
 pub mod mail;
 pub mod search;
 pub mod session;
+pub mod utils;
