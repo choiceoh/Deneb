@@ -165,7 +165,7 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	fmt.Fprintf(&sb, "%s\n", now.Format("Monday, January 2, 2006 — 15:04"))
 	fmt.Fprintf(&sb, "Time zone: %s\n\n", tz)
 
-	// Context files (AGENTS.md, CLAUDE.md, etc.).
+	// Context files (CLAUDE.md, SOUL.md, etc.).
 	contextPrompt := FormatContextFilesForPrompt(params.ContextFiles)
 	if contextPrompt != "" {
 		sb.WriteString(contextPrompt)
