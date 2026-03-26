@@ -75,6 +75,29 @@ func ExtractSystemText(system json.RawMessage) string {
 	return ""
 }
 
+// AppendSystemText appends additional text to the system prompt.
+// Handles both JSON string and []ContentBlock formats.
+func AppendSystemText(system json.RawMessage, addition string) json.RawMessage {
+	if addition == "" {
+		return system
+	}
+	if len(system) == 0 {
+		return SystemString(addition)
+	}
+	// Try plain string first.
+	var s string
+	if json.Unmarshal(system, &s) == nil {
+		return SystemString(s + "\n\n" + addition)
+	}
+	// Try array of content blocks — append as new text block.
+	var blocks []ContentBlock
+	if json.Unmarshal(system, &blocks) == nil {
+		blocks = append(blocks, ContentBlock{Type: "text", Text: "\n\n" + addition})
+		return SystemBlocks(blocks)
+	}
+	return system
+}
+
 // ThinkingConfig controls Anthropic's extended thinking feature.
 type ThinkingConfig struct {
 	Type         string `json:"type"`          // "enabled" or "disabled"

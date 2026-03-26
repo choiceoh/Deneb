@@ -26,7 +26,10 @@ Rules:
 - Remove redundant greetings, filler, and repeated information.
 - Use bullet points for distinct facts; use prose for connected narratives.
 - Write in the same language as the source material.
-- Target the specified token count; do not pad or truncate artificially.`
+- Target the specified token count; do not pad or truncate artificially.
+- For tool calls: preserve tool name, key arguments, and outcome (success/failure). Format: [tool:NAME → result]
+- When summarizing decisions, include the reasoning or constraint that led to the choice. Preserve rejected alternatives if explicitly discussed.
+- Preserve file:line references and function/method names exactly. When code changes are discussed, keep the before→after pattern.`
 
 	// aggressiveAddendum is appended for aggressive compression passes.
 	aggressiveAddendum = `

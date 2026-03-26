@@ -63,12 +63,14 @@ func evaluateCompaction(cfg CompactionConfig, storedTokens, liveTokens, tokenBud
 // handleContextOverflowAurora handles context overflow using the Aurora compaction system.
 // When the Aurora store is available, it runs a full hierarchical sweep via Rust FFI.
 // Falls back to legacy transcript-based compaction otherwise.
+// Returns the compacted messages, an optional system prompt addition from Aurora
+// (guidance text for the LLM about summarized context), and any error.
 func handleContextOverflowAurora(
 	deps runDeps,
 	params RunParams,
 	llmClient *llm.Client,
 	logger *slog.Logger,
-) ([]llm.Message, error) {
+) ([]llm.Message, string, error) {
 	// Try Aurora compaction first.
 	if deps.auroraStore != nil {
 		logger.Info("aurora: running compaction sweep on overflow")
@@ -101,17 +103,18 @@ func handleContextOverflowAurora(
 			}
 			asmResult, err := aurora.Assemble(deps.auroraStore, 1, asmCfg, logger)
 			if err != nil {
-				return nil, fmt.Errorf("aurora reassemble after compaction: %w", err)
+				return nil, "", fmt.Errorf("aurora reassemble after compaction: %w", err)
 			}
-			return asmResult.Messages, nil
+			return asmResult.Messages, asmResult.SystemPromptAddition, nil
 		}
 	}
 
 	// Legacy fallback: use transcript store directly.
-	return handleContextOverflowLegacy(
+	msgs, err := handleContextOverflowLegacy(
 		deps.transcript, params.SessionKey,
 		deps.contextCfg, deps.compactionCfg, logger,
 	)
+	return msgs, "", err
 }
 
 // handleContextOverflowLegacy is the original overflow handler using transcript-based compaction.
