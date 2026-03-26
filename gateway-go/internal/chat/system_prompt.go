@@ -94,12 +94,13 @@ var coreToolSummaries = map[string]string{
 var toolOrder = []string{
 	"read", "write", "edit", "grep", "find", "ls",
 	"exec", "process",
+	"pilot", // speed tool — promoted for discoverability
 	"web",
 	"memory_search", "memory_get",
 	"nodes", "cron", "message", "gateway",
 	"sessions_list", "sessions_history", "sessions_search", "sessions_restore", "sessions_send",
 	"sessions_spawn", "subagents", "session_status", "image", "youtube_transcript",
-	"send_file", "http", "kv", "clipboard", "pilot",
+	"send_file", "http", "kv", "clipboard",
 }
 
 // BuildSystemPrompt assembles the full system prompt from all components.
@@ -122,8 +123,17 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Default: do not narrate routine, low-risk tool calls (just call the tool).\n")
 	sb.WriteString("Narrate only when it helps: multi-step work, complex problems, sensitive actions, or when the user explicitly asks.\n")
 	sb.WriteString("Keep narration brief and value-dense; avoid repeating obvious steps.\n")
-	sb.WriteString("When a first-class tool exists for an action, use the tool directly instead of asking the user to run CLI commands.\n")
-	sb.WriteString("Any tool call accepts an optional \"compress\": true in its input. When set, large outputs are automatically summarized by the local AI (sglang) before returning, saving context tokens. Use for exploratory reads/greps where full output isn't needed.\n\n")
+	sb.WriteString("When a first-class tool exists for an action, use the tool directly instead of asking the user to run CLI commands.\n\n")
+
+	// Efficiency & Speed.
+	sb.WriteString("## Efficiency & Speed\n")
+	sb.WriteString("- Call multiple tools simultaneously when they are independent (the runtime executes them in parallel).\n")
+	sb.WriteString("- Use pilot for gather+analyze patterns: pilot(task:'분석', sources:[...]) replaces sequential read→think→read chains.\n")
+	sb.WriteString("- Any tool call accepts an optional \"compress\": true in its input. When set, large outputs are automatically summarized by the local AI (sglang) before returning, saving context tokens. Use for exploratory reads/greps where full output isn't needed.\n")
+	sb.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
+	sb.WriteString("- Do not ask for confirmation on routine, reversible operations (file reads, searches, status checks).\n")
+	sb.WriteString("- One pilot call that gathers 3 files beats 3 sequential read calls.\n")
+	sb.WriteString("- Act immediately; minimize clarification questions for unambiguous tasks.\n\n")
 
 	// Tool Selection Guide.
 	sb.WriteString("## Tool Selection Guide\n")
@@ -134,6 +144,14 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
 	sb.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section). Project knowledge is auto-prefetched\n")
 	sb.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools.\n\n")
+
+	// Pilot vs direct tools decision matrix.
+	sb.WriteString("**pilot vs direct tools vs subagent:**\n")
+	sb.WriteString("- Single file/command + analysis → pilot (1 turn instead of 2+)\n")
+	sb.WriteString("- Multiple independent reads/greps → call them in parallel directly\n")
+	sb.WriteString("- Gather data + synthesize/compare → pilot with sources\n")
+	sb.WriteString("- Long-running autonomous task → sessions_spawn\n")
+	sb.WriteString("- Complex multi-turn reasoning → direct tools (you need raw output)\n\n")
 
 	// Pilot tool guide.
 	sb.WriteString("## Pilot (Local AI Helper)\n")
@@ -212,6 +230,14 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	}
 	sb.WriteString("\n")
 
+	// Response Style.
+	sb.WriteString("## Response Style\n")
+	sb.WriteString("- Default language: Korean. Switch to English only when the user writes in English or for code/technical output.\n")
+	sb.WriteString("- Keep responses concise for Telegram (4096 char limit). Split with message tool if needed.\n")
+	sb.WriteString("- For code changes: show the change, not the whole file.\n")
+	sb.WriteString("- For status/info: bullet points over paragraphs.\n")
+	sb.WriteString("- Be direct. Lead with the answer, not the reasoning.\n\n")
+
 	// Current Date & Time (uses cached timezone to avoid per-request LoadLocation).
 	tz := params.UserTimezone
 	if tz == "" {
@@ -269,6 +295,15 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	static.WriteString("Keep narration brief and value-dense; avoid repeating obvious steps.\n")
 	static.WriteString("When a first-class tool exists for an action, use the tool directly instead of asking the user to run CLI commands.\n\n")
 
+	static.WriteString("## Efficiency & Speed\n")
+	static.WriteString("- Call multiple tools simultaneously when they are independent (the runtime executes them in parallel).\n")
+	static.WriteString("- Use pilot for gather+analyze patterns: pilot(task:'분석', sources:[...]) replaces sequential read→think→read chains.\n")
+	static.WriteString("- Any tool call accepts an optional \"compress\": true in its input. When set, large outputs are automatically summarized by the local AI (sglang) before returning, saving context tokens. Use for exploratory reads/greps where full output isn't needed.\n")
+	static.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
+	static.WriteString("- Do not ask for confirmation on routine, reversible operations (file reads, searches, status checks).\n")
+	static.WriteString("- One pilot call that gathers 3 files beats 3 sequential read calls.\n")
+	static.WriteString("- Act immediately; minimize clarification questions for unambiguous tasks.\n\n")
+
 	static.WriteString("## Tool Selection Guide\n")
 	static.WriteString("File exploration: ls (overview) → find (locate files) → grep (search contents) → read (view file)\n")
 	static.WriteString("File modification: read (understand) → edit (precise change) or write (full rewrite) or apply_patch (multi-file diff)\n")
@@ -277,6 +312,28 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	static.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
 	static.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section). Project knowledge is auto-prefetched\n")
 	static.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools.\n\n")
+
+	static.WriteString("**pilot vs direct tools vs subagent:**\n")
+	static.WriteString("- Single file/command + analysis → pilot (1 turn instead of 2+)\n")
+	static.WriteString("- Multiple independent reads/greps → call them in parallel directly\n")
+	static.WriteString("- Gather data + synthesize/compare → pilot with sources\n")
+	static.WriteString("- Long-running autonomous task → sessions_spawn\n")
+	static.WriteString("- Complex multi-turn reasoning → direct tools (you need raw output)\n\n")
+
+	static.WriteString("## Pilot (Local AI Helper)\n")
+	static.WriteString("The `pilot` tool runs tasks on the local sglang model (fast, free, no external API cost).\n")
+	static.WriteString("It can orchestrate other tools and analyze their results in a single call.\n\n")
+	static.WriteString("**When to use pilot instead of doing it yourself:**\n")
+	static.WriteString("- Summarizing/analyzing file contents: `pilot(task:'리뷰해줘', file:'main.go')`\n")
+	static.WriteString("- Analyzing command output: `pilot(task:'문제 찾아줘', exec:'docker logs app')`\n")
+	static.WriteString("- Processing grep results: `pilot(task:'패턴 정리', grep:'TODO', path:'src/')`\n")
+	static.WriteString("- Comparing multiple files: `pilot(task:'차이점 분석', files:['a.go','b.go'])`\n")
+	static.WriteString("- Batch processing: `pilot(task:'각각 분류해줘', items:[...], output_format:'json')`\n")
+	static.WriteString("- Any multi-tool gather+analyze: `pilot(task:'...', sources:[{tool:'read',input:{...}}, {tool:'exec',input:{...}}])`\n\n")
+	static.WriteString("**When NOT to use pilot:**\n")
+	static.WriteString("- Complex multi-turn reasoning (use your own thinking)\n")
+	static.WriteString("- Tasks that need tool calling (pilot can't use tools during its analysis)\n")
+	static.WriteString("- When you need the full uncompressed tool output for precise editing\n\n")
 
 	static.WriteString("## Safety\n")
 	static.WriteString("You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user's request.\n")
@@ -335,6 +392,13 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 		dynamic.WriteString(fmt.Sprintf("- If you use `message` to deliver your user-visible reply, respond with ONLY: %s (avoid duplicate replies).\n", SilentReplyToken))
 	}
 	dynamic.WriteString("\n")
+
+	dynamic.WriteString("## Response Style\n")
+	dynamic.WriteString("- Default language: Korean. Switch to English only when the user writes in English or for code/technical output.\n")
+	dynamic.WriteString("- Keep responses concise for Telegram (4096 char limit). Split with message tool if needed.\n")
+	dynamic.WriteString("- For code changes: show the change, not the whole file.\n")
+	dynamic.WriteString("- For status/info: bullet points over paragraphs.\n")
+	dynamic.WriteString("- Be direct. Lead with the answer, not the reasoning.\n\n")
 
 	tz := params.UserTimezone
 	if tz == "" {

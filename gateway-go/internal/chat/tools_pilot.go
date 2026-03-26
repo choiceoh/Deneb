@@ -341,11 +341,25 @@ func mustJSON(v any) json.RawMessage {
 
 // --- Local LLM call ---
 
+// sglangClient is a singleton LLM client for the local sglang server.
+// Avoids creating a new HTTP client + transport on every call.
+var (
+	sglangClientOnce sync.Once
+	sglangClientInst *llm.Client
+)
+
+func getSglangClient() *llm.Client {
+	sglangClientOnce.Do(func() {
+		sglangClientInst = llm.NewClient(defaultSglangBaseURL, "", llm.WithLogger(slog.Default()))
+	})
+	return sglangClientInst
+}
+
 func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
 	defer cancel()
 
-	client := llm.NewClient(defaultSglangBaseURL, "", llm.WithLogger(slog.Default()))
+	client := getSglangClient()
 
 	req := llm.ChatRequest{
 		Model:     sglangModel,
