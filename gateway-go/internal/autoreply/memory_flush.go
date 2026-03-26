@@ -25,7 +25,7 @@ const (
 const (
 	memoryFlushTargetHint    = "Store durable memories only in memory/YYYY-MM-DD.md (create memory/ if needed)."
 	memoryFlushAppendHint    = "If memory/YYYY-MM-DD.md already exists, APPEND new content only and do not overwrite existing entries."
-	memoryFlushReadOnlyHint  = "Treat workspace bootstrap/reference files such as MEMORY.md, SOUL.md, TOOLS.md, and AGENTS.md as read-only during this flush; never overwrite, replace, or edit them."
+	memoryFlushReadOnlyHint  = "Treat workspace bootstrap/reference files such as MEMORY.md, SOUL.md, TOOLS.md, and CLAUDE.md as read-only during this flush; never overwrite, replace, or edit them."
 )
 
 // DefaultMemoryFlushPrompt is the default user-turn prompt for memory flush.
