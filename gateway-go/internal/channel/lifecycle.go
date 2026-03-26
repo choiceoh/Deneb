@@ -17,20 +17,29 @@ type ChannelHealth struct {
 	Latency   int64  `json:"latencyMs,omitempty"`
 }
 
+// Restart backoff constants.
+const (
+	restartBaseDelay = 1 * time.Second
+	restartMaxDelay  = 30 * time.Second
+	restartMaxRetries = 5
+)
+
 // LifecycleManager orchestrates channel plugin lifecycle (start/stop/health).
 type LifecycleManager struct {
-	registry  *Registry
-	logger    *slog.Logger
-	mu        sync.RWMutex
-	startedAt map[string]int64 // channel ID → start timestamp
+	registry       *Registry
+	logger         *slog.Logger
+	mu             sync.RWMutex
+	startedAt      map[string]int64 // channel ID → start timestamp
+	restartCount   map[string]int   // channel ID → consecutive restart attempts
 }
 
 // NewLifecycleManager creates a lifecycle manager for the given registry.
 func NewLifecycleManager(registry *Registry, logger *slog.Logger) *LifecycleManager {
 	return &LifecycleManager{
-		registry:  registry,
-		logger:    logger,
-		startedAt: make(map[string]int64),
+		registry:     registry,
+		logger:       logger,
+		startedAt:    make(map[string]int64),
+		restartCount: make(map[string]int),
 	}
 }
 
@@ -195,6 +204,7 @@ func (lm *LifecycleManager) StartChannel(ctx context.Context, id string) error {
 	}
 	lm.mu.Lock()
 	lm.startedAt[id] = time.Now().UnixMilli()
+	lm.restartCount[id] = 0 // reset on successful start
 	lm.mu.Unlock()
 	return nil
 }
@@ -206,11 +216,35 @@ func (lm *LifecycleManager) GetStartedAt(id string) int64 {
 	return lm.startedAt[id]
 }
 
-// RestartChannel stops and restarts a single channel.
+// RestartChannel stops and restarts a single channel with exponential backoff.
+// Limits consecutive restart attempts to restartMaxRetries before giving up.
 func (lm *LifecycleManager) RestartChannel(ctx context.Context, id string) error {
 	if err := lm.StopChannel(ctx, id); err != nil {
 		lm.logger.Warn("channel stop failed during restart", "id", id, "error", err)
 	}
+
+	lm.mu.Lock()
+	attempt := lm.restartCount[id]
+	lm.restartCount[id] = attempt + 1
+	lm.mu.Unlock()
+
+	if attempt >= restartMaxRetries {
+		return fmt.Errorf("channel %q exceeded max restart attempts (%d)", id, restartMaxRetries)
+	}
+
+	// Exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s.
+	delay := restartBaseDelay << uint(attempt)
+	if delay > restartMaxDelay {
+		delay = restartMaxDelay
+	}
+	lm.logger.Info("restarting channel with backoff", "id", id, "attempt", attempt+1, "delay", delay)
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(delay):
+	}
+
 	return lm.StartChannel(ctx, id)
 }
 
