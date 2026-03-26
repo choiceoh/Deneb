@@ -507,11 +507,15 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 // interruptActiveRun cancels all active runs for a session key.
 func (h *Handler) interruptActiveRun(sessionKey string) {
 	h.abortMu.Lock()
+	var toDelete []string
 	for id, entry := range h.abortMap {
 		if entry.SessionKey == sessionKey {
 			entry.CancelFn()
-			delete(h.abortMap, id)
+			toDelete = append(toDelete, id)
 		}
+	}
+	for _, id := range toDelete {
+		delete(h.abortMap, id)
 	}
 	h.abortMu.Unlock()
 }

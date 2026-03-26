@@ -11,7 +11,7 @@ const SilentReplyToken = "NO_REPLY"
 
 var (
 	// silentExactRe matches the exact silent reply token with optional whitespace.
-	silentExactRe = regexp.MustCompile(`(?s)^\s*NO_REPLY\s*$`)
+	silentExactRe = regexp.MustCompile(`^\s*NO_REPLY\s*$`)
 	// silentTrailingRe matches a trailing NO_REPLY token at the end of mixed content.
 	silentTrailingRe = regexp.MustCompile(`(?:^|\s+|\*+)NO_REPLY\s*$`)
 )

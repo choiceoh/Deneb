@@ -319,9 +319,13 @@ func toolFind(defaultDir string) ToolFunc {
 			if d.IsDir() && strings.HasPrefix(d.Name(), ".") && d.Name() != "." {
 				return filepath.SkipDir
 			}
+			// Match against both the filename and the relative path.
+			rel, _ := filepath.Rel(searchDir, path)
 			matched, _ := filepath.Match(p.Pattern, d.Name())
+			if !matched && rel != "" {
+				matched, _ = filepath.Match(p.Pattern, rel)
+			}
 			if matched {
-				rel, _ := filepath.Rel(searchDir, path)
 				if rel == "" {
 					rel = path
 				}
@@ -395,9 +399,29 @@ func toolLs(defaultDir string) ToolFunc {
 // --- Helpers ---
 
 // resolvePath resolves a potentially relative path against the default directory.
+// It validates that the resolved path does not escape the workspace boundary.
 func resolvePath(path, defaultDir string) string {
+	var resolved string
 	if filepath.IsAbs(path) {
-		return path
+		resolved = filepath.Clean(path)
+	} else {
+		resolved = filepath.Clean(filepath.Join(defaultDir, path))
 	}
-	return filepath.Join(defaultDir, path)
+
+	// Security: verify the resolved path is under the workspace root
+	// to prevent path traversal attacks (e.g., "../../etc/passwd").
+	absDefault, err := filepath.Abs(defaultDir)
+	if err != nil {
+		return resolved
+	}
+	absResolved, err := filepath.Abs(resolved)
+	if err != nil {
+		return resolved
+	}
+	if !strings.HasPrefix(absResolved, absDefault+string(filepath.Separator)) && absResolved != absDefault {
+		// Path escapes workspace — clamp to workspace root.
+		return absDefault
+	}
+
+	return resolved
 }

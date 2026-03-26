@@ -1195,7 +1195,7 @@ func loadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {
 func resolveDefaultModel(logger *slog.Logger) string {
 	snapshot, err := config.LoadConfigFromDefaultPath()
 	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
-		return "zai/glm-5"
+		return "zai/glm-5-turbo"
 	}
 	var root struct {
 		Agents struct {
@@ -1207,7 +1207,7 @@ func resolveDefaultModel(logger *slog.Logger) string {
 	}
 	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
 		logger.Warn("failed to parse agents config for model", "error", err)
-		return "zai/glm-5"
+		return "zai/glm-5-turbo"
 	}
 	if root.Agents.DefaultModel != "" {
 		return root.Agents.DefaultModel
@@ -1215,7 +1215,7 @@ func resolveDefaultModel(logger *slog.Logger) string {
 	if root.Agents.Defaults.Model != "" {
 		return root.Agents.Defaults.Model
 	}
-	return "zai/glm-5"
+	return "zai/glm-5-turbo"
 }
 
 // resolveWorkspaceDir determines the workspace directory for file tool operations.

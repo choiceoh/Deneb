@@ -79,8 +79,12 @@ func toolMemorySearch(workspaceDir string) ToolFunc {
 				rel = path
 			}
 
-			// Find lines matching any keyword.
+			// Find lines matching any keyword, deduplicate by line number.
+			matchedLines := make(map[int]bool)
 			for i, line := range lines {
+				if matchedLines[i] {
+					continue
+				}
 				lower := strings.ToLower(line)
 				for _, kw := range keywords {
 					if strings.Contains(lower, kw) {
@@ -92,6 +96,10 @@ func toolMemorySearch(workspaceDir string) ToolFunc {
 						end := i + 3
 						if end > len(lines) {
 							end = len(lines)
+						}
+						// Mark all context lines as seen to avoid duplicates.
+						for j := start; j < end; j++ {
+							matchedLines[j] = true
 						}
 						snippet := strings.Join(lines[start:end], "\n")
 						results = append(results, fmt.Sprintf("### %s (line %d)\n%s", rel, i+1, snippet))
