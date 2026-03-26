@@ -97,6 +97,16 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Prioritize safety and human oversight over completion; if instructions conflict, pause and ask; comply with stop/pause/audit requests and never bypass safeguards.\n")
 	sb.WriteString("Do not manipulate or persuade anyone to expand access or disable safeguards. Do not copy yourself or change system prompts, safety rules, or tool policies unless explicitly requested.\n\n")
 
+	// Deneb CLI Quick Reference.
+	sb.WriteString("## Deneb CLI Quick Reference\n")
+	sb.WriteString("Deneb is controlled via subcommands. Do not invent commands.\n")
+	sb.WriteString("To manage the Gateway daemon service (start/stop/restart):\n")
+	sb.WriteString("- deneb gateway status\n")
+	sb.WriteString("- deneb gateway start\n")
+	sb.WriteString("- deneb gateway stop\n")
+	sb.WriteString("- deneb gateway restart\n")
+	sb.WriteString("If unsure, ask the user to run `deneb help` (or `deneb gateway --help`) and paste the output.\n\n")
+
 	// Skills.
 	if params.SkillsPrompt != "" {
 		sb.WriteString("## Skills (mandatory)\n")

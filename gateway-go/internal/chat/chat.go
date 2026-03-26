@@ -279,6 +279,11 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 			fmt.Sprintf("message too large: %d bytes exceeds limit of %d", len(p.Message), h.maxMessageBytes)))
 	}
 
+	// Pre-process slash commands before dispatching to agent.
+	if slashResult := ParseSlashCommand(p.Message); slashResult != nil && slashResult.Handled {
+		return h.handleSlashCommand(req.ID, p.SessionKey, p.Delivery, slashResult)
+	}
+
 	// Interrupt any active run on this session to prevent concurrent runs.
 	h.interruptActiveRun(p.SessionKey)
 
@@ -509,6 +514,83 @@ func (h *Handler) interruptActiveRun(sessionKey string) {
 		}
 	}
 	h.abortMu.Unlock()
+}
+
+// handleSlashCommand processes a recognized slash command and returns a response.
+// This runs synchronously (no agent loop) and delivers a reply to the channel.
+func (h *Handler) handleSlashCommand(
+	reqID string,
+	sessionKey string,
+	delivery *DeliveryContext,
+	cmd *SlashResult,
+) *protocol.ResponseFrame {
+	switch cmd.Command {
+	case "reset":
+		// Abort any active run and clear transcript.
+		h.interruptActiveRun(sessionKey)
+		if h.transcript != nil {
+			if err := h.transcript.Delete(sessionKey); err != nil {
+				h.logger.Warn("failed to delete transcript on reset", "error", err)
+			}
+		}
+		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
+			Phase: session.PhaseEnd,
+			Ts:    time.Now().UnixMilli(),
+		})
+		h.deliverSlashResponse(delivery, "세션이 초기화되었습니다.")
+
+	case "kill":
+		h.interruptActiveRun(sessionKey)
+		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
+			Phase: session.PhaseEnd,
+			Ts:    time.Now().UnixMilli(),
+		})
+		h.deliverSlashResponse(delivery, "실행이 중단되었습니다.")
+
+	case "status":
+		status := h.buildSessionStatus(sessionKey)
+		h.deliverSlashResponse(delivery, status)
+
+	case "model":
+		if cmd.Args != "" {
+			h.defaultModel = cmd.Args
+			h.deliverSlashResponse(delivery, fmt.Sprintf("모델이 %q(으)로 변경되었습니다.", cmd.Args))
+		}
+
+	case "think":
+		h.deliverSlashResponse(delivery, "사고 모드가 토글되었습니다.")
+	}
+
+	return protocol.MustResponseOK(reqID, map[string]any{
+		"command": cmd.Command,
+		"handled": true,
+	})
+}
+
+// deliverSlashResponse sends a slash command response back to the originating channel.
+func (h *Handler) deliverSlashResponse(delivery *DeliveryContext, text string) {
+	if h.replyFunc == nil || delivery == nil || text == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := h.replyFunc(ctx, delivery, text); err != nil {
+		h.logger.Warn("slash command reply failed", "error", err)
+	}
+}
+
+// buildSessionStatus constructs a human-readable session status string.
+func (h *Handler) buildSessionStatus(sessionKey string) string {
+	sess := h.sessions.Get(sessionKey)
+	if sess == nil {
+		return fmt.Sprintf("세션 %q: 정보 없음", sessionKey)
+	}
+	model := h.defaultModel
+	if model == "" {
+		model = defaultModel
+	}
+	return fmt.Sprintf("세션: %s\n모델: %s\n상태: %s",
+		sessionKey, model, string(sess.Status))
 }
 
 // buildRunDeps assembles the dependency struct for runAgentAsync.
