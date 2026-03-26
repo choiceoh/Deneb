@@ -164,7 +164,7 @@ pub unsafe extern "C" fn deneb_validate_session_key(key_ptr: *const u8, key_len:
         if security::is_valid_session_key(key_str) {
             0
         } else {
-            -3
+            FFI_ERR_VALIDATION
         }
     })
 }
@@ -756,7 +756,7 @@ pub unsafe extern "C" fn deneb_compaction_evaluate(
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -829,7 +829,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_start(
         let json = compaction::napi::compaction_sweep_start(handle);
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -865,7 +865,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_step(
         let json = compaction::napi::compaction_sweep_step(handle, resp_str.to_string());
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -992,7 +992,7 @@ pub unsafe extern "C" fn deneb_memory_merge_hybrid_results(
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1031,7 +1031,7 @@ pub unsafe extern "C" fn deneb_memory_extract_keywords(
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1100,7 +1100,7 @@ pub unsafe extern "C" fn deneb_extract_links(
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1140,7 +1140,7 @@ pub unsafe extern "C" fn deneb_html_to_markdown(
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1201,7 +1201,7 @@ pub unsafe extern "C" fn deneb_base64_canonicalize(
             Some(canonical) => {
                 let bytes = canonical.as_bytes();
                 if bytes.len() > out_slice.len() {
-                    return FFI_ERR_OVERFLOW;
+                    return FFI_ERR_OUTPUT_TOO_SMALL;
                 }
                 out_slice[..bytes.len()].copy_from_slice(bytes);
                 bytes.len() as i32
@@ -1244,7 +1244,7 @@ pub unsafe extern "C" fn deneb_parse_media_tokens(
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1323,7 +1323,7 @@ pub unsafe extern "C" fn deneb_markdown_to_ir(
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1363,7 +1363,7 @@ pub unsafe extern "C" fn deneb_markdown_detect_fences(
         };
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1408,7 +1408,7 @@ pub unsafe extern "C" fn deneb_context_assembly_start(
         let json = context_engine::napi::context_assembly_start(handle);
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1444,7 +1444,7 @@ pub unsafe extern "C" fn deneb_context_assembly_step(
         let json = context_engine::napi::context_assembly_step(handle, resp_str.to_string());
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1498,7 +1498,7 @@ pub unsafe extern "C" fn deneb_context_expand_start(
         let json = context_engine::napi::context_expand_start(handle);
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1533,7 +1533,7 @@ pub unsafe extern "C" fn deneb_context_expand_step(
         let json = context_engine::napi::context_expand_step(handle, resp_str.to_string());
         let bytes = json.as_bytes();
         if bytes.len() > out_slice.len() {
-            return FFI_ERR_OVERFLOW;
+            return FFI_ERR_OUTPUT_TOO_SMALL;
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
@@ -1590,7 +1590,7 @@ mod tests {
     fn test_validate_session_key_empty() {
         let key = "";
         let result = unsafe { deneb_validate_session_key(key.as_ptr(), key.len()) };
-        assert_eq!(result, -3);
+        assert_eq!(result, FFI_ERR_VALIDATION);
     }
 
     #[test]
