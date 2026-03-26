@@ -96,6 +96,18 @@ func (pr *PluginHTTPRouter) Handle(w http.ResponseWriter, r *http.Request) bool 
 		}
 	}
 
+	// Recover from handler panics to prevent server crash.
+	defer func() {
+		if rv := recover(); rv != nil {
+			pr.logger.Error("plugin HTTP handler panic",
+				"pluginId", best.PluginID,
+				"prefix", best.PathPrefix,
+				"panic", rv,
+			)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+	}()
+
 	best.Handler.ServeHTTP(w, r)
 	return true
 }

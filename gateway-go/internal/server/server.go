@@ -123,8 +123,7 @@ type Server struct {
 	heartbeatState *rpc.HeartbeatState
 	presenceStore  *rpc.PresenceStore
 
-	// Phase 5: HTTP routing for Control UI and plugins.
-	controlUI    *ControlUIHandler
+	// Phase 5: HTTP routing for plugins.
 	pluginRouter *PluginHTTPRouter
 
 	// Phase 5: Hooks HTTP webhook handler.
@@ -286,17 +285,6 @@ func New(addr string, opts ...Option) *Server {
 			Providers: s.providers,
 		})
 	}
-
-	// Phase 5: Control UI SPA serving and plugin HTTP routing.
-	controlUIEnabled := false
-	controlUIBasePath := ""
-	controlUIRoot := ""
-	if s.runtimeCfg != nil {
-		controlUIEnabled = s.runtimeCfg.ControlUIEnabled
-		controlUIBasePath = s.runtimeCfg.ControlUIBasePath
-		controlUIRoot = s.runtimeCfg.ControlUIRoot
-	}
-	s.controlUI = NewControlUIHandler(controlUIBasePath, controlUIRoot, s.version, controlUIEnabled, s.logger)
 
 	// Plugin HTTP router with auth check backed by the gateway auth validator.
 	var pluginAuthCheck func(r *http.Request) bool
@@ -531,14 +519,10 @@ func (s *Server) buildMux() *http.ServeMux {
 		})
 	}
 
-	// Catch-all handler: plugin HTTP routes → Control UI → root fallback.
+	// Catch-all handler: plugin HTTP routes → root fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Plugin HTTP routes (checked first).
+		// Plugin HTTP routes.
 		if s.pluginRouter != nil && s.pluginRouter.Handle(w, r) {
-			return
-		}
-		// Control UI SPA serving.
-		if s.controlUI != nil && s.controlUI.Handle(w, r) {
 			return
 		}
 		// Root fallback for exact "/" GET.

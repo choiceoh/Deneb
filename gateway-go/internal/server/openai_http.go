@@ -118,6 +118,17 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate model is non-empty.
+	if req.Model == "" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": map[string]string{
+				"message": "model is required",
+				"type":    "invalid_request_error",
+			},
+		})
+		return
+	}
+
 	if len(req.Messages) == 0 {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{
@@ -130,6 +141,12 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	// Extract user prompt from the last user message.
 	prompt := extractUserPrompt(req.Messages)
+
+	// If no text prompt but images are present, use a placeholder.
+	if prompt == "" && hasImageContent(req.Messages) {
+		prompt = "User sent image(s) with no text."
+	}
+
 	if prompt == "" {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{
@@ -138,6 +155,12 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			},
 		})
 		return
+	}
+
+	// Extract system/developer prompt and prepend if present.
+	systemPrompt := extractSystemPrompt(req.Messages)
+	if systemPrompt != "" {
+		prompt = systemPrompt + "\n\n" + prompt
 	}
 
 	// Check chat handler availability (after validation to surface 400 errors first).
@@ -155,6 +178,11 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	sessionKey := "openai-compat"
 	if req.User != "" {
 		sessionKey = "openai-compat-" + req.User
+	}
+
+	// Allow overriding session key via X-Deneb-Session header.
+	if sessionHeader := r.Header.Get("X-Deneb-Session"); sessionHeader != "" {
+		sessionKey = sessionHeader
 	}
 
 	if req.Stream {
@@ -369,40 +397,78 @@ func (s *Server) authenticateHTTP(w http.ResponseWriter, r *http.Request) bool {
 }
 
 // extractUserPrompt extracts the text from the last user message in the messages array.
+// Normalizes deprecated "function" role to "tool".
 func extractUserPrompt(messages []OpenAIMessage) string {
 	// Walk from the end to find the last user message.
 	for i := len(messages) - 1; i >= 0; i-- {
-		msg := messages[i]
-		if msg.Role != "user" {
-			continue
+		role := messages[i].Role
+		if role == "function" {
+			role = "tool"
 		}
-		return extractMessageText(msg.Content)
+		if role == "user" {
+			text := extractMessageText(messages[i])
+			if text != "" {
+				return text
+			}
+		}
 	}
 	return ""
 }
 
-// extractMessageText extracts text from a message content field.
-// Content can be a plain string or an array of content parts.
-func extractMessageText(content any) string {
-	switch v := content.(type) {
-	case string:
-		return v
-	case []any:
-		// Array of content parts — concatenate text parts.
-		var parts []string
-		for _, item := range v {
-			if m, ok := item.(map[string]any); ok {
-				if t, _ := m["type"].(string); t == "text" {
-					if text, _ := m["text"].(string); text != "" {
-						parts = append(parts, text)
+// extractSystemPrompt collects all system/developer messages into a combined prompt.
+func extractSystemPrompt(messages []OpenAIMessage) string {
+	var parts []string
+	for _, msg := range messages {
+		if msg.Role == "system" || msg.Role == "developer" {
+			text := extractMessageText(msg)
+			if text != "" {
+				parts = append(parts, text)
+			}
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+// hasImageContent checks if any message contains image_url content parts.
+func hasImageContent(messages []OpenAIMessage) bool {
+	for _, msg := range messages {
+		if parts, ok := msg.Content.([]any); ok {
+			for _, item := range parts {
+				if m, ok := item.(map[string]any); ok {
+					if t, _ := m["type"].(string); t == "image_url" {
+						return true
 					}
 				}
 			}
 		}
-		return strings.Join(parts, "\n")
-	default:
-		return ""
 	}
+	return false
+}
+
+// extractMessageText extracts text from a message content field.
+// Content can be a plain string or an array of content parts.
+// Handles both "text" and "input_text" part types.
+func extractMessageText(msg OpenAIMessage) string {
+	switch c := msg.Content.(type) {
+	case string:
+		return c
+	case []any:
+		var parts []string
+		for _, item := range c {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			partType, _ := m["type"].(string)
+			if partType == "text" || partType == "input_text" {
+				if text, ok := m["text"].(string); ok {
+					parts = append(parts, text)
+				}
+			}
+		}
+		return strings.Join(parts, "\n")
+	}
+	return ""
 }
 
 // writeSSEData marshals v as JSON and writes it as an SSE data event.

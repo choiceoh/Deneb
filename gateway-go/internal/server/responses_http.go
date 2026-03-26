@@ -21,11 +21,12 @@ const maxResponsesBodyBytes = 20 * 1024 * 1024 // 20 MB
 
 // ResponsesRequest is the inbound request body for /v1/responses.
 type ResponsesRequest struct {
-	Model        string `json:"model"`
-	Input        any    `json:"input"` // string or []ItemParam
-	Instructions string `json:"instructions,omitempty"`
-	Stream       *bool  `json:"stream,omitempty"`
-	User         string `json:"user,omitempty"`
+	Model           string `json:"model"`
+	Input           any    `json:"input"` // string or []ItemParam
+	Instructions    string `json:"instructions,omitempty"`
+	Stream          *bool  `json:"stream,omitempty"`
+	User            string `json:"user,omitempty"`
+	MaxOutputTokens *int   `json:"max_output_tokens,omitempty"`
 }
 
 // --- Response types ---
@@ -95,6 +96,17 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]string{
 				"message": "invalid request body: " + err.Error(),
+				"type":    "invalid_request_error",
+			},
+		})
+		return
+	}
+
+	// Validate model is non-empty.
+	if req.Model == "" {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": map[string]string{
+				"message": "model is required",
 				"type":    "invalid_request_error",
 			},
 		})
@@ -361,40 +373,63 @@ func (s *Server) isResponsesEnabled() bool {
 }
 
 // extractResponsesInput extracts text from the input field.
-// Input can be a string or an array of message items.
+// Input can be a string or an array of item objects (message, function_call_output, etc.).
 func extractResponsesInput(input any) string {
 	switch v := input.(type) {
 	case string:
-		return v
+		return strings.TrimSpace(v)
 	case []any:
-		// Array of message items — find user messages and concatenate content.
 		var parts []string
 		for _, item := range v {
 			m, ok := item.(map[string]any)
 			if !ok {
 				continue
 			}
-			role, _ := m["role"].(string)
-			if role != "" && role != "user" {
-				continue
-			}
-			// Content can be a string or array of content blocks.
-			switch c := m["content"].(type) {
-			case string:
-				parts = append(parts, c)
-			case []any:
-				for _, block := range c {
-					if bm, ok := block.(map[string]any); ok {
-						if t, _ := bm["type"].(string); t == "input_text" || t == "text" {
-							if text, _ := bm["text"].(string); text != "" {
-								parts = append(parts, text)
+			itemType, _ := m["type"].(string)
+			switch itemType {
+			case "message":
+				// Extract text from content (string or array of content blocks).
+				if content, ok := m["content"].(string); ok {
+					parts = append(parts, content)
+				} else if contentArr, ok := m["content"].([]any); ok {
+					for _, part := range contentArr {
+						if pm, ok := part.(map[string]any); ok {
+							partType, _ := pm["type"].(string)
+							if partType == "input_text" || partType == "text" {
+								if text, ok := pm["text"].(string); ok {
+									parts = append(parts, text)
+								}
+							}
+						}
+					}
+				}
+			case "function_call_output":
+				if output, ok := m["output"].(string); ok {
+					parts = append(parts, output)
+				}
+			default:
+				// Legacy format: items without an explicit type but with role+content.
+				role, _ := m["role"].(string)
+				if role != "" && role != "user" {
+					continue
+				}
+				switch c := m["content"].(type) {
+				case string:
+					parts = append(parts, c)
+				case []any:
+					for _, block := range c {
+						if bm, ok := block.(map[string]any); ok {
+							if t, _ := bm["type"].(string); t == "input_text" || t == "text" {
+								if text, _ := bm["text"].(string); text != "" {
+									parts = append(parts, text)
+								}
 							}
 						}
 					}
 				}
 			}
 		}
-		return strings.Join(parts, "\n")
+		return strings.TrimSpace(strings.Join(parts, "\n"))
 	default:
 		return ""
 	}
