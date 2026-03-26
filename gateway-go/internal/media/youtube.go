@@ -308,9 +308,9 @@ func cleanSubtitleText(raw string) string {
 	text := strings.Join(result, "\n")
 
 	// Truncate very long transcripts (cap at ~30K chars to stay within LLM context).
-	const maxTranscriptChars = 30000
+	const maxTranscriptChars = 50000
 	if len(text) > maxTranscriptChars {
-		text = text[:maxTranscriptChars] + "\n\n[...자막이 30,000자에서 잘렸습니다]"
+		text = text[:maxTranscriptChars] + "\n\n[...자막이 50,000자에서 잘렸습니다]"
 	}
 
 	return text
