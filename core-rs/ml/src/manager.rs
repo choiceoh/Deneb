@@ -156,11 +156,12 @@ impl ModelManager {
     /// `LocalEmbedder`/`LocalReranker` which wrap this method.
     #[allow(private_interfaces)]
     pub fn get_model(&self, role: ModelRole) -> Result<Arc<LoadedModel>, MlError> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().expect("model manager lock poisoned");
 
         // Already loaded — touch timestamp and return.
         if inner.models.contains_key(&role) {
-            let entry = inner.models.get_mut(&role).unwrap();
+            // Unwrap safe: contains_key confirmed above.
+            let entry = inner.models.get_mut(&role).expect("role just checked");
             entry.last_used = Instant::now();
             // Safety: we return an Arc clone so the caller can use it after unlock.
             let model = Arc::new(LoadedModel {
@@ -200,7 +201,7 @@ impl ModelManager {
 
     /// Unload a specific model (or all if `role` is `None`).
     pub fn unload(&self, role: Option<ModelRole>) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().expect("model manager lock poisoned");
         match role {
             Some(r) => {
                 inner.models.remove(&r);
@@ -213,7 +214,7 @@ impl ModelManager {
 
     /// Unload models that have exceeded their TTL.
     pub fn unload_expired(&self) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().expect("model manager lock poisoned");
         let now = Instant::now();
         let expired: Vec<ModelRole> = inner
             .models
@@ -239,7 +240,7 @@ impl ModelManager {
 
     /// Status report for all configured roles.
     pub fn status(&self) -> serde_json::Value {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().expect("model manager lock poisoned");
         let mut result = serde_json::Map::new();
 
         for role in ModelRole::ALL {

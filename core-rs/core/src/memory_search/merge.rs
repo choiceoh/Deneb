@@ -1,3 +1,5 @@
+//! Hybrid search result merging (vector + keyword fusion with MMR re-ranking).
+
 use std::collections::HashMap;
 
 use super::mmr;

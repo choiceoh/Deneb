@@ -1,3 +1,5 @@
+//! Full-text search query builder for SQLite FTS5.
+
 use once_cell::sync::Lazy;
 use regex::Regex;
 

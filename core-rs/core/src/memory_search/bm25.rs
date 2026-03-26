@@ -1,3 +1,5 @@
+//! BM25 rank-to-score conversion for SQLite FTS5 results.
+
 /// Convert a SQLite BM25 rank value to a [0, 1] score.
 ///
 /// SQLite's `bm25()` returns negative values where more negative = more relevant.

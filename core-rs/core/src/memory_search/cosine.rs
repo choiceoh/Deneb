@@ -1,3 +1,5 @@
+//! Cosine similarity computation for vector search.
+
 /// Cosine similarity between two f64 vectors.
 /// Returns 0.0 for empty or zero-norm vectors.
 /// Result is clamped to [-1.0, 1.0] to guard against float imprecision.

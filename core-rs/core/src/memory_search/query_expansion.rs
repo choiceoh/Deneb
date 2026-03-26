@@ -1,3 +1,5 @@
+//! Query expansion and keyword extraction for memory search.
+
 use once_cell::sync::Lazy;
 use regex::Regex;
 

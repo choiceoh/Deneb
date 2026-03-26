@@ -80,6 +80,8 @@ pub unsafe extern "C" fn deneb_validate_frame(json_ptr: *const u8, json_len: usi
     if json_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: json_ptr is null-checked above, json_len is bounded by FFI_MAX_INPUT_LEN.
+    // The Go caller guarantees the buffer is valid for json_len bytes.
     let slice = std::slice::from_raw_parts(json_ptr, json_len);
     ffi_catch(FFI_ERR_PANIC, move || {
         let json_str = match std::str::from_utf8(slice) {
@@ -108,6 +110,8 @@ pub unsafe extern "C" fn deneb_constant_time_eq(
     if a_ptr.is_null() || b_ptr.is_null() {
         return FFI_ERR_NULL_PTR;
     }
+    // SAFETY: both pointers are null-checked above. The Go caller guarantees
+    // each buffer is valid for its respective length.
     let a = std::slice::from_raw_parts(a_ptr, a_len);
     let b = std::slice::from_raw_parts(b_ptr, b_len);
     if security::constant_time_eq(a, b) {
@@ -134,12 +138,16 @@ pub unsafe extern "C" fn deneb_detect_mime(
     if data_ptr.is_null() || out_ptr.is_null() {
         return FFI_ERR_NULL_PTR;
     }
+    // SAFETY: data_ptr and out_ptr are null-checked above. The Go caller guarantees
+    // both buffers are valid for their respective lengths.
     let data = std::slice::from_raw_parts(data_ptr, data_len);
     let mime = media::detect_mime(data);
     let mime_bytes = mime.as_bytes();
     if mime_bytes.len() > out_len {
         return FFI_ERR_OUTPUT_TOO_SMALL;
     }
+    // SAFETY: mime_bytes.len() <= out_len checked above; source (stack) and
+    // destination (caller-owned) never overlap.
     std::ptr::copy_nonoverlapping(mime_bytes.as_ptr(), out_ptr, mime_bytes.len());
     mime_bytes.len() as i32
 }
@@ -157,6 +165,7 @@ pub unsafe extern "C" fn deneb_validate_session_key(key_ptr: *const u8, key_len:
     if key_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: key_ptr is null-checked above, key_len bounded by FFI_MAX_INPUT_LEN.
     let slice = std::slice::from_raw_parts(key_ptr, key_len);
     ffi_catch(FFI_ERR_PANIC, move || {
         let key_str = match std::str::from_utf8(slice) {
@@ -191,6 +200,8 @@ pub unsafe extern "C" fn deneb_sanitize_html(
     if input_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: input_ptr and out_ptr are null-checked above, input_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -222,6 +233,7 @@ pub unsafe extern "C" fn deneb_is_safe_url(url_ptr: *const u8, url_len: usize) -
     if url_len > 8192 {
         return 1; // treat oversized URLs as unsafe
     }
+    // SAFETY: url_ptr is null-checked above, url_len capped at 8 KB.
     let slice = std::slice::from_raw_parts(url_ptr, url_len);
     ffi_catch(FFI_ERR_PANIC, move || {
         let url_str = match std::str::from_utf8(slice) {
@@ -250,6 +262,7 @@ pub unsafe extern "C" fn deneb_validate_error_code(code_ptr: *const u8, code_len
     if code_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: code_ptr is null-checked above, code_len bounded by FFI_MAX_INPUT_LEN.
     let slice = std::slice::from_raw_parts(code_ptr, code_len);
     ffi_catch(FFI_ERR_PANIC, move || {
         let code_str = match std::str::from_utf8(slice) {
@@ -292,6 +305,8 @@ pub unsafe extern "C" fn deneb_vega_execute(
     if cmd_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: cmd_ptr and out_ptr are null-checked above, cmd_len bounded by
+    // FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let slice = std::slice::from_raw_parts(cmd_ptr, cmd_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -381,6 +396,8 @@ pub unsafe extern "C" fn deneb_vega_search(
     if query_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: query_ptr and out_ptr are null-checked above, query_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let slice = std::slice::from_raw_parts(query_ptr, query_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -510,6 +527,8 @@ pub unsafe extern "C" fn deneb_ml_embed(
     if input_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: input_ptr and out_ptr are null-checked above, input_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -574,6 +593,8 @@ pub unsafe extern "C" fn deneb_ml_rerank(
     if input_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: input_ptr and out_ptr are null-checked above, input_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -673,6 +694,8 @@ pub unsafe extern "C" fn deneb_validate_params(
     if json_len > FFI_MAX_INPUT_LEN || method_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: method_ptr and json_ptr are null-checked above, both lengths
+    // bounded by FFI_MAX_INPUT_LEN. The Go caller guarantees valid buffers.
     let method_slice = std::slice::from_raw_parts(method_ptr, method_len);
     let json_slice = std::slice::from_raw_parts(json_ptr, json_len);
 
@@ -699,6 +722,8 @@ pub unsafe extern "C" fn deneb_validate_params(
                     let total_len = json_bytes.len();
                     if !errors_out.is_null() && !json_bytes.is_empty() {
                         let write_len = total_len.min(errors_out_len);
+                        // SAFETY: errors_out is null-checked in this branch, errors_out_len
+                        // is the caller-provided buffer capacity.
                         let out = std::slice::from_raw_parts_mut(errors_out, errors_out_len);
                         out[..write_len].copy_from_slice(&json_bytes[..write_len]);
                     }
@@ -740,6 +765,8 @@ pub unsafe extern "C" fn deneb_compaction_evaluate(
     if config_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: config_ptr and out_ptr are null-checked above, config_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let config_slice = std::slice::from_raw_parts(config_ptr, config_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -786,6 +813,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_new(
     if config_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE as i64;
     }
+    // SAFETY: config_ptr is null-checked above, config_len bounded by FFI_MAX_INPUT_LEN.
     let config_slice = std::slice::from_raw_parts(config_ptr, config_len);
     ffi_catch(FFI_ERR_PANIC, move || {
         let config_str = match std::str::from_utf8(config_slice) {
@@ -826,6 +854,7 @@ pub unsafe extern "C" fn deneb_compaction_sweep_start(
     if out_ptr.is_null() {
         return FFI_ERR_NULL_PTR;
     }
+    // SAFETY: out_ptr is null-checked above. The Go caller guarantees the buffer is valid.
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
         let json = compaction::napi::compaction_sweep_start(handle);
@@ -857,6 +886,8 @@ pub unsafe extern "C" fn deneb_compaction_sweep_step(
     if resp_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: resp_ptr and out_ptr are null-checked above, resp_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let resp_slice = std::slice::from_raw_parts(resp_ptr, resp_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -904,6 +935,7 @@ pub unsafe extern "C" fn deneb_memory_cosine_similarity(
     if a_len > MAX_VEC_LEN || b_len > MAX_VEC_LEN {
         return 0.0;
     }
+    // SAFETY: a_ptr and b_ptr are null-checked above, lengths capped at MAX_VEC_LEN.
     let a = std::slice::from_raw_parts(a_ptr, a_len);
     let b = std::slice::from_raw_parts(b_ptr, b_len);
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -936,6 +968,8 @@ pub unsafe extern "C" fn deneb_memory_build_fts_query(
     if raw_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: raw_ptr and out_ptr are null-checked above, raw_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let slice = std::slice::from_raw_parts(raw_ptr, raw_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -976,6 +1010,8 @@ pub unsafe extern "C" fn deneb_memory_merge_hybrid_results(
     if params_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: params_ptr and out_ptr are null-checked above, params_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let slice = std::slice::from_raw_parts(params_ptr, params_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -1019,6 +1055,8 @@ pub unsafe extern "C" fn deneb_memory_extract_keywords(
     if query_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: query_ptr and out_ptr are null-checked above, query_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let slice = std::slice::from_raw_parts(query_ptr, query_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -1066,6 +1104,8 @@ pub unsafe extern "C" fn deneb_extract_links(
     if text_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: text_ptr, config_ptr, and out_ptr are null-checked above, text_len
+    // bounded by FFI_MAX_INPUT_LEN. The Go caller guarantees all buffers are valid.
     let text_slice = std::slice::from_raw_parts(text_ptr, text_len);
     let config_slice = std::slice::from_raw_parts(config_ptr, config_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
@@ -1128,6 +1168,8 @@ pub unsafe extern "C" fn deneb_html_to_markdown(
     if html_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: html_ptr and out_ptr are null-checked above, html_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let html_slice = std::slice::from_raw_parts(html_ptr, html_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -1162,6 +1204,7 @@ pub unsafe extern "C" fn deneb_base64_estimate(input_ptr: *const u8, input_len: 
     if input_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE as i64;
     }
+    // SAFETY: input_ptr is null-checked above, input_len bounded by FFI_MAX_INPUT_LEN.
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let input_str = match std::str::from_utf8(slice) {
@@ -1192,6 +1235,8 @@ pub unsafe extern "C" fn deneb_base64_canonicalize(
     if input_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: input_ptr and out_ptr are null-checked above, input_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let slice = std::slice::from_raw_parts(input_ptr, input_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -1232,6 +1277,8 @@ pub unsafe extern "C" fn deneb_parse_media_tokens(
     if text_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: text_ptr and out_ptr are null-checked above, text_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let text_slice = std::slice::from_raw_parts(text_ptr, text_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -1280,6 +1327,8 @@ pub unsafe extern "C" fn deneb_markdown_to_ir(
     if md_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: md_ptr and out_ptr are null-checked above, md_len bounded by
+    // FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let md_slice = std::slice::from_raw_parts(md_ptr, md_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -1288,6 +1337,7 @@ pub unsafe extern "C" fn deneb_markdown_to_ir(
             Err(_) => return FFI_ERR_INVALID_UTF8,
         };
         let options = if !opts_ptr.is_null() && opts_len > 0 {
+            // SAFETY: opts_ptr is non-null (checked in this branch), opts_len > 0.
             let opts_bytes = std::slice::from_raw_parts(opts_ptr, opts_len);
             match std::str::from_utf8(opts_bytes) {
                 Ok(s) => match serde_json::from_str::<markdown::parser::ParseOptions>(s) {
@@ -1351,6 +1401,8 @@ pub unsafe extern "C" fn deneb_markdown_detect_fences(
     if text_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: text_ptr and out_ptr are null-checked above, text_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let text_slice = std::slice::from_raw_parts(text_ptr, text_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -1405,6 +1457,7 @@ pub unsafe extern "C" fn deneb_context_assembly_start(
     if out_ptr.is_null() {
         return FFI_ERR_NULL_PTR;
     }
+    // SAFETY: out_ptr is null-checked above. The Go caller guarantees the buffer is valid.
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
         let json = context_engine::napi::context_assembly_start(handle);
@@ -1436,6 +1489,8 @@ pub unsafe extern "C" fn deneb_context_assembly_step(
     if resp_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: resp_ptr and out_ptr are null-checked above, resp_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let resp_slice = std::slice::from_raw_parts(resp_ptr, resp_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
@@ -1469,6 +1524,7 @@ pub unsafe extern "C" fn deneb_context_expand_new(
     if summary_id_ptr.is_null() {
         return 0;
     }
+    // SAFETY: summary_id_ptr is null-checked above.
     let slice = std::slice::from_raw_parts(summary_id_ptr, summary_id_len);
     let summary_id = match std::str::from_utf8(slice) {
         Ok(s) => s.to_string(),
@@ -1495,6 +1551,7 @@ pub unsafe extern "C" fn deneb_context_expand_start(
     if out_ptr.is_null() {
         return FFI_ERR_NULL_PTR;
     }
+    // SAFETY: out_ptr is null-checked above. The Go caller guarantees the buffer is valid.
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
         let json = context_engine::napi::context_expand_start(handle);
@@ -1525,6 +1582,8 @@ pub unsafe extern "C" fn deneb_context_expand_step(
     if resp_len > FFI_MAX_INPUT_LEN {
         return FFI_ERR_INPUT_TOO_LARGE;
     }
+    // SAFETY: resp_ptr and out_ptr are null-checked above, resp_len bounded
+    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
     let resp_slice = std::slice::from_raw_parts(resp_ptr, resp_len);
     let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
     ffi_catch(FFI_ERR_PANIC, move || {
