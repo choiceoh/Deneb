@@ -8,6 +8,46 @@ title: "Tools"
 
 # Tools (Deneb)
 
+## Parallel tool calls
+
+Deneb executes independent tool calls **in parallel** within a single turn.
+When the agent issues multiple tool calls at once and they have no data dependencies,
+the runtime runs them concurrently (each in its own goroutine) and returns all
+results together.
+
+**When to use parallel calls:**
+
+- Multiple `read` / `grep` / `find` calls targeting different files or directories
+- Independent `exec` commands that do not depend on each others output
+- Simultaneous `web` searches or fetches for unrelated queries
+- `browser` → `snapshot` alongside an unrelated `read` or `grep`
+- Any combination of tools where one does not need the others result
+
+**When NOT to use parallel calls:**
+
+- A tool needs another tools output (use `$ref` chaining or sequential turns instead)
+- Order matters (e.g. `write` then `read` of the same file)
+- Side-effect ordering is important (e.g. `exec` that sets up state for the next `exec`)
+
+**Example — parallel reads:**
+
+```json
+[
+  { "tool": "read", "input": { "path": "src/main.go" } },
+  { "tool": "read", "input": { "path": "src/config.go" } },
+  { "tool": "grep", "input": { "pattern": "TODO", "path": "src/" } }
+]
+```
+
+All three execute at the same time and results come back in a single turn.
+
+<Tip>
+Prefer parallel direct tool calls for independent reads/greps. Use `pilot` with
+multiple sources when you also need the results analyzed together in one step.
+</Tip>
+
+---
+
 Deneb exposes **first-class agent tools** for browser, canvas, nodes, and cron.
 These replace the old `deneb-*` skills: the tools are typed, no shelling,
 and the agent should rely on them directly.
