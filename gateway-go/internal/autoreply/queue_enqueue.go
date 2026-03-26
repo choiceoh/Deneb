@@ -130,7 +130,7 @@ func (r *FollowupQueueRegistry) EnqueueFollowupRun(
 ) bool {
 	queue := r.GetOrCreate(key, settings)
 
-	// Check recent message ID cache.
+	// Check recent message ID cache (lock-free, cache has its own mutex).
 	var recentKey string
 	if dedupeMode != DedupeNone {
 		recentKey = buildRecentMessageIDKey(run, key)
@@ -138,6 +138,10 @@ func (r *FollowupQueueRegistry) EnqueueFollowupRun(
 			return false
 		}
 	}
+
+	// All queue field access under the per-queue lock.
+	queue.Lock()
+	defer queue.Unlock()
 
 	// Check in-queue deduplication.
 	allowPrompt := dedupeMode == DedupePrompt

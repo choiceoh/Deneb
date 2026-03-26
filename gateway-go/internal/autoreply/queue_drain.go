@@ -95,8 +95,11 @@ func (s *FollowupDrainService) ResetDrainState() {
 		if q == nil {
 			continue
 		}
+		q.Lock()
 		q.Draining = false
-		if len(q.Items) > 0 || q.DroppedCount > 0 {
+		needsKick := len(q.Items) > 0 || q.DroppedCount > 0
+		q.Unlock()
+		if needsKick {
 			s.KickIfIdle(key)
 		}
 	}
@@ -109,148 +112,195 @@ func (s *FollowupDrainService) ScheduleDrain(key string, runFollowup FollowupDra
 	if queue == nil {
 		return
 	}
+	queue.Lock()
 	if queue.Draining {
+		queue.Unlock()
 		return
 	}
 	queue.Draining = true
+	queue.Unlock()
 	s.callbacks.Set(key, runFollowup)
 
-	go func() {
-		consecutiveFailures := 0
-		collectForceIndividual := false
+	go s.drainLoop(key, queue, runFollowup)
+}
 
-		defer func() {
-			queue.Draining = false
-			if len(queue.Items) == 0 && queue.DroppedCount == 0 {
-				s.registry.Delete(key)
-			} else {
-				// Re-schedule if items remain.
-				s.ScheduleDrain(key, runFollowup)
-			}
-		}()
+// drainLoop is the main drain goroutine. It holds/releases the per-queue lock
+// around field access but releases it before executing callbacks.
+func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, runFollowup FollowupDrainCallback) {
+	consecutiveFailures := 0
+	collectForceIndividual := false
 
-		for len(queue.Items) > 0 || queue.DroppedCount > 0 {
-			// Wait for debounce.
-			if queue.DebounceMs > 0 {
-				time.Sleep(time.Duration(queue.DebounceMs) * time.Millisecond)
-			}
-
-			// Apply exponential backoff on consecutive failures.
-			if consecutiveFailures > 0 {
-				idx := consecutiveFailures - 1
-				if idx >= len(backoffDelays) {
-					idx = len(backoffDelays) - 1
-				}
-				time.Sleep(backoffDelays[idx])
-			}
-
-			if queue.Mode == FollowupModeCollect {
-				// Once items span multiple channels, switch to individual drain
-				// to preserve per-message routing. This is sticky within a drain cycle.
-				isCrossChannel := !collectForceIndividual && hasCrossChannelItems(queue.Items)
-				if isCrossChannel {
-					collectForceIndividual = true
-				}
-
-				if !collectForceIndividual {
-					ok := s.drainCollect(queue, runFollowup)
-					if !ok {
-						consecutiveFailures++
-						if consecutiveFailures >= maxConsecutiveFailures {
-							s.logError(fmt.Sprintf("followup queue drain giving up for %s after %d failures", key, consecutiveFailures))
-							break
-						}
-						continue
-					}
-					consecutiveFailures = 0
-					continue
-				}
-				// Fall through to individual drain for cross-channel items.
-			}
-
-			// Drain summary prompt if accumulated.
-			if queue.DroppedCount > 0 && len(queue.SummaryLines) > 0 {
-				summaryPrompt := buildFollowupSummaryPrompt(queue)
-				if summaryPrompt != "" && queue.LastRun != nil {
-					if len(queue.Items) > 0 {
-						item := queue.Items[0]
-						queue.Items = queue.Items[1:]
-						err := runFollowup(FollowupRun{
-							Prompt:               summaryPrompt,
-							Run:                  queue.LastRun,
-							EnqueuedAt:           time.Now().UnixMilli(),
-							OriginatingChannel:   item.OriginatingChannel,
-							OriginatingTo:        item.OriginatingTo,
-							OriginatingAccountID: item.OriginatingAccountID,
-							OriginatingThreadID:  item.OriginatingThreadID,
-						})
-						if err != nil {
-							consecutiveFailures++
-							s.logError(fmt.Sprintf("followup queue drain summary failed for %s: %s", key, err))
-							if consecutiveFailures >= maxConsecutiveFailures {
-								break
-							}
-							continue
-						}
-						consecutiveFailures = 0
-					}
-					clearFollowupSummaryState(queue)
-					continue
-				}
-			}
-
-			// Drain next individual item.
-			if len(queue.Items) == 0 {
-				break
-			}
-			item := queue.Items[0]
-			queue.Items = queue.Items[1:]
-			if err := runFollowup(item); err != nil {
-				queue.LastEnqueuedAt = time.Now().UnixMilli()
-				consecutiveFailures++
-				s.logError(fmt.Sprintf("followup queue drain failed for %s: %s", key, err))
-				if consecutiveFailures >= maxConsecutiveFailures {
-					break
-				}
-				continue
-			}
-			consecutiveFailures = 0
+	defer func() {
+		queue.Lock()
+		queue.Draining = false
+		empty := len(queue.Items) == 0 && queue.DroppedCount == 0
+		queue.Unlock()
+		if empty {
+			s.registry.Delete(key)
+		} else {
+			s.ScheduleDrain(key, runFollowup)
 		}
 	}()
+
+	for {
+		// Snapshot loop condition under lock.
+		queue.Lock()
+		hasWork := len(queue.Items) > 0 || queue.DroppedCount > 0
+		debounceMs := queue.DebounceMs
+		queue.Unlock()
+		if !hasWork {
+			break
+		}
+
+		// Wait for debounce (unlocked — allows enqueue during sleep).
+		if debounceMs > 0 {
+			time.Sleep(time.Duration(debounceMs) * time.Millisecond)
+		}
+
+		// Apply exponential backoff on consecutive failures.
+		if consecutiveFailures > 0 {
+			idx := consecutiveFailures - 1
+			if idx >= len(backoffDelays) {
+				idx = len(backoffDelays) - 1
+			}
+			time.Sleep(backoffDelays[idx])
+		}
+
+		// --- Collect mode ---
+		queue.Lock()
+		mode := queue.Mode
+		queue.Unlock()
+
+		if mode == FollowupModeCollect {
+			if !collectForceIndividual {
+				queue.Lock()
+				isCross := hasCrossChannelItems(queue.Items)
+				queue.Unlock()
+				if isCross {
+					collectForceIndividual = true
+				}
+			}
+
+			if !collectForceIndividual {
+				ok := s.drainCollect(queue, runFollowup)
+				if !ok {
+					consecutiveFailures++
+					if consecutiveFailures >= maxConsecutiveFailures {
+						s.logError(fmt.Sprintf("followup queue drain giving up for %s after %d failures", key, consecutiveFailures))
+						break
+					}
+					continue
+				}
+				consecutiveFailures = 0
+				continue
+			}
+			// Fall through to individual drain for cross-channel items.
+		}
+
+		// --- Summary drain ---
+		drained := s.trySummaryDrain(key, queue, runFollowup)
+		if drained {
+			consecutiveFailures = 0
+			continue
+		}
+
+		// --- Individual item drain ---
+		queue.Lock()
+		if len(queue.Items) == 0 {
+			queue.Unlock()
+			break
+		}
+		item := queue.Items[0]
+		queue.Items = queue.Items[1:]
+		queue.Unlock()
+
+		// Execute callback without holding the lock.
+		if err := runFollowup(item); err != nil {
+			queue.Lock()
+			queue.LastEnqueuedAt = time.Now().UnixMilli()
+			queue.Unlock()
+			consecutiveFailures++
+			s.logError(fmt.Sprintf("followup queue drain failed for %s: %s", key, err))
+			if consecutiveFailures >= maxConsecutiveFailures {
+				break
+			}
+			continue
+		}
+		consecutiveFailures = 0
+	}
+}
+
+// trySummaryDrain attempts to drain the summary prompt if accumulated.
+// Returns true if a summary was drained (success or failure).
+func (s *FollowupDrainService) trySummaryDrain(key string, queue *FollowupQueueState, runFollowup FollowupDrainCallback) bool {
+	queue.Lock()
+	if queue.DroppedCount == 0 || len(queue.SummaryLines) == 0 {
+		queue.Unlock()
+		return false
+	}
+	summaryPrompt := buildFollowupSummaryPrompt(queue)
+	lastRun := queue.LastRun
+	if summaryPrompt == "" || lastRun == nil || len(queue.Items) == 0 {
+		queue.Unlock()
+		return false
+	}
+	item := queue.Items[0]
+	queue.Items = queue.Items[1:]
+	queue.Unlock()
+
+	err := runFollowup(FollowupRun{
+		Prompt:               summaryPrompt,
+		Run:                  lastRun,
+		EnqueuedAt:           time.Now().UnixMilli(),
+		OriginatingChannel:   item.OriginatingChannel,
+		OriginatingTo:        item.OriginatingTo,
+		OriginatingAccountID: item.OriginatingAccountID,
+		OriginatingThreadID:  item.OriginatingThreadID,
+	})
+	if err != nil {
+		s.logError(fmt.Sprintf("followup queue drain summary failed for %s: %s", key, err))
+		return true // still consumed the attempt
+	}
+	queue.Lock()
+	clearFollowupSummaryState(queue)
+	queue.Unlock()
+	return true
 }
 
 // drainCollect processes items in collect mode (batch all into a single prompt).
 func (s *FollowupDrainService) drainCollect(queue *FollowupQueueState, runFollowup FollowupDrainCallback) bool {
+	queue.Lock()
 	if len(queue.Items) == 0 {
+		queue.Unlock()
 		return false
 	}
 
+	// Snapshot items for the batch.
 	items := make([]FollowupRun, len(queue.Items))
 	copy(items, queue.Items)
-
 	run := queue.LastRun
 	if len(items) > 0 && items[len(items)-1].Run != nil {
 		run = items[len(items)-1].Run
 	}
+	summary := buildFollowupSummaryPrompt(queue)
+	queue.Unlock()
+
 	if run == nil {
 		return false
 	}
 
-	// Build collected prompt.
+	// Build collected prompt (no lock needed, working on snapshot).
 	var lines []string
 	lines = append(lines, "[Queued messages while agent was busy]")
 	for i, item := range items {
 		lines = append(lines, fmt.Sprintf("---\nQueued #%d\n%s", i+1, strings.TrimSpace(item.Prompt)))
 	}
-
-	summary := buildFollowupSummaryPrompt(queue)
 	if summary != "" {
 		lines = append(lines, "---", summary)
 	}
-
-	// Resolve routing from items.
 	routing := resolveOriginRoutingMetadata(items)
 
+	// Execute callback without holding the lock.
 	err := runFollowup(FollowupRun{
 		Prompt:               strings.Join(lines, "\n"),
 		Run:                  run,
@@ -264,11 +314,19 @@ func (s *FollowupDrainService) drainCollect(queue *FollowupQueueState, runFollow
 		return false
 	}
 
-	// Remove consumed items.
-	queue.Items = queue.Items[len(items):]
+	// Remove consumed items under lock.
+	queue.Lock()
+	// Items may have been appended during the callback; only remove the
+	// ones we consumed (up to snapshotLen).
+	snapshotLen := len(items)
+	if snapshotLen > len(queue.Items) {
+		snapshotLen = len(queue.Items)
+	}
+	queue.Items = queue.Items[snapshotLen:]
 	if summary != "" {
 		clearFollowupSummaryState(queue)
 	}
+	queue.Unlock()
 	return true
 }
 
@@ -301,6 +359,7 @@ func resolveOriginRoutingMetadata(items []FollowupRun) originRoutingMetadata {
 }
 
 // buildFollowupSummaryPrompt creates a summary prompt from dropped items.
+// Caller must hold queue.mu.
 func buildFollowupSummaryPrompt(state *FollowupQueueState) string {
 	if state.DroppedCount == 0 || len(state.SummaryLines) == 0 {
 		return ""
@@ -314,12 +373,14 @@ func buildFollowupSummaryPrompt(state *FollowupQueueState) string {
 }
 
 // clearFollowupSummaryState resets the summary/dropped state.
+// Caller must hold queue.mu.
 func clearFollowupSummaryState(state *FollowupQueueState) {
 	state.DroppedCount = 0
 	state.SummaryLines = state.SummaryLines[:0]
 }
 
 // hasCrossChannelItems returns true if items target different channel/to/account/thread combinations.
+// Caller must hold queue.mu.
 func hasCrossChannelItems(items []FollowupRun) bool {
 	if len(items) <= 1 {
 		return false

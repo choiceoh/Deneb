@@ -1,7 +1,10 @@
 package autoreply
 
 import (
+	"fmt"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestFollowupQueueRegistry_GetOrCreate(t *testing.T) {
@@ -202,6 +205,75 @@ func TestClearSessionQueues(t *testing.T) {
 	}
 	if len(result.Keys) != 2 {
 		t.Errorf("expected 2 unique keys, got %d", len(result.Keys))
+	}
+}
+
+func TestFollowupQueue_ConcurrentEnqueue(t *testing.T) {
+	// Verify concurrent enqueue does not race or corrupt the queue.
+	r := NewFollowupQueueRegistry()
+	cache := newRecentMessageIDCache()
+	settings := FollowupQueueSettings{Mode: FollowupModeSteer, Cap: 200}
+
+	const numEnqueues = 100
+	var wg sync.WaitGroup
+	for i := 0; i < numEnqueues; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			r.EnqueueFollowupRun("k", FollowupRun{
+				Prompt:    fmt.Sprintf("msg-%d", idx),
+				MessageID: fmt.Sprintf("id-%d", idx),
+			}, settings, DedupeMessageID, cache)
+		}(i)
+	}
+	wg.Wait()
+
+	depth := r.Depth("k")
+	if depth != numEnqueues {
+		t.Errorf("expected depth=%d, got %d", numEnqueues, depth)
+	}
+}
+
+func TestFollowupDrainService_basic(t *testing.T) {
+	r := NewFollowupQueueRegistry()
+	cache := newRecentMessageIDCache()
+	settings := FollowupQueueSettings{Mode: FollowupModeSteer, Cap: 100, DebounceMs: 1}
+
+	// Pre-enqueue items.
+	for i := 0; i < 5; i++ {
+		r.EnqueueFollowupRun("k", FollowupRun{
+			Prompt:    fmt.Sprintf("msg-%d", i),
+			MessageID: fmt.Sprintf("id-%d", i),
+		}, settings, DedupeMessageID, cache)
+	}
+
+	var drainedCount int
+	var drainedMu sync.Mutex
+	drainService := NewFollowupDrainService(r, func(msg string) { t.Log(msg) })
+	drainService.ScheduleDrain("k", func(run FollowupRun) error {
+		drainedMu.Lock()
+		drainedCount++
+		drainedMu.Unlock()
+		return nil
+	})
+
+	// Wait for drain.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		drainedMu.Lock()
+		n := drainedCount
+		drainedMu.Unlock()
+		if n >= 5 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	drainedMu.Lock()
+	count := drainedCount
+	drainedMu.Unlock()
+	if count != 5 {
+		t.Errorf("expected 5 drained, got %d", count)
 	}
 }
 
