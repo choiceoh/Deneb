@@ -223,10 +223,20 @@ func parseAssemblyDone(store *Store, cmdJSON json.RawMessage) (*AssemblyResult, 
 	}
 
 	// Build ordered LLM messages preserving the assembly's selected order.
+	// Insert a boundary marker at the transition from summaries to fresh messages
+	// so the LLM can distinguish summarized history from recent conversation.
 	var llmMsgs []llm.Message
+	hasSummaries := false
+	boundaryInserted := false
+
 	for _, item := range done.SelectedItems {
 		switch item.ItemType {
 		case "message":
+			if hasSummaries && !boundaryInserted {
+				llmMsgs = append(llmMsgs, llm.NewTextMessage("user",
+					"─── Context boundary: above is summarized history, below is recent conversation ───"))
+				boundaryInserted = true
+			}
 			if item.MessageID != nil {
 				if m, ok := messages[*item.MessageID]; ok {
 					role := m.Role
@@ -237,6 +247,7 @@ func parseAssemblyDone(store *Store, cmdJSON json.RawMessage) (*AssemblyResult, 
 				}
 			}
 		case "summary":
+			hasSummaries = true
 			if item.SummaryID != nil {
 				if s, ok := summaries[*item.SummaryID]; ok {
 					// Summaries are injected as system-like context.
@@ -298,19 +309,28 @@ func assembleFallback(
 	summaries, _ := store.FetchSummaries(sumIDs)
 
 	var llmMsgs []llm.Message
+	hasSums := false
+	boundaryDone := false
+
 	for _, ci := range items {
-		if ci.ItemType == "message" && ci.MessageID != nil {
+		if ci.ItemType == "summary" && ci.SummaryID != nil {
+			hasSums = true
+			if s, ok := summaries[*ci.SummaryID]; ok {
+				llmMsgs = append(llmMsgs, llm.NewTextMessage("user",
+					fmt.Sprintf("[Aurora Summary]\n%s", s.Content)))
+			}
+		} else if ci.ItemType == "message" && ci.MessageID != nil {
+			if hasSums && !boundaryDone {
+				llmMsgs = append(llmMsgs, llm.NewTextMessage("user",
+					"─── Context boundary: above is summarized history, below is recent conversation ───"))
+				boundaryDone = true
+			}
 			if m, ok := messages[*ci.MessageID]; ok {
 				role := m.Role
 				if role == "" {
 					role = "user"
 				}
 				llmMsgs = append(llmMsgs, llm.NewTextMessage(role, m.Content))
-			}
-		} else if ci.ItemType == "summary" && ci.SummaryID != nil {
-			if s, ok := summaries[*ci.SummaryID]; ok {
-				llmMsgs = append(llmMsgs, llm.NewTextMessage("user",
-					fmt.Sprintf("[Aurora Summary]\n%s", s.Content)))
 			}
 		}
 	}

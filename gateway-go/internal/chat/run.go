@@ -256,6 +256,7 @@ func executeAgentRun(
 
 	// 8. Execute agent loop with compaction retry.
 	var agentResult *AgentResult
+	origSystem := cfg.System // preserve for compaction retries to avoid duplicate appends
 
 	for attempt := 0; attempt <= maxCompactionRetries; attempt++ {
 		if attempt > 0 {
@@ -268,13 +269,16 @@ func executeAgentRun(
 			// Check for context overflow error.
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
 				logger.Info("context overflow, attempting compaction", "error", runErr)
-				compactedMsgs, compErr := handleContextOverflowAurora(
+				compactedMsgs, sysAddition, compErr := handleContextOverflowAurora(
 					deps, params, client, logger,
 				)
 				if compErr != nil {
 					return nil, fmt.Errorf("compaction failed: %w (original: %w)", compErr, runErr)
 				}
 				messages = compactedMsgs
+				if sysAddition != "" {
+					cfg.System = llm.AppendSystemText(origSystem, sysAddition)
+				}
 				continue
 			}
 
