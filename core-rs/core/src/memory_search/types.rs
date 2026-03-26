@@ -1,3 +1,5 @@
+//! Shared types for the memory search pipeline (results, configs, merge params).
+
 use serde::{Deserialize, Serialize};
 
 /// A single hybrid search result (used for both vector and keyword sources).

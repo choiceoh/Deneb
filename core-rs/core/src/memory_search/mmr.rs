@@ -1,3 +1,5 @@
+//! Maximal Marginal Relevance (MMR) re-ranking for search result diversity.
+
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashSet;

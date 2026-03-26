@@ -1,3 +1,8 @@
+//! Minimal PNG encoder for generating simple RGBA images.
+//!
+//! Ports `crc32`, `pngChunk`, `fillPixel`, and `encodePngRgba` from
+//! `src/media/png-encode.ts`.
+
 /// Minimal PNG encoder for generating simple RGBA images.
 ///
 /// Ports `crc32`, `pngChunk`, `fillPixel`, and `encodePngRgba` from

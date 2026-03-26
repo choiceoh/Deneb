@@ -1,3 +1,5 @@
+//! Temporal decay scoring — applies recency bias to memory search results.
+
 use once_cell::sync::Lazy;
 use regex::Regex;
 

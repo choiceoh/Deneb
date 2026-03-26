@@ -1,3 +1,8 @@
+//! External content detection and sanitization (napi-rs).
+//!
+//! Detects suspicious patterns in externally fetched content to prevent
+//! prompt injection and other attacks.
+
 #[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::*;
 /// Prompt injection detection and marker sanitization.
