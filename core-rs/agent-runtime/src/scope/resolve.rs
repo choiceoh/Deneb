@@ -331,14 +331,24 @@ pub fn derive_session_chat_type(session_key: &str) -> SessionKeyChatType {
     let scoped = parse_agent_session_key(&raw)
         .map(|p| p.rest)
         .unwrap_or_else(|| raw.clone());
-    let tokens: std::collections::HashSet<&str> = scoped.split(':').filter(|s| !s.is_empty()).collect();
-    if tokens.contains("group") {
+    let mut has_group = false;
+    let mut has_channel = false;
+    let mut has_direct = false;
+    for token in scoped.split(':').filter(|s| !s.is_empty()) {
+        match token {
+            "group" => has_group = true,
+            "channel" => has_channel = true,
+            "direct" | "dm" => has_direct = true,
+            _ => {}
+        }
+    }
+    if has_group {
         return SessionKeyChatType::Group;
     }
-    if tokens.contains("channel") {
+    if has_channel {
         return SessionKeyChatType::Channel;
     }
-    if tokens.contains("direct") || tokens.contains("dm") {
+    if has_direct {
         return SessionKeyChatType::Direct;
     }
     // Legacy Discord keys: discord:<accountId>:guild-<guildId>:channel-<channelId>
@@ -407,21 +417,31 @@ pub fn is_acp_session_key(session_key: &str) -> bool {
 }
 
 /// Resolve the parent session key for a thread (strips ":thread:<id>" or ":topic:<id>" suffix).
+/// Session keys are ASCII by convention; lowercase search is done on the same
+/// lowercased string to avoid byte-index misalignment across UTF-8 boundaries.
 pub fn resolve_thread_parent_session_key(session_key: &str) -> Option<String> {
     let raw = session_key.trim();
     if raw.is_empty() {
         return None;
     }
-    let normalized = raw.to_lowercase();
+    // Work entirely on lowercased string, then return the slice length from it.
+    // Session keys are ASCII, so byte indices are stable across case transforms.
+    let lower = raw.to_lowercase();
     let markers = [":thread:", ":topic:"];
-    let mut idx: Option<usize> = None;
+    let mut best: Option<usize> = None;
     for marker in &markers {
-        if let Some(candidate) = normalized.rfind(marker) {
-            idx = Some(idx.map_or(candidate, |prev| prev.max(candidate)));
+        if let Some(candidate) = lower.rfind(marker) {
+            best = Some(best.map_or(candidate, |prev| prev.max(candidate)));
         }
     }
-    let pos = idx?;
+    let pos = best?;
     if pos == 0 {
+        return None;
+    }
+    // Use the position on the original raw string. Safe because session keys
+    // are ASCII (agent IDs, channel names, peer IDs are all ASCII-constrained).
+    // Guard against non-ASCII edge cases by checking char boundary.
+    if !raw.is_char_boundary(pos) {
         return None;
     }
     let parent = raw[..pos].trim();
@@ -691,6 +711,47 @@ pub fn resolve_thread_session_keys(
     (session_key, parent_session_key.map(|s| s.to_string()))
 }
 
+/// Resolve a linked peer ID from identity links mapping.
+/// Mirrors `src/routing/session-key.ts#resolveLinkedPeerId`. Keep in sync.
+fn resolve_linked_peer_id(
+    identity_links: &std::collections::HashMap<String, Vec<String>>,
+    channel: &str,
+    peer_id: &str,
+) -> Option<String> {
+    let pid = peer_id.trim();
+    if pid.is_empty() {
+        return None;
+    }
+    let mut candidates = std::collections::HashSet::new();
+    let raw_candidate = pid.trim().to_lowercase();
+    if !raw_candidate.is_empty() {
+        candidates.insert(raw_candidate);
+    }
+    let ch = channel.trim().to_lowercase();
+    if !ch.is_empty() {
+        let scoped = format!("{}:{}", ch, pid.trim().to_lowercase());
+        if !scoped.is_empty() {
+            candidates.insert(scoped);
+        }
+    }
+    if candidates.is_empty() {
+        return None;
+    }
+    for (canonical, ids) in identity_links {
+        let canonical_name = canonical.trim();
+        if canonical_name.is_empty() {
+            continue;
+        }
+        for id in ids {
+            let normalized = id.trim().to_lowercase();
+            if !normalized.is_empty() && candidates.contains(&normalized) {
+                return Some(canonical_name.to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Build a peer-scoped session key for an agent.
 /// Mirrors `src/routing/session-key.ts#buildAgentPeerSessionKey`. Keep in sync.
 pub fn build_agent_peer_session_key(
@@ -700,6 +761,7 @@ pub fn build_agent_peer_session_key(
     account_id: Option<&str>,
     peer_kind: Option<&str>,
     peer_id: Option<&str>,
+    identity_links: Option<&std::collections::HashMap<String, Vec<String>>>,
     dm_scope: Option<&str>,
 ) -> String {
     let kind = peer_kind.unwrap_or("direct");
@@ -707,7 +769,17 @@ pub fn build_agent_peer_session_key(
 
     if kind == "direct" {
         let scope = dm_scope.unwrap_or("main");
-        let pid = peer_id.unwrap_or("").trim().to_lowercase();
+        let mut pid = peer_id.unwrap_or("").trim().to_string();
+
+        // Resolve identity links for non-main DM scopes.
+        if scope != "main" {
+            if let Some(links) = identity_links {
+                if let Some(linked) = resolve_linked_peer_id(links, channel, &pid) {
+                    pid = linked;
+                }
+            }
+        }
+        let pid = pid.to_lowercase();
 
         if scope == "per-account-channel-peer" && !pid.is_empty() {
             let ch = {
@@ -1140,7 +1212,7 @@ mod tests {
     #[test]
     fn build_agent_peer_session_key_group() {
         assert_eq!(
-            build_agent_peer_session_key("bot", None, "telegram", None, Some("group"), Some("123"), None),
+            build_agent_peer_session_key("bot", None, "telegram", None, Some("group"), Some("123"), None, None),
             "agent:bot:telegram:group:123"
         );
     }
@@ -1149,7 +1221,7 @@ mod tests {
     fn build_agent_peer_session_key_direct_main() {
         // Default dm_scope is "main", which falls back to main session key.
         assert_eq!(
-            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("user1"), None),
+            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("user1"), None, None),
             "agent:bot:main"
         );
     }
@@ -1157,7 +1229,7 @@ mod tests {
     #[test]
     fn build_agent_peer_session_key_per_peer() {
         assert_eq!(
-            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("User1"), Some("per-peer")),
+            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("User1"), None, Some("per-peer")),
             "agent:bot:direct:user1"
         );
     }
@@ -1165,7 +1237,7 @@ mod tests {
     #[test]
     fn build_agent_peer_session_key_per_channel_peer() {
         assert_eq!(
-            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("User1"), Some("per-channel-peer")),
+            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("User1"), None, Some("per-channel-peer")),
             "agent:bot:telegram:direct:user1"
         );
     }
@@ -1173,8 +1245,28 @@ mod tests {
     #[test]
     fn build_agent_peer_session_key_per_account_channel_peer() {
         assert_eq!(
-            build_agent_peer_session_key("bot", None, "telegram", Some("acct1"), Some("direct"), Some("User1"), Some("per-account-channel-peer")),
+            build_agent_peer_session_key("bot", None, "telegram", Some("acct1"), Some("direct"), Some("User1"), None, Some("per-account-channel-peer")),
             "agent:bot:telegram:acct1:direct:user1"
+        );
+    }
+
+    #[test]
+    fn build_agent_peer_session_key_with_identity_links() {
+        let mut links = std::collections::HashMap::new();
+        links.insert("canonical-user".to_string(), vec!["telegram:user1".to_string()]);
+        assert_eq!(
+            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("User1"), Some(&links), Some("per-peer")),
+            "agent:bot:direct:canonical-user"
+        );
+    }
+
+    #[test]
+    fn build_agent_peer_session_key_identity_links_no_match() {
+        let mut links = std::collections::HashMap::new();
+        links.insert("other-user".to_string(), vec!["discord:other".to_string()]);
+        assert_eq!(
+            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("User1"), Some(&links), Some("per-peer")),
+            "agent:bot:direct:user1"
         );
     }
 }

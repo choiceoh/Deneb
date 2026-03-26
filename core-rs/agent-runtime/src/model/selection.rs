@@ -175,6 +175,9 @@ pub fn parse_model_ref(raw: &str, default_provider: &str) -> Option<ModelRef> {
 /// Split trailing auth profile from a model string (e.g. "model@profile").
 /// Handles YYYYMMDD@ version suffixes correctly.
 /// Mirrors `src/agents/models/model-ref-profile.ts`. Keep in sync.
+///
+/// Model strings are ASCII by convention (provider/model IDs, date suffixes).
+/// Byte indexing is safe because all delimiters (`@`, `/`) are single-byte ASCII.
 pub fn split_trailing_auth_profile(raw: &str) -> (String, Option<String>) {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -182,7 +185,8 @@ pub fn split_trailing_auth_profile(raw: &str) -> (String, Option<String>) {
     }
 
     let last_slash = trimmed.rfind('/').map(|i| i + 1).unwrap_or(0);
-    let mut profile_delimiter = match trimmed[last_slash..].find('@') {
+    let after_slash = &trimmed[last_slash..];
+    let mut profile_delimiter = match after_slash.find('@') {
         Some(i) => last_slash + i,
         None => return (trimmed.to_string(), None),
     };
@@ -190,19 +194,31 @@ pub fn split_trailing_auth_profile(raw: &str) -> (String, Option<String>) {
         return (trimmed.to_string(), None);
     }
 
-    // Check if @ is followed by YYYYMMDD (version suffix, not profile).
-    let version_suffix = &trimmed[profile_delimiter + 1..];
-    if version_suffix.len() >= 8 && version_suffix[..8].chars().all(|c| c.is_ascii_digit()) {
+    // Check if @ is followed by YYYYMMDD (version suffix, not profile delimiter).
+    let after_at = &trimmed[profile_delimiter + 1..];
+    let is_version_suffix = after_at.len() >= 8
+        && after_at.as_bytes()[..8].iter().all(|b| b.is_ascii_digit());
+
+    if is_version_suffix {
         // Look for another @ after the 8-digit version suffix.
-        let next_at = if version_suffix.len() > 8 && version_suffix.as_bytes()[8] == b'@' {
+        let next_at = if after_at.len() > 8 && after_at.as_bytes()[8] == b'@' {
+            // YYYYMMDD@ immediately followed by profile.
             Some(profile_delimiter + 9)
         } else {
-            trimmed[profile_delimiter + 9..].find('@').map(|i| profile_delimiter + 9 + i)
+            // Search further for @.
+            after_at.get(9..).and_then(|rest| rest.find('@').map(|i| profile_delimiter + 9 + i))
         };
         match next_at {
             Some(pos) => profile_delimiter = pos,
             None => return (trimmed.to_string(), None),
         }
+    }
+
+    // Guard: verify char boundaries (model strings are ASCII but be safe).
+    if !trimmed.is_char_boundary(profile_delimiter)
+        || !trimmed.is_char_boundary(profile_delimiter + 1)
+    {
+        return (trimmed.to_string(), None);
     }
 
     let model = trimmed[..profile_delimiter].trim();
@@ -619,21 +635,17 @@ pub fn resolve_default_model_for_agent(
         resolve_agent_effective_model_primary(agents_list, id, agents_defaults_model)
     });
 
-    let effective_model = if let Some(ref override_model) = agent_model_override {
-        if !override_model.is_empty() {
-            let base = to_agent_model_list_like(agents_defaults_model).unwrap_or(serde_json::json!({}));
-            let mut obj = match base {
-                serde_json::Value::Object(m) => m,
-                _ => serde_json::Map::new(),
-            };
-            obj.insert("primary".to_string(), serde_json::Value::String(override_model.clone()));
-            Some(serde_json::Value::Object(obj))
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    // Build effective model config: agent override takes priority over global default.
+    let effective_model = agent_model_override
+        .filter(|m| !m.is_empty())
+        .map(|override_model| {
+            let mut obj = serde_json::Map::new();
+            obj.insert(
+                "primary".to_string(),
+                serde_json::Value::String(override_model),
+            );
+            serde_json::Value::Object(obj)
+        });
 
     let model_ref = effective_model.as_ref().or(agents_defaults_model);
 
