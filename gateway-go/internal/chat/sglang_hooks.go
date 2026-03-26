@@ -21,7 +21,7 @@ import (
 // The local model analyzes the user's message and gathers relevant context.
 
 const (
-	proactiveTimeout    = 10 * time.Second
+	proactiveTimeout    = 5 * time.Second
 	proactiveMaxTokens  = 1024
 	proactiveMinMsgLen  = 20 // skip for very short messages
 )
@@ -94,9 +94,9 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 // Called in the agent loop after tool execution, before feeding results back to LLM.
 
 const (
-	compressThreshold      = 8000 // chars — only compress outputs larger than this
+	compressThreshold      = 16000 // chars — only compress very large outputs (saves sglang calls)
 	compressMaxTokens      = 1024
-	compressTimeout        = 30 * time.Second
+	compressTimeout        = 10 * time.Second
 	// Tools whose output should never be compressed (they're already structured/small).
 	toolCompressSkipPrefix = "pilot" // pilot already uses sglang, don't double-process
 )
