@@ -32,7 +32,8 @@ const (
 	pilotMaxSources  = 10
 )
 
-const pilotSystemPrompt = `You are Pilot, a fast local AI assistant.
+func buildPilotSystemPrompt(workspaceDir string) string {
+	base := `You are Pilot, a fast local AI assistant.
 Rules:
 - Execute the task directly. No preamble, no pleasantries.
 - Match the user's language (Korean if Korean input, English if English).
@@ -40,6 +41,12 @@ Rules:
 - If output_format is "list", return a numbered list.
 - If processing multiple sources, reference each by its label.
 - Be concise. Substance over length.`
+
+	if workspaceDir != "" {
+		return base + "\n\nWorkspace directory: " + workspaceDir
+	}
+	return base
+}
 
 func pilotToolSchema() map[string]any {
 	return map[string]any{
@@ -118,7 +125,7 @@ func pilotToolSchema() map[string]any {
 
 // toolPilot creates the pilot ToolFunc. It uses the ToolExecutor to run
 // source tools from the registry before feeding results to the local LLM.
-func toolPilot(tools ToolExecutor) ToolFunc {
+func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p pilotParams
 		if err := json.Unmarshal(input, &p); err != nil {
@@ -152,7 +159,7 @@ func toolPilot(tools ToolExecutor) ToolFunc {
 
 		// Phase 2: Build prompt and call local LLM.
 		userMsg := buildPilotPrompt(p.Task, p.OutputFormat, gathered)
-		result, err := callLocalLLM(ctx, pilotSystemPrompt, userMsg, pilotMaxTokens)
+		result, err := callLocalLLM(ctx, buildPilotSystemPrompt(workspaceDir), userMsg, pilotMaxTokens)
 		if err != nil {
 			return "", fmt.Errorf("pilot: %w", err)
 		}

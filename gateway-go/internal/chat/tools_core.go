@@ -244,7 +244,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Name:        "pilot",
 		Description: "Fast local AI that runs tools + analyzes results in one call. Provide task + sources (tool calls from registry) or shortcuts (file, exec, grep, url). Replaces multi-turn read→analyze patterns with a single call",
 		InputSchema: pilotToolSchema(),
-		Fn:          toolPilot(registry),
+		Fn:          toolPilot(registry, workspaceDir),
 	})
 }
 
