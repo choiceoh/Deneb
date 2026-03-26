@@ -447,3 +447,31 @@ func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
 }
+
+// ResolveAgentWorkspaceDir determines the workspace directory for the default agent.
+// Priority:
+//  1. agents.list[] entry with default=true → workspace
+//  2. agents.defaults.workspace
+//  3. ~/.deneb/workspace (built-in default, matching TS resolveDefaultAgentWorkspaceDir)
+func ResolveAgentWorkspaceDir(cfg *DenebConfig) string {
+	if cfg != nil && cfg.Agents != nil {
+		// Check per-agent workspace from agents.list[].
+		for _, agent := range cfg.Agents.List {
+			if agent.Default != nil && *agent.Default && strings.TrimSpace(agent.Workspace) != "" {
+				return expandHomePath(strings.TrimSpace(agent.Workspace))
+			}
+		}
+		// Check agents.defaults.workspace.
+		if cfg.Agents.Defaults != nil && strings.TrimSpace(cfg.Agents.Defaults.Workspace) != "" {
+			return expandHomePath(strings.TrimSpace(cfg.Agents.Defaults.Workspace))
+		}
+	}
+
+	// Built-in default: ~/.deneb/workspace (matches TS resolveDefaultAgentWorkspaceDir).
+	home := resolveHomeDir()
+	profile := strings.TrimSpace(os.Getenv("DENEB_PROFILE"))
+	if profile != "" && strings.ToLower(profile) != "default" {
+		return filepath.Join(home, DefaultStateDirname, "workspace-"+profile)
+	}
+	return filepath.Join(home, DefaultStateDirname, "workspace")
+}

@@ -212,6 +212,80 @@ func TestApplyDefaults(t *testing.T) {
 	}
 }
 
+func TestResolveAgentWorkspaceDirNilConfig(t *testing.T) {
+	t.Setenv("DENEB_PROFILE", "")
+	dir := ResolveAgentWorkspaceDir(nil)
+	if dir == "" {
+		t.Fatal("expected non-empty workspace dir")
+	}
+	if filepath.Base(dir) != "workspace" {
+		t.Errorf("expected basename 'workspace', got %q", filepath.Base(dir))
+	}
+	// Should be under ~/.deneb/workspace.
+	parent := filepath.Base(filepath.Dir(dir))
+	if parent != ".deneb" {
+		t.Errorf("expected parent '.deneb', got %q", parent)
+	}
+}
+
+func TestResolveAgentWorkspaceDirFromDefaults(t *testing.T) {
+	cfg := &DenebConfig{
+		Agents: &AgentsConfig{
+			Defaults: &AgentsDefaultsConfig{
+				Workspace: "/srv/my-workspace",
+			},
+		},
+	}
+	dir := ResolveAgentWorkspaceDir(cfg)
+	if dir != "/srv/my-workspace" {
+		t.Errorf("expected /srv/my-workspace, got %q", dir)
+	}
+}
+
+func TestResolveAgentWorkspaceDirFromAgentList(t *testing.T) {
+	isDefault := true
+	cfg := &DenebConfig{
+		Agents: &AgentsConfig{
+			Defaults: &AgentsDefaultsConfig{
+				Workspace: "/srv/default-workspace",
+			},
+			List: []AgentEntryConfig{
+				{ID: "main", Default: &isDefault, Workspace: "/srv/main-workspace"},
+			},
+		},
+	}
+	dir := ResolveAgentWorkspaceDir(cfg)
+	// Per-agent with default=true takes precedence over agents.defaults.workspace.
+	if dir != "/srv/main-workspace" {
+		t.Errorf("expected /srv/main-workspace, got %q", dir)
+	}
+}
+
+func TestResolveAgentWorkspaceDirProfile(t *testing.T) {
+	t.Setenv("DENEB_PROFILE", "work")
+	dir := ResolveAgentWorkspaceDir(nil)
+	if filepath.Base(dir) != "workspace-work" {
+		t.Errorf("expected basename 'workspace-work', got %q", filepath.Base(dir))
+	}
+}
+
+func TestResolveAgentWorkspaceDirHomeTilde(t *testing.T) {
+	cfg := &DenebConfig{
+		Agents: &AgentsConfig{
+			Defaults: &AgentsDefaultsConfig{
+				Workspace: "~/my-workspace",
+			},
+		},
+	}
+	dir := ResolveAgentWorkspaceDir(cfg)
+	if dir == "~/my-workspace" {
+		t.Error("expected ~ to be expanded")
+	}
+	if !filepath.IsAbs(dir) {
+		t.Errorf("expected absolute path, got %q", dir)
+	}
+}
+
 func TestHashRaw(t *testing.T) {
 	h1 := hashRaw(nil)
 	h2 := hashRaw([]byte("hello"))
