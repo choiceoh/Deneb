@@ -91,7 +91,7 @@ type perplexityResponse struct {
 // Both perplexitySearch (formatted) and search+fetch (raw) use this.
 func perplexityCall(ctx context.Context, apiKey, query string) (answer string, citations []string, err error) {
 	reqBody := map[string]any{
-		"model": "sonar",
+		"model": "sonar-reasoning-pro",
 		"messages": []map[string]string{
 			{"role": "user", "content": query},
 		},
