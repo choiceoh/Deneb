@@ -21,7 +21,7 @@ import (
 // The local model analyzes the user's message and gathers relevant context.
 
 const (
-	proactiveTimeout    = 10 * time.Second
+	proactiveTimeout    = 5 * time.Second
 	proactiveMaxTokens  = 1024
 	proactiveMinMsgLen  = 20 // skip for very short messages
 )

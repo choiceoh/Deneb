@@ -136,6 +136,8 @@ func executeAgentRun(
 	broadcaster *streamBroadcaster,
 	logger *slog.Logger,
 ) (*AgentResult, error) {
+	runStart := time.Now()
+
 	// 1. Persist user message to transcript + Aurora store.
 	if deps.transcript != nil && params.Message != "" {
 		userMsg := ChatMessage{
@@ -170,6 +172,7 @@ func executeAgentRun(
 		proactiveCh <- proactiveResult{} // no-op: skip for short messages
 	}
 
+	promptStart := time.Now()
 	// 3. Assemble system prompt (supports both string and content block array).
 	// The prompt format is deferred: if Anthropic is the provider, we use
 	// ContentBlock arrays with cache_control breakpoints; otherwise plain string.
@@ -197,30 +200,52 @@ func executeAgentRun(
 		systemPrompt = llm.SystemString(BuildSystemPrompt(spp))
 	}
 
-	// 3.5. Knowledge prefetch: search Vega + Memory for relevant context,
-	// append results to system prompt so the LLM sees them as background knowledge.
-	// Stored in knowledgeAddition so it survives Anthropic ContentBlock rebuilds below.
-	var knowledgeAddition string
-	if params.Message != "" {
-		kDeps := KnowledgeDeps{
-			VegaBackend:  deps.vegaBackend,
-			WorkspaceDir: workspaceDir,
-		}
-		knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
-		if knowledgeAddition != "" {
-			systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
-		}
-	}
+	logger.Info("pipeline: system prompt built", "ms", time.Since(promptStart).Milliseconds())
 
-	// 4. Assemble context (token-budgeted history).
+	prepStart := time.Now()
+	// 3.5 + 4. Run knowledge prefetch and context assembly in parallel.
+	// Both are independent: knowledge searches Vega/Memory, context loads transcript history.
+	var knowledgeAddition string
 	var messages []llm.Message
-	if deps.transcript != nil {
-		result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger)
-		if err != nil {
-			logger.Warn("context assembly failed, using message only", "error", err)
-		} else {
-			messages = result.Messages
+	var contextErr error
+
+	var prepWg sync.WaitGroup
+
+	// Knowledge prefetch (parallel).
+	prepWg.Add(1)
+	go func() {
+		defer prepWg.Done()
+		if params.Message != "" {
+			kDeps := KnowledgeDeps{
+				VegaBackend:  deps.vegaBackend,
+				WorkspaceDir: workspaceDir,
+			}
+			knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
 		}
+	}()
+
+	// Context assembly (parallel).
+	prepWg.Add(1)
+	go func() {
+		defer prepWg.Done()
+		if deps.transcript != nil {
+			result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger)
+			if err != nil {
+				contextErr = err
+			} else {
+				messages = result.Messages
+			}
+		}
+	}()
+
+	prepWg.Wait()
+	logger.Info("pipeline: knowledge+context parallel prep done", "ms", time.Since(prepStart).Milliseconds())
+
+	if contextErr != nil {
+		logger.Warn("context assembly failed, using message only", "error", contextErr)
+	}
+	if knowledgeAddition != "" {
+		systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
 	}
 
 	// Build or augment user message with attachments.
@@ -240,7 +265,11 @@ func executeAgentRun(
 	}
 
 	// 5. Collect proactive context hint and inject into system prompt.
+	proactiveWaitStart := time.Now()
 	proactive := <-proactiveCh
+	if pw := time.Since(proactiveWaitStart).Milliseconds(); pw > 50 {
+		logger.Info("pipeline: proactive context wait", "ms", pw)
+	}
 	if proactive.hint != "" {
 		systemPrompt = llm.AppendSystemText(systemPrompt,
 			"\n## Context Hint (from local analysis)\n"+proactive.hint)
@@ -314,7 +343,13 @@ func executeAgentRun(
 		emitDelta = broadcaster.EmitDelta
 	}
 
+	logger.Info("pipeline: prep complete, starting agent loop",
+		"prepMs", time.Since(runStart).Milliseconds(),
+		"model", model, "provider", providerID,
+		"messages", len(messages), "tools", len(tools))
+
 	// 11. Execute agent loop with compaction retry.
+	agentStart := time.Now()
 	var agentResult *AgentResult
 	origSystem := cfg.System // preserve for compaction retries to avoid duplicate appends
 
@@ -362,6 +397,13 @@ func executeAgentRun(
 		}
 		break
 	}
+
+	logger.Info("pipeline: agent loop complete",
+		"agentMs", time.Since(agentStart).Milliseconds(),
+		"totalMs", time.Since(runStart).Milliseconds(),
+		"turns", agentResult.Turns,
+		"inputTokens", agentResult.Usage.InputTokens,
+		"outputTokens", agentResult.Usage.OutputTokens)
 
 	return agentResult, nil
 }
