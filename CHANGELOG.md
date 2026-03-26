@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.11.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.10.0...deneb-v3.11.0) (2026-03-26)
+
+
+### Features
+
+* complete Python-to-Rust migration for Vega ([#304](https://github.com/choiceoh/Deneb/issues/304)) ([e93e541](https://github.com/choiceoh/Deneb/commit/e93e541fadb2d58e5d6dca58415156f425be2bc4))
+
+
+### Bug Fixes
+
+* correct Rust base64 test assertion, Go ML test stub handling, and format drift ([#316](https://github.com/choiceoh/Deneb/issues/316)) ([19712ee](https://github.com/choiceoh/Deneb/commit/19712ee5a3e7cdb03feedc340735b36da48a3021))
+* **gateway-go:** fix Telegram chat handler bugs — unique request IDs, reply timeouts, strict channel filter ([#311](https://github.com/choiceoh/Deneb/issues/311)) ([3a96b01](https://github.com/choiceoh/Deneb/commit/3a96b0123850a9311adf0010cba80acf6f8c868f))
+* harden Go/Rust FFI build — buffer growth, handle safety, error codes ([#298](https://github.com/choiceoh/Deneb/issues/298)) ([93c68a6](https://github.com/choiceoh/Deneb/commit/93c68a68281eb8a2f26151ac266f56c248c91bbb))
+
 ## [3.10.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.9.0...deneb-v3.10.0) (2026-03-25)
 
 ### Features
