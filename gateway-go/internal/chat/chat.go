@@ -105,7 +105,8 @@ type Handler struct {
 	defaultSystem string
 	maxTokens     int
 
-	replyFunc ReplyFunc // optional: delivers response to originating channel
+	replyFunc    ReplyFunc    // optional: delivers response to originating channel
+	mediaSendFn  MediaSendFunc // optional: delivers files to originating channel
 
 	abortMu  sync.Mutex
 	abortMap map[string]*AbortEntry // clientRunId -> entry
@@ -196,6 +197,12 @@ func (h *Handler) SetBroadcastRaw(fn BroadcastRawFunc) {
 // when a DeliveryContext is present.
 func (h *Handler) SetReplyFunc(fn ReplyFunc) {
 	h.replyFunc = fn
+}
+
+// SetMediaSendFunc sets the function that delivers files back to the
+// originating channel (e.g., Telegram). Used by the send_file tool.
+func (h *Handler) SetMediaSendFunc(fn MediaSendFunc) {
+	h.mediaSendFn = fn
 }
 
 // HandleBtw processes a side question (/btw) without affecting the main
@@ -615,6 +622,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		broadcastRaw:    h.broadcastRaw,
 		jobTracker:      h.jobTracker,
 		replyFunc:       h.replyFunc,
+		mediaSendFn:     h.mediaSendFn,
 		providerConfigs: h.providerConfigs,
 		logger:          h.logger,
 		auroraStore:     h.auroraStore,

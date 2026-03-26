@@ -1327,6 +1327,45 @@ func (s *Server) wireTelegramChatHandler() {
 		return err
 	})
 
+	// Set media send function: delivers files back to Telegram.
+	s.chatHandler.SetMediaSendFunc(func(ctx context.Context, delivery *chat.DeliveryContext, filePath, mediaType, caption string, silent bool) error {
+		if delivery == nil || delivery.Channel != "telegram" {
+			return nil
+		}
+		client := s.telegramPlug.Client()
+		if client == nil {
+			return fmt.Errorf("telegram client not connected")
+		}
+		chatID, err := strconv.ParseInt(delivery.To, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
+		}
+
+		f, err := os.Open(filePath)
+		if err != nil {
+			return fmt.Errorf("open file: %w", err)
+		}
+		defer f.Close()
+
+		fileName := filepath.Base(filePath)
+		opts := telegram.SendOptions{DisableNotification: silent}
+
+		switch mediaType {
+		case "photo":
+			_, err = telegram.UploadPhoto(ctx, client, chatID, fileName, f, caption, opts)
+		case "video":
+			// Upload as document — Telegram sendVideo requires a URL/file_id, not multipart.
+			_, err = telegram.UploadDocument(ctx, client, chatID, fileName, f, caption, opts)
+		case "audio":
+			_, err = telegram.UploadDocument(ctx, client, chatID, fileName, f, caption, opts)
+		case "voice":
+			_, err = telegram.UploadDocument(ctx, client, chatID, fileName, f, caption, opts)
+		default: // "document" or unknown
+			_, err = telegram.UploadDocument(ctx, client, chatID, fileName, f, caption, opts)
+		}
+		return err
+	})
+
 	// Create the inbound processor that routes Telegram messages through
 	// the autoreply command/directive pipeline before dispatching to chat.send.
 	inbound := NewInboundProcessor(s)

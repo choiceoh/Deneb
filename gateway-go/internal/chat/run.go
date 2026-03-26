@@ -49,6 +49,7 @@ type runDeps struct {
 	broadcastRaw    BroadcastRawFunc          // optional
 	jobTracker      *agent.JobTracker         // optional
 	replyFunc       ReplyFunc                 // optional; delivers response to originating channel
+	mediaSendFn     MediaSendFunc             // optional; delivers files to originating channel
 	providerConfigs map[string]ProviderConfig // optional; config-based provider credentials
 	logger          *slog.Logger              // required (defaults to slog.Default)
 
@@ -96,6 +97,9 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 	if deps.replyFunc != nil {
 		ctx = WithReplyFunc(ctx, deps.replyFunc)
+	}
+	if deps.mediaSendFn != nil {
+		ctx = WithMediaSendFunc(ctx, deps.mediaSendFn)
 	}
 	ctx = WithSessionKey(ctx, params.SessionKey)
 

@@ -211,6 +211,38 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		InputSchema: nodesToolSchema(),
 		Fn:          toolNodes(),
 	})
+
+	// -- Send file tool (media delivery to channel) --
+	registry.RegisterTool(ToolDef{
+		Name:        "send_file",
+		Description: "Send a file to the user (photo, document, video, audio, voice)",
+		InputSchema: sendFileToolSchema(),
+		Fn:          toolSendFile(),
+	})
+
+	// -- HTTP tool (structured API requests) --
+	registry.RegisterTool(ToolDef{
+		Name:        "http",
+		Description: "Make HTTP requests (GET, POST, PUT, PATCH, DELETE) with headers and JSON body",
+		InputSchema: httpToolSchema(),
+		Fn:          toolHTTP(),
+	})
+
+	// -- KV tool (lightweight key-value persistence) --
+	registry.RegisterTool(ToolDef{
+		Name:        "kv",
+		Description: "Persistent key-value store for agent state across sessions",
+		InputSchema: kvToolSchema(),
+		Fn:          toolKV(),
+	})
+
+	// -- Clipboard tool (temporary content sharing) --
+	registry.RegisterTool(ToolDef{
+		Name:        "clipboard",
+		Description: "In-memory clipboard for temporary content storage and retrieval",
+		InputSchema: clipboardToolSchema(),
+		Fn:          toolClipboard(),
+	})
 }
 
 // --- Exec tool ---

@@ -60,6 +60,10 @@ var coreToolSummaries = map[string]string{
 	"session_status":     "Show session status and usage",
 	"image":              "Analyze images with a vision model",
 	"youtube_transcript": "Extract transcript/subtitles and metadata from a YouTube video",
+	"send_file":          "Send a file to the user (photo, document, video, audio, voice)",
+	"http":               "Make structured HTTP requests (GET, POST, PUT, PATCH, DELETE)",
+	"kv":                 "Persistent key-value store for agent state",
+	"clipboard":          "In-memory clipboard for temporary content",
 }
 
 // toolOrder defines the display order for tools in the system prompt.
@@ -72,6 +76,7 @@ var toolOrder = []string{
 	"nodes", "cron", "message", "gateway",
 	"sessions_list", "sessions_history", "sessions_send",
 	"sessions_spawn", "subagents", "session_status", "image", "youtube_transcript",
+	"send_file", "http", "kv", "clipboard",
 }
 
 // BuildSystemPrompt assembles the full system prompt from all components.
