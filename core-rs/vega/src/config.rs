@@ -104,3 +104,129 @@ impl VegaConfig {
             .unwrap_or(false)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_constants() {
+        assert_eq!(SCHEMA_VERSION, 6);
+        assert_eq!(PROTOCOL_VERSION, 1);
+        assert_eq!(VERSION, "2.0.0");
+    }
+
+    #[test]
+    fn test_default_config() {
+        let cfg = VegaConfig::default();
+        assert_eq!(cfg.db_path, PathBuf::from("projects.db"));
+        assert_eq!(cfg.md_dir, PathBuf::from("projects"));
+        assert_eq!(cfg.rerank_mode, "full");
+        assert_eq!(cfg.model_unload_ttl, 300);
+        assert_eq!(cfg.inference_backend, "local");
+        assert!(cfg.model_embedder.is_none());
+        assert!(cfg.model_reranker.is_none());
+    }
+
+    #[test]
+    fn test_has_ml_local_with_embedder() {
+        let cfg = VegaConfig {
+            inference_backend: "local".into(),
+            model_embedder: Some(PathBuf::from("/models/embed.gguf")),
+            ..Default::default()
+        };
+        assert!(cfg.has_ml());
+    }
+
+    #[test]
+    fn test_has_ml_local_with_reranker() {
+        let cfg = VegaConfig {
+            inference_backend: "local".into(),
+            model_reranker: Some(PathBuf::from("/models/rerank.gguf")),
+            ..Default::default()
+        };
+        assert!(cfg.has_ml());
+    }
+
+    #[test]
+    fn test_has_ml_no_models() {
+        let cfg = VegaConfig::default();
+        assert!(!cfg.has_ml());
+    }
+
+    #[test]
+    fn test_has_ml_sqlite_only_backend() {
+        let cfg = VegaConfig {
+            inference_backend: "sqlite_only".into(),
+            model_embedder: Some(PathBuf::from("/models/embed.gguf")),
+            ..Default::default()
+        };
+        assert!(!cfg.has_ml());
+    }
+
+    #[test]
+    fn test_db_exists_nonexistent() {
+        let cfg = VegaConfig {
+            db_path: PathBuf::from("/nonexistent/path/test.db"),
+            ..Default::default()
+        };
+        assert!(!cfg.db_exists());
+    }
+
+    #[test]
+    fn test_db_exists_real_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        fs::write(&db_path, b"fake-db").unwrap();
+
+        let cfg = VegaConfig {
+            db_path,
+            ..Default::default()
+        };
+        assert!(cfg.db_exists());
+    }
+
+    #[test]
+    fn test_md_dir_valid_nonexistent() {
+        let cfg = VegaConfig {
+            md_dir: PathBuf::from("/nonexistent/dir"),
+            ..Default::default()
+        };
+        assert!(!cfg.md_dir_valid());
+    }
+
+    #[test]
+    fn test_md_dir_valid_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = VegaConfig {
+            md_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        assert!(!cfg.md_dir_valid());
+    }
+
+    #[test]
+    fn test_md_dir_valid_with_md_files() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("project.md"), b"# Project").unwrap();
+
+        let cfg = VegaConfig {
+            md_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        assert!(cfg.md_dir_valid());
+    }
+
+    #[test]
+    fn test_md_dir_valid_no_md_files() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("readme.txt"), b"text").unwrap();
+
+        let cfg = VegaConfig {
+            md_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        assert!(!cfg.md_dir_valid());
+    }
+}
