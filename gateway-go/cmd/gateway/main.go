@@ -17,7 +17,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
-	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/server"
 )
@@ -104,8 +103,6 @@ func main() {
 		}
 	}
 
-	// Lower the gateway's OOM score so the kernel kills child processes first.
-	process.ProtectGatewayOOM(logger)
 
 	// Daemon mode: manage PID file and check for existing daemon.
 	if *daemonMode || *pidFile != "" {
