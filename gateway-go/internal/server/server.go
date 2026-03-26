@@ -126,6 +126,9 @@ type Server struct {
 	// Phase 5: HTTP routing for Control UI and plugins.
 	controlUI    *ControlUIHandler
 	pluginRouter *PluginHTTPRouter
+
+	// Phase 5: Hooks HTTP webhook handler.
+	hooksHTTP *HooksHTTPHandler
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
@@ -195,6 +198,13 @@ func WithProviders(r *provider.Registry) Option {
 func WithTranscript(w *transcript.Writer) Option {
 	return func(s *Server) {
 		s.transcript = w
+	}
+}
+
+// WithHooksHTTP sets the hooks HTTP webhook handler.
+func WithHooksHTTP(h *HooksHTTPHandler) Option {
+	return func(s *Server) {
+		s.hooksHTTP = h
 	}
 }
 
@@ -501,6 +511,21 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("POST /api/v1/rpc", s.handleRPC)
 	mux.HandleFunc("GET /ws", s.handleWsUpgrade)
+
+	// Hooks HTTP webhook endpoint — intercepts /hooks/* before the fallback.
+	if s.hooksHTTP != nil {
+		hooksHandler := s.hooksHTTP
+		mux.HandleFunc("/hooks/", func(w http.ResponseWriter, r *http.Request) {
+			if !hooksHandler.Handle(w, r) {
+				http.NotFound(w, r)
+			}
+		})
+		mux.HandleFunc("/hooks", func(w http.ResponseWriter, r *http.Request) {
+			if !hooksHandler.Handle(w, r) {
+				http.NotFound(w, r)
+			}
+		})
+	}
 
 	// Catch-all handler: plugin HTTP routes → Control UI → root fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
