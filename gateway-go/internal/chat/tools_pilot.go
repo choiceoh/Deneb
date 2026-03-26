@@ -305,6 +305,11 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 			}
 		}
 
+		// Clean JSON output if requested.
+		if p.OutputFormat == "json" {
+			result = cleanJSONResponse(result)
+		}
+
 		// Metrics logging.
 		totalInput := 0
 		for _, g := range gathered {
@@ -577,6 +582,39 @@ func smartTruncate(s string, maxChars int, sourceType string) string {
 	default:
 		return s[:maxChars] + fmt.Sprintf("\n\n[... truncated at %d chars]", maxChars)
 	}
+}
+
+// --- JSON output cleaning ---
+
+// cleanJSONResponse strips markdown fences and validates JSON output.
+// If the output is not valid JSON, tries to extract the first JSON object/array.
+func cleanJSONResponse(s string) string {
+	s = strings.TrimSpace(s)
+
+	// Strip markdown code fences.
+	if strings.HasPrefix(s, "```json") {
+		s = strings.TrimPrefix(s, "```json")
+		s = strings.TrimSuffix(strings.TrimSpace(s), "```")
+		s = strings.TrimSpace(s)
+	} else if strings.HasPrefix(s, "```") {
+		s = strings.TrimPrefix(s, "```")
+		s = strings.TrimSuffix(strings.TrimSpace(s), "```")
+		s = strings.TrimSpace(s)
+	}
+
+	if json.Valid([]byte(s)) {
+		return s
+	}
+
+	// Try to extract the first JSON object or array.
+	if idx := strings.IndexAny(s, "[{"); idx >= 0 {
+		candidate := s[idx:]
+		if json.Valid([]byte(candidate)) {
+			return candidate
+		}
+	}
+
+	return s
 }
 
 // --- Chaining ---

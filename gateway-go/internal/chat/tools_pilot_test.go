@@ -31,6 +31,31 @@ func TestShouldUseThinking(t *testing.T) {
 
 // stripThinkingTags is tested in web_fetch_test.go (shared function).
 
+func TestCleanJSONResponse(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"valid json", `{"key": "value"}`, `{"key": "value"}`},
+		{"with json fence", "```json\n{\"key\": \"value\"}\n```", `{"key": "value"}`},
+		{"with plain fence", "```\n[1, 2, 3]\n```", `[1, 2, 3]`},
+		{"with prefix text", "Here is the result: {\"key\": \"value\"}", `{"key": "value"}`},
+		{"array with prefix", "Result:\n[1, 2, 3]", `[1, 2, 3]`},
+		{"not json at all", "just plain text", "just plain text"},
+		{"empty", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := cleanJSONResponse(tt.input)
+			if got != tt.want {
+				t.Errorf("cleanJSONResponse() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSmartTruncate(t *testing.T) {
 	longContent := make([]byte, 5000)
 	for i := range longContent {
