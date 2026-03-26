@@ -13,6 +13,10 @@ The core idea: AI agents should never lose context, no matter how long the conve
 
 The goal: a personal AI assistant that remembers everything, runs locally, supports extensible messaging channels, and respects privacy and security.
 
+Deneb follows deliberate design constraints documented in
+[design philosophy](/concepts/design-philosophy): single-user premise,
+depth over breadth, and opinionated defaults.
+
 The current focus is:
 
 Priority:
