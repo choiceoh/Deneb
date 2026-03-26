@@ -67,10 +67,88 @@ func MemoryBuildFtsQuery(raw string) (string, error) {
 	return strings.Join(tokens, " OR "), nil
 }
 
-// MemoryMergeHybridResults is a pure-Go fallback that returns an empty array.
-// Full hybrid merge requires the Rust implementation.
-func MemoryMergeHybridResults(_ string) (json.RawMessage, error) {
-	return json.RawMessage("[]"), nil
+// MemoryMergeHybridResults is a pure-Go fallback for hybrid search merge.
+// Merges vector and keyword results with weighted scoring, sorted by score descending.
+func MemoryMergeHybridResults(paramsJSON string) (json.RawMessage, error) {
+	if len(paramsJSON) == 0 {
+		return json.RawMessage("[]"), nil
+	}
+
+	var params struct {
+		Vector       []hybridResult `json:"vector"`
+		Keyword      []hybridResult `json:"keyword"`
+		VectorWeight float64        `json:"vectorWeight"`
+		TextWeight   float64        `json:"textWeight"`
+	}
+	if err := json.Unmarshal([]byte(paramsJSON), &params); err != nil {
+		return json.RawMessage("[]"), nil
+	}
+
+	type entry struct {
+		Path        string  `json:"path"`
+		StartLine   uint32  `json:"startLine"`
+		EndLine     uint32  `json:"endLine"`
+		Score       float64 `json:"score"`
+		Snippet     string  `json:"snippet"`
+		Source      string  `json:"source"`
+		vectorScore float64
+		textScore   float64
+	}
+
+	byID := make(map[string]*entry)
+
+	for _, r := range params.Vector {
+		byID[r.ID] = &entry{
+			Path: r.Path, StartLine: r.StartLine, EndLine: r.EndLine,
+			Source: r.Source, Snippet: r.Snippet, vectorScore: r.Score,
+		}
+	}
+	for _, r := range params.Keyword {
+		if e, ok := byID[r.ID]; ok {
+			e.textScore = r.Score
+			if r.Snippet != "" {
+				e.Snippet = r.Snippet
+			}
+		} else {
+			byID[r.ID] = &entry{
+				Path: r.Path, StartLine: r.StartLine, EndLine: r.EndLine,
+				Source: r.Source, Snippet: r.Snippet, textScore: r.Score,
+			}
+		}
+	}
+
+	merged := make([]entry, 0, len(byID))
+	for _, e := range byID {
+		e.Score = params.VectorWeight*e.vectorScore + params.TextWeight*e.textScore
+		merged = append(merged, *e)
+	}
+
+	// Sort by score descending, path+startLine as tiebreaker.
+	for i := 1; i < len(merged); i++ {
+		for j := i; j > 0; j-- {
+			if merged[j].Score > merged[j-1].Score ||
+				(merged[j].Score == merged[j-1].Score && merged[j].Path < merged[j-1].Path) ||
+				(merged[j].Score == merged[j-1].Score && merged[j].Path == merged[j-1].Path && merged[j].StartLine < merged[j-1].StartLine) {
+				merged[j], merged[j-1] = merged[j-1], merged[j]
+			}
+		}
+	}
+
+	data, err := json.Marshal(merged)
+	if err != nil {
+		return json.RawMessage("[]"), nil
+	}
+	return json.RawMessage(data), nil
+}
+
+type hybridResult struct {
+	ID        string  `json:"id"`
+	Path      string  `json:"path"`
+	StartLine uint32  `json:"startLine"`
+	EndLine   uint32  `json:"endLine"`
+	Source    string  `json:"source"`
+	Snippet  string  `json:"snippet"`
+	Score     float64 `json:"score"`
 }
 
 // MemoryExtractKeywords is a pure-Go fallback for keyword extraction.
