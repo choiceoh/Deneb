@@ -421,16 +421,18 @@ pub fn resolve_thinking_default_for_model(
     ThinkLevel::Off
 }
 
-/// Model catalog entry for vision/document support checks.
+/// Model catalog entry for vision/document/reasoning support checks.
+/// Matches TS `ModelCatalogEntry` type from `src/agents/models/model-catalog.ts`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelCatalogEntry {
     pub provider: String,
     pub id: String,
+    /// Human-readable name (defaults to id if not provided).
     #[serde(default)]
-    pub supports_vision: bool,
-    #[serde(default)]
-    pub supports_document: bool,
+    pub name: String,
+    /// Input modalities supported by this model (e.g., ["text", "image", "document"]).
+    pub input: Option<Vec<ModelInputType>>,
     #[serde(default)]
     pub reasoning: bool,
     pub context_window: Option<u64>,
@@ -445,22 +447,20 @@ pub enum ModelInputType {
     Document,
 }
 
-/// Check if a model supports vision based on catalog lookup.
-pub fn model_supports_vision(catalog: &[ModelCatalogEntry], provider: &str, model: &str) -> bool {
-    let p = normalize_provider_id(provider);
-    let m = model.to_lowercase();
-    catalog.iter().any(|e| {
-        normalize_provider_id(&e.provider) == p && e.id.to_lowercase() == m && e.supports_vision
-    })
+/// Check if a model supports vision (image input) based on catalog lookup.
+pub fn model_supports_vision(entry: Option<&ModelCatalogEntry>) -> bool {
+    entry
+        .and_then(|e| e.input.as_ref())
+        .map(|inputs| inputs.contains(&ModelInputType::Image))
+        .unwrap_or(false)
 }
 
 /// Check if a model supports document input based on catalog lookup.
-pub fn model_supports_document(catalog: &[ModelCatalogEntry], provider: &str, model: &str) -> bool {
-    let p = normalize_provider_id(provider);
-    let m = model.to_lowercase();
-    catalog.iter().any(|e| {
-        normalize_provider_id(&e.provider) == p && e.id.to_lowercase() == m && e.supports_document
-    })
+pub fn model_supports_document(entry: Option<&ModelCatalogEntry>) -> bool {
+    entry
+        .and_then(|e| e.input.as_ref())
+        .map(|inputs| inputs.contains(&ModelInputType::Document))
+        .unwrap_or(false)
 }
 
 /// Find a model in the catalog by provider and model ID.
@@ -1275,17 +1275,17 @@ mod tests {
 
     #[test]
     fn model_catalog_support_checks() {
-        let catalog = vec![ModelCatalogEntry {
+        let entry = ModelCatalogEntry {
             provider: "anthropic".to_string(),
             id: "claude-opus-4-6".to_string(),
-            supports_vision: true,
-            supports_document: true,
+            name: "Claude Opus 4.6".to_string(),
+            input: Some(vec![ModelInputType::Text, ModelInputType::Image, ModelInputType::Document]),
             reasoning: false,
             context_window: Some(200_000),
-        }];
-        assert!(model_supports_vision(&catalog, "anthropic", "claude-opus-4-6"));
-        assert!(model_supports_document(&catalog, "anthropic", "claude-opus-4-6"));
-        assert!(!model_supports_vision(&catalog, "openai", "gpt-4o"));
+        };
+        assert!(model_supports_vision(Some(&entry)));
+        assert!(model_supports_document(Some(&entry)));
+        assert!(!model_supports_vision(None));
     }
 
     #[test]

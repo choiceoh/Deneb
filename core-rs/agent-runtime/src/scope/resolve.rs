@@ -393,12 +393,15 @@ pub fn is_subagent_session_key(session_key: &str) -> bool {
 }
 
 /// Get the subagent nesting depth from a session key.
+/// Uses split to match TS behavior: `raw.split(":subagent:").length - 1`.
 pub fn get_subagent_depth(session_key: &str) -> usize {
     let raw = session_key.trim().to_lowercase();
     if raw.is_empty() {
         return 0;
     }
-    raw.matches(":subagent:").count()
+    // split(":subagent:") counts delimiters correctly even when the string
+    // starts with "subagent:" (no leading colon). This matches the TS algorithm.
+    raw.split(":subagent:").count().saturating_sub(1)
 }
 
 /// Check if a session key is ACP-scoped.

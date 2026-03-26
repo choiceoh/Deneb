@@ -4,6 +4,9 @@
 //!
 //! This is a pure-logic state machine. The host (TS/Go) handles I/O
 //! (message delivery, session creation, timers) and feeds events into this registry.
+//!
+//! **Thread safety:** This struct is NOT thread-safe. The caller (Go FFI or
+//! Node.js napi) must serialize all access. In Go, wrap in a sync.Mutex.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -30,7 +33,24 @@ impl SubagentRunStatus {
     }
 }
 
+/// Spawn mode for subagent runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SpawnSubagentMode {
+    Spawn,
+    Resume,
+}
+
+/// Cleanup policy for subagent runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CleanupPolicy {
+    Delete,
+    Keep,
+}
+
 /// A registered subagent run record.
+/// Full field set matching TS `SubagentRunRecord` type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubagentRunRecord {
@@ -45,6 +65,27 @@ pub struct SubagentRunRecord {
     pub started_at_ms: Option<i64>,
     pub ended_at_ms: Option<i64>,
     pub output: Option<String>,
+    // Extended fields matching TS SubagentRunRecord.
+    pub task: Option<String>,
+    pub label: Option<String>,
+    pub workspace_dir: Option<String>,
+    pub run_timeout_seconds: Option<f64>,
+    pub spawn_mode: Option<SpawnSubagentMode>,
+    pub cleanup: Option<CleanupPolicy>,
+    pub session_started_at: Option<i64>,
+    pub accumulated_runtime_ms: Option<f64>,
+    pub ended_reason: Option<String>,
+    pub suppress_announce_reason: Option<String>,
+    pub expects_completion_message: Option<bool>,
+    pub announce_retry_count: Option<u32>,
+    pub last_announce_retry_at: Option<i64>,
+    pub frozen_result_text: Option<String>,
+    pub frozen_result_captured_at: Option<i64>,
+    pub fallback_frozen_result_text: Option<String>,
+    pub fallback_frozen_result_captured_at: Option<i64>,
+    pub attachments_dir: Option<String>,
+    pub attachments_root_dir: Option<String>,
+    pub retain_attachments_on_keep: Option<bool>,
 }
 
 /// Pure-logic subagent registry. Manages run lifecycle state without I/O.
@@ -64,21 +105,18 @@ impl SubagentRegistry {
     pub fn register(&mut self, record: SubagentRunRecord) {
         let run_id = record.run_id.clone();
         let child_key = record.child_session_key.clone();
-        self.by_child_key.insert(child_key, run_id.clone());
-        self.runs.insert(run_id, record);
+        self.runs.insert(run_id.clone(), record);
+        self.by_child_key.insert(child_key, run_id);
     }
 
     /// Release (remove) a subagent run by ID.
     pub fn release(&mut self, run_id: &str) -> Option<SubagentRunRecord> {
-        if let Some(record) = self.runs.remove(run_id) {
-            // Only remove child key index if it still points to this run.
-            if self.by_child_key.get(&record.child_session_key) == Some(&run_id.to_string()) {
-                self.by_child_key.remove(&record.child_session_key);
-            }
-            Some(record)
-        } else {
-            None
+        let record = self.runs.remove(run_id)?;
+        // Only remove child key index if it still points to this run.
+        if self.by_child_key.get(&record.child_session_key).map(|s| s.as_str()) == Some(run_id) {
+            self.by_child_key.remove(&record.child_session_key);
         }
+        Some(record)
     }
 
     /// Update the status of a run. Returns false if the run doesn't exist.
@@ -182,26 +220,22 @@ impl SubagentRegistry {
         self.runs.is_empty()
     }
 
-    /// Detect orphaned runs (active runs whose requester session is also terminal or missing).
+    /// Detect orphaned runs: active runs whose requester (parent) session has
+    /// already reached a terminal state. Root sessions (not themselves children
+    /// of another subagent) are excluded — they cannot be orphaned.
     pub fn detect_orphans(&self) -> Vec<&SubagentRunRecord> {
-        // Collect all active child session keys.
-        let active_sessions: std::collections::HashSet<&str> = self
-            .runs
-            .values()
-            .filter(|r| !r.status.is_terminal())
-            .map(|r| r.child_session_key.as_str())
-            .collect();
-
         self.runs
             .values()
             .filter(|r| {
-                !r.status.is_terminal()
-                    && !active_sessions.contains(r.requester_session_key.as_str())
-                    // Check if requester itself has a terminal run.
-                    && self
-                        .get_by_child_session_key(&r.requester_session_key)
-                        .map(|parent| parent.status.is_terminal())
-                        .unwrap_or(false)
+                if r.status.is_terminal() {
+                    return false;
+                }
+                // Check if the requester is itself a registered child.
+                // If not registered (root session), it can't be orphaned.
+                match self.get_by_child_session_key(&r.requester_session_key) {
+                    Some(parent) => parent.status.is_terminal(),
+                    None => false, // Root session — not orphaned.
+                }
             })
             .collect()
     }
@@ -230,6 +264,26 @@ mod tests {
             started_at_ms: Some(1000),
             ended_at_ms: None,
             output: None,
+            task: None,
+            label: None,
+            workspace_dir: None,
+            run_timeout_seconds: None,
+            spawn_mode: None,
+            cleanup: None,
+            session_started_at: None,
+            accumulated_runtime_ms: None,
+            ended_reason: None,
+            suppress_announce_reason: None,
+            expects_completion_message: None,
+            announce_retry_count: None,
+            last_announce_retry_at: None,
+            frozen_result_text: None,
+            frozen_result_captured_at: None,
+            fallback_frozen_result_text: None,
+            fallback_frozen_result_captured_at: None,
+            attachments_dir: None,
+            attachments_root_dir: None,
+            retain_attachments_on_keep: None,
         }
     }
 
@@ -287,7 +341,6 @@ mod tests {
         assert!(!reg.should_ignore_post_completion_announce("child:1"));
         reg.update_status("r1", SubagentRunStatus::Completed, Some(2000));
         assert!(reg.should_ignore_post_completion_announce("child:1"));
-        // Unknown session -> true (ignore).
         assert!(reg.should_ignore_post_completion_announce("child:unknown"));
     }
 
@@ -299,5 +352,29 @@ mod tests {
         assert!(SubagentRunStatus::Failed.is_terminal());
         assert!(SubagentRunStatus::Killed.is_terminal());
         assert!(SubagentRunStatus::Timeout.is_terminal());
+    }
+
+    #[test]
+    fn detect_orphans_parent_terminal() {
+        let mut reg = SubagentRegistry::new();
+        // Parent run: child:parent requested by root:main.
+        reg.register(make_run("r-parent", "child:parent", "root:main"));
+        // Child run: child:grandchild requested by child:parent.
+        reg.register(make_run("r-child", "child:grandchild", "child:parent"));
+        // Parent completes — child becomes orphan.
+        reg.update_status("r-parent", SubagentRunStatus::Completed, Some(2000));
+        let orphans = reg.detect_orphans();
+        assert_eq!(orphans.len(), 1);
+        assert_eq!(orphans[0].run_id, "r-child");
+    }
+
+    #[test]
+    fn detect_orphans_root_not_orphaned() {
+        let mut reg = SubagentRegistry::new();
+        // Root-level run: child:1 requested by root:main (not itself a child).
+        reg.register(make_run("r1", "child:1", "root:main"));
+        // root:main is not registered as a child, so r1 should NOT be orphaned.
+        let orphans = reg.detect_orphans();
+        assert!(orphans.is_empty());
     }
 }

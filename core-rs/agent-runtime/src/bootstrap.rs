@@ -44,13 +44,16 @@ impl BootstrapCache {
 
     /// Conditional clear on session rollover: clears if the session key changed
     /// or if a previous session ID was provided (indicating rollover).
+    /// Conditional clear on session rollover: clears if the session key changed
+    /// or if a previous session ID was provided (indicating rollover).
+    /// Empty strings are treated as absent (matching TS truthy check behavior).
     pub fn clear_on_session_rollover(
         &mut self,
         session_key: Option<&str>,
         previous_session_id: Option<&str>,
     ) {
         if let Some(key) = session_key {
-            if previous_session_id.is_some() {
+            if !key.is_empty() && previous_session_id.filter(|s| !s.is_empty()).is_some() {
                 self.cache.remove(key);
             }
         }

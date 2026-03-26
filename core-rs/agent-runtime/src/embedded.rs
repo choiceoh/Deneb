@@ -17,28 +17,48 @@ pub struct ActiveEmbeddedRunSnapshot {
     pub in_flight_prompt: Option<String>,
 }
 
-/// Metadata about an embedded PI agent.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Metadata about an embedded PI agent run.
+/// Matches TS `EmbeddedPiAgentMeta` from `src/agents/pi-embedded-runner/types.ts`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmbeddedPiAgentMeta {
-    pub session_id: String,
+    pub session_id: Option<String>,
     pub session_key: Option<String>,
-    pub provider: String,
-    pub model: String,
-    pub agent_id: Option<String>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub compaction_count: Option<u32>,
+    pub prompt_tokens: Option<u64>,
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub cache_read_tokens: Option<u64>,
+    pub cache_write_tokens: Option<u64>,
+}
+
+/// A payload entry in an embedded PI run result.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddedPiRunPayload {
+    pub text: Option<String>,
+    pub media_url: Option<String>,
+    pub media_urls: Option<Vec<String>>,
+    pub reply_to_id: Option<String>,
+    #[serde(default)]
+    pub is_error: bool,
 }
 
 /// Result of an embedded PI agent run.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Matches TS `EmbeddedPiRunResult` from `src/agents/pi-embedded-runner/types.ts`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmbeddedPiRunResult {
-    pub session_id: String,
-    pub success: bool,
-    pub output: Option<String>,
-    pub error: Option<String>,
-    pub runtime_ms: Option<i64>,
-    pub input_tokens: Option<u64>,
-    pub output_tokens: Option<u64>,
+    pub payloads: Option<Vec<EmbeddedPiRunPayload>>,
+    pub meta: Option<EmbeddedPiRunMeta>,
+    #[serde(default)]
+    pub did_send_via_messaging_tool: bool,
+    pub messaging_tool_sent_texts: Option<Vec<String>>,
+    pub messaging_tool_sent_media_urls: Option<Vec<String>>,
+    pub successful_cron_adds: Option<u32>,
+    pub orphaned_user_prompt: Option<String>,
 }
 
 /// Result of a compaction operation.
