@@ -876,8 +876,18 @@ func (s *Server) registerPhase2Methods() {
 	workspaceDir := resolveWorkspaceDir()
 	s.logger.Info("resolved agent workspace directory", "workspaceDir", workspaceDir)
 
-	// Register core tools (file I/O, exec, process, stubs for others).
-	chat.RegisterCoreTools(chatCfg.Tools, s.processes, workspaceDir, s.cron)
+	// Build core tool dependencies.
+	toolDeps := &chat.CoreToolDeps{
+		ProcessMgr:   s.processes,
+		WorkspaceDir: workspaceDir,
+		CronSched:    s.cron,
+		Sessions:     s.sessions,
+		LLMClient:    chatCfg.LLMClient,
+		Transcript:   transcriptStore,
+	}
+
+	// Register core tools (file I/O, exec, process, sessions, gateway, cron, image).
+	chat.RegisterCoreTools(chatCfg.Tools, toolDeps)
 	if s.authManager != nil {
 		chatCfg.AuthManager = s.authManager
 	}
@@ -889,6 +899,21 @@ func (s *Server) registerPhase2Methods() {
 		s.logger,
 		chatCfg,
 	)
+
+	// Wire SessionSendFn after handler creation to avoid circular deps.
+	toolDeps.SessionSendFn = func(sessionKey, message string) error {
+		fakeReq := &protocol.RequestFrame{
+			ID:     fmt.Sprintf("tool_send_%d", time.Now().UnixNano()),
+			Method: "sessions.send",
+		}
+		params := map[string]string{"key": sessionKey, "message": message}
+		fakeReq.Params, _ = json.Marshal(params)
+		resp := s.chatHandler.SessionsSend(context.Background(), fakeReq)
+		if resp != nil && resp.Error != nil {
+			return fmt.Errorf("%s", resp.Error.Message)
+		}
+		return nil
+	}
 	rpc.RegisterChatMethods(s.dispatcher, rpc.ChatDeps{Chat: s.chatHandler})
 
 	// Wire raw broadcast directly to chat handler for streaming event relay.

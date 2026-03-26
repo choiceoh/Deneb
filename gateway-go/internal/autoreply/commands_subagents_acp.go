@@ -4,21 +4,154 @@
 package autoreply
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
+// ACPCommandDepsConfig holds optional infra dependencies for wiring ACP
+// subagent commands beyond the basic registry operations.
+type ACPCommandDepsConfig struct {
+	// Infra provides session management and spawn capabilities.
+	Infra *SubagentInfraDeps
+	// SessionSendFn sends a message to a session, triggering an agent run.
+	SessionSendFn func(sessionKey, message string) error
+	// TranscriptLoader loads transcript history for a session.
+	TranscriptLoader func(sessionKey string, limit int) ([]ChatLogMessage, error)
+	// SessionBindings provides focus/unfocus/agents capabilities.
+	SessionBindings *SessionBindingService
+}
+
+// SessionBindingService tracks session-to-conversation bindings.
+type SessionBindingService struct {
+	mu       sync.RWMutex
+	bindings map[string]*SessionBindingEntry // bindingID → entry
+	byConvo  map[string]string               // "channel:account:convo" → bindingID
+	nextID   int
+}
+
+// NewSessionBindingService creates a new binding service.
+func NewSessionBindingService() *SessionBindingService {
+	return &SessionBindingService{
+		bindings: make(map[string]*SessionBindingEntry),
+		byConvo:  make(map[string]string),
+	}
+}
+
+// Bind creates a new session binding.
+func (s *SessionBindingService) Bind(params SessionBindParams) *SessionBindResult {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.nextID++
+	bindingID := fmt.Sprintf("bind_%d", s.nextID)
+	convoKey := fmt.Sprintf("%s:%s:%s", params.Channel, params.AccountID, params.ConversationID)
+
+	// Remove existing binding for same conversation.
+	if oldID, ok := s.byConvo[convoKey]; ok {
+		delete(s.bindings, oldID)
+	}
+
+	entry := &SessionBindingEntry{
+		BindingID:        bindingID,
+		TargetSessionKey: params.TargetSessionKey,
+		BoundBy:          params.BoundBy,
+	}
+	s.bindings[bindingID] = entry
+	s.byConvo[convoKey] = bindingID
+
+	return &SessionBindResult{
+		BindingID:      bindingID,
+		ConversationID: params.ConversationID,
+		TargetKey:      params.TargetSessionKey,
+	}
+}
+
+// Resolve finds an active binding for a conversation.
+func (s *SessionBindingService) Resolve(channel, accountID, conversationID string) *SessionBindingEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	convoKey := fmt.Sprintf("%s:%s:%s", channel, accountID, conversationID)
+	bindingID, ok := s.byConvo[convoKey]
+	if !ok {
+		return nil
+	}
+	return s.bindings[bindingID]
+}
+
+// Unbind removes a session binding.
+func (s *SessionBindingService) Unbind(bindingID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, ok := s.bindings[bindingID]
+	if !ok {
+		return fmt.Errorf("binding %q not found", bindingID)
+	}
+	delete(s.bindings, bindingID)
+
+	// Clean up convo index.
+	for key, id := range s.byConvo {
+		if id == bindingID {
+			delete(s.byConvo, key)
+			break
+		}
+	}
+	return nil
+}
+
+// ListForSession returns all bindings targeting a session.
+func (s *SessionBindingService) ListForSession(sessionKey string) []AgentBindingEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var entries []AgentBindingEntry
+	for convoKey, bindingID := range s.byConvo {
+		binding := s.bindings[bindingID]
+		if binding == nil || binding.TargetSessionKey != sessionKey {
+			continue
+		}
+		parts := strings.SplitN(convoKey, ":", 3)
+		entry := AgentBindingEntry{
+			ConversationID: "",
+			Channel:        "",
+			TargetKey:      binding.TargetSessionKey,
+		}
+		if len(parts) >= 1 {
+			entry.Channel = parts[0]
+		}
+		if len(parts) >= 2 {
+			entry.AccountID = parts[1]
+		}
+		if len(parts) >= 3 {
+			entry.ConversationID = parts[2]
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
 // NewSubagentCommandDepsFromACP creates a SubagentCommandDeps backed by
-// the given ACPRegistry. This is the production wiring point.
-func NewSubagentCommandDepsFromACP(registry *ACPRegistry) *SubagentCommandDeps {
-	return &SubagentCommandDeps{
+// the given ACPRegistry. Optional config provides full infrastructure wiring.
+func NewSubagentCommandDepsFromACP(registry *ACPRegistry, cfg ...ACPCommandDepsConfig) *SubagentCommandDeps {
+	var config ACPCommandDepsConfig
+	if len(cfg) > 0 {
+		config = cfg[0]
+	}
+
+	deps := &SubagentCommandDeps{
 		ListRuns: func(controllerKey string) []SubagentRunRecord {
 			return acpAgentsToRunRecords(registry.List(""), controllerKey)
 		},
 		Kill: &SubagentKillDeps{
 			KillRun: func(runID string) (bool, error) {
+				if config.Infra != nil {
+					return true, config.Infra.KillSubagent(runID)
+				}
 				return registry.Kill(runID), nil
 			},
 			KillAll: func(controllerKey string, runs []SubagentRunRecord) (int, error) {
@@ -34,18 +167,98 @@ func NewSubagentCommandDepsFromACP(registry *ACPRegistry) *SubagentCommandDeps {
 				return killed, nil
 			},
 		},
-		Send:    nil, // Send/steer requires agent turn execution — not yet wired.
-		Spawn:   nil, // Spawn requires ACP spawn protocol — not yet wired.
-		Focus:   nil, // Focus requires session binding service — not yet wired.
-		Unfocus: nil, // Unfocus requires session binding service — not yet wired.
-		Agents:  nil, // Agents requires session binding service — not yet wired.
-		Log: &SubagentLogDeps{
-			GetHistory: func(sessionKey string, limit int) ([]ChatLogMessage, error) {
-				// Stub: actual transcript loading needs SessionManager.
-				return nil, fmt.Errorf("transcript loading not yet available in Go gateway")
-			},
-		},
 	}
+
+	// Wire Send/Steer if SessionSendFn is available.
+	if config.SessionSendFn != nil {
+		deps.Send = &SubagentSendDeps{
+			SendMessage: func(sessionKey, message string) (*SubagentSendResult, error) {
+				if err := config.SessionSendFn(sessionKey, message); err != nil {
+					return &SubagentSendResult{Status: "error", Error: err.Error()}, nil
+				}
+				return &SubagentSendResult{Status: "ok", RunID: fmt.Sprintf("send_%d", time.Now().UnixNano())}, nil
+			},
+			SteerRun: func(runID, message string) (*SubagentSteerResult, error) {
+				// Find the agent by run ID and send to its session.
+				agent := registry.Get(runID)
+				if agent == nil {
+					return &SubagentSteerResult{Status: "error", Error: "agent not found"}, nil
+				}
+				if err := config.SessionSendFn(agent.SessionKey, message); err != nil {
+					return &SubagentSteerResult{Status: "error", Error: err.Error()}, nil
+				}
+				return &SubagentSteerResult{Status: "accepted", RunID: runID}, nil
+			},
+		}
+	}
+
+	// Wire Spawn if Infra is available.
+	if config.Infra != nil {
+		deps.Spawn = &SubagentSpawnDeps{
+			SpawnDirect: func(params SubagentSpawnParams, spawnCtx SubagentSpawnContext) (*SubagentSpawnResult, error) {
+				result := config.Infra.SpawnSubagent(context.Background(), SpawnSubagentParams{
+					ParentSessionKey: spawnCtx.AgentSessionKey,
+					Role:             params.Task,
+					Model:            params.Model,
+					InitialMessage:   params.Task,
+				})
+				if result.Error != nil {
+					return &SubagentSpawnResult{Status: "error", Error: result.Error.Error()}, nil
+				}
+				// Send initial task message to spawned session.
+				if config.SessionSendFn != nil {
+					_ = config.SessionSendFn(result.SessionKey, params.Task)
+				}
+				return &SubagentSpawnResult{
+					Status:          "accepted",
+					ChildSessionKey: result.SessionKey,
+					RunID:           result.AgentID,
+				}, nil
+			},
+		}
+	}
+
+	// Wire Focus/Unfocus/Agents if SessionBindings is available.
+	if config.SessionBindings != nil {
+		sbs := config.SessionBindings
+
+		deps.Focus = &SubagentFocusDeps{
+			BindSession: func(params SessionBindParams) (*SessionBindResult, error) {
+				result := sbs.Bind(params)
+				return result, nil
+			},
+		}
+
+		deps.Unfocus = &SubagentUnfocusDeps{
+			ResolveBinding: func(channel, accountID, conversationID string) *SessionBindingEntry {
+				return sbs.Resolve(channel, accountID, conversationID)
+			},
+			Unbind: func(bindingID string) error {
+				return sbs.Unbind(bindingID)
+			},
+		}
+
+		deps.Agents = &SubagentAgentsDeps{
+			ListBindings: func(sessionKey string) []AgentBindingEntry {
+				return sbs.ListForSession(sessionKey)
+			},
+		}
+	}
+
+	// Wire Log/GetHistory.
+	if config.TranscriptLoader != nil {
+		deps.Log = &SubagentLogDeps{
+			GetHistory: config.TranscriptLoader,
+		}
+	} else {
+		deps.Log = &SubagentLogDeps{
+			GetHistory: func(sessionKey string, limit int) ([]ChatLogMessage, error) {
+				return nil, fmt.Errorf("transcript loading not available")
+			},
+		}
+	}
+
+	return deps
 }
 
 // acpAgentsToRunRecords converts ACPAgent entries to SubagentRunRecord.
@@ -121,8 +334,8 @@ type ACPSubagentCommandHandler struct {
 }
 
 // NewACPSubagentCommandHandler creates a handler wired to the given registry.
-func NewACPSubagentCommandHandler(registry *ACPRegistry) *ACPSubagentCommandHandler {
-	deps := NewSubagentCommandDepsFromACP(registry)
+func NewACPSubagentCommandHandler(registry *ACPRegistry, cfg ...ACPCommandDepsConfig) *ACPSubagentCommandHandler {
+	deps := NewSubagentCommandDepsFromACP(registry, cfg...)
 	return &ACPSubagentCommandHandler{
 		registry: registry,
 		deps:     deps,
