@@ -29,5 +29,8 @@ hashbrown = "0.15"
 # Optional ML inference for semantic search
 deneb-ml = { path = "../ml", optional = true }
 
+[lints]
+workspace = true
+
 [dev-dependencies]
 tempfile = "3"

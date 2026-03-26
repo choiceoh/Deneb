@@ -1,0 +1,93 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - revive
+    - ineffassign
+    - unused
+    - gocritic
+    - misspell
+    - unconvert
+    - unparam
+    - predeclared
+    - durationcheck
+    - nilerr
+    - bodyclose
+    - noctx
+    - errname
+    - errorlint
+    - exhaustive
+    - copyloopvar
+    - intrange
+  settings:
+    errcheck:
+      check-type-assertions: true
+      exclude-functions:
+        - fmt.Fprintf
+        - fmt.Fprintln
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: exported
+          disabled: true
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: unexported-return
+        - name: var-declaration
+        - name: var-naming
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+      disabled-checks:
+        - commentedOutCode
+    staticcheck:
+      checks:
+        - all
+        - "-SA1019"
+    exhaustive:
+      default-signifies-exhaustive: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Test files: relax errcheck and style linters.
+      - path: "_test\\.go$"
+        linters:
+          - errcheck
+          - gocritic
+          - unparam
+      # Generated protobuf code.
+      - path: "pkg/protocol/gen/"
+        linters:
+          - all
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

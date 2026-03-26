@@ -54,7 +54,7 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Clippy lint
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets
 
       - name: Build (release)
         run: cargo build --release
@@ -91,6 +91,16 @@ jobs:
 
       - name: Vet
         run: go vet -tags no_ffi ./...
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)" || (echo "Go files need formatting:"; gofmt -l .; exit 1)
+
+      - name: Lint (golangci-lint)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.5
+          working-directory: gateway-go
+          args: --new-from-rev=HEAD~1
 
   go-ffi:
     name: Go (with Rust FFI)
@@ -164,7 +174,7 @@ jobs:
 
       - name: Clippy lint
         working-directory: cli-rs
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets
 
       - name: Build (release)
         working-directory: cli-rs

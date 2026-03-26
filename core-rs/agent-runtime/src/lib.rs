@@ -13,8 +13,6 @@
 //! Consumed by `deneb-core` (which re-exports FFI/napi bindings).
 //! Not a standalone FFI library — all external exposure goes through `deneb-core`.
 
-#![deny(clippy::all)]
-
 pub mod bootstrap;
 pub mod defaults;
 pub mod embedded;

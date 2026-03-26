@@ -67,6 +67,9 @@ pulldown-cmark = { version = "0.12", default-features = false, features = ["simd
 deneb-vega = { path = "../vega", optional = true }
 deneb-ml = { path = "../ml", optional = true }
 
+[lints]
+workspace = true
+
 [build-dependencies]
 prost-build = "0.13"
 napi-build = { version = "2", optional = true }
