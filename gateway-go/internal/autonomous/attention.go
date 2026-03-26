@@ -133,21 +133,32 @@ func (a *Attention) timerLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Skip if service has consecutive errors (let backoff apply).
-			if a.svc.ConsecutiveErrors() > 0 {
-				backoffMultiplier := 1 << min(a.svc.ConsecutiveErrors(), 6)
-				backoffInterval := a.cfg.CycleInterval * time.Duration(backoffMultiplier)
-				a.logger.Debug("timer tick skipped due to backoff",
-					"consecutiveErrors", a.svc.ConsecutiveErrors(),
-					"effectiveInterval", backoffInterval)
+			consErr := a.svc.ConsecutiveErrors()
 
-				// Auto-stop after 10 consecutive failures.
-				if a.svc.ConsecutiveErrors() >= 10 {
-					a.logger.Warn("10 consecutive failures, stopping attention timer")
-					a.StopTimer()
-					return
+			// Auto-stop after 10 consecutive failures.
+			if consErr >= 10 {
+				a.logger.Warn("10 consecutive failures, stopping attention timer")
+				a.StopTimer()
+				return
+			}
+
+			// Exponential backoff: skip tick if not enough time has elapsed.
+			if consErr > 0 {
+				exp := consErr
+				if exp > 6 {
+					exp = 6
 				}
-				continue
+				backoffInterval := a.cfg.CycleInterval * time.Duration(int64(1)<<exp)
+				a.mu.Lock()
+				elapsed := time.Since(time.UnixMilli(a.lastTrigger))
+				a.mu.Unlock()
+				if elapsed < backoffInterval {
+					a.logger.Debug("timer tick skipped due to backoff",
+						"consecutiveErrors", consErr,
+						"backoffInterval", backoffInterval,
+						"elapsed", elapsed)
+					continue
+				}
 			}
 
 			a.Push(Signal{
@@ -156,11 +167,4 @@ func (a *Attention) timerLoop(ctx context.Context) {
 			})
 		}
 	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

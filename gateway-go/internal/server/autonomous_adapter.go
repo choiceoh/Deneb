@@ -13,8 +13,8 @@ import (
 )
 
 // autonomousAgentAdapter bridges chat.Handler to the autonomous.AgentRunner interface.
-// It sends a message via SessionsSend, waits for the run to complete via JobTracker,
-// and reads the output from the transcript.
+// It sends a message via SessionsSend, subscribes to transcript appends to capture
+// the assistant output, and waits for the run to complete via JobTracker.
 type autonomousAgentAdapter struct {
 	chatHandler *chat.Handler
 	jobTracker  *agent.JobTracker
@@ -24,6 +24,36 @@ type autonomousAgentAdapter struct {
 // RunAgentTurn implements autonomous.AgentRunner.
 func (a *autonomousAgentAdapter) RunAgentTurn(ctx context.Context, sessionKey, message string) (string, error) {
 	runID := fmt.Sprintf("autonomous_%d", time.Now().UnixNano())
+
+	// Subscribe to transcript appends for this session BEFORE starting the run,
+	// so we don't miss the assistant message.
+	var lastAssistantMsg string
+	outputCh := make(chan string, 1)
+	if a.transcript != nil {
+		unsubscribe := a.transcript.OnAppend(func(key string, msg json.RawMessage) {
+			if key != sessionKey {
+				return
+			}
+			var parsed struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			}
+			if json.Unmarshal(msg, &parsed) == nil && parsed.Role == "assistant" && parsed.Content != "" {
+				// Non-blocking send — only capture the latest.
+				select {
+				case outputCh <- parsed.Content:
+				default:
+					// Drain and replace with newer message.
+					select {
+					case <-outputCh:
+					default:
+					}
+					outputCh <- parsed.Content
+				}
+			}
+		})
+		defer unsubscribe()
+	}
 
 	// Build the sessions.send request.
 	req := &protocol.RequestFrame{
@@ -43,35 +73,21 @@ func (a *autonomousAgentAdapter) RunAgentTurn(ctx context.Context, sessionKey, m
 		return "", fmt.Errorf("sessions.send failed: %s", resp.Error.Message)
 	}
 
-	// Wait for the run to complete.
+	// Wait for the run to complete via JobTracker.
 	if a.jobTracker != nil {
 		timeoutMs := int64(10 * 60 * 1000) // 10 minutes
 		snap := a.jobTracker.WaitForJob(ctx, runID, timeoutMs, false)
 		if snap != nil && snap.Status == agent.RunStatusError {
 			return "", fmt.Errorf("agent run failed: %s", snap.Error)
 		}
-	} else {
-		// No job tracker — poll-wait with simple sleep.
-		// This is a fallback; in production jobTracker should always be set.
-		time.Sleep(5 * time.Second)
 	}
 
-	// Read the last assistant message from the transcript.
-	if a.transcript != nil {
-		msgs, err := a.transcript.ReadMessages(sessionKey)
-		if err == nil && len(msgs) > 0 {
-			// Walk backward to find the last assistant message.
-			for i := len(msgs) - 1; i >= 0; i-- {
-				var msg struct {
-					Role    string `json:"role"`
-					Content string `json:"content"`
-				}
-				if json.Unmarshal(msgs[i], &msg) == nil && msg.Role == "assistant" {
-					return msg.Content, nil
-				}
-			}
-		}
+	// Collect the output captured by the transcript listener.
+	select {
+	case lastAssistantMsg = <-outputCh:
+	default:
+		// No output captured — may have been a silent reply.
 	}
 
-	return "", nil
+	return lastAssistantMsg, nil
 }
