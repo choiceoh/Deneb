@@ -313,10 +313,6 @@ func New(addr string, opts ...Option) *Server {
 	// Wire provider RPC methods if a provider registry is configured.
 	if s.providers != nil {
 		rpc.RegisterProviderMethods(s.dispatcher, rpc.ProviderDeps{
-			Deps: rpc.Deps{
-				Sessions: s.sessions,
-				Channels: s.channels,
-			},
 			Providers: s.providers,
 		})
 	}
@@ -324,7 +320,6 @@ func New(addr string, opts ...Option) *Server {
 	// Initialize plugin full registry and register RPC methods.
 	s.pluginFullRegistry = plugin.NewFullRegistry(s.logger)
 	rpc.RegisterPluginMethods(s.dispatcher, rpc.PluginDeps{
-		Deps:           rpc.Deps{Sessions: s.sessions, Channels: s.channels},
 		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry},
 	})
 
@@ -807,11 +802,9 @@ func (s *Server) registerExtendedMethods() {
 	rpc.RegisterACPMethods(s.dispatcher, s.acpDeps)
 
 	rpc.RegisterExtendedMethods(s.dispatcher, rpc.ExtendedDeps{
-		Deps: rpc.Deps{
-			Sessions:    s.sessions,
-			Channels:    s.channels,
-			GatewaySubs: s.gatewaySubs,
-		},
+		Sessions:    s.sessions,
+		Channels:    s.channels,
+		GatewaySubs: s.gatewaySubs,
 		Processes:   s.processes,
 		Cron:        s.cron,
 		Hooks:       s.hooks,
@@ -820,20 +813,12 @@ func (s *Server) registerExtendedMethods() {
 
 	// Provider methods.
 	rpc.RegisterProviderMethods(s.dispatcher, rpc.ProviderDeps{
-		Deps: rpc.Deps{
-			Sessions: s.sessions,
-			Channels: s.channels,
-		},
 		Providers:   s.providers,
 		AuthManager: s.authManager,
 	})
 
 	// Tool methods.
 	rpc.RegisterToolMethods(s.dispatcher, rpc.ToolDeps{
-		Deps: rpc.Deps{
-			Sessions: s.sessions,
-			Channels: s.channels,
-		},
 		Processes: s.processes,
 	})
 
@@ -843,11 +828,8 @@ func (s *Server) registerExtendedMethods() {
 		sessionCompressor = transcript.NewCompressor(transcript.DefaultCompactionConfig(), s.logger)
 	}
 	sessionDeps := rpc.SessionDeps{
-		Deps: rpc.Deps{
-			Sessions:    s.sessions,
-			Channels:    s.channels,
-			GatewaySubs: s.gatewaySubs,
-		},
+		Sessions:    s.sessions,
+		GatewaySubs: s.gatewaySubs,
 		Transcripts: s.transcript,
 		Compressor:  sessionCompressor,
 	}

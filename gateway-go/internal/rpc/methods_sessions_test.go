@@ -11,11 +11,8 @@ import (
 
 func testSessionDeps() SessionDeps {
 	return SessionDeps{
-		Deps: Deps{
-			Sessions: session.NewManager(),
-			Channels: channel.NewRegistry(),
-			// GatewaySubs left nil — emitSessionLifecycle safely no-ops.
-		},
+		Sessions: session.NewManager(),
+		// GatewaySubs left nil — emitSessionLifecycle safely no-ops.
 	}
 }
 
@@ -23,7 +20,10 @@ func sessionDispatcher(t *testing.T) (*Dispatcher, SessionDeps) {
 	t.Helper()
 	deps := testSessionDeps()
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, deps.Deps)
+	RegisterBuiltinMethods(d, Deps{
+		Sessions: deps.Sessions,
+		Channels: channel.NewRegistry(),
+	})
 	RegisterSessionMethods(d, deps)
 	return d, deps
 }

@@ -25,17 +25,19 @@ func newTestGatewaySubs() *events.GatewayEventSubscriptions {
 func testExtendedDeps() ExtendedDeps {
 	gs := newTestGatewaySubs()
 	return ExtendedDeps{
-		Deps: Deps{
-			Sessions:    session.NewManager(),
-			Channels:    channel.NewRegistry(),
-			GatewaySubs: gs,
-		},
+		Sessions:    session.NewManager(),
+		Channels:    channel.NewRegistry(),
+		GatewaySubs: gs,
 	}
 }
 
 func testAgentDispatcher(deps ExtendedDeps) *Dispatcher {
 	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d, deps.Deps)
+	RegisterBuiltinMethods(d, Deps{
+		Sessions: deps.Sessions,
+		Channels: deps.Channels,
+		GatewaySubs: deps.GatewaySubs,
+	})
 	RegisterExtendedMethods(d, deps)
 	return d
 }

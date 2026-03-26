@@ -24,7 +24,7 @@ func testACPDeps() *ACPDeps {
 			ACPRegistry: registry,
 		},
 	}
-	deps.enabled.Store(true)
+	deps.SetEnabled(true)
 	return deps
 }
 
@@ -122,7 +122,7 @@ func TestACPStatus_WithAgents(t *testing.T) {
 
 func TestACPStartStop(t *testing.T) {
 	deps := testACPDeps()
-	deps.enabled.Store(false)
+	deps.SetEnabled(false)
 	d := testACPDispatcher(deps)
 
 	// Start.
@@ -208,7 +208,7 @@ func TestACPSpawn_MissingRole(t *testing.T) {
 
 func TestACPSpawn_Disabled(t *testing.T) {
 	deps := testACPDeps()
-	deps.enabled.Store(false)
+	deps.SetEnabled(false)
 	d := testACPDispatcher(deps)
 
 	resp := dispatchACP(t, d, "acp.spawn", map[string]string{"role": "worker"})
@@ -449,7 +449,7 @@ func TestACPBindings_FilterBySession(t *testing.T) {
 
 func TestACPWriteOps_DisabledState(t *testing.T) {
 	deps := testACPDeps()
-	deps.enabled.Store(false)
+	deps.SetEnabled(false)
 	d := testACPDispatcher(deps)
 
 	// All write operations should fail.
