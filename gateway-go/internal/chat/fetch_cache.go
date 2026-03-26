@@ -69,9 +69,11 @@ func (c *FetchCache) Put(url string, content string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Update existing entry in-place (no order change).
+	// Update existing entry: refresh data and move to end of order (LRU).
 	if _, exists := c.entries[url]; exists {
 		c.entries[url] = &fetchCacheEntry{content: content, createdAt: time.Now()}
+		c.removeFromOrder(url)
+		c.order = append(c.order, url)
 		return
 	}
 

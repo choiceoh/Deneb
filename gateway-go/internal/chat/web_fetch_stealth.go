@@ -182,9 +182,9 @@ func isSoftBlock(result *media.FetchResult) bool {
 	if !strings.Contains(result.ContentType, "text/html") {
 		return false
 	}
-	// Small responses are more likely to be challenge pages.
-	// Real pages are rarely < 1KB of HTML.
-	if result.Size > 50000 {
+	// Challenge pages are typically small (< 15KB). Skip check on larger
+	// responses to avoid false positives on real small pages.
+	if result.Size > 15000 {
 		return false
 	}
 

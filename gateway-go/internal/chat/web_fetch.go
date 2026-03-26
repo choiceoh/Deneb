@@ -18,7 +18,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -208,255 +207,29 @@ func webFetchURL(ctx context.Context, cache *FetchCache, sglang *sglangExtractor
 	return applyTruncation(fullResult, maxChars), nil
 }
 
-// --- Search mode ---
-
-// webSearch dispatches to the best available search provider.
-// Priority: Perplexity (sonar) → Brave → DuckDuckGo.
-func webSearch(ctx context.Context, query string, count int) (string, error) {
-	pplxKey := os.Getenv("PERPLEXITY_API_KEY")
-	if pplxKey != "" {
-		return perplexitySearch(ctx, pplxKey, query)
-	}
-	braveKey := os.Getenv("BRAVE_SEARCH_API_KEY")
-	if braveKey == "" {
-		braveKey = os.Getenv("BRAVE_API_KEY")
-	}
-	if braveKey != "" {
-		return braveWebSearch(ctx, braveKey, query, count)
-	}
-	return duckDuckGoSearch(ctx, query)
-}
-
-// --- Perplexity Sonar search ---
-
-// perplexitySearch uses Perplexity's sonar model for web search.
-// Returns an AI-synthesized answer with citations — ideal for agent consumption
-// because the answer is already structured and noise-free.
-func perplexitySearch(ctx context.Context, apiKey, query string) (string, error) {
-	reqBody := map[string]any{
-		"model": "sonar",
-		"messages": []map[string]string{
-			{"role": "user", "content": query},
-		},
-	}
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("marshal perplexity request: %w", err)
-	}
-
-	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(reqCtx, "POST", "https://api.perplexity.ai/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("create perplexity request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("perplexity request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return formatFetchError(webFetchErr{
-			Code:      "search_http_" + strconv.Itoa(resp.StatusCode),
-			Message:   fmt.Sprintf("Perplexity returned HTTP %d: %s", resp.StatusCode, string(respBody)),
-			Retryable: resp.StatusCode >= 500,
-		}), nil
-	}
-
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Citations []string `json:"citations"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("parse perplexity response: %w", err)
-	}
-	if len(result.Choices) == 0 {
-		return "No results from Perplexity.", nil
-	}
-
-	var sb strings.Builder
-	sb.WriteString(result.Choices[0].Message.Content)
-
-	// Append citations as numbered sources.
-	if len(result.Citations) > 0 {
-		sb.WriteString("\n\n**Sources:**\n")
-		for i, cite := range result.Citations {
-			fmt.Fprintf(&sb, "[%d] %s\n", i+1, cite)
-		}
-	}
-
-	return sb.String(), nil
-}
-
-func braveWebSearch(ctx context.Context, apiKey, query string, count int) (string, error) {
-	reqURL := fmt.Sprintf("https://api.search.brave.com/res/v1/web/search?q=%s&count=%d",
-		url.QueryEscape(query), count)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("X-Subscription-Token", apiKey)
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("brave search failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return formatFetchError(webFetchErr{
-			Code: "search_http_" + strconv.Itoa(resp.StatusCode),
-			Message: fmt.Sprintf("Brave Search returned HTTP %d", resp.StatusCode),
-			Retryable: resp.StatusCode >= 500,
-		}), nil
-	}
-
-	var result braveSearchResult
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("parse brave response: %w", err)
-	}
-
-	return formatSearchResults(result.Web.Results), nil
-}
-
-type braveSearchResult struct {
-	Web struct {
-		Results []searchResult `json:"results"`
-	} `json:"web"`
-}
-
-type searchResult struct {
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Description string `json:"description"`
-}
-
-func duckDuckGoSearch(ctx context.Context, query string) (string, error) {
-	reqURL := fmt.Sprintf("https://api.duckduckgo.com/?q=%s&format=json&no_html=1&skip_disambig=1",
-		url.QueryEscape(query))
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", chromeProfile.headers["User-Agent"])
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("duckduckgo search failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var result struct {
-		Abstract      string `json:"Abstract"`
-		AbstractURL   string `json:"AbstractURL"`
-		RelatedTopics []struct {
-			Text     string `json:"Text"`
-			FirstURL string `json:"FirstURL"`
-		} `json:"RelatedTopics"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("parse duckduckgo response: %w", err)
-	}
-
-	var sb strings.Builder
-	if result.Abstract != "" {
-		fmt.Fprintf(&sb, "**Summary:** %s\nSource: %s\n\n", result.Abstract, result.AbstractURL)
-	}
-	for i, topic := range result.RelatedTopics {
-		if i >= 5 || topic.Text == "" {
-			break
-		}
-		fmt.Fprintf(&sb, "- %s\n  %s\n", topic.Text, topic.FirstURL)
-	}
-	if sb.Len() == 0 {
-		return "No results found for this query.", nil
-	}
-	return sb.String(), nil
-}
-
-func formatSearchResults(results []searchResult) string {
-	if len(results) == 0 {
-		return "No results found."
-	}
-	var sb strings.Builder
-	for i, r := range results {
-		fmt.Fprintf(&sb, "%d. **%s**\n   %s\n   %s\n\n", i+1, r.Title, r.URL, r.Description)
-	}
-	return sb.String()
-}
-
 // --- Search+fetch mode ---
 
 // webSearchAndFetch searches the web and auto-fetches the top N results.
-// Uses Perplexity citations or Brave results as fetch targets.
+// Uses webSearchWithURLs() to get both formatted output and fetchable URLs.
 func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *sglangExtractor, query string, count, fetchTop, maxChars int) (string, error) {
 	if maxChars <= 0 {
-		maxChars = 30000 // lower default for multi-fetch to fit in context
+		maxChars = 30000
 	}
 
-	// Step 1: Search and collect URLs to fetch.
-	var searchOutput string
-	var fetchURLs []string
-
-	pplxKey := os.Getenv("PERPLEXITY_API_KEY")
-	braveKey := os.Getenv("BRAVE_SEARCH_API_KEY")
-	if braveKey == "" {
-		braveKey = os.Getenv("BRAVE_API_KEY")
+	searchOutput, fetchURLs, err := webSearchWithURLs(ctx, query, count)
+	if err != nil {
+		return "", err
 	}
-
-	switch {
-	case pplxKey != "":
-		// Perplexity: get answer + citations as fetch targets.
-		answer, citations, err := perplexitySearchRaw(ctx, pplxKey, query)
-		if err != nil {
-			return "", err
-		}
-		searchOutput = answer
-		fetchURLs = citations
-
-	case braveKey != "":
-		// Brave: get search results as fetch targets.
-		results, err := braveSearchRaw(ctx, braveKey, query, count)
-		if err != nil {
-			return "", err
-		}
-		searchOutput = formatSearchResults(results)
-		for _, r := range results {
-			fetchURLs = append(fetchURLs, r.URL)
-		}
-
-	default:
-		// DuckDuckGo: no good URLs for fetching.
-		return duckDuckGoSearch(ctx, query)
-	}
-
 	if searchOutput == "" {
 		return "No results found.", nil
 	}
 
-	// Step 2: Build output with search summary.
 	var sb strings.Builder
 	sb.WriteString("<search_results query=\"" + query + "\">\n")
 	sb.WriteString(searchOutput)
 	sb.WriteString("\n</search_results>\n\n")
 
-	// Step 3: Auto-fetch top N URLs.
+	// Auto-fetch top N URLs.
 	if fetchTop > len(fetchURLs) {
 		fetchTop = len(fetchURLs)
 	}
@@ -466,12 +239,10 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *sglangExt
 
 	perResultChars := maxChars / fetchTop
 	for i := 0; i < fetchTop; i++ {
-		fetchURL := fetchURLs[i]
-		fmt.Fprintf(&sb, "<fetched index=\"%d\" url=\"%s\">\n", i+1, fetchURL)
-
-		content, err := webFetchURL(ctx, cache, sglang, fetchURL, perResultChars)
-		if err != nil {
-			fmt.Fprintf(&sb, "Fetch failed: %s\n", err.Error())
+		fmt.Fprintf(&sb, "<fetched index=\"%d\" url=\"%s\">\n", i+1, fetchURLs[i])
+		content, fetchErr := webFetchURL(ctx, cache, sglang, fetchURLs[i], perResultChars)
+		if fetchErr != nil {
+			fmt.Fprintf(&sb, "Fetch failed: %s\n", fetchErr.Error())
 		} else {
 			sb.WriteString(content)
 		}
@@ -479,89 +250,6 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *sglangExt
 	}
 
 	return sb.String(), nil
-}
-
-// perplexitySearchRaw returns the answer text and citation URLs separately.
-func perplexitySearchRaw(ctx context.Context, apiKey, query string) (answer string, citations []string, err error) {
-	reqBody := map[string]any{
-		"model": "sonar",
-		"messages": []map[string]string{
-			{"role": "user", "content": query},
-		},
-	}
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", nil, err
-	}
-
-	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(reqCtx, "POST", "https://api.perplexity.ai/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", nil, fmt.Errorf("perplexity request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", nil, fmt.Errorf("Perplexity HTTP %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Citations []string `json:"citations"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", nil, fmt.Errorf("parse perplexity response: %w", err)
-	}
-	if len(result.Choices) == 0 {
-		return "", nil, nil
-	}
-
-	return result.Choices[0].Message.Content, result.Citations, nil
-}
-
-// braveSearchRaw returns raw search results for use in search+fetch mode.
-func braveSearchRaw(ctx context.Context, apiKey, query string, count int) ([]searchResult, error) {
-	reqURL := fmt.Sprintf("https://api.search.brave.com/res/v1/web/search?q=%s&count=%d",
-		url.QueryEscape(query), count)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("X-Subscription-Token", apiKey)
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("brave search failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Brave Search HTTP %d", resp.StatusCode)
-	}
-
-	var result braveSearchResult
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("parse brave response: %w", err)
-	}
-	return result.Web.Results, nil
 }
 
 // --- Content processing by type ---
