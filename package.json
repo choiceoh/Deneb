@@ -1,7 +1,18 @@
 {
   "name": "deneb",
-  "version": "3.11.2",
-  "private": true,
+  "version": "3.11.3",
+  "description": "Multi-channel AI gateway with extensible messaging integrations",
+  "keywords": [],
+  "homepage": "https://github.com/deneb/deneb#readme",
+  "bugs": {
+    "url": "https://github.com/deneb/deneb/issues"
+  },
+  "license": "MIT",
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deneb/deneb.git"
+  },
   "scripts": {
     "gateway-go:build": "cd gateway-go && go build -tags no_rust ./...",
     "gateway-go:build:cgo": "cd gateway-go && CGO_ENABLED=1 go build ./...",
