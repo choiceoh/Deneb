@@ -4,9 +4,10 @@
 //   - Structured metadata (title, final URL, language, publish date, signals)
 //   - Machine-readable errors with classification codes
 //   - Aggressive noise removal (nav, ads, cookie banners, comments)
-//   - Intelligent truncation with content density awareness
+//   - Section-aware truncation respecting markdown structure
 //   - Optional SGLang AI-powered extraction for HTML content
-//   - Quality signals (login wall, JS-required, bot detection)
+//   - Quality signals (login wall, SPA shell, bot detection, soft paywall)
+//   - Charset normalization, JSON pretty-printing, fetch timing
 package chat
 
 import (
@@ -53,18 +54,23 @@ func webFetchToolSchema() map[string]any {
 // webFetchMeta holds machine-readable metadata about the fetched page.
 type webFetchMeta struct {
 	Title        string   `json:"title,omitempty"`
+	Description  string   `json:"description,omitempty"`
 	URL          string   `json:"url"`
 	FinalURL     string   `json:"final_url,omitempty"`
 	CanonicalURL string   `json:"canonical_url,omitempty"`
-	Description  string   `json:"description,omitempty"`
 	Language     string   `json:"language,omitempty"`
 	Published    string   `json:"published,omitempty"`
+	Author       string   `json:"author,omitempty"`
+	SiteName     string   `json:"site_name,omitempty"`
+	OGType       string   `json:"og_type,omitempty"`
 	ContentType  string   `json:"content_type"`
 	StatusCode   int      `json:"status_code"`
+	FetchMs      int64    `json:"fetch_ms"`
 	OrigChars    int      `json:"original_chars"`
 	ExtractChars int      `json:"extracted_chars"`
 	Retention    string   `json:"retention_ratio"`
 	Truncated    bool     `json:"truncated"`
+	WordCount    int      `json:"word_count,omitempty"`
 	Signals      []string `json:"signals,omitempty"`
 }
 
@@ -102,21 +108,12 @@ func toolWebFetch(cache *FetchCache, sglang *sglangExtractor) ToolFunc {
 
 		// YouTube → delegate to transcript extraction.
 		if media.IsYouTubeURL(p.URL) {
-			ytCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-			defer cancel()
-			result, err := media.ExtractYouTubeTranscript(ytCtx, p.URL)
-			if err != nil {
-				return formatFetchError(webFetchErr{
-					Code: "youtube_failed", Message: err.Error(),
-					URL: p.URL, Retryable: true,
-				}), nil
-			}
-			return media.FormatYouTubeResult(result), nil
+			return fetchYouTube(ctx, p.URL)
 		}
 
 		// Cache lookup.
 		if cached, ok := cache.Get(p.URL); ok {
-			return truncateResult(cached, maxChars), nil
+			return applyTruncation(cached, maxChars), nil
 		}
 
 		// Size limit: 2× maxChars raw bytes, capped at 5 MB.
@@ -125,13 +122,16 @@ func toolWebFetch(cache *FetchCache, sglang *sglangExtractor) ToolFunc {
 			maxBytes = 5 * 1024 * 1024
 		}
 
-		// Fetch with retry.
+		// Fetch with retry + timing.
+		fetchStart := time.Now()
 		result, err := fetchWithRetry(ctx, p.URL, maxBytes)
+		fetchMs := time.Since(fetchStart).Milliseconds()
 		if err != nil {
 			return formatFetchError(classifyFetchError(err, p.URL)), nil
 		}
 
-		rawContent := string(result.Data)
+		// Charset normalization — convert non-UTF-8 to UTF-8.
+		rawContent := normalizeCharset(result.Data, result.ContentType)
 		origChars := len(rawContent)
 
 		meta := webFetchMeta{
@@ -139,63 +139,118 @@ func toolWebFetch(cache *FetchCache, sglang *sglangExtractor) ToolFunc {
 			FinalURL:    result.FinalURL,
 			ContentType: result.ContentType,
 			StatusCode:  result.StatusCode,
+			FetchMs:     fetchMs,
 			OrigChars:   origChars,
 		}
 
-		var content string
 		isHTML := strings.Contains(result.ContentType, "text/html") ||
 			strings.Contains(result.ContentType, "application/xhtml")
+		isJSON := strings.Contains(result.ContentType, "application/json") ||
+			strings.Contains(result.ContentType, "+json")
 
-		if isHTML {
-			// Extract metadata from raw HTML before conversion.
-			extractHTMLMeta(rawContent, &meta)
-
-			// Detect quality signals from raw HTML.
-			meta.Signals = detectSignals(rawContent)
-
-			// Convert HTML to Markdown.
-			// Try SGLang AI extraction first for superior noise removal.
-			if sglang.available() {
-				extracted, err := sglang.extract(ctx, rawContent, p.URL)
-				if err != nil {
-					slog.Warn("sglang extraction failed, falling back to FFI",
-						"url", p.URL, "error", err)
-					content = ffiConvert(rawContent)
-				} else {
-					content = extracted
-				}
-			} else {
-				content = ffiConvert(rawContent)
-			}
-		} else {
+		var content string
+		switch {
+		case isHTML:
+			content = processHTML(ctx, rawContent, p.URL, sglang, &meta)
+		case isJSON:
+			content = processJSON(rawContent)
+		default:
 			content = rawContent
 		}
 
 		meta.ExtractChars = len(content)
 		if origChars > 0 {
-			ratio := float64(meta.ExtractChars) / float64(origChars) * 100
-			meta.Retention = fmt.Sprintf("%.1f%%", ratio)
+			meta.Retention = fmt.Sprintf("%.1f%%", float64(meta.ExtractChars)/float64(origChars)*100)
 		} else {
 			meta.Retention = "0%"
 		}
 
-		// Detect empty-after-extraction signal.
-		if isHTML && len(strings.TrimSpace(content)) < 100 && origChars > 1000 {
-			meta.Signals = appendUnique(meta.Signals, "low_content_yield")
+		// Estimate word count from extracted content.
+		if meta.WordCount == 0 {
+			meta.WordCount = estimateWordCount(content)
 		}
 
-		// Build full result (metadata + content) and cache before truncation.
+		// Build full result and cache before truncation.
 		fullResult := formatFetchResult(meta, content)
 		cache.Put(p.URL, fullResult)
 
-		return truncateResult(fullResult, maxChars), nil
+		return applyTruncation(fullResult, maxChars), nil
 	}
+}
+
+// --- Content processing by type ---
+
+// processHTML runs the full HTML extraction pipeline:
+// 1. Extract metadata from raw HTML
+// 2. Detect quality signals
+// 3. Strip noise elements (nav, aside, footer, ads, cookie banners)
+// 4. Convert to Markdown (SGLang AI or FFI fallback)
+func processHTML(ctx context.Context, html string, url string, sglang *sglangExtractor, meta *webFetchMeta) string {
+	// Step 1: Extract metadata from raw HTML (before any stripping).
+	extractHTMLMeta(html, meta)
+
+	// Step 2: Detect quality signals from raw HTML.
+	meta.Signals = detectSignals(html)
+
+	// Step 3: Strip noise elements — the critical preprocessing step.
+	// This removes nav, aside, footer, ads, cookie banners, comments, etc.
+	// Even when SGLang is available, pre-stripping reduces input tokens
+	// and prevents noise from confusing the AI extraction.
+	cleaned := stripNoiseElements(html)
+
+	// Step 4: Convert to Markdown.
+	var content string
+	if sglang.available() {
+		extracted, err := sglang.extract(ctx, cleaned, url, meta.Language)
+		if err != nil {
+			slog.Warn("sglang extraction failed, falling back to FFI",
+				"url", url, "error", err)
+			content = ffiConvert(cleaned)
+		} else {
+			content = extracted
+		}
+	} else {
+		content = ffiConvert(cleaned)
+	}
+
+	// Step 5: Post-extraction quality check.
+	trimmedLen := len(strings.TrimSpace(content))
+	if trimmedLen < 100 && meta.OrigChars > 1000 {
+		meta.Signals = appendUnique(meta.Signals, "low_content_yield")
+	}
+
+	return content
+}
+
+// processJSON pretty-prints JSON for readability.
+func processJSON(raw string) string {
+	var parsed any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return raw // invalid JSON — return as-is
+	}
+	pretty, err := json.MarshalIndent(parsed, "", "  ")
+	if err != nil {
+		return raw
+	}
+	return string(pretty)
+}
+
+func fetchYouTube(ctx context.Context, url string) (string, error) {
+	ytCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+	result, err := media.ExtractYouTubeTranscript(ytCtx, url)
+	if err != nil {
+		return formatFetchError(webFetchErr{
+			Code: "youtube_failed", Message: err.Error(),
+			URL: url, Retryable: true,
+		}), nil
+	}
+	return media.FormatYouTubeResult(result), nil
 }
 
 // --- Fetch with retry ---
 
 // fetchWithRetry fetches a URL with retry on transient errors (5xx, timeouts).
-// Max 3 attempts with short backoff: 0ms, 500ms, 1500ms.
 func fetchWithRetry(ctx context.Context, url string, maxBytes int64) (*media.FetchResult, error) {
 	backoff := [3]time.Duration{0, 500 * time.Millisecond, 1500 * time.Millisecond}
 
@@ -232,7 +287,6 @@ func fetchWithRetry(ctx context.Context, url string, maxBytes int64) (*media.Fet
 	return nil, lastErr
 }
 
-// isRetryableError returns true for transient errors worth retrying.
 func isRetryableError(err error) bool {
 	var mfe *media.MediaFetchError
 	if errors.As(err, &mfe) {
@@ -258,156 +312,25 @@ func ffiConvert(html string) string {
 	return text
 }
 
-// --- HTML metadata extraction ---
-
-var (
-	ogTitleRe     = regexp.MustCompile(`(?i)<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']`)
-	ogTitleRevRe  = regexp.MustCompile(`(?i)<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']`)
-	ogDescRe      = regexp.MustCompile(`(?i)<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']`)
-	ogDescRevRe   = regexp.MustCompile(`(?i)<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']`)
-	metaDescRe    = regexp.MustCompile(`(?i)<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']`)
-	metaDescRevRe = regexp.MustCompile(`(?i)<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']`)
-	canonicalRe   = regexp.MustCompile(`(?i)<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']`)
-	canonicalRevRe = regexp.MustCompile(`(?i)<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["']`)
-	htmlLangRe    = regexp.MustCompile(`(?i)<html[^>]+lang=["']([^"']+)["']`)
-	publishRe     = regexp.MustCompile(`(?i)<meta[^>]+(?:property=["']article:published_time["']|name=["'](?:date|publish[_-]?date|DC\.date)["'])[^>]+content=["']([^"']+)["']`)
-	publishRevRe  = regexp.MustCompile(`(?i)<meta[^>]+content=["']([^"']+)["'][^>]+(?:property=["']article:published_time["']|name=["'](?:date|publish[_-]?date|DC\.date)["'])`)
-	titleTagRe    = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
-)
-
-// extractHTMLMeta parses HTML meta tags into the metadata struct.
-// Only reads the first ~8K to avoid scanning huge documents.
-func extractHTMLMeta(html string, meta *webFetchMeta) {
-	// Limit scan to head section (typically < 8K).
-	scan := html
-	if len(scan) > 8192 {
-		scan = scan[:8192]
-	}
-
-	// Title: prefer OG, fallback to <title>.
-	if m := ogTitleRe.FindStringSubmatch(scan); len(m) > 1 {
-		meta.Title = m[1]
-	} else if m := ogTitleRevRe.FindStringSubmatch(scan); len(m) > 1 {
-		meta.Title = m[1]
-	} else if m := titleTagRe.FindStringSubmatch(scan); len(m) > 1 {
-		meta.Title = strings.TrimSpace(m[1])
-	}
-
-	// Description: prefer OG, fallback to meta name="description".
-	if m := ogDescRe.FindStringSubmatch(scan); len(m) > 1 {
-		meta.Description = m[1]
-	} else if m := ogDescRevRe.FindStringSubmatch(scan); len(m) > 1 {
-		meta.Description = m[1]
-	} else if m := metaDescRe.FindStringSubmatch(scan); len(m) > 1 {
-		meta.Description = m[1]
-	} else if m := metaDescRevRe.FindStringSubmatch(scan); len(m) > 1 {
-		meta.Description = m[1]
-	}
-
-	// Canonical URL.
-	if m := canonicalRe.FindStringSubmatch(scan); len(m) > 1 {
-		meta.CanonicalURL = m[1]
-	} else if m := canonicalRevRe.FindStringSubmatch(scan); len(m) > 1 {
-		meta.CanonicalURL = m[1]
-	}
-
-	// Language.
-	if m := htmlLangRe.FindStringSubmatch(scan); len(m) > 1 {
-		meta.Language = m[1]
-	}
-
-	// Publish date.
-	if m := publishRe.FindStringSubmatch(scan); len(m) > 1 {
-		meta.Published = m[1]
-	} else if m := publishRevRe.FindStringSubmatch(scan); len(m) > 1 {
-		meta.Published = m[1]
-	}
-}
-
-// --- Quality signal detection ---
-
-var (
-	loginWallPatterns = []string{
-		"login-wall", "paywall", "sign-in-gate", "subscribe-wall",
-		"registration-wall", "loginRequired", "login_required",
-		"metered-content", "premium-content",
-	}
-	jsRequiredPatterns = []string{
-		"you need to enable javascript",
-		"this page requires javascript",
-		"please enable javascript",
-		"javascript is required",
-		"noscript",
-	}
-	botBlockPatterns = []string{
-		"access denied", "blocked by cloudflare",
-		"captcha", "are you a robot", "unusual traffic",
-		"please verify you are a human",
-	}
-)
-
-func detectSignals(html string) []string {
-	lower := strings.ToLower(html)
-	var signals []string
-
-	for _, p := range loginWallPatterns {
-		if strings.Contains(lower, p) {
-			signals = append(signals, "login_wall_detected")
-			break
-		}
-	}
-
-	// Check for JS-required only if <noscript> contains a substantial message
-	// or if the body is mostly empty but has JS framework indicators.
-	for _, p := range jsRequiredPatterns {
-		if strings.Contains(lower, p) {
-			signals = append(signals, "js_required")
-			break
-		}
-	}
-
-	for _, p := range botBlockPatterns {
-		if strings.Contains(lower, p) {
-			signals = append(signals, "bot_blocked")
-			break
-		}
-	}
-
-	// Empty body detection: large HTML but little visible text.
-	bodyIdx := strings.Index(lower, "<body")
-	if bodyIdx >= 0 {
-		body := lower[bodyIdx:]
-		// Count non-tag characters roughly.
-		textLen := 0
-		inTag := false
-		for _, r := range body {
-			if r == '<' {
-				inTag = true
-			} else if r == '>' {
-				inTag = false
-			} else if !inTag && r > ' ' {
-				textLen++
-			}
-		}
-		if len(body) > 5000 && textLen < 200 {
-			signals = appendUnique(signals, "empty_body")
-		}
-	}
-
-	return signals
-}
-
 // --- SGLang AI-powered content extraction ---
 
-// sglangExtractor calls a local SGLang server for intelligent content extraction.
 type sglangExtractor struct {
-	once       sync.Once
-	client     *http.Client
-	baseURL    string
-	apiKey     string
-	model      string
-	isReady    bool
+	mu      sync.Mutex
+	client  *http.Client
+	baseURL string
+	apiKey  string
+	model   string
+	state   int // 0=unknown, 1=available, -1=unavailable
+	probeAt time.Time
 }
+
+const (
+	sglangUnknown     = 0
+	sglangAvailable   = 1
+	sglangUnavailable = -1
+	// Re-probe interval when previously unavailable.
+	sglangReprobeInterval = 5 * time.Minute
+)
 
 func newSGLangExtractor() *sglangExtractor {
 	baseURL := os.Getenv("SGLANG_BASE_URL")
@@ -430,65 +353,103 @@ func newSGLangExtractor() *sglangExtractor {
 	}
 }
 
-// available returns true if SGLang server is reachable.
-// Probes the server once on first call, then caches the result.
+// available checks if SGLang is reachable. Probes on first call,
+// then re-probes periodically if previously unavailable.
 func (s *sglangExtractor) available() bool {
-	s.once.Do(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		req, err := http.NewRequestWithContext(ctx, "GET", s.baseURL+"/models", nil)
-		if err != nil {
-			return
-		}
-		req.Header.Set("Authorization", "Bearer "+s.apiKey)
-		resp, err := s.client.Do(req)
-		if err != nil {
-			slog.Info("sglang not available", "url", s.baseURL, "error", err)
-			return
-		}
-		resp.Body.Close()
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			s.isReady = true
-			slog.Info("sglang available", "url", s.baseURL, "model", s.model)
-		}
-	})
-	return s.isReady
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.state == sglangAvailable {
+		return true
+	}
+	if s.state == sglangUnavailable && time.Since(s.probeAt) < sglangReprobeInterval {
+		return false
+	}
+
+	// Probe the server.
+	s.probeAt = time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "GET", s.baseURL+"/models", nil)
+	if err != nil {
+		s.state = sglangUnavailable
+		return false
+	}
+	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	resp, err := s.client.Do(req)
+	if err != nil {
+		slog.Info("sglang not available", "url", s.baseURL, "error", err)
+		s.state = sglangUnavailable
+		return false
+	}
+	resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		s.state = sglangAvailable
+		slog.Info("sglang available", "url", s.baseURL, "model", s.model)
+		return true
+	}
+	s.state = sglangUnavailable
+	return false
 }
 
-const sglangExtractionPrompt = `You are a web content extractor for AI agents. Given raw HTML-converted-to-markdown content from a webpage, extract ONLY the main article/content.
+const sglangSystemPrompt = `You are a precision web content extractor for AI agents. Your output becomes the agent's sole understanding of the webpage.
 
-Rules:
-1. REMOVE: navigation menus, headers, footers, sidebars, advertisements, cookie banners, "related articles" sections, comment sections, social media widgets, breadcrumbs, pagination
-2. PRESERVE: main article text, tables (as markdown tables), code blocks, lists, images references, headings hierarchy
-3. MAINTAIN the original markdown structure — headings stay as headings, tables stay as tables, lists stay as lists
-4. Do NOT add commentary, summaries, or explanations — return only the extracted content
-5. If the content is already clean, return it as-is
-6. Output in the same language as the source content`
+REMOVE completely:
+- Navigation menus, breadcrumbs, pagination elements
+- Cookie banners, GDPR notices, consent dialogs
+- Advertisement blocks, sponsored content, promotional banners
+- "Related articles", "You might also like", "Trending" sections
+- Comment sections, user reviews (unless they ARE the main content)
+- Social media share buttons, follow widgets
+- Site-wide headers, footers, copyright notices
+- Search bars, login forms, newsletter signup forms
+- Sidebar widgets, tag clouds, archive links
 
-// extract calls SGLang to intelligently extract main content from HTML.
-func (s *sglangExtractor) extract(ctx context.Context, html string, url string) (string, error) {
-	// First convert HTML to markdown via FFI to reduce token usage.
+PRESERVE with structure:
+- Main article/page body text — this is the primary output
+- Headings hierarchy (# through ######) exactly as structured
+- Data tables as proper markdown tables with alignment
+- Code blocks with language tags (` + "```" + `lang ... ` + "```" + `)
+- Ordered and unordered lists with proper nesting
+- Blockquotes with > prefix
+- Image references as ![alt](url) when informational
+- Inline links [text](url) when they add value
+
+RULES:
+- Output ONLY the extracted content — no wrapping, no commentary
+- Preserve the source language exactly
+- If content is already clean, return it unchanged
+- Empty extraction is better than including noise`
+
+// extract calls SGLang for intelligent content extraction from pre-cleaned HTML.
+func (s *sglangExtractor) extract(ctx context.Context, html string, url string, language string) (string, error) {
+	// Convert HTML to markdown via FFI first to reduce token count.
 	mdContent := ffiConvert(html)
 
-	// If content is small enough, AI extraction adds little value.
+	// Small content: AI adds little value, return directly.
 	if len(mdContent) < 2000 {
 		return mdContent, nil
 	}
 
-	// Limit input to avoid overwhelming the model.
-	// Qwen3.5-35B-A3B has 262K context, but we cap at ~100K chars for extraction.
-	inputLimit := 100000
-	if len(mdContent) > inputLimit {
-		mdContent = mdContent[:inputLimit]
+	// Cap input to ~100K chars (well within Qwen 262K context).
+	if len(mdContent) > 100000 {
+		mdContent = mdContent[:100000]
 	}
 
-	userMsg := fmt.Sprintf("URL: %s\n\nContent:\n%s", url, mdContent)
+	// Build user message with context hints.
+	var userMsg strings.Builder
+	fmt.Fprintf(&userMsg, "URL: %s\n", url)
+	if language != "" {
+		fmt.Fprintf(&userMsg, "Language: %s\n", language)
+	}
+	userMsg.WriteString("\n---\n")
+	userMsg.WriteString(mdContent)
 
 	reqBody := map[string]any{
 		"model": s.model,
 		"messages": []map[string]string{
-			{"role": "system", "content": sglangExtractionPrompt},
-			{"role": "user", "content": userMsg},
+			{"role": "system", "content": sglangSystemPrompt},
+			{"role": "user", "content": userMsg.String()},
 		},
 		"max_tokens":  16384,
 		"temperature": 0,
@@ -535,14 +496,11 @@ func (s *sglangExtractor) extract(ctx context.Context, html string, url string) 
 	}
 
 	extracted := result.Choices[0].Message.Content
-
-	// Strip thinking tags if present (Qwen models with enable_thinking).
 	extracted = stripThinkingTags(extracted)
 
 	return strings.TrimSpace(extracted), nil
 }
 
-// stripThinkingTags removes <think>...</think> blocks from Qwen model output.
 var thinkingTagRe = regexp.MustCompile(`(?s)<think>.*?</think>\s*`)
 
 func stripThinkingTags(s string) string {
@@ -564,42 +522,44 @@ func classifyFetchError(err error, url string) webFetchErr {
 			}
 		case media.ErrMaxBytes:
 			return webFetchErr{
-				Code:      "content_too_large",
-				Message:   mfe.Message,
-				URL:       url,
-				Retryable: false,
+				Code: "content_too_large", Message: mfe.Message,
+				URL: url, Retryable: false,
 			}
 		case media.ErrFetchFailed:
 			code := "fetch_failed"
 			msg := mfe.Message
 			retryable := true
-			if strings.Contains(msg, "SSRF") {
-				code = "ssrf_blocked"
-				retryable = false
-			} else if strings.Contains(msg, "no such host") || strings.Contains(msg, "no addresses") {
-				code = "dns_failure"
-				retryable = false
-			} else if strings.Contains(msg, "too many redirects") {
-				code = "redirect_loop"
-				retryable = false
+			switch {
+			case strings.Contains(msg, "SSRF"):
+				code, retryable = "ssrf_blocked", false
+			case strings.Contains(msg, "no such host") || strings.Contains(msg, "no addresses"):
+				code, retryable = "dns_failure", false
+			case strings.Contains(msg, "too many redirects"):
+				code, retryable = "redirect_loop", false
+			case strings.Contains(msg, "certificate"):
+				code, retryable = "tls_error", false
+			case strings.Contains(msg, "connection refused"):
+				code, retryable = "connection_refused", true
+			case strings.Contains(msg, "connection reset"):
+				code, retryable = "connection_reset", true
 			}
 			return webFetchErr{Code: code, Message: msg, URL: url, Retryable: retryable}
 		}
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return webFetchErr{
-			Code: "timeout", Message: "request timed out", URL: url, Retryable: true,
-		}
+		return webFetchErr{Code: "timeout", Message: "request timed out", URL: url, Retryable: true}
 	}
-	return webFetchErr{
-		Code: "unknown", Message: err.Error(), URL: url, Retryable: false,
+	if errors.Is(err, context.Canceled) {
+		return webFetchErr{Code: "canceled", Message: "request canceled", URL: url, Retryable: false}
 	}
+	return webFetchErr{Code: "unknown", Message: err.Error(), URL: url, Retryable: false}
 }
 
 // --- Output formatting ---
 
 func formatFetchResult(meta webFetchMeta, content string) string {
 	var b strings.Builder
+	b.Grow(len(content) + 512)
 
 	b.WriteString("<metadata>\n")
 	if meta.Title != "" {
@@ -608,11 +568,17 @@ func formatFetchResult(meta webFetchMeta, content string) string {
 	if meta.Description != "" {
 		fmt.Fprintf(&b, "Description: %s\n", meta.Description)
 	}
+	if meta.Author != "" {
+		fmt.Fprintf(&b, "Author: %s\n", meta.Author)
+	}
+	if meta.SiteName != "" {
+		fmt.Fprintf(&b, "Site: %s\n", meta.SiteName)
+	}
 	fmt.Fprintf(&b, "URL: %s\n", meta.URL)
 	if meta.FinalURL != "" && meta.FinalURL != meta.URL {
 		fmt.Fprintf(&b, "FinalURL: %s\n", meta.FinalURL)
 	}
-	if meta.CanonicalURL != "" {
+	if meta.CanonicalURL != "" && meta.CanonicalURL != meta.URL && meta.CanonicalURL != meta.FinalURL {
 		fmt.Fprintf(&b, "Canonical: %s\n", meta.CanonicalURL)
 	}
 	if meta.Language != "" {
@@ -621,10 +587,17 @@ func formatFetchResult(meta webFetchMeta, content string) string {
 	if meta.Published != "" {
 		fmt.Fprintf(&b, "Published: %s\n", meta.Published)
 	}
+	if meta.OGType != "" {
+		fmt.Fprintf(&b, "Type: %s\n", meta.OGType)
+	}
 	fmt.Fprintf(&b, "ContentType: %s\n", meta.ContentType)
 	fmt.Fprintf(&b, "StatusCode: %d\n", meta.StatusCode)
+	fmt.Fprintf(&b, "FetchTime: %dms\n", meta.FetchMs)
 	fmt.Fprintf(&b, "ContentChars: %d (original: %d, retention: %s)\n",
 		meta.ExtractChars, meta.OrigChars, meta.Retention)
+	if meta.WordCount > 0 {
+		fmt.Fprintf(&b, "WordCount: %d\n", meta.WordCount)
+	}
 	if meta.Truncated {
 		b.WriteString("Truncated: true\n")
 	}
@@ -651,20 +624,38 @@ func formatFetchError(e webFetchErr) string {
 	return b.String()
 }
 
-// truncateResult truncates a formatted result to maxChars, preserving the
-// metadata section. If truncation happens, inserts a truncation marker.
-func truncateResult(result string, maxChars int) string {
+// applyTruncation truncates a formatted result preserving metadata section
+// and cutting content at section boundaries rather than mid-sentence.
+func applyTruncation(result string, maxChars int) string {
 	if len(result) <= maxChars {
 		return result
 	}
-	// Ensure we keep the metadata section intact.
-	metaEnd := strings.Index(result, "</metadata>")
-	if metaEnd >= 0 && metaEnd < maxChars {
-		// Truncate only the content portion.
-		truncated := result[:maxChars]
-		return truncated + "\n\n[...truncated at " + strconv.Itoa(maxChars) + " chars]\n</content>"
+
+	// Split at content boundary.
+	contentStart := strings.Index(result, "<content>\n")
+	if contentStart < 0 || contentStart >= maxChars {
+		return result[:maxChars] + "\n[...truncated]"
 	}
-	return result[:maxChars] + "\n[...truncated]"
+
+	metaSection := result[:contentStart+len("<content>\n")]
+	contentBody := result[contentStart+len("<content>\n"):]
+
+	// Remove trailing </content> for processing.
+	contentBody = strings.TrimSuffix(contentBody, "\n</content>")
+
+	// Available chars for content.
+	availChars := maxChars - len(metaSection) - 40 // 40 for truncation marker + closing tag
+	if availChars <= 0 {
+		return metaSection + "\n[...no space for content]\n</content>"
+	}
+
+	truncated, wasTruncated := truncateAtSection(contentBody, availChars)
+	if wasTruncated {
+		remaining := len(contentBody) - len(truncated)
+		return metaSection + truncated +
+			"\n\n[...truncated: " + strconv.Itoa(remaining) + " chars remaining]\n</content>"
+	}
+	return metaSection + truncated + "\n</content>"
 }
 
 // --- Helpers ---
@@ -676,4 +667,11 @@ func appendUnique(ss []string, s string) []string {
 		}
 	}
 	return append(ss, s)
+}
+
+// estimateWordCount estimates word count from text content.
+// Uses a simple split on whitespace, which works for both Latin and CJK text.
+func estimateWordCount(text string) int {
+	fields := strings.Fields(text)
+	return len(fields)
 }
