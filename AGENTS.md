@@ -796,28 +796,23 @@ This runs the smart gate, pushes, and creates the PR automatically. Options: `--
 
 ## Go Gateway Migration TODO (TS → Go 포팅 잔여 작업)
 
-Go 게이트웨이 마이그레이션 완료 후 누락된 기능 목록. Node.js 브릿지는 이미 완전 제거됨. RPC 메서드는 parity test로 관리되어 대부분 포팅 완료. **주요 격차는 HTTP 레이어**에 집중.
+Go 게이트웨이 마이그레이션 **사실상 완료** (2026-03-26 평가). Node.js 브릿지 완전 제거. RPC 130+ 메서드 parity test 통과. HTTP 레이어 포함 P0~P3 전항목 구현됨. 남은 격차는 ML 추론 활성화 정도.
 
-### P0 (Critical)
+### P0 (Critical) — 구현 완료
 
-- [ ] **Hooks HTTP 엔드포인트** — 외부 webhook 수신 (`POST /hooks/*`)
-  - TS 참조: `src/gateway/http/server-http.ts`, `src/gateway/hooks.ts`, `src/gateway/hooks-mapping.ts`
-  - 기능: Bearer 토큰 인증, rate limiting, idempotency, wake/agent 디스패치, 매핑 시스템, 템플릿, transform 함수
-  - Go 현재: `gateway-go/internal/hooks/`는 내부 이벤트 핸들러만 (HTTP webhook 수신 없음)
-  - 영향: GitHub, Gmail, CI/CD, Slack 등 외부 서비스에서 에이전트 트리거 불가
+- [x] **Hooks HTTP 엔드포인트** — 외부 webhook 수신 (`POST /hooks/*`)
+  - Go 구현: `gateway-go/internal/server/hooks_http.go` (34KB) + 테스트 (24KB)
+  - Bearer 토큰 인증, rate limiting, idempotency, wake/agent 디스패치, 매핑 시스템, 템플릿, transform 함수
 
-### P1 (High)
+### P1 (High) — 구현 완료
 
-- [ ] **OpenAI Chat Completions HTTP API** — `POST /v1/chat/completions`
-  - TS 참조: `src/gateway/openai-http.ts`
-  - 기능: OpenAI-호환 JSON/SSE 스트리밍, 이미지 지원 (max 8개/20MB), 에이전트 통합
-  - Go 현재: outbound 클라이언트만 (`gateway-go/internal/llm/openai.go`), 서버 측 없음
-  - 영향: LangChain, OpenAI SDK 래퍼 등 외부 클라이언트 연동 불가
+- [x] **OpenAI Chat Completions HTTP API** — `POST /v1/chat/completions`
+  - Go 구현: `gateway-go/internal/server/openai_http.go` (482줄)
+  - OpenAI-호환 JSON/SSE 스트리밍, 이미지 지원, 에이전트 통합
 
-- [ ] **Open Responses HTTP API** — `POST /v1/responses`
-  - TS 참조: `src/gateway/openresponses-http.ts`
-  - 기능: Open Responses 프로토콜, 클라이언트 제공 도구, SSE 스트리밍 (10종 이벤트)
-  - Go 현재: 미구현
+- [x] **Open Responses HTTP API** — `POST /v1/responses`
+  - Go 구현: `gateway-go/internal/server/responses_http.go` (446줄)
+  - Open Responses 프로토콜, 클라이언트 제공 도구, SSE 스트리밍
 
 - [x] ~~**Control UI (SPA)** — 불필요 (단일 유저 Telegram 전용 배포이므로 제거)~~
 
@@ -860,3 +855,9 @@ Go 게이트웨이 마이그레이션 완료 후 누락된 기능 목록. Node.j
 - [x] **Credential planner / Probe auth** — 단일 유저 배포용 간소화
   - Go 구현: `gateway-go/internal/auth/credentials.go`
   - env → config 순서 해석, secret ref 거부, probe 역할 지원
+
+### 남은 격차 (미미)
+
+- [ ] **ML 크레이트 활성화** — `core-rs/ml/` (v0.1.0)이 feature-gated 상태. DGX Spark에서 CUDA 빌드 + GGUF 모델 로드 시 추가 작업 필요.
+  - 임베딩: Qwen3-Embedding-8B, 리랭커: Qwen3-Reranker-4B (llama-cpp-2 기반)
+  - `ml` 피처 없으면 stub 모드 (BackendUnavailable 반환)
