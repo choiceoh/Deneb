@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCollectMemoryFiles(t *testing.T) {
@@ -105,6 +106,45 @@ func TestToolMemorySearch(t *testing.T) {
 			t.Errorf("expected no-memory-files message, got: %s", result)
 		}
 	})
+}
+
+func TestReadMemoryFile_CacheAndInvalidation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.md")
+	os.WriteFile(path, []byte("v1"), 0o644)
+
+	// First read: cache miss.
+	content, err := readMemoryFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if content != "v1" {
+		t.Fatalf("got %q, want %q", content, "v1")
+	}
+
+	// Second read: cache hit (same mtime).
+	content, err = readMemoryFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if content != "v1" {
+		t.Fatalf("got %q, want %q", content, "v1")
+	}
+
+	// Modify file — update mtime to force cache invalidation.
+	// Use Chtimes to ensure mtime actually changes (some fast filesystems
+	// may not update mtime if write happens within the same second).
+	newTime := time.Now().Add(2 * time.Second)
+	os.WriteFile(path, []byte("v2"), 0o644)
+	os.Chtimes(path, newTime, newTime)
+
+	content, err = readMemoryFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if content != "v2" {
+		t.Fatalf("got %q after modification, want %q", content, "v2")
+	}
 }
 
 func TestToolMemoryGet(t *testing.T) {

@@ -21,15 +21,21 @@ import (
 )
 
 // mdIRCache caches MarkdownToIR results by input hash to avoid redundant
-// FFI calls for identical markdown content. Uses a bounded LRU-like map
-// with simple eviction when capacity is reached.
-var mdIRCache = &markdownCache{entries: make(map[uint64]json.RawMessage)}
+// FFI calls for identical markdown content. Uses a bounded LRU cache
+// with single-entry eviction based on a monotonic access counter.
+var mdIRCache = &markdownCache{entries: make(map[uint64]*mdCacheEntry)}
 
 const mdCacheMaxEntries = 128
 
+type mdCacheEntry struct {
+	value      json.RawMessage
+	lastAccess int64
+}
+
 type markdownCache struct {
-	mu      sync.Mutex
-	entries map[uint64]json.RawMessage
+	mu        sync.Mutex
+	entries   map[uint64]*mdCacheEntry
+	accessCtr int64 // monotonic counter, cheaper than wall clock
 }
 
 // fnv1a64 is a fast non-cryptographic hash for cache keys.
@@ -47,25 +53,32 @@ func fnv1a64(s string) uint64 {
 func (c *markdownCache) get(key uint64) (json.RawMessage, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	v, ok := c.entries[key]
-	return v, ok
+	entry, ok := c.entries[key]
+	if !ok {
+		return nil, false
+	}
+	c.accessCtr++
+	entry.lastAccess = c.accessCtr
+	return entry.value, true
 }
 
 func (c *markdownCache) put(key uint64, val json.RawMessage) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.accessCtr++
 	if len(c.entries) >= mdCacheMaxEntries {
-		// Simple eviction: clear half the entries.
-		i := 0
-		for k := range c.entries {
-			if i >= mdCacheMaxEntries/2 {
-				break
+		// LRU eviction: remove the single least recently accessed entry.
+		var lruKey uint64
+		var lruAccess int64 = c.accessCtr + 1
+		for k, e := range c.entries {
+			if e.lastAccess < lruAccess {
+				lruAccess = e.lastAccess
+				lruKey = k
 			}
-			delete(c.entries, k)
-			i++
 		}
+		delete(c.entries, lruKey)
 	}
-	c.entries[key] = val
+	c.entries[key] = &mdCacheEntry{value: val, lastAccess: c.accessCtr}
 }
 
 // MarkdownToIR parses markdown text into an intermediate representation.
