@@ -20,7 +20,7 @@ updates:
           - patch
     open-pull-requests-limit: 5
 
-  # Go modules
+  # Go modules — gateway-go (used by Go gateway)
   - package-ecosystem: gomod
     directory: /gateway-go
     schedule:
@@ -36,15 +36,23 @@ updates:
           - patch
     open-pull-requests-limit: 5
 
-  # Rust crates
+  # Rust crates — core-rs (FFI engine, built with --no-default-features)
   - package-ecosystem: cargo
     directory: /core-rs
     schedule:
       interval: weekly
     cooldown:
       default-days: 3
+    ignore:
+      # napi is Node.js-only feature, excluded in Go builds
+      - dependency-name: "napi"
+        versions: ["*"]
+      - dependency-name: "napi-derive"
+        versions: ["*"]
+      - dependency-name: "napi-build"
+        versions: ["*"]
     groups:
-      rust-deps:
+      rust-core:
         patterns:
           - "*"
         update-types:
@@ -52,15 +60,18 @@ updates:
           - patch
     open-pull-requests-limit: 5
 
-  # Docker base images
-  - package-ecosystem: docker
-    directory: /
+  # Rust crates — cli-rs (standalone CLI tool)
+  - package-ecosystem: cargo
+    directory: /cli-rs
     schedule:
       interval: weekly
     cooldown:
-      default-days: 2
+      default-days: 3
     groups:
-      docker-images:
+      rust-cli:
         patterns:
           - "*"
-    open-pull-requests-limit: 5
+        update-types:
+          - minor
+          - patch
+    open-pull-requests-limit: 3
