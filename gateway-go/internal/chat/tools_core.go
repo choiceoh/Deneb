@@ -9,14 +9,33 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
 )
+
+// CoreToolDeps holds all dependencies for core agent tools.
+// Fields may be nil — each tool gracefully degrades when its dependency is unavailable.
+type CoreToolDeps struct {
+	ProcessMgr   *process.Manager
+	WorkspaceDir string
+	CronSched    *cron.Scheduler
+	Sessions     *session.Manager
+	LLMClient    *llm.Client
+	Transcript   TranscriptStore
+
+	// SessionSendFn is a callback that sends a message to a target session,
+	// triggering an agent run. Set after Handler creation to avoid circular deps.
+	SessionSendFn func(sessionKey, message string) error
+}
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
 // Tools that require external subsystems (e.g., process manager) are wired here.
-// Tools not yet implemented return a descriptive "not available" message.
-func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspaceDir string, cronSched *cron.Scheduler) {
+func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
+	procMgr := deps.ProcessMgr
+	workspaceDir := deps.WorkspaceDir
+	cronSched := deps.CronSched
 	// -- File system tools (implemented in tools_fs.go) --
 	registry.RegisterTool(ToolDef{
 		Name:        "read",
@@ -120,7 +139,7 @@ func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspa
 		Name:        "cron",
 		Description: "Manage cron jobs and wake events (reminders, periodic tasks)",
 		InputSchema: cronToolSchema(),
-		Fn:          toolCron(cronSched),
+		Fn:          toolCron(cronSched, deps),
 	})
 
 	// -- Gateway tool --
@@ -128,7 +147,7 @@ func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspa
 		Name:        "gateway",
 		Description: "Gateway control (restart, config, update)",
 		InputSchema: gatewayToolSchema(),
-		Fn:          toolGateway(),
+		Fn:          toolGateway(workspaceDir),
 	})
 
 	// -- Session tools --
@@ -136,25 +155,25 @@ func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspa
 		Name:        "sessions_list",
 		Description: "List other sessions with optional filters",
 		InputSchema: sessionsListToolSchema(),
-		Fn:          toolSessionsList(),
+		Fn:          toolSessionsList(deps.Sessions),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "sessions_history",
 		Description: "Fetch history for another session",
 		InputSchema: sessionsHistoryToolSchema(),
-		Fn:          toolSessionsHistory(),
+		Fn:          toolSessionsHistory(deps.Transcript),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "sessions_send",
 		Description: "Send a message to another session",
 		InputSchema: sessionsSendToolSchema(),
-		Fn:          toolSessionsSend(),
+		Fn:          toolSessionsSend(deps),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "sessions_spawn",
 		Description: "Spawn an isolated sub-agent session",
 		InputSchema: sessionsSpawnToolSchema(),
-		Fn:          toolSessionsSpawn(),
+		Fn:          toolSessionsSpawn(deps),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "subagents",
@@ -166,7 +185,7 @@ func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspa
 		Name:        "session_status",
 		Description: "Show session status and usage (📊 session_status)",
 		InputSchema: sessionStatusToolSchema(),
-		Fn:          toolSessionStatus(),
+		Fn:          toolSessionStatus(deps.Sessions),
 	})
 
 	// -- Image tool --
@@ -174,7 +193,7 @@ func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspa
 		Name:        "image",
 		Description: "Analyze images with a vision model",
 		InputSchema: imageToolSchema(),
-		Fn:          toolImage(),
+		Fn:          toolImage(deps.LLMClient),
 	})
 
 	// -- Nodes tool --

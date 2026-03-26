@@ -113,11 +113,35 @@ func toolMessage() ToolFunc {
 			return "Message sent successfully.", nil
 
 		case "react":
-			// Reaction support requires channel-specific implementation.
-			return "Reaction support is not yet available in the Go gateway.", nil
+			if p.Emoji == "" {
+				return "", fmt.Errorf("emoji is required for react action")
+			}
+			if p.MessageID == "" {
+				return "", fmt.Errorf("messageId is required for react action")
+			}
+
+			replyFn := ReplyFuncFromContext(ctx)
+			if replyFn == nil {
+				return "React: no reply function available (channel not connected).", nil
+			}
+
+			delivery := DeliveryFromContext(ctx)
+			if delivery == nil {
+				delivery = &DeliveryContext{}
+			}
+
+			// Send reaction as a special marker text that the channel adapter interprets.
+			reactPayload := fmt.Sprintf("__react:%s:%s", p.MessageID, p.Emoji)
+			reactCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+
+			if err := replyFn(reactCtx, delivery, reactPayload); err != nil {
+				return fmt.Sprintf("Failed to send reaction: %s", err.Error()), nil
+			}
+			return fmt.Sprintf("Reaction %s sent to message %s.", p.Emoji, p.MessageID), nil
 
 		default:
-			return fmt.Sprintf("Unknown message action: %q. Supported: send, reply.", p.Action), nil
+			return fmt.Sprintf("Unknown message action: %q. Supported: send, reply, react.", p.Action), nil
 		}
 	}
 }
