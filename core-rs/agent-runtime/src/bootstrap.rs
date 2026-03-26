@@ -44,8 +44,6 @@ impl BootstrapCache {
 
     /// Conditional clear on session rollover: clears if the session key changed
     /// or if a previous session ID was provided (indicating rollover).
-    /// Conditional clear on session rollover: clears if the session key changed
-    /// or if a previous session ID was provided (indicating rollover).
     /// Empty strings are treated as absent (matching TS truthy check behavior).
     pub fn clear_on_session_rollover(
         &mut self,

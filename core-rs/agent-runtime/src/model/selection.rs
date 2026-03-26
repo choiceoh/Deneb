@@ -589,10 +589,16 @@ pub fn resolve_configured_model_ref(
     }
 
     // Before falling back to hardcoded default, check configured providers.
+    // TS iterates with Object.entries() which preserves insertion order.
+    // HashMap has no guaranteed order, so sort keys alphabetically for
+    // deterministic fallback selection across TS/Rust boundaries.
     if let Some(providers) = configured_providers {
         let has_default = providers.contains_key(default_provider);
         if !has_default {
-            for (provider_name, provider_cfg) in providers {
+            let mut sorted_keys: Vec<&String> = providers.keys().collect();
+            sorted_keys.sort();
+            for provider_name in sorted_keys {
+                let provider_cfg = &providers[provider_name];
                 if let Ok(entry) =
                     serde_json::from_value::<ProviderConfigEntry>(provider_cfg.clone())
                 {
@@ -1351,5 +1357,286 @@ mod tests {
         }];
         assert!(resolve_reasoning_default(&catalog, "openai", "o3"));
         assert!(!resolve_reasoning_default(&catalog, "openai", "gpt-4o"));
+    }
+
+    #[test]
+    fn to_agent_model_list_like_string() {
+        let val = serde_json::json!("claude-opus-4-6");
+        let result = to_agent_model_list_like(Some(&val)).unwrap();
+        assert_eq!(result["primary"], "claude-opus-4-6");
+    }
+
+    #[test]
+    fn to_agent_model_list_like_object() {
+        let val = serde_json::json!({"primary": "m1", "fallbacks": ["m2"]});
+        let result = to_agent_model_list_like(Some(&val)).unwrap();
+        assert_eq!(result["primary"], "m1");
+    }
+
+    #[test]
+    fn to_agent_model_list_like_none() {
+        assert!(to_agent_model_list_like(None).is_none());
+        assert!(to_agent_model_list_like(Some(&serde_json::json!(""))).is_none());
+    }
+
+    #[test]
+    fn resolve_agent_model_primary_value_basic() {
+        assert_eq!(
+            resolve_agent_model_primary_value(Some(&serde_json::json!("claude-opus-4-6"))),
+            Some("claude-opus-4-6".to_string())
+        );
+        assert_eq!(
+            resolve_agent_model_primary_value(Some(&serde_json::json!({"primary": "m1"}))),
+            Some("m1".to_string())
+        );
+        assert_eq!(resolve_agent_model_primary_value(None), None);
+    }
+
+    #[test]
+    fn resolve_configured_model_ref_basic() {
+        let models = std::collections::HashMap::new();
+        let result = resolve_configured_model_ref(
+            Some(&serde_json::json!("claude-sonnet-4-6")),
+            &models,
+            None,
+            DEFAULT_PROVIDER,
+            "claude-opus-4-6",
+        );
+        // bare model name -> anthropic default
+        assert_eq!(result.provider, "anthropic");
+        assert_eq!(result.model, "claude-sonnet-4-6");
+    }
+
+    #[test]
+    fn resolve_configured_model_ref_with_provider() {
+        let models = std::collections::HashMap::new();
+        let result = resolve_configured_model_ref(
+            Some(&serde_json::json!("openai/gpt-4o")),
+            &models,
+            None,
+            DEFAULT_PROVIDER,
+            "claude-opus-4-6",
+        );
+        assert_eq!(result.provider, "openai");
+        assert_eq!(result.model, "gpt-4o");
+    }
+
+    #[test]
+    fn resolve_configured_model_ref_fallback_provider() {
+        let models = std::collections::HashMap::new();
+        let mut providers = std::collections::HashMap::new();
+        providers.insert(
+            "openai".to_string(),
+            serde_json::json!({"models": [{"id": "gpt-4o"}]}),
+        );
+        let result = resolve_configured_model_ref(
+            None,
+            &models,
+            Some(&providers),
+            "anthropic", // not in providers
+            "claude-opus-4-6",
+        );
+        assert_eq!(result.provider, "openai");
+        assert_eq!(result.model, "gpt-4o");
+    }
+
+    #[test]
+    fn resolve_configured_model_ref_default() {
+        let models = std::collections::HashMap::new();
+        let result = resolve_configured_model_ref(
+            None,
+            &models,
+            None,
+            DEFAULT_PROVIDER,
+            "claude-opus-4-6",
+        );
+        assert_eq!(result.provider, "anthropic");
+        assert_eq!(result.model, "claude-opus-4-6");
+    }
+
+    #[test]
+    fn resolve_default_model_for_agent_basic() {
+        let agents = vec![serde_json::json!({"id": "alpha", "model": "openai/gpt-4o"})];
+        let models = std::collections::HashMap::new();
+        let result = resolve_default_model_for_agent(
+            &agents,
+            None,
+            &models,
+            None,
+            Some("alpha"),
+        );
+        assert_eq!(result.provider, "openai");
+        assert_eq!(result.model, "gpt-4o");
+    }
+
+    #[test]
+    fn resolve_default_model_for_agent_no_override() {
+        let agents: Vec<serde_json::Value> = vec![];
+        let models = std::collections::HashMap::new();
+        let result = resolve_default_model_for_agent(
+            &agents,
+            Some(&serde_json::json!("claude-sonnet-4-6")),
+            &models,
+            None,
+            None,
+        );
+        assert_eq!(result.provider, "anthropic");
+        assert_eq!(result.model, "claude-sonnet-4-6");
+    }
+
+    #[test]
+    fn resolve_thinking_default_per_model_config() {
+        let mut models = std::collections::HashMap::new();
+        models.insert(
+            "anthropic/claude-opus-4-6".to_string(),
+            serde_json::json!({"params": {"thinking": "high"}}),
+        );
+        let result = resolve_thinking_default(
+            "anthropic",
+            "claude-opus-4-6",
+            &models,
+            None,
+            None,
+        );
+        assert_eq!(result, ThinkLevel::High);
+    }
+
+    #[test]
+    fn resolve_thinking_default_global_override() {
+        let models = std::collections::HashMap::new();
+        let result = resolve_thinking_default(
+            "openai",
+            "gpt-4o",
+            &models,
+            Some("medium"),
+            None,
+        );
+        assert_eq!(result, ThinkLevel::Medium);
+    }
+
+    #[test]
+    fn resolve_hooks_gmail_model_basic() {
+        let models = std::collections::HashMap::new();
+        let result = resolve_hooks_gmail_model(Some("openai/gpt-4o"), &models, DEFAULT_PROVIDER);
+        assert!(result.is_some());
+        let model_ref = result.unwrap();
+        assert_eq!(model_ref.provider, "openai");
+        assert_eq!(model_ref.model, "gpt-4o");
+    }
+
+    #[test]
+    fn resolve_hooks_gmail_model_none() {
+        let models = std::collections::HashMap::new();
+        assert!(resolve_hooks_gmail_model(None, &models, DEFAULT_PROVIDER).is_none());
+        assert!(resolve_hooks_gmail_model(Some(""), &models, DEFAULT_PROVIDER).is_none());
+    }
+
+    #[test]
+    fn build_allowed_model_set_allow_any() {
+        let agents: Vec<serde_json::Value> = vec![];
+        let catalog = vec![ModelCatalogEntry {
+            provider: "anthropic".to_string(),
+            id: "claude-opus-4-6".to_string(),
+            ..Default::default()
+        }];
+        let result = build_allowed_model_set(
+            &agents, &[], &catalog, DEFAULT_PROVIDER, None, None, None,
+        );
+        assert!(result.allow_any);
+        assert_eq!(result.allowed_catalog.len(), 1);
+    }
+
+    #[test]
+    fn build_allowed_model_set_restricted() {
+        let agents: Vec<serde_json::Value> = vec![];
+        let catalog = vec![
+            ModelCatalogEntry {
+                provider: "anthropic".to_string(),
+                id: "claude-opus-4-6".to_string(),
+                ..Default::default()
+            },
+            ModelCatalogEntry {
+                provider: "openai".to_string(),
+                id: "gpt-4o".to_string(),
+                ..Default::default()
+            },
+        ];
+        let allowlist = vec!["anthropic/claude-opus-4-6".to_string()];
+        let result = build_allowed_model_set(
+            &agents, &allowlist, &catalog, DEFAULT_PROVIDER, None, None, None,
+        );
+        assert!(!result.allow_any);
+        assert!(result.allowed_keys.contains("anthropic/claude-opus-4-6"));
+        assert!(!result.allowed_keys.contains("openai/gpt-4o"));
+    }
+
+    #[test]
+    fn resolve_allowed_model_ref_valid() {
+        let agents: Vec<serde_json::Value> = vec![];
+        let models = std::collections::HashMap::new();
+        let result = resolve_allowed_model_ref(&ResolveAllowedModelRefParams {
+            raw: "anthropic/claude-opus-4-6",
+            agents_list: &agents,
+            raw_allowlist: &[],
+            catalog: &[],
+            configured_models: &models,
+            default_provider: DEFAULT_PROVIDER,
+            default_model: None,
+            agents_defaults_model: None,
+        });
+        assert!(result.is_ok());
+        let (model_ref, key) = result.unwrap();
+        assert_eq!(model_ref.provider, "anthropic");
+        assert_eq!(key, "anthropic/claude-opus-4-6");
+    }
+
+    #[test]
+    fn resolve_allowed_model_ref_empty() {
+        let agents: Vec<serde_json::Value> = vec![];
+        let models = std::collections::HashMap::new();
+        let result = resolve_allowed_model_ref(&ResolveAllowedModelRefParams {
+            raw: "",
+            agents_list: &agents,
+            raw_allowlist: &[],
+            catalog: &[],
+            configured_models: &models,
+            default_provider: DEFAULT_PROVIDER,
+            default_model: None,
+            agents_defaults_model: None,
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn resolve_subagent_configured_model_selection_basic() {
+        let agents = vec![serde_json::json!({
+            "id": "alpha",
+            "model": "claude-sonnet-4-6",
+            "subagents": {"model": "claude-haiku-4-5"}
+        })];
+        let result = resolve_subagent_configured_model_selection(&agents, "alpha", None);
+        assert_eq!(result, Some("claude-haiku-4-5".to_string()));
+    }
+
+    #[test]
+    fn resolve_subagent_configured_model_selection_fallback_to_agent() {
+        let agents = vec![serde_json::json!({
+            "id": "alpha",
+            "model": "claude-sonnet-4-6"
+        })];
+        let result = resolve_subagent_configured_model_selection(&agents, "alpha", None);
+        assert_eq!(result, Some("claude-sonnet-4-6".to_string()));
+    }
+
+    #[test]
+    fn resolve_subagent_spawn_model_selection_override() {
+        let agents: Vec<serde_json::Value> = vec![];
+        let models = std::collections::HashMap::new();
+        let result = resolve_subagent_spawn_model_selection(
+            &agents, None, &models, None,
+            "alpha", None,
+            Some(&serde_json::json!("openai/gpt-4o")),
+        );
+        assert_eq!(result, "openai/gpt-4o");
     }
 }
