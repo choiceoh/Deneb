@@ -66,6 +66,14 @@ func TestSmokeWebSocketRoundTrip(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "done")
 
+	// Read connect.challenge event first.
+	challengeCtx, challengeCancel := context.WithTimeout(ctx, 2*time.Second)
+	_, _, err = conn.Read(challengeCtx)
+	challengeCancel()
+	if err != nil {
+		t.Fatalf("read challenge: %v", err)
+	}
+
 	// Handshake.
 	connectReq, _ := protocol.NewRequestFrame("smoke-hs", "connect", protocol.ConnectParams{
 		MinProtocol: 1, MaxProtocol: 5,
