@@ -56,9 +56,9 @@ func TestBuiltinMethodsRegistered(t *testing.T) {
 		"context.assembly.new", "context.assembly.start", "context.assembly.step",
 		"context.expand.new", "context.expand.start", "context.expand.step",
 		"context.engine.drop",
-		// Vega FFI (Phase 0 scaffolding).
+		// Vega FFI.
 		"vega.ffi.execute", "vega.ffi.search",
-		// ML FFI (Phase 0 scaffolding).
+		// ML FFI.
 		"ml.embed", "ml.rerank",
 		// Tools catalog (static core).
 		"tools.catalog",

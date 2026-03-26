@@ -98,11 +98,11 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 	d.Register("context.expand.step", contextExpandStep())
 	d.Register("context.engine.drop", contextEngineDrop())
 
-	// Vega FFI methods (Rust Phase 0 scaffolding).
+	// Vega FFI methods (requires "vega" feature in Rust core).
 	d.Register("vega.ffi.execute", vegaFFIExecute())
 	d.Register("vega.ffi.search", vegaFFISearch())
 
-	// ML methods (Rust Phase 0 scaffolding).
+	// ML methods (requires "ml" feature in Rust core).
 	d.Register("ml.embed", mlEmbed())
 	d.Register("ml.rerank", mlRerank())
 

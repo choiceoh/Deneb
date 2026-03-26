@@ -9,7 +9,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// ML RPC methods (Rust FFI — Phase 0 scaffolding)
+// ML RPC methods (Rust FFI — requires "ml" feature in deneb-core)
 // ---------------------------------------------------------------------------
 
 func mlEmbed() HandlerFunc {

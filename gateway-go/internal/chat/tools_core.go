@@ -69,7 +69,7 @@ func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspa
 		Fn:          toolProcess(procMgr),
 	})
 
-	// -- Web tools (stub) --
+	// -- Web tools --
 	registry.RegisterTool(ToolDef{
 		Name:        "web_fetch",
 		Description: "Fetch and extract readable content from a URL",

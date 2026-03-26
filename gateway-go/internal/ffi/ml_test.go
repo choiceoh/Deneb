@@ -17,7 +17,7 @@ func TestMLEmbed_Stub(t *testing.T) {
 	if err := json.Unmarshal(result, &parsed); err != nil {
 		t.Fatalf("result is not valid JSON: %v", err)
 	}
-	// Accept either stub "embeddings" key (no_ffi/Phase 0) or "error" key (ml feature disabled in Rust FFI).
+	// Accept either "embeddings" key (no_ffi fallback or ml feature disabled) or "error" key.
 	_, hasEmbeddings := parsed["embeddings"]
 	_, hasError := parsed["error"]
 	if !hasEmbeddings && !hasError {
@@ -38,7 +38,7 @@ func TestMLRerank_Stub(t *testing.T) {
 	if err := json.Unmarshal(result, &parsed); err != nil {
 		t.Fatalf("result is not valid JSON: %v", err)
 	}
-	// Accept either stub "ranked" key (no_ffi/Phase 0) or "error" key (ml feature disabled in Rust FFI).
+	// Accept either "ranked" key (no_ffi fallback or ml feature disabled) or "error" key.
 	_, hasRanked := parsed["ranked"]
 	_, hasError := parsed["error"]
 	if !hasRanked && !hasError {
