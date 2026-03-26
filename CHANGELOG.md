@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.11.2](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.1...deneb-v3.11.2) (2026-03-26)
+
+
+### Bug Fixes
+
+* handle agents.defaults.model as json.RawMessage (string or object) ([#339](https://github.com/choiceoh/Deneb/issues/339)) ([ad11af9](https://github.com/choiceoh/Deneb/commit/ad11af9fcd58abe4f175034020034cc0b90d3a91))
+
 ## [3.11.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.0...deneb-v3.11.1) (2026-03-26)
 
 
