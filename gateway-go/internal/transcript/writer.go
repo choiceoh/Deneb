@@ -26,12 +26,17 @@ type SessionHeader struct {
 	Cwd       string `json:"cwd,omitempty"`
 }
 
+// AppendListener is called when a message is appended to a session transcript.
+type AppendListener func(sessionKey string, msg json.RawMessage)
+
 // Writer manages session transcript files.
 type Writer struct {
-	mu      sync.Mutex
-	baseDir string // e.g. ~/.deneb/agents/<agentId>/sessions/
-	logger  *slog.Logger
-	known   map[string]bool // tracks which sessions have been initialized
+	mu        sync.Mutex
+	baseDir   string // e.g. ~/.deneb/agents/<agentId>/sessions/
+	logger    *slog.Logger
+	known     map[string]bool // tracks which sessions have been initialized
+	listeners []AppendListener
+	listMu    sync.RWMutex
 }
 
 // NewWriter creates a new transcript writer.
@@ -146,6 +151,9 @@ func (w *Writer) AppendMessage(sessionKey string, msg json.RawMessage) error {
 		return fmt.Errorf("transcript: write: %w", err)
 	}
 
+	// Notify listeners of the new message.
+	w.notifyListeners(sessionKey, msg)
+
 	return nil
 }
 
@@ -234,4 +242,80 @@ func (w *Writer) AppendStructured(sessionKey string, v any) error {
 		return fmt.Errorf("transcript: marshal: %w", err)
 	}
 	return w.AppendMessage(sessionKey, data)
+}
+
+// OnAppend registers a listener that is called after each successful message append.
+// Returns an unsubscribe function.
+func (w *Writer) OnAppend(fn AppendListener) func() {
+	w.listMu.Lock()
+	w.listeners = append(w.listeners, fn)
+	idx := len(w.listeners) - 1
+	w.listMu.Unlock()
+
+	return func() {
+		w.listMu.Lock()
+		defer w.listMu.Unlock()
+		if idx < len(w.listeners) {
+			// Set to nil instead of removing to preserve indices.
+			w.listeners[idx] = nil
+		}
+	}
+}
+
+// notifyListeners calls all registered append listeners.
+func (w *Writer) notifyListeners(sessionKey string, msg json.RawMessage) {
+	w.listMu.RLock()
+	defer w.listMu.RUnlock()
+	for _, fn := range w.listeners {
+		if fn != nil {
+			fn(sessionKey, msg)
+		}
+	}
+}
+
+// ReadMessages reads all non-header messages from a session transcript.
+// Returns the full raw JSON messages (unlike ReadPreview which truncates).
+func (w *Writer) ReadMessages(sessionKey string) ([]json.RawMessage, error) {
+	path, err := w.SessionPath(sessionKey)
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []json.RawMessage{}, nil
+		}
+		return nil, fmt.Errorf("transcript: open: %w", err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 512*1024), 10*1024*1024) // 10 MB max line
+	first := true
+	var messages []json.RawMessage
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		if first {
+			first = false
+			continue // Skip header.
+		}
+		// Make a copy since scanner reuses the buffer.
+		msg := make(json.RawMessage, len(line))
+		copy(msg, line)
+		messages = append(messages, msg)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("transcript: scan: %w", err)
+	}
+
+	if messages == nil {
+		return []json.RawMessage{}, nil
+	}
+	return messages, nil
 }
