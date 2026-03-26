@@ -248,43 +248,12 @@ func fetchYouTube(ctx context.Context, url string) (string, error) {
 	return media.FormatYouTubeResult(result), nil
 }
 
-// --- Fetch with retry ---
+// --- Fetch with stealth ---
 
-// fetchWithRetry fetches a URL with retry on transient errors (5xx, timeouts).
+// fetchWithRetry fetches a URL using browser-like stealth profiles.
+// Delegates to stealthFetch which handles bot-block detection and escalation.
 func fetchWithRetry(ctx context.Context, url string, maxBytes int64) (*media.FetchResult, error) {
-	backoff := [3]time.Duration{0, 500 * time.Millisecond, 1500 * time.Millisecond}
-
-	var lastErr error
-	for attempt := 0; attempt < len(backoff); attempt++ {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(backoff[attempt]):
-			}
-		}
-
-		fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		result, err := media.Fetch(fetchCtx, media.FetchOptions{
-			URL:      url,
-			MaxBytes: maxBytes,
-			Headers: map[string]string{
-				"User-Agent": "Deneb-Gateway/1.0",
-				"Accept":     "text/html,text/plain,application/json,*/*",
-			},
-		})
-		cancel()
-
-		if err == nil {
-			return result, nil
-		}
-		lastErr = err
-
-		if !isRetryableError(err) {
-			return nil, err
-		}
-	}
-	return nil, lastErr
+	return stealthFetch(ctx, url, maxBytes)
 }
 
 func isRetryableError(err error) bool {
