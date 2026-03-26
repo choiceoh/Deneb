@@ -182,7 +182,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	if agentMessage != "" && media.IsYouTubeURL(agentMessage) {
 		ytURLs := media.ExtractYouTubeURLs(agentMessage)
 		for _, ytURL := range ytURLs {
-			ytCtx, ytCancel := context.WithTimeout(context.Background(), 90*time.Second)
+			ytCtx, ytCancel := context.WithTimeout(context.Background(), 15*time.Second)
 			ytResult, err := media.ExtractYouTubeTranscript(ytCtx, ytURL)
 			ytCancel()
 			if err != nil {
@@ -193,9 +193,11 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		}
 	}
 
-	// Enrich message with fetched link content.
+	// Enrich message with fetched link content (bounded to avoid blocking inbound).
+	linkCtx, linkCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer linkCancel()
 	if linkSummary := EnrichMessageWithLinks(
-		context.Background(), agentMessage, defaultLinkFetcher, p.logger,
+		linkCtx, agentMessage, defaultLinkFetcher, p.logger,
 	); linkSummary != "" {
 		agentMessage = agentMessage + "\n\n" + linkSummary
 	}
