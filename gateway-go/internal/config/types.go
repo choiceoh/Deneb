@@ -4,6 +4,8 @@
 // Go gateway to read ~/.deneb/deneb.json and resolve gateway-specific settings.
 package config
 
+import "encoding/json"
+
 // DenebConfig is the top-level configuration object read from deneb.json.
 // Only gateway-relevant sections are fully typed; other sections are preserved
 // as raw JSON for forwarding to the Node.js Plugin Host bridge.
@@ -253,9 +255,10 @@ type AgentsConfig struct {
 }
 
 // AgentsDefaultsConfig holds nested agents.defaults.* fields.
+// Model accepts string or {primary, fallbacks} — kept as raw JSON to avoid parse errors.
 type AgentsDefaultsConfig struct {
-	Model     string `json:"model,omitempty"`
-	Workspace string `json:"workspace,omitempty"`
+	Model     json.RawMessage `json:"model,omitempty"`
+	Workspace string          `json:"workspace,omitempty"`
 }
 
 // AgentEntryConfig represents a single agent in agents.list[].
