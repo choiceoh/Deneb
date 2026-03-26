@@ -5,35 +5,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
-// Pilot tool: the main AI agent's fast local helper with integrated data sources.
+// Pilot tool: the AI agent's fast local helper that can orchestrate other tools.
 //
-// Why pilot instead of sessions_spawn?
-//   - 1 call does everything: gather data + process it (vs read→pilot or exec→pilot = 2+ calls)
-//   - Synchronous: instant inline result
-//   - Zero overhead: no session, transcript, lifecycle
+// The agent specifies a task and data sources. Pilot:
+//   1. Executes source tool calls via the ToolRegistry (parallel)
+//   2. Feeds all gathered data + task to the local sglang model
+//   3. Returns the result synchronously
 //
-// Data sources (use one or combine):
-//   - content: direct text
-//   - file/files: read files automatically
-//   - exec: run a command, process the output
-//   - grep+path: search codebase, process matches
-//   - url: fetch web content
-//   - items: batch multiple items
+// This turns multi-call workflows into a single pilot call:
+//   Before: read("main.go") → [wait] → pilot(task, content=result)  (2 turns)
+//   After:  pilot(task, sources=[{tool:"read", input:{file_path:"main.go"}}])  (1 turn)
+//
+// Shortcuts (file, exec, grep, url) expand to sources internally for convenience.
 
 const (
-	pilotTimeout   = 2 * time.Minute
-	pilotMaxInput  = 24000 // chars — auto-truncate beyond this
-	pilotMaxTokens = 4096
-	pilotExecTimeout = 15 * time.Second
+	pilotTimeout     = 2 * time.Minute
+	pilotMaxInput    = 24000 // chars — auto-truncate beyond this
+	pilotMaxTokens   = 4096
+	pilotMaxSources  = 10
 )
 
 const pilotSystemPrompt = `You are Pilot, a fast local AI assistant.
@@ -42,7 +38,7 @@ Rules:
 - Match the user's language (Korean if Korean input, English if English).
 - If output_format is "json", return valid JSON only.
 - If output_format is "list", return a numbered list.
-- If processing multiple items or files, handle each and label results clearly.
+- If processing multiple sources, reference each by its label.
 - Be concise. Substance over length.`
 
 func pilotToolSchema() map[string]any {
@@ -51,41 +47,64 @@ func pilotToolSchema() map[string]any {
 		"properties": map[string]any{
 			"task": map[string]any{
 				"type":        "string",
-				"description": "What to do — free-form (e.g., '버그 찾아줘', 'summarize', '한국어로 번역')",
+				"description": "What to do — free-form instruction",
+			},
+			"sources": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"tool": map[string]any{
+							"type":        "string",
+							"description": "Tool name from the registry (read, exec, grep, find, web_fetch, ls, http, etc.)",
+						},
+						"input": map[string]any{
+							"type":        "object",
+							"description": "Tool input parameters (same schema as calling the tool directly)",
+						},
+						"label": map[string]any{
+							"type":        "string",
+							"description": "Label for this source in the analysis (auto-generated if omitted)",
+						},
+					},
+					"required": []string{"tool", "input"},
+				},
+				"description": "Tool calls to execute before analysis. Pilot runs these, collects results, then processes everything with the local AI",
 			},
 			"content": map[string]any{
 				"type":        "string",
-				"description": "Direct text/code input",
-			},
-			"file": map[string]any{
-				"type":        "string",
-				"description": "Read this file and process it (relative or absolute path)",
-			},
-			"files": map[string]any{
-				"type":        "array",
-				"items":       map[string]any{"type": "string"},
-				"description": "Read multiple files and process them",
-			},
-			"exec": map[string]any{
-				"type":        "string",
-				"description": "Run this shell command and process the output",
-			},
-			"grep": map[string]any{
-				"type":        "string",
-				"description": "Grep for this pattern and process the matches",
-			},
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Directory/file path for grep (defaults to workspace root)",
-			},
-			"url": map[string]any{
-				"type":        "string",
-				"description": "Fetch this URL and process the content",
+				"description": "Direct text/code input (no tool call needed)",
 			},
 			"items": map[string]any{
 				"type":        "array",
 				"items":       map[string]any{"type": "string"},
 				"description": "Multiple items to process in batch",
+			},
+			// Shortcuts — expand to sources internally.
+			"file": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: read this file (expands to sources:[{tool:'read', input:{file_path:...}}])",
+			},
+			"files": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Shortcut: read multiple files",
+			},
+			"exec": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: run this command (expands to sources:[{tool:'exec', input:{command:...}}])",
+			},
+			"grep": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: grep for this pattern (use with 'path')",
+			},
+			"path": map[string]any{
+				"type":        "string",
+				"description": "Path for grep shortcut",
+			},
+			"url": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: fetch this URL (expands to sources:[{tool:'web_fetch', input:{url:...}}])",
 			},
 			"output_format": map[string]any{
 				"type":        "string",
@@ -97,9 +116,9 @@ func pilotToolSchema() map[string]any {
 	}
 }
 
-// toolPilot creates the pilot ToolFunc. workspaceDir is needed for file/grep
-// path resolution.
-func toolPilot(workspaceDir string) ToolFunc {
+// toolPilot creates the pilot ToolFunc. It uses the ToolExecutor to run
+// source tools from the registry before feeding results to the local LLM.
+func toolPilot(tools ToolExecutor) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p pilotParams
 		if err := json.Unmarshal(input, &p); err != nil {
@@ -109,10 +128,26 @@ func toolPilot(workspaceDir string) ToolFunc {
 			return "", fmt.Errorf("task is required")
 		}
 
-		// Phase 1: Gather data from all sources.
-		gathered, err := gatherSources(ctx, p, workspaceDir)
-		if err != nil {
-			return "", fmt.Errorf("pilot gather: %w", err)
+		// Expand shortcuts into source specs.
+		sources := expandShortcuts(p)
+
+		// Merge with explicit sources.
+		sources = append(sources, p.Sources...)
+
+		// Cap source count.
+		if len(sources) > pilotMaxSources {
+			sources = sources[:pilotMaxSources]
+		}
+
+		// Phase 1: Execute all source tools in parallel.
+		gathered := executeSources(ctx, sources, tools)
+
+		// Add direct content/items.
+		if p.Content != "" {
+			gathered = append(gathered, sourceResult{"content", p.Content})
+		}
+		for i, item := range p.Items {
+			gathered = append(gathered, sourceResult{fmt.Sprintf("item[%d]", i+1), item})
 		}
 
 		// Phase 2: Build prompt and call local LLM.
@@ -128,97 +163,128 @@ func toolPilot(workspaceDir string) ToolFunc {
 
 // pilotParams is the parsed tool input.
 type pilotParams struct {
-	Task         string   `json:"task"`
-	Content      string   `json:"content"`
-	File         string   `json:"file"`
-	Files        []string `json:"files"`
-	Exec         string   `json:"exec"`
-	Grep         string   `json:"grep"`
-	Path         string   `json:"path"`
-	URL          string   `json:"url"`
-	Items        []string `json:"items"`
-	OutputFormat string   `json:"output_format"`
+	Task         string       `json:"task"`
+	Sources      []sourceSpec `json:"sources"`
+	Content      string       `json:"content"`
+	Items        []string     `json:"items"`
+	OutputFormat string       `json:"output_format"`
+
+	// Shortcuts.
+	File  string   `json:"file"`
+	Files []string `json:"files"`
+	Exec  string   `json:"exec"`
+	Grep  string   `json:"grep"`
+	Path  string   `json:"path"`
+	URL   string   `json:"url"`
 }
 
-// sourceBlock is a labeled chunk of gathered data.
-type sourceBlock struct {
+// sourceSpec is a tool call specification from the agent.
+type sourceSpec struct {
+	Tool  string          `json:"tool"`
+	Input json.RawMessage `json:"input"`
+	Label string          `json:"label"`
+}
+
+// sourceResult is a labeled chunk of gathered data.
+type sourceResult struct {
 	label   string
 	content string
 }
 
-// gatherSources collects data from all specified sources.
-func gatherSources(ctx context.Context, p pilotParams, workspaceDir string) ([]sourceBlock, error) {
-	var blocks []sourceBlock
+// expandShortcuts converts convenience params (file, exec, grep, url) into sourceSpecs.
+func expandShortcuts(p pilotParams) []sourceSpec {
+	var specs []sourceSpec
 
-	// Direct content.
-	if p.Content != "" {
-		blocks = append(blocks, sourceBlock{"input", p.Content})
-	}
-
-	// Single file.
 	if p.File != "" {
-		content, err := readFileForPilot(p.File, workspaceDir)
-		if err != nil {
-			return nil, fmt.Errorf("file %q: %w", p.File, err)
-		}
-		blocks = append(blocks, sourceBlock{p.File, content})
+		specs = append(specs, sourceSpec{
+			Tool:  "read",
+			Input: mustJSON(map[string]any{"file_path": p.File}),
+			Label: p.File,
+		})
 	}
 
-	// Multiple files.
 	for _, f := range p.Files {
-		content, err := readFileForPilot(f, workspaceDir)
-		if err != nil {
-			// Non-fatal: include error message as content.
-			blocks = append(blocks, sourceBlock{f, fmt.Sprintf("[error reading file: %s]", err)})
-			continue
-		}
-		blocks = append(blocks, sourceBlock{f, content})
+		specs = append(specs, sourceSpec{
+			Tool:  "read",
+			Input: mustJSON(map[string]any{"file_path": f}),
+			Label: f,
+		})
 	}
 
-	// Shell command.
 	if p.Exec != "" {
-		output, err := execForPilot(ctx, p.Exec, workspaceDir)
-		if err != nil {
-			blocks = append(blocks, sourceBlock{"exec: " + p.Exec, fmt.Sprintf("[command failed: %s]", err)})
-		} else {
-			blocks = append(blocks, sourceBlock{"exec: " + p.Exec, output})
-		}
+		specs = append(specs, sourceSpec{
+			Tool:  "exec",
+			Input: mustJSON(map[string]any{"command": p.Exec, "timeout": 15}),
+			Label: "$ " + p.Exec,
+		})
 	}
 
-	// Grep.
 	if p.Grep != "" {
-		searchPath := workspaceDir
+		grepInput := map[string]any{"pattern": p.Grep, "maxResults": 50}
 		if p.Path != "" {
-			searchPath = resolvePathForPilot(p.Path, workspaceDir)
+			grepInput["path"] = p.Path
 		}
-		output, err := grepForPilot(ctx, p.Grep, searchPath)
-		if err != nil {
-			blocks = append(blocks, sourceBlock{"grep: " + p.Grep, fmt.Sprintf("[grep failed: %s]", err)})
-		} else {
-			blocks = append(blocks, sourceBlock{"grep: " + p.Grep, output})
-		}
+		specs = append(specs, sourceSpec{
+			Tool:  "grep",
+			Input: mustJSON(grepInput),
+			Label: "grep: " + p.Grep,
+		})
 	}
 
-	// URL fetch.
 	if p.URL != "" {
-		output, err := fetchURLForPilot(ctx, p.URL)
-		if err != nil {
-			blocks = append(blocks, sourceBlock{p.URL, fmt.Sprintf("[fetch failed: %s]", err)})
-		} else {
-			blocks = append(blocks, sourceBlock{p.URL, output})
-		}
+		specs = append(specs, sourceSpec{
+			Tool:  "web_fetch",
+			Input: mustJSON(map[string]any{"url": p.URL}),
+			Label: p.URL,
+		})
 	}
 
-	// Batch items.
-	for i, item := range p.Items {
-		blocks = append(blocks, sourceBlock{fmt.Sprintf("item[%d]", i+1), item})
-	}
-
-	return blocks, nil
+	return specs
 }
 
-// buildPilotPrompt assembles the final user message from task + gathered data.
-func buildPilotPrompt(task, outputFormat string, blocks []sourceBlock) string {
+// executeSources runs all source tool calls in parallel via the ToolRegistry.
+func executeSources(ctx context.Context, sources []sourceSpec, tools ToolExecutor) []sourceResult {
+	if len(sources) == 0 {
+		return nil
+	}
+
+	results := make([]sourceResult, len(sources))
+	var wg sync.WaitGroup
+
+	for i, src := range sources {
+		// Block pilot from calling itself (infinite recursion guard).
+		if src.Tool == "pilot" {
+			results[i] = sourceResult{
+				label:   src.Label,
+				content: "[error: pilot cannot call itself]",
+			}
+			continue
+		}
+
+		wg.Add(1)
+		go func(idx int, s sourceSpec) {
+			defer wg.Done()
+
+			label := s.Label
+			if label == "" {
+				label = fmt.Sprintf("%s[%d]", s.Tool, idx+1)
+			}
+
+			output, err := tools.Execute(ctx, s.Tool, s.Input)
+			if err != nil {
+				results[idx] = sourceResult{label, fmt.Sprintf("[tool error: %s]", err)}
+				return
+			}
+			results[idx] = sourceResult{label, output}
+		}(i, src)
+	}
+
+	wg.Wait()
+	return results
+}
+
+// buildPilotPrompt assembles the user message from task + gathered data.
+func buildPilotPrompt(task, outputFormat string, blocks []sourceResult) string {
 	var sb strings.Builder
 
 	sb.WriteString("Task: ")
@@ -252,82 +318,8 @@ func buildPilotPrompt(task, outputFormat string, blocks []sourceBlock) string {
 	return sb.String()
 }
 
-// --- Data source helpers ---
+// --- Helpers ---
 
-func readFileForPilot(path, workspaceDir string) (string, error) {
-	resolved := resolvePathForPilot(path, workspaceDir)
-	data, err := os.ReadFile(resolved)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-func execForPilot(ctx context.Context, command, workdir string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, pilotExecTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "bash", "-c", command)
-	cmd.Dir = workdir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		if len(out) > 0 {
-			return string(out), nil // Return output even on error (useful).
-		}
-		return "", err
-	}
-	return string(out), nil
-}
-
-func grepForPilot(ctx context.Context, pattern, searchPath string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, pilotExecTimeout)
-	defer cancel()
-
-	args := []string{"-n", "--max-count=50", "-C1", pattern, searchPath}
-	cmd := exec.CommandContext(ctx, "rg", args...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		// rg exit 1 = no matches.
-		if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
-			return "No matches found.", nil
-		}
-		// Fallback to grep.
-		grepArgs := []string{"-rn", "--max-count=50", "-C1", pattern, searchPath}
-		cmd2 := exec.CommandContext(ctx, "grep", grepArgs...)
-		out2, _ := cmd2.CombinedOutput()
-		if len(out2) > 0 {
-			return string(out2), nil
-		}
-		return "", fmt.Errorf("rg: %w", err)
-	}
-	return string(out), nil
-}
-
-func fetchURLForPilot(ctx context.Context, rawURL string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, pilotExecTimeout)
-	defer cancel()
-
-	// Use curl + readability extraction via simple text dump.
-	cmd := exec.CommandContext(ctx, "curl", "-sfL", "--max-time", "10",
-		"-H", "User-Agent: Mozilla/5.0", rawURL)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("curl: %w", err)
-	}
-
-	// Strip HTML tags for a rough text extraction.
-	text := stripHTMLTags(string(out))
-	return text, nil
-}
-
-func resolvePathForPilot(path, workspaceDir string) string {
-	if filepath.IsAbs(path) {
-		return filepath.Clean(path)
-	}
-	return filepath.Clean(filepath.Join(workspaceDir, path))
-}
-
-// truncateInput shortens input to maxChars with a notice.
 func truncateInput(s string, maxChars int) string {
 	if len(s) <= maxChars {
 		return s
@@ -335,9 +327,13 @@ func truncateInput(s string, maxChars int) string {
 	return s[:maxChars] + fmt.Sprintf("\n\n[... truncated at %d chars]", maxChars)
 }
 
-// --- Shared LLM call ---
+func mustJSON(v any) json.RawMessage {
+	data, _ := json.Marshal(v)
+	return data
+}
 
-// callLocalLLM sends a single-turn request to the local sglang server.
+// --- Local LLM call ---
+
 func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
 	defer cancel()
@@ -368,8 +364,6 @@ func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 	return text, nil
 }
 
-// collectStream reads all events from a streaming LLM response and returns
-// the concatenated text output.
 func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
 	var sb strings.Builder
 	for {
