@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -130,35 +131,42 @@ func RunAgent(
 		assistantBlocks := turnResult.contentBlocks
 		messages = append(messages, llm.NewBlockMessage("assistant", assistantBlocks))
 
-		// Execute tools and build tool_result blocks.
-		var toolResults []llm.ContentBlock
-		for _, tc := range turnResult.toolCalls {
-			logger.Info("executing tool", "name", tc.Name, "turn", turn)
+		// Execute tools in parallel and build tool_result blocks.
+		// Each goroutine writes to its own index — no mutex needed for the slice.
+		toolResults := make([]llm.ContentBlock, len(turnResult.toolCalls))
+		var wg sync.WaitGroup
+		for i, tc := range turnResult.toolCalls {
+			wg.Add(1)
+			go func(idx int, tc llm.ContentBlock) {
+				defer wg.Done()
+				logger.Info("executing tool", "name", tc.Name, "turn", turn)
 
-			var toolOutput string
-			var toolErr error
-			if tools != nil {
-				toolOutput, toolErr = tools.Execute(ctx, tc.Name, tc.Input)
-			} else {
-				toolErr = fmt.Errorf("no tool executor configured")
-			}
+				var toolOutput string
+				var toolErr error
+				if tools != nil {
+					toolOutput, toolErr = tools.Execute(ctx, tc.Name, tc.Input)
+				} else {
+					toolErr = fmt.Errorf("no tool executor configured")
+				}
 
-			if ctx.Err() != nil {
-				result.StopReason = stopReasonFromCtx(ctx)
-				return result, nil
-			}
+				block := llm.ContentBlock{
+					Type:      "tool_result",
+					ToolUseID: tc.ID,
+				}
+				if toolErr != nil {
+					block.Content = fmt.Sprintf("Error: %s", toolErr.Error())
+					block.IsError = true
+				} else {
+					block.Content = toolOutput
+				}
+				toolResults[idx] = block
+			}(i, tc)
+		}
+		wg.Wait()
 
-			block := llm.ContentBlock{
-				Type:      "tool_result",
-				ToolUseID: tc.ID,
-			}
-			if toolErr != nil {
-				block.Content = fmt.Sprintf("Error: %s", toolErr.Error())
-				block.IsError = true
-			} else {
-				block.Content = toolOutput
-			}
-			toolResults = append(toolResults, block)
+		if ctx.Err() != nil {
+			result.StopReason = stopReasonFromCtx(ctx)
+			return result, nil
 		}
 
 		messages = append(messages, llm.NewBlockMessage("user", toolResults))
