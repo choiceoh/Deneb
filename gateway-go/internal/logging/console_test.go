@@ -10,7 +10,7 @@ import (
 
 // fixedTime returns a consistent time for deterministic test output.
 func fixedTime() time.Time {
-	return time.Date(2026, 3, 26, 14, 5, 9, 0, time.UTC)
+	return time.Date(2026, 3, 26, 14, 5, 9, 123_000_000, time.UTC)
 }
 
 func newTestRecord(level slog.Level, msg string, attrs ...slog.Attr) slog.Record {
@@ -32,7 +32,7 @@ func TestConsoleHandler_BasicFormat(t *testing.T) {
 	}
 
 	got := buf.String()
-	want := "14:05:09 INF server started addr=127.0.0.1:8080 port=8080\n"
+	want := "14:05:09.123 INF server started addr=127.0.0.1:8080 port=8080\n"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
@@ -74,23 +74,18 @@ func TestConsoleHandler_ValueQuoting(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	// Plain value: no quotes.
 	if !strings.Contains(got, "plain=hello") {
 		t.Errorf("plain value not found in %q", got)
 	}
-	// Value with spaces: quoted.
 	if !strings.Contains(got, `spaces="hello world"`) {
 		t.Errorf("spaces value not quoted in %q", got)
 	}
-	// Empty value: quoted.
 	if !strings.Contains(got, `empty=""`) {
 		t.Errorf("empty value not quoted in %q", got)
 	}
-	// Value with equals: quoted.
 	if !strings.Contains(got, `equals="a=b"`) {
 		t.Errorf("equals value not quoted in %q", got)
 	}
-	// Value with quotes: escaped and quoted.
 	if !strings.Contains(got, `quotes="say \"hi\""`) {
 		t.Errorf("quotes value not properly escaped in %q", got)
 	}
@@ -121,7 +116,6 @@ func TestConsoleHandler_WithAttrs(t *testing.T) {
 	h2.Handle(nil, r)
 
 	got := buf.String()
-	// Pre-attr should appear before record attrs.
 	pkgIdx := strings.Index(got, "pkg=server")
 	msIdx := strings.Index(got, "ms=42")
 	if pkgIdx < 0 || msIdx < 0 {
@@ -146,19 +140,47 @@ func TestConsoleHandler_WithGroup(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_ColorOutput(t *testing.T) {
+func TestConsoleHandler_ColorStyling(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
 
-	r := newTestRecord(slog.LevelError, "fail")
+	r := newTestRecord(slog.LevelError, "fail", slog.String("id", "abc"))
 	h.Handle(nil, r)
 
 	got := buf.String()
-	if !strings.Contains(got, colorRed) {
-		t.Errorf("color mode should contain ANSI red: %q", got)
+	// ERR level uses bold red.
+	if !strings.Contains(got, ansiBoldRed) {
+		t.Errorf("color mode should contain bold red for ERR: %q", got)
 	}
-	if !strings.Contains(got, colorReset) {
-		t.Errorf("color mode should contain ANSI reset: %q", got)
+	// Timestamp should be dim.
+	if !strings.Contains(got, ansiDim) {
+		t.Errorf("timestamp should be dim: %q", got)
+	}
+	// Bold should be present (for level and message).
+	if !strings.Contains(got, ansiReset) {
+		t.Errorf("should contain reset sequences: %q", got)
+	}
+}
+
+func TestConsoleHandler_ColorLevelStyles(t *testing.T) {
+	tests := []struct {
+		level slog.Level
+		want  string
+	}{
+		{slog.LevelDebug, ansiBoldCyn},
+		{slog.LevelInfo, ansiBoldGrn},
+		{slog.LevelWarn, ansiBoldYel},
+		{slog.LevelError, ansiBoldRed},
+	}
+	for _, tt := range tests {
+		var buf bytes.Buffer
+		h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
+		r := newTestRecord(tt.level, "test")
+		h.Handle(nil, r)
+
+		if !strings.Contains(buf.String(), tt.want) {
+			t.Errorf("level %v: expected style %q in %q", tt.level, tt.want, buf.String())
+		}
 	}
 }
 
@@ -175,6 +197,49 @@ func TestConsoleHandler_NoColorOutput(t *testing.T) {
 	}
 }
 
+func TestConsoleHandler_ErrorAttrHighlight(t *testing.T) {
+	var buf bytes.Buffer
+	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
+
+	r := newTestRecord(slog.LevelError, "failed",
+		slog.String("id", "abc"),
+		slog.String("error", "connection refused"),
+	)
+	h.Handle(nil, r)
+
+	got := buf.String()
+	// The "error" key should get italic+red styling.
+	if !strings.Contains(got, ansiItalic) {
+		t.Errorf("error attr should use italic: %q", got)
+	}
+	// The error value should be in red (separate from the key styling).
+	errorIdx := strings.Index(got, "error=")
+	if errorIdx < 0 {
+		t.Fatalf("error attr not found in %q", got)
+	}
+	// Check red color appears around the error value.
+	afterError := got[errorIdx:]
+	redCount := strings.Count(afterError, ansiRed)
+	if redCount < 1 {
+		t.Errorf("error value should be red: %q", got)
+	}
+}
+
+func TestConsoleHandler_PanicAttrHighlight(t *testing.T) {
+	var buf bytes.Buffer
+	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
+
+	r := newTestRecord(slog.LevelError, "handler panic",
+		slog.String("panic", "nil pointer"),
+	)
+	h.Handle(nil, r)
+
+	got := buf.String()
+	if !strings.Contains(got, ansiItalic) {
+		t.Errorf("panic attr should use italic+red: %q", got)
+	}
+}
+
 func TestConsoleHandler_BoolAttr(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
@@ -187,8 +252,49 @@ func TestConsoleHandler_BoolAttr(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	want := "14:05:09 DBG rpc method=health ok=true ms=5\n"
+	want := "14:05:09.123 DBG rpc method=health ok=true ms=5\n"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestConsoleHandler_MillisecondTimestamp(t *testing.T) {
+	var buf bytes.Buffer
+	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
+
+	r := newTestRecord(slog.LevelInfo, "test")
+	h.Handle(nil, r)
+
+	got := buf.String()
+	if !strings.HasPrefix(got, "14:05:09.123") {
+		t.Errorf("expected millisecond timestamp, got %q", got)
+	}
+}
+
+func TestConsoleHandler_ErrorMessageBoldRed(t *testing.T) {
+	var buf bytes.Buffer
+	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
+
+	r := newTestRecord(slog.LevelError, "something broke")
+	h.Handle(nil, r)
+
+	got := buf.String()
+	// ERR message should use bold red (ansiBoldRed appears for both level and message).
+	count := strings.Count(got, ansiBoldRed)
+	if count < 2 {
+		t.Errorf("ERR level should bold-red both level and message, got %d occurrences in %q", count, got)
+	}
+}
+
+func TestConsoleHandler_InfoMessageBold(t *testing.T) {
+	var buf bytes.Buffer
+	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
+
+	r := newTestRecord(slog.LevelInfo, "started")
+	h.Handle(nil, r)
+
+	got := buf.String()
+	if !strings.Contains(got, ansiBold) {
+		t.Errorf("INF message should be bold: %q", got)
 	}
 }

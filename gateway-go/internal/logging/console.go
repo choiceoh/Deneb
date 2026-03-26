@@ -1,9 +1,11 @@
 // Package logging provides a human-readable console log handler for slog.
 //
-// The ConsoleHandler outputs compact, colored log lines in the format:
+// The ConsoleHandler outputs compact, modern log lines with ANSI styling:
 //
-//	HH:MM:SS LVL message key=val key=val
+//	14:05:09.123 INF server started addr=127.0.0.1:18789
 //
+// Visual hierarchy: dim timestamp, bold colored level, bold message, dim keys.
+// Error attribute values are highlighted in red for quick scanning.
 // Designed for direct log tailing (tail -f) on a single-server deployment.
 package logging
 
@@ -17,14 +19,20 @@ import (
 	"unicode"
 )
 
-// ANSI color codes for log level highlighting.
+// ANSI escape sequences for styling.
 const (
-	colorReset  = "\033[0m"
-	colorCyan   = "\033[36m"
-	colorGreen  = "\033[32m"
-	colorYellow = "\033[33m"
-	colorRed    = "\033[31m"
-	colorDim    = "\033[2m"
+	ansiReset    = "\033[0m"
+	ansiBold     = "\033[1m"
+	ansiDim      = "\033[2m"
+	ansiItalic   = "\033[3m"
+	ansiRed      = "\033[31m"
+	ansiGreen    = "\033[32m"
+	ansiYellow   = "\033[33m"
+	ansiCyan     = "\033[36m"
+	ansiBoldRed  = "\033[1;31m"
+	ansiBoldGrn  = "\033[1;32m"
+	ansiBoldYel  = "\033[1;33m"
+	ansiBoldCyn  = "\033[1;36m"
 )
 
 // ConsoleOptions configures the ConsoleHandler.
@@ -79,41 +87,51 @@ func (h *ConsoleHandler) Handle(_ context.Context, r slog.Record) error {
 	bp := bufPool.Get().(*[]byte)
 	buf := (*bp)[:0]
 
-	// Time: HH:MM:SS
 	t := r.Time
 	if t.IsZero() {
 		t = time.Now()
 	}
-	hour, min, sec := t.Clock()
-	buf = appendTwoDigits(buf, hour)
-	buf = append(buf, ':')
-	buf = appendTwoDigits(buf, min)
-	buf = append(buf, ':')
-	buf = appendTwoDigits(buf, sec)
-	buf = append(buf, ' ')
 
-	// Level: 3-letter abbreviation with optional color.
-	lvl, lvlColor := levelAbbrev(r.Level)
+	lvl, lvlStyle := levelLabel(r.Level)
+	isErr := r.Level >= slog.LevelError
+
 	if h.color {
-		buf = append(buf, lvlColor...)
-		buf = append(buf, lvl...)
-		buf = append(buf, colorReset...)
-	} else {
-		buf = append(buf, lvl...)
-	}
-	buf = append(buf, ' ')
+		// Dim timestamp.
+		buf = append(buf, ansiDim...)
+		buf = appendTimestamp(buf, t)
+		buf = append(buf, ansiReset...)
+		buf = append(buf, ' ')
 
-	// Message.
-	buf = append(buf, r.Message...)
+		// Bold colored level.
+		buf = append(buf, lvlStyle...)
+		buf = append(buf, lvl...)
+		buf = append(buf, ansiReset...)
+		buf = append(buf, ' ')
+
+		// Bold message (red if error level).
+		if isErr {
+			buf = append(buf, ansiBoldRed...)
+		} else {
+			buf = append(buf, ansiBold...)
+		}
+		buf = append(buf, r.Message...)
+		buf = append(buf, ansiReset...)
+	} else {
+		buf = appendTimestamp(buf, t)
+		buf = append(buf, ' ')
+		buf = append(buf, lvl...)
+		buf = append(buf, ' ')
+		buf = append(buf, r.Message...)
+	}
 
 	// Pre-attrs from WithAttrs.
 	for _, a := range h.preAttrs {
-		buf = h.appendAttr(buf, a)
+		buf = h.appendAttr(buf, a, isErr)
 	}
 
 	// Record attrs.
 	r.Attrs(func(a slog.Attr) bool {
-		buf = h.appendAttr(buf, a)
+		buf = h.appendAttr(buf, a, isErr)
 		return true
 	})
 
@@ -134,10 +152,7 @@ func (h *ConsoleHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 		return h
 	}
 	h2 := h.clone()
-	// Apply group prefix to pre-attrs.
-	for _, a := range attrs {
-		h2.preAttrs = append(h2.preAttrs, a)
-	}
+	h2.preAttrs = append(h2.preAttrs, attrs...)
 	return h2
 }
 
@@ -165,8 +180,9 @@ func (h *ConsoleHandler) clone() *ConsoleHandler {
 	return h2
 }
 
-// appendAttr formats a single attribute as " key=val".
-func (h *ConsoleHandler) appendAttr(buf []byte, a slog.Attr) []byte {
+// appendAttr formats a single attribute as " key=val" with styling.
+// The "error" key gets special red highlighting for quick scanning.
+func (h *ConsoleHandler) appendAttr(buf []byte, a slog.Attr, isErr bool) []byte {
 	a.Value = a.Value.Resolve()
 	if a.Equal(slog.Attr{}) {
 		return buf
@@ -174,23 +190,41 @@ func (h *ConsoleHandler) appendAttr(buf []byte, a slog.Attr) []byte {
 
 	buf = append(buf, ' ')
 
-	// Group prefix.
+	// Build the full key with group prefix.
+	isErrorKey := a.Key == "error" || a.Key == "err" || a.Key == "panic"
+
+	if h.color {
+		if isErrorKey {
+			// Error keys: italic red key and red value.
+			buf = append(buf, ansiItalic...)
+			buf = append(buf, ansiRed...)
+			buf = h.appendKey(buf, a.Key)
+			buf = append(buf, ansiReset...)
+			buf = append(buf, ansiRed...)
+			buf = appendValue(buf, a.Value)
+			buf = append(buf, ansiReset...)
+		} else {
+			// Normal keys: dim key, normal value.
+			buf = append(buf, ansiDim...)
+			buf = h.appendKey(buf, a.Key)
+			buf = append(buf, ansiReset...)
+			buf = appendValue(buf, a.Value)
+		}
+	} else {
+		buf = h.appendKey(buf, a.Key)
+		buf = appendValue(buf, a.Value)
+	}
+	return buf
+}
+
+// appendKey writes group-prefixed "key=" to buf.
+func (h *ConsoleHandler) appendKey(buf []byte, key string) []byte {
 	for _, g := range h.groups {
 		buf = append(buf, g...)
 		buf = append(buf, '.')
 	}
-
-	if h.color {
-		buf = append(buf, colorDim...)
-		buf = append(buf, a.Key...)
-		buf = append(buf, '=')
-		buf = append(buf, colorReset...)
-	} else {
-		buf = append(buf, a.Key...)
-		buf = append(buf, '=')
-	}
-
-	buf = appendValue(buf, a.Value)
+	buf = append(buf, key...)
+	buf = append(buf, '=')
 	return buf
 }
 
@@ -237,23 +271,43 @@ func needsQuote(s string) bool {
 	return false
 }
 
-// levelAbbrev returns the 3-letter abbreviation and ANSI color for a level.
-func levelAbbrev(l slog.Level) (string, string) {
+// appendTimestamp writes "HH:MM:SS.mmm" to buf.
+func appendTimestamp(buf []byte, t time.Time) []byte {
+	hour, min, sec := t.Clock()
+	ms := t.Nanosecond() / 1_000_000
+	buf = appendTwoDigits(buf, hour)
+	buf = append(buf, ':')
+	buf = appendTwoDigits(buf, min)
+	buf = append(buf, ':')
+	buf = appendTwoDigits(buf, sec)
+	buf = append(buf, '.')
+	buf = appendThreeDigits(buf, ms)
+	return buf
+}
+
+// levelLabel returns the 3-letter label and ANSI bold+color for a level.
+func levelLabel(l slog.Level) (string, string) {
 	switch {
 	case l < slog.LevelInfo:
-		return "DBG", colorCyan
+		return "DBG", ansiBoldCyn
 	case l < slog.LevelWarn:
-		return "INF", colorGreen
+		return "INF", ansiBoldGrn
 	case l < slog.LevelError:
-		return "WRN", colorYellow
+		return "WRN", ansiBoldYel
 	default:
-		return "ERR", colorRed
+		return "ERR", ansiBoldRed
 	}
 }
 
-// appendTwoDigits appends a zero-padded two-digit number to buf.
 func appendTwoDigits(buf []byte, n int) []byte {
 	buf = append(buf, byte('0'+n/10))
+	buf = append(buf, byte('0'+n%10))
+	return buf
+}
+
+func appendThreeDigits(buf []byte, n int) []byte {
+	buf = append(buf, byte('0'+n/100))
+	buf = append(buf, byte('0'+(n/10)%10))
 	buf = append(buf, byte('0'+n%10))
 	return buf
 }
