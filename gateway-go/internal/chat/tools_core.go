@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os/exec"
 	"strings"
 	"time"
@@ -301,7 +303,96 @@ func webFetchToolSchema() map[string]any {
 }
 
 func toolWebFetch() ToolFunc {
-	return func(_ context.Context, _ json.RawMessage) (string, error) {
-		return "Tool \"web_fetch\" is not yet available in the Go gateway.", nil
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			URL      string `json:"url"`
+			MaxChars int    `json:"maxChars"`
+		}
+		if err := json.Unmarshal(input, &p); err != nil {
+			return "", fmt.Errorf("invalid web_fetch params: %w", err)
+		}
+		if p.URL == "" {
+			return "", fmt.Errorf("url is required")
+		}
+
+		// Validate URL scheme.
+		if !strings.HasPrefix(p.URL, "http://") && !strings.HasPrefix(p.URL, "https://") {
+			return "", fmt.Errorf("only http:// and https:// URLs are supported")
+		}
+
+		// Default max chars.
+		maxChars := 50000
+		if p.MaxChars > 0 {
+			maxChars = p.MaxChars
+		}
+
+		// Fetch with timeout.
+		fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, p.URL, nil)
+		if err != nil {
+			return "", fmt.Errorf("create request: %w", err)
+		}
+		req.Header.Set("User-Agent", "Deneb-Gateway/1.0")
+		req.Header.Set("Accept", "text/html,text/plain,application/json,*/*")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("fetch failed: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode >= 400 {
+			return fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status), nil
+		}
+
+		// Read body with size limit (2x maxChars as raw bytes may be larger).
+		limitBytes := int64(maxChars * 2)
+		if limitBytes > 5*1024*1024 {
+			limitBytes = 5 * 1024 * 1024 // Cap at 5 MB
+		}
+		bodyReader := io.LimitReader(resp.Body, limitBytes)
+		body, err := io.ReadAll(bodyReader)
+		if err != nil {
+			return "", fmt.Errorf("read body: %w", err)
+		}
+
+		content := string(body)
+
+		// Basic HTML tag stripping for readability.
+		contentType := resp.Header.Get("Content-Type")
+		if strings.Contains(contentType, "text/html") {
+			content = stripHTMLTags(content)
+		}
+
+		// Truncate to maxChars.
+		if len(content) > maxChars {
+			content = content[:maxChars] + "\n\n[...truncated at " + fmt.Sprintf("%d", maxChars) + " chars]"
+		}
+
+		return content, nil
 	}
+}
+
+// stripHTMLTags does a basic removal of HTML tags for text extraction.
+func stripHTMLTags(html string) string {
+	var sb strings.Builder
+	inTag := false
+	for _, r := range html {
+		switch {
+		case r == '<':
+			inTag = true
+		case r == '>':
+			inTag = false
+		case !inTag:
+			sb.WriteRune(r)
+		}
+	}
+	// Collapse excessive whitespace.
+	result := sb.String()
+	for strings.Contains(result, "\n\n\n") {
+		result = strings.ReplaceAll(result, "\n\n\n", "\n\n")
+	}
+	return strings.TrimSpace(result)
 }
