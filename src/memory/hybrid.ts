@@ -10,24 +10,15 @@ export type HybridSource = string;
 export { type MMRConfig, DEFAULT_MMR_CONFIG };
 export { type TemporalDecayConfig, DEFAULT_TEMPORAL_DECAY_CONFIG };
 
-export type HybridVectorResult = {
+/** A single hybrid search result (used for both vector and keyword sources). */
+export type HybridResult = {
   id: string;
   path: string;
   startLine: number;
   endLine: number;
   source: HybridSource;
   snippet: string;
-  vectorScore: number;
-};
-
-export type HybridKeywordResult = {
-  id: string;
-  path: string;
-  startLine: number;
-  endLine: number;
-  source: HybridSource;
-  snippet: string;
-  textScore: number;
+  score: number;
 };
 
 export function buildFtsQuery(raw: string): string | null {
@@ -55,8 +46,8 @@ export function bm25RankToScore(rank: number): number {
 }
 
 export async function mergeHybridResults(params: {
-  vector: HybridVectorResult[];
-  keyword: HybridKeywordResult[];
+  vector: HybridResult[];
+  keyword: HybridResult[];
   vectorWeight: number;
   textWeight: number;
   workspaceDir?: string;
@@ -98,7 +89,7 @@ export async function mergeHybridResults(params: {
       endLine: r.endLine,
       source: r.source,
       snippet: r.snippet,
-      vectorScore: r.vectorScore,
+      vectorScore: r.score,
       textScore: 0,
     });
   }
@@ -106,7 +97,7 @@ export async function mergeHybridResults(params: {
   for (const r of params.keyword) {
     const existing = byId.get(r.id);
     if (existing) {
-      existing.textScore = r.textScore;
+      existing.textScore = r.score;
       if (r.snippet && r.snippet.length > 0) {
         existing.snippet = r.snippet;
       }
@@ -119,7 +110,7 @@ export async function mergeHybridResults(params: {
         source: r.source,
         snippet: r.snippet,
         vectorScore: 0,
-        textScore: r.textScore,
+        textScore: r.score,
       });
     }
   }

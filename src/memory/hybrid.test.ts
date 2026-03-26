@@ -40,7 +40,7 @@ describe("memory hybrid helpers", () => {
           endLine: 2,
           source: "memory",
           snippet: "vec-a",
-          vectorScore: 0.9,
+          score: 0.9,
         },
       ],
       keyword: [
@@ -51,7 +51,7 @@ describe("memory hybrid helpers", () => {
           endLine: 4,
           source: "memory",
           snippet: "kw-b",
-          textScore: 1.0,
+          score: 1.0,
         },
       ],
     });
@@ -75,7 +75,7 @@ describe("memory hybrid helpers", () => {
           endLine: 2,
           source: "memory",
           snippet: "vec-a",
-          vectorScore: 0.2,
+          score: 0.2,
         },
       ],
       keyword: [
@@ -86,7 +86,7 @@ describe("memory hybrid helpers", () => {
           endLine: 2,
           source: "memory",
           snippet: "kw-a",
-          textScore: 1.0,
+          score: 1.0,
         },
       ],
     });

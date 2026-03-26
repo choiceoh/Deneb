@@ -1,27 +1,17 @@
 use serde::{Deserialize, Serialize};
 
+/// A single hybrid search result (used for both vector and keyword sources).
+/// The `score` field holds the source-specific score (vector similarity or text relevance).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct HybridVectorResult {
+pub struct HybridResult {
     pub id: String,
     pub path: String,
     pub start_line: u32,
     pub end_line: u32,
     pub source: String,
     pub snippet: String,
-    pub vector_score: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HybridKeywordResult {
-    pub id: String,
-    pub path: String,
-    pub start_line: u32,
-    pub end_line: u32,
-    pub source: String,
-    pub snippet: String,
-    pub text_score: f64,
+    pub score: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,8 +68,8 @@ impl Default for TemporalDecayConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MergeParams {
-    pub vector: Vec<HybridVectorResult>,
-    pub keyword: Vec<HybridKeywordResult>,
+    pub vector: Vec<HybridResult>,
+    pub keyword: Vec<HybridResult>,
     pub vector_weight: f64,
     pub text_weight: f64,
     pub mmr: Option<MmrConfig>,

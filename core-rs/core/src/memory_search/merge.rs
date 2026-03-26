@@ -22,7 +22,7 @@ pub fn merge_hybrid_results(params: &MergeParams) -> Vec<MergedResult> {
                 end_line: r.end_line,
                 source: &r.source,
                 snippet: &r.snippet,
-                vector_score: r.vector_score,
+                vector_score: r.score,
                 text_score: 0.0,
             },
         );
@@ -31,7 +31,7 @@ pub fn merge_hybrid_results(params: &MergeParams) -> Vec<MergedResult> {
     // Merge keyword results
     for r in &params.keyword {
         if let Some(existing) = by_id.get_mut(r.id.as_str()) {
-            existing.text_score = r.text_score;
+            existing.text_score = r.score;
             if !r.snippet.is_empty() {
                 existing.snippet = &r.snippet;
             }
@@ -45,7 +45,7 @@ pub fn merge_hybrid_results(params: &MergeParams) -> Vec<MergedResult> {
                     source: &r.source,
                     snippet: &r.snippet,
                     vector_score: 0.0,
-                    text_score: r.text_score,
+                    text_score: r.score,
                 },
             );
         }
@@ -137,27 +137,27 @@ struct MergeEntry<'a> {
 mod tests {
     use super::*;
 
-    fn make_vector(id: &str, path: &str, score: f64) -> HybridVectorResult {
-        HybridVectorResult {
+    fn make_vector(id: &str, path: &str, score: f64) -> HybridResult {
+        HybridResult {
             id: id.to_string(),
             path: path.to_string(),
             start_line: 1,
             end_line: 10,
             source: "memory".to_string(),
             snippet: format!("snippet for {}", id),
-            vector_score: score,
+            score,
         }
     }
 
-    fn make_keyword(id: &str, path: &str, score: f64) -> HybridKeywordResult {
-        HybridKeywordResult {
+    fn make_keyword(id: &str, path: &str, score: f64) -> HybridResult {
+        HybridResult {
             id: id.to_string(),
             path: path.to_string(),
             start_line: 1,
             end_line: 10,
             source: "memory".to_string(),
             snippet: format!("keyword snippet for {}", id),
-            text_score: score,
+            score,
         }
     }
 
