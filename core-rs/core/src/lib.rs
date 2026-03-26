@@ -14,7 +14,7 @@
 #[macro_use]
 extern crate napi_derive;
 
-// Phase 0: Core modules (C FFI + Rust API)
+// Core modules (C FFI + Rust API)
 pub mod compaction;
 pub mod context_engine;
 pub mod markdown;
@@ -24,7 +24,7 @@ pub mod parsing;
 pub mod protocol;
 pub mod security;
 
-// Phase 1: napi-rs modules (Node.js native addon)
+// napi-rs modules (Node.js native addon)
 pub mod exif;
 pub mod external_content;
 pub mod mime_utils;
@@ -32,7 +32,7 @@ pub mod png;
 pub mod safe_regex;
 
 // ---------------------------------------------------------------------------
-// C FFI exports (Phase 0 — used by Go via CGo)
+// C FFI exports (used by Go via CGo)
 // ---------------------------------------------------------------------------
 
 /// Maximum input size for FFI string functions (16 MB).
@@ -263,7 +263,7 @@ pub unsafe extern "C" fn deneb_validate_error_code(code_ptr: *const u8, code_len
 }
 
 // ---------------------------------------------------------------------------
-// Vega FFI exports (Phase 0 scaffolding — full implementation in Phase 1)
+// Vega FFI exports (requires "vega" feature)
 // ---------------------------------------------------------------------------
 
 /// C FFI: Execute a Vega command.
@@ -272,7 +272,7 @@ pub unsafe extern "C" fn deneb_validate_error_code(code_ptr: *const u8, code_len
 /// Returns bytes written on success, negative on error.
 ///
 /// When the `vega` feature is enabled, dispatches to deneb-vega command registry.
-/// Otherwise returns a phase-0 stub response.
+/// Otherwise returns `{"error":"vega backend unavailable"}`.
 ///
 /// # Safety
 /// `cmd_ptr` must point to valid UTF-8 of `cmd_len` bytes.

@@ -17,11 +17,11 @@ func TestVegaExecute_Stub(t *testing.T) {
 	if err := json.Unmarshal(result, &parsed); err != nil {
 		t.Fatalf("result is not valid JSON: %v", err)
 	}
-	// Phase 0 stub should include "phase":0.
-	if phase, ok := parsed["phase"]; ok {
-		if phase != float64(0) {
-			t.Errorf("expected phase=0, got %v", phase)
-		}
+	// Should include an "error" key (either "backend unavailable" or Vega result).
+	_, hasError := parsed["error"]
+	_, hasResult := parsed["result"]
+	if !hasError && !hasResult {
+		t.Error("expected 'error' or 'result' key in response")
 	}
 	t.Logf("VegaExecute result: %s", string(result))
 }
@@ -38,7 +38,7 @@ func TestVegaSearch_Stub(t *testing.T) {
 	if err := json.Unmarshal(result, &parsed); err != nil {
 		t.Fatalf("result is not valid JSON: %v", err)
 	}
-	// Phase 0 stub should include "results" key.
+	// Should include "results" key (either empty array or search results).
 	if _, ok := parsed["results"]; !ok {
 		t.Error("expected 'results' key in response")
 	}

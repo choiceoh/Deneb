@@ -1,8 +1,8 @@
 // Package server implements the HTTP + WebSocket gateway server.
 //
-// This replaces the scaffolding from Phase 0/1 with a working gateway
-// server that handles health endpoints, WebSocket connections with the
-// full handshake protocol, and RPC dispatch.
+// Handles health endpoints, WebSocket connections with the full handshake
+// protocol, RPC dispatch, OpenAI-compatible HTTP APIs, hooks webhooks,
+// session management, and plugin HTTP routing.
 package server
 
 import (

@@ -856,7 +856,8 @@ func resolvePayloadDotPath(payload map[string]any, dotPath string) string {
 	return fmt.Sprintf("%v", current)
 }
 
-// TODO: transform function support (requires Go plugin system or scripting engine)
+// Transform functions omitted by design — template rendering + JSONPath extraction
+// covers the single-user deployment use case without requiring a scripting engine.
 
 // ───────────────────────────────────────────────────────────────────────
 // Utility functions.

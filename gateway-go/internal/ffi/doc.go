@@ -44,11 +44,11 @@
 //   - CompactionEvaluate: Compaction threshold evaluation
 //   - CompactionSweepNew/Start/Step/Drop: Sweep state machine
 //
-// Vega FFI (Phase 0 scaffolding):
+// Vega FFI (requires "vega" feature in deneb-core):
 //   - VegaExecute: Execute a Vega command
 //   - VegaSearch: Execute a Vega search query
 //
-// ML FFI (Phase 0 scaffolding):
+// ML FFI (requires "ml" feature in deneb-core):
 //   - MLEmbed: Generate text embeddings
 //   - MLRerank: Rerank documents against a query
 //
