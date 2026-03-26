@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 )
 
 const (
@@ -52,13 +53,16 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 	out := make(chan StreamEvent, 16)
 	done := make(chan struct{})
 
+	// Protect respBody.Close() from concurrent calls (context cancel vs normal exit).
+	closeOnce := sync.OnceFunc(func() { respBody.Close() })
+
 	// Watch for context cancellation and close respBody to unblock the SSE
 	// parser goroutine. Without this, the parser stays blocked on
 	// scanner.Scan() when the caller stops consuming events.
 	go func() {
 		select {
 		case <-ctx.Done():
-			respBody.Close()
+			closeOnce()
 		case <-done:
 		}
 	}()
@@ -66,7 +70,7 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 	go func() {
 		defer close(out)
 		defer close(done)
-		defer respBody.Close()
+		defer closeOnce()
 
 		for raw := range rawEvents {
 			// Use the SSE event type if set, otherwise infer from data.

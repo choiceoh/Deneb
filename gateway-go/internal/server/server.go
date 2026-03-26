@@ -338,10 +338,13 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		},
 	}
 	s.startedAt = time.Now()
-	s.ready.Store(true)
 	s.startTickBroadcaster(ctx)
 	s.StartMonitoring(ctx)
 	s.startProcessPruner(ctx)
+	s.sessions.StartGC(ctx)
+
+	// Mark ready after all background subsystems have started.
+	s.ready.Store(true)
 
 	// Auto-start all registered channel plugins.
 	if s.channelLifecycle != nil {
@@ -441,13 +444,24 @@ func (s *Server) doShutdown() error {
 	// 3. Close existing WebSocket clients.
 	s.clients.Range(func(key, value any) bool {
 		client := value.(*WsClient)
-		client.conn.Close(websocket.StatusGoingAway, "server shutting down")
+		if err := client.conn.Close(websocket.StatusGoingAway, "server shutting down"); err != nil {
+			s.logger.Debug("ws close during shutdown", "connId", client.connID, "error", err)
+		}
 		return true
 	})
 
-	// 4. Stop gateway event subscriptions.
+	// 4. Stop gateway event subscriptions (bounded to avoid hanging).
 	if s.gatewaySubs != nil {
-		s.gatewaySubs.Stop()
+		done := make(chan struct{})
+		go func() {
+			s.gatewaySubs.Stop()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			s.logger.Warn("gatewaySubs.Stop timed out after 5s")
+		}
 	}
 
 	// 5. Stop dedupe background GC.

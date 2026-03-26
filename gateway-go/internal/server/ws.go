@@ -28,6 +28,16 @@ var jsonBufPool = sync.Pool{
 	},
 }
 
+// Connection health constants.
+const (
+	// pingInterval is how often the server sends WebSocket pings to detect dead connections.
+	pingInterval = 30 * time.Second
+	// idleTimeout disconnects clients that haven't sent any messages.
+	idleTimeout = 5 * time.Minute
+	// maxConsecutiveBadFrames closes connections that send too many malformed frames.
+	maxConsecutiveBadFrames = 3
+)
+
 // WsClient represents a connected WebSocket client.
 // Implements events.Subscriber for event broadcasting.
 type WsClient struct {
@@ -39,7 +49,9 @@ type WsClient struct {
 	deviceID       string
 	scopes         []auth.Scope
 	writeMu        sync.Mutex
-	bufferedAmount atomic.Int64
+	inflightBytes  atomic.Int64 // bytes currently being written (not yet flushed)
+	lastActivity   atomic.Int64 // unix nano of last inbound message
+	cancelPing     context.CancelFunc
 }
 
 // --- Subscriber interface (events.Subscriber) ---
@@ -68,20 +80,34 @@ func (c *WsClient) Scopes() []string {
 }
 
 // SendEvent writes event data to the WebSocket.
+// inflightBytes tracks bytes during write for slow consumer detection.
 func (c *WsClient) SendEvent(data []byte) error {
+	n := int64(len(data))
+	c.inflightBytes.Add(n)
+	defer c.inflightBytes.Add(-n)
+
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err := c.conn.Write(ctx, websocket.MessageText, data)
-	if err == nil {
-		c.bufferedAmount.Add(int64(len(data)))
-	}
-	return err
+	return c.conn.Write(ctx, websocket.MessageText, data)
 }
 
-// BufferedAmount returns an estimate of queued bytes.
-func (c *WsClient) BufferedAmount() int64 { return c.bufferedAmount.Load() }
+// BufferedAmount returns bytes currently in-flight (being written).
+// Used by the broadcaster for slow consumer detection.
+func (c *WsClient) BufferedAmount() int64 { return c.inflightBytes.Load() }
+
+// touchActivity records the current time as last inbound activity.
+func (c *WsClient) touchActivity() { c.lastActivity.Store(time.Now().UnixNano()) }
+
+// idleDuration returns how long since the last inbound message.
+func (c *WsClient) idleDuration() time.Duration {
+	last := c.lastActivity.Load()
+	if last == 0 {
+		return time.Since(c.created)
+	}
+	return time.Since(time.Unix(0, last))
+}
 
 // handleWsUpgrade upgrades an HTTP connection to WebSocket and manages the lifecycle.
 func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
@@ -106,10 +132,14 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 		connID:  generateConnID(),
 		created: time.Now(),
 	}
+	client.touchActivity()
 
 	s.clients.Store(client.connID, client)
 	s.clientCnt.Add(1)
 	defer func() {
+		if client.cancelPing != nil {
+			client.cancelPing()
+		}
 		s.broadcaster.Unsubscribe(client.connID)
 		s.clients.Delete(client.connID)
 		s.clientCnt.Add(-1)
@@ -128,6 +158,11 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 	handshakeCancel()
 
 	conn.SetReadLimit(protocol.MaxPayloadBytes)
+
+	// Start ping/pong + idle timeout goroutine for connection health monitoring.
+	pingCtx, pingCancel := context.WithCancel(r.Context())
+	client.cancelPing = pingCancel
+	go s.runPingLoop(pingCtx, client)
 
 	// Enter message loop (blocks until disconnect).
 	// Ticks are handled by a shared server-level ticker (see startTickBroadcaster).
@@ -281,6 +316,7 @@ func (s *Server) buildHelloOk(client *WsClient) *protocol.HelloOk {
 // Uses single-pass unmarshal: tries RequestFrame first (the common case),
 // falling back to type-peek only for non-request frames.
 func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
+	var consecutiveBadFrames int
 	for {
 		_, data, err := client.conn.Read(ctx)
 		if err != nil {
@@ -292,6 +328,7 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 		}
 
 		// Track activity on every inbound WS message.
+		client.touchActivity()
 		if s.activity != nil {
 			s.activity.Touch()
 		}
@@ -299,7 +336,12 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 		// Single-pass: unmarshal directly as RequestFrame (dominant case).
 		var req protocol.RequestFrame
 		if err := json.Unmarshal(data, &req); err != nil {
-			s.logger.Warn("unmarshal frame", "connId", client.connID, "error", err)
+			consecutiveBadFrames++
+			s.logger.Warn("unmarshal frame", "connId", client.connID, "error", err, "consecutive", consecutiveBadFrames)
+			if consecutiveBadFrames >= maxConsecutiveBadFrames {
+				s.logger.Warn("too many bad frames, closing connection", "connId", client.connID)
+				return
+			}
 			// Send error response so the client knows the frame was rejected.
 			errResp := protocol.NewResponseError("", protocol.NewError(
 				protocol.ErrInvalidRequest, "malformed JSON frame"))
@@ -308,6 +350,7 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 			}
 			continue
 		}
+		consecutiveBadFrames = 0 // reset on valid frame
 
 		if req.Type != protocol.FrameTypeRequest {
 			// Non-request frames (events, etc.) are ignored on inbound WS.
@@ -346,6 +389,35 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 		if err := s.writeFrame(ctx, client, resp); err != nil {
 			s.logger.Warn("response write failed", "connId", client.connID, "method", req.Method, "error", err)
 			return
+		}
+	}
+}
+
+// runPingLoop sends periodic WebSocket pings and disconnects idle or unresponsive clients.
+// nhooyr.io/websocket handles pong responses automatically; Ping() blocks until pong arrives.
+func (s *Server) runPingLoop(ctx context.Context, client *WsClient) {
+	ticker := time.NewTicker(pingInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Check idle timeout first.
+			if client.idleDuration() > idleTimeout {
+				s.logger.Info("closing idle connection", "connId", client.connID, "idle", client.idleDuration().String())
+				client.conn.Close(websocket.StatusGoingAway, "idle timeout")
+				return
+			}
+			// Send ping; failure means connection is dead.
+			pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			err := client.conn.Ping(pingCtx)
+			cancel()
+			if err != nil {
+				s.logger.Info("ping failed, closing connection", "connId", client.connID, "error", err)
+				client.conn.Close(websocket.StatusGoingAway, "ping timeout")
+				return
+			}
 		}
 	}
 }

@@ -5,6 +5,7 @@
 package session
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -88,6 +89,14 @@ type Session struct {
 	LastOutput string `json:"lastOutput,omitempty"`
 }
 
+// Session GC constants.
+const (
+	// gcInterval is how often the GC scans for stale sessions.
+	gcInterval = 10 * time.Minute
+	// gcMaxAge is how long a terminal session is kept before eviction.
+	gcMaxAge = 1 * time.Hour
+)
+
 // Manager tracks active sessions in memory.
 type Manager struct {
 	mu       sync.RWMutex
@@ -101,6 +110,52 @@ func NewManager() *Manager {
 		sessions: make(map[string]*Session),
 		eventBus: NewEventBus(),
 	}
+}
+
+// StartGC starts a background goroutine that periodically evicts terminal
+// sessions (done/failed/killed/timeout) older than gcMaxAge.
+// Stops when ctx is canceled.
+func (m *Manager) StartGC(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(gcInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				m.evictStale()
+			}
+		}
+	}()
+}
+
+// evictStale removes terminal sessions whose UpdatedAt is older than gcMaxAge.
+func (m *Manager) evictStale() {
+	cutoff := time.Now().Add(-gcMaxAge).UnixMilli()
+	var evicted []string
+
+	m.mu.Lock()
+	for key, s := range m.sessions {
+		if isTerminal(s.Status) && s.UpdatedAt < cutoff {
+			delete(m.sessions, key)
+			evicted = append(evicted, key)
+		}
+	}
+	m.mu.Unlock()
+
+	for _, key := range evicted {
+		m.eventBus.Emit(Event{Kind: EventDeleted, Key: key})
+	}
+}
+
+// isTerminal returns true for session statuses that represent completed runs.
+func isTerminal(s RunStatus) bool {
+	switch s {
+	case StatusDone, StatusFailed, StatusKilled, StatusTimeout:
+		return true
+	}
+	return false
 }
 
 // EventBusRef returns the session event bus for subscribing to lifecycle events.

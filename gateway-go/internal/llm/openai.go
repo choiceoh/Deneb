@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 )
 
 // StreamChatOpenAI sends a streaming chat request to an OpenAI-compatible
@@ -203,10 +204,13 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 	out := make(chan StreamEvent, 16)
 	done := make(chan struct{})
 
+	// Protect respBody.Close() from concurrent calls (context cancel vs normal exit).
+	closeOnce := sync.OnceFunc(func() { respBody.Close() })
+
 	go func() {
 		select {
 		case <-ctx.Done():
-			respBody.Close()
+			closeOnce()
 		case <-done:
 		}
 	}()
@@ -214,7 +218,7 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 	go func() {
 		defer close(out)
 		defer close(done)
-		defer respBody.Close()
+		defer closeOnce()
 
 		firstChunk := true
 		// nextBlockIndex tracks the Anthropic-style content block index.
