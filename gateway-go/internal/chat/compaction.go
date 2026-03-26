@@ -84,8 +84,8 @@ func handleContextOverflowAurora(
 			deps.contextCfg.TokenBudget,
 			sweepCfg,
 			summarizer,
-			true,  // force (overflow already detected)
-			true,  // hard trigger
+			true, // force (overflow already detected)
+			true, // hard trigger
 			logger,
 		)
 		if err != nil {

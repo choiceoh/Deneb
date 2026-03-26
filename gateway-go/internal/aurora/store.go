@@ -27,14 +27,14 @@ type Store struct {
 
 // storeData is the on-disk schema.
 type storeData struct {
-	ContextItems     []ContextItem       `json:"contextItems"`
-	Messages         map[string]MessageRecord  `json:"messages"`         // key: messageId as string
-	Summaries        map[string]SummaryRecord  `json:"summaries"`        // key: summaryId
-	SummaryParents   map[string][]string       `json:"summaryParents"`   // summaryId -> parentIds
-	SummaryMessages  map[string][]uint64       `json:"summaryMessages"`  // summaryId -> messageIds
-	CompactionEvents []CompactionEvent         `json:"compactionEvents"`
-	NextOrdinalVal   uint64                    `json:"nextOrdinal"`
-	NextMessageID    uint64                    `json:"nextMessageId"`
+	ContextItems     []ContextItem            `json:"contextItems"`
+	Messages         map[string]MessageRecord `json:"messages"`        // key: messageId as string
+	Summaries        map[string]SummaryRecord `json:"summaries"`       // key: summaryId
+	SummaryParents   map[string][]string      `json:"summaryParents"`  // summaryId -> parentIds
+	SummaryMessages  map[string][]uint64      `json:"summaryMessages"` // summaryId -> messageIds
+	CompactionEvents []CompactionEvent        `json:"compactionEvents"`
+	NextOrdinalVal   uint64                   `json:"nextOrdinal"`
+	NextMessageID    uint64                   `json:"nextMessageId"`
 }
 
 // CompactionEvent is a persisted compaction event record.

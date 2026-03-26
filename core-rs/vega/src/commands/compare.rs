@@ -201,10 +201,8 @@ fn get_chunk_type_counts(conn: &Connection) -> Value {
     };
 
     let mut map = serde_json::Map::new();
-    for row in rows {
-        if let Ok((ctype, cnt)) = row {
-            map.insert(ctype, json!(cnt));
-        }
+    for (ctype, cnt) in rows.flatten() {
+        map.insert(ctype, json!(cnt));
     }
     Value::Object(map)
 }
@@ -225,10 +223,8 @@ fn get_status_counts(conn: &Connection) -> Value {
     };
 
     let mut map = serde_json::Map::new();
-    for row in rows {
-        if let Ok((status, cnt)) = row {
-            map.insert(status, json!(cnt));
-        }
+    for (status, cnt) in rows.flatten() {
+        map.insert(status, json!(cnt));
     }
     Value::Object(map)
 }

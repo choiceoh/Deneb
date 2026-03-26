@@ -52,7 +52,7 @@ type runDeps struct {
 	providerConfigs map[string]ProviderConfig // optional; config-based provider credentials
 	logger          *slog.Logger              // required (defaults to slog.Default)
 
-	auroraStore   *aurora.Store         // optional; enables Aurora compaction
+	auroraStore   *aurora.Store // optional; enables Aurora compaction
 	contextCfg    ContextConfig
 	compactionCfg CompactionConfig
 	defaultModel  string

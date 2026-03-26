@@ -183,7 +183,7 @@ mod tests {
         // Infinity inputs should not panic; result clamped or 0.0
         let sim = cosine_similarity(&[f64::INFINITY, 1.0], &[1.0, 2.0]);
         assert!(sim.is_finite());
-        assert!(sim >= -1.0 && sim <= 1.0);
+        assert!((-1.0..=1.0).contains(&sim));
     }
 
     #[test]

@@ -98,15 +98,13 @@ fn find_person_projects(
         .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
 
     let mut items = Vec::new();
-    for row in rows {
-        if let Ok((id, proj_name, status, content)) = row {
-            items.push(json!({
-                "project_id": id,
-                "project_name": proj_name,
-                "status": status,
-                "role": content.trim(),
-            }));
-        }
+    for (id, proj_name, status, content) in rows.flatten() {
+        items.push(json!({
+            "project_id": id,
+            "project_name": proj_name,
+            "status": status,
+            "role": content.trim(),
+        }));
     }
     Ok(items)
 }
@@ -150,18 +148,16 @@ fn find_person_comm_logs(conn: &Connection, name: &str) -> Result<Vec<Value>, St
         .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
 
     let mut items = Vec::new();
-    for row in rows {
-        if let Ok((id, project_id, proj_name, comm_date, counterpart, method, summary)) = row {
-            items.push(json!({
-                "comm_id": id,
-                "project_id": project_id,
-                "project_name": proj_name,
-                "date": comm_date,
-                "counterpart": counterpart,
-                "method": method,
-                "summary": summary,
-            }));
-        }
+    for (id, project_id, proj_name, comm_date, counterpart, method, summary) in rows.flatten() {
+        items.push(json!({
+            "comm_id": id,
+            "project_id": project_id,
+            "project_name": proj_name,
+            "date": comm_date,
+            "counterpart": counterpart,
+            "method": method,
+            "summary": summary,
+        }));
     }
     Ok(items)
 }
@@ -191,14 +187,12 @@ fn find_person_actions(conn: &Connection, name: &str) -> Result<Vec<Value>, Stri
         .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
 
     let mut items = Vec::new();
-    for row in rows {
-        if let Ok((project_id, proj_name, content)) = row {
-            items.push(json!({
-                "project_id": project_id,
-                "project_name": proj_name,
-                "action": content.trim(),
-            }));
-        }
+    for (project_id, proj_name, content) in rows.flatten() {
+        items.push(json!({
+            "project_id": project_id,
+            "project_name": proj_name,
+            "action": content.trim(),
+        }));
     }
     Ok(items)
 }

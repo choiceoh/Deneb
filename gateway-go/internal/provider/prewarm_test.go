@@ -56,9 +56,9 @@ func TestDoPrewarmRequest_OpenAI(t *testing.T) {
 
 func TestSplitModelID(t *testing.T) {
 	tests := []struct {
-		input      string
-		wantProv   string
-		wantModel  string
+		input     string
+		wantProv  string
+		wantModel string
 	}{
 		{"zai/glm-5-turbo", "zai", "glm-5-turbo"},
 		{"anthropic/claude-3-haiku", "anthropic", "claude-3-haiku"},

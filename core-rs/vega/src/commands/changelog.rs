@@ -39,24 +39,18 @@ pub fn cmd_changelog(args: &Value, config: &VegaConfig) -> CommandResult {
         }
     }
 
-    let has_changes = !changes
-        .get("new_projects")
-        .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
-        || !changes
-            .get("removed_projects")
-            .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
-        || !changes
-            .get("status_changes")
-            .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
-        || !changes
-            .get("new_comms")
-            .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
-        || !changes
-            .get("modified_chunks")
-            .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
-        || !changes
-            .get("new_chunks")
-            .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()));
+    let is_non_empty = |key: &str| -> bool {
+        changes
+            .get(key)
+            .and_then(|v| v.as_array())
+            .is_some_and(|a| !a.is_empty())
+    };
+    let has_changes = is_non_empty("new_projects")
+        || is_non_empty("removed_projects")
+        || is_non_empty("status_changes")
+        || is_non_empty("new_comms")
+        || is_non_empty("modified_chunks")
+        || is_non_empty("new_chunks");
 
     CommandResult::ok(
         "changelog",

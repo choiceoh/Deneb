@@ -199,10 +199,8 @@ fn find_project_for_mail(
             }
         }
 
-        if score > 0 {
-            if best.is_none() || score > best.as_ref().unwrap().3 {
-                best = Some((*id, name.clone(), sf.clone(), score));
-            }
+        if score > 0 && (best.is_none() || score > best.as_ref().unwrap().3) {
+            best = Some((*id, name.clone(), sf.clone(), score));
         }
     }
 

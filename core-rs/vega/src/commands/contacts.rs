@@ -29,8 +29,8 @@ pub fn cmd_contacts(args: &Value, config: &VegaConfig) -> CommandResult {
 
     let summary = json!({
         "total_contacts": contacts.len(),
-        "with_phone": contacts.iter().filter(|c| c["phone"].as_str().map_or(false, |s| !s.is_empty())).count(),
-        "with_email": contacts.iter().filter(|c| c["email"].as_str().map_or(false, |s| !s.is_empty())).count(),
+        "with_phone": contacts.iter().filter(|c| c["phone"].as_str().is_some_and(|s| !s.is_empty())).count(),
+        "with_email": contacts.iter().filter(|c| c["email"].as_str().is_some_and(|s| !s.is_empty())).count(),
     });
 
     CommandResult::ok(

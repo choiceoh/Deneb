@@ -28,31 +28,31 @@ type SummarizeOptions struct {
 
 // SweepConfig configures a compaction sweep run.
 type SweepConfig struct {
-	ContextThreshold      float64 `json:"contextThreshold"`
-	FreshTailCount        uint32  `json:"freshTailCount"`
-	LeafMinFanout         uint32  `json:"leafMinFanout"`
-	CondensedMinFanout    uint32  `json:"condensedMinFanout"`
-	CondensedMinFanoutHard uint32 `json:"condensedMinFanoutHard"`
-	IncrementalMaxDepth   int32   `json:"incrementalMaxDepth"`
-	LeafChunkTokens       *uint32 `json:"leafChunkTokens,omitempty"`
-	LeafTargetTokens      uint32  `json:"leafTargetTokens"`
-	CondensedTargetTokens uint32  `json:"condensedTargetTokens"`
-	MaxRounds             uint32  `json:"maxRounds"`
-	Timezone              *string `json:"timezone,omitempty"`
+	ContextThreshold       float64 `json:"contextThreshold"`
+	FreshTailCount         uint32  `json:"freshTailCount"`
+	LeafMinFanout          uint32  `json:"leafMinFanout"`
+	CondensedMinFanout     uint32  `json:"condensedMinFanout"`
+	CondensedMinFanoutHard uint32  `json:"condensedMinFanoutHard"`
+	IncrementalMaxDepth    int32   `json:"incrementalMaxDepth"`
+	LeafChunkTokens        *uint32 `json:"leafChunkTokens,omitempty"`
+	LeafTargetTokens       uint32  `json:"leafTargetTokens"`
+	CondensedTargetTokens  uint32  `json:"condensedTargetTokens"`
+	MaxRounds              uint32  `json:"maxRounds"`
+	Timezone               *string `json:"timezone,omitempty"`
 }
 
 // DefaultSweepConfig returns production defaults.
 func DefaultSweepConfig() SweepConfig {
 	return SweepConfig{
-		ContextThreshold:      0.75,
-		FreshTailCount:        8,
-		LeafMinFanout:         8,
-		CondensedMinFanout:    4,
+		ContextThreshold:       0.75,
+		FreshTailCount:         8,
+		LeafMinFanout:          8,
+		CondensedMinFanout:     4,
 		CondensedMinFanoutHard: 2,
-		IncrementalMaxDepth:   0,
-		LeafTargetTokens:      600,
-		CondensedTargetTokens: 900,
-		MaxRounds:             10,
+		IncrementalMaxDepth:    0,
+		LeafTargetTokens:       600,
+		CondensedTargetTokens:  900,
+		MaxRounds:              10,
 	}
 }
 
@@ -285,8 +285,8 @@ func handleSummarize(
 	logger *slog.Logger,
 ) (any, error) {
 	var cmd struct {
-		Text       string           `json:"text"`
-		Aggressive bool             `json:"aggressive"`
+		Text       string            `json:"text"`
+		Aggressive bool              `json:"aggressive"`
 		Options    *SummarizeOptions `json:"options,omitempty"`
 	}
 	if err := json.Unmarshal(cmdJSON, &cmd); err != nil {

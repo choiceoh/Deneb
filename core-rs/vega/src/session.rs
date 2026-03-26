@@ -15,7 +15,7 @@ use serde_json::Value;
 const MAX_RECENT_IDS: usize = 10;
 
 /// Session state persisted between commands.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct VegaSession {
     /// Recently accessed project IDs (most recent first).
     pub recent_ids: VecDeque<i64>,
@@ -23,16 +23,6 @@ pub struct VegaSession {
     pub last_command: Option<String>,
     /// Last query string.
     pub last_query: Option<String>,
-}
-
-impl Default for VegaSession {
-    fn default() -> Self {
-        Self {
-            recent_ids: VecDeque::new(),
-            last_command: None,
-            last_query: None,
-        }
-    }
 }
 
 impl VegaSession {

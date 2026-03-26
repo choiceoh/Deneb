@@ -84,17 +84,16 @@ fn find_red_status_projects(conn: &Connection) -> Result<Vec<Value>, String> {
         .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
 
     let mut items = Vec::new();
-    for row in rows {
-        if let Ok((id, name, status)) = row {
-            items.push(json!({
-                "type": "critical",
-                "priority": 0,
-                "project_id": id,
-                "project_name": name,
-                "status": status,
-                "reason": format!("🔴 위험 상태: {}", status),
-            }));
-        }
+    for row in rows.flatten() {
+        let (id, name, status) = row;
+        items.push(json!({
+            "type": "critical",
+            "priority": 0,
+            "project_id": id,
+            "project_name": name,
+            "status": status,
+            "reason": format!("🔴 위험 상태: {}", status),
+        }));
     }
     Ok(items)
 }
@@ -125,22 +124,21 @@ fn find_overdue_actions(conn: &Connection) -> Result<Vec<Value>, String> {
     let today = chrono_today_str();
 
     let mut items = Vec::new();
-    for row in rows {
-        if let Ok((project_id, name, content)) = row {
-            for cap in date_re.captures_iter(&content) {
-                let date_str = format!("{}-{:0>2}-{:0>2}", &cap[1], &cap[2], &cap[3]);
-                if date_str < today {
-                    items.push(json!({
-                        "type": "overdue",
-                        "priority": 1,
-                        "project_id": project_id,
-                        "project_name": name,
-                        "due_date": date_str,
-                        "action": content.trim(),
-                        "reason": format!("⏰ 기한 초과: {} ({})", content.trim(), date_str),
-                    }));
-                    break; // one item per action chunk
-                }
+    for row in rows.flatten() {
+        let (project_id, name, content) = row;
+        for cap in date_re.captures_iter(&content) {
+            let date_str = format!("{}-{:0>2}-{:0>2}", &cap[1], &cap[2], &cap[3]);
+            if date_str < today {
+                items.push(json!({
+                    "type": "overdue",
+                    "priority": 1,
+                    "project_id": project_id,
+                    "project_name": name,
+                    "due_date": date_str,
+                    "action": content.trim(),
+                    "reason": format!("⏰ 기한 초과: {} ({})", content.trim(), date_str),
+                }));
+                break; // one item per action chunk
             }
         }
     }
@@ -174,17 +172,16 @@ fn find_overloaded_persons(conn: &Connection) -> Result<Vec<Value>, String> {
         .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
 
     let mut items = Vec::new();
-    for row in rows {
-        if let Ok((person, cnt, projects)) = row {
-            items.push(json!({
-                "type": "overloaded",
-                "priority": 2,
-                "person": person.trim(),
-                "project_count": cnt,
-                "projects": projects,
-                "reason": format!("👤 과부하: {} ({}개 프로젝트)", person.trim(), cnt),
-            }));
-        }
+    for row in rows.flatten() {
+        let (person, cnt, projects) = row;
+        items.push(json!({
+            "type": "overloaded",
+            "priority": 2,
+            "person": person.trim(),
+            "project_count": cnt,
+            "projects": projects,
+            "reason": format!("👤 과부하: {} ({}개 프로젝트)", person.trim(), cnt),
+        }));
     }
     Ok(items)
 }
@@ -218,18 +215,17 @@ fn find_stale_projects(conn: &Connection) -> Result<Vec<Value>, String> {
         .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
 
     let mut items = Vec::new();
-    for row in rows {
-        if let Ok((id, name, _status, last_comm)) = row {
-            let comm_display = last_comm.as_deref().unwrap_or("기록 없음");
-            items.push(json!({
-                "type": "stale",
-                "priority": 3,
-                "project_id": id,
-                "project_name": name,
-                "last_comm": comm_display,
-                "reason": format!("💤 장기 미소통: {} (마지막: {})", name, comm_display),
-            }));
-        }
+    for row in rows.flatten() {
+        let (id, name, _status, last_comm) = row;
+        let comm_display = last_comm.as_deref().unwrap_or("기록 없음");
+        items.push(json!({
+            "type": "stale",
+            "priority": 3,
+            "project_id": id,
+            "project_name": name,
+            "last_comm": comm_display,
+            "reason": format!("💤 장기 미소통: {} (마지막: {})", name, comm_display),
+        }));
     }
     Ok(items)
 }

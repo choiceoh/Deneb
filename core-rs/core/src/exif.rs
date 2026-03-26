@@ -1,7 +1,7 @@
-/// JPEG EXIF orientation reader.
-///
-/// Ports `readJpegExifOrientation` from `src/media/image-ops.ts` (lines 47-134).
-/// Pure binary buffer parsing — ideal Rust target (no GC, SIMD-friendly).
+//! JPEG EXIF orientation reader.
+//!
+//! Ports `readJpegExifOrientation` from `src/media/image-ops.ts` (lines 47-134).
+//! Pure binary buffer parsing — ideal Rust target (no GC, SIMD-friendly).
 
 #[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::Buffer;

@@ -144,7 +144,7 @@ fn tokenize_korean(s: &str) -> Vec<String> {
 /// "--days 7" → 7. Returns None if no pattern found.
 pub fn extract_days(text: &str, default: i64) -> i64 {
     // --days flag
-    if let Some(re) = Regex::new(r"--days\s+(\d+)").ok() {
+    if let Ok(re) = Regex::new(r"--days\s+(\d+)") {
         if let Some(caps) = re.captures(text) {
             if let Ok(d) = caps[1].parse::<i64>() {
                 return d.clamp(1, 90);
@@ -159,7 +159,7 @@ pub fn extract_days(text: &str, default: i64) -> i64 {
         (r"(\d+)\s*개월", 30),
     ];
     for (pat, mult) in patterns {
-        if let Some(re) = Regex::new(pat).ok() {
+        if let Ok(re) = Regex::new(pat) {
             if let Some(caps) = re.captures(text) {
                 if let Ok(n) = caps[1].parse::<i64>() {
                     return (n * mult).clamp(1, 90);
@@ -181,7 +181,7 @@ pub fn extract_days(text: &str, default: i64) -> i64 {
 
 /// Extract result limit from text. "--limit 5" → 5, "3개" → 3.
 pub fn extract_limit(text: &str, default: usize) -> usize {
-    if let Some(re) = Regex::new(r"--limit\s+(\d+)").ok() {
+    if let Ok(re) = Regex::new(r"--limit\s+(\d+)") {
         if let Some(caps) = re.captures(text) {
             if let Ok(n) = caps[1].parse::<usize>() {
                 return n.clamp(1, 100);
@@ -189,7 +189,7 @@ pub fn extract_limit(text: &str, default: usize) -> usize {
         }
     }
     // N개 pattern
-    if let Some(re) = Regex::new(r"(\d+)\s*개").ok() {
+    if let Ok(re) = Regex::new(r"(\d+)\s*개") {
         if let Some(caps) = re.captures(text) {
             if let Ok(n) = caps[1].parse::<usize>() {
                 return n.clamp(1, 100);
@@ -275,10 +275,8 @@ pub fn find_project_id_in_text(
 
     for (id, name) in &rows {
         let score = fuzzy_match_score(text, name);
-        if score >= threshold {
-            if best.is_none() || score > best.as_ref().unwrap().2 {
-                best = Some((*id, name.clone(), score));
-            }
+        if score >= threshold && (best.is_none() || score > best.as_ref().unwrap().2) {
+            best = Some((*id, name.clone(), score));
         }
     }
 

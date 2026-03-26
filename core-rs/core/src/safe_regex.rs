@@ -1,10 +1,10 @@
-/// ReDoS (Regular Expression Denial of Service) prevention.
-///
-/// Ports the tokenizer + nested-repetition analyzer from
-/// `src/security/safe-regex.ts` to Rust for CPU-bound safety checks.
-///
-/// Only the safety analysis (`has_nested_repetition`) is in Rust.
-/// `compileSafeRegex` stays in TypeScript because it creates V8 RegExp objects.
+//! ReDoS (Regular Expression Denial of Service) prevention.
+//!
+//! Ports the tokenizer + nested-repetition analyzer from
+//! `src/security/safe-regex.ts` to Rust for CPU-bound safety checks.
+//!
+//! Only the safety analysis (`has_nested_repetition`) is in Rust.
+//! `compileSafeRegex` stays in TypeScript because it creates V8 RegExp objects.
 
 #[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::*;

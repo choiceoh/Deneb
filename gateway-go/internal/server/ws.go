@@ -41,17 +41,17 @@ const (
 // WsClient represents a connected WebSocket client.
 // Implements events.Subscriber for event broadcasting.
 type WsClient struct {
-	conn           *websocket.Conn
-	connID         string
-	created        time.Time
-	role           string
-	authed         bool
-	deviceID       string
-	scopes         []auth.Scope
-	writeMu        sync.Mutex
-	inflightBytes  atomic.Int64 // bytes currently being written (not yet flushed)
-	lastActivity   atomic.Int64 // unix nano of last inbound message
-	cancelPing     context.CancelFunc
+	conn          *websocket.Conn
+	connID        string
+	created       time.Time
+	role          string
+	authed        bool
+	deviceID      string
+	scopes        []auth.Scope
+	writeMu       sync.Mutex
+	inflightBytes atomic.Int64 // bytes currently being written (not yet flushed)
+	lastActivity  atomic.Int64 // unix nano of last inbound message
+	cancelPing    context.CancelFunc
 }
 
 // --- Subscriber interface (events.Subscriber) ---

@@ -18,14 +18,14 @@ const (
 
 // AckReactionGateParams holds the inputs for ack reaction gating.
 type AckReactionGateParams struct {
-	Scope                AckReactionScope
-	IsDirect             bool
-	IsGroup              bool
-	IsMentionableGroup   bool
-	RequireMention       bool
-	CanDetectMention     bool
+	Scope                 AckReactionScope
+	IsDirect              bool
+	IsGroup               bool
+	IsMentionableGroup    bool
+	RequireMention        bool
+	CanDetectMention      bool
 	EffectiveWasMentioned bool
-	ShouldBypassMention  bool
+	ShouldBypassMention   bool
 }
 
 // ShouldAckReaction determines whether an ack reaction should be sent.

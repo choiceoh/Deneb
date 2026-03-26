@@ -332,13 +332,17 @@ mod tests {
 
     #[test]
     fn test_aurora_config_validated_clamp() {
-        let mut config = AuroraConfig::default();
-        config.context_threshold = 2.0;
+        let config = AuroraConfig {
+            context_threshold: 2.0,
+            ..AuroraConfig::default()
+        };
         let validated = config.validated();
         assert_eq!(validated.context_threshold, 1.0);
 
-        let mut config2 = AuroraConfig::default();
-        config2.context_threshold = 0.01;
+        let config2 = AuroraConfig {
+            context_threshold: 0.01,
+            ..AuroraConfig::default()
+        };
         let validated2 = config2.validated();
         assert_eq!(validated2.context_threshold, 0.1);
     }

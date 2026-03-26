@@ -222,8 +222,7 @@ fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
 
     // E-7: Auto-correction on failure or 0 results
     if !result.success
-        || (result.success
-            && command == "search"
+        || (command == "search"
             && result
                 .data
                 .get("result_count")

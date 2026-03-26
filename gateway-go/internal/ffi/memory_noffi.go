@@ -147,7 +147,7 @@ type hybridResult struct {
 	StartLine uint32  `json:"startLine"`
 	EndLine   uint32  `json:"endLine"`
 	Source    string  `json:"source"`
-	Snippet  string  `json:"snippet"`
+	Snippet   string  `json:"snippet"`
 	Score     float64 `json:"score"`
 }
 
