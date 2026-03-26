@@ -1,13 +1,12 @@
-// web_fetch.go — Agent-oriented web content extraction tool.
+// web_fetch.go — Unified web tool: search, fetch, and search+fetch in one.
 //
-// Designed for AI agent consumption, not human browsing. Key principles:
-//   - Structured metadata (title, final URL, language, publish date, signals)
-//   - Machine-readable errors with classification codes
-//   - Aggressive noise removal (nav, ads, cookie banners, comments)
-//   - Section-aware truncation respecting markdown structure
-//   - Optional SGLang AI-powered extraction for HTML content
-//   - Quality signals (login wall, SPA shell, bot detection, soft paywall)
-//   - Charset normalization, JSON pretty-printing, fetch timing
+// Three modes via parameter dispatch:
+//   {"url": "..."}                        → Fetch mode (extract content from URL)
+//   {"query": "..."}                      → Search mode (web search results)
+//   {"query": "...", "fetch": N}          → Search+fetch (search then auto-fetch top N)
+//
+// Designed for AI agent consumption with structured metadata, machine-readable
+// errors, aggressive noise removal, SGLang AI extraction, and bot-block evasion.
 package chat
 
 import (
@@ -19,6 +18,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -32,20 +32,31 @@ import (
 
 // --- Tool schema ---
 
-func webFetchToolSchema() map[string]any {
+func webToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"url": map[string]any{
 				"type":        "string",
-				"description": "HTTP or HTTPS URL to fetch",
+				"description": "URL to fetch and extract content from",
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Web search query (uses Brave Search or DuckDuckGo)",
+			},
+			"fetch": map[string]any{
+				"type":        "number",
+				"description": "When used with query: auto-fetch top N search results (1-3, default: 0 = search only)",
 			},
 			"maxChars": map[string]any{
 				"type":        "number",
-				"description": "Maximum content characters to return (default: 50000)",
+				"description": "Maximum content characters per result (default: 50000)",
+			},
+			"count": map[string]any{
+				"type":        "number",
+				"description": "Number of search results (default: 5)",
 			},
 		},
-		"required": []string{"url"},
 	}
 }
 
@@ -82,100 +93,325 @@ type webFetchErr struct {
 	Retryable bool   `json:"retryable"`
 }
 
-// --- Tool implementation ---
+// --- Unified tool implementation ---
 
-func toolWebFetch(cache *FetchCache, sglang *sglangExtractor) ToolFunc {
+func toolWeb(cache *FetchCache, sglang *sglangExtractor) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			URL      string `json:"url"`
+			Query    string `json:"query"`
+			Fetch    int    `json:"fetch"`
 			MaxChars int    `json:"maxChars"`
+			Count    int    `json:"count"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return formatFetchError(webFetchErr{
 				Code: "invalid_params", Message: err.Error(), Retryable: false,
 			}), nil
 		}
-		if p.URL == "" {
+
+		// Dispatch by mode.
+		switch {
+		case p.URL != "":
+			// Fetch mode: extract content from URL.
+			return webFetchURL(ctx, cache, sglang, p.URL, p.MaxChars)
+
+		case p.Query != "":
+			if p.Count <= 0 {
+				p.Count = 5
+			}
+			if p.Fetch > 0 {
+				// Search+fetch mode: search then auto-fetch top N.
+				if p.Fetch > 3 {
+					p.Fetch = 3
+				}
+				return webSearchAndFetch(ctx, cache, sglang, p.Query, p.Count, p.Fetch, p.MaxChars)
+			}
+			// Search-only mode: return search results.
+			return webSearch(ctx, p.Query, p.Count)
+
+		default:
 			return formatFetchError(webFetchErr{
-				Code: "missing_url", Message: "url is required", Retryable: false,
+				Code: "missing_params", Message: "either url or query is required", Retryable: false,
 			}), nil
 		}
-
-		maxChars := 50000
-		if p.MaxChars > 0 {
-			maxChars = p.MaxChars
-		}
-
-		// YouTube → delegate to transcript extraction.
-		if media.IsYouTubeURL(p.URL) {
-			return fetchYouTube(ctx, p.URL)
-		}
-
-		// Cache lookup.
-		if cached, ok := cache.Get(p.URL); ok {
-			return applyTruncation(cached, maxChars), nil
-		}
-
-		// Size limit: 2× maxChars raw bytes, capped at 5 MB.
-		maxBytes := int64(maxChars * 2)
-		if maxBytes > 5*1024*1024 {
-			maxBytes = 5 * 1024 * 1024
-		}
-
-		// Fetch with retry + timing.
-		fetchStart := time.Now()
-		result, err := fetchWithRetry(ctx, p.URL, maxBytes)
-		fetchMs := time.Since(fetchStart).Milliseconds()
-		if err != nil {
-			return formatFetchError(classifyFetchError(err, p.URL)), nil
-		}
-
-		// Charset normalization — convert non-UTF-8 to UTF-8.
-		rawContent := normalizeCharset(result.Data, result.ContentType)
-		origChars := len(rawContent)
-
-		meta := webFetchMeta{
-			URL:         p.URL,
-			FinalURL:    result.FinalURL,
-			ContentType: result.ContentType,
-			StatusCode:  result.StatusCode,
-			FetchMs:     fetchMs,
-			OrigChars:   origChars,
-		}
-
-		isHTML := strings.Contains(result.ContentType, "text/html") ||
-			strings.Contains(result.ContentType, "application/xhtml")
-		isJSON := strings.Contains(result.ContentType, "application/json") ||
-			strings.Contains(result.ContentType, "+json")
-
-		var content string
-		switch {
-		case isHTML:
-			content = processHTML(ctx, rawContent, p.URL, sglang, &meta)
-		case isJSON:
-			content = processJSON(rawContent)
-		default:
-			content = rawContent
-		}
-
-		meta.ExtractChars = len(content)
-		if origChars > 0 {
-			meta.Retention = fmt.Sprintf("%.1f%%", float64(meta.ExtractChars)/float64(origChars)*100)
-		} else {
-			meta.Retention = "0%"
-		}
-
-		// Estimate word count from extracted content.
-		if meta.WordCount == 0 {
-			meta.WordCount = estimateWordCount(content)
-		}
-
-		// Build full result and cache before truncation.
-		fullResult := formatFetchResult(meta, content)
-		cache.Put(p.URL, fullResult)
-
-		return applyTruncation(fullResult, maxChars), nil
 	}
+}
+
+// --- Fetch mode ---
+
+func webFetchURL(ctx context.Context, cache *FetchCache, sglang *sglangExtractor, targetURL string, maxChars int) (string, error) {
+	if maxChars <= 0 {
+		maxChars = 50000
+	}
+
+	// YouTube → transcript.
+	if media.IsYouTubeURL(targetURL) {
+		return fetchYouTube(ctx, targetURL)
+	}
+
+	// Cache hit.
+	if cached, ok := cache.Get(targetURL); ok {
+		return applyTruncation(cached, maxChars), nil
+	}
+
+	// Size limit.
+	maxBytes := int64(maxChars * 2)
+	if maxBytes > 5*1024*1024 {
+		maxBytes = 5 * 1024 * 1024
+	}
+
+	fetchStart := time.Now()
+	result, err := fetchWithRetry(ctx, targetURL, maxBytes)
+	fetchMs := time.Since(fetchStart).Milliseconds()
+	if err != nil {
+		return formatFetchError(classifyFetchError(err, targetURL)), nil
+	}
+
+	rawContent := normalizeCharset(result.Data, result.ContentType)
+	origChars := len(rawContent)
+
+	meta := webFetchMeta{
+		URL: targetURL, FinalURL: result.FinalURL,
+		ContentType: result.ContentType, StatusCode: result.StatusCode,
+		FetchMs: fetchMs, OrigChars: origChars,
+	}
+
+	isHTML := strings.Contains(result.ContentType, "text/html") ||
+		strings.Contains(result.ContentType, "application/xhtml")
+	isJSON := strings.Contains(result.ContentType, "application/json") ||
+		strings.Contains(result.ContentType, "+json")
+
+	var content string
+	switch {
+	case isHTML:
+		content = processHTML(ctx, rawContent, targetURL, sglang, &meta)
+	case isJSON:
+		content = processJSON(rawContent)
+	default:
+		content = rawContent
+	}
+
+	meta.ExtractChars = len(content)
+	if origChars > 0 {
+		meta.Retention = fmt.Sprintf("%.1f%%", float64(meta.ExtractChars)/float64(origChars)*100)
+	} else {
+		meta.Retention = "0%"
+	}
+	if meta.WordCount == 0 {
+		meta.WordCount = estimateWordCount(content)
+	}
+
+	fullResult := formatFetchResult(meta, content)
+	cache.Put(targetURL, fullResult)
+
+	return applyTruncation(fullResult, maxChars), nil
+}
+
+// --- Search mode ---
+
+func webSearch(ctx context.Context, query string, count int) (string, error) {
+	braveKey := os.Getenv("BRAVE_SEARCH_API_KEY")
+	if braveKey == "" {
+		braveKey = os.Getenv("BRAVE_API_KEY")
+	}
+	if braveKey != "" {
+		return braveWebSearch(ctx, braveKey, query, count)
+	}
+	return duckDuckGoSearch(ctx, query)
+}
+
+func braveWebSearch(ctx context.Context, apiKey, query string, count int) (string, error) {
+	reqURL := fmt.Sprintf("https://api.search.brave.com/res/v1/web/search?q=%s&count=%d",
+		url.QueryEscape(query), count)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Subscription-Token", apiKey)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("brave search failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return formatFetchError(webFetchErr{
+			Code: "search_http_" + strconv.Itoa(resp.StatusCode),
+			Message: fmt.Sprintf("Brave Search returned HTTP %d", resp.StatusCode),
+			Retryable: resp.StatusCode >= 500,
+		}), nil
+	}
+
+	var result braveSearchResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("parse brave response: %w", err)
+	}
+
+	return formatSearchResults(result.Web.Results), nil
+}
+
+type braveSearchResult struct {
+	Web struct {
+		Results []searchResult `json:"results"`
+	} `json:"web"`
+}
+
+type searchResult struct {
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	Description string `json:"description"`
+}
+
+func duckDuckGoSearch(ctx context.Context, query string) (string, error) {
+	reqURL := fmt.Sprintf("https://api.duckduckgo.com/?q=%s&format=json&no_html=1&skip_disambig=1",
+		url.QueryEscape(query))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", chromeProfile.headers["User-Agent"])
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("duckduckgo search failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Abstract      string `json:"Abstract"`
+		AbstractURL   string `json:"AbstractURL"`
+		RelatedTopics []struct {
+			Text     string `json:"Text"`
+			FirstURL string `json:"FirstURL"`
+		} `json:"RelatedTopics"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("parse duckduckgo response: %w", err)
+	}
+
+	var sb strings.Builder
+	if result.Abstract != "" {
+		fmt.Fprintf(&sb, "**Summary:** %s\nSource: %s\n\n", result.Abstract, result.AbstractURL)
+	}
+	for i, topic := range result.RelatedTopics {
+		if i >= 5 || topic.Text == "" {
+			break
+		}
+		fmt.Fprintf(&sb, "- %s\n  %s\n", topic.Text, topic.FirstURL)
+	}
+	if sb.Len() == 0 {
+		return "No results found for this query.", nil
+	}
+	return sb.String(), nil
+}
+
+func formatSearchResults(results []searchResult) string {
+	if len(results) == 0 {
+		return "No results found."
+	}
+	var sb strings.Builder
+	for i, r := range results {
+		fmt.Fprintf(&sb, "%d. **%s**\n   %s\n   %s\n\n", i+1, r.Title, r.URL, r.Description)
+	}
+	return sb.String()
+}
+
+// --- Search+fetch mode ---
+
+// webSearchAndFetch searches the web and auto-fetches the top N results.
+// Returns search results with inline extracted content.
+func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *sglangExtractor, query string, count, fetchTop, maxChars int) (string, error) {
+	if maxChars <= 0 {
+		maxChars = 30000 // lower default for multi-fetch to fit in context
+	}
+
+	// Step 1: Search.
+	braveKey := os.Getenv("BRAVE_SEARCH_API_KEY")
+	if braveKey == "" {
+		braveKey = os.Getenv("BRAVE_API_KEY")
+	}
+
+	var results []searchResult
+	if braveKey != "" {
+		parsed, err := braveSearchRaw(ctx, braveKey, query, count)
+		if err != nil {
+			return "", err
+		}
+		results = parsed
+	} else {
+		// DuckDuckGo doesn't return fetchable URLs well, fall back to search-only.
+		return duckDuckGoSearch(ctx, query)
+	}
+
+	if len(results) == 0 {
+		return "No results found.", nil
+	}
+
+	// Step 2: Build search results header.
+	var sb strings.Builder
+	sb.WriteString("<search_results query=\"" + query + "\">\n")
+	for i, r := range results {
+		fmt.Fprintf(&sb, "%d. **%s**\n   %s\n   %s\n", i+1, r.Title, r.URL, r.Description)
+	}
+	sb.WriteString("</search_results>\n\n")
+
+	// Step 3: Auto-fetch top N results.
+	if fetchTop > len(results) {
+		fetchTop = len(results)
+	}
+	perResultChars := maxChars / fetchTop
+
+	for i := 0; i < fetchTop; i++ {
+		resultURL := results[i].URL
+		fmt.Fprintf(&sb, "<fetched index=\"%d\" url=\"%s\">\n", i+1, resultURL)
+
+		content, err := webFetchURL(ctx, cache, sglang, resultURL, perResultChars)
+		if err != nil {
+			fmt.Fprintf(&sb, "Fetch failed: %s\n", err.Error())
+		} else {
+			sb.WriteString(content)
+		}
+		sb.WriteString("\n</fetched>\n\n")
+	}
+
+	return sb.String(), nil
+}
+
+// braveSearchRaw returns raw search results for use in search+fetch mode.
+func braveSearchRaw(ctx context.Context, apiKey, query string, count int) ([]searchResult, error) {
+	reqURL := fmt.Sprintf("https://api.search.brave.com/res/v1/web/search?q=%s&count=%d",
+		url.QueryEscape(query), count)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Subscription-Token", apiKey)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("brave search failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Brave Search HTTP %d", resp.StatusCode)
+	}
+
+	var result braveSearchResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("parse brave response: %w", err)
+	}
+	return result.Web.Results, nil
 }
 
 // --- Content processing by type ---
