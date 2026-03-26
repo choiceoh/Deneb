@@ -2,6 +2,7 @@ package ffi
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -105,4 +106,158 @@ func TestMarkdownToPlainText(t *testing.T) {
 		t.Fatal("expected non-empty text")
 	}
 	t.Logf("Plain text: %q", text)
+}
+
+func TestMarkdownToIR_Headings(t *testing.T) {
+	ir, err := MarkdownToIR("# Heading 1\n## Heading 2\n### Heading 3", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(ir, &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	// Headings should have '#' stripped
+	if result.Text == "" {
+		t.Error("expected non-empty text after heading strip")
+	}
+	if strings.Contains(result.Text, "# ") {
+		t.Errorf("expected heading markers stripped, got %q", result.Text)
+	}
+}
+
+func TestMarkdownToIR_Links(t *testing.T) {
+	ir, err := MarkdownToIR("[Click here](https://example.com)", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(ir, &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if !strings.Contains(result.Text, "Click here") {
+		t.Errorf("expected link text preserved, got %q", result.Text)
+	}
+	if strings.Contains(result.Text, "https://") {
+		t.Errorf("expected URL stripped from text, got %q", result.Text)
+	}
+}
+
+func TestMarkdownDetectFences_TildeFence(t *testing.T) {
+	text := "before\n~~~python\nprint('hi')\n~~~\nafter"
+	fences, err := MarkdownDetectFences(text)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var spans []json.RawMessage
+	if err := json.Unmarshal(fences, &spans); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(spans) != 1 {
+		t.Errorf("expected 1 tilde fence span, got %d", len(spans))
+	}
+}
+
+func TestMarkdownDetectFences_Unclosed(t *testing.T) {
+	text := "start\n```python\nsome code\nno closing fence"
+	fences, err := MarkdownDetectFences(text)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var spans []struct {
+		Start int `json:"start"`
+		End   int `json:"end"`
+	}
+	if err := json.Unmarshal(fences, &spans); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 unclosed fence span, got %d", len(spans))
+	}
+	// Unclosed fence should extend to end of text
+	if spans[0].End != len(text) {
+		t.Errorf("expected unclosed fence end=%d, got %d", len(text), spans[0].End)
+	}
+}
+
+func TestMarkdownDetectFences_MultipleFences(t *testing.T) {
+	text := "```go\nfunc main(){}\n```\nsome text\n```rust\nfn main(){}\n```"
+	fences, err := MarkdownDetectFences(text)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var spans []json.RawMessage
+	if err := json.Unmarshal(fences, &spans); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(spans) != 2 {
+		t.Errorf("expected 2 fence spans, got %d", len(spans))
+	}
+}
+
+func TestMarkdownDetectFences_IndentedFence(t *testing.T) {
+	text := "   ```python\n   code\n   ```"
+	fences, err := MarkdownDetectFences(text)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var spans []json.RawMessage
+	if err := json.Unmarshal(fences, &spans); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(spans) != 1 {
+		t.Errorf("expected 1 indented fence span, got %d", len(spans))
+	}
+}
+
+func TestMarkdownDetectFences_TooMuchIndent(t *testing.T) {
+	// 4+ spaces of indent should NOT be treated as a fence
+	text := "    ```python\n    code\n    ```"
+	fences, err := MarkdownDetectFences(text)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var spans []json.RawMessage
+	if err := json.Unmarshal(fences, &spans); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(spans) != 0 {
+		t.Errorf("expected 0 fence spans for 4-space indent, got %d", len(spans))
+	}
+}
+
+func TestMarkdownDetectFences_NoFences(t *testing.T) {
+	text := "Just some normal text\nwith multiple lines\nbut no code fences"
+	fences, err := MarkdownDetectFences(text)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var spans []json.RawMessage
+	if err := json.Unmarshal(fences, &spans); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(spans) != 0 {
+		t.Errorf("expected 0 fences, got %d", len(spans))
+	}
+}
+
+func TestMarkdownToPlainText_Complex(t *testing.T) {
+	input := "# Title\n\n**Bold** and *italic* with `code` and [link](https://example.com)\n\n## Section"
+	text, err := MarkdownToPlainText(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(text, "**") || strings.Contains(text, "__") {
+		t.Errorf("bold markers should be stripped, got %q", text)
+	}
+	if strings.Contains(text, "`") {
+		t.Errorf("code backticks should be stripped, got %q", text)
+	}
+	if !strings.Contains(text, "Bold") || !strings.Contains(text, "italic") {
+		t.Errorf("content should be preserved, got %q", text)
+	}
 }

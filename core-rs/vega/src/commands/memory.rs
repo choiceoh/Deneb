@@ -637,3 +637,98 @@ pub fn cmd_memory_version(_args: &Value, _config: &VegaConfig) -> CommandResult 
         }),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_fts_query_simple() {
+        let result = sanitize_fts_query("hello world");
+        assert_eq!(result, r#""hello" "world""#);
+    }
+
+    #[test]
+    fn test_sanitize_fts_query_single_token() {
+        let result = sanitize_fts_query("rust");
+        assert_eq!(result, r#""rust""#);
+    }
+
+    #[test]
+    fn test_sanitize_fts_query_with_quotes() {
+        let result = sanitize_fts_query(r#"hello "world""#);
+        // Quotes are escaped by doubling, then tokens are quoted
+        // Input: hello "world" → replace " with "": hello ""world"" → split: [hello, ""world""] → wrap: "hello" """world"""
+        assert_eq!(result, r#""hello" """world""""#);
+    }
+
+    #[test]
+    fn test_sanitize_fts_query_extra_whitespace() {
+        let result = sanitize_fts_query("  hello   world  ");
+        assert_eq!(result, r#""hello" "world""#);
+    }
+
+    #[test]
+    fn test_sanitize_fts_query_empty() {
+        let result = sanitize_fts_query("");
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_parse_md_sections_basic() {
+        let content = "# Title\nSome intro\n## Section A\nContent A\n## Section B\nContent B\n";
+        let sections = parse_md_sections(content);
+        assert_eq!(sections.len(), 3);
+        assert_eq!(sections[0].0, "Title");
+        assert!(sections[0].1.contains("Some intro"));
+        assert_eq!(sections[1].0, "Section A");
+        assert!(sections[1].1.contains("Content A"));
+        assert_eq!(sections[2].0, "Section B");
+        assert!(sections[2].1.contains("Content B"));
+    }
+
+    #[test]
+    fn test_parse_md_sections_no_headings() {
+        let content = "Just some text\nwith multiple lines\n";
+        let sections = parse_md_sections(content);
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].0, "_header");
+        assert!(sections[0].1.contains("Just some text"));
+    }
+
+    #[test]
+    fn test_parse_md_sections_empty() {
+        let sections = parse_md_sections("");
+        assert!(sections.is_empty());
+    }
+
+    #[test]
+    fn test_parse_md_sections_consecutive_headings() {
+        let content = "# First\n## Second\nContent\n";
+        let sections = parse_md_sections(content);
+        // First heading has no content, so only Second appears
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].0, "Second");
+    }
+
+    #[test]
+    fn test_compute_content_hash_deterministic() {
+        let hash1 = compute_content_hash("hello world");
+        let hash2 = compute_content_hash("hello world");
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_compute_content_hash_different_inputs() {
+        let hash1 = compute_content_hash("hello");
+        let hash2 = compute_content_hash("world");
+        assert_ne!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_compute_content_hash_format() {
+        let hash = compute_content_hash("test");
+        assert_eq!(hash.len(), 16); // 16 hex chars = 64-bit hash
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+}
