@@ -1,6 +1,6 @@
 // queue_drain.go — Followup queue drain scheduling and execution.
 // Mirrors src/auto-reply/reply/queue/drain.ts (203 LOC).
-package autoreply
+package queue
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"

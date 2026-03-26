@@ -12,6 +12,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 )
@@ -105,7 +106,7 @@ func ParseFullInlineDirectives(body string, opts *FullDirectiveParseOptions) Ful
 	// Now extract debounce/cap/drop args using the token-based parser
 	// which returns QueueDirective with types.FollowupQueueMode/types.FollowupDropPolicy.
 	if result.HasQueueDirective {
-		qd := ExtractQueueDirective(body)
+		qd := queue.ExtractQueueDirective(body)
 		if qd.HasDirective {
 			result.QueueModeResolved = qd.QueueMode
 			result.QueueReset = qd.QueueReset

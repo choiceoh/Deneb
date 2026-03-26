@@ -1,6 +1,6 @@
 // queue_settings.go — Followup queue settings resolution.
 // Mirrors src/auto-reply/reply/queue/settings.ts (72 LOC).
-package autoreply
+package queue
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"

@@ -1,4 +1,4 @@
-package autoreply
+package queue
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
@@ -60,7 +60,7 @@ func TestFollowupQueueRegistry_Clear(t *testing.T) {
 
 func TestEnqueueFollowupRun_basic(t *testing.T) {
 	r := NewFollowupQueueRegistry()
-	cache := newRecentMessageIDCache()
+	cache := NewRecentMessageIDCache()
 	settings := types.FollowupQueueSettings{Mode: types.FollowupModeSteer, Cap: 5}
 
 	ok := r.EnqueueFollowupRun("k", types.FollowupRun{Prompt: "hello", MessageID: "m1"}, settings, types.DedupeMessageID, cache)
@@ -83,7 +83,7 @@ func TestEnqueueFollowupRun_basic(t *testing.T) {
 
 func TestEnqueueFollowupRun_dropPolicy(t *testing.T) {
 	r := NewFollowupQueueRegistry()
-	cache := newRecentMessageIDCache()
+	cache := NewRecentMessageIDCache()
 	settings := types.FollowupQueueSettings{Mode: types.FollowupModeSteer, Cap: 2, DropPolicy: types.FollowupDropNew}
 
 	r.EnqueueFollowupRun("k", types.FollowupRun{Prompt: "1"}, settings, types.DedupeNone, cache)
@@ -101,7 +101,7 @@ func TestEnqueueFollowupRun_dropPolicy(t *testing.T) {
 
 func TestEnqueueFollowupRun_dropOld(t *testing.T) {
 	r := NewFollowupQueueRegistry()
-	cache := newRecentMessageIDCache()
+	cache := NewRecentMessageIDCache()
 	settings := types.FollowupQueueSettings{Mode: types.FollowupModeSteer, Cap: 2, DropPolicy: types.FollowupDropOld}
 
 	r.EnqueueFollowupRun("k", types.FollowupRun{Prompt: "1"}, settings, types.DedupeNone, cache)
@@ -212,7 +212,7 @@ func TestClearSessionQueues(t *testing.T) {
 func TestFollowupQueue_ConcurrentEnqueue(t *testing.T) {
 	// Verify concurrent enqueue does not race or corrupt the queue.
 	r := NewFollowupQueueRegistry()
-	cache := newRecentMessageIDCache()
+	cache := NewRecentMessageIDCache()
 	settings := types.FollowupQueueSettings{Mode: types.FollowupModeSteer, Cap: 200}
 
 	const numEnqueues = 100
@@ -237,7 +237,7 @@ func TestFollowupQueue_ConcurrentEnqueue(t *testing.T) {
 
 func TestFollowupDrainService_basic(t *testing.T) {
 	r := NewFollowupQueueRegistry()
-	cache := newRecentMessageIDCache()
+	cache := NewRecentMessageIDCache()
 	settings := types.FollowupQueueSettings{Mode: types.FollowupModeSteer, Cap: 100, DebounceMs: 1}
 
 	// Pre-enqueue items.

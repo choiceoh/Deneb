@@ -8,6 +8,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"fmt"
 	"strings"
@@ -48,11 +49,11 @@ type DirectiveModelResolution struct {
 
 // DirectiveQueueChanges describes queue modifications from directives.
 type DirectiveQueueChanges struct {
-	Mode       QueueMode
+	Mode       queue.QueueMode
 	Reset      bool
 	DebounceMs int
 	Cap        int
-	DropPolicy QueueDropPolicy
+	DropPolicy queue.QueueDropPolicy
 }
 
 // HandleDirectives processes all inline directives in a message body.
@@ -299,11 +300,11 @@ func resolveQueueDirective(directives InlineDirectives) DirectiveQueueChanges {
 		mode := strings.ToLower(directives.RawQueueMode)
 		switch mode {
 		case "auto":
-			changes.Mode = QueueModeAuto
+			changes.Mode = queue.QueueModeAuto
 		case "manual":
-			changes.Mode = QueueModeManual
+			changes.Mode = queue.QueueModeManual
 		case "off":
-			changes.Mode = QueueModeOff
+			changes.Mode = queue.QueueModeOff
 		}
 	}
 	return changes

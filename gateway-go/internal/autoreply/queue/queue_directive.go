@@ -1,6 +1,6 @@
 // queue_directive.go — Parsing /queue directive from message text.
 // Mirrors src/auto-reply/reply/queue/directive.ts (177 LOC).
-package autoreply
+package queue
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"

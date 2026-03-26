@@ -1,6 +1,6 @@
 // queue_normalize.go — Queue mode and drop policy normalization.
 // Mirrors src/auto-reply/reply/queue/normalize.ts (47 LOC).
-package autoreply
+package queue
 
 import (
 	"strings"

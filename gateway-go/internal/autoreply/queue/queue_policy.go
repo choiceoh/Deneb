@@ -1,6 +1,6 @@
 // queue_policy.go — Active run queue action resolution.
 // Mirrors src/auto-reply/reply/queue-policy.ts (21 LOC).
-package autoreply
+package queue
 
 // ActiveRunQueueAction determines what to do with an incoming message
 // when a run is active.

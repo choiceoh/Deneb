@@ -1,6 +1,6 @@
 // queue_cleanup.go — Session queue cleanup.
 // Mirrors src/auto-reply/reply/queue/cleanup.ts (34 LOC).
-package autoreply
+package queue
 
 // ClearSessionQueueResult holds the result of clearing session queues.
 type ClearSessionQueueResult struct {

@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"fmt"
@@ -15,7 +16,7 @@ import (
 type SubagentInfraDeps struct {
 	ACPRegistry   *ACPRegistry
 	ACPProjector  *ACPProjector
-	FollowupQueue *FollowupQueueRegistry
+	FollowupQueue *queue.FollowupQueueRegistry
 	SessionStore  func(key string) *types.SessionState
 	SaveSession   func(session *types.SessionState) error
 	AbortSession  func(sessionKey string) error
@@ -192,7 +193,7 @@ func (d *SubagentInfraDeps) EnqueueFollowup(sessionKey, text string, run *types.
 		},
 		types.FollowupQueueSettings{},
 		types.DedupeNone,
-		newRecentMessageIDCache(),
+		queue.NewRecentMessageIDCache(),
 	)
 }
 

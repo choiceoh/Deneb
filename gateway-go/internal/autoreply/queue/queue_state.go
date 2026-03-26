@@ -1,6 +1,6 @@
 // queue_state.go — Followup queue state management.
 // Mirrors src/auto-reply/reply/queue/state.ts (88 LOC).
-package autoreply
+package queue
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"

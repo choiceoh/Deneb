@@ -1,6 +1,6 @@
 // queue_enqueue.go — Followup queue enqueue logic with deduplication.
 // Mirrors src/auto-reply/reply/queue/enqueue.ts (118 LOC).
-package autoreply
+package queue
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
@@ -21,20 +21,20 @@ type dedupeEntry struct {
 	seenAt time.Time
 }
 
-// recentMessageIDCache is a bounded TTL cache for message ID deduplication.
-type recentMessageIDCache struct {
+// RecentMessageIDCache is a bounded TTL cache for message ID deduplication.
+type RecentMessageIDCache struct {
 	mu      sync.Mutex
 	entries map[string]dedupeEntry
 }
 
-func newRecentMessageIDCache() *recentMessageIDCache {
-	return &recentMessageIDCache{
+func NewRecentMessageIDCache() *RecentMessageIDCache {
+	return &RecentMessageIDCache{
 		entries: make(map[string]dedupeEntry),
 	}
 }
 
 // peek returns true if the key is in the cache and not expired.
-func (c *recentMessageIDCache) peek(key string) bool {
+func (c *RecentMessageIDCache) peek(key string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	entry, ok := c.entries[key]
@@ -49,7 +49,7 @@ func (c *recentMessageIDCache) peek(key string) bool {
 }
 
 // check adds a key to the cache and prunes expired entries if over capacity.
-func (c *recentMessageIDCache) check(key string) {
+func (c *RecentMessageIDCache) check(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.entries[key] = dedupeEntry{seenAt: time.Now()}
@@ -59,13 +59,13 @@ func (c *recentMessageIDCache) check(key string) {
 }
 
 // clear removes all entries.
-func (c *recentMessageIDCache) clear() {
+func (c *RecentMessageIDCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.entries = make(map[string]dedupeEntry)
 }
 
-func (c *recentMessageIDCache) prune() {
+func (c *RecentMessageIDCache) prune() {
 	now := time.Now()
 	for k, v := range c.entries {
 		if now.Sub(v.seenAt) > recentMessageIDTTL {
@@ -127,7 +127,7 @@ func (r *FollowupQueueRegistry) EnqueueFollowupRun(
 	run types.FollowupRun,
 	settings types.FollowupQueueSettings,
 	dedupeMode types.FollowupDedupeMode,
-	recentIDs *recentMessageIDCache,
+	recentIDs *RecentMessageIDCache,
 ) bool {
 	queue := r.GetOrCreate(key, settings)
 
@@ -185,6 +185,6 @@ func (r *FollowupQueueRegistry) EnqueueFollowupRun(
 }
 
 // ResetRecentQueuedMessageIDDedupe clears the dedup cache.
-func (c *recentMessageIDCache) reset() {
+func (c *RecentMessageIDCache) reset() {
 	c.clear()
 }
