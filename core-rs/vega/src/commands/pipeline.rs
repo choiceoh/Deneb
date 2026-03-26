@@ -1,3 +1,4 @@
+use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -5,6 +6,14 @@ use serde_json::{json, Value};
 use crate::config::VegaConfig;
 
 use super::{open_db, CommandResult};
+
+static BILLIONS_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(\d+(?:\.\d+)?)\s*억\s*(?:(\d+(?:\.\d+)?)\s*만)?\s*원?").unwrap()
+});
+static TEN_THOUSANDS_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(\d+(?:,\d+)?(?:\.\d+)?)\s*만\s*원").unwrap());
+static WON_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(\d{1,3}(?:,\d{3})+)\s*원").unwrap());
 
 /// Pipeline analysis: extract monetary amounts from project text,
 /// classify project stages, and aggregate pipeline metrics.
@@ -165,13 +174,9 @@ fn extract_amount_for_project(conn: &Connection, project_id: i64) -> Result<f64,
 /// Extract monetary amount from text using regex patterns.
 /// Supports Korean Won formats: 억원, 만원, 원, and comma-separated numbers.
 fn extract_amount_from_text(text: &str) -> f64 {
-    // Pattern: N억 M만원 or N억원
-    let billions_re =
-        Regex::new(r"(\d+(?:\.\d+)?)\s*억\s*(?:(\d+(?:\.\d+)?)\s*만)?\s*원?").unwrap();
-    // Pattern: N만원
-    let ten_thousands_re = Regex::new(r"(\d+(?:,\d+)?(?:\.\d+)?)\s*만\s*원").unwrap();
-    // Pattern: N원 (plain number with 원)
-    let won_re = Regex::new(r"(\d{1,3}(?:,\d{3})+)\s*원").unwrap();
+    let billions_re = &*BILLIONS_RE;
+    let ten_thousands_re = &*TEN_THOUSANDS_RE;
+    let won_re = &*WON_RE;
 
     let mut max_amount: f64 = 0.0;
 

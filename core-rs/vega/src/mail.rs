@@ -7,9 +7,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use chrono::Local;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
+
+static COMM_SECTION_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?m)^##\s+커뮤니케이션").unwrap());
+static HISTORY_SECTION_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?m)^##\s+이력").unwrap());
 
 use crate::config::VegaConfig;
 
@@ -235,17 +241,14 @@ fn append_mail_to_md(
     let entry = format!("- [{}] {}: {} — {}\n", date, sender, subject, summary);
 
     // Find "## 커뮤니케이션" or "## 이력" section
-    let comm_re = Regex::new(r"(?m)^##\s+커뮤니케이션").unwrap();
-    let history_re = Regex::new(r"(?m)^##\s+이력").unwrap();
-
-    let new_content = if let Some(m) = comm_re.find(&content) {
+    let new_content = if let Some(m) = COMM_SECTION_RE.find(&content) {
         // Insert after the heading line
         let pos = content[m.end()..]
             .find('\n')
             .map(|p| m.end() + p + 1)
             .unwrap_or(m.end());
         format!("{}{}{}", &content[..pos], entry, &content[pos..])
-    } else if let Some(m) = history_re.find(&content) {
+    } else if let Some(m) = HISTORY_SECTION_RE.find(&content) {
         // Insert before 이력 section
         format!(
             "{}## 커뮤니케이션\n{}\n{}",

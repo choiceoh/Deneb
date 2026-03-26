@@ -1,3 +1,4 @@
+use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -5,6 +6,15 @@ use serde_json::{json, Value};
 use crate::config::VegaConfig;
 
 use super::{open_db, CommandResult};
+
+static NAME_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"([가-힣]{2,4})\s*(과장|대리|부장|사원|팀장|차장|이사|사장|실장|수석|선임|책임|매니저|담당|주임|부사장|전무|상무)?").unwrap()
+});
+static PHONE_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})").unwrap());
+static EMAIL_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})").unwrap()
+});
 
 /// Extract contacts (names, phones, emails) from project text using regex patterns.
 pub fn cmd_contacts(args: &Value, config: &VegaConfig) -> CommandResult {
@@ -134,15 +144,9 @@ fn extract_from_text(
 ) -> Vec<Value> {
     let mut contacts = Vec::new();
 
-    // Korean name pattern: 2-4 Korean characters (가-힣)
-    let name_re = Regex::new(r"([가-힣]{2,4})\s*(과장|대리|부장|사원|팀장|차장|이사|사장|실장|수석|선임|책임|매니저|담당|주임|부사장|전무|상무)?"
-    ).unwrap();
-
-    // Phone patterns: Korean mobile/landline formats
-    let phone_re = Regex::new(r"(0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})").unwrap();
-
-    // Email pattern
-    let email_re = Regex::new(r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})").unwrap();
+    let name_re = &*NAME_RE;
+    let phone_re = &*PHONE_RE;
+    let email_re = &*EMAIL_RE;
 
     // For person_internal/person_external chunks, the first line is typically the name
     if chunk_type == "person_internal" || chunk_type == "person_external" {

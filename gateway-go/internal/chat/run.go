@@ -141,24 +141,28 @@ func executeAgentRun(
 	}
 
 	// 2. Assemble system prompt (supports both string and content block array).
+	// The prompt format is deferred: if Anthropic is the provider, we use
+	// ContentBlock arrays with cache_control breakpoints; otherwise plain string.
 	var systemPrompt json.RawMessage
+	var systemPromptParams *SystemPromptParams // non-nil when dynamic build is needed
 	if params.System != "" {
 		systemPrompt = llm.SystemString(params.System)
 	} else if deps.defaultSystem != "" {
 		systemPrompt = llm.SystemString(deps.defaultSystem)
 	}
 	if len(systemPrompt) == 0 && deps.tools != nil {
-		// Build system prompt from tool definitions, workspace context, and runtime info.
 		workspaceDir := resolveWorkspaceDirForPrompt()
-		built := BuildSystemPrompt(SystemPromptParams{
+		spp := SystemPromptParams{
 			WorkspaceDir: workspaceDir,
 			ToolDefs:     deps.tools.Definitions(),
 			UserTimezone: resolveTimezone(),
 			ContextFiles: LoadContextFiles(workspaceDir),
 			RuntimeInfo:  BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
 			Channel:      deliveryChannel(params.Delivery),
-		})
-		systemPrompt = llm.SystemString(built)
+		}
+		systemPromptParams = &spp
+		// Default to plain string; overridden to blocks after apiType is resolved.
+		systemPrompt = llm.SystemString(BuildSystemPrompt(spp))
 	}
 
 	// 3. Assemble context (token-budgeted history).
@@ -211,6 +215,17 @@ func executeAgentRun(
 	var tools []llm.Tool
 	if deps.tools != nil {
 		tools = deps.tools.LLMTools()
+	}
+
+	// For Anthropic API: rebuild system prompt as ContentBlock array with
+	// cache_control breakpoints, and mark the last tool for caching.
+	if apiType == "anthropic" {
+		if systemPromptParams != nil {
+			systemPrompt = llm.SystemBlocks(BuildSystemPromptBlocks(*systemPromptParams))
+		}
+		if len(tools) > 0 {
+			tools[len(tools)-1].CacheControl = &llm.CacheControl{Type: "ephemeral"}
+		}
 	}
 
 	// 6. Build agent config.

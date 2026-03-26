@@ -4,11 +4,17 @@
 
 use std::fs;
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde_json::{json, Value};
 
 use crate::config::VegaConfig;
 
 use super::{open_db, CommandResult};
+
+static STATUS_TABLE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?m)^\|\s*\*?\*?상태\*?\*?\s*\|\s*(.*?)\s*\|").unwrap()
+});
 
 /// Sync database changes back to markdown files.
 pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
@@ -52,7 +58,7 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
     let mut synced = 0;
     let mut skipped = 0;
     let mut errors = Vec::new();
-    let status_re = regex::Regex::new(r"(?m)^\|\s*\*?\*?상태\*?\*?\s*\|\s*(.*?)\s*\|").unwrap();
+    let status_re = &*STATUS_TABLE_RE;
 
     for (_pid, name, source_file, status, _client, _person) in &projects {
         let clean = source_file

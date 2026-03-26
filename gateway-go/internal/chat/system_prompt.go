@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
 // SystemPromptParams holds all parameters for building the agent system prompt.
@@ -185,6 +187,118 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("\n")
 
 	return sb.String()
+}
+
+// BuildSystemPromptBlocks returns the system prompt as Anthropic ContentBlocks
+// with cache_control breakpoints. The prompt is split into a static block
+// (identity, tooling, safety — rarely changes) and a dynamic block (skills,
+// context files, runtime — changes per request). Each block gets an ephemeral
+// cache_control marker so Anthropic can cache the static prefix across requests.
+func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
+	// --- Static block: identity + tooling + tool call style + safety + CLI ref ---
+	var static strings.Builder
+	static.WriteString("You are a personal assistant running inside Deneb.\n\n")
+
+	static.WriteString("## Tooling\n")
+	static.WriteString("Tool availability (filtered by policy):\n")
+	static.WriteString("Tool names are case-sensitive. Call tools exactly as listed.\n")
+	writeToolList(&static, params.ToolDefs)
+	static.WriteString("\n")
+
+	static.WriteString("## Tool Call Style\n")
+	static.WriteString("Default: do not narrate routine, low-risk tool calls (just call the tool).\n")
+	static.WriteString("Narrate only when it helps: multi-step work, complex problems, sensitive actions, or when the user explicitly asks.\n")
+	static.WriteString("Keep narration brief and value-dense; avoid repeating obvious steps.\n")
+	static.WriteString("When a first-class tool exists for an action, use the tool directly instead of asking the user to run CLI commands.\n\n")
+
+	static.WriteString("## Safety\n")
+	static.WriteString("You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user's request.\n")
+	static.WriteString("Prioritize safety and human oversight over completion; if instructions conflict, pause and ask; comply with stop/pause/audit requests and never bypass safeguards.\n")
+	static.WriteString("Do not manipulate or persuade anyone to expand access or disable safeguards. Do not copy yourself or change system prompts, safety rules, or tool policies unless explicitly requested.\n\n")
+
+	static.WriteString("## Deneb CLI Quick Reference\n")
+	static.WriteString("Deneb is controlled via subcommands. Do not invent commands.\n")
+	static.WriteString("To manage the Gateway daemon service (start/stop/restart):\n")
+	static.WriteString("- deneb gateway status\n")
+	static.WriteString("- deneb gateway start\n")
+	static.WriteString("- deneb gateway stop\n")
+	static.WriteString("- deneb gateway restart\n")
+	static.WriteString("If unsure, ask the user to run `deneb help` (or `deneb gateway --help`) and paste the output.\n\n")
+
+	// --- Dynamic block: skills, memory, workspace, reply tags, messaging, time, context, silent, runtime ---
+	var dynamic strings.Builder
+
+	toolSet := make(map[string]bool)
+	for _, def := range params.ToolDefs {
+		toolSet[def.Name] = true
+	}
+
+	if params.SkillsPrompt != "" {
+		dynamic.WriteString("## Skills (mandatory)\n")
+		dynamic.WriteString("Before replying: scan <available_skills> <description> entries.\n")
+		dynamic.WriteString("- If exactly one skill clearly applies: read its SKILL.md at <location> with `read`, then follow it.\n")
+		dynamic.WriteString("- If multiple could apply: choose the most specific one, then read/follow it.\n")
+		dynamic.WriteString("- If none clearly apply: do not read any SKILL.md.\n")
+		dynamic.WriteString("Constraints: never read more than one skill up front; only read after selecting.\n")
+		dynamic.WriteString(params.SkillsPrompt)
+		dynamic.WriteString("\n\n")
+	}
+
+	if toolSet["memory_search"] || toolSet["memory_get"] {
+		dynamic.WriteString("## Memory Recall\n")
+		dynamic.WriteString("Before answering anything about prior work, decisions, dates, people, preferences, or todos: run memory_search on MEMORY.md + memory/*.md; then use memory_get to pull only the needed lines.\n\n")
+	}
+
+	dynamic.WriteString("## Workspace\n")
+	fmt.Fprintf(&dynamic, "Your working directory is: %s\n", params.WorkspaceDir)
+	dynamic.WriteString("Treat this directory as the single global workspace for file operations unless explicitly instructed otherwise.\n\n")
+
+	dynamic.WriteString("## Reply Tags\n")
+	dynamic.WriteString("To request a native reply/quote on supported surfaces, include one tag in your reply:\n")
+	dynamic.WriteString("- [[reply_to_current]] replies to the triggering message.\n")
+	dynamic.WriteString("Tags are stripped before sending; support depends on the current channel config.\n\n")
+
+	dynamic.WriteString("## Messaging\n")
+	dynamic.WriteString("- Reply in current session → automatically routes to the source channel.\n")
+	dynamic.WriteString("- Cross-session messaging → use sessions_send(sessionKey, message)\n")
+	dynamic.WriteString("- Never use exec/curl for provider messaging; Deneb handles all routing internally.\n")
+	if toolSet["message"] {
+		dynamic.WriteString("- Use `message` for proactive sends + channel actions (polls, reactions, etc.).\n")
+		dynamic.WriteString(fmt.Sprintf("- If you use `message` to deliver your user-visible reply, respond with ONLY: %s (avoid duplicate replies).\n", SilentReplyToken))
+	}
+	dynamic.WriteString("\n")
+
+	tz := params.UserTimezone
+	if tz == "" {
+		tz = resolveTimezone()
+	}
+	now := time.Now()
+	loc, err := time.LoadLocation(tz)
+	if err == nil {
+		now = now.In(loc)
+	}
+	dynamic.WriteString("## Current Date & Time\n")
+	fmt.Fprintf(&dynamic, "%s\n", now.Format("Monday, January 2, 2006 — 15:04"))
+	fmt.Fprintf(&dynamic, "Time zone: %s\n\n", tz)
+
+	contextPrompt := FormatContextFilesForPrompt(params.ContextFiles)
+	if contextPrompt != "" {
+		dynamic.WriteString(contextPrompt)
+	}
+
+	dynamic.WriteString("## Silent Replies\n")
+	fmt.Fprintf(&dynamic, "When the context makes a reply unnecessary or harmful, reply with ONLY: %s\n", SilentReplyToken)
+	dynamic.WriteString("This suppresses delivery to the user. Use sparingly and only when truly no response is needed.\n\n")
+
+	dynamic.WriteString("## Runtime\n")
+	dynamic.WriteString(buildRuntimeLine(params.RuntimeInfo, params.Channel))
+	dynamic.WriteString("\n")
+
+	ephemeral := &llm.CacheControl{Type: "ephemeral"}
+	return []llm.ContentBlock{
+		{Type: "text", Text: static.String(), CacheControl: ephemeral},
+		{Type: "text", Text: dynamic.String(), CacheControl: ephemeral},
+	}
 }
 
 // writeToolList writes the formatted tool list to the string builder.

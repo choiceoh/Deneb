@@ -4,9 +4,21 @@
 //! escape_like, fuzzy_find_project, find_project_id_in_text,
 //! extract_days, extract_limit, extract_bullets, build_search_suggestions.
 
+use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+
+// Pre-compiled regex patterns for hot-path functions.
+static KOREAN_TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9]+").unwrap());
+static DAYS_FLAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"--days\s+(\d+)").unwrap());
+static DAYS_IL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*일").unwrap());
+static DAYS_JU_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*주").unwrap());
+static DAYS_GAEWOL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*개월").unwrap());
+static LIMIT_FLAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"--limit\s+(\d+)").unwrap());
+static LIMIT_GAE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*개").unwrap());
+static BULLET_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[\-•*]+\s*").unwrap());
+static NUMBERED_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+[.)]\s*").unwrap());
 
 /// Escape special SQL LIKE characters (%, _, \).
 /// Use with `ESCAPE '\'` in the LIKE clause.
@@ -132,8 +144,8 @@ fn normalize_for_match(s: &str) -> String {
 
 /// Tokenize text into Korean/alphanumeric tokens (2+ chars).
 fn tokenize_korean(s: &str) -> Vec<String> {
-    let re = Regex::new(r"[가-힣A-Za-z0-9]+").unwrap();
-    re.find_iter(s)
+    KOREAN_TOKEN_RE
+        .find_iter(s)
         .map(|m| m.as_str().to_string())
         .filter(|t| t.chars().count() >= 2)
         .collect()
@@ -144,26 +156,22 @@ fn tokenize_korean(s: &str) -> Vec<String> {
 /// "--days 7" → 7. Returns None if no pattern found.
 pub fn extract_days(text: &str, default: i64) -> i64 {
     // --days flag
-    if let Ok(re) = Regex::new(r"--days\s+(\d+)") {
-        if let Some(caps) = re.captures(text) {
-            if let Ok(d) = caps[1].parse::<i64>() {
-                return d.clamp(1, 90);
-            }
+    if let Some(caps) = DAYS_FLAG_RE.captures(text) {
+        if let Ok(d) = caps[1].parse::<i64>() {
+            return d.clamp(1, 90);
         }
     }
 
     // Korean patterns: N일, N주, N개월
-    let patterns: &[(&str, i64)] = &[
-        (r"(\d+)\s*일", 1),
-        (r"(\d+)\s*주", 7),
-        (r"(\d+)\s*개월", 30),
+    let patterns: &[(&Lazy<Regex>, i64)] = &[
+        (&DAYS_IL_RE, 1),
+        (&DAYS_JU_RE, 7),
+        (&DAYS_GAEWOL_RE, 30),
     ];
-    for (pat, mult) in patterns {
-        if let Ok(re) = Regex::new(pat) {
-            if let Some(caps) = re.captures(text) {
-                if let Ok(n) = caps[1].parse::<i64>() {
-                    return (n * mult).clamp(1, 90);
-                }
+    for (re, mult) in patterns {
+        if let Some(caps) = re.captures(text) {
+            if let Ok(n) = caps[1].parse::<i64>() {
+                return (n * mult).clamp(1, 90);
             }
         }
     }
@@ -181,19 +189,14 @@ pub fn extract_days(text: &str, default: i64) -> i64 {
 
 /// Extract result limit from text. "--limit 5" → 5, "3개" → 3.
 pub fn extract_limit(text: &str, default: usize) -> usize {
-    if let Ok(re) = Regex::new(r"--limit\s+(\d+)") {
-        if let Some(caps) = re.captures(text) {
-            if let Ok(n) = caps[1].parse::<usize>() {
-                return n.clamp(1, 100);
-            }
+    if let Some(caps) = LIMIT_FLAG_RE.captures(text) {
+        if let Ok(n) = caps[1].parse::<usize>() {
+            return n.clamp(1, 100);
         }
     }
-    // N개 pattern
-    if let Ok(re) = Regex::new(r"(\d+)\s*개") {
-        if let Some(caps) = re.captures(text) {
-            if let Ok(n) = caps[1].parse::<usize>() {
-                return n.clamp(1, 100);
-            }
+    if let Some(caps) = LIMIT_GAE_RE.captures(text) {
+        if let Ok(n) = caps[1].parse::<usize>() {
+            return n.clamp(1, 100);
         }
     }
     default
@@ -204,16 +207,14 @@ pub fn extract_limit(text: &str, default: usize) -> usize {
 /// Deduplicates and limits to `limit` items.
 pub fn extract_bullets(content: &str, limit: usize) -> Vec<String> {
     let mut items = Vec::new();
-    let re_bullet = Regex::new(r"^[\-•*]+\s*").unwrap();
-    let re_numbered = Regex::new(r"^\d+[.)]\s*").unwrap();
 
     for raw in content.lines() {
         let line = raw.trim();
         if line.is_empty() {
             continue;
         }
-        let mut cleaned = re_bullet.replace(line, "").to_string();
-        cleaned = re_numbered.replace(&cleaned, "").to_string();
+        let mut cleaned = BULLET_RE.replace(line, "").to_string();
+        cleaned = NUMBERED_RE.replace(&cleaned, "").to_string();
         // Collapse whitespace
         cleaned = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
         if cleaned.chars().count() < 3 {
