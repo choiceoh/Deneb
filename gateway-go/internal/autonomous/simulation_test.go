@@ -24,6 +24,8 @@ func (s *scenarioRunner) RunAgentTurn(_ context.Context, _, _ string) (string, e
 	return out, nil
 }
 
+func (s *scenarioRunner) ResetSession(_ string) error { return nil }
+
 func newSimService(t *testing.T, runner AgentRunner) *Service {
 	t.Helper()
 	dir := t.TempDir()

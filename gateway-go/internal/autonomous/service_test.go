@@ -11,14 +11,20 @@ import (
 
 // mockAgentRunner is a test double for AgentRunner.
 type mockAgentRunner struct {
-	output    string
-	err       error
-	callCount atomic.Int32
+	output     string
+	err        error
+	callCount  atomic.Int32
+	resetCount atomic.Int32
 }
 
 func (m *mockAgentRunner) RunAgentTurn(_ context.Context, _, _ string) (string, error) {
 	m.callCount.Add(1)
 	return m.output, m.err
+}
+
+func (m *mockAgentRunner) ResetSession(_ string) error {
+	m.resetCount.Add(1)
+	return nil
 }
 
 func newTestService(t *testing.T, runner AgentRunner) *Service {
@@ -178,6 +184,8 @@ func (s *slowAgentRunner) RunAgentTurn(ctx context.Context, _, _ string) (string
 	}
 }
 
+func (s *slowAgentRunner) ResetSession(_ string) error { return nil }
+
 func TestService_RunCycleAsync(t *testing.T) {
 	runner := &mockAgentRunner{output: "done"}
 	svc := newTestService(t, runner)
@@ -243,6 +251,62 @@ func TestService_NoAgent(t *testing.T) {
 	_, err := svc.RunCycle(context.Background())
 	if err == nil {
 		t.Error("expected error when agent is nil")
+	}
+}
+
+func TestService_SkippedCyclePreservesConsecutiveErrors(t *testing.T) {
+	runner := &mockAgentRunner{err: fmt.Errorf("fail")}
+	svc := newTestService(t, runner)
+	svc.AddGoal("test", "medium")
+
+	// Cause two errors.
+	svc.RunCycle(context.Background())
+	svc.RunCycle(context.Background())
+	if svc.Status().ConsecutiveErr != 2 {
+		t.Fatalf("expected 2 consecutive errors, got %d", svc.Status().ConsecutiveErr)
+	}
+
+	// Remove the goal so next cycle is skipped.
+	goals, _ := svc.Goals().List()
+	svc.Goals().Remove(goals[0].ID)
+
+	// Skipped cycle should NOT reset the error counter.
+	runner.err = nil
+	runner.output = ""
+	svc.RunCycle(context.Background())
+	if svc.Status().ConsecutiveErr != 2 {
+		t.Errorf("consecutiveErrors after skip = %d, want 2 (preserved)", svc.Status().ConsecutiveErr)
+	}
+}
+
+func TestService_SessionResetCalledAfterCycle(t *testing.T) {
+	runner := &mockAgentRunner{output: "done"}
+	svc := newTestService(t, runner)
+	svc.AddGoal("test reset", "medium")
+
+	svc.RunCycle(context.Background())
+
+	if runner.resetCount.Load() != 1 {
+		t.Errorf("resetCount = %d, want 1", runner.resetCount.Load())
+	}
+}
+
+func TestService_EnabledStatePersisted(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "goals.json")
+	cfg := ServiceConfig{GoalStorePath: storePath, CycleTimeoutMs: 5000}
+
+	// Create service, disable it.
+	svc1 := NewService(cfg, &mockAgentRunner{}, nil)
+	svc1.SetEnabled(false)
+
+	// Create a new service from same store — should restore disabled state.
+	svc2 := NewService(cfg, &mockAgentRunner{}, nil)
+	svc2.Start(context.Background(), AttentionConfig{CycleInterval: time.Hour, CooldownMs: 1000})
+	defer svc2.Stop()
+
+	if svc2.Enabled() {
+		t.Error("expected enabled=false after restore from persisted state")
 	}
 }
 

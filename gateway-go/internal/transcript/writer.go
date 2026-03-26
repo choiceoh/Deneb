@@ -61,6 +61,22 @@ func (w *Writer) SessionPath(sessionKey string) (string, error) {
 	return filepath.Join(w.baseDir, sessionKey+".jsonl"), nil
 }
 
+// DeleteSession removes the transcript file and clears the known-session cache
+// for the given key. Returns nil if the file does not exist.
+func (w *Writer) DeleteSession(sessionKey string) error {
+	path, err := w.SessionPath(sessionKey)
+	if err != nil {
+		return err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	delete(w.known, sessionKey)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("transcript: delete session %q: %w", sessionKey, err)
+	}
+	return nil
+}
+
 // validateSessionKey rejects session keys that could cause path traversal.
 func validateSessionKey(key string) error {
 	if key == "" {

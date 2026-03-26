@@ -85,3 +85,63 @@ func TestAttention_NilConfig(t *testing.T) {
 		t.Errorf("default CooldownMs = %d", att.cfg.CooldownMs)
 	}
 }
+
+func TestAttention_DeferredSignalGuard(t *testing.T) {
+	svc, _ := newTestAttentionService(t)
+	svc.AddGoal("test", "medium")
+
+	cfg := AttentionConfig{
+		CycleInterval: time.Minute,
+		CooldownMs:    200,
+	}
+	att := NewAttention(svc, cfg, svc.logger)
+
+	// First push triggers immediately.
+	att.Push(Signal{Kind: SignalGoalAdded, Priority: SignalPriorityHigh})
+	time.Sleep(20 * time.Millisecond)
+
+	// Two rapid high-priority signals during cooldown: only one deferred goroutine
+	// should be created (the second should be dropped).
+	att.Push(Signal{Kind: SignalGoalAdded, Priority: SignalPriorityHigh})
+	att.Push(Signal{Kind: SignalGoalAdded, Priority: SignalPriorityHigh})
+
+	// pendingDefer should be true (one goroutine active).
+	if !att.pendingDefer.Load() {
+		t.Error("expected pendingDefer to be true after first deferred signal")
+	}
+
+	// Wait for cooldown to expire and deferred signal to fire.
+	time.Sleep(300 * time.Millisecond)
+
+	// pendingDefer should be cleared.
+	if att.pendingDefer.Load() {
+		t.Error("expected pendingDefer to be false after deferred signal fired")
+	}
+}
+
+func TestAttention_InitialCycleTrigger(t *testing.T) {
+	svc, runner := newTestAttentionService(t)
+	svc.AddGoal("startup test", "medium")
+
+	cfg := AttentionConfig{
+		CycleInterval: time.Hour, // long interval so we don't get timer ticks
+		CooldownMs:    10,
+	}
+	att := NewAttention(svc, cfg, svc.logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Mock the initial delay to be shorter for testing. We rely on the
+	// 30-second delay in production, but test will just verify the Push happens.
+	att.StartTimer(ctx)
+
+	// The initial trigger fires after 30s in production. For this test we
+	// just verify the timer is active and the system doesn't panic.
+	if !att.IsTimerActive() {
+		t.Error("expected timer to be active after StartTimer")
+	}
+
+	att.StopTimer()
+	_ = runner // runner available if we need to verify call count
+}

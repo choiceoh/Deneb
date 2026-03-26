@@ -16,6 +16,15 @@ type AgentRunner interface {
 	// RunAgentTurn executes an agent turn and blocks until completion.
 	// Returns the agent's text output.
 	RunAgentTurn(ctx context.Context, sessionKey, message string) (output string, err error)
+	// ResetSession clears the transcript for the given session key.
+	// Called after each cycle to prevent unbounded transcript growth.
+	ResetSession(sessionKey string) error
+}
+
+// Notifier delivers significant autonomous cycle events to the user.
+// Implemented by the server layer to send messages via Telegram or other channels.
+type Notifier interface {
+	Notify(ctx context.Context, message string) error
 }
 
 // ServiceConfig configures the autonomous service.
@@ -50,6 +59,7 @@ type Service struct {
 	attention *Attention
 	enabled   bool // false = timer paused, manual cycle.run still works
 	listeners []EventListener
+	notifier  Notifier // optional: delivers significant events to the user
 }
 
 // EventListener receives autonomous cycle events.
@@ -125,6 +135,9 @@ func (s *Service) Start(ctx context.Context, attentionCfg AttentionConfig) {
 		s.lastCycleAt = cs.LastRunAtMs
 		s.totalCycles = cs.TotalCycles
 		s.totalErrors = cs.TotalErrors
+		if cs.Enabled != nil {
+			s.enabled = *cs.Enabled
+		}
 	}
 
 	s.attention = NewAttention(s, attentionCfg, s.logger)
@@ -196,10 +209,19 @@ func (s *Service) Goals() *GoalStore {
 
 // SetEnabled toggles the autonomous timer. When disabled, the timer doesn't
 // trigger cycles but manual RunCycle/RunCycleAsync still works.
+// The state is persisted to disk so it survives gateway restarts.
 func (s *Service) SetEnabled(enabled bool) {
 	s.mu.Lock()
 	s.enabled = enabled
 	s.mu.Unlock()
+
+	// Persist the enabled state so it survives restarts.
+	if cs, err := s.goals.LoadCycleState(); err == nil {
+		cs.Enabled = &enabled
+		if persistErr := s.goals.UpdateCycleState(cs); persistErr != nil {
+			s.logger.Warn("failed to persist enabled state", "error", persistErr)
+		}
+	}
 	s.logger.Info("autonomous mode toggled", "enabled", enabled)
 }
 
@@ -215,6 +237,14 @@ func (s *Service) OnEvent(listener EventListener) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.listeners = append(s.listeners, listener)
+}
+
+// SetNotifier sets the optional notifier for delivering significant cycle
+// events to the user (e.g., via Telegram).
+func (s *Service) SetNotifier(n Notifier) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.notifier = n
 }
 
 func (s *Service) emit(event CycleEvent) {
@@ -358,6 +388,14 @@ func (s *Service) executeCycle(ctx context.Context) *CycleOutcome {
 	s.emit(CycleEvent{Type: "cycle_started"})
 
 	output, runErr := s.agent.RunAgentTurn(ctx, autonomousSessionKey, prompt)
+
+	// Reset session transcript after each cycle to prevent unbounded growth.
+	// The decision prompt already provides continuity via CycleState.LastSummary
+	// and goal NoteHistory, so transcript accumulation is unnecessary.
+	if resetErr := s.agent.ResetSession(autonomousSessionKey); resetErr != nil {
+		s.logger.Warn("failed to reset autonomous session transcript", "error", resetErr)
+	}
+
 	if runErr != nil {
 		errMsg := runErr.Error()
 		if ctx.Err() != nil {
@@ -417,7 +455,9 @@ func (s *Service) applyCycleOutcome(outcome *CycleOutcome) {
 	if outcome.Status == "error" {
 		s.consecutiveErr++
 		s.totalErrors++
-	} else {
+	} else if outcome.Status == "ok" {
+		// Only reset on successful execution. "skipped" (no active goals)
+		// leaves the error counter unchanged to avoid masking real failures.
 		s.consecutiveErr = 0
 	}
 
@@ -471,6 +511,9 @@ func (s *Service) applyCycleOutcome(outcome *CycleOutcome) {
 		eventType = "cycle_skipped"
 	}
 	s.emit(CycleEvent{Type: eventType, Outcome: outcome})
+
+	// Notify user of significant events via Telegram (or other channel).
+	s.notifySignificantEvents(outcome)
 
 	s.logger.Info("cycle completed",
 		"status", outcome.Status,
@@ -546,6 +589,50 @@ func (s *Service) autoPauseStaleGoals() {
 				s.logger.Info("auto-paused stale goal",
 					"id", g.ID, "cycleCount", g.CycleCount, "description", g.Description)
 			}
+		}
+	}
+}
+
+// notifySignificantEvents sends Telegram (or other channel) notifications
+// for events the user should know about: goal completed, goal paused, or
+// repeated consecutive errors.
+func (s *Service) notifySignificantEvents(outcome *CycleOutcome) {
+	s.mu.Lock()
+	notifier := s.notifier
+	consErr := s.consecutiveErr
+	s.mu.Unlock()
+
+	if notifier == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(s.svcCtx, 15*time.Second)
+	defer cancel()
+
+	// Notify on goal completions and pauses.
+	if outcome.Status == "ok" {
+		for _, u := range outcome.GoalUpdates {
+			var msg string
+			switch u.Status {
+			case StatusCompleted:
+				msg = fmt.Sprintf("✅ 자율 실행: %s", u.Note)
+			case StatusPaused:
+				msg = fmt.Sprintf("⏸ 자율 실행 중단: %s", u.Note)
+			}
+			if msg != "" {
+				if err := notifier.Notify(ctx, msg); err != nil {
+					s.logger.Warn("failed to send autonomous notification", "error", err)
+				}
+			}
+		}
+	}
+
+	// Notify on consecutive errors (at the 3rd error and every 5th after).
+	if outcome.Status == "error" && consErr >= 3 && (consErr == 3 || consErr%5 == 0) {
+		msg := fmt.Sprintf("⚠️ 자율 실행: 연속 오류 %d회 — %s", consErr,
+			truncateOutput(outcome.Error, 100))
+		if err := notifier.Notify(ctx, msg); err != nil {
+			s.logger.Warn("failed to send error notification", "error", err)
 		}
 	}
 }

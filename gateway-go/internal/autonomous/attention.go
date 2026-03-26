@@ -44,13 +44,14 @@ func DefaultAttentionConfig() AttentionConfig {
 
 // Attention accumulates signals and triggers autonomous cycles when thresholds are met.
 type Attention struct {
-	mu          sync.Mutex
-	svc         *Service
-	cfg         AttentionConfig
-	lastTrigger int64
-	timerCancel context.CancelFunc
-	timerActive atomic.Bool
-	logger      *slog.Logger
+	mu           sync.Mutex
+	svc          *Service
+	cfg          AttentionConfig
+	lastTrigger  int64
+	timerCancel  context.CancelFunc
+	timerActive  atomic.Bool
+	pendingDefer atomic.Bool // guards against unbounded deferred signal goroutine chains
+	logger       *slog.Logger
 }
 
 // NewAttention creates an attention tracker for the given service.
@@ -81,10 +82,18 @@ func (a *Attention) Push(signal Signal) {
 		// High-priority signals (e.g., goal added) are deferred until cooldown
 		// expires instead of being silently dropped.
 		if signal.Priority == SignalPriorityHigh {
+			// Guard against unbounded deferred goroutine chains: only one
+			// deferred signal can be pending at a time.
+			if !a.pendingDefer.CompareAndSwap(false, true) {
+				a.logger.Debug("high-priority signal dropped, another defer already pending",
+					"kind", signal.Kind)
+				return
+			}
 			svcCtx := a.svc.svcCtx
 			a.logger.Debug("high-priority signal deferred until cooldown expires",
 				"kind", signal.Kind, "deferMs", remainMs)
 			go func() {
+				defer a.pendingDefer.Store(false)
 				timer := time.NewTimer(time.Duration(remainMs) * time.Millisecond)
 				defer timer.Stop()
 				select {
@@ -133,6 +142,19 @@ func (a *Attention) StartTimer(ctx context.Context) {
 	a.timerActive.Store(true)
 
 	go a.timerLoop(timerCtx)
+
+	// Schedule an initial cycle shortly after startup instead of waiting
+	// a full interval. 30-second delay lets the system stabilize.
+	go func() {
+		select {
+		case <-time.After(30 * time.Second):
+			if a.svc.Enabled() {
+				a.Push(Signal{Kind: SignalTimer, Priority: SignalPriorityNormal})
+			}
+		case <-timerCtx.Done():
+		}
+	}()
+
 	a.logger.Info("attention timer started", "interval", a.cfg.CycleInterval)
 }
 
