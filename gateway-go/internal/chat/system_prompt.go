@@ -65,8 +65,7 @@ var coreToolSummaries = map[string]string{
 	"ls":                 "List directory contents with sizes. Use find for recursive search",
 	"exec":               "Run a shell command (bash -c). Default timeout 30s, max 5min. Use background=true for long tasks, then process to check",
 	"process":            "Manage background exec sessions: list running, poll/log output, kill by sessionId",
-	"web_search":         "Search the web and get result snippets. Use web_fetch to read a specific page",
-	"web_fetch":          "Fetch URL and extract readable text (HTML stripped). Max 50k chars default",
+	"web":                "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch, {query:...} search, {query:...,fetch:N} search+fetch",
 	"memory_search":      "Search MEMORY.md + memory/*.md by keyword. Returns matched lines with ±2 lines context",
 	"memory_get":         "Read specific line range from a memory file. Use after memory_search to get full context",
 	"nodes":              "Discover and control paired mobile nodes (status/notify/camera/run)",
@@ -92,7 +91,7 @@ var coreToolSummaries = map[string]string{
 var toolOrder = []string{
 	"read", "write", "edit", "grep", "find", "ls",
 	"exec", "process",
-	"web_search", "web_fetch",
+	"web",
 	"memory_search", "memory_get",
 	"nodes", "cron", "message", "gateway",
 	"sessions_list", "sessions_history", "sessions_send",
@@ -126,7 +125,7 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("## Tool Selection Guide\n")
 	sb.WriteString("File exploration: ls (overview) → find (locate files) → grep (search contents) → read (view file)\n")
 	sb.WriteString("File modification: read (understand) → edit (precise change) or write (full rewrite) or apply_patch (multi-file diff)\n")
-	sb.WriteString("Web research: web_search (discover URLs) → web_fetch (read page content)\n")
+	sb.WriteString("Web research: web {query:...} (search) → web {url:...} (fetch page) or web {query:...,fetch:2} (search+auto-fetch)\n")
 	sb.WriteString("Long commands: exec with background=true → process poll/log to check output\n")
 	sb.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
 	sb.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section)\n")
@@ -252,7 +251,7 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	static.WriteString("## Tool Selection Guide\n")
 	static.WriteString("File exploration: ls (overview) → find (locate files) → grep (search contents) → read (view file)\n")
 	static.WriteString("File modification: read (understand) → edit (precise change) or write (full rewrite) or apply_patch (multi-file diff)\n")
-	static.WriteString("Web research: web_search (discover URLs) → web_fetch (read page content)\n")
+	static.WriteString("Web research: web {query:...} (search) → web {url:...} (fetch page) or web {query:...,fetch:2} (search+auto-fetch)\n")
 	static.WriteString("Long commands: exec with background=true → process poll/log to check output\n")
 	static.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
 	static.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section)\n")

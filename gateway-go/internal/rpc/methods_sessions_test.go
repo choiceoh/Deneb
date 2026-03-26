@@ -93,9 +93,9 @@ func TestToolsCatalog_CoreToolCount(t *testing.T) {
 	for _, g := range groups {
 		total += len(g.(map[string]any)["tools"].([]any))
 	}
-	// Must match the 22 core tools from src/agents/tool-catalog.ts.
-	if total != 22 {
-		t.Errorf("expected 22 core tools, got %d", total)
+	// web_search + web_fetch merged into single "web" tool → 21 tools.
+	if total != 21 {
+		t.Errorf("expected 21 core tools, got %d", total)
 	}
 }
 

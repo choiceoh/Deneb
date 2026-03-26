@@ -634,8 +634,7 @@ var coreSections = []coreSection{
 		{"process", "Manage background processes", []ToolProfileID{ProfileCoding}},
 	}},
 	{"web", "Web", []coreTool{
-		{"web_search", "Search the web", []ToolProfileID{ProfileCoding}},
-		{"web_fetch", "Fetch web content", []ToolProfileID{ProfileCoding}},
+		{"web", "Search the web, fetch URLs, or search+auto-fetch", []ToolProfileID{ProfileCoding}},
 	}},
 	{"memory", "Memory", []coreTool{
 		{"memory_search", "Semantic search", []ToolProfileID{ProfileCoding}},

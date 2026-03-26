@@ -1,64 +1,10 @@
 package chat
 
 import (
-	"context"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 )
-
-func TestIsRetryableError(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			"5xx server error",
-			&media.MediaFetchError{Code: media.ErrHTTPError, Status: 500},
-			true,
-		},
-		{
-			"503 service unavailable",
-			&media.MediaFetchError{Code: media.ErrHTTPError, Status: 503},
-			true,
-		},
-		{
-			"404 not found",
-			&media.MediaFetchError{Code: media.ErrHTTPError, Status: 404},
-			false,
-		},
-		{
-			"403 forbidden",
-			&media.MediaFetchError{Code: media.ErrHTTPError, Status: 403},
-			false,
-		},
-		{
-			"fetch failed (connection error)",
-			&media.MediaFetchError{Code: media.ErrFetchFailed, Message: "connection reset"},
-			true,
-		},
-		{
-			"max bytes exceeded",
-			&media.MediaFetchError{Code: media.ErrMaxBytes},
-			false,
-		},
-		{
-			"context deadline exceeded",
-			context.DeadlineExceeded,
-			true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isRetryableError(tt.err)
-			if got != tt.want {
-				t.Errorf("isRetryableError(%v) = %v, want %v", tt.err, got, tt.want)
-			}
-		})
-	}
-}
 
 func TestFormatExecResult(t *testing.T) {
 	t.Run("stdout only", func(t *testing.T) {
@@ -113,7 +59,7 @@ func TestToolSchemas(t *testing.T) {
 	schemas := map[string]func() map[string]any{
 		"exec":               execToolSchema,
 		"process":            processToolSchema,
-		"webFetch":           webFetchToolSchema,
+		"web":               webToolSchema,
 		"youtubeTranscript":  youtubeTranscriptToolSchema,
 		"applyPatch":         applyPatchToolSchema,
 		"memorySearch":       memorySearchToolSchema,
@@ -157,9 +103,9 @@ func TestRegisterCoreTools(t *testing.T) {
 	// Verify expected tools are registered.
 	expectedTools := []string{
 		"read", "write", "edit", "grep", "find", "ls",
-		"exec", "process", "web_fetch",
+		"exec", "process", "web",
 		"memory_search", "memory_get", "message",
-		"apply_patch", "web_search", "cron", "gateway",
+		"apply_patch", "cron", "gateway",
 		"sessions_list", "sessions_history", "sessions_send", "sessions_spawn",
 		"subagents", "session_status", "image", "youtube_transcript", "nodes",
 	}

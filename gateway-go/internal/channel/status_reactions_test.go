@@ -14,8 +14,9 @@ func TestResolveToolEmoji(t *testing.T) {
 		want     string
 	}{
 		{"empty", "", emojis.Tool},
-		{"web_search", "web_search", emojis.Web},
-		{"web_fetch", "web_fetch", emojis.Web},
+		{"web", "web", emojis.Web},
+		{"web_search_legacy", "web_search", emojis.Web},
+		{"web_fetch_legacy", "web_fetch", emojis.Web},
 		{"browser", "browser", emojis.Web},
 		{"exec", "exec", emojis.Coding},
 		{"read", "read", emojis.Coding},
