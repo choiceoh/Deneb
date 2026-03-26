@@ -22,9 +22,11 @@ func RegisterAutonomousMethods(d *Dispatcher, deps AutonomousDeps) {
 	d.Register("autonomous.status", autonomousStatus(deps))
 	d.Register("autonomous.goals.list", autonomousGoalsList(deps))
 	d.Register("autonomous.goals.add", autonomousGoalsAdd(deps))
+	d.Register("autonomous.goals.update", autonomousGoalsUpdate(deps))
 	d.Register("autonomous.goals.remove", autonomousGoalsRemove(deps))
 	d.Register("autonomous.cycle.run", autonomousCycleRun(deps))
 	d.Register("autonomous.cycle.stop", autonomousCycleStop(deps))
+	d.Register("autonomous.enable", autonomousEnable(deps))
 }
 
 func autonomousStatus(deps AutonomousDeps) HandlerFunc {
@@ -116,5 +118,47 @@ func autonomousCycleStop(deps AutonomousDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		deps.Autonomous.StopCycle()
 		return protocol.MustResponseOK(req.ID, map[string]any{"stopped": true})
+	}
+}
+
+func autonomousGoalsUpdate(deps AutonomousDeps) HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			ID       string `json:"id"`
+			Priority string `json:"priority,omitempty"`
+			Status   string `json:"status,omitempty"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}
+		if p.ID == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "id is required"))
+		}
+		if p.Priority == "" && p.Status == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "priority or status required"))
+		}
+
+		if err := deps.Autonomous.Goals().UpdateGoal(p.ID, p.Priority, p.Status); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrNotFound, err.Error()))
+		}
+		return protocol.MustResponseOK(req.ID, map[string]any{"updated": p.ID})
+	}
+}
+
+func autonomousEnable(deps AutonomousDeps) HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrInvalidRequest, "invalid params: "+err.Error()))
+		}
+		deps.Autonomous.SetEnabled(p.Enabled)
+		return protocol.MustResponseOK(req.ID, map[string]any{"enabled": p.Enabled})
 	}
 }

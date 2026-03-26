@@ -43,6 +43,18 @@ type Service struct {
 
 	// Phase 2: attention-based triggering.
 	attention *Attention
+	enabled   bool // false = timer paused, manual cycle.run still works
+	listeners []EventListener
+}
+
+// EventListener receives autonomous cycle events.
+type EventListener func(event CycleEvent)
+
+// CycleEvent describes a cycle lifecycle event for external consumers.
+type CycleEvent struct {
+	Type       string       `json:"type"` // "cycle_started", "cycle_completed", "cycle_failed", "cycle_skipped"
+	Outcome    *CycleOutcome `json:"outcome,omitempty"`
+	Ts         int64        `json:"ts"`
 }
 
 // CycleOutcome describes the result of a single decision cycle.
@@ -58,6 +70,7 @@ type CycleOutcome struct {
 // ServiceStatus is the snapshot returned by Status().
 type ServiceStatus struct {
 	Running        bool          `json:"running"`
+	Enabled        bool          `json:"enabled"`
 	CycleRunning   bool          `json:"cycleRunning"`
 	ActiveGoals    int           `json:"activeGoals"`
 	TotalGoals     int           `json:"totalGoals"`
@@ -78,11 +91,12 @@ func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Serv
 	}
 	store := NewGoalStore(cfg.GoalStorePath)
 	return &Service{
-		goals:  store,
-		agent:  agent,
-		logger: logger.With("pkg", "autonomous"),
-		cfg:    cfg,
-		runLog: NewRunLog(cfg.GoalStorePath),
+		goals:   store,
+		agent:   agent,
+		logger:  logger.With("pkg", "autonomous"),
+		cfg:     cfg,
+		runLog:  NewRunLog(cfg.GoalStorePath),
+		enabled: true,
 	}
 }
 
@@ -131,6 +145,7 @@ func (s *Service) Status() ServiceStatus {
 
 	return ServiceStatus{
 		Running:        s.attention != nil,
+		Enabled:        s.enabled,
 		CycleRunning:   s.cycleRunning,
 		ActiveGoals:    len(active),
 		TotalGoals:     len(all),
@@ -145,6 +160,40 @@ func (s *Service) Status() ServiceStatus {
 // Goals returns the goal store for direct CRUD operations.
 func (s *Service) Goals() *GoalStore {
 	return s.goals
+}
+
+// SetEnabled toggles the autonomous timer. When disabled, the timer doesn't
+// trigger cycles but manual RunCycle/RunCycleAsync still works.
+func (s *Service) SetEnabled(enabled bool) {
+	s.mu.Lock()
+	s.enabled = enabled
+	s.mu.Unlock()
+	s.logger.Info("autonomous mode toggled", "enabled", enabled)
+}
+
+// Enabled returns whether the timer is active.
+func (s *Service) Enabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.enabled
+}
+
+// OnEvent registers a listener for cycle events.
+func (s *Service) OnEvent(listener EventListener) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.listeners = append(s.listeners, listener)
+}
+
+func (s *Service) emit(event CycleEvent) {
+	event.Ts = time.Now().UnixMilli()
+	s.mu.Lock()
+	listeners := make([]EventListener, len(s.listeners))
+	copy(listeners, s.listeners)
+	s.mu.Unlock()
+	for _, l := range listeners {
+		l(event)
+	}
 }
 
 // AddGoal adds a goal and triggers attention if available.
@@ -265,11 +314,14 @@ func (s *Service) executeCycle(ctx context.Context) *CycleOutcome {
 	// 3. Load last cycle state for prompt continuity.
 	cycleState, _ := s.goals.LoadCycleState()
 
-	// 4. Build decision prompt and run agent turn.
-	prompt := buildDecisionPrompt(active, &cycleState)
+	// 4. Build decision prompt with recently-changed goals for context.
+	recentlyChanged, _ := s.goals.RecentlyChanged(30 * 60 * 1000) // last 30 min
+	prompt := buildDecisionPrompt(active, &cycleState, recentlyChanged...)
 	s.logger.Info("running autonomous cycle",
 		"goals", len(active),
 		"topGoal", active[0].Description)
+
+	s.emit(CycleEvent{Type: "cycle_started"})
 
 	output, runErr := s.agent.RunAgentTurn(ctx, autonomousSessionKey, prompt)
 	if runErr != nil {
@@ -291,9 +343,19 @@ func (s *Service) executeCycle(ctx context.Context) *CycleOutcome {
 	}
 	updates := parseGoalUpdates(output, activeIDs)
 
-	// 6. Apply updates to goal store.
+	// 6. Validate and apply updates to goal store.
+	activeIDSet := make(map[string]bool, len(active))
+	for _, g := range active {
+		activeIDSet[g.ID] = true
+	}
+
 	var goalWorked string
 	for _, u := range updates {
+		// Reject updates referencing non-existent goal IDs.
+		if !activeIDSet[u.ID] {
+			s.logger.Warn("ignoring goal update for unknown ID", "id", u.ID)
+			continue
+		}
 		if updateErr := s.goals.Update(u.ID, u.Status, u.Note); updateErr != nil {
 			s.logger.Warn("failed to apply goal update", "id", u.ID, "error", updateErr)
 		} else if goalWorked == "" {
@@ -353,6 +415,22 @@ func (s *Service) applyCycleOutcome(outcome *CycleOutcome) {
 		Error:      outcome.Error,
 		UpdateCount: len(outcome.GoalUpdates),
 	})
+
+	// Purge old completed goals periodically (every 50 cycles).
+	if s.totalCycles%50 == 0 {
+		if purged, err := s.goals.PurgeCompleted(); err == nil && purged > 0 {
+			s.logger.Info("purged completed goals", "count", purged)
+		}
+	}
+
+	// Emit cycle event for external consumers.
+	eventType := "cycle_completed"
+	if outcome.Status == "error" {
+		eventType = "cycle_failed"
+	} else if outcome.Status == "skipped" {
+		eventType = "cycle_skipped"
+	}
+	s.emit(CycleEvent{Type: eventType, Outcome: outcome})
 
 	s.logger.Info("cycle completed",
 		"status", outcome.Status,

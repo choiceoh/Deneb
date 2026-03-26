@@ -13,8 +13,9 @@ import (
 const autonomousSessionKey = "autonomous:cycle"
 
 // buildDecisionPrompt constructs the LLM prompt for a decision cycle.
-// Includes active goals, last cycle summary, current time, and structured output instructions.
-func buildDecisionPrompt(goals []Goal, lastCycle *CycleState) string {
+// Includes active goals, recently changed goals, last cycle summary, current time,
+// and structured output instructions.
+func buildDecisionPrompt(goals []Goal, lastCycle *CycleState, recentlyChanged ...Goal) string {
 	var b strings.Builder
 
 	// Header with timestamp for time-aware decisions.
@@ -44,6 +45,22 @@ func buildDecisionPrompt(goals []Goal, lastCycle *CycleState) string {
 		age := time.Since(time.UnixMilli(g.CreatedAtMs))
 		if age > 24*time.Hour {
 			b.WriteString(fmt.Sprintf("   생성: %d일 전\n", int(age.Hours()/24)))
+		}
+	}
+
+	// Recently completed/paused goals for context.
+	if len(recentlyChanged) > 0 {
+		b.WriteString("\n## 최근 상태 변경\n\n")
+		for _, g := range recentlyChanged {
+			label := "완료됨"
+			if g.Status == StatusPaused {
+				label = "중단됨"
+			}
+			b.WriteString(fmt.Sprintf("- **%s**: %s", label, g.Description))
+			if g.LastNote != "" {
+				b.WriteString(fmt.Sprintf(" — %s", g.LastNote))
+			}
+			b.WriteString("\n")
 		}
 	}
 

@@ -133,6 +133,11 @@ func (a *Attention) timerLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Skip if disabled.
+			if !a.svc.Enabled() {
+				continue
+			}
+
 			consErr := a.svc.ConsecutiveErrors()
 
 			// Auto-stop after 10 consecutive failures.

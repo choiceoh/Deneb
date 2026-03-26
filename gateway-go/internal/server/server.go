@@ -1236,6 +1236,11 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 		transcript:  s.transcript,
 	}, s.logger)
 
+	// Broadcast autonomous cycle events to WebSocket clients.
+	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
+		broadcastFn("autonomous.cycle", event)
+	})
+
 	rpc.RegisterAutonomousMethods(s.dispatcher, rpc.AutonomousDeps{
 		Autonomous: s.autonomousSvc,
 	})

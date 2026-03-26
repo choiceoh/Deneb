@@ -42,14 +42,19 @@ const (
 
 // Goal represents a single autonomous objective.
 type Goal struct {
-	ID          string `json:"id"`
-	Description string `json:"description"`
-	Priority    string `json:"priority"`            // "high", "medium", "low"
-	Status      string `json:"status"`              // "active", "completed", "paused"
-	LastNote    string `json:"lastNote,omitempty"`   // progress note from last cycle
-	CreatedAtMs int64  `json:"createdAtMs"`
-	UpdatedAtMs int64  `json:"updatedAtMs"`
+	ID           string `json:"id"`
+	Description  string `json:"description"`
+	Priority     string `json:"priority"`              // "high", "medium", "low"
+	Status       string `json:"status"`                // "active", "completed", "paused"
+	LastNote     string `json:"lastNote,omitempty"`     // progress note from last cycle
+	PausedReason string `json:"pausedReason,omitempty"` // why the goal was paused
+	CycleCount   int    `json:"cycleCount,omitempty"`   // how many cycles worked on this goal
+	CreatedAtMs  int64  `json:"createdAtMs"`
+	UpdatedAtMs  int64  `json:"updatedAtMs"`
 }
+
+// CompletedGoalRetentionMs is how long completed goals are kept before auto-purge (7 days).
+const CompletedGoalRetentionMs = 7 * 24 * 60 * 60 * 1000
 
 // GoalUpdate represents a goal state change parsed from cycle output.
 type GoalUpdate struct {
@@ -302,7 +307,8 @@ func (s *GoalStore) ActiveGoals() ([]Goal, error) {
 	return active, nil
 }
 
-// Update modifies a goal's status and/or note.
+// Update modifies a goal's status and/or note. Called by the cycle runner
+// after parsing LLM output. Tracks cycle count and paused reason.
 func (s *GoalStore) Update(id, status, note string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -320,11 +326,101 @@ func (s *GoalStore) Update(id, status, note string) error {
 			if note != "" {
 				store.Goals[i].LastNote = note
 			}
+			// Track why a goal was paused.
+			if status == StatusPaused && note != "" {
+				store.Goals[i].PausedReason = note
+			} else if status == StatusActive {
+				store.Goals[i].PausedReason = ""
+			}
+			store.Goals[i].CycleCount++
 			store.Goals[i].UpdatedAtMs = time.Now().UnixMilli()
 			return s.saveLocked(store)
 		}
 	}
 	return fmt.Errorf("goal %q not found", id)
+}
+
+// UpdateGoal patches a goal's priority and/or status. Used by the RPC handler
+// for manual goal management (e.g., reactivating a paused goal, changing priority).
+func (s *GoalStore) UpdateGoal(id string, priority, status string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	store, err := s.loadLocked()
+	if err != nil {
+		return err
+	}
+
+	for i := range store.Goals {
+		if store.Goals[i].ID == id {
+			if priority != "" {
+				store.Goals[i].Priority = normalizePriority(priority)
+			}
+			if status != "" {
+				switch status {
+				case StatusActive, StatusCompleted, StatusPaused:
+					store.Goals[i].Status = status
+					if status == StatusActive {
+						store.Goals[i].PausedReason = ""
+					}
+				default:
+					return fmt.Errorf("invalid status %q", status)
+				}
+			}
+			store.Goals[i].UpdatedAtMs = time.Now().UnixMilli()
+			return s.saveLocked(store)
+		}
+	}
+	return fmt.Errorf("goal %q not found", id)
+}
+
+// PurgeCompleted removes completed goals older than CompletedGoalRetentionMs.
+// Returns the number of purged goals.
+func (s *GoalStore) PurgeCompleted() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	store, err := s.loadLocked()
+	if err != nil {
+		return 0, err
+	}
+
+	cutoff := time.Now().UnixMilli() - CompletedGoalRetentionMs
+	filtered := make([]Goal, 0, len(store.Goals))
+	purged := 0
+	for _, g := range store.Goals {
+		if g.Status == StatusCompleted && g.UpdatedAtMs < cutoff {
+			purged++
+			continue
+		}
+		filtered = append(filtered, g)
+	}
+	if purged == 0 {
+		return 0, nil
+	}
+
+	store.Goals = filtered
+	if err := s.saveLocked(store); err != nil {
+		return 0, err
+	}
+	return purged, nil
+}
+
+// RecentlyChanged returns goals whose status changed in the last N milliseconds.
+// Used to inject recent completions/pauses into the decision prompt.
+func (s *GoalStore) RecentlyChanged(withinMs int64) ([]Goal, error) {
+	store, err := s.Load()
+	if err != nil {
+		return nil, err
+	}
+	cutoff := time.Now().UnixMilli() - withinMs
+	var recent []Goal
+	for _, g := range store.Goals {
+		if g.UpdatedAtMs >= cutoff && g.Status != StatusActive {
+			recent = append(recent, g)
+		}
+	}
+	return recent, nil
 }
 
 func normalizePriority(p string) string {
