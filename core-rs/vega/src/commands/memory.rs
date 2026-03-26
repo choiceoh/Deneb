@@ -1,7 +1,7 @@
-#[cfg(feature = "ml")]
-use std::collections::HashMap;
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
+#[cfg(feature = "ml")]
+use std::collections::HashMap;
 use std::fs;
 
 use crate::config::VegaConfig;
@@ -83,7 +83,9 @@ fn fts_search(
          LIMIT ?2"
     };
 
-    let mut stmt = conn.prepare(sql).map_err(|e| format!("FTS 쿼리 준비 실패: {e}"))?;
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("FTS 쿼리 준비 실패: {e}"))?;
 
     let map_row = |row: &rusqlite::Row| -> rusqlite::Result<Value> {
         Ok(json!({
@@ -154,8 +156,8 @@ fn vector_search(
         ));
     }
 
-    let query_embedding: Vec<f32> = serde_json::from_slice(&output.stdout)
-        .map_err(|e| format!("임베딩 파싱 실패: {e}"))?;
+    let query_embedding: Vec<f32> =
+        serde_json::from_slice(&output.stdout).map_err(|e| format!("임베딩 파싱 실패: {e}"))?;
 
     // Load chunk embeddings from DB and compute cosine similarity
     let mut stmt = conn
@@ -189,7 +191,9 @@ fn vector_search(
         .map(|(mut val, blob)| {
             let embedding = bytes_to_f32_vec(&blob);
             let score = cosine_similarity(&query_embedding, &embedding);
-            val.as_object_mut().unwrap().insert("score".into(), json!(score));
+            val.as_object_mut()
+                .unwrap()
+                .insert("score".into(), json!(score));
             (score, val)
         })
         .collect();
@@ -285,7 +289,10 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
     if !md_dir.exists() {
         return CommandResult::err(
             "memory-update",
-            &format!("마크다운 디렉토리가 존재하지 않습니다: {}", md_dir.display()),
+            &format!(
+                "마크다운 디렉토리가 존재하지 않습니다: {}",
+                md_dir.display()
+            ),
         );
     }
 
@@ -300,12 +307,7 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
 
     let entries: Vec<_> = match fs::read_dir(md_dir) {
         Ok(rd) => rd.filter_map(|e| e.ok()).collect(),
-        Err(e) => {
-            return CommandResult::err(
-                "memory-update",
-                &format!("디렉토리 읽기 실패: {e}"),
-            )
-        }
+        Err(e) => return CommandResult::err("memory-update", &format!("디렉토리 읽기 실패: {e}")),
     };
 
     for entry in entries {
@@ -327,10 +329,7 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
         };
 
         let hash = compute_content_hash(&content);
-        let filename = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
         // Check existing hash
         if !force {
@@ -350,10 +349,7 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
         }
 
         // Find or create project
-        let project_name = path
-            .file_stem()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let project_name = path.file_stem().and_then(|n| n.to_str()).unwrap_or("");
 
         let project_id: Option<i64> = conn
             .query_row(
@@ -419,10 +415,7 @@ fn parse_md_sections(content: &str) -> Vec<(String, String)> {
                 sections.push((current_section.clone(), current_content.clone()));
                 current_content.clear();
             }
-            current_section = line
-                .trim_start_matches('#')
-                .trim()
-                .to_string();
+            current_section = line.trim_start_matches('#').trim().to_string();
         } else {
             current_content.push_str(line);
             current_content.push('\n');
@@ -570,7 +563,10 @@ pub fn cmd_memory_embed(args: &Value, config: &VegaConfig) -> CommandResult {
 
 #[cfg(not(feature = "ml"))]
 pub fn cmd_memory_embed(_args: &Value, _config: &VegaConfig) -> CommandResult {
-    CommandResult::err("memory-embed", "ML 기능이 비활성화되어 있습니다. 'ml' 피처를 활성화하세요.")
+    CommandResult::err(
+        "memory-embed",
+        "ML 기능이 비활성화되어 있습니다. 'ml' 피처를 활성화하세요.",
+    )
 }
 
 #[cfg(feature = "ml")]

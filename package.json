@@ -1,18 +1,7 @@
 {
   "name": "deneb",
   "version": "3.11.2",
-  "description": "Multi-channel AI gateway with extensible messaging integrations",
-  "keywords": [],
-  "homepage": "https://github.com/deneb/deneb#readme",
-  "bugs": {
-    "url": "https://github.com/deneb/deneb/issues"
-  },
-  "license": "MIT",
-  "author": "",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/deneb/deneb.git"
-  },
+  "private": true,
   "scripts": {
     "gateway-go:build": "cd gateway-go && go build -tags no_rust ./...",
     "gateway-go:build:cgo": "cd gateway-go && CGO_ENABLED=1 go build ./...",
@@ -23,7 +12,6 @@
     "docs:spellcheck": "bash scripts/docs-spellcheck.sh",
     "docs:spellcheck:fix": "bash scripts/docs-spellcheck.sh --write",
     "core-rs:test": "cd core-rs && cargo test",
-    "rust:test": "cargo test --workspace",
-    "prepare": "command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git config core.hooksPath git-hooks || exit 0"
+    "rust:test": "cargo test --workspace"
   }
 }

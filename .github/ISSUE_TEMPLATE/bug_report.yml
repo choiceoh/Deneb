@@ -76,7 +76,7 @@ body:
     attributes:
       label: Install method
       description: How Deneb was installed or launched.
-      placeholder: npm global / pnpm dev / docker / mac app
+      placeholder: git clone + make / docker / mac app
   - type: input
     id: model
     attributes:

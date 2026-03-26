@@ -9,7 +9,6 @@ on:
       - "core-rs/core/Cargo.toml"
       - "core-rs/Cargo.toml"
       - "core-rs/core/src/protocol/error_codes.rs"
-      - "src/gateway/protocol/schema/error-codes.ts"
       - "scripts/proto-gen.sh"
       - "scripts/error-code-sync-check.sh"
   push:
@@ -20,15 +19,12 @@ on:
       - "core-rs/core/Cargo.toml"
       - "core-rs/Cargo.toml"
       - "core-rs/core/src/protocol/error_codes.rs"
-      - "src/gateway/protocol/schema/error-codes.ts"
       - "scripts/proto-gen.sh"
       - "scripts/error-code-sync-check.sh"
 
 # Pin tool versions to match committed generated code.
-# Update these when regenerating with newer tools.
 env:
   PROTOC_GEN_GO_VERSION: v1.36.11
-  TS_PROTO_VERSION: "2.11.6"
 
 jobs:
   generate-check:
@@ -37,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup buf, Go, Rust, Node (parallel-safe)
+      - name: Setup buf and Go
         uses: bufbuild/buf-setup-action@v1
 
       - uses: actions/setup-go@v5
@@ -47,10 +43,6 @@ jobs:
           cache-dependency-path: gateway-go/go.sum
 
       - uses: dtolnay/rust-toolchain@stable
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -66,7 +58,6 @@ jobs:
         run: |
           sudo apt-get install -y protobuf-compiler &
           go install google.golang.org/protobuf/cmd/protoc-gen-go@${{ env.PROTOC_GEN_GO_VERSION }} &
-          npm install -g ts-proto@${{ env.TS_PROTO_VERSION }} &
           wait
 
       - name: Generate and verify

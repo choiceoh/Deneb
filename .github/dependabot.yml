@@ -3,36 +3,7 @@
 
 version: 2
 
-registries:
-  npm-npmjs:
-    type: npm-registry
-    url: https://registry.npmjs.org
-    token: ${{secrets.NPM_NPMJS_TOKEN}}
-    replaces-base: true
-
 updates:
-  # npm dependencies (root)
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: daily
-    cooldown:
-      default-days: 2
-    groups:
-      production:
-        dependency-type: production
-        update-types:
-          - minor
-          - patch
-      development:
-        dependency-type: development
-        update-types:
-          - minor
-          - patch
-    open-pull-requests-limit: 10
-    registries:
-      - npm-npmjs
-
   # GitHub Actions
   - package-ecosystem: github-actions
     directory: /

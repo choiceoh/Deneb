@@ -81,7 +81,10 @@ mod tests {
 
     #[test]
     fn normalize_for_auth() {
-        assert_eq!(normalize_provider_id_for_auth("volcengine-plan"), "volcengine");
+        assert_eq!(
+            normalize_provider_id_for_auth("volcengine-plan"),
+            "volcengine"
+        );
         assert_eq!(normalize_provider_id_for_auth("byteplus-plan"), "byteplus");
         assert_eq!(normalize_provider_id_for_auth("anthropic"), "anthropic");
     }
@@ -103,7 +106,10 @@ mod tests {
         map.insert("Anthropic".to_string(), ());
         map.insert("aws-bedrock".to_string(), ());
 
-        assert_eq!(find_normalized_provider_key(&map, "anthropic"), Some("Anthropic"));
+        assert_eq!(
+            find_normalized_provider_key(&map, "anthropic"),
+            Some("Anthropic")
+        );
         assert_eq!(
             find_normalized_provider_key(&map, "amazon-bedrock"),
             Some("aws-bedrock")

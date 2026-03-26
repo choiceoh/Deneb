@@ -56,18 +56,3 @@ jobs:
       - name: Disallow direct inputs interpolation in composite run blocks
         run: go run scripts/check-composite-action-input-interpolation.go
 
-  config-docs-drift:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Node environment
-        uses: ./.github/actions/setup-node-env
-        with:
-          install-bun: "false"
-          use-sticky-disk: "false"
-
-      - name: Check config docs drift statefile
-        run: pnpm config:docs:check

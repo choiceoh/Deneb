@@ -23,12 +23,21 @@ pub fn apply_depth(data: &Value, command: &str, depth: &str) -> Value {
 fn compact_result(data: &Value, command: &str) -> Value {
     match command {
         "search" => {
-            let projects = data.get("projects").and_then(|v| v.as_array()).map(|arr| {
-                arr.iter().take(5).map(|p| json!({
-                    "id": p.get("id"), "name": p.get("name"),
-                    "status": p.get("status"), "score": p.get("score"),
-                })).collect::<Vec<_>>()
-            }).unwrap_or_default();
+            let projects = data
+                .get("projects")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .take(5)
+                        .map(|p| {
+                            json!({
+                                "id": p.get("id"), "name": p.get("name"),
+                                "status": p.get("status"), "score": p.get("score"),
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
             json!({
                 "projects": projects,
                 "result_count": data.get("result_count"),
@@ -57,11 +66,25 @@ fn compact_result(data: &Value, command: &str) -> Value {
         }),
         "brief" => {
             let mut kept = json!({});
-            for key in ["project_id", "project_name", "status", "client",
-                        "person_internal", "latest_activity", "next_actions", "risks"] {
-                if let Some(v) = data.get(key) { kept[key] = v.clone(); }
+            for key in [
+                "project_id",
+                "project_name",
+                "status",
+                "client",
+                "person_internal",
+                "latest_activity",
+                "next_actions",
+                "risks",
+            ] {
+                if let Some(v) = data.get(key) {
+                    kept[key] = v.clone();
+                }
             }
-            kept["comm_count"] = json!(data.get("recent_comms").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0));
+            kept["comm_count"] = json!(data
+                .get("recent_comms")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0));
             kept
         }
         "dashboard" => json!({
@@ -112,32 +135,54 @@ fn compact_result(data: &Value, command: &str) -> Value {
 /// Port of Python _build_ai_hint with 15 situational patterns.
 pub fn build_ai_hint(command: &str, data: &Value) -> Value {
     let result_type = match command {
-        "search" => "검색 결과", "show" => "프로젝트 상세", "brief" => "브리프",
-        "urgent" => "긴급 항목", "dashboard" => "대시보드", "pipeline" => "파이프라인",
-        "weekly" => "주간 보고", "contacts" => "연락처", "cross" => "크로스 분석",
-        "person" => "인물 포트폴리오", "compare" => "프로젝트 비교",
-        "timeline" => "타임라인", "list" => "프로젝트 목록", _ => "기타",
+        "search" => "검색 결과",
+        "show" => "프로젝트 상세",
+        "brief" => "브리프",
+        "urgent" => "긴급 항목",
+        "dashboard" => "대시보드",
+        "pipeline" => "파이프라인",
+        "weekly" => "주간 보고",
+        "contacts" => "연락처",
+        "cross" => "크로스 분석",
+        "person" => "인물 포트폴리오",
+        "compare" => "프로젝트 비교",
+        "timeline" => "타임라인",
+        "list" => "프로젝트 목록",
+        _ => "기타",
     };
 
     let mut hints: Vec<Value> = Vec::new();
 
     match command {
         "search" => {
-            let n = data.get("result_count").and_then(|rc| rc.get("projects"))
-                .and_then(|v| v.as_i64()).unwrap_or(0);
+            let n = data
+                .get("result_count")
+                .and_then(|rc| rc.get("projects"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
             if n == 0 {
                 hints.push(json!({"situation": "no_results",
                     "guide": "검색 결과가 없습니다. suggestions 필드의 후보를 안내하거나 키워드 변경을 제안하세요."}));
             } else if n == 1 {
-                let pid = data.get("projects").and_then(|v| v.as_array())
-                    .and_then(|a| a.first()).and_then(|p| p.get("id")).and_then(|v| v.as_i64()).unwrap_or(0);
+                let pid = data
+                    .get("projects")
+                    .and_then(|v| v.as_array())
+                    .and_then(|a| a.first())
+                    .and_then(|p| p.get("id"))
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
                 hints.push(json!({"situation": "single_match",
                     "guide": format!("정확히 1개 프로젝트 매칭. 추가 정보: brief {}", pid)}));
             } else if n > 5 {
                 hints.push(json!({"situation": "too_many_results",
                     "guide": "결과가 많습니다. 상위 3개만 언급하고 조건 좁히기를 제안하세요."}));
             }
-            if data.get("search_meta").and_then(|m| m.get("semantic_used")).and_then(|v| v.as_bool()).unwrap_or(false) {
+            if data
+                .get("search_meta")
+                .and_then(|m| m.get("semantic_used"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
                 hints.push(json!({"situation": "semantic_enriched",
                     "guide": "의미 검색이 추가 결과를 포함합니다."}));
             }
@@ -158,11 +203,21 @@ pub fn build_ai_hint(command: &str, data: &Value) -> Value {
             }
         }
         "brief" => {
-            if data.get("risks").and_then(|v| v.as_array()).map(|a| !a.is_empty()).unwrap_or(false) {
+            if data
+                .get("risks")
+                .and_then(|v| v.as_array())
+                .map(|a| !a.is_empty())
+                .unwrap_or(false)
+            {
                 hints.push(json!({"situation": "has_risks",
                     "guide": "리스크 항목이 있습니다. 상태/액션 보고 후 리스크를 별도 강조하세요."}));
             }
-            if data.get("next_actions").and_then(|v| v.as_array()).map(|a| a.is_empty()).unwrap_or(true) {
+            if data
+                .get("next_actions")
+                .and_then(|v| v.as_array())
+                .map(|a| a.is_empty())
+                .unwrap_or(true)
+            {
                 let pid = data.get("project_id").and_then(|v| v.as_i64()).unwrap_or(0);
                 hints.push(json!({"situation": "no_actions",
                     "guide": "다음 액션이 비어 있습니다. 액션 추가를 물어보세요.",
@@ -170,22 +225,32 @@ pub fn build_ai_hint(command: &str, data: &Value) -> Value {
             }
         }
         "person" => {
-            let count = data.get("project_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let count = data
+                .get("project_count")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
             if count >= 5 {
                 hints.push(json!({"situation": "overloaded",
                     "guide": format!("이 인물이 {}개 프로젝트를 담당합니다. 과부하 상태임을 언급하세요.", count)}));
             }
         }
         "show" => {
-            let pid = data.get("id").or(data.get("project").and_then(|p| p.get("id")))
-                .and_then(|v| v.as_i64()).unwrap_or(0);
+            let pid = data
+                .get("id")
+                .or(data.get("project").and_then(|p| p.get("id")))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
             if pid > 0 {
                 hints.push(json!({"situation": "show_detail",
                     "guide": format!("프로젝트 상세입니다. 요약: brief {}, 이력: timeline {}.", pid, pid)}));
             }
         }
         "list" => {
-            let count = data.get("projects").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+            let count = data
+                .get("projects")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
             hints.push(json!({"situation": "project_list",
                 "guide": format!("{}개 프로젝트 목록입니다. 상세는 brief <ID>로 확인하세요.", count)}));
         }
@@ -231,10 +296,12 @@ pub fn build_bundle(command: &str, data: &Value, conn: Option<&Connection>) -> V
             if let Some(pid) = pid {
                 // Check overdue actions
                 if let Ok(mut stmt) = conn.prepare(
-                    "SELECT content FROM chunks WHERE project_id=?1 AND chunk_type='next_action'"
+                    "SELECT content FROM chunks WHERE project_id=?1 AND chunk_type='next_action'",
                 ) {
                     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-                    if let Ok(rows) = stmt.query_map(rusqlite::params![pid], |r| r.get::<_, String>(0)) {
+                    if let Ok(rows) =
+                        stmt.query_map(rusqlite::params![pid], |r| r.get::<_, String>(0))
+                    {
                         for content in rows.flatten() {
                             let re = Regex::new(r"20\d{2}[-/]\d{2}[-/]\d{2}").unwrap();
                             for m in re.find_iter(&content) {
@@ -248,7 +315,10 @@ pub fn build_bundle(command: &str, data: &Value, conn: Option<&Connection>) -> V
                     }
                 }
                 // Related projects by same person
-                let person = data.get("person_internal").and_then(|v| v.as_str()).unwrap_or("");
+                let person = data
+                    .get("person_internal")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 if let Some(first_name) = person.split_whitespace().next() {
                     if !first_name.is_empty() {
                         if let Ok(mut stmt) = conn.prepare(
@@ -270,12 +340,14 @@ pub fn build_bundle(command: &str, data: &Value, conn: Option<&Connection>) -> V
             // This week's activity
             if let Ok(mut stmt) = conn.prepare(
                 "SELECT COUNT(*) FROM comm_log cl JOIN projects p ON p.id = cl.project_id
-                 WHERE p.person_internal LIKE ?1 AND cl.log_date >= date('now', '-7 days')"
+                 WHERE p.person_internal LIKE ?1 AND cl.log_date >= date('now', '-7 days')",
             ) {
                 let person = data.get("person").and_then(|v| v.as_str()).unwrap_or("");
                 if !person.is_empty() {
                     let pattern = format!("%{}%", crate::utils::escape_like(person));
-                    if let Ok(count) = stmt.query_row(rusqlite::params![pattern], |r| r.get::<_, i64>(0)) {
+                    if let Ok(count) =
+                        stmt.query_row(rusqlite::params![pattern], |r| r.get::<_, i64>(0))
+                    {
                         bundle["this_week_activity"] = json!({"comm_count": count});
                     }
                 }
@@ -283,12 +355,20 @@ pub fn build_bundle(command: &str, data: &Value, conn: Option<&Connection>) -> V
         }
         "show" => {
             // Same-client projects
-            let client = data.get("project").and_then(|p| p.get("client")).and_then(|v| v.as_str())
-                .or_else(|| data.get("client").and_then(|v| v.as_str())).unwrap_or("");
-            let show_pid = data.get("project").and_then(|p| p.get("id")).and_then(|v| v.as_i64())
+            let client = data
+                .get("project")
+                .and_then(|p| p.get("client"))
+                .and_then(|v| v.as_str())
+                .or_else(|| data.get("client").and_then(|v| v.as_str()))
+                .unwrap_or("");
+            let show_pid = data
+                .get("project")
+                .and_then(|p| p.get("id"))
+                .and_then(|v| v.as_i64())
                 .or_else(|| data.get("id").and_then(|v| v.as_i64()));
             if !client.is_empty() {
-                if let (Some(pid), Some(first_word)) = (show_pid, client.split_whitespace().next()) {
+                if let (Some(pid), Some(first_word)) = (show_pid, client.split_whitespace().next())
+                {
                     if let Ok(mut stmt) = conn.prepare(
                         "SELECT id, name, status FROM projects WHERE client LIKE ?1 AND id != ?2 LIMIT 3"
                     ) {
@@ -340,9 +420,11 @@ pub fn try_auto_correct(
 
     // Pattern 3: search 0 results + _auto_brief → brief
     if command == "search" {
-        let proj_count = data.get("result_count")
+        let proj_count = data
+            .get("result_count")
             .and_then(|rc| rc.get("projects"))
-            .and_then(|v| v.as_i64()).unwrap_or(-1);
+            .and_then(|v| v.as_i64())
+            .unwrap_or(-1);
         if proj_count == 0 {
             if let Some(ab) = data.get("_auto_brief") {
                 if let Some(pid) = ab.get("project_id").and_then(|v| v.as_i64()) {
@@ -395,7 +477,9 @@ pub fn route_confidence(query: &str) -> (&'static str, f64) {
     ];
     for (pattern, cmd, conf) in high_patterns {
         if let Ok(re) = Regex::new(pattern) {
-            if re.is_match(&q) { return (cmd, *conf); }
+            if re.is_match(&q) {
+                return (cmd, *conf);
+            }
         }
     }
     ("search", 0.5)
@@ -406,7 +490,9 @@ pub fn smart_route(query: &str) -> (&'static str, f64) {
     let (cmd, conf) = route_confidence(query);
     if cmd == "search" && conf < 0.6 {
         if let Ok(re) = Regex::new(r"어떻게|어때|상황|진행|되고\s*있|근황") {
-            if re.is_match(query) { return ("brief", 0.7); }
+            if re.is_match(query) {
+                return ("brief", 0.7);
+            }
         }
     }
     (cmd, conf)
@@ -423,11 +509,15 @@ pub fn apply_format(data: &Value, _command: &str, fmt: &str) -> Value {
         "ids" => {
             let projects = data.get("projects").and_then(|v| v.as_array());
             if let Some(projects) = projects {
-                let ids: Vec<Value> = projects.iter()
+                let ids: Vec<Value> = projects
+                    .iter()
                     .filter_map(|p| p.get("id").or(p.get("project_id")))
-                    .cloned().collect();
+                    .cloned()
+                    .collect();
                 json!({"ids": ids})
-            } else { data.clone() }
+            } else {
+                data.clone()
+            }
         }
         "markdown" => {
             let projects = data.get("projects").and_then(|v| v.as_array());
@@ -437,30 +527,47 @@ pub fn apply_format(data: &Value, _command: &str, fmt: &str) -> Value {
                     "|---|---|---|---|".to_string(),
                 ];
                 for p in projects {
-                    lines.push(format!("| {} | {} | {} | {} |",
-                        p.get("id").and_then(|v| v.as_i64()).map(|v| v.to_string()).unwrap_or_default(),
+                    lines.push(format!(
+                        "| {} | {} | {} | {} |",
+                        p.get("id")
+                            .and_then(|v| v.as_i64())
+                            .map(|v| v.to_string())
+                            .unwrap_or_default(),
                         p.get("name").and_then(|v| v.as_str()).unwrap_or(""),
                         p.get("status").and_then(|v| v.as_str()).unwrap_or(""),
-                        p.get("person").or(p.get("person_internal")).and_then(|v| v.as_str()).unwrap_or(""),
+                        p.get("person")
+                            .or(p.get("person_internal"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(""),
                     ));
                 }
                 let mut out = data.clone();
                 out["markdown"] = json!(lines.join("\n"));
                 out
-            } else { data.clone() }
+            } else {
+                data.clone()
+            }
         }
         "detail" => {
             let projects = data.get("projects").and_then(|v| v.as_array());
             if let Some(projects) = projects {
-                let lines: Vec<String> = projects.iter().map(|p| format!("[{}] {} — {}",
-                    p.get("id").and_then(|v| v.as_i64()).unwrap_or(0),
-                    p.get("name").and_then(|v| v.as_str()).unwrap_or(""),
-                    p.get("status").and_then(|v| v.as_str()).unwrap_or(""),
-                )).collect();
+                let lines: Vec<String> = projects
+                    .iter()
+                    .map(|p| {
+                        format!(
+                            "[{}] {} — {}",
+                            p.get("id").and_then(|v| v.as_i64()).unwrap_or(0),
+                            p.get("name").and_then(|v| v.as_str()).unwrap_or(""),
+                            p.get("status").and_then(|v| v.as_str()).unwrap_or(""),
+                        )
+                    })
+                    .collect();
                 let mut out = data.clone();
                 out["lines"] = json!(lines);
                 out
-            } else { data.clone() }
+            } else {
+                data.clone()
+            }
         }
         _ => data.clone(),
     }
@@ -476,15 +583,32 @@ pub fn generate_summary(command: &str, data: &Value) -> String {
         "search" => {
             let rc = data.get("result_count").unwrap_or(&Value::Null);
             let projects = rc.get("projects").and_then(|v| v.as_i64()).unwrap_or(0);
-            let comms = rc.get("communications").and_then(|v| v.as_i64()).unwrap_or(0);
-            let top_names: Vec<String> = data.get("projects").and_then(|v| v.as_array())
-                .map(|arr| arr.iter().take(3)
-                    .filter_map(|p| p.get("name").and_then(|v| v.as_str()).map(String::from))
-                    .collect()).unwrap_or_default();
+            let comms = rc
+                .get("communications")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let top_names: Vec<String> = data
+                .get("projects")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .take(3)
+                        .filter_map(|p| p.get("name").and_then(|v| v.as_str()).map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
             if top_names.is_empty() {
-                format!("검색 결과: {}개 프로젝트, {}건 커뮤니케이션", projects, comms)
+                format!(
+                    "검색 결과: {}개 프로젝트, {}건 커뮤니케이션",
+                    projects, comms
+                )
             } else {
-                format!("검색 결과: {} ({}개 프로젝트, {}건 커뮤니케이션)", top_names.join(", "), projects, comms)
+                format!(
+                    "검색 결과: {} ({}개 프로젝트, {}건 커뮤니케이션)",
+                    top_names.join(", "),
+                    projects,
+                    comms
+                )
             }
         }
         "urgent" => {
@@ -493,7 +617,11 @@ pub fn generate_summary(command: &str, data: &Value) -> String {
             format!("관심 필요 {}건 (긴급 {}건)", total, critical)
         }
         "show" => {
-            let name = data.get("project").and_then(|p| p.get("name")).and_then(|v| v.as_str()).unwrap_or("?");
+            let name = data
+                .get("project")
+                .and_then(|p| p.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
             format!("프로젝트 상세: {}", name)
         }
         "brief" => {
@@ -501,29 +629,60 @@ pub fn generate_summary(command: &str, data: &Value) -> String {
                 let count = data.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
                 format!("{}개 프로젝트 브리프", count)
             } else {
-                let name = data.get("project_name").and_then(|v| v.as_str()).unwrap_or("?");
-                let actions = data.get("next_actions").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
-                let risks = data.get("risks").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
-                format!("[{}] {} — 액션 {}개, 리스크 {}개",
-                    data.get("project_id").and_then(|v| v.as_i64()).unwrap_or(0), name, actions, risks)
+                let name = data
+                    .get("project_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?");
+                let actions = data
+                    .get("next_actions")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.len())
+                    .unwrap_or(0);
+                let risks = data
+                    .get("risks")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.len())
+                    .unwrap_or(0);
+                format!(
+                    "[{}] {} — 액션 {}개, 리스크 {}개",
+                    data.get("project_id").and_then(|v| v.as_i64()).unwrap_or(0),
+                    name,
+                    actions,
+                    risks
+                )
             }
         }
         "dashboard" => {
-            let total = data.get("total_projects").and_then(|v| v.as_i64()).unwrap_or(0);
-            let active = data.get("active_projects").and_then(|v| v.as_i64()).unwrap_or(0);
+            let total = data
+                .get("total_projects")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let active = data
+                .get("active_projects")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
             format!("전체 {}개 중 활성 {}개", total, active)
         }
         "person" => {
             let name = data.get("person").and_then(|v| v.as_str()).unwrap_or("?");
-            let count = data.get("project_count").and_then(|v| v.as_i64()).unwrap_or(0);
+            let count = data
+                .get("project_count")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
             format!("{}: 프로젝트 {}개", name, count)
         }
         "pipeline" => {
-            let total = data.get("total_amount").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let total = data
+                .get("total_amount")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             format!("파이프라인 총 {:.1}억원", total)
         }
         "weekly" => {
-            let active = data.get("active_projects").and_then(|v| v.as_i64()).unwrap_or(0);
+            let active = data
+                .get("active_projects")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
             format!("활성 프로젝트 {}개", active)
         }
         _ => format!("{} 완료", command),
@@ -597,7 +756,8 @@ mod tests {
 
     #[test]
     fn test_apply_format_markdown() {
-        let data = json!({"projects": [{"id": 1, "name": "P1", "status": "진행중", "person": "김"}]});
+        let data =
+            json!({"projects": [{"id": 1, "name": "P1", "status": "진행중", "person": "김"}]});
         let result = apply_format(&data, "search", "markdown");
         assert!(result.get("markdown").is_some());
     }

@@ -77,12 +77,18 @@ mod tests {
 
     #[test]
     fn default_mode_returns_default_model() {
-        assert_eq!(resolve_agent_model(ModelMode::Default, None, None), DEFAULT_MODEL);
+        assert_eq!(
+            resolve_agent_model(ModelMode::Default, None, None),
+            DEFAULT_MODEL
+        );
     }
 
     #[test]
     fn fast_mode_returns_fast_model() {
-        assert_eq!(resolve_agent_model(ModelMode::Fast, None, None), DEFAULT_FAST_MODEL);
+        assert_eq!(
+            resolve_agent_model(ModelMode::Fast, None, None),
+            DEFAULT_FAST_MODEL
+        );
     }
 
     #[test]

@@ -22,14 +22,8 @@ pub fn cmd_template(args: &Value, config: &VegaConfig) -> CommandResult {
         Some(n) => n,
         None => return CommandResult::err("template", "name 파라미터가 필요합니다"),
     };
-    let client = args
-        .get("client")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let person = args
-        .get("person")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let client = args.get("client").and_then(|v| v.as_str()).unwrap_or("");
+    let person = args.get("person").and_then(|v| v.as_str()).unwrap_or("");
     let status = args
         .get("status")
         .and_then(|v| v.as_str())
@@ -48,10 +42,7 @@ pub fn cmd_template(args: &Value, config: &VegaConfig) -> CommandResult {
     // Ensure md_dir exists
     if !md_dir.exists() {
         if let Err(e) = fs::create_dir_all(md_dir) {
-            return CommandResult::err(
-                "template",
-                &format!("디렉토리 생성 실패: {e}"),
-            );
+            return CommandResult::err("template", &format!("디렉토리 생성 실패: {e}"));
         }
     }
 
@@ -92,10 +83,7 @@ pub fn cmd_template(args: &Value, config: &VegaConfig) -> CommandResult {
     let project_id = match db_result {
         Ok(_) => conn.last_insert_rowid(),
         Err(e) => {
-            return CommandResult::err(
-                "template",
-                &format!("DB 등록 실패 (파일은 생성됨): {e}"),
-            )
+            return CommandResult::err("template", &format!("DB 등록 실패 (파일은 생성됨): {e}"))
         }
     };
 

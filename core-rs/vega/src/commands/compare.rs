@@ -1,8 +1,8 @@
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
+use super::{find_project_id, open_db, CommandResult};
 use crate::config::VegaConfig;
-use super::{CommandResult, open_db, find_project_id};
 
 /// Compare two projects: shared/unique vendors, materials, persons, tags.
 /// Args: { "project_a": "프로젝트A", "project_b": "프로젝트B" }
@@ -18,11 +18,21 @@ pub fn cmd_compare(args: &Value, config: &VegaConfig) -> CommandResult {
 
     let id_a = match find_project_id(config, proj_a) {
         Some(id) => id,
-        None => return CommandResult::err("compare", &format!("프로젝트를 찾을 수 없습니다: {}", proj_a)),
+        None => {
+            return CommandResult::err(
+                "compare",
+                &format!("프로젝트를 찾을 수 없습니다: {}", proj_a),
+            )
+        }
     };
     let id_b = match find_project_id(config, proj_b) {
         Some(id) => id,
-        None => return CommandResult::err("compare", &format!("프로젝트를 찾을 수 없습니다: {}", proj_b)),
+        None => {
+            return CommandResult::err(
+                "compare",
+                &format!("프로젝트를 찾을 수 없습니다: {}", proj_b),
+            )
+        }
     };
 
     let conn = match open_db(config) {
@@ -59,7 +69,8 @@ pub fn cmd_compare(args: &Value, config: &VegaConfig) -> CommandResult {
 /// Compare chunks of a given type between two projects.
 fn compare_dimension(conn: &Connection, id_a: i64, id_b: i64, chunk_type: &str) -> Value {
     let get_set = |project_id: i64| -> Vec<String> {
-        let sql = "SELECT DISTINCT TRIM(content) FROM chunks WHERE project_id = ?1 AND chunk_type = ?2";
+        let sql =
+            "SELECT DISTINCT TRIM(content) FROM chunks WHERE project_id = ?1 AND chunk_type = ?2";
         let mut stmt = match conn.prepare(sql) {
             Ok(s) => s,
             Err(_) => return Vec::new(),

@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use crate::config::VegaConfig;
 use crate::utils::extract_bullets;
 
-use super::{open_db, find_project_id, CommandResult};
+use super::{find_project_id, open_db, CommandResult};
 
 /// Build a structured brief for one project by ID.
 /// Public so other commands (search, ask) can call it for auto-brief.
@@ -73,15 +73,22 @@ pub fn build_single_brief(conn: &Connection, pid: i64) -> Result<Value, String> 
         .collect();
 
     // Bucket by chunk_type
-    let mut bucket: std::collections::HashMap<String, Vec<&(String, String, String, Option<String>)>> =
-        std::collections::HashMap::new();
+    let mut bucket: std::collections::HashMap<
+        String,
+        Vec<&(String, String, String, Option<String>)>,
+    > = std::collections::HashMap::new();
     for chunk in &chunks {
         bucket.entry(chunk.2.clone()).or_default().push(chunk);
     }
 
     // 3. Next actions from next_action chunks
     let mut next_actions: Vec<String> = Vec::new();
-    for ch in bucket.get("next_action").unwrap_or(&Vec::new()).iter().take(3) {
+    for ch in bucket
+        .get("next_action")
+        .unwrap_or(&Vec::new())
+        .iter()
+        .take(3)
+    {
         next_actions.extend(extract_bullets(&ch.1, 3));
     }
     next_actions.truncate(5);
@@ -313,7 +320,11 @@ mod tests {
         let comms = brief.get("recent_comms").unwrap().as_array().unwrap();
         assert_eq!(comms.len(), 1);
 
-        let cmds = brief.get("recommended_commands").unwrap().as_array().unwrap();
+        let cmds = brief
+            .get("recommended_commands")
+            .unwrap()
+            .as_array()
+            .unwrap();
         assert!(cmds.len() >= 3);
     }
 

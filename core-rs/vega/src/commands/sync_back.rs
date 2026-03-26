@@ -26,7 +26,14 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
         .prepare("SELECT id, name, source_file, status, client, person_internal FROM projects WHERE source_file IS NOT NULL")
         .unwrap();
 
-    let projects: Vec<(i64, String, String, Option<String>, Option<String>, Option<String>)> = stmt
+    let projects: Vec<(
+        i64,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )> = stmt
         .query_map([], |r| {
             Ok((
                 r.get::<_, i64>(0)?,

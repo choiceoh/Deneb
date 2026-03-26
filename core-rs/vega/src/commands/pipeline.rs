@@ -19,10 +19,8 @@ pub fn cmd_pipeline(_args: &Value, config: &VegaConfig) -> CommandResult {
         Err(e) => return CommandResult::err("pipeline", &e),
     };
     let mut pipeline_items: Vec<Value> = Vec::new();
-    let mut stage_totals: std::collections::HashMap<String, f64> =
-        std::collections::HashMap::new();
-    let mut stage_counts: std::collections::HashMap<String, i64> =
-        std::collections::HashMap::new();
+    let mut stage_totals: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+    let mut stage_counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
 
     for (project_id, title, status) in &projects {
         let amount = match extract_amount_for_project(&conn, *project_id) {
@@ -168,7 +166,8 @@ fn extract_amount_for_project(conn: &Connection, project_id: i64) -> Result<f64,
 /// Supports Korean Won formats: 억원, 만원, 원, and comma-separated numbers.
 fn extract_amount_from_text(text: &str) -> f64 {
     // Pattern: N억 M만원 or N억원
-    let billions_re = Regex::new(r"(\d+(?:\.\d+)?)\s*억\s*(?:(\d+(?:\.\d+)?)\s*만)?\s*원?").unwrap();
+    let billions_re =
+        Regex::new(r"(\d+(?:\.\d+)?)\s*억\s*(?:(\d+(?:\.\d+)?)\s*만)?\s*원?").unwrap();
     // Pattern: N만원
     let ten_thousands_re = Regex::new(r"(\d+(?:,\d+)?(?:\.\d+)?)\s*만\s*원").unwrap();
     // Pattern: N원 (plain number with 원)
@@ -227,7 +226,8 @@ fn classify_stage(status: &str) -> String {
         "negotiation".to_string()
     } else if s.contains("계약") || s.contains("수주") || s.contains("착수") {
         "contract".to_string()
-    } else if s.contains("진행") || s.contains("시공") || s.contains("실행") || s.contains("🟢") {
+    } else if s.contains("진행") || s.contains("시공") || s.contains("실행") || s.contains("🟢")
+    {
         "execution".to_string()
     } else if s.contains("완료") || s.contains("준공") || s.contains("종료") {
         "completed".to_string()
@@ -293,10 +293,7 @@ mod tests {
     #[test]
     fn test_extract_amount_billions() {
         assert_eq!(extract_amount_from_text("총 3억원 규모"), 300_000_000.0);
-        assert_eq!(
-            extract_amount_from_text("약 2억 5000만원"),
-            250_000_000.0
-        );
+        assert_eq!(extract_amount_from_text("약 2억 5000만원"), 250_000_000.0);
     }
 
     #[test]
@@ -307,10 +304,7 @@ mod tests {
 
     #[test]
     fn test_extract_amount_plain_won() {
-        assert_eq!(
-            extract_amount_from_text("50,000,000원"),
-            50_000_000.0
-        );
+        assert_eq!(extract_amount_from_text("50,000,000원"), 50_000_000.0);
     }
 
     #[test]

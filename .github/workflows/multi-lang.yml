@@ -1,7 +1,7 @@
 # CI pipeline for Rust (core-rs) and Go (gateway-go) components.
 #
 # Runs on PRs and pushes that touch Rust, Go, or protobuf files.
-# The existing ci.yml handles TypeScript — this workflow is additive.
+# Rust (core-rs, cli-rs) and Go (gateway-go) CI pipeline.
 name: Multi-Language CI
 
 on:
@@ -9,7 +9,6 @@ on:
     branches: [main]
     paths:
       - "core-rs/**"
-      - "core-rs-napi/**"
       - "cli-rs/**"
       - "gateway-go/**"
       - "proto/**"
@@ -20,11 +19,9 @@ on:
   pull_request:
     paths:
       - "core-rs/**"
-      - "core-rs-napi/**"
       - "cli-rs/**"
       - "gateway-go/**"
       - "proto/**"
-      - "src/plugin-host/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "Makefile"
@@ -177,38 +174,12 @@ jobs:
         working-directory: cli-rs
         run: cargo test
 
-  napi:
-    name: Rust napi bridge (core-rs-napi)
-    runs-on: ubuntu-latest
-    needs: rust
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
-
-      - name: Check
-        run: cargo check -p deneb-core-rs-napi
-
   integration:
-    name: Integration (Go + Plugin Host)
+    name: Integration (Go gateway)
     runs-on: ubuntu-latest
     needs: go-ffi
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-          cache-dependency-path: gateway-go/go.sum
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
 
       - uses: actions/download-artifact@v8
         with:

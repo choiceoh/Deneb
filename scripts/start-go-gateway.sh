@@ -1,18 +1,11 @@
 #!/usr/bin/env bash
-# Start the Go gateway with the Node.js plugin host.
+# Start the Go gateway.
 #
 # Usage:
 #   scripts/start-go-gateway.sh [--port PORT] [--bind MODE] [--daemon] [--force]
 #
-# The Go binary (dist/deneb-gateway) is the primary process.
-# It spawns a Node.js plugin host subprocess via --plugin-host-cmd,
-# which handles Telegram and other channel extensions over a Unix socket bridge.
-#
-# If the Go binary is not found, falls back to the Node.js gateway.
-#
 # Prerequisites:
-#   - make go-binary (builds dist/deneb-gateway)
-#   - pnpm build (builds dist/plugin-host/main.js)
+#   - make go (builds the gateway binary)
 
 set -euo pipefail
 
@@ -38,26 +31,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-GO_BINARY="$REPO_DIR/dist/deneb-gateway"
-PLUGIN_HOST_ENTRY="$REPO_DIR/dist/plugin-host/main.js"
+GO_BINARY="$REPO_DIR/gateway-go/gateway"
 
 # Check if the Go gateway binary exists.
 if [[ ! -x "$GO_BINARY" ]]; then
   echo "Go gateway binary not found at $GO_BINARY"
-  echo "Building with: make go-binary"
-  cd "$REPO_DIR" && make go-binary
-fi
-
-# Check if the plugin host entry exists.
-if [[ ! -f "$PLUGIN_HOST_ENTRY" ]]; then
-  echo "Plugin host entry not found at $PLUGIN_HOST_ENTRY"
-  echo "Build it with: pnpm build"
-  exit 1
+  echo "Building with: make go"
+  cd "$REPO_DIR" && make go
 fi
 
 # Build the Go gateway command.
 CMD=("$GO_BINARY")
-CMD+=("--plugin-host-cmd" "node $PLUGIN_HOST_ENTRY")
 
 if [[ -n "$PORT" ]]; then
   CMD+=("--port" "$PORT")

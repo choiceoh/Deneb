@@ -51,15 +51,8 @@ Use this skill for release and publish-time workflow. Keep ordinary development 
 Before tagging or publishing, run:
 
 ```bash
-node --import tsx scripts/release-check.ts
-pnpm release:check
-pnpm test:install:smoke
-```
-
-For a non-root smoke path:
-
-```bash
-DENEB_INSTALL_SMOKE_SKIP_NONROOT=1 pnpm test:install:smoke
+make check
+make test
 ```
 
 ## Use the right auth flow
