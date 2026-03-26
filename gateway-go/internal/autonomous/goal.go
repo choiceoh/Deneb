@@ -58,11 +58,29 @@ type GoalUpdate struct {
 	Note   string `json:"note,omitempty"`
 }
 
+// CycleState tracks persistent cycle execution state across restarts.
+type CycleState struct {
+	LastRunAtMs       int64  `json:"lastRunAtMs,omitempty"`
+	LastStatus        string `json:"lastStatus,omitempty"`        // "ok", "error", "skipped"
+	LastError         string `json:"lastError,omitempty"`
+	LastSummary       string `json:"lastSummary,omitempty"`       // short output summary
+	ConsecutiveErrors int    `json:"consecutiveErrors,omitempty"`
+	TotalCycles       int    `json:"totalCycles,omitempty"`
+	TotalErrors       int    `json:"totalErrors,omitempty"`
+}
+
 // GoalStoreFile is the on-disk format for the goal store.
 type GoalStoreFile struct {
-	Version int    `json:"version"`
-	Goals   []Goal `json:"goals"`
+	Version    int        `json:"version"`
+	Goals      []Goal     `json:"goals"`
+	CycleState CycleState `json:"cycleState,omitempty"`
 }
+
+// MaxGoals is the maximum number of goals allowed.
+const MaxGoals = 20
+
+// MaxDescriptionLen is the maximum length for a goal description.
+const MaxDescriptionLen = 500
 
 // GoalStore manages goal persistence with atomic writes and caching.
 type GoalStore struct {
@@ -160,12 +178,30 @@ func (s *GoalStore) saveLocked(store *GoalStoreFile) error {
 
 // Add creates a new goal and persists to disk.
 func (s *GoalStore) Add(description, priority string) (Goal, error) {
+	if description == "" {
+		return Goal{}, fmt.Errorf("description is required")
+	}
+	if len(description) > MaxDescriptionLen {
+		return Goal{}, fmt.Errorf("description exceeds %d characters", MaxDescriptionLen)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	store, err := s.loadLocked()
 	if err != nil {
 		return Goal{}, err
+	}
+
+	// Count active + paused goals (completed goals don't count toward the limit).
+	liveCount := 0
+	for _, g := range store.Goals {
+		if g.Status != StatusCompleted {
+			liveCount++
+		}
+	}
+	if liveCount >= MaxGoals {
+		return Goal{}, fmt.Errorf("goal limit reached (%d); remove or complete existing goals first", MaxGoals)
 	}
 
 	now := time.Now().UnixMilli()
@@ -186,6 +222,28 @@ func (s *GoalStore) Add(description, priority string) (Goal, error) {
 		return Goal{}, err
 	}
 	return goal, nil
+}
+
+// UpdateCycleState persists the cycle execution state.
+func (s *GoalStore) UpdateCycleState(state CycleState) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	store, err := s.loadLocked()
+	if err != nil {
+		return err
+	}
+	store.CycleState = state
+	return s.saveLocked(store)
+}
+
+// LoadCycleState returns the persisted cycle state.
+func (s *GoalStore) LoadCycleState() (CycleState, error) {
+	store, err := s.Load()
+	if err != nil {
+		return CycleState{}, err
+	}
+	return store.CycleState, nil
 }
 
 // Remove deletes a goal by ID and persists.

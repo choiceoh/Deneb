@@ -30,7 +30,11 @@ func RegisterAutonomousMethods(d *Dispatcher, deps AutonomousDeps) {
 func autonomousStatus(deps AutonomousDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		status := deps.Autonomous.Status()
-		return protocol.MustResponseOK(req.ID, status)
+		recentRuns := deps.Autonomous.RecentRuns(5)
+		return protocol.MustResponseOK(req.ID, map[string]any{
+			"status":     status,
+			"recentRuns": recentRuns,
+		})
 	}
 }
 
@@ -95,13 +99,16 @@ func autonomousGoalsRemove(deps AutonomousDeps) HandlerFunc {
 }
 
 func autonomousCycleRun(deps AutonomousDeps) HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		outcome, err := deps.Autonomous.RunCycle(ctx)
-		if err != nil {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		// Start cycle asynchronously — don't block the RPC response.
+		if err := deps.Autonomous.RunCycleAsync(); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
 				protocol.ErrUnavailable, err.Error()))
 		}
-		return protocol.MustResponseOK(req.ID, outcome)
+		return protocol.MustResponseOK(req.ID, map[string]any{
+			"started": true,
+			"status":  "cycle started in background",
+		})
 	}
 }
 

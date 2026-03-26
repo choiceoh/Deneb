@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // autonomousSessionKey is the fixed session key for autonomous cycles.
@@ -12,38 +13,73 @@ import (
 const autonomousSessionKey = "autonomous:cycle"
 
 // buildDecisionPrompt constructs the LLM prompt for a decision cycle.
-// The prompt includes all active goals sorted by priority and instructions
-// for the agent to pick one goal, take concrete action, and report progress.
-func buildDecisionPrompt(goals []Goal) string {
+// Includes active goals, last cycle summary, current time, and structured output instructions.
+func buildDecisionPrompt(goals []Goal, lastCycle *CycleState) string {
 	var b strings.Builder
 
-	b.WriteString("# Autonomous Decision Cycle\n\n")
-	b.WriteString("You are running in autonomous mode. Your task is to make progress on the highest-priority active goal.\n\n")
+	// Header with timestamp for time-aware decisions.
+	now := time.Now()
+	b.WriteString("# 자율 실행 모드 — Decision Cycle\n\n")
+	b.WriteString(fmt.Sprintf("현재 시각: %s\n\n", now.Format("2006-01-02 15:04 (Mon)")))
 
-	b.WriteString("## Active Goals\n\n")
+	// Last cycle summary for continuity.
+	if lastCycle != nil && lastCycle.LastSummary != "" {
+		b.WriteString("## 이전 사이클 결과\n\n")
+		b.WriteString(lastCycle.LastSummary)
+		b.WriteString("\n\n")
+	}
+
+	// Active goals.
+	b.WriteString("## 활성 목표\n\n")
+	if len(goals) == 0 {
+		b.WriteString("활성 목표가 없습니다.\n\n")
+		return b.String()
+	}
 	for i, g := range goals {
-		b.WriteString(fmt.Sprintf("%d. **[%s] %s** (id: `%s`)\n", i+1, strings.ToUpper(g.Priority), g.Description, g.ID))
+		b.WriteString(fmt.Sprintf("%d. **[%s]** %s (id: `%s`)\n",
+			i+1, priorityLabel(g.Priority), g.Description, g.ID))
 		if g.LastNote != "" {
-			b.WriteString(fmt.Sprintf("   Last progress: %s\n", g.LastNote))
+			b.WriteString(fmt.Sprintf("   이전 진행: %s\n", g.LastNote))
+		}
+		age := time.Since(time.UnixMilli(g.CreatedAtMs))
+		if age > 24*time.Hour {
+			b.WriteString(fmt.Sprintf("   생성: %d일 전\n", int(age.Hours()/24)))
 		}
 	}
 
-	b.WriteString("\n## Instructions\n\n")
-	b.WriteString("1. Pick the highest-priority goal that you can make concrete progress on right now.\n")
-	b.WriteString("2. Use available tools (exec, read, write, web_fetch, etc.) to take real action.\n")
-	b.WriteString("3. Focus on ONE goal per cycle. Do not try to work on multiple goals.\n")
-	b.WriteString("4. If a goal is impossible or blocked, mark it as \"paused\" with an explanation.\n")
-	b.WriteString("5. If a goal is fully achieved, mark it as \"completed\".\n\n")
+	// Instructions.
+	b.WriteString("\n## 실행 지침\n\n")
+	b.WriteString("1. 우선순위가 가장 높은 목표 중 지금 실행 가능한 것을 하나 선택하라.\n")
+	b.WriteString("2. 사용 가능한 도구(exec, read, write, web_fetch 등)를 적극 활용해 실제 진행을 만들어라.\n")
+	b.WriteString("3. 한 사이클에 하나의 목표에만 집중하라.\n")
+	b.WriteString("4. 실행이 불가능하거나 외부 의존성으로 막힌 목표는 \"paused\"로 전환하고 이유를 설명하라.\n")
+	b.WriteString("5. 목표가 완전히 달성되면 \"completed\"로 전환하라.\n")
+	b.WriteString("6. 도구 실행 결과가 예상과 다르면 한 단계 더 시도하되, 같은 실패가 반복되면 paused로 전환하라.\n\n")
 
-	b.WriteString("## Required Output\n\n")
-	b.WriteString("After completing your work, you MUST end your response with a goal update block in this exact format:\n\n")
+	// Output format.
+	b.WriteString("## 출력 형식 (필수)\n\n")
+	b.WriteString("작업 완료 후 반드시 응답 끝에 아래 형식의 목표 업데이트 블록을 포함하라:\n\n")
 	b.WriteString("```goal_update\n")
-	b.WriteString("{\"goalUpdates\": [{\"id\": \"GOAL_ID\", \"status\": \"active\", \"note\": \"What you accomplished this cycle\"}]}\n")
-	b.WriteString("```\n\n")
-	b.WriteString("Valid status values: \"active\" (still in progress), \"completed\" (fully done), \"paused\" (blocked/impossible).\n")
-	b.WriteString("The note should be a concise Korean summary of what was accomplished or why the goal was paused.\n")
+	b.WriteString(`{"goalUpdates": [{"id": "GOAL_ID", "status": "active", "note": "이번 사이클에서 수행한 내용"}]}`)
+	b.WriteString("\n```\n\n")
+	b.WriteString("- status 값: `active` (진행 중), `completed` (완료), `paused` (중단)\n")
+	b.WriteString("- note: 한국어로 간결하게 작성 (50자 이내 권장)\n")
+	b.WriteString("- goal_update 블록이 없으면 진행 기록이 남지 않으니 반드시 포함할 것\n")
 
 	return b.String()
+}
+
+func priorityLabel(p string) string {
+	switch p {
+	case PriorityHigh:
+		return "높음"
+	case PriorityMedium:
+		return "보통"
+	case PriorityLow:
+		return "낮음"
+	default:
+		return p
+	}
 }
 
 // goalUpdateBlockRegex matches a fenced ```goal_update ... ``` block.
@@ -55,33 +91,85 @@ type goalUpdatePayload struct {
 }
 
 // parseGoalUpdates extracts GoalUpdate entries from the agent's output.
-// Looks for a fenced ```goal_update block with JSON content.
-func parseGoalUpdates(output string) []GoalUpdate {
+// If the structured block is missing or malformed, falls back to extracting
+// a summary from the last paragraph of the output.
+func parseGoalUpdates(output string, activeGoalIDs []string) []GoalUpdate {
+	// Try structured parsing first.
 	matches := goalUpdateBlockRegex.FindStringSubmatch(output)
-	if len(matches) < 2 {
-		return nil
+	if len(matches) >= 2 {
+		var payload goalUpdatePayload
+		if err := json.Unmarshal([]byte(matches[1]), &payload); err == nil {
+			valid := validateUpdates(payload.GoalUpdates)
+			if len(valid) > 0 {
+				return valid
+			}
+		}
 	}
 
-	var payload goalUpdatePayload
-	if err := json.Unmarshal([]byte(matches[1]), &payload); err != nil {
-		return nil
+	// Fallback: LLM didn't produce structured output.
+	// Save the tail of the output as a note on the first active goal
+	// so progress isn't completely lost.
+	if len(activeGoalIDs) > 0 && output != "" {
+		note := extractFallbackNote(output)
+		if note != "" {
+			return []GoalUpdate{{
+				ID:     activeGoalIDs[0],
+				Status: StatusActive,
+				Note:   note,
+			}}
+		}
 	}
 
-	// Validate updates.
-	valid := make([]GoalUpdate, 0, len(payload.GoalUpdates))
-	for _, u := range payload.GoalUpdates {
+	return nil
+}
+
+func validateUpdates(updates []GoalUpdate) []GoalUpdate {
+	valid := make([]GoalUpdate, 0, len(updates))
+	for _, u := range updates {
 		if u.ID == "" {
 			continue
 		}
 		switch u.Status {
 		case StatusActive, StatusCompleted, StatusPaused:
 			// ok
-		case "":
-			u.Status = StatusActive
 		default:
 			u.Status = StatusActive
+		}
+		// Truncate excessively long notes.
+		if len(u.Note) > 500 {
+			u.Note = u.Note[:497] + "..."
 		}
 		valid = append(valid, u)
 	}
 	return valid
+}
+
+// extractFallbackNote extracts the last meaningful paragraph from output
+// as a fallback progress note (max 200 chars).
+func extractFallbackNote(output string) string {
+	// Take the last non-empty paragraph.
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	var lastPara string
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" || strings.HasPrefix(line, "```") {
+			if lastPara != "" {
+				break
+			}
+			continue
+		}
+		if lastPara == "" {
+			lastPara = line
+		} else {
+			lastPara = line + " " + lastPara
+		}
+		// Don't collect too much.
+		if len(lastPara) > 200 {
+			break
+		}
+	}
+	if len(lastPara) > 200 {
+		lastPara = lastPara[:197] + "..."
+	}
+	return lastPara
 }

@@ -19,7 +19,8 @@ type AgentRunner interface {
 
 // ServiceConfig configures the autonomous service.
 type ServiceConfig struct {
-	GoalStorePath string
+	GoalStorePath  string
+	CycleTimeoutMs int64 // per-cycle timeout (default 10 min)
 }
 
 // Service manages the autonomous goal-driven execution lifecycle.
@@ -29,13 +30,16 @@ type Service struct {
 	agent  AgentRunner
 	logger *slog.Logger
 	cfg    ServiceConfig
+	runLog *RunLog
 
-	// Cycle state.
+	// Cycle state (in-memory, synced to disk via GoalStore.CycleState).
 	cycleRunning   bool
 	cycleCancel    context.CancelFunc
 	lastCycleAt    int64
 	consecutiveErr int
 	lastOutcome    *CycleOutcome
+	totalCycles    int
+	totalErrors    int
 
 	// Phase 2: attention-based triggering.
 	attention *Attention
@@ -48,17 +52,20 @@ type CycleOutcome struct {
 	GoalUpdates []GoalUpdate `json:"goalUpdates,omitempty"`
 	DurationMs  int64        `json:"durationMs"`
 	Error       string       `json:"error,omitempty"`
+	GoalWorked  string       `json:"goalWorked,omitempty"` // ID of the goal acted on
 }
 
 // ServiceStatus is the snapshot returned by Status().
 type ServiceStatus struct {
-	Running        bool         `json:"running"`
-	CycleRunning   bool         `json:"cycleRunning"`
-	ActiveGoals    int          `json:"activeGoals"`
-	TotalGoals     int          `json:"totalGoals"`
-	LastCycleAt    int64        `json:"lastCycleAt,omitempty"`
+	Running        bool          `json:"running"`
+	CycleRunning   bool          `json:"cycleRunning"`
+	ActiveGoals    int           `json:"activeGoals"`
+	TotalGoals     int           `json:"totalGoals"`
+	LastCycleAt    int64         `json:"lastCycleAt,omitempty"`
 	LastOutcome    *CycleOutcome `json:"lastOutcome,omitempty"`
-	ConsecutiveErr int          `json:"consecutiveErrors"`
+	ConsecutiveErr int           `json:"consecutiveErrors"`
+	TotalCycles    int           `json:"totalCycles"`
+	TotalErrors    int           `json:"totalErrors"`
 }
 
 // NewService creates a new autonomous service.
@@ -66,22 +73,37 @@ func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Serv
 	if logger == nil {
 		logger = slog.Default()
 	}
+	if cfg.CycleTimeoutMs <= 0 {
+		cfg.CycleTimeoutMs = 10 * 60 * 1000 // 10 minutes
+	}
+	store := NewGoalStore(cfg.GoalStorePath)
 	return &Service{
-		goals:  NewGoalStore(cfg.GoalStorePath),
+		goals:  store,
 		agent:  agent,
 		logger: logger.With("pkg", "autonomous"),
 		cfg:    cfg,
+		runLog: NewRunLog(cfg.GoalStorePath),
 	}
 }
 
-// Start initializes the service and starts the attention timer (Phase 2).
+// Start initializes the service, restores persisted state, and starts the attention timer.
 func (s *Service) Start(ctx context.Context, attentionCfg AttentionConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Restore persisted cycle state from disk.
+	if cs, err := s.goals.LoadCycleState(); err == nil {
+		s.consecutiveErr = cs.ConsecutiveErrors
+		s.lastCycleAt = cs.LastRunAtMs
+		s.totalCycles = cs.TotalCycles
+		s.totalErrors = cs.TotalErrors
+	}
+
 	s.attention = NewAttention(s, attentionCfg, s.logger)
 	s.attention.StartTimer(ctx)
-	s.logger.Info("autonomous service started")
+	s.logger.Info("autonomous service started",
+		"totalCycles", s.totalCycles,
+		"consecutiveErrors", s.consecutiveErr)
 }
 
 // Stop shuts down the service and cancels any running cycle.
@@ -115,6 +137,8 @@ func (s *Service) Status() ServiceStatus {
 		LastCycleAt:    s.lastCycleAt,
 		LastOutcome:    s.lastOutcome,
 		ConsecutiveErr: s.consecutiveErr,
+		TotalCycles:    s.totalCycles,
+		TotalErrors:    s.totalErrors,
 	}
 }
 
@@ -129,7 +153,8 @@ func (s *Service) AddGoal(description, priority string) (Goal, error) {
 	if err != nil {
 		return Goal{}, err
 	}
-	// Trigger immediate cycle via attention (Phase 2).
+	s.logger.Info("goal added", "id", goal.ID, "priority", goal.Priority)
+	// Trigger immediate cycle via attention.
 	if s.attention != nil {
 		s.attention.Push(Signal{
 			Kind:     SignalGoalAdded,
@@ -153,7 +178,8 @@ func (s *Service) RunCycle(ctx context.Context) (*CycleOutcome, error) {
 		return nil, fmt.Errorf("agent runner not configured")
 	}
 
-	cycleCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	timeout := time.Duration(s.cfg.CycleTimeoutMs) * time.Millisecond
+	cycleCtx, cancel := context.WithTimeout(ctx, timeout)
 	s.cycleRunning = true
 	s.cycleCancel = cancel
 	s.mu.Unlock()
@@ -167,18 +193,34 @@ func (s *Service) RunCycle(ctx context.Context) (*CycleOutcome, error) {
 	}()
 
 	outcome := s.executeCycle(cycleCtx)
+	s.applyCycleOutcome(outcome)
 
+	return outcome, nil
+}
+
+// RunCycleAsync starts a cycle in the background. Returns immediately.
+// Used by the RPC handler to avoid blocking.
+func (s *Service) RunCycleAsync() error {
 	s.mu.Lock()
-	s.lastCycleAt = time.Now().UnixMilli()
-	s.lastOutcome = outcome
-	if outcome.Status == "error" {
-		s.consecutiveErr++
-	} else {
-		s.consecutiveErr = 0
+	if s.cycleRunning {
+		s.mu.Unlock()
+		return fmt.Errorf("cycle already running")
+	}
+	if s.agent == nil {
+		s.mu.Unlock()
+		return fmt.Errorf("agent runner not configured")
 	}
 	s.mu.Unlock()
 
-	return outcome, nil
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(),
+			time.Duration(s.cfg.CycleTimeoutMs)*time.Millisecond)
+		defer cancel()
+		if _, err := s.RunCycle(ctx); err != nil {
+			s.logger.Warn("async cycle failed", "error", err)
+		}
+	}()
+	return nil
 }
 
 // StopCycle cancels a running cycle.
@@ -220,24 +262,42 @@ func (s *Service) executeCycle(ctx context.Context) *CycleOutcome {
 		}
 	}
 
-	// 3. Build decision prompt and run agent turn.
-	prompt := buildDecisionPrompt(active)
-	s.logger.Info("running autonomous cycle", "goals", len(active))
+	// 3. Load last cycle state for prompt continuity.
+	cycleState, _ := s.goals.LoadCycleState()
+
+	// 4. Build decision prompt and run agent turn.
+	prompt := buildDecisionPrompt(active, &cycleState)
+	s.logger.Info("running autonomous cycle",
+		"goals", len(active),
+		"topGoal", active[0].Description)
 
 	output, runErr := s.agent.RunAgentTurn(ctx, autonomousSessionKey, prompt)
 	if runErr != nil {
+		errMsg := runErr.Error()
+		if ctx.Err() != nil {
+			errMsg = "cycle timeout: " + errMsg
+		}
 		return &CycleOutcome{
 			Status:     "error",
-			Error:      runErr.Error(),
+			Error:      errMsg,
 			DurationMs: time.Now().UnixMilli() - startedAt,
 		}
 	}
 
-	// 4. Parse goal updates from output.
-	updates := parseGoalUpdates(output)
+	// 5. Parse goal updates (with fallback).
+	activeIDs := make([]string, len(active))
+	for i, g := range active {
+		activeIDs[i] = g.ID
+	}
+	updates := parseGoalUpdates(output, activeIDs)
+
+	// 6. Apply updates to goal store.
+	var goalWorked string
 	for _, u := range updates {
 		if updateErr := s.goals.Update(u.ID, u.Status, u.Note); updateErr != nil {
 			s.logger.Warn("failed to apply goal update", "id", u.ID, "error", updateErr)
+		} else if goalWorked == "" {
+			goalWorked = u.ID
 		}
 	}
 
@@ -246,6 +306,84 @@ func (s *Service) executeCycle(ctx context.Context) *CycleOutcome {
 		Output:      truncateOutput(output, 2000),
 		GoalUpdates: updates,
 		DurationMs:  time.Now().UnixMilli() - startedAt,
+		GoalWorked:  goalWorked,
+	}
+}
+
+// applyCycleOutcome updates in-memory and persistent state after a cycle.
+func (s *Service) applyCycleOutcome(outcome *CycleOutcome) {
+	s.mu.Lock()
+	now := time.Now().UnixMilli()
+	s.lastCycleAt = now
+	s.lastOutcome = outcome
+	s.totalCycles++
+
+	if outcome.Status == "error" {
+		s.consecutiveErr++
+		s.totalErrors++
+	} else {
+		s.consecutiveErr = 0
+	}
+
+	// Build summary for next cycle's prompt.
+	summary := buildCycleSummary(outcome)
+
+	cs := CycleState{
+		LastRunAtMs:       now,
+		LastStatus:        outcome.Status,
+		LastError:         outcome.Error,
+		LastSummary:       summary,
+		ConsecutiveErrors: s.consecutiveErr,
+		TotalCycles:       s.totalCycles,
+		TotalErrors:       s.totalErrors,
+	}
+	s.mu.Unlock()
+
+	// Persist cycle state to disk (non-critical if this fails).
+	if err := s.goals.UpdateCycleState(cs); err != nil {
+		s.logger.Warn("failed to persist cycle state", "error", err)
+	}
+
+	// Append to run log.
+	s.runLog.Append(RunLogEntry{
+		Timestamp:  now,
+		Status:     outcome.Status,
+		DurationMs: outcome.DurationMs,
+		GoalWorked: outcome.GoalWorked,
+		Error:      outcome.Error,
+		UpdateCount: len(outcome.GoalUpdates),
+	})
+
+	s.logger.Info("cycle completed",
+		"status", outcome.Status,
+		"durationMs", outcome.DurationMs,
+		"goalUpdates", len(outcome.GoalUpdates),
+		"consecutiveErrors", s.consecutiveErr)
+}
+
+// buildCycleSummary creates a short summary for the next cycle's prompt.
+func buildCycleSummary(outcome *CycleOutcome) string {
+	switch outcome.Status {
+	case "skipped":
+		return "이전 사이클: 활성 목표 없어 건너뜀"
+	case "error":
+		return fmt.Sprintf("이전 사이클: 오류 발생 — %s", truncateOutput(outcome.Error, 100))
+	case "ok":
+		if len(outcome.GoalUpdates) == 0 {
+			return "이전 사이클: 완료 (목표 업데이트 없음)"
+		}
+		var parts []string
+		for _, u := range outcome.GoalUpdates {
+			if u.Note != "" {
+				parts = append(parts, fmt.Sprintf("[%s] %s", u.ID, u.Note))
+			}
+		}
+		if len(parts) == 0 {
+			return "이전 사이클: 완료"
+		}
+		return "이전 사이클 진행: " + truncateOutput(joinStrings(parts, "; "), 300)
+	default:
+		return ""
 	}
 }
 
@@ -256,9 +394,25 @@ func (s *Service) MarshalStatus() json.RawMessage {
 	return data
 }
 
+// RecentRuns returns the last N run log entries.
+func (s *Service) RecentRuns(n int) []RunLogEntry {
+	return s.runLog.Recent(n)
+}
+
 func truncateOutput(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+func joinStrings(ss []string, sep string) string {
+	result := ""
+	for i, s := range ss {
+		if i > 0 {
+			result += sep
+		}
+		result += s
+	}
+	return result
 }
