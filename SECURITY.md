@@ -6,16 +6,11 @@ If you believe you've found a security issue in Deneb, please report it privatel
 
 Report vulnerabilities directly to the repository where the issue lives:
 
-- **Core CLI and gateway** — [deneb/deneb](https://github.com/deneb/deneb)
-- **macOS desktop app** — [deneb/deneb](https://github.com/deneb/deneb) (apps/macos)
-- **iOS app** — [deneb/deneb](https://github.com/deneb/deneb) (apps/ios)
-- **Android app** — [deneb/deneb](https://github.com/deneb/deneb) (apps/android)
-- **ClawHub** — [deneb/clawhub](https://github.com/deneb/clawhub)
-- **Trust and threat model** — [deneb/trust](https://github.com/deneb/trust)
+- **Core CLI and gateway** — [choiceoh/Deneb](https://github.com/choiceoh/Deneb)
 
 For issues that don't fit a specific repo, or if you're unsure, email **[security@deneb.ai](mailto:security@deneb.ai)** and we'll route it.
 
-For full reporting instructions see our [Trust page](https://trust.deneb.ai).
+For full reporting instructions, see our [security documentation](https://docs.deneb.ai/gateway/security).
 
 ### Required in Reports
 
@@ -246,33 +241,26 @@ Deneb's web interface (Gateway Control UI + HTTP endpoints) is intended for **lo
 
 ## Runtime Requirements
 
-### Node.js Version
+### Build Dependencies
 
-Deneb requires **Node.js 22.16.0 or later** (LTS). Node 24 is recommended. This version includes important security patches:
+Deneb requires:
 
-- CVE-2025-59466: async_hooks DoS vulnerability
-- CVE-2026-21636: Permission model bypass vulnerability
+- **Rust** (stable, via rustup) — for core-rs
+- **Go 1.24+** — for gateway-go
+- **buf** and **protoc** — for protobuf code generation
 
-Verify your Node.js version:
+### DGX Spark Production
+
+For full production builds with Vega search and CUDA inference:
 
 ```bash
-node --version  # Should be v22.16.0 or later (v24.x recommended)
+make gateway-dgx  # Go gateway + Rust core (Vega FTS + ML + CUDA)
 ```
 
-### Docker Security
-
-When running Deneb in Docker:
-
-1. The official image runs as a non-root user (`node`) for reduced attack surface
-2. Use `--read-only` flag when possible for additional filesystem protection
-3. Limit container capabilities with `--cap-drop=ALL`
-
-Example secure Docker run:
+For environments without CUDA:
 
 ```bash
-docker run --read-only --cap-drop=ALL \
-  -v deneb-data:/app/data \
-  deneb/deneb:latest
+make rust-vega    # FTS-only mode
 ```
 
 ## Security Scanning

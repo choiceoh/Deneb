@@ -52,12 +52,11 @@ We prioritize secure defaults, but also expose clear knobs for trusted high-powe
 
 ## Plugins & Memory
 
-Deneb has an extensive plugin API.
-Core stays lean; optional capability should usually ship as plugins.
+Deneb has an extensible skill and plugin system.
+Core stays lean; optional capability should usually ship as skills or plugins.
 
-Preferred plugin path is npm package distribution plus local extension loading for development.
-If you build a plugin, host and maintain it in your own repository.
-The bar for adding optional plugins to core is intentionally high.
+If you build a skill, host and maintain it in your own repository.
+The bar for adding skills or plugins to core is intentionally high.
 Plugin docs: [`docs/tools/plugin.md`](docs/tools/plugin.md)
 
 Memory is a special plugin slot where only one memory plugin can be active at a time.
@@ -87,11 +86,11 @@ This keeps setup explicit: users see docs, auth, permissions, and security postu
 Long term, we want easier onboarding flows as hardening matures.
 We do not want convenience wrappers that hide critical security decisions from users.
 
-### Why TypeScript?
+### Why Go + Rust?
 
-Deneb is primarily an orchestration system: prompts, tools, protocols, and integrations.
-TypeScript was chosen to keep Deneb hackable by default.
-It is widely known, fast to iterate in, and easy to read, modify, and extend.
+Deneb is built as a two-language system: Go for the gateway (orchestration, networking, session management) and Rust for the core library (protocol validation, security, media, memory search, context engine).
+
+Go was chosen for the gateway because it provides excellent concurrency, fast compilation, and a minimal dependency footprint (only 2 direct external dependencies). Rust was chosen for the core library because it provides memory safety, zero-cost FFI via CGo static linking, and SIMD-accelerated performance for search and validation operations.
 
 ## What We Will Not Merge (For Now)
 

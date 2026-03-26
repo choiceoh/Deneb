@@ -1,6 +1,6 @@
 # Contributing to Deneb
 
-Welcome to the lobster tank! 🦞
+Welcome to Deneb!
 
 ## Quick Links
 
@@ -12,7 +12,7 @@ Welcome to the lobster tank! 🦞
 1. **Bugs & small fixes** → Open a PR!
 2. **New features / architecture** → Start a [GitHub Discussion](https://github.com/choiceoh/Deneb/discussions) or ask in Discord first
 3. **Test/CI-only PRs for known `main` failures** → Don't open a PR, the Maintainer team is already tracking it and such PRs will be closed automatically. If you've spotted a _new_ regression not yet shown in main CI, report it as an issue first.
-4. **Questions** → Discord [#help](https://discord.com/channels/1456350064065904867/1459642797895319552) / [#users-helping-users](https://discord.com/channels/1456350064065904867/1459007081603403828)
+4. **Questions** → Open a [GitHub Discussion](https://github.com/choiceoh/Deneb/discussions) or file an issue
 
 ## Before You PR
 
