@@ -93,8 +93,9 @@ type HookMapping struct {
 
 // HookWakePayload is the request body for /hooks/wake.
 type HookWakePayload struct {
-	Text string `json:"text"`
-	Mode string `json:"mode,omitempty"` // "now" or "next-heartbeat"
+	Text   string `json:"text"`
+	Mode   string `json:"mode,omitempty"`   // "now" or "next-heartbeat"
+	Target string `json:"target,omitempty"` // "autonomous" to trigger autonomous cycle
 }
 
 // HookAgentPayload is the request body for /hooks/agent.
@@ -150,6 +151,8 @@ type HookDispatchers struct {
 	DispatchWake func(text string, mode string)
 	// DispatchAgent starts an agent job and returns a runId.
 	DispatchAgent func(payload HookAgentDispatchPayload) string
+	// DispatchAutonomousWake triggers an autonomous cycle (Phase 2).
+	DispatchAutonomousWake func(text string)
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -322,6 +325,12 @@ type HooksHTTPHandler struct {
 	logger      *slog.Logger
 }
 
+// SetAutonomousWakeDispatcher sets the callback for autonomous wake triggers.
+// Called after the autonomous service is initialized.
+func (h *HooksHTTPHandler) SetAutonomousWakeDispatcher(fn func(text string)) {
+	h.dispatchers.DispatchAutonomousWake = fn
+}
+
 // NewHooksHTTPHandler creates a new webhook HTTP handler.
 func NewHooksHTTPHandler(cfg *HooksHTTPConfig, dispatchers HookDispatchers, logger *slog.Logger) *HooksHTTPHandler {
 	if cfg.BasePath == "" {
@@ -453,6 +462,14 @@ func (h *HooksHTTPHandler) handleWake(w http.ResponseWriter, body map[string]any
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "mode must be \"now\" or \"next-heartbeat\""})
 		return
 	}
+	// Check for autonomous target.
+	target, _ := body["target"].(string)
+	if target == "autonomous" && h.dispatchers.DispatchAutonomousWake != nil {
+		h.dispatchers.DispatchAutonomousWake(text)
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "target": "autonomous"})
+		return
+	}
+
 	h.dispatchers.DispatchWake(text, mode)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "mode": mode})
 }
