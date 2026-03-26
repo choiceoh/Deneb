@@ -902,50 +902,23 @@ fn cmd_timeline(args: &Value, config: &VegaConfig) -> CommandResult {
     )
 }
 
-/// embed: Generate embeddings for chunks (requires ml feature).
+/// embed: Generate embeddings for chunks.
+/// In sglang mode, embedding is handled by the Go gateway via SGLang HTTP API.
+/// This Rust-side command is retained for backward compatibility but returns
+/// a message directing to the Go-side embed pipeline.
 #[allow(unused_variables)]
 fn cmd_embed(_args: &Value, config: &VegaConfig) -> CommandResult {
-    #[cfg(feature = "ml")]
-    {
-        use crate::search::semantic;
-
-        if !config.has_ml() {
-            return CommandResult::err(
-                "embed",
-                "ML 모델이 설정되지 않았습니다 (VEGA_MODEL_EMBEDDER)",
-            );
-        }
-
-        let conn = match open_db(config) {
-            Ok(c) => c,
-            Err(e) => return CommandResult::err("embed", &e),
-        };
-
-        // Build ML manager
-        let mut ml_configs: Vec<deneb_ml::ModelConfig> = Vec::new();
-        if let Some(ref path) = config.model_embedder {
-            ml_configs.push(deneb_ml::ModelConfig::embedder(
-                path.clone(),
-                config.model_unload_ttl,
-            ));
-        }
-        let mgr = deneb_ml::ModelManager::new(ml_configs);
-
-        match semantic::embed_chunks(&conn, "qwen3-embedding-8b", &mgr) {
-            Ok(count) => CommandResult::ok(
-                "embed",
-                json!({
-                    "embedded_chunks": count,
-                }),
-            ),
-            Err(e) => CommandResult::err("embed", &format!("임베딩 실패: {}", e)),
-        }
+    if config.has_sglang() {
+        return CommandResult::ok(
+            "embed",
+            json!({
+                "message": "SGLang 모드: 임베딩은 Go 게이트웨이에서 SGLang HTTP API로 처리됩니다.",
+                "backend": "sglang",
+            }),
+        );
     }
 
-    #[cfg(not(feature = "ml"))]
-    {
-        CommandResult::err("embed", "ML 기능이 비활성화되어 있습니다 (feature: ml)")
-    }
+    CommandResult::err("embed", "임베딩 백엔드가 설정되지 않았습니다 (VEGA_INFERENCE=sglang 권장)")
 }
 
 // -- Helpers --

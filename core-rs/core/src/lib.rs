@@ -368,12 +368,7 @@ fn vega_execute_impl(cmd_json: &str) -> String {
         if let Some(m) = cfg.get("rerank_mode").and_then(|v| v.as_str()) {
             vc.rerank_mode = m.to_string();
         }
-        if let Some(p) = cfg.get("model_embedder").and_then(|v| v.as_str()) {
-            vc.model_embedder = Some(std::path::PathBuf::from(p));
-        }
-        if let Some(p) = cfg.get("model_reranker").and_then(|v| v.as_str()) {
-            vc.model_reranker = Some(std::path::PathBuf::from(p));
-        }
+        // model_embedder and model_reranker removed — embeddings via SGLang HTTP.
         vc
     } else {
         base.clone()
@@ -430,9 +425,10 @@ pub unsafe extern "C" fn deneb_vega_search(
 }
 
 /// Internal Vega search dispatch.
+/// Supports optional `query_embedding` field for SGLang-generated vectors.
 #[cfg(feature = "vega")]
 fn vega_search_impl(query_json: &str) -> String {
-    // Parse: {"query": "검색어", "config": {"db_path": "..."}}
+    // Parse: {"query": "검색어", "query_embedding": [...], "config": {"db_path": "..."}}
     let parsed: serde_json::Value = match serde_json::from_str(query_json) {
         Ok(v) => v,
         Err(_) => {
@@ -445,6 +441,16 @@ fn vega_search_impl(query_json: &str) -> String {
         .get("query")
         .and_then(|v| v.as_str())
         .unwrap_or(query_json);
+
+    // Parse optional pre-computed query embedding from SGLang.
+    let query_embedding: Option<Vec<f32>> = parsed
+        .get("query_embedding")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_f64().map(|f| f as f32))
+                .collect()
+        });
 
     let base = cached_vega_config();
     let config = if let Some(cfg) = parsed.get("config") {
@@ -460,18 +466,22 @@ fn vega_search_impl(query_json: &str) -> String {
         base.clone()
     };
 
-    vega_search_with_config(query, &config)
+    vega_search_with_config(query, query_embedding.as_deref(), &config)
 }
 
 #[cfg(feature = "vega")]
 fn vega_search_direct(query: &str) -> String {
-    vega_search_with_config(query, cached_vega_config())
+    vega_search_with_config(query, None, cached_vega_config())
 }
 
 #[cfg(feature = "vega")]
-fn vega_search_with_config(query: &str, config: &deneb_vega::config::VegaConfig) -> String {
+fn vega_search_with_config(
+    query: &str,
+    query_embedding: Option<&[f32]>,
+    config: &deneb_vega::config::VegaConfig,
+) -> String {
     let router = deneb_vega::search::SearchRouter::new(config.clone());
-    match router.search(query) {
+    match router.search_with_embedding(query, query_embedding) {
         Ok(result) => serde_json::to_string(&result)
             .unwrap_or_else(|e| format!(r#"{{"error":"serialize","detail":"{}"}}"#, e)),
         Err(e) => format!(r#"{{"error":"search_failed","detail":"{}"}}"#, e),

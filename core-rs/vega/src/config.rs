@@ -21,16 +21,10 @@ pub struct VegaConfig {
     pub db_path: PathBuf,
     /// Directory containing project markdown files.
     pub md_dir: PathBuf,
-    /// Reranking mode: "full" (fusion + reranker), "vega_only" (fusion), or "none" (BM25 only).
+    /// Reranking mode: "vega_only" (cosine + BM25 fusion) or "none" (BM25 only).
     pub rerank_mode: String,
-    /// Model unload TTL in seconds (0 = never unload).
-    pub model_unload_ttl: u64,
-    /// Inference backend: "local" or "sqlite_only".
+    /// Inference backend: "sglang" (default, embeddings via Go HTTP) or "sqlite_only" (FTS only).
     pub inference_backend: String,
-    /// Path to embedder GGUF model (for semantic search).
-    pub model_embedder: Option<PathBuf>,
-    /// Path to reranker GGUF model.
-    pub model_reranker: Option<PathBuf>,
 }
 
 impl Default for VegaConfig {
@@ -38,11 +32,8 @@ impl Default for VegaConfig {
         Self {
             db_path: PathBuf::from("projects.db"),
             md_dir: PathBuf::from("projects"),
-            rerank_mode: "full".into(),
-            model_unload_ttl: 300,
-            inference_backend: "local".into(),
-            model_embedder: None,
-            model_reranker: None,
+            rerank_mode: "vega_only".into(),
+            inference_backend: "sglang".into(),
         }
     }
 }
@@ -61,28 +52,16 @@ impl VegaConfig {
         if let Ok(v) = std::env::var("VEGA_RERANK") {
             cfg.rerank_mode = v;
         }
-        if let Ok(v) = std::env::var("VEGA_MODEL_TTL") {
-            if let Ok(n) = v.parse() {
-                cfg.model_unload_ttl = n;
-            }
-        }
         if let Ok(v) = std::env::var("VEGA_INFERENCE") {
             cfg.inference_backend = v;
-        }
-        if let Ok(v) = std::env::var("VEGA_MODEL_EMBEDDER") {
-            cfg.model_embedder = Some(PathBuf::from(v));
-        }
-        if let Ok(v) = std::env::var("VEGA_MODEL_RERANKER") {
-            cfg.model_reranker = Some(PathBuf::from(v));
         }
 
         cfg
     }
 
-    /// Check if ML inference is configured and available.
-    pub fn has_ml(&self) -> bool {
-        self.inference_backend == "local"
-            && (self.model_embedder.is_some() || self.model_reranker.is_some())
+    /// Check if the inference backend uses SGLang (embeddings provided externally via Go).
+    pub fn has_sglang(&self) -> bool {
+        self.inference_backend == "sglang"
     }
 
     /// Check if the database path exists.
@@ -122,47 +101,23 @@ mod tests {
         let cfg = VegaConfig::default();
         assert_eq!(cfg.db_path, PathBuf::from("projects.db"));
         assert_eq!(cfg.md_dir, PathBuf::from("projects"));
-        assert_eq!(cfg.rerank_mode, "full");
-        assert_eq!(cfg.model_unload_ttl, 300);
-        assert_eq!(cfg.inference_backend, "local");
-        assert!(cfg.model_embedder.is_none());
-        assert!(cfg.model_reranker.is_none());
+        assert_eq!(cfg.rerank_mode, "vega_only");
+        assert_eq!(cfg.inference_backend, "sglang");
     }
 
     #[test]
-    fn test_has_ml_local_with_embedder() {
-        let cfg = VegaConfig {
-            inference_backend: "local".into(),
-            model_embedder: Some(PathBuf::from("/models/embed.gguf")),
-            ..Default::default()
-        };
-        assert!(cfg.has_ml());
-    }
-
-    #[test]
-    fn test_has_ml_local_with_reranker() {
-        let cfg = VegaConfig {
-            inference_backend: "local".into(),
-            model_reranker: Some(PathBuf::from("/models/rerank.gguf")),
-            ..Default::default()
-        };
-        assert!(cfg.has_ml());
-    }
-
-    #[test]
-    fn test_has_ml_no_models() {
+    fn test_has_sglang_default() {
         let cfg = VegaConfig::default();
-        assert!(!cfg.has_ml());
+        assert!(cfg.has_sglang());
     }
 
     #[test]
-    fn test_has_ml_sqlite_only_backend() {
+    fn test_has_sglang_sqlite_only() {
         let cfg = VegaConfig {
             inference_backend: "sqlite_only".into(),
-            model_embedder: Some(PathBuf::from("/models/embed.gguf")),
             ..Default::default()
         };
-        assert!(!cfg.has_ml());
+        assert!(!cfg.has_sglang());
     }
 
     #[test]

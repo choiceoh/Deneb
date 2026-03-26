@@ -29,15 +29,8 @@ pub fn cmd_memory_search(args: &Value, config: &VegaConfig) -> CommandResult {
         Err(e) => return CommandResult::err("memory-search", &e),
     };
 
-    // Optional vector search with reranking
-    #[cfg(feature = "ml")]
-    {
-        if config.has_ml() {
-            if let Ok(vec_results) = vector_search(&conn, query, limit, config) {
-                fts_results = rerank_results(fts_results, vec_results);
-            }
-        }
-    }
+    // Vector search is now handled by the Go gateway via SGLang HTTP API.
+    // The Rust side only runs FTS search for the memory-search command.
 
     // Truncate to limit
     fts_results.truncate(limit as usize);
@@ -127,153 +120,8 @@ fn sanitize_fts_query(query: &str) -> String {
         .join(" ")
 }
 
-/// Vector search using embeddings (ML feature only).
-#[cfg(feature = "ml")]
-fn vector_search(
-    conn: &Connection,
-    query: &str,
-    limit: i64,
-    config: &VegaConfig,
-) -> Result<Vec<Value>, String> {
-    use std::process::Command;
-
-    let embedder = match &config.model_embedder {
-        Some(p) => p,
-        None => return Err("임베더 모델 경로가 설정되지 않았습니다".into()),
-    };
-
-    // Generate query embedding via external embedder process
-    let output = Command::new(embedder)
-        .arg("--query")
-        .arg(query)
-        .output()
-        .map_err(|e| format!("임베더 실행 실패: {e}"))?;
-
-    if !output.status.success() {
-        return Err(format!(
-            "임베더 오류: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-
-    let query_embedding: Vec<f32> =
-        serde_json::from_slice(&output.stdout).map_err(|e| format!("임베딩 파싱 실패: {e}"))?;
-
-    // Load chunk embeddings from DB and compute cosine similarity
-    let mut stmt = conn
-        .prepare(
-            "SELECT c.id, c.project_id, c.section, c.content, c.source_file,
-                    p.name as project_name, e.embedding
-             FROM embeddings e
-             JOIN chunks c ON e.chunk_id = c.id
-             LEFT JOIN projects p ON c.project_id = p.id",
-        )
-        .map_err(|e| format!("벡터 검색 쿼리 실패: {e}"))?;
-
-    let mut scored: Vec<(f64, Value)> = stmt
-        .query_map([], |row| {
-            let embedding_blob: Vec<u8> = row.get(6)?;
-            Ok((
-                json!({
-                    "id": row.get::<_, i64>(0)?,
-                    "project_id": row.get::<_, Option<i64>>(1)?,
-                    "section": row.get::<_, Option<String>>(2)?,
-                    "content": row.get::<_, String>(3)?,
-                    "source_file": row.get::<_, Option<String>>(4)?,
-                    "project_name": row.get::<_, Option<String>>(5)?,
-                    "source": "vector",
-                }),
-                embedding_blob,
-            ))
-        })
-        .map_err(|e| format!("벡터 검색 실행 실패: {e}"))?
-        .filter_map(|r| r.ok())
-        .map(|(mut val, blob)| {
-            let embedding = bytes_to_f32_vec(&blob);
-            let score = cosine_similarity(&query_embedding, &embedding);
-            val.as_object_mut()
-                .unwrap()
-                .insert("score".into(), json!(score));
-            (score, val)
-        })
-        .collect();
-
-    // Sort by score descending
-    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    scored.truncate(limit as usize);
-
-    Ok(scored.into_iter().map(|(_, v)| v).collect())
-}
-
-#[cfg(feature = "ml")]
-fn bytes_to_f32_vec(bytes: &[u8]) -> Vec<f32> {
-    bytes
-        .chunks_exact(4)
-        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-        .collect()
-}
-
-#[cfg(feature = "ml")]
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
-    if a.len() != b.len() || a.is_empty() {
-        return 0.0;
-    }
-    let mut dot = 0.0_f64;
-    let mut norm_a = 0.0_f64;
-    let mut norm_b = 0.0_f64;
-    for (x, y) in a.iter().zip(b.iter()) {
-        let x = *x as f64;
-        let y = *y as f64;
-        dot += x * y;
-        norm_a += x * x;
-        norm_b += y * y;
-    }
-    let denom = norm_a.sqrt() * norm_b.sqrt();
-    if denom == 0.0 {
-        0.0
-    } else {
-        dot / denom
-    }
-}
-
-/// Rerank FTS and vector results using reciprocal rank fusion.
-#[cfg(feature = "ml")]
-fn rerank_results(fts: Vec<Value>, vector: Vec<Value>) -> Vec<Value> {
-    let k = 60.0_f64; // RRF constant
-
-    let mut scores: HashMap<i64, (f64, Value)> = HashMap::new();
-
-    for (rank, item) in fts.iter().enumerate() {
-        let id = item.get("id").and_then(|v| v.as_i64()).unwrap_or(-1);
-        let rrf = 1.0 / (k + rank as f64 + 1.0);
-        scores
-            .entry(id)
-            .and_modify(|(s, _)| *s += rrf)
-            .or_insert((rrf, item.clone()));
-    }
-
-    for (rank, item) in vector.iter().enumerate() {
-        let id = item.get("id").and_then(|v| v.as_i64()).unwrap_or(-1);
-        let rrf = 1.0 / (k + rank as f64 + 1.0);
-        scores
-            .entry(id)
-            .and_modify(|(s, _)| *s += rrf)
-            .or_insert((rrf, item.clone()));
-    }
-
-    let mut merged: Vec<(f64, Value)> = scores.into_values().collect();
-    merged.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-
-    merged
-        .into_iter()
-        .map(|(score, mut v): (f64, Value)| {
-            v.as_object_mut()
-                .unwrap()
-                .insert("rrf_score".into(), json!(score));
-            v
-        })
-        .collect()
-}
+// Vector search, cosine similarity, and RRF reranking removed.
+// These are now handled by the Go gateway via SGLang HTTP API.
 
 /// Index .md files into DB with content hash tracking.
 /// Scans md_dir, computes SHA-256 hash per file, upserts chunks.
@@ -440,132 +288,22 @@ fn compute_content_hash(content: &str) -> String {
     format!("{:016x}", hasher.finish())
 }
 
-/// Generate embeddings for chunks that don't have them yet.
-/// Delegates to ML embedder model.
-#[cfg(feature = "ml")]
-pub fn cmd_memory_embed(args: &Value, config: &VegaConfig) -> CommandResult {
-    use std::process::Command;
-
-    if !config.has_ml() {
-        return CommandResult::err("memory-embed", "ML 기능이 비활성화되어 있습니다");
-    }
-
-    let embedder = match &config.model_embedder {
-        Some(p) => p,
-        None => {
-            return CommandResult::err("memory-embed", "임베더 모델 경로가 설정되지 않았습니다")
-        }
-    };
-
-    let conn = match open_db(config) {
-        Ok(c) => c,
-        Err(e) => return CommandResult::err("memory-embed", &e),
-    };
-
-    let batch_size = args
-        .get("batch_size")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(32) as usize;
-
-    // Find chunks without embeddings
-    let mut stmt = conn
-        .prepare(
-            "SELECT c.id, c.content FROM chunks c
-             LEFT JOIN embeddings e ON c.id = e.chunk_id
-             WHERE e.chunk_id IS NULL",
-        )
-        .map_err(|e| format!("쿼리 실패: {e}"))
-        .unwrap();
-
-    let pending: Vec<(i64, String)> = stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-        .map_err(|e| format!("쿼리 실행 실패: {e}"))
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
-
-    if pending.is_empty() {
+/// Generate embeddings for chunks.
+/// In sglang mode, embedding is handled by the Go gateway via SGLang HTTP API.
+pub fn cmd_memory_embed(_args: &Value, config: &VegaConfig) -> CommandResult {
+    if config.has_sglang() {
         return CommandResult::ok(
             "memory-embed",
             json!({
-                "embedded": 0,
-                "message": "임베딩할 청크가 없습니다",
+                "message": "SGLang 모드: 임베딩은 Go 게이트웨이에서 SGLang HTTP API로 처리됩니다.",
+                "backend": "sglang",
             }),
         );
     }
 
-    let total = pending.len();
-    let mut embedded = 0usize;
-    let mut errors: Vec<String> = Vec::new();
-
-    for batch in pending.chunks(batch_size) {
-        let texts: Vec<&str> = batch.iter().map(|(_, c)| c.as_str()).collect();
-        let input = serde_json::to_string(&texts).unwrap();
-
-        let output = Command::new(embedder)
-            .arg("--batch")
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .and_then(|mut child| {
-                use std::io::Write;
-                if let Some(ref mut stdin) = child.stdin {
-                    stdin.write_all(input.as_bytes())?;
-                }
-                child.wait_with_output()
-            });
-
-        match output {
-            Ok(out) if out.status.success() => {
-                let embeddings: Vec<Vec<f32>> = match serde_json::from_slice(&out.stdout) {
-                    Ok(e) => e,
-                    Err(e) => {
-                        errors.push(format!("임베딩 파싱 실패: {e}"));
-                        continue;
-                    }
-                };
-
-                for ((chunk_id, _), embedding) in batch.iter().zip(embeddings.iter()) {
-                    let blob = f32_vec_to_bytes(embedding);
-                    if conn
-                        .execute(
-                            "INSERT OR REPLACE INTO embeddings (chunk_id, embedding) VALUES (?1, ?2)",
-                            params![chunk_id, blob],
-                        )
-                        .is_ok()
-                    {
-                        embedded += 1;
-                    }
-                }
-            }
-            Ok(out) => {
-                errors.push(format!(
-                    "임베더 오류: {}",
-                    String::from_utf8_lossy(&out.stderr)
-                ));
-            }
-            Err(e) => {
-                errors.push(format!("임베더 실행 실패: {e}"));
-            }
-        }
-    }
-
-    CommandResult::ok(
-        "memory-embed",
-        json!({
-            "total_pending": total,
-            "embedded": embedded,
-            "errors": errors,
-        }),
-    )
-}
-
-#[cfg(not(feature = "ml"))]
-pub fn cmd_memory_embed(_args: &Value, _config: &VegaConfig) -> CommandResult {
     CommandResult::err(
         "memory-embed",
-        "ML 기능이 비활성화되어 있습니다. 'ml' 피처를 활성화하세요.",
+        "임베딩 백엔드가 설정되지 않았습니다 (VEGA_INFERENCE=sglang 권장)",
     )
 }
 
@@ -605,7 +343,7 @@ pub fn cmd_memory_status(_args: &Value, config: &VegaConfig) -> CommandResult {
         .query_row("SELECT COUNT(*) FROM chunks_fts", [], |row| row.get(0))
         .unwrap_or(0);
 
-    let has_ml = config.has_ml();
+    let sglang_enabled = config.has_sglang();
 
     CommandResult::ok(
         "memory-status",
@@ -615,7 +353,7 @@ pub fn cmd_memory_status(_args: &Value, config: &VegaConfig) -> CommandResult {
             "chunks": chunk_count,
             "embeddings": embedding_count,
             "fts_indexed": fts_count,
-            "ml_enabled": has_ml,
+            "sglang_enabled": sglang_enabled,
             "md_dir": config.md_dir.display().to_string(),
             "db_path": config.db_path.display().to_string(),
         }),
