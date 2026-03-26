@@ -289,6 +289,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "deneb-agent-runtime"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "deneb-core"
 version = "3.8.0"
 dependencies = [

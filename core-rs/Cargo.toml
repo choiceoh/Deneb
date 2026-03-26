@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "vega", "ml"]
+members = ["core", "vega", "ml", "agent-runtime"]
 resolver = "2"
 
 [workspace.dependencies]
