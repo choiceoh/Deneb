@@ -68,4 +68,25 @@ func TestFormatContextFilesForPrompt(t *testing.T) {
 	if !strings.Contains(result, "agent content") {
 		t.Error("expected agent content")
 	}
+	if !strings.Contains(result, "The following project context files have been loaded:") {
+		t.Error("expected context files loaded preamble")
+	}
+	if !strings.Contains(result, "embody its persona and tone") {
+		t.Error("expected SOUL.md activation instruction when SOUL.md is present")
+	}
+}
+
+func TestFormatContextFilesForPrompt_NoSoul(t *testing.T) {
+	files := []ContextFile{
+		{Path: "CLAUDE.md", Content: "agent content"},
+		{Path: "TOOLS.md", Content: "tools content"},
+	}
+
+	result := FormatContextFilesForPrompt(files)
+	if strings.Contains(result, "embody its persona and tone") {
+		t.Error("SOUL.md activation instruction should not appear without SOUL.md")
+	}
+	if !strings.Contains(result, "The following project context files have been loaded:") {
+		t.Error("expected context files loaded preamble")
+	}
 }
