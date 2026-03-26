@@ -12,7 +12,7 @@ import (
 // Context assembly defaults.
 const (
 	defaultTokenBudget    = 100_000
-	defaultFreshTailCount = 32
+	defaultFreshTailCount = 48
 	defaultMaxMessages    = 100
 	// charsPerToken is the rough estimate for token counting when a
 	// real tokenizer is unavailable (BPE averages ~3.5–4 chars/token).

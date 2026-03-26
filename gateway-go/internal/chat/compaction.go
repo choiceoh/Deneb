@@ -14,7 +14,7 @@ import (
 
 // Compaction defaults.
 const (
-	defaultContextThreshold = 0.75
+	defaultContextThreshold = 0.85
 	// summarizationModel is used for compaction summaries (cost-efficient).
 	summarizationModel = "claude-haiku-4-5-20251001"
 )

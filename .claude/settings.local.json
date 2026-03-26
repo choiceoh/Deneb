@@ -5,5 +5,18 @@
       "Bash(cargo *)",
       "Bash(go *)"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/user/Deneb && make rust 2>&1 | tail -5"
+          }
+        ]
+      }
+    ]
   }
 }

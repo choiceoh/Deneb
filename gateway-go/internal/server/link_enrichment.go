@@ -20,8 +20,8 @@ import (
 // Link enrichment limits.
 const (
 	maxLinksPerMessage     = 5
-	maxCharsPerLink        = 5000
-	maxTotalLinkChars      = 15000
+	maxCharsPerLink        = 12000
+	maxTotalLinkChars      = 40000
 	linkFetchTimeout       = 10 * time.Second
 	totalEnrichmentTimeout = 30 * time.Second
 	linkFetchMaxBytes      = int64(2 * 1024 * 1024) // 2 MB raw download

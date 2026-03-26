@@ -10,8 +10,8 @@ func TestDefaultContextConfig(t *testing.T) {
 	if cfg.TokenBudget != 100_000 {
 		t.Errorf("TokenBudget = %d, want %d", cfg.TokenBudget, 100_000)
 	}
-	if cfg.FreshTailCount != 32 {
-		t.Errorf("FreshTailCount = %d, want %d", cfg.FreshTailCount, 32)
+	if cfg.FreshTailCount != 48 {
+		t.Errorf("FreshTailCount = %d, want %d", cfg.FreshTailCount, 48)
 	}
 	if cfg.MaxMessages != 100 {
 		t.Errorf("MaxMessages = %d, want %d", cfg.MaxMessages, 100)
