@@ -238,12 +238,12 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolClipboard(),
 	})
 
-	// -- Pilot tool (fast local AI via sglang — synchronous, no session overhead) --
+	// -- Pilot tool (fast local AI with integrated data sources) --
 	registry.RegisterTool(ToolDef{
 		Name:        "pilot",
-		Description: "Fast local AI: describe task + content → instant result. Batch via items[]. No session overhead (use over sessions_spawn for simple tasks)",
+		Description: "Fast local AI with built-in data gathering. Describe task + provide source (content, file, files, exec, grep, url, items) → instant result. One call replaces read+analyze, exec+parse, grep+summarize workflows",
 		InputSchema: pilotToolSchema(),
-		Fn:          toolPilot(),
+		Fn:          toolPilot(workspaceDir),
 	})
 }
 
