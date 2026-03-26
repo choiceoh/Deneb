@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -393,6 +394,33 @@ func inferAPIType(providerID string) string {
 		// Most providers (zai, sglang, openai, etc.) use OpenAI-compatible API.
 		return "openai"
 	}
+}
+
+// executeAgentRunWithDelta is a variant of executeAgentRun that accepts a direct
+// onDelta callback for streaming text to HTTP clients.
+func executeAgentRunWithDelta(
+	ctx context.Context,
+	params RunParams,
+	deps runDeps,
+	onDelta func(string),
+	logger *slog.Logger,
+) (*AgentResult, error) {
+	deltaRaw := BroadcastRawFunc(func(event string, data []byte) int {
+		if onDelta == nil || event != "chat.delta" {
+			return 0
+		}
+		var envelope struct {
+			Payload struct {
+				Delta string `json:"delta"`
+			} `json:"payload"`
+		}
+		if err := json.Unmarshal(data, &envelope); err == nil && envelope.Payload.Delta != "" {
+			onDelta(envelope.Payload.Delta)
+		}
+		return 1
+	})
+	broadcaster := newStreamBroadcaster(deltaRaw, params.SessionKey, params.ClientRunID)
+	return executeAgentRun(ctx, params, deps, broadcaster, logger)
 }
 
 // isContextOverflow checks if an error indicates a context window overflow.

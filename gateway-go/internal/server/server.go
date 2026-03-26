@@ -512,6 +512,10 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/v1/rpc", s.handleRPC)
 	mux.HandleFunc("GET /ws", s.handleWsUpgrade)
 
+	// OpenAI-compatible HTTP API endpoints.
+	mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
+	mux.HandleFunc("POST /v1/responses", s.handleResponses)
+
 	// Hooks HTTP webhook endpoint — intercepts /hooks/* before the fallback.
 	if s.hooksHTTP != nil {
 		hooksHandler := s.hooksHTTP
