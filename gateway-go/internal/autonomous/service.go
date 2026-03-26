@@ -84,7 +84,13 @@ type ServiceStatus struct {
 	ConsecutiveErr int           `json:"consecutiveErrors"`
 	TotalCycles    int           `json:"totalCycles"`
 	TotalErrors    int           `json:"totalErrors"`
+	SuccessRate    float64       `json:"successRate"`            // 0.0-1.0 from recent runs
+	AvgDurationMs  int64         `json:"avgDurationMs"`          // average cycle duration from recent runs
+	StaleGoals     int           `json:"staleGoals,omitempty"`   // goals detected as stuck
 }
+
+// stalePauseThreshold is the cycle count after which a stale goal is auto-paused.
+const stalePauseThreshold = 10
 
 // NewService creates a new autonomous service.
 func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Service {
@@ -101,7 +107,7 @@ func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Serv
 		agent:     agent,
 		logger:    logger.With("pkg", "autonomous"),
 		cfg:       cfg,
-		runLog:    NewRunLog(cfg.GoalStorePath),
+		runLog:    NewRunLog(cfg.GoalStorePath, logger),
 		enabled:   true,
 		svcCtx:    svcCtx,
 		svcCancel: svcCancel,
@@ -155,8 +161,19 @@ func (s *Service) Status() ServiceStatus {
 	all, _ := s.goals.List()
 	active, _ := s.goals.ActiveGoals()
 
+	// Compute metrics from recent runs.
+	successRate, avgDur := s.computeMetrics()
+
+	// Count stale goals.
+	staleCount := 0
+	for _, g := range active {
+		if g.IsStale() {
+			staleCount++
+		}
+	}
+
 	return ServiceStatus{
-		Running:        s.attention != nil,
+		Running:        s.attention != nil && s.attention.IsTimerActive(),
 		Enabled:        s.enabled,
 		CycleRunning:   s.cycleRunning,
 		ActiveGoals:    len(active),
@@ -166,6 +183,9 @@ func (s *Service) Status() ServiceStatus {
 		ConsecutiveErr: s.consecutiveErr,
 		TotalCycles:    s.totalCycles,
 		TotalErrors:    s.totalErrors,
+		SuccessRate:    successRate,
+		AvgDurationMs:  avgDur,
+		StaleGoals:     staleCount,
 	}
 }
 
@@ -413,12 +433,13 @@ func (s *Service) applyCycleOutcome(outcome *CycleOutcome) {
 		TotalCycles:       s.totalCycles,
 		TotalErrors:       s.totalErrors,
 	}
-	s.mu.Unlock()
 
-	// Persist cycle state to disk (non-critical if this fails).
+	// Persist cycle state to disk while still holding the lock,
+	// preventing a concurrent cycle from seeing stale persisted state.
 	if err := s.goals.UpdateCycleState(cs); err != nil {
 		s.logger.Warn("failed to persist cycle state", "error", err)
 	}
+	s.mu.Unlock()
 
 	// Append to run log.
 	s.runLog.Append(RunLogEntry{
@@ -429,6 +450,11 @@ func (s *Service) applyCycleOutcome(outcome *CycleOutcome) {
 		Error:      outcome.Error,
 		UpdateCount: len(outcome.GoalUpdates),
 	})
+
+	// Auto-pause stale goals that have shown no meaningful progress.
+	if outcome.Status == "ok" {
+		s.autoPauseStaleGoals()
+	}
 
 	// Purge old completed goals periodically (every 50 cycles).
 	if s.totalCycles%50 == 0 {
@@ -476,6 +502,51 @@ func buildCycleSummary(outcome *CycleOutcome) string {
 		return "이전 사이클 진행: " + truncateOutput(strings.Join(parts, "; "), 300)
 	default:
 		return ""
+	}
+}
+
+// computeMetrics derives success rate and average duration from recent run log entries.
+func (s *Service) computeMetrics() (successRate float64, avgDurationMs int64) {
+	recent := s.runLog.Recent(20)
+	if len(recent) == 0 {
+		return 0, 0
+	}
+	var okCount int
+	var totalDur int64
+	var durCount int
+	for _, r := range recent {
+		if r.Status == "ok" {
+			okCount++
+		}
+		if r.DurationMs > 0 {
+			totalDur += r.DurationMs
+			durCount++
+		}
+	}
+	successRate = float64(okCount) / float64(len(recent))
+	if durCount > 0 {
+		avgDurationMs = totalDur / int64(durCount)
+	}
+	return
+}
+
+// autoPauseStaleGoals pauses goals that have exceeded the stale threshold,
+// indicating the LLM has failed to make meaningful progress.
+func (s *Service) autoPauseStaleGoals() {
+	active, err := s.goals.ActiveGoals()
+	if err != nil {
+		return
+	}
+	for _, g := range active {
+		if g.CycleCount >= stalePauseThreshold && g.IsStale() {
+			reason := fmt.Sprintf("시스템 자동 중단: %d회 작업 후 진전 없음", g.CycleCount)
+			if err := s.goals.Update(g.ID, StatusPaused, reason); err != nil {
+				s.logger.Warn("failed to auto-pause stale goal", "id", g.ID, "error", err)
+			} else {
+				s.logger.Info("auto-paused stale goal",
+					"id", g.ID, "cycleCount", g.CycleCount, "description", g.Description)
+			}
+		}
 	}
 }
 

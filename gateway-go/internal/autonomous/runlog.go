@@ -2,6 +2,7 @@ package autonomous
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,16 +24,20 @@ const maxRunLogEntries = 100
 // RunLog maintains a persistent JSONL log of cycle executions.
 // Stored alongside the goal store in the same directory.
 type RunLog struct {
-	mu   sync.Mutex
-	path string
-	ring []RunLogEntry
+	mu     sync.Mutex
+	path   string
+	ring   []RunLogEntry
+	logger *slog.Logger
 }
 
 // NewRunLog creates a run log in the same directory as the goal store.
-func NewRunLog(goalStorePath string) *RunLog {
+func NewRunLog(goalStorePath string, logger *slog.Logger) *RunLog {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	dir := filepath.Dir(goalStorePath)
 	logPath := filepath.Join(dir, "cycle-runs.jsonl")
-	rl := &RunLog{path: logPath}
+	rl := &RunLog{path: logPath, logger: logger.With("component", "runlog")}
 	rl.load()
 	return rl
 }
@@ -54,16 +59,21 @@ func (rl *RunLog) Append(entry RunLogEntry) {
 
 	line, err := json.Marshal(entry)
 	if err != nil {
+		rl.logger.Warn("failed to marshal run log entry", "error", err)
 		return
 	}
 	line = append(line, '\n')
 
 	f, err := os.OpenFile(rl.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
+		rl.logger.Warn("failed to open run log file", "error", err)
 		return
 	}
-	defer f.Close()
-	f.Write(line)
+	if _, err := f.Write(line); err != nil {
+		rl.logger.Warn("failed to write run log entry", "error", err)
+	}
+	// Close the file before potential truncation to avoid concurrent fd access.
+	f.Close()
 
 	// Truncate file if it has grown beyond maxRunLogEntries.
 	rl.mayTruncateFile()

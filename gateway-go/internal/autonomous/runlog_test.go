@@ -8,7 +8,7 @@ import (
 func TestRunLog_AppendAndRecent(t *testing.T) {
 	dir := t.TempDir()
 	goalPath := filepath.Join(dir, "goals.json")
-	rl := NewRunLog(goalPath)
+	rl := NewRunLog(goalPath, nil)
 
 	rl.Append(RunLogEntry{Timestamp: 1, Status: "ok", DurationMs: 100})
 	rl.Append(RunLogEntry{Timestamp: 2, Status: "error", DurationMs: 200, Error: "fail"})
@@ -29,7 +29,7 @@ func TestRunLog_AppendAndRecent(t *testing.T) {
 
 func TestRunLog_RecentMoreThanAvailable(t *testing.T) {
 	dir := t.TempDir()
-	rl := NewRunLog(filepath.Join(dir, "goals.json"))
+	rl := NewRunLog(filepath.Join(dir, "goals.json"), nil)
 	rl.Append(RunLogEntry{Timestamp: 1, Status: "ok"})
 
 	recent := rl.Recent(10)
@@ -40,7 +40,7 @@ func TestRunLog_RecentMoreThanAvailable(t *testing.T) {
 
 func TestRunLog_RecentEmpty(t *testing.T) {
 	dir := t.TempDir()
-	rl := NewRunLog(filepath.Join(dir, "goals.json"))
+	rl := NewRunLog(filepath.Join(dir, "goals.json"), nil)
 
 	recent := rl.Recent(5)
 	if recent != nil {
@@ -50,7 +50,7 @@ func TestRunLog_RecentEmpty(t *testing.T) {
 
 func TestRunLog_RecentZero(t *testing.T) {
 	dir := t.TempDir()
-	rl := NewRunLog(filepath.Join(dir, "goals.json"))
+	rl := NewRunLog(filepath.Join(dir, "goals.json"), nil)
 	rl.Append(RunLogEntry{Timestamp: 1, Status: "ok"})
 
 	recent := rl.Recent(0)
@@ -61,7 +61,7 @@ func TestRunLog_RecentZero(t *testing.T) {
 
 func TestRunLog_RecentNegative(t *testing.T) {
 	dir := t.TempDir()
-	rl := NewRunLog(filepath.Join(dir, "goals.json"))
+	rl := NewRunLog(filepath.Join(dir, "goals.json"), nil)
 	rl.Append(RunLogEntry{Timestamp: 1, Status: "ok"})
 
 	recent := rl.Recent(-1)
@@ -74,12 +74,12 @@ func TestRunLog_Persistence(t *testing.T) {
 	dir := t.TempDir()
 	goalPath := filepath.Join(dir, "goals.json")
 
-	rl1 := NewRunLog(goalPath)
+	rl1 := NewRunLog(goalPath, nil)
 	rl1.Append(RunLogEntry{Timestamp: 100, Status: "ok", DurationMs: 50, GoalWorked: "g1"})
 	rl1.Append(RunLogEntry{Timestamp: 200, Status: "error", Error: "boom"})
 
 	// New instance should reload from disk.
-	rl2 := NewRunLog(goalPath)
+	rl2 := NewRunLog(goalPath, nil)
 	recent := rl2.Recent(10)
 	if len(recent) != 2 {
 		t.Fatalf("len = %d after reload, want 2", len(recent))
@@ -94,7 +94,7 @@ func TestRunLog_Persistence(t *testing.T) {
 
 func TestRunLog_MaxEntries(t *testing.T) {
 	dir := t.TempDir()
-	rl := NewRunLog(filepath.Join(dir, "goals.json"))
+	rl := NewRunLog(filepath.Join(dir, "goals.json"), nil)
 
 	for i := 0; i < maxRunLogEntries+20; i++ {
 		rl.Append(RunLogEntry{Timestamp: int64(i), Status: "ok"})

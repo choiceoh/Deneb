@@ -42,16 +42,21 @@ const (
 
 // Goal represents a single autonomous objective.
 type Goal struct {
-	ID           string `json:"id"`
-	Description  string `json:"description"`
-	Priority     string `json:"priority"`              // "high", "medium", "low"
-	Status       string `json:"status"`                // "active", "completed", "paused"
-	LastNote     string `json:"lastNote,omitempty"`     // progress note from last cycle
-	PausedReason string `json:"pausedReason,omitempty"` // why the goal was paused
-	CycleCount   int    `json:"cycleCount,omitempty"`   // how many cycles worked on this goal
-	CreatedAtMs  int64  `json:"createdAtMs"`
-	UpdatedAtMs  int64  `json:"updatedAtMs"`
+	ID             string   `json:"id"`
+	Description    string   `json:"description"`
+	Priority       string   `json:"priority"`                        // "high", "medium", "low"
+	Status         string   `json:"status"`                          // "active", "completed", "paused"
+	LastNote       string   `json:"lastNote,omitempty"`              // progress note from last cycle
+	NoteHistory    []string `json:"noteHistory,omitempty"`           // previous notes (newest first, max 3)
+	PausedReason   string   `json:"pausedReason,omitempty"`          // why the goal was paused
+	CycleCount     int      `json:"cycleCount,omitempty"`            // how many cycles worked on this goal
+	LastWorkedAtMs int64    `json:"lastWorkedAtMs,omitempty"`        // last time a cycle worked on this goal
+	CreatedAtMs    int64    `json:"createdAtMs"`
+	UpdatedAtMs    int64    `json:"updatedAtMs"`
 }
+
+// maxNoteHistory is the number of previous notes kept per goal.
+const maxNoteHistory = 3
 
 // CompletedGoalRetentionMs is how long completed goals are kept before auto-purge (7 days).
 const CompletedGoalRetentionMs = 7 * 24 * 60 * 60 * 1000
@@ -325,12 +330,21 @@ func (s *GoalStore) Update(id, status, note string) error {
 		return err
 	}
 
+	now := time.Now().UnixMilli()
 	for i := range store.Goals {
 		if store.Goals[i].ID == id {
 			if status != "" {
 				store.Goals[i].Status = status
 			}
 			if note != "" {
+				// Push previous LastNote into NoteHistory before overwriting.
+				if store.Goals[i].LastNote != "" {
+					store.Goals[i].NoteHistory = prependNote(
+						store.Goals[i].NoteHistory,
+						store.Goals[i].LastNote,
+						maxNoteHistory,
+					)
+				}
 				store.Goals[i].LastNote = note
 			}
 			// Track why a goal was paused.
@@ -340,7 +354,8 @@ func (s *GoalStore) Update(id, status, note string) error {
 				store.Goals[i].PausedReason = ""
 			}
 			store.Goals[i].CycleCount++
-			store.Goals[i].UpdatedAtMs = time.Now().UnixMilli()
+			store.Goals[i].LastWorkedAtMs = now
+			store.Goals[i].UpdatedAtMs = now
 			return s.saveLocked(store)
 		}
 	}
@@ -450,6 +465,56 @@ func priorityRank(p string) int {
 	default:
 		return 0
 	}
+}
+
+// prependNote inserts a note at the front of a history slice, capping at max entries.
+func prependNote(history []string, note string, max int) []string {
+	result := make([]string, 0, max)
+	result = append(result, note)
+	for _, h := range history {
+		if len(result) >= max {
+			break
+		}
+		result = append(result, h)
+	}
+	return result
+}
+
+// IsStale returns true if this goal appears stuck: high cycle count
+// with repetitive notes indicating no real progress.
+func (g Goal) IsStale() bool {
+	if g.CycleCount < 5 || g.LastNote == "" {
+		return false
+	}
+	if len(g.NoteHistory) < 2 {
+		return false
+	}
+	// Compare the first 50 runes of recent notes. If the last 3 notes
+	// share the same prefix, the goal is likely stuck.
+	cur := notePrefix(g.LastNote)
+	for _, h := range g.NoteHistory[:2] {
+		if notePrefix(h) != cur {
+			return false
+		}
+	}
+	return true
+}
+
+func notePrefix(s string) string {
+	r := []rune(s)
+	if len(r) > 50 {
+		r = r[:50]
+	}
+	return string(r)
+}
+
+// StarvationCycles returns how many service cycles have passed since this
+// goal was last worked on. Returns 0 if never worked or totalCycles is not provided.
+func (g Goal) StarvationCycles(totalCycles int, lastWorkedCycle int) int {
+	if lastWorkedCycle <= 0 {
+		return 0
+	}
+	return totalCycles - lastWorkedCycle
 }
 
 func copyFile(src, dst string) error {

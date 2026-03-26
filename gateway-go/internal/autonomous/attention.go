@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -48,6 +49,7 @@ type Attention struct {
 	cfg         AttentionConfig
 	lastTrigger int64
 	timerCancel context.CancelFunc
+	timerActive atomic.Bool
 	logger      *slog.Logger
 }
 
@@ -75,8 +77,26 @@ func (a *Attention) Push(signal Signal) {
 
 	// Cooldown check: don't trigger too frequently.
 	if now-a.lastTrigger < a.cfg.CooldownMs {
-		a.logger.Debug("attention signal within cooldown, ignoring",
-			"kind", signal.Kind, "cooldownRemainMs", a.cfg.CooldownMs-(now-a.lastTrigger))
+		remainMs := a.cfg.CooldownMs - (now - a.lastTrigger)
+		// High-priority signals (e.g., goal added) are deferred until cooldown
+		// expires instead of being silently dropped.
+		if signal.Priority == SignalPriorityHigh {
+			svcCtx := a.svc.svcCtx
+			a.logger.Debug("high-priority signal deferred until cooldown expires",
+				"kind", signal.Kind, "deferMs", remainMs)
+			go func() {
+				timer := time.NewTimer(time.Duration(remainMs) * time.Millisecond)
+				defer timer.Stop()
+				select {
+				case <-timer.C:
+					a.Push(signal)
+				case <-svcCtx.Done():
+				}
+			}()
+		} else {
+			a.logger.Debug("attention signal within cooldown, ignoring",
+				"kind", signal.Kind, "cooldownRemainMs", remainMs)
+		}
 		return
 	}
 
@@ -87,8 +107,11 @@ func (a *Attention) Push(signal Signal) {
 	a.lastTrigger = now
 
 	// Run cycle in a goroutine to avoid blocking the caller.
+	// Use svcCtx so the goroutine is cancelled when the service stops.
+	svcCtx := a.svc.svcCtx
+	timeout := time.Duration(a.svc.cfg.CycleTimeoutMs) * time.Millisecond
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		ctx, cancel := context.WithTimeout(svcCtx, timeout)
 		defer cancel()
 		if _, err := a.svc.RunCycle(ctx); err != nil {
 			a.logger.Warn("attention-triggered cycle failed", "error", err)
@@ -107,6 +130,7 @@ func (a *Attention) StartTimer(ctx context.Context) {
 
 	timerCtx, cancel := context.WithCancel(ctx)
 	a.timerCancel = cancel
+	a.timerActive.Store(true)
 
 	go a.timerLoop(timerCtx)
 	a.logger.Info("attention timer started", "interval", a.cfg.CycleInterval)
@@ -125,8 +149,14 @@ func (a *Attention) stopTimerLocked() {
 	if a.timerCancel != nil {
 		a.timerCancel()
 		a.timerCancel = nil
+		a.timerActive.Store(false)
 		a.logger.Info("attention timer stopped")
 	}
+}
+
+// IsTimerActive reports whether the periodic timer is currently running.
+func (a *Attention) IsTimerActive() bool {
+	return a.timerActive.Load()
 }
 
 func (a *Attention) timerLoop(ctx context.Context) {
