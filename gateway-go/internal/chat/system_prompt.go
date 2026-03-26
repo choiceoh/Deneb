@@ -36,34 +36,34 @@ type RuntimeInfo struct {
 // coreToolSummaries maps tool names to one-line descriptions for the system prompt.
 // Shown to the LLM so it knows which tools are available and what they do.
 var coreToolSummaries = map[string]string{
-	"read":               "Read file contents with line numbers. Supports offset/limit for partial reads. Returns total lines and truncation info",
-	"write":              "Create or overwrite files. Creates parent directories automatically",
-	"edit":               "Search-and-replace edit. Unique match required by default; use replace_all=true for bulk replacements",
-	"grep":               "Regex search in files (ripgrep). Supports contextLines, ignoreCase, fileType, maxResults params",
-	"find":               "Find files by glob pattern. Supports ** for recursive matching and showHidden for dotfiles",
-	"ls":                 "List directory contents with file sizes",
-	"exec":               "Run shell commands (bash -c). Default timeout 30s, max 5min. Use background=true for long-running commands",
-	"process":            "Manage background exec sessions (list/poll/log/kill)",
-	"web_search":         "Search the web (Brave API or DuckDuckGo fallback)",
-	"web_fetch":          "Fetch and extract readable content from a URL (max 50k chars default)",
-	"memory_search":      "Search memory files (MEMORY.md, memory/*.md) by keyword with context",
-	"memory_get":         "Read specific lines from a memory file (1-based line range)",
-	"nodes":              "Discover and control paired nodes (status/notify/camera/run)",
-	"cron":               "Manage cron jobs and wake events (status/list/add/update/remove/run)",
-	"message":            "Send messages and channel actions (send/reply/react/thread-reply)",
-	"gateway":            "Gateway control (restart, config.get/patch/apply, update.run)",
-	"sessions_list":      "List other sessions with optional kind filter",
-	"sessions_history":   "Fetch history for another session",
-	"sessions_send":      "Send a message to another session",
-	"sessions_spawn":     "Spawn an isolated sub-agent session with optional model override",
-	"subagents":          "List, steer, or kill sub-agent runs",
-	"session_status":     "Show session status, usage, and token counts",
-	"image":              "Analyze images with a vision model (local files or URLs, up to 20)",
-	"youtube_transcript": "Extract transcript/subtitles and metadata from a YouTube video",
-	"send_file":          "Send a file to the user (photo, document, video, audio, voice)",
-	"http":               "Make structured HTTP requests (GET, POST, PUT, PATCH, DELETE)",
-	"kv":                 "Persistent key-value store for agent state",
-	"clipboard":          "In-memory clipboard for temporary content",
+	"read":               "Read file contents with line numbers (default: 2000 lines). Use offset/limit for large files",
+	"write":              "Create or overwrite a file. Auto-creates parent directories. Use edit for partial changes",
+	"edit":               "Search-and-replace in a file. old_string must be unique unless replace_all=true. Read first to find the exact string",
+	"grep":               "Regex search across files (ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
+	"find":               "Find files by glob pattern (e.g. \"**/*.go\"). Use grep to search inside files instead",
+	"ls":                 "List directory contents with sizes. Use find for recursive search",
+	"exec":               "Run a shell command (bash -c). Default timeout 30s, max 5min. Use background=true for long tasks, then process to check",
+	"process":            "Manage background exec sessions: list running, poll/log output, kill by sessionId",
+	"web_search":         "Search the web and get result snippets. Use web_fetch to read a specific page",
+	"web_fetch":          "Fetch URL and extract readable text (HTML stripped). Max 50k chars default",
+	"memory_search":      "Search MEMORY.md + memory/*.md by keyword. Returns matched lines with ±2 lines context",
+	"memory_get":         "Read specific line range from a memory file. Use after memory_search to get full context",
+	"nodes":              "Discover and control paired mobile nodes (status/notify/camera/run)",
+	"cron":               "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
+	"message":            "Send messages to the user's channel. Actions: send, reply, react, thread-reply. Use for proactive sends",
+	"gateway":            "Gateway self-management: config read/write, restart (SIGUSR1), git pull + rebuild",
+	"sessions_list":      "List active sessions with kind/status. Filter by kinds: main, group, cron, hook",
+	"sessions_history":   "Fetch message history from another session (default: last 20 messages)",
+	"sessions_send":      "Send a message to another session (defaults to \"main\" if sessionKey omitted)",
+	"sessions_spawn":     "Create an isolated sub-agent session for parallel work. Use subagents to monitor",
+	"subagents":          "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
+	"session_status":     "Show current session info: kind, status, model, token usage, runtime",
+	"image":              "Analyze images with a vision model (up to 20 local files or URLs). Accepts optional prompt",
+	"youtube_transcript": "Extract transcript/subtitles from a YouTube video URL",
+	"send_file":          "Send a file to the user (auto-detects: photo/video/audio/document). Max 50 MB",
+	"http":               "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
+	"kv":                 "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
+	"clipboard":          "Temporary in-memory clipboard (ring buffer, 32 items max). Actions: set, get, list, clear",
 }
 
 // toolOrder defines the display order for tools in the system prompt.
@@ -100,6 +100,16 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Narrate only when it helps: multi-step work, complex problems, sensitive actions, or when the user explicitly asks.\n")
 	sb.WriteString("Keep narration brief and value-dense; avoid repeating obvious steps.\n")
 	sb.WriteString("When a first-class tool exists for an action, use the tool directly instead of asking the user to run CLI commands.\n\n")
+
+	// Tool Selection Guide.
+	sb.WriteString("## Tool Selection Guide\n")
+	sb.WriteString("File exploration: ls (overview) → find (locate files) → grep (search contents) → read (view file)\n")
+	sb.WriteString("File modification: read (understand) → edit (precise change) or write (full rewrite) or apply_patch (multi-file diff)\n")
+	sb.WriteString("Web research: web_search (discover URLs) → web_fetch (read page content)\n")
+	sb.WriteString("Long commands: exec with background=true → process poll/log to check output\n")
+	sb.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
+	sb.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section)\n")
+	sb.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools.\n\n")
 
 	// Safety.
 	sb.WriteString("## Safety\n")
@@ -215,6 +225,15 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	static.WriteString("Narrate only when it helps: multi-step work, complex problems, sensitive actions, or when the user explicitly asks.\n")
 	static.WriteString("Keep narration brief and value-dense; avoid repeating obvious steps.\n")
 	static.WriteString("When a first-class tool exists for an action, use the tool directly instead of asking the user to run CLI commands.\n\n")
+
+	static.WriteString("## Tool Selection Guide\n")
+	static.WriteString("File exploration: ls (overview) → find (locate files) → grep (search contents) → read (view file)\n")
+	static.WriteString("File modification: read (understand) → edit (precise change) or write (full rewrite) or apply_patch (multi-file diff)\n")
+	static.WriteString("Web research: web_search (discover URLs) → web_fetch (read page content)\n")
+	static.WriteString("Long commands: exec with background=true → process poll/log to check output\n")
+	static.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
+	static.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section)\n")
+	static.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools.\n\n")
 
 	static.WriteString("## Safety\n")
 	static.WriteString("You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking; avoid long-term plans beyond the user's request.\n")

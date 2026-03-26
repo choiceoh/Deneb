@@ -261,11 +261,15 @@ func execToolSchema() map[string]any {
 			},
 			"timeout": map[string]any{
 				"type":        "number",
-				"description": "Timeout in seconds",
+				"description": "Timeout in seconds (default: 30, max: 300)",
+				"default":     30,
+				"minimum":     1,
+				"maximum":     300,
 			},
 			"background": map[string]any{
 				"type":        "boolean",
-				"description": "Run in background immediately",
+				"description": "Run in background immediately, then use process tool to check output",
+				"default":     false,
 			},
 		},
 		"required": []string{"command"},
@@ -360,7 +364,8 @@ func processToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Process action: list, poll, log, write, kill",
+				"description": "Process action",
+				"enum":        []string{"list", "poll", "log", "write", "kill"},
 			},
 			"sessionId": map[string]any{
 				"type":        "string",
@@ -431,6 +436,8 @@ func webFetchToolSchema() map[string]any {
 			"maxChars": map[string]any{
 				"type":        "number",
 				"description": "Maximum characters to return",
+				"default":     50000,
+				"minimum":     1,
 			},
 		},
 		"required": []string{"url"},

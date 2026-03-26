@@ -16,7 +16,8 @@ func messageToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Message action: send, react, reply, thread-reply",
+				"description": "Message action",
+				"enum":        []string{"send", "react", "reply", "thread-reply"},
 			},
 			"message": map[string]any{
 				"type":        "string",
