@@ -274,3 +274,137 @@ fn diff_snapshots(prev: &HashMap<i64, Value>, current: &HashMap<i64, Value>) -> 
         "new_chunks": new_chunks,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_project(name: &str, status: &str, comm_count: i64) -> Value {
+        json!({
+            "name": name,
+            "status": status,
+            "comm_count": comm_count,
+            "chunks": {}
+        })
+    }
+
+    #[test]
+    fn test_diff_snapshots_empty() {
+        let prev: HashMap<i64, Value> = HashMap::new();
+        let current: HashMap<i64, Value> = HashMap::new();
+        let diff = diff_snapshots(&prev, &current);
+
+        assert_eq!(diff["new_projects"].as_array().unwrap().len(), 0);
+        assert_eq!(diff["removed_projects"].as_array().unwrap().len(), 0);
+        assert_eq!(diff["status_changes"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_diff_snapshots_new_project() {
+        let prev: HashMap<i64, Value> = HashMap::new();
+        let mut current: HashMap<i64, Value> = HashMap::new();
+        current.insert(1, make_project("Project A", "active", 0));
+
+        let diff = diff_snapshots(&prev, &current);
+        let new_projects = diff["new_projects"].as_array().unwrap();
+        assert_eq!(new_projects.len(), 1);
+        assert_eq!(new_projects[0]["name"], "Project A");
+    }
+
+    #[test]
+    fn test_diff_snapshots_removed_project() {
+        let mut prev: HashMap<i64, Value> = HashMap::new();
+        prev.insert(1, make_project("Project A", "active", 0));
+        let current: HashMap<i64, Value> = HashMap::new();
+
+        let diff = diff_snapshots(&prev, &current);
+        let removed = diff["removed_projects"].as_array().unwrap();
+        assert_eq!(removed.len(), 1);
+        assert_eq!(removed[0]["name"], "Project A");
+    }
+
+    #[test]
+    fn test_diff_snapshots_status_change() {
+        let mut prev: HashMap<i64, Value> = HashMap::new();
+        prev.insert(1, make_project("Project A", "active", 5));
+
+        let mut current: HashMap<i64, Value> = HashMap::new();
+        current.insert(1, make_project("Project A", "completed", 5));
+
+        let diff = diff_snapshots(&prev, &current);
+        let changes = diff["status_changes"].as_array().unwrap();
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0]["old_status"], "active");
+        assert_eq!(changes[0]["new_status"], "completed");
+    }
+
+    #[test]
+    fn test_diff_snapshots_new_comms() {
+        let mut prev: HashMap<i64, Value> = HashMap::new();
+        prev.insert(1, make_project("Project A", "active", 3));
+
+        let mut current: HashMap<i64, Value> = HashMap::new();
+        current.insert(1, make_project("Project A", "active", 7));
+
+        let diff = diff_snapshots(&prev, &current);
+        let comms = diff["new_comms"].as_array().unwrap();
+        assert_eq!(comms.len(), 1);
+        assert_eq!(comms[0]["new_entries"], 4);
+    }
+
+    #[test]
+    fn test_diff_snapshots_chunk_changes() {
+        let mut prev: HashMap<i64, Value> = HashMap::new();
+        prev.insert(
+            1,
+            json!({
+                "name": "Project A",
+                "status": "active",
+                "comm_count": 0,
+                "chunks": {
+                    "overview": "hash_old",
+                    "notes": "hash_same"
+                }
+            }),
+        );
+
+        let mut current: HashMap<i64, Value> = HashMap::new();
+        current.insert(
+            1,
+            json!({
+                "name": "Project A",
+                "status": "active",
+                "comm_count": 0,
+                "chunks": {
+                    "overview": "hash_new",
+                    "notes": "hash_same",
+                    "contacts": "hash_brand_new"
+                }
+            }),
+        );
+
+        let diff = diff_snapshots(&prev, &current);
+        let modified = diff["modified_chunks"].as_array().unwrap();
+        assert_eq!(modified.len(), 1);
+        assert_eq!(modified[0]["heading"], "overview");
+
+        let new_chunks = diff["new_chunks"].as_array().unwrap();
+        assert_eq!(new_chunks.len(), 1);
+        assert_eq!(new_chunks[0]["heading"], "contacts");
+    }
+
+    #[test]
+    fn test_diff_snapshots_no_changes() {
+        let mut prev: HashMap<i64, Value> = HashMap::new();
+        prev.insert(1, make_project("Project A", "active", 5));
+
+        let mut current: HashMap<i64, Value> = HashMap::new();
+        current.insert(1, make_project("Project A", "active", 5));
+
+        let diff = diff_snapshots(&prev, &current);
+        assert_eq!(diff["new_projects"].as_array().unwrap().len(), 0);
+        assert_eq!(diff["removed_projects"].as_array().unwrap().len(), 0);
+        assert_eq!(diff["status_changes"].as_array().unwrap().len(), 0);
+        assert_eq!(diff["new_comms"].as_array().unwrap().len(), 0);
+    }
+}

@@ -232,3 +232,81 @@ fn extract_from_text(
 
     contacts
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_from_text_korean_name_with_phone() {
+        let body = "김철수 과장 010-1234-5678\n";
+        let contacts = extract_from_text(body, "note", "테스트 프로젝트", 1);
+        assert!(!contacts.is_empty(), "expected at least one contact");
+        // Find the contact with the phone number
+        let c = contacts.iter().find(|c| c["phone"] == "010-1234-5678").unwrap();
+        assert_eq!(c["name"], "김철수");
+        assert_eq!(c["title"], "과장");
+    }
+
+    #[test]
+    fn test_extract_from_text_email() {
+        let body = "홍길동 대리 (hong@example.com)";
+        let contacts = extract_from_text(body, "note", "프로젝트", 1);
+        assert!(!contacts.is_empty());
+        let c = &contacts[0];
+        assert_eq!(c["name"], "홍길동");
+        assert_eq!(c["email"], "hong@example.com");
+    }
+
+    #[test]
+    fn test_extract_from_text_person_internal() {
+        let body = "박지영 팀장\n010-9876-5432\npark@company.co.kr\n기타 정보";
+        let contacts = extract_from_text(body, "person_internal", "프로젝트", 1);
+        assert_eq!(contacts.len(), 1);
+        let c = &contacts[0];
+        assert_eq!(c["name"], "박지영 팀장");
+        assert_eq!(c["phone"], "010-9876-5432");
+        assert_eq!(c["email"], "park@company.co.kr");
+        assert_eq!(c["type"], "internal");
+    }
+
+    #[test]
+    fn test_extract_from_text_person_external() {
+        let body = "이민호\n02-123-4567";
+        let contacts = extract_from_text(body, "person_external", "외부 프로젝트", 2);
+        assert_eq!(contacts.len(), 1);
+        let c = &contacts[0];
+        assert_eq!(c["type"], "external");
+        assert_eq!(c["project_id"], 2);
+    }
+
+    #[test]
+    fn test_extract_from_text_no_contacts() {
+        let body = "This is just a regular note with no contact info.";
+        let contacts = extract_from_text(body, "note", "프로젝트", 1);
+        assert!(contacts.is_empty());
+    }
+
+    #[test]
+    fn test_extract_from_text_multiple_contacts() {
+        let body = "김영희 과장 010-1111-2222\n\n이철수 대리 010-3333-4444\n";
+        let contacts = extract_from_text(body, "note", "프로젝트", 1);
+        assert!(contacts.len() >= 2, "expected at least 2 contacts, got {}", contacts.len());
+    }
+
+    #[test]
+    fn test_extract_from_text_landline_format() {
+        let body = "사무실 연락처: 최수진 부장 02-555-1234";
+        let contacts = extract_from_text(body, "note", "프로젝트", 1);
+        assert!(!contacts.is_empty());
+        assert_eq!(contacts[0]["phone"], "02-555-1234");
+    }
+
+    #[test]
+    fn test_extract_from_text_phone_no_dash() {
+        let body = "정민수 사원 01012345678";
+        let contacts = extract_from_text(body, "note", "프로젝트", 1);
+        assert!(!contacts.is_empty());
+        assert_eq!(contacts[0]["phone"], "01012345678");
+    }
+}
