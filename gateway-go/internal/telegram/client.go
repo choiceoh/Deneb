@@ -357,6 +357,62 @@ func (c *Client) AnswerCallbackQuery(ctx context.Context, callbackQueryID, text 
 	return err
 }
 
+// GetFile retrieves file metadata (including download path) for a given file_id.
+func (c *Client) GetFile(ctx context.Context, fileID string) (*File, error) {
+	result, err := c.CallIdempotent(ctx, "getFile", map[string]any{
+		"file_id": fileID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var f File
+	if err := json.Unmarshal(result, &f); err != nil {
+		return nil, fmt.Errorf("decode getFile: %w", err)
+	}
+	return &f, nil
+}
+
+// FileDownloadURL returns the direct download URL for a Telegram file.
+// The filePath comes from GetFile().FilePath.
+func (c *Client) FileDownloadURL(filePath string) string {
+	return "https://api.telegram.org/file/bot" + c.token + "/" + filePath
+}
+
+// DownloadFile downloads a file from Telegram by file_id.
+// Returns the raw bytes and the file path (useful for MIME detection from extension).
+func (c *Client) DownloadFile(ctx context.Context, fileID string) ([]byte, string, error) {
+	f, err := c.GetFile(ctx, fileID)
+	if err != nil {
+		return nil, "", fmt.Errorf("getFile: %w", err)
+	}
+	if f.FilePath == "" {
+		return nil, "", fmt.Errorf("file has no download path (may exceed 20 MB)")
+	}
+
+	url := c.FileDownloadURL(f.FilePath)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("create download request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("download file: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
+	}
+
+	// Limit to 50 MB (Telegram's max file size for bots).
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024*1024))
+	if err != nil {
+		return nil, "", fmt.Errorf("read file data: %w", err)
+	}
+	return data, f.FilePath, nil
+}
+
 // DeleteMessage deletes a message.
 func (c *Client) DeleteMessage(ctx context.Context, chatID, messageID int64) error {
 	_, err := c.CallIdempotent(ctx, "deleteMessage", map[string]any{

@@ -172,27 +172,20 @@ func executeAgentRun(
 		}
 	}
 
-	// If context assembly failed or had no history, build user message.
+	// Build or augment user message with attachments.
 	if len(messages) == 0 && params.Message != "" {
-		// Include attachments as multimodal content blocks if present.
+		// No history — build the user message from scratch.
 		if len(params.Attachments) > 0 {
-			blocks := []llm.ContentBlock{{Type: "text", Text: params.Message}}
-			for _, att := range params.Attachments {
-				if att.URL != "" && att.Type == "image" {
-					blocks = append(blocks, llm.ContentBlock{
-						Type: "image",
-						Source: &llm.ImageSource{
-							Type:      "url",
-							MediaType: att.MimeType,
-							Data:      att.URL,
-						},
-					})
-				}
-			}
+			blocks := buildAttachmentBlocks(params.Message, params.Attachments)
 			messages = []llm.Message{llm.NewBlockMessage("user", blocks)}
 		} else {
 			messages = []llm.Message{llm.NewTextMessage("user", params.Message)}
 		}
+	} else if len(messages) > 0 && len(params.Attachments) > 0 {
+		// History exists but current message has attachments — replace the
+		// last user message (which was persisted as text-only) with a
+		// multimodal version that includes the image/video content blocks.
+		messages = appendAttachmentsToHistory(messages, params.Message, params.Attachments)
 	}
 
 	// 3. Resolve model and provider.
@@ -499,6 +492,102 @@ func resolveDefaultBaseURL(providerID string) string {
 	default:
 		return ""
 	}
+}
+
+// buildAttachmentBlocks creates a multimodal content block array from text and
+// attachments. Images with base64 Data get Anthropic-native ImageSource blocks;
+// images with URL get URL-referenced blocks.
+func buildAttachmentBlocks(text string, attachments []ChatAttachment) []llm.ContentBlock {
+	blocks := make([]llm.ContentBlock, 0, len(attachments)+1)
+	if text != "" {
+		blocks = append(blocks, llm.ContentBlock{Type: "text", Text: text})
+	}
+	for _, att := range attachments {
+		if att.Type != "image" {
+			continue
+		}
+		if att.Data != "" {
+			// Base64-encoded inline image (from Telegram download).
+			blocks = append(blocks, llm.ContentBlock{
+				Type: "image",
+				Source: &llm.ImageSource{
+					Type:      "base64",
+					MediaType: att.MimeType,
+					Data:      att.Data,
+				},
+			})
+		} else if att.URL != "" {
+			blocks = append(blocks, llm.ContentBlock{
+				Type: "image",
+				Source: &llm.ImageSource{
+					Type:      "url",
+					MediaType: att.MimeType,
+					Data:      att.URL,
+				},
+			})
+		}
+	}
+	return blocks
+}
+
+// appendAttachmentsToHistory finds the last user message in the history and
+// replaces it with a multimodal version that includes attachment content blocks.
+// This is needed because transcript persistence stores text only; the
+// attachments must be re-injected before sending to the LLM.
+func appendAttachmentsToHistory(messages []llm.Message, text string, attachments []ChatAttachment) []llm.Message {
+	// Find the last user message.
+	lastUserIdx := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		var role struct {
+			Role string `json:"role"`
+		}
+		if err := json.Unmarshal(messages[i].Content, &role); err == nil && role.Role == "" {
+			// Content is a string, not structured. Check role from the Message.
+		}
+		if messages[i].Role == "user" {
+			lastUserIdx = i
+			break
+		}
+	}
+
+	if lastUserIdx < 0 {
+		// No user message in history; append a new multimodal message.
+		blocks := buildAttachmentBlocks(text, attachments)
+		return append(messages, llm.NewBlockMessage("user", blocks))
+	}
+
+	// Replace the last user message with a multimodal version.
+	// Extract existing text from the message.
+	existingText := extractTextFromMessage(messages[lastUserIdx])
+	if existingText == "" {
+		existingText = text
+	}
+
+	blocks := buildAttachmentBlocks(existingText, attachments)
+	result := make([]llm.Message, len(messages))
+	copy(result, messages)
+	result[lastUserIdx] = llm.NewBlockMessage("user", blocks)
+	return result
+}
+
+// extractTextFromMessage extracts the text content from a Message.
+// Handles both string content and structured content block arrays.
+func extractTextFromMessage(msg llm.Message) string {
+	// Try as plain string first.
+	var s string
+	if err := json.Unmarshal(msg.Content, &s); err == nil {
+		return s
+	}
+	// Try as content block array.
+	var blocks []llm.ContentBlock
+	if err := json.Unmarshal(msg.Content, &blocks); err == nil {
+		for _, b := range blocks {
+			if b.Type == "text" && b.Text != "" {
+				return b.Text
+			}
+		}
+	}
+	return ""
 }
 
 // isContextOverflow checks if an error indicates a context window overflow.

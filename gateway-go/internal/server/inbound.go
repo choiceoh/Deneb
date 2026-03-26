@@ -16,6 +16,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -55,7 +56,16 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	msg := update.Message
-	if msg == nil || msg.Text == "" {
+	if msg == nil {
+		return
+	}
+
+	// Determine the text body: Text for text messages, Caption for media messages.
+	msgText := media.MessageText(msg)
+	hasMedia := media.HasMedia(msg)
+
+	// Skip messages with neither text nor processable media.
+	if msgText == "" && !hasMedia {
 		return
 	}
 
@@ -71,8 +81,8 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	msgCtx := &autoreply.MsgContext{
-		Body:              msg.Text,
-		RawBody:           msg.Text,
+		Body:              msgText,
+		RawBody:           msgText,
 		From:              chatID,
 		To:                chatID,
 		SessionKey:        sessionKey,
@@ -94,7 +104,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		msgCtx.BodyForCommands = autoreply.StripMentions(msgCtx.BodyForCommands, "")
 	}
 
-	// Try slash command dispatch.
+	// Try slash command dispatch (only for text messages with commands).
 	trimmed := strings.TrimSpace(msgCtx.BodyForCommands)
 	if strings.HasPrefix(trimmed, "/") {
 		cmdKey := extractCommandKey(trimmed)
@@ -125,10 +135,12 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	// Parse inline directives (!model, !think, etc.) and clean the message body.
-	directives := autoreply.ParseInlineDirectives(msgCtx.BodyForAgent, nil)
-	agentMessage := directives.Cleaned
-	if agentMessage == "" {
-		agentMessage = msgCtx.BodyForAgent
+	agentMessage := msgCtx.BodyForAgent
+	if agentMessage != "" {
+		directives := autoreply.ParseInlineDirectives(agentMessage, nil)
+		if directives.Cleaned != "" {
+			agentMessage = directives.Cleaned
+		}
 	}
 
 	// Interactive replies: extract reply context when user replies to a message.
@@ -139,6 +151,46 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		}
 	}
 
+	// Extract media attachments (download + base64-encode).
+	var attachments []chat.ChatAttachment
+	if hasMedia {
+		tgClient := p.server.telegramPlug.Client()
+		if tgClient != nil {
+			mediaAtts := media.ExtractAttachments(
+				context.Background(), tgClient, msg, p.logger,
+			)
+			for _, ma := range mediaAtts {
+				attachments = append(attachments, chat.ChatAttachment{
+					Type:     ma.Type,
+					MimeType: ma.MimeType,
+					Data:     ma.Data,
+					Name:     ma.Name,
+					Size:     ma.Size,
+				})
+			}
+		}
+
+		// If no text was provided with media, use a default analysis prompt.
+		if agentMessage == "" && len(attachments) > 0 {
+			agentMessage = "이 미디어를 분석해 주세요."
+		}
+	}
+
+	// Auto-detect YouTube URLs and extract transcript as context.
+	if agentMessage != "" && media.IsYouTubeURL(agentMessage) {
+		ytURLs := media.ExtractYouTubeURLs(agentMessage)
+		for _, ytURL := range ytURLs {
+			ytCtx, ytCancel := context.WithTimeout(context.Background(), 90*time.Second)
+			ytResult, err := media.ExtractYouTubeTranscript(ytCtx, ytURL)
+			ytCancel()
+			if err != nil {
+				p.logger.Warn("youtube transcript extraction failed", "url", ytURL, "error", err)
+				continue
+			}
+			agentMessage = agentMessage + "\n\n" + media.FormatYouTubeResult(ytResult)
+		}
+	}
+
 	// Enrich message with fetched link content.
 	if linkSummary := EnrichMessageWithLinks(
 		context.Background(), agentMessage, defaultLinkFetcher, p.logger,
@@ -146,24 +198,30 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		agentMessage = agentMessage + "\n\n" + linkSummary
 	}
 
-	// Dispatch to chat.send with the preprocessed message.
+	// Build delivery context with triggering message ID for reply threading.
 	delivery := map[string]any{
 		"channel": "telegram",
 		"to":      chatID,
 	}
-	// Pass the triggering message ID for [[reply_to_current]] support.
 	if msg.MessageID != 0 {
 		delivery["messageId"] = strconv.FormatInt(msg.MessageID, 10)
 	}
 
+	// Build chat.send params.
+	sendParams := map[string]any{
+		"sessionKey": sessionKey,
+		"message":    agentMessage,
+		"delivery":   delivery,
+	}
+	if len(attachments) > 0 {
+		sendParams["attachments"] = attachments
+	}
+
+	// Dispatch to chat.send with the preprocessed message and media attachments.
 	req, err := protocol.NewRequestFrame(
 		"tg-"+chatID+"-"+strconv.FormatInt(msg.MessageID, 10),
 		"chat.send",
-		map[string]any{
-			"sessionKey": sessionKey,
-			"message":    agentMessage,
-			"delivery":   delivery,
-		},
+		sendParams,
 	)
 	if err != nil {
 		p.logger.Error("failed to build chat.send request", "error", err)

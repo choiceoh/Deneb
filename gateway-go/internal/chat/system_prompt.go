@@ -55,7 +55,8 @@ var coreToolSummaries = map[string]string{
 	"sessions_spawn":   "Spawn an isolated sub-agent session",
 	"subagents":        "List, steer, or kill sub-agent runs",
 	"session_status":   "Show session status and usage",
-	"image":            "Analyze images with a vision model",
+	"image":                "Analyze images with a vision model",
+	"youtube_transcript":   "Extract transcript/subtitles and metadata from a YouTube video",
 }
 
 // toolOrder defines the display order for tools in the system prompt.
@@ -66,7 +67,7 @@ var toolOrder = []string{
 	"memory_search", "memory_get",
 	"nodes", "cron", "message", "gateway",
 	"sessions_list", "sessions_history", "sessions_send",
-	"sessions_spawn", "subagents", "session_status", "image",
+	"sessions_spawn", "subagents", "session_status", "image", "youtube_transcript",
 }
 
 // BuildSystemPrompt assembles the full system prompt from all components.
