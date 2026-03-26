@@ -375,25 +375,28 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 
 ### Multi-Language Build (Makefile)
 
-| Command            | Description                                          |
-| ------------------ | ---------------------------------------------------- |
-| `make all`         | Build Rust + Go (release)                            |
-| `make rust`        | Build Rust core library (release)                    |
-| `make rust-test`   | Run Rust tests (`cargo test`)                        |
-| `make go`          | Build Go gateway                                     |
-| `make go-test`     | Run Go tests (`go test ./...`)                       |
-| `make go-run`      | Run Go gateway locally                               |
-| `make go-dev`      | Run Go gateway in dev mode (auto-restart on SIGUSR1) |
-| `make test`        | Run Rust + Go tests                                  |
-| `make check`       | Full check: proto-check + rust-test + go-test + ts   |
-| `make clean`       | Clean Rust + Go build artifacts                      |
-| `make proto`       | Generate protobuf code (Go + Rust + TS, parallel)    |
-| `make proto-go`    | Generate Go protobuf structs only                    |
-| `make proto-rust`  | Generate Rust protobuf structs only                  |
-| `make proto-ts`    | Generate TypeScript protobuf types only              |
-| `make proto-check` | Generate + verify no uncommitted diffs               |
-| `make proto-lint`  | Lint proto files only (buf lint)                     |
-| `make proto-watch` | Watch proto files and regenerate on change           |
+| Command             | Description                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| `make all`          | Build Rust + Go (release)                                    |
+| `make rust`         | Build Rust core library (release, minimal — no vega/ml)      |
+| `make rust-vega`    | Build Rust core + Vega search (FTS-only, no ML)              |
+| `make rust-dgx`     | Build Rust core + Vega + ML + CUDA (DGX Spark production)    |
+| `make rust-test`    | Run Rust tests (`cargo test`)                                |
+| `make go`           | Build Go gateway                                             |
+| `make go-test`      | Run Go tests (`go test ./...`)                               |
+| `make go-run`       | Run Go gateway locally                                       |
+| `make go-dev`       | Run Go gateway in dev mode (auto-restart on SIGUSR1)         |
+| `make gateway-dgx`  | Build DGX Spark production gateway (vega + ml + cuda)        |
+| `make test`         | Run Rust + Go tests                                          |
+| `make check`        | Full check: proto-check + rust-test + go-test + ts           |
+| `make clean`        | Clean Rust + Go build artifacts                              |
+| `make proto`        | Generate protobuf code (Go + Rust + TS, parallel)            |
+| `make proto-go`     | Generate Go protobuf structs only                            |
+| `make proto-rust`   | Generate Rust protobuf structs only                          |
+| `make proto-ts`     | Generate TypeScript protobuf types only                      |
+| `make proto-check`  | Generate + verify no uncommitted diffs                       |
+| `make proto-lint`   | Lint proto files only (buf lint)                             |
+| `make proto-watch`  | Watch proto files and regenerate on change                   |
 
 ### Development
 
@@ -796,28 +799,23 @@ This runs the smart gate, pushes, and creates the PR automatically. Options: `--
 
 ## Go Gateway Migration TODO (TS → Go 포팅 잔여 작업)
 
-Go 게이트웨이 마이그레이션 완료 후 누락된 기능 목록. Node.js 브릿지는 이미 완전 제거됨. RPC 메서드는 parity test로 관리되어 대부분 포팅 완료. **주요 격차는 HTTP 레이어**에 집중.
+Go 게이트웨이 마이그레이션 **완료** (2026-03-26 평가). Node.js 브릿지 완전 제거. RPC 130+ 메서드 parity test 통과. HTTP 레이어 포함 P0~P3 전항목 및 ML 빌드 체인 구현됨.
 
-### P0 (Critical)
+### P0 (Critical) — 구현 완료
 
-- [ ] **Hooks HTTP 엔드포인트** — 외부 webhook 수신 (`POST /hooks/*`)
-  - TS 참조: `src/gateway/http/server-http.ts`, `src/gateway/hooks.ts`, `src/gateway/hooks-mapping.ts`
-  - 기능: Bearer 토큰 인증, rate limiting, idempotency, wake/agent 디스패치, 매핑 시스템, 템플릿, transform 함수
-  - Go 현재: `gateway-go/internal/hooks/`는 내부 이벤트 핸들러만 (HTTP webhook 수신 없음)
-  - 영향: GitHub, Gmail, CI/CD, Slack 등 외부 서비스에서 에이전트 트리거 불가
+- [x] **Hooks HTTP 엔드포인트** — 외부 webhook 수신 (`POST /hooks/*`)
+  - Go 구현: `gateway-go/internal/server/hooks_http.go` (34KB) + 테스트 (24KB)
+  - Bearer 토큰 인증, rate limiting, idempotency, wake/agent 디스패치, 매핑 시스템, 템플릿, transform 함수
 
-### P1 (High)
+### P1 (High) — 구현 완료
 
-- [ ] **OpenAI Chat Completions HTTP API** — `POST /v1/chat/completions`
-  - TS 참조: `src/gateway/openai-http.ts`
-  - 기능: OpenAI-호환 JSON/SSE 스트리밍, 이미지 지원 (max 8개/20MB), 에이전트 통합
-  - Go 현재: outbound 클라이언트만 (`gateway-go/internal/llm/openai.go`), 서버 측 없음
-  - 영향: LangChain, OpenAI SDK 래퍼 등 외부 클라이언트 연동 불가
+- [x] **OpenAI Chat Completions HTTP API** — `POST /v1/chat/completions`
+  - Go 구현: `gateway-go/internal/server/openai_http.go` (482줄)
+  - OpenAI-호환 JSON/SSE 스트리밍, 이미지 지원, 에이전트 통합
 
-- [ ] **Open Responses HTTP API** — `POST /v1/responses`
-  - TS 참조: `src/gateway/openresponses-http.ts`
-  - 기능: Open Responses 프로토콜, 클라이언트 제공 도구, SSE 스트리밍 (10종 이벤트)
-  - Go 현재: 미구현
+- [x] **Open Responses HTTP API** — `POST /v1/responses`
+  - Go 구현: `gateway-go/internal/server/responses_http.go` (446줄)
+  - Open Responses 프로토콜, 클라이언트 제공 도구, SSE 스트리밍
 
 - [x] ~~**Control UI (SPA)** — 불필요 (단일 유저 Telegram 전용 배포이므로 제거)~~
 
@@ -860,3 +858,12 @@ Go 게이트웨이 마이그레이션 완료 후 누락된 기능 목록. Node.j
 - [x] **Credential planner / Probe auth** — 단일 유저 배포용 간소화
   - Go 구현: `gateway-go/internal/auth/credentials.go`
   - env → config 순서 해석, secret ref 거부, probe 역할 지원
+
+### 남은 격차 — 구현 완료
+
+- [x] **ML 크레이트 빌드 체인 활성화** — `make rust-dgx` / `make gateway-dgx` 추가
+  - Cargo feature 체인: `deneb-core/dgx` → `vega-ml` + `cuda` → `deneb-ml/cuda` → `llama-cpp-2/cuda`
+  - DGX Spark 프로덕션: `make gateway-dgx` (Vega FTS + 시맨틱 검색 + CUDA GGUF 추론)
+  - CUDA 없는 환경: `make rust-vega` (FTS-only 모드)
+  - 환경 변수: `VEGA_MODEL_EMBEDDER`, `VEGA_MODEL_RERANKER`, `VEGA_MODEL_EXPANDER` (GGUF 경로)
+  - 모델 자동 감지: `~/.deneb/models/*.gguf` (gateway-go/internal/vega/autodetect.go)
