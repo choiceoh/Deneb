@@ -49,9 +49,10 @@ type AuthManager struct {
 	credentials map[string]*ManagedCredential
 	registry    *Registry
 	logger      *slog.Logger
+	stopOnce    sync.Once
 	stopCh      chan struct{}
 
-	// File-state-based cache invalidation fields.
+	// File-state-based cache invalidation fields (protected by mu).
 	authFilePath  string
 	lastAuthMtime int64 // Unix nano of last known mtime
 	lastAuthSize  int64 // File size at last read
@@ -79,6 +80,7 @@ func (am *AuthManager) SetAuthFilePath(path string) {
 
 // hasAuthFileChanged checks if the auth store file has been modified
 // since the last read. Returns true if the file should be reloaded.
+// Caller must hold am.mu (at least RLock).
 func (am *AuthManager) hasAuthFileChanged() bool {
 	if am.authFilePath == "" {
 		return false
@@ -93,6 +95,7 @@ func (am *AuthManager) hasAuthFileChanged() bool {
 }
 
 // markAuthFileRead updates the cached file state after a successful read.
+// Caller must hold am.mu (write lock).
 func (am *AuthManager) markAuthFileRead() {
 	if am.authFilePath == "" {
 		return
@@ -198,13 +201,11 @@ func (am *AuthManager) StartRotationLoop(ctx context.Context) {
 	go am.rotationLoop(ctx)
 }
 
-// Stop terminates the rotation loop.
+// Stop terminates the rotation loop. Safe for concurrent calls.
 func (am *AuthManager) Stop() {
-	select {
-	case <-am.stopCh:
-	default:
+	am.stopOnce.Do(func() {
 		close(am.stopCh)
-	}
+	})
 }
 
 func (am *AuthManager) rotationLoop(ctx context.Context) {

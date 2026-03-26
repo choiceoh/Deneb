@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,6 +25,7 @@ type TypedHookRegistration struct {
 
 // TypedHookRunner provides typed hook execution with merge strategies.
 type TypedHookRunner struct {
+	mu         sync.RWMutex
 	hooks      []TypedHookRegistration
 	logger     *slog.Logger
 	catchErrors bool
@@ -39,11 +41,15 @@ func NewTypedHookRunner(logger *slog.Logger, catchErrors bool) *TypedHookRunner 
 
 // Register adds a typed hook.
 func (r *TypedHookRunner) Register(reg TypedHookRegistration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.hooks = append(r.hooks, reg)
 }
 
 // getHooksForName returns hooks sorted by priority (higher first).
 func (r *TypedHookRunner) getHooksForName(name HookName) []TypedHookRegistration {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var matched []TypedHookRegistration
 	for _, h := range r.hooks {
 		if h.HookName == name {
@@ -58,6 +64,8 @@ func (r *TypedHookRunner) getHooksForName(name HookName) []TypedHookRegistration
 
 // getHooksForNameAndPlugin returns hooks for a name filtered by plugin.
 func (r *TypedHookRunner) getHooksForNameAndPlugin(name HookName, pluginID string) []TypedHookRegistration {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var matched []TypedHookRegistration
 	for _, h := range r.hooks {
 		if h.HookName == name && h.PluginID == pluginID {
@@ -353,11 +361,15 @@ func concatTextSegments(left, right string) string {
 
 // Count returns the total number of typed hook registrations.
 func (r *TypedHookRunner) Count() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return len(r.hooks)
 }
 
 // CountForHook returns registrations for a specific hook.
 func (r *TypedHookRunner) CountForHook(name HookName) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	count := 0
 	for _, h := range r.hooks {
 		if h.HookName == name {
@@ -369,6 +381,8 @@ func (r *TypedHookRunner) CountForHook(name HookName) int {
 
 // ListRegisteredHooks returns unique hook names that have handlers.
 func (r *TypedHookRunner) ListRegisteredHooks() []HookName {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	seen := make(map[HookName]bool)
 	var names []HookName
 	for _, h := range r.hooks {
