@@ -3,6 +3,7 @@
 //! Measures the cosine of the angle between two vectors:
 //! `cos(θ) = (A·B) / (‖A‖ × ‖B‖)`, yielding a value in [-1, 1].
 //! On x86_64, uses SSE2 intrinsics to process two f64 lanes at once;
+//! on aarch64 (DGX Spark), uses NEON intrinsics with fused multiply-add;
 //! on other architectures, falls back to a scalar loop.
 
 /// Cosine similarity between two f64 vectors.
@@ -18,7 +19,10 @@ pub fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
     #[cfg(target_arch = "x86_64")]
     let raw = cosine_similarity_sse2(&a[..len], &b[..len]);
 
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(target_arch = "aarch64")]
+    let raw = cosine_similarity_neon(&a[..len], &b[..len]);
+
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     let raw = cosine_similarity_scalar(&a[..len], &b[..len]);
 
     // Guard: NaN from bad inputs → 0.0; clamp to valid range
@@ -84,8 +88,53 @@ unsafe fn horizontal_sum_pd(v: std::arch::x86_64::__m128d) -> f64 {
     _mm_cvtsd_f64(sum)
 }
 
-/// Scalar fallback for non-x86_64 targets (e.g., ARM/Apple Silicon).
-#[cfg(not(target_arch = "x86_64"))]
+/// NEON-accelerated cosine similarity for aarch64 (DGX Spark Grace CPU).
+/// Processes two f64 elements per iteration using 128-bit NEON registers.
+#[cfg(target_arch = "aarch64")]
+#[allow(unsafe_code)]
+fn cosine_similarity_neon(a: &[f64], b: &[f64]) -> f64 {
+    use std::arch::aarch64::*;
+
+    let len = a.len();
+    let chunks = len / 2;
+    let remainder = len % 2;
+
+    // SAFETY: NEON is always available on aarch64. We process aligned pairs of f64.
+    unsafe {
+        let mut dot_vec = vdupq_n_f64(0.0);
+        let mut norm_a_vec = vdupq_n_f64(0.0);
+        let mut norm_b_vec = vdupq_n_f64(0.0);
+
+        for i in 0..chunks {
+            let offset = i * 2;
+            let va = vld1q_f64(a.as_ptr().add(offset));
+            let vb = vld1q_f64(b.as_ptr().add(offset));
+            dot_vec = vfmaq_f64(dot_vec, va, vb);
+            norm_a_vec = vfmaq_f64(norm_a_vec, va, va);
+            norm_b_vec = vfmaq_f64(norm_b_vec, vb, vb);
+        }
+
+        // Reduce 2-wide NEON accumulators to scalar sums.
+        let dot = vaddvq_f64(dot_vec);
+        let mut norm_a = vaddvq_f64(norm_a_vec);
+        let mut norm_b = vaddvq_f64(norm_b_vec);
+
+        // Scalar tail for odd-length vectors.
+        if remainder > 0 {
+            let idx = chunks * 2;
+            let av = a[idx];
+            let bv = b[idx];
+            norm_a += av * av;
+            norm_b += bv * bv;
+            return finish(dot + av * bv, norm_a, norm_b);
+        }
+
+        finish(dot, norm_a, norm_b)
+    }
+}
+
+/// Scalar fallback for targets without SIMD support.
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 fn cosine_similarity_scalar(a: &[f64], b: &[f64]) -> f64 {
     let mut dot = 0.0;
     let mut norm_a = 0.0;

@@ -9,6 +9,9 @@ use rusqlite::params;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "ml")]
+use rayon::prelude::*;
+
 use super::fts_search::ChunkRow;
 
 /// Semantic search result for a single chunk.
@@ -94,7 +97,7 @@ pub fn semantic_search(
         }
     };
 
-    let mut results: Vec<SemanticResult> = Vec::new();
+    // Collect all rows from DB first (SQLite access is single-threaded).
     let param_refs: Vec<&dyn rusqlite::types::ToSql> = filter_params
         .iter()
         .map(|p| p as &dyn rusqlite::types::ToSql)
@@ -126,46 +129,53 @@ pub fn semantic_search(
         }
     };
 
-    for row in rows.flatten() {
-        let (
-            chunk_id,
-            emb_blob,
-            project_id,
-            name,
-            client,
-            status,
-            person,
-            heading,
-            content,
-            chunk_type,
-            entry_date,
-        ) = row;
+    let all_rows: Vec<_> = rows.flatten().collect();
 
-        // Decode embedding blob (f32 little-endian)
-        let chunk_vec = blob_to_f32_vec(&emb_blob);
-        if chunk_vec.len() != query_vec.len() {
-            continue; // Dimension mismatch
-        }
-
-        // Cosine similarity (vectors are L2-normalized, so dot product = cosine)
-        let score = dot_product(&query_vec, &chunk_vec);
-
-        if score >= config.min_score {
-            results.push(SemanticResult {
+    // Parallel similarity computation across all chunks (leverages 20-core DGX Spark).
+    let mut results: Vec<SemanticResult> = all_rows
+        .par_iter()
+        .filter_map(|row| {
+            let (
                 chunk_id,
+                emb_blob,
                 project_id,
-                project_name: name,
+                name,
                 client,
                 status,
-                person_internal: person,
-                section_heading: heading,
+                person,
+                heading,
                 content,
                 chunk_type,
                 entry_date,
-                score,
-            });
-        }
-    }
+            ) = row;
+
+            let chunk_vec = blob_to_f32_vec(emb_blob);
+            if chunk_vec.len() != query_vec.len() {
+                return None; // Dimension mismatch
+            }
+
+            // Cosine similarity (vectors are L2-normalized, so dot product = cosine)
+            let score = dot_product_simd(&query_vec, &chunk_vec);
+
+            if score >= config.min_score {
+                Some(SemanticResult {
+                    chunk_id: *chunk_id,
+                    project_id: *project_id,
+                    project_name: name.clone(),
+                    client: client.clone(),
+                    status: status.clone(),
+                    person_internal: person.clone(),
+                    section_heading: heading.clone(),
+                    content: content.clone(),
+                    chunk_type: chunk_type.clone(),
+                    entry_date: entry_date.clone(),
+                    score,
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
 
     // Sort by score descending, take top_k
     results.sort_by(|a, b| {
@@ -260,8 +270,8 @@ pub fn embed_chunks(
     }
 
     let mut count = 0;
-    // Process in batches of 16
-    for batch in chunks.chunks(16) {
+    // Process in batches of 32 (increased for DGX Spark throughput).
+    for batch in chunks.chunks(32) {
         let texts: Vec<&str> = batch.iter().map(|(_, content)| content.as_str()).collect();
         let result = embedder.embed(&texts)?;
 
@@ -312,8 +322,62 @@ fn blob_to_f32_vec(blob: &[u8]) -> Vec<f32> {
 }
 
 /// Dot product of two f32 vectors (cosine similarity for L2-normalized vectors).
+/// SIMD-optimized: uses NEON on aarch64, SSE on x86_64, scalar fallback otherwise.
 #[allow(dead_code)]
-fn dot_product(a: &[f32], b: &[f32]) -> f64 {
+fn dot_product_simd(a: &[f32], b: &[f32]) -> f64 {
+    let len = a.len().min(b.len());
+    if len == 0 {
+        return 0.0;
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        dot_product_neon(&a[..len], &b[..len])
+    }
+
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        dot_product_scalar(&a[..len], &b[..len])
+    }
+}
+
+/// NEON-accelerated f32 dot product for aarch64.
+/// Processes 4 f32 elements per iteration using 128-bit NEON registers.
+#[cfg(target_arch = "aarch64")]
+#[allow(unsafe_code, dead_code)]
+fn dot_product_neon(a: &[f32], b: &[f32]) -> f64 {
+    use std::arch::aarch64::*;
+
+    let len = a.len();
+    let chunks = len / 4;
+    let remainder = len % 4;
+
+    // SAFETY: NEON is always available on aarch64.
+    unsafe {
+        let mut acc = vdupq_n_f32(0.0);
+
+        for i in 0..chunks {
+            let offset = i * 4;
+            let va = vld1q_f32(a.as_ptr().add(offset));
+            let vb = vld1q_f32(b.as_ptr().add(offset));
+            acc = vfmaq_f32(acc, va, vb);
+        }
+
+        let mut sum = vaddvq_f32(acc) as f64;
+
+        // Scalar tail for remaining elements.
+        let tail_start = chunks * 4;
+        for i in 0..remainder {
+            sum += a[tail_start + i] as f64 * b[tail_start + i] as f64;
+        }
+
+        sum
+    }
+}
+
+/// Scalar f32 dot product fallback.
+#[allow(dead_code)]
+fn dot_product_scalar(a: &[f32], b: &[f32]) -> f64 {
     a.iter()
         .zip(b.iter())
         .map(|(&x, &y)| x as f64 * y as f64)
@@ -349,10 +413,10 @@ mod tests {
     fn test_dot_product() {
         let a = vec![1.0f32, 0.0, 0.0];
         let b = vec![1.0f32, 0.0, 0.0];
-        assert!((dot_product(&a, &b) - 1.0).abs() < 1e-6);
+        assert!((dot_product_simd(&a, &b) - 1.0).abs() < 1e-6);
 
         let c = vec![0.0f32, 1.0, 0.0];
-        assert!((dot_product(&a, &c)).abs() < 1e-6);
+        assert!((dot_product_simd(&a, &c)).abs() < 1e-6);
     }
 
     #[test]

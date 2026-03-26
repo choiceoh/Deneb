@@ -11,7 +11,8 @@ import (
 	"time"
 )
 
-const memoryFileCacheTTL = 2 * time.Second
+// Extended for single-user DGX Spark: memory files rarely change between messages.
+const memoryFileCacheTTL = 30 * time.Second
 
 // memFileCache caches the result of collectMemoryFiles to avoid repeated
 // os.Stat + os.ReadDir calls within a short window. TTL-based invalidation

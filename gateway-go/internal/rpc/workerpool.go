@@ -30,16 +30,17 @@ func NewWorkerPool(maxWorkers int) *WorkerPool {
 	}
 }
 
-// defaultPoolSize computes the pool size: 2× logical CPU cores, clamped to [4, 64].
+// defaultPoolSize computes the pool size: 2× logical CPU cores, clamped to [4, 128].
 // The 2× multiplier accounts for I/O-bound handlers (DB, LLM calls) that spend
-// most time waiting rather than using CPU.
+// most time waiting rather than using CPU. Upper bound raised for DGX Spark
+// workloads where GPU inference waits dominate.
 func defaultPoolSize() int {
 	n := runtime.NumCPU() * 2
 	if n < 4 {
 		n = 4
 	}
-	if n > 64 {
-		n = 64
+	if n > 128 {
+		n = 128
 	}
 	return n
 }

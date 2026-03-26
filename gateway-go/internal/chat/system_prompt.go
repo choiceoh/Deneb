@@ -5,10 +5,31 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
+
+// cachedTimezone and cachedTimezoneLocation cache the resolved timezone
+// at startup to avoid time.LoadLocation() on every chat message.
+var (
+	cachedTimezone     string
+	cachedTimezoneLoc  *time.Location
+	cachedTimezoneOnce sync.Once
+)
+
+// loadCachedTimezone resolves and caches timezone once.
+func loadCachedTimezone() (string, *time.Location) {
+	cachedTimezoneOnce.Do(func() {
+		cachedTimezone = resolveTimezone()
+		loc, err := time.LoadLocation(cachedTimezone)
+		if err == nil {
+			cachedTimezoneLoc = loc
+		}
+	})
+	return cachedTimezone, cachedTimezoneLoc
+}
 
 // SystemPromptParams holds all parameters for building the agent system prompt.
 type SystemPromptParams struct {
@@ -161,14 +182,16 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	}
 	sb.WriteString("\n")
 
-	// Current Date & Time.
+	// Current Date & Time (uses cached timezone to avoid per-request LoadLocation).
 	tz := params.UserTimezone
 	if tz == "" {
-		tz = resolveTimezone()
+		tz, _ = loadCachedTimezone()
 	}
 	now := time.Now()
-	loc, err := time.LoadLocation(tz)
-	if err == nil {
+	_, cachedLoc := loadCachedTimezone()
+	if cachedLoc != nil && tz == cachedTimezone {
+		now = now.In(cachedLoc)
+	} else if loc, err := time.LoadLocation(tz); err == nil {
 		now = now.In(loc)
 	}
 	sb.WriteString("## Current Date & Time\n")
@@ -275,11 +298,13 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 
 	tz := params.UserTimezone
 	if tz == "" {
-		tz = resolveTimezone()
+		tz, _ = loadCachedTimezone()
 	}
 	now := time.Now()
-	loc, err := time.LoadLocation(tz)
-	if err == nil {
+	_, cachedLoc2 := loadCachedTimezone()
+	if cachedLoc2 != nil && tz == cachedTimezone {
+		now = now.In(cachedLoc2)
+	} else if loc, err := time.LoadLocation(tz); err == nil {
 		now = now.In(loc)
 	}
 	dynamic.WriteString("## Current Date & Time\n")

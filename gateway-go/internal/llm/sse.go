@@ -18,7 +18,7 @@ import (
 //
 // Multi-line data fields are joined with "\n".
 func ParseSSE(r io.Reader) <-chan StreamEvent {
-	ch := make(chan StreamEvent, 16)
+	ch := make(chan StreamEvent, 64)
 	go func() {
 		defer close(ch)
 

@@ -44,6 +44,9 @@ thiserror.workspace = true
 napi = { version = "2", features = ["napi9", "serde-json"], optional = true }
 napi-derive = { version = "2", optional = true }
 
+# Data parallelism (20-core DGX Spark utilization)
+rayon.workspace = true
+
 # Regex (ReDoS-safe by design)
 regex.workspace = true
 # Fancy regex for patterns with lookahead/lookbehind (e.g., secret ref ID validation).

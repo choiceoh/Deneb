@@ -53,6 +53,19 @@ pub struct ModelConfig {
     pub embedding: bool,
     /// Unload after this many seconds of inactivity (0 = never).
     pub unload_ttl_secs: u64,
+    /// Number of threads for inference. 0 = use all available cores.
+    pub n_threads: u32,
+}
+
+/// Detect optimal thread count for inference.
+/// Uses all available cores minus 2 (reserve for Go runtime and OS),
+/// with a minimum of 4.
+fn default_n_threads() -> u32 {
+    let cpus = std::thread::available_parallelism()
+        .map(|n| n.get() as u32)
+        .unwrap_or(4);
+    // Reserve 2 cores for Go gateway + OS, minimum 4 inference threads.
+    cpus.saturating_sub(2).max(4)
 }
 
 impl ModelConfig {
@@ -65,6 +78,7 @@ impl ModelConfig {
             n_batch: 512,
             embedding: true,
             unload_ttl_secs: ttl,
+            n_threads: default_n_threads(),
         }
     }
 
@@ -77,6 +91,7 @@ impl ModelConfig {
             n_batch: 512,
             embedding: false,
             unload_ttl_secs: ttl,
+            n_threads: default_n_threads(),
         }
     }
 
@@ -89,6 +104,7 @@ impl ModelConfig {
             n_batch: 512,
             embedding: false,
             unload_ttl_secs: ttl,
+            n_threads: default_n_threads(),
         }
     }
 }
@@ -197,6 +213,12 @@ impl ModelManager {
         );
 
         Ok(model_arc)
+    }
+
+    /// Get the config for a given role (if configured).
+    pub fn get_config(&self, role: ModelRole) -> Option<ModelConfig> {
+        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        inner.configs.get(&role).cloned()
     }
 
     /// Unload a specific model (or all if `role` is `None`).

@@ -61,10 +61,15 @@ impl LocalReranker {
         }
 
         let _model = self.manager.get_model(ModelRole::Reranker)?;
+        let _n_threads = self
+            .manager
+            .get_config(ModelRole::Reranker)
+            .map(|c| c.n_threads as i32)
+            .unwrap_or(4);
 
         #[cfg(feature = "llama")]
         {
-            self.rerank_with_model(&_model.model, query, documents)
+            self.rerank_with_model(&_model.model, query, documents, _n_threads)
         }
 
         #[cfg(not(feature = "llama"))]
@@ -97,11 +102,15 @@ impl LocalReranker {
         model: &llama_cpp_2::LlamaModel,
         query: &str,
         documents: &[&str],
+        n_threads: i32,
     ) -> Result<Vec<RankedDocument>, MlError> {
         use llama_cpp_2::context::params::LlamaContextParams;
         use llama_cpp_2::llama_batch::LlamaBatch;
 
-        let ctx_params = LlamaContextParams::default().with_n_ctx(std::num::NonZeroU32::new(512));
+        let ctx_params = LlamaContextParams::default()
+            .with_n_ctx(std::num::NonZeroU32::new(512))
+            .with_n_threads(n_threads)
+            .with_n_threads_batch(n_threads);
         let mut ctx = model
             .new_context(None, ctx_params)
             .map_err(|e| MlError::InferenceFailed(format!("context creation: {e}")))?;
