@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	DefaultFollowupDebounceMs = 1000
+	DefaultFollowupDebounceMs = 0
 	DefaultFollowupCap        = 20
 	DefaultFollowupDrop       = types.FollowupDropSummarize
 )
