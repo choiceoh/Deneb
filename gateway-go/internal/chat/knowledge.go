@@ -93,13 +93,16 @@ func truncateRunes(s string, maxRunes int) string {
 }
 
 // formatKnowledge builds the "## 관련 지식" section from search results,
-// respecting the token budget.
+// respecting the token budget. Uses incremental token counting via sb.Len()
+// deltas to avoid O(N * totalLen) re-scanning on each iteration.
 func formatKnowledge(vegaResults []vega.SearchResult, memMatches []MemoryMatch) string {
 	var sb strings.Builder
 	sb.WriteString("## 관련 지식\n\n")
+	tokenCount := sb.Len() / charsPerToken
 
 	// Vega project results.
 	for _, r := range vegaResults {
+		before := sb.Len()
 		content := truncateRunes(r.Content, knowledgeMaxContentRunes)
 		fmt.Fprintf(&sb, "### 프로젝트: %s\n", r.ProjectName)
 		if r.Section != "" {
@@ -107,28 +110,33 @@ func formatKnowledge(vegaResults []vega.SearchResult, memMatches []MemoryMatch) 
 		} else {
 			fmt.Fprintf(&sb, "%s\n\n", content)
 		}
+		tokenCount += (sb.Len() - before) / charsPerToken
 
-		if estimateTokens(sb.String()) >= knowledgeMaxTokens {
+		if tokenCount >= knowledgeMaxTokens {
 			break
 		}
 	}
 
 	// Memory matches.
-	if len(memMatches) > 0 && estimateTokens(sb.String()) < knowledgeMaxTokens {
+	if len(memMatches) > 0 && tokenCount < knowledgeMaxTokens {
+		before := sb.Len()
 		sb.WriteString("### 메모리\n")
+		tokenCount += (sb.Len() - before) / charsPerToken
+
 		for _, m := range memMatches {
+			before = sb.Len()
 			snippet := truncateRunes(m.Snippet, knowledgeMaxContentRunes)
 			fmt.Fprintf(&sb, "- %s (line %d): %s\n", m.File, m.Line, snippet)
+			tokenCount += (sb.Len() - before) / charsPerToken
 
-			if estimateTokens(sb.String()) >= knowledgeMaxTokens {
+			if tokenCount >= knowledgeMaxTokens {
 				break
 			}
 		}
 	}
 
-	result := sb.String()
-	if estimateTokens(result) < 10 {
+	if tokenCount < 10 {
 		return "" // too little content to be useful
 	}
-	return result
+	return sb.String()
 }

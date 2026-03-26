@@ -920,7 +920,8 @@ func (s *Server) registerPhase2Methods() {
 	}
 	var transcriptStore chat.TranscriptStore
 	if transcriptDir != "" {
-		transcriptStore = chat.NewFileTranscriptStore(transcriptDir)
+		transcriptStore = chat.NewCachedTranscriptStore(
+			chat.NewFileTranscriptStore(transcriptDir), 0)
 	}
 
 	chatCfg := chat.DefaultHandlerConfig()

@@ -19,6 +19,53 @@ const memoryFileCacheTTL = 30 * time.Second
 // follows the plugin discovery cache pattern.
 var memFileCache = &memoryFileListCache{}
 
+// memContentCache caches file contents keyed by absolute path with mtime-based
+// invalidation. Avoids repeated os.ReadFile calls for the same memory files
+// across searches within the same agent turn.
+var memContentCache = &memoryContentCache{
+	entries: make(map[string]*memContentEntry),
+}
+
+type memContentEntry struct {
+	content string
+	mtime   time.Time
+}
+
+type memoryContentCache struct {
+	mu      sync.Mutex
+	entries map[string]*memContentEntry
+}
+
+// readMemoryFile returns file content, using a mtime-based cache to skip
+// redundant reads. Falls back to os.ReadFile on cache miss or mtime change.
+func readMemoryFile(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	mtime := info.ModTime()
+
+	memContentCache.mu.Lock()
+	if entry, ok := memContentCache.entries[path]; ok && entry.mtime.Equal(mtime) {
+		content := entry.content
+		memContentCache.mu.Unlock()
+		return content, nil
+	}
+	memContentCache.mu.Unlock()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	content := string(data)
+
+	memContentCache.mu.Lock()
+	memContentCache.entries[path] = &memContentEntry{content: content, mtime: mtime}
+	memContentCache.mu.Unlock()
+
+	return content, nil
+}
+
 type memoryFileListCache struct {
 	mu        sync.Mutex
 	workspace string
@@ -100,11 +147,11 @@ func searchMemoryFiles(workspaceDir string, query string, limit int) []MemoryMat
 
 	var matches []MemoryMatch
 	for _, path := range memoryFiles {
-		data, err := os.ReadFile(path)
+		content, err := readMemoryFile(path)
 		if err != nil {
 			continue
 		}
-		lines := strings.Split(string(data), "\n")
+		lines := strings.Split(content, "\n")
 		rel, _ := filepath.Rel(workspaceDir, path)
 		if rel == "" {
 			rel = path
@@ -197,12 +244,12 @@ func toolMemoryGet(workspaceDir string) ToolFunc {
 		}
 
 		path := resolvePath(p.Path, workspaceDir)
-		data, err := os.ReadFile(path)
+		content, err := readMemoryFile(path)
 		if err != nil {
 			return "", fmt.Errorf("failed to read memory file: %w", err)
 		}
 
-		lines := strings.Split(string(data), "\n")
+		lines := strings.Split(content, "\n")
 
 		// Apply line range if specified.
 		start := 0
