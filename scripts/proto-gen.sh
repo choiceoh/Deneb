@@ -1,20 +1,18 @@
 #!/usr/bin/env bash
 # Protobuf code generation pipeline.
 #
-# Generates Go, Rust, and TypeScript types from proto/ definitions.
+# Generates Go and Rust types from proto/ definitions.
 #
 # Prerequisites:
 #   - buf (https://buf.build/docs/installation)
 #   - protoc (apt install protobuf-compiler / brew install protobuf)
 #   - protoc-gen-go (go install google.golang.org/protobuf/cmd/protoc-gen-go@latest)
-#   - ts-proto (npm install -g ts-proto)
 #   - Rust toolchain (for prost-build via cargo build)
 #
 # Usage:
 #   ./scripts/proto-gen.sh          # generate all (parallel)
 #   ./scripts/proto-gen.sh --go     # Go only
 #   ./scripts/proto-gen.sh --rust   # Rust only
-#   ./scripts/proto-gen.sh --ts     # TypeScript only
 #   ./scripts/proto-gen.sh --check  # generate + verify no uncommitted diffs
 #   ./scripts/proto-gen.sh --lint   # lint proto files only
 #   ./scripts/proto-gen.sh --watch  # watch proto files and regenerate on change
@@ -24,7 +22,6 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROTO_DIR="$REPO_ROOT/proto"
 GO_OUT="$REPO_ROOT/gateway-go/pkg/protocol/gen"
-TS_OUT="$REPO_ROOT/src/protocol/generated"
 LOCKFILE="$REPO_ROOT/.proto-gen.lock"
 HASH_FILE="$REPO_ROOT/.proto-gen.hash"
 
@@ -60,8 +57,7 @@ release_lock() { rm -f "$LOCKFILE"; }
 cleanup_on_signal() {
   warn "Interrupted — restoring generated files from git..."
   git -C "$REPO_ROOT" checkout -- \
-    "gateway-go/pkg/protocol/gen" \
-    "src/protocol/generated" 2>/dev/null || true
+    "gateway-go/pkg/protocol/gen" 2>/dev/null || true
   release_lock
   exit 130
 }
@@ -91,7 +87,6 @@ compute_proto_hash() {
   # Hash proto files + gen configs to detect changes.
   cat "$PROTO_DIR"/*.proto \
     "$PROTO_DIR"/buf.gen.go.yaml \
-    "$PROTO_DIR"/buf.gen.ts.yaml \
     "$REPO_ROOT/core-rs/core/build.rs" \
     2>/dev/null | sha256sum | cut -d' ' -f1
 }
@@ -116,18 +111,13 @@ verify_output() {
   info "$label: generated $count file(s)"
 }
 
-# Verify that every .proto file in proto/ has a corresponding generated output
-# in both Go and TypeScript directories. Catches forgotten proto files.
-# For Go, accepts either auto-generated .pb.go in gen/ or hand-written .go in
-# the parent protocol/ directory (some protos use hand-written JSON-wire types).
+# Verify that every .proto file in proto/ has a corresponding generated Go output.
 verify_completeness() {
-  local proto_count go_count ts_count missing=()
+  local proto_count go_count missing=()
   local go_parent_dir
   go_parent_dir="$(dirname "$GO_OUT")"
   proto_count=$(find "$PROTO_DIR" -maxdepth 1 -name "*.proto" -type f | wc -l)
   go_count=$(find "$GO_OUT" -maxdepth 1 -name "*.pb.go" -type f 2>/dev/null | wc -l)
-  # TS count excludes index.ts (hand-written barrel) and the google/ directory.
-  ts_count=$(find "$TS_OUT" -maxdepth 1 -name "*.ts" -type f ! -name "index.ts" 2>/dev/null | wc -l)
 
   for proto in "$PROTO_DIR"/*.proto; do
     local base
@@ -135,9 +125,6 @@ verify_completeness() {
     # Go: accept auto-generated .pb.go OR hand-written .go in parent dir.
     if [ ! -f "$GO_OUT/${base}.pb.go" ] && [ ! -f "$go_parent_dir/${base}.go" ]; then
       missing+=("Go: ${base}.pb.go (or ${base}.go)")
-    fi
-    if [ ! -f "$TS_OUT/${base}.ts" ]; then
-      missing+=("TS: ${base}.ts")
     fi
   done
 
@@ -156,16 +143,15 @@ verify_completeness() {
     for m in "${missing[@]}"; do
       warn "  - $m"
     done
-    fail "Not all .proto files have generated outputs. Found $proto_count protos, $go_count Go gen + $go_hand_count Go hand-written, $ts_count TS."
+    fail "Not all .proto files have generated outputs. Found $proto_count protos, $go_count Go gen + $go_hand_count Go hand-written."
   fi
-  info "Proto completeness: $proto_count protos → $go_count Go gen + $go_hand_count Go hand-written + $ts_count TS (all present)"
+  info "Proto completeness: $proto_count protos → $go_count Go gen + $go_hand_count Go hand-written (all present)"
 }
 
 clean_generated() {
   local dir="$1"
   if [ -d "$dir" ]; then
-    # Delete generated files but preserve hand-written barrels (index.ts).
-    find "$dir" -type f \( -name "*.pb.go" -o -name "*.ts" \) ! -name "index.ts" -delete
+    find "$dir" -type f -name "*.pb.go" -delete
     find "$dir" -mindepth 1 -type d -empty -delete 2>/dev/null || true
   fi
 }
@@ -190,40 +176,29 @@ gen_rust() {
   info "Rust generation complete"
 }
 
-gen_ts() {
-  info "Generating TypeScript → src/protocol/generated/"
-  command -v protoc-gen-ts_proto &>/dev/null || fail "protoc-gen-ts_proto not found. Install: npm install -g ts-proto"
-  clean_generated "$TS_OUT"
-  ( mkdir -p "$TS_OUT" && cd "$PROTO_DIR" && buf generate --template buf.gen.ts.yaml )
-  verify_output "$TS_OUT" "*.ts" "TypeScript"
-}
-
-# Run Go, Rust, and TS generation in parallel.
+# Run Go and Rust generation in parallel.
 gen_all_parallel() {
   check_prereqs buf rust
   info "Linting proto files..."
   (cd "$PROTO_DIR" && buf lint) || fail "buf lint failed — fix proto errors before generating"
 
-  local go_log rust_log ts_log
-  go_log=$(mktemp) rust_log=$(mktemp) ts_log=$(mktemp)
+  local go_log rust_log
+  go_log=$(mktemp) rust_log=$(mktemp)
 
-  # Launch all three in parallel.
+  # Launch both in parallel.
   gen_go   > "$go_log"   2>&1 &
   local go_pid=$!
   gen_rust > "$rust_log"  2>&1 &
   local rust_pid=$!
-  gen_ts   > "$ts_log"    2>&1 &
-  local ts_pid=$!
 
   local failures=()
 
   wait "$go_pid"   || failures+=("Go")
   wait "$rust_pid"  || failures+=("Rust")
-  wait "$ts_pid"    || failures+=("TypeScript")
 
   # Print output (success and failure both).
-  cat "$go_log" "$rust_log" "$ts_log"
-  rm -f "$go_log" "$rust_log" "$ts_log"
+  cat "$go_log" "$rust_log"
+  rm -f "$go_log" "$rust_log"
 
   if [ ${#failures[@]} -gt 0 ]; then
     fail "Generation failed for: ${failures[*]}"
@@ -238,7 +213,6 @@ check_diffs() {
   cd "$REPO_ROOT"
   local paths=(
     "gateway-go/pkg/protocol/gen"
-    "src/protocol/generated"
   )
   local has_diff=0
 
@@ -332,10 +306,6 @@ case "$1" in
     check_prereqs "" rust
     gen_rust
     ;;
-  --ts)
-    check_prereqs buf
-    gen_ts
-    ;;
   --check)
     if is_up_to_date; then
       info "Proto hash unchanged — skipping regeneration"
@@ -348,6 +318,6 @@ case "$1" in
     gen_all_parallel
     ;;
   *)
-    fail "Unknown option: $1. Use --go, --rust, --ts, --check, --lint, --watch, or no args."
+    fail "Unknown option: $1. Use --go, --rust, --check, --lint, --watch, or no args."
     ;;
 esac

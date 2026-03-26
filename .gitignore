@@ -1,11 +1,6 @@
-# Dependencies
-node_modules/
-
 # Build output
 dist/
-dist-runtime/
 build/
-*.tsbuildinfo
 .artifacts/
 
 # Environment
@@ -26,56 +21,14 @@ Thumbs.db
 
 # Logs
 *.log
-npm-debug.log*
-
-# Coverage
-coverage/
-
-# Playwright
-test-results/
-playwright-report/
-blob-report/
-
-# Deneb runtime
-deneb-3142/
-.config-backups/
-
-# Vega subtree
-__pycache__/
-*.pyc
-*.db
-.session.json
-*.hash
-
-# Vitest test artifacts
-__deneb_vitest__/
-test/reports/
-test/fixtures/failed-tests.json
-
-# Highway (Rust test engine)
-tools/highway/target/
-.highway-cache.json
 
 # Rust build artifacts (workspace)
 /target/
-native/target/
 core-rs/target/
-core-rs-napi/target/
+cli-rs/target/
 
-# Native addon build output (unified in core-rs-napi/)
-core-rs-napi/*.node
-core-rs-napi/index.js
-core-rs-napi/index.d.ts
-core-rs-napi/node_modules/
-
-# Legacy native/ build output
-native/*.node
-native/index.js
-native/index.d.ts
-
-# Rust build artifacts
-core-rs/*.node
-core-rs/npm/
+# Go build artifacts
+gateway-go/deneb-gateway
 
 # Temp
 /tmp/
@@ -84,8 +37,7 @@ core-rs/npm/
 # Proto generation
 .proto-gen.lock
 .proto-gen.hash
-native/package-lock.json
 
-# Generated docs (recreate via pnpm config:docs:gen)
+# Generated docs
 docs/.generated/config-baseline.json
 docs/.generated/config-baseline.jsonl

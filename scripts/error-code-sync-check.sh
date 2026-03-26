@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # Error code sync check.
 #
-# Part 1: Protocol error codes — 3-way sync (proto / Rust / TypeScript).
+# Part 1: Protocol error codes — 2-way sync (proto / Rust).
 # Part 2: FFI error codes — 2-way sync (Rust lib.rs / Go errors.go).
 set -euo pipefail
 
 PROTO_FILE="proto/gateway.proto"
 RUST_FILE="core-rs/core/src/protocol/error_codes.rs"
-TS_FILE="src/gateway/protocol/schema/error-codes.ts"
 RUST_FFI_FILE="core-rs/core/src/lib.rs"
 GO_FFI_FILE="gateway-go/internal/ffi/errors.go"
 
@@ -19,7 +18,7 @@ fail() { echo "ERROR: $*" >&2; exit 1; }
 errors=0
 
 # =========================================================================
-# Part 1: Protocol error codes (proto / Rust / TypeScript)
+# Part 1: Protocol error codes (proto / Rust)
 # =========================================================================
 
 # --- Extract from proto (strip ERROR_CODE_ prefix, skip UNSPECIFIED) ---
@@ -31,23 +30,11 @@ proto_codes=$(grep -oP 'ERROR_CODE_\K[A-Z_]+(?=\s*=)' "$PROTO_FILE" | grep -v '^
 rust_codes=$(sed -n '/fn as_str/,/^    }/p' "$RUST_FILE" | grep -oP '=> "\K[A-Z_]+(?=")' | sort)
 [[ -n "$rust_codes" ]] || fail "No error codes found in $RUST_FILE"
 
-# --- Extract from TypeScript (keys of ErrorCodes object: `KEY: "VALUE"`) ---
-ts_codes=$(sed -n '/^export const ErrorCodes/,/^} as const/p' "$TS_FILE" | grep -oP '^\s+\K[A-Z_]+(?=:\s*")' | sort)
-[[ -n "$ts_codes" ]] || fail "No error codes found in $TS_FILE"
-
 # --- Compare proto vs Rust ---
 diff_proto_rust=$(diff <(echo "$proto_codes") <(echo "$rust_codes") || true)
 if [[ -n "$diff_proto_rust" ]]; then
   echo "MISMATCH: proto vs Rust"
   echo "$diff_proto_rust"
-  errors=1
-fi
-
-# --- Compare proto vs TypeScript ---
-diff_proto_ts=$(diff <(echo "$proto_codes") <(echo "$ts_codes") || true)
-if [[ -n "$diff_proto_ts" ]]; then
-  echo "MISMATCH: proto vs TypeScript"
-  echo "$diff_proto_ts"
   errors=1
 fi
 
@@ -89,11 +76,10 @@ ffi_count=$(echo "$rust_ffi_values" | wc -l)
 if [[ "$errors" -ne 0 ]]; then
   echo ""
   echo "Error codes are out of sync."
-  echo "  proto:      $PROTO_FILE"
-  echo "  Rust:       $RUST_FILE"
-  echo "  TypeScript: $TS_FILE"
-  echo "  Rust FFI:   $RUST_FFI_FILE"
-  echo "  Go FFI:     $GO_FFI_FILE"
+  echo "  proto:    $PROTO_FILE"
+  echo "  Rust:     $RUST_FILE"
+  echo "  Rust FFI: $RUST_FFI_FILE"
+  echo "  Go FFI:   $GO_FFI_FILE"
   exit 1
 fi
 

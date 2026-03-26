@@ -19,7 +19,7 @@ repos:
         args: [--maxkb=500]
       - id: check-merge-conflict
       - id: detect-private-key
-        exclude: '(^|/)(\.secrets\.baseline$|\.detect-secrets\.cfg$|\.pre-commit-config\.yaml$|apps/ios/fastlane/Fastfile$|.*\.test\.ts$)'
+        exclude: '(^|/)(\.secrets\.baseline$|\.detect-secrets\.cfg$|\.pre-commit-config\.yaml$|apps/ios/fastlane/Fastfile$)'
 
   # Secret detection (same as CI)
   - repo: https://github.com/Yelp/detect-secrets
@@ -31,55 +31,13 @@ repos:
           - .secrets.baseline
           - --exclude-files
           - '(^|/)pnpm-lock\.yaml$'
-          - --exclude-lines
-          - 'key_content\.include\?\("BEGIN PRIVATE KEY"\)'
-          - --exclude-lines
-          - 'case \.apiKeyEnv: "API key \(env var\)"'
-          - --exclude-lines
-          - 'case apikey = "apiKey"'
-          - --exclude-lines
-          - '"gateway\.remote\.password"'
-          - --exclude-lines
-          - '"gateway\.auth\.password"'
-          - --exclude-lines
-          - '"talk\.apiKey"'
-          - --exclude-lines
-          - '=== "string"'
-          - --exclude-lines
-          - 'typeof remote\?\.password === "string"'
-          - --exclude-lines
-          - "DENEB_DOCKER_GPG_FINGERPRINT="
-          - --exclude-lines
-          - '"secretShape": "(secret_input|sibling_ref)"'
-          - --exclude-lines
-          - 'API key rotation \(provider-specific\): set `\*_API_KEYS`'
-          - --exclude-lines
-          - 'password: `DENEB_GATEWAY_PASSWORD` -> `gateway\.auth\.password` -> `gateway\.remote\.password`'
-          - --exclude-lines
-          - 'password: `DENEB_GATEWAY_PASSWORD` -> `gateway\.remote\.password` -> `gateway\.auth\.password`'
-          - --exclude-files
-          - '^src/gateway/client\.watchdog\.test\.ts$'
-          - --exclude-lines
-          - 'export CUSTOM_API_K[E]Y="your-key"'
-          - --exclude-lines
-          - 'grep -q ''N[O]DE_COMPILE_CACHE=/var/tmp/deneb-compile-cache'' ~/.bashrc \|\| cat >> ~/.bashrc <<''EOF'''
-          - --exclude-lines
-          - 'env: \{ MISTRAL_API_K[E]Y: "sk-\.\.\." \},'
-          - --exclude-lines
-          - '"ap[i]Key": "xxxxx"(,)?'
-          - --exclude-lines
-          - 'ap[i]Key: "A[I]za\.\.\.",'
-          - --exclude-lines
-          - '"ap[i]Key": "(resolved|normalized|legacy)-key"(,)?'
-          - --exclude-lines
-          - 'sparkle:edSignature="[A-Za-z0-9+/=]+"'
+
   # Shell script linting
   - repo: https://github.com/koalaman/shellcheck-precommit
     rev: v0.11.0
     hooks:
       - id: shellcheck
-        args: [--severity=error] # Only fail on errors, not warnings/info
-        # Exclude vendor and scripts with embedded code or known issues
+        args: [--severity=error]
         exclude: "^(vendor/|scripts/e2e/)"
 
   # GitHub Actions linting
@@ -95,45 +53,3 @@ repos:
       - id: zizmor
         args: [--persona=regular, --min-severity=medium, --min-confidence=medium]
         exclude: "^(vendor/|Swabble/)"
-
-  # Project checks (same commands as CI)
-  - repo: local
-    hooks:
-      # pnpm audit --prod --audit-level=high
-      - id: pnpm-audit-prod
-        name: pnpm-audit-prod
-        entry: pnpm audit --prod --audit-level=high
-        language: system
-        pass_filenames: false
-
-      # oxlint --type-aware src test
-      - id: oxlint
-        name: oxlint
-        entry: scripts/pre-commit/run-node-tool.sh oxlint --type-aware src test
-        language: system
-        pass_filenames: false
-        types_or: [javascript, jsx, ts, tsx]
-
-      # oxfmt --check src test
-      - id: oxfmt
-        name: oxfmt
-        entry: scripts/pre-commit/run-node-tool.sh oxfmt --check src test
-        language: system
-        pass_filenames: false
-        types_or: [javascript, jsx, ts, tsx]
-
-      # swiftlint (same as CI)
-      - id: swiftlint
-        name: swiftlint
-        entry: swiftlint --config .swiftlint.yml
-        language: system
-        pass_filenames: false
-        types: [swift]
-
-      # swiftformat --lint (same as CI)
-      - id: swiftformat
-        name: swiftformat
-        entry: swiftformat --lint apps/macos/Sources --config .swiftformat
-        language: system
-        pass_filenames: false
-        types: [swift]

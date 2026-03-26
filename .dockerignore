@@ -1,15 +1,10 @@
 .git
 .worktrees
 
-# Sensitive files – docker-setup.sh writes .env with DENEB_GATEWAY_TOKEN
-# into the project root; keep it out of the build context.
+# Sensitive files
 .env
 .env.*
 
-.bun-cache
-.bun
-.tmp
-**/.tmp
 .DS_Store
 **/.DS_Store
 *.png
@@ -21,18 +16,6 @@
 *.mov
 *.wav
 *.mp3
-node_modules
-**/node_modules
-.pnpm-store
-**/.pnpm-store
-.turbo
-**/.turbo
-.cache
-**/.cache
-.next
-**/.next
-coverage
-**/coverage
 *.log
 tmp
 **/tmp
@@ -40,31 +23,11 @@ tmp
 # build artifacts
 dist
 **/dist
-apps/macos/.build
-apps/ios/build
-**/*.trace
+target
+**/target
 
-# large app trees not needed for CLI build
+# large trees not needed for gateway build
 apps/
 assets/
-Peekaboo/
-Swabble/
-Core/
-Users/
-vendor/
-
-# Needed for building the Canvas A2UI bundle during Docker image builds.
-# Keep the rest of apps/ and vendor/ excluded to avoid a large build context.
-!apps/shared/
-!apps/shared/DenebKit/
-!apps/shared/DenebKit/Sources/
-!apps/shared/DenebKit/Sources/DenebKit/
-!apps/shared/DenebKit/Sources/DenebKit/Resources/
-!apps/shared/DenebKit/Sources/DenebKit/Resources/tool-display.json
-!apps/shared/DenebKit/Tools/
-!apps/shared/DenebKit/Tools/CanvasA2UI/
-!apps/shared/DenebKit/Tools/CanvasA2UI/**
-!vendor/a2ui/
-!vendor/a2ui/renderers/
-!vendor/a2ui/renderers/lit/
-!vendor/a2ui/renderers/lit/**
+docs/
+skills/

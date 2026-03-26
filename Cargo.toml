@@ -1,5 +1,5 @@
 [workspace]
-members = ["core-rs-napi", "tools/highway", "cli-rs"]
+members = ["cli-rs"]
 exclude = ["core-rs"]
 resolver = "2"
 
