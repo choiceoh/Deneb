@@ -155,7 +155,7 @@ gh pr review 55 --comment --body "Looks good overall, one question below." --rep
 
 ### PR Comments
 
-```bash
+````bash
 # Simple comment
 gh pr comment 55 --body "Looks good to merge." --repo owner/repo
 
@@ -169,16 +169,19 @@ gh pr comment 55 --repo owner/repo -F - <<'EOF'
 ```ts
 // suggested fix
 if (!config) return defaultConfig;
-```
+````
+
 EOF
 
 # Reply to a review thread via API
+
 gh api repos/owner/repo/pulls/55/comments \
-  --jq '.[] | "\(.id): \(.body[:80])"'
+ --jq '.[] | "\(.id): \(.body[:80])"'
 
 gh api repos/owner/repo/pulls/comments/12345/replies \
-  -f body="Fixed in the latest commit."
-```
+ -f body="Fixed in the latest commit."
+
+````
 
 ### Branch Operations
 
@@ -191,7 +194,7 @@ gh pr checkout 55 --repo owner/repo
 
 # Checkout detached (don't create local branch)
 gh pr checkout 55 --detach
-```
+````
 
 ## Issues
 
@@ -467,11 +470,11 @@ gh pr list --json number,title,state,mergeable \
 
 ### Commonly Useful `--json` Fields
 
-| Resource | Useful fields |
-| -------- | ------------- |
-| PR | `number`, `title`, `state`, `author`, `body`, `mergeable`, `reviewDecision`, `files`, `additions`, `deletions`, `statusCheckRollup` |
-| Issue | `number`, `title`, `state`, `labels`, `assignees`, `milestone`, `createdAt`, `updatedAt` |
-| Run | `databaseId`, `name`, `status`, `conclusion`, `headBranch`, `event` |
+| Resource | Useful fields                                                                                                                       |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| PR       | `number`, `title`, `state`, `author`, `body`, `mergeable`, `reviewDecision`, `files`, `additions`, `deletions`, `statusCheckRollup` |
+| Issue    | `number`, `title`, `state`, `labels`, `assignees`, `milestone`, `createdAt`, `updatedAt`                                            |
+| Run      | `databaseId`, `name`, `status`, `conclusion`, `headBranch`, `event`                                                                 |
 
 ## Patterns and Best Practices
 
@@ -479,7 +482,7 @@ gh pr list --json number,title,state,mergeable \
 
 Always use heredoc (`-F - <<'EOF'`) for comment/body text containing backticks, special characters, or newlines. Never use `-b "..."` with complex content.
 
-```bash
+````bash
 # Correct: single-quoted EOF prevents shell expansion
 gh pr comment 55 --repo owner/repo -F - <<'EOF'
 ## Review
@@ -488,14 +491,16 @@ Code looks clean. One suggestion:
 
 ```ts
 const result = await fetchData();
-```
+````
 
 Tested locally — all green.
 EOF
 
 # Wrong: shell will break on backticks and special chars
+
 # gh pr comment 55 -b "Use `fetchData()` instead..."
-```
+
+````
 
 ### Batch Operations
 
@@ -508,7 +513,7 @@ gh pr list --repo owner/repo --label "stale" --json number --jq '.[].number' | \
 gh search issues --repo owner/repo --state open -- "legacy" \
   --json number --jq '.[].number' | \
   xargs -I{} gh issue edit {} --add-label "tech-debt" --repo owner/repo
-```
+````
 
 > **Safety:** If a batch operation affects more than 5 items, list the items first and confirm before executing.
 
@@ -526,12 +531,12 @@ gh api rate_limit --jq '.rate | "\(.remaining)/\(.limit)"'
 gh api repos/owner/repo --cache 1h
 ```
 
-| Error | Cause | Fix |
-| ----- | ----- | --- |
-| `HTTP 404` | Repo not found or no access | Check repo name and auth scope |
-| `HTTP 403` | Rate limited or insufficient permissions | Wait or `gh auth refresh` |
-| `HTTP 422` | Invalid request (bad field, duplicate) | Check request body/params |
-| `GraphQL: ...` | Query syntax error | Validate query structure |
+| Error          | Cause                                    | Fix                            |
+| -------------- | ---------------------------------------- | ------------------------------ |
+| `HTTP 404`     | Repo not found or no access              | Check repo name and auth scope |
+| `HTTP 403`     | Rate limited or insufficient permissions | Wait or `gh auth refresh`      |
+| `HTTP 422`     | Invalid request (bad field, duplicate)   | Check request body/params      |
+| `GraphQL: ...` | Query syntax error                       | Validate query structure       |
 
 ## Templates
 

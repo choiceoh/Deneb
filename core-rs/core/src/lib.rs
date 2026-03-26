@@ -1757,7 +1757,7 @@ mod tests {
         let len = unsafe {
             deneb_base64_canonicalize(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len())
         };
-        assert_eq!(len, -3); // invalid
+        assert_eq!(len, -7); // FFI_ERR_VALIDATION: invalid base64
     }
 
     #[test]
