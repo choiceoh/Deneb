@@ -398,8 +398,8 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 				}
 			}
 
-			// Check finish reason.
-			if choice.FinishReason != "" {
+			// Check finish reason (nil = not yet finished, non-nil = terminal).
+			if choice.FinishReason != nil {
 				// Close text block if still open.
 				if textBlockOpen {
 					textBlockOpen = false
@@ -416,7 +416,7 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 
 				// Map OpenAI finish reasons to Anthropic stop reasons.
 				stopReason := "end_turn"
-				switch choice.FinishReason {
+				switch *choice.FinishReason {
 				case "length":
 					stopReason = "max_tokens"
 				case "stop":
@@ -527,7 +527,7 @@ type openAIChunk struct {
 	Choices []struct {
 		Index        int         `json:"index"`
 		Delta        openAIDelta `json:"delta"`
-		FinishReason string      `json:"finish_reason"`
+		FinishReason *string     `json:"finish_reason"` // pointer: null → nil, "stop" → &"stop"
 	} `json:"choices"`
 	Usage *openAIUsage `json:"usage,omitempty"`
 }
