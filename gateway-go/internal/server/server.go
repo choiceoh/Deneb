@@ -854,7 +854,7 @@ func (s *Server) registerPhase2Methods() {
 	s.logger.Info("resolved agent workspace directory", "workspaceDir", workspaceDir)
 
 	// Register core tools (file I/O, exec, process, stubs for others).
-	chat.RegisterCoreTools(chatCfg.Tools, s.processes, workspaceDir)
+	chat.RegisterCoreTools(chatCfg.Tools, s.processes, workspaceDir, s.cron)
 	if s.authManager != nil {
 		chatCfg.AuthManager = s.authManager
 	}
