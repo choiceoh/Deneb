@@ -196,6 +196,14 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolImage(deps.LLMClient),
 	})
 
+	// -- YouTube transcript tool --
+	registry.RegisterTool(ToolDef{
+		Name:        "youtube_transcript",
+		Description: "Extract transcript/subtitles and metadata from a YouTube video",
+		InputSchema: youtubeTranscriptToolSchema(),
+		Fn:          toolYouTubeTranscript(),
+	})
+
 	// -- Nodes tool --
 	registry.RegisterTool(ToolDef{
 		Name:        "nodes",
@@ -451,6 +459,48 @@ func toolWebFetch() ToolFunc {
 		}
 
 		return content, nil
+	}
+}
+
+// --- YouTube transcript tool ---
+
+func youtubeTranscriptToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"url": map[string]any{
+				"type":        "string",
+				"description": "YouTube video URL (youtube.com/watch?v=... or youtu.be/...)",
+			},
+		},
+		"required": []string{"url"},
+	}
+}
+
+func toolYouTubeTranscript() ToolFunc {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			URL string `json:"url"`
+		}
+		if err := json.Unmarshal(input, &p); err != nil {
+			return "", fmt.Errorf("invalid youtube_transcript params: %w", err)
+		}
+		if p.URL == "" {
+			return "", fmt.Errorf("url is required")
+		}
+		if !media.IsYouTubeURL(p.URL) {
+			return "", fmt.Errorf("not a valid YouTube URL: %s", p.URL)
+		}
+
+		ytCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+		defer cancel()
+
+		result, err := media.ExtractYouTubeTranscript(ytCtx, p.URL)
+		if err != nil {
+			return "", fmt.Errorf("youtube transcript extraction failed: %w", err)
+		}
+
+		return media.FormatYouTubeResult(result), nil
 	}
 }
 

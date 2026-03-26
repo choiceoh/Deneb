@@ -176,6 +176,21 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		}
 	}
 
+	// Auto-detect YouTube URLs and extract transcript as context.
+	if agentMessage != "" && media.IsYouTubeURL(agentMessage) {
+		ytURLs := media.ExtractYouTubeURLs(agentMessage)
+		for _, ytURL := range ytURLs {
+			ytCtx, ytCancel := context.WithTimeout(context.Background(), 90*time.Second)
+			ytResult, err := media.ExtractYouTubeTranscript(ytCtx, ytURL)
+			ytCancel()
+			if err != nil {
+				p.logger.Warn("youtube transcript extraction failed", "url", ytURL, "error", err)
+				continue
+			}
+			agentMessage = agentMessage + "\n\n" + media.FormatYouTubeResult(ytResult)
+		}
+	}
+
 	// Enrich message with fetched link content.
 	if linkSummary := EnrichMessageWithLinks(
 		context.Background(), agentMessage, defaultLinkFetcher, p.logger,
