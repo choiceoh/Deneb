@@ -166,5 +166,22 @@ func (p *Plugin) SetHandler(h UpdateHandler) {
 	}
 }
 
+// BotUser returns the verified bot user (set after Start). Returns nil before Start.
+func (p *Plugin) BotUser() *User {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.botUser
+}
+
+// BotUserID returns the bot's user ID, or 0 if not yet verified.
+func (p *Plugin) BotUserID() int64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.botUser == nil {
+		return 0
+	}
+	return p.botUser.ID
+}
+
 // Ensure Plugin satisfies the channel.Plugin interface at compile time.
 var _ channel.Plugin = (*Plugin)(nil)
