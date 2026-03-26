@@ -3,7 +3,7 @@
 <p align="center">
   <strong>Self-Hosted AI Agent with Lossless Memory</strong><br>
   <a href="https://github.com/choiceoh/Deneb/releases"><img src="https://img.shields.io/badge/version-3.11.4-blue" alt="Version"></a>
-  <a href="https://github.com/choiceoh/Deneb/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+  <a href="https://github.com/choiceoh/Deneb/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-stable-dea584" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.24+-00ADD8" alt="Go"></a>
 </p>
@@ -165,7 +165,7 @@ Deneb/
 │   ├── cmd/gateway/            #   Entry point
 │   └── internal/               #   41 packages: server, RPC, session, channel,
 │                               #   chat, agent, autonomous, media, vega, and more
-├── proto/                      # Shared Protobuf schemas
+├── proto/                      # Shared Protobuf schemas (6 schemas)
 │   ├── gateway.proto           #   Gateway frames, error codes
 │   ├── channel.proto           #   Channel capabilities & meta
 │   ├── session.proto           #   Session lifecycle & state
