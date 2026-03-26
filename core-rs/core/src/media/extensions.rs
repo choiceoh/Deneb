@@ -45,6 +45,7 @@ const MIME_MAP: &[(&str, &str, MediaCategory)] = &[
     ("audio/mp4", "m4a", MediaCategory::Audio),
     ("audio/aac", "aac", MediaCategory::Audio),
     ("audio/webm", "weba", MediaCategory::Audio),
+    ("audio/opus", "opus", MediaCategory::Audio),
     // Video
     ("video/mp4", "mp4", MediaCategory::Video),
     ("video/webm", "webm", MediaCategory::Video),
@@ -59,10 +60,28 @@ const MIME_MAP: &[(&str, &str, MediaCategory)] = &[
         "docx",
         MediaCategory::Document,
     ),
+    (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "xlsx",
+        MediaCategory::Document,
+    ),
+    (
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "pptx",
+        MediaCategory::Document,
+    ),
+    ("application/vnd.ms-excel", "xls", MediaCategory::Document),
+    (
+        "application/vnd.ms-powerpoint",
+        "ppt",
+        MediaCategory::Document,
+    ),
     // Archives
     ("application/zip", "zip", MediaCategory::Archive),
     ("application/gzip", "gz", MediaCategory::Archive),
     ("application/x-tar", "tar", MediaCategory::Archive),
+    ("application/x-7z-compressed", "7z", MediaCategory::Archive),
+    ("application/vnd.rar", "rar", MediaCategory::Archive),
     // Text
     ("application/json", "json", MediaCategory::Text),
     ("application/xml", "xml", MediaCategory::Text),
@@ -71,6 +90,7 @@ const MIME_MAP: &[(&str, &str, MediaCategory)] = &[
     ("text/css", "css", MediaCategory::Text),
     ("text/javascript", "js", MediaCategory::Text),
     ("text/markdown", "md", MediaCategory::Text),
+    ("text/csv", "csv", MediaCategory::Text),
     // Fallback
     ("application/octet-stream", "bin", MediaCategory::Unknown),
 ];

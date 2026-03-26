@@ -121,6 +121,11 @@ fn is_valid_media(candidate: &str) -> bool {
     if candidate.chars().any(|c| c.is_whitespace()) {
         return false;
     }
+    is_valid_media_core(candidate) || is_bare_filename(candidate)
+}
+
+/// Core path/URL validation without whitespace restriction.
+fn is_valid_media_core(candidate: &str) -> bool {
     // HTTP(S) URL.
     if candidate.starts_with("http://") || candidate.starts_with("https://") {
         return true;
@@ -147,6 +152,40 @@ fn is_valid_media(candidate: &str) -> bool {
         return true;
     }
     false
+}
+
+/// Check if a candidate is a bare filename with a file extension (1-10 chars).
+/// E.g., "image.png", "recording.m4a"
+fn is_bare_filename(candidate: &str) -> bool {
+    if candidate.is_empty() || candidate.len() > 260 {
+        return false;
+    }
+    if let Some(dot_pos) = candidate.rfind('.') {
+        let ext_len = candidate.len() - dot_pos - 1;
+        if ext_len >= 1 && ext_len <= 10 {
+            let name = &candidate[..dot_pos];
+            // Name must be non-empty and contain no path separators
+            return !name.is_empty() && !name.contains('/') && !name.contains('\\');
+        }
+    }
+    false
+}
+
+/// Try to extract a quoted string payload from the text.
+/// Supports double quotes, single quotes.
+/// Returns the unquoted content if found.
+fn try_unwrap_quoted(payload: &str) -> Option<&str> {
+    let trimmed = payload.trim();
+    if trimmed.len() < 2 {
+        return None;
+    }
+    let first = trimmed.as_bytes()[0];
+    let last = trimmed.as_bytes()[trimmed.len() - 1];
+    if (first == b'"' && last == b'"') || (first == b'\'' && last == b'\'') {
+        Some(&trimmed[1..trimmed.len() - 1])
+    } else {
+        None
+    }
 }
 
 /// Clean wrapping quotes/brackets from a candidate.
@@ -185,17 +224,56 @@ fn normalize_media_source(src: &str) -> String {
     }
 }
 
-/// Strip `[[audio_as_voice]]` tag from text.
-fn strip_audio_tag(text: &str) -> (String, bool) {
-    let tag = "[[audio_as_voice]]";
-    if let Some(idx) = text.find(tag) {
-        let mut result = String::with_capacity(text.len());
-        result.push_str(&text[..idx]);
-        result.push_str(&text[idx + tag.len()..]);
-        (result, true)
-    } else {
-        (text.to_string(), false)
+/// A parsed inline directive like `[[key]]` or `[[key=value]]`.
+#[derive(Debug)]
+struct InlineDirective {
+    key: String,
+    #[allow(dead_code)]
+    value: Option<String>,
+}
+
+/// Parse and strip all `[[...]]` inline directives from text.
+/// Returns the cleaned text and a list of parsed directives.
+fn strip_inline_directives(text: &str) -> (String, Vec<InlineDirective>) {
+    let mut directives = Vec::new();
+    let mut result = String::with_capacity(text.len());
+    let mut rest = text;
+
+    while let Some(start) = rest.find("[[") {
+        if let Some(end) = rest[start + 2..].find("]]") {
+            let inner = &rest[start + 2..start + 2 + end];
+            // Parse key=value or just key
+            let directive = if let Some(eq_pos) = inner.find('=') {
+                InlineDirective {
+                    key: inner[..eq_pos].trim().to_string(),
+                    value: Some(inner[eq_pos + 1..].trim().to_string()),
+                }
+            } else {
+                InlineDirective {
+                    key: inner.trim().to_string(),
+                    value: None,
+                }
+            };
+            result.push_str(&rest[..start]);
+            directives.push(directive);
+            rest = &rest[start + 2 + end + 2..];
+        } else {
+            // No closing ]] found — keep the rest as-is
+            result.push_str(rest);
+            rest = "";
+            break;
+        }
     }
+    result.push_str(rest);
+
+    (result, directives)
+}
+
+/// Strip directives and detect `audio_as_voice`.
+fn strip_audio_tag(text: &str) -> (String, bool) {
+    let (cleaned, directives) = strip_inline_directives(text);
+    let audio_as_voice = directives.iter().any(|d| d.key == "audio_as_voice");
+    (cleaned, audio_as_voice)
 }
 
 /// Extract `MEDIA:` tokens from text output.
@@ -271,23 +349,36 @@ pub fn split_media_from_output(raw: &str) -> MediaParseResult {
             continue;
         }
 
-        // Try each space-separated part.
+        // Stage 1: Try unwrapping quoted payload (e.g., MEDIA: "path with spaces.mp3").
         let mut any_valid = false;
-        for part in payload.split_whitespace() {
-            let candidate = clean_candidate(part);
+        if let Some(unquoted) = try_unwrap_quoted(payload) {
+            let candidate = clean_candidate(unquoted);
             let normalized = normalize_media_source(candidate);
-            if is_valid_media(&normalized) {
+            if is_valid_media_allow_spaces(&normalized) || is_bare_filename(&normalized) {
                 media.push(normalized);
                 any_valid = true;
                 found_media_token = true;
             }
         }
 
-        // Fallback: try the entire payload as a single path (may contain spaces).
+        // Stage 2: Try each space-separated part.
+        if !any_valid {
+            for part in payload.split_whitespace() {
+                let candidate = clean_candidate(part);
+                let normalized = normalize_media_source(candidate);
+                if is_valid_media(&normalized) {
+                    media.push(normalized);
+                    any_valid = true;
+                    found_media_token = true;
+                }
+            }
+        }
+
+        // Stage 3: Fallback — try entire payload as a single path (may contain spaces).
         if !any_valid {
             let candidate = clean_candidate(payload);
             let normalized = normalize_media_source(candidate);
-            if is_valid_media_allow_spaces(&normalized) {
+            if is_valid_media_allow_spaces(&normalized) || is_bare_filename(&normalized) {
                 media.push(normalized);
                 found_media_token = true;
                 any_valid = true;
@@ -348,26 +439,7 @@ fn is_valid_media_allow_spaces(candidate: &str) -> bool {
     if candidate.is_empty() || candidate.len() > 4096 {
         return false;
     }
-    if candidate.starts_with("http://") || candidate.starts_with("https://") {
-        return true;
-    }
-    if candidate.starts_with('/')
-        || candidate.starts_with("./")
-        || candidate.starts_with("../")
-        || candidate.starts_with('~')
-        || candidate.starts_with("\\\\")
-    {
-        return true;
-    }
-    let bytes = candidate.as_bytes();
-    if bytes.len() >= 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && (bytes[2] == b'\\' || bytes[2] == b'/')
-    {
-        return true;
-    }
-    false
+    is_valid_media_core(candidate)
 }
 
 fn is_likely_local_path(candidate: &str) -> bool {
@@ -495,5 +567,37 @@ mod tests {
     fn backtick_wrapped() {
         let result = split_media_from_output("MEDIA: `https://example.com/img.png`");
         assert_eq!(result.media_urls, vec!["https://example.com/img.png"]);
+    }
+
+    #[test]
+    fn quoted_path_with_spaces() {
+        let result = split_media_from_output(r#"MEDIA: "/tmp/my file with spaces.mp3""#);
+        assert_eq!(result.media_urls, vec!["/tmp/my file with spaces.mp3"]);
+    }
+
+    #[test]
+    fn bare_filename() {
+        let result = split_media_from_output("MEDIA: image.png");
+        assert_eq!(result.media_urls, vec!["image.png"]);
+    }
+
+    #[test]
+    fn bare_filename_with_extension() {
+        let result = split_media_from_output("MEDIA: recording.m4a");
+        assert_eq!(result.media_urls, vec!["recording.m4a"]);
+    }
+
+    #[test]
+    fn directive_key_value() {
+        let result = split_media_from_output("Hello [[audio_as_voice]] [[format=wav]]\nMEDIA: /tmp/voice.wav");
+        assert!(result.audio_as_voice);
+        assert!(!result.text.contains("[["));
+    }
+
+    #[test]
+    fn directive_unclosed_bracket() {
+        let result = split_media_from_output("Hello [[ not closed");
+        assert_eq!(result.text, "Hello [[ not closed");
+        assert!(!result.audio_as_voice);
     }
 }

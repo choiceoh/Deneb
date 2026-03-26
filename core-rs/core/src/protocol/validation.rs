@@ -458,6 +458,16 @@ pub enum ValidateParamsError {
 /// and a mutable errors vector to append to.
 pub type ValidatorFn = fn(&serde_json::Value, &str, &mut Vec<ValidationError>);
 
+/// Generic validator that accepts any JSON object.
+/// Used for result/event methods where only the type constraint matters.
+fn validate_object_params(
+    value: &serde_json::Value,
+    path: &str,
+    errors: &mut Vec<ValidationError>,
+) {
+    require_object(value, path, errors);
+}
+
 /// Look up the validator function for a given RPC method name.
 fn lookup_validator(method: &str) -> Option<ValidatorFn> {
     // Session methods
@@ -490,6 +500,7 @@ fn lookup_validator(method: &str) -> Option<ValidatorFn> {
 
         // Secrets methods
         "secrets.resolve" => Some(schemas::secrets::validate_secrets_resolve_params),
+        "secrets.resolve.result" => Some(validate_object_params),
         "secrets.reload" => Some(schemas::secrets::validate_secrets_reload_params),
 
         // Wizard methods
@@ -504,6 +515,7 @@ fn lookup_validator(method: &str) -> Option<ValidatorFn> {
         "chat.send" => Some(schemas::logs_chat::validate_chat_send_params),
         "chat.abort" => Some(schemas::logs_chat::validate_chat_abort_params),
         "chat.inject" => Some(schemas::logs_chat::validate_chat_inject_params),
+        "chat.event" => Some(validate_object_params),
 
         // Config methods
         "config.get" => Some(schemas::config::validate_config_get_params),
@@ -512,6 +524,7 @@ fn lookup_validator(method: &str) -> Option<ValidatorFn> {
         "config.patch" => Some(schemas::config::validate_config_patch_params),
         "config.schema" => Some(schemas::config::validate_config_schema_params),
         "config.schema.lookup" => Some(schemas::config::validate_config_schema_lookup_params),
+        "config.schema.lookup.result" => Some(validate_object_params),
         "update.run" => Some(schemas::config::validate_update_run_params),
 
         // Channels methods
@@ -519,6 +532,7 @@ fn lookup_validator(method: &str) -> Option<ValidatorFn> {
         "channels.logout" => Some(schemas::channels::validate_channels_logout_params),
         "talk.mode" => Some(schemas::channels::validate_talk_mode_params),
         "talk.config" => Some(schemas::channels::validate_talk_config_params),
+        "talk.config.result" => Some(validate_object_params),
         "weblogin.start" => Some(schemas::channels::validate_web_login_start_params),
         "weblogin.wait" => Some(schemas::channels::validate_web_login_wait_params),
 

@@ -20,6 +20,23 @@ interface CoreRsModuleRaw {
   validateErrorCode(code: string): boolean;
   isRetryableErrorCode(code: string): boolean;
   validateParams(method: string, json: string): string;
+  // Security: input validation / sanitization
+  isSafeInput(input: string): boolean;
+  sanitizeControlChars(input: string): string;
+  stripInvisibleUnicode(input: string): string;
+  // Parsing functions
+  parsingHtmlToMarkdown(html: string): string;
+  parsingExtractLinks(text: string, configJson: string): string;
+  parsingSplitMediaFromOutput(raw: string): string;
+  parsingEstimateBase64DecodedBytes(input: string): number;
+  parsingCanonicalizeBase64(input: string): string | null;
+  // Media helper functions
+  mediaExtensionForMime(mime: string): string;
+  mediaCategoryForMime(mime: string): string;
+  mediaDetectMimeWithInfo(data: Buffer): string;
+  mediaIsImage(mime: string): boolean;
+  mediaIsAudio(mime: string): boolean;
+  mediaIsVideo(mime: string): boolean;
   // Memory search functions
   memoryCosineSimilarity(a: number[], b: number[]): number;
   memoryBm25RankToScore(rank: number): number;
@@ -49,6 +66,27 @@ export interface NativeValidationResult {
   errors?: NativeValidationError[];
 }
 
+/** Result of parsing HTML to markdown. */
+export interface HtmlToMarkdownResult {
+  text: string;
+  title?: string;
+}
+
+/** Result of extracting media tokens from output. */
+export interface MediaParseResult {
+  text: string;
+  media_urls?: string[];
+  media_url?: string;
+  audio_as_voice?: boolean;
+}
+
+/** MIME detection result with extension and category. */
+export interface MimeDetectInfo {
+  mime: string;
+  extension: string;
+  category: string;
+}
+
 export interface CoreRsModule {
   /** Validate a gateway protocol frame. Returns frame type ("req"/"res"/"event"). Throws on invalid. */
   validateFrame(json: string): string;
@@ -68,6 +106,34 @@ export interface CoreRsModule {
   isRetryableErrorCode(code: string): boolean;
   /** Validate RPC parameters for a method. Returns validation result with errors. */
   validateParams(method: string, json: string): NativeValidationResult;
+  /** Check if input contains potential injection patterns (null bytes, XSS). */
+  isSafeInput(input: string): boolean;
+  /** Remove control characters except newline/tab/CR. */
+  sanitizeControlChars(input: string): string;
+  /** Remove invisible Unicode characters (zero-width, bidi marks, etc.). */
+  stripInvisibleUnicode(input: string): string;
+  /** Convert HTML to markdown. Returns JSON {text, title?}. */
+  parsingHtmlToMarkdown(html: string): HtmlToMarkdownResult;
+  /** Extract safe links from text. */
+  parsingExtractLinks(text: string, maxLinks?: number): string[];
+  /** Parse MEDIA: tokens from command output. */
+  parsingSplitMediaFromOutput(raw: string): MediaParseResult;
+  /** Estimate decoded byte size from base64 string length. */
+  parsingEstimateBase64DecodedBytes(input: string): number;
+  /** Normalize and validate a base64 string. Returns canonical form or null. */
+  parsingCanonicalizeBase64(input: string): string | null;
+  /** Get file extension for a MIME type. */
+  mediaExtensionForMime(mime: string): string;
+  /** Get media category for a MIME type ("image"/"audio"/"video"/"document"/"archive"/"text"/"unknown"). */
+  mediaCategoryForMime(mime: string): string;
+  /** Detect MIME with full info (mime, extension, category). */
+  mediaDetectMimeWithInfo(data: Buffer): MimeDetectInfo;
+  /** Check if MIME type is an image. */
+  mediaIsImage(mime: string): boolean;
+  /** Check if MIME type is audio. */
+  mediaIsAudio(mime: string): boolean;
+  /** Check if MIME type is video. */
+  mediaIsVideo(mime: string): boolean;
   /** Memory search: cosine similarity between two vectors. */
   memoryCosineSimilarity(a: number[], b: number[]): number;
   /** Memory search: BM25 rank to [0,1] score. */
@@ -118,6 +184,37 @@ function wrapModule(raw: CoreRsModuleRaw): CoreRsModule {
       const resultJson = raw.validateParams(method, json);
       return JSON.parse(resultJson) as NativeValidationResult;
     },
+    // Security: input validation / sanitization
+    isSafeInput: (input: string) => raw.isSafeInput(input),
+    sanitizeControlChars: (input: string) => raw.sanitizeControlChars(input),
+    stripInvisibleUnicode: (input: string) => raw.stripInvisibleUnicode(input),
+    // Parsing functions
+    parsingHtmlToMarkdown(html: string): HtmlToMarkdownResult {
+      const json = raw.parsingHtmlToMarkdown(html);
+      return JSON.parse(json) as HtmlToMarkdownResult;
+    },
+    parsingExtractLinks(text: string, maxLinks?: number): string[] {
+      const configJson = JSON.stringify({ max_links: maxLinks ?? 5 });
+      const json = raw.parsingExtractLinks(text, configJson);
+      return JSON.parse(json) as string[];
+    },
+    parsingSplitMediaFromOutput(rawText: string): MediaParseResult {
+      const json = raw.parsingSplitMediaFromOutput(rawText);
+      return JSON.parse(json) as MediaParseResult;
+    },
+    parsingEstimateBase64DecodedBytes: (input: string) =>
+      raw.parsingEstimateBase64DecodedBytes(input),
+    parsingCanonicalizeBase64: (input: string) => raw.parsingCanonicalizeBase64(input),
+    // Media helper functions
+    mediaExtensionForMime: (mime: string) => raw.mediaExtensionForMime(mime),
+    mediaCategoryForMime: (mime: string) => raw.mediaCategoryForMime(mime),
+    mediaDetectMimeWithInfo(data: Buffer): MimeDetectInfo {
+      const json = raw.mediaDetectMimeWithInfo(data);
+      return JSON.parse(json) as MimeDetectInfo;
+    },
+    mediaIsImage: (mime: string) => raw.mediaIsImage(mime),
+    mediaIsAudio: (mime: string) => raw.mediaIsAudio(mime),
+    mediaIsVideo: (mime: string) => raw.mediaIsVideo(mime),
     // Memory search passthrough
     memoryCosineSimilarity: (a: number[], b: number[]) => raw.memoryCosineSimilarity(a, b),
     memoryBm25RankToScore: (rank: number) => raw.memoryBm25RankToScore(rank),

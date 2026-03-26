@@ -337,6 +337,7 @@ export const validateSecretsResolveParams =
   makeNativeValidator<SecretsResolveParams>("secrets.resolve");
 export const validateSecretsResolveResult =
   makeNativeValidator<SecretsResolveResult>("secrets.resolve.result");
+export const validateSecretsReloadParams = makeNativeValidator("secrets.reload");
 export const validateSessionsListParams = makeNativeValidator<SessionsListParams>("sessions.list");
 export const validateSessionsPreviewParams =
   makeNativeValidator<SessionsPreviewParams>("sessions.preview");

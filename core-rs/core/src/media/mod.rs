@@ -4,6 +4,50 @@
 
 pub mod extensions;
 
+/// Detect OOXML document type by scanning ZIP contents for known path markers.
+/// Scans the first 8KB of the ZIP file for internal path signatures.
+fn detect_ooxml(data: &[u8]) -> Option<&'static str> {
+    // Scan a limited window to avoid reading the entire file
+    let scan_len = data.len().min(8192);
+    let window = &data[..scan_len];
+
+    // Look for OOXML internal path markers in the ZIP local file headers.
+    // Use specific filenames to avoid false positives from short prefixes.
+    if contains_bytes(window, b"xl/workbook.xml")
+        || contains_bytes(window, b"xl/sharedStrings.xml")
+        || contains_bytes(window, b"xl/styles.xml")
+    {
+        return Some(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        );
+    }
+    if contains_bytes(window, b"word/document.xml")
+        || contains_bytes(window, b"word/styles.xml")
+        || contains_bytes(window, b"word/settings.xml")
+    {
+        return Some(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        );
+    }
+    if contains_bytes(window, b"ppt/presentation.xml")
+        || contains_bytes(window, b"ppt/slides/")
+        || contains_bytes(window, b"ppt/slideMasters/")
+    {
+        return Some(
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        );
+    }
+    None
+}
+
+/// Simple byte substring search (no allocation).
+#[inline]
+fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|w| w == needle)
+}
+
 /// Detect ISOBMFF-based formats from ftyp box at offset 4.
 /// Handles MP4, M4A, AVIF, HEIC/HEIF.
 #[inline]
@@ -120,6 +164,10 @@ pub fn detect_mime(data: &[u8]) -> &'static str {
         }
         0x50 => {
             if data.starts_with(&[0x50, 0x4B, 0x03, 0x04]) {
+                // ZIP file — check for OOXML markers inside the archive
+                if let Some(ooxml) = detect_ooxml(data) {
+                    return ooxml;
+                }
                 return "application/zip";
             }
         }
@@ -229,6 +277,49 @@ mod tests {
         assert_eq!(detect_mime(&[b'I', b'I', 0x2A, 0x00, 0x08]), "image/tiff");
         // TIFF big-endian
         assert_eq!(detect_mime(&[b'M', b'M', 0x00, 0x2A, 0x00]), "image/tiff");
+    }
+
+    #[test]
+    fn test_ooxml_xlsx() {
+        // ZIP header + "xl/" marker
+        let mut data = vec![0x50, 0x4B, 0x03, 0x04];
+        data.extend_from_slice(&[0x00; 26]); // local file header padding
+        data.extend_from_slice(b"xl/workbook.xml");
+        assert_eq!(
+            detect_mime(&data),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+    }
+
+    #[test]
+    fn test_ooxml_docx() {
+        let mut data = vec![0x50, 0x4B, 0x03, 0x04];
+        data.extend_from_slice(&[0x00; 26]);
+        data.extend_from_slice(b"word/document.xml");
+        assert_eq!(
+            detect_mime(&data),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
+    }
+
+    #[test]
+    fn test_ooxml_pptx() {
+        let mut data = vec![0x50, 0x4B, 0x03, 0x04];
+        data.extend_from_slice(&[0x00; 26]);
+        data.extend_from_slice(b"ppt/presentation.xml");
+        assert_eq!(
+            detect_mime(&data),
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        );
+    }
+
+    #[test]
+    fn test_plain_zip() {
+        // ZIP without OOXML markers
+        let mut data = vec![0x50, 0x4B, 0x03, 0x04];
+        data.extend_from_slice(&[0x00; 26]);
+        data.extend_from_slice(b"some/other/file.txt");
+        assert_eq!(detect_mime(&data), "application/zip");
     }
 
     #[test]
