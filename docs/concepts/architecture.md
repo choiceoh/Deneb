@@ -8,7 +8,7 @@ title: "Gateway Architecture"
 
 # Gateway architecture
 
-Last updated: 2026-03-25
+Last updated: 2026-03-26
 
 ## Overview
 
@@ -92,6 +92,370 @@ The gateway detects available hardware at startup and selects a **hardware profi
 GPU detection runs `nvidia-smi` at startup; override with `DENEB_GPU_ACCEL` env var (`dgx-spark`, `cuda`, `none`).
 
 Each profile also tunes: V8 heap size, SQLite cache/mmap, UV threadpool, compute pool size (for worker threads), FFmpeg buffer/timeout, and image worker count.
+
+## Full system overview
+
+End-to-end view of every major component and how data flows from messaging channels through the gateway to LLM providers and back.
+
+```mermaid
+graph TB
+    subgraph "Messaging Channels"
+        TG["📱 Telegram<br>(primary channel)"]
+        DC["Discord"]
+        SL["Slack"]
+        WA["WhatsApp"]
+        SG["Signal"]
+        IM["iMessage"]
+        WC["WebChat"]
+    end
+
+    subgraph "Control Plane Clients"
+        CLI["CLI (cli-rs)<br>Rust → WebSocket"]
+        MAC["macOS App"]
+        WEB["Web Admin UI"]
+    end
+
+    subgraph "Nodes"
+        IOS["iOS Node"]
+        AND["Android Node"]
+        HL["Headless Node"]
+    end
+
+    subgraph DGX["NVIDIA DGX Spark"]
+        subgraph GW["Go Gateway (gateway-go)"]
+            HTTP["HTTP Server<br>/health, /api/v1/rpc,<br>OpenAI API, Responses API"]
+            WSS["WebSocket Server"]
+            RPC["RPC Dispatcher<br>130+ methods"]
+            SESS["Session Manager<br>IDLE→RUNNING→DONE"]
+            AUTH["Auth + Pairing"]
+            CHAT["Chat Pipeline<br>system prompt, tools,<br>context files"]
+            CRON["Cron Scheduler"]
+            CHAN["Channel Registry<br>Plugin interface"]
+        end
+
+        subgraph FFI["Rust Core (CGo FFI)"]
+            PROTO["Protocol Validation"]
+            SEC["Security<br>sanitize, SSRF"]
+            MED["Media Detection<br>21 formats"]
+            MD["Markdown Parser"]
+            MEM["Memory Search<br>SIMD cosine, BM25"]
+            CTX["Context Engine<br>Aurora assembly"]
+            CMP["Compaction<br>sweep engine"]
+            PARSE["Parsing<br>URL, HTML→MD"]
+        end
+
+        subgraph VEGA["Vega Search Engine"]
+            FTS["SQLite FTS5"]
+            SEM["Semantic Search<br>(optional ML)"]
+        end
+
+        subgraph ML["ML Inference (deneb-ml)"]
+            EMB["Embedder<br>GGUF models"]
+            RR["Reranker"]
+            CUDA["CUDA Acceleration"]
+        end
+
+        subgraph NH["Node.js Plugin Host"]
+            CHANEXT["Channel Extensions"]
+            SKILLRT["Skill Runtime"]
+            PROVINT["Provider Integrations"]
+        end
+
+        SKILLS["Skills (17)<br>github, weather,<br>coding-agent, tmux,<br>himalaya, summarize..."]
+        PROTO_SCHEMA["Proto Schemas<br>gateway.proto<br>channel.proto<br>session.proto"]
+    end
+
+    subgraph "LLM Providers"
+        ANTH["Anthropic"]
+        OAI["OpenAI"]
+        GGL["Google"]
+        LOCAL["Local GGUF<br>(on-device)"]
+    end
+
+    %% Channel → Gateway
+    TG -->|"Bot API"| CHAN
+    DC -->|"Bot API"| CHAN
+    SL --> CHAN
+    WA -->|"Baileys"| CHAN
+    SG --> CHAN
+    IM --> CHAN
+    WC -->|"WS"| WSS
+
+    %% Control plane
+    CLI -->|"WebSocket"| WSS
+    MAC -->|"WebSocket"| WSS
+    WEB -->|"WebSocket"| WSS
+
+    %% Nodes
+    IOS -->|"WS role:node"| WSS
+    AND -->|"WS role:node"| WSS
+    HL -->|"WS role:node"| WSS
+
+    %% Internal gateway flow
+    WSS --> RPC
+    HTTP --> RPC
+    RPC --> AUTH
+    RPC --> SESS
+    SESS --> CHAT
+    CHAT --> CRON
+    CHAN --> RPC
+
+    %% FFI calls
+    RPC --> PROTO
+    RPC --> SEC
+    RPC --> MED
+    CHAT --> MD
+    CHAT --> MEM
+    CHAT --> CTX
+    CHAT --> CMP
+    CHAT --> PARSE
+
+    %% Vega + ML
+    MEM --> FTS
+    FTS --> SEM
+    SEM --> EMB
+    SEM --> RR
+    EMB --> CUDA
+
+    %% Plugin host
+    RPC -->|"Unix socket"| CHANEXT
+    SKILLRT --> SKILLS
+    CHANEXT --> SKILLRT
+
+    %% Proto schema codegen
+    PROTO_SCHEMA -.->|"codegen"| PROTO
+    PROTO_SCHEMA -.->|"codegen"| RPC
+
+    %% LLM
+    CHAT -->|"API calls"| ANTH
+    CHAT -->|"API calls"| OAI
+    CHAT -->|"API calls"| GGL
+    CHAT -->|"local inference"| LOCAL
+    LOCAL --> CUDA
+```
+
+## Gateway internal architecture
+
+Detailed view of the Go gateway's internal package structure and request processing pipeline.
+
+```mermaid
+graph LR
+    subgraph "Inbound"
+        REQ_HTTP["HTTP Request<br>/api/v1/rpc"]
+        REQ_WS["WebSocket Frame<br>type: req"]
+        REQ_CHAN["Channel Message<br>Telegram, Discord..."]
+    end
+
+    subgraph "gateway-go/internal"
+        subgraph server["server/"]
+            SRV["HTTP + WS Listener<br>:18789"]
+            HEALTH["/health endpoint"]
+            OAIAPI["OpenAI-compat API"]
+            RESPAPI["Responses API"]
+        end
+
+        subgraph auth["auth/"]
+            TOKEN["Token Auth"]
+            ALLOW["Allowlists"]
+            PAIR["Device Pairing"]
+        end
+
+        subgraph rpc["rpc/"]
+            DISPATCH["Method Dispatcher<br>thread-safe registry"]
+        end
+
+        subgraph session["session/"]
+            LIFECYCLE["Lifecycle State Machine"]
+            EVENTS["Event Pub/Sub Bus"]
+            STATES["IDLE → RUNNING →<br>DONE / FAILED /<br>KILLED / TIMEOUT"]
+        end
+
+        subgraph channel["channel/"]
+            REGISTRY["Plugin Registry"]
+            PLUGIN["Plugin Interface<br>Meta + Capabilities"]
+            CHANMGR["Lifecycle Manager<br>start / stop / health"]
+        end
+
+        subgraph chat["chat/"]
+            SYSPROMPT["System Prompt<br>Assembly"]
+            TOOLS["Tool Registry<br>exec, read, write,<br>edit, grep, find, ls, web"]
+            CTXFILES["Context Files<br>AGENTS.md, CLAUDE.md,<br>SOUL.md, TOOLS.md"]
+            SLASH["Slash Commands<br>/reset /status /kill<br>/model /think"]
+            SILENT["Silent Reply<br>NO_REPLY detection"]
+        end
+
+        subgraph llm["llm/"]
+            SAMPLING["Sampling Params<br>top_p, top_k, penalties"]
+            MULTIMOD["Multimodal<br>ImageSource"]
+        end
+
+        subgraph ffi["ffi/"]
+            CGO["CGo Bindings<br>8 *_cgo.go files"]
+            NOFFI["No-FFI Fallbacks<br>*_noffi.go"]
+        end
+
+        subgraph vega_int["vega/"]
+            VEGAEXEC["Vega Execute"]
+            VEGASRCH["Vega Search"]
+            AUTODET["Model Autodetect<br>~/.deneb/models/*.gguf"]
+        end
+    end
+
+    subgraph "Rust Core (libdeneb_core.a)"
+        RUSTFNS["deneb_validate_frame<br>deneb_constant_time_eq<br>deneb_detect_mime<br>deneb_sanitize_html<br>deneb_is_safe_url<br>deneb_vega_execute<br>deneb_vega_search<br>deneb_embed<br>deneb_rerank"]
+    end
+
+    subgraph "External"
+        LLM_EXT["LLM Providers<br>Anthropic, OpenAI,<br>Google, Local"]
+    end
+
+    %% Inbound routing
+    REQ_HTTP --> SRV
+    REQ_WS --> SRV
+    REQ_CHAN --> REGISTRY
+
+    %% Server → Auth → RPC
+    SRV --> TOKEN
+    TOKEN --> DISPATCH
+
+    %% RPC → Session → Chat
+    DISPATCH --> LIFECYCLE
+    LIFECYCLE --> SYSPROMPT
+    SYSPROMPT --> CTXFILES
+    SYSPROMPT --> TOOLS
+    SYSPROMPT --> SLASH
+
+    %% Chat → LLM
+    TOOLS --> SAMPLING
+    SAMPLING --> LLM_EXT
+
+    %% Channel flow
+    REGISTRY --> PLUGIN
+    PLUGIN --> CHANMGR
+    CHANMGR --> DISPATCH
+
+    %% FFI
+    DISPATCH --> CGO
+    CGO --> RUSTFNS
+
+    %% Vega
+    DISPATCH --> VEGAEXEC
+    VEGAEXEC --> CGO
+    VEGASRCH --> CGO
+    AUTODET -.-> VEGAEXEC
+
+    %% Events
+    LIFECYCLE --> EVENTS
+    EVENTS -->|"streaming"| SRV
+```
+
+## Rust core crate architecture
+
+The `core-rs/` workspace contains 4 crates with a layered feature-flag dependency chain.
+
+```mermaid
+graph TB
+    subgraph "deneb-core (main crate)"
+        direction TB
+        LIBRS["lib.rs<br>30+ C FFI exports<br>(deneb_* functions)"]
+
+        subgraph modules["Core Modules"]
+            PROTO_M["protocol/<br>Frame validation<br>RequestFrame, ResponseFrame,<br>EventFrame, ErrorShape"]
+            SEC_M["security/<br>constant_time_eq<br>sanitize_html<br>is_safe_url (SSRF)<br>is_valid_session_key"]
+            MED_M["media/<br>Magic-byte MIME detection<br>21 formats, OOXML, ISOBMFF"]
+            MEM_M["memory_search/<br>SIMD cosine similarity<br>BM25, FTS query builder<br>hybrid merge, MMR diversity"]
+            MD_M["markdown/<br>pulldown-cmark parser<br>code spans, fences, tables"]
+            CTX_M["context_engine/<br>Aurora assembly<br>DAG-aware token budgeting<br>handle-based FFI"]
+            CMP_M["compaction/<br>Sweep state machine<br>chunk selection<br>threshold evaluation"]
+            PARSE_M["parsing/<br>URL extraction<br>HTML-to-Markdown<br>base64, media tokens"]
+        end
+
+        LIBRS --> PROTO_M
+        LIBRS --> SEC_M
+        LIBRS --> MED_M
+        LIBRS --> MEM_M
+        LIBRS --> MD_M
+        LIBRS --> CTX_M
+        LIBRS --> CMP_M
+        LIBRS --> PARSE_M
+    end
+
+    subgraph "deneb-vega"
+        VEGA_CORE["SQLite FTS5<br>Search Engine"]
+        VEGA_CMD["Commands<br>search, brief, changelog,<br>dashboard"]
+        VEGA_DB["DB Layer<br>schema, importer,<br>parser, classifier"]
+        VEGA_SEARCH["Search Pipeline<br>query analysis → FTS5 →<br>semantic → fusion/rerank"]
+    end
+
+    subgraph "deneb-ml"
+        ML_EMB["Embedder<br>LocalEmbedder<br>GGUF text embeddings"]
+        ML_RR["Reranker<br>LocalReranker<br>RankedDocument"]
+        ML_MGR["Model Manager<br>TTL-based eviction<br>model pooling"]
+        ML_CUDA["CUDA Backend<br>llama-cpp-2 bindings"]
+    end
+
+    subgraph "deneb-agent-runtime"
+        ART_MODEL["Model Selection<br>provider normalization<br>catalog, thinking levels"]
+        ART_SCOPE["Scope Resolution<br>agent registry<br>session key parsing"]
+        ART_SUB["Subagent Lifecycle<br>Pending → Running → Terminal"]
+        ART_USAGE["Usage Tracking<br>multi-provider normalization"]
+    end
+
+    subgraph "Feature Flags"
+        F_DEFAULT["default"]
+        F_VEGA["vega"]
+        F_ML["ml"]
+        F_CUDA["cuda"]
+        F_VEGA_ML["vega-ml"]
+        F_DGX["dgx (production)"]
+    end
+
+    %% Crate dependencies
+    LIBRS -->|"optional"| VEGA_CORE
+    VEGA_SEARCH -->|"optional (ml feature)"| ML_EMB
+    VEGA_SEARCH -->|"optional (ml feature)"| ML_RR
+    ML_EMB --> ML_MGR
+    ML_RR --> ML_MGR
+    ML_MGR -->|"cuda feature"| ML_CUDA
+
+    %% Feature flag chain
+    F_DEFAULT -.-> F_VEGA
+    F_VEGA -.-> F_ML
+    F_ML -.-> F_CUDA
+    F_VEGA -.-> F_VEGA_ML
+    F_VEGA_ML -.-> F_DGX
+
+    subgraph "Build Targets"
+        B_RUST["make rust<br>(minimal, no vega)"]
+        B_VEGA["make rust-vega<br>(FTS only)"]
+        B_DGX["make rust-dgx<br>(full: vega+ml+cuda)"]
+    end
+
+    F_DEFAULT -.-> B_RUST
+    F_VEGA -.-> B_VEGA
+    F_DGX -.-> B_DGX
+
+    subgraph "Proto Schemas (proto/)"
+        PGW["gateway.proto<br>ErrorCode, RequestFrame,<br>ResponseFrame, EventFrame"]
+        PCH["channel.proto<br>ChannelCapabilities,<br>ChannelMeta"]
+        PSS["session.proto<br>SessionRunStatus,<br>SessionKind"]
+    end
+
+    %% Proto → codegen
+    PGW -->|"prost-build"| PROTO_M
+    PCH -->|"prost-build"| PROTO_M
+    PSS -->|"prost-build"| PROTO_M
+
+    subgraph "Output Artifacts"
+        STATIC["libdeneb_core.a<br>(staticlib → Go CGo)"]
+        CDYLIB["libdeneb_core.so<br>(cdylib → Node.js napi)"]
+        RLIB["rlib<br>(workspace internal)"]
+    end
+
+    LIBRS --> STATIC
+    LIBRS --> CDYLIB
+    LIBRS --> RLIB
+```
 
 ## Components and flows
 
