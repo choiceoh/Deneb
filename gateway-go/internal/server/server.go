@@ -851,6 +851,7 @@ func (s *Server) registerPhase2Methods() {
 
 	// Resolve workspace directory for file tool operations.
 	workspaceDir := resolveWorkspaceDir()
+	s.logger.Info("resolved agent workspace directory", "workspaceDir", workspaceDir)
 
 	// Register core tools (file I/O, exec, process, stubs for others).
 	chat.RegisterCoreTools(chatCfg.Tools, s.processes, workspaceDir)

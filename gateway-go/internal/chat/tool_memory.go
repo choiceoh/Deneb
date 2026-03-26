@@ -61,7 +61,7 @@ func toolMemorySearch(workspaceDir string) ToolFunc {
 		// Collect memory files.
 		memoryFiles := collectMemoryFiles(workspaceDir)
 		if len(memoryFiles) == 0 {
-			return "No memory files found (MEMORY.md or memory/*.md).", nil
+			return fmt.Sprintf("No memory files found in workspace %q (looked for MEMORY.md, memory.md, memory/*.md).", workspaceDir), nil
 		}
 
 		keywords := strings.Fields(strings.ToLower(p.Query))
