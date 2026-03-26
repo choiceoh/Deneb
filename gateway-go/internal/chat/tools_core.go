@@ -158,6 +158,18 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolSessionsHistory(deps.Transcript),
 	})
 	registry.RegisterTool(ToolDef{
+		Name:        "sessions_search",
+		Description: "Search all past session transcripts by keyword",
+		InputSchema: sessionsSearchToolSchema(),
+		Fn:          toolSessionsSearch(deps.Transcript),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "sessions_restore",
+		Description: "Restore a past session's history into the current session",
+		InputSchema: sessionsRestoreToolSchema(),
+		Fn:          toolSessionsRestore(deps.Transcript),
+	})
+	registry.RegisterTool(ToolDef{
 		Name:        "sessions_send",
 		Description: "Send a message to another session",
 		InputSchema: sessionsSendToolSchema(),

@@ -74,6 +74,8 @@ var coreToolSummaries = map[string]string{
 	"gateway":            "Gateway self-management: config read/write, restart (SIGUSR1), git pull + rebuild",
 	"sessions_list":      "List active sessions with kind/status. Filter by kinds: main, group, cron, hook",
 	"sessions_history":   "Fetch message history from another session (default: last 20 messages)",
+	"sessions_search":   "Search all past session transcripts by keyword. Returns matching messages with context",
+	"sessions_restore":  "Restore a past session's conversation into the current session for continuation",
 	"sessions_send":      "Send a message to another session (defaults to \"main\" if sessionKey omitted)",
 	"sessions_spawn":     "Create an isolated sub-agent session for parallel work. Use subagents to monitor",
 	"subagents":          "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
@@ -95,7 +97,7 @@ var toolOrder = []string{
 	"web",
 	"memory_search", "memory_get",
 	"nodes", "cron", "message", "gateway",
-	"sessions_list", "sessions_history", "sessions_send",
+	"sessions_list", "sessions_history", "sessions_search", "sessions_restore", "sessions_send",
 	"sessions_spawn", "subagents", "session_status", "image", "youtube_transcript",
 	"send_file", "http", "kv", "clipboard", "pilot",
 }

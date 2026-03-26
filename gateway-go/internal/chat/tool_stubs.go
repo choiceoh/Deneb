@@ -468,6 +468,171 @@ func toolSessionsHistory(transcript TranscriptStore) ToolFunc {
 	}
 }
 
+// --- sessions_search tool ---
+
+func sessionsSearchToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Search keyword to find in session transcripts",
+			},
+			"maxResults": map[string]any{
+				"type":        "number",
+				"description": "Maximum number of matching messages to return (default 20)",
+				"default":     20,
+				"minimum":     1,
+				"maximum":     100,
+			},
+		},
+		"required": []string{"query"},
+	}
+}
+
+func toolSessionsSearch(transcript TranscriptStore) ToolFunc {
+	return func(_ context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			Query      string `json:"query"`
+			MaxResults int    `json:"maxResults"`
+		}
+		if err := json.Unmarshal(input, &p); err != nil {
+			return "", fmt.Errorf("invalid sessions_search params: %w", err)
+		}
+		if p.Query == "" {
+			return "", fmt.Errorf("query is required")
+		}
+		if transcript == nil {
+			return "Transcript store not available.", nil
+		}
+
+		maxResults := p.MaxResults
+		if maxResults <= 0 {
+			maxResults = 20
+		}
+		if maxResults > 100 {
+			maxResults = 100
+		}
+
+		results, err := transcript.Search(p.Query, maxResults)
+		if err != nil {
+			return fmt.Sprintf("Search failed: %s", err.Error()), nil
+		}
+		if len(results) == 0 {
+			return fmt.Sprintf("No matches found for %q across session transcripts.", p.Query), nil
+		}
+
+		var sb strings.Builder
+		totalMatches := 0
+		for _, r := range results {
+			totalMatches += len(r.Matches)
+		}
+		fmt.Fprintf(&sb, "Found %d match(es) across %d session(s) for %q:\n\n", totalMatches, len(results), p.Query)
+
+		for _, r := range results {
+			fmt.Fprintf(&sb, "### Session: %s\n", r.SessionKey)
+			for _, m := range r.Matches {
+				// Show context before.
+				for _, c := range m.Context {
+					if c.Role != "" && c.Content != "" {
+						// Only show context messages that come before the match.
+						break
+					}
+				}
+				if len(m.Context) > 0 && m.Index > 0 {
+					ctx := m.Context[0]
+					content := ctx.Content
+					if len(content) > 200 {
+						content = content[:200] + "..."
+					}
+					fmt.Fprintf(&sb, "  [ctx] [%s] %s\n", ctx.Role, content)
+				}
+
+				// Show matched message.
+				content := m.Message.Content
+				if len(content) > 500 {
+					content = content[:500] + "..."
+				}
+				fmt.Fprintf(&sb, "  **[%s]** %s\n", m.Message.Role, content)
+
+				// Show context after (last element if index < len-1).
+				if len(m.Context) > 1 || (len(m.Context) == 1 && m.Index == 0) {
+					ctx := m.Context[len(m.Context)-1]
+					content := ctx.Content
+					if len(content) > 200 {
+						content = content[:200] + "..."
+					}
+					fmt.Fprintf(&sb, "  [ctx] [%s] %s\n", ctx.Role, content)
+				}
+				sb.WriteString("\n")
+			}
+		}
+		return sb.String(), nil
+	}
+}
+
+// --- sessions_restore tool ---
+
+func sessionsRestoreToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"sourceSessionKey": map[string]any{
+				"type":        "string",
+				"description": "Session key to restore history from",
+			},
+			"limit": map[string]any{
+				"type":        "number",
+				"description": "Max messages to restore (0 or omit = all)",
+				"default":     0,
+			},
+		},
+		"required": []string{"sourceSessionKey"},
+	}
+}
+
+func toolSessionsRestore(transcript TranscriptStore) ToolFunc {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			SourceSessionKey string `json:"sourceSessionKey"`
+			Limit            int    `json:"limit"`
+		}
+		if err := json.Unmarshal(input, &p); err != nil {
+			return "", fmt.Errorf("invalid sessions_restore params: %w", err)
+		}
+		if p.SourceSessionKey == "" {
+			return "", fmt.Errorf("sourceSessionKey is required")
+		}
+		if transcript == nil {
+			return "Transcript store not available.", nil
+		}
+
+		currentKey := SessionKeyFromContext(ctx)
+		if currentKey != "" && currentKey == p.SourceSessionKey {
+			return "Cannot restore a session into itself.", nil
+		}
+
+		msgs, total, err := transcript.Load(p.SourceSessionKey, p.Limit)
+		if err != nil {
+			return fmt.Sprintf("Failed to load source session %q: %s", p.SourceSessionKey, err.Error()), nil
+		}
+		if len(msgs) == 0 {
+			return fmt.Sprintf("Session %q has no history (or does not exist).", p.SourceSessionKey), nil
+		}
+
+		restored := 0
+		for _, msg := range msgs {
+			if err := transcript.Append(currentKey, msg); err != nil {
+				return fmt.Sprintf("Restored %d messages before error: %s", restored, err.Error()), nil
+			}
+			restored++
+		}
+
+		return fmt.Sprintf("Restored %d of %d messages from session %q into current session %q.\nThe restored conversation will be available in the next turn's context.",
+			restored, total, p.SourceSessionKey, currentKey), nil
+	}
+}
+
 // --- sessions_send tool ---
 
 func sessionsSendToolSchema() map[string]any {

@@ -6,8 +6,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
+
+// SearchResult holds matching messages from a single session.
+type SearchResult struct {
+	SessionKey string       `json:"sessionKey"`
+	Matches    []MatchedMsg `json:"matches"`
+}
+
+// MatchedMsg is a single matching message with surrounding context.
+type MatchedMsg struct {
+	Index   int           `json:"index"`   // position in transcript
+	Message ChatMessage   `json:"message"` // the matched message
+	Context []ChatMessage `json:"context"` // surrounding messages (+-1)
+}
 
 // TranscriptStore loads and persists session transcripts.
 type TranscriptStore interface {
@@ -17,6 +31,10 @@ type TranscriptStore interface {
 	Append(sessionKey string, msg ChatMessage) error
 	// Delete removes the transcript for a session (used by /reset).
 	Delete(sessionKey string) error
+	// ListKeys returns all session keys that have transcripts.
+	ListKeys() ([]string, error)
+	// Search scans all session transcripts for messages containing the query string.
+	Search(query string, maxResults int) ([]SearchResult, error)
 }
 
 // FileTranscriptStore stores transcripts as JSONL files on disk.
@@ -115,6 +133,72 @@ func (s *FileTranscriptStore) Delete(sessionKey string) error {
 	return nil
 }
 
+// ListKeys returns all session keys by scanning JSONL files in baseDir.
+func (s *FileTranscriptStore) ListKeys() ([]string, error) {
+	entries, err := os.ReadDir(s.baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("list transcript keys: %w", err)
+	}
+	var keys []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasSuffix(name, ".jsonl") {
+			keys = append(keys, strings.TrimSuffix(name, ".jsonl"))
+		}
+	}
+	return keys, nil
+}
+
+// Search scans all transcripts for messages containing the query (case-insensitive).
+// Returns up to maxResults matching messages grouped by session key.
+func (s *FileTranscriptStore) Search(query string, maxResults int) ([]SearchResult, error) {
+	keys, err := s.ListKeys()
+	if err != nil {
+		return nil, err
+	}
+	queryLower := strings.ToLower(query)
+	var results []SearchResult
+	remaining := maxResults
+
+	for _, key := range keys {
+		if remaining <= 0 {
+			break
+		}
+		msgs, _, err := s.Load(key, 0)
+		if err != nil || len(msgs) == 0 {
+			continue
+		}
+		var matches []MatchedMsg
+		for i, msg := range msgs {
+			if remaining <= 0 {
+				break
+			}
+			if strings.Contains(strings.ToLower(msg.Content), queryLower) {
+				m := MatchedMsg{Index: i, Message: msg}
+				// Add +-1 surrounding context.
+				if i > 0 {
+					m.Context = append(m.Context, msgs[i-1])
+				}
+				if i < len(msgs)-1 {
+					m.Context = append(m.Context, msgs[i+1])
+				}
+				matches = append(matches, m)
+				remaining--
+			}
+		}
+		if len(matches) > 0 {
+			results = append(results, SearchResult{SessionKey: key, Matches: matches})
+		}
+	}
+	return results, nil
+}
+
 // MemoryTranscriptStore is an in-memory transcript store for testing.
 type MemoryTranscriptStore struct {
 	mu       sync.Mutex
@@ -157,4 +241,52 @@ func (s *MemoryTranscriptStore) Delete(sessionKey string) error {
 	defer s.mu.Unlock()
 	delete(s.sessions, sessionKey)
 	return nil
+}
+
+// ListKeys returns all session keys.
+func (s *MemoryTranscriptStore) ListKeys() ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	keys := make([]string, 0, len(s.sessions))
+	for k := range s.sessions {
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+
+// Search scans all in-memory transcripts for messages containing the query.
+func (s *MemoryTranscriptStore) Search(query string, maxResults int) ([]SearchResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	queryLower := strings.ToLower(query)
+	var results []SearchResult
+	remaining := maxResults
+
+	for key, msgs := range s.sessions {
+		if remaining <= 0 {
+			break
+		}
+		var matches []MatchedMsg
+		for i, msg := range msgs {
+			if remaining <= 0 {
+				break
+			}
+			if strings.Contains(strings.ToLower(msg.Content), queryLower) {
+				m := MatchedMsg{Index: i, Message: msg}
+				if i > 0 {
+					m.Context = append(m.Context, msgs[i-1])
+				}
+				if i < len(msgs)-1 {
+					m.Context = append(m.Context, msgs[i+1])
+				}
+				matches = append(matches, m)
+				remaining--
+			}
+		}
+		if len(matches) > 0 {
+			results = append(results, SearchResult{SessionKey: key, Matches: matches})
+		}
+	}
+	return results, nil
 }
