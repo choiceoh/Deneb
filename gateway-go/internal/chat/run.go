@@ -408,14 +408,14 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.C
 	if deps.authManager != nil {
 		target := providerID
 		if target == "" {
-			target = "openai"
+			target = "zai" // Default provider: Z.ai Coding Plan (OpenAI-compatible).
 		}
 		cred := deps.authManager.Resolve(target, "")
 		if cred != nil && !cred.IsExpired() && cred.APIKey != "" {
 			base := cred.BaseURL
 			apiType := inferAPIType(target)
-			if base == "" && apiType == "anthropic" {
-				base = llm.DefaultAnthropicBaseURL
+			if base == "" {
+				base = resolveDefaultBaseURL(target)
 			}
 			return llm.NewClient(base, cred.APIKey, llm.WithLogger(logger)), apiType
 		}
@@ -428,6 +428,13 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.C
 
 	return nil, ""
 }
+
+// Default base URLs for known providers (used when config doesn't specify one).
+const (
+	// Z.ai Coding Plan global endpoint (OpenAI-compatible).
+	// Matches ZAI_CODING_GLOBAL_BASE_URL in src/plugins/provider-model-definitions.ts.
+	defaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
+)
 
 // inferAPIType guesses the API type from the provider ID.
 // OpenAI-compatible is the default; Anthropic is special-cased.
@@ -466,6 +473,19 @@ func executeAgentRunWithDelta(
 	})
 	broadcaster := newStreamBroadcaster(deltaRaw, params.SessionKey, params.ClientRunID)
 	return executeAgentRun(ctx, params, deps, broadcaster, logger)
+}
+
+// resolveDefaultBaseURL returns the default API base URL for a known provider
+// when no explicit base URL is configured.
+func resolveDefaultBaseURL(providerID string) string {
+	switch providerID {
+	case "anthropic":
+		return llm.DefaultAnthropicBaseURL
+	case "zai":
+		return defaultZaiBaseURL
+	default:
+		return ""
+	}
 }
 
 // isContextOverflow checks if an error indicates a context window overflow.
