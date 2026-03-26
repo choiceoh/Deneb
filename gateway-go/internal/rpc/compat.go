@@ -54,6 +54,7 @@ type TalkDeps = handlerplatform.TalkDeps
 type ExtendedDeps = handleragent.ExtendedDeps
 type AgentsDeps = handleragent.AgentsDeps
 type AutonomousDeps = handleragent.AutonomousDeps
+type CopilotDeps = handleragent.CopilotDeps
 type SessionDeps = handlersession.Deps
 type HeartbeatDeps = handlerpresence.HeartbeatDeps
 type PresenceDeps = handlerpresence.Deps
@@ -104,6 +105,10 @@ func RegisterAgentsMethods(d *Dispatcher, deps AgentsDeps) {
 
 func RegisterAutonomousMethods(d *Dispatcher, deps AutonomousDeps) {
 	d.RegisterDomain(handleragent.AutonomousMethods(deps))
+}
+
+func RegisterCopilotMethods(d *Dispatcher, deps CopilotDeps) {
+	d.RegisterDomain(handleragent.CopilotMethods(deps))
 }
 
 func RegisterChannelLifecycleMethods(d *Dispatcher, deps ChannelLifecycleDeps) {

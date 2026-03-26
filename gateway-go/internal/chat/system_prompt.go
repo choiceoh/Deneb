@@ -84,6 +84,7 @@ var coreToolSummaries = map[string]string{
 	"http":               "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
 	"kv":                 "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
 	"clipboard":          "Temporary in-memory clipboard (ring buffer, 32 items max). Actions: set, get, list, clear",
+	"pilot":              "Fast local AI (sglang) that orchestrates tools in one call. sources: [{tool:'read',input:{file_path:'x.go'}}, {tool:'exec',input:{command:'...'}}] or shortcuts: file, exec, grep, url. Pilot runs the tools, then analyzes all results. output_format: text/json/list. Use for tasks that need data gathering + quick analysis without a full subagent",
 }
 
 // toolOrder defines the display order for tools in the system prompt.
@@ -96,7 +97,7 @@ var toolOrder = []string{
 	"nodes", "cron", "message", "gateway",
 	"sessions_list", "sessions_history", "sessions_send",
 	"sessions_spawn", "subagents", "session_status", "image", "youtube_transcript",
-	"send_file", "http", "kv", "clipboard",
+	"send_file", "http", "kv", "clipboard", "pilot",
 }
 
 // BuildSystemPrompt assembles the full system prompt from all components.

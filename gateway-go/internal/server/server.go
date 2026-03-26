@@ -31,6 +31,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/copilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
@@ -144,6 +145,9 @@ type Server struct {
 
 	// Phase 5: Autonomous goal-driven execution.
 	autonomousSvc *autonomous.Service
+
+	// Copilot: background system monitor using local sglang.
+	copilotSvc *copilot.Service
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
@@ -390,6 +394,13 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		})
 	}
 
+	// Start copilot background system monitor.
+	if s.copilotSvc != nil {
+		s.safeGo("copilot:start", func() {
+			s.copilotSvc.Start(ctx)
+		})
+	}
+
 	// Fire gateway.start hooks.
 	if s.hooks != nil {
 		addr := ln.Addr().String()
@@ -508,6 +519,11 @@ func (s *Server) doShutdown() error {
 	// 6b. Stop autonomous service.
 	if s.autonomousSvc != nil {
 		s.autonomousSvc.Stop()
+	}
+
+	// 6c. Stop copilot service.
+	if s.copilotSvc != nil {
+		s.copilotSvc.Stop()
 	}
 
 	// 7. Fire gateway.stop hooks.
@@ -1259,6 +1275,29 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 			}
 		})
 	}
+
+	// Copilot: background system monitor using local sglang.
+	s.copilotSvc = copilot.NewService(copilot.ServiceConfig{
+		CheckIntervalMin: 15,
+		SglangBaseURL:    "http://127.0.0.1:30000/v1",
+		SglangModel:      "Qwen/Qwen3.5-35B-A3B",
+	}, s.logger)
+
+	// Wire Telegram notifier for copilot alerts.
+	if s.telegramPlug != nil {
+		tgCfg := s.telegramPlug.Config()
+		if tgCfg != nil && len(tgCfg.AllowFrom.IDs) > 0 {
+			s.copilotSvc.SetNotifier(&telegramNotifier{
+				plugin: s.telegramPlug,
+				chatID: tgCfg.AllowFrom.IDs[0],
+				logger: s.logger,
+			})
+		}
+	}
+
+	rpc.RegisterCopilotMethods(s.dispatcher, rpc.CopilotDeps{
+		Copilot: s.copilotSvc,
+	})
 }
 
 // registerNativeSystemMethods registers native Go system RPC methods:

@@ -237,6 +237,14 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		InputSchema: clipboardToolSchema(),
 		Fn:          toolClipboard(),
 	})
+
+	// -- Pilot tool (local AI via sglang for lightweight tasks) --
+	registry.RegisterTool(ToolDef{
+		Name:        "pilot",
+		Description: "Delegate lightweight tasks to local AI (summarize, analyze_code, classify, ask, translate)",
+		InputSchema: pilotToolSchema(),
+		Fn:          toolPilot(),
+	})
 }
 
 // --- Exec tool ---
