@@ -6,7 +6,7 @@
 // this pipeline guarantees SEQUENTIAL delivery order via a send queue (matching
 // the TS sendChain = sendChain.then(...) pattern), while performing deduplication
 // using both full payload keys (including threading) and content-only keys.
-package autoreply
+package streaming
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"

@@ -1,7 +1,7 @@
 // block_reply_coalescer.go — Full streaming coalescer for reply payloads.
 // Mirrors src/auto-reply/reply/block-reply-coalescer.ts (151 LOC).
 // Buffers text payloads and flushes based on character thresholds and idle timers.
-package autoreply
+package streaming
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"

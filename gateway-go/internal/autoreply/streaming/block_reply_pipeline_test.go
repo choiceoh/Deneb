@@ -1,4 +1,4 @@
-package autoreply
+package streaming
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"

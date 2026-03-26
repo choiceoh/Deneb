@@ -1,6 +1,6 @@
 // reply_dispatcher_full.go — Full reply dispatcher with human delay and idle signaling.
 // Mirrors src/auto-reply/reply/reply-dispatcher.ts (264 LOC).
-package autoreply
+package streaming
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
