@@ -25,6 +25,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -97,6 +98,7 @@ type Handler struct {
 	jobTracker      *agent.JobTracker
 	providerConfigs map[string]ProviderConfig
 	auroraStore     *aurora.Store // Aurora hierarchical compaction store
+	vegaBackend     vega.Backend // optional; knowledge prefetch
 
 	// Agent run configuration.
 	contextCfg    ContextConfig
@@ -134,6 +136,7 @@ type HandlerConfig struct {
 	JobTracker      *agent.JobTracker
 	ProviderConfigs map[string]ProviderConfig // provider ID → config
 	AuroraStore     *aurora.Store             // Aurora hierarchical compaction store
+	VegaBackend     vega.Backend              // optional; enables knowledge prefetch in chat
 	ContextCfg      ContextConfig
 	CompactionCfg   CompactionConfig
 	DefaultModel    string
@@ -172,6 +175,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		jobTracker:      cfg.JobTracker,
 		providerConfigs: cfg.ProviderConfigs,
 		auroraStore:     cfg.AuroraStore,
+		vegaBackend:     cfg.VegaBackend,
 		contextCfg:      cfg.ContextCfg,
 		compactionCfg:   cfg.CompactionCfg,
 		defaultModel:    cfg.DefaultModel,
@@ -626,6 +630,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		providerConfigs: h.providerConfigs,
 		logger:          h.logger,
 		auroraStore:     h.auroraStore,
+		vegaBackend:     h.vegaBackend,
 		contextCfg:      h.contextCfg,
 		compactionCfg:   h.compactionCfg,
 		defaultModel:    h.defaultModel,

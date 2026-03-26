@@ -132,7 +132,7 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Web research: web {query:...} (search) → web {url:...} (fetch page) or web {query:...,fetch:2} (search+auto-fetch)\n")
 	sb.WriteString("Long commands: exec with background=true → process poll/log to check output\n")
 	sb.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
-	sb.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section)\n")
+	sb.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section). Project knowledge is auto-prefetched\n")
 	sb.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools.\n\n")
 
 	// Pilot tool guide.
@@ -185,8 +185,9 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 		toolSet[def.Name] = true
 	}
 	if toolSet["memory_search"] || toolSet["memory_get"] {
-		sb.WriteString("## Memory Recall\n")
-		sb.WriteString("Before answering anything about prior work, decisions, dates, people, preferences, or todos: run memory_search on MEMORY.md + memory/*.md; then use memory_get to pull only the needed lines.\n\n")
+		sb.WriteString("## Memory & Knowledge Recall\n")
+		sb.WriteString("관련 프로젝트 지식과 메모리가 이 프롬프트의 '관련 지식' 섹션에 자동 포함됩니다.\n")
+		sb.WriteString("추가 정보가 필요하면 memory_search로 메모리 파일을 더 탐색하세요.\n\n")
 	}
 
 	// Workspace.
@@ -274,7 +275,7 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	static.WriteString("Web research: web {query:...} (search) → web {url:...} (fetch page) or web {query:...,fetch:2} (search+auto-fetch)\n")
 	static.WriteString("Long commands: exec with background=true → process poll/log to check output\n")
 	static.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
-	static.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section)\n")
+	static.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section). Project knowledge is auto-prefetched\n")
 	static.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools.\n\n")
 
 	static.WriteString("## Safety\n")
@@ -311,8 +312,9 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	}
 
 	if toolSet["memory_search"] || toolSet["memory_get"] {
-		dynamic.WriteString("## Memory Recall\n")
-		dynamic.WriteString("Before answering anything about prior work, decisions, dates, people, preferences, or todos: run memory_search on MEMORY.md + memory/*.md; then use memory_get to pull only the needed lines.\n\n")
+		dynamic.WriteString("## Memory & Knowledge Recall\n")
+		dynamic.WriteString("관련 프로젝트 지식과 메모리가 이 프롬프트의 '관련 지식' 섹션에 자동 포함됩니다.\n")
+		dynamic.WriteString("추가 정보가 필요하면 memory_search로 메모리 파일을 더 탐색하세요.\n\n")
 	}
 
 	dynamic.WriteString("## Workspace\n")
