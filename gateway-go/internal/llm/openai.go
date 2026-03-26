@@ -26,6 +26,18 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 		MaxTokens: req.MaxTokens,
 	}
 
+	// Convert tools to OpenAI function-calling format.
+	for _, t := range req.Tools {
+		oaiReq.Tools = append(oaiReq.Tools, openAITool{
+			Type: "function",
+			Function: openAIFunction{
+				Name:        t.Name,
+				Description: t.Description,
+				Parameters:  t.InputSchema,
+			},
+		})
+	}
+
 	// Convert system prompt to a system message.
 	if req.System != "" {
 		oaiReq.Messages = append(oaiReq.Messages, openAIMessage{
@@ -34,8 +46,9 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 		})
 	}
 
-	// Convert messages.
+	// Convert messages (handles plain text, tool_use, and tool_result blocks).
 	for _, m := range req.Messages {
+		// Try plain text string first.
 		var text string
 		if err := json.Unmarshal(m.Content, &text); err == nil {
 			oaiReq.Messages = append(oaiReq.Messages, openAIMessage{
@@ -44,21 +57,73 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 			})
 			continue
 		}
-		// Content blocks — extract text.
+
+		// Content blocks — may contain text, tool_use, or tool_result.
 		var blocks []ContentBlock
-		if err := json.Unmarshal(m.Content, &blocks); err == nil {
-			var combined string
-			for _, b := range blocks {
-				if b.Type == "text" {
-					combined += b.Text
+		if err := json.Unmarshal(m.Content, &blocks); err != nil {
+			continue
+		}
+
+		// Classify blocks in this message.
+		var textParts string
+		var toolCalls []openAIToolCall
+		var toolResults []ContentBlock
+		for _, b := range blocks {
+			switch b.Type {
+			case "text":
+				textParts += b.Text
+			case "tool_use":
+				args := "{}"
+				if len(b.Input) > 0 {
+					args = string(b.Input)
 				}
+				toolCalls = append(toolCalls, openAIToolCall{
+					ID:   b.ID,
+					Type: "function",
+					Function: struct {
+						Name      string `json:"name"`
+						Arguments string `json:"arguments"`
+					}{
+						Name:      b.Name,
+						Arguments: args,
+					},
+				})
+			case "tool_result":
+				toolResults = append(toolResults, b)
 			}
-			if combined != "" {
+		}
+
+		// Assistant message with tool calls.
+		if m.Role == "assistant" {
+			msg := openAIMessage{Role: "assistant"}
+			if textParts != "" {
+				msg.Content = textParts
+			}
+			if len(toolCalls) > 0 {
+				msg.ToolCalls = toolCalls
+			}
+			oaiReq.Messages = append(oaiReq.Messages, msg)
+			continue
+		}
+
+		// Tool result messages (role=user with tool_result blocks → separate "tool" messages).
+		if len(toolResults) > 0 {
+			for _, tr := range toolResults {
 				oaiReq.Messages = append(oaiReq.Messages, openAIMessage{
-					Role:    m.Role,
-					Content: combined,
+					Role:       "tool",
+					Content:    tr.Content,
+					ToolCallID: tr.ToolUseID,
 				})
 			}
+			continue
+		}
+
+		// Default: user/other message with text only.
+		if textParts != "" {
+			oaiReq.Messages = append(oaiReq.Messages, openAIMessage{
+				Role:    m.Role,
+				Content: textParts,
+			})
 		}
 	}
 
@@ -105,6 +170,18 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 		defer respBody.Close()
 
 		firstChunk := true
+		// nextBlockIndex tracks the Anthropic-style content block index.
+		// Block 0 is always text; tool_use blocks start at 1.
+		nextBlockIndex := 0
+		textBlockOpen := false
+
+		// toolBuilders accumulates streamed tool call fragments by OpenAI tool index.
+		type toolBuilder struct {
+			id   string
+			name string
+			args []byte
+		}
+		toolBuilders := map[int]*toolBuilder{}
 
 		for raw := range rawEvents {
 			// OpenAI sends "data: [DONE]" as the final event.
@@ -135,13 +212,6 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 					},
 				})
 				emit(ctx, out, StreamEvent{Type: "message_start", Payload: startPayload})
-
-				// Emit content_block_start for text block.
-				cbsPayload, _ := json.Marshal(ContentBlockStart{
-					Index:        0,
-					ContentBlock: ContentBlock{Type: "text"},
-				})
-				emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: cbsPayload})
 			}
 
 			if len(chunk.Choices) == 0 {
@@ -162,8 +232,18 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 
 			choice := chunk.Choices[0]
 
-			// Emit text delta.
+			// Emit text delta — open text block lazily on first text content.
 			if choice.Delta.Content != "" {
+				if !textBlockOpen {
+					textBlockOpen = true
+					nextBlockIndex = 0
+					cbsPayload, _ := json.Marshal(ContentBlockStart{
+						Index:        nextBlockIndex,
+						ContentBlock: ContentBlock{Type: "text"},
+					})
+					emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: cbsPayload})
+					nextBlockIndex++
+				}
 				cbdPayload, _ := json.Marshal(ContentBlockDelta{
 					Index: 0,
 					Delta: struct {
@@ -178,11 +258,86 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 				emit(ctx, out, StreamEvent{Type: "content_block_delta", Payload: cbdPayload})
 			}
 
+			// Handle streamed tool calls.
+			for _, tc := range choice.Delta.ToolCalls {
+				tb, exists := toolBuilders[tc.Index]
+				if !exists {
+					// Close text block before first tool call if open.
+					if textBlockOpen {
+						textBlockOpen = false
+						cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: 0})
+						emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
+					}
+
+					// New tool call — emit content_block_start for tool_use.
+					tb = &toolBuilder{id: tc.ID, name: tc.Function.Name}
+					toolBuilders[tc.Index] = tb
+
+					if nextBlockIndex == 0 {
+						nextBlockIndex = 1 // reserve 0 for text
+					}
+
+					cbsPayload, _ := json.Marshal(ContentBlockStart{
+						Index: nextBlockIndex,
+						ContentBlock: ContentBlock{
+							Type: "tool_use",
+							ID:   tc.ID,
+							Name: tc.Function.Name,
+						},
+					})
+					emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: cbsPayload})
+					tb.args = nil
+					nextBlockIndex++
+				} else {
+					// Update name/id if provided in subsequent chunks.
+					if tc.ID != "" {
+						tb.id = tc.ID
+					}
+					if tc.Function.Name != "" {
+						tb.name = tc.Function.Name
+					}
+				}
+
+				// Accumulate argument fragments and emit as input_json_delta.
+				if tc.Function.Arguments != "" {
+					tb.args = append(tb.args, tc.Function.Arguments...)
+					// Determine the Anthropic block index for this tool call.
+					// Tool calls start at index 1 (or nextBlockIndex - len(toolBuilders) + tc.Index).
+					blockIdx := tc.Index + 1 // text=0, first tool=1, second tool=2, ...
+					if !textBlockOpen && nextBlockIndex > 0 {
+						// If text block was never opened, tools start at 0.
+						// But we already set nextBlockIndex to 1, so tools are at 1+.
+					}
+					cbdPayload, _ := json.Marshal(ContentBlockDelta{
+						Index: blockIdx,
+						Delta: struct {
+							Type        string `json:"type"`
+							Text        string `json:"text,omitempty"`
+							PartialJSON string `json:"partial_json,omitempty"`
+						}{
+							Type:        "input_json_delta",
+							PartialJSON: tc.Function.Arguments,
+						},
+					})
+					emit(ctx, out, StreamEvent{Type: "content_block_delta", Payload: cbdPayload})
+				}
+			}
+
 			// Check finish reason.
 			if choice.FinishReason != "" {
-				// Close the text content block.
-				cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: 0})
-				emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
+				// Close text block if still open.
+				if textBlockOpen {
+					textBlockOpen = false
+					cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: 0})
+					emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
+				}
+
+				// Close all open tool_use blocks.
+				for idx := range toolBuilders {
+					blockIdx := idx + 1
+					cbStopPayload, _ := json.Marshal(ContentBlockStop{Index: blockIdx})
+					emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
+				}
 
 				// Map OpenAI finish reasons to Anthropic stop reasons.
 				stopReason := "end_turn"
@@ -191,6 +346,8 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 					stopReason = "max_tokens"
 				case "stop":
 					stopReason = "end_turn"
+				case "tool_calls":
+					stopReason = "tool_use"
 				}
 
 				outputTokens := 0
@@ -232,11 +389,36 @@ type openAIRequest struct {
 	Stream      bool            `json:"stream"`
 	MaxTokens   int             `json:"max_tokens,omitempty"`
 	Temperature *float64        `json:"temperature,omitempty"`
+	Tools       []openAITool    `json:"tools,omitempty"`
+}
+
+// openAITool wraps a function definition in OpenAI's tool format.
+type openAITool struct {
+	Type     string         `json:"type"` // always "function"
+	Function openAIFunction `json:"function"`
+}
+
+type openAIFunction struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
 }
 
 type openAIMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string              `json:"role"`
+	Content    string              `json:"content,omitempty"`
+	ToolCalls  []openAIToolCall    `json:"tool_calls,omitempty"`  // assistant tool calls
+	ToolCallID string              `json:"tool_call_id,omitempty"` // tool result reference
+}
+
+// openAIToolCall represents a tool call in an assistant message.
+type openAIToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"` // "function"
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
 }
 
 type openAIChunk struct {
@@ -244,16 +426,28 @@ type openAIChunk struct {
 	Object  string `json:"object"`
 	Model   string `json:"model"`
 	Choices []struct {
-		Index        int    `json:"index"`
+		Index        int         `json:"index"`
 		Delta        openAIDelta `json:"delta"`
-		FinishReason string `json:"finish_reason"`
+		FinishReason string      `json:"finish_reason"`
 	} `json:"choices"`
 	Usage *openAIUsage `json:"usage,omitempty"`
 }
 
 type openAIDelta struct {
-	Role    string `json:"role,omitempty"`
-	Content string `json:"content,omitempty"`
+	Role      string                `json:"role,omitempty"`
+	Content   string                `json:"content,omitempty"`
+	ToolCalls []openAIDeltaToolCall `json:"tool_calls,omitempty"`
+}
+
+// openAIDeltaToolCall is a streamed fragment of a tool call.
+type openAIDeltaToolCall struct {
+	Index    int    `json:"index"`
+	ID       string `json:"id,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Function struct {
+		Name      string `json:"name,omitempty"`
+		Arguments string `json:"arguments,omitempty"`
+	} `json:"function"`
 }
 
 type openAIUsage struct {
