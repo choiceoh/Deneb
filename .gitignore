@@ -22,6 +22,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Go build artifacts
+gateway-go/gateway
+gateway-go/cover.out
+
 # Rust build artifacts (workspace)
 /target/
 core-rs/target/
