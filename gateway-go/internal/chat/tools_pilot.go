@@ -11,116 +11,123 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
-// pilotInput is the parsed input for the pilot tool.
-type pilotInput struct {
-	Mode    string `json:"mode"`
-	Content string `json:"content"`
-	Prompt  string `json:"prompt"`
-}
-
-// pilotMode defines a supported pilot task mode with its system prompt.
-type pilotMode struct {
-	system string
-	// maxTokens overrides the default if set.
-	maxTokens int
-}
-
-// pilotModes maps mode names to their system prompts and configs.
-var pilotModes = map[string]pilotMode{
-	"summarize": {
-		system:    "You are a concise summarizer. Summarize the given text, focusing on key points only. Reply in the same language as the input. Be brief and direct.",
-		maxTokens: 2048,
-	},
-	"analyze_code": {
-		system:    "You are a code reviewer. Analyze the given code and report: (1) bugs or potential issues, (2) security concerns, (3) improvement suggestions. Be specific with line references. Reply in Korean.",
-		maxTokens: 4096,
-	},
-	"classify": {
-		system:    "You are a text classifier. Classify the given text by category, intent, and sentiment. Return a structured brief response. Reply in Korean.",
-		maxTokens: 1024,
-	},
-	"ask": {
-		system:    "You are a helpful assistant. Answer the question based on the provided context. Be accurate and concise. Reply in Korean unless the context is in another language.",
-		maxTokens: 4096,
-	},
-	"translate": {
-		system:    "You are a translator. Translate the given text to Korean. If already Korean, translate to English. Preserve formatting and technical terms.",
-		maxTokens: 4096,
-	},
-}
+// Pilot tool: the main AI agent's fast local helper.
+//
+// Why pilot instead of sessions_spawn (subagent)?
+//   - Synchronous: 1 tool call → instant result (subagent needs spawn + poll + history = 3+ calls)
+//   - Zero overhead: no session, transcript, lifecycle, or broadcasting
+//   - Free-form: just describe the task, no mode selection needed
+//   - Batch: process multiple items in a single call
+//   - Local: runs on DGX Spark sglang, no external API cost
 
 const (
-	pilotTimeout        = 2 * time.Minute
-	pilotDefaultMaxToks = 2048
+	pilotTimeout   = 2 * time.Minute
+	pilotMaxInput  = 24000 // chars — beyond this, auto-truncate with notice
+	pilotMaxTokens = 4096
 )
+
+// pilotSystemPrompt is the baseline identity for all pilot calls.
+const pilotSystemPrompt = `You are Pilot, a fast local AI assistant.
+Rules:
+- Execute the task directly. No preamble, no pleasantries.
+- Match the user's language (Korean if Korean input, English if English).
+- If output_format is "json", return valid JSON only.
+- If output_format is "list", return a numbered list.
+- If processing multiple items, handle each one and label results clearly.
+- Be concise. Prefer substance over length.`
 
 func pilotToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"mode": map[string]any{
+			"task": map[string]any{
 				"type":        "string",
-				"enum":        []string{"summarize", "analyze_code", "classify", "ask", "translate"},
-				"description": "Task type: summarize, analyze_code, classify, ask, translate",
+				"description": "What to do — free-form instruction (e.g., '이 코드 버그 찾아줘', 'summarize this', '한국어로 번역')",
 			},
 			"content": map[string]any{
 				"type":        "string",
-				"description": "Text or code to process",
+				"description": "Text, code, or data to process",
 			},
-			"prompt": map[string]any{
+			"items": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Multiple items to process in batch (alternative to content for batch jobs)",
+			},
+			"output_format": map[string]any{
 				"type":        "string",
-				"description": "Additional instructions (optional; for ask mode, this is the question)",
+				"enum":        []string{"text", "json", "list"},
+				"description": "Desired output format (default: text)",
 			},
 		},
-		"required": []string{"mode", "content"},
+		"required": []string{"task"},
 	}
 }
 
-// toolPilot returns a ToolFunc that delegates lightweight tasks to the local
-// sglang model (Qwen). This saves external API costs for simple operations
-// like summarization, code review, classification, and translation.
+// toolPilot returns a ToolFunc that delegates tasks to the local sglang model.
+// Unlike sessions_spawn, pilot is synchronous (1 call = 1 result) with zero
+// session overhead. The agent just describes the task and gets the answer back.
 func toolPilot() ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		var p pilotInput
+		var p struct {
+			Task         string   `json:"task"`
+			Content      string   `json:"content"`
+			Items        []string `json:"items"`
+			OutputFormat string   `json:"output_format"`
+		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("invalid pilot input: %w", err)
 		}
-		if p.Content == "" {
-			return "", fmt.Errorf("content is required")
+		if p.Task == "" {
+			return "", fmt.Errorf("task is required")
 		}
 
-		mode, ok := pilotModes[p.Mode]
-		if !ok {
-			modes := make([]string, 0, len(pilotModes))
-			for k := range pilotModes {
-				modes = append(modes, k)
-			}
-			return "", fmt.Errorf("unknown mode %q; supported: %s", p.Mode, strings.Join(modes, ", "))
-		}
-
-		// Build user message. For "ask" mode, content is context and prompt is the question.
-		var userText string
-		if p.Mode == "ask" && p.Prompt != "" {
-			userText = fmt.Sprintf("Context:\n%s\n\nQuestion: %s", p.Content, p.Prompt)
-		} else if p.Prompt != "" {
-			userText = fmt.Sprintf("%s\n\nAdditional instructions: %s", p.Content, p.Prompt)
-		} else {
-			userText = p.Content
-		}
-
-		maxTokens := mode.maxTokens
-		if maxTokens <= 0 {
-			maxTokens = pilotDefaultMaxToks
-		}
+		// Build the user message from task + content/items.
+		userMsg := buildPilotMessage(p.Task, p.Content, p.Items, p.OutputFormat)
 
 		// Call local sglang.
-		result, err := callLocalLLM(ctx, mode.system, userText, maxTokens)
+		result, err := callLocalLLM(ctx, pilotSystemPrompt, userMsg, pilotMaxTokens)
 		if err != nil {
-			return "", fmt.Errorf("pilot (%s): %w", p.Mode, err)
+			return "", fmt.Errorf("pilot: %w", err)
 		}
 
 		return result, nil
 	}
+}
+
+// buildPilotMessage assembles the user prompt from task, content/items, and format.
+func buildPilotMessage(task, content string, items []string, outputFormat string) string {
+	var sb strings.Builder
+
+	// Task instruction.
+	sb.WriteString("Task: ")
+	sb.WriteString(task)
+
+	// Output format hint.
+	if outputFormat != "" && outputFormat != "text" {
+		sb.WriteString("\nOutput format: ")
+		sb.WriteString(outputFormat)
+	}
+
+	// Content (single item) or items (batch).
+	if len(items) > 0 {
+		sb.WriteString(fmt.Sprintf("\n\n--- %d items ---\n", len(items)))
+		for i, item := range items {
+			sb.WriteString(fmt.Sprintf("\n[%d]\n%s\n", i+1, truncateInput(item, pilotMaxInput/len(items))))
+		}
+	} else if content != "" {
+		sb.WriteString("\n\n---\n")
+		sb.WriteString(truncateInput(content, pilotMaxInput))
+	}
+
+	return sb.String()
+}
+
+// truncateInput shortens input to maxChars with a notice.
+func truncateInput(s string, maxChars int) string {
+	if len(s) <= maxChars {
+		return s
+	}
+	return s[:maxChars] + "\n\n[... truncated, showing first " + fmt.Sprintf("%d", maxChars) + " chars]"
 }
 
 // callLocalLLM sends a single-turn request to the local sglang server and
@@ -145,7 +152,6 @@ func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 		return "", fmt.Errorf("sglang stream: %w", err)
 	}
 
-	// Collect full response from stream.
 	text, err := collectStream(ctx, events)
 	if err != nil {
 		return "", err
@@ -158,14 +164,12 @@ func callLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 }
 
 // collectStream reads all events from a streaming LLM response and returns
-// the concatenated text output. This is a simplified version of consumeStream
-// for non-interactive tool use.
+// the concatenated text output.
 func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
 	var sb strings.Builder
 	for {
 		select {
 		case <-ctx.Done():
-			// Return whatever we collected so far.
 			if sb.Len() > 0 {
 				return sb.String(), nil
 			}
