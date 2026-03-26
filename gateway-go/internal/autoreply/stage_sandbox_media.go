@@ -126,6 +126,19 @@ func StageRemoteMedia(remoteHost, remotePath, localPath string) error {
 var errFileTooLarge = errors.New("file too large")
 
 func resolveRawMediaPaths(ctx *MsgContext) []string {
+	// Prefer MediaPaths array over single MediaPath.
+	if len(ctx.MediaPaths) > 0 {
+		var paths []string
+		for _, p := range ctx.MediaPaths {
+			trimmed := strings.TrimSpace(p)
+			if trimmed != "" {
+				paths = append(paths, trimmed)
+			}
+		}
+		if len(paths) > 0 {
+			return paths
+		}
+	}
 	if ctx.MediaPath != "" {
 		path := strings.TrimSpace(ctx.MediaPath)
 		if path != "" {
@@ -206,13 +219,52 @@ func stageLocalFile(source, dest string, maxBytes int64) error {
 }
 
 func rewriteStagedMediaPaths(ctx *MsgContext, rawPaths []string, staged map[string]string) {
-	// Rewrite single MediaPath.
-	if ctx.MediaPath != "" {
-		abs := resolveAbsolutePath(ctx.MediaPath)
-		if abs != "" {
-			if mapped, ok := staged[abs]; ok {
-				ctx.MediaPath = mapped
-			}
+	rewriteIfStaged := func(value string) string {
+		raw := strings.TrimSpace(value)
+		if raw == "" {
+			return value
 		}
+		abs := resolveAbsolutePath(raw)
+		if abs == "" {
+			return value
+		}
+		if mapped, ok := staged[abs]; ok {
+			return mapped
+		}
+		return value
+	}
+
+	hasPathsArray := len(ctx.MediaPaths) > 0
+
+	if hasPathsArray {
+		// Rewrite MediaPaths array.
+		nextPaths := make([]string, len(rawPaths))
+		for i, p := range rawPaths {
+			nextPaths[i] = rewriteIfStaged(p)
+		}
+		ctx.MediaPaths = nextPaths
+		if len(nextPaths) > 0 {
+			ctx.MediaPath = nextPaths[0]
+		}
+	} else {
+		// Rewrite single MediaPath.
+		rewritten := rewriteIfStaged(ctx.MediaPath)
+		if rewritten != ctx.MediaPath {
+			ctx.MediaPath = rewritten
+		}
+	}
+
+	// Rewrite MediaUrls array.
+	if len(ctx.MediaUrls) > 0 {
+		nextUrls := make([]string, len(ctx.MediaUrls))
+		for i, u := range ctx.MediaUrls {
+			nextUrls[i] = rewriteIfStaged(u)
+		}
+		ctx.MediaUrls = nextUrls
+	}
+	// Rewrite single MediaUrl.
+	rewrittenUrl := rewriteIfStaged(ctx.MediaUrl)
+	if rewrittenUrl != ctx.MediaUrl {
+		ctx.MediaUrl = rewrittenUrl
 	}
 }

@@ -64,14 +64,52 @@ func FinalizeInboundContextFull(ctx *MsgContext, opts FinalizeInboundContextOpti
 	// 5. Command authorization: default-deny when upstream forgets.
 	// ctx.CommandAuthorized stays as-is (Go zero value is false = deny).
 
-	// 6. Media type alignment.
+	// 6. Media type alignment: ensure MediaType is set and MediaTypes
+	// is padded to match MediaPaths/MediaUrls length.
 	mediaCount := countMediaEntries(ctx)
 	if mediaCount > 0 {
 		mediaType := normalizeMediaType(ctx.MediaType)
-		if mediaType == "" {
-			mediaType = DefaultMediaType
+		rawMediaTypes := ctx.MediaTypes
+
+		var mediaTypesFinal []string
+		if len(rawMediaTypes) > 0 {
+			// Pad existing array to match media count.
+			filled := make([]string, len(rawMediaTypes))
+			copy(filled, rawMediaTypes)
+			for len(filled) < mediaCount {
+				filled = append(filled, "")
+			}
+			mediaTypesFinal = make([]string, len(filled))
+			for i, entry := range filled {
+				normalized := normalizeMediaType(entry)
+				if normalized == "" {
+					normalized = DefaultMediaType
+				}
+				mediaTypesFinal[i] = normalized
+			}
+		} else if mediaType != "" {
+			// Broadcast single type across all entries.
+			mediaTypesFinal = make([]string, mediaCount)
+			mediaTypesFinal[0] = mediaType
+			for i := 1; i < mediaCount; i++ {
+				mediaTypesFinal[i] = DefaultMediaType
+			}
+		} else {
+			// Fill with default.
+			mediaTypesFinal = make([]string, mediaCount)
+			for i := range mediaTypesFinal {
+				mediaTypesFinal[i] = DefaultMediaType
+			}
 		}
-		ctx.MediaType = mediaType
+
+		ctx.MediaTypes = mediaTypesFinal
+		if mediaType == "" && len(mediaTypesFinal) > 0 {
+			ctx.MediaType = mediaTypesFinal[0]
+		} else if mediaType != "" {
+			ctx.MediaType = mediaType
+		} else {
+			ctx.MediaType = DefaultMediaType
+		}
 	}
 }
 
@@ -159,11 +197,21 @@ func normalizeMediaType(value string) string {
 
 // countMediaEntries counts the total media entries across paths and URLs.
 func countMediaEntries(ctx *MsgContext) int {
-	count := 0
-	if ctx.MediaPath != "" {
-		count = 1
+	pathCount := len(ctx.MediaPaths)
+	urlCount := len(ctx.MediaUrls)
+	single := 0
+	if ctx.MediaPath != "" || ctx.MediaUrl != "" {
+		single = 1
 	}
-	return count
+	// Return the maximum across all sources.
+	max := single
+	if pathCount > max {
+		max = pathCount
+	}
+	if urlCount > max {
+		max = urlCount
+	}
+	return max
 }
 
 // firstNonEmpty returns the first non-empty string.

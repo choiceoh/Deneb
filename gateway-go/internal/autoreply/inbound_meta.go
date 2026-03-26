@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // InboundMetaContext extends TemplateContext with additional fields used by
@@ -62,6 +63,9 @@ type InboundMetaContext struct {
 	ForwardedFromSignature string
 	ForwardedFromChatType string
 	ForwardedDate      *int64
+
+	// Envelope formatting.
+	Timezone           string // "utc", "local", or IANA timezone
 
 	// Thread starter.
 	ThreadStarterBody  string
@@ -156,7 +160,10 @@ func BuildInboundUserContextPrefix(ctx *InboundMetaContext) string {
 		convInfo.Set("sender", sender)
 	}
 	if ctx.Timestamp != nil {
-		convInfo.Set("timestamp", formatTimestampISO(*ctx.Timestamp))
+		ts := FormatEnvelopeTimestampMs(*ctx.Timestamp, ctx.Timezone)
+		if ts != "" {
+			convInfo.Set("timestamp", ts)
+		}
 	}
 	convInfo.Set("group_subject", safeTrim(ctx.GroupSubject))
 	convInfo.Set("group_channel", safeTrim(ctx.GroupChannel))
@@ -320,12 +327,33 @@ func safeTrim(value string) string {
 	return trimmed
 }
 
-func formatTimestampISO(ms int64) string {
+// FormatEnvelopeTimestampMs formats an epoch-ms timestamp with weekday prefix
+// and timezone support for inbound context blocks.
+//
+// Mirrors src/auto-reply/envelope.ts formatEnvelopeTimestamp().
+func FormatEnvelopeTimestampMs(ms int64, timezone string) string {
 	if ms <= 0 {
 		return ""
 	}
-	// Simple ISO-8601 from epoch ms.
-	return fmt.Sprintf("%d", ms)
+	t := time.Unix(0, ms*int64(time.Millisecond))
+
+	tz := strings.ToLower(strings.TrimSpace(timezone))
+	switch tz {
+	case "", "utc":
+		t = t.UTC()
+	case "local":
+		t = t.Local()
+	default:
+		if loc, err := time.LoadLocation(timezone); err == nil {
+			t = t.In(loc)
+		} else {
+			t = t.UTC()
+		}
+	}
+
+	weekday := t.Format("Mon")
+	formatted := t.Format("2006-01-02 15:04:05 MST")
+	return weekday + " " + formatted
 }
 
 func formatContextBlock(header string, data any) string {

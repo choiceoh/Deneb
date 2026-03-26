@@ -24,9 +24,16 @@ type SendPolicyFunc func(sessionKey, channel, chatType string) string
 // It handles /new, /reset detection, hook emission, and routes to
 // registered command handlers.
 //
+// Supports two handler tiers:
+//  1. CommandHandlerFull pipeline — typed handlers with full params (TS commands-core.ts pattern)
+//  2. CommandRouter bridge — delegates to the existing CommandRouter/CommandHandler system
+//
 // Mirrors src/auto-reply/reply/commands-core.ts handleCommands().
 type CommandDispatcher struct {
 	handlers       []CommandHandlerFull
+	router         *CommandRouter     // bridge to existing handler system
+	registry       *CommandRegistry   // command normalization/detection
+	acpRegistry    *ACPRegistry       // sub-agent lifecycle tracking
 	sendPolicyFunc SendPolicyFunc
 	logger         *slog.Logger
 }
@@ -41,6 +48,22 @@ func NewCommandDispatcher(handlers []CommandHandlerFull, logger *slog.Logger) *C
 		handlers: handlers,
 		logger:   logger,
 	}
+}
+
+// SetRouter connects the existing CommandRouter so builtin commands
+// (model, think, status, etc.) are reachable through the full dispatch pipeline.
+func (d *CommandDispatcher) SetRouter(router *CommandRouter) {
+	d.router = router
+}
+
+// SetRegistry connects the CommandRegistry for normalization and detection.
+func (d *CommandDispatcher) SetRegistry(registry *CommandRegistry) {
+	d.registry = registry
+}
+
+// SetACPRegistry connects the ACP registry for sub-agent operations.
+func (d *CommandDispatcher) SetACPRegistry(acpRegistry *ACPRegistry) {
+	d.acpRegistry = acpRegistry
 }
 
 // SetSendPolicyFunc configures the send policy resolver.
@@ -98,11 +121,59 @@ func (d *CommandDispatcher) DispatchCommands(params HandleCommandsFullParams) Co
 		}
 	}
 
-	// Run through command handlers.
+	// Run through typed full-params handlers first.
 	for _, handler := range d.handlers {
 		result := handler(params, true)
 		if result != nil {
 			return *result
+		}
+	}
+
+	// Bridge to existing CommandRouter if available.
+	// This connects the 37+ builtin command handlers (model, think, status, etc.)
+	// through the full dispatch pipeline.
+	if d.router != nil {
+		cmdKey := extractDispatchCommandKey(params.Command.CommandBodyNormalized)
+		if cmdKey != "" && d.router.HasHandler(cmdKey) {
+			routerCtx := CommandContext{
+				Command:    cmdKey,
+				Args:       extractDispatchCommandArgs(params.Command.CommandBodyNormalized, cmdKey),
+				Body:       params.Ctx.Body,
+				SessionKey: params.SessionKey,
+				Channel:    params.Command.Channel,
+				IsGroup:    params.IsGroup,
+				Msg:        params.Ctx,
+				Session: &SessionState{
+					SessionKey:     params.SessionKey,
+					AgentID:        params.AgentID,
+					Channel:        params.Command.Channel,
+					IsGroup:        params.IsGroup,
+					Model:          params.Model,
+					Provider:       params.Provider,
+					ThinkLevel:     params.ResolvedThinkLevel,
+					VerboseLevel:   params.ResolvedVerboseLevel,
+					ReasoningLevel: params.ResolvedReasoningLevel,
+					ElevatedLevel:  params.ResolvedElevatedLevel,
+				},
+				Deps: &CommandDeps{},
+			}
+
+			routerResult, err := d.router.Dispatch(routerCtx)
+			if err == nil && routerResult != nil {
+				var reply *ReplyPayload
+				if routerResult.Reply != "" {
+					reply = &ReplyPayload{
+						Text:    routerResult.Reply,
+						IsError: routerResult.IsError,
+					}
+				} else if len(routerResult.Payloads) > 0 {
+					reply = &routerResult.Payloads[0]
+				}
+				return CommandHandlerFullResult{
+					Reply:          reply,
+					ShouldContinue: !routerResult.SkipAgent,
+				}
+			}
 		}
 	}
 
@@ -118,6 +189,32 @@ func (d *CommandDispatcher) DispatchCommands(params HandleCommandsFullParams) Co
 	}
 
 	return CommandHandlerFullResult{ShouldContinue: true}
+}
+
+// extractDispatchCommandKey extracts the command key from a normalized body.
+func extractDispatchCommandKey(body string) string {
+	trimmed := strings.TrimSpace(body)
+	if !strings.HasPrefix(trimmed, "/") {
+		return ""
+	}
+	end := strings.IndexAny(trimmed[1:], " \t\n")
+	if end == -1 {
+		return trimmed[1:]
+	}
+	return trimmed[1 : end+1]
+}
+
+// extractDispatchCommandArgs extracts arguments after the command key.
+func extractDispatchCommandArgs(body, cmdKey string) *CommandArgs {
+	prefix := "/" + cmdKey
+	if len(body) <= len(prefix) {
+		return nil
+	}
+	rest := body[len(prefix):]
+	if len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
+		return &CommandArgs{Raw: strings.TrimSpace(rest)}
+	}
+	return nil
 }
 
 // applyResetTailContext rewrites context fields with the tail text after a reset command.
