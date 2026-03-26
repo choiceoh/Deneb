@@ -20,6 +20,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 )
 
+// truncate shortens s to maxLen chars, appending "..." if truncated.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
 // --- cron tool ---
 
 func cronToolSchema() map[string]any {
@@ -532,37 +540,23 @@ func toolSessionsSearch(transcript TranscriptStore) ToolFunc {
 		for _, r := range results {
 			fmt.Fprintf(&sb, "### Session: %s\n", r.SessionKey)
 			for _, m := range r.Matches {
-				// Show context before.
-				for _, c := range m.Context {
-					if c.Role != "" && c.Content != "" {
-						// Only show context messages that come before the match.
-						break
-					}
-				}
-				if len(m.Context) > 0 && m.Index > 0 {
-					ctx := m.Context[0]
-					content := ctx.Content
-					if len(content) > 200 {
-						content = content[:200] + "..."
-					}
-					fmt.Fprintf(&sb, "  [ctx] [%s] %s\n", ctx.Role, content)
+				// Context layout: [before, after] when both exist,
+				// [after] when index==0, [before] when last message.
+				hasBefore := m.Index > 0 && len(m.Context) > 0
+				hasAfter := len(m.Context) > 1 || (len(m.Context) == 1 && !hasBefore)
+
+				if hasBefore {
+					c := m.Context[0]
+					content := truncate(c.Content, 200)
+					fmt.Fprintf(&sb, "  [ctx] [%s] %s\n", c.Role, content)
 				}
 
-				// Show matched message.
-				content := m.Message.Content
-				if len(content) > 500 {
-					content = content[:500] + "..."
-				}
-				fmt.Fprintf(&sb, "  **[%s]** %s\n", m.Message.Role, content)
+				fmt.Fprintf(&sb, "  **[%s]** %s\n", m.Message.Role, truncate(m.Message.Content, 500))
 
-				// Show context after (last element if index < len-1).
-				if len(m.Context) > 1 || (len(m.Context) == 1 && m.Index == 0) {
-					ctx := m.Context[len(m.Context)-1]
-					content := ctx.Content
-					if len(content) > 200 {
-						content = content[:200] + "..."
-					}
-					fmt.Fprintf(&sb, "  [ctx] [%s] %s\n", ctx.Role, content)
+				if hasAfter {
+					c := m.Context[len(m.Context)-1]
+					content := truncate(c.Content, 200)
+					fmt.Fprintf(&sb, "  [ctx] [%s] %s\n", c.Role, content)
 				}
 				sb.WriteString("\n")
 			}

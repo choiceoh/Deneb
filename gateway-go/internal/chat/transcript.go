@@ -155,6 +155,28 @@ func (s *FileTranscriptStore) ListKeys() ([]string, error) {
 	return keys, nil
 }
 
+// searchMessages finds messages matching queryLower in msgs, consuming from *remaining.
+func searchMessages(msgs []ChatMessage, queryLower string, remaining *int) []MatchedMsg {
+	var matches []MatchedMsg
+	for i, msg := range msgs {
+		if *remaining <= 0 {
+			break
+		}
+		if strings.Contains(strings.ToLower(msg.Content), queryLower) {
+			m := MatchedMsg{Index: i, Message: msg}
+			if i > 0 {
+				m.Context = append(m.Context, msgs[i-1])
+			}
+			if i < len(msgs)-1 {
+				m.Context = append(m.Context, msgs[i+1])
+			}
+			matches = append(matches, m)
+			*remaining--
+		}
+	}
+	return matches
+}
+
 // Search scans all transcripts for messages containing the query (case-insensitive).
 // Returns up to maxResults matching messages grouped by session key.
 func (s *FileTranscriptStore) Search(query string, maxResults int) ([]SearchResult, error) {
@@ -174,25 +196,7 @@ func (s *FileTranscriptStore) Search(query string, maxResults int) ([]SearchResu
 		if err != nil || len(msgs) == 0 {
 			continue
 		}
-		var matches []MatchedMsg
-		for i, msg := range msgs {
-			if remaining <= 0 {
-				break
-			}
-			if strings.Contains(strings.ToLower(msg.Content), queryLower) {
-				m := MatchedMsg{Index: i, Message: msg}
-				// Add +-1 surrounding context.
-				if i > 0 {
-					m.Context = append(m.Context, msgs[i-1])
-				}
-				if i < len(msgs)-1 {
-					m.Context = append(m.Context, msgs[i+1])
-				}
-				matches = append(matches, m)
-				remaining--
-			}
-		}
-		if len(matches) > 0 {
+		if matches := searchMessages(msgs, queryLower, &remaining); len(matches) > 0 {
 			results = append(results, SearchResult{SessionKey: key, Matches: matches})
 		}
 	}
@@ -267,24 +271,7 @@ func (s *MemoryTranscriptStore) Search(query string, maxResults int) ([]SearchRe
 		if remaining <= 0 {
 			break
 		}
-		var matches []MatchedMsg
-		for i, msg := range msgs {
-			if remaining <= 0 {
-				break
-			}
-			if strings.Contains(strings.ToLower(msg.Content), queryLower) {
-				m := MatchedMsg{Index: i, Message: msg}
-				if i > 0 {
-					m.Context = append(m.Context, msgs[i-1])
-				}
-				if i < len(msgs)-1 {
-					m.Context = append(m.Context, msgs[i+1])
-				}
-				matches = append(matches, m)
-				remaining--
-			}
-		}
-		if len(matches) > 0 {
+		if matches := searchMessages(msgs, queryLower, &remaining); len(matches) > 0 {
 			results = append(results, SearchResult{SessionKey: key, Matches: matches})
 		}
 	}
