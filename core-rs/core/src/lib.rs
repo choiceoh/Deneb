@@ -8,6 +8,10 @@
 //! It exposes both a Rust API and a C FFI surface for integration
 //! with Go (via CGo) and Node.js (via napi-rs).
 
+// This crate uses unsafe for C FFI exports (#[no_mangle] extern "C" functions)
+// required by the Go gateway CGo integration.
+#![allow(unsafe_code)]
+
 #[cfg(feature = "napi_binding")]
 #[macro_use]
 extern crate napi_derive;
