@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.11.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.0...deneb-v3.11.1) (2026-03-26)
+
+
+### Bug Fixes
+
+* resolve autoreply duplicate declarations and model config parsing ([#334](https://github.com/choiceoh/Deneb/issues/334)) ([f7737bd](https://github.com/choiceoh/Deneb/commit/f7737bdc0b157a24db2fc1f588ca4d34f185e8d6))
+* resolve Go gateway workspace dir from config instead of os.Getwd() ([#337](https://github.com/choiceoh/Deneb/issues/337)) ([ae6b9a0](https://github.com/choiceoh/Deneb/commit/ae6b9a06a67b401868df151bc3699a7e109d1c9f))
+
 ## [3.11.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.10.0...deneb-v3.11.0) (2026-03-26)
 
 
