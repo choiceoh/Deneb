@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -105,16 +107,16 @@ func assembleFFI(
 
 func handleAssemblyCmd(store *Store, cmdJSON json.RawMessage) (any, error) {
 	var cmd struct {
-		Type           string `json:"type"`
-		ConversationID uint64 `json:"conversationId"`
+		Type string `json:"type"`
 	}
 	if err := json.Unmarshal(cmdJSON, &cmd); err != nil {
 		return nil, err
 	}
+	convID := parseConversationID(cmdJSON)
 
 	switch cmd.Type {
 	case "fetchContextItems":
-		items, err := store.FetchContextItems(cmd.ConversationID)
+		items, err := store.FetchContextItems(convID)
 		if err != nil {
 			return nil, err
 		}
@@ -163,7 +165,7 @@ func handleAssemblyCmd(store *Store, cmdJSON json.RawMessage) (any, error) {
 		}, nil
 
 	case "fetchSummaryStats":
-		stats, err := store.FetchSummaryStats(cmd.ConversationID)
+		stats, err := store.FetchSummaryStats(convID)
 		if err != nil {
 			return nil, err
 		}
@@ -178,37 +180,40 @@ func handleAssemblyCmd(store *Store, cmdJSON json.RawMessage) (any, error) {
 }
 
 func parseAssemblyDone(store *Store, cmdJSON json.RawMessage) (*AssemblyResult, error) {
-	var done struct {
-		EstimatedTokens      int      `json:"estimatedTokens"`
-		RawMessageCount      int      `json:"rawMessageCount"`
-		SummaryCount         int      `json:"summaryCount"`
-		SystemPromptAddition string   `json:"systemPromptAddition"`
-		SelectedItemIDs      []string `json:"selectedItemIds,omitempty"`
-		// The Rust engine may use a different field name.
-		SelectedItems []struct {
-			ItemType  string  `json:"itemType"`
-			MessageID *uint64 `json:"messageId,omitempty"`
-			SummaryID *string `json:"summaryId,omitempty"`
-		} `json:"selectedItems,omitempty"`
+	var envelope struct {
+		Result struct {
+			EstimatedTokens      int      `json:"estimatedTokens"`
+			RawMessageCount      int      `json:"rawMessageCount"`
+			SummaryCount         int      `json:"summaryCount"`
+			SystemPromptAddition string   `json:"systemPromptAddition"`
+			SelectedItemIDs      []string `json:"selectedItemIds,omitempty"`
+		} `json:"result"`
 	}
-	if err := json.Unmarshal(cmdJSON, &done); err != nil {
+	if err := json.Unmarshal(cmdJSON, &envelope); err != nil {
 		return nil, fmt.Errorf("parse assembly done: %w", err)
 	}
+	done := envelope.Result
 
-	// Collect all message IDs and summary IDs from selected items.
+	// Parse selectedItemIds from the Rust engine.
+	// Format: "msg_{messageId}" for messages, raw summary ID for summaries.
+	type selectedItem struct {
+		isMessage bool
+		msgID     uint64
+		sumID     string
+	}
+	var items []selectedItem
 	var msgIDs []uint64
 	var sumIDs []string
 
-	for _, item := range done.SelectedItems {
-		switch item.ItemType {
-		case "message":
-			if item.MessageID != nil {
-				msgIDs = append(msgIDs, *item.MessageID)
+	for _, id := range done.SelectedItemIDs {
+		if strings.HasPrefix(id, "msg_") {
+			if n, err := strconv.ParseUint(id[4:], 10, 64); err == nil {
+				items = append(items, selectedItem{isMessage: true, msgID: n})
+				msgIDs = append(msgIDs, n)
 			}
-		case "summary":
-			if item.SummaryID != nil {
-				sumIDs = append(sumIDs, *item.SummaryID)
-			}
+		} else {
+			items = append(items, selectedItem{isMessage: false, sumID: id})
+			sumIDs = append(sumIDs, id)
 		}
 	}
 
@@ -229,38 +234,32 @@ func parseAssemblyDone(store *Store, cmdJSON json.RawMessage) (*AssemblyResult, 
 	hasSummaries := false
 	boundaryInserted := false
 
-	for _, item := range done.SelectedItems {
-		switch item.ItemType {
-		case "message":
+	for _, item := range items {
+		if item.isMessage {
 			if hasSummaries && !boundaryInserted {
 				llmMsgs = append(llmMsgs, llm.NewTextMessage("user",
 					"─── Context boundary: above is summarized history, below is recent conversation ───"))
 				boundaryInserted = true
 			}
-			if item.MessageID != nil {
-				if m, ok := messages[*item.MessageID]; ok {
-					role := m.Role
-					if role == "" {
-						role = "user"
-					}
-					llmMsgs = append(llmMsgs, llm.NewTextMessage(role, m.Content))
+			if m, ok := messages[item.msgID]; ok {
+				role := m.Role
+				if role == "" {
+					role = "user"
 				}
+				llmMsgs = append(llmMsgs, llm.NewTextMessage(role, m.Content))
 			}
-		case "summary":
+		} else {
 			hasSummaries = true
-			if item.SummaryID != nil {
-				if s, ok := summaries[*item.SummaryID]; ok {
-					// Summaries are injected as system-like context.
-					prefix := "[Aurora Summary"
-					if s.Kind == "condensed" {
-						prefix += fmt.Sprintf(" depth=%d", s.Depth)
-					}
-					prefix += "]"
-					llmMsgs = append(llmMsgs, llm.NewTextMessage(
-						"user",
-						fmt.Sprintf("%s\n%s", prefix, s.Content),
-					))
+			if s, ok := summaries[item.sumID]; ok {
+				prefix := "[Aurora Summary"
+				if s.Kind == "condensed" {
+					prefix += fmt.Sprintf(" depth=%d", s.Depth)
 				}
+				prefix += "]"
+				llmMsgs = append(llmMsgs, llm.NewTextMessage(
+					"user",
+					fmt.Sprintf("%s\n%s", prefix, s.Content),
+				))
 			}
 		}
 	}

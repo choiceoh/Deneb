@@ -14,6 +14,20 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 )
 
+// parseConversationID extracts conversation_id from a command JSON,
+// accepting both snake_case (Rust FFI) and camelCase (test/direct) formats.
+func parseConversationID(cmdJSON json.RawMessage) uint64 {
+	var cmd struct {
+		SnakeCase uint64 `json:"conversation_id"`
+		CamelCase uint64 `json:"conversationId"`
+	}
+	json.Unmarshal(cmdJSON, &cmd)
+	if cmd.SnakeCase != 0 {
+		return cmd.SnakeCase
+	}
+	return cmd.CamelCase
+}
+
 // Summarizer is called when the sweep engine requests an LLM summary.
 // The host provides an implementation that calls the active LLM provider.
 type Summarizer func(text string, aggressive bool, opts *SummarizeOptions) (string, error)
@@ -186,14 +200,8 @@ func handleCommand(
 }
 
 func handleFetchTokenCount(store *Store, cmdJSON json.RawMessage) (any, error) {
-	var cmd struct {
-		ConversationID uint64 `json:"conversationId"`
-	}
-	if err := json.Unmarshal(cmdJSON, &cmd); err != nil {
-		return nil, err
-	}
-
-	count, err := store.FetchTokenCount(cmd.ConversationID)
+	convID := parseConversationID(cmdJSON)
+	count, err := store.FetchTokenCount(convID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch token count: %w", err)
 	}
@@ -204,14 +212,8 @@ func handleFetchTokenCount(store *Store, cmdJSON json.RawMessage) (any, error) {
 }
 
 func handleFetchContextItems(store *Store, cmdJSON json.RawMessage) (any, error) {
-	var cmd struct {
-		ConversationID uint64 `json:"conversationId"`
-	}
-	if err := json.Unmarshal(cmdJSON, &cmd); err != nil {
-		return nil, err
-	}
-
-	items, err := store.FetchContextItems(cmd.ConversationID)
+	convID := parseConversationID(cmdJSON)
+	items, err := store.FetchContextItems(convID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch context items: %w", err)
 	}
@@ -258,15 +260,15 @@ func handleFetchSummaries(store *Store, cmdJSON json.RawMessage) (any, error) {
 }
 
 func handleFetchDistinctDepths(store *Store, cmdJSON json.RawMessage) (any, error) {
+	convID := parseConversationID(cmdJSON)
 	var cmd struct {
-		ConversationID uint64 `json:"conversationId"`
-		MaxOrdinal     uint64 `json:"maxOrdinal"`
+		MaxOrdinal uint64 `json:"maxOrdinal"`
 	}
 	if err := json.Unmarshal(cmdJSON, &cmd); err != nil {
 		return nil, err
 	}
 
-	depths, err := store.FetchDistinctDepths(cmd.ConversationID, cmd.MaxOrdinal)
+	depths, err := store.FetchDistinctDepths(convID, cmd.MaxOrdinal)
 	if err != nil {
 		return nil, fmt.Errorf("fetch distinct depths: %w", err)
 	}

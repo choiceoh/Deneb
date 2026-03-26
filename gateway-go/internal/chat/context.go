@@ -93,6 +93,11 @@ func assembleContextFFI(
 		return nil, fmt.Errorf("load transcript for context: %w", err)
 	}
 
+	// Respect MaxMessages limit: only feed the tail N messages to the engine.
+	if cfg.MaxMessages > 0 && len(allMsgs) > cfg.MaxMessages {
+		allMsgs = allMsgs[len(allMsgs)-cfg.MaxMessages:]
+	}
+
 	// Run the command/response loop.
 	for {
 		var cmd struct {
@@ -103,15 +108,17 @@ func assembleContextFFI(
 		}
 
 		if cmd.Type == "done" {
-			var result struct {
-				Type            string   `json:"type"`
-				EstimatedTokens int      `json:"estimatedTokens"`
-				SelectedIDs     []string `json:"selectedItemIds"`
-				SummaryCount    int      `json:"summaryCount"`
+			var envelope struct {
+				Result struct {
+					EstimatedTokens int      `json:"estimatedTokens"`
+					SelectedIDs     []string `json:"selectedItemIds"`
+					SummaryCount    int      `json:"summaryCount"`
+				} `json:"result"`
 			}
-			if err := json.Unmarshal(cmdJSON, &result); err != nil {
+			if err := json.Unmarshal(cmdJSON, &envelope); err != nil {
 				return nil, fmt.Errorf("parse assembly result: %w", err)
 			}
+			result := envelope.Result
 
 			selected := selectMessagesByIDs(allMsgs, result.SelectedIDs)
 			return &AssemblyResult{

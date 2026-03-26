@@ -191,6 +191,9 @@ func searchMemoryFiles(workspaceDir string, query string, limit int) []MemoryMat
 	if limit > 0 && len(matches) > limit {
 		matches = matches[:limit]
 	}
+	if matches == nil {
+		return []MemoryMatch{} // files exist but no keyword matches
+	}
 	return matches
 }
 

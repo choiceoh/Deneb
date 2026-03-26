@@ -216,7 +216,15 @@ func runCompactionSweepLegacy(
 
 		if cmd.Type == "done" {
 			logger.Info("compaction sweep completed", "session", sessionKey)
-			return true, nil
+			var doneCmd struct {
+				Result struct {
+					ActionTaken bool `json:"actionTaken"`
+				} `json:"result"`
+			}
+			if err := json.Unmarshal(cmdJSON, &doneCmd); err == nil {
+				return doneCmd.Result.ActionTaken, nil
+			}
+			return false, nil
 		}
 
 		response, err := handleSweepCommandLegacy(cmdJSON, allMsgs, logger)
