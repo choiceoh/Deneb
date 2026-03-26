@@ -184,6 +184,14 @@ type Animation struct {
 	FileSize     int64  `json:"file_size,omitempty"`
 }
 
+// File represents a file ready to be downloaded from Telegram.
+type File struct {
+	FileID       string `json:"file_id"`
+	FileUniqueID string `json:"file_unique_id"`
+	FileSize     int64  `json:"file_size,omitempty"`
+	FilePath     string `json:"file_path,omitempty"`
+}
+
 // ForumTopic represents a forum topic in a supergroup.
 type ForumTopic struct {
 	Name string `json:"name"`

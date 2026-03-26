@@ -66,9 +66,10 @@ type ChatMessage struct {
 
 // ChatAttachment represents an attachment on a chat message.
 type ChatAttachment struct {
-	Type     string `json:"type"` // "image", "file", "audio"
+	Type     string `json:"type"` // "image", "file", "audio", "video"
 	MimeType string `json:"mimeType,omitempty"`
 	URL      string `json:"url,omitempty"`
+	Data     string `json:"data,omitempty"` // base64-encoded content (used for inline media)
 	Name     string `json:"name,omitempty"`
 	Size     int64  `json:"size,omitempty"`
 }
