@@ -78,6 +78,75 @@ func memoryGetToolSchema() map[string]any {
 	}
 }
 
+// MemoryMatch represents a single keyword match in a memory file.
+type MemoryMatch struct {
+	File    string // relative path from workspace
+	Line    int    // 1-based line number
+	Snippet string // matched line with ±2 lines context
+}
+
+// searchMemoryFiles searches memory files for keyword matches and returns results.
+// Shared by toolMemorySearch (LLM tool) and PrefetchKnowledge (context assembly).
+func searchMemoryFiles(workspaceDir string, query string, limit int) []MemoryMatch {
+	memoryFiles := collectMemoryFiles(workspaceDir)
+	if len(memoryFiles) == 0 {
+		return nil // nil signals "no memory files exist"
+	}
+
+	keywords := strings.Fields(strings.ToLower(query))
+	if len(keywords) == 0 {
+		return []MemoryMatch{} // empty slice signals "files exist, no matches"
+	}
+
+	var matches []MemoryMatch
+	for _, path := range memoryFiles {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		rel, _ := filepath.Rel(workspaceDir, path)
+		if rel == "" {
+			rel = path
+		}
+
+		matchedLines := make(map[int]bool)
+		for i, line := range lines {
+			if matchedLines[i] {
+				continue
+			}
+			lower := strings.ToLower(line)
+			for _, kw := range keywords {
+				if strings.Contains(lower, kw) {
+					start := i - 2
+					if start < 0 {
+						start = 0
+					}
+					end := i + 3
+					if end > len(lines) {
+						end = len(lines)
+					}
+					for j := start; j < end; j++ {
+						matchedLines[j] = true
+					}
+					snippet := strings.Join(lines[start:end], "\n")
+					matches = append(matches, MemoryMatch{
+						File:    rel,
+						Line:    i + 1,
+						Snippet: snippet,
+					})
+					break
+				}
+			}
+		}
+	}
+
+	if limit > 0 && len(matches) > limit {
+		matches = matches[:limit]
+	}
+	return matches
+}
+
 // toolMemorySearch implements keyword-based search across MEMORY.md and memory/*.md.
 func toolMemorySearch(workspaceDir string) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
@@ -91,65 +160,21 @@ func toolMemorySearch(workspaceDir string) ToolFunc {
 			return "", fmt.Errorf("query is required")
 		}
 
-		// Collect memory files.
-		memoryFiles := collectMemoryFiles(workspaceDir)
-		if len(memoryFiles) == 0 {
+		matches := searchMemoryFiles(workspaceDir, p.Query, 20)
+		if matches == nil {
 			return fmt.Sprintf("No memory files found in workspace %q (looked for MEMORY.md, memory.md, memory/*.md).", workspaceDir), nil
 		}
-
-		keywords := strings.Fields(strings.ToLower(p.Query))
-		var results []string
-
-		for _, path := range memoryFiles {
-			data, err := os.ReadFile(path)
-			if err != nil {
-				continue
-			}
-			content := string(data)
-			lines := strings.Split(content, "\n")
-			rel, _ := filepath.Rel(workspaceDir, path)
-			if rel == "" {
-				rel = path
-			}
-
-			// Find lines matching any keyword, deduplicate by line number.
-			matchedLines := make(map[int]bool)
-			for i, line := range lines {
-				if matchedLines[i] {
-					continue
-				}
-				lower := strings.ToLower(line)
-				for _, kw := range keywords {
-					if strings.Contains(lower, kw) {
-						// Include surrounding context (±2 lines).
-						start := i - 2
-						if start < 0 {
-							start = 0
-						}
-						end := i + 3
-						if end > len(lines) {
-							end = len(lines)
-						}
-						// Mark all context lines as seen to avoid duplicates.
-						for j := start; j < end; j++ {
-							matchedLines[j] = true
-						}
-						snippet := strings.Join(lines[start:end], "\n")
-						results = append(results, fmt.Sprintf("### %s (line %d)\n%s", rel, i+1, snippet))
-						break
-					}
-				}
-			}
-		}
-
-		if len(results) == 0 {
+		if len(matches) == 0 {
 			return fmt.Sprintf("No matches found for %q in memory files.", p.Query), nil
 		}
 
-		// Cap results.
-		if len(results) > 20 {
-			results = results[:20]
-			results = append(results, fmt.Sprintf("\n... and more results (showing 20 of total)"))
+		results := make([]string, 0, len(matches))
+		for _, m := range matches {
+			results = append(results, fmt.Sprintf("### %s (line %d)\n%s", m.File, m.Line, m.Snippet))
+		}
+
+		if len(matches) == 20 {
+			results = append(results, "\n... and more results (showing 20 of total)")
 		}
 
 		return strings.Join(results, "\n\n"), nil

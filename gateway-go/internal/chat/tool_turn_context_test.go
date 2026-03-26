@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -141,20 +142,7 @@ func TestDetectCycle_WithCycle(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected cycle detection error")
 	}
-	if !contains(err.Error(), "circular") {
+	if !strings.Contains(err.Error(), "circular") {
 		t.Errorf("expected 'circular' in error, got: %v", err)
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && containsStr(s, substr)
-}
-
-func containsStr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

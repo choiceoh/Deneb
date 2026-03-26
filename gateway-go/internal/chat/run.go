@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
 // cachedWorkspaceDir caches the resolved workspace directory at startup
@@ -63,6 +64,7 @@ type runDeps struct {
 	logger          *slog.Logger              // required (defaults to slog.Default)
 
 	auroraStore   *aurora.Store // optional; enables Aurora compaction
+	vegaBackend   vega.Backend // optional; enables knowledge prefetch
 	contextCfg    ContextConfig
 	compactionCfg CompactionConfig
 	defaultModel  string
@@ -153,7 +155,22 @@ func executeAgentRun(
 		}
 	}
 
-	// 2. Assemble system prompt (supports both string and content block array).
+	// 2. Kick off proactive context in parallel with prompt + history assembly.
+	// The local sglang model analyzes the user message and returns a context
+	// hint that reduces the agent's first-turn exploration (saves 1-3 turns).
+	type proactiveResult struct{ hint string }
+	proactiveCh := make(chan proactiveResult, 1)
+	workspaceDir := resolveWorkspaceDirForPrompt()
+	if params.Message != "" && len(params.Message) >= proactiveMinMsgLen {
+		go func() {
+			hint := buildProactiveContext(ctx, params.Message, workspaceDir, logger)
+			proactiveCh <- proactiveResult{hint: hint}
+		}()
+	} else {
+		proactiveCh <- proactiveResult{} // no-op: skip for short messages
+	}
+
+	// 3. Assemble system prompt (supports both string and content block array).
 	// The prompt format is deferred: if Anthropic is the provider, we use
 	// ContentBlock arrays with cache_control breakpoints; otherwise plain string.
 	var systemPrompt json.RawMessage
@@ -164,7 +181,6 @@ func executeAgentRun(
 		systemPrompt = llm.SystemString(deps.defaultSystem)
 	}
 	if len(systemPrompt) == 0 && deps.tools != nil {
-		workspaceDir := resolveWorkspaceDirForPrompt()
 		tz, _ := loadCachedTimezone()
 		spp := SystemPromptParams{
 			WorkspaceDir: workspaceDir,
@@ -181,7 +197,22 @@ func executeAgentRun(
 		systemPrompt = llm.SystemString(BuildSystemPrompt(spp))
 	}
 
-	// 3. Assemble context (token-budgeted history).
+	// 3.5. Knowledge prefetch: search Vega + Memory for relevant context,
+	// append results to system prompt so the LLM sees them as background knowledge.
+	// Stored in knowledgeAddition so it survives Anthropic ContentBlock rebuilds below.
+	var knowledgeAddition string
+	if params.Message != "" {
+		kDeps := KnowledgeDeps{
+			VegaBackend:  deps.vegaBackend,
+			WorkspaceDir: workspaceDir,
+		}
+		knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
+		if knowledgeAddition != "" {
+			systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
+		}
+	}
+
+	// 4. Assemble context (token-budgeted history).
 	var messages []llm.Message
 	if deps.transcript != nil {
 		result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger)
@@ -208,7 +239,15 @@ func executeAgentRun(
 		messages = appendAttachmentsToHistory(messages, params.Message, params.Attachments)
 	}
 
-	// 3. Resolve model and provider.
+	// 5. Collect proactive context hint and inject into system prompt.
+	proactive := <-proactiveCh
+	if proactive.hint != "" {
+		systemPrompt = llm.AppendSystemText(systemPrompt,
+			"\n## Context Hint (from local analysis)\n"+proactive.hint)
+		logger.Info("proactive context injected", "chars", len(proactive.hint))
+	}
+
+	// 6. Resolve model and provider.
 	model := params.Model
 	if model == "" {
 		model = deps.defaultModel
@@ -221,13 +260,13 @@ func executeAgentRun(
 	providerID, modelName := parseModelID(model)
 	model = modelName
 
-	// 4. Resolve LLM client from provider config, auth manager, or pre-configured client.
+	// 7. Resolve LLM client from provider config, auth manager, or pre-configured client.
 	client, apiType := resolveClient(deps, providerID, logger)
 	if client == nil {
 		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
 	}
 
-	// 5. Build tool list from registry (uses stored descriptions and schemas).
+	// 8. Build tool list from registry (uses stored descriptions and schemas).
 	var tools []llm.Tool
 	if deps.tools != nil {
 		tools = deps.tools.LLMTools()
@@ -238,13 +277,22 @@ func executeAgentRun(
 	if apiType == "anthropic" {
 		if systemPromptParams != nil {
 			systemPrompt = llm.SystemBlocks(BuildSystemPromptBlocks(*systemPromptParams))
+			// Re-apply knowledge prefetch (the rebuild above replaces the prompt).
+			if knowledgeAddition != "" {
+				systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
+			}
+		}
+		// Re-inject proactive hint (Anthropic rebuild overwrites the string version).
+		if proactive.hint != "" {
+			systemPrompt = llm.AppendSystemText(systemPrompt,
+				"\n## Context Hint (from local analysis)\n"+proactive.hint)
 		}
 		if len(tools) > 0 {
 			tools[len(tools)-1].CacheControl = &llm.CacheControl{Type: "ephemeral"}
 		}
 	}
 
-	// 6. Build agent config.
+	// 9. Build agent config.
 	maxTokens := deps.maxTokens
 	if maxTokens <= 0 {
 		maxTokens = defaultMaxTokens
@@ -260,13 +308,13 @@ func executeAgentRun(
 		APIType:   apiType,
 	}
 
-	// 7. Set up delta emitter for streaming.
+	// 10. Set up delta emitter for streaming.
 	var emitDelta func(string)
 	if broadcaster != nil {
 		emitDelta = broadcaster.EmitDelta
 	}
 
-	// 8. Execute agent loop with compaction retry.
+	// 11. Execute agent loop with compaction retry.
 	var agentResult *AgentResult
 	origSystem := cfg.System // preserve for compaction retries to avoid duplicate appends
 
@@ -299,7 +347,7 @@ func executeAgentRun(
 			if providerID != "sglang" && providerID != "" && ctx.Err() == nil {
 				logger.Warn("primary model failed, falling back to sglang",
 					"provider", providerID, "model", model, "error", runErr)
-				fbClient := llm.NewClient(defaultSglangBaseURL, "", llm.WithLogger(logger))
+				fbClient := getSglangClient()
 				fbCfg := cfg
 				fbCfg.Model = sglangModel
 				fbCfg.APIType = "openai"
