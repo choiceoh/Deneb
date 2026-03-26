@@ -13,55 +13,33 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
-// sseResponse builds an SSE response string for a simple text completion.
+// sseResponse builds an OpenAI-compatible SSE response for a simple text completion.
 func sseResponse(text, stopReason string) string {
+	// Map Anthropic stop reasons to OpenAI finish_reasons.
+	finishReason := stopReason
+	if finishReason == "end_turn" {
+		finishReason = "stop"
+	}
+
 	var b strings.Builder
-	b.WriteString(`event: message_start
-data: {"type":"message_start","message":{"id":"msg_1","model":"test","usage":{"input_tokens":10,"output_tokens":0}}}
-
-event: content_block_start
-data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
-
-`)
-	b.WriteString(fmt.Sprintf(`event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"%s"}}
-
-event: content_block_stop
-data: {"type":"content_block_stop","index":0}
-
-`, text))
-	b.WriteString(fmt.Sprintf(`event: message_delta
-data: {"type":"message_delta","delta":{"stop_reason":"%s"},"usage":{"output_tokens":5}}
-
-event: message_stop
-data: {"type":"message_stop"}
-
-`, stopReason))
+	// Delta chunk with content.
+	b.WriteString(fmt.Sprintf("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"%s\"},\"finish_reason\":null}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":0}}\n\n", text))
+	// Final chunk with finish_reason.
+	b.WriteString(fmt.Sprintf("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"%s\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}\n\n", finishReason))
+	b.WriteString("data: [DONE]\n\n")
 	return b.String()
 }
 
-// sseToolResponse builds an SSE response that contains a tool_use block.
+// sseToolResponse builds an OpenAI-compatible SSE response with a tool call.
 func sseToolResponse(toolID, toolName, toolInput string) string {
 	var b strings.Builder
-	b.WriteString(`event: message_start
-data: {"type":"message_start","message":{"id":"msg_1","model":"test","usage":{"input_tokens":10,"output_tokens":0}}}
-
-event: content_block_start
-data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"` + toolID + `","name":"` + toolName + `"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"` + toolInput + `"}}
-
-event: content_block_stop
-data: {"type":"content_block_stop","index":0}
-
-event: message_delta
-data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":10}}
-
-event: message_stop
-data: {"type":"message_stop"}
-
-`)
+	// First chunk: tool call declaration.
+	b.WriteString(fmt.Sprintf("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"%s\",\"type\":\"function\",\"function\":{\"name\":\"%s\",\"arguments\":\"\"}}]},\"finish_reason\":null}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":0}}\n\n", toolID, toolName))
+	// Second chunk: tool call arguments.
+	b.WriteString(fmt.Sprintf("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"%s\"}}]},\"finish_reason\":null}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}\n\n", toolInput))
+	// Final chunk: finish with tool_calls reason.
+	b.WriteString("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":10}}\n\n")
+	b.WriteString("data: [DONE]\n\n")
 	return b.String()
 }
 
