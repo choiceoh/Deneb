@@ -96,6 +96,9 @@ func (s *FullTypingSignaler) SignalMessageStart() {
 
 // SignalTextDelta signals a text delta was received, starting typing if appropriate.
 // Filters out silent reply tokens (NO_REPLY).
+//
+// For "message"/"instant" modes: uses startTypingOnText (filters silent tokens).
+// For "thinking" mode: keeps typing alive via refreshTypingTtl if already active.
 func (s *FullTypingSignaler) SignalTextDelta(text string) {
 	if s.disabled || s.controller == nil {
 		return
@@ -108,14 +111,19 @@ func (s *FullTypingSignaler) SignalTextDelta(text string) {
 	if renderable {
 		s.hasRenderableText = true
 	} else {
+		// Non-renderable text (silent token) — skip typing.
 		return
 	}
 	if s.ShouldStartOnText {
-		s.controller.Start()
+		s.controller.StartTypingOnText(text)
 		return
 	}
 	if s.ShouldStartOnReasoning {
-		s.controller.Start()
+		// In thinking mode, keep alive via TTL refresh.
+		if !s.controller.IsActive() {
+			s.controller.StartTypingLoop()
+		}
+		s.controller.RefreshTypingTtl()
 	}
 }
 
@@ -127,15 +135,22 @@ func (s *FullTypingSignaler) SignalReasoningDelta() {
 	if !s.hasRenderableText {
 		return
 	}
-	s.controller.Start()
+	s.controller.StartTypingLoop()
+	s.controller.RefreshTypingTtl()
 }
 
 // SignalToolStart signals that a tool invocation has started.
+// Starts typing immediately when tools begin, refreshes TTL if already active.
 func (s *FullTypingSignaler) SignalToolStart() {
 	if s.disabled || s.controller == nil {
 		return
 	}
-	s.controller.Start()
+	if !s.controller.IsActive() {
+		s.controller.StartTypingLoop()
+		s.controller.RefreshTypingTtl()
+		return
+	}
+	s.controller.RefreshTypingTtl()
 }
 
 // Stop stops the underlying typing controller.

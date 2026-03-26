@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"regexp"
 	"strings"
 )
 
@@ -95,24 +96,39 @@ func sanitizeInboundText(text string) string {
 	return text
 }
 
-// stripSystemTags removes <system-reminder> tags from text to prevent injection.
+// Regex patterns for system tag neutralization.
+// Matches src/auto-reply/reply/inbound-text.ts sanitizeInboundSystemTags().
+var (
+	// Neutralizes bracketed system tags like [System Message], [Assistant], [Internal].
+	bracketedSystemTagRe = regexp.MustCompile(`(?i)\[\s*(System\s*Message|System|Assistant|Internal)\s*\]`)
+	// Neutralizes line-prefixed "System:" patterns.
+	lineSystemPrefixRe = regexp.MustCompile(`(?mi)^(\s*)System:(?:\s|$)`)
+	// Strips <system-reminder>...</system-reminder> blocks entirely.
+	systemReminderTagRe = regexp.MustCompile(`(?is)<system-reminder>.*?</system-reminder>`)
+	// Strips unclosed <system-reminder> tags.
+	systemReminderOpenRe = regexp.MustCompile(`(?i)<system-reminder>[\s\S]*$`)
+)
+
+// stripSystemTags removes system-level injection vectors from user text.
+// Three-pass sanitization:
+// 1. Remove <system-reminder>...</system-reminder> blocks entirely
+// 2. Replace bracketed tags [System Message] → (System Message)
+// 3. Replace line-prefixed "System:" → "System (untrusted):"
 func stripSystemTags(text string) string {
-	// Remove opening and closing system-reminder tags.
-	result := text
-	for {
-		lower := strings.ToLower(result)
-		start := strings.Index(lower, "<system-reminder>")
-		if start == -1 {
-			break
+	// Pass 1: Remove complete system-reminder blocks.
+	result := systemReminderTagRe.ReplaceAllString(text, "")
+	// Pass 1b: Remove unclosed system-reminder tags.
+	result = systemReminderOpenRe.ReplaceAllString(result, "")
+	// Pass 2: Neutralize bracketed system tags → parenthesized.
+	result = bracketedSystemTagRe.ReplaceAllStringFunc(result, func(match string) string {
+		inner := bracketedSystemTagRe.FindStringSubmatch(match)
+		if len(inner) > 1 {
+			return "(" + inner[1] + ")"
 		}
-		end := strings.Index(lower[start:], "</system-reminder>")
-		if end == -1 {
-			// Remove unclosed tag.
-			result = result[:start]
-			break
-		}
-		result = result[:start] + result[start+end+len("</system-reminder>"):]
-	}
+		return match
+	})
+	// Pass 3: Neutralize line-prefixed "System:".
+	result = lineSystemPrefixRe.ReplaceAllString(result, "${1}System (untrusted):")
 	return result
 }
 

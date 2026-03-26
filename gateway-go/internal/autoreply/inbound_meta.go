@@ -267,17 +267,27 @@ func BuildInboundUserContextPrefix(ctx *InboundMetaContext) string {
 func resolveInboundChannel(ctx *InboundMetaContext) string {
 	channelValue := safeTrim(ctx.OriginatingChannel)
 	if channelValue == "" {
-		channelValue = safeTrim(ctx.Surface)
+		surface := safeTrim(ctx.Surface)
+		// Webchat/Hub Chat sessions: omit channel entirely rather than
+		// falling back to an unrelated provider.
+		if surface != "" && surface != "webchat" {
+			channelValue = surface
+		}
 	}
 	if channelValue == "" {
 		provider := safeTrim(ctx.Provider)
-		if provider != "webchat" && ctx.Surface != "webchat" {
+		if provider != "webchat" && safeTrim(ctx.Surface) != "webchat" {
 			channelValue = provider
 		}
 	}
 	return channelValue
 }
 
+// resolveSenderLabel builds a display label from sender identity fields.
+// Priority: name > username > tag > e164 > id.
+// If both a display part and an id part exist and differ, formats as "display (idPart)".
+//
+// Mirrors src/channels/sender-label.ts resolveSenderLabel().
 func resolveSenderLabel(ctx *InboundMetaContext) string {
 	name := safeTrim(ctx.SenderName)
 	username := safeTrim(ctx.SenderUsername)
@@ -285,19 +295,21 @@ func resolveSenderLabel(ctx *InboundMetaContext) string {
 	e164 := safeTrim(ctx.SenderE164)
 	id := safeTrim(ctx.SenderId)
 
-	if name != "" {
-		return name
+	// Determine display name (human-readable).
+	display := firstNonEmpty(name, username, tag)
+	// Determine identifier part (machine-readable).
+	idPart := firstNonEmpty(e164, id, username)
+
+	if display == "" && idPart == "" {
+		return ""
 	}
-	if username != "" {
-		return username
+	if display == "" {
+		return idPart
 	}
-	if tag != "" {
-		return tag
+	if idPart == "" || display == idPart {
+		return display
 	}
-	if e164 != "" {
-		return e164
-	}
-	return id
+	return display + " (" + idPart + ")"
 }
 
 func safeTrim(value string) string {

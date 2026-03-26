@@ -1,7 +1,8 @@
 package autoreply
 
 // InternalMessageChannel is the well-known channel name for internal webchat messages.
-const InternalMessageChannel = "__internal_webchat__"
+// Matches INTERNAL_MESSAGE_CHANNEL from src/utils/message-channel.ts.
+const InternalMessageChannel = "webchat"
 
 // ResolveRunTypingPolicyParams holds the inputs for typing policy resolution.
 type ResolveRunTypingPolicyParams struct {

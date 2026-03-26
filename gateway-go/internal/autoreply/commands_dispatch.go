@@ -16,14 +16,19 @@ const (
 
 var resetCommandRe = regexp.MustCompile(`^/(new|reset)(?:\s|$)`)
 
+// SendPolicyFunc resolves the send policy for a session.
+// Returns "deny" to block the message, any other value to allow.
+type SendPolicyFunc func(sessionKey, channel, chatType string) string
+
 // CommandDispatcher manages the full command dispatch pipeline.
 // It handles /new, /reset detection, hook emission, and routes to
 // registered command handlers.
 //
 // Mirrors src/auto-reply/reply/commands-core.ts handleCommands().
 type CommandDispatcher struct {
-	handlers []CommandHandlerFull
-	logger   *slog.Logger
+	handlers       []CommandHandlerFull
+	sendPolicyFunc SendPolicyFunc
+	logger         *slog.Logger
 }
 
 // NewCommandDispatcher creates a new dispatcher with the given handlers.
@@ -36,6 +41,11 @@ func NewCommandDispatcher(handlers []CommandHandlerFull, logger *slog.Logger) *C
 		handlers: handlers,
 		logger:   logger,
 	}
+}
+
+// SetSendPolicyFunc configures the send policy resolver.
+func (d *CommandDispatcher) SetSendPolicyFunc(fn SendPolicyFunc) {
+	d.sendPolicyFunc = fn
 }
 
 // DispatchCommands runs the full command dispatch pipeline.
@@ -96,7 +106,17 @@ func (d *CommandDispatcher) DispatchCommands(params HandleCommandsFullParams) Co
 		}
 	}
 
-	// No handler matched — continue to agent execution.
+	// No handler matched — check send policy before continuing to agent.
+	if d.sendPolicyFunc != nil {
+		policy := d.sendPolicyFunc(params.SessionKey, params.Command.Channel, "")
+		if policy == "deny" {
+			d.logger.Debug("send blocked by policy",
+				"sessionKey", params.SessionKey,
+			)
+			return CommandHandlerFullResult{ShouldContinue: false}
+		}
+	}
+
 	return CommandHandlerFullResult{ShouldContinue: true}
 }
 
