@@ -32,7 +32,7 @@ func TestConsoleHandler_BasicFormat(t *testing.T) {
 	}
 
 	got := buf.String()
-	want := "14:05:09.123 INF server started addr=127.0.0.1:8080 port=8080\n"
+	want := "14:05:09.1 INF · server started addr=127.0.0.1:8080 port=8080\n"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
@@ -110,18 +110,18 @@ func TestConsoleHandler_Enabled(t *testing.T) {
 func TestConsoleHandler_WithAttrs(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
-	h2 := h.WithAttrs([]slog.Attr{slog.String("pkg", "server")})
+	h2 := h.WithAttrs([]slog.Attr{slog.String("component", "router")})
 
 	r := newTestRecord(slog.LevelInfo, "request", slog.Int("ms", 42))
 	h2.Handle(nil, r)
 
 	got := buf.String()
-	pkgIdx := strings.Index(got, "pkg=server")
+	compIdx := strings.Index(got, "component=router")
 	msIdx := strings.Index(got, "ms=42")
-	if pkgIdx < 0 || msIdx < 0 {
+	if compIdx < 0 || msIdx < 0 {
 		t.Fatalf("expected both attrs in %q", got)
 	}
-	if pkgIdx > msIdx {
+	if compIdx > msIdx {
 		t.Errorf("pre-attr should appear before record attr: %q", got)
 	}
 }
@@ -148,15 +148,12 @@ func TestConsoleHandler_ColorStyling(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	// ERR level uses bold red.
 	if !strings.Contains(got, ansiBoldRed) {
 		t.Errorf("color mode should contain bold red for ERR: %q", got)
 	}
-	// Timestamp should be dim.
 	if !strings.Contains(got, ansiDim) {
 		t.Errorf("timestamp should be dim: %q", got)
 	}
-	// Bold should be present (for level and message).
 	if !strings.Contains(got, ansiReset) {
 		t.Errorf("should contain reset sequences: %q", got)
 	}
@@ -208,16 +205,13 @@ func TestConsoleHandler_ErrorAttrHighlight(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	// The "error" key should get italic+red styling.
 	if !strings.Contains(got, ansiItalic) {
 		t.Errorf("error attr should use italic: %q", got)
 	}
-	// The error value should be in red (separate from the key styling).
 	errorIdx := strings.Index(got, "error=")
 	if errorIdx < 0 {
 		t.Fatalf("error attr not found in %q", got)
 	}
-	// Check red color appears around the error value.
 	afterError := got[errorIdx:]
 	redCount := strings.Count(afterError, ansiRed)
 	if redCount < 1 {
@@ -252,13 +246,13 @@ func TestConsoleHandler_BoolAttr(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	want := "14:05:09.123 DBG rpc method=health ok=true ms=5\n"
+	want := "14:05:09.1 DBG · rpc method=health ok=true ms=5\n"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
 }
 
-func TestConsoleHandler_MillisecondTimestamp(t *testing.T) {
+func TestConsoleHandler_Timestamp(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
@@ -266,8 +260,12 @@ func TestConsoleHandler_MillisecondTimestamp(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	if !strings.HasPrefix(got, "14:05:09.123") {
-		t.Errorf("expected millisecond timestamp, got %q", got)
+	if !strings.HasPrefix(got, "14:05:09.1") {
+		t.Errorf("expected decisecond timestamp, got %q", got)
+	}
+	// Should NOT have 3-digit milliseconds.
+	if strings.HasPrefix(got, "14:05:09.123") {
+		t.Errorf("timestamp should be decisecond (1 digit), not millisecond: %q", got)
 	}
 }
 
@@ -279,7 +277,6 @@ func TestConsoleHandler_ErrorMessageBoldRed(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	// ERR message should use bold red (ansiBoldRed appears for both level and message).
 	count := strings.Count(got, ansiBoldRed)
 	if count < 2 {
 		t.Errorf("ERR level should bold-red both level and message, got %d occurrences in %q", count, got)
@@ -296,5 +293,129 @@ func TestConsoleHandler_InfoMessageBold(t *testing.T) {
 	got := buf.String()
 	if !strings.Contains(got, ansiBold) {
 		t.Errorf("INF message should be bold: %q", got)
+	}
+}
+
+// --- New tests for modernized features ---
+
+func TestConsoleHandler_Separator(t *testing.T) {
+	// No-color mode should contain the · separator.
+	var buf bytes.Buffer
+	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
+	r := newTestRecord(slog.LevelInfo, "test")
+	h.Handle(nil, r)
+
+	got := buf.String()
+	if !strings.Contains(got, " · ") {
+		t.Errorf("expected · separator in no-color output: %q", got)
+	}
+
+	// Color mode should also contain ·.
+	buf.Reset()
+	h2 := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
+	h2.Handle(nil, r)
+
+	got = buf.String()
+	if !strings.Contains(got, "·") {
+		t.Errorf("expected · separator in color output: %q", got)
+	}
+}
+
+func TestConsoleHandler_PkgTag(t *testing.T) {
+	// pkg preAttr should render as [server] tag, not pkg=server.
+	var buf bytes.Buffer
+	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
+	h2 := h.WithAttrs([]slog.Attr{slog.String("pkg", "server")})
+
+	r := newTestRecord(slog.LevelInfo, "request", slog.Int("status", 200))
+	h2.Handle(nil, r)
+
+	got := buf.String()
+	want := "14:05:09.1 INF · [server] request status=200\n"
+	if got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+	// Must NOT contain pkg=server.
+	if strings.Contains(got, "pkg=server") {
+		t.Errorf("pkg should be rendered as [server] tag, not key=value: %q", got)
+	}
+}
+
+func TestConsoleHandler_PkgTagInline(t *testing.T) {
+	// pkg as a record attr (not preAttr) should also render as tag.
+	var buf bytes.Buffer
+	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
+
+	r := newTestRecord(slog.LevelInfo, "request",
+		slog.String("pkg", "media"),
+		slog.Int("status", 200),
+	)
+	h.Handle(nil, r)
+
+	got := buf.String()
+	if !strings.Contains(got, "[media]") {
+		t.Errorf("inline pkg should render as [media] tag: %q", got)
+	}
+	if strings.Contains(got, "pkg=media") {
+		t.Errorf("pkg should not appear as key=value: %q", got)
+	}
+}
+
+func TestConsoleHandler_PkgTagColor(t *testing.T) {
+	// Color mode should use dim cyan for pkg tag.
+	var buf bytes.Buffer
+	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
+	h2 := h.WithAttrs([]slog.Attr{slog.String("pkg", "server")})
+
+	r := newTestRecord(slog.LevelInfo, "request")
+	h2.Handle(nil, r)
+
+	got := buf.String()
+	if !strings.Contains(got, ansiDimCyn) {
+		t.Errorf("pkg tag should use dim cyan in color mode: %q", got)
+	}
+	if !strings.Contains(got, "[server]") {
+		t.Errorf("pkg tag should contain [server]: %q", got)
+	}
+}
+
+func TestConsoleHandler_NoPkgTag(t *testing.T) {
+	// Without pkg attr, separator goes directly to message.
+	var buf bytes.Buffer
+	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
+
+	r := newTestRecord(slog.LevelInfo, "hello")
+	h.Handle(nil, r)
+
+	got := buf.String()
+	want := "14:05:09.1 INF · hello\n"
+	if got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestConsoleHandler_DurationFormatting(t *testing.T) {
+	tests := []struct {
+		dur  time.Duration
+		want string
+	}{
+		{150 * time.Microsecond, "150µs"},
+		{42 * time.Millisecond, "42ms"},
+		{1234 * time.Millisecond, "1.2s"},
+		{9999 * time.Millisecond, "9.9s"},
+		{90 * time.Second, "1m30s"},
+		{time.Hour + 30*time.Minute, "1h30m0s"},
+	}
+	for _, tt := range tests {
+		var buf bytes.Buffer
+		h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
+		r := newTestRecord(slog.LevelInfo, "op", slog.Duration("elapsed", tt.dur))
+		h.Handle(nil, r)
+
+		got := buf.String()
+		wantAttr := "elapsed=" + tt.want
+		if !strings.Contains(got, wantAttr) {
+			t.Errorf("duration %v: expected %q in %q", tt.dur, wantAttr, got)
+		}
 	}
 }
