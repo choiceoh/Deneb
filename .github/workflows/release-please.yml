@@ -4,10 +4,16 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      target_version:
+        description: "Target version (e.g. 3.12.0). Leave empty for auto."
+        required: false
+        type: string
 
 permissions:
   contents: write
   pull-requests: write
+  attestations: write
 
 jobs:
   release-please:
@@ -17,10 +23,6 @@ jobs:
       tag: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.version }}
     steps:
-      # Use a PAT so the release PR triggers other CI workflows.
-      # Set RELEASE_PLEASE_TOKEN as a repo secret with a fine-grained PAT
-      # (contents: write, pull-requests: write).
-      # Falls back to the default GITHUB_TOKEN if the secret is not set.
       - uses: googleapis/release-please-action@v4
         id: release
         with:
@@ -28,29 +30,132 @@ jobs:
           manifest-file: .release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Print release info
-        if: steps.release.outputs.release_created == 'true'
-        run: |
-          echo "## Release v${{ steps.release.outputs.version }} created" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Tag:** ${{ steps.release.outputs.tag_name }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Version:** ${{ steps.release.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
-
-  # Post-release: tag-triggered jobs can be added here.
-  # The DGX Spark deployment model is `git pull` + restart,
-  # so no CI/CD publish step is needed. This job creates a
-  # GitHub release summary for visibility.
+  # Post-release: build all targets + stats + checksums
   post-release:
     needs: release-please
     if: needs.release-please.outputs.release-created == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+          - goos: linux
+            goarch: amd64
+            suffix: linux-amd64
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Rust core (shared across all targets) ──
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core-rs
+
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+
+      - name: Build Rust core (release)
+        working-directory: core-rs
+        run: cargo build --release
+
+      # ── Go gateway with Rust FFI ──
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: gateway-go/go.sum
+
+      - name: Detect pre-release
+        id: prerelease
+        run: |
+          VERSION="${{ needs.release-please.outputs.version }}"
+          if echo "$VERSION" | grep -qE '(alpha|beta|rc|pre)'; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build gateway binary (${{ matrix.suffix }})
+        run: |
+          cd gateway-go
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=1 \
+            go build \
+            -ldflags "-s -w -X main.version=${{ needs.release-please.outputs.version }}" \
+            -o ../deneb-${{ matrix.suffix }} ./cmd/gateway/
+
+      - name: Generate SHA256 checksum
+        run: sha256sum deneb-${{ matrix.suffix }} > deneb-${{ matrix.suffix }}.sha256
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag }}
+          files: |
+            deneb-${{ matrix.suffix }}
+            deneb-${{ matrix.suffix }}.sha256
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Release summary with stats ──
+  release-summary:
+    needs: [release-please, post-release]
+    if: needs.release-please.outputs.release-created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect commit stats
+        id: stats
+        run: |
+          PREV_TAG=$(git tag --sort=-v:refname | sed -n '2p')
+          if [ -z "$PREV_TAG" ]; then
+            COMMIT_RANGE="HEAD~100..HEAD"
+          else
+            COMMIT_RANGE="${PREV_TAG}..HEAD"
+          fi
+          TOTAL=$(git log --oneline $COMMIT_RANGE | wc -l)
+          ADDED=$(git diff --shortstat $PREV_TAG..HEAD 2>/dev/null | grep -oP '\d+(?= insertion)' || echo 0)
+          DELETED=$(git diff --shortstat $PREV_TAG..HEAD 2>/dev/null | grep -oP '\d+(?= deletion)' || echo 0)
+          FILES=$(git diff --stat $PREV_TAG..HEAD 2>/dev/null | tail -1 | grep -oP '\d+(?= file)' || echo 0)
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "added=$ADDED" >> "$GITHUB_OUTPUT"
+          echo "deleted=$DELETED" >> "$GITHUB_OUTPUT"
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
 
       - name: Generate release summary
         run: |
-          echo "## Release ${{ needs.release-please.outputs.tag }} published" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Deploy on DGX Spark:" >> "$GITHUB_STEP_SUMMARY"
-          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
-          echo "git pull origin main && deneb gateway restart" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ## 🚀 Deneb ${{ needs.release-please.outputs.tag }}
+
+          | Metric | Value |
+          |--------|-------|
+          | Commits | ${{ steps.stats.outputs.total }} |
+          | Files changed | ${{ steps.stats.outputs.files }} |
+          | Lines added | ${{ steps.stats.outputs.added }} |
+          | Lines deleted | ${{ steps.stats.outputs.deleted }} |
+
+          ### Binaries
+          | Platform | File | Checksum |
+          |----------|------|----------|
+          | linux/arm64 | \`deneb-linux-arm64\` | \`deneb-linux-arm64.sha256\` |
+          | linux/amd64 | \`deneb-linux-amd64\` | \`deneb-linux-amd64.sha256\` |
+
+          ### Deploy on DGX Spark
+          \`\`\`bash
+          # Download binary for this platform
+          ARCH=\$(uname -m)
+          curl -sL -o deneb https://github.com/choiceoh/Deneb/releases/download/${{ needs.release-please.outputs.tag }}/deneb-linux-\${ARCH/arm64/aarch64}
+          chmod +x deneb && sudo mv deneb /usr/local/bin/
+          deneb gateway restart
+          \`\`\`
+
+          > ⚠️ Verify integrity: \`sha256sum -c deneb-linux-*.sha256\`
+          EOF

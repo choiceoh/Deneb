@@ -37,79 +37,227 @@ jobs:
         id: check
         uses: ./.github/actions/detect-docs-changes
 
-  # Rust core library: build + test
+  # ── Rust core-rs ──────────────────────────────────────────────
   core-rs:
     needs: [docs-scope]
     if: needs.docs-scope.outputs.docs_only != 'true'
+    name: Rust (core-rs)
     runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           submodules: false
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo registry and build
-        uses: actions/cache@v5
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            core-rs/target
-          key: core-rs-${{ runner.os }}-${{ hashFiles('core-rs/Cargo.lock', 'core-rs/Cargo.toml') }}
-          restore-keys: |
-            core-rs-${{ runner.os }}-
+          workspaces: core-rs
 
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
-      - name: Build core-rs
+      - name: Check formatting
         working-directory: core-rs
-        run: cargo build
+        run: cargo fmt -- --check
 
-      - name: Test core-rs
+      - name: Clippy lint
+        working-directory: core-rs
+        run: cargo clippy --workspace --all-targets
+
+      - name: Build (release)
+        working-directory: core-rs
+        run: cargo build --release
+
+      - name: Test
         working-directory: core-rs
         run: cargo test
 
-  # Go gateway: build + test
-  gateway-go:
+      - name: Upload static library
+        uses: actions/upload-artifact@v4
+        with:
+          name: libdeneb-core
+          path: core-rs/target/release/libdeneb_core.a
+          retention-days: 1
+
+  # ── Rust CLI (cli-rs) ────────────────────────────────────────
+  cli-rs:
     needs: [docs-scope]
     if: needs.docs-scope.outputs.docs_only != 'true'
+    name: Rust (cli-rs)
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           submodules: false
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli-rs
+
+      - name: Check formatting
+        working-directory: cli-rs
+        run: cargo fmt -- --check
+
+      - name: Clippy lint
+        working-directory: cli-rs
+        run: cargo clippy --all-targets
+
+      - name: Build (release)
+        working-directory: cli-rs
+        run: cargo build --release
+
+      - name: Test
+        working-directory: cli-rs
+        run: cargo test
+
+  # ── Go gateway (pure, no FFI) ────────────────────────────────
+  go-pure:
+    needs: [docs-scope]
+    if: needs.docs-scope.outputs.docs_only != 'true'
+    name: Go (pure, no FFI)
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: gateway-go
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
           cache-dependency-path: gateway-go/go.sum
 
-      - name: Build gateway (no FFI)
-        working-directory: gateway-go
+      - name: Build (no FFI)
         run: CGO_ENABLED=0 go build -tags no_ffi ./...
 
-      - name: Test gateway (no FFI)
-        working-directory: gateway-go
+      - name: Test (no FFI)
         run: CGO_ENABLED=0 go test -tags no_ffi -count=1 ./...
 
       - name: Vet
-        working-directory: gateway-go
         run: go vet -tags no_ffi ./...
 
-  # Secrets: private key detection + workflow audit
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)" || (echo "Go files need formatting:"; gofmt -l .; exit 1)
+
+      - name: Lint (golangci-lint)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.5
+          working-directory: gateway-go
+          args: --new-from-rev=HEAD~1
+
+  # ── Go gateway (with Rust FFI) ───────────────────────────────
+  go-ffi:
+    needs: [docs-scope, core-rs]
+    if: needs.docs-scope.outputs.docs_only != 'true'
+    name: Go (with Rust FFI)
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: gateway-go
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: gateway-go/go.sum
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: libdeneb-core
+          path: core-rs/target/release/
+
+      - name: Build (CGo + Rust FFI)
+        run: go build ./...
+
+      - name: Test (CGo + Rust FFI, race detector)
+        run: go test -race -count=1 ./...
+
+      - name: Test (integration)
+        run: go test -race -count=1 -tags=integration ./...
+
+      - name: Build gateway binary
+        run: go build -o gateway ./cmd/gateway/
+
+      - name: Gateway binary smoke test
+        run: |
+          ./gateway --port 0 &
+          GW_PID=$!
+          sleep 1
+          kill -0 $GW_PID 2>/dev/null || { echo "Gateway failed to start"; exit 1; }
+          kill $GW_PID
+          wait $GW_PID 2>/dev/null || true
+          echo "Gateway smoke test passed"
+
+      - name: Upload gateway binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: deneb-gateway
+          path: gateway-go/gateway
+          retention-days: 1
+
+  # ── Integration (end-to-end gateway test) ────────────────────
+  integration:
+    needs: [go-ffi]
+    name: Integration (gateway e2e)
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: deneb-gateway
+          path: dist/
+
+      - name: Make gateway binary executable
+        run: chmod +x dist/gateway
+
+      - name: Gateway CLI flags smoke test
+        run: |
+          dist/gateway --help 2>&1 | grep -q "plugin-host-cmd" || { echo "Missing --plugin-host-cmd flag"; exit 1; }
+          dist/gateway --help 2>&1 | grep -q "config-dir" || { echo "Missing --config-dir flag"; exit 1; }
+          dist/gateway --help 2>&1 | grep -q "auth-mode" || { echo "Missing --auth-mode flag"; exit 1; }
+          echo "CLI flags present"
+
+      - name: Gateway health + RPC endpoint test
+        run: |
+          dist/gateway --port 19999 --bind loopback &
+          GW_PID=$!
+          sleep 2
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:19999/health || echo "000")
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "Health check failed with status $HTTP_STATUS"
+            kill $GW_PID 2>/dev/null || true
+            exit 1
+          fi
+          echo "Health endpoint returned 200"
+          RESULT=$(curl -s -X POST http://127.0.0.1:19999/api/v1/rpc \
+            -H "Content-Type: application/json" \
+            -d '{"type":"req","id":"test-1","method":"health.check","params":{}}')
+          echo "RPC response: $RESULT"
+          echo "$RESULT" | grep -q '"ok":true' || { echo "RPC health.check failed"; kill $GW_PID; exit 1; }
+          kill $GW_PID
+          wait $GW_PID 2>/dev/null || true
+          echo "Integration test passed"
+
+  # ── Secrets: private key detection + workflow audit ───────────
   secrets:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           submodules: false
 
@@ -148,17 +296,14 @@ jobs:
           BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-
           if [ -z "${BASE_SHA:-}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
             echo "No usable base SHA detected; skipping zizmor."
             exit 0
           fi
-
           if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
             echo "Base SHA ${BASE_SHA} is unavailable; skipping zizmor."
             exit 0
           fi
-
           mapfile -t workflow_files < <(
             git diff --name-only "${BASE_SHA}" HEAD -- '.github/workflows/*.yml' '.github/workflows/*.yaml'
           )
@@ -166,6 +311,5 @@ jobs:
             echo "No workflow changes detected; skipping zizmor."
             exit 0
           fi
-
           printf 'Auditing workflow files:\n%s\n' "${workflow_files[@]}"
           pre-commit run zizmor --files "${workflow_files[@]}"

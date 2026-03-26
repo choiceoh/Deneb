@@ -20,6 +20,38 @@ updates:
           - patch
     open-pull-requests-limit: 5
 
+  # Go modules
+  - package-ecosystem: gomod
+    directory: /gateway-go
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      go-deps:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    open-pull-requests-limit: 5
+
+  # Rust crates
+  - package-ecosystem: cargo
+    directory: /core-rs
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      rust-deps:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    open-pull-requests-limit: 5
+
   # Docker base images
   - package-ecosystem: docker
     directory: /

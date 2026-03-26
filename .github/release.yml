@@ -1,6 +1,5 @@
 # GitHub auto-generated release notes configuration
-# This controls the "Generate release notes" button on GitHub Releases
-# and complements release-please's changelog.
+# Controls the "Generate release notes" button and complements release-please.
 
 changelog:
   exclude:
@@ -11,23 +10,35 @@ changelog:
       - "dependabot"
       - "renovate"
   categories:
-    - title: "Features"
+    - title: "✨ Features"
       labels:
         - "enhancement"
         - "feature"
-    - title: "Bug Fixes"
+    - title: "🐛 Bug Fixes"
       labels:
         - "bug"
         - "fix"
-    - title: "Performance"
+    - title: "⚡ Performance"
       labels:
         - "performance"
-    - title: "Infrastructure"
+    - title: "🔧 Internal"
       labels:
         - "lang: rust"
         - "lang: go"
         - "lang: protobuf"
         - "ci"
+        - "refactor"
+    - title: "📝 Documentation"
+      labels:
+        - "documentation"
+        - "docs"
+    - title: "🧪 Tests"
+      labels:
+        - "test"
+        - "testing"
+    - title: "📦 Dependencies"
+      labels:
+        - "dependencies"
     - title: "Other"
       labels:
         - "*"
