@@ -179,7 +179,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Name:        "subagents",
 		Description: "List, steer, or kill sub-agent runs",
 		InputSchema: subagentsToolSchema(),
-		Fn:          toolSubagents(),
+		Fn:          toolSubagents(deps),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "session_status",
