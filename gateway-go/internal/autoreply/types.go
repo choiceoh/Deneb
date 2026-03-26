@@ -58,7 +58,12 @@ type MsgContext struct {
 	MessageSid         string
 	ReplyToID          string
 	MediaPath          string
+	MediaPaths         []string // multiple media file paths
+	MediaUrl           string
+	MediaUrls          []string // multiple media URLs
 	MediaType          string
+	MediaTypes         []string // per-file media types (parallel to MediaPaths/MediaUrls)
+	MediaRemoteHost    string   // remote host for SCP-based media staging
 	Transcript         string
 	WasMentioned       bool
 	CommandAuthorized  bool
@@ -79,4 +84,8 @@ type TemplateContext struct {
 	AgentID    string
 	Channel    string
 	IsGroup    bool
+	MediaPath  string
+	MediaPaths []string
+	MediaUrl   string
+	MediaUrls  []string
 }
