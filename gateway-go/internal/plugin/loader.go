@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // PluginManifest describes a plugin package from its manifest file.
@@ -24,6 +25,7 @@ type PluginManifest struct {
 
 // PluginLoader discovers and loads plugins from disk.
 type PluginLoader struct {
+	mu        sync.RWMutex
 	logger    *slog.Logger
 	roots     []string // directories to scan for plugins
 	manifests map[string]*PluginManifest
@@ -63,7 +65,9 @@ func (l *PluginLoader) Discover() ([]PluginManifest, error) {
 				continue
 			}
 			manifests = append(manifests, *manifest)
+			l.mu.Lock()
 			l.manifests[manifest.ID] = manifest
+			l.mu.Unlock()
 		}
 	}
 
@@ -73,11 +77,15 @@ func (l *PluginLoader) Discover() ([]PluginManifest, error) {
 
 // GetManifest returns a cached manifest by ID.
 func (l *PluginLoader) GetManifest(id string) *PluginManifest {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	return l.manifests[id]
 }
 
 // ListManifests returns all discovered manifests.
 func (l *PluginLoader) ListManifests() []PluginManifest {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	result := make([]PluginManifest, 0, len(l.manifests))
 	for _, m := range l.manifests {
 		result = append(result, *m)
@@ -125,6 +133,7 @@ func (l *PluginLoader) loadManifest(path string) (*PluginManifest, error) {
 
 // ManifestRegistry caches and provides lookup for plugin manifests.
 type ManifestRegistry struct {
+	mu        sync.RWMutex
 	manifests map[string]*PluginManifest
 }
 
@@ -137,16 +146,22 @@ func NewManifestRegistry() *ManifestRegistry {
 
 // Register adds a manifest to the registry.
 func (r *ManifestRegistry) Register(m PluginManifest) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.manifests[m.ID] = &m
 }
 
 // Get returns a manifest by ID.
 func (r *ManifestRegistry) Get(id string) *PluginManifest {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.manifests[id]
 }
 
 // ListByKind returns all manifests of a specific kind.
 func (r *ManifestRegistry) ListByKind(kind PluginKind) []PluginManifest {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var result []PluginManifest
 	for _, m := range r.manifests {
 		if m.Kind == kind {
@@ -158,5 +173,7 @@ func (r *ManifestRegistry) ListByKind(kind PluginKind) []PluginManifest {
 
 // Count returns the total number of registered manifests.
 func (r *ManifestRegistry) Count() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return len(r.manifests)
 }

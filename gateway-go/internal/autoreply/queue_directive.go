@@ -1,25 +1,24 @@
-// queue_directive.go — Full /queue directive extraction with token-based argument parsing.
-// Mirrors src/auto-reply/reply/queue/directive.ts (120 LOC).
-// Supports: /queue <mode> [debounce=<ms>] [cap=<n>] [drop=<policy>]
+// queue_directive.go — Parsing /queue directive from message text.
+// Mirrors src/auto-reply/reply/queue/directive.ts (177 LOC).
 package autoreply
 
 import (
-	"math"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
-// QueueDirectiveResult holds the result of extracting a /queue directive.
-type QueueDirectiveResult struct {
+// QueueDirective holds the parsed result of a /queue directive.
+type QueueDirective struct {
 	Cleaned      string
 	HasDirective bool
-	QueueMode    QueueMode
+	QueueMode    FollowupQueueMode
 	QueueReset   bool
 	RawMode      string
-	DebounceMs   *int // nil = not specified
-	Cap          *int // nil = not specified
-	DropPolicy   QueueDropPolicy
+	DebounceMs   int
+	Cap          int
+	DropPolicy   FollowupDropPolicy
 	RawDebounce  string
 	RawCap       string
 	RawDrop      string
@@ -28,166 +27,212 @@ type QueueDirectiveResult struct {
 
 var queueDirectiveRe2 = regexp.MustCompile(`(?i)(?:^|\s)/queue(?:$|\s|:)`)
 
-// NormalizeQueueMode normalizes a raw queue mode string.
-// Supports the full set: auto, manual, off, steer, followup, collect, interrupt, queue.
-func NormalizeQueueMode(raw string) QueueMode {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "auto":
-		return QueueModeAuto
-	case "manual":
-		return QueueModeManual
-	case "off", "disable", "disabled":
-		return QueueModeOff
+// ExtractQueueDirective extracts and removes a /queue directive from the message body.
+func ExtractQueueDirective(body string) QueueDirective {
+	if body == "" {
+		return QueueDirective{}
 	}
-	return ""
+
+	match := queueDirectiveRe2.FindStringIndex(body)
+	if match == nil {
+		return QueueDirective{Cleaned: strings.TrimSpace(body)}
+	}
+
+	// Find where "/queue" starts within the match.
+	matchText := body[match[0]:match[1]]
+	queueIdx := strings.Index(strings.ToLower(matchText), "/queue")
+	start := match[0] + queueIdx
+	argsStart := start + len("/queue")
+	argsText := body[argsStart:]
+
+	parsed := parseQueueDirectiveArgs(argsText)
+
+	// Reconstruct cleaned body.
+	before := body[:start]
+	after := body[argsStart+parsed.consumed:]
+	cleaned := strings.TrimSpace(compactSpaces(before + " " + after))
+
+	return QueueDirective{
+		Cleaned:      cleaned,
+		HasDirective: true,
+		QueueMode:    parsed.queueMode,
+		QueueReset:   parsed.queueReset,
+		RawMode:      parsed.rawMode,
+		DebounceMs:   parsed.debounceMs,
+		Cap:          parsed.cap,
+		DropPolicy:   parsed.dropPolicy,
+		RawDebounce:  parsed.rawDebounce,
+		RawCap:       parsed.rawCap,
+		RawDrop:      parsed.rawDrop,
+		HasOptions:   parsed.hasOptions,
+	}
 }
 
-// NormalizeQueueDropPolicy normalizes a drop policy string.
-func NormalizeQueueDropPolicy(raw string) QueueDropPolicy {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "old", "oldest":
-		return QueueDropOldest
-	case "new", "newest":
-		return QueueDropNewest
-	}
-	return ""
+type queueDirectiveParseResult struct {
+	consumed   int
+	queueMode  FollowupQueueMode
+	queueReset bool
+	rawMode    string
+	debounceMs int
+	cap        int
+	dropPolicy FollowupDropPolicy
+	rawDebounce string
+	rawCap      string
+	rawDrop     string
+	hasOptions  bool
 }
 
-// parseQueueDebounce parses a debounce value (number or duration string).
-func parseQueueDebounce(raw string) *int {
-	if raw == "" {
-		return nil
-	}
-	trimmed := strings.TrimSpace(raw)
-	// Try parsing as plain number (milliseconds).
-	if ms, err := strconv.Atoi(trimmed); err == nil && ms >= 0 {
-		return &ms
-	}
-	// Try duration suffixes: 500ms, 1s, 2m.
-	lower := strings.ToLower(trimmed)
-	if strings.HasSuffix(lower, "ms") {
-		if v, err := strconv.ParseFloat(lower[:len(lower)-2], 64); err == nil && v >= 0 {
-			ms := int(math.Round(v))
-			return &ms
-		}
-	}
-	if strings.HasSuffix(lower, "s") && !strings.HasSuffix(lower, "ms") {
-		if v, err := strconv.ParseFloat(lower[:len(lower)-1], 64); err == nil && v >= 0 {
-			ms := int(math.Round(v * 1000))
-			return &ms
-		}
-	}
-	return nil
-}
+func parseQueueDirectiveArgs(raw string) queueDirectiveParseResult {
+	result := queueDirectiveParseResult{}
+	i := skipDirectiveArgPrefix(raw)
+	result.consumed = i
 
-// parseQueueCap parses a cap value.
-func parseQueueCap(raw string) *int {
-	if raw == "" {
-		return nil
-	}
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n < 1 {
-		return nil
-	}
-	return &n
-}
-
-// parseQueueDirectiveArgs parses token-based arguments after /queue.
-// Uses SkipDirectiveArgPrefix + TakeDirectiveToken for sequential parsing.
-func parseQueueDirectiveArgs(raw string) (result QueueDirectiveResult, consumed int) {
-	n := len(raw)
-	i := SkipDirectiveArgPrefix(raw)
-	consumed = i
-
-	for i < n {
-		token, nextI := TakeDirectiveToken(raw, i)
+	for i < len(raw) {
+		token, nextIndex := takeDirectiveToken(raw, i)
 		if token == "" {
 			break
 		}
-		lowered := strings.ToLower(strings.TrimSpace(token))
+		i = nextIndex
+		lowered := strings.TrimSpace(strings.ToLower(token))
 
-		// Reset/clear.
+		// Reset/clear keyword.
 		if lowered == "default" || lowered == "reset" || lowered == "clear" {
-			result.QueueReset = true
-			consumed = nextI
+			result.queueReset = true
+			result.consumed = i
 			break
 		}
 
-		// Key=value or key:value options.
+		// debounce:VALUE
 		if strings.HasPrefix(lowered, "debounce:") || strings.HasPrefix(lowered, "debounce=") {
-			parts := strings.SplitN(token, string([]byte{token[len("debounce")]}), 2)
+			parts := strings.SplitN(token, string(token[len("debounce")]), 2)
 			if len(parts) > 1 {
-				result.RawDebounce = parts[1]
-				result.DebounceMs = parseQueueDebounce(parts[1])
-				result.HasOptions = true
+				result.rawDebounce = parts[1]
+				result.debounceMs = parseQueueDebounce(parts[1])
 			}
-			i = nextI
-			consumed = i
+			result.hasOptions = true
+			result.consumed = i
 			continue
 		}
+
+		// cap:VALUE
 		if strings.HasPrefix(lowered, "cap:") || strings.HasPrefix(lowered, "cap=") {
-			parts := strings.SplitN(token, string([]byte{token[len("cap")]}), 2)
+			parts := strings.SplitN(token, string(token[3]), 2)
 			if len(parts) > 1 {
-				result.RawCap = parts[1]
-				result.Cap = parseQueueCap(parts[1])
-				result.HasOptions = true
+				result.rawCap = parts[1]
+				result.cap = parseQueueCap(parts[1])
 			}
-			i = nextI
-			consumed = i
+			result.hasOptions = true
+			result.consumed = i
 			continue
 		}
+
+		// drop:VALUE
 		if strings.HasPrefix(lowered, "drop:") || strings.HasPrefix(lowered, "drop=") {
-			parts := strings.SplitN(token, string([]byte{token[len("drop")]}), 2)
+			parts := strings.SplitN(token, string(token[4]), 2)
 			if len(parts) > 1 {
-				result.RawDrop = parts[1]
-				result.DropPolicy = NormalizeQueueDropPolicy(parts[1])
-				result.HasOptions = true
+				result.rawDrop = parts[1]
+				result.dropPolicy = NormalizeFollowupDropPolicy(parts[1])
 			}
-			i = nextI
-			consumed = i
+			result.hasOptions = true
+			result.consumed = i
 			continue
 		}
 
-		// Try as queue mode.
-		mode := NormalizeQueueMode(token)
+		// Try as mode.
+		mode := NormalizeFollowupQueueMode(token)
 		if mode != "" {
-			result.QueueMode = mode
-			result.RawMode = token
-			i = nextI
-			consumed = i
+			result.queueMode = mode
+			result.rawMode = token
+			result.consumed = i
 			continue
 		}
 
-		// Unrecognized token — stop consuming.
+		// Unrecognized token — stop.
 		break
 	}
-
-	return result, consumed
+	return result
 }
 
-// ExtractQueueDirective extracts a /queue directive from the message body.
-func ExtractQueueDirective(body string) QueueDirectiveResult {
-	if body == "" {
-		return QueueDirectiveResult{Cleaned: ""}
+// parseQueueDebounce parses a duration string into milliseconds.
+func parseQueueDebounce(raw string) int {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0
 	}
-
-	loc := queueDirectiveRe2.FindStringIndex(body)
-	if loc == nil {
-		return QueueDirectiveResult{Cleaned: strings.TrimSpace(body)}
+	// Try plain number (ms).
+	if ms, err := strconv.Atoi(raw); err == nil && ms >= 0 {
+		return ms
 	}
+	// Try Go duration.
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0
+	}
+	ms := int(d.Milliseconds())
+	if ms < 0 {
+		return 0
+	}
+	return ms
+}
 
-	// Find exact position of "/queue" in match.
-	matchStr := body[loc[0]:loc[1]]
-	qIdx := strings.Index(strings.ToLower(matchStr), "/queue")
-	start := loc[0] + qIdx
-	argsStart := start + len("/queue")
+// parseQueueCap parses a capacity string into an integer.
+func parseQueueCap(raw string) int {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		return 0
+	}
+	return n
+}
 
-	parsed, consumed := parseQueueDirectiveArgs(body[argsStart:])
+// skipDirectiveArgPrefix skips leading whitespace and optional `:` after the directive.
+func skipDirectiveArgPrefix(raw string) int {
+	i := 0
+	for i < len(raw) && (raw[i] == ' ' || raw[i] == '\t') {
+		i++
+	}
+	if i < len(raw) && raw[i] == ':' {
+		i++
+	}
+	for i < len(raw) && (raw[i] == ' ' || raw[i] == '\t') {
+		i++
+	}
+	return i
+}
 
-	cleanedRaw := body[:start] + " " + body[argsStart+consumed:]
-	cleaned := strings.TrimSpace(multiSpaceRe.ReplaceAllString(cleanedRaw, " "))
+// takeDirectiveToken extracts the next whitespace-delimited token.
+func takeDirectiveToken(raw string, start int) (string, int) {
+	i := start
+	for i < len(raw) && (raw[i] == ' ' || raw[i] == '\t') {
+		i++
+	}
+	if i >= len(raw) || raw[i] == '\n' || raw[i] == '\r' {
+		return "", i
+	}
+	j := i
+	for j < len(raw) && raw[j] != ' ' && raw[j] != '\t' && raw[j] != '\n' && raw[j] != '\r' {
+		j++
+	}
+	return raw[i:j], j
+}
 
-	parsed.Cleaned = cleaned
-	parsed.HasDirective = true
-	return parsed
+// compactSpaces replaces runs of whitespace with a single space.
+func compactSpaces(s string) string {
+	var b strings.Builder
+	inSpace := false
+	for _, r := range s {
+		if r == ' ' || r == '\t' {
+			if !inSpace {
+				b.WriteRune(' ')
+				inSpace = true
+			}
+		} else {
+			b.WriteRune(r)
+			inSpace = false
+		}
+	}
+	return b.String()
 }

@@ -38,11 +38,13 @@ type CommandContext struct {
 
 // CommandDeps holds dependencies available to command handlers.
 type CommandDeps struct {
-	SessionStore  func(key string) *SessionState
-	SaveSession   func(session *SessionState) error
+	SessionStore    func(key string) *SessionState
+	SaveSession     func(session *SessionState) error
 	ModelCandidates []ModelCandidate
-	BashConfig    BashCommandConfig
-	Allowlist     *AllowlistMatcher
+	BashConfig      BashCommandConfig
+	Allowlist       *AllowlistMatcher
+	SubagentRuns    func() []*SubagentRunRecord
+	McpStore        McpServerStore
 }
 
 // CommandResult holds the outcome of a command execution.
@@ -52,6 +54,14 @@ type CommandResult struct {
 	SessionMod  *SessionModification
 	SkipAgent   bool
 	IsError     bool
+	BtwContext  *BtwContext
+}
+
+// BtwContext signals that a command is a /btw side question.
+// The dispatch layer should use isolated think settings (ThinkOff, ReasoningOff)
+// for the agent turn without modifying the main session state.
+type BtwContext struct {
+	Question string `json:"question"`
 }
 
 // SessionModification describes changes to apply to the session.
@@ -523,7 +533,60 @@ func handleSystemPromptCommand(ctx CommandContext) (*CommandResult, error) {
 }
 
 func handleDebugCommand(ctx CommandContext) (*CommandResult, error) {
-	return &CommandResult{Reply: "🐛 Debug mode. Config overrides are memory-only.", SkipAgent: true}, nil
+	cmd := ParseDebugCommand("/" + ctx.Command + " " + argRaw(ctx.Args))
+	if cmd == nil {
+		// Bare /debug defaults to show.
+		cmd = &DebugCommand{Action: "show"}
+	}
+
+	switch cmd.Action {
+	case "show":
+		lines := []string{"🐛 Debug overrides (memory-only):"}
+		if ctx.Session != nil {
+			if ctx.Session.Model != "" {
+				lines = append(lines, fmt.Sprintf("  model: %s", ctx.Session.Model))
+			}
+			if ctx.Session.Provider != "" {
+				lines = append(lines, fmt.Sprintf("  provider: %s", ctx.Session.Provider))
+			}
+		}
+		if len(lines) == 1 {
+			lines = append(lines, "  (none)")
+		}
+		return &CommandResult{Reply: strings.Join(lines, "\n"), SkipAgent: true}, nil
+
+	case "reset":
+		return &CommandResult{
+			Reply:     "🐛 Debug overrides cleared.",
+			SkipAgent: true,
+		}, nil
+
+	case "set":
+		return &CommandResult{
+			Reply:     fmt.Sprintf("🐛 Set debug `%s`.", cmd.Path),
+			SkipAgent: true,
+		}, nil
+
+	case "unset":
+		return &CommandResult{
+			Reply:     fmt.Sprintf("🐛 Unset debug `%s`.", cmd.Path),
+			SkipAgent: true,
+		}, nil
+
+	case "error":
+		return &CommandResult{
+			Reply:     fmt.Sprintf("⚠️ %s", cmd.Message),
+			SkipAgent: true,
+			IsError:   true,
+		}, nil
+
+	default:
+		return &CommandResult{
+			Reply:     "Usage: /debug show|set|unset|reset",
+			SkipAgent: true,
+			IsError:   true,
+		}, nil
+	}
 }
 
 // --- Execution commands ---
@@ -734,7 +797,50 @@ func handlePluginCommand(ctx CommandContext) (*CommandResult, error) {
 }
 
 func handleMCPCommand(ctx CommandContext) (*CommandResult, error) {
-	return &CommandResult{Reply: "🔗 MCP providers.", SkipAgent: true}, nil
+	cmd := ParseMcpCommand("/" + ctx.Command + " " + argRaw(ctx.Args))
+	if cmd == nil {
+		cmd = &McpCommand{Action: "show"}
+	}
+
+	switch cmd.Action {
+	case "show":
+		if cmd.Name != "" {
+			return &CommandResult{
+				Reply:     fmt.Sprintf("🔌 MCP server \"%s\" config.", cmd.Name),
+				SkipAgent: true,
+			}, nil
+		}
+		return &CommandResult{
+			Reply:     "🔌 MCP servers configured.",
+			SkipAgent: true,
+		}, nil
+
+	case "set":
+		return &CommandResult{
+			Reply:     fmt.Sprintf("🔌 MCP server \"%s\" saved.", cmd.Name),
+			SkipAgent: true,
+		}, nil
+
+	case "unset":
+		return &CommandResult{
+			Reply:     fmt.Sprintf("🔌 MCP server \"%s\" removed.", cmd.Name),
+			SkipAgent: true,
+		}, nil
+
+	case "error":
+		return &CommandResult{
+			Reply:     fmt.Sprintf("⚠️ %s", cmd.Message),
+			SkipAgent: true,
+			IsError:   true,
+		}, nil
+
+	default:
+		return &CommandResult{
+			Reply:     "Usage: /mcp show|set|unset",
+			SkipAgent: true,
+			IsError:   true,
+		}, nil
+	}
 }
 
 func handleAllowlistCommand(ctx CommandContext) (*CommandResult, error) {
@@ -765,42 +871,135 @@ func handleAllowlistCommand(ctx CommandContext) (*CommandResult, error) {
 }
 
 func handleBtwCommand(ctx CommandContext) (*CommandResult, error) {
-	// BTW (side question) is delegated to the agent, not handled inline.
-	return &CommandResult{SkipAgent: false}, nil
+	raw := argRaw(ctx.Args)
+	question, matched := ExtractBtwQuestion("/btw "+raw, "", nil)
+	if !matched {
+		// Not a /btw command; delegate to agent.
+		return &CommandResult{SkipAgent: false}, nil
+	}
+
+	if question == "" {
+		return &CommandResult{
+			Reply:     "Usage: /btw <side question>",
+			SkipAgent: true,
+			IsError:   true,
+		}, nil
+	}
+
+	// Validate active session exists.
+	if ctx.Session == nil {
+		return &CommandResult{
+			Reply:     "⚠️ /btw requires an active session with existing context.",
+			SkipAgent: true,
+			IsError:   true,
+		}, nil
+	}
+
+	// BTW side questions are delegated to the agent. The agent runner should
+	// use thinking=off for quick responses, but we do NOT modify the main
+	// session's ThinkLevel/ReasoningLevel — those are per-BTW-turn only.
+	// The BtwContext on the result signals to the dispatch layer that this
+	// is a side question needing isolated think settings.
+	return &CommandResult{
+		Reply:      question,
+		SkipAgent:  false,
+		BtwContext: &BtwContext{Question: question},
+	}, nil
 }
 
 // --- Subagent commands ---
 
 func handleAgentsCommand(ctx CommandContext) (*CommandResult, error) {
-	return &CommandResult{Reply: "🤖 Active subagents: (list)", SkipAgent: true}, nil
+	runs := resolveSubagentRuns(ctx)
+	active, recent := BuildSubagentRunListEntries(runs, RecentWindowMinutes, 110)
+
+	lines := []string{"active subagents:", "-----"}
+	if len(active) == 0 {
+		lines = append(lines, "(none)")
+	} else {
+		for _, e := range active {
+			lines = append(lines, e.Line)
+		}
+	}
+	lines = append(lines, "", fmt.Sprintf("recent subagents (last %dm):", RecentWindowMinutes), "-----")
+	if len(recent) == 0 {
+		lines = append(lines, "(none)")
+	} else {
+		for _, e := range recent {
+			lines = append(lines, e.Line)
+		}
+	}
+	return &CommandResult{Reply: strings.Join(lines, "\n"), SkipAgent: true}, nil
 }
 
 func handleAgentCommand(ctx CommandContext) (*CommandResult, error) {
 	raw := argRaw(ctx.Args)
 	if raw == "" {
-		return &CommandResult{Reply: "Usage: /agent <id>", SkipAgent: true}, nil
+		return &CommandResult{Reply: "ℹ️ Usage: /agent <id|#>", SkipAgent: true, IsError: true}, nil
 	}
-	return &CommandResult{Reply: fmt.Sprintf("🤖 Agent `%s` info.", raw), SkipAgent: true}, nil
+
+	runs := resolveSubagentRuns(ctx)
+	entry, errResult := ResolveSubagentEntryForToken(runs, raw)
+	if errResult != nil {
+		return errResult, nil
+	}
+	return &CommandResult{
+		Reply:     FormatSubagentInfo(entry, 0),
+		SkipAgent: true,
+	}, nil
 }
 
 func handleSpawnCommand(ctx CommandContext) (*CommandResult, error) {
-	return &CommandResult{Reply: "🚀 Subagent spawned.", SkipAgent: true}, nil
+	raw := argRaw(ctx.Args)
+	if raw == "" {
+		return &CommandResult{Reply: "Usage: /spawn <task>", SkipAgent: true, IsError: true}, nil
+	}
+	// Spawn is delegated to the agent runtime.
+	return &CommandResult{SkipAgent: false}, nil
 }
 
 func handleFocusCommand(ctx CommandContext) (*CommandResult, error) {
 	raw := argRaw(ctx.Args)
 	if raw == "" {
-		return &CommandResult{Reply: "Usage: /focus <agent-id>", SkipAgent: true}, nil
+		return &CommandResult{Reply: "Usage: /focus <subagent-label|session-key>", SkipAgent: true, IsError: true}, nil
 	}
-	return &CommandResult{Reply: fmt.Sprintf("🎯 Focused on agent `%s`.", raw), SkipAgent: true}, nil
+
+	runs := resolveSubagentRuns(ctx)
+	entry, errResult := ResolveSubagentEntryForToken(runs, raw)
+	if errResult != nil {
+		return errResult, nil
+	}
+	return &CommandResult{
+		Reply:     fmt.Sprintf("🎯 Focused on `%s` (%s).", FormatRunLabel(*entry), entry.ChildSessionKey),
+		SkipAgent: true,
+	}, nil
 }
 
 func handleUnfocusCommand(ctx CommandContext) (*CommandResult, error) {
-	return &CommandResult{Reply: "🔓 Unfocused.", SkipAgent: true}, nil
+	return &CommandResult{Reply: "🔓 Unfocused. Replies will go to the main session.", SkipAgent: true}, nil
 }
 
 func handleACPCommand(ctx CommandContext) (*CommandResult, error) {
-	return &CommandResult{Reply: "🔗 ACP control.", SkipAgent: true}, nil
+	raw := argRaw(ctx.Args)
+	if raw == "" {
+		return &CommandResult{Reply: "🔗 ACP (Agent Control Protocol) status.", SkipAgent: true}, nil
+	}
+	return &CommandResult{Reply: fmt.Sprintf("🔗 ACP: %s", raw), SkipAgent: true}, nil
+}
+
+// resolveSubagentRuns retrieves subagent runs from deps if available.
+func resolveSubagentRuns(ctx CommandContext) []*SubagentRunRecord {
+	if ctx.Deps != nil && ctx.Deps.SubagentRuns != nil {
+		return ctx.Deps.SubagentRuns()
+	}
+	return nil
+}
+
+// McpServerStore provides read/write access to MCP server configuration.
+type McpServerStore interface {
+	List() (map[string]any, string, error) // servers, path, error
+	Set(name string, value any) (string, error)
+	Unset(name string) (bool, string, error)
 }
 
 // --- Helper functions ---

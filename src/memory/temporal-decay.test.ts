@@ -24,7 +24,7 @@ function createVectorMemoryEntry(params: {
   id: string;
   path: string;
   snippet: string;
-  vectorScore: number;
+  score: number;
 }) {
   return {
     id: params.id,
@@ -33,7 +33,7 @@ function createVectorMemoryEntry(params: {
     endLine: 1,
     source: "memory" as const,
     snippet: params.snippet,
-    vectorScore: params.vectorScore,
+    score: params.score,
   };
 }
 
@@ -111,13 +111,13 @@ describe("temporal decay", () => {
         id: "old",
         path: "memory/2025-01-01.md",
         snippet: "old but high",
-        vectorScore: 0.95,
+        score: 0.95,
       }),
       createVectorMemoryEntry({
         id: "new",
         path: "memory/2026-02-10.md",
         snippet: "new and relevant",
-        vectorScore: 0.8,
+        score: 0.8,
       }),
     ]);
 
@@ -131,19 +131,19 @@ describe("temporal decay", () => {
         id: "future",
         path: "memory/2099-01-01.md",
         snippet: "future",
-        vectorScore: 0.9,
+        score: 0.9,
       }),
       createVectorMemoryEntry({
         id: "today",
         path: "memory/2026-02-10.md",
         snippet: "today",
-        vectorScore: 0.8,
+        score: 0.8,
       }),
       createVectorMemoryEntry({
         id: "very-old",
         path: "memory/2000-01-01.md",
         snippet: "ancient",
-        vectorScore: 1,
+        score: 1,
       }),
     ]);
 

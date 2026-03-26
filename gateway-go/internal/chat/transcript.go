@@ -15,6 +15,8 @@ type TranscriptStore interface {
 	Load(sessionKey string, limit int) ([]ChatMessage, int, error)
 	// Append adds a message to the session transcript.
 	Append(sessionKey string, msg ChatMessage) error
+	// Delete removes the transcript for a session (used by /reset).
+	Delete(sessionKey string) error
 }
 
 // FileTranscriptStore stores transcripts as JSONL files on disk.
@@ -102,6 +104,17 @@ func (s *FileTranscriptStore) Append(sessionKey string, msg ChatMessage) error {
 	return nil
 }
 
+// Delete removes the transcript file for a session.
+func (s *FileTranscriptStore) Delete(sessionKey string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	path := s.sessionPath(sessionKey)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete transcript: %w", err)
+	}
+	return nil
+}
+
 // MemoryTranscriptStore is an in-memory transcript store for testing.
 type MemoryTranscriptStore struct {
 	mu       sync.Mutex
@@ -135,5 +148,13 @@ func (s *MemoryTranscriptStore) Append(sessionKey string, msg ChatMessage) error
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sessions[sessionKey] = append(s.sessions[sessionKey], msg)
+	return nil
+}
+
+// Delete removes transcript for a session.
+func (s *MemoryTranscriptStore) Delete(sessionKey string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.sessions, sessionKey)
 	return nil
 }

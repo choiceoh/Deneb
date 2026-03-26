@@ -1,64 +1,13 @@
-// config_commands.go — Config command parsing and value coercion.
-// Mirrors src/auto-reply/reply/config-commands.ts (23 LOC),
-// config-value.ts (49 LOC), config-write-authorization.ts (34 LOC),
-// commands-setunset.ts (102 LOC), commands-setunset-standard.ts (24 LOC),
-// commands-slash-parse.ts (44 LOC).
+// config_commands.go — /config command parsing.
+// Mirrors src/auto-reply/reply/config-commands.ts (23 LOC).
 //
-// Implements the full slash command parsing pipeline:
-// parseSlashCommandOrNull → parseSlashCommandWithSetUnset → parseConfigCommand
+// Uses ParseSlashCommandOrNull from commands_slash_parse.go and
+// ParseConfigValue from config_value.go (both from main).
 package autoreply
 
 import (
-	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
 )
-
-// --- Slash command parsing (mirrors commands-slash-parse.ts) ---
-
-// SlashParseResult holds the result of parsing a slash command.
-type SlashParseResult struct {
-	OK      bool
-	Action  string
-	Args    string
-	Message string // error message when !OK
-}
-
-// ParseSlashCommandOrNull extracts action and args from a slash command.
-// Returns nil if the text doesn't start with the expected slash prefix.
-func ParseSlashCommandOrNull(raw string, slash string, defaultAction string, invalidMessage string) *SlashParseResult {
-	trimmed := strings.TrimSpace(raw)
-	slashLower := strings.ToLower(slash)
-	if !strings.HasPrefix(strings.ToLower(trimmed), slashLower) {
-		return nil
-	}
-	rest := strings.TrimSpace(trimmed[len(slash):])
-	// Handle colon syntax: /config:set → action=set
-	if strings.HasPrefix(rest, ":") {
-		rest = strings.TrimSpace(rest[1:])
-	}
-	if rest == "" {
-		if defaultAction == "" {
-			defaultAction = "show"
-		}
-		return &SlashParseResult{OK: true, Action: defaultAction}
-	}
-
-	// Split into action + args.
-	fields := strings.SplitN(rest, " ", 2)
-	action := strings.ToLower(strings.TrimSpace(fields[0]))
-	args := ""
-	if len(fields) > 1 {
-		args = strings.TrimSpace(fields[1])
-	}
-	if action == "" {
-		return &SlashParseResult{OK: false, Message: invalidMessage}
-	}
-	return &SlashParseResult{OK: true, Action: action, Args: args}
-}
-
-// --- Config command types ---
 
 // ConfigCommandAction identifies the action of a /config command.
 type ConfigCommandAction string
@@ -80,11 +29,8 @@ type ConfigCommand struct {
 
 // ParseConfigCommand parses a /config command from raw text.
 // Returns nil if the text is not a /config command.
-//
-// Implements the TS pipeline: parseStandardSetUnsetSlashCommand → onKnownAction
-// → set/unset handlers with parseConfigValue coercion.
 func ParseConfigCommand(raw string) *ConfigCommand {
-	parsed := ParseSlashCommandOrNull(raw, "/config", "show", "Invalid /config syntax.")
+	parsed := ParseSlashCommandOrNull(raw, "/config", "Invalid /config syntax.", "show")
 	if parsed == nil {
 		return nil
 	}
@@ -119,130 +65,37 @@ func parseConfigSetCommand(slash, args string) *ConfigCommand {
 	var path, rawValue string
 
 	// Try path=value syntax first.
-	if eqIdx := strings.Index(args, "="); eqIdx > 0 {
-		path = strings.TrimSpace(args[:eqIdx])
+	eqIdx := -1
+	for i, c := range args {
+		if c == '=' {
+			eqIdx = i
+			break
+		}
+	}
+	if eqIdx > 0 {
+		path = args[:eqIdx]
 		rawValue = args[eqIdx+1:]
 	} else {
 		// Try path <space> value syntax.
-		fields := strings.SplitN(args, " ", 2)
-		if len(fields) < 2 {
-			return &ConfigCommand{Action: ConfigActionError, Message: fmt.Sprintf("Usage: %s set <path>=<value>", slash)}
+		for i, c := range args {
+			if c == ' ' || c == '\t' {
+				path = args[:i]
+				rawValue = args[i+1:]
+				break
+			}
 		}
-		path = strings.TrimSpace(fields[0])
-		rawValue = strings.TrimSpace(fields[1])
 	}
 
-	if path == "" {
+	if path == "" || rawValue == "" {
 		return &ConfigCommand{Action: ConfigActionError, Message: fmt.Sprintf("Usage: %s set <path>=<value>", slash)}
 	}
 
-	value, errMsg := ParseConfigValue(rawValue)
-	if errMsg != "" {
-		return &ConfigCommand{Action: ConfigActionError, Message: errMsg}
+	result := ParseConfigValue(rawValue)
+	if result.Error != "" {
+		return &ConfigCommand{Action: ConfigActionError, Message: result.Error}
 	}
 
-	return &ConfigCommand{Action: ConfigActionSet, Path: path, Value: value}
-}
-
-// --- Config value parsing (mirrors config-value.ts) ---
-
-// ParseConfigValue coerces a user-provided config value string into a typed value.
-// Returns the parsed value and an error message (empty if no error).
-//
-// Coercion order (matching TS): JSON object/array → boolean → null → number → quoted string → plain string.
-func ParseConfigValue(raw string) (value any, errMsg string) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil, "Missing value."
-	}
-
-	// JSON object or array.
-	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
-		var parsed any
-		if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
-			return nil, fmt.Sprintf("Invalid JSON: %s", err.Error())
-		}
-		return parsed, ""
-	}
-
-	// Boolean literals.
-	if trimmed == "true" {
-		return true, ""
-	}
-	if trimmed == "false" {
-		return false, ""
-	}
-
-	// Null.
-	if trimmed == "null" {
-		return nil, ""
-	}
-
-	// Number (integer or float).
-	if num, err := strconv.ParseFloat(trimmed, 64); err == nil {
-		if !isInfiniteOrNaN(num) {
-			return num, ""
-		}
-	}
-
-	// Quoted string (double or single).
-	if (strings.HasPrefix(trimmed, `"`) && strings.HasSuffix(trimmed, `"`)) ||
-		(strings.HasPrefix(trimmed, `'`) && strings.HasSuffix(trimmed, `'`)) {
-		// Try JSON parse for proper escape handling.
-		var parsed string
-		if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil {
-			return parsed, ""
-		}
-		// Fallback: strip quotes.
-		return trimmed[1 : len(trimmed)-1], ""
-	}
-
-	// Plain string.
-	return trimmed, ""
-}
-
-func isInfiniteOrNaN(f float64) bool {
-	return f != f || f > 1.7976931348623157e+308 || f < -1.7976931348623157e+308
-}
-
-// --- Debug command parsing ---
-
-// DebugCommand represents a parsed /debug command.
-type DebugCommand struct {
-	Action  ConfigCommandAction
-	Path    string
-	Value   any
-	Message string
-}
-
-// ParseDebugCommand parses a /debug command from raw text.
-func ParseDebugCommand(raw string) *DebugCommand {
-	parsed := ParseSlashCommandOrNull(raw, "/debug", "show", "Invalid /debug syntax.")
-	if parsed == nil {
-		return nil
-	}
-	if !parsed.OK {
-		return &DebugCommand{Action: ConfigActionError, Message: parsed.Message}
-	}
-
-	switch parsed.Action {
-	case "show", "get":
-		return &DebugCommand{Action: ConfigActionShow, Path: parsed.Args}
-
-	case "unset", "reset":
-		if parsed.Args == "" {
-			// /debug reset with no path resets all overrides.
-			return &DebugCommand{Action: ConfigActionUnset}
-		}
-		return &DebugCommand{Action: ConfigActionUnset, Path: parsed.Args}
-
-	case "set":
-		cmd := parseConfigSetCommand("/debug", parsed.Args)
-		return &DebugCommand{Action: cmd.Action, Path: cmd.Path, Value: cmd.Value, Message: cmd.Message}
-
-	default:
-		return &DebugCommand{Action: ConfigActionError, Message: "Usage: /debug show|set|unset|reset"}
-	}
+	return &ConfigCommand{Action: ConfigActionSet, Path: path, Value: result.Value}
 }
 
 // --- Config write authorization ---

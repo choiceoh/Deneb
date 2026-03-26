@@ -244,6 +244,13 @@ type SessionConfig struct {
 
 // AgentsConfig for agent runtime.
 type AgentsConfig struct {
-	MaxConcurrent         *int `json:"maxConcurrent,omitempty"`
-	SubagentMaxConcurrent *int `json:"subagentMaxConcurrent,omitempty"`
+	MaxConcurrent         *int   `json:"maxConcurrent,omitempty"`
+	SubagentMaxConcurrent *int   `json:"subagentMaxConcurrent,omitempty"`
+	DefaultModel          string `json:"defaultModel,omitempty"`
+	DefaultSystem         string `json:"defaultSystem,omitempty"`
+}
+
+// AgentsDefaultsConfig holds nested agents.defaults.* fields.
+type AgentsDefaultsConfig struct {
+	Model string `json:"model,omitempty"`
 }

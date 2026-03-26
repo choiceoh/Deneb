@@ -36,11 +36,11 @@ type FullInlineDirectives struct {
 	InvalidExecAsk   bool
 	InvalidExecNode  bool
 
-	// Queue options (full).
-	QueueModeResolved QueueMode
-	DebounceMs        *int // nil = not specified
-	Cap               *int // nil = not specified
-	DropPolicy        QueueDropPolicy
+	// Queue options (full, from QueueDirective).
+	QueueModeResolved FollowupQueueMode
+	DebounceMs        int
+	Cap               int
+	DropPolicy        FollowupDropPolicy
 	RawDebounce       string
 	RawCap            string
 	RawDrop           string
@@ -101,19 +101,20 @@ func ParseFullInlineDirectives(body string, opts *FullDirectiveParseOptions) Ful
 
 	// Step 3: Re-extract /queue from the original body with full options.
 	// The basic parser only captured HasQueueDirective + RawQueueMode.
-	// Now extract debounce/cap/drop args using the token-based parser.
+	// Now extract debounce/cap/drop args using the token-based parser
+	// which returns QueueDirective with FollowupQueueMode/FollowupDropPolicy.
 	if result.HasQueueDirective {
-		queueResult := ExtractQueueDirective(body)
-		if queueResult.HasDirective {
-			result.QueueModeResolved = queueResult.QueueMode
-			result.QueueReset = queueResult.QueueReset
-			result.DebounceMs = queueResult.DebounceMs
-			result.Cap = queueResult.Cap
-			result.DropPolicy = queueResult.DropPolicy
-			result.RawDebounce = queueResult.RawDebounce
-			result.RawCap = queueResult.RawCap
-			result.RawDrop = queueResult.RawDrop
-			result.HasQueueOpts = queueResult.HasOptions
+		qd := ExtractQueueDirective(body)
+		if qd.HasDirective {
+			result.QueueModeResolved = qd.QueueMode
+			result.QueueReset = qd.QueueReset
+			result.DebounceMs = qd.DebounceMs
+			result.Cap = qd.Cap
+			result.DropPolicy = qd.DropPolicy
+			result.RawDebounce = qd.RawDebounce
+			result.RawCap = qd.RawCap
+			result.RawDrop = qd.RawDrop
+			result.HasQueueOpts = qd.HasOptions
 		}
 	}
 

@@ -136,8 +136,27 @@ func (s *Server) handleWsUpgrade(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("websocket disconnected", "connId", client.connID)
 }
 
-// handleHandshake reads the first frame and validates it as a connect request.
+// handleHandshake sends a connect.challenge event, then reads and validates the connect request.
 func (s *Server) handleHandshake(ctx context.Context, client *WsClient, remoteAddr string) error {
+	// Send connect.challenge event with random nonce before reading connect frame.
+	// This prevents replay attacks and proves device identity.
+	// Mirrors src/gateway/server/ws-connection.ts.
+	challengeNonce := generateChallengeNonce()
+	challengeEvent, _ := json.Marshal(map[string]any{
+		"type":  "event",
+		"event": "connect.challenge",
+		"payload": map[string]any{
+			"nonce": challengeNonce,
+			"ts":    time.Now().UnixMilli(),
+		},
+	})
+	challengeCtx, challengeCancel := context.WithTimeout(ctx, 5*time.Second)
+	err := client.conn.Write(challengeCtx, 1 /* TextMessage */, challengeEvent)
+	challengeCancel()
+	if err != nil {
+		return fmt.Errorf("send connect.challenge: %w", err)
+	}
+
 	_, data, err := client.conn.Read(ctx)
 	if err != nil {
 		return fmt.Errorf("read connect frame: %w", err)
@@ -445,4 +464,14 @@ func generateConnID() string {
 		return fmt.Sprintf("conn-%d", time.Now().UnixNano())
 	}
 	return "conn-" + hex.EncodeToString(b)
+}
+
+// generateChallengeNonce returns a 16-byte hex-encoded random nonce for the
+// connect.challenge WebSocket event (prevents replay attacks).
+func generateChallengeNonce() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("nonce-%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
 }

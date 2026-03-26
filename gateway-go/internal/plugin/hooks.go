@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -60,6 +61,7 @@ type HookResult struct {
 
 // HookRunner manages and executes hooks with proper ordering and error handling.
 type HookRunner struct {
+	mu     sync.RWMutex
 	hooks  []registeredHook
 	logger *slog.Logger
 }
@@ -76,6 +78,8 @@ func NewHookRunner(logger *slog.Logger) *HookRunner {
 
 // Register adds a hook with options.
 func (r *HookRunner) Register(name HookName, pluginID string, handler HookFunc, opts HookOptions) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.hooks = append(r.hooks, registeredHook{
 		entry:   HookEntry{Name: name, PluginID: pluginID, Handler: handler},
 		options: opts,
@@ -85,13 +89,15 @@ func (r *HookRunner) Register(name HookName, pluginID string, handler HookFunc, 
 // Run executes all hooks for the given name in priority order.
 // Returns results for each hook (including errors).
 func (r *HookRunner) Run(ctx context.Context, name HookName, payload map[string]any) []HookResult {
-	// Collect matching hooks.
+	// Collect matching hooks under read lock.
+	r.mu.RLock()
 	var matching []registeredHook
 	for _, h := range r.hooks {
 		if h.entry.Name == name {
 			matching = append(matching, h)
 		}
 	}
+	r.mu.RUnlock()
 	if len(matching) == 0 {
 		return nil
 	}
@@ -128,6 +134,7 @@ func (r *HookRunner) Run(ctx context.Context, name HookName, payload map[string]
 
 // RunFireAndForget executes hooks without waiting for results.
 func (r *HookRunner) RunFireAndForget(name HookName, payload map[string]any) {
+	// Run already handles its own locking, safe to call from goroutine.
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -137,6 +144,8 @@ func (r *HookRunner) RunFireAndForget(name HookName, payload map[string]any) {
 
 // Count returns the number of registered hooks for a name.
 func (r *HookRunner) Count(name HookName) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	count := 0
 	for _, h := range r.hooks {
 		if h.entry.Name == name {
@@ -148,6 +157,8 @@ func (r *HookRunner) Count(name HookName) int {
 
 // ListHookNames returns all unique hook names that have registered handlers.
 func (r *HookRunner) ListHookNames() []HookName {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	seen := make(map[HookName]bool)
 	var names []HookName
 	for _, h := range r.hooks {

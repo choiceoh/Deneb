@@ -29,6 +29,21 @@ func TestWebSocketHandshake(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
+	// Read connect.challenge event first.
+	challengeCtx, challengeCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer challengeCancel()
+	_, challengeData, err := conn.Read(challengeCtx)
+	if err != nil {
+		t.Fatalf("read challenge: %v", err)
+	}
+	var challengeEvent map[string]any
+	if err := json.Unmarshal(challengeData, &challengeEvent); err != nil {
+		t.Fatalf("unmarshal challenge: %v", err)
+	}
+	if challengeEvent["event"] != "connect.challenge" {
+		t.Fatalf("expected connect.challenge event, got %v", challengeEvent["event"])
+	}
+
 	// Send connect request.
 	connectReq, _ := protocol.NewRequestFrame("hs-1", "connect", protocol.ConnectParams{
 		MinProtocol: 1,
@@ -153,6 +168,14 @@ func connectWS(t *testing.T, ctx context.Context, addr string) *websocket.Conn {
 	conn, _, err := websocket.Dial(ctx, wsURL, nil)
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
+	}
+
+	// Read connect.challenge event first.
+	challengeCtx, challengeCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer challengeCancel()
+	_, _, err = conn.Read(challengeCtx)
+	if err != nil {
+		t.Fatalf("read challenge: %v", err)
 	}
 
 	connectReq, _ := protocol.NewRequestFrame("hs", "connect", protocol.ConnectParams{

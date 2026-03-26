@@ -436,7 +436,7 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
         endLine: r.endLine,
         source: r.source,
         snippet: r.snippet,
-        vectorScore: r.score,
+        score: r.score,
       })),
       keyword: params.keyword.map((r) => ({
         id: r.id,
@@ -445,7 +445,7 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
         endLine: r.endLine,
         source: r.source,
         snippet: r.snippet,
-        textScore: r.textScore,
+        score: r.textScore,
       })),
       vectorWeight: params.vectorWeight,
       textWeight: params.textWeight,

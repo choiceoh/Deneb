@@ -500,6 +500,11 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/v1/rpc", s.handleRPC)
 	mux.HandleFunc("GET /ws", s.handleWsUpgrade)
 
+	// HTTP API endpoints (P2 migration).
+	mux.HandleFunc("POST /tools/invoke", s.handleToolsInvoke)
+	mux.HandleFunc("POST /sessions/{key}/kill", s.handleSessionKill)
+	mux.HandleFunc("GET /sessions/{key}/history", s.handleSessionHistory)
+
 	// OpenAI-compatible HTTP API endpoints.
 	mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
 	mux.HandleFunc("POST /v1/responses", s.handleResponses)
@@ -840,7 +845,15 @@ func (s *Server) registerPhase2Methods() {
 	chatCfg.Transcript = transcriptStore
 	chatCfg.Tools = chat.NewToolRegistry()
 	chatCfg.JobTracker = s.jobTracker
-	chatCfg.DefaultModel = "zai/glm-5-turbo"
+
+	// Resolve default model from config; fall back to hardcoded default.
+	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
+
+	// Resolve workspace directory for file tool operations.
+	workspaceDir := resolveWorkspaceDir()
+
+	// Register core tools (file I/O, exec, process, stubs for others).
+	chat.RegisterCoreTools(chatCfg.Tools, s.processes, workspaceDir)
 	if s.authManager != nil {
 		chatCfg.AuthManager = s.authManager
 	}
@@ -885,6 +898,31 @@ func (s *Server) registerPhase2Methods() {
 			s.broadcaster.Broadcast("config.changed", map[string]any{
 				"ts": time.Now().UnixMilli(),
 			})
+			// Restart channels to pick up config changes.
+			if s.channelLifecycle != nil {
+				s.safeGo("config:restart-channels", func() {
+					reloadCtx := context.Background()
+					if errs := s.channelLifecycle.StopAll(reloadCtx); len(errs) > 0 {
+						for id, err := range errs {
+							s.logger.Warn("config reload: channel stop failed", "channel", id, "error", err)
+						}
+					}
+					if errs := s.channelLifecycle.StartAll(reloadCtx); len(errs) > 0 {
+						for id, err := range errs {
+							s.logger.Warn("config reload: channel start failed", "channel", id, "error", err)
+						}
+					}
+					s.logger.Info("config reload: channels restarted")
+				})
+			}
+			// Restart cron scheduler.
+			if s.cron != nil {
+				s.safeGo("config:restart-cron", func() {
+					s.cron.Close()
+					s.cron = cron.NewScheduler(s.logger)
+					s.logger.Info("config reload: cron scheduler restarted")
+				})
+			}
 		},
 	})
 
@@ -938,8 +976,45 @@ func (s *Server) registerPhase2Methods() {
 	s.dispatcher.Register("browser.request", stubUnavailable)
 	s.dispatcher.Register("web.login.start", stubUnavailable)
 	s.dispatcher.Register("web.login.wait", stubUnavailable)
-	s.dispatcher.Register("channels.logout", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp := protocol.MustResponseOK(req.ID, map[string]any{"ok": true, "loggedOut": false})
+	s.dispatcher.Register("channels.logout", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Channel string `json:"channel"`
+		}
+		if len(req.Params) > 0 {
+			_ = json.Unmarshal(req.Params, &p)
+		}
+		if p.Channel == "" {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrMissingParam, "channel is required"))
+		}
+		// Validate channel exists.
+		ch := s.channels.Get(p.Channel)
+		if ch == nil {
+			return protocol.NewResponseError(req.ID, protocol.NewError(
+				protocol.ErrNotFound, "channel not found: "+p.Channel))
+		}
+		// Stop the channel (logout = stop + clear).
+		loggedOut := true
+		if s.channelLifecycle != nil {
+			if err := s.channelLifecycle.StopChannel(ctx, p.Channel); err != nil {
+				s.logger.Warn("channels.logout: stop failed", "channel", p.Channel, "error", err)
+				loggedOut = false
+			}
+		}
+		// Broadcast channel change event.
+		if loggedOut {
+			s.broadcaster.Broadcast("channels.changed", map[string]any{
+				"channelId": p.Channel,
+				"action":    "logged_out",
+				"ts":        time.Now().UnixMilli(),
+			})
+		}
+		resp := protocol.MustResponseOK(req.ID, map[string]any{
+			"ok":        true,
+			"channel":   p.Channel,
+			"loggedOut": loggedOut,
+			"cleared":   loggedOut,
+		})
 		return resp
 	})
 }
@@ -1180,6 +1255,46 @@ func loadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {
 		logger.Info("loaded provider configs", "count", len(root.Models.Providers))
 	}
 	return root.Models.Providers
+}
+
+// resolveDefaultModel reads agents.defaultModel or agents.defaults.model from
+// deneb.json, falling back to a hardcoded default.
+func resolveDefaultModel(logger *slog.Logger) string {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
+		return "zai/glm-5-turbo"
+	}
+	var root struct {
+		Agents struct {
+			DefaultModel string `json:"defaultModel"`
+			Defaults     struct {
+				Model string `json:"model"`
+			} `json:"defaults"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		logger.Warn("failed to parse agents config for model", "error", err)
+		return "zai/glm-5-turbo"
+	}
+	if root.Agents.DefaultModel != "" {
+		return root.Agents.DefaultModel
+	}
+	if root.Agents.Defaults.Model != "" {
+		return root.Agents.Defaults.Model
+	}
+	return "zai/glm-5-turbo"
+}
+
+// resolveWorkspaceDir determines the workspace directory for file tool operations.
+// Uses current working directory as the workspace root.
+func resolveWorkspaceDir() string {
+	if cwd, err := os.Getwd(); err == nil {
+		return cwd
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return home
+	}
+	return "/tmp"
 }
 
 // resolveDenebDir returns the path to ~/.deneb.
