@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 )
@@ -131,15 +133,15 @@ func RunJob(ctx context.Context, job Job, deps RunnerDeps) RunOutcome {
 	var deliveryResult *DeliveryResult
 	if output != "" && target != nil {
 		// Skip delivery if the output is just a heartbeat ack.
-		stripped := autoreply.StripHeartbeatToken(output, autoreply.StripModeHeartbeat, 0)
+		stripped := tokens.StripHeartbeatToken(output, tokens.StripModeHeartbeat, 0)
 		if !stripped.ShouldSkip {
-			payloads := []autoreply.ReplyPayload{{Text: stripped.Text}}
+			payloads := []types.ReplyPayload{{Text: stripped.Text}}
 			bestEffort := false
 			if job.Delivery != nil {
 				bestEffort = job.Delivery.BestEffort
 			}
 			dr := DeliverCronOutput(runCtx, deps.Channels, *target, payloads, DeliverOutputOptions{
-				ChunkLimit: autoreply.DefaultChunkLimit,
+				ChunkLimit: chunk.DefaultLimit,
 				ChunkMode:  "length",
 				BestEffort: bestEffort,
 				Logger:     deps.Logger,

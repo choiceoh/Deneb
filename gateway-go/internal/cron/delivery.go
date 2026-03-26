@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
 
@@ -140,7 +142,7 @@ func DeliverCronOutput(
 	ctx context.Context,
 	channels *channel.Registry,
 	target DeliveryTarget,
-	payloads []autoreply.ReplyPayload,
+	payloads []types.ReplyPayload,
 	opts DeliverOutputOptions,
 ) DeliveryResult {
 	start := time.Now()
@@ -170,19 +172,19 @@ func DeliverCronOutput(
 
 	chunkLimit := opts.ChunkLimit
 	if chunkLimit <= 0 {
-		chunkLimit = autoreply.DefaultChunkLimit
+		chunkLimit = chunk.DefaultLimit
 	}
 
 	for _, payload := range payloads {
 		// Skip silent replies.
-		if autoreply.IsSilentReplyText(payload.Text, "") {
+		if tokens.IsSilentReplyText(payload.Text, "") {
 			continue
 		}
 
 		// Chunk text if needed.
 		texts := []string{payload.Text}
 		if len(payload.Text) > chunkLimit {
-			texts = autoreply.ChunkTextWithMode(payload.Text, chunkLimit, autoreply.ChunkMode(opts.ChunkMode))
+			texts = chunk.TextWithMode(payload.Text, chunkLimit, chunk.Mode(opts.ChunkMode))
 		}
 
 		for i, text := range texts {

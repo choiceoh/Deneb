@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,7 +16,7 @@ const StagedMediaMaxBytes int64 = 50 * 1024 * 1024 // 50 MB (matches Telegram li
 
 // StageSandboxMediaParams holds the parameters for media staging.
 type StageSandboxMediaParams struct {
-	Ctx          *MsgContext
+	Ctx          *types.MsgContext
 	SessionKey   string
 	WorkspaceDir string
 	MediaDir     string // base media directory for local files
@@ -125,7 +126,7 @@ func StageRemoteMedia(remoteHost, remotePath, localPath string) error {
 
 var errFileTooLarge = errors.New("file too large")
 
-func resolveRawMediaPaths(ctx *MsgContext) []string {
+func resolveRawMediaPaths(ctx *types.MsgContext) []string {
 	// Prefer MediaPaths array over single MediaPath.
 	if len(ctx.MediaPaths) > 0 {
 		var paths []string
@@ -218,7 +219,7 @@ func stageLocalFile(source, dest string, maxBytes int64) error {
 	return nil
 }
 
-func rewriteStagedMediaPaths(ctx *MsgContext, rawPaths []string, staged map[string]string) {
+func rewriteStagedMediaPaths(ctx *types.MsgContext, rawPaths []string, staged map[string]string) {
 	rewriteIfStaged := func(value string) string {
 		raw := strings.TrimSpace(value)
 		if raw == "" {

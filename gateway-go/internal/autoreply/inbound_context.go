@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"regexp"
 	"strings"
 )
@@ -21,7 +22,7 @@ const DefaultMediaType = "application/octet-stream"
 // with the full priority chain logic from the TypeScript codebase.
 //
 // Mirrors src/auto-reply/reply/inbound-context.ts finalizeInboundContext().
-func FinalizeInboundContextFull(ctx *MsgContext, opts FinalizeInboundContextOptions) {
+func FinalizeInboundContextFull(ctx *types.MsgContext, opts FinalizeInboundContextOptions) {
 	if ctx == nil {
 		return
 	}
@@ -196,7 +197,7 @@ func normalizeMediaType(value string) string {
 }
 
 // countMediaEntries counts the total media entries across paths and URLs.
-func countMediaEntries(ctx *MsgContext) int {
+func countMediaEntries(ctx *types.MsgContext) int {
 	pathCount := len(ctx.MediaPaths)
 	urlCount := len(ctx.MediaUrls)
 	single := 0

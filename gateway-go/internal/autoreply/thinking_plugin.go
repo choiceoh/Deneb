@@ -1,6 +1,9 @@
 package autoreply
 
-import "sync"
+import (
+	"sync"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
 
 // ProviderThinkingContext provides context for plugin-based thinking level resolution.
 type ProviderThinkingContext struct {
@@ -28,7 +31,7 @@ type ProviderThinkingResolver interface {
 
 	// ResolveDefaultThinkingLevel returns the provider's default thinking level.
 	// Returns (level, hasDecision).
-	ResolveDefaultThinkingLevel(provider string, ctx ProviderThinkingContext) (ThinkLevel, bool)
+	ResolveDefaultThinkingLevel(provider string, ctx ProviderThinkingContext) (types.ThinkLevel, bool)
 }
 
 // ThinkingRuntime wraps the shared thinking functions with plugin-aware overrides.
@@ -63,7 +66,7 @@ func (r *ThinkingRuntime) getResolver() ProviderThinkingResolver {
 // Consults plugin resolver first, then falls back to built-in check.
 func (r *ThinkingRuntime) IsBinaryThinkingProvider(provider, model string) bool {
 	// Built-in check first.
-	if IsBinaryThinkingProvider(provider) {
+	if types.IsBinaryThinkingProvider(provider) {
 		return true
 	}
 
@@ -72,7 +75,7 @@ func (r *ThinkingRuntime) IsBinaryThinkingProvider(provider, model string) bool 
 		return false
 	}
 
-	normalizedProvider := NormalizeProviderId(provider)
+	normalizedProvider := types.NormalizeProviderId(provider)
 	if normalizedProvider == "" {
 		return false
 	}
@@ -105,7 +108,7 @@ func (r *ThinkingRuntime) SupportsXHighThinking(provider, model string) bool {
 		return false
 	}
 
-	providerKey := NormalizeProviderId(provider)
+	providerKey := types.NormalizeProviderId(provider)
 	if providerKey == "" {
 		return false
 	}
@@ -121,13 +124,13 @@ func (r *ThinkingRuntime) SupportsXHighThinking(provider, model string) bool {
 }
 
 // ListThinkingLevels returns available thinking levels, consulting plugin for xhigh support.
-func (r *ThinkingRuntime) ListThinkingLevels(provider, model string) []ThinkLevel {
-	levels := make([]ThinkLevel, len(BaseThinkingLevels()))
-	copy(levels, BaseThinkingLevels())
+func (r *ThinkingRuntime) ListThinkingLevels(provider, model string) []types.ThinkLevel {
+	levels := make([]types.ThinkLevel, len(types.BaseThinkingLevels()))
+	copy(levels, types.BaseThinkingLevels())
 	if r.SupportsXHighThinking(provider, model) {
-		result := make([]ThinkLevel, 0, len(levels)+1)
+		result := make([]types.ThinkLevel, 0, len(levels)+1)
 		result = append(result, levels[:len(levels)-1]...)
-		result = append(result, ThinkXHigh)
+		result = append(result, types.ThinkXHigh)
 		result = append(result, levels[len(levels)-1])
 		return result
 	}
@@ -157,10 +160,10 @@ func (r *ThinkingRuntime) FormatThinkingLevels(provider, model, separator string
 
 // ResolveThinkingDefaultForModel determines the default thinking level,
 // consulting plugin resolver first.
-func (r *ThinkingRuntime) ResolveThinkingDefaultForModel(provider, model string, catalog []ThinkingCatalogEntry) ThinkLevel {
+func (r *ThinkingRuntime) ResolveThinkingDefaultForModel(provider, model string, catalog []ThinkingCatalogEntry) types.ThinkLevel {
 	resolver := r.getResolver()
 	if resolver != nil {
-		normalizedProvider := NormalizeProviderId(provider)
+		normalizedProvider := types.NormalizeProviderId(provider)
 		var reasoning bool
 		for _, entry := range catalog {
 			if entry.Provider == provider && entry.ID == model {

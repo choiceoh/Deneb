@@ -13,7 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
 
@@ -43,7 +45,7 @@ type IsolatedAgentResult struct {
 	DeliveryResult *DeliveryResult
 	Summary        string
 	OutputText     string
-	Payloads       []autoreply.ReplyPayload
+	Payloads       []types.ReplyPayload
 	WasHeartbeat   bool
 	SessionKey     string
 }
@@ -117,7 +119,7 @@ func RunIsolatedAgentTurn(
 	result.Summary = PickSummaryFromOutput(output)
 
 	// 4. Check if output is heartbeat-only.
-	stripped := autoreply.StripHeartbeatToken(output, autoreply.StripModeHeartbeat, autoreply.DefaultHeartbeatAckChars)
+	stripped := tokens.StripHeartbeatToken(output, tokens.StripModeHeartbeat, tokens.DefaultHeartbeatAckChars)
 	if stripped.ShouldSkip {
 		result.WasHeartbeat = true
 		if cfg.SkipHeartbeatDelivery {
@@ -145,13 +147,13 @@ func RunIsolatedAgentTurn(
 		deliveryText = stripped.Text
 	}
 	if deliveryText != "" {
-		result.Payloads = append(result.Payloads, autoreply.ReplyPayload{Text: deliveryText})
+		result.Payloads = append(result.Payloads, types.ReplyPayload{Text: deliveryText})
 	}
 
 	// 7. Deliver to target.
 	if cfg.DeliveryTarget != nil && len(result.Payloads) > 0 && !result.WasHeartbeat {
 		dr := DeliverCronOutput(runCtx, channels, *cfg.DeliveryTarget, result.Payloads, DeliverOutputOptions{
-			ChunkLimit: autoreply.DefaultChunkLimit,
+			ChunkLimit: chunk.DefaultLimit,
 			ChunkMode:  "length",
 			BestEffort: cfg.DeliveryBestEffort,
 			Logger:     logger,

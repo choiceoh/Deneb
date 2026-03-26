@@ -1,5 +1,9 @@
 package autoreply
 
+import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
+
 // CommandContextFull provides the full context for command dispatch,
 // mirroring CommandContext from src/auto-reply/reply/commands-types.ts.
 type CommandContextFull struct {
@@ -23,8 +27,8 @@ type CommandContextFull struct {
 //
 // Mirrors HandleCommandsParams from src/auto-reply/reply/commands-types.ts.
 type HandleCommandsFullParams struct {
-	Ctx           *MsgContext
-	RootCtx       *MsgContext // ACP root context (may differ from Ctx)
+	Ctx           *types.MsgContext
+	RootCtx       *types.MsgContext // ACP root context (may differ from Ctx)
 	Command       CommandContextFull
 	AgentID       string
 	AgentDir      string
@@ -36,10 +40,10 @@ type HandleCommandsFullParams struct {
 	IsGroup       bool
 
 	// Resolved inference levels.
-	ResolvedThinkLevel       ThinkLevel
-	ResolvedVerboseLevel     VerboseLevel
-	ResolvedReasoningLevel   ReasoningLevel
-	ResolvedElevatedLevel    ElevatedLevel
+	ResolvedThinkLevel       types.ThinkLevel
+	ResolvedVerboseLevel     types.VerboseLevel
+	ResolvedReasoningLevel   types.ReasoningLevel
+	ResolvedElevatedLevel    types.ElevatedLevel
 	ResolvedBlockStreamBreak string // "text_end" | "message_end"
 
 	// Typing.
@@ -66,7 +70,7 @@ type ElevatedFailure struct {
 //
 // Mirrors CommandHandlerResult from src/auto-reply/reply/commands-types.ts.
 type CommandHandlerFullResult struct {
-	Reply          *ReplyPayload
+	Reply          *types.ReplyPayload
 	ShouldContinue bool
 }
 

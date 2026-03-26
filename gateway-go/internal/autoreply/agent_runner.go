@@ -6,6 +6,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,11 +25,11 @@ type AgentTurnConfig struct {
 	SystemPrompt   string
 	Message        string
 	Attachments    []MediaAttachment
-	ThinkLevel     ThinkLevel
+	ThinkLevel     types.ThinkLevel
 	FastMode       bool
-	VerboseLevel   VerboseLevel
-	ReasoningLevel ReasoningLevel
-	ElevatedLevel  ElevatedLevel
+	VerboseLevel   types.VerboseLevel
+	ReasoningLevel types.ReasoningLevel
+	ElevatedLevel  types.ElevatedLevel
 	MaxTokens      int
 	ContextTokens  int
 	TimeoutMs      int64
@@ -44,7 +45,7 @@ type AgentTurnConfig struct {
 
 // AgentTurnResult holds the outcome of an agent turn.
 type AgentTurnResult struct {
-	Payloads         []ReplyPayload
+	Payloads         []types.ReplyPayload
 	ToolMeta         *ToolMeta
 	OutputText       string
 	Summary          string
@@ -252,7 +253,7 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 
 	reminderGuard := NewReminderGuard(3)
 	totalToolCalls := 0
-	var allPayloads []ReplyPayload
+	var allPayloads []types.ReplyPayload
 
 	// Agent execution loop: send to LLM, process tool calls, repeat.
 	for turn := 0; turn < r.maxTurns; turn++ {
@@ -308,7 +309,7 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 					r.onSessionReset(cfg.SessionKey, "context_overflow")
 				}
 				result.Error = nil
-				allPayloads = append(allPayloads, ReplyPayload{
+				allPayloads = append(allPayloads, types.ReplyPayload{
 					Text:    ContextOverflowMessage,
 					IsError: true,
 				})
@@ -318,7 +319,7 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 			// 3. Billing error → specific message.
 			if llmErr != nil && IsBillingError(llmErr.Error()) {
 				result.Error = nil
-				allPayloads = append(allPayloads, ReplyPayload{
+				allPayloads = append(allPayloads, types.ReplyPayload{
 					Text:    BillingErrorMessage,
 					IsError: true,
 				})
@@ -331,7 +332,7 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 					r.onSessionReset(cfg.SessionKey, "role_ordering")
 				}
 				result.Error = nil
-				allPayloads = append(allPayloads, ReplyPayload{
+				allPayloads = append(allPayloads, types.ReplyPayload{
 					Text:    RoleOrderingMessage,
 					IsError: true,
 				})
@@ -372,7 +373,7 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 					errText = "⚠️ Provider temporarily unavailable. Please try again."
 				}
 				result.Error = llmErr
-				allPayloads = append(allPayloads, ReplyPayload{
+				allPayloads = append(allPayloads, types.ReplyPayload{
 					Text:    fmt.Sprintf("⚠️ Agent failed: %s", strings.TrimRight(errText, ".")),
 					IsError: true,
 				})
@@ -392,7 +393,7 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 		// No tool calls → we're done.
 		if len(response.ToolCalls) == 0 || response.StopReason == "end_turn" {
 			if response.Content != "" {
-				allPayloads = append(allPayloads, ReplyPayload{Text: response.Content})
+				allPayloads = append(allPayloads, types.ReplyPayload{Text: response.Content})
 			}
 			break
 		}
@@ -439,7 +440,7 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 
 				// Emit tool result payload for block streaming.
 				if output != "" {
-					allPayloads = append(allPayloads, ReplyPayload{
+					allPayloads = append(allPayloads, types.ReplyPayload{
 						Text:    output,
 						IsError: isError,
 					})
@@ -464,7 +465,7 @@ func (r *DefaultAgentRunner) executeTool(ctx context.Context, call ToolCall, cfg
 
 	// Check elevated permissions for bash/exec tools.
 	if (call.Name == "bash" || call.Name == "execute" || call.Name == "computer") &&
-		cfg.ElevatedLevel == ElevatedOff {
+		cfg.ElevatedLevel == types.ElevatedOff {
 		return "Tool execution requires elevated permissions. Use /elevated on to enable.", true, nil
 	}
 
@@ -577,19 +578,19 @@ func BuildAgentPayload(cfg AgentTurnConfig, history []AgentMessage, tools []Agen
 
 	// Configure thinking based on think level.
 	switch cfg.ThinkLevel {
-	case ThinkOff, "":
+	case types.ThinkOff, "":
 		// No thinking config needed.
-	case ThinkMinimal:
+	case types.ThinkMinimal:
 		payload.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 1024}
-	case ThinkLow:
+	case types.ThinkLow:
 		payload.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 4096}
-	case ThinkMedium:
+	case types.ThinkMedium:
 		payload.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 10240}
-	case ThinkHigh:
+	case types.ThinkHigh:
 		payload.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
-	case ThinkXHigh:
+	case types.ThinkXHigh:
 		payload.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 65536}
-	case ThinkAdaptive:
+	case types.ThinkAdaptive:
 		payload.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 16384}
 	}
 

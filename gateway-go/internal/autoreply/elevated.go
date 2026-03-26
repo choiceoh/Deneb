@@ -5,13 +5,14 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"regexp"
 	"strings"
 )
 
 // ElevatedModeAvailable checks if elevated execution is available.
-func ElevatedModeAvailable(session *SessionState) bool {
-	return session != nil && session.ElevatedLevel != ElevatedOff
+func ElevatedModeAvailable(session *types.SessionState) bool {
+	return session != nil && session.ElevatedLevel != types.ElevatedOff
 }
 
 // ElevatedUnavailableMessage returns a message when elevated mode is not available.

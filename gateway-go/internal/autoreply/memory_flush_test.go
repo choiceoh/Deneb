@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"strings"
 	"testing"
 )
@@ -22,7 +23,7 @@ func TestResolveMemoryFlushSettings_defaults(t *testing.T) {
 	if !strings.Contains(s.Prompt, "Pre-compaction memory flush") {
 		t.Error("expected default prompt")
 	}
-	if !strings.Contains(s.Prompt, SilentReplyToken) {
+	if !strings.Contains(s.Prompt, tokens.SilentReplyToken) {
 		t.Error("expected NO_REPLY hint in prompt")
 	}
 	if !strings.Contains(s.Prompt, "APPEND new content only") {

@@ -12,6 +12,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"fmt"
 	"strconv"
 	"strings"
@@ -30,16 +31,16 @@ type CommandContext struct {
 	Channel    string
 	AccountID  string
 	IsGroup    bool
-	Msg        *MsgContext
-	Session    *SessionState
+	Msg        *types.MsgContext
+	Session    *types.SessionState
 	// Dependencies for handlers that need them.
 	Deps *CommandDeps
 }
 
 // CommandDeps holds dependencies available to command handlers.
 type CommandDeps struct {
-	SessionStore    func(key string) *SessionState
-	SaveSession     func(session *SessionState) error
+	SessionStore    func(key string) *types.SessionState
+	SaveSession     func(session *types.SessionState) error
 	ModelCandidates []ModelCandidate
 	BashConfig      BashCommandConfig
 	Allowlist       *AllowlistMatcher
@@ -50,7 +51,7 @@ type CommandDeps struct {
 // CommandResult holds the outcome of a command execution.
 type CommandResult struct {
 	Reply      string
-	Payloads   []ReplyPayload
+	Payloads   []types.ReplyPayload
 	SessionMod *SessionModification
 	SkipAgent  bool
 	IsError    bool
@@ -58,7 +59,7 @@ type CommandResult struct {
 }
 
 // BtwContext signals that a command is a /btw side question.
-// The dispatch layer should use isolated think settings (ThinkOff, ReasoningOff)
+// The dispatch layer should use isolated think settings (types.ThinkOff, types.ReasoningOff)
 // for the agent turn without modifying the main session state.
 type BtwContext struct {
 	Question string `json:"question"`
@@ -69,13 +70,13 @@ type SessionModification struct {
 	Reset           bool
 	Model           string
 	Provider        string
-	ThinkLevel      ThinkLevel
-	VerboseLevel    VerboseLevel
+	ThinkLevel      types.ThinkLevel
+	VerboseLevel    types.VerboseLevel
 	FastMode        *bool
-	ReasoningLevel  ReasoningLevel
-	ElevatedLevel   ElevatedLevel
+	ReasoningLevel  types.ReasoningLevel
+	ElevatedLevel   types.ElevatedLevel
 	SendPolicy      string
-	GroupActivation GroupActivationMode
+	GroupActivation types.GroupActivationMode
 	SystemPrompt    *string
 	Label           *string
 	// Session lifecycle.
@@ -362,20 +363,20 @@ func handleModelsListCommand(ctx CommandContext) (*CommandResult, error) {
 func handleThinkCommand(ctx CommandContext) (*CommandResult, error) {
 	raw := argRaw(ctx.Args)
 	if raw == "" {
-		current := ThinkOff
+		current := types.ThinkOff
 		if ctx.Session != nil && ctx.Session.ThinkLevel != "" {
 			current = ctx.Session.ThinkLevel
 		}
-		labels := FormatThinkingLevels("", ", ")
+		labels := types.FormatThinkingLevels("", ", ")
 		return &CommandResult{
 			Reply:     fmt.Sprintf("🧠 Thinking: **%s**\nOptions: %s", current, labels),
 			SkipAgent: true,
 		}, nil
 	}
-	level, ok := NormalizeThinkLevel(raw)
+	level, ok := types.NormalizeThinkLevel(raw)
 	if !ok {
 		return &CommandResult{
-			Reply:     fmt.Sprintf("⚠️ Unknown thinking level: `%s`\nOptions: %s", raw, FormatThinkingLevels("", ", ")),
+			Reply:     fmt.Sprintf("⚠️ Unknown thinking level: `%s`\nOptions: %s", raw, types.FormatThinkingLevels("", ", ")),
 			SkipAgent: true, IsError: true,
 		}, nil
 	}
@@ -395,7 +396,7 @@ func handleFastCommand(ctx CommandContext) (*CommandResult, error) {
 		}
 		return &CommandResult{Reply: fmt.Sprintf("⚡ Fast mode: **%s**", mode), SkipAgent: true}, nil
 	}
-	val, ok := NormalizeFastMode(raw)
+	val, ok := types.NormalizeFastMode(raw)
 	if !ok {
 		return &CommandResult{Reply: "⚠️ Usage: /fast on|off|status", SkipAgent: true, IsError: true}, nil
 	}
@@ -409,13 +410,13 @@ func handleFastCommand(ctx CommandContext) (*CommandResult, error) {
 func handleVerboseCommand(ctx CommandContext) (*CommandResult, error) {
 	raw := argRaw(ctx.Args)
 	if raw == "" {
-		current := VerboseOff
+		current := types.VerboseOff
 		if ctx.Session != nil && ctx.Session.VerboseLevel != "" {
 			current = ctx.Session.VerboseLevel
 		}
 		return &CommandResult{Reply: fmt.Sprintf("📝 Verbose: **%s**\nOptions: off, on, full", current), SkipAgent: true}, nil
 	}
-	level, ok := NormalizeVerboseLevel(raw)
+	level, ok := types.NormalizeVerboseLevel(raw)
 	if !ok {
 		return &CommandResult{Reply: "⚠️ Usage: /verbose off|on|full", SkipAgent: true, IsError: true}, nil
 	}
@@ -429,13 +430,13 @@ func handleVerboseCommand(ctx CommandContext) (*CommandResult, error) {
 func handleReasoningCommand(ctx CommandContext) (*CommandResult, error) {
 	raw := argRaw(ctx.Args)
 	if raw == "" {
-		current := ReasoningOff
+		current := types.ReasoningOff
 		if ctx.Session != nil && ctx.Session.ReasoningLevel != "" {
 			current = ctx.Session.ReasoningLevel
 		}
 		return &CommandResult{Reply: fmt.Sprintf("💭 Reasoning: **%s**\nOptions: off, on, stream", current), SkipAgent: true}, nil
 	}
-	level, ok := NormalizeReasoningLevel(raw)
+	level, ok := types.NormalizeReasoningLevel(raw)
 	if !ok {
 		return &CommandResult{Reply: "⚠️ Usage: /reasoning off|on|stream", SkipAgent: true, IsError: true}, nil
 	}
@@ -449,13 +450,13 @@ func handleReasoningCommand(ctx CommandContext) (*CommandResult, error) {
 func handleElevatedCommand(ctx CommandContext) (*CommandResult, error) {
 	raw := argRaw(ctx.Args)
 	if raw == "" {
-		current := ElevatedOff
+		current := types.ElevatedOff
 		if ctx.Session != nil && ctx.Session.ElevatedLevel != "" {
 			current = ctx.Session.ElevatedLevel
 		}
 		return &CommandResult{Reply: fmt.Sprintf("🔓 Elevated: **%s**\nOptions: off, on, ask, full", current), SkipAgent: true}, nil
 	}
-	level, ok := NormalizeElevatedLevel(raw)
+	level, ok := types.NormalizeElevatedLevel(raw)
 	if !ok {
 		return &CommandResult{Reply: "⚠️ Usage: /elevated off|on|ask|full", SkipAgent: true, IsError: true}, nil
 	}
@@ -471,7 +472,7 @@ func handleUsageCommand(ctx CommandContext) (*CommandResult, error) {
 	if raw == "" {
 		return &CommandResult{Reply: "📊 Usage display options: off, tokens, full", SkipAgent: true}, nil
 	}
-	level, ok := NormalizeUsageDisplay(raw)
+	level, ok := types.NormalizeUsageDisplay(raw)
 	if !ok {
 		return &CommandResult{Reply: "⚠️ Usage: /usage off|tokens|full", SkipAgent: true, IsError: true}, nil
 	}
@@ -611,7 +612,7 @@ func handleBashCommand(ctx CommandContext) (*CommandResult, error) {
 	}
 
 	// Check elevated permissions.
-	if ctx.Session != nil && ctx.Session.ElevatedLevel == ElevatedOff {
+	if ctx.Session != nil && ctx.Session.ElevatedLevel == types.ElevatedOff {
 		return &CommandResult{Reply: ElevatedUnavailableMessage(), SkipAgent: true, IsError: true}, nil
 	}
 
@@ -657,7 +658,7 @@ func handleApproveCommand(ctx CommandContext) (*CommandResult, error) {
 func handleActivationCommand(ctx CommandContext) (*CommandResult, error) {
 	raw := argRaw(ctx.Args)
 	if raw == "" {
-		current := ActivationMention
+		current := types.ActivationMention
 		if ctx.Session != nil && ctx.Session.GroupActivation != "" {
 			current = ctx.Session.GroupActivation
 		}
@@ -666,7 +667,7 @@ func handleActivationCommand(ctx CommandContext) (*CommandResult, error) {
 			SkipAgent: true,
 		}, nil
 	}
-	mode, ok := NormalizeGroupActivation(raw)
+	mode, ok := types.NormalizeGroupActivation(raw)
 	if !ok {
 		return &CommandResult{Reply: "⚠️ Usage: /activation mention|always", SkipAgent: true, IsError: true}, nil
 	}
@@ -897,7 +898,7 @@ func handleBtwCommand(ctx CommandContext) (*CommandResult, error) {
 
 	// BTW side questions are delegated to the agent. The agent runner should
 	// use thinking=off for quick responses, but we do NOT modify the main
-	// session's ThinkLevel/ReasoningLevel — those are per-BTW-turn only.
+	// session's types.ThinkLevel/types.ReasoningLevel — those are per-BTW-turn only.
 	// The BtwContext on the result signals to the dispatch layer that this
 	// is a side question needing isolated think settings.
 	return &CommandResult{

@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"regexp"
 	"strings"
 )
@@ -10,11 +11,11 @@ type InlineDirectives struct {
 	Cleaned string // message body with all directives removed
 
 	HasThinkDirective bool
-	ThinkLevel        ThinkLevel
+	ThinkLevel        types.ThinkLevel
 	RawThinkLevel     string
 
 	HasVerboseDirective bool
-	VerboseLevel        VerboseLevel
+	VerboseLevel        types.VerboseLevel
 	RawVerboseLevel     string
 
 	HasFastDirective bool
@@ -22,11 +23,11 @@ type InlineDirectives struct {
 	RawFastMode      string
 
 	HasReasoningDirective bool
-	ReasoningLevel        ReasoningLevel
+	ReasoningLevel        types.ReasoningLevel
 	RawReasoningLevel     string
 
 	HasElevatedDirective bool
-	ElevatedLevel        ElevatedLevel
+	ElevatedLevel        types.ElevatedLevel
 	RawElevatedLevel     string
 
 	HasStatusDirective bool
@@ -62,14 +63,14 @@ func ParseInlineDirectives(body string, opts *DirectiveParseOptions) InlineDirec
 
 	// Extract /think directive.
 	text, result.HasThinkDirective, result.ThinkLevel, result.RawThinkLevel = extractLevelDirective(
-		text, thinkDirectiveRe, func(raw string) (ThinkLevel, bool) { return NormalizeThinkLevel(raw) },
-		ThinkLow, // default when no arg: /think → low
+		text, thinkDirectiveRe, func(raw string) (types.ThinkLevel, bool) { return types.NormalizeThinkLevel(raw) },
+		types.ThinkLow, // default when no arg: /think → low
 	)
 
 	// Extract /verbose directive.
 	text, result.HasVerboseDirective, result.VerboseLevel, result.RawVerboseLevel = extractLevelDirective(
-		text, verboseDirectiveRe, func(raw string) (VerboseLevel, bool) { return NormalizeVerboseLevel(raw) },
-		VerboseOn, // default: /verbose → on
+		text, verboseDirectiveRe, func(raw string) (types.VerboseLevel, bool) { return types.NormalizeVerboseLevel(raw) },
+		types.VerboseOn, // default: /verbose → on
 	)
 
 	// Extract /fast directive.
@@ -81,15 +82,15 @@ func ParseInlineDirectives(body string, opts *DirectiveParseOptions) InlineDirec
 
 	// Extract /reasoning directive.
 	text, result.HasReasoningDirective, result.ReasoningLevel, result.RawReasoningLevel = extractLevelDirective(
-		text, reasoningDirectiveRe, func(raw string) (ReasoningLevel, bool) { return NormalizeReasoningLevel(raw) },
-		ReasoningOn,
+		text, reasoningDirectiveRe, func(raw string) (types.ReasoningLevel, bool) { return types.NormalizeReasoningLevel(raw) },
+		types.ReasoningOn,
 	)
 
 	// Extract /elevated directive (unless disabled).
 	if !opts.DisableElevated {
 		text, result.HasElevatedDirective, result.ElevatedLevel, result.RawElevatedLevel = extractLevelDirective(
-			text, elevatedDirectiveRe, func(raw string) (ElevatedLevel, bool) { return NormalizeElevatedLevel(raw) },
-			ElevatedOn,
+			text, elevatedDirectiveRe, func(raw string) (types.ElevatedLevel, bool) { return types.NormalizeElevatedLevel(raw) },
+			types.ElevatedOn,
 		)
 	}
 
@@ -187,7 +188,7 @@ func extractBoolDirective(
 	value = defaultVal
 	if m[2] >= 0 {
 		rawValue = text[m[2]:m[3]]
-		if v, ok := NormalizeFastMode(rawValue); ok {
+		if v, ok := types.NormalizeFastMode(rawValue); ok {
 			value = v
 		}
 	}

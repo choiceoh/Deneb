@@ -4,6 +4,11 @@
 // message-preprocess-hooks.ts (50 LOC).
 package autoreply
 
+import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
+
 // StreamingDirective represents a directive detected during streaming.
 type StreamingDirective struct {
 	Type  string // "think", "verbose", "model", etc.
@@ -13,7 +18,7 @@ type StreamingDirective struct {
 // DetectStreamingDirective checks if streamed text contains an inline directive.
 func DetectStreamingDirective(text string) *StreamingDirective {
 	// During streaming, we watch for [[directives]] in the output.
-	tags := ExtractReplyTags(text)
+	tags := tokens.ExtractReplyTags(text)
 	for _, tag := range tags {
 		switch tag.Name {
 		case "think":
@@ -74,17 +79,17 @@ func SanitizeUntrustedContent(text string, policy UntrustedContentPolicy) string
 
 	// Strip system tags if enabled.
 	if policy.StripSystemTags {
-		result = StripReplyTags(result)
+		result = tokens.StripReplyTags(result)
 	}
 
 	return result
 }
 
 // MessagePreprocessHook is called before agent processing to modify the message.
-type MessagePreprocessHook func(msg *MsgContext) error
+type MessagePreprocessHook func(msg *types.MsgContext) error
 
 // RunPreprocessHooks executes all preprocess hooks on a message.
-func RunPreprocessHooks(msg *MsgContext, hooks []MessagePreprocessHook) error {
+func RunPreprocessHooks(msg *types.MsgContext, hooks []MessagePreprocessHook) error {
 	for _, hook := range hooks {
 		if err := hook(msg); err != nil {
 			return err

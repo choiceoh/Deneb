@@ -1,12 +1,16 @@
 package autoreply
 
+import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
+
 // InternalMessageChannel is the well-known channel name for internal webchat messages.
 // Matches INTERNAL_MESSAGE_CHANNEL from src/utils/message-channel.ts.
 const InternalMessageChannel = "webchat"
 
 // ResolveRunTypingPolicyParams holds the inputs for typing policy resolution.
 type ResolveRunTypingPolicyParams struct {
-	RequestedPolicy    TypingPolicy
+	RequestedPolicy    types.TypingPolicy
 	SuppressTyping     bool
 	IsHeartbeat        bool
 	OriginatingChannel string
@@ -15,7 +19,7 @@ type ResolveRunTypingPolicyParams struct {
 
 // ResolvedRunTypingPolicy holds the resolved typing policy and suppression flag.
 type ResolvedRunTypingPolicy struct {
-	TypingPolicy   TypingPolicy
+	TypingPolicy   types.TypingPolicy
 	SuppressTyping bool
 }
 
@@ -24,14 +28,14 @@ type ResolvedRunTypingPolicy struct {
 //
 // Mirrors src/auto-reply/reply/typing-policy.ts.
 func ResolveRunTypingPolicy(params ResolveRunTypingPolicyParams) ResolvedRunTypingPolicy {
-	var policy TypingPolicy
+	var policy types.TypingPolicy
 	switch {
 	case params.IsHeartbeat:
-		policy = TypingPolicyHeartbeat
+		policy = types.TypingPolicyHeartbeat
 	case params.OriginatingChannel == InternalMessageChannel:
-		policy = TypingPolicyInternalWeb
+		policy = types.TypingPolicyInternalWeb
 	case params.SystemEvent:
-		policy = TypingPolicySystemEvent
+		policy = types.TypingPolicySystemEvent
 	default:
 		if params.RequestedPolicy != "" {
 			policy = params.RequestedPolicy
@@ -41,9 +45,9 @@ func ResolveRunTypingPolicy(params ResolveRunTypingPolicyParams) ResolvedRunTypi
 	}
 
 	suppress := params.SuppressTyping ||
-		policy == TypingPolicyHeartbeat ||
-		policy == TypingPolicySystemEvent ||
-		policy == TypingPolicyInternalWeb
+		policy == types.TypingPolicyHeartbeat ||
+		policy == types.TypingPolicySystemEvent ||
+		policy == types.TypingPolicyInternalWeb
 
 	return ResolvedRunTypingPolicy{
 		TypingPolicy:   policy,

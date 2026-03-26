@@ -3,6 +3,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"fmt"
 	"math"
 	"math/big"
@@ -17,7 +18,7 @@ type AbortCutoffContext struct {
 }
 
 // ResolveAbortCutoffFromContext derives abort cutoff info from the message context.
-func ResolveAbortCutoffFromContext(msg *MsgContext) *AbortCutoffContext {
+func ResolveAbortCutoffFromContext(msg *types.MsgContext) *AbortCutoffContext {
 	messageSid := strings.TrimSpace(msg.MessageSid)
 	if messageSid == "" {
 		return nil

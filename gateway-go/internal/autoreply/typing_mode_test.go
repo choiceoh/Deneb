@@ -1,6 +1,9 @@
 package autoreply
 
-import "testing"
+import (
+	"testing"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
 
 func TestResolveTypingMode(t *testing.T) {
 	tests := []struct {
@@ -15,17 +18,17 @@ func TestResolveTypingMode(t *testing.T) {
 		},
 		{
 			name: "heartbeat policy returns never",
-			ctx:  TypingModeContext{TypingPolicy: TypingPolicyHeartbeat},
+			ctx:  TypingModeContext{TypingPolicy: types.TypingPolicyHeartbeat},
 			want: TypingModeNever,
 		},
 		{
 			name: "system_event policy returns never",
-			ctx:  TypingModeContext{TypingPolicy: TypingPolicySystemEvent},
+			ctx:  TypingModeContext{TypingPolicy: types.TypingPolicySystemEvent},
 			want: TypingModeNever,
 		},
 		{
 			name: "internal_webchat policy returns never",
-			ctx:  TypingModeContext{TypingPolicy: TypingPolicyInternalWeb},
+			ctx:  TypingModeContext{TypingPolicy: types.TypingPolicyInternalWeb},
 			want: TypingModeNever,
 		},
 		{

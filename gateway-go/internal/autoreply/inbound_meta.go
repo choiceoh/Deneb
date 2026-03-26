@@ -7,10 +7,10 @@ import (
 	"time"
 )
 
-// InboundMetaContext extends TemplateContext with additional fields used by
+// InboundMetaContext extends types.TemplateContext with additional fields used by
 // the inbound metadata system prompt and user context prefix generators.
 //
-// This mirrors the TemplateContext shape from src/auto-reply/templating.ts
+// This mirrors the types.TemplateContext shape from src/auto-reply/templating.ts
 // with the fields needed by inbound-meta.ts.
 type InboundMetaContext struct {
 	// Session / routing.

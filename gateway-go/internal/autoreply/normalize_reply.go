@@ -1,6 +1,8 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 )
 
@@ -8,20 +10,20 @@ import (
 // - Filters empty/silent/heartbeat replies
 // - Strips silent tokens
 // - Applies response prefix templates
-func NormalizeReplyPayload(payload ReplyPayload, opts NormalizeOpts) (ReplyPayload, bool) {
+func NormalizeReplyPayload(payload types.ReplyPayload, opts NormalizeOpts) (types.ReplyPayload, bool) {
 	text := strings.TrimSpace(payload.Text)
 
 	// Check for silent reply.
-	if IsSilentReplyText(text, "") {
+	if tokens.IsSilentReplyText(text, "") {
 		return payload, false // skip delivery
 	}
 
 	// Strip trailing silent token from mixed content.
-	text = StripSilentToken(text, "")
+	text = tokens.StripSilentToken(text, "")
 
 	// Handle heartbeat token in the text.
-	if strings.Contains(text, HeartbeatToken) {
-		result := StripHeartbeatToken(text, opts.HeartbeatMode, opts.HeartbeatAckMaxChars)
+	if strings.Contains(text, tokens.HeartbeatToken) {
+		result := tokens.StripHeartbeatToken(text, opts.HeartbeatMode, opts.HeartbeatAckMaxChars)
 		if result.ShouldSkip {
 			return payload, false
 		}
@@ -45,14 +47,14 @@ func NormalizeReplyPayload(payload ReplyPayload, opts NormalizeOpts) (ReplyPaylo
 // NormalizeOpts configures reply normalization.
 type NormalizeOpts struct {
 	ResponsePrefix       string
-	HeartbeatMode        StripHeartbeatMode
+	HeartbeatMode        tokens.StripHeartbeatMode
 	HeartbeatAckMaxChars int
 }
 
 // FilterReplyPayloads normalizes a slice of payloads, removing those that
 // should be skipped.
-func FilterReplyPayloads(payloads []ReplyPayload, opts NormalizeOpts) []ReplyPayload {
-	var result []ReplyPayload
+func FilterReplyPayloads(payloads []types.ReplyPayload, opts NormalizeOpts) []types.ReplyPayload {
+	var result []types.ReplyPayload
 	for _, p := range payloads {
 		normalized, ok := NormalizeReplyPayload(p, opts)
 		if ok {
@@ -63,9 +65,9 @@ func FilterReplyPayloads(payloads []ReplyPayload, opts NormalizeOpts) []ReplyPay
 }
 
 // DeduplicateReplyPayloads removes duplicate text and media from payloads.
-func DeduplicateReplyPayloads(payloads []ReplyPayload) []ReplyPayload {
+func DeduplicateReplyPayloads(payloads []types.ReplyPayload) []types.ReplyPayload {
 	seen := make(map[string]bool)
-	var result []ReplyPayload
+	var result []types.ReplyPayload
 	for _, p := range payloads {
 		key := p.Text
 		if key == "" {

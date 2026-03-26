@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"os"
 	"path/filepath"
 	"testing"
@@ -105,7 +106,7 @@ func TestStageSandboxMedia_Integration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := &MsgContext{
+	ctx := &types.MsgContext{
 		MediaPath: testFile,
 	}
 
@@ -149,7 +150,7 @@ func TestStageSandboxMedia_FileTooLarge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := &MsgContext{
+	ctx := &types.MsgContext{
 		MediaPath: testFile,
 	}
 
@@ -165,7 +166,7 @@ func TestStageSandboxMedia_FileTooLarge(t *testing.T) {
 }
 
 func TestStageSandboxMedia_NoMedia(t *testing.T) {
-	ctx := &MsgContext{}
+	ctx := &types.MsgContext{}
 	err := StageSandboxMedia(StageSandboxMediaParams{
 		Ctx:          ctx,
 		SessionKey:   "test-session",
@@ -177,7 +178,7 @@ func TestStageSandboxMedia_NoMedia(t *testing.T) {
 }
 
 func TestStageSandboxMedia_BlockedPath(t *testing.T) {
-	ctx := &MsgContext{
+	ctx := &types.MsgContext{
 		MediaPath: "/etc/passwd",
 	}
 	err := StageSandboxMedia(StageSandboxMediaParams{

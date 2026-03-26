@@ -1,13 +1,16 @@
 package autoreply
 
-import "testing"
+import (
+	"testing"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
 
 func TestCommandDispatcher_ResetDetection(t *testing.T) {
 	// Register a handler that catches /new.
 	handler := func(params HandleCommandsFullParams, allowText bool) *CommandHandlerFullResult {
 		if IsResetCommand(params.Command.CommandBodyNormalized) {
 			return &CommandHandlerFullResult{
-				Reply:          &ReplyPayload{Text: "Session reset."},
+				Reply:          &types.ReplyPayload{Text: "Session reset."},
 				ShouldContinue: false,
 			}
 		}
@@ -17,7 +20,7 @@ func TestCommandDispatcher_ResetDetection(t *testing.T) {
 
 	// Authorized /new.
 	result := d.DispatchCommands(HandleCommandsFullParams{
-		Ctx: &MsgContext{Body: "/new"},
+		Ctx: &types.MsgContext{Body: "/new"},
 		Command: CommandContextFull{
 			CommandBodyNormalized: "/new",
 			IsAuthorizedSender:    true,
@@ -32,7 +35,7 @@ func TestCommandDispatcher_UnauthorizedReset(t *testing.T) {
 	d := NewCommandDispatcher(nil, nil)
 
 	result := d.DispatchCommands(HandleCommandsFullParams{
-		Ctx: &MsgContext{Body: "/reset"},
+		Ctx: &types.MsgContext{Body: "/reset"},
 		Command: CommandContextFull{
 			CommandBodyNormalized: "/reset",
 			IsAuthorizedSender:    false,
@@ -50,7 +53,7 @@ func TestCommandDispatcher_UnauthorizedReset(t *testing.T) {
 func TestCommandDispatcher_ResetWithTail(t *testing.T) {
 	d := NewCommandDispatcher(nil, nil)
 
-	ctx := &MsgContext{Body: "/new what's the weather?"}
+	ctx := &types.MsgContext{Body: "/new what's the weather?"}
 	result := d.DispatchCommands(HandleCommandsFullParams{
 		Ctx: ctx,
 		Command: CommandContextFull{
@@ -76,7 +79,7 @@ func TestCommandDispatcher_HandlerMatch(t *testing.T) {
 		if params.Command.CommandBodyNormalized == "/status" {
 			handlerCalled = true
 			return &CommandHandlerFullResult{
-				Reply:          &ReplyPayload{Text: "ok"},
+				Reply:          &types.ReplyPayload{Text: "ok"},
 				ShouldContinue: false,
 			}
 		}
@@ -85,7 +88,7 @@ func TestCommandDispatcher_HandlerMatch(t *testing.T) {
 
 	d := NewCommandDispatcher([]CommandHandlerFull{handler}, nil)
 	result := d.DispatchCommands(HandleCommandsFullParams{
-		Ctx: &MsgContext{Body: "/status"},
+		Ctx: &types.MsgContext{Body: "/status"},
 		Command: CommandContextFull{
 			CommandBodyNormalized: "/status",
 			IsAuthorizedSender:    true,
@@ -110,7 +113,7 @@ func TestCommandDispatcher_NoMatchContinues(t *testing.T) {
 
 	d := NewCommandDispatcher([]CommandHandlerFull{handler}, nil)
 	result := d.DispatchCommands(HandleCommandsFullParams{
-		Ctx: &MsgContext{Body: "hello world"},
+		Ctx: &types.MsgContext{Body: "hello world"},
 		Command: CommandContextFull{
 			CommandBodyNormalized: "hello world",
 			IsAuthorizedSender:    true,
@@ -129,7 +132,7 @@ func TestCommandDispatcher_SendPolicyDeny(t *testing.T) {
 	})
 
 	result := d.DispatchCommands(HandleCommandsFullParams{
-		Ctx: &MsgContext{Body: "hello"},
+		Ctx: &types.MsgContext{Body: "hello"},
 		Command: CommandContextFull{
 			CommandBodyNormalized: "hello",
 			IsAuthorizedSender:    true,

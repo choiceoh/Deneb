@@ -1,30 +1,33 @@
 package autoreply
 
-import "testing"
+import (
+	"testing"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
 
 func TestResolveRunTypingPolicy(t *testing.T) {
 	tests := []struct {
 		name         string
 		params       ResolveRunTypingPolicyParams
-		wantPolicy   TypingPolicy
+		wantPolicy   types.TypingPolicy
 		wantSuppress bool
 	}{
 		{
 			name:         "heartbeat forces heartbeat policy and suppresses",
 			params:       ResolveRunTypingPolicyParams{IsHeartbeat: true},
-			wantPolicy:   TypingPolicyHeartbeat,
+			wantPolicy:   types.TypingPolicyHeartbeat,
 			wantSuppress: true,
 		},
 		{
 			name:         "internal webchat forces internal_webchat policy and suppresses",
 			params:       ResolveRunTypingPolicyParams{OriginatingChannel: "webchat"},
-			wantPolicy:   TypingPolicyInternalWeb,
+			wantPolicy:   types.TypingPolicyInternalWeb,
 			wantSuppress: true,
 		},
 		{
 			name:         "system event forces system_event policy and suppresses",
 			params:       ResolveRunTypingPolicyParams{SystemEvent: true},
-			wantPolicy:   TypingPolicySystemEvent,
+			wantPolicy:   types.TypingPolicySystemEvent,
 			wantSuppress: true,
 		},
 		{
@@ -48,13 +51,13 @@ func TestResolveRunTypingPolicy(t *testing.T) {
 		{
 			name:         "heartbeat takes priority over system event",
 			params:       ResolveRunTypingPolicyParams{IsHeartbeat: true, SystemEvent: true},
-			wantPolicy:   TypingPolicyHeartbeat,
+			wantPolicy:   types.TypingPolicyHeartbeat,
 			wantSuppress: true,
 		},
 		{
 			name:         "internal webchat takes priority over system event",
 			params:       ResolveRunTypingPolicyParams{OriginatingChannel: "webchat", SystemEvent: true},
-			wantPolicy:   TypingPolicyInternalWeb,
+			wantPolicy:   types.TypingPolicyInternalWeb,
 			wantSuppress: true,
 		},
 	}

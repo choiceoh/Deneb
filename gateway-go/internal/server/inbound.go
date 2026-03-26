@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -80,7 +81,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		senderName = buildSenderName(msg.From)
 	}
 
-	msgCtx := &autoreply.MsgContext{
+	msgCtx := &types.MsgContext{
 		Body:              msgText,
 		RawBody:           msgText,
 		From:              chatID,
@@ -116,7 +117,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 				Channel:    "telegram",
 				IsGroup:    msgCtx.IsGroup,
 				Msg:        msgCtx,
-				Session: &autoreply.SessionState{
+				Session: &types.SessionState{
 					SessionKey: sessionKey,
 					Channel:    "telegram",
 					IsGroup:    msgCtx.IsGroup,

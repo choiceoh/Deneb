@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -143,7 +144,7 @@ func (d *CommandDispatcher) DispatchCommands(params HandleCommandsFullParams) Co
 				Channel:    params.Command.Channel,
 				IsGroup:    params.IsGroup,
 				Msg:        params.Ctx,
-				Session: &SessionState{
+				Session: &types.SessionState{
 					SessionKey:     params.SessionKey,
 					AgentID:        params.AgentID,
 					Channel:        params.Command.Channel,
@@ -160,9 +161,9 @@ func (d *CommandDispatcher) DispatchCommands(params HandleCommandsFullParams) Co
 
 			routerResult, err := d.router.Dispatch(routerCtx)
 			if err == nil && routerResult != nil {
-				var reply *ReplyPayload
+				var reply *types.ReplyPayload
 				if routerResult.Reply != "" {
-					reply = &ReplyPayload{
+					reply = &types.ReplyPayload{
 						Text:    routerResult.Reply,
 						IsError: routerResult.IsError,
 					}
@@ -218,7 +219,7 @@ func extractDispatchCommandArgs(body, cmdKey string) *CommandArgs {
 }
 
 // applyResetTailContext rewrites context fields with the tail text after a reset command.
-func applyResetTailContext(ctx *MsgContext, resetTail string) {
+func applyResetTailContext(ctx *types.MsgContext, resetTail string) {
 	ctx.Body = resetTail
 	ctx.RawBody = resetTail
 	ctx.CommandBody = resetTail

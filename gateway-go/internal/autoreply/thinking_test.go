@@ -1,36 +1,39 @@
 package autoreply
 
-import "testing"
+import (
+	"testing"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
 
 func TestNormalizeThinkLevel(t *testing.T) {
 	tests := []struct {
 		raw    string
-		want   ThinkLevel
+		want   types.ThinkLevel
 		wantOk bool
 	}{
-		{"off", ThinkOff, true},
-		{"on", ThinkLow, true},
-		{"enable", ThinkLow, true},
-		{"min", ThinkMinimal, true},
-		{"minimal", ThinkMinimal, true},
-		{"low", ThinkLow, true},
-		{"medium", ThinkMedium, true},
-		{"med", ThinkMedium, true},
-		{"high", ThinkHigh, true},
-		{"max", ThinkHigh, true},
-		{"xhigh", ThinkXHigh, true},
-		{"extrahigh", ThinkXHigh, true},
-		{"adaptive", ThinkAdaptive, true},
-		{"auto", ThinkAdaptive, true},
-		{"think", ThinkMinimal, true},
+		{"off", types.ThinkOff, true},
+		{"on", types.ThinkLow, true},
+		{"enable", types.ThinkLow, true},
+		{"min", types.ThinkMinimal, true},
+		{"minimal", types.ThinkMinimal, true},
+		{"low", types.ThinkLow, true},
+		{"medium", types.ThinkMedium, true},
+		{"med", types.ThinkMedium, true},
+		{"high", types.ThinkHigh, true},
+		{"max", types.ThinkHigh, true},
+		{"xhigh", types.ThinkXHigh, true},
+		{"extrahigh", types.ThinkXHigh, true},
+		{"adaptive", types.ThinkAdaptive, true},
+		{"auto", types.ThinkAdaptive, true},
+		{"think", types.ThinkMinimal, true},
 		{"", "", false},
 		{"invalid", "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.raw, func(t *testing.T) {
-			got, ok := NormalizeThinkLevel(tt.raw)
+			got, ok := types.NormalizeThinkLevel(tt.raw)
 			if got != tt.want || ok != tt.wantOk {
-				t.Errorf("NormalizeThinkLevel(%q) = (%q, %v), want (%q, %v)", tt.raw, got, ok, tt.want, tt.wantOk)
+				t.Errorf("types.NormalizeThinkLevel(%q) = (%q, %v), want (%q, %v)", tt.raw, got, ok, tt.want, tt.wantOk)
 			}
 		})
 	}
@@ -39,20 +42,20 @@ func TestNormalizeThinkLevel(t *testing.T) {
 func TestNormalizeVerboseLevel(t *testing.T) {
 	tests := []struct {
 		raw  string
-		want VerboseLevel
+		want types.VerboseLevel
 		ok   bool
 	}{
-		{"off", VerboseOff, true},
-		{"on", VerboseOn, true},
-		{"full", VerboseFull, true},
-		{"false", VerboseOff, true},
-		{"everything", VerboseFull, true},
+		{"off", types.VerboseOff, true},
+		{"on", types.VerboseOn, true},
+		{"full", types.VerboseFull, true},
+		{"false", types.VerboseOff, true},
+		{"everything", types.VerboseFull, true},
 		{"", "", false},
 	}
 	for _, tt := range tests {
-		got, ok := NormalizeVerboseLevel(tt.raw)
+		got, ok := types.NormalizeVerboseLevel(tt.raw)
 		if got != tt.want || ok != tt.ok {
-			t.Errorf("NormalizeVerboseLevel(%q) = (%q, %v), want (%q, %v)", tt.raw, got, ok, tt.want, tt.ok)
+			t.Errorf("types.NormalizeVerboseLevel(%q) = (%q, %v), want (%q, %v)", tt.raw, got, ok, tt.want, tt.ok)
 		}
 	}
 }
@@ -60,20 +63,20 @@ func TestNormalizeVerboseLevel(t *testing.T) {
 func TestNormalizeElevatedLevel(t *testing.T) {
 	tests := []struct {
 		raw  string
-		want ElevatedLevel
+		want types.ElevatedLevel
 		ok   bool
 	}{
-		{"off", ElevatedOff, true},
-		{"on", ElevatedOn, true},
-		{"ask", ElevatedAsk, true},
-		{"full", ElevatedFull, true},
-		{"auto-approve", ElevatedFull, true},
+		{"off", types.ElevatedOff, true},
+		{"on", types.ElevatedOn, true},
+		{"ask", types.ElevatedAsk, true},
+		{"full", types.ElevatedFull, true},
+		{"auto-approve", types.ElevatedFull, true},
 		{"", "", false},
 	}
 	for _, tt := range tests {
-		got, ok := NormalizeElevatedLevel(tt.raw)
+		got, ok := types.NormalizeElevatedLevel(tt.raw)
 		if got != tt.want || ok != tt.ok {
-			t.Errorf("NormalizeElevatedLevel(%q) = (%q, %v), want (%q, %v)", tt.raw, got, ok, tt.want, tt.ok)
+			t.Errorf("types.NormalizeElevatedLevel(%q) = (%q, %v), want (%q, %v)", tt.raw, got, ok, tt.want, tt.ok)
 		}
 	}
 }
@@ -81,20 +84,20 @@ func TestNormalizeElevatedLevel(t *testing.T) {
 func TestNormalizeReasoningLevel(t *testing.T) {
 	tests := []struct {
 		raw  string
-		want ReasoningLevel
+		want types.ReasoningLevel
 		ok   bool
 	}{
-		{"off", ReasoningOff, true},
-		{"on", ReasoningOn, true},
-		{"stream", ReasoningStream, true},
-		{"hidden", ReasoningOff, true},
-		{"visible", ReasoningOn, true},
+		{"off", types.ReasoningOff, true},
+		{"on", types.ReasoningOn, true},
+		{"stream", types.ReasoningStream, true},
+		{"hidden", types.ReasoningOff, true},
+		{"visible", types.ReasoningOn, true},
 		{"", "", false},
 	}
 	for _, tt := range tests {
-		got, ok := NormalizeReasoningLevel(tt.raw)
+		got, ok := types.NormalizeReasoningLevel(tt.raw)
 		if got != tt.want || ok != tt.ok {
-			t.Errorf("NormalizeReasoningLevel(%q) = (%q, %v), want (%q, %v)", tt.raw, got, ok, tt.want, tt.ok)
+			t.Errorf("types.NormalizeReasoningLevel(%q) = (%q, %v), want (%q, %v)", tt.raw, got, ok, tt.want, tt.ok)
 		}
 	}
 }
@@ -112,9 +115,9 @@ func TestNormalizeFastMode(t *testing.T) {
 		{"", false, false},
 	}
 	for _, tt := range tests {
-		got, ok := NormalizeFastMode(tt.raw)
+		got, ok := types.NormalizeFastMode(tt.raw)
 		if got != tt.want || ok != tt.ok {
-			t.Errorf("NormalizeFastMode(%q) = (%v, %v), want (%v, %v)", tt.raw, got, ok, tt.want, tt.ok)
+			t.Errorf("types.NormalizeFastMode(%q) = (%v, %v), want (%v, %v)", tt.raw, got, ok, tt.want, tt.ok)
 		}
 	}
 }
@@ -130,18 +133,18 @@ func TestNormalizeProviderId(t *testing.T) {
 		{"", ""},
 	}
 	for _, tt := range tests {
-		got := NormalizeProviderId(tt.raw)
+		got := types.NormalizeProviderId(tt.raw)
 		if got != tt.want {
-			t.Errorf("NormalizeProviderId(%q) = %q, want %q", tt.raw, got, tt.want)
+			t.Errorf("types.NormalizeProviderId(%q) = %q, want %q", tt.raw, got, tt.want)
 		}
 	}
 }
 
 func TestIsBinaryThinkingProvider(t *testing.T) {
-	if !IsBinaryThinkingProvider("z.ai") {
+	if !types.IsBinaryThinkingProvider("z.ai") {
 		t.Error("z.ai should be binary")
 	}
-	if IsBinaryThinkingProvider("anthropic") {
+	if types.IsBinaryThinkingProvider("anthropic") {
 		t.Error("anthropic should not be binary")
 	}
 }

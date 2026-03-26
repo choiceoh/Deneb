@@ -8,6 +8,8 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"fmt"
 	"strings"
 )
@@ -21,7 +23,7 @@ type DirectiveHandlingResult struct {
 	// Session modifications to apply.
 	SessionMod *SessionModification
 	// Immediate reply (e.g., for /status in directive form).
-	ImmediateReply *ReplyPayload
+	ImmediateReply *types.ReplyPayload
 	// Acknowledgment text for mode changes.
 	AckText string
 	// Errors from invalid directives.
@@ -47,16 +49,16 @@ type DirectiveModelResolution struct {
 
 // DirectiveQueueChanges describes queue modifications from directives.
 type DirectiveQueueChanges struct {
-	Mode       QueueMode
+	Mode       queue.QueueMode
 	Reset      bool
 	DebounceMs int
 	Cap        int
-	DropPolicy QueueDropPolicy
+	DropPolicy queue.QueueDropPolicy
 }
 
 // HandleDirectives processes all inline directives in a message body.
 // This is the main orchestrator matching directive-handling.impl.ts.
-func HandleDirectives(body string, session *SessionState, opts DirectiveHandlingOptions) DirectiveHandlingResult {
+func HandleDirectives(body string, session *types.SessionState, opts DirectiveHandlingOptions) DirectiveHandlingResult {
 	result := DirectiveHandlingResult{}
 
 	// 1. Parse inline directives.
@@ -142,7 +144,7 @@ func HandleDirectives(body string, session *SessionState, opts DirectiveHandling
 	if directives.HasStatusDirective && opts.StatusHandler != nil {
 		statusReply := opts.StatusHandler(session)
 		if statusReply != "" {
-			result.ImmediateReply = &ReplyPayload{Text: statusReply}
+			result.ImmediateReply = &types.ReplyPayload{Text: statusReply}
 		}
 	}
 
@@ -160,12 +162,12 @@ type DirectiveHandlingOptions struct {
 	DisableStatus          bool
 	RequireAuthForElevated bool
 	IsAuthorized           bool
-	StatusHandler          func(session *SessionState) string
+	StatusHandler          func(session *types.SessionState) string
 }
 
 // PersistDirectives applies directive results to the session store.
 // Mirrors directive-handling.persist.ts persistInlineDirectives().
-func PersistDirectives(session *SessionState, result DirectiveHandlingResult) {
+func PersistDirectives(session *types.SessionState, result DirectiveHandlingResult) {
 	if result.SessionMod == nil {
 		return
 	}
@@ -202,14 +204,14 @@ func PersistDirectives(session *SessionState, result DirectiveHandlingResult) {
 // ResolveCurrentDirectiveLevels resolves effective levels from session + config.
 // Mirrors directive-handling.levels.ts resolveCurrentDirectiveLevels().
 type ResolvedLevels struct {
-	ThinkLevel     ThinkLevel
-	VerboseLevel   VerboseLevel
+	ThinkLevel     types.ThinkLevel
+	VerboseLevel   types.VerboseLevel
 	FastMode       bool
-	ReasoningLevel ReasoningLevel
-	ElevatedLevel  ElevatedLevel
+	ReasoningLevel types.ReasoningLevel
+	ElevatedLevel  types.ElevatedLevel
 }
 
-func ResolveCurrentDirectiveLevels(session *SessionState, defaults ResolvedLevels) ResolvedLevels {
+func ResolveCurrentDirectiveLevels(session *types.SessionState, defaults ResolvedLevels) ResolvedLevels {
 	result := defaults
 
 	if session == nil {
@@ -298,11 +300,11 @@ func resolveQueueDirective(directives InlineDirectives) DirectiveQueueChanges {
 		mode := strings.ToLower(directives.RawQueueMode)
 		switch mode {
 		case "auto":
-			changes.Mode = QueueModeAuto
+			changes.Mode = queue.QueueModeAuto
 		case "manual":
-			changes.Mode = QueueModeManual
+			changes.Mode = queue.QueueModeManual
 		case "off":
-			changes.Mode = QueueModeOff
+			changes.Mode = queue.QueueModeOff
 		}
 	}
 	return changes
@@ -321,7 +323,7 @@ func IsFastLaneDirective(directives InlineDirectives) bool {
 }
 
 // BuildFastLaneReply creates a quick acknowledgment reply for fast-lane directives.
-func BuildFastLaneReply(directives InlineDirectives) *ReplyPayload {
+func BuildFastLaneReply(directives InlineDirectives) *types.ReplyPayload {
 	var parts []string
 	if directives.HasThinkDirective {
 		parts = append(parts, fmt.Sprintf("🧠 Think: %s", directives.ThinkLevel))
@@ -341,7 +343,7 @@ func BuildFastLaneReply(directives InlineDirectives) *ReplyPayload {
 	if len(parts) == 0 {
 		return nil
 	}
-	return &ReplyPayload{Text: strings.Join(parts, "\n")}
+	return &types.ReplyPayload{Text: strings.Join(parts, "\n")}
 }
 
 // --- Helpers ---

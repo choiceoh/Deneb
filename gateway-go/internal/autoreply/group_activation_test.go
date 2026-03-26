@@ -1,26 +1,29 @@
 package autoreply
 
-import "testing"
+import (
+	"testing"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
 
 func TestNormalizeGroupActivation(t *testing.T) {
 	tests := []struct {
 		raw    string
-		want   GroupActivationMode
+		want   types.GroupActivationMode
 		wantOk bool
 	}{
-		{"mention", ActivationMention, true},
-		{"MENTION", ActivationMention, true},
-		{"always", ActivationAlways, true},
-		{"ALWAYS", ActivationAlways, true},
+		{"mention", types.ActivationMention, true},
+		{"MENTION", types.ActivationMention, true},
+		{"always", types.ActivationAlways, true},
+		{"ALWAYS", types.ActivationAlways, true},
 		{"invalid", "", false},
 		{"", "", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.raw, func(t *testing.T) {
-			got, ok := NormalizeGroupActivation(tt.raw)
+			got, ok := types.NormalizeGroupActivation(tt.raw)
 			if got != tt.want || ok != tt.wantOk {
-				t.Errorf("NormalizeGroupActivation(%q) = (%q, %v), want (%q, %v)", tt.raw, got, ok, tt.want, tt.wantOk)
+				t.Errorf("types.NormalizeGroupActivation(%q) = (%q, %v), want (%q, %v)", tt.raw, got, ok, tt.want, tt.wantOk)
 			}
 		})
 	}
@@ -31,11 +34,11 @@ func TestParseActivationCommand(t *testing.T) {
 		name     string
 		raw      string
 		wantCmd  bool
-		wantMode GroupActivationMode
+		wantMode types.GroupActivationMode
 	}{
-		{"with mode", "/activation mention", true, ActivationMention},
+		{"with mode", "/activation mention", true, types.ActivationMention},
 		{"without mode", "/activation", true, ""},
-		{"always mode", "/activation always", true, ActivationAlways},
+		{"always mode", "/activation always", true, types.ActivationAlways},
 		{"not activation", "/status", false, ""},
 		{"empty", "", false, ""},
 		{"invalid mode", "/activation foo", true, ""},

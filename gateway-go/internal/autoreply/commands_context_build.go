@@ -3,6 +3,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 )
 
@@ -26,7 +27,7 @@ type InboundCommandContext struct {
 // BuildInboundCommandContext constructs an InboundCommandContext from message
 // context, config, and normalization parameters.
 func BuildInboundCommandContext(params struct {
-	Msg                   *MsgContext
+	Msg                   *types.MsgContext
 	Channel               *ChannelContext
 	AgentID               string
 	SessionKey            string

@@ -1,12 +1,15 @@
 package autoreply
 
-import "testing"
+import (
+	"testing"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
 
 // mockResolver implements ProviderThinkingResolver for testing.
 type mockResolver struct {
 	binaryResult  *bool
 	xhighResult   *bool
-	defaultResult *ThinkLevel
+	defaultResult *types.ThinkLevel
 }
 
 func (m *mockResolver) ResolveBinaryThinking(provider string, ctx ProviderThinkingContext) (bool, bool) {
@@ -23,7 +26,7 @@ func (m *mockResolver) ResolveXHighThinking(provider string, ctx ProviderThinkin
 	return false, false
 }
 
-func (m *mockResolver) ResolveDefaultThinkingLevel(provider string, ctx ProviderThinkingContext) (ThinkLevel, bool) {
+func (m *mockResolver) ResolveDefaultThinkingLevel(provider string, ctx ProviderThinkingContext) (types.ThinkLevel, bool) {
 	if m.defaultResult != nil {
 		return *m.defaultResult, true
 	}
@@ -31,7 +34,7 @@ func (m *mockResolver) ResolveDefaultThinkingLevel(provider string, ctx Provider
 }
 
 func thinkingBoolPtr(v bool) *bool      { return &v }
-func thinkPtr(v ThinkLevel) *ThinkLevel { return &v }
+func thinkPtr(v types.ThinkLevel) *types.ThinkLevel { return &v }
 
 func TestThinkingRuntime_IsBinaryThinkingProvider_Builtin(t *testing.T) {
 	rt := NewThinkingRuntime()
@@ -77,17 +80,17 @@ func TestThinkingRuntime_SupportsXHighThinking_Plugin(t *testing.T) {
 func TestThinkingRuntime_ResolveDefault_Builtin(t *testing.T) {
 	rt := NewThinkingRuntime()
 	level := rt.ResolveThinkingDefaultForModel("anthropic", "claude-opus-4.6", nil)
-	if level != ThinkAdaptive {
+	if level != types.ThinkAdaptive {
 		t.Errorf("expected adaptive for claude 4.6, got %q", level)
 	}
 }
 
 func TestThinkingRuntime_ResolveDefault_Plugin(t *testing.T) {
 	rt := NewThinkingRuntime()
-	rt.SetResolver(&mockResolver{defaultResult: thinkPtr(ThinkHigh)})
+	rt.SetResolver(&mockResolver{defaultResult: thinkPtr(types.ThinkHigh)})
 
 	level := rt.ResolveThinkingDefaultForModel("custom", "model-x", nil)
-	if level != ThinkHigh {
+	if level != types.ThinkHigh {
 		t.Errorf("expected plugin to override: high, got %q", level)
 	}
 }
@@ -97,7 +100,7 @@ func TestThinkingRuntime_ListLevels_WithXHigh(t *testing.T) {
 	levels := rt.ListThinkingLevels("openai", "gpt-5.4")
 	found := false
 	for _, l := range levels {
-		if l == ThinkXHigh {
+		if l == types.ThinkXHigh {
 			found = true
 		}
 	}

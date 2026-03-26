@@ -10,6 +10,9 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"regexp"
 	"strings"
 )
@@ -72,7 +75,7 @@ type TelegramContext struct {
 }
 
 // ExtractInboundText extracts the text body from an inbound message context.
-func ExtractInboundText(msg *MsgContext) string {
+func ExtractInboundText(msg *types.MsgContext) string {
 	if msg.Body != "" {
 		return msg.Body
 	}
@@ -88,7 +91,7 @@ func StripInboundMeta(text string) string {
 		return text
 	}
 	// Remove system tags.
-	result := StripReplyTags(text)
+	result := tokens.StripReplyTags(text)
 	// Remove forwarded-from markers.
 	result = stripForwardedHeader(result)
 	return strings.TrimSpace(result)
@@ -125,11 +128,11 @@ type ReplyThreading struct {
 }
 
 // ResolveReplyThreading determines the threading for a reply payload.
-func ResolveReplyThreading(payload ReplyPayload, msg *MsgContext) ReplyThreading {
+func ResolveReplyThreading(payload types.ReplyPayload, msg *types.MsgContext) ReplyThreading {
 	threading := ReplyThreading{}
 
 	// Check for explicit reply-to tag.
-	replyTo, current := ApplyReplyThreading(payload.Text, "")
+	replyTo, current := tokens.ApplyReplyThreading(payload.Text, "")
 	if current {
 		threading.ReplyToCurrent = true
 		threading.ReplyToID = msg.MessageSid
@@ -172,7 +175,7 @@ type ReplyDeliveryConfig struct {
 	ThreadID   string
 	ReplyToID  string
 	ChunkLimit int
-	ChunkMode  ChunkMode
+	ChunkMode  chunk.Mode
 }
 
 // AudioTag represents audio metadata.

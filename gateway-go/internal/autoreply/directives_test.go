@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 	"testing"
 )
@@ -21,8 +22,8 @@ func TestParseInlineDirectives(t *testing.T) {
 		if !d.HasThinkDirective {
 			t.Error("expected think directive")
 		}
-		if d.ThinkLevel != ThinkHigh {
-			t.Errorf("ThinkLevel = %q, want 'high'", d.ThinkLevel)
+		if d.ThinkLevel != types.ThinkHigh {
+			t.Errorf("types.ThinkLevel = %q, want 'high'", d.ThinkLevel)
 		}
 		if d.Cleaned != "hello world" {
 			t.Errorf("cleaned = %q, want 'hello world'", d.Cleaned)
@@ -34,8 +35,8 @@ func TestParseInlineDirectives(t *testing.T) {
 		if !d.HasThinkDirective {
 			t.Error("expected think directive")
 		}
-		if d.ThinkLevel != ThinkLow {
-			t.Errorf("ThinkLevel = %q, want 'low'", d.ThinkLevel)
+		if d.ThinkLevel != types.ThinkLow {
+			t.Errorf("types.ThinkLevel = %q, want 'low'", d.ThinkLevel)
 		}
 	})
 
@@ -44,8 +45,8 @@ func TestParseInlineDirectives(t *testing.T) {
 		if !d.HasVerboseDirective {
 			t.Error("expected verbose directive")
 		}
-		if d.VerboseLevel != VerboseFull {
-			t.Errorf("VerboseLevel = %q, want 'full'", d.VerboseLevel)
+		if d.VerboseLevel != types.VerboseFull {
+			t.Errorf("types.VerboseLevel = %q, want 'full'", d.VerboseLevel)
 		}
 	})
 
@@ -64,8 +65,8 @@ func TestParseInlineDirectives(t *testing.T) {
 		if !d.HasThinkDirective || !d.HasFastDirective || !d.HasVerboseDirective {
 			t.Error("expected all three directives")
 		}
-		if d.ThinkLevel != ThinkMedium {
-			t.Errorf("ThinkLevel = %q", d.ThinkLevel)
+		if d.ThinkLevel != types.ThinkMedium {
+			t.Errorf("types.ThinkLevel = %q", d.ThinkLevel)
 		}
 		if !strings.Contains(d.Cleaned, "hello") {
 			t.Errorf("cleaned = %q, should contain 'hello'", d.Cleaned)
@@ -87,8 +88,8 @@ func TestParseInlineDirectives(t *testing.T) {
 		if !d.HasReasoningDirective {
 			t.Error("expected reasoning directive")
 		}
-		if d.ReasoningLevel != ReasoningStream {
-			t.Errorf("ReasoningLevel = %q, want 'stream'", d.ReasoningLevel)
+		if d.ReasoningLevel != types.ReasoningStream {
+			t.Errorf("types.ReasoningLevel = %q, want 'stream'", d.ReasoningLevel)
 		}
 	})
 

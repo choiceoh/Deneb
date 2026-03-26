@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"log/slog"
 	"os"
 	"strings"
@@ -50,14 +51,14 @@ func TestCommandRouter_DispatchThink(t *testing.T) {
 
 	// With arg.
 	result, _ := r.Dispatch(CommandContext{Command: "think", Args: &CommandArgs{Raw: "high"}})
-	if result.SessionMod.ThinkLevel != ThinkHigh {
+	if result.SessionMod.ThinkLevel != types.ThinkHigh {
 		t.Errorf("think = %q, want high", result.SessionMod.ThinkLevel)
 	}
 
 	// Without arg (show current).
 	result, _ = r.Dispatch(CommandContext{
 		Command: "think",
-		Session: &SessionState{ThinkLevel: ThinkMedium},
+		Session: &types.SessionState{ThinkLevel: types.ThinkMedium},
 	})
 	if !strings.Contains(result.Reply, "medium") {
 		t.Errorf("reply should show current level: %q", result.Reply)
@@ -86,7 +87,7 @@ func TestCommandRouter_DispatchFast(t *testing.T) {
 	// Status query.
 	result, _ = r.Dispatch(CommandContext{
 		Command: "fast",
-		Session: &SessionState{FastMode: true},
+		Session: &types.SessionState{FastMode: true},
 	})
 	if !strings.Contains(result.Reply, "on") {
 		t.Errorf("reply should show 'on': %q", result.Reply)
@@ -99,7 +100,7 @@ func TestCommandRouter_DispatchBash_Blocked(t *testing.T) {
 	result, _ := r.Dispatch(CommandContext{
 		Command: "bash",
 		Args:    &CommandArgs{Raw: "ls"},
-		Session: &SessionState{ElevatedLevel: ElevatedOff},
+		Session: &types.SessionState{ElevatedLevel: types.ElevatedOff},
 	})
 	if !result.IsError {
 		t.Error("expected error when elevated is off")
@@ -122,7 +123,7 @@ func TestCommandRouter_DispatchActivation(t *testing.T) {
 	r := NewCommandRouter(NewCommandRegistry(BuiltinChatCommands()))
 
 	result, _ := r.Dispatch(CommandContext{Command: "activation", Args: &CommandArgs{Raw: "always"}})
-	if result.SessionMod.GroupActivation != ActivationAlways {
+	if result.SessionMod.GroupActivation != types.ActivationAlways {
 		t.Error("expected always activation")
 	}
 
