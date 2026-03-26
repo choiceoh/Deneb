@@ -37,6 +37,9 @@ func main() {
 	logLevel := flag.String("log-level", "", "Log level: debug, info, warn, error (overrides config)")
 	flag.Parse()
 
+	// Load .env files before config bootstrap so env-based overrides are available.
+	config.LoadDotenvFiles(slog.Default())
+
 	// Bootstrap config from ~/.deneb/deneb.json (or --config path).
 	bootstrap, err := config.BootstrapGatewayConfig(config.BootstrapOptions{
 		ConfigPath: *configPath,
