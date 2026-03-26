@@ -260,6 +260,89 @@ func TestFormatUsageSummary(t *testing.T) {
 	}
 }
 
+func TestDefaultAgentRunner_ContextOverflowRecovery(t *testing.T) {
+	resetCalled := false
+	runner := NewDefaultAgentRunner(AgentRunnerConfig{
+		LLM: &mockLLM{responses: []*LLMResponse{}}, // will error
+		Logger: testSlogLogger(),
+	})
+	runner.onSessionReset = func(key, reason string) {
+		resetCalled = true
+		if reason != "context_overflow" {
+			t.Errorf("expected 'context_overflow', got %q", reason)
+		}
+	}
+	// Override llm to return context overflow error.
+	runner.llm = &errorLLM{err: fmt.Errorf("context window exceeded: too large")}
+
+	result, err := runner.RunTurn(context.Background(), AgentTurnConfig{
+		SessionKey: "test", Model: "m", Message: "hi",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resetCalled {
+		t.Error("expected session reset callback")
+	}
+	if len(result.Payloads) == 0 || !result.Payloads[0].IsError {
+		t.Error("expected error payload")
+	}
+}
+
+func TestDefaultAgentRunner_BillingError(t *testing.T) {
+	runner := NewDefaultAgentRunner(AgentRunnerConfig{
+		LLM:    &errorLLM{err: fmt.Errorf("billing: insufficient_quota")},
+		Logger: testSlogLogger(),
+	})
+	result, err := runner.RunTurn(context.Background(), AgentTurnConfig{
+		SessionKey: "test", Model: "m", Message: "hi",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("payloads=%d, error=%v, wasAborted=%v", len(result.Payloads), result.Error, result.WasAborted)
+	for i, p := range result.Payloads {
+		t.Logf("  payload[%d]: text=%q isError=%v", i, p.Text, p.IsError)
+	}
+	if len(result.Payloads) == 0 {
+		t.Fatal("expected payloads")
+	}
+	if result.Payloads[0].Text != BillingErrorMessage {
+		t.Errorf("got %q", result.Payloads[0].Text)
+	}
+}
+
+func TestIsContextOverflowError(t *testing.T) {
+	if !IsContextOverflowError("context window exceeded") {
+		t.Error("should detect overflow")
+	}
+	if IsContextOverflowError("normal error") {
+		t.Error("should not detect overflow")
+	}
+}
+
+func TestIsTransientHTTPError(t *testing.T) {
+	if !IsTransientHTTPError("HTTP 502 Bad Gateway") {
+		t.Error("should detect 502")
+	}
+	if !IsTransientHTTPError("rate limited 429") {
+		t.Error("should detect 429")
+	}
+	if IsTransientHTTPError("normal error") {
+		t.Error("should not detect")
+	}
+}
+
+// errorLLM always returns an error.
+type errorLLM struct{ err error }
+
+func (m *errorLLM) Chat(_ context.Context, _ AgentRunnerPayload) (*LLMResponse, error) {
+	return nil, m.err
+}
+func (m *errorLLM) ChatStream(_ context.Context, _ AgentRunnerPayload) (LLMStreamIterator, error) {
+	return nil, m.err
+}
+
 func TestFormatDuration(t *testing.T) {
 	tests := []struct{ ms int64; want string }{
 		{500, "500ms"},

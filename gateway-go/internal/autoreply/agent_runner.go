@@ -131,6 +131,55 @@ type ToolExecutor interface {
 
 // --- Default Agent Runner Implementation ---
 
+// Error classification constants (mirrors TS pi-embedded-helpers.ts).
+const (
+	BillingErrorMessage      = "⚠️ Billing error — please check your API key or plan."
+	ContextOverflowMessage   = "⚠️ Context overflow — prompt too large for this model. Try a shorter message or a larger-context model."
+	RoleOrderingMessage      = "⚠️ Message ordering conflict. I've reset the conversation - please try again."
+	CompactionFailureMessage = "⚠️ Context limit exceeded during compaction. I've reset our conversation to start fresh - please try again."
+	TransientRetryDelayMs    = 2500
+)
+
+// IsContextOverflowError checks if an error message indicates context overflow.
+func IsContextOverflowError(msg string) bool {
+	lower := strings.ToLower(msg)
+	if strings.Contains(lower, "context") && (strings.Contains(lower, "overflow") || strings.Contains(lower, "too large") || strings.Contains(lower, "exceeded") || strings.Contains(lower, "too long")) {
+		return true
+	}
+	if strings.Contains(lower, "max_tokens") || strings.Contains(lower, "token limit") {
+		return true
+	}
+	return false
+}
+
+// IsBillingError checks if an error is billing-related.
+func IsBillingError(msg string) bool {
+	lower := strings.ToLower(msg)
+	return strings.Contains(lower, "billing") || strings.Contains(lower, "payment") || strings.Contains(lower, "insufficient_quota")
+}
+
+// IsTransientHTTPError checks if an error is a retryable transient HTTP error.
+func IsTransientHTTPError(msg string) bool {
+	for _, code := range []string{"502", "503", "521", "429", "529"} {
+		if strings.Contains(msg, code) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsRoleOrderingError checks if an error is a role ordering conflict.
+func IsRoleOrderingError(msg string) bool {
+	lower := strings.ToLower(msg)
+	return strings.Contains(lower, "roles must alternate") || strings.Contains(lower, "incorrect role")
+}
+
+// IsCompactionFailure checks if an error occurred during compaction.
+func IsCompactionFailure(msg string) bool {
+	lower := strings.ToLower(msg)
+	return strings.Contains(lower, "compaction") && (strings.Contains(lower, "fail") || strings.Contains(lower, "error"))
+}
+
 // DefaultAgentRunner implements AgentExecutor with the full LLM loop.
 type DefaultAgentRunner struct {
 	llm          LLMClient
@@ -138,6 +187,8 @@ type DefaultAgentRunner struct {
 	logger       *slog.Logger
 	maxTurns     int
 	maxToolCalls int
+	// Error recovery state.
+	onSessionReset func(sessionKey, reason string) // callback for session reset
 }
 
 // AgentRunnerConfig configures the default agent runner.
@@ -236,8 +287,59 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 		}
 
 		if llmErr != nil {
-			// Try fallback models if available.
-			if len(cfg.FallbackModels) > 0 && turn == 0 {
+			errMsg := llmErr.Error()
+
+			// 1. Transient HTTP retry (502/503/521/429 → wait 2.5s, retry once).
+			if IsTransientHTTPError(errMsg) && turn == 0 {
+				r.logger.Warn("transient HTTP error, retrying",
+					"error", errMsg, "session", cfg.SessionKey)
+				select {
+				case <-runCtx.Done():
+					result.WasAborted = true
+					break
+				case <-time.After(TransientRetryDelayMs * time.Millisecond):
+				}
+				response, llmErr = r.llm.Chat(runCtx, payload)
+			}
+
+			// 2. Context overflow → auto-recovery.
+			if llmErr != nil && IsContextOverflowError(llmErr.Error()) {
+				if r.onSessionReset != nil {
+					r.onSessionReset(cfg.SessionKey, "context_overflow")
+				}
+				result.Error = nil
+				allPayloads = append(allPayloads, ReplyPayload{
+					Text:    ContextOverflowMessage,
+					IsError: true,
+				})
+				break
+			}
+
+			// 3. Billing error → specific message.
+			if llmErr != nil && IsBillingError(llmErr.Error()) {
+				result.Error = nil
+				allPayloads = append(allPayloads, ReplyPayload{
+					Text:    BillingErrorMessage,
+					IsError: true,
+				})
+				break
+			}
+
+			// 4. Role ordering → session reset.
+			if llmErr != nil && IsRoleOrderingError(llmErr.Error()) {
+				if r.onSessionReset != nil {
+					r.onSessionReset(cfg.SessionKey, "role_ordering")
+				}
+				result.Error = nil
+				allPayloads = append(allPayloads, ReplyPayload{
+					Text:    RoleOrderingMessage,
+					IsError: true,
+				})
+				break
+			}
+
+			// 5. Try fallback models if available.
+			if llmErr != nil && len(cfg.FallbackModels) > 0 && turn == 0 {
 				for i, fallback := range cfg.FallbackModels {
 					r.logger.Info("trying fallback model",
 						"model", fallback, "attempt", i+1, "session", cfg.SessionKey)
@@ -262,8 +364,18 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 					}
 				}
 			}
+
+			// 6. Final error — no recovery possible.
 			if llmErr != nil {
+				errText := llmErr.Error()
+				if IsTransientHTTPError(errText) {
+					errText = "⚠️ Provider temporarily unavailable. Please try again."
+				}
 				result.Error = llmErr
+				allPayloads = append(allPayloads, ReplyPayload{
+					Text:    fmt.Sprintf("⚠️ Agent failed: %s", strings.TrimRight(errText, ".")),
+					IsError: true,
+				})
 				break
 			}
 		}
