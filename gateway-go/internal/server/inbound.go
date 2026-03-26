@@ -264,7 +264,7 @@ func (p *InboundProcessor) sendCommandReply(chatID string, result *autoreply.Com
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	html := telegram.FormatHTML(replyText)
+	html := telegram.MarkdownToTelegramHTML(replyText)
 	if _, err := telegram.SendText(ctx, client, id, html, telegram.SendOptions{ParseMode: "HTML"}); err != nil {
 		p.logger.Warn("failed to send command reply", "chatId", chatID, "error", err)
 	}

@@ -1361,7 +1361,7 @@ func (s *Server) wireTelegramChatHandler() {
 		// Parse optional button directive from agent reply.
 		cleanText, keyboard := parseReplyButtons(text)
 		opts := telegram.SendOptions{ParseMode: "HTML", Keyboard: keyboard}
-		html := telegram.FormatHTML(cleanText)
+		html := telegram.MarkdownToTelegramHTML(cleanText)
 		_, err = telegram.SendText(ctx, client, chatID, html, opts)
 		return err
 	})
