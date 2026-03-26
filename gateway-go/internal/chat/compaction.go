@@ -15,8 +15,8 @@ import (
 // Compaction defaults.
 const (
 	defaultContextThreshold = 0.85
-	// summarizationModel is used for compaction summaries (cost-efficient).
-	summarizationModel = "claude-haiku-4-5-20251001"
+	// summarizationModel — local sglang Qwen for cost-efficient compaction summaries.
+	summarizationModel = "Qwen/Qwen3.5-35B-A3B"
 )
 
 // CompactionConfig configures compaction behavior.
@@ -76,7 +76,9 @@ func handleContextOverflowAurora(
 		sweepCfg.ContextThreshold = deps.compactionCfg.ContextThreshold
 		sweepCfg.FreshTailCount = uint32(deps.compactionCfg.FreshTailCount)
 
-		summarizer := aurora.NewLLMSummarizer(llmClient, summarizationModel)
+		// Use local sglang for cost-efficient compaction summaries.
+		sglangClient := llm.NewClient(defaultSglangBaseURL, "", llm.WithLogger(logger))
+		summarizer := aurora.NewLLMSummarizer(sglangClient, summarizationModel, "openai")
 
 		result, err := aurora.RunSweep(
 			deps.auroraStore,
