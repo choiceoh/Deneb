@@ -78,6 +78,21 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 				return nil, ctx.Err()
 			case <-time.After(delay):
 			}
+
+			// Reset the request body for retry. bytes.Reader implements
+			// io.Seeker, so we can rewind it. For GetBody-enabled requests
+			// (e.g. from http.NewRequest), recreate the body from GetBody.
+			if seeker, ok := req.Body.(io.Seeker); ok {
+				if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+					return nil, fmt.Errorf("reset request body for retry: %w", err)
+				}
+			} else if req.GetBody != nil {
+				body, err := req.GetBody()
+				if err != nil {
+					return nil, fmt.Errorf("recreate request body for retry: %w", err)
+				}
+				req.Body = body
+			}
 		}
 
 		resp, err := c.httpClient.Do(req.WithContext(ctx))
