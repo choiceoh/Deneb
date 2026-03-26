@@ -21,9 +21,10 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 
 	// Build OpenAI-format request body.
 	oaiReq := openAIRequest{
-		Model:     req.Model,
-		Stream:    true,
-		MaxTokens: req.MaxTokens,
+		Model:         req.Model,
+		Stream:        true,
+		StreamOptions: &openAIStreamOpts{IncludeUsage: true}, // #6: request usage data in stream
+		MaxTokens:     req.MaxTokens,
 	}
 
 	// Convert tools to OpenAI function-calling format.
@@ -46,7 +47,7 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 		})
 	}
 
-	// Convert messages (handles plain text, tool_use, and tool_result blocks).
+	// Convert messages (handles plain text, tool_use, tool_result, and image blocks).
 	for _, m := range req.Messages {
 		// Try plain text string first.
 		var text string
@@ -58,7 +59,7 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 			continue
 		}
 
-		// Content blocks — may contain text, tool_use, or tool_result.
+		// Content blocks — may contain text, tool_use, tool_result, or image.
 		var blocks []ContentBlock
 		if err := json.Unmarshal(m.Content, &blocks); err != nil {
 			continue
@@ -68,6 +69,7 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 		var textParts string
 		var toolCalls []openAIToolCall
 		var toolResults []ContentBlock
+		var imageParts []openAIContentPart
 		for _, b := range blocks {
 			switch b.Type {
 			case "text":
@@ -90,6 +92,23 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 				})
 			case "tool_result":
 				toolResults = append(toolResults, b)
+			case "image":
+				// #7: Anthropic image block (base64) → OpenAI image_url with data URI.
+				if b.Source != nil && b.Source.Data != "" {
+					dataURI := "data:" + b.Source.MediaType + ";base64," + b.Source.Data
+					imageParts = append(imageParts, openAIContentPart{
+						Type:     "image_url",
+						ImageURL: &openAIImgURL{URL: dataURI},
+					})
+				}
+			case "image_url":
+				// #7: Already in OpenAI format (image_url block).
+				if b.ImageURL != nil {
+					imageParts = append(imageParts, openAIContentPart{
+						Type:     "image_url",
+						ImageURL: &openAIImgURL{URL: b.ImageURL.URL, Detail: b.ImageURL.Detail},
+					})
+				}
 			}
 		}
 
@@ -115,6 +134,20 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 					ToolCallID: tr.ToolUseID,
 				})
 			}
+			continue
+		}
+
+		// #7: If message has images, use multipart content array.
+		if len(imageParts) > 0 {
+			var parts []openAIContentPart
+			if textParts != "" {
+				parts = append(parts, openAIContentPart{Type: "text", Text: textParts})
+			}
+			parts = append(parts, imageParts...)
+			oaiReq.Messages = append(oaiReq.Messages, openAIMessage{
+				Role:    m.Role,
+				Content: parts,
+			})
 			continue
 		}
 
@@ -215,8 +248,33 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 			}
 
 			if len(chunk.Choices) == 0 {
-				// Usage-only chunk (some providers send this at the end).
+				// #8: Usage-only chunk (OpenAI sends this at the end with stream_options).
+				// Re-emit message_start with accurate input tokens, plus message_delta
+				// with output tokens, so consumeStream picks up correct usage.
 				if chunk.Usage != nil {
+					if chunk.Usage.PromptTokens > 0 {
+						correctedStart, _ := json.Marshal(MessageStart{
+							Message: struct {
+								ID    string `json:"id"`
+								Model string `json:"model"`
+								Usage struct {
+									InputTokens  int `json:"input_tokens"`
+									OutputTokens int `json:"output_tokens"`
+								} `json:"usage"`
+							}{
+								ID:    chunk.ID,
+								Model: chunk.Model,
+								Usage: struct {
+									InputTokens  int `json:"input_tokens"`
+									OutputTokens int `json:"output_tokens"`
+								}{
+									InputTokens: chunk.Usage.PromptTokens,
+								},
+							},
+						})
+						emit(ctx, out, StreamEvent{Type: "message_start", Payload: correctedStart})
+					}
+
 					mdPayload, _ := json.Marshal(MessageDelta{
 						Delta: struct {
 							StopReason string `json:"stop_reason"`
@@ -301,13 +359,7 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 				// Accumulate argument fragments and emit as input_json_delta.
 				if tc.Function.Arguments != "" {
 					tb.args = append(tb.args, tc.Function.Arguments...)
-					// Determine the Anthropic block index for this tool call.
-					// Tool calls start at index 1 (or nextBlockIndex - len(toolBuilders) + tc.Index).
 					blockIdx := tc.Index + 1 // text=0, first tool=1, second tool=2, ...
-					if !textBlockOpen && nextBlockIndex > 0 {
-						// If text block was never opened, tools start at 0.
-						// But we already set nextBlockIndex to 1, so tools are at 1+.
-					}
 					cbdPayload, _ := json.Marshal(ContentBlockDelta{
 						Index: blockIdx,
 						Delta: struct {
@@ -339,7 +391,7 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 					emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
 				}
 
-				// Map OpenAI finish reasons to Anthropic stop reasons.
+				// #11: Map OpenAI finish reasons to Anthropic stop reasons.
 				stopReason := "end_turn"
 				switch choice.FinishReason {
 				case "length":
@@ -348,6 +400,8 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 					stopReason = "end_turn"
 				case "tool_calls":
 					stopReason = "tool_use"
+				case "content_filter":
+					stopReason = "content_filtered"
 				}
 
 				outputTokens := 0
@@ -384,12 +438,18 @@ func emit(ctx context.Context, ch chan<- StreamEvent, ev StreamEvent) {
 // --- OpenAI request/response types ---
 
 type openAIRequest struct {
-	Model       string          `json:"model"`
-	Messages    []openAIMessage `json:"messages"`
-	Stream      bool            `json:"stream"`
-	MaxTokens   int             `json:"max_tokens,omitempty"`
-	Temperature *float64        `json:"temperature,omitempty"`
-	Tools       []openAITool    `json:"tools,omitempty"`
+	Model         string            `json:"model"`
+	Messages      []openAIMessage   `json:"messages"`
+	Stream        bool              `json:"stream"`
+	StreamOptions *openAIStreamOpts `json:"stream_options,omitempty"` // #6: request usage in stream
+	MaxTokens     int               `json:"max_tokens,omitempty"`
+	Temperature   *float64          `json:"temperature,omitempty"`
+	Tools         []openAITool      `json:"tools,omitempty"`
+}
+
+// openAIStreamOpts controls streaming behavior.
+type openAIStreamOpts struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 // openAITool wraps a function definition in OpenAI's tool format.
@@ -404,11 +464,26 @@ type openAIFunction struct {
 	Parameters  map[string]any `json:"parameters"`
 }
 
+// openAIMessage represents a message in the OpenAI chat format.
+// Content is any because it can be a string or []openAIContentPart (for vision).
 type openAIMessage struct {
-	Role       string              `json:"role"`
-	Content    string              `json:"content,omitempty"`
-	ToolCalls  []openAIToolCall    `json:"tool_calls,omitempty"`  // assistant tool calls
-	ToolCallID string              `json:"tool_call_id,omitempty"` // tool result reference
+	Role       string           `json:"role"`
+	Content    any              `json:"content,omitempty"`      // string or []openAIContentPart
+	ToolCalls  []openAIToolCall `json:"tool_calls,omitempty"`   // assistant tool calls
+	ToolCallID string           `json:"tool_call_id,omitempty"` // tool result reference
+}
+
+// openAIContentPart is a single part in a multipart content array (text or image_url).
+type openAIContentPart struct {
+	Type     string        `json:"type"`                // "text" or "image_url"
+	Text     string        `json:"text,omitempty"`      // for type="text"
+	ImageURL *openAIImgURL `json:"image_url,omitempty"` // for type="image_url"
+}
+
+// openAIImgURL holds the URL (or data URI) for an image content part.
+type openAIImgURL struct {
+	URL    string `json:"url"`
+	Detail string `json:"detail,omitempty"` // "auto", "low", "high"
 }
 
 // openAIToolCall represents a tool call in an assistant message.

@@ -38,7 +38,7 @@ func NewBlockMessage(role string, blocks []ContentBlock) Message {
 
 // ContentBlock represents a single content block in a message.
 type ContentBlock struct {
-	Type string `json:"type"` // "text", "tool_use", "tool_result"
+	Type string `json:"type"` // "text", "tool_use", "tool_result", "image"
 
 	// text block
 	Text string `json:"text,omitempty"`
@@ -52,6 +52,25 @@ type ContentBlock struct {
 	ToolUseID  string `json:"tool_use_id,omitempty"`
 	Content    string `json:"content,omitempty"`
 	IsError    bool   `json:"is_error,omitempty"`
+
+	// image block (Anthropic: type="image", source.type/media_type/data)
+	Source *ImageSource `json:"source,omitempty"`
+
+	// image_url block (OpenAI: type="image_url", image_url.url)
+	ImageURL *ImageURL `json:"image_url,omitempty"`
+}
+
+// ImageSource is an Anthropic-style inline image (base64).
+type ImageSource struct {
+	Type      string `json:"type"`       // "base64"
+	MediaType string `json:"media_type"` // "image/png", "image/jpeg", etc.
+	Data      string `json:"data"`       // base64-encoded image data
+}
+
+// ImageURL is an OpenAI-style image reference (URL or data URI).
+type ImageURL struct {
+	URL    string `json:"url"`
+	Detail string `json:"detail,omitempty"` // "auto", "low", "high"
 }
 
 // Tool describes a tool available to the model.
