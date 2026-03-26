@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
@@ -26,9 +28,10 @@ func (a *autonomousAgentAdapter) RunAgentTurn(ctx context.Context, sessionKey, m
 	runID := fmt.Sprintf("autonomous_%d", time.Now().UnixNano())
 
 	// Subscribe to transcript appends for this session BEFORE starting the run,
-	// so we don't miss the assistant message.
-	var lastAssistantMsg string
-	outputCh := make(chan string, 1)
+	// so we don't miss any assistant messages. Accumulate all assistant content
+	// so that goal_update blocks in intermediate messages are not lost.
+	var mu sync.Mutex
+	var accumulated strings.Builder
 	if a.transcript != nil {
 		unsubscribe := a.transcript.OnAppend(func(key string, msg json.RawMessage) {
 			if key != sessionKey {
@@ -39,17 +42,12 @@ func (a *autonomousAgentAdapter) RunAgentTurn(ctx context.Context, sessionKey, m
 				Content string `json:"content"`
 			}
 			if json.Unmarshal(msg, &parsed) == nil && parsed.Role == "assistant" && parsed.Content != "" {
-				// Non-blocking send — only capture the latest.
-				select {
-				case outputCh <- parsed.Content:
-				default:
-					// Drain and replace with newer message.
-					select {
-					case <-outputCh:
-					default:
-					}
-					outputCh <- parsed.Content
+				mu.Lock()
+				if accumulated.Len() > 0 {
+					accumulated.WriteString("\n")
 				}
+				accumulated.WriteString(parsed.Content)
+				mu.Unlock()
 			}
 		})
 		defer unsubscribe()
@@ -82,12 +80,9 @@ func (a *autonomousAgentAdapter) RunAgentTurn(ctx context.Context, sessionKey, m
 		}
 	}
 
-	// Collect the output captured by the transcript listener.
-	select {
-	case lastAssistantMsg = <-outputCh:
-	default:
-		// No output captured — may have been a silent reply.
-	}
-
-	return lastAssistantMsg, nil
+	// Return the accumulated assistant output.
+	mu.Lock()
+	output := accumulated.String()
+	mu.Unlock()
+	return output, nil
 }

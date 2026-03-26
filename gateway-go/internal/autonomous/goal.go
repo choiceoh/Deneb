@@ -108,6 +108,12 @@ func (s *GoalStore) Load() (*GoalStoreFile, error) {
 }
 
 func (s *GoalStore) loadLocked() (*GoalStoreFile, error) {
+	// Return cached copy if available — saveLocked always updates the cache,
+	// so the cache is authoritative after first load.
+	if s.cached != nil {
+		return s.cached, nil
+	}
+
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -169,9 +175,10 @@ func (s *GoalStore) saveLocked(store *GoalStoreFile) error {
 	}
 
 	if err := os.Rename(tmp, s.path); err != nil {
+		// Rename can fail across filesystems; fall back to copy.
 		if copyErr := copyFile(tmp, s.path); copyErr != nil {
 			os.Remove(tmp)
-			return fmt.Errorf("rename goal store: %w", err)
+			return fmt.Errorf("rename goal store: %w (copy fallback: %v)", err, copyErr)
 		}
 		os.Remove(tmp)
 	}

@@ -129,5 +129,8 @@ func (rl *RunLog) mayTruncateFile() {
 		buf = append(buf, line...)
 		buf = append(buf, '\n')
 	}
-	os.WriteFile(rl.path, buf, 0o600)
+	if err := os.WriteFile(rl.path, buf, 0o600); err != nil {
+		// Non-critical: log file truncation failure doesn't affect operation.
+		_ = err
+	}
 }

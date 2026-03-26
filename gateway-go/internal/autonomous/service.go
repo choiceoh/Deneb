@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -40,6 +41,10 @@ type Service struct {
 	lastOutcome    *CycleOutcome
 	totalCycles    int
 	totalErrors    int
+
+	// Service-level context for propagation to async operations.
+	svcCtx    context.Context
+	svcCancel context.CancelFunc
 
 	// Phase 2: attention-based triggering.
 	attention *Attention
@@ -90,13 +95,16 @@ func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Serv
 		cfg.CycleTimeoutMs = 10 * 60 * 1000 // 10 minutes
 	}
 	store := NewGoalStore(cfg.GoalStorePath)
+	svcCtx, svcCancel := context.WithCancel(context.Background())
 	return &Service{
-		goals:   store,
-		agent:   agent,
-		logger:  logger.With("pkg", "autonomous"),
-		cfg:     cfg,
-		runLog:  NewRunLog(cfg.GoalStorePath),
-		enabled: true,
+		goals:     store,
+		agent:     agent,
+		logger:    logger.With("pkg", "autonomous"),
+		cfg:       cfg,
+		runLog:    NewRunLog(cfg.GoalStorePath),
+		enabled:   true,
+		svcCtx:    svcCtx,
+		svcCancel: svcCancel,
 	}
 }
 
@@ -131,6 +139,10 @@ func (s *Service) Stop() {
 	if s.cycleCancel != nil {
 		s.cycleCancel()
 		s.cycleCancel = nil
+	}
+	// Cancel service-level context to stop any in-flight async cycles.
+	if s.svcCancel != nil {
+		s.svcCancel()
 	}
 	s.logger.Info("autonomous service stopped")
 }
@@ -248,7 +260,8 @@ func (s *Service) RunCycle(ctx context.Context) (*CycleOutcome, error) {
 }
 
 // RunCycleAsync starts a cycle in the background. Returns immediately.
-// Used by the RPC handler to avoid blocking.
+// Used by the RPC handler to avoid blocking. Uses the service-level context
+// so async cycles are cancelled when the service stops.
 func (s *Service) RunCycleAsync() error {
 	s.mu.Lock()
 	if s.cycleRunning {
@@ -259,10 +272,11 @@ func (s *Service) RunCycleAsync() error {
 		s.mu.Unlock()
 		return fmt.Errorf("agent runner not configured")
 	}
+	svcCtx := s.svcCtx
 	s.mu.Unlock()
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(),
+		ctx, cancel := context.WithTimeout(svcCtx,
 			time.Duration(s.cfg.CycleTimeoutMs)*time.Millisecond)
 		defer cancel()
 		if _, err := s.RunCycle(ctx); err != nil {
@@ -459,7 +473,7 @@ func buildCycleSummary(outcome *CycleOutcome) string {
 		if len(parts) == 0 {
 			return "이전 사이클: 완료"
 		}
-		return "이전 사이클 진행: " + truncateOutput(joinStrings(parts, "; "), 300)
+		return "이전 사이클 진행: " + truncateOutput(strings.Join(parts, "; "), 300)
 	default:
 		return ""
 	}
@@ -477,20 +491,11 @@ func (s *Service) RecentRuns(n int) []RunLogEntry {
 	return s.runLog.Recent(n)
 }
 
-func truncateOutput(s string, maxLen int) string {
-	if len(s) <= maxLen {
+// truncateOutput truncates a string to maxRunes runes, preserving UTF-8 boundaries.
+func truncateOutput(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
 		return s
 	}
-	return s[:maxLen] + "..."
-}
-
-func joinStrings(ss []string, sep string) string {
-	result := ""
-	for i, s := range ss {
-		if i > 0 {
-			result += sep
-		}
-		result += s
-	}
-	return result
+	return string(runes[:maxRunes]) + "..."
 }
