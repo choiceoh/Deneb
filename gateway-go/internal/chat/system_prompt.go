@@ -86,6 +86,7 @@ var coreToolSummaries = map[string]string{
 	"http":               "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
 	"kv":                 "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
 	"clipboard":          "Temporary in-memory clipboard (ring buffer, 32 items max). Actions: set, get, list, clear",
+	"gmail":              "Gmail via gog CLI. Actions: inbox (unread summary + important), search (structured results), read (message by ID), send (with contact alias), reply, label (list/add/remove). Contact aliases auto-resolved from KV store",
 	"apply_patch":        "Apply multi-file unified diff patches. Tries git apply first, falls back to patch -p1",
 	"pilot":              "Fast local AI (sglang) that orchestrates tools in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory. Options: chain, max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-thinking for complex tasks. Falls back to raw results if sglang is down",
 }
@@ -101,7 +102,7 @@ var toolOrder = []string{
 	"nodes", "cron", "message", "gateway",
 	"sessions_list", "sessions_history", "sessions_search", "sessions_restore", "sessions_send",
 	"sessions_spawn", "subagents", "session_status", "image", "youtube_transcript",
-	"send_file", "http", "kv", "clipboard",
+	"send_file", "http", "gmail", "kv", "clipboard",
 }
 
 // BuildSystemPrompt assembles the full system prompt from all components.
