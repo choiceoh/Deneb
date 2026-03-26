@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -108,7 +109,11 @@ func (p *Plugin) Start(ctx context.Context) error {
 	p.bot = NewBot(p.client, p.config, p.handler, p.logger)
 	go func() {
 		if err := p.bot.Start(context.Background()); err != nil {
-			p.logger.Error("telegram polling error", "error", err)
+			if errors.Is(err, context.Canceled) {
+				p.logger.Info("telegram polling stopped")
+			} else {
+				p.logger.Error("telegram polling error", "error", err)
+			}
 		}
 	}()
 
