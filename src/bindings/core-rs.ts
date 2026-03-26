@@ -198,8 +198,8 @@ function wrapModule(raw: CoreRsModuleRaw): CoreRsModule {
       const json = raw.parsingExtractLinks(text, configJson);
       return JSON.parse(json) as string[];
     },
-    parsingSplitMediaFromOutput(raw_text: string): MediaParseResult {
-      const json = raw.parsingSplitMediaFromOutput(raw_text);
+    parsingSplitMediaFromOutput(rawText: string): MediaParseResult {
+      const json = raw.parsingSplitMediaFromOutput(rawText);
       return JSON.parse(json) as MediaParseResult;
     },
     parsingEstimateBase64DecodedBytes: (input: string) =>

@@ -162,6 +162,18 @@ pub fn parsing_canonicalize_base64(input: String) -> Option<String> {
 // Media helper functions (extension, category, classification)
 // ---------------------------------------------------------------------------
 
+fn category_to_str(cat: deneb_core::media::extensions::MediaCategory) -> &'static str {
+    match cat {
+        deneb_core::media::extensions::MediaCategory::Image => "image",
+        deneb_core::media::extensions::MediaCategory::Audio => "audio",
+        deneb_core::media::extensions::MediaCategory::Video => "video",
+        deneb_core::media::extensions::MediaCategory::Document => "document",
+        deneb_core::media::extensions::MediaCategory::Archive => "archive",
+        deneb_core::media::extensions::MediaCategory::Text => "text",
+        deneb_core::media::extensions::MediaCategory::Unknown => "unknown",
+    }
+}
+
 /// Get file extension for a MIME type (e.g., "image/png" → "png").
 #[napi]
 pub fn media_extension_for_mime(mime: String) -> String {
@@ -172,17 +184,7 @@ pub fn media_extension_for_mime(mime: String) -> String {
 /// Returns one of: "image", "audio", "video", "document", "archive", "text", "unknown".
 #[napi]
 pub fn media_category_for_mime(mime: String) -> String {
-    let cat = deneb_core::media::extensions::category_for_mime(&mime);
-    match cat {
-        deneb_core::media::extensions::MediaCategory::Image => "image",
-        deneb_core::media::extensions::MediaCategory::Audio => "audio",
-        deneb_core::media::extensions::MediaCategory::Video => "video",
-        deneb_core::media::extensions::MediaCategory::Document => "document",
-        deneb_core::media::extensions::MediaCategory::Archive => "archive",
-        deneb_core::media::extensions::MediaCategory::Text => "text",
-        deneb_core::media::extensions::MediaCategory::Unknown => "unknown",
-    }
-    .to_string()
+    category_to_str(deneb_core::media::extensions::category_for_mime(&mime)).to_string()
 }
 
 /// Detect MIME type from magic bytes and return full info as JSON.
@@ -192,19 +194,14 @@ pub fn media_detect_mime_with_info(data: Buffer) -> String {
     let slice = data.as_ref();
     let head = if slice.len() > 4096 { &slice[..4096] } else { slice };
     let info = deneb_core::media::extensions::detect_mime_with_info(head);
-    let cat = match info.category {
-        deneb_core::media::extensions::MediaCategory::Image => "image",
-        deneb_core::media::extensions::MediaCategory::Audio => "audio",
-        deneb_core::media::extensions::MediaCategory::Video => "video",
-        deneb_core::media::extensions::MediaCategory::Document => "document",
-        deneb_core::media::extensions::MediaCategory::Archive => "archive",
-        deneb_core::media::extensions::MediaCategory::Text => "text",
-        deneb_core::media::extensions::MediaCategory::Unknown => "unknown",
-    };
-    format!(
-        r#"{{"mime":"{}","extension":"{}","category":"{}"}}"#,
-        info.mime, info.extension, cat
-    )
+    let cat = category_to_str(info.category);
+    // Use serde_json to guarantee valid JSON escaping.
+    serde_json::json!({
+        "mime": info.mime,
+        "extension": info.extension,
+        "category": cat,
+    })
+    .to_string()
 }
 
 /// Check if a MIME type is an image format.

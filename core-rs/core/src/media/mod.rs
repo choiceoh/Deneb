@@ -11,18 +11,28 @@ fn detect_ooxml(data: &[u8]) -> Option<&'static str> {
     let scan_len = data.len().min(8192);
     let window = &data[..scan_len];
 
-    // Look for OOXML internal path markers in the ZIP central directory / local headers
-    if contains_bytes(window, b"xl/workbook.xml") || contains_bytes(window, b"xl/") {
+    // Look for OOXML internal path markers in the ZIP local file headers.
+    // Use specific filenames to avoid false positives from short prefixes.
+    if contains_bytes(window, b"xl/workbook.xml")
+        || contains_bytes(window, b"xl/sharedStrings.xml")
+        || contains_bytes(window, b"xl/styles.xml")
+    {
         return Some(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         );
     }
-    if contains_bytes(window, b"word/document.xml") || contains_bytes(window, b"word/") {
+    if contains_bytes(window, b"word/document.xml")
+        || contains_bytes(window, b"word/styles.xml")
+        || contains_bytes(window, b"word/settings.xml")
+    {
         return Some(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         );
     }
-    if contains_bytes(window, b"ppt/presentation.xml") || contains_bytes(window, b"ppt/") {
+    if contains_bytes(window, b"ppt/presentation.xml")
+        || contains_bytes(window, b"ppt/slides/")
+        || contains_bytes(window, b"ppt/slideMasters/")
+    {
         return Some(
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         );
