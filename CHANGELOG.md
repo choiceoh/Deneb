@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.11.7](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.6...deneb-v3.11.7) (2026-03-26)
+
+
+### 🐛 Bug Fixes
+
+* resolve all failing tests across Rust core and Go gateway ([6dc20d9](https://github.com/choiceoh/Deneb/commit/6dc20d9677438868800493f3b55bca95df12030c))
+
 ## [3.11.6](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.5...deneb-v3.11.6) (2026-03-26)
 
 
