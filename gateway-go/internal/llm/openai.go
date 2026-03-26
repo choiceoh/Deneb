@@ -223,8 +223,31 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 				return
 			}
 
+			// Handle SSE error events from OpenAI-compatible providers.
+			if raw.Type == "error" {
+				emit(ctx, out, StreamEvent{Type: "error", Payload: raw.Payload})
+				return
+			}
+
 			var chunk openAIChunk
 			if err := json.Unmarshal(raw.Payload, &chunk); err != nil {
+				// Try parsing as an OpenAI error response ({"error": {...}}).
+				var errResp struct {
+					Error struct {
+						Message string `json:"message"`
+						Type    string `json:"type"`
+					} `json:"error"`
+				}
+				if json.Unmarshal(raw.Payload, &errResp) == nil && errResp.Error.Message != "" {
+					errPayload, _ := json.Marshal(map[string]string{
+						"type":    errResp.Error.Type,
+						"message": errResp.Error.Message,
+					})
+					emit(ctx, out, StreamEvent{Type: "error", Payload: errPayload})
+					return
+				}
+				c.logger.Warn("skipping unparseable OpenAI stream chunk",
+					"error", err, "payload", string(raw.Payload))
 				continue
 			}
 
@@ -391,14 +414,14 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 					emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: cbStopPayload})
 				}
 
-				// #11: Map OpenAI finish reasons to Anthropic stop reasons.
+				// Map OpenAI finish reasons to Anthropic stop reasons.
 				stopReason := "end_turn"
 				switch choice.FinishReason {
 				case "length":
 					stopReason = "max_tokens"
 				case "stop":
 					stopReason = "end_turn"
-				case "tool_calls":
+				case "tool_calls", "function_call":
 					stopReason = "tool_use"
 				case "content_filter":
 					stopReason = "content_filtered"
@@ -465,10 +488,11 @@ type openAIFunction struct {
 }
 
 // openAIMessage represents a message in the OpenAI chat format.
-// Content is any because it can be a string or []openAIContentPart (for vision).
+// Content is any because it can be a string, []openAIContentPart (for vision),
+// or nil (marshals to JSON null, required by OpenAI for tool-only assistant messages).
 type openAIMessage struct {
 	Role       string           `json:"role"`
-	Content    any              `json:"content,omitempty"`      // string or []openAIContentPart
+	Content    any              `json:"content"`                // string, []openAIContentPart, or nil (→ null)
 	ToolCalls  []openAIToolCall `json:"tool_calls,omitempty"`   // assistant tool calls
 	ToolCallID string           `json:"tool_call_id,omitempty"` // tool result reference
 }
