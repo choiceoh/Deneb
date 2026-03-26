@@ -207,6 +207,9 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		return m.failProcess(tracked, req.ID, startedAt, err.Error())
 	}
 
+	// Raise the child's OOM score so the kernel kills it before the gateway.
+	raiseOOMScore(cmd.Process.Pid, m.logger)
+
 	// Capture output (bounded). We must fully drain both pipes even beyond the
 	// capture limit, otherwise the subprocess blocks on a full pipe buffer and
 	// cmd.Wait() hangs forever.
@@ -352,6 +355,27 @@ func drainBounded(r io.Reader, limit int) []byte {
 	// Drain any remaining bytes so the writer doesn't block.
 	io.Copy(io.Discard, r)
 	return kept
+}
+
+// raiseOOMScore writes a high oom_score_adj for the given PID so the kernel
+// prefers killing the subprocess over the gateway when memory is tight.
+func raiseOOMScore(pid int, logger *slog.Logger) {
+	path := fmt.Sprintf("/proc/%d/oom_score_adj", pid)
+	// 500 = significantly more likely to be OOM-killed than the gateway (default 0).
+	if err := os.WriteFile(path, []byte("500"), 0644); err != nil {
+		logger.Debug("could not raise child oom_score_adj", "pid", pid, "error", err)
+	}
+}
+
+// ProtectGatewayOOM lowers the gateway's own OOM score so the kernel
+// prefers killing child processes first. Call once at startup.
+func ProtectGatewayOOM(logger *slog.Logger) {
+	// -200 = make the gateway much less likely to be OOM-killed.
+	if err := os.WriteFile("/proc/self/oom_score_adj", []byte("-200"), 0644); err != nil {
+		logger.Warn("could not lower gateway oom_score_adj", "error", err)
+	} else {
+		logger.Info("gateway OOM protection enabled", "oom_score_adj", -200)
+	}
 }
 
 // Prune removes completed/failed processes older than the given duration.
