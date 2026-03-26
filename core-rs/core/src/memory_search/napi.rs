@@ -72,11 +72,17 @@ pub fn memory_is_evergreen_memory_path(file_path: String) -> bool {
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn memory_mmr_rerank(items_json: String, config_json: String) -> String {
     if items_json.len() > NAPI_MAX_INPUT_LEN {
-        return "[]".to_string();
+        return r#"{"error":"input_too_large","detail":"items_json exceeds 16MB limit"}"#
+            .to_string();
     }
     let items: Vec<types::MmrItem> = match serde_json::from_str(&items_json) {
         Ok(v) => v,
-        Err(_) => return "[]".to_string(),
+        Err(e) => {
+            return format!(
+                r#"{{"error":"parse_failed","detail":"items_json: {}"}}"#,
+                e.to_string().replace('"', "'")
+            );
+        }
     };
     let config: types::MmrConfig = serde_json::from_str(&config_json).unwrap_or_default();
 
@@ -118,11 +124,17 @@ pub fn memory_expand_query_for_fts(query: String) -> String {
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn memory_merge_hybrid_results(params_json: String) -> String {
     if params_json.len() > NAPI_MAX_INPUT_LEN {
-        return "[]".to_string();
+        return r#"{"error":"input_too_large","detail":"params_json exceeds 16MB limit"}"#
+            .to_string();
     }
     let params: types::MergeParams = match serde_json::from_str(&params_json) {
         Ok(v) => v,
-        Err(_) => return "[]".to_string(),
+        Err(e) => {
+            return format!(
+                r#"{{"error":"parse_failed","detail":"params_json: {}"}}"#,
+                e.to_string().replace('"', "'")
+            );
+        }
     };
     let results = merge::merge_hybrid_results(&params);
     serde_json::to_string(&results).unwrap_or_else(|_| "[]".to_string())

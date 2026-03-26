@@ -1030,10 +1030,12 @@ func (s *Server) registerPhase2Methods() {
 		Providers: s.providers,
 	})
 
-	// Stub handlers for methods not available in standalone mode.
+	// Stub handlers for methods that required the removed Node.js bridge.
+	// Registered explicitly so callers receive ErrUnavailable instead of
+	// "unknown method", and RPC parity tests pass.
 	stubUnavailable := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		return protocol.NewResponseError(req.ID, protocol.NewError(
-			protocol.ErrUnavailable, req.Method+" not available in standalone mode"))
+			protocol.ErrUnavailable, req.Method+" not available (requires browser/web-login integration)"))
 	}
 	s.dispatcher.Register("browser.request", stubUnavailable)
 	s.dispatcher.Register("web.login.start", stubUnavailable)
