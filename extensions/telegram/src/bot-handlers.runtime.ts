@@ -1788,6 +1788,29 @@ export const registerTelegramHandlers = ({
     });
   });
 
+  // Handle edited messages — re-process the updated content through the same pipeline.
+  bot.on("edited_message", async (ctx) => {
+    const msg = ctx.editedMessage;
+    if (!msg) {
+      return;
+    }
+    await handleInboundMessageLike({
+      ctxForDedupe: ctx,
+      ctx: buildSyntheticContext(ctx, msg),
+      msg,
+      chatId: msg.chat.id,
+      isGroup: msg.chat.type === "group" || msg.chat.type === "supergroup",
+      isForum: msg.chat.is_forum === true,
+      messageThreadId: msg.message_thread_id,
+      senderId: msg.from?.id != null ? String(msg.from.id) : "",
+      senderUsername: msg.from?.username ?? "",
+      requireConfiguredGroup: false,
+      sendOversizeWarning: true,
+      oversizeLogMessage: "edited message media exceeds size limit",
+      errorMessage: "edited_message handler failed",
+    });
+  });
+
   // Handle channel posts — enables bot-to-bot communication via Telegram channels.
   // Telegram bots cannot see other bot messages in groups, but CAN in channels.
   // This handler normalizes channel_post updates into the standard message pipeline.
@@ -1839,5 +1862,70 @@ export const registerTelegramHandlers = ({
       oversizeLogMessage: "channel post media exceeds size limit",
       errorMessage: "channel_post handler failed",
     });
+  });
+
+  // Handle edited channel posts — re-process updated channel content.
+  bot.on("edited_channel_post", async (ctx) => {
+    const post = ctx.editedChannelPost;
+    if (!post) {
+      return;
+    }
+
+    const chatId = post.chat.id;
+    const syntheticFrom = post.sender_chat
+      ? {
+          id: post.sender_chat.id,
+          is_bot: true as const,
+          first_name: post.sender_chat.title || "Channel",
+          username: post.sender_chat.username,
+        }
+      : {
+          id: chatId,
+          is_bot: true as const,
+          first_name: post.chat.title || "Channel",
+          username: post.chat.username,
+        };
+    const syntheticMsg: Message = {
+      ...post,
+      from: post.from ?? syntheticFrom,
+      chat: {
+        ...post.chat,
+        type: "supergroup" as const,
+      },
+    } as Message;
+
+    await handleInboundMessageLike({
+      ctxForDedupe: ctx,
+      ctx: buildSyntheticContext(ctx, syntheticMsg),
+      msg: syntheticMsg,
+      chatId,
+      isGroup: true,
+      isForum: false,
+      senderId:
+        post.sender_chat?.id != null
+          ? String(post.sender_chat.id)
+          : post.from?.id != null
+            ? String(post.from.id)
+            : "",
+      senderUsername: post.sender_chat?.username ?? post.from?.username ?? "",
+      requireConfiguredGroup: true,
+      sendOversizeWarning: false,
+      oversizeLogMessage: "edited channel post media exceeds size limit",
+      errorMessage: "edited_channel_post handler failed",
+    });
+  });
+
+  // Log bot membership changes (added/removed from groups).
+  bot.on("my_chat_member", async (ctx) => {
+    const update = ctx.myChatMember;
+    if (!update) {
+      return;
+    }
+    const chatTitle = update.chat.title ?? String(update.chat.id);
+    const oldStatus = update.old_chat_member.status;
+    const newStatus = update.new_chat_member.status;
+    if (oldStatus !== newStatus) {
+      logVerbose(`telegram: bot membership changed in "${chatTitle}": ${oldStatus} → ${newStatus}`);
+    }
   });
 };
