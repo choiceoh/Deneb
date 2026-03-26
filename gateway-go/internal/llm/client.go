@@ -6,10 +6,27 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
 )
+
+// sharedTransport is a connection-pooled HTTP transport shared across all
+// LLM clients. Avoids per-request TCP/TLS handshake overhead by reusing
+// idle connections. Tuned for DGX Spark single-user deployment where most
+// requests go to 1-2 provider endpoints.
+var sharedTransport = &http.Transport{
+	DialContext: (&net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext,
+	MaxIdleConns:        64,
+	MaxIdleConnsPerHost: 16,
+	IdleConnTimeout:     90 * time.Second,
+	TLSHandshakeTimeout: 5 * time.Second,
+	ForceAttemptHTTP2:   true,
+}
 
 // Client is an HTTP client for LLM provider APIs.
 type Client struct {
@@ -49,7 +66,7 @@ func WithRetry(maxRetries int, baseDelay, maxDelay time.Duration) ClientOption {
 // NewClient creates a new LLM API client.
 func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 	c := &Client{
-		httpClient: &http.Client{Timeout: 10 * time.Minute},
+		httpClient: &http.Client{Timeout: 10 * time.Minute, Transport: sharedTransport},
 		baseURL:    baseURL,
 		apiKey:     apiKey,
 		logger:     slog.Default(),

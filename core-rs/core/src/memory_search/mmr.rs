@@ -113,40 +113,77 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
     // Greedy MMR loop: select items one at a time, always picking the candidate
     // with the highest MMR score relative to the already-selected set.
     let mut selected: Vec<usize> = Vec::with_capacity(items.len());
-    let mut remaining: HashSet<usize> = (0..items.len()).collect();
+    let mut remaining: Vec<usize> = (0..items.len()).collect();
+
+    // Threshold for parallel inner loop: when remaining × selected exceeds this,
+    // the O(n²) Jaccard work benefits from multi-core distribution.
+    const PAR_THRESHOLD: usize = 64;
 
     while !remaining.is_empty() {
-        let mut best_idx = None;
-        let mut best_mmr_score = f64::NEG_INFINITY;
-
-        for &candidate_idx in &remaining {
-            let normalized_relevance = normalize(items[candidate_idx].score);
-
-            // Max similarity to already selected items
-            let max_sim = selected
-                .iter()
-                .map(|&sel_idx| {
-                    jaccard_similarity(&token_cache[candidate_idx], &token_cache[sel_idx])
+        let best = if remaining.len() * selected.len().max(1) >= PAR_THRESHOLD {
+            // Parallel: distribute MMR scoring across cores.
+            remaining
+                .par_iter()
+                .map(|&candidate_idx| {
+                    let normalized_relevance = normalize(items[candidate_idx].score);
+                    let max_sim = selected
+                        .iter()
+                        .map(|&sel_idx| {
+                            jaccard_similarity(
+                                &token_cache[candidate_idx],
+                                &token_cache[sel_idx],
+                            )
+                        })
+                        .fold(0.0_f64, f64::max);
+                    let mmr_score =
+                        compute_mmr_score(normalized_relevance, max_sim, clamped_lambda);
+                    (candidate_idx, mmr_score)
                 })
-                .fold(0.0_f64, f64::max);
+                .max_by(|a, b| {
+                    a.1.partial_cmp(&b.1)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| {
+                            items[a.0]
+                                .score
+                                .partial_cmp(&items[b.0].score)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        })
+                })
+        } else {
+            // Sequential: avoid rayon overhead for small sets.
+            remaining
+                .iter()
+                .map(|&candidate_idx| {
+                    let normalized_relevance = normalize(items[candidate_idx].score);
+                    let max_sim = selected
+                        .iter()
+                        .map(|&sel_idx| {
+                            jaccard_similarity(
+                                &token_cache[candidate_idx],
+                                &token_cache[sel_idx],
+                            )
+                        })
+                        .fold(0.0_f64, f64::max);
+                    let mmr_score =
+                        compute_mmr_score(normalized_relevance, max_sim, clamped_lambda);
+                    (candidate_idx, mmr_score)
+                })
+                .max_by(|a, b| {
+                    a.1.partial_cmp(&b.1)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| {
+                            items[a.0]
+                                .score
+                                .partial_cmp(&items[b.0].score)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        })
+                })
+        };
 
-            let mmr_score = compute_mmr_score(normalized_relevance, max_sim, clamped_lambda);
-
-            // Use original score as tiebreaker
-            if mmr_score > best_mmr_score
-                || (mmr_score == best_mmr_score
-                    && best_idx
-                        .is_none_or(|bi: usize| items[candidate_idx].score > items[bi].score))
-            {
-                best_mmr_score = mmr_score;
-                best_idx = Some(candidate_idx);
-            }
-        }
-
-        match best_idx {
-            Some(idx) => {
+        match best {
+            Some((idx, _)) => {
                 selected.push(idx);
-                remaining.remove(&idx);
+                remaining.retain(|&x| x != idx);
             }
             None => break,
         }

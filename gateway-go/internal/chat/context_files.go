@@ -33,7 +33,8 @@ const (
 	maxContextTotalChars = 150_000
 	// ctxCacheRevalidateInterval forces a full re-scan after this duration
 	// to detect newly added or deleted context files.
-	ctxCacheRevalidateInterval = 30 * time.Second
+	// Extended for single-user DGX Spark: config files rarely change mid-session.
+	ctxCacheRevalidateInterval = 5 * time.Minute
 )
 
 // ctxCache is a singleton mtime-based cache for context files.

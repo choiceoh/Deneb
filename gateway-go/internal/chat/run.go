@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
@@ -14,6 +15,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+)
+
+// cachedWorkspaceDir caches the resolved workspace directory at startup
+// to avoid disk I/O (config.LoadConfigFromDefaultPath) on every chat message.
+// Single-user deployment: config doesn't change at runtime.
+var (
+	cachedWorkspaceDir     string
+	cachedWorkspaceDirOnce sync.Once
 )
 
 // RunParams holds all parameters for an async agent run.
@@ -156,16 +165,19 @@ func executeAgentRun(
 	}
 	if len(systemPrompt) == 0 && deps.tools != nil {
 		workspaceDir := resolveWorkspaceDirForPrompt()
+		tz, _ := loadCachedTimezone()
 		spp := SystemPromptParams{
 			WorkspaceDir: workspaceDir,
 			ToolDefs:     deps.tools.Definitions(),
-			UserTimezone: resolveTimezone(),
+			UserTimezone: tz,
 			ContextFiles: LoadContextFiles(workspaceDir),
 			RuntimeInfo:  BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
 			Channel:      deliveryChannel(params.Delivery),
 		}
 		systemPromptParams = &spp
-		// Default to plain string; overridden to blocks after apiType is resolved.
+		// Defer format choice: only build the format we'll actually use.
+		// BuildSystemPrompt (string) is the default; overridden to blocks
+		// for Anthropic API after apiType is resolved below.
 		systemPrompt = llm.SystemString(BuildSystemPrompt(spp))
 	}
 
@@ -656,14 +668,18 @@ func stopReasonFromCtx(ctx context.Context) string {
 // Reads agents.defaults.workspace / agents.list[].workspace from config,
 // falling back to ~/.deneb/workspace (matching TS resolveAgentWorkspaceDir).
 func resolveWorkspaceDirForPrompt() string {
-	snap, err := config.LoadConfigFromDefaultPath()
-	if err == nil && snap != nil {
-		dir := config.ResolveAgentWorkspaceDir(&snap.Config)
-		if dir != "" {
-			return dir
+	cachedWorkspaceDirOnce.Do(func() {
+		snap, err := config.LoadConfigFromDefaultPath()
+		if err == nil && snap != nil {
+			dir := config.ResolveAgentWorkspaceDir(&snap.Config)
+			if dir != "" {
+				cachedWorkspaceDir = dir
+				return
+			}
 		}
-	}
-	return config.ResolveAgentWorkspaceDir(nil)
+		cachedWorkspaceDir = config.ResolveAgentWorkspaceDir(nil)
+	})
+	return cachedWorkspaceDir
 }
 
 // deliveryChannel extracts the channel name from a delivery context.
