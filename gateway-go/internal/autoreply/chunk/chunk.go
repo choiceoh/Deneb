@@ -1,26 +1,26 @@
-package autoreply
+package chunk
 
 import (
 	"strings"
 	"unicode"
 )
 
-// ChunkMode controls how outbound messages are split.
-type ChunkMode string
+// Mode controls how outbound messages are split.
+type Mode string
 
 const (
-	ChunkModeLength  ChunkMode = "length"  // split only when exceeding limit
-	ChunkModeNewline ChunkMode = "newline" // prefer breaking on paragraph boundaries
+	ModeLength  Mode = "length"  // split only when exceeding limit
+	ModeNewline Mode = "newline" // prefer breaking on paragraph boundaries
 )
 
-// DefaultChunkLimit is the default maximum characters per outbound message chunk.
-const DefaultChunkLimit = 4000
+// DefaultLimit is the default maximum characters per outbound message chunk.
+const DefaultLimit = 4000
 
-// ResolveTextChunkLimit returns the chunk limit for a given provider/account,
+// ResolveTextLimit returns the chunk limit for a given provider/account,
 // falling back to the default. providerLimit is looked up from config externally.
-func ResolveTextChunkLimit(providerLimit int, fallback int) int {
+func ResolveTextLimit(providerLimit int, fallback int) int {
 	if fallback <= 0 {
-		fallback = DefaultChunkLimit
+		fallback = DefaultLimit
 	}
 	if providerLimit > 0 {
 		return providerLimit
@@ -28,9 +28,9 @@ func ResolveTextChunkLimit(providerLimit int, fallback int) int {
 	return fallback
 }
 
-// ChunkText splits text into chunks of at most `limit` characters, preferring
+// Text splits text into chunks of at most `limit` characters, preferring
 // newline and whitespace breaks. This mirrors the TS chunkText().
-func ChunkText(text string, limit int) []string {
+func Text(text string, limit int) []string {
 	if text == "" {
 		return nil
 	}
@@ -119,10 +119,10 @@ func isWhitespace(r rune) bool {
 	return unicode.IsSpace(r)
 }
 
-// ChunkByParagraph splits text on paragraph boundaries (blank lines),
+// ByParagraph splits text on paragraph boundaries (blank lines),
 // packing multiple paragraphs into a single chunk up to limit.
 // Falls back to length-based splitting for oversized paragraphs.
-func ChunkByParagraph(text string, limit int, splitLongParagraphs bool) []string {
+func ByParagraph(text string, limit int, splitLongParagraphs bool) []string {
 	if text == "" {
 		return nil
 	}
@@ -142,7 +142,7 @@ func ChunkByParagraph(text string, limit int, splitLongParagraphs bool) []string
 		if !splitLongParagraphs {
 			return []string{normalized}
 		}
-		return ChunkText(normalized, limit)
+		return Text(normalized, limit)
 	}
 
 	// Split on blank lines (one or more newlines with optional whitespace between).
@@ -159,7 +159,7 @@ func ChunkByParagraph(text string, limit int, splitLongParagraphs bool) []string
 		} else if !splitLongParagraphs {
 			chunks = append(chunks, paragraph)
 		} else {
-			chunks = append(chunks, ChunkText(paragraph, limit)...)
+			chunks = append(chunks, Text(paragraph, limit)...)
 		}
 	}
 	return chunks
@@ -196,10 +196,10 @@ func splitOnBlankLines(text string) []string {
 	return parts
 }
 
-// ChunkByNewline splits text on newlines, trimming line whitespace.
+// ByNewline splits text on newlines, trimming line whitespace.
 // Blank lines are folded into the next non-empty line as leading "\n" prefixes.
 // Long lines are split by length unless splitLongLines is false.
-func ChunkByNewline(text string, maxLineLength int, splitLongLines, trimLines bool) []string {
+func ByNewline(text string, maxLineLength int, splitLongLines, trimLines bool) []string {
 	if text == "" {
 		return nil
 	}
@@ -253,7 +253,7 @@ func ChunkByNewline(text string, maxLineLength int, splitLongLines, trimLines bo
 		chunks = append(chunks, prefix+first)
 		remaining := lineValue[firstLimit:]
 		if remaining != "" {
-			chunks = append(chunks, ChunkText(remaining, maxLineLength)...)
+			chunks = append(chunks, Text(remaining, maxLineLength)...)
 		}
 	}
 
@@ -263,10 +263,10 @@ func ChunkByNewline(text string, maxLineLength int, splitLongLines, trimLines bo
 	return chunks
 }
 
-// ChunkTextWithMode dispatches to the appropriate chunking function based on mode.
-func ChunkTextWithMode(text string, limit int, mode ChunkMode) []string {
-	if mode == ChunkModeNewline {
-		return ChunkByParagraph(text, limit, true)
+// TextWithMode dispatches to the appropriate chunking function based on mode.
+func TextWithMode(text string, limit int, mode Mode) []string {
+	if mode == ModeNewline {
+		return ByParagraph(text, limit, true)
 	}
-	return ChunkText(text, limit)
+	return Text(text, limit)
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -140,7 +141,7 @@ func RunJob(ctx context.Context, job Job, deps RunnerDeps) RunOutcome {
 				bestEffort = job.Delivery.BestEffort
 			}
 			dr := DeliverCronOutput(runCtx, deps.Channels, *target, payloads, DeliverOutputOptions{
-				ChunkLimit: autoreply.DefaultChunkLimit,
+				ChunkLimit: chunk.DefaultLimit,
 				ChunkMode:  "length",
 				BestEffort: bestEffort,
 				Logger:     deps.Logger,

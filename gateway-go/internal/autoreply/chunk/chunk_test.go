@@ -1,4 +1,4 @@
-package autoreply
+package chunk
 
 import (
 	"strings"
@@ -7,13 +7,13 @@ import (
 
 func TestChunkText(t *testing.T) {
 	t.Run("empty text", func(t *testing.T) {
-		if got := ChunkText("", 100); got != nil {
+		if got := Text("", 100); got != nil {
 			t.Errorf("expected nil, got %v", got)
 		}
 	})
 
 	t.Run("text within limit", func(t *testing.T) {
-		got := ChunkText("hello", 100)
+		got := Text("hello", 100)
 		if len(got) != 1 || got[0] != "hello" {
 			t.Errorf("expected single chunk, got %v", got)
 		}
@@ -21,7 +21,7 @@ func TestChunkText(t *testing.T) {
 
 	t.Run("text exceeding limit splits on whitespace", func(t *testing.T) {
 		text := "hello world foo bar"
-		got := ChunkText(text, 12)
+		got := Text(text, 12)
 		if len(got) < 2 {
 			t.Errorf("expected multiple chunks, got %v", got)
 		}
@@ -34,7 +34,7 @@ func TestChunkText(t *testing.T) {
 
 	t.Run("prefers newline breaks", func(t *testing.T) {
 		text := "line one\nline two\nline three"
-		got := ChunkText(text, 18)
+		got := Text(text, 18)
 		if len(got) < 2 {
 			t.Errorf("expected multiple chunks, got %v", got)
 		}
@@ -45,7 +45,7 @@ func TestChunkText(t *testing.T) {
 	})
 
 	t.Run("zero limit returns whole text", func(t *testing.T) {
-		got := ChunkText("hello", 0)
+		got := Text("hello", 0)
 		if len(got) != 1 || got[0] != "hello" {
 			t.Errorf("expected single chunk with zero limit, got %v", got)
 		}
@@ -54,7 +54,7 @@ func TestChunkText(t *testing.T) {
 
 func TestChunkByParagraph(t *testing.T) {
 	t.Run("no paragraphs", func(t *testing.T) {
-		got := ChunkByParagraph("single paragraph", 100, true)
+		got := ByParagraph("single paragraph", 100, true)
 		if len(got) != 1 {
 			t.Errorf("expected 1 chunk, got %d", len(got))
 		}
@@ -62,7 +62,7 @@ func TestChunkByParagraph(t *testing.T) {
 
 	t.Run("splits on blank lines", func(t *testing.T) {
 		text := "paragraph one\n\nparagraph two\n\nparagraph three"
-		got := ChunkByParagraph(text, 100, true)
+		got := ByParagraph(text, 100, true)
 		if len(got) != 3 {
 			t.Errorf("expected 3 chunks, got %d: %v", len(got), got)
 		}
@@ -70,7 +70,7 @@ func TestChunkByParagraph(t *testing.T) {
 
 	t.Run("long paragraph with split enabled", func(t *testing.T) {
 		text := "para1\n\n" + strings.Repeat("a", 50)
-		got := ChunkByParagraph(text, 20, true)
+		got := ByParagraph(text, 20, true)
 		if len(got) < 3 {
 			t.Errorf("expected at least 3 chunks, got %d", len(got))
 		}
@@ -78,7 +78,7 @@ func TestChunkByParagraph(t *testing.T) {
 
 	t.Run("long paragraph with split disabled", func(t *testing.T) {
 		text := "para1\n\n" + strings.Repeat("a", 50)
-		got := ChunkByParagraph(text, 20, false)
+		got := ByParagraph(text, 20, false)
 		// Should not split the long paragraph.
 		if len(got) != 2 {
 			t.Errorf("expected 2 chunks (no split), got %d", len(got))
@@ -89,7 +89,7 @@ func TestChunkByParagraph(t *testing.T) {
 func TestChunkByNewline(t *testing.T) {
 	t.Run("simple lines", func(t *testing.T) {
 		text := "line1\nline2\nline3"
-		got := ChunkByNewline(text, 100, true, true)
+		got := ByNewline(text, 100, true, true)
 		if len(got) != 3 {
 			t.Errorf("expected 3 chunks, got %d: %v", len(got), got)
 		}
@@ -97,7 +97,7 @@ func TestChunkByNewline(t *testing.T) {
 
 	t.Run("blank lines folded", func(t *testing.T) {
 		text := "line1\n\n\nline2"
-		got := ChunkByNewline(text, 100, true, true)
+		got := ByNewline(text, 100, true, true)
 		if len(got) != 2 {
 			t.Errorf("expected 2 chunks, got %d: %v", len(got), got)
 		}
@@ -112,14 +112,14 @@ func TestChunkTextWithMode(t *testing.T) {
 	text := "para1\n\npara2"
 
 	t.Run("length mode", func(t *testing.T) {
-		got := ChunkTextWithMode(text, 100, ChunkModeLength)
+		got := TextWithMode(text, 100, ModeLength)
 		if len(got) != 1 {
 			t.Errorf("length mode should return 1 chunk for short text, got %d", len(got))
 		}
 	})
 
 	t.Run("newline mode splits paragraphs", func(t *testing.T) {
-		got := ChunkTextWithMode(text, 100, ChunkModeNewline)
+		got := TextWithMode(text, 100, ModeNewline)
 		if len(got) != 2 {
 			t.Errorf("newline mode should split on paragraphs, got %d: %v", len(got), got)
 		}
@@ -127,13 +127,13 @@ func TestChunkTextWithMode(t *testing.T) {
 }
 
 func TestResolveTextChunkLimit(t *testing.T) {
-	if got := ResolveTextChunkLimit(0, 0); got != DefaultChunkLimit {
-		t.Errorf("expected default %d, got %d", DefaultChunkLimit, got)
+	if got := ResolveTextLimit(0, 0); got != DefaultLimit {
+		t.Errorf("expected default %d, got %d", DefaultLimit, got)
 	}
-	if got := ResolveTextChunkLimit(2000, 0); got != 2000 {
+	if got := ResolveTextLimit(2000, 0); got != 2000 {
 		t.Errorf("expected provider limit 2000, got %d", got)
 	}
-	if got := ResolveTextChunkLimit(0, 3000); got != 3000 {
+	if got := ResolveTextLimit(0, 3000); got != 3000 {
 		t.Errorf("expected fallback 3000, got %d", got)
 	}
 }

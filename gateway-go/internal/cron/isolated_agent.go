@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
@@ -152,7 +153,7 @@ func RunIsolatedAgentTurn(
 	// 7. Deliver to target.
 	if cfg.DeliveryTarget != nil && len(result.Payloads) > 0 && !result.WasHeartbeat {
 		dr := DeliverCronOutput(runCtx, channels, *cfg.DeliveryTarget, result.Payloads, DeliverOutputOptions{
-			ChunkLimit: autoreply.DefaultChunkLimit,
+			ChunkLimit: chunk.DefaultLimit,
 			ChunkMode:  "length",
 			BestEffort: cfg.DeliveryBestEffort,
 			Logger:     logger,

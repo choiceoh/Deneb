@@ -10,6 +10,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"regexp"
 	"strings"
@@ -173,7 +174,7 @@ type ReplyDeliveryConfig struct {
 	ThreadID   string
 	ReplyToID  string
 	ChunkLimit int
-	ChunkMode  ChunkMode
+	ChunkMode  chunk.Mode
 }
 
 // AudioTag represents audio metadata.

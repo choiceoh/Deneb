@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"fmt"
@@ -146,7 +147,7 @@ func RouteReply(
 	to string,
 	payload types.ReplyPayload,
 	chunkLimit int,
-	chunkMode ChunkMode,
+	chunkMode chunk.Mode,
 ) error {
 	plugin := channels.Get(channelID)
 	if plugin == nil {
@@ -161,7 +162,7 @@ func RouteReply(
 	// Chunk text if it exceeds the limit.
 	texts := []string{payload.Text}
 	if chunkLimit > 0 && len(payload.Text) > chunkLimit {
-		texts = ChunkTextWithMode(payload.Text, chunkLimit, chunkMode)
+		texts = chunk.TextWithMode(payload.Text, chunkLimit, chunkMode)
 	}
 
 	for i, text := range texts {
