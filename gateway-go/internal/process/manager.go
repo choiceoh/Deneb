@@ -14,10 +14,14 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 )
+
+// gracefulStopDelay is how long to wait after SIGTERM before sending SIGKILL.
+const gracefulStopDelay = 5 * time.Second
 
 // RunStatus represents the current state of a managed process.
 type RunStatus string
@@ -147,6 +151,17 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	tracked.mu.Unlock()
 
 	cmd := exec.CommandContext(execCtx, req.Command, req.Args...)
+	// Run in a new process group so we can kill all children together.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// Graceful shutdown: send SIGTERM to the process group first, then SIGKILL
+	// after gracefulStopDelay if the process hasn't exited.
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+	}
+	cmd.WaitDelay = gracefulStopDelay
 	if req.WorkingDir != "" {
 		cmd.Dir = req.WorkingDir
 	}
@@ -199,6 +214,8 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	stderrBytes := drainBounded(stderr, m.maxStdout)
 
 	err = cmd.Wait()
+	// Capture context error before cancel() overwrites it.
+	ctxErr := execCtx.Err()
 	cancel()
 	endedAt := time.Now().UnixMilli()
 
@@ -212,10 +229,15 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	}
 
 	if err != nil {
-		if execCtx.Err() == context.DeadlineExceeded {
+		switch ctxErr {
+		case context.DeadlineExceeded:
 			result.Status = StatusKilled
 			result.Error = "timeout"
-		} else {
+		case context.Canceled:
+			// Parent context canceled (agent timeout) or explicit Kill() call.
+			result.Status = StatusKilled
+			result.Error = "canceled"
+		default:
 			result.Status = StatusFailed
 			result.Error = err.Error()
 		}
