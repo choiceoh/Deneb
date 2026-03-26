@@ -42,6 +42,34 @@ pub fn normalize_agent_id(value: &str) -> String {
     }
 }
 
+/// Default main session key.
+pub const DEFAULT_MAIN_KEY: &str = "main";
+
+/// Parsed agent session key components.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedAgentSessionKey {
+    pub agent_id: String,
+    pub rest: String,
+}
+
+/// Classification of a session key's shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionKeyShape {
+    Missing,
+    Agent,
+    LegacyOrAlias,
+    MalformedAgent,
+}
+
+/// Chat type derived from session key structure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionKeyChatType {
+    Direct,
+    Group,
+    Channel,
+    Unknown,
+}
+
 /// Agent entry from config (mirrors DenebConfig.agents.list[]).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,6 +90,22 @@ pub struct AgentEntry {
     pub model: Option<serde_json::Value>,
     /// Skills filter (array of skill names).
     pub skills: Option<Vec<String>>,
+    /// Memory search configuration.
+    pub memory_search: Option<serde_json::Value>,
+    /// Human delay configuration.
+    pub human_delay: Option<serde_json::Value>,
+    /// Heartbeat configuration.
+    pub heartbeat: Option<serde_json::Value>,
+    /// Identity/persona configuration.
+    pub identity: Option<serde_json::Value>,
+    /// Group chat configuration.
+    pub group_chat: Option<serde_json::Value>,
+    /// Subagents configuration.
+    pub subagents: Option<serde_json::Value>,
+    /// Sandbox configuration.
+    pub sandbox: Option<serde_json::Value>,
+    /// Tools configuration.
+    pub tools: Option<serde_json::Value>,
 }
 
 /// Resolved agent configuration (subset of AgentEntry with normalized values).
@@ -73,6 +117,14 @@ pub struct ResolvedAgentConfig {
     pub agent_dir: Option<String>,
     pub model: Option<serde_json::Value>,
     pub skills: Option<Vec<String>>,
+    pub memory_search: Option<serde_json::Value>,
+    pub human_delay: Option<serde_json::Value>,
+    pub heartbeat: Option<serde_json::Value>,
+    pub identity: Option<serde_json::Value>,
+    pub group_chat: Option<serde_json::Value>,
+    pub subagents: Option<serde_json::Value>,
+    pub sandbox: Option<serde_json::Value>,
+    pub tools: Option<serde_json::Value>,
 }
 
 /// Result of resolving both default and session agent IDs.
@@ -150,7 +202,9 @@ pub fn resolve_session_agent_ids(
         id
     } else if let Some(key) = session_key {
         // Extract agent ID from session key format "agent:<id>:<rest>".
-        parse_agent_id_from_session_key(key).unwrap_or_else(|| default_agent_id.clone())
+        parse_agent_session_key(key)
+            .map(|p| normalize_agent_id(&p.agent_id))
+            .unwrap_or_else(|| default_agent_id.clone())
     } else {
         default_agent_id.clone()
     };
@@ -161,19 +215,231 @@ pub fn resolve_session_agent_ids(
     }
 }
 
-/// Extract the agent ID from a session key of format "agent:<id>:<rest>".
-fn parse_agent_id_from_session_key(session_key: &str) -> Option<String> {
-    let trimmed = session_key.trim().to_lowercase();
-    if !trimmed.starts_with("agent:") {
+/// Parse an agent-scoped session key in canonical format "agent:<id>:<rest>".
+/// Returns both the agent ID and the remainder (rest), both normalized to lowercase.
+/// Mirrors `src/sessions/session-key-utils.ts#parseAgentSessionKey`. Keep in sync.
+pub fn parse_agent_session_key(session_key: &str) -> Option<ParsedAgentSessionKey> {
+    let raw = session_key.trim().to_lowercase();
+    if raw.is_empty() {
         return None;
     }
-    let rest = &trimmed["agent:".len()..];
-    let colon_pos = rest.find(':')?;
-    let agent_id = &rest[..colon_pos];
-    if agent_id.is_empty() {
+    let parts: Vec<&str> = raw.split(':').filter(|s| !s.is_empty()).collect();
+    if parts.len() < 3 {
         return None;
     }
-    Some(normalize_agent_id(agent_id))
+    if parts[0] != "agent" {
+        return None;
+    }
+    let agent_id = parts[1].trim();
+    let rest = parts[2..].join(":");
+    if agent_id.is_empty() || rest.is_empty() {
+        return None;
+    }
+    Some(ParsedAgentSessionKey {
+        agent_id: agent_id.to_string(),
+        rest,
+    })
+}
+
+/// Resolve the agent ID from a session key. Falls back to DEFAULT_AGENT_ID.
+pub fn resolve_agent_id_from_session_key(session_key: &str) -> String {
+    let parsed = parse_agent_session_key(session_key);
+    normalize_agent_id(parsed.as_ref().map(|p| p.agent_id.as_str()).unwrap_or(DEFAULT_AGENT_ID))
+}
+
+/// Normalize a main key to lowercase with default fallback.
+pub fn normalize_main_key(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        DEFAULT_MAIN_KEY.to_string()
+    } else {
+        trimmed.to_lowercase()
+    }
+}
+
+/// Check if an agent ID is syntactically valid.
+pub fn is_valid_agent_id(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty() && VALID_ID_RE.is_match(trimmed)
+}
+
+/// Sanitize an agent ID (alias for normalize_agent_id).
+pub fn sanitize_agent_id(value: &str) -> String {
+    normalize_agent_id(value)
+}
+
+/// Classify the shape of a session key.
+pub fn classify_session_key_shape(session_key: &str) -> SessionKeyShape {
+    let raw = session_key.trim();
+    if raw.is_empty() {
+        return SessionKeyShape::Missing;
+    }
+    if parse_agent_session_key(raw).is_some() {
+        return SessionKeyShape::Agent;
+    }
+    if raw.to_lowercase().starts_with("agent:") {
+        SessionKeyShape::MalformedAgent
+    } else {
+        SessionKeyShape::LegacyOrAlias
+    }
+}
+
+/// Extract the request session key from a store key.
+pub fn to_agent_request_session_key(store_key: &str) -> Option<String> {
+    let raw = store_key.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    parse_agent_session_key(raw)
+        .map(|p| p.rest)
+        .or_else(|| Some(raw.to_string()))
+}
+
+/// Build the store session key from agent ID and request key.
+pub fn to_agent_store_session_key(
+    agent_id: &str,
+    request_key: &str,
+    main_key: Option<&str>,
+) -> String {
+    let raw = request_key.trim();
+    if raw.is_empty() || raw.to_lowercase() == DEFAULT_MAIN_KEY {
+        return build_agent_main_session_key(agent_id, main_key);
+    }
+    if let Some(parsed) = parse_agent_session_key(raw) {
+        return format!("agent:{}:{}", parsed.agent_id, parsed.rest);
+    }
+    let lowered = raw.to_lowercase();
+    if lowered.starts_with("agent:") {
+        return lowered;
+    }
+    format!("agent:{}:{}", normalize_agent_id(agent_id), lowered)
+}
+
+/// Build the main session key for an agent.
+pub fn build_agent_main_session_key(agent_id: &str, main_key: Option<&str>) -> String {
+    let id = normalize_agent_id(agent_id);
+    let key = normalize_main_key(main_key.unwrap_or(""));
+    format!("agent:{}:{}", id, key)
+}
+
+/// Derive the chat type from a session key.
+pub fn derive_session_chat_type(session_key: &str) -> SessionKeyChatType {
+    let raw = session_key.trim().to_lowercase();
+    if raw.is_empty() {
+        return SessionKeyChatType::Unknown;
+    }
+    let scoped = parse_agent_session_key(&raw)
+        .map(|p| p.rest)
+        .unwrap_or_else(|| raw.clone());
+    let tokens: std::collections::HashSet<&str> = scoped.split(':').filter(|s| !s.is_empty()).collect();
+    if tokens.contains("group") {
+        return SessionKeyChatType::Group;
+    }
+    if tokens.contains("channel") {
+        return SessionKeyChatType::Channel;
+    }
+    if tokens.contains("direct") || tokens.contains("dm") {
+        return SessionKeyChatType::Direct;
+    }
+    // Legacy Discord keys: discord:<accountId>:guild-<guildId>:channel-<channelId>
+    static DISCORD_LEGACY_RE: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"^discord:(?:[^:]+:)?guild-[^:]+:channel-[^:]+$").unwrap()
+    });
+    if DISCORD_LEGACY_RE.is_match(&scoped) {
+        return SessionKeyChatType::Channel;
+    }
+    SessionKeyChatType::Unknown
+}
+
+/// Check if a session key represents a cron run.
+pub fn is_cron_run_session_key(session_key: &str) -> bool {
+    static CRON_RUN_RE: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"^cron:[^:]+:run:[^:]+$").unwrap()
+    });
+    parse_agent_session_key(session_key)
+        .map(|p| CRON_RUN_RE.is_match(&p.rest))
+        .unwrap_or(false)
+}
+
+/// Check if a session key is cron-scoped.
+pub fn is_cron_session_key(session_key: &str) -> bool {
+    parse_agent_session_key(session_key)
+        .map(|p| p.rest.starts_with("cron:"))
+        .unwrap_or(false)
+}
+
+/// Check if a session key is subagent-scoped.
+pub fn is_subagent_session_key(session_key: &str) -> bool {
+    let raw = session_key.trim();
+    if raw.is_empty() {
+        return false;
+    }
+    if raw.to_lowercase().starts_with("subagent:") {
+        return true;
+    }
+    parse_agent_session_key(raw)
+        .map(|p| p.rest.starts_with("subagent:"))
+        .unwrap_or(false)
+}
+
+/// Get the subagent nesting depth from a session key.
+pub fn get_subagent_depth(session_key: &str) -> usize {
+    let raw = session_key.trim().to_lowercase();
+    if raw.is_empty() {
+        return 0;
+    }
+    raw.matches(":subagent:").count()
+}
+
+/// Check if a session key is ACP-scoped.
+pub fn is_acp_session_key(session_key: &str) -> bool {
+    let raw = session_key.trim();
+    if raw.is_empty() {
+        return false;
+    }
+    let normalized = raw.to_lowercase();
+    if normalized.starts_with("acp:") {
+        return true;
+    }
+    parse_agent_session_key(raw)
+        .map(|p| p.rest.starts_with("acp:"))
+        .unwrap_or(false)
+}
+
+/// Resolve the parent session key for a thread (strips ":thread:<id>" or ":topic:<id>" suffix).
+pub fn resolve_thread_parent_session_key(session_key: &str) -> Option<String> {
+    let raw = session_key.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let normalized = raw.to_lowercase();
+    let markers = [":thread:", ":topic:"];
+    let mut idx: Option<usize> = None;
+    for marker in &markers {
+        if let Some(candidate) = normalized.rfind(marker) {
+            idx = Some(idx.map_or(candidate, |prev| prev.max(candidate)));
+        }
+    }
+    let pos = idx?;
+    if pos == 0 {
+        return None;
+    }
+    let parent = raw[..pos].trim();
+    if parent.is_empty() { None } else { Some(parent.to_string()) }
+}
+
+/// Resolve the fallback agent ID from explicit agent ID or session key.
+pub fn resolve_fallback_agent_id(
+    agent_id: Option<&str>,
+    session_key: Option<&str>,
+) -> String {
+    let explicit = agent_id
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if let Some(id) = explicit {
+        return normalize_agent_id(&id);
+    }
+    resolve_agent_id_from_session_key(session_key.unwrap_or(""))
 }
 
 /// Resolve a specific agent's config from the list.
@@ -193,6 +459,14 @@ pub fn resolve_agent_config(
         agent_dir: entry.agent_dir,
         model: entry.model,
         skills: entry.skills,
+        memory_search: entry.memory_search,
+        human_delay: entry.human_delay,
+        heartbeat: entry.heartbeat,
+        identity: entry.identity,
+        group_chat: entry.group_chat,
+        subagents: entry.subagents,
+        sandbox: entry.sandbox,
+        tools: entry.tools,
     })
 }
 
@@ -397,16 +671,138 @@ mod tests {
     }
 
     #[test]
-    fn parse_agent_id_from_session_key_valid() {
+    fn parse_agent_session_key_valid() {
+        let parsed = parse_agent_session_key("agent:mybot:main").unwrap();
+        assert_eq!(parsed.agent_id, "mybot");
+        assert_eq!(parsed.rest, "main");
+    }
+
+    #[test]
+    fn parse_agent_session_key_with_rest() {
+        let parsed = parse_agent_session_key("agent:mybot:cron:daily:run:123").unwrap();
+        assert_eq!(parsed.agent_id, "mybot");
+        assert_eq!(parsed.rest, "cron:daily:run:123");
+    }
+
+    #[test]
+    fn parse_agent_session_key_invalid() {
+        assert!(parse_agent_session_key("not-agent-key").is_none());
+        assert!(parse_agent_session_key("agent::main").is_none());
+        assert!(parse_agent_session_key("agent:bot").is_none());
+        assert!(parse_agent_session_key("").is_none());
+    }
+
+    #[test]
+    fn resolve_agent_id_from_session_key_basic() {
+        assert_eq!(resolve_agent_id_from_session_key("agent:mybot:main"), "mybot");
+        assert_eq!(resolve_agent_id_from_session_key("not-agent"), DEFAULT_AGENT_ID);
+    }
+
+    #[test]
+    fn normalize_main_key_basic() {
+        assert_eq!(normalize_main_key(""), DEFAULT_MAIN_KEY);
+        assert_eq!(normalize_main_key("  Custom  "), "custom");
+    }
+
+    #[test]
+    fn is_valid_agent_id_basic() {
+        assert!(is_valid_agent_id("main"));
+        assert!(is_valid_agent_id("my-agent_1"));
+        assert!(!is_valid_agent_id(""));
+        assert!(!is_valid_agent_id("invalid chars!"));
+    }
+
+    #[test]
+    fn classify_session_key_shape_basic() {
+        assert_eq!(classify_session_key_shape(""), SessionKeyShape::Missing);
+        assert_eq!(classify_session_key_shape("agent:bot:main"), SessionKeyShape::Agent);
+        assert_eq!(classify_session_key_shape("agent:"), SessionKeyShape::MalformedAgent);
+        assert_eq!(classify_session_key_shape("legacy-key"), SessionKeyShape::LegacyOrAlias);
+    }
+
+    #[test]
+    fn build_agent_main_session_key_basic() {
+        assert_eq!(build_agent_main_session_key("mybot", None), "agent:mybot:main");
+        assert_eq!(build_agent_main_session_key("mybot", Some("custom")), "agent:mybot:custom");
+    }
+
+    #[test]
+    fn to_agent_store_session_key_basic() {
         assert_eq!(
-            parse_agent_id_from_session_key("agent:mybot:main"),
-            Some("mybot".to_string())
+            to_agent_store_session_key("mybot", "", None),
+            "agent:mybot:main"
+        );
+        assert_eq!(
+            to_agent_store_session_key("mybot", "main", None),
+            "agent:mybot:main"
+        );
+        assert_eq!(
+            to_agent_store_session_key("mybot", "custom-key", None),
+            "agent:mybot:custom-key"
         );
     }
 
     #[test]
-    fn parse_agent_id_from_session_key_invalid() {
-        assert_eq!(parse_agent_id_from_session_key("not-agent-key"), None);
-        assert_eq!(parse_agent_id_from_session_key("agent::main"), None);
+    fn derive_session_chat_type_basic() {
+        assert_eq!(derive_session_chat_type(""), SessionKeyChatType::Unknown);
+        assert_eq!(
+            derive_session_chat_type("agent:bot:telegram:group:123"),
+            SessionKeyChatType::Group
+        );
+        assert_eq!(
+            derive_session_chat_type("agent:bot:telegram:direct:456"),
+            SessionKeyChatType::Direct
+        );
+        assert_eq!(
+            derive_session_chat_type("agent:bot:telegram:channel:789"),
+            SessionKeyChatType::Channel
+        );
+    }
+
+    #[test]
+    fn is_cron_session_key_basic() {
+        assert!(is_cron_session_key("agent:bot:cron:daily"));
+        assert!(!is_cron_session_key("agent:bot:main"));
+    }
+
+    #[test]
+    fn is_subagent_session_key_basic() {
+        assert!(is_subagent_session_key("agent:bot:subagent:child"));
+        assert!(is_subagent_session_key("subagent:child"));
+        assert!(!is_subagent_session_key("agent:bot:main"));
+    }
+
+    #[test]
+    fn get_subagent_depth_basic() {
+        assert_eq!(get_subagent_depth("agent:bot:main"), 0);
+        assert_eq!(get_subagent_depth("agent:bot:subagent:child"), 1);
+        assert_eq!(get_subagent_depth("agent:bot:subagent:child:subagent:grandchild"), 2);
+    }
+
+    #[test]
+    fn is_acp_session_key_basic() {
+        assert!(is_acp_session_key("acp:session123"));
+        assert!(is_acp_session_key("agent:bot:acp:session123"));
+        assert!(!is_acp_session_key("agent:bot:main"));
+    }
+
+    #[test]
+    fn resolve_thread_parent_session_key_basic() {
+        assert_eq!(
+            resolve_thread_parent_session_key("agent:bot:telegram:group:123:thread:456"),
+            Some("agent:bot:telegram:group:123".to_string())
+        );
+        assert_eq!(resolve_thread_parent_session_key("agent:bot:main"), None);
+        assert_eq!(resolve_thread_parent_session_key(""), None);
+    }
+
+    #[test]
+    fn resolve_fallback_agent_id_basic() {
+        assert_eq!(resolve_fallback_agent_id(Some("mybot"), None), "mybot");
+        assert_eq!(
+            resolve_fallback_agent_id(None, Some("agent:mybot:main")),
+            "mybot"
+        );
+        assert_eq!(resolve_fallback_agent_id(None, None), DEFAULT_AGENT_ID);
     }
 }
