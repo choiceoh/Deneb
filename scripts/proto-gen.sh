@@ -118,8 +118,12 @@ verify_output() {
 
 # Verify that every .proto file in proto/ has a corresponding generated output
 # in both Go and TypeScript directories. Catches forgotten proto files.
+# For Go, accepts either auto-generated .pb.go in gen/ or hand-written .go in
+# the parent protocol/ directory (some protos use hand-written JSON-wire types).
 verify_completeness() {
   local proto_count go_count ts_count missing=()
+  local go_parent_dir
+  go_parent_dir="$(dirname "$GO_OUT")"
   proto_count=$(find "$PROTO_DIR" -maxdepth 1 -name "*.proto" -type f | wc -l)
   go_count=$(find "$GO_OUT" -maxdepth 1 -name "*.pb.go" -type f 2>/dev/null | wc -l)
   # TS count excludes index.ts (hand-written barrel) and the google/ directory.
@@ -128,11 +132,22 @@ verify_completeness() {
   for proto in "$PROTO_DIR"/*.proto; do
     local base
     base=$(basename "$proto" .proto)
-    if [ ! -f "$GO_OUT/${base}.pb.go" ]; then
-      missing+=("Go: ${base}.pb.go")
+    # Go: accept auto-generated .pb.go OR hand-written .go in parent dir.
+    if [ ! -f "$GO_OUT/${base}.pb.go" ] && [ ! -f "$go_parent_dir/${base}.go" ]; then
+      missing+=("Go: ${base}.pb.go (or ${base}.go)")
     fi
     if [ ! -f "$TS_OUT/${base}.ts" ]; then
       missing+=("TS: ${base}.ts")
+    fi
+  done
+
+  local go_hand_count
+  go_hand_count=0
+  for proto in "$PROTO_DIR"/*.proto; do
+    local base
+    base=$(basename "$proto" .proto)
+    if [ ! -f "$GO_OUT/${base}.pb.go" ] && [ -f "$go_parent_dir/${base}.go" ]; then
+      go_hand_count=$((go_hand_count + 1))
     fi
   done
 
@@ -141,9 +156,9 @@ verify_completeness() {
     for m in "${missing[@]}"; do
       warn "  - $m"
     done
-    fail "Not all .proto files have generated outputs. Found $proto_count protos, $go_count Go, $ts_count TS."
+    fail "Not all .proto files have generated outputs. Found $proto_count protos, $go_count Go gen + $go_hand_count Go hand-written, $ts_count TS."
   fi
-  info "Proto completeness: $proto_count protos → $go_count Go + $ts_count TS (all present)"
+  info "Proto completeness: $proto_count protos → $go_count Go gen + $go_hand_count Go hand-written + $ts_count TS (all present)"
 }
 
 clean_generated() {
