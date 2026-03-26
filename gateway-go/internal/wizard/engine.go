@@ -32,6 +32,14 @@ type Session struct {
 	Error     string        `json:"error,omitempty"`
 	StepID    string        `json:"stepId,omitempty"`
 	Prompt    any           `json:"prompt,omitempty"`
+	Steps     []Step        `json:"steps,omitempty"`
+	StepIndex int           `json:"stepIndex"`
+}
+
+// Step defines a single wizard step with an ID and optional prompt.
+type Step struct {
+	ID     string `json:"id"`
+	Prompt any    `json:"prompt,omitempty"`
 }
 
 // Answer holds the user's response to a wizard step.
@@ -53,8 +61,14 @@ func NewEngine() *Engine {
 	}
 }
 
-// Start begins a new wizard session in the given mode.
+// Start begins a new wizard session in the given mode (single-step).
 func (e *Engine) Start(mode, workspace string) *Session {
+	return e.StartWithSteps(mode, workspace, nil)
+}
+
+// StartWithSteps begins a new wizard session with predefined steps.
+// If steps is nil or empty, the session behaves as single-step (backward compatible).
+func (e *Engine) StartWithSteps(mode, workspace string, steps []Step) *Session {
 	id := genSessionID()
 	sess := &Session{
 		SessionID: id,
@@ -62,6 +76,11 @@ func (e *Engine) Start(mode, workspace string) *Session {
 		Workspace: workspace,
 		Status:    StatusRunning,
 		Done:      false,
+		Steps:     steps,
+	}
+	if len(steps) > 0 {
+		sess.StepID = steps[0].ID
+		sess.Prompt = steps[0].Prompt
 	}
 
 	e.mu.Lock()
@@ -85,16 +104,20 @@ func (e *Engine) Next(sessionID string, answer *Answer) (*Session, error) {
 		return nil, fmt.Errorf("wizard session %q is %s", sessionID, sess.Status)
 	}
 
-	// Wizard steps are driven by the RPC handler.
-	// This provides the state tracking shell; actual step logic is delegated.
 	if answer != nil {
-		sess.StepID = answer.StepID
 		sess.Value = answer.Value
 	}
 
-	// Mark done after processing (simplified; real wizards have multi-step flows).
-	sess.Done = true
-	sess.Status = StatusDone
+	// Multi-step: advance to the next step if more remain.
+	if len(sess.Steps) > 0 && sess.StepIndex < len(sess.Steps)-1 {
+		sess.StepIndex++
+		sess.StepID = sess.Steps[sess.StepIndex].ID
+		sess.Prompt = sess.Steps[sess.StepIndex].Prompt
+	} else {
+		// Final step (or single-step session): mark done.
+		sess.Done = true
+		sess.Status = StatusDone
+	}
 
 	cp := *sess
 	return &cp, nil

@@ -12,6 +12,28 @@ import (
 // DefaultTopOfHourStaggerMs is the default stagger for top-of-hour cron jobs.
 const DefaultTopOfHourStaggerMs = 5 * 60 * 1000 // 5 minutes
 
+// monthNames maps month abbreviations to numbers for cron fields.
+var monthNames = map[string]string{
+	"jan": "1", "feb": "2", "mar": "3", "apr": "4",
+	"may": "5", "jun": "6", "jul": "7", "aug": "8",
+	"sep": "9", "oct": "10", "nov": "11", "dec": "12",
+}
+
+// dowNames maps day-of-week abbreviations to numbers for cron fields.
+var dowNames = map[string]string{
+	"sun": "0", "mon": "1", "tue": "2", "wed": "3",
+	"thu": "4", "fri": "5", "sat": "6",
+}
+
+// resolveNamedValues replaces named month/dow values in a cron field.
+func resolveNamedValues(field string, names map[string]string) string {
+	lower := strings.ToLower(field)
+	for name, num := range names {
+		lower = strings.ReplaceAll(lower, name, num)
+	}
+	return lower
+}
+
 // ComputeNextRunAtMs computes the next run time for a schedule.
 func ComputeNextRunAtMs(schedule StoreSchedule, nowMs int64) int64 {
 	switch schedule.Kind {
@@ -103,12 +125,30 @@ func computeNextCronMs(schedule StoreSchedule, nowMs int64) int64 {
 
 // evaluateCronExpr parses a standard 5-field cron expression and finds the
 // next matching time after `now`. Supports: *, ranges (1-5), steps (*/5),
-// lists (1,3,5), and fixed values.
+// lists (1,3,5), fixed values, @shorthand aliases, and named months/days.
 func evaluateCronExpr(expr string, now time.Time, loc *time.Location) time.Time {
+	// Expand shorthand aliases.
+	switch strings.ToLower(strings.TrimSpace(expr)) {
+	case "@yearly", "@annually":
+		expr = "0 0 1 1 *"
+	case "@monthly":
+		expr = "0 0 1 * *"
+	case "@weekly":
+		expr = "0 0 * * 0"
+	case "@daily", "@midnight":
+		expr = "0 0 * * *"
+	case "@hourly":
+		expr = "0 * * * *"
+	}
+
 	fields := strings.Fields(expr)
 	if len(fields) < 5 {
 		return time.Time{}
 	}
+
+	// Resolve named month/dow values (JAN-DEC, MON-SUN).
+	fields[3] = resolveNamedValues(fields[3], monthNames)
+	fields[4] = resolveNamedValues(fields[4], dowNames)
 
 	// Parse: minute hour dom month dow
 	minutes := parseCronField(fields[0], 0, 59)

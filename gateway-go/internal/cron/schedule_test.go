@@ -148,6 +148,56 @@ func TestParseAbsoluteTimeMs(t *testing.T) {
 	}
 }
 
+func TestCronShorthandAliases(t *testing.T) {
+	now := time.Now().UnixMilli()
+	shorthands := []string{"@hourly", "@daily", "@weekly", "@monthly", "@yearly", "@annually"}
+	for _, sh := range shorthands {
+		schedule := StoreSchedule{Kind: "cron", Expr: sh}
+		next := ComputeNextRunAtMs(schedule, now)
+		if next <= now {
+			t.Errorf("%s: next = %d, should be > %d", sh, next, now)
+		}
+	}
+}
+
+func TestCronNamedMonths(t *testing.T) {
+	now := time.Now().UnixMilli()
+	schedule := StoreSchedule{Kind: "cron", Expr: "0 0 1 JAN *"}
+	next := ComputeNextRunAtMs(schedule, now)
+	if next <= 0 {
+		t.Error("expected valid next-run for JAN expression")
+	}
+}
+
+func TestCronNamedDays(t *testing.T) {
+	now := time.Now().UnixMilli()
+	schedule := StoreSchedule{Kind: "cron", Expr: "0 0 * * MON"}
+	next := ComputeNextRunAtMs(schedule, now)
+	if next <= now {
+		t.Errorf("next = %d, should be > %d", next, now)
+	}
+	// Verify it's actually a Monday.
+	nextTime := time.UnixMilli(next)
+	if nextTime.Weekday() != time.Monday {
+		t.Errorf("expected Monday, got %s", nextTime.Weekday())
+	}
+}
+
+func TestCronNamedRange(t *testing.T) {
+	now := time.Now().UnixMilli()
+	schedule := StoreSchedule{Kind: "cron", Expr: "0 9 * * MON-FRI"}
+	next := ComputeNextRunAtMs(schedule, now)
+	if next <= now {
+		t.Errorf("next = %d, should be > %d", next, now)
+	}
+	// Verify it's a weekday.
+	nextTime := time.UnixMilli(next)
+	dow := nextTime.Weekday()
+	if dow == time.Saturday || dow == time.Sunday {
+		t.Errorf("expected weekday, got %s", dow)
+	}
+}
+
 func TestStableJobOffset(t *testing.T) {
 	offset1 := stableJobOffset("0 * * * *", 300000)
 	offset2 := stableJobOffset("0 * * * *", 300000)
