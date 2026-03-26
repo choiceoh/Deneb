@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.11.3](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.2...deneb-v3.11.3) (2026-03-26)
+
+
+### Bug Fixes
+
+* strip Telegram [@bot](https://github.com/bot) suffix from slash commands ([#344](https://github.com/choiceoh/Deneb/issues/344)) ([2b94c45](https://github.com/choiceoh/Deneb/commit/2b94c45246d37a9adb8079ae3d7766aa972ac11e))
+
 ## [3.11.2](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.1...deneb-v3.11.2) (2026-03-26)
 
 
