@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.11.5](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.4...deneb-v3.11.5) (2026-03-26)
+
+
+### Performance
+
+* DGX Spark 20-core CPU utilization + chat latency optimization ([#405](https://github.com/choiceoh/Deneb/issues/405)) ([1162f35](https://github.com/choiceoh/Deneb/commit/1162f35f5372dc0ad0ca619afabea1be66b0747b))
+
 ## [3.11.4](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.3...deneb-v3.11.4) (2026-03-26)
 
 
