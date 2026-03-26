@@ -86,13 +86,14 @@ var coreToolSummaries = map[string]string{
 	"http":               "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
 	"kv":                 "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
 	"clipboard":          "Temporary in-memory clipboard (ring buffer, 32 items max). Actions: set, get, list, clear",
+	"apply_patch":        "Apply multi-file unified diff patches. Tries git apply first, falls back to patch -p1",
 	"pilot":              "Fast local AI (sglang) that orchestrates tools in one call. sources: [{tool:'read',input:{...}}, {tool:'exec',input:{...}}] or shortcuts: file, exec, grep, url, http, kv_key, memory. Supports conditional sources (only_if/skip_if) and post_process steps (filter_lines, head, tail, unique, sort). output_format: text/json/list",
 }
 
 // toolOrder defines the display order for tools in the system prompt.
 // Grouped logically: filesystem → exec → web → memory → system → sessions.
 var toolOrder = []string{
-	"read", "write", "edit", "grep", "find", "ls",
+	"read", "write", "edit", "apply_patch", "grep", "find", "ls",
 	"exec", "process",
 	"web",
 	"memory_search", "memory_get",
@@ -123,7 +124,8 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Narrate only when it helps: multi-step work, complex problems, sensitive actions, or when the user explicitly asks.\n")
 	sb.WriteString("Keep narration brief and value-dense; avoid repeating obvious steps.\n")
 	sb.WriteString("When a first-class tool exists for an action, use the tool directly instead of asking the user to run CLI commands.\n")
-	sb.WriteString("Any tool call accepts an optional \"compress\": true in its input. When set, large outputs are automatically summarized by the local AI (sglang) before returning, saving context tokens. Use for exploratory reads/greps where full output isn't needed.\n\n")
+	sb.WriteString("Any tool call accepts an optional \"compress\": true in its input. When set, large outputs are automatically summarized by the local AI (sglang) before returning, saving context tokens. Use for exploratory reads/greps where full output isn't needed.\n")
+	sb.WriteString("All tool outputs are automatically post-processed: outputs over 64K chars are trimmed (head+tail preserved), common errors get actionable hints (permission denied, command not found, etc.), grep results over 200 lines are capped with a count summary, find results over 500 entries are grouped by directory, and failed exec commands get exit code annotations. This is transparent — no action needed.\n\n")
 
 	// Tool Selection Guide.
 	sb.WriteString("## Tool Selection Guide\n")
@@ -139,8 +141,13 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("## Tool Chaining ($ref)\n")
 	sb.WriteString("When calling multiple tools in one turn, a tool can reference another tool's output via `\"$ref\": \"<tool_use_id>\"` in its input.\n")
 	sb.WriteString("The referenced tool's output is injected as `_ref_content` in the input JSON. The tool waits up to 30s for the referenced result.\n")
-	sb.WriteString("Example: call grep (id: toolu_1) and pilot (id: toolu_2) together — pilot input includes `\"$ref\": \"toolu_1\"` to receive grep's output.\n")
-	sb.WriteString("Use this for dependent parallel calls: the independent tool runs immediately while the dependent tool waits for its data.\n\n")
+	sb.WriteString("Example: call grep (id: toolu_1) and pilot (id: toolu_2) together — pilot input includes `\"$ref\": \"toolu_1\"` to receive grep's output as `_ref_content`.\n")
+	sb.WriteString("Use this for dependent parallel calls: the independent tool runs immediately while the dependent tool waits for its data.\n")
+	sb.WriteString("Common patterns:\n")
+	sb.WriteString("- grep → pilot: find patterns, then analyze them in one turn\n")
+	sb.WriteString("- exec → pilot: run command, then analyze output without a round trip\n")
+	sb.WriteString("- read → pilot: read file, then summarize/review locally\n")
+	sb.WriteString("- find → read: locate files, then read the first match (use `_ref_content` to pick the path)\n\n")
 
 	// Pilot tool guide.
 	sb.WriteString("## Pilot (Local AI Helper)\n")
