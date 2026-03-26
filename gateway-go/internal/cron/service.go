@@ -484,11 +484,8 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 	startedAt := time.Now().UnixMilli()
 	s.emit(CronEvent{Type: "job_started", JobID: job.ID})
 
-	// Apply timeout.
-	timeoutMs := int64(job.Payload.TimeoutSeconds) * 1000
-	if timeoutMs <= 0 {
-		timeoutMs = 5 * 60 * 1000
-	}
+	// Apply timeout (mirrors timeout-policy.ts).
+	timeoutMs := ResolveCronJobTimeoutMs(job)
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
 
