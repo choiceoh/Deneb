@@ -422,7 +422,7 @@ fn run_like_query(
         .iter()
         .map(|_| "c.content LIKE ?".to_string())
         .collect();
-    let like_params: Vec<String> = all_terms.iter().map(|t| format!("%{}%", t)).collect();
+    let mut like_params: Vec<String> = all_terms.iter().map(|t| format!("%{}%", t)).collect();
 
     let mut sql = format!(
         "SELECT DISTINCT c.id as chunk_id, p.id as project_id,
@@ -434,8 +434,11 @@ fn run_like_query(
     );
 
     if !existing_ids.is_empty() {
-        let placeholders: Vec<String> = existing_ids.iter().map(|id| id.to_string()).collect();
-        sql.push_str(&format!(" AND c.id NOT IN ({})", placeholders.join(",")));
+        let ph: Vec<&str> = existing_ids.iter().map(|_| "?").collect();
+        sql.push_str(&format!(" AND c.id NOT IN ({})", ph.join(",")));
+        for id in existing_ids {
+            like_params.push(id.to_string());
+        }
     }
     sql.push_str(&format!(" LIMIT {}", LIKE_LIMIT));
 
@@ -486,11 +489,11 @@ fn run_comm_query(
     let mut params: Vec<String> = vec![fts_q];
 
     if !project_ids.is_empty() {
-        let placeholders: Vec<String> = project_ids.iter().map(|id| id.to_string()).collect();
-        sql.push_str(&format!(
-            " AND cl.project_id IN ({})",
-            placeholders.join(",")
-        ));
+        let ph: Vec<&str> = project_ids.iter().map(|_| "?").collect();
+        sql.push_str(&format!(" AND cl.project_id IN ({})", ph.join(",")));
+        for id in project_ids {
+            params.push(id.to_string());
+        }
     } else if !extracted.clients.is_empty() {
         let mut cl_conds = Vec::new();
         for cl in &extracted.clients {
