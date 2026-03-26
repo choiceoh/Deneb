@@ -17,9 +17,11 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
+	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/server"
+	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
 // ExitCodeRestart is the exit code used to signal that the gateway should be
@@ -103,6 +105,9 @@ func main() {
 		server.WithVersion(*version),
 		server.WithConfig(rtCfg),
 	)
+
+	// Initialize Vega backend (SGLang-enhanced search).
+	initVega(srv, logger)
 
 	if bootstrap.GeneratedToken != "" {
 		logger.Info("gateway auth token auto-generated",
@@ -205,6 +210,31 @@ func runWithSignals(run func(ctx context.Context) error, logger *slog.Logger) in
 		return ExitCodeRestart
 	}
 	return 0
+}
+
+// initVega sets up the Vega search backend with SGLang embedding and query expansion.
+func initVega(srv *server.Server, logger *slog.Logger) {
+	const (
+		sglangURL   = "http://127.0.0.1:30000/v1"
+		sglangModel = "Qwen/Qwen3.5-35B-A3B"
+	)
+
+	if !vega.ShouldEnableVega(ffi.Available, sglangURL, logger) {
+		logger.Info("vega: disabled (FFI not available)")
+		return
+	}
+
+	backend := vega.NewEnhancedBackend(vega.EnhancedBackendConfig{
+		Logger:      logger,
+		SglangURL:   sglangURL,
+		SglangModel: sglangModel,
+	})
+	srv.SetVega(backend)
+
+	logger.Info("vega: EnhancedBackend initialized",
+		"sglang_url", sglangURL,
+		"model", sglangModel,
+	)
 }
 
 func parseLogLevel(s string) slog.Level {

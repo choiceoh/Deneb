@@ -103,13 +103,13 @@ pub fn cmd_health(_args: &Value, config: &VegaConfig) -> CommandResult {
                     "detail": format!("v{} (최신: v{})", schema_ver, crate::config::SCHEMA_VERSION),
                 }));
 
-                // ML availability
-                let ml_available = config.has_ml();
+                // Inference backend status
+                let has_sglang = config.has_sglang();
                 checks.push(json!({
-                    "check": "ML 추론",
-                    "status": if ml_available { "ok" } else { "info" },
-                    "detail": if ml_available {
-                        format!("활성 (backend: {})", config.inference_backend)
+                    "check": "임베딩 추론",
+                    "status": if has_sglang { "ok" } else { "info" },
+                    "detail": if has_sglang {
+                        format!("SGLang (backend: {})", config.inference_backend)
                     } else {
                         "비활성 (의미검색 없음)".to_string()
                     },

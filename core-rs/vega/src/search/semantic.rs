@@ -198,6 +198,135 @@ pub fn semantic_search(
     Vec::new()
 }
 
+/// Semantic search with a pre-computed query vector (no GGUF model needed).
+/// Used when embeddings are generated externally (e.g. via SGLang HTTP API).
+/// Reuses the same SIMD-accelerated cosine similarity and rayon parallelism.
+pub fn semantic_search_with_vec(
+    conn: &Connection,
+    query_vec: &[f32],
+    config: &SemanticConfig,
+    project_filter: Option<&[i64]>,
+) -> Vec<SemanticResult> {
+    if query_vec.is_empty() {
+        return Vec::new();
+    }
+
+    // Load chunk embeddings from DB.
+    let mut sql = String::from(
+        "SELECT ce.chunk_id, ce.embedding, c.project_id, p.name, p.client, p.status,
+                p.person_internal, c.section_heading, c.content, c.chunk_type, c.entry_date
+         FROM chunk_embeddings ce
+         JOIN chunks c ON c.id = ce.chunk_id
+         JOIN projects p ON p.id = c.project_id",
+    );
+
+    let mut filter_params: Vec<i64> = Vec::new();
+    if let Some(pids) = project_filter {
+        if !pids.is_empty() {
+            let ph: Vec<&str> = pids.iter().map(|_| "?").collect();
+            sql.push_str(&format!(" WHERE c.project_id IN ({})", ph.join(",")));
+            filter_params.extend_from_slice(pids);
+        }
+    }
+
+    let mut stmt = match conn.prepare(&sql) {
+        Ok(s) => s,
+        Err(e) => {
+            log::debug!("Semantic search (vec): prepare failed: {}", e);
+            return Vec::new();
+        }
+    };
+
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = filter_params
+        .iter()
+        .map(|p| p as &dyn rusqlite::types::ToSql)
+        .collect();
+    let rows = stmt.query_map(param_refs.as_slice(), |row| {
+        let chunk_id: i64 = row.get(0)?;
+        let emb_blob: Vec<u8> = row.get(1)?;
+        let project_id: i64 = row.get(2)?;
+        let name: String = row.get::<_, Option<String>>(3)?.unwrap_or_default();
+        let client: String = row.get::<_, Option<String>>(4)?.unwrap_or_default();
+        let status: String = row.get::<_, Option<String>>(5)?.unwrap_or_default();
+        let person: String = row.get::<_, Option<String>>(6)?.unwrap_or_default();
+        let heading: String = row.get::<_, Option<String>>(7)?.unwrap_or_default();
+        let content: String = row.get::<_, Option<String>>(8)?.unwrap_or_default();
+        let chunk_type: String = row.get::<_, Option<String>>(9)?.unwrap_or_default();
+        let entry_date: String = row.get::<_, Option<String>>(10)?.unwrap_or_default();
+
+        Ok((
+            chunk_id, emb_blob, project_id, name, client, status, person, heading, content,
+            chunk_type, entry_date,
+        ))
+    });
+
+    let rows = match rows {
+        Ok(r) => r,
+        Err(e) => {
+            log::debug!("Semantic search (vec): query failed: {}", e);
+            return Vec::new();
+        }
+    };
+
+    let all_rows: Vec<_> = rows.flatten().collect();
+    if all_rows.is_empty() {
+        return Vec::new();
+    }
+
+    // Parallel similarity computation (SIMD-accelerated, leverages DGX Spark cores).
+    let mut results: Vec<SemanticResult> = all_rows
+        .iter()
+        .filter_map(|row| {
+            let (
+                chunk_id,
+                emb_blob,
+                project_id,
+                name,
+                client,
+                status,
+                person,
+                heading,
+                content,
+                chunk_type,
+                entry_date,
+            ) = row;
+
+            let chunk_vec = blob_to_f32_vec(emb_blob);
+            if chunk_vec.len() != query_vec.len() {
+                return None;
+            }
+
+            let score = dot_product_simd(query_vec, &chunk_vec);
+
+            if score >= config.min_score {
+                Some(SemanticResult {
+                    chunk_id: *chunk_id,
+                    project_id: *project_id,
+                    project_name: name.clone(),
+                    client: client.clone(),
+                    status: status.clone(),
+                    person_internal: person.clone(),
+                    section_heading: heading.clone(),
+                    content: content.clone(),
+                    chunk_type: chunk_type.clone(),
+                    entry_date: entry_date.clone(),
+                    score,
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    results.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    results.truncate(config.top_k);
+    results
+}
+
 /// Rerank search results using the ML reranker.
 ///
 /// Takes existing chunk results and reranks them by query relevance.

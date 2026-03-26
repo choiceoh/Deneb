@@ -41,7 +41,8 @@ pub struct SearchMeta {
 }
 
 /// Main search router. Analyzes queries, runs SQLite search, optionally runs
-/// semantic search via deneb-ml, and applies fusion ranking.
+/// semantic search via pre-computed embeddings (SGLang) or deneb-ml fallback,
+/// and applies fusion ranking.
 pub struct SearchRouter {
     config: VegaConfig,
     #[cfg(feature = "ml")]
@@ -50,8 +51,9 @@ pub struct SearchRouter {
 
 impl SearchRouter {
     pub fn new(config: VegaConfig) -> Self {
+        // ML manager is no longer used — embeddings come from SGLang via Go.
         #[cfg(feature = "ml")]
-        let ml_manager = build_ml_manager(&config);
+        let ml_manager: Option<deneb_ml::ModelManager> = None;
 
         Self {
             config,
@@ -60,8 +62,13 @@ impl SearchRouter {
         }
     }
 
-    /// Check if semantic search is available (ML models configured + feature enabled).
+    /// Check if semantic search is available.
+    /// In sglang mode, semantic is available when a query_embedding is provided.
+    /// In local mode, requires ML models to be configured.
     fn semantic_available(&self) -> bool {
+        if self.config.has_sglang() {
+            return true; // Embeddings provided externally by Go
+        }
         #[cfg(feature = "ml")]
         {
             self.ml_manager.is_some()
@@ -72,8 +79,19 @@ impl SearchRouter {
         }
     }
 
-    /// Execute a full search: analyze → SQLite FTS → semantic (optional) → fusion → unified.
+    /// Execute a full search (no pre-computed embedding).
     pub fn search(&self, query: &str) -> Result<SearchResult, Box<dyn std::error::Error>> {
+        self.search_with_embedding(query, None)
+    }
+
+    /// Execute a full search: analyze → SQLite FTS → semantic (optional) → fusion → unified.
+    /// When `query_embedding` is provided, uses the pre-computed vector for semantic search
+    /// (no GGUF model needed). When None, falls back to GGUF embedding if available.
+    pub fn search_with_embedding(
+        &self,
+        query: &str,
+        query_embedding: Option<&[f32]>,
+    ) -> Result<SearchResult, Box<dyn std::error::Error>> {
         let query = normalize_query(query);
         if query.is_empty() {
             return Ok(SearchResult {
@@ -107,86 +125,89 @@ impl SearchRouter {
         init_db(&conn)?;
         let mut sqlite_result = sqlite_search(&conn, &query, extracted);
 
-        // 3. Semantic search (when ML is available and route permits)
-        #[allow(unused_mut)]
+        // 3. Semantic search — supports two modes:
+        //    a) Pre-computed query_embedding from SGLang (no GGUF needed)
+        //    b) GGUF-based embedding via ML manager (legacy, requires ml feature)
         let mut semantic_count = 0;
-        #[allow(unused_mut)]
         let mut semantic_used = false;
 
-        #[cfg(feature = "ml")]
-        if let Some(ref mgr) = self.ml_manager {
-            let should_run_semantic = match analysis.route {
-                SearchRoute::Semantic => true,
-                SearchRoute::Hybrid => true,
-                SearchRoute::Sqlite => {
-                    // Fallback: run semantic if SQLite returned too few results
-                    query_analyzer::has_semantic_pattern(&query)
-                        || (!extracted.keywords.is_empty() && sqlite_result.chunks.len() < 5)
+        let should_run_semantic = match analysis.route {
+            SearchRoute::Semantic => true,
+            SearchRoute::Hybrid => true,
+            SearchRoute::Sqlite => {
+                query_analyzer::has_semantic_pattern(&query)
+                    || (!extracted.keywords.is_empty() && sqlite_result.chunks.len() < 5)
+            }
+        };
+
+        if should_run_semantic {
+            let project_filter = if !sqlite_result.project_ids.is_empty()
+                && analysis.route != SearchRoute::Semantic
+            {
+                Some(sqlite_result.project_ids.as_slice())
+            } else {
+                None
+            };
+
+            // Try pre-computed vector first (SGLang mode), then GGUF fallback.
+            let sem_results = if let Some(qvec) = query_embedding {
+                semantic::semantic_search_with_vec(
+                    &conn,
+                    qvec,
+                    &semantic::SemanticConfig::default(),
+                    project_filter,
+                )
+            } else {
+                // GGUF fallback (only with ml feature).
+                #[cfg(feature = "ml")]
+                {
+                    if let Some(ref mgr) = self.ml_manager {
+                        semantic::semantic_search(
+                            &conn,
+                            &query,
+                            &semantic::SemanticConfig::default(),
+                            project_filter,
+                            mgr,
+                        )
+                    } else {
+                        Vec::new()
+                    }
+                }
+                #[cfg(not(feature = "ml"))]
+                {
+                    Vec::new()
                 }
             };
 
-            if should_run_semantic {
-                let project_filter = if !sqlite_result.project_ids.is_empty()
-                    && analysis.route != SearchRoute::Semantic
-                {
-                    Some(sqlite_result.project_ids.as_slice())
-                } else {
-                    None
-                };
+            if !sem_results.is_empty() {
+                semantic_used = true;
+                semantic_count = sem_results.len();
 
-                let sem_results = semantic::semantic_search(
-                    &conn,
-                    &query,
-                    &semantic::SemanticConfig::default(),
-                    project_filter,
-                    mgr,
-                );
-
-                if !sem_results.is_empty() {
-                    semantic_used = true;
-                    semantic_count = sem_results.len();
-
-                    // Convert semantic results to unified format and merge
-                    for sr in &sem_results {
-                        // Avoid duplicating chunks already in SQLite results
-                        if !sqlite_result
-                            .chunks
-                            .iter()
-                            .any(|c| c.chunk_id == sr.chunk_id)
-                        {
-                            sqlite_result.chunks.push(fts_search::ChunkRow {
-                                chunk_id: sr.chunk_id,
-                                project_id: sr.project_id,
-                                name: sr.project_name.clone(),
-                                client: sr.client.clone(),
-                                status: sr.status.clone(),
-                                person_internal: sr.person_internal.clone(),
-                                capacity: String::new(),
-                                section_heading: sr.section_heading.clone(),
-                                content: sr.content.clone(),
-                                chunk_type: sr.chunk_type.clone(),
-                                entry_date: sr.entry_date.clone(),
-                            });
-                        }
-                    }
-                }
-            }
-
-            // 3b. ML reranking (when rerank_mode is "full")
-            if self.config.rerank_mode == "full" && !sqlite_result.chunks.is_empty() {
-                let reranked = semantic::rerank_results(&query, &sqlite_result.chunks, 30, mgr);
-                if !reranked.is_empty() {
-                    // Apply reranker scores as boost to fusion
-                    // reranked is [(original_index, score)]
-                    for (idx, ml_score) in &reranked {
-                        if let Some(chunk) = sqlite_result.chunks.get(*idx) {
-                            // We'll apply these as metadata for fusion to pick up
-                            log::debug!("Rerank: chunk {} score {:.3}", chunk.chunk_id, ml_score);
-                        }
+                for sr in &sem_results {
+                    if !sqlite_result
+                        .chunks
+                        .iter()
+                        .any(|c| c.chunk_id == sr.chunk_id)
+                    {
+                        sqlite_result.chunks.push(fts_search::ChunkRow {
+                            chunk_id: sr.chunk_id,
+                            project_id: sr.project_id,
+                            name: sr.project_name.clone(),
+                            client: sr.client.clone(),
+                            status: sr.status.clone(),
+                            person_internal: sr.person_internal.clone(),
+                            capacity: String::new(),
+                            section_heading: sr.section_heading.clone(),
+                            content: sr.content.clone(),
+                            chunk_type: sr.chunk_type.clone(),
+                            entry_date: sr.entry_date.clone(),
+                        });
                     }
                 }
             }
         }
+
+        // Note: ML reranking removed — using cosine similarity + BM25 fusion only.
 
         // 4. Apply fusion ranking
         let project_scores = if self.config.rerank_mode != "none" {
@@ -235,34 +256,9 @@ impl SearchRouter {
     }
 }
 
-/// Build ML ModelManager from VegaConfig (feature-gated).
-#[cfg(feature = "ml")]
-fn build_ml_manager(config: &VegaConfig) -> Option<deneb_ml::ModelManager> {
-    if config.inference_backend != "local" {
-        return None;
-    }
-
-    let mut configs = Vec::new();
-
-    if let Some(ref path) = config.model_embedder {
-        configs.push(deneb_ml::ModelConfig::embedder(
-            path.clone(),
-            config.model_unload_ttl,
-        ));
-    }
-    if let Some(ref path) = config.model_reranker {
-        configs.push(deneb_ml::ModelConfig::reranker(
-            path.clone(),
-            config.model_unload_ttl,
-        ));
-    }
-
-    if configs.is_empty() {
-        None
-    } else {
-        Some(deneb_ml::ModelManager::new(configs))
-    }
-}
+// build_ml_manager removed — GGUF model loading is no longer used.
+// Embeddings are now generated externally via SGLang HTTP API (Go side).
+// The ml feature flag and deneb_ml dependency can be removed in a follow-up cleanup.
 
 #[cfg(test)]
 mod tests {
