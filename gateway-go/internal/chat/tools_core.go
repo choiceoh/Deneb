@@ -3,12 +3,16 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
@@ -89,11 +93,12 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	})
 
 	// -- Web tools --
+	webFetchCache := NewFetchCache()
 	registry.RegisterTool(ToolDef{
 		Name:        "web_fetch",
 		Description: "Fetch and extract readable content from a URL",
 		InputSchema: webFetchToolSchema(),
-		Fn:          toolWebFetch(),
+		Fn:          toolWebFetch(webFetchCache),
 	})
 
 	// -- Memory tools --
@@ -444,7 +449,7 @@ func webFetchToolSchema() map[string]any {
 	}
 }
 
-func toolWebFetch() ToolFunc {
+func toolWebFetch(cache *FetchCache) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			URL      string `json:"url"`
@@ -463,42 +468,122 @@ func toolWebFetch() ToolFunc {
 			maxChars = p.MaxChars
 		}
 
+		// YouTube URL → delegate to transcript extraction.
+		if media.IsYouTubeURL(p.URL) {
+			ytCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+			defer cancel()
+			result, err := media.ExtractYouTubeTranscript(ytCtx, p.URL)
+			if err != nil {
+				return "", fmt.Errorf("youtube transcript extraction failed: %w", err)
+			}
+			return media.FormatYouTubeResult(result), nil
+		}
+
+		// Cache lookup — stores full content, truncate on retrieval.
+		if cached, ok := cache.Get(p.URL); ok {
+			if len(cached) > maxChars {
+				cached = cached[:maxChars] + "\n\n[...truncated at " + strconv.Itoa(maxChars) + " chars]"
+			}
+			return cached, nil
+		}
+
 		// Size limit: 2× maxChars raw bytes, capped at 5 MB.
 		maxBytes := int64(maxChars * 2)
 		if maxBytes > 5*1024*1024 {
 			maxBytes = 5 * 1024 * 1024
 		}
 
-		// Use SSRF-safe media.Fetch for the download.
-		fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
+		// Fetch with retry on transient errors.
+		result, err := fetchWithRetry(ctx, p.URL, maxBytes)
+		if err != nil {
+			return "", fmt.Errorf("fetch failed: %w", err)
+		}
 
+		content := string(result.Data)
+		title := ""
+
+		// Convert HTML to Markdown via Rust FFI for structured text extraction.
+		if strings.Contains(result.ContentType, "text/html") {
+			text, t, convErr := ffi.HtmlToMarkdown(content)
+			if convErr != nil {
+				slog.Warn("html-to-markdown failed, using raw content", "url", p.URL, "error", convErr)
+			} else {
+				content = text
+				title = t
+			}
+		}
+
+		// Cache full content before truncation.
+		cache.Put(p.URL, content)
+
+		// Build structured response with metadata header.
+		var header strings.Builder
+		if title != "" {
+			fmt.Fprintf(&header, "Title: %s\n", title)
+		}
+		fmt.Fprintf(&header, "URL: %s\n", p.URL)
+		fmt.Fprintf(&header, "Content-Type: %s\n", result.ContentType)
+		header.WriteString("---\n")
+
+		if len(content) > maxChars {
+			content = content[:maxChars] + "\n\n[...truncated at " + strconv.Itoa(maxChars) + " chars]"
+		}
+
+		return header.String() + content, nil
+	}
+}
+
+// fetchWithRetry fetches a URL with retry on transient errors (5xx, timeouts).
+// Max 3 attempts with short backoff: 0ms, 500ms, 1500ms.
+func fetchWithRetry(ctx context.Context, url string, maxBytes int64) (*media.FetchResult, error) {
+	backoff := [3]time.Duration{0, 500 * time.Millisecond, 1500 * time.Millisecond}
+
+	var lastErr error
+	for attempt := 0; attempt < len(backoff); attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff[attempt]):
+			}
+		}
+
+		fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		result, err := media.Fetch(fetchCtx, media.FetchOptions{
-			URL:      p.URL,
+			URL:      url,
 			MaxBytes: maxBytes,
 			Headers: map[string]string{
 				"User-Agent": "Deneb-Gateway/1.0",
 				"Accept":     "text/html,text/plain,application/json,*/*",
 			},
 		})
-		if err != nil {
-			return "", fmt.Errorf("fetch failed: %w", err)
+		cancel()
+
+		if err == nil {
+			return result, nil
 		}
+		lastErr = err
 
-		content := string(result.Data)
-
-		// Basic HTML tag stripping for readability.
-		if strings.Contains(result.ContentType, "text/html") {
-			content = stripHTMLTags(content)
+		if !isRetryableError(err) {
+			return nil, err
 		}
-
-		// Truncate to maxChars.
-		if len(content) > maxChars {
-			content = content[:maxChars] + "\n\n[...truncated at " + fmt.Sprintf("%d", maxChars) + " chars]"
-		}
-
-		return content, nil
 	}
+	return nil, lastErr
+}
+
+// isRetryableError returns true for transient errors worth retrying.
+func isRetryableError(err error) bool {
+	var mfe *media.MediaFetchError
+	if errors.As(err, &mfe) {
+		if mfe.Code == media.ErrHTTPError && mfe.Status >= 500 {
+			return true
+		}
+		if mfe.Code == media.ErrFetchFailed {
+			return true
+		}
+		return false
+	}
+	return errors.Is(err, context.DeadlineExceeded)
 }
 
 // --- YouTube transcript tool ---
@@ -594,24 +679,3 @@ func toolApplyPatch(defaultDir string) ToolFunc {
 	}
 }
 
-// stripHTMLTags does a basic removal of HTML tags for text extraction.
-func stripHTMLTags(html string) string {
-	var sb strings.Builder
-	inTag := false
-	for _, r := range html {
-		switch {
-		case r == '<':
-			inTag = true
-		case r == '>':
-			inTag = false
-		case !inTag:
-			sb.WriteRune(r)
-		}
-	}
-	// Collapse excessive whitespace.
-	result := sb.String()
-	for strings.Contains(result, "\n\n\n") {
-		result = strings.ReplaceAll(result, "\n\n\n", "\n\n")
-	}
-	return strings.TrimSpace(result)
-}

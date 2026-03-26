@@ -1,31 +1,60 @@
 package chat
 
 import (
+	"context"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 )
 
-func TestStripHTMLTags(t *testing.T) {
+func TestIsRetryableError(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		want  string
+		name string
+		err  error
+		want bool
 	}{
-		{"plain text", "hello world", "hello world"},
-		{"simple tags", "<p>hello</p>", "hello"},
-		{"nested tags", "<div><span>text</span></div>", "text"},
-		{"attributes", `<a href="link">click</a>`, "click"},
-		{"script content", "<script>alert('x')</script>", "alert('x')"},
-		{"empty", "", ""},
-		{"whitespace collapse", "<p>a</p>\n\n\n\n<p>b</p>", "a\n\nb"},
-		{"mixed content", "before <b>bold</b> after", "before bold after"},
+		{
+			"5xx server error",
+			&media.MediaFetchError{Code: media.ErrHTTPError, Status: 500},
+			true,
+		},
+		{
+			"503 service unavailable",
+			&media.MediaFetchError{Code: media.ErrHTTPError, Status: 503},
+			true,
+		},
+		{
+			"404 not found",
+			&media.MediaFetchError{Code: media.ErrHTTPError, Status: 404},
+			false,
+		},
+		{
+			"403 forbidden",
+			&media.MediaFetchError{Code: media.ErrHTTPError, Status: 403},
+			false,
+		},
+		{
+			"fetch failed (connection error)",
+			&media.MediaFetchError{Code: media.ErrFetchFailed, Message: "connection reset"},
+			true,
+		},
+		{
+			"max bytes exceeded",
+			&media.MediaFetchError{Code: media.ErrMaxBytes},
+			false,
+		},
+		{
+			"context deadline exceeded",
+			context.DeadlineExceeded,
+			true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := stripHTMLTags(tt.input)
+			got := isRetryableError(tt.err)
 			if got != tt.want {
-				t.Errorf("stripHTMLTags(%q) = %q, want %q", tt.input, got, tt.want)
+				t.Errorf("isRetryableError(%v) = %v, want %v", tt.err, got, tt.want)
 			}
 		})
 	}
