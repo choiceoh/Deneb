@@ -1259,6 +1259,8 @@ func loadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {
 
 // resolveDefaultModel reads agents.defaultModel or agents.defaults.model from
 // deneb.json, falling back to a hardcoded default.
+// The model field can be either a string ("model-name") or an object
+// ({"primary": "model-name", "fallbacks": [...]}).
 func resolveDefaultModel(logger *slog.Logger) string {
 	snapshot, err := config.LoadConfigFromDefaultPath()
 	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
@@ -1266,10 +1268,8 @@ func resolveDefaultModel(logger *slog.Logger) string {
 	}
 	var root struct {
 		Agents struct {
-			DefaultModel string `json:"defaultModel"`
-			Defaults     struct {
-				Model string `json:"model"`
-			} `json:"defaults"`
+			DefaultModel string          `json:"defaultModel"`
+			Defaults     json.RawMessage `json:"defaults"`
 		} `json:"agents"`
 	}
 	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
@@ -1279,10 +1279,36 @@ func resolveDefaultModel(logger *slog.Logger) string {
 	if root.Agents.DefaultModel != "" {
 		return root.Agents.DefaultModel
 	}
-	if root.Agents.Defaults.Model != "" {
-		return root.Agents.Defaults.Model
+	if len(root.Agents.Defaults) > 0 {
+		model := extractModelFromDefaults(root.Agents.Defaults)
+		if model != "" {
+			return model
+		}
 	}
 	return "zai/glm-5-turbo"
+}
+
+// extractModelFromDefaults handles both string and object forms of the model field.
+func extractModelFromDefaults(raw json.RawMessage) string {
+	var defaults struct {
+		Model json.RawMessage `json:"model"`
+	}
+	if err := json.Unmarshal(raw, &defaults); err != nil || len(defaults.Model) == 0 {
+		return ""
+	}
+	// Try string first.
+	var s string
+	if err := json.Unmarshal(defaults.Model, &s); err == nil && s != "" {
+		return s
+	}
+	// Try object with primary field.
+	var obj struct {
+		Primary string `json:"primary"`
+	}
+	if err := json.Unmarshal(defaults.Model, &obj); err == nil && obj.Primary != "" {
+		return obj.Primary
+	}
+	return ""
 }
 
 // resolveWorkspaceDir determines the workspace directory for file tool operations.
