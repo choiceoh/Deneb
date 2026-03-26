@@ -3,9 +3,12 @@
 package autoreply
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
 // StatusReport holds all data for building a status message.
@@ -25,6 +28,15 @@ type StatusReport struct {
 	GroupActivation types.GroupActivationMode
 	Usage           *SessionUsage
 	RunCount        int
+
+	// Server-level fields (populated from StatusDeps).
+	Version       string
+	StartedAt     time.Time
+	RustFFI       bool
+	SessionCount  int
+	WSConnections int32
+	ProviderUsage map[string]*ProviderUsageStats
+	ChannelHealth []ChannelHealthEntry
 }
 
 // BuildStatusMessage creates a formatted status message from a report.
@@ -73,12 +85,108 @@ func BuildStatusMessage(report StatusReport) string {
 		sections = append(sections, fmt.Sprintf("👥 **Group activation:** %s", activation))
 	}
 
-	// Usage section.
+	// Gateway info section.
+	if report.Version != "" || !report.StartedAt.IsZero() {
+		var gatewayParts []string
+		if report.Version != "" {
+			gatewayParts = append(gatewayParts, fmt.Sprintf("Gateway v%s", report.Version))
+		}
+		if !report.StartedAt.IsZero() {
+			gatewayParts = append(gatewayParts, fmt.Sprintf("Uptime: %s", formatUptime(time.Since(report.StartedAt))))
+		}
+		sections = append(sections, "🖥️ "+strings.Join(gatewayParts, " | "))
+	}
+
+	// System subsystem line.
+	if report.Version != "" || !report.StartedAt.IsZero() {
+		rustStatus := "❌"
+		if report.RustFFI {
+			rustStatus = "✅"
+		}
+		sections = append(sections, fmt.Sprintf("🔧 Rust Core: %s | Sessions: %d | WS: %d",
+			rustStatus, report.SessionCount, report.WSConnections))
+	}
+
+	// Per-provider API usage.
+	if len(report.ProviderUsage) > 0 {
+		sections = append(sections, buildProviderUsageSection(report.ProviderUsage))
+	}
+
+	// Channel health.
+	if len(report.ChannelHealth) > 0 {
+		for _, ch := range report.ChannelHealth {
+			icon := "💚"
+			status := "정상"
+			if !ch.Healthy {
+				icon = "❌"
+				status = "비정상"
+				if ch.Reason != "" {
+					status = ch.Reason
+				}
+			}
+			sections = append(sections, fmt.Sprintf("%s **%s:** %s", icon, ch.ID, status))
+		}
+	}
+
+	// Session-level usage (legacy, if available).
 	if report.Usage != nil && report.Usage.TotalTokens > 0 {
 		sections = append(sections, fmt.Sprintf("📊 **Usage:** %s", report.Usage.FormatUsage()))
 	}
 
 	return strings.Join(sections, "\n")
+}
+
+// buildProviderUsageSection formats per-provider API usage as a section.
+func buildProviderUsageSection(providers map[string]*ProviderUsageStats) string {
+	// Sort provider names for stable output.
+	names := make([]string, 0, len(providers))
+	for name := range providers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	lines := []string{"📊 **API 사용량:**"}
+	for _, name := range names {
+		p := providers[name]
+		total := p.Input + p.Output
+		lines = append(lines, fmt.Sprintf("  %s — %s회, %s tokens (%s in, %s out)",
+			name,
+			FormatTokenCount(p.Calls),
+			formatCompactTokens(total),
+			formatCompactTokens(p.Input),
+			formatCompactTokens(p.Output),
+		))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// formatUptime formats a duration as a compact uptime string (e.g. "2d 5h 32m").
+func formatUptime(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
+}
+
+// formatCompactTokens formats token counts in compact form (e.g. "1.2M", "890K", "500").
+func formatCompactTokens(n int64) string {
+	if n >= 1_000_000 {
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	}
+	if n >= 1_000 {
+		return fmt.Sprintf("%.1fK", float64(n)/1_000)
+	}
+	return fmt.Sprintf("%d", n)
 }
 
 // BuildHelpMessage creates a help/commands message.
