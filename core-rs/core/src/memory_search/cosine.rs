@@ -84,6 +84,7 @@ unsafe fn horizontal_sum_pd(v: std::arch::x86_64::__m128d) -> f64 {
     _mm_cvtsd_f64(sum)
 }
 
+/// Scalar fallback for non-x86_64 targets (e.g., ARM/Apple Silicon).
 #[cfg(not(target_arch = "x86_64"))]
 fn cosine_similarity_scalar(a: &[f64], b: &[f64]) -> f64 {
     let mut dot = 0.0;

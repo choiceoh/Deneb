@@ -84,6 +84,9 @@ impl LocalEmbedder {
                 .str_to_token(text, llama_cpp_2::model::AddBos::Always)
                 .map_err(|e| MlError::InferenceFailed(format!("tokenization: {e}")))?;
 
+            // Build a batch with is_last=true only on the final token.
+            // llama.cpp computes embeddings only for positions with the logits flag
+            // set (is_last), so this extracts a single embedding from the last position.
             let mut batch = LlamaBatch::new(tokens.len(), 1);
             for (i, &token) in tokens.iter().enumerate() {
                 let is_last = i == tokens.len() - 1;
@@ -109,6 +112,8 @@ impl LocalEmbedder {
             let normalized = l2_normalize(&vec);
             all_vectors.push(normalized);
 
+            // Clear KV cache between texts so attention keys/values from one
+            // text don't leak into the next, which would corrupt embeddings.
             ctx.clear_kv_cache();
         }
 

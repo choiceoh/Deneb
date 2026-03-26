@@ -217,7 +217,7 @@ pub struct SweepEngine {
     context_items: Vec<ContextItem>,
     messages: HashMap<u64, MessageRecord>,
     summaries: HashMap<String, SummaryRecord>,
-    fresh_tail_ordinal: u64,
+    fresh_tail_ordinal: u64, // u64::MAX = sentinel for "no fresh tail protection"
 
     // Per-pass state
     leaf_iter: u32,

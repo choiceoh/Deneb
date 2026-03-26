@@ -55,7 +55,7 @@ impl DangerousPatterns {
         {
             return false;
         }
-        // Stack buffer for small inputs; heap only for large.
+        // Pre-sized allocation for small inputs avoids excess capacity; both branches heap-allocate.
         let lower: Vec<u8> = if haystack.len() <= 256 {
             let mut buf = Vec::with_capacity(haystack.len());
             buf.extend(haystack.iter().map(|b| b.to_ascii_lowercase()));

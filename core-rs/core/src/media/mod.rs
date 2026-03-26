@@ -84,7 +84,8 @@ pub fn detect_mime(data: &[u8]) -> &'static str {
             if data[1] == 0xD8 && data[2] == 0xFF {
                 return "image/jpeg";
             }
-            // MP3 sync word: 0xFF 0xE0..0xFF
+            // MP3 frame sync: 12-bit sync word 0xFFF or 0xFFE. The top 3 bits
+            // of byte[1] must be set (0xE0 mask), covering MPEG1/2/2.5 layers.
             if (data[1] & 0xE0) == 0xE0 {
                 return "audio/mpeg";
             }
@@ -169,6 +170,8 @@ pub fn detect_mime(data: &[u8]) -> &'static str {
                 return "application/gzip";
             }
         }
+        // Best-effort JSON heuristic: any data starting with { or [ is assumed JSON.
+        // Not true validation — plain text starting with a bracket would match.
         b'{' | b'[' => return "application/json",
         b'<' => {
             if data.starts_with(b"<?xml") || data.starts_with(b"<svg") {
