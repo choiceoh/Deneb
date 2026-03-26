@@ -41,7 +41,7 @@ Use these hubs to discover every page, including deep dives and reference docs t
 
 - [Architecture](/concepts/architecture)
 - [Features](/concepts/features)
-- [Network hub](/network)
+- [Network hub](/gateway/network-overview)
 - [Agent runtime](/concepts/agent)
 - [Agent workspace](/concepts/agent-workspace)
 - [Memory](/concepts/memory)
@@ -104,7 +104,7 @@ Use these hubs to discover every page, including deep dives and reference docs t
 ## Tools + automation
 
 - [Tools surface](/tools)
-- [OpenProse](/prose)
+- [OpenProse](/plugins/prose)
 - [CLI reference](/cli)
 - [Exec tool](/tools/exec)
 - [PDF tool](/tools/pdf)

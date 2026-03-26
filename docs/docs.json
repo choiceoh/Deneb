@@ -730,6 +730,70 @@
     {
       "source": "/gateway/trusted-proxy",
       "destination": "/gateway/authentication"
+    },
+    {
+      "source": "/brave-search",
+      "destination": "/tools/brave-search"
+    },
+    {
+      "source": "/perplexity",
+      "destination": "/tools/perplexity"
+    },
+    {
+      "source": "/prose",
+      "destination": "/plugins/prose"
+    },
+    {
+      "source": "/ci",
+      "destination": "/help/ci"
+    },
+    {
+      "source": "/date-time",
+      "destination": "/reference/date-time"
+    },
+    {
+      "source": "/pi",
+      "destination": "/concepts/pi"
+    },
+    {
+      "source": "/pi-dev",
+      "destination": "/help/pi-dev"
+    },
+    {
+      "source": "/vps",
+      "destination": "/install/vps"
+    },
+    {
+      "source": "/auth-credential-semantics",
+      "destination": "/gateway/auth-credential-semantics"
+    },
+    {
+      "source": "/logging",
+      "destination": "/gateway/logging-overview"
+    },
+    {
+      "source": "/network",
+      "destination": "/gateway/network-overview"
+    },
+    {
+      "source": "/debug/node-issue",
+      "destination": "/help/node-issue"
+    },
+    {
+      "source": "/diagnostics/flags",
+      "destination": "/help/diagnostics-flags"
+    },
+    {
+      "source": "/docs.acp",
+      "destination": "/reference/acp-bridge"
+    },
+    {
+      "source": "/architecture/modular-architecture-plan",
+      "destination": "/reference/modular-architecture-plan"
+    },
+    {
+      "source": "/internal/rust-go-porting-assessment",
+      "destination": "/reference/rust-go-porting-assessment"
     }
   ],
   "navigation": {
@@ -795,7 +859,7 @@
               {
                 "group": "Hosting and deployment",
                 "pages": [
-                  "vps",
+                  "install/vps",
                   "install/fly",
                   "install/hetzner",
                   "install/gcp",
@@ -841,7 +905,7 @@
               {
                 "group": "Fundamentals",
                 "pages": [
-                  "pi",
+                  "concepts/pi",
                   "concepts/architecture",
                   "concepts/agent",
                   "concepts/agent-loop",
@@ -892,7 +956,7 @@
                 "group": "Built-in tools",
                 "pages": [
                   "tools/apply-patch",
-                  "brave-search",
+                  "tools/brave-search",
                   "tools/btw",
                   "tools/diffs",
                   "tools/elevated",
@@ -902,7 +966,7 @@
                   "tools/lobster",
                   "tools/loop-detection",
                   "tools/pdf",
-                  "perplexity",
+                  "tools/perplexity",
                   "tools/reactions",
                   "tools/thinking",
                   "tools/web"
@@ -946,7 +1010,7 @@
                   "plugins/manifest",
                   "plugins/agent-tools",
                   "tools/capability-cookbook",
-                  "prose"
+                  "plugins/prose"
                 ]
               },
               {
@@ -1088,7 +1152,7 @@
                       "gateway/configuration-examples",
                       "gateway/configuration-guidelines",
                       "gateway/authentication",
-                      "auth-credential-semantics",
+                      "gateway/auth-credential-semantics",
                       "gateway/secrets",
                       "gateway/secrets-plan-contract",
                       "gateway/health",
@@ -1176,7 +1240,7 @@
                   "reference/prompt-caching",
                   "reference/api-usage-costs",
                   "reference/transcript-hygiene",
-                  "date-time"
+                  "reference/date-time"
                 ]
               },
               {
@@ -1216,8 +1280,8 @@
                   "help/debugging",
                   "help/testing",
                   "help/scripts",
-                  "debug/node-issue",
-                  "diagnostics/flags"
+                  "help/node-issue",
+                  "help/diagnostics-flags"
                 ]
               },
               {
@@ -1230,11 +1294,11 @@
               },
               {
                 "group": "Developer setup",
-                "pages": ["start/setup", "pi-dev"]
+                "pages": ["start/setup", "help/pi-dev"]
               },
               {
                 "group": "Contributing",
-                "pages": ["ci"]
+                "pages": ["help/ci"]
               },
               {
                 "group": "Docs meta",
@@ -1303,7 +1367,7 @@
               {
                 "group": "托管与部署",
                 "pages": [
-                  "zh-CN/vps",
+                  "zh-CN/install/vps",
                   "zh-CN/install/fly",
                   "zh-CN/install/hetzner",
                   "zh-CN/install/gcp",
@@ -1349,7 +1413,7 @@
               {
                 "group": "基础",
                 "pages": [
-                  "zh-CN/pi",
+                  "zh-CN/concepts/pi",
                   "zh-CN/concepts/architecture",
                   "zh-CN/concepts/agent",
                   "zh-CN/concepts/agent-loop",
@@ -1399,13 +1463,13 @@
                 "group": "内置工具",
                 "pages": [
                   "zh-CN/tools/apply-patch",
-                  "zh-CN/brave-search",
+                  "zh-CN/tools/brave-search",
                   "zh-CN/tools/elevated",
                   "zh-CN/tools/exec",
                   "zh-CN/tools/exec-approvals",
                   "zh-CN/tools/firecrawl",
                   "zh-CN/tools/lobster",
-                  "zh-CN/perplexity",
+                  "zh-CN/tools/perplexity",
                   "zh-CN/tools/reactions",
                   "zh-CN/tools/thinking",
                   "zh-CN/tools/web"
@@ -1444,7 +1508,7 @@
                   "zh-CN/plugins/architecture",
                   "zh-CN/plugins/manifest",
                   "zh-CN/plugins/agent-tools",
-                  "zh-CN/prose"
+                  "zh-CN/plugins/prose"
                 ]
               },
               {
@@ -1619,7 +1683,7 @@
               },
               {
                 "group": "运维专题",
-                "pages": ["zh-CN/network", "zh-CN/logging"]
+                "pages": ["zh-CN/gateway/network-overview", "zh-CN/gateway/logging-overview"]
               },
               {
                 "group": "安全",
@@ -1665,7 +1729,7 @@
                   "zh-CN/reference/token-use",
                   "zh-CN/reference/api-usage-costs",
                   "zh-CN/reference/transcript-hygiene",
-                  "zh-CN/date-time"
+                  "zh-CN/reference/date-time"
                 ]
               },
               {
@@ -1705,8 +1769,8 @@
                   "zh-CN/help/debugging",
                   "zh-CN/help/testing",
                   "zh-CN/help/scripts",
-                  "zh-CN/debug/node-issue",
-                  "zh-CN/diagnostics/flags"
+                  "zh-CN/help/node-issue",
+                  "zh-CN/help/diagnostics-flags"
                 ]
               },
               {
@@ -1719,7 +1783,7 @@
               },
               {
                 "group": "开发者设置",
-                "pages": ["zh-CN/start/setup", "zh-CN/pi-dev"]
+                "pages": ["zh-CN/start/setup", "zh-CN/help/pi-dev"]
               },
               {
                 "group": "文档元信息",
