@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -63,8 +64,11 @@ type runDeps struct {
 	providerConfigs map[string]ProviderConfig // optional; config-based provider credentials
 	logger          *slog.Logger              // required (defaults to slog.Default)
 
-	auroraStore   *aurora.Store // optional; enables Aurora compaction
-	vegaBackend   vega.Backend // optional; enables knowledge prefetch
+	auroraStore     *aurora.Store            // optional; enables Aurora compaction
+	vegaBackend     vega.Backend            // optional; enables knowledge prefetch
+	memoryStore     *memory.Store           // optional; structured memory (Honcho-style)
+	memoryEmbedder  *memory.Embedder        // optional; fact embedding
+	dreamingTrigger *memory.DreamingTrigger // optional; dreaming trigger
 	contextCfg    ContextConfig
 	compactionCfg CompactionConfig
 	defaultModel  string
@@ -217,8 +221,10 @@ func executeAgentRun(
 		defer prepWg.Done()
 		if params.Message != "" {
 			kDeps := KnowledgeDeps{
-				VegaBackend:  deps.vegaBackend,
-				WorkspaceDir: workspaceDir,
+				VegaBackend:    deps.vegaBackend,
+				WorkspaceDir:   workspaceDir,
+				MemoryStore:    deps.memoryStore,
+				MemoryEmbedder: deps.memoryEmbedder,
 			}
 			knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
 		}
@@ -461,14 +467,42 @@ func handleRunSuccess(
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
 	// Auto-memory: extract key learnings asynchronously via local sglang.
+	// When structured memory store is available, use Honcho-style importance extraction.
+	// Falls back to legacy MEMORY.md append otherwise.
 	if params.Message != "" && result.Text != "" {
 		go func() {
 			memCtx, memCancel := context.WithTimeout(context.Background(), autoMemoryTimeout)
 			defer memCancel()
-			notes := extractAutoMemory(memCtx, params.Message, result.Text, logger)
-			if notes != "" {
-				workspaceDir := resolveWorkspaceDirForPrompt()
-				appendToMemoryFile(workspaceDir, notes, logger)
+
+			if deps.memoryStore != nil {
+				// Structured extraction: extract facts with importance scoring.
+				sglangClient := getSglangClient()
+				facts, err := memory.ExtractFacts(memCtx, sglangClient, sglangModel, params.Message, result.Text, logger)
+				if err != nil {
+					logger.Debug("structured memory extraction failed, falling back", "error", err)
+				}
+				if len(facts) > 0 {
+					memory.InsertExtractedFacts(memCtx, deps.memoryStore, deps.memoryEmbedder, facts, logger)
+					// Debounced MEMORY.md export (export every 10 facts).
+					if count, _ := deps.memoryStore.ActiveFactCount(memCtx); count%10 == 0 {
+						workspaceDir := resolveWorkspaceDirForPrompt()
+						if err := deps.memoryStore.ExportToFile(memCtx, workspaceDir); err != nil {
+							logger.Debug("memory export failed", "error", err)
+						}
+					}
+				}
+
+				// Check dreaming trigger.
+				if deps.dreamingTrigger != nil {
+					deps.dreamingTrigger.IncrementTurnAndCheck(memCtx)
+				}
+			} else {
+				// Legacy: append bullet points to MEMORY.md.
+				notes := extractAutoMemory(memCtx, params.Message, result.Text, logger)
+				if notes != "" {
+					workspaceDir := resolveWorkspaceDirForPrompt()
+					appendToMemoryFile(workspaceDir, notes, logger)
+				}
 			}
 		}()
 	}
