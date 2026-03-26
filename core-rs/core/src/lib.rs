@@ -328,6 +328,15 @@ pub unsafe extern "C" fn deneb_vega_execute(
     })
 }
 
+/// Cached VegaConfig to avoid reading 7+ env vars on every FFI call.
+/// Initialized once on first use; env vars are stable at runtime.
+#[cfg(feature = "vega")]
+fn cached_vega_config() -> &'static deneb_vega::config::VegaConfig {
+    use std::sync::OnceLock;
+    static CONFIG: OnceLock<deneb_vega::config::VegaConfig> = OnceLock::new();
+    CONFIG.get_or_init(deneb_vega::config::VegaConfig::from_env)
+}
+
 /// Internal Vega execute dispatch.
 #[cfg(feature = "vega")]
 fn vega_execute_impl(cmd_json: &str) -> String {
@@ -346,9 +355,10 @@ fn vega_execute_impl(cmd_json: &str) -> String {
         .cloned()
         .unwrap_or(serde_json::Value::Null);
 
-    // Build config from JSON or env (model paths are read from env by from_env())
+    // Use cached base config; apply per-call overrides only when provided.
+    let base = cached_vega_config();
     let config = if let Some(cfg) = parsed.get("config") {
-        let mut vc = deneb_vega::config::VegaConfig::from_env();
+        let mut vc = base.clone();
         if let Some(p) = cfg.get("db_path").and_then(|v| v.as_str()) {
             vc.db_path = std::path::PathBuf::from(p);
         }
@@ -366,7 +376,7 @@ fn vega_execute_impl(cmd_json: &str) -> String {
         }
         vc
     } else {
-        deneb_vega::config::VegaConfig::from_env()
+        base.clone()
     };
 
     let result = deneb_vega::commands::execute(command, &args, &config);
@@ -436,8 +446,9 @@ fn vega_search_impl(query_json: &str) -> String {
         .and_then(|v| v.as_str())
         .unwrap_or(query_json);
 
+    let base = cached_vega_config();
     let config = if let Some(cfg) = parsed.get("config") {
-        let mut vc = deneb_vega::config::VegaConfig::from_env();
+        let mut vc = base.clone();
         if let Some(p) = cfg.get("db_path").and_then(|v| v.as_str()) {
             vc.db_path = std::path::PathBuf::from(p);
         }
@@ -446,7 +457,7 @@ fn vega_search_impl(query_json: &str) -> String {
         }
         vc
     } else {
-        deneb_vega::config::VegaConfig::from_env()
+        base.clone()
     };
 
     vega_search_with_config(query, &config)
@@ -454,8 +465,7 @@ fn vega_search_impl(query_json: &str) -> String {
 
 #[cfg(feature = "vega")]
 fn vega_search_direct(query: &str) -> String {
-    let config = deneb_vega::config::VegaConfig::from_env();
-    vega_search_with_config(query, &config)
+    vega_search_with_config(query, cached_vega_config())
 }
 
 #[cfg(feature = "vega")]
