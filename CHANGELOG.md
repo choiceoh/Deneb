@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.11.6](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.5...deneb-v3.11.6) (2026-03-26)
+
+
+### 🔧 Internal
+
+* split oversized commands_handlers.go and parser.rs into focused domain files ([d1aa584](https://github.com/choiceoh/Deneb/commit/d1aa584899654f2469d584a832c7698d5305b836))
+
 ## [3.11.5](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.4...deneb-v3.11.5) (2026-03-26)
 
 
