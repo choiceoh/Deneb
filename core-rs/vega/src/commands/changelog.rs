@@ -31,10 +31,7 @@ pub fn cmd_changelog(args: &Value, config: &VegaConfig) -> CommandResult {
     let changes = diff_snapshots(&prev, &current_snapshot);
 
     // Optionally save the new snapshot (default: true)
-    let save = args
-        .get("save")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
+    let save = args.get("save").and_then(|v| v.as_bool()).unwrap_or(true);
 
     if save {
         if let Err(e) = save_snapshot(&snapshot_path, &current_snapshot) {
@@ -42,12 +39,24 @@ pub fn cmd_changelog(args: &Value, config: &VegaConfig) -> CommandResult {
         }
     }
 
-    let has_changes = !changes.get("new_projects").map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
-        || !changes.get("removed_projects").map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
-        || !changes.get("status_changes").map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
-        || !changes.get("new_comms").map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
-        || !changes.get("modified_chunks").map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
-        || !changes.get("new_chunks").map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()));
+    let has_changes = !changes
+        .get("new_projects")
+        .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
+        || !changes
+            .get("removed_projects")
+            .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
+        || !changes
+            .get("status_changes")
+            .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
+        || !changes
+            .get("new_comms")
+            .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
+        || !changes
+            .get("modified_chunks")
+            .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()))
+        || !changes
+            .get("new_chunks")
+            .map_or(true, |v| v.as_array().map_or(true, |a| a.is_empty()));
 
     CommandResult::ok(
         "changelog",
@@ -149,9 +158,7 @@ fn count_comms(conn: &Connection, project_id: i64) -> Result<i64, String> {
 
 fn get_chunk_hashes(conn: &Connection, project_id: i64) -> Result<Value, String> {
     let mut stmt = conn
-        .prepare(
-            "SELECT heading, content_hash FROM chunks WHERE project_id = ?1",
-        )
+        .prepare("SELECT heading, content_hash FROM chunks WHERE project_id = ?1")
         .map_err(|e| format!("청크 해시 조회 실패: {e}"))?;
 
     let mut hashes = serde_json::Map::new();
@@ -176,8 +183,7 @@ fn save_snapshot(path: &PathBuf, snapshot: &HashMap<i64, Value>) -> Result<(), S
     for (id, val) in snapshot {
         obj.insert(id.to_string(), val.clone());
     }
-    let data =
-        serde_json::to_string_pretty(&Value::Object(obj)).map_err(|e| e.to_string())?;
+    let data = serde_json::to_string_pretty(&Value::Object(obj)).map_err(|e| e.to_string())?;
     fs::write(path, data).map_err(|e| e.to_string())
 }
 

@@ -39,7 +39,7 @@ USAGE
 require_cmds() {
   local missing=()
   local cmd
-  for cmd in git gh jq rg pnpm node; do
+  for cmd in git gh jq rg; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
       missing+=("$cmd")
     fi
@@ -166,9 +166,8 @@ run_quiet_logged() {
 }
 
 bootstrap_deps_if_needed() {
-  if [ ! -x node_modules/.bin/vitest ]; then
-    run_quiet_logged "pnpm install --frozen-lockfile" ".local/bootstrap-install.log" pnpm install --frozen-lockfile
-  fi
+  # No-op: TypeScript dependencies removed; Go/Rust build via Makefile.
+  true
 }
 
 wait_for_pr_head_sha() {
@@ -478,10 +477,9 @@ run_prepare_push_retry_gates() {
   local docs_only="${1:-false}"
 
   bootstrap_deps_if_needed
-  run_quiet_logged "pnpm build (lease-retry)" ".local/lease-retry-build.log" pnpm build
-  run_quiet_logged "pnpm check (lease-retry)" ".local/lease-retry-check.log" pnpm check
+  run_quiet_logged "make check (lease-retry)" ".local/lease-retry-check.log" make check
   if [ "$docs_only" != "true" ]; then
-    run_quiet_logged "pnpm test (lease-retry)" ".local/lease-retry-test.log" pnpm test
+    run_quiet_logged "make test (lease-retry)" ".local/lease-retry-test.log" make test
   fi
 }
 
@@ -1043,41 +1041,9 @@ review_tests() {
 
   bootstrap_deps_if_needed
 
-  local list_log=".local/review-tests-list.log"
-  run_quiet_logged "pnpm vitest list" "$list_log" pnpm vitest list "$@"
-
-  local missing_list=()
-  for target in "$@"; do
-    local base
-    base=$(basename "$target")
-    if ! rg -F -q "$target" "$list_log" && ! rg -F -q "$base" "$list_log"; then
-      missing_list+=("$target")
-    fi
-  done
-
-  if [ "${#missing_list[@]}" -gt 0 ]; then
-    echo "These requested targets were not selected by vitest list:"
-    printf ' - %s\n' "${missing_list[@]}"
-    exit 1
-  fi
-
+  # Run Go and Rust tests for the specified targets.
   local run_log=".local/review-tests-run.log"
-  run_quiet_logged "pnpm vitest run" "$run_log" pnpm vitest run "$@"
-
-  local missing_run=()
-  for target in "$@"; do
-    local base
-    base=$(basename "$target")
-    if ! rg -F -q "$target" "$run_log" && ! rg -F -q "$base" "$run_log"; then
-      missing_run+=("$target")
-    fi
-  done
-
-  if [ "${#missing_run[@]}" -gt 0 ]; then
-    echo "These requested targets were not observed in vitest run output:"
-    printf ' - %s\n' "${missing_run[@]}"
-    exit 1
-  fi
+  run_quiet_logged "make test" "$run_log" make test
 
   {
     echo "REVIEW_TESTS_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1425,13 +1391,12 @@ prepare_gates() {
   validate_changelog_merge_hygiene
   validate_changelog_entry_for_pr "$pr" "$contrib"
 
-  run_quiet_logged "pnpm build" ".local/gates-build.log" pnpm build
-  run_quiet_logged "pnpm check" ".local/gates-check.log" pnpm check
+  run_quiet_logged "make check" ".local/gates-check.log" make check
 
   if [ "$docs_only" = "true" ]; then
-    echo "Docs-only change detected with high confidence; skipping pnpm test."
+    echo "Docs-only change detected with high confidence; skipping make test."
   else
-    run_quiet_logged "pnpm test" ".local/gates-test.log" pnpm test
+    run_quiet_logged "make test" ".local/gates-test.log" make test
   fi
 
   cat > .local/gates.env <<EOF_ENV
@@ -1582,7 +1547,7 @@ prepare_run() {
 is_mainline_drift_critical_path_for_merge() {
   local path="$1"
   case "$path" in
-    package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.npmrc|.oxlintrc.json|.oxfmtrc.json|tsconfig.json|tsconfig.*.json|vitest.config.ts|vitest.*.config.ts|scripts/*|.github/workflows/*)
+    Cargo.toml|Cargo.lock|Makefile|go.mod|go.sum|proto/*|scripts/*|.github/workflows/*)
       return 0
       ;;
   esac

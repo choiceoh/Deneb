@@ -3,21 +3,9 @@
   "configurations": [
     {
       "name": "Gateway Dev Server",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["gateway:dev"],
+      "runtimeExecutable": "make",
+      "runtimeArgs": ["go-dev"],
       "port": 18789
-    },
-    {
-      "name": "Control UI Dev (Vite)",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["ui:dev"],
-      "port": 5173
-    },
-    {
-      "name": "Docs Dev (Mintlify)",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["docs:dev"],
-      "port": 3000
     }
   ]
 }

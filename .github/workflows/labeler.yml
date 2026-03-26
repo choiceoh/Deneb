@@ -85,7 +85,7 @@ jobs:
               per_page: 100,
             });
 
-            const excludedLockfiles = new Set(["pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lockb"]);
+            const excludedLockfiles = new Set(["Cargo.lock", "go.sum"]);
             const totalChangedLines = files.reduce((total, file) => {
               const path = file.filename ?? "";
               if (path === "docs.acp.md" || path.startsWith("docs/") || excludedLockfiles.has(path)) {
@@ -504,7 +504,7 @@ jobs:
                 per_page: 100,
               });
 
-              const excludedLockfiles = new Set(["pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lockb"]);
+              const excludedLockfiles = new Set(["Cargo.lock", "go.sum"]);
               const totalChangedLines = files.reduce((total, file) => {
                 const path = file.filename ?? "";
                 if (path === "docs.acp.md" || path.startsWith("docs/") || excludedLockfiles.has(path)) {

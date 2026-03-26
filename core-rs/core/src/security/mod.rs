@@ -226,8 +226,7 @@ pub fn is_safe_url(url: &str) -> bool {
     // URLs like http://example.com start with 'h', not '/' or '\', so they
     // won't match here. Only bare //host/share without a scheme is caught.
     if bytes.len() >= 2
-        && ((bytes[0] == b'\\' && bytes[1] == b'\\')
-            || (bytes[0] == b'/' && bytes[1] == b'/'))
+        && ((bytes[0] == b'\\' && bytes[1] == b'\\') || (bytes[0] == b'/' && bytes[1] == b'/'))
     {
         return false;
     }
@@ -635,7 +634,9 @@ mod tests {
         assert_eq!(strip_invisible_unicode("a\u{E0001}b"), "ab");
         // Mixed invisible chars
         assert_eq!(
-            strip_invisible_unicode("\u{200B}\u{200C}\u{200D}\u{2060}\u{FEFF}text\u{E0000}\u{E007F}"),
+            strip_invisible_unicode(
+                "\u{200B}\u{200C}\u{200D}\u{2060}\u{FEFF}text\u{E0000}\u{E007F}"
+            ),
             "text"
         );
         // Preserves normal Unicode (emoji, CJK, accents)

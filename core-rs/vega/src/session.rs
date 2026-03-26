@@ -96,11 +96,7 @@ impl VegaSession {
 
     /// Resolve Korean pronouns to project names using session context.
     /// Returns the resolved query if pronouns were found and resolved.
-    pub fn resolve_pronouns(
-        &self,
-        query: &str,
-        conn: &rusqlite::Connection,
-    ) -> Option<String> {
+    pub fn resolve_pronouns(&self, query: &str, conn: &rusqlite::Connection) -> Option<String> {
         if self.recent_ids.is_empty() {
             return None;
         }

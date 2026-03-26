@@ -19,7 +19,7 @@ Use this skill for Parallels guest workflows and smoke interpretation. Do not lo
 
 ## macOS flow
 
-- Preferred entrypoint: `pnpm test:parallels:macos`
+- Preferred entrypoint: `make test:parallels:macos`
 - Target the snapshot closest to `macOS 26.3.1 fresh`.
 - `prlctl exec` is fine for deterministic repo commands, but use the guest Terminal or `prlctl enter` when installer parity or shell-sensitive behavior matters.
 - On the fresh Tahoe snapshot, `brew` exists but `node` may be missing from PATH in noninteractive exec. Use `/opt/homebrew/bin/node` when needed.
@@ -28,7 +28,7 @@ Use this skill for Parallels guest workflows and smoke interpretation. Do not lo
 
 ## Windows flow
 
-- Preferred entrypoint: `pnpm test:parallels:windows`
+- Preferred entrypoint: `make test:parallels:windows`
 - Use the snapshot closest to `pre-deneb-native-e2e-2026-03-12`.
 - Always use `prlctl exec --current-user`; plain `prlctl exec` lands in `NT AUTHORITY\\SYSTEM`.
 - Prefer explicit `npm.cmd` and `deneb.cmd`.
@@ -37,7 +37,7 @@ Use this skill for Parallels guest workflows and smoke interpretation. Do not lo
 
 ## Linux flow
 
-- Preferred entrypoint: `pnpm test:parallels:linux`
+- Preferred entrypoint: `make test:parallels:linux`
 - Use the snapshot closest to fresh `Ubuntu 24.04.3 ARM64`.
 - Use plain `prlctl exec`; `--current-user` is not the right transport on this snapshot.
 - Fresh snapshots may be missing `curl`, and `apt-get update` can fail on clock skew. Bootstrap with `apt-get -o Acquire::Check-Date=false update` and install `curl ca-certificates`.

@@ -105,7 +105,10 @@ pub fn update_meta_field(
     };
 
     if let Some(cap) = re.captures(&content) {
-        let old_value = cap.get(1).map(|m| m.as_str().trim().to_string()).unwrap_or_default();
+        let old_value = cap
+            .get(1)
+            .map(|m| m.as_str().trim().to_string())
+            .unwrap_or_default();
         let new_content = re
             .replace(&content, |caps: &regex::Captures| {
                 caps[0].replace(caps.get(1).unwrap().as_str(), new_value)
@@ -160,11 +163,7 @@ pub fn add_action_item(md_path: &Path, text: &str) -> (bool, String) {
 
 /// Add a history entry to a project's .md file under "이력" section.
 pub fn add_history_entry(md_path: &Path, text: &str) -> (bool, String) {
-    let dated_text = format!(
-        "[{}] {}",
-        chrono::Local::now().format("%Y-%m-%d"),
-        text
-    );
+    let dated_text = format!("[{}] {}", chrono::Local::now().format("%Y-%m-%d"), text);
     add_to_section(md_path, "이력", &dated_text)
 }
 
@@ -213,12 +212,7 @@ fn add_to_section(md_path: &Path, section_name: &str, text: &str) -> (bool, Stri
         )
     } else {
         // Section doesn't exist — create it
-        format!(
-            "{}\n\n## {}\n{}\n",
-            content.trim_end(),
-            section_name,
-            entry
-        )
+        format!("{}\n\n## {}\n{}\n", content.trim_end(), section_name, entry)
     };
 
     match fs::write(md_path, new_content) {

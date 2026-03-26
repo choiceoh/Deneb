@@ -31,9 +31,7 @@ pub fn cmd_add_action(args: &Value, config: &VegaConfig) -> CommandResult {
         .get("date")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            chrono::Local::now().format("%Y-%m-%d").to_string()
-        });
+        .unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d").to_string());
 
     // Resolve project
     let project_id = find_project_id(config, project_query);
@@ -60,18 +58,13 @@ pub fn cmd_add_action(args: &Value, config: &VegaConfig) -> CommandResult {
     if !md_path.exists() {
         return CommandResult::err(
             "add-action",
-            &format!(
-                "프로젝트 파일을 찾을 수 없습니다: {}",
-                md_path.display()
-            ),
+            &format!("프로젝트 파일을 찾을 수 없습니다: {}", md_path.display()),
         );
     }
 
     let content = match fs::read_to_string(&md_path) {
         Ok(c) => c,
-        Err(e) => {
-            return CommandResult::err("add-action", &format!("파일 읽기 실패: {e}"))
-        }
+        Err(e) => return CommandResult::err("add-action", &format!("파일 읽기 실패: {e}")),
     };
 
     // Determine target section name
@@ -130,8 +123,7 @@ fn insert_into_md_section(content: &str, section_name: &str, line: &str) -> Stri
         let trimmed = l.trim();
         if trimmed == section_header || trimmed.starts_with(&format!("{section_header} ")) {
             section_start = Some(i);
-        } else if section_start.is_some() && next_section.is_none() && trimmed.starts_with("## ")
-        {
+        } else if section_start.is_some() && next_section.is_none() && trimmed.starts_with("## ") {
             next_section = Some(i);
         }
     }

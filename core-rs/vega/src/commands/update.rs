@@ -1,6 +1,6 @@
+use regex::Regex;
 use rusqlite::params;
 use serde_json::{json, Value};
-use regex::Regex;
 use std::fs;
 
 use crate::config::VegaConfig;
@@ -96,9 +96,7 @@ pub fn cmd_update(args: &Value, config: &VegaConfig) -> CommandResult {
     if md_path.exists() {
         let content = match fs::read_to_string(&md_path) {
             Ok(c) => c,
-            Err(e) => {
-                return CommandResult::err("update", &format!("파일 읽기 실패: {e}"))
-            }
+            Err(e) => return CommandResult::err("update", &format!("파일 읽기 실패: {e}")),
         };
 
         let mut new_content = content.clone();
@@ -150,9 +148,7 @@ pub fn cmd_update(args: &Value, config: &VegaConfig) -> CommandResult {
 /// Update a key-value field in markdown content (e.g., "- **상태:** 진행중").
 fn update_md_field(content: &str, field_name: &str, new_value: &str) -> String {
     // Match patterns like "- **필드명:** 값" or "**필드명:** 값"
-    let pattern = format!(
-        r"(?m)^(\s*-?\s*\*\*{field_name}:\*\*\s*)(.*)$"
-    );
+    let pattern = format!(r"(?m)^(\s*-?\s*\*\*{field_name}:\*\*\s*)(.*)$");
     if let Ok(re) = Regex::new(&pattern) {
         if re.is_match(content) {
             return re
@@ -186,8 +182,7 @@ fn append_to_section(content: &str, section_name: &str, line: &str) -> String {
         let trimmed = l.trim();
         if trimmed == section_header {
             section_start = Some(i);
-        } else if section_start.is_some() && next_section.is_none() && trimmed.starts_with("## ")
-        {
+        } else if section_start.is_some() && next_section.is_none() && trimmed.starts_with("## ") {
             next_section = Some(i);
         }
     }

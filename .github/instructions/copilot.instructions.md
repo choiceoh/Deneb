@@ -4,61 +4,45 @@
 
 ## Tech Stack
 
-- **Runtime**: Node 22+ (Bun also supported for dev/scripts)
-- **Language**: TypeScript (ESM, strict mode)
-- **Package Manager**: pnpm (keep `pnpm-lock.yaml` in sync)
-- **Lint/Format**: Oxlint, Oxfmt (`pnpm check`)
-- **Tests**: Vitest with V8 coverage
-- **CLI Framework**: Commander + clack/prompts
-- **Build**: tsdown (outputs to `dist/`)
+- **Languages**: Go (gateway), Rust (core library, CLI)
+- **Build**: Makefile orchestrates Rust (`cargo`) and Go (`go build`)
+- **Tests**: `cargo test` (Rust), `go test` (Go)
+- **Protobuf**: buf + prost (Rust) + protoc-gen-go (Go)
 
 ## Anti-Redundancy Rules
 
 - Avoid files that just re-export from another file. Import directly from the original source.
 - If a function already exists, import it - do NOT create a duplicate in another file.
-- Before creating any formatter, utility, or helper, search for existing implementations first.
+- Before creating any utility or helper, search for existing implementations first.
 
 ## Source of Truth Locations
 
-### Formatting Utilities (`src/infra/`)
+### Go Gateway (`gateway-go/`)
 
-- **Time formatting**: `src\infra\format-time`
+- RPC methods: `internal/rpc/`
+- Session management: `internal/session/`
+- Channel plugins: `internal/channel/`
+- HTTP server: `internal/server/`
+- Chat/LLM: `internal/chat/`
 
-**NEVER create local `formatAge`, `formatDuration`, `formatElapsedTime` functions - import from centralized modules.**
+### Rust Core (`core-rs/`)
 
-### Terminal Output (`src/terminal/`)
-
-- Tables: `src/terminal/table.ts` (`renderTable`)
-- Themes/colors: `src/terminal/theme.ts` (`theme.success`, `theme.muted`, etc.)
-- Progress: `src/cli/progress.ts` (spinners, progress bars)
-
-### CLI Patterns
-
-- CLI option wiring: `src/cli/`
-- Commands: `src/commands/`
-- Dependency injection via `createDefaultDeps`
-
-## Import Conventions
-
-- Use `.js` extension for cross-package imports (ESM)
-- Direct imports only - no re-export wrapper files
-- Types: `import type { X }` for type-only imports
+- Protocol validation: `core/src/protocol/`
+- Security: `core/src/security/`
+- Media detection: `core/src/media/`
+- FFI entry: `core/src/lib.rs`
 
 ## Code Quality
 
-- TypeScript (ESM), strict typing, avoid `any`
-- Keep files under ~700 LOC - extract helpers when larger
-- Colocated tests: `*.test.ts` next to source files
-- Run `pnpm check` before commits (lint + format)
-- Run `pnpm tsgo` for type checking
+- Colocated tests: `*_test.go` (Go), `#[cfg(test)]` (Rust)
+- Run `make check` before commits
+- Run `make test` for full test suite
 
-## Stack & Commands
+## Commands
 
-- **Package manager**: pnpm (`pnpm install`)
-- **Dev**: `pnpm deneb ...` or `pnpm dev`
-- **Type-check**: `pnpm tsgo`
-- **Lint/format**: `pnpm check`
-- **Tests**: `pnpm test`
-- **Build**: `pnpm build`
-
-If you are coding together with a human, do NOT use scripts/committer, but git directly and run the above commands manually to ensure quality.
+- **Build**: `make all` (Rust + Go)
+- **Test**: `make test` (Rust + Go tests)
+- **Check**: `make check` (proto-check + rust-test + go-test)
+- **Rust only**: `make rust` / `make rust-test`
+- **Go only**: `make go` / `make go-test`
+- **Proto**: `make proto` / `make proto-check`

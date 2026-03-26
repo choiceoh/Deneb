@@ -117,25 +117,18 @@ Other channel configs (Discord, Signal, Slack, WhatsApp, iMessage) exist at the 
 ```bash
 git clone https://github.com/choiceoh/Deneb.git
 cd Deneb
-pnpm install
 make all        # Build Rust + Go
-pnpm build      # Build TypeScript
 ```
 
 ### Configure
 
-```bash
-# Interactive setup wizard
-pnpm deneb onboard
-```
-
-Or edit `~/.deneb/deneb.json` directly.
+Edit `~/.deneb/deneb.json` directly.
 
 ### Run
 
 ```bash
 # Start the gateway
-pnpm deneb gateway run
+scripts/start-go-gateway.sh --port 18789 --bind loopback
 ```
 
 ## Architecture
@@ -184,18 +177,15 @@ Deneb/
 ## Development
 
 ```bash
-pnpm install          # Install dependencies
 make all              # Build Rust + Go
-pnpm build            # Build TypeScript
+make test             # Run Rust + Go tests
+make check            # Full check (proto + Rust + Go)
 
-pnpm dev              # Development mode
-pnpm test             # Run tests (vitest)
-pnpm check            # Full pre-commit check (format + lint + typecheck + boundary checks)
-pnpm format:fix       # Auto-format (oxfmt)
-
+make rust             # Build Rust only
 make rust-test        # Run Rust tests
+make go               # Build Go only
 make go-test          # Run Go tests
-make check            # Full multi-language check (proto + Rust + Go + TS)
+make proto            # Generate protobuf code
 ```
 
 ## License

@@ -1,8 +1,8 @@
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
+use super::{open_db, CommandResult};
 use crate::config::VegaConfig;
-use super::{CommandResult, open_db};
 
 /// Person query: find all projects and communications for a given person.
 /// Args: { "name": "홍길동" }
@@ -137,7 +137,15 @@ fn find_person_comm_logs(conn: &Connection, name: &str) -> Result<Vec<Value>, St
             let counterpart: String = row.get(4)?;
             let method: String = row.get(5)?;
             let summary: String = row.get(6)?;
-            Ok((id, project_id, proj_name, comm_date, counterpart, method, summary))
+            Ok((
+                id,
+                project_id,
+                proj_name,
+                comm_date,
+                counterpart,
+                method,
+                summary,
+            ))
         })
         .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
 

@@ -1,20 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pnpm build:*)",
-      "Read(//c/Users/user/.local/share/**)",
-      "Read(//usr/local/bin/**)",
-      "Bash(command -v pnpm)",
-      "Bash(export PATH=$HOME/.local/share/pnpm:$HOME/.corepack/bin:$PATH)",
-      "Bash(corepack enable:*)",
-      "Bash(npx pnpm:*)",
-      "Bash(wsl -e bash -c \"cd /tmp/deneb-src && pnpm build 2>&1 | tail -30\")",
-      "Bash(wsl -e bash -lc \"cd /tmp/deneb-src && which pnpm && pnpm build 2>&1 | tail -40\")",
-      "Bash(wsl -e bash -lc \"which node; which pnpm; echo PATH=$PATH\")",
-      "Bash(wsl -u choiceoh -e bash -lc \"which pnpm; which node; cd /tmp/deneb-src && pnpm build 2>&1 | tail -40\")",
-      "Bash(wsl -u choiceoh -e bash -lc \"cat ~/.bashrc | grep -i ''pnpm\\\\|nvm\\\\|fnm\\\\|node\\\\|PATH'' | head -20; ls ~/. -la | grep -i nvm; ls /home/choiceoh/.local/share/pnpm 2>/dev/null; ls /home/choiceoh/.nvm 2>/dev/null\")",
-      "Bash(wsl -u choiceoh -e bash -lc \"find /home/choiceoh -maxdepth 3 -name ''pnpm'' -o -name ''node'' 2>/dev/null | head -10; ls /home/choiceoh/.local/share/pnpm/pnpm 2>/dev/null; corepack enable 2>/dev/null && which pnpm 2>/dev/null\")",
-      "Bash(wsl -e wc -l /tmp/deneb-src/src/browser/routes/agent.act.ts)"
+      "Bash(make *)",
+      "Bash(cargo *)",
+      "Bash(go *)"
     ]
   }
 }

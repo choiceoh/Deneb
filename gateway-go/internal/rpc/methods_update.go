@@ -82,18 +82,14 @@ func updateRun(deps UpdateDeps) HandlerFunc {
 		// Step 3: Get new git SHA (after).
 		afterSHA := runGitRev(repoDir)
 
-		// Step 4: Detect package manager and run install.
-		pm := detectPackageManager(repoDir)
-		if pm != "" {
-			installCmd := pm + " install"
-			installStep := runStep(updateCtx, repoDir, installCmd, pm, "install")
-			steps = append(steps, installStep)
-			if !installStep.OK {
-				return updateResult(req.ID, false, "error", pm, beforeSHA, afterSHA, steps, startTime, deps.DenebDir, p.RestartDelayMs)
-			}
+		// Step 4: Rebuild via make.
+		buildStep := runStep(updateCtx, repoDir, "make all", "make", "all")
+		steps = append(steps, buildStep)
+		if !buildStep.OK {
+			return updateResult(req.ID, false, "error", "make", beforeSHA, afterSHA, steps, startTime, deps.DenebDir, p.RestartDelayMs)
 		}
 
-		return updateResult(req.ID, true, "ok", pm, beforeSHA, afterSHA, steps, startTime, deps.DenebDir, p.RestartDelayMs)
+		return updateResult(req.ID, true, "ok", "make", beforeSHA, afterSHA, steps, startTime, deps.DenebDir, p.RestartDelayMs)
 	}
 }
 
@@ -170,19 +166,6 @@ func runGitRev(dir string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
-}
-
-func detectPackageManager(dir string) string {
-	if _, err := os.Stat(filepath.Join(dir, "pnpm-lock.yaml")); err == nil {
-		return "pnpm"
-	}
-	if _, err := os.Stat(filepath.Join(dir, "bun.lockb")); err == nil {
-		return "bun"
-	}
-	if _, err := os.Stat(filepath.Join(dir, "package-lock.json")); err == nil {
-		return "npm"
-	}
-	return ""
 }
 
 func truncateLog(s string, maxLen int) string {

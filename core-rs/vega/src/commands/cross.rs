@@ -147,7 +147,9 @@ fn find_vendor_overlaps(conn: &Connection) -> Result<Vec<(String, Vec<String>)>,
           AND p.status NOT LIKE '%종료%'
         ORDER BY p.title
     ";
-    let mut stmt = conn.prepare(sql).map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
     let rows = stmt
         .query_map([], |row| {
             let body: String = row.get(0)?;
@@ -194,7 +196,9 @@ fn find_material_overlaps(conn: &Connection) -> Result<Vec<(String, Vec<String>)
           AND p.status NOT LIKE '%종료%'
         ORDER BY p.title
     ";
-    let mut stmt = conn.prepare(sql).map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
     let rows = stmt
         .query_map([], |row| {
             let body: String = row.get(0)?;
@@ -240,7 +244,9 @@ fn find_personnel_overload(conn: &Connection) -> Result<Vec<(String, Vec<String>
           AND p.status NOT LIKE '%종료%'
         ORDER BY p.title
     ";
-    let mut stmt = conn.prepare(sql).map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
     let rows = stmt
         .query_map([], |row| {
             let body: String = row.get(0)?;
@@ -299,7 +305,9 @@ fn find_schedule_conflicts(conn: &Connection) -> Result<Vec<Value>, String> {
           )
         LIMIT 50
     ";
-    let mut stmt = conn.prepare(sql).map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
     let rows = stmt
         .query_map([], |row| {
             let proj1: String = row.get(0)?;
@@ -329,7 +337,9 @@ fn find_tech_synergy(conn: &Connection) -> Result<Vec<(String, Vec<String>)>, St
           AND p.status NOT LIKE '%종료%'
         ORDER BY t.name, p.title
     ";
-    let mut stmt = conn.prepare(sql).map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
     let rows = stmt
         .query_map([], |row| {
             let tag: String = row.get(0)?;

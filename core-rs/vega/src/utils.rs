@@ -46,11 +46,7 @@ pub fn sequence_similarity(a: &str, b: &str) -> f64 {
         } else {
             (&b_chars, &a_chars)
         };
-        return if multi.contains(&single[0]) {
-            0.3
-        } else {
-            0.0
-        };
+        return if multi.contains(&single[0]) { 0.3 } else { 0.0 };
     }
 
     // Build bigram sets
@@ -262,12 +258,13 @@ pub fn find_project_id_in_text(
         return None;
     }
 
-    let mut stmt = conn
-        .prepare("SELECT id, name FROM projects")
-        .ok()?;
+    let mut stmt = conn.prepare("SELECT id, name FROM projects").ok()?;
     let rows: Vec<(i64, String)> = stmt
         .query_map([], |r| {
-            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1).unwrap_or_default()))
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1).unwrap_or_default(),
+            ))
         })
         .ok()?
         .filter_map(|r| r.ok())
@@ -300,11 +297,7 @@ pub struct Suggestion {
 
 /// Build search suggestions (project/client/person candidates)
 /// when search returns 0 results. Uses fuzzy matching against DB.
-pub fn build_search_suggestions(
-    conn: &Connection,
-    query: &str,
-    limit: usize,
-) -> Vec<Suggestion> {
+pub fn build_search_suggestions(conn: &Connection, query: &str, limit: usize) -> Vec<Suggestion> {
     if query.is_empty() {
         return Vec::new();
     }
@@ -314,9 +307,9 @@ pub fn build_search_suggestions(
     let mut seen_clients = std::collections::HashSet::new();
     let mut seen_persons = std::collections::HashSet::new();
 
-    let mut stmt = match conn.prepare(
-        "SELECT id, name, client, person_internal, person_external FROM projects",
-    ) {
+    let mut stmt = match conn
+        .prepare("SELECT id, name, client, person_internal, person_external FROM projects")
+    {
         Ok(s) => s,
         Err(_) => return suggestions,
     };
@@ -388,7 +381,11 @@ pub fn build_search_suggestions(
         }
     }
 
-    suggestions.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    suggestions.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     suggestions.truncate(limit);
     suggestions
 }
