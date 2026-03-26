@@ -90,12 +90,12 @@ type MemoryMatch struct {
 func searchMemoryFiles(workspaceDir string, query string, limit int) []MemoryMatch {
 	memoryFiles := collectMemoryFiles(workspaceDir)
 	if len(memoryFiles) == 0 {
-		return nil
+		return nil // nil signals "no memory files exist"
 	}
 
 	keywords := strings.Fields(strings.ToLower(query))
 	if len(keywords) == 0 {
-		return nil
+		return []MemoryMatch{} // empty slice signals "files exist, no matches"
 	}
 
 	var matches []MemoryMatch

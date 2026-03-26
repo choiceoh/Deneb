@@ -185,13 +185,16 @@ func executeAgentRun(
 
 	// 2.5. Knowledge prefetch: search Vega + Memory for relevant context,
 	// append results to system prompt so the LLM sees them as background knowledge.
+	// Stored in knowledgeAddition so it survives Anthropic ContentBlock rebuilds below.
+	var knowledgeAddition string
 	if params.Message != "" {
 		kDeps := KnowledgeDeps{
 			VegaBackend:  deps.vegaBackend,
 			WorkspaceDir: resolveWorkspaceDirForPrompt(),
 		}
-		if addition := PrefetchKnowledge(ctx, params.Message, kDeps); addition != "" {
-			systemPrompt = llm.AppendSystemText(systemPrompt, addition)
+		knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
+		if knowledgeAddition != "" {
+			systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
 		}
 	}
 
@@ -252,6 +255,10 @@ func executeAgentRun(
 	if apiType == "anthropic" {
 		if systemPromptParams != nil {
 			systemPrompt = llm.SystemBlocks(BuildSystemPromptBlocks(*systemPromptParams))
+			// Re-apply knowledge prefetch (the rebuild above replaces the prompt).
+			if knowledgeAddition != "" {
+				systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
+			}
 		}
 		if len(tools) > 0 {
 			tools[len(tools)-1].CacheControl = &llm.CacheControl{Type: "ephemeral"}
