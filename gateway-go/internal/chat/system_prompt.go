@@ -146,7 +146,8 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Long commands: exec with background=true → process poll/log to check output\n")
 	sb.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
 	sb.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section). Project knowledge is auto-prefetched\n")
-	sb.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools.\n\n")
+	sb.WriteString("Gmail: gmail {action:'inbox'} (요약) → gmail {action:'search', query:'...'} (검색) → gmail {action:'read', message_id:'...'} (읽기). 연락처 별명은 KV에서 자동 해석 (gmail.contacts.<alias>)\n")
+	sb.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools. Prefer gmail over exec+gog.\n\n")
 
 	// Tool Chaining.
 	sb.WriteString("## Tool Chaining ($ref)\n")
@@ -328,7 +329,8 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	static.WriteString("Long commands: exec with background=true → process poll/log to check output\n")
 	static.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
 	static.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section). Project knowledge is auto-prefetched\n")
-	static.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools.\n\n")
+	static.WriteString("Gmail: gmail {action:'inbox'} (요약) → gmail {action:'search', query:'...'} (검색) → gmail {action:'read', message_id:'...'} (읽기). 연락처 별명은 KV에서 자동 해석 (gmail.contacts.<alias>)\n")
+	static.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools. Prefer gmail over exec+gog.\n\n")
 
 	static.WriteString("**pilot vs direct tools vs subagent:**\n")
 	static.WriteString("- Single file/command + analysis → pilot (1 turn instead of 2+)\n")
