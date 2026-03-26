@@ -31,7 +31,8 @@ type RuntimeInfo struct {
 	Channel      string
 }
 
-// coreToolSummaries mirrors src/agents/system-prompt/system-prompt.ts:227-254.
+// coreToolSummaries maps tool names to one-line descriptions for the system prompt.
+// Shown to the LLM so it knows which tools are available and what they do.
 var coreToolSummaries = map[string]string{
 	"read":               "Read file contents",
 	"write":              "Create or overwrite files",
@@ -60,6 +61,7 @@ var coreToolSummaries = map[string]string{
 }
 
 // toolOrder defines the display order for tools in the system prompt.
+// Grouped logically: filesystem → exec → web → memory → system → sessions.
 var toolOrder = []string{
 	"read", "write", "edit", "grep", "find", "ls",
 	"exec", "process",

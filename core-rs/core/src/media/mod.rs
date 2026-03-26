@@ -40,8 +40,8 @@ fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
     haystack.windows(needle.len()).any(|w| w == needle)
 }
 
-/// Detect ISOBMFF-based formats from ftyp box at offset 4.
-/// Handles MP4, M4A, AVIF, HEIC/HEIF.
+/// Detect ISO Base Media File Format (ISOBMFF) variants from the `ftyp` box at offset 4.
+/// The 4-byte brand at offset 8 distinguishes MP4, M4A, AVIF, HEIC/HEIF.
 #[inline]
 fn detect_ftyp(data: &[u8]) -> Option<&'static str> {
     if data.len() >= 8 && &data[4..8] == b"ftyp" {
@@ -66,7 +66,8 @@ fn detect_ftyp(data: &[u8]) -> Option<&'static str> {
 }
 
 /// Detect MIME type from the first bytes of a file (magic byte sniffing).
-/// Uses first-byte dispatch to minimize comparisons.
+/// Uses first-byte dispatch to minimize comparisons across 21+ formats.
+/// Falls back to "application/octet-stream" for unrecognized data.
 pub fn detect_mime(data: &[u8]) -> &'static str {
     if data.len() < 4 {
         return "application/octet-stream";
@@ -83,7 +84,8 @@ pub fn detect_mime(data: &[u8]) -> &'static str {
             if data[1] == 0xD8 && data[2] == 0xFF {
                 return "image/jpeg";
             }
-            // MP3 sync word: 0xFF 0xE0..0xFF
+            // MP3 frame sync: 12-bit sync word 0xFFF or 0xFFE. The top 3 bits
+            // of byte[1] must be set (0xE0 mask), covering MPEG1/2/2.5 layers.
             if (data[1] & 0xE0) == 0xE0 {
                 return "audio/mpeg";
             }
@@ -168,6 +170,8 @@ pub fn detect_mime(data: &[u8]) -> &'static str {
                 return "application/gzip";
             }
         }
+        // Best-effort JSON heuristic: any data starting with { or [ is assumed JSON.
+        // Not true validation — plain text starting with a bracket would match.
         b'{' | b'[' => return "application/json",
         b'<' => {
             if data.starts_with(b"<?xml") || data.starts_with(b"<svg") {

@@ -43,7 +43,8 @@ type Status struct {
 }
 
 // Plugin is the interface that channel plugins must implement.
-// This mirrors the ChannelPlugin contract from TypeScript.
+// Each plugin manages the lifecycle of a single messaging channel (e.g., Telegram).
+// Start/Stop are called by the LifecycleManager during gateway startup/shutdown.
 type Plugin interface {
 	ID() string
 	Meta() Meta

@@ -1,4 +1,8 @@
 //! Hybrid search result merging (vector + keyword fusion with MMR re-ranking).
+//!
+//! Pipeline: collect vector + keyword results → weighted score fusion →
+//! temporal decay (path-based date extraction) → sort by score → optional
+//! MMR diversity re-ranking.
 
 use std::collections::HashMap;
 
@@ -125,13 +129,17 @@ pub fn merge_hybrid_results(params: &MergeParams) -> Vec<MergedResult> {
     merged
 }
 
+/// Intermediate entry used during merge. Borrows from the input results to
+/// avoid cloning until the final scored output is constructed.
 struct MergeEntry<'a> {
     path: &'a str,
     start_line: u32,
     end_line: u32,
     source: &'a str,
     snippet: &'a str,
+    /// Score from vector (cosine similarity) search, 0.0 if absent.
     vector_score: f64,
+    /// Score from keyword (BM25) search, 0.0 if absent.
     text_score: f64,
 }
 

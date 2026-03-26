@@ -120,6 +120,8 @@ func handleContextOverflowLegacy(
 	compCfg CompactionConfig,
 	logger *slog.Logger,
 ) ([]llm.Message, error) {
+	// Estimate stored tokens as 120% of budget — accounts for messages that
+	// arrived between the last compaction and the current overflow.
 	estimatedStored := ctxCfg.TokenBudget + ctxCfg.TokenBudget/5
 	decision, err := evaluateCompaction(compCfg, estimatedStored, estimatedStored, ctxCfg.TokenBudget)
 	if err != nil {
@@ -140,7 +142,8 @@ func handleContextOverflowLegacy(
 		}
 	}
 
-	// Fallback: halve the context window.
+	// Fallback: halve the context window and message limit to fit within the
+	// LLM's context. This is a last resort when compaction didn't free enough space.
 	reducedCfg := ctxCfg
 	reducedCfg.TokenBudget /= 2
 	if reducedCfg.MaxMessages > 10 {
@@ -193,6 +196,11 @@ func runCompactionSweepLegacy(
 		return false, fmt.Errorf("load transcript for sweep: %w", err)
 	}
 
+	// Pull-based coroutine protocol with the Rust compaction state machine:
+	// 1. Rust yields a SweepCommand (e.g., FetchMessages, Summarize).
+	// 2. Go executes the command and marshals a SweepResponse.
+	// 3. Go feeds the response back via CompactionSweepStep, which returns the next command.
+	// 4. Repeat until Rust yields a "done" command with the final result.
 	for {
 		var cmd struct {
 			Type string `json:"type"`

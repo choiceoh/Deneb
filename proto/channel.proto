@@ -1,6 +1,7 @@
 // Channel type definitions.
 //
-// These mirror the TypeScript definitions in src/channels/plugins/types.core.ts.
+// Describes channel plugin metadata, capabilities, and runtime account state.
+// Each channel plugin (Telegram, Discord, etc.) reports these to the gateway.
 
 syntax = "proto3";
 
@@ -8,8 +9,8 @@ package deneb.channel;
 
 option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen";
 
-// ChannelCapabilities describes what a channel supports.
-// TypeScript: ChannelCapabilities in types.core.ts
+// ChannelCapabilities describes the messaging features a channel supports.
+// Used by the chat pipeline to adapt behavior (e.g., skip reactions if unsupported).
 message ChannelCapabilities {
   repeated string chat_types = 1;
   optional bool polls = 2;
@@ -25,8 +26,7 @@ message ChannelCapabilities {
   optional bool block_streaming = 12;
 }
 
-// ChannelMeta describes channel metadata.
-// TypeScript: ChannelMeta in types.core.ts
+// ChannelMeta describes static channel metadata for display and selection UIs.
 message ChannelMeta {
   string id = 1;
   string label = 2;
@@ -47,8 +47,8 @@ message ChannelMeta {
   repeated string prefer_over = 17;
 }
 
-// ChannelAccountSnapshot — runtime state of a channel account.
-// TypeScript: ChannelAccountSnapshot in types.core.ts
+// ChannelAccountSnapshot captures the runtime state of a channel account.
+// Includes connection health, activity timestamps, and configuration status.
 message ChannelAccountSnapshot {
   string account_id = 1;
   optional string name = 2;

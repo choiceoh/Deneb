@@ -1,7 +1,8 @@
 // Package session manages gateway session lifecycle.
 //
-// This implements the session state machine from
-// src/gateway/session/ in Go.
+// Sessions follow a state machine: IDLE → RUNNING → {DONE | FAILED | KILLED | TIMEOUT}.
+// The Manager tracks sessions in memory and emits events on state transitions.
+// A background GC goroutine evicts terminal sessions after gcMaxAge (1 hour).
 package session
 
 import (
@@ -260,6 +261,12 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 
 // ApplyLifecycleEvent applies a lifecycle event to a session, creating it if needed.
 // Returns a snapshot copy safe for concurrent use.
+//
+// Behavior by phase:
+//   - Start: creates session if absent, sets status to Running.
+//   - End/Error: updates terminal status, preserves StartedAt from existing session.
+//   - Unknown phase: no-op — returns existing session or a KindUnknown stub so
+//     callers can always dereference the result safely without nil checks.
 func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session {
 	m.mu.Lock()
 

@@ -42,7 +42,9 @@ pub mod safe_regex;
 const FFI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
 
 // FFI error code constants — used across all `extern "C"` functions.
-// Positive values are function-specific; negative values are shared errors.
+// Negative values are shared error codes (below). Positive values from
+// buffer-writing functions (deneb_detect_mime, deneb_sanitize_html, etc.)
+// represent bytes written — NOT error codes.
 // These MUST stay in sync with gateway-go/internal/ffi/errors.go.
 const FFI_ERR_NULL_PTR: i32 = -1;
 const FFI_ERR_INVALID_UTF8: i32 = -2;
@@ -230,8 +232,10 @@ pub unsafe extern "C" fn deneb_is_safe_url(url_ptr: *const u8, url_len: usize) -
         return FFI_ERR_NULL_PTR;
     }
     // URLs should not be extremely long; cap at 8 KB.
+    // Returns 1 (unsafe) rather than FFI_ERR_INPUT_TOO_LARGE because an
+    // oversized URL is a policy rejection (SSRF risk), not a parameter error.
     if url_len > 8192 {
-        return 1; // treat oversized URLs as unsafe
+        return 1;
     }
     // SAFETY: url_ptr is null-checked above, url_len capped at 8 KB.
     let slice = std::slice::from_raw_parts(url_ptr, url_len);

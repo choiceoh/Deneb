@@ -54,7 +54,8 @@ fn strip_markdown_links(input: &str) -> String {
 /// Returns the index past the closing `)` on success.
 fn match_markdown_link(bytes: &[u8], start: usize) -> Option<usize> {
     let len = bytes.len();
-    // Find closing `]`.
+    // Find closing `]` using depth tracking to handle nested brackets,
+    // e.g., `[link [sub] text](url)` correctly matches the outermost pair.
     let mut i = start + 1;
     let mut depth = 1;
     while i < len && depth > 0 {

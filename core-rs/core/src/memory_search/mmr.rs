@@ -54,7 +54,11 @@ pub fn compute_mmr_score(relevance: f64, max_similarity: f64, lambda: f64) -> f6
     lambda * relevance - (1.0 - lambda) * max_similarity
 }
 
-/// Re-rank items using Maximal Marginal Relevance.
+/// Re-rank items using Maximal Marginal Relevance (MMR).
+///
+/// Greedy selection: at each step, pick the candidate that maximizes
+/// `λ × relevance − (1−λ) × max_similarity_to_selected`. This balances
+/// relevance against diversity — higher λ favors relevance, lower λ favors diversity.
 ///
 /// Returns indices into the original `items` slice in MMR order.
 pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
@@ -105,6 +109,8 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
         }
     };
 
+    // Greedy MMR loop: select items one at a time, always picking the candidate
+    // with the highest MMR score relative to the already-selected set.
     let mut selected: Vec<usize> = Vec::with_capacity(items.len());
     let mut remaining: HashSet<usize> = (0..items.len()).collect();
 

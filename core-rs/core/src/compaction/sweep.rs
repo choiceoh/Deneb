@@ -140,6 +140,14 @@ pub enum SweepResponse {
 
 // ── Internal state ──────────────────────────────────────────────────────────
 
+/// State machine phases for the compaction sweep.
+///
+/// The sweep proceeds in two phases:
+/// 1. **Leaf passes** — summarize raw messages into depth-0 summaries.
+/// 2. **Condensed passes** — merge existing summaries into higher-depth summaries.
+///
+/// Each phase follows: select chunk → fetch context → LLM summarize (normal →
+/// aggressive → fallback) → persist → check if budget is satisfied → repeat.
 #[derive(Debug, Clone)]
 enum Phase {
     /// Initial: fetch token count to evaluate threshold.
@@ -149,7 +157,7 @@ enum Phase {
     /// Prefetch messages referenced by context items.
     PrefetchingMessages,
 
-    // Phase 1: Leaf passes
+    // Phase 1: Leaf passes — summarize raw messages into depth-0 summaries.
     /// Select leaf chunk and prepare for summarization.
     LeafSelect,
     /// Fetch prior summary context for the leaf pass.
@@ -165,7 +173,7 @@ enum Phase {
     /// Persist leaf compaction event.
     LeafPersistEvent,
 
-    // Phase 2: Condensed passes
+    // Phase 2: Condensed passes — merge existing summaries into higher-depth summaries.
     /// Fetch distinct depths for condensation candidate search.
     CondensedFetchDepths,
     /// Fetch summaries for the selected condensation chunk.
@@ -209,7 +217,7 @@ pub struct SweepEngine {
     context_items: Vec<ContextItem>,
     messages: HashMap<u64, MessageRecord>,
     summaries: HashMap<String, SummaryRecord>,
-    fresh_tail_ordinal: u64,
+    fresh_tail_ordinal: u64, // u64::MAX = sentinel for "no fresh tail protection"
 
     // Per-pass state
     leaf_iter: u32,

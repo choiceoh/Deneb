@@ -38,8 +38,10 @@ func NewKeyCache() *KeyCache {
 	}
 }
 
-// Get looks up a session key by run ID.
-// Returns (sessionKey, true) on cache hit, ("", false) on miss or expired.
+// Get looks up a session key by run ID. Three possible outcomes:
+//   - (sessionKey, true): positive cache hit — run ID maps to a known session.
+//   - ("", true): negative cache hit — run ID was recently looked up and not found (within TTL).
+//   - ("", false): cache miss — run ID is unknown or the negative entry expired.
 func (c *KeyCache) Get(runID string) (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

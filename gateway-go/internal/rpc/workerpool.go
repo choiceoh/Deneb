@@ -30,6 +30,9 @@ func NewWorkerPool(maxWorkers int) *WorkerPool {
 	}
 }
 
+// defaultPoolSize computes the pool size: 2× logical CPU cores, clamped to [4, 64].
+// The 2× multiplier accounts for I/O-bound handlers (DB, LLM calls) that spend
+// most time waiting rather than using CPU.
 func defaultPoolSize() int {
 	n := runtime.NumCPU() * 2
 	if n < 4 {

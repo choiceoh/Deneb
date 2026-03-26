@@ -78,6 +78,9 @@ func (b *EventBus) Emit(event Event) {
 	}
 	b.mu.RUnlock()
 
+	// Each handler is called in an isolated closure with panic recovery.
+	// Panics are silently swallowed to prevent a buggy subscriber from
+	// disrupting event delivery to other subscribers.
 	for _, h := range snapshot {
 		func() {
 			defer func() { recover() }()

@@ -276,7 +276,8 @@ var methodScopes = map[string]auth.Scope{
 }
 
 // RequiredScope returns the scope needed to call the given method.
-// Returns ScopeAdmin for unknown methods (fail-closed).
+// Returns ScopeAdmin for unknown methods (fail-closed). When adding new RPC
+// methods, register them in methodScopes above to avoid unintentional admin-only access.
 func RequiredScope(method string) auth.Scope {
 	if scope, ok := methodScopes[method]; ok {
 		return scope

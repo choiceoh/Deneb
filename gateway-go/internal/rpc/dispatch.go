@@ -110,9 +110,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *
 	return d.safeCall(ctx, req, handler)
 }
 
-// safeCall invokes a handler with panic recovery and a hard deadline.
+// safeCall invokes a handler with panic recovery and a hard context deadline.
 // If a WorkerPool is attached, the handler goroutine is submitted through
-// the pool so concurrent handler execution is bounded.
+// the pool to bound concurrent handler execution. Panics are caught and
+// converted to UNAVAILABLE error responses rather than crashing the server.
 func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, handler HandlerFunc) *protocol.ResponseFrame {
 	type result struct {
 		resp *protocol.ResponseFrame
