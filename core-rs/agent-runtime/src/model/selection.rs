@@ -361,6 +361,147 @@ pub fn normalize_model_selection(value: &serde_json::Value) -> Option<String> {
     }
 }
 
+/// Catalog entry for thinking level resolution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThinkingCatalogEntry {
+    pub provider: String,
+    pub id: String,
+    #[serde(default)]
+    pub reasoning: bool,
+}
+
+/// Claude 4.6+ model prefixes that support adaptive thinking.
+const CLAUDE_46_PREFIXES: &[&str] = &["claude-opus-4-6", "claude-sonnet-4-6"];
+
+/// Resolve the default thinking level for a model.
+/// Mirrors `src/auto-reply/thinking.shared.ts#resolveThinkingDefaultForModel`. Keep in sync.
+pub fn resolve_thinking_default_for_model(
+    provider: &str,
+    model: &str,
+    catalog: Option<&[ThinkingCatalogEntry]>,
+) -> ThinkLevel {
+    let normalized_provider = normalize_provider_id(provider);
+    let model_lower = model.to_lowercase();
+
+    // Claude 4.6+ models on Anthropic or Bedrock get adaptive thinking.
+    if normalized_provider == "anthropic" || normalized_provider == "amazon-bedrock" {
+        if CLAUDE_46_PREFIXES.iter().any(|prefix| model_lower.starts_with(prefix)) {
+            return ThinkLevel::Adaptive;
+        }
+    }
+
+    // Check catalog for models marked with reasoning.
+    if let Some(entries) = catalog {
+        for entry in entries {
+            if normalize_provider_id(&entry.provider) == normalized_provider
+                && entry.id.to_lowercase() == model_lower
+                && entry.reasoning
+            {
+                return ThinkLevel::Low;
+            }
+        }
+    }
+
+    ThinkLevel::Off
+}
+
+/// Model catalog entry for vision/document support checks.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelCatalogEntry {
+    pub provider: String,
+    pub id: String,
+    #[serde(default)]
+    pub supports_vision: bool,
+    #[serde(default)]
+    pub supports_document: bool,
+    #[serde(default)]
+    pub reasoning: bool,
+    pub context_window: Option<u64>,
+}
+
+/// Model input type classification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ModelInputType {
+    Text,
+    Image,
+    Document,
+}
+
+/// Check if a model supports vision based on catalog lookup.
+pub fn model_supports_vision(catalog: &[ModelCatalogEntry], provider: &str, model: &str) -> bool {
+    let p = normalize_provider_id(provider);
+    let m = model.to_lowercase();
+    catalog.iter().any(|e| {
+        normalize_provider_id(&e.provider) == p && e.id.to_lowercase() == m && e.supports_vision
+    })
+}
+
+/// Check if a model supports document input based on catalog lookup.
+pub fn model_supports_document(catalog: &[ModelCatalogEntry], provider: &str, model: &str) -> bool {
+    let p = normalize_provider_id(provider);
+    let m = model.to_lowercase();
+    catalog.iter().any(|e| {
+        normalize_provider_id(&e.provider) == p && e.id.to_lowercase() == m && e.supports_document
+    })
+}
+
+/// Find a model in the catalog by provider and model ID.
+pub fn find_model_in_catalog<'a>(
+    catalog: &'a [ModelCatalogEntry],
+    provider: &str,
+    model: &str,
+) -> Option<&'a ModelCatalogEntry> {
+    let p = normalize_provider_id(provider);
+    let m = model.to_lowercase();
+    catalog.iter().find(|e| {
+        normalize_provider_id(&e.provider) == p && e.id.to_lowercase() == m
+    })
+}
+
+/// Status of a model ref against allowlist and catalog.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelRefStatus {
+    pub key: String,
+    pub in_catalog: bool,
+    pub allow_any: bool,
+    pub allowed: bool,
+}
+
+/// Get the status of a model ref against the allowlist and catalog.
+pub fn get_model_ref_status(
+    model_ref: &ModelRef,
+    catalog: &[ModelCatalogEntry],
+    allowed_keys: Option<&std::collections::HashSet<String>>,
+) -> ModelRefStatus {
+    let key = model_key(&model_ref.provider, &model_ref.model);
+    let in_catalog = find_model_in_catalog(catalog, &model_ref.provider, &model_ref.model).is_some();
+    let allow_any = allowed_keys.is_none();
+    let allowed = allow_any
+        || allowed_keys
+            .map(|keys| keys.contains(&key))
+            .unwrap_or(false);
+    ModelRefStatus {
+        key,
+        in_catalog,
+        allow_any,
+        allowed,
+    }
+}
+
+/// Resolve the reasoning default for a model ("on" if catalog marks it as reasoning).
+pub fn resolve_reasoning_default(
+    catalog: &[ModelCatalogEntry],
+    provider: &str,
+    model: &str,
+) -> bool {
+    find_model_in_catalog(catalog, provider, model)
+        .map(|e| e.reasoning)
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -639,5 +780,114 @@ mod tests {
     fn normalize_model_selection_empty() {
         assert_eq!(normalize_model_selection(&serde_json::json!("")), None);
         assert_eq!(normalize_model_selection(&serde_json::json!(null)), None);
+    }
+
+    #[test]
+    fn thinking_default_claude_46_adaptive() {
+        assert_eq!(
+            resolve_thinking_default_for_model("anthropic", "claude-opus-4-6-20260301", None),
+            ThinkLevel::Adaptive
+        );
+        assert_eq!(
+            resolve_thinking_default_for_model("anthropic", "claude-sonnet-4-6", None),
+            ThinkLevel::Adaptive
+        );
+    }
+
+    #[test]
+    fn thinking_default_bedrock_adaptive() {
+        assert_eq!(
+            resolve_thinking_default_for_model("amazon-bedrock", "claude-opus-4-6", None),
+            ThinkLevel::Adaptive
+        );
+    }
+
+    #[test]
+    fn thinking_default_non_claude_off() {
+        assert_eq!(
+            resolve_thinking_default_for_model("openai", "gpt-4o", None),
+            ThinkLevel::Off
+        );
+    }
+
+    #[test]
+    fn thinking_default_catalog_reasoning_low() {
+        let catalog = vec![ThinkingCatalogEntry {
+            provider: "openai".to_string(),
+            id: "o3".to_string(),
+            reasoning: true,
+        }];
+        assert_eq!(
+            resolve_thinking_default_for_model("openai", "o3", Some(&catalog)),
+            ThinkLevel::Low
+        );
+    }
+
+    #[test]
+    fn model_catalog_support_checks() {
+        let catalog = vec![ModelCatalogEntry {
+            provider: "anthropic".to_string(),
+            id: "claude-opus-4-6".to_string(),
+            supports_vision: true,
+            supports_document: true,
+            reasoning: false,
+            context_window: Some(200_000),
+        }];
+        assert!(model_supports_vision(&catalog, "anthropic", "claude-opus-4-6"));
+        assert!(model_supports_document(&catalog, "anthropic", "claude-opus-4-6"));
+        assert!(!model_supports_vision(&catalog, "openai", "gpt-4o"));
+    }
+
+    #[test]
+    fn find_model_in_catalog_basic() {
+        let catalog = vec![ModelCatalogEntry {
+            provider: "anthropic".to_string(),
+            id: "claude-opus-4-6".to_string(),
+            ..Default::default()
+        }];
+        assert!(find_model_in_catalog(&catalog, "anthropic", "claude-opus-4-6").is_some());
+        assert!(find_model_in_catalog(&catalog, "openai", "gpt-4o").is_none());
+    }
+
+    #[test]
+    fn get_model_ref_status_allowed() {
+        let catalog = vec![ModelCatalogEntry {
+            provider: "anthropic".to_string(),
+            id: "claude-opus-4-6".to_string(),
+            ..Default::default()
+        }];
+        let mut allowed = std::collections::HashSet::new();
+        allowed.insert("anthropic/claude-opus-4-6".to_string());
+        let model_ref = ModelRef {
+            provider: "anthropic".to_string(),
+            model: "claude-opus-4-6".to_string(),
+        };
+        let status = get_model_ref_status(&model_ref, &catalog, Some(&allowed));
+        assert!(status.in_catalog);
+        assert!(status.allowed);
+        assert!(!status.allow_any);
+    }
+
+    #[test]
+    fn get_model_ref_status_no_allowlist() {
+        let model_ref = ModelRef {
+            provider: "anthropic".to_string(),
+            model: "claude-opus-4-6".to_string(),
+        };
+        let status = get_model_ref_status(&model_ref, &[], None);
+        assert!(status.allow_any);
+        assert!(status.allowed);
+    }
+
+    #[test]
+    fn resolve_reasoning_default_basic() {
+        let catalog = vec![ModelCatalogEntry {
+            provider: "openai".to_string(),
+            id: "o3".to_string(),
+            reasoning: true,
+            ..Default::default()
+        }];
+        assert!(resolve_reasoning_default(&catalog, "openai", "o3"));
+        assert!(!resolve_reasoning_default(&catalog, "openai", "gpt-4o"));
     }
 }
