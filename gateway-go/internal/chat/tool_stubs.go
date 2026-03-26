@@ -20,12 +20,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 )
 
-// truncate shortens s to maxLen chars, appending "..." if truncated.
+// truncate shortens s to maxLen runes, appending "..." if truncated.
+// Uses rune count to avoid splitting multi-byte UTF-8 characters (e.g. Korean).
 func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + "..."
+	return string(runes[:maxLen]) + "..."
 }
 
 // --- cron tool ---
@@ -602,7 +604,10 @@ func toolSessionsRestore(transcript TranscriptStore) ToolFunc {
 		}
 
 		currentKey := SessionKeyFromContext(ctx)
-		if currentKey != "" && currentKey == p.SourceSessionKey {
+		if currentKey == "" {
+			return "Cannot determine current session key.", nil
+		}
+		if currentKey == p.SourceSessionKey {
 			return "Cannot restore a session into itself.", nil
 		}
 
