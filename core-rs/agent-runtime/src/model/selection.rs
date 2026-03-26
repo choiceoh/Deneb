@@ -400,10 +400,10 @@ pub fn resolve_thinking_default_for_model(
     let model_lower = model.to_lowercase();
 
     // Claude 4.6+ models on Anthropic or Bedrock get adaptive thinking.
-    if normalized_provider == "anthropic" || normalized_provider == "amazon-bedrock" {
-        if CLAUDE_46_PREFIXES.iter().any(|prefix| model_lower.starts_with(prefix)) {
-            return ThinkLevel::Adaptive;
-        }
+    if (normalized_provider == "anthropic" || normalized_provider == "amazon-bedrock")
+        && CLAUDE_46_PREFIXES.iter().any(|prefix| model_lower.starts_with(prefix))
+    {
+        return ThinkLevel::Adaptive;
     }
 
     // Check catalog for models marked with reasoning.
@@ -858,18 +858,30 @@ pub fn build_allowed_model_set(
     }
 }
 
+/// Parameters for `resolve_allowed_model_ref`.
+pub struct ResolveAllowedModelRefParams<'a> {
+    pub raw: &'a str,
+    pub agents_list: &'a [serde_json::Value],
+    pub raw_allowlist: &'a [String],
+    pub catalog: &'a [ModelCatalogEntry],
+    pub configured_models: &'a std::collections::HashMap<String, serde_json::Value>,
+    pub default_provider: &'a str,
+    pub default_model: Option<&'a str>,
+    pub agents_defaults_model: Option<&'a serde_json::Value>,
+}
+
 /// Validate a model ref against the allowed set and return it or an error.
 /// Mirrors `src/agents/models/model-selection.ts#resolveAllowedModelRef`. Keep in sync.
-pub fn resolve_allowed_model_ref(
-    raw: &str,
-    agents_list: &[serde_json::Value],
-    raw_allowlist: &[String],
-    catalog: &[ModelCatalogEntry],
-    configured_models: &std::collections::HashMap<String, serde_json::Value>,
-    default_provider: &str,
-    default_model: Option<&str>,
-    agents_defaults_model: Option<&serde_json::Value>,
-) -> Result<(ModelRef, String), String> {
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_allowed_model_ref(params: &ResolveAllowedModelRefParams<'_>) -> Result<(ModelRef, String), String> {
+    let raw = params.raw;
+    let agents_list = params.agents_list;
+    let raw_allowlist = params.raw_allowlist;
+    let catalog = params.catalog;
+    let configured_models = params.configured_models;
+    let default_provider = params.default_provider;
+    let default_model = params.default_model;
+    let agents_defaults_model = params.agents_defaults_model;
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err("invalid model: empty".to_string());

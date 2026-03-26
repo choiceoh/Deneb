@@ -24,7 +24,8 @@ pub use selection::{
     // Config-driven resolution
     build_allowed_model_set, build_configured_allowlist_keys, build_model_alias_index,
     infer_unique_provider_from_configured_models, is_cli_provider,
-    resolve_allowlist_model_key, resolve_allowed_model_ref, resolve_configured_model_ref,
+    resolve_allowlist_model_key, resolve_allowed_model_ref, ResolveAllowedModelRefParams,
+    resolve_configured_model_ref,
     resolve_default_model_for_agent, resolve_hooks_gmail_model, resolve_model_ref_from_string,
     resolve_subagent_configured_model_selection, resolve_subagent_spawn_model_selection,
     resolve_thinking_default,

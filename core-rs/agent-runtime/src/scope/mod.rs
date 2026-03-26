@@ -27,7 +27,8 @@ pub use resolve::{
     // Session key parsing
     parse_agent_session_key, resolve_agent_id_from_session_key, normalize_main_key,
     classify_session_key_shape, to_agent_request_session_key, to_agent_store_session_key,
-    build_agent_main_session_key, build_agent_peer_session_key, build_group_history_key,
+    build_agent_main_session_key, build_agent_peer_session_key, BuildAgentPeerSessionKeyParams,
+    build_group_history_key,
     resolve_thread_session_keys, derive_session_chat_type,
     // Session key predicates
     is_cron_session_key, is_cron_run_session_key, is_subagent_session_key,

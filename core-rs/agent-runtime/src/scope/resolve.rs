@@ -755,18 +755,29 @@ fn resolve_linked_peer_id(
     None
 }
 
+/// Parameters for `build_agent_peer_session_key`.
+pub struct BuildAgentPeerSessionKeyParams<'a> {
+    pub agent_id: &'a str,
+    pub main_key: Option<&'a str>,
+    pub channel: &'a str,
+    pub account_id: Option<&'a str>,
+    pub peer_kind: Option<&'a str>,
+    pub peer_id: Option<&'a str>,
+    pub identity_links: Option<&'a std::collections::HashMap<String, Vec<String>>>,
+    pub dm_scope: Option<&'a str>,
+}
+
 /// Build a peer-scoped session key for an agent.
 /// Mirrors `src/routing/session-key.ts#buildAgentPeerSessionKey`. Keep in sync.
-pub fn build_agent_peer_session_key(
-    agent_id: &str,
-    main_key: Option<&str>,
-    channel: &str,
-    account_id: Option<&str>,
-    peer_kind: Option<&str>,
-    peer_id: Option<&str>,
-    identity_links: Option<&std::collections::HashMap<String, Vec<String>>>,
-    dm_scope: Option<&str>,
-) -> String {
+pub fn build_agent_peer_session_key(params: &BuildAgentPeerSessionKeyParams<'_>) -> String {
+    let agent_id = params.agent_id;
+    let main_key = params.main_key;
+    let channel = params.channel;
+    let account_id = params.account_id;
+    let peer_kind = params.peer_kind;
+    let peer_id = params.peer_id;
+    let identity_links = params.identity_links;
+    let dm_scope = params.dm_scope;
     let kind = peer_kind.unwrap_or("direct");
     let aid = normalize_agent_id(agent_id);
 
@@ -1215,16 +1226,21 @@ mod tests {
     #[test]
     fn build_agent_peer_session_key_group() {
         assert_eq!(
-            build_agent_peer_session_key("bot", None, "telegram", None, Some("group"), Some("123"), None, None),
+            build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
+                agent_id: "bot", main_key: None, channel: "telegram", account_id: None,
+                peer_kind: Some("group"), peer_id: Some("123"), identity_links: None, dm_scope: None,
+            }),
             "agent:bot:telegram:group:123"
         );
     }
 
     #[test]
     fn build_agent_peer_session_key_direct_main() {
-        // Default dm_scope is "main", which falls back to main session key.
         assert_eq!(
-            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("user1"), None, None),
+            build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
+                agent_id: "bot", main_key: None, channel: "telegram", account_id: None,
+                peer_kind: Some("direct"), peer_id: Some("user1"), identity_links: None, dm_scope: None,
+            }),
             "agent:bot:main"
         );
     }
@@ -1232,7 +1248,10 @@ mod tests {
     #[test]
     fn build_agent_peer_session_key_per_peer() {
         assert_eq!(
-            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("User1"), None, Some("per-peer")),
+            build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
+                agent_id: "bot", main_key: None, channel: "telegram", account_id: None,
+                peer_kind: Some("direct"), peer_id: Some("User1"), identity_links: None, dm_scope: Some("per-peer"),
+            }),
             "agent:bot:direct:user1"
         );
     }
@@ -1240,7 +1259,10 @@ mod tests {
     #[test]
     fn build_agent_peer_session_key_per_channel_peer() {
         assert_eq!(
-            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("User1"), None, Some("per-channel-peer")),
+            build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
+                agent_id: "bot", main_key: None, channel: "telegram", account_id: None,
+                peer_kind: Some("direct"), peer_id: Some("User1"), identity_links: None, dm_scope: Some("per-channel-peer"),
+            }),
             "agent:bot:telegram:direct:user1"
         );
     }
@@ -1248,7 +1270,10 @@ mod tests {
     #[test]
     fn build_agent_peer_session_key_per_account_channel_peer() {
         assert_eq!(
-            build_agent_peer_session_key("bot", None, "telegram", Some("acct1"), Some("direct"), Some("User1"), None, Some("per-account-channel-peer")),
+            build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
+                agent_id: "bot", main_key: None, channel: "telegram", account_id: Some("acct1"),
+                peer_kind: Some("direct"), peer_id: Some("User1"), identity_links: None, dm_scope: Some("per-account-channel-peer"),
+            }),
             "agent:bot:telegram:acct1:direct:user1"
         );
     }
@@ -1258,7 +1283,10 @@ mod tests {
         let mut links = std::collections::HashMap::new();
         links.insert("canonical-user".to_string(), vec!["telegram:user1".to_string()]);
         assert_eq!(
-            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("User1"), Some(&links), Some("per-peer")),
+            build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
+                agent_id: "bot", main_key: None, channel: "telegram", account_id: None,
+                peer_kind: Some("direct"), peer_id: Some("User1"), identity_links: Some(&links), dm_scope: Some("per-peer"),
+            }),
             "agent:bot:direct:canonical-user"
         );
     }
@@ -1268,7 +1296,10 @@ mod tests {
         let mut links = std::collections::HashMap::new();
         links.insert("other-user".to_string(), vec!["discord:other".to_string()]);
         assert_eq!(
-            build_agent_peer_session_key("bot", None, "telegram", None, Some("direct"), Some("User1"), Some(&links), Some("per-peer")),
+            build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
+                agent_id: "bot", main_key: None, channel: "telegram", account_id: None,
+                peer_kind: Some("direct"), peer_id: Some("User1"), identity_links: Some(&links), dm_scope: Some("per-peer"),
+            }),
             "agent:bot:direct:user1"
         );
     }
