@@ -269,12 +269,12 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 		}
 
 		// Determine thinking mode and max tokens.
-		thinking := shouldUseThinking(p.Task, len(sources))
+		// Brief mode disables thinking — not enough token budget for both.
+		thinking := p.MaxLength != "brief" && shouldUseThinking(p.Task, len(sources))
 		maxTokens := pilotMaxTokens
 		if thinking {
 			maxTokens = 6144 // extra budget for thinking + answer
-		}
-		if p.MaxLength == "brief" {
+		} else if p.MaxLength == "brief" {
 			maxTokens = 1024
 		}
 
@@ -557,25 +557,32 @@ func smartTruncate(s string, maxChars int, sourceType string) string {
 
 	marker := fmt.Sprintf("\n\n[... truncated, original %d chars ...]\n\n", len(s))
 
+	budget := maxChars - len(marker)
+	if budget < 200 {
+		// Not enough room for head+tail split — fall back to simple head truncation.
+		return s[:maxChars] + fmt.Sprintf("\n\n[... truncated at %d chars]", maxChars)
+	}
+
 	switch sourceType {
 	case "file":
 		// Preserve start + end for file content (function signatures + tail).
-		headSize := (maxChars - len(marker)) * 6 / 10
-		tailSize := (maxChars - len(marker)) - headSize
-		if headSize < 500 {
-			headSize = 500
-		}
-		if tailSize < 500 {
-			tailSize = 500
+		headSize := budget * 6 / 10
+		tailSize := budget - headSize
+		// Ensure head+tail don't exceed content length (when s is only slightly over maxChars).
+		if headSize+tailSize >= len(s) {
+			return s[:maxChars] + fmt.Sprintf("\n\n[... truncated at %d chars]", maxChars)
 		}
 		return s[:headSize] + marker + s[len(s)-tailSize:]
 
 	case "exec":
 		// Preserve end for command output (errors/results typically at bottom).
-		headSize := (maxChars - len(marker)) * 2 / 10
-		tailSize := (maxChars - len(marker)) - headSize
+		headSize := budget * 2 / 10
 		if headSize < 200 {
 			headSize = 200
+		}
+		tailSize := budget - headSize
+		if headSize+tailSize >= len(s) {
+			return s[:maxChars] + fmt.Sprintf("\n\n[... truncated at %d chars]", maxChars)
 		}
 		return s[:headSize] + marker + s[len(s)-tailSize:]
 
@@ -650,6 +657,18 @@ func executeChain(ctx context.Context, initialResult, task, outputFormat, maxLen
 	}
 
 	if len(followUp) == 0 || len(followUp) > 5 {
+		return ""
+	}
+
+	// Filter out any self-referential pilot calls from chain.
+	filtered := followUp[:0]
+	for _, f := range followUp {
+		if f.Tool != "pilot" {
+			filtered = append(filtered, f)
+		}
+	}
+	followUp = filtered
+	if len(followUp) == 0 {
 		return ""
 	}
 
