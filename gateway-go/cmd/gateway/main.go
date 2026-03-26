@@ -17,6 +17,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
+	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/server"
 )
@@ -55,9 +56,24 @@ func main() {
 		resolvedLogLevel = *logLevel
 	}
 	level := parseLogLevel(resolvedLogLevel)
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level: level,
-	}))
+
+	// Resolve log format: config > default ("text").
+	logFormat := "text"
+	if bootstrap.Config.Logging != nil && bootstrap.Config.Logging.Format != "" {
+		logFormat = bootstrap.Config.Logging.Format
+	}
+
+	var handler slog.Handler
+	switch logFormat {
+	case "json":
+		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+	default:
+		handler = logging.NewConsoleHandler(os.Stderr, &logging.ConsoleOptions{
+			Level: level,
+			Color: true,
+		})
+	}
+	logger := slog.New(handler)
 
 	// Resolve port: CLI flag > env > config > default.
 	resolvedPort := config.ResolveGatewayPort(&bootstrap.Config)

@@ -191,6 +191,7 @@ type GatewayToolsConfig struct {
 // LoggingConfig for structured logging.
 type LoggingConfig struct {
 	Level           string `json:"level,omitempty"`
+	Format          string `json:"format,omitempty"` // "text" (default) or "json"
 	File            string `json:"file,omitempty"`
 	RedactSensitive string `json:"redactSensitive,omitempty"`
 }
