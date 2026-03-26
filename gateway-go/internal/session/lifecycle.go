@@ -45,6 +45,9 @@ func resolveLifecyclePhase(phase LifecyclePhase) *LifecyclePhase {
 }
 
 // resolveTerminalStatus determines the terminal RunStatus from an event.
+//
+// Priority: PhaseError → Failed, StopReason "aborted" → Killed (explicit kill),
+// Aborted flag → Timeout (context deadline exceeded), otherwise → Done.
 func resolveTerminalStatus(event LifecycleEvent) RunStatus {
 	if event.Phase == PhaseError {
 		return StatusFailed
