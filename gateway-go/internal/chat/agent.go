@@ -12,10 +12,10 @@ import (
 
 // AgentConfig configures the agent execution loop.
 type AgentConfig struct {
-	MaxTurns  int           // Maximum tool-call turns before stopping. Default: 25.
-	Timeout   time.Duration // Maximum wall time for the entire agent run. Default: 10m.
+	MaxTurns  int              // Maximum tool-call turns before stopping. Default: 25.
+	Timeout   time.Duration    // Maximum wall time for the entire agent run. Default: 10m.
 	Model     string
-	System    string
+	System    json.RawMessage  // System prompt: JSON string or array of ContentBlocks.
 	Tools     []llm.Tool
 	MaxTokens int    // Max output tokens per LLM call. Default: 8192.
 	APIType   string // "anthropic" (default) or "openai"

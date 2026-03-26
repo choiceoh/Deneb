@@ -5,25 +5,74 @@
 // using the shared types defined here.
 package llm
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // ChatRequest represents a streaming chat completion request.
+// The System field accepts both a plain string and an array of ContentBlocks
+// (for Anthropic cache_control annotations and extended thinking).
 type ChatRequest struct {
-	Model            string   `json:"model"`
-	Messages         []Message `json:"messages"`
-	System           string   `json:"system,omitempty"`
-	MaxTokens        int      `json:"max_tokens"`
-	Tools            []Tool   `json:"tools,omitempty"`
-	Stream           bool     `json:"stream"`
-	Temperature      *float64 `json:"temperature,omitempty"`
-	TopP             *float64 `json:"top_p,omitempty"`
-	TopK             *int     `json:"top_k,omitempty"`
-	StopSequences    []string `json:"stop_sequences,omitempty"`
-	FrequencyPenalty *float64 `json:"-"` // OpenAI only; excluded from Anthropic JSON
-	PresencePenalty  *float64 `json:"-"` // OpenAI only; excluded from Anthropic JSON
+	Model            string          `json:"model"`
+	Messages         []Message       `json:"messages"`
+	System           json.RawMessage `json:"system,omitempty"` // string or []ContentBlock
+	MaxTokens        int             `json:"max_tokens"`
+	Tools            []Tool          `json:"tools,omitempty"`
+	Stream           bool            `json:"stream"`
+	Temperature      *float64        `json:"temperature,omitempty"`
+	TopP             *float64        `json:"top_p,omitempty"`
+	TopK             *int            `json:"top_k,omitempty"`
+	StopSequences    []string        `json:"stop_sequences,omitempty"`
+	FrequencyPenalty *float64        `json:"-"` // OpenAI only; excluded from Anthropic JSON
+	PresencePenalty  *float64        `json:"-"` // OpenAI only; excluded from Anthropic JSON
 
 	// Anthropic extended thinking support.
 	Thinking *ThinkingConfig `json:"thinking,omitempty"`
+}
+
+// SystemString is a convenience for setting a plain string system prompt.
+func SystemString(s string) json.RawMessage {
+	if s == "" {
+		return nil
+	}
+	raw, _ := json.Marshal(s)
+	return raw
+}
+
+// SystemBlocks is a convenience for setting an array-of-blocks system prompt
+// (used for Anthropic cache_control annotations).
+func SystemBlocks(blocks []ContentBlock) json.RawMessage {
+	if len(blocks) == 0 {
+		return nil
+	}
+	raw, _ := json.Marshal(blocks)
+	return raw
+}
+
+// ExtractSystemText extracts a plain text string from the System field,
+// whether it's stored as a JSON string or an array of content blocks.
+func ExtractSystemText(system json.RawMessage) string {
+	if len(system) == 0 {
+		return ""
+	}
+	// Try plain string first.
+	var s string
+	if json.Unmarshal(system, &s) == nil {
+		return s
+	}
+	// Try array of content blocks.
+	var blocks []ContentBlock
+	if json.Unmarshal(system, &blocks) == nil {
+		var sb strings.Builder
+		for _, b := range blocks {
+			if b.Type == "text" {
+				sb.WriteString(b.Text)
+			}
+		}
+		return sb.String()
+	}
+	return ""
 }
 
 // ThinkingConfig controls Anthropic's extended thinking feature.

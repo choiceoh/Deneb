@@ -40,10 +40,12 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 	}
 
 	// Convert system prompt to a system message.
-	if req.System != "" {
+	// Supports both string and array-of-blocks formats.
+	systemText := ExtractSystemText(req.System)
+	if systemText != "" {
 		oaiReq.Messages = append(oaiReq.Messages, openAIMessage{
 			Role:    "system",
-			Content: req.System,
+			Content: systemText,
 		})
 	}
 

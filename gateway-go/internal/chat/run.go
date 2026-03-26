@@ -87,6 +87,16 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		broadcaster.EmitStarted()
 	}
 
+	// Inject delivery context and reply function into ctx so tools
+	// (especially the message tool) can send proactive messages.
+	if params.Delivery != nil {
+		ctx = WithDeliveryContext(ctx, params.Delivery)
+	}
+	if deps.replyFunc != nil {
+		ctx = WithReplyFunc(ctx, deps.replyFunc)
+	}
+	ctx = WithSessionKey(ctx, params.SessionKey)
+
 	// Run the agent and capture result.
 	result, err := executeAgentRun(ctx, params, deps, broadcaster, logger)
 
@@ -122,15 +132,17 @@ func executeAgentRun(
 		}
 	}
 
-	// 2. Assemble system prompt.
-	systemPrompt := params.System
-	if systemPrompt == "" {
-		systemPrompt = deps.defaultSystem
+	// 2. Assemble system prompt (supports both string and content block array).
+	var systemPrompt json.RawMessage
+	if params.System != "" {
+		systemPrompt = llm.SystemString(params.System)
+	} else if deps.defaultSystem != "" {
+		systemPrompt = llm.SystemString(deps.defaultSystem)
 	}
-	if systemPrompt == "" && deps.tools != nil {
+	if len(systemPrompt) == 0 && deps.tools != nil {
 		// Build system prompt from tool definitions, workspace context, and runtime info.
 		workspaceDir := resolveWorkspaceDirForPrompt()
-		systemPrompt = BuildSystemPrompt(SystemPromptParams{
+		built := BuildSystemPrompt(SystemPromptParams{
 			WorkspaceDir: workspaceDir,
 			ToolDefs:     deps.tools.Definitions(),
 			UserTimezone: resolveTimezone(),
@@ -138,6 +150,7 @@ func executeAgentRun(
 			RuntimeInfo:  BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
 			Channel:      deliveryChannel(params.Delivery),
 		})
+		systemPrompt = llm.SystemString(built)
 	}
 
 	// 3. Assemble context (token-budgeted history).

@@ -77,6 +77,28 @@ func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspa
 		Fn:          toolWebFetch(),
 	})
 
+	// -- Memory tools --
+	registry.RegisterTool(ToolDef{
+		Name:        "memory_search",
+		Description: "Search memory files (MEMORY.md, memory/*.md) by keyword",
+		InputSchema: memorySearchToolSchema(),
+		Fn:          toolMemorySearch(workspaceDir),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "memory_get",
+		Description: "Read specific lines from a memory file",
+		InputSchema: memoryGetToolSchema(),
+		Fn:          toolMemoryGet(workspaceDir),
+	})
+
+	// -- Message tool (proactive channel sends via context-injected ReplyFunc) --
+	registry.RegisterTool(ToolDef{
+		Name:        "message",
+		Description: "Send messages and channel actions (send, reply, react)",
+		InputSchema: messageToolSchema(),
+		Fn:          toolMessage(),
+	})
+
 	// -- Apply patch tool --
 	registry.RegisterTool(ToolDef{
 		Name:        "apply_patch",
@@ -91,9 +113,11 @@ func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspa
 		desc string
 	}{
 		{"web_search", "Search the web"},
-		{"memory_search", "Semantic memory search"},
-		{"memory_get", "Read memory files"},
-		{"message", "Send messages and channel actions"},
+		// memory tools are registered separately with full implementation.
+		// {"memory_search", "Semantic memory search"},
+		// {"memory_get", "Read memory files"},
+		// message tool is registered separately with full implementation.
+		// {"message", "Send messages and channel actions"},
 		{"cron", "Manage cron jobs and wake events"},
 		{"gateway", "Gateway control (restart, config, update)"},
 		{"sessions_list", "List other sessions"},
