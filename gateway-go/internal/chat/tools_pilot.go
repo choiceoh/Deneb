@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -158,10 +160,18 @@ func pilotToolSchema() map[string]any {
 							"type":        "string",
 							"description": "Label for this source in the analysis (auto-generated if omitted)",
 						},
+						"only_if": map[string]any{
+							"type":        "string",
+							"description": "Only execute if the source with this label succeeded (non-empty, no error)",
+						},
+						"skip_if": map[string]any{
+							"type":        "string",
+							"description": "Skip this source if the source with this label succeeded",
+						},
 					},
 					"required": []string{"tool", "input"},
 				},
-				"description": "Tool calls to execute before analysis. Pilot runs these, collects results, then processes everything with the local AI",
+				"description": "Tool calls to execute before analysis. Supports conditional execution via only_if/skip_if",
 			},
 			"content": map[string]any{
 				"type":        "string",
@@ -201,6 +211,37 @@ func pilotToolSchema() map[string]any {
 			"url": map[string]any{
 				"type":        "string",
 				"description": "Shortcut: fetch this URL (expands to sources:[{tool:'web_fetch', input:{url:...}}])",
+			},
+			"http": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: GET this URL via http tool (expands to sources:[{tool:'http', input:{url:..., method:'GET'}}])",
+			},
+			"kv_key": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: get this key from KV store (expands to sources:[{tool:'kv', input:{action:'get', key:...}}])",
+			},
+			"memory": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: search memory for this query (expands to sources:[{tool:'memory_search', input:{query:...}}])",
+			},
+			"post_process": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"action": map[string]any{
+							"type":        "string",
+							"description": "Post-processing action to apply to gathered source data before LLM analysis",
+							"enum":        []string{"filter_lines", "head", "tail", "unique", "sort"},
+						},
+						"param": map[string]any{
+							"type":        "string",
+							"description": "Action parameter: regex for filter_lines, line count for head/tail",
+						},
+					},
+					"required": []string{"action"},
+				},
+				"description": "Post-processing steps applied to gathered data before LLM analysis",
 			},
 			"output_format": map[string]any{
 				"type":        "string",
@@ -249,8 +290,13 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 			sources = sources[:pilotMaxSources]
 		}
 
-		// Phase 1: Execute all source tools in parallel (with per-source timeout).
+		// Phase 1: Execute sources (unconditional in parallel, then conditional).
 		gathered := executeSources(ctx, sources, tools)
+
+		// Phase 1.5: Apply post-processing steps to gathered data.
+		if len(p.PostProcess) > 0 {
+			gathered = applyPostProcessSteps(gathered, p.PostProcess)
+		}
 
 		// Add direct content/items.
 		if p.Content != "" {
@@ -333,29 +379,41 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 
 // pilotParams is the parsed tool input.
 type pilotParams struct {
-	Task         string       `json:"task"`
-	Sources      []sourceSpec `json:"sources"`
-	Content      string       `json:"content"`
-	Items        []string     `json:"items"`
-	OutputFormat string       `json:"output_format"`
-	MaxLength    string       `json:"max_length"`
-	Chain        bool         `json:"chain"`
+	Task         string            `json:"task"`
+	Sources      []sourceSpec      `json:"sources"`
+	Content      string            `json:"content"`
+	Items        []string          `json:"items"`
+	OutputFormat string            `json:"output_format"`
+	MaxLength    string            `json:"max_length"`
+	Chain        bool              `json:"chain"`
+	PostProcess  []postProcessStep `json:"post_process"`
 
 	// Shortcuts.
-	File  string   `json:"file"`
-	Files []string `json:"files"`
-	Exec  string   `json:"exec"`
-	Grep  string   `json:"grep"`
-	Find  string   `json:"find"`
-	Path  string   `json:"path"`
-	URL   string   `json:"url"`
+	File   string   `json:"file"`
+	Files  []string `json:"files"`
+	Exec   string   `json:"exec"`
+	Grep   string   `json:"grep"`
+	Find   string   `json:"find"`
+	Path   string   `json:"path"`
+	URL    string   `json:"url"`
+	HTTP   string   `json:"http"`
+	KVKey  string   `json:"kv_key"`
+	Memory string   `json:"memory"`
+}
+
+// postProcessStep is a programmatic transformation applied to gathered data.
+type postProcessStep struct {
+	Action string `json:"action"` // filter_lines, head, tail, unique, sort
+	Param  string `json:"param"`  // action-specific parameter
 }
 
 // sourceSpec is a tool call specification from the agent.
 type sourceSpec struct {
-	Tool  string          `json:"tool"`
-	Input json.RawMessage `json:"input"`
-	Label string          `json:"label"`
+	Tool   string          `json:"tool"`
+	Input  json.RawMessage `json:"input"`
+	Label  string          `json:"label"`
+	OnlyIf string          `json:"only_if"` // execute only if named source succeeded
+	SkipIf string          `json:"skip_if"` // skip if named source succeeded
 }
 
 // sourceResult is a labeled chunk of gathered data.
@@ -427,6 +485,30 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 		})
 	}
 
+	if p.HTTP != "" {
+		specs = append(specs, sourceSpec{
+			Tool:  "http",
+			Input: mustJSON(map[string]any{"url": p.HTTP, "method": "GET"}),
+			Label: "http: " + p.HTTP,
+		})
+	}
+
+	if p.KVKey != "" {
+		specs = append(specs, sourceSpec{
+			Tool:  "kv",
+			Input: mustJSON(map[string]any{"action": "get", "key": p.KVKey}),
+			Label: "kv: " + p.KVKey,
+		})
+	}
+
+	if p.Memory != "" {
+		specs = append(specs, sourceSpec{
+			Tool:  "memory_search",
+			Input: mustJSON(map[string]any{"query": p.Memory}),
+			Label: "memory: " + p.Memory,
+		})
+	}
+
 	return specs
 }
 
@@ -450,51 +532,97 @@ func sourceTypeFromTool(tool string) string {
 	}
 }
 
-// executeSources runs all source tool calls in parallel via the ToolRegistry,
-// with per-source timeout.
+// executeSources runs source tool calls via the ToolRegistry.
+// Unconditional sources (no only_if/skip_if) run in parallel with per-source timeout.
+// Conditional sources run sequentially after, evaluating their conditions.
 func executeSources(ctx context.Context, sources []sourceSpec, tools ToolExecutor) []sourceResult {
 	if len(sources) == 0 {
 		return nil
 	}
 
 	results := make([]sourceResult, len(sources))
-	var wg sync.WaitGroup
 
+	// Split into unconditional and conditional.
+	type indexedSource struct {
+		idx int
+		src sourceSpec
+	}
+	var unconditional, conditional []indexedSource
 	for i, src := range sources {
-		// Block pilot from calling itself (infinite recursion guard).
-		if src.Tool == "pilot" {
-			results[i] = sourceResult{
-				label:      src.Label,
+		label := src.Label
+		if label == "" {
+			label = fmt.Sprintf("%s[%d]", src.Tool, i+1)
+			sources[i].Label = label
+		}
+		if src.OnlyIf != "" || src.SkipIf != "" {
+			conditional = append(conditional, indexedSource{i, src})
+		} else {
+			unconditional = append(unconditional, indexedSource{i, src})
+		}
+	}
+
+	// Phase 1: Run unconditional sources in parallel.
+	var wg sync.WaitGroup
+	for _, is := range unconditional {
+		if is.src.Tool == "pilot" {
+			results[is.idx] = sourceResult{
+				label:      is.src.Label,
 				content:    "[error: pilot cannot call itself]",
 				sourceType: "content",
 			}
 			continue
 		}
-
 		wg.Add(1)
 		go func(idx int, s sourceSpec) {
 			defer wg.Done()
-
-			label := s.Label
-			if label == "" {
-				label = fmt.Sprintf("%s[%d]", s.Tool, idx+1)
-			}
-
-			// Per-source timeout.
 			srcCtx, srcCancel := context.WithTimeout(ctx, sourceTimeout)
 			defer srcCancel()
-
 			output, err := tools.Execute(srcCtx, s.Tool, s.Input)
 			if err != nil {
-				results[idx] = sourceResult{label, fmt.Sprintf("[tool error: %s]", err), sourceTypeFromTool(s.Tool)}
+				results[idx] = sourceResult{s.Label, fmt.Sprintf("[tool error: %s]", err), sourceTypeFromTool(s.Tool)}
 				return
 			}
-			results[idx] = sourceResult{label, output, sourceTypeFromTool(s.Tool)}
-		}(i, src)
+			results[idx] = sourceResult{s.Label, output, sourceTypeFromTool(s.Tool)}
+		}(is.idx, is.src)
+	}
+	wg.Wait()
+
+	// Phase 2: Run conditional sources sequentially.
+	for _, is := range conditional {
+		src := is.src
+		if src.Tool == "pilot" {
+			results[is.idx] = sourceResult{src.Label, "[error: pilot cannot call itself]", "content"}
+			continue
+		}
+		if src.OnlyIf != "" && !sourceSucceeded(results, src.OnlyIf) {
+			results[is.idx] = sourceResult{src.Label, fmt.Sprintf("[skipped: %q did not succeed]", src.OnlyIf), "content"}
+			continue
+		}
+		if src.SkipIf != "" && sourceSucceeded(results, src.SkipIf) {
+			results[is.idx] = sourceResult{src.Label, fmt.Sprintf("[skipped: %q succeeded]", src.SkipIf), "content"}
+			continue
+		}
+		srcCtx, srcCancel := context.WithTimeout(ctx, sourceTimeout)
+		output, err := tools.Execute(srcCtx, src.Tool, src.Input)
+		srcCancel()
+		if err != nil {
+			results[is.idx] = sourceResult{src.Label, fmt.Sprintf("[tool error: %s]", err), sourceTypeFromTool(src.Tool)}
+			continue
+		}
+		results[is.idx] = sourceResult{src.Label, output, sourceTypeFromTool(src.Tool)}
 	}
 
-	wg.Wait()
 	return results
+}
+
+// sourceSucceeded checks if a source with the given label has a non-empty, non-error result.
+func sourceSucceeded(results []sourceResult, label string) bool {
+	for _, r := range results {
+		if r.label == label {
+			return r.content != "" && !strings.HasPrefix(r.content, "[tool error:") && !strings.HasPrefix(r.content, "[skipped:")
+		}
+	}
+	return false
 }
 
 // --- Prompt building ---
@@ -935,6 +1063,91 @@ func buildFallbackResult(task string, gathered []sourceResult) string {
 	}
 
 	return sb.String()
+}
+
+// --- Post-process steps ---
+
+// applyPostProcessSteps applies programmatic transformations to gathered data
+// before feeding it to the LLM. This reduces noise without burning LLM tokens.
+func applyPostProcessSteps(gathered []sourceResult, steps []postProcessStep) []sourceResult {
+	for _, step := range steps {
+		for i := range gathered {
+			gathered[i].content = applyStep(gathered[i].content, step)
+		}
+	}
+	return gathered
+}
+
+func applyStep(content string, step postProcessStep) string {
+	lines := strings.Split(content, "\n")
+
+	switch step.Action {
+	case "filter_lines":
+		if step.Param == "" {
+			return content
+		}
+		re, err := regexp.Compile(step.Param)
+		if err != nil {
+			return content
+		}
+		var filtered []string
+		for _, line := range lines {
+			if re.MatchString(line) {
+				filtered = append(filtered, line)
+			}
+		}
+		return strings.Join(filtered, "\n")
+
+	case "head":
+		n := parseLineCount(step.Param, 20)
+		if n >= len(lines) {
+			return content
+		}
+		return strings.Join(lines[:n], "\n") + fmt.Sprintf("\n[... %d more lines]", len(lines)-n)
+
+	case "tail":
+		n := parseLineCount(step.Param, 20)
+		if n >= len(lines) {
+			return content
+		}
+		return fmt.Sprintf("[%d lines before ...]\n", len(lines)-n) + strings.Join(lines[len(lines)-n:], "\n")
+
+	case "unique":
+		seen := make(map[string]bool)
+		var unique []string
+		for _, line := range lines {
+			if !seen[line] {
+				seen[line] = true
+				unique = append(unique, line)
+			}
+		}
+		return strings.Join(unique, "\n")
+
+	case "sort":
+		sorted := make([]string, len(lines))
+		copy(sorted, lines)
+		sort.Strings(sorted)
+		return strings.Join(sorted, "\n")
+
+	default:
+		return content
+	}
+}
+
+func parseLineCount(s string, defaultN int) int {
+	if s == "" {
+		return defaultN
+	}
+	n := 0
+	for _, c := range s {
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+		}
+	}
+	if n <= 0 {
+		return defaultN
+	}
+	return n
 }
 
 // --- Helpers ---

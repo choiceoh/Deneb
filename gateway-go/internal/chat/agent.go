@@ -74,6 +74,10 @@ func RunAgent(
 	for turn := 0; turn < cfg.MaxTurns; turn++ {
 		result.Turns = turn + 1
 
+		// Create a fresh TurnContext for cross-tool result sharing within this turn.
+		turnCtx := NewTurnContext()
+		ctx = WithTurnContext(ctx, turnCtx)
+
 		req := llm.ChatRequest{
 			Model:     cfg.Model,
 			Messages:  messages,
@@ -141,6 +145,7 @@ func RunAgent(
 				defer wg.Done()
 				logger.Info("executing tool", "name", tc.Name, "turn", turn)
 
+				start := time.Now()
 				var toolOutput string
 				var toolErr error
 				if tools != nil {
@@ -148,6 +153,7 @@ func RunAgent(
 				} else {
 					toolErr = fmt.Errorf("no tool executor configured")
 				}
+				elapsed := time.Since(start)
 
 				block := llm.ContentBlock{
 					Type:      "tool_result",
@@ -160,6 +166,14 @@ func RunAgent(
 					block.Content = toolOutput
 				}
 				toolResults[idx] = block
+
+				// Store result in TurnContext for cross-tool referencing ($ref).
+				turnCtx.Store(tc.ID, &turnResult_{
+					ToolName: tc.Name,
+					Output:   block.Content,
+					IsError:  block.IsError,
+					Duration: elapsed,
+				})
 			}(i, tc)
 		}
 		wg.Wait()

@@ -7,9 +7,12 @@ import (
 	"log/slog"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
+
+const refWaitTimeout = 30 * time.Second
 
 // ToolExecutor executes a named tool with JSON input and returns the result.
 type ToolExecutor interface {
@@ -29,9 +32,10 @@ type ToolDef struct {
 
 // ToolRegistry maps tool names to tool definitions (executor + schema + description).
 type ToolRegistry struct {
-	mu    sync.RWMutex
-	tools map[string]ToolDef
-	order []string // preserves registration order
+	mu          sync.RWMutex
+	tools       map[string]ToolDef
+	order       []string // preserves registration order
+	postProcess *PostProcessRegistry
 }
 
 // NewToolRegistry creates an empty tool registry.
@@ -64,6 +68,9 @@ func (r *ToolRegistry) RegisterTool(def ToolDef) {
 
 // Execute runs the named tool. Returns an error if the tool is not found.
 //
+// If the input contains "$ref", the referenced tool's output (from TurnContext)
+// is injected into the input as "_ref_content" before execution.
+//
 // If the input contains "compress": true, the tool output is automatically
 // compressed via the local sglang model before returning. This lets the AI
 // agent opt-in to compression on a per-call basis to save context tokens.
@@ -78,9 +85,17 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	// Check for compress flag before executing (avoids re-parsing in every tool).
 	wantCompress := extractCompressFlag(input)
 
+	// Resolve $ref: wait for the referenced tool result and inject it.
+	input = resolveRef(ctx, input)
+
 	output, err := def.Fn(ctx, input)
 	if err != nil {
 		return output, err
+	}
+
+	// Apply post-processors.
+	if r.postProcess != nil {
+		output = r.postProcess.Apply(ctx, name, output)
 	}
 
 	// Apply compression if requested by the agent.
@@ -89,6 +104,13 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	}
 
 	return output, nil
+}
+
+// SetPostProcess attaches a PostProcessRegistry to the tool registry.
+func (r *ToolRegistry) SetPostProcess(pp *PostProcessRegistry) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.postProcess = pp
 }
 
 // extractCompressFlag checks if input JSON contains "compress": true.
@@ -100,6 +122,47 @@ func extractCompressFlag(input json.RawMessage) bool {
 		return meta.Compress
 	}
 	return false
+}
+
+// resolveRef checks for a "$ref" field in the input. If present, it waits for
+// the referenced tool result from TurnContext and injects the output as
+// "_ref_content" into the input JSON. This enables tool chaining: one tool can
+// consume the output of a previously (or concurrently) executed tool.
+func resolveRef(ctx context.Context, input json.RawMessage) json.RawMessage {
+	var meta struct {
+		Ref string `json:"$ref"`
+	}
+	if json.Unmarshal(input, &meta) != nil || meta.Ref == "" {
+		return input
+	}
+
+	tc := TurnContextFromContext(ctx)
+	if tc == nil {
+		return input
+	}
+
+	result, ok := tc.Wait(meta.Ref, refWaitTimeout)
+	if !ok {
+		// Timeout — inject error message as ref content.
+		return injectRefContent(input, fmt.Sprintf("[ref timeout: %s not available within %s]", meta.Ref, refWaitTimeout))
+	}
+
+	return injectRefContent(input, result.Output)
+}
+
+// injectRefContent adds "_ref_content" to the input JSON object.
+func injectRefContent(input json.RawMessage, content string) json.RawMessage {
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(input, &obj) != nil {
+		return input
+	}
+	contentBytes, _ := json.Marshal(content)
+	obj["_ref_content"] = contentBytes
+	result, err := json.Marshal(obj)
+	if err != nil {
+		return input
+	}
+	return result
 }
 
 // Names returns all registered tool names in registration order.

@@ -86,13 +86,14 @@ var coreToolSummaries = map[string]string{
 	"http":               "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
 	"kv":                 "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
 	"clipboard":          "Temporary in-memory clipboard (ring buffer, 32 items max). Actions: set, get, list, clear",
-	"pilot":              "Fast local AI (sglang) that orchestrates tools in one call. sources: [{tool:'read',input:{file_path:'x.go'}}, {tool:'exec',input:{command:'...'}}] or shortcuts: file, exec, grep, url. Pilot runs the tools, then analyzes all results. output_format: text/json/list. Use for tasks that need data gathering + quick analysis without a full subagent",
+	"apply_patch":        "Apply multi-file unified diff patches. Tries git apply first, falls back to patch -p1",
+	"pilot":              "Fast local AI (sglang) that orchestrates tools in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory. Options: chain, max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-thinking for complex tasks. Falls back to raw results if sglang is down",
 }
 
 // toolOrder defines the display order for tools in the system prompt.
 // Grouped logically: filesystem → exec → web → memory → system → sessions.
 var toolOrder = []string{
-	"read", "write", "edit", "grep", "find", "ls",
+	"read", "write", "edit", "apply_patch", "grep", "find", "ls",
 	"exec", "process",
 	"pilot", // speed tool — promoted for discoverability
 	"web",
@@ -130,6 +131,7 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("- Call multiple tools simultaneously when they are independent (the runtime executes them in parallel).\n")
 	sb.WriteString("- Use pilot for gather+analyze patterns: pilot(task:'분석', sources:[...]) replaces sequential read→think→read chains.\n")
 	sb.WriteString("- Any tool call accepts an optional \"compress\": true in its input. When set, large outputs are automatically summarized by the local AI (sglang) before returning, saving context tokens. Use for exploratory reads/greps where full output isn't needed.\n")
+	sb.WriteString("- All tool outputs are automatically post-processed: outputs over 64K chars are trimmed (head+tail preserved), common errors get actionable hints, grep results over 200 lines are capped with count summary, find results over 500 entries are grouped by directory. This is transparent.\n")
 	sb.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
 	sb.WriteString("- Do not ask for confirmation on routine, reversible operations (file reads, searches, status checks).\n")
 	sb.WriteString("- One pilot call that gathers 3 files beats 3 sequential read calls.\n")
@@ -144,6 +146,12 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
 	sb.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section). Project knowledge is auto-prefetched\n")
 	sb.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools.\n\n")
+
+	// Tool Chaining.
+	sb.WriteString("## Tool Chaining ($ref)\n")
+	sb.WriteString("When calling multiple tools in one turn, a tool can reference another tool's output via `\"$ref\": \"<tool_use_id>\"` in its input.\n")
+	sb.WriteString("The referenced tool's output is injected as `_ref_content` in the input JSON. The tool waits up to 30s for the referenced result.\n")
+	sb.WriteString("Common patterns: grep→pilot, exec→pilot, read→pilot, find→read.\n\n")
 
 	// Pilot vs direct tools decision matrix.
 	sb.WriteString("**pilot vs direct tools vs subagent:**\n")
@@ -168,7 +176,11 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("- Batch processing: `pilot(task:'각각 분류해줘', items:[...], output_format:'json')`\n")
 	sb.WriteString("- Multi-step analysis: `pilot(task:'관련 코드 찾아서 분석', grep:'TODO', chain:true)` (chain=true: pilot reads files found by grep)\n")
 	sb.WriteString("- Brief output for Telegram: `pilot(task:'요약', file:'log.txt', max_length:'brief')`\n")
+	sb.WriteString("- HTTP API data: `pilot(task:'분석', http:'https://api.example.com/data')`\n")
+	sb.WriteString("- KV/Memory: `pilot(task:'확인', kv_key:'config.theme')` or `pilot(task:'정리', memory:'배포')`\n")
 	sb.WriteString("- Full sources spec: `pilot(task:'...', sources:[{tool:'read',input:{...}}, {tool:'exec',input:{...}}])`\n\n")
+	sb.WriteString("**Conditional sources:** Use `only_if`/`skip_if` on sources to conditionally execute based on another source's success.\n")
+	sb.WriteString("**Post-processing:** Add `post_process` steps (filter_lines, head, tail, unique, sort) to transform gathered data before LLM analysis.\n\n")
 	sb.WriteString("**When NOT to use pilot:**\n")
 	sb.WriteString("- Complex multi-turn reasoning (use your own thinking)\n")
 	sb.WriteString("- When you need full uncompressed output for precise editing\n\n")

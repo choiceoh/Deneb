@@ -378,3 +378,95 @@ func TestIsListItem(t *testing.T) {
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
+
+// --- Tests for new integration features ---
+
+func TestExpandShortcuts_HTTP(t *testing.T) {
+	p := pilotParams{Task: "analyze", HTTP: "https://api.example.com/data"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "http" {
+		t.Errorf("expected 1 http spec, got %d", len(specs))
+	}
+}
+
+func TestExpandShortcuts_KVKey(t *testing.T) {
+	p := pilotParams{Task: "check", KVKey: "config.theme"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "kv" {
+		t.Errorf("expected 1 kv spec, got %d", len(specs))
+	}
+}
+
+func TestExpandShortcuts_Memory(t *testing.T) {
+	p := pilotParams{Task: "summarize", Memory: "배포 결정"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "memory_search" {
+		t.Errorf("expected 1 memory_search spec, got %d", len(specs))
+	}
+}
+
+func TestSourceSucceeded(t *testing.T) {
+	results := []sourceResult{
+		{label: "mem", content: "some results", sourceType: "content"},
+		{label: "err", content: "[tool error: failed]", sourceType: "content"},
+		{label: "skip", content: "[skipped: mem did not succeed]", sourceType: "content"},
+		{label: "empty", content: "", sourceType: "content"},
+	}
+	if !sourceSucceeded(results, "mem") {
+		t.Error("expected 'mem' to be successful")
+	}
+	if sourceSucceeded(results, "err") {
+		t.Error("expected 'err' to not be successful")
+	}
+	if sourceSucceeded(results, "skip") {
+		t.Error("expected 'skip' to not be successful")
+	}
+	if sourceSucceeded(results, "empty") {
+		t.Error("expected 'empty' to not be successful")
+	}
+}
+
+func TestApplyPostProcessSteps_FilterLines(t *testing.T) {
+	gathered := []sourceResult{{label: "data", content: "foo bar\nbaz qux\nfoo baz", sourceType: "content"}}
+	steps := []postProcessStep{{Action: "filter_lines", Param: "foo"}}
+	result := applyPostProcessSteps(gathered, steps)
+	if result[0].content != "foo bar\nfoo baz" {
+		t.Errorf("unexpected filter result: %q", result[0].content)
+	}
+}
+
+func TestApplyPostProcessSteps_Unique(t *testing.T) {
+	gathered := []sourceResult{{label: "data", content: "a\nb\na\nc\nb", sourceType: "content"}}
+	steps := []postProcessStep{{Action: "unique"}}
+	result := applyPostProcessSteps(gathered, steps)
+	if result[0].content != "a\nb\nc" {
+		t.Errorf("unexpected unique result: %q", result[0].content)
+	}
+}
+
+func TestApplyPostProcessSteps_Sort(t *testing.T) {
+	gathered := []sourceResult{{label: "data", content: "cherry\napple\nbanana", sourceType: "content"}}
+	steps := []postProcessStep{{Action: "sort"}}
+	result := applyPostProcessSteps(gathered, steps)
+	if result[0].content != "apple\nbanana\ncherry" {
+		t.Errorf("unexpected sort result: %q", result[0].content)
+	}
+}
+
+func TestParseLineCount(t *testing.T) {
+	cases := []struct {
+		input    string
+		defN     int
+		expected int
+	}{
+		{"10", 20, 10},
+		{"", 20, 20},
+		{"abc", 20, 20},
+	}
+	for _, tc := range cases {
+		got := parseLineCount(tc.input, tc.defN)
+		if got != tc.expected {
+			t.Errorf("parseLineCount(%q, %d) = %d, want %d", tc.input, tc.defN, got, tc.expected)
+		}
+	}
+}
