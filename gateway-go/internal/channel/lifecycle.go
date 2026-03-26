@@ -26,11 +26,12 @@ const (
 
 // LifecycleManager orchestrates channel plugin lifecycle (start/stop/health).
 type LifecycleManager struct {
-	registry     *Registry
-	logger       *slog.Logger
+	registry *Registry
+	logger   *slog.Logger
+
 	mu           sync.RWMutex
-	startedAt    map[string]int64 // channel ID → start timestamp
-	restartCount map[string]int   // channel ID → consecutive restart attempts
+	startedAt    map[string]int64 // guarded by mu — channel ID → start timestamp
+	restartCount map[string]int   // guarded by mu — channel ID → consecutive restart attempts
 }
 
 // NewLifecycleManager creates a lifecycle manager for the given registry.

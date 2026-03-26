@@ -976,7 +976,7 @@ func (s *Server) registerPhase2Methods() {
 		fakeReq.Params, _ = json.Marshal(params)
 		resp := s.chatHandler.SessionsSend(context.Background(), fakeReq)
 		if resp != nil && resp.Error != nil {
-			return fmt.Errorf("%s", resp.Error.Message)
+			return errors.New(resp.Error.Message)
 		}
 		return nil
 	}
