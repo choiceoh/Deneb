@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 )
 
@@ -392,54 +391,38 @@ func toolWebFetch() ToolFunc {
 			return "", fmt.Errorf("url is required")
 		}
 
-		// Validate URL scheme.
-		if !strings.HasPrefix(p.URL, "http://") && !strings.HasPrefix(p.URL, "https://") {
-			return "", fmt.Errorf("only http:// and https:// URLs are supported")
-		}
-
 		// Default max chars.
 		maxChars := 50000
 		if p.MaxChars > 0 {
 			maxChars = p.MaxChars
 		}
 
-		// Fetch with timeout.
+		// Size limit: 2× maxChars raw bytes, capped at 5 MB.
+		maxBytes := int64(maxChars * 2)
+		if maxBytes > 5*1024*1024 {
+			maxBytes = 5 * 1024 * 1024
+		}
+
+		// Use SSRF-safe media.Fetch for the download.
 		fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
-		req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, p.URL, nil)
-		if err != nil {
-			return "", fmt.Errorf("create request: %w", err)
-		}
-		req.Header.Set("User-Agent", "Deneb-Gateway/1.0")
-		req.Header.Set("Accept", "text/html,text/plain,application/json,*/*")
-
-		resp, err := http.DefaultClient.Do(req)
+		result, err := media.Fetch(fetchCtx, media.FetchOptions{
+			URL:      p.URL,
+			MaxBytes: maxBytes,
+			Headers: map[string]string{
+				"User-Agent": "Deneb-Gateway/1.0",
+				"Accept":     "text/html,text/plain,application/json,*/*",
+			},
+		})
 		if err != nil {
 			return "", fmt.Errorf("fetch failed: %w", err)
 		}
-		defer resp.Body.Close()
 
-		if resp.StatusCode >= 400 {
-			return fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status), nil
-		}
-
-		// Read body with size limit (2x maxChars as raw bytes may be larger).
-		limitBytes := int64(maxChars * 2)
-		if limitBytes > 5*1024*1024 {
-			limitBytes = 5 * 1024 * 1024 // Cap at 5 MB
-		}
-		bodyReader := io.LimitReader(resp.Body, limitBytes)
-		body, err := io.ReadAll(bodyReader)
-		if err != nil {
-			return "", fmt.Errorf("read body: %w", err)
-		}
-
-		content := string(body)
+		content := string(result.Data)
 
 		// Basic HTML tag stripping for readability.
-		contentType := resp.Header.Get("Content-Type")
-		if strings.Contains(contentType, "text/html") {
+		if strings.Contains(result.ContentType, "text/html") {
 			content = stripHTMLTags(content)
 		}
 

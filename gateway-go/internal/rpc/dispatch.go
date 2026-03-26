@@ -12,19 +12,27 @@ import (
 	"runtime/debug"
 	"sync"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // HandlerFunc processes an RPC request and returns a response.
 type HandlerFunc func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame
 
+// MiddlewareFunc wraps an RPC handler to add cross-cutting behavior (logging,
+// rate-limiting, etc.). This type-aliases the middleware package's Middleware
+// so callers don't need a separate import.
+type MiddlewareFunc = middleware.Middleware
+
 // Dispatcher routes RPC method calls to registered handlers.
-// Optionally backed by a WorkerPool to bound concurrent handler goroutines.
+// Optionally backed by a WorkerPool to bound concurrent handler goroutines
+// and a middleware chain for cross-cutting concerns.
 type Dispatcher struct {
 	mu       sync.RWMutex
 	handlers map[string]HandlerFunc
 	logger   *slog.Logger
 	pool     *WorkerPool
+	mw       middleware.Middleware // composed middleware chain (may be nil)
 }
 
 // NewDispatcher creates an empty RPC dispatcher with a default worker pool
@@ -35,6 +43,16 @@ func NewDispatcher(logger *slog.Logger) *Dispatcher {
 		logger:   logger,
 		pool:     NewWorkerPool(0), // default: 2× CPU cores, clamped [4, 64]
 	}
+}
+
+// UseMiddleware installs a composed middleware chain that wraps every handler
+// invocation. Middleware are applied in order: first middleware is outermost.
+// Must be called before the first Dispatch; not safe for concurrent use.
+func (d *Dispatcher) UseMiddleware(mws ...middleware.Middleware) {
+	if len(mws) == 0 {
+		return
+	}
+	d.mw = middleware.Chain(mws...)
 }
 
 // SetWorkerPool attaches a bounded worker pool for handler execution.
@@ -67,19 +85,29 @@ func (d *Dispatcher) Methods() []string {
 
 // Dispatch routes a request to the appropriate handler.
 // Returns a NOT_FOUND error if no handler is registered for the method.
+// If a middleware chain is installed via UseMiddleware, it wraps the handler.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	d.mu.RLock()
 	handler, ok := d.handlers[req.Method]
+	mw := d.mw
 	d.mu.RUnlock()
 
-	if ok {
-		return d.safeCall(ctx, req, handler)
+	if !ok {
+		return protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrNotFound,
+			fmt.Sprintf("unknown method: %q", req.Method),
+		))
 	}
 
-	return protocol.NewResponseError(req.ID, protocol.NewError(
-		protocol.ErrNotFound,
-		fmt.Sprintf("unknown method: %q", req.Method),
-	))
+	// Wrap handler through middleware chain if one is installed.
+	// Type conversion needed because rpc.HandlerFunc and middleware.HandlerFunc
+	// are structurally identical but distinct named types.
+	if mw != nil {
+		wrapped := mw(middleware.HandlerFunc(handler))
+		handler = HandlerFunc(wrapped)
+	}
+
+	return d.safeCall(ctx, req, handler)
 }
 
 // safeCall invokes a handler with panic recovery and a hard deadline.
