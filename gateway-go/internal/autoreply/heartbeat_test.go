@@ -43,13 +43,13 @@ func TestResolveHeartbeatPrompt(t *testing.T) {
 
 func TestStripHeartbeatToken(t *testing.T) {
 	tests := []struct {
-		name       string
-		raw        string
-		mode       StripHeartbeatMode
-		maxAck     int
-		wantSkip   bool
-		wantText   string
-		wantStrip  bool
+		name      string
+		raw       string
+		mode      StripHeartbeatMode
+		maxAck    int
+		wantSkip  bool
+		wantText  string
+		wantStrip bool
 	}{
 		{"empty", "", StripModeMessage, 0, true, "", false},
 		{"only token", "HEARTBEAT_OK", StripModeMessage, 0, true, "", true},

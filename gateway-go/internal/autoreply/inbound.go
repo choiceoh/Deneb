@@ -93,7 +93,7 @@ func StripStructuralPrefixes(text string) string {
 
 // InboundDedupe tracks recently processed message IDs to prevent duplicates.
 type InboundDedupe struct {
-	seen map[string]int64
+	seen    map[string]int64
 	maxSize int
 }
 

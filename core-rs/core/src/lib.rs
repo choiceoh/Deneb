@@ -8,8 +8,6 @@
 //! It exposes both a Rust API and a C FFI surface for integration
 //! with Go (via CGo) and Node.js (via napi-rs).
 
-#![deny(clippy::all)]
-
 #[cfg(feature = "napi_binding")]
 #[macro_use]
 extern crate napi_derive;

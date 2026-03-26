@@ -6,9 +6,9 @@ import (
 
 func TestParseSchedule(t *testing.T) {
 	tests := []struct {
-		input    string
-		wantMs   int64
-		wantErr  bool
+		input   string
+		wantMs  int64
+		wantErr bool
 	}{
 		{"5000", 5000, false},
 		{"every 5m", 300000, false},

@@ -47,12 +47,12 @@ type CompactionResult struct {
 
 // TranscriptMessage is a parsed message from a JSONL transcript line.
 type TranscriptMessage struct {
-	Type      string `json:"type,omitempty"`
-	Role      string `json:"role,omitempty"`
-	Content   string `json:"content,omitempty"`
-	ID        string `json:"id,omitempty"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	TokenCount int   `json:"tokenCount,omitempty"`
+	Type       string `json:"type,omitempty"`
+	Role       string `json:"role,omitempty"`
+	Content    string `json:"content,omitempty"`
+	ID         string `json:"id,omitempty"`
+	Timestamp  int64  `json:"timestamp,omitempty"`
+	TokenCount int    `json:"tokenCount,omitempty"`
 	// Raw preserves the original JSON for re-serialization.
 	Raw json.RawMessage `json:"-"`
 }
@@ -288,9 +288,9 @@ func buildSummary(messages []TranscriptMessage) map[string]any {
 		"content":   fmt.Sprintf("Summary of %d earlier messages:\n%s", len(messages), strings.Join(parts, "\n")),
 		"timestamp": time.Now().UnixMilli(),
 		"metadata": map[string]any{
-			"compacted":        true,
-			"originalCount":    len(messages),
-			"compactedAt":      time.Now().UnixMilli(),
+			"compacted":     true,
+			"originalCount": len(messages),
+			"compactedAt":   time.Now().UnixMilli(),
 		},
 	}
 	return summary

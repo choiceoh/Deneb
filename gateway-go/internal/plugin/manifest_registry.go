@@ -19,24 +19,24 @@ const defaultManifestCacheMs = 1000
 // PluginManifestRecord is the complete metadata for a loaded plugin.
 // Mirrors PluginManifestRecord from manifest-registry.ts.
 type PluginManifestRecord struct {
-	ID                string              `json:"id"`
-	Name              string              `json:"name,omitempty"`
-	Description       string              `json:"description,omitempty"`
-	Version           string              `json:"version,omitempty"`
-	Format            PluginFormat         `json:"format,omitempty"`
-	Origin            PluginOrigin         `json:"origin"`
-	Source            string              `json:"source"`
-	SetupSource       string              `json:"setupSource,omitempty"`
-	RootDir           string              `json:"rootDir"`
-	PackageDir        string              `json:"packageDir,omitempty"`
-	ManifestPath      string              `json:"manifestPath,omitempty"`
-	WorkspaceDir      string              `json:"workspaceDir,omitempty"`
-	Channels          []string            `json:"channels,omitempty"`
-	Providers         []string            `json:"providers,omitempty"`
-	Skills            []string            `json:"skills,omitempty"`
-	Hooks             []string            `json:"hooks,omitempty"`
-	Schema            map[string]any      `json:"schema,omitempty"`
-	PackageManifest   *DenebPackageManifest `json:"packageManifest,omitempty"`
+	ID              string                `json:"id"`
+	Name            string                `json:"name,omitempty"`
+	Description     string                `json:"description,omitempty"`
+	Version         string                `json:"version,omitempty"`
+	Format          PluginFormat          `json:"format,omitempty"`
+	Origin          PluginOrigin          `json:"origin"`
+	Source          string                `json:"source"`
+	SetupSource     string                `json:"setupSource,omitempty"`
+	RootDir         string                `json:"rootDir"`
+	PackageDir      string                `json:"packageDir,omitempty"`
+	ManifestPath    string                `json:"manifestPath,omitempty"`
+	WorkspaceDir    string                `json:"workspaceDir,omitempty"`
+	Channels        []string              `json:"channels,omitempty"`
+	Providers       []string              `json:"providers,omitempty"`
+	Skills          []string              `json:"skills,omitempty"`
+	Hooks           []string              `json:"hooks,omitempty"`
+	Schema          map[string]any        `json:"schema,omitempty"`
+	PackageManifest *DenebPackageManifest `json:"packageManifest,omitempty"`
 }
 
 // PluginManifestRegistryResult holds the result of loading the manifest registry.
@@ -48,11 +48,11 @@ type PluginManifestRegistryResult struct {
 // FullManifestRegistry extends ManifestRegistry with discovery, deduplication,
 // and caching. It's the Go equivalent of loadPluginManifestRegistry.
 type FullManifestRegistry struct {
-	mu          sync.Mutex
-	records     map[string]*PluginManifestRecord
-	cache       map[string]*manifestCacheEntry
-	discoverer  *PluginDiscoverer
-	logger      *slog.Logger
+	mu         sync.Mutex
+	records    map[string]*PluginManifestRecord
+	cache      map[string]*manifestCacheEntry
+	discoverer *PluginDiscoverer
+	logger     *slog.Logger
 }
 
 type manifestCacheEntry struct {

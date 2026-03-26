@@ -17,12 +17,12 @@ type ProviderModel struct {
 
 // ProviderAuth holds authentication credentials for a provider.
 type ProviderAuth struct {
-	Type       string `json:"type"`       // "api_key", "oauth", "token"
-	APIKey     string `json:"apiKey,omitempty"`
-	Token      string `json:"token,omitempty"`
-	BaseURL    string `json:"baseUrl,omitempty"`
-	OrgID      string `json:"orgId,omitempty"`
-	ProfileID  string `json:"profileId,omitempty"`
+	Type      string `json:"type"` // "api_key", "oauth", "token"
+	APIKey    string `json:"apiKey,omitempty"`
+	Token     string `json:"token,omitempty"`
+	BaseURL   string `json:"baseUrl,omitempty"`
+	OrgID     string `json:"orgId,omitempty"`
+	ProfileID string `json:"profileId,omitempty"`
 }
 
 // ProviderCapabilities describes what a provider supports.

@@ -137,7 +137,7 @@ func SanitizeHTML(input string) string {
 
 // blockedHosts are hostnames that should not be accessed (SSRF protection).
 var blockedHosts = map[string]bool{
-	"localhost":                 true,
+	"localhost":                true,
 	"127.0.0.1":                true,
 	"0.0.0.0":                  true,
 	"[::1]":                    true,

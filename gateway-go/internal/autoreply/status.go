@@ -9,21 +9,21 @@ import (
 
 // StatusReport holds all data for building a status message.
 type StatusReport struct {
-	SessionKey    string
-	AgentID       string
-	Model         string
-	Provider      string
-	Channel       string
-	IsGroup       bool
-	ThinkLevel    ThinkLevel
-	FastMode      bool
-	VerboseLevel  VerboseLevel
-	ReasoningLevel ReasoningLevel
-	ElevatedLevel ElevatedLevel
-	SendPolicy    string
+	SessionKey      string
+	AgentID         string
+	Model           string
+	Provider        string
+	Channel         string
+	IsGroup         bool
+	ThinkLevel      ThinkLevel
+	FastMode        bool
+	VerboseLevel    VerboseLevel
+	ReasoningLevel  ReasoningLevel
+	ElevatedLevel   ElevatedLevel
+	SendPolicy      string
 	GroupActivation GroupActivationMode
-	Usage         *SessionUsage
-	RunCount      int
+	Usage           *SessionUsage
+	RunCount        int
 }
 
 // BuildStatusMessage creates a formatted status message from a report.

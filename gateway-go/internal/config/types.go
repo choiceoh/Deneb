@@ -10,16 +10,16 @@ import "encoding/json"
 // Only gateway-relevant sections are fully typed; other sections are preserved
 // as raw JSON for forwarding to the Node.js Plugin Host bridge.
 type DenebConfig struct {
-	Meta      *MetaConfig      `json:"meta,omitempty"`
-	Gateway   *GatewayConfig   `json:"gateway,omitempty"`
-	Logging   *LoggingConfig   `json:"logging,omitempty"`
-	Hooks     *HooksConfig     `json:"hooks,omitempty"`
+	Meta       *MetaConfig       `json:"meta,omitempty"`
+	Gateway    *GatewayConfig    `json:"gateway,omitempty"`
+	Logging    *LoggingConfig    `json:"logging,omitempty"`
+	Hooks      *HooksConfig      `json:"hooks,omitempty"`
 	CanvasHost *CanvasHostConfig `json:"canvasHost,omitempty"`
-	Media     *MediaConfig     `json:"media,omitempty"`
-	Secrets   *SecretsConfig   `json:"secrets,omitempty"`
-	Channels  *ChannelsConfig  `json:"channels,omitempty"`
-	Session   *SessionConfig   `json:"session,omitempty"`
-	Agents    *AgentsConfig    `json:"agents,omitempty"`
+	Media      *MediaConfig      `json:"media,omitempty"`
+	Secrets    *SecretsConfig    `json:"secrets,omitempty"`
+	Channels   *ChannelsConfig   `json:"channels,omitempty"`
+	Session    *SessionConfig    `json:"session,omitempty"`
+	Agents     *AgentsConfig     `json:"agents,omitempty"`
 }
 
 // MetaConfig tracks config version metadata.
@@ -30,46 +30,46 @@ type MetaConfig struct {
 
 // GatewayConfig holds all gateway server settings.
 type GatewayConfig struct {
-	Port                              *int                  `json:"port,omitempty"`
-	Mode                              string                `json:"mode,omitempty"` // "local" | "remote"
-	Bind                              string                `json:"bind,omitempty"` // GatewayBindMode
-	CustomBindHost                    string                `json:"customBindHost,omitempty"`
+	Port                              *int                    `json:"port,omitempty"`
+	Mode                              string                  `json:"mode,omitempty"` // "local" | "remote"
+	Bind                              string                  `json:"bind,omitempty"` // GatewayBindMode
+	CustomBindHost                    string                  `json:"customBindHost,omitempty"`
 	ControlUI                         *GatewayControlUIConfig `json:"controlUi,omitempty"`
-	Auth                              *GatewayAuthConfig    `json:"auth,omitempty"`
+	Auth                              *GatewayAuthConfig      `json:"auth,omitempty"`
 	Tailscale                         *GatewayTailscaleConfig `json:"tailscale,omitempty"`
-	Remote                            *GatewayRemoteConfig  `json:"remote,omitempty"`
-	Reload                            *GatewayReloadConfig  `json:"reload,omitempty"`
-	TLS                               *GatewayTLSConfig     `json:"tls,omitempty"`
-	HTTP                              *GatewayHTTPConfig    `json:"http,omitempty"`
-	Push                              *GatewayPushConfig    `json:"push,omitempty"`
-	Nodes                             *GatewayNodesConfig   `json:"nodes,omitempty"`
-	TrustedProxies                    []string              `json:"trustedProxies,omitempty"`
-	AllowRealIPFallback               *bool                 `json:"allowRealIpFallback,omitempty"`
-	Tools                             *GatewayToolsConfig   `json:"tools,omitempty"`
-	ChannelHealthCheckMinutes         *int                  `json:"channelHealthCheckMinutes,omitempty"`
-	ChannelStaleEventThresholdMinutes *int                  `json:"channelStaleEventThresholdMinutes,omitempty"`
-	ChannelMaxRestartsPerHour         *int                  `json:"channelMaxRestartsPerHour,omitempty"`
+	Remote                            *GatewayRemoteConfig    `json:"remote,omitempty"`
+	Reload                            *GatewayReloadConfig    `json:"reload,omitempty"`
+	TLS                               *GatewayTLSConfig       `json:"tls,omitempty"`
+	HTTP                              *GatewayHTTPConfig      `json:"http,omitempty"`
+	Push                              *GatewayPushConfig      `json:"push,omitempty"`
+	Nodes                             *GatewayNodesConfig     `json:"nodes,omitempty"`
+	TrustedProxies                    []string                `json:"trustedProxies,omitempty"`
+	AllowRealIPFallback               *bool                   `json:"allowRealIpFallback,omitempty"`
+	Tools                             *GatewayToolsConfig     `json:"tools,omitempty"`
+	ChannelHealthCheckMinutes         *int                    `json:"channelHealthCheckMinutes,omitempty"`
+	ChannelStaleEventThresholdMinutes *int                    `json:"channelStaleEventThresholdMinutes,omitempty"`
+	ChannelMaxRestartsPerHour         *int                    `json:"channelMaxRestartsPerHour,omitempty"`
 }
 
 // GatewayControlUIConfig controls the Control UI serving.
 type GatewayControlUIConfig struct {
-	Enabled                                    *bool    `json:"enabled,omitempty"`
-	BasePath                                   string   `json:"basePath,omitempty"`
-	Root                                       string   `json:"root,omitempty"`
-	AllowedOrigins                             []string `json:"allowedOrigins,omitempty"`
-	DangerouslyAllowHostHeaderOriginFallback   *bool    `json:"dangerouslyAllowHostHeaderOriginFallback,omitempty"`
-	AllowInsecureAuth                          *bool    `json:"allowInsecureAuth,omitempty"`
-	DangerouslyDisableDeviceAuth               *bool    `json:"dangerouslyDisableDeviceAuth,omitempty"`
+	Enabled                                  *bool    `json:"enabled,omitempty"`
+	BasePath                                 string   `json:"basePath,omitempty"`
+	Root                                     string   `json:"root,omitempty"`
+	AllowedOrigins                           []string `json:"allowedOrigins,omitempty"`
+	DangerouslyAllowHostHeaderOriginFallback *bool    `json:"dangerouslyAllowHostHeaderOriginFallback,omitempty"`
+	AllowInsecureAuth                        *bool    `json:"allowInsecureAuth,omitempty"`
+	DangerouslyDisableDeviceAuth             *bool    `json:"dangerouslyDisableDeviceAuth,omitempty"`
 }
 
 // GatewayAuthConfig configures gateway authentication.
 type GatewayAuthConfig struct {
-	Mode         string                    `json:"mode,omitempty"` // "none" | "token" | "password" | "trusted-proxy"
-	Token        string                    `json:"token,omitempty"`
-	Password     string                    `json:"password,omitempty"`
-	AllowTailscale *bool                   `json:"allowTailscale,omitempty"`
-	RateLimit    *GatewayAuthRateLimitConfig `json:"rateLimit,omitempty"`
-	TrustedProxy *GatewayTrustedProxyConfig  `json:"trustedProxy,omitempty"`
+	Mode           string                      `json:"mode,omitempty"` // "none" | "token" | "password" | "trusted-proxy"
+	Token          string                      `json:"token,omitempty"`
+	Password       string                      `json:"password,omitempty"`
+	AllowTailscale *bool                       `json:"allowTailscale,omitempty"`
+	RateLimit      *GatewayAuthRateLimitConfig `json:"rateLimit,omitempty"`
+	TrustedProxy   *GatewayTrustedProxyConfig  `json:"trustedProxy,omitempty"`
 }
 
 // GatewayAuthRateLimitConfig configures auth rate limiting.
@@ -107,9 +107,9 @@ type GatewayRemoteConfig struct {
 
 // GatewayReloadConfig for config reload behavior.
 type GatewayReloadConfig struct {
-	Mode               string `json:"mode,omitempty"` // "off" | "restart" | "hot" | "hybrid"
-	DebounceMs         *int   `json:"debounceMs,omitempty"`
-	DeferralTimeoutMs  *int   `json:"deferralTimeoutMs,omitempty"`
+	Mode              string `json:"mode,omitempty"` // "off" | "restart" | "hot" | "hybrid"
+	DebounceMs        *int   `json:"debounceMs,omitempty"`
+	DeferralTimeoutMs *int   `json:"deferralTimeoutMs,omitempty"`
 }
 
 // GatewayTLSConfig for TLS termination.
@@ -124,7 +124,7 @@ type GatewayTLSConfig struct {
 // GatewayHTTPConfig for HTTP endpoint settings.
 type GatewayHTTPConfig struct {
 	Endpoints       *GatewayHTTPEndpointsConfig       `json:"endpoints,omitempty"`
-	SecurityHeaders *GatewayHTTPSecurityHeadersConfig  `json:"securityHeaders,omitempty"`
+	SecurityHeaders *GatewayHTTPSecurityHeadersConfig `json:"securityHeaders,omitempty"`
 }
 
 // GatewayHTTPEndpointsConfig for HTTP API endpoints.
@@ -197,8 +197,8 @@ type LoggingConfig struct {
 
 // HooksConfig for gateway hooks.
 type HooksConfig struct {
-	Token   string        `json:"token,omitempty"`
-	Entries []HookEntry   `json:"entries,omitempty"`
+	Token   string      `json:"token,omitempty"`
+	Entries []HookEntry `json:"entries,omitempty"`
 }
 
 // HookEntry defines a single hook.
@@ -246,12 +246,12 @@ type SessionConfig struct {
 
 // AgentsConfig for agent runtime.
 type AgentsConfig struct {
-	MaxConcurrent         *int                 `json:"maxConcurrent,omitempty"`
-	SubagentMaxConcurrent *int                 `json:"subagentMaxConcurrent,omitempty"`
-	DefaultModel          string               `json:"defaultModel,omitempty"`
-	DefaultSystem         string               `json:"defaultSystem,omitempty"`
+	MaxConcurrent         *int                  `json:"maxConcurrent,omitempty"`
+	SubagentMaxConcurrent *int                  `json:"subagentMaxConcurrent,omitempty"`
+	DefaultModel          string                `json:"defaultModel,omitempty"`
+	DefaultSystem         string                `json:"defaultSystem,omitempty"`
 	Defaults              *AgentsDefaultsConfig `json:"defaults,omitempty"`
-	List                  []AgentEntryConfig   `json:"list,omitempty"`
+	List                  []AgentEntryConfig    `json:"list,omitempty"`
 }
 
 // AgentsDefaultsConfig holds nested agents.defaults.* fields.

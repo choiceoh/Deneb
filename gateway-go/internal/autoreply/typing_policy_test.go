@@ -4,10 +4,10 @@ import "testing"
 
 func TestResolveRunTypingPolicy(t *testing.T) {
 	tests := []struct {
-		name           string
-		params         ResolveRunTypingPolicyParams
-		wantPolicy     TypingPolicy
-		wantSuppress   bool
+		name         string
+		params       ResolveRunTypingPolicyParams
+		wantPolicy   TypingPolicy
+		wantSuppress bool
 	}{
 		{
 			name:         "heartbeat forces heartbeat policy and suppresses",

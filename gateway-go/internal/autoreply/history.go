@@ -9,9 +9,9 @@ const maxHistoryKeys = 1000
 
 // HistoryEntry records a message in the conversation history.
 type HistoryEntry struct {
-	Role      string `json:"role"` // "user" or "assistant"
-	Text      string `json:"text"`
-	Timestamp int64  `json:"timestamp"`
+	Role       string `json:"role"` // "user" or "assistant"
+	Text       string `json:"text"`
+	Timestamp  int64  `json:"timestamp"`
 	SessionKey string `json:"sessionKey,omitempty"`
 }
 

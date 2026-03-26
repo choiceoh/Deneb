@@ -4,9 +4,9 @@ import "testing"
 
 // mockResolver implements ProviderThinkingResolver for testing.
 type mockResolver struct {
-	binaryResult   *bool
-	xhighResult    *bool
-	defaultResult  *ThinkLevel
+	binaryResult  *bool
+	xhighResult   *bool
+	defaultResult *ThinkLevel
 }
 
 func (m *mockResolver) ResolveBinaryThinking(provider string, ctx ProviderThinkingContext) (bool, bool) {
@@ -30,7 +30,7 @@ func (m *mockResolver) ResolveDefaultThinkingLevel(provider string, ctx Provider
 	return "", false
 }
 
-func thinkingBoolPtr(v bool) *bool { return &v }
+func thinkingBoolPtr(v bool) *bool      { return &v }
 func thinkPtr(v ThinkLevel) *ThinkLevel { return &v }
 
 func TestThinkingRuntime_IsBinaryThinkingProvider_Builtin(t *testing.T) {

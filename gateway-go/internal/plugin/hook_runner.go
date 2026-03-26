@@ -25,9 +25,9 @@ type TypedHookRegistration struct {
 
 // TypedHookRunner provides typed hook execution with merge strategies.
 type TypedHookRunner struct {
-	mu         sync.RWMutex
-	hooks      []TypedHookRegistration
-	logger     *slog.Logger
+	mu          sync.RWMutex
+	hooks       []TypedHookRegistration
+	logger      *slog.Logger
 	catchErrors bool
 }
 
@@ -245,7 +245,7 @@ func (r *TypedHookRunner) RunMessageSending(ctx context.Context, payload map[str
 
 // BeforeToolCallResult holds the result of before_tool_call hooks.
 type BeforeToolCallResult struct {
-	Cancel      bool   `json:"cancel,omitempty"`
+	Cancel       bool   `json:"cancel,omitempty"`
 	CancelReason string `json:"cancelReason,omitempty"`
 }
 

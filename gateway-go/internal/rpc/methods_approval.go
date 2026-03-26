@@ -35,25 +35,25 @@ func RegisterApprovalMethods(d *Dispatcher, deps ApprovalDeps) {
 func execApprovalRequest(deps ApprovalDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			ID           string            `json:"id,omitempty"`
-			Command      string            `json:"command"`
-			CommandArgv  []string          `json:"commandArgv,omitempty"`
-			Env          map[string]string `json:"env,omitempty"`
-			Cwd          string            `json:"cwd,omitempty"`
-			SystemRunPlan any              `json:"systemRunPlan,omitempty"`
-			NodeID       string            `json:"nodeId,omitempty"`
-			Host         string            `json:"host,omitempty"`
-			Security     string            `json:"security,omitempty"`
-			Ask          string            `json:"ask,omitempty"`
-			AgentID      string            `json:"agentId,omitempty"`
-			ResolvedPath string            `json:"resolvedPath,omitempty"`
-			SessionKey   string            `json:"sessionKey,omitempty"`
-			TimeoutMs    int64             `json:"timeoutMs,omitempty"`
-			TwoPhase     bool              `json:"twoPhase,omitempty"`
-			TurnSourceChannel   string     `json:"turnSourceChannel,omitempty"`
-			TurnSourceTo        string     `json:"turnSourceTo,omitempty"`
-			TurnSourceAccountID string     `json:"turnSourceAccountId,omitempty"`
-			TurnSourceThreadID  string     `json:"turnSourceThreadId,omitempty"`
+			ID                  string            `json:"id,omitempty"`
+			Command             string            `json:"command"`
+			CommandArgv         []string          `json:"commandArgv,omitempty"`
+			Env                 map[string]string `json:"env,omitempty"`
+			Cwd                 string            `json:"cwd,omitempty"`
+			SystemRunPlan       any               `json:"systemRunPlan,omitempty"`
+			NodeID              string            `json:"nodeId,omitempty"`
+			Host                string            `json:"host,omitempty"`
+			Security            string            `json:"security,omitempty"`
+			Ask                 string            `json:"ask,omitempty"`
+			AgentID             string            `json:"agentId,omitempty"`
+			ResolvedPath        string            `json:"resolvedPath,omitempty"`
+			SessionKey          string            `json:"sessionKey,omitempty"`
+			TimeoutMs           int64             `json:"timeoutMs,omitempty"`
+			TwoPhase            bool              `json:"twoPhase,omitempty"`
+			TurnSourceChannel   string            `json:"turnSourceChannel,omitempty"`
+			TurnSourceTo        string            `json:"turnSourceTo,omitempty"`
+			TurnSourceAccountID string            `json:"turnSourceAccountId,omitempty"`
+			TurnSourceThreadID  string            `json:"turnSourceThreadId,omitempty"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(

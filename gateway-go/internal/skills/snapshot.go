@@ -28,7 +28,7 @@ type FullSkillSnapshot struct {
 // SnapshotConfig holds all the configuration for building a snapshot.
 type SnapshotConfig struct {
 	DiscoverConfig
-	SkillFilter     []string           // nil = unrestricted, empty = no skills
+	SkillFilter     []string // nil = unrestricted, empty = no skills
 	Eligibility     EligibilityContext
 	SnapshotVersion int64
 	RemoteNote      string // optional note from remote eligibility

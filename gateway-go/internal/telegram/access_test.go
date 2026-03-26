@@ -424,7 +424,7 @@ func TestConfig_PolicyOverrides(t *testing.T) {
 		DmPolicy:       DmPolicyOpen,
 		GroupPolicy:    GroupPolicyAllowlist,
 		Streaming:      StreamingPartial,
-		BlockStreaming:  boolPtr(true),
+		BlockStreaming: boolPtr(true),
 		ChunkMode:      ChunkModeNewline,
 		ReplyToMode:    ReplyToAll,
 		ReactionLevel:  ReactionExtensive,

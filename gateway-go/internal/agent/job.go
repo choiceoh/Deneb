@@ -50,17 +50,17 @@ type pendingError struct {
 
 const (
 	cacheTTLMs      = 10 * 60 * 1000 // 10 minutes
-	errorGraceMs    = 15_000          // 15 seconds
+	errorGraceMs    = 15_000         // 15 seconds
 	maxCacheEntries = 500
 )
 
 // JobTracker manages agent job tracking, caching, and deduplication.
 type JobTracker struct {
-	mu           sync.Mutex
-	cache        map[string]*RunSnapshot
-	pending      map[string]*pendingError
-	runStarts    map[string]int64 // runId -> startedAt timestamp
-	logger       *slog.Logger
+	mu        sync.Mutex
+	cache     map[string]*RunSnapshot
+	pending   map[string]*pendingError
+	runStarts map[string]int64 // runId -> startedAt timestamp
+	logger    *slog.Logger
 
 	// Subscribers for run lifecycle events.
 	subMu       sync.RWMutex

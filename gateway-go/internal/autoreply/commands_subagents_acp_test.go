@@ -12,32 +12,32 @@ func TestNewSubagentCommandDepsFromACP(t *testing.T) {
 
 	// Register some agents.
 	reg.Register(ACPAgent{
-		ID:        "agent-1",
-		ParentID:  "session:main",
-		Role:      "researcher",
-		Status:    "running",
+		ID:         "agent-1",
+		ParentID:   "session:main",
+		Role:       "researcher",
+		Status:     "running",
 		SessionKey: "session:sub:1",
-		SpawnedAt: now - 60000,
-		Depth:     1,
+		SpawnedAt:  now - 60000,
+		Depth:      1,
 	})
 	reg.Register(ACPAgent{
-		ID:        "agent-2",
-		ParentID:  "session:main",
-		Role:      "coder",
-		Status:    "done",
+		ID:         "agent-2",
+		ParentID:   "session:main",
+		Role:       "coder",
+		Status:     "done",
 		SessionKey: "session:sub:2",
-		SpawnedAt: now - 120000,
-		EndedAt:   now - 30000,
-		Depth:     1,
+		SpawnedAt:  now - 120000,
+		EndedAt:    now - 30000,
+		Depth:      1,
 	})
 	reg.Register(ACPAgent{
-		ID:        "agent-3",
-		ParentID:  "session:other",
-		Role:      "unrelated",
-		Status:    "running",
+		ID:         "agent-3",
+		ParentID:   "session:other",
+		Role:       "unrelated",
+		Status:     "running",
 		SessionKey: "session:sub:3",
-		SpawnedAt: now - 10000,
-		Depth:     1,
+		SpawnedAt:  now - 10000,
+		Depth:      1,
 	})
 
 	deps := NewSubagentCommandDepsFromACP(reg)

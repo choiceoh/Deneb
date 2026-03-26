@@ -15,7 +15,7 @@ type testPlugin struct {
 	caps    *Capabilities
 }
 
-func (p *testPlugin) ID() string               { return p.id }
+func (p *testPlugin) ID() string                { return p.id }
 func (p *testPlugin) Label() string             { return p.label }
 func (p *testPlugin) AuthMethods() []AuthMethod { return p.auth }
 func (p *testPlugin) Aliases() []string         { return p.aliases }

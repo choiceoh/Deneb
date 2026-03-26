@@ -33,11 +33,11 @@ var AllDiscoveryOrders = []DiscoveryOrder{
 
 // DiscoveryProvider represents a provider plugin with catalog/discovery hooks.
 type DiscoveryProvider struct {
-	Plugin        Plugin
-	CatalogOrder  DiscoveryOrder
-	Label         string
-	HasCatalog    bool
-	HasDiscovery  bool
+	Plugin       Plugin
+	CatalogOrder DiscoveryOrder
+	Label        string
+	HasCatalog   bool
+	HasDiscovery bool
 }
 
 // DiscoveryProviderConfig holds resolved provider config for catalog results.

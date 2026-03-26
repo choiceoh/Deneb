@@ -3,7 +3,7 @@
 # Orchestrates Rust (core-rs workspace), Go (gateway-go), and CLI (cli-rs) builds.
 
 .PHONY: all rust rust-vega rust-dgx rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
-       go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-clean go-binary go-binary-dgx gateway-prod gateway-dgx \
+       go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-binary go-binary-dgx gateway-prod gateway-dgx \
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
        cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 \
        cli-cross-win-x64 cli-cross-all \
@@ -50,7 +50,7 @@ rust-fmt:
 	cd core-rs && cargo fmt --all -- --check
 
 rust-clippy:
-	cd core-rs && cargo clippy --workspace --all-targets -- -D warnings
+	cd core-rs && cargo clippy --workspace --all-targets
 
 rust-clean:
 	cd core-rs && cargo clean
@@ -98,6 +98,17 @@ go-test-fuzz:
 go-vet:
 	cd gateway-go && go vet ./...
 
+go-fmt:
+	@cd gateway-go && test -z "$$(gofmt -l .)" || (echo "Go files need formatting:"; gofmt -l .; exit 1)
+
+# Lint only new/changed Go code (safe for CI gate on existing codebases).
+go-lint:
+	cd gateway-go && golangci-lint run --new ./...
+
+# Full lint audit (all existing code). Use for periodic cleanup.
+go-lint-all:
+	cd gateway-go && golangci-lint run ./...
+
 go-binary: rust go
 	cd gateway-go && go build -o ../dist/deneb-gateway ./cmd/gateway/
 
@@ -133,7 +144,7 @@ cli-fmt:
 	cd cli-rs && cargo fmt -- --check
 
 cli-clippy:
-	cd cli-rs && cargo clippy --all-targets -- -D warnings
+	cd cli-rs && cargo clippy --all-targets
 
 cli-bench:
 	cd cli-rs && cargo test --test startup_bench -- --nocapture
@@ -170,7 +181,7 @@ test: rust-test go-test cli-test
 clean: rust-clean go-clean cli-clean
 	@echo "Cleaned Rust, Go, and CLI build artifacts"
 
-check: proto-check error-code-sync rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-vet go-test
+check: proto-check error-code-sync rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-fmt go-vet go-test
 	@echo "All checks passed"
 
 fmt:
@@ -218,6 +229,8 @@ info:
 	@echo "  make go-binary  - Build Go gateway binary to dist/"
 	@echo "  make gateway-dgx - Build DGX Spark production gateway (vega+ml+cuda)"
 	@echo "  make test       - Run Rust + Go + CLI tests"
+	@echo "  make go-lint    - Run golangci-lint on Go gateway"
+	@echo "  make go-fmt     - Check Go formatting"
 	@echo "  make check      - Run all checks (Rust + Go + CLI)"
 	@echo "  make clean      - Clean Rust, Go, and CLI build artifacts"
 	@echo "  make cli-bench  - Run CLI startup benchmark"

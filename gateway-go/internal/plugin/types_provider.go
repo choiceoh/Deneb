@@ -22,19 +22,19 @@ const (
 
 // ProviderAuthMethod describes one authentication method for a provider.
 type ProviderAuthMethod struct {
-	ID     string           `json:"id"`
-	Label  string           `json:"label"`
-	Hint   string           `json:"hint,omitempty"`
-	Kind   ProviderAuthKind `json:"kind"`
+	ID     string                     `json:"id"`
+	Label  string                     `json:"label"`
+	Hint   string                     `json:"hint,omitempty"`
+	Kind   ProviderAuthKind           `json:"kind"`
 	Wizard *ProviderPluginWizardSetup `json:"wizard,omitempty"`
 }
 
 // ProviderAuthResult is the result of a provider auth flow.
 type ProviderAuthResult struct {
-	Profiles     []AuthProfileEntry     `json:"profiles"`
-	ConfigPatch  map[string]any         `json:"configPatch,omitempty"`
-	DefaultModel string                 `json:"defaultModel,omitempty"`
-	Notes        []string               `json:"notes,omitempty"`
+	Profiles     []AuthProfileEntry `json:"profiles"`
+	ConfigPatch  map[string]any     `json:"configPatch,omitempty"`
+	DefaultModel string             `json:"defaultModel,omitempty"`
+	Notes        []string           `json:"notes,omitempty"`
 }
 
 // AuthProfileEntry associates a profile ID with a credential.
@@ -92,8 +92,8 @@ type ProviderAuthOpts struct {
 type ResolvedProviderAuth struct {
 	ApiKey       string `json:"apiKey,omitempty"`
 	DiscoveryKey string `json:"discoveryApiKey,omitempty"`
-	Mode         string `json:"mode"`      // "api_key", "oauth", "token", "none"
-	Source       string `json:"source"`    // "env", "profile", "none"
+	Mode         string `json:"mode"`   // "api_key", "oauth", "token", "none"
+	Source       string `json:"source"` // "env", "profile", "none"
 	ProfileID    string `json:"profileId,omitempty"`
 }
 
@@ -117,7 +117,7 @@ type ProviderCatalogResult struct {
 
 // ProviderPluginCatalog describes a provider's catalog hook.
 type ProviderPluginCatalog struct {
-	Order ProviderCatalogOrder `json:"order,omitempty"`
+	Order ProviderCatalogOrder                                                                   `json:"order,omitempty"`
 	Run   func(ctx context.Context, cctx ProviderCatalogContext) (*ProviderCatalogResult, error) `json:"-"`
 }
 
@@ -156,12 +156,12 @@ type ProviderPrepareDynamicModelContext = ProviderResolveDynamicModelContext
 
 // ProviderNormalizeResolvedModelContext provides context for model normalization.
 type ProviderNormalizeResolvedModelContext struct {
-	Config       map[string]any        `json:"config,omitempty"`
-	AgentDir     string                `json:"agentDir,omitempty"`
-	WorkspaceDir string                `json:"workspaceDir,omitempty"`
-	Provider     string                `json:"provider"`
-	ModelID      string                `json:"modelId"`
-	Model        ProviderRuntimeModel  `json:"model"`
+	Config       map[string]any       `json:"config,omitempty"`
+	AgentDir     string               `json:"agentDir,omitempty"`
+	WorkspaceDir string               `json:"workspaceDir,omitempty"`
+	Provider     string               `json:"provider"`
+	ModelID      string               `json:"modelId"`
+	Model        ProviderRuntimeModel `json:"model"`
 }
 
 // ProviderPrepareRuntimeAuthContext provides context for runtime auth exchange.
@@ -214,13 +214,13 @@ type ProviderFetchUsageSnapshotContext struct {
 
 // ProviderPrepareExtraParamsContext provides context for extra param normalization.
 type ProviderPrepareExtraParamsContext struct {
-	Config       map[string]any `json:"config,omitempty"`
-	AgentDir     string         `json:"agentDir,omitempty"`
-	WorkspaceDir string         `json:"workspaceDir,omitempty"`
-	Provider     string         `json:"provider"`
-	ModelID      string         `json:"modelId"`
-	ExtraParams  map[string]any `json:"extraParams,omitempty"`
-	ThinkingLevel string        `json:"thinkingLevel,omitempty"`
+	Config        map[string]any `json:"config,omitempty"`
+	AgentDir      string         `json:"agentDir,omitempty"`
+	WorkspaceDir  string         `json:"workspaceDir,omitempty"`
+	Provider      string         `json:"provider"`
+	ModelID       string         `json:"modelId"`
+	ExtraParams   map[string]any `json:"extraParams,omitempty"`
+	ThinkingLevel string         `json:"thinkingLevel,omitempty"`
 }
 
 // ProviderCacheTtlEligibilityContext provides context for cache TTL eligibility.
@@ -292,10 +292,10 @@ type ModelCatalogEntry struct {
 
 // ProviderAugmentModelCatalogContext provides context for catalog augmentation.
 type ProviderAugmentModelCatalogContext struct {
-	Config       map[string]any    `json:"config,omitempty"`
-	AgentDir     string            `json:"agentDir,omitempty"`
-	WorkspaceDir string            `json:"workspaceDir,omitempty"`
-	Env          map[string]string `json:"env"`
+	Config       map[string]any      `json:"config,omitempty"`
+	AgentDir     string              `json:"agentDir,omitempty"`
+	WorkspaceDir string              `json:"workspaceDir,omitempty"`
+	Env          map[string]string   `json:"env"`
 	Entries      []ModelCatalogEntry `json:"entries"`
 }
 
@@ -303,14 +303,14 @@ type ProviderAugmentModelCatalogContext struct {
 
 // ProviderPluginWizardSetup describes wizard/onboarding setup metadata.
 type ProviderPluginWizardSetup struct {
-	ChoiceID       string                    `json:"choiceId,omitempty"`
-	ChoiceLabel    string                    `json:"choiceLabel,omitempty"`
-	ChoiceHint     string                    `json:"choiceHint,omitempty"`
-	GroupID        string                    `json:"groupId,omitempty"`
-	GroupLabel     string                    `json:"groupLabel,omitempty"`
-	GroupHint      string                    `json:"groupHint,omitempty"`
-	MethodID       string                    `json:"methodId,omitempty"`
-	ModelAllowlist *ProviderModelAllowlist   `json:"modelAllowlist,omitempty"`
+	ChoiceID       string                  `json:"choiceId,omitempty"`
+	ChoiceLabel    string                  `json:"choiceLabel,omitempty"`
+	ChoiceHint     string                  `json:"choiceHint,omitempty"`
+	GroupID        string                  `json:"groupId,omitempty"`
+	GroupLabel     string                  `json:"groupLabel,omitempty"`
+	GroupHint      string                  `json:"groupHint,omitempty"`
+	MethodID       string                  `json:"methodId,omitempty"`
+	ModelAllowlist *ProviderModelAllowlist `json:"modelAllowlist,omitempty"`
 }
 
 // ProviderModelAllowlist describes model filtering for wizard flows.
@@ -330,7 +330,7 @@ type ProviderPluginWizardModelPicker struct {
 // ProviderPluginWizard holds wizard configuration for a provider.
 type ProviderPluginWizard struct {
 	Setup       *ProviderPluginWizardSetup       `json:"setup,omitempty"`
-	ModelPicker *ProviderPluginWizardModelPicker  `json:"modelPicker,omitempty"`
+	ModelPicker *ProviderPluginWizardModelPicker `json:"modelPicker,omitempty"`
 }
 
 // --- ProviderPlugin: the main provider plugin interface ---
@@ -338,15 +338,15 @@ type ProviderPluginWizard struct {
 // ProviderPlugin describes a registered provider plugin with all hooks.
 // This is the Go equivalent of the TS ProviderPlugin type.
 type ProviderPlugin struct {
-	ID       string `json:"id"`
-	PluginID string `json:"pluginId,omitempty"`
-	Label    string `json:"label"`
-	DocsPath string `json:"docsPath,omitempty"`
-	Aliases  []string `json:"aliases,omitempty"`
-	EnvVars  []string `json:"envVars,omitempty"`
-	DeprecatedProfileIds []string `json:"deprecatedProfileIds,omitempty"`
-	Auth     []ProviderAuthMethod `json:"auth"`
-	Wizard   *ProviderPluginWizard `json:"wizard,omitempty"`
+	ID                   string                `json:"id"`
+	PluginID             string                `json:"pluginId,omitempty"`
+	Label                string                `json:"label"`
+	DocsPath             string                `json:"docsPath,omitempty"`
+	Aliases              []string              `json:"aliases,omitempty"`
+	EnvVars              []string              `json:"envVars,omitempty"`
+	DeprecatedProfileIds []string              `json:"deprecatedProfileIds,omitempty"`
+	Auth                 []ProviderAuthMethod  `json:"auth"`
+	Wizard               *ProviderPluginWizard `json:"wizard,omitempty"`
 
 	// Catalog hook for provider model discovery.
 	Catalog *ProviderPluginCatalog `json:"-"`

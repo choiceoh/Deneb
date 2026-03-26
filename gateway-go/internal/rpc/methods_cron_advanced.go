@@ -68,9 +68,9 @@ func cronStatus(deps CronAdvancedDeps) HandlerFunc {
 		taskCount := len(deps.Cron.List())
 
 		resp := protocol.MustResponseOK(req.ID, map[string]any{
-			"running":       running,
-			"nextRunAtMs":   nextRun,
-			"taskCount":     taskCount,
+			"running":     running,
+			"nextRunAtMs": nextRun,
+			"taskCount":   taskCount,
 		})
 		return resp
 	}

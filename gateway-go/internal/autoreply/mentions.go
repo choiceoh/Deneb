@@ -49,25 +49,25 @@ type GroupContext struct {
 	GroupID     string
 	GroupTitle  string
 	MemberCount int
-	IsThread   bool
-	ThreadID   string
+	IsThread    bool
+	ThreadID    string
 }
 
 // ChannelContext holds channel-specific context.
 type ChannelContext struct {
-	Channel    string
-	AccountID  string
+	Channel     string
+	AccountID   string
 	BotUsername string
-	ChatType   string // "direct", "group", "supergroup", "channel"
+	ChatType    string // "direct", "group", "supergroup", "channel"
 }
 
 // TelegramContext holds Telegram-specific message context.
 type TelegramContext struct {
-	ChatID     int64
-	MessageID  int64
-	ThreadID   int64
-	IsForward  bool
-	IsReply    bool
+	ChatID           int64
+	MessageID        int64
+	ThreadID         int64
+	IsForward        bool
+	IsReply          bool
 	ReplyToMessageID int64
 }
 

@@ -4,9 +4,9 @@ import "testing"
 
 func TestNormalizeGroupActivation(t *testing.T) {
 	tests := []struct {
-		raw     string
-		want    GroupActivationMode
-		wantOk  bool
+		raw    string
+		want   GroupActivationMode
+		wantOk bool
 	}{
 		{"mention", ActivationMention, true},
 		{"MENTION", ActivationMention, true},
@@ -28,10 +28,10 @@ func TestNormalizeGroupActivation(t *testing.T) {
 
 func TestParseActivationCommand(t *testing.T) {
 	tests := []struct {
-		name      string
-		raw       string
-		wantCmd   bool
-		wantMode  GroupActivationMode
+		name     string
+		raw      string
+		wantCmd  bool
+		wantMode GroupActivationMode
 	}{
 		{"with mode", "/activation mention", true, ActivationMention},
 		{"without mode", "/activation", true, ""},

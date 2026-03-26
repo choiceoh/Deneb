@@ -69,13 +69,13 @@ func ExtractQueueDirective(body string) QueueDirective {
 }
 
 type queueDirectiveParseResult struct {
-	consumed   int
-	queueMode  FollowupQueueMode
-	queueReset bool
-	rawMode    string
-	debounceMs int
-	cap        int
-	dropPolicy FollowupDropPolicy
+	consumed    int
+	queueMode   FollowupQueueMode
+	queueReset  bool
+	rawMode     string
+	debounceMs  int
+	cap         int
+	dropPolicy  FollowupDropPolicy
 	rawDebounce string
 	rawCap      string
 	rawDrop     string

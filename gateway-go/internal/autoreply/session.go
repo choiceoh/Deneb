@@ -7,44 +7,44 @@ import (
 
 // SessionState holds the resolved state for a reply session.
 type SessionState struct {
-	SessionKey       string
-	AgentID          string
-	IsNew            bool
-	IsReset          bool
-	IsGroup          bool
-	IsThread         bool
-	Channel          string
-	AccountID        string
-	ThreadID         string
-	Model            string
-	Provider         string
-	ThinkLevel       ThinkLevel
-	FastMode         bool
-	VerboseLevel     VerboseLevel
-	ReasoningLevel   ReasoningLevel
-	ElevatedLevel    ElevatedLevel
-	GroupActivation  GroupActivationMode
-	SendPolicy       string
-	CreatedAt        int64
-	UpdatedAt        int64
+	SessionKey      string
+	AgentID         string
+	IsNew           bool
+	IsReset         bool
+	IsGroup         bool
+	IsThread        bool
+	Channel         string
+	AccountID       string
+	ThreadID        string
+	Model           string
+	Provider        string
+	ThinkLevel      ThinkLevel
+	FastMode        bool
+	VerboseLevel    VerboseLevel
+	ReasoningLevel  ReasoningLevel
+	ElevatedLevel   ElevatedLevel
+	GroupActivation GroupActivationMode
+	SendPolicy      string
+	CreatedAt       int64
+	UpdatedAt       int64
 }
 
 // SessionResetTrigger identifies what caused a session reset.
 type SessionResetTrigger string
 
 const (
-	ResetNone       SessionResetTrigger = ""
-	ResetCommand    SessionResetTrigger = "command"     // /new or /reset
-	ResetExpired    SessionResetTrigger = "expired"     // session exceeded max age
-	ResetFreshness  SessionResetTrigger = "freshness"   // session stale
-	ResetForced     SessionResetTrigger = "forced"      // programmatic reset
+	ResetNone      SessionResetTrigger = ""
+	ResetCommand   SessionResetTrigger = "command"   // /new or /reset
+	ResetExpired   SessionResetTrigger = "expired"   // session exceeded max age
+	ResetFreshness SessionResetTrigger = "freshness" // session stale
+	ResetForced    SessionResetTrigger = "forced"    // programmatic reset
 )
 
 // SessionResetPolicy describes when sessions should be reset.
 type SessionResetPolicy struct {
-	MaxAgeMs    int64  // 0 = no age limit
-	MaxIdleMs   int64  // 0 = no idle limit
-	OnNewAgent  bool   // reset when switching agents
+	MaxAgeMs   int64 // 0 = no age limit
+	MaxIdleMs  int64 // 0 = no idle limit
+	OnNewAgent bool  // reset when switching agents
 }
 
 // DefaultSessionResetPolicy returns the default reset policy.

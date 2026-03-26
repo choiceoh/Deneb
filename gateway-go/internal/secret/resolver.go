@@ -32,10 +32,10 @@ type ReloadResult struct {
 
 // Resolver manages secret resolution and caching.
 type Resolver struct {
-	mu          sync.RWMutex
-	secrets     map[string]any // flat path -> value
-	loadedAtMs  int64
-	warnings    []string
+	mu         sync.RWMutex
+	secrets    map[string]any // flat path -> value
+	loadedAtMs int64
+	warnings   []string
 }
 
 // NewResolver creates a new secret resolver.

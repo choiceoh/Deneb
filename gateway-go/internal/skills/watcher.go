@@ -33,9 +33,9 @@ var defaultSkillsWatchIgnored = map[string]bool{
 type Watcher struct {
 	mu sync.RWMutex
 
-	listeners    map[uint64]ChangeListener
-	listenerSeq  atomic.Uint64
-	listenersMu  sync.RWMutex
+	listeners   map[uint64]ChangeListener
+	listenerSeq atomic.Uint64
+	listenersMu sync.RWMutex
 
 	workspaceVersions map[string]int64
 	versionsMu        sync.RWMutex

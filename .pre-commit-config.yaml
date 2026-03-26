@@ -37,7 +37,7 @@ repos:
     rev: v0.11.0
     hooks:
       - id: shellcheck
-        args: [--severity=error]
+        args: [--severity=warning]
         exclude: "^(vendor/|scripts/e2e/)"
 
   # GitHub Actions linting

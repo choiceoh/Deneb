@@ -23,18 +23,18 @@ func DefaultHumanDelay() HumanDelayConfig {
 // FullReplyDispatcher extends ReplyDispatcher with human delay, timeout
 // wrapping, idle signaling, and pending count reservation.
 type FullReplyDispatcher struct {
-	mu           sync.Mutex
-	deliver      DeliverFunc
-	logger       *slog.Logger
-	ctx          context.Context
-	counts       map[ReplyDispatchKind]int
-	pending      int
-	complete     bool
-	idleCh       chan struct{}
-	humanDelay   HumanDelayConfig
-	sendTimeout  time.Duration
-	onComplete   func()
-	lastSendAt   int64
+	mu          sync.Mutex
+	deliver     DeliverFunc
+	logger      *slog.Logger
+	ctx         context.Context
+	counts      map[ReplyDispatchKind]int
+	pending     int
+	complete    bool
+	idleCh      chan struct{}
+	humanDelay  HumanDelayConfig
+	sendTimeout time.Duration
+	onComplete  func()
+	lastSendAt  int64
 }
 
 // FullDispatcherConfig configures the full reply dispatcher.

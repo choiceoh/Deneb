@@ -84,9 +84,9 @@ func TestResolveGatewayRuntimeConfigFunnelRequiresPassword(t *testing.T) {
 
 	auth := ResolvedGatewayAuth{Mode: "token", Token: "test-token"}
 	_, err := ResolveGatewayRuntimeConfig(RuntimeConfigParams{
-		Config: &cfg,
-		Port:   18789,
-		Auth:   &auth,
+		Config:            &cfg,
+		Port:              18789,
+		Auth:              &auth,
 		TailscaleOverride: &GatewayTailscaleConfig{Mode: "funnel"},
 	})
 	if err == nil {

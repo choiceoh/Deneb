@@ -63,10 +63,10 @@ type testAliasPlugin struct {
 	aliases []string
 }
 
-func (p *testAliasPlugin) ID() string              { return p.id }
-func (p *testAliasPlugin) Label() string            { return p.label }
+func (p *testAliasPlugin) ID() string                { return p.id }
+func (p *testAliasPlugin) Label() string             { return p.label }
 func (p *testAliasPlugin) AuthMethods() []AuthMethod { return nil }
-func (p *testAliasPlugin) Aliases() []string        { return p.aliases }
+func (p *testAliasPlugin) Aliases() []string         { return p.aliases }
 
 func TestRegistry_GetByNormalizedID(t *testing.T) {
 	r := NewRegistry()

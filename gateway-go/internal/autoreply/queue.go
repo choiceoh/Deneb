@@ -41,10 +41,10 @@ func DefaultQueueSettings() QueueSettings {
 
 // QueueItem represents a queued message.
 type QueueItem struct {
-	Text       string    `json:"text"`
-	SessionKey string    `json:"sessionKey"`
-	QueuedAt   int64     `json:"queuedAt"`
-	Priority   int       `json:"priority,omitempty"` // higher = more urgent
+	Text       string `json:"text"`
+	SessionKey string `json:"sessionKey"`
+	QueuedAt   int64  `json:"queuedAt"`
+	Priority   int    `json:"priority,omitempty"` // higher = more urgent
 }
 
 // MessageQueue manages a bounded queue of pending messages.

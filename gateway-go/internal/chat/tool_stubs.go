@@ -131,8 +131,8 @@ func duckDuckGoSearch(ctx context.Context, query string) (string, error) {
 	defer resp.Body.Close()
 
 	var result struct {
-		Abstract     string `json:"Abstract"`
-		AbstractURL  string `json:"AbstractURL"`
+		Abstract      string `json:"Abstract"`
+		AbstractURL   string `json:"AbstractURL"`
 		RelatedTopics []struct {
 			Text     string `json:"Text"`
 			FirstURL string `json:"FirstURL"`

@@ -12,8 +12,8 @@ import (
 
 // StoreMigrationIssues tracks counts of legacy patterns found during migration.
 type StoreMigrationIssues struct {
-	JobID                       int `json:"jobId,omitempty"`
-	LegacyScheduleString        int `json:"legacyScheduleString,omitempty"`
+	JobID                        int `json:"jobId,omitempty"`
+	LegacyScheduleString         int `json:"legacyScheduleString,omitempty"`
 	LegacyScheduleCron           int `json:"legacyScheduleCron,omitempty"`
 	LegacyPayloadKind            int `json:"legacyPayloadKind,omitempty"`
 	LegacyPayloadProvider        int `json:"legacyPayloadProvider,omitempty"`

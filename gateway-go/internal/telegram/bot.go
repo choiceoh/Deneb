@@ -19,12 +19,12 @@ type Bot struct {
 	handler UpdateHandler
 	logger  *slog.Logger
 
-	mu        sync.Mutex
-	offset    int64
-	running   bool
-	stopFunc  context.CancelFunc
-	messages  []*Message // buffered inbound messages for poll RPC
-	msgMu     sync.Mutex
+	mu       sync.Mutex
+	offset   int64
+	running  bool
+	stopFunc context.CancelFunc
+	messages []*Message // buffered inbound messages for poll RPC
+	msgMu    sync.Mutex
 
 	// Update deduplication.
 	seen   map[int64]time.Time

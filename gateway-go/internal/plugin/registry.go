@@ -12,25 +12,25 @@ import (
 // FullRegistry extends the basic Registry with full registration capabilities
 // for channels, providers, tools, commands, services, and HTTP routes.
 type FullRegistry struct {
-	mu            sync.RWMutex
-	plugins       map[string]*PluginMeta
-	channels      map[string]ChannelRegistration
-	providers     map[string]ProviderRegistration
-	tools         map[string]ToolRegistration
-	commands      map[string]CommandRegistration
-	services      map[string]ServiceRegistration
-	httpRoutes    map[string]HTTPRouteRegistration
-	interactives  map[string]InteractiveRegistration
-	hookRunner    *HookRunner
-	logger        *slog.Logger
+	mu           sync.RWMutex
+	plugins      map[string]*PluginMeta
+	channels     map[string]ChannelRegistration
+	providers    map[string]ProviderRegistration
+	tools        map[string]ToolRegistration
+	commands     map[string]CommandRegistration
+	services     map[string]ServiceRegistration
+	httpRoutes   map[string]HTTPRouteRegistration
+	interactives map[string]InteractiveRegistration
+	hookRunner   *HookRunner
+	logger       *slog.Logger
 }
 
 // ChannelRegistration describes a registered channel plugin.
 type ChannelRegistration struct {
-	PluginID string
+	PluginID  string
 	ChannelID string
-	Label    string
-	Plugin   interface{} // the actual channel.Plugin
+	Label     string
+	Plugin    interface{} // the actual channel.Plugin
 }
 
 // ProviderRegistration describes a registered LLM provider.
@@ -49,10 +49,10 @@ type ToolRegistration struct {
 
 // CommandRegistration describes a registered CLI command from a plugin.
 type CommandRegistration struct {
-	PluginID string
-	Name     string
+	PluginID    string
+	Name        string
 	Description string
-	Handler  func(ctx context.Context, args []string) error
+	Handler     func(ctx context.Context, args []string) error
 }
 
 // ServiceRegistration describes a long-running plugin service.

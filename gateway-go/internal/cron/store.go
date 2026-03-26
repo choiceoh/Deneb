@@ -26,61 +26,61 @@ type CronStoreFile struct {
 
 // StoreJob is the on-disk representation of a cron job with full state.
 type StoreJob struct {
-	ID           string              `json:"id"`
-	Name         string              `json:"name,omitempty"`
-	AgentID      string              `json:"agentId,omitempty"`
-	Enabled      bool                `json:"enabled"`
-	Schedule     StoreSchedule       `json:"schedule"`
-	Payload      StorePayload        `json:"payload"`
-	Delivery     *JobDeliveryConfig  `json:"delivery,omitempty"`
-	State        JobState            `json:"state"`
-	CreatedAtMs  int64               `json:"createdAtMs,omitempty"`
-	UpdatedAtMs  int64               `json:"updatedAtMs,omitempty"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name,omitempty"`
+	AgentID     string             `json:"agentId,omitempty"`
+	Enabled     bool               `json:"enabled"`
+	Schedule    StoreSchedule      `json:"schedule"`
+	Payload     StorePayload       `json:"payload"`
+	Delivery    *JobDeliveryConfig `json:"delivery,omitempty"`
+	State       JobState           `json:"state"`
+	CreatedAtMs int64              `json:"createdAtMs,omitempty"`
+	UpdatedAtMs int64              `json:"updatedAtMs,omitempty"`
 }
 
 // StoreSchedule represents the schedule configuration on disk.
 // Supports three kinds: "at" (one-shot), "every" (interval), "cron" (expression).
 type StoreSchedule struct {
 	Kind      string `json:"kind"`                // "at", "every", "cron"
-	At        string `json:"at,omitempty"`         // ISO8601 for kind=at
-	EveryMs   int64  `json:"everyMs,omitempty"`    // interval for kind=every
-	AnchorMs  int64  `json:"anchorMs,omitempty"`   // anchor point for kind=every
-	Expr      string `json:"expr,omitempty"`       // cron expression for kind=cron
-	Tz        string `json:"tz,omitempty"`         // timezone for kind=cron
-	StaggerMs int64  `json:"staggerMs,omitempty"`  // stagger window for kind=cron
+	At        string `json:"at,omitempty"`        // ISO8601 for kind=at
+	EveryMs   int64  `json:"everyMs,omitempty"`   // interval for kind=every
+	AnchorMs  int64  `json:"anchorMs,omitempty"`  // anchor point for kind=every
+	Expr      string `json:"expr,omitempty"`      // cron expression for kind=cron
+	Tz        string `json:"tz,omitempty"`        // timezone for kind=cron
+	StaggerMs int64  `json:"staggerMs,omitempty"` // stagger window for kind=cron
 }
 
 // StorePayload represents the job payload on disk.
 type StorePayload struct {
-	Kind    string `json:"kind"`              // "agentTurn" or "systemEvent"
-	Message string `json:"message,omitempty"` // for agentTurn
-	Text    string `json:"text,omitempty"`    // for systemEvent
-	Model   string `json:"model,omitempty"`
-	Thinking string `json:"thinking,omitempty"`
-	TimeoutSeconds int `json:"timeoutSeconds,omitempty"`
-	LightContext   bool `json:"lightContext,omitempty"`
+	Kind           string `json:"kind"`              // "agentTurn" or "systemEvent"
+	Message        string `json:"message,omitempty"` // for agentTurn
+	Text           string `json:"text,omitempty"`    // for systemEvent
+	Model          string `json:"model,omitempty"`
+	Thinking       string `json:"thinking,omitempty"`
+	TimeoutSeconds int    `json:"timeoutSeconds,omitempty"`
+	LightContext   bool   `json:"lightContext,omitempty"`
 }
 
 // JobState tracks runtime state for a cron job.
 type JobState struct {
-	NextRunAtMs      int64  `json:"nextRunAtMs,omitempty"`
-	RunningAtMs      int64  `json:"runningAtMs,omitempty"`
-	LastRunAtMs      int64  `json:"lastRunAtMs,omitempty"`
-	LastRunStatus    string `json:"lastRunStatus,omitempty"` // "ok", "error", "skipped"
-	LastError        string `json:"lastError,omitempty"`
-	LastDurationMs   int64  `json:"lastDurationMs,omitempty"`
-	ConsecutiveErrors int   `json:"consecutiveErrors,omitempty"`
-	LastDeliveryStatus string `json:"lastDeliveryStatus,omitempty"`
-	LastDeliveryError  string `json:"lastDeliveryError,omitempty"`
-	LastFailureAlertAtMs int64 `json:"lastFailureAlertAtMs,omitempty"`
-	ScheduleErrorCount   int   `json:"scheduleErrorCount,omitempty"`
+	NextRunAtMs          int64  `json:"nextRunAtMs,omitempty"`
+	RunningAtMs          int64  `json:"runningAtMs,omitempty"`
+	LastRunAtMs          int64  `json:"lastRunAtMs,omitempty"`
+	LastRunStatus        string `json:"lastRunStatus,omitempty"` // "ok", "error", "skipped"
+	LastError            string `json:"lastError,omitempty"`
+	LastDurationMs       int64  `json:"lastDurationMs,omitempty"`
+	ConsecutiveErrors    int    `json:"consecutiveErrors,omitempty"`
+	LastDeliveryStatus   string `json:"lastDeliveryStatus,omitempty"`
+	LastDeliveryError    string `json:"lastDeliveryError,omitempty"`
+	LastFailureAlertAtMs int64  `json:"lastFailureAlertAtMs,omitempty"`
+	ScheduleErrorCount   int    `json:"scheduleErrorCount,omitempty"`
 }
 
 // Store manages cron job persistence with atomic writes and caching.
 type Store struct {
-	mu        sync.Mutex
-	path      string
-	cached    *CronStoreFile
+	mu         sync.Mutex
+	path       string
+	cached     *CronStoreFile
 	cachedJSON string // serialized JSON for diffing
 }
 

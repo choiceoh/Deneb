@@ -45,26 +45,26 @@ type Update struct {
 
 // Message represents a Telegram message.
 type Message struct {
-	MessageID       int64            `json:"message_id"`
-	From            *User            `json:"from,omitempty"`
-	Chat            Chat             `json:"chat"`
-	Date            int64            `json:"date"`
-	Text            string           `json:"text,omitempty"`
-	Entities        []MessageEntity  `json:"entities,omitempty"`
-	ReplyToMessage  *Message         `json:"reply_to_message,omitempty"`
-	Photo           []PhotoSize      `json:"photo,omitempty"`
-	Document        *Document        `json:"document,omitempty"`
-	Video           *Video           `json:"video,omitempty"`
-	Audio           *Audio           `json:"audio,omitempty"`
-	Voice           *Voice           `json:"voice,omitempty"`
-	VideoNote       *VideoNote       `json:"video_note,omitempty"`
-	Sticker         *Sticker         `json:"sticker,omitempty"`
-	Animation       *Animation       `json:"animation,omitempty"`
-	Caption         string           `json:"caption,omitempty"`
-	CaptionEntities []MessageEntity  `json:"caption_entities,omitempty"`
-	MediaGroupID    string           `json:"media_group_id,omitempty"`
-	MessageThreadID int64            `json:"message_thread_id,omitempty"`
-	IsTopicMessage  bool             `json:"is_topic_message,omitempty"`
+	MessageID       int64           `json:"message_id"`
+	From            *User           `json:"from,omitempty"`
+	Chat            Chat            `json:"chat"`
+	Date            int64           `json:"date"`
+	Text            string          `json:"text,omitempty"`
+	Entities        []MessageEntity `json:"entities,omitempty"`
+	ReplyToMessage  *Message        `json:"reply_to_message,omitempty"`
+	Photo           []PhotoSize     `json:"photo,omitempty"`
+	Document        *Document       `json:"document,omitempty"`
+	Video           *Video          `json:"video,omitempty"`
+	Audio           *Audio          `json:"audio,omitempty"`
+	Voice           *Voice          `json:"voice,omitempty"`
+	VideoNote       *VideoNote      `json:"video_note,omitempty"`
+	Sticker         *Sticker        `json:"sticker,omitempty"`
+	Animation       *Animation      `json:"animation,omitempty"`
+	Caption         string          `json:"caption,omitempty"`
+	CaptionEntities []MessageEntity `json:"caption_entities,omitempty"`
+	MediaGroupID    string          `json:"media_group_id,omitempty"`
+	MessageThreadID int64           `json:"message_thread_id,omitempty"`
+	IsTopicMessage  bool            `json:"is_topic_message,omitempty"`
 }
 
 // User represents a Telegram user or bot.
@@ -199,9 +199,9 @@ type CallbackQuery struct {
 
 // ReactionType represents a reaction emoji or custom emoji.
 type ReactionType struct {
-	Type          string `json:"type"`                       // "emoji" or "custom_emoji"
-	Emoji         string `json:"emoji,omitempty"`             // Standard emoji character
-	CustomEmojiID string `json:"custom_emoji_id,omitempty"`   // Custom emoji ID
+	Type          string `json:"type"`                      // "emoji" or "custom_emoji"
+	Emoji         string `json:"emoji,omitempty"`           // Standard emoji character
+	CustomEmojiID string `json:"custom_emoji_id,omitempty"` // Custom emoji ID
 }
 
 // MessageReaction represents a change in message reactions.
@@ -234,10 +234,10 @@ type LinkPreviewOptions struct {
 
 // APIResponse wraps the Telegram Bot API response envelope.
 type APIResponse struct {
-	OK          bool            `json:"ok"`
-	Result      json.RawMessage `json:"result,omitempty"`
-	Description string          `json:"description,omitempty"`
-	ErrorCode   int             `json:"error_code,omitempty"`
+	OK          bool                `json:"ok"`
+	Result      json.RawMessage     `json:"result,omitempty"`
+	Description string              `json:"description,omitempty"`
+	ErrorCode   int                 `json:"error_code,omitempty"`
 	Parameters  *ResponseParameters `json:"parameters,omitempty"`
 }
 

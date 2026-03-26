@@ -29,28 +29,28 @@ type RunParams struct {
 
 // Agent run defaults.
 const (
-	defaultMaxTokens        = 8192
-	defaultMaxTurns         = 25
-	defaultAgentTimeout     = 10 * time.Minute
-	defaultModel            = "zai/glm-5-turbo"
-	maxCompactionRetries    = 2
+	defaultMaxTokens     = 8192
+	defaultMaxTurns      = 25
+	defaultAgentTimeout  = 10 * time.Minute
+	defaultModel         = "zai/glm-5-turbo"
+	maxCompactionRetries = 2
 )
 
 // runDeps holds the dependencies the async run needs from the Handler.
 // Optional fields (may be nil): transcript, tools, authManager,
 // broadcast, broadcastRaw, jobTracker. Required: sessions, logger.
 type runDeps struct {
-	sessions     *session.Manager       // required
-	llmClient    *llm.Client            // optional; resolved from authManager if nil
-	transcript   TranscriptStore        // optional; history unavailable without it
-	tools        *ToolRegistry          // optional; no tool use if nil
-	authManager  *provider.AuthManager  // optional; uses pre-configured client if nil
-	broadcast    BroadcastFunc          // optional
-	broadcastRaw BroadcastRawFunc       // optional
-	jobTracker   *agent.JobTracker      // optional
-	replyFunc       ReplyFunc              // optional; delivers response to originating channel
+	sessions        *session.Manager          // required
+	llmClient       *llm.Client               // optional; resolved from authManager if nil
+	transcript      TranscriptStore           // optional; history unavailable without it
+	tools           *ToolRegistry             // optional; no tool use if nil
+	authManager     *provider.AuthManager     // optional; uses pre-configured client if nil
+	broadcast       BroadcastFunc             // optional
+	broadcastRaw    BroadcastRawFunc          // optional
+	jobTracker      *agent.JobTracker         // optional
+	replyFunc       ReplyFunc                 // optional; delivers response to originating channel
 	providerConfigs map[string]ProviderConfig // optional; config-based provider credentials
-	logger          *slog.Logger             // required (defaults to slog.Default)
+	logger          *slog.Logger              // required (defaults to slog.Default)
 
 	auroraStore   *aurora.Store         // optional; enables Aurora compaction
 	contextCfg    ContextConfig

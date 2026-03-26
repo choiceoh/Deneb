@@ -18,8 +18,8 @@ type ToolHandler func(ctx context.Context, input map[string]any) (output string,
 
 // ToolRegistry manages available tools and their handlers.
 type ToolRegistry struct {
-	mu       sync.RWMutex
-	tools    map[string]registeredTool
+	mu    sync.RWMutex
+	tools map[string]registeredTool
 }
 
 type registeredTool struct {

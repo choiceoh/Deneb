@@ -59,10 +59,10 @@ func TestSanitizeEnv(t *testing.T) {
 	result := SanitizeEnv(env, nil)
 
 	expected := map[string]bool{
-		"PATH=/usr/bin":                         true,
-		"HOME=/root":                            true,
+		"PATH=/usr/bin":                          true,
+		"HOME=/root":                             true,
 		"NODE_OPTIONS=--max-old-space-size=4096": true,
-		"TERM=xterm":                            true,
+		"TERM=xterm":                             true,
 	}
 
 	if len(result) != len(expected) {

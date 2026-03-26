@@ -29,14 +29,14 @@ var (
 
 // ConfigSnapshot holds the result of loading and validating a config file.
 type ConfigSnapshot struct {
-	Path     string       `json:"path"`
-	Exists   bool         `json:"exists"`
-	Raw      string       `json:"raw,omitempty"`
-	Config   DenebConfig  `json:"config"`
-	Hash     string       `json:"hash"`
-	Valid    bool         `json:"valid"`
+	Path     string        `json:"path"`
+	Exists   bool          `json:"exists"`
+	Raw      string        `json:"raw,omitempty"`
+	Config   DenebConfig   `json:"config"`
+	Hash     string        `json:"hash"`
+	Valid    bool          `json:"valid"`
 	Issues   []ConfigIssue `json:"issues,omitempty"`
-	Warnings []string     `json:"warnings,omitempty"`
+	Warnings []string      `json:"warnings,omitempty"`
 }
 
 // ConfigIssue represents a config validation error.

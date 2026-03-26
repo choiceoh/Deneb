@@ -26,13 +26,13 @@ type InboundCommandContext struct {
 // BuildInboundCommandContext constructs an InboundCommandContext from message
 // context, config, and normalization parameters.
 func BuildInboundCommandContext(params struct {
-	Msg                    *MsgContext
-	Channel                *ChannelContext
-	AgentID                string
-	SessionKey             string
-	IsGroup                bool
-	TriggerBodyNormalized  string
-	Registry               *CommandRegistry
+	Msg                   *MsgContext
+	Channel               *ChannelContext
+	AgentID               string
+	SessionKey            string
+	IsGroup               bool
+	TriggerBodyNormalized string
+	Registry              *CommandRegistry
 }) InboundCommandContext {
 	msg := params.Msg
 	from := strings.TrimSpace(msg.From)

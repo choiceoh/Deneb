@@ -105,10 +105,10 @@ func copyDir(src, dst string) error {
 
 // SkillStatus represents the aggregated status of all skills for a workspace.
 type SkillStatus struct {
-	Skills       []SkillStatusEntry `json:"skills"`
-	RequiredBins []string           `json:"requiredBins,omitempty"`
-	TotalCount   int                `json:"totalCount"`
-	EligibleCount int              `json:"eligibleCount"`
+	Skills        []SkillStatusEntry `json:"skills"`
+	RequiredBins  []string           `json:"requiredBins,omitempty"`
+	TotalCount    int                `json:"totalCount"`
+	EligibleCount int                `json:"eligibleCount"`
 }
 
 // SkillStatusEntry is one skill's status report.

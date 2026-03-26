@@ -134,17 +134,17 @@ func skillsUpdate(deps SkillDeps) HandlerFunc {
 func skillsSnapshot(_ SkillDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			WorkspaceDir     string            `json:"workspaceDir"`
-			BundledSkillsDir string            `json:"bundledSkillsDir,omitempty"`
-			ManagedSkillsDir string            `json:"managedSkillsDir,omitempty"`
-			ExtraDirs        []string          `json:"extraDirs,omitempty"`
-			PluginSkillDirs  []string          `json:"pluginSkillDirs,omitempty"`
-			SkillFilter      []string          `json:"skillFilter,omitempty"`
+			WorkspaceDir     string                        `json:"workspaceDir"`
+			BundledSkillsDir string                        `json:"bundledSkillsDir,omitempty"`
+			ManagedSkillsDir string                        `json:"managedSkillsDir,omitempty"`
+			ExtraDirs        []string                      `json:"extraDirs,omitempty"`
+			PluginSkillDirs  []string                      `json:"pluginSkillDirs,omitempty"`
+			SkillFilter      []string                      `json:"skillFilter,omitempty"`
 			SkillConfigs     map[string]skills.SkillConfig `json:"skillConfigs,omitempty"`
-			AllowBundled     []string          `json:"allowBundled,omitempty"`
-			ConfigValues     map[string]bool   `json:"configValues,omitempty"`
-			EnvVars          map[string]string `json:"envVars,omitempty"`
-			RemoteNote       string            `json:"remoteNote,omitempty"`
+			AllowBundled     []string                      `json:"allowBundled,omitempty"`
+			ConfigValues     map[string]bool               `json:"configValues,omitempty"`
+			EnvVars          map[string]string             `json:"envVars,omitempty"`
+			RemoteNote       string                        `json:"remoteNote,omitempty"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -190,14 +190,14 @@ func skillsSnapshot(_ SkillDeps) HandlerFunc {
 func skillsCommands(_ SkillDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			WorkspaceDir     string            `json:"workspaceDir"`
-			BundledSkillsDir string            `json:"bundledSkillsDir,omitempty"`
-			ExtraDirs        []string          `json:"extraDirs,omitempty"`
-			PluginSkillDirs  []string          `json:"pluginSkillDirs,omitempty"`
-			SkillFilter      []string          `json:"skillFilter,omitempty"`
+			WorkspaceDir     string                        `json:"workspaceDir"`
+			BundledSkillsDir string                        `json:"bundledSkillsDir,omitempty"`
+			ExtraDirs        []string                      `json:"extraDirs,omitempty"`
+			PluginSkillDirs  []string                      `json:"pluginSkillDirs,omitempty"`
+			SkillFilter      []string                      `json:"skillFilter,omitempty"`
 			SkillConfigs     map[string]skills.SkillConfig `json:"skillConfigs,omitempty"`
-			AllowBundled     []string          `json:"allowBundled,omitempty"`
-			ReservedNames    []string          `json:"reservedNames,omitempty"`
+			AllowBundled     []string                      `json:"allowBundled,omitempty"`
+			ReservedNames    []string                      `json:"reservedNames,omitempty"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -281,14 +281,14 @@ func skillsDiscover(deps SkillDeps) HandlerFunc {
 func skillsEntries(_ SkillDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			WorkspaceDir     string            `json:"workspaceDir"`
-			BundledSkillsDir string            `json:"bundledSkillsDir,omitempty"`
-			ManagedSkillsDir string            `json:"managedSkillsDir,omitempty"`
-			ExtraDirs        []string          `json:"extraDirs,omitempty"`
-			PluginSkillDirs  []string          `json:"pluginSkillDirs,omitempty"`
+			WorkspaceDir     string                        `json:"workspaceDir"`
+			BundledSkillsDir string                        `json:"bundledSkillsDir,omitempty"`
+			ManagedSkillsDir string                        `json:"managedSkillsDir,omitempty"`
+			ExtraDirs        []string                      `json:"extraDirs,omitempty"`
+			PluginSkillDirs  []string                      `json:"pluginSkillDirs,omitempty"`
 			SkillConfigs     map[string]skills.SkillConfig `json:"skillConfigs,omitempty"`
-			AllowBundled     []string          `json:"allowBundled,omitempty"`
-			SkillFilter      []string          `json:"skillFilter,omitempty"`
+			AllowBundled     []string                      `json:"allowBundled,omitempty"`
+			SkillFilter      []string                      `json:"skillFilter,omitempty"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -331,11 +331,11 @@ func skillsEntries(_ SkillDeps) HandlerFunc {
 func skillsWorkspaceStatus(_ SkillDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			WorkspaceDir     string            `json:"workspaceDir"`
-			BundledSkillsDir string            `json:"bundledSkillsDir,omitempty"`
-			ExtraDirs        []string          `json:"extraDirs,omitempty"`
+			WorkspaceDir     string                        `json:"workspaceDir"`
+			BundledSkillsDir string                        `json:"bundledSkillsDir,omitempty"`
+			ExtraDirs        []string                      `json:"extraDirs,omitempty"`
 			SkillConfigs     map[string]skills.SkillConfig `json:"skillConfigs,omitempty"`
-			AllowBundled     []string          `json:"allowBundled,omitempty"`
+			AllowBundled     []string                      `json:"allowBundled,omitempty"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(

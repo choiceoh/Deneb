@@ -125,9 +125,11 @@ func TestWatchdog_StaleActivity(t *testing.T) {
 
 func TestChannelHealthMonitor_HealthSnapshot(t *testing.T) {
 	m := NewChannelHealthMonitor(ChannelHealthDeps{
-		ListChannelIDs:   func() []string { return []string{"discord", "telegram"} },
+		ListChannelIDs: func() []string { return []string{"discord", "telegram"} },
 		GetChannelStatus: func(id string) string {
-			if id == "discord" { return "running" }
+			if id == "discord" {
+				return "running"
+			}
 			return "stopped"
 		},
 		GetChannelLastEventAt: func(_ string) int64 { return time.Now().UnixMilli() },

@@ -26,9 +26,9 @@ func GetSchema() *SchemaNode {
 				Type:        "object",
 				Description: "Gateway server settings",
 				Properties: map[string]*SchemaNode{
-					"port":    {Type: "number", Description: "Gateway port", Default: DefaultGatewayPort},
-					"mode":    {Type: "string", Description: "Gateway mode", Enum: []string{"local", "remote"}},
-					"bind":    {Type: "string", Description: "Bind mode", Enum: []string{"auto", "lan", "loopback", "custom", "tailnet"}},
+					"port": {Type: "number", Description: "Gateway port", Default: DefaultGatewayPort},
+					"mode": {Type: "string", Description: "Gateway mode", Enum: []string{"local", "remote"}},
+					"bind": {Type: "string", Description: "Bind mode", Enum: []string{"auto", "lan", "loopback", "custom", "tailnet"}},
 				},
 			},
 			"logging": {

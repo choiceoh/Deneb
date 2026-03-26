@@ -453,5 +453,3 @@ type AuthDoctorContext struct {
 type AuthDoctorProvider interface {
 	BuildAuthDoctorHint(ctx context.Context, dctx AuthDoctorContext) (string, error)
 }
-
-

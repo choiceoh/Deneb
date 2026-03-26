@@ -8,14 +8,14 @@ import (
 
 // SessionEntry represents a session's persistent state.
 type SessionEntry struct {
-	SessionKey             string `json:"sessionKey"`
-	SessionID              string `json:"sessionId,omitempty"`
-	SessionFile            string `json:"sessionFile,omitempty"`
-	CreatedAt              int64  `json:"createdAt"`
-	UpdatedAt              int64  `json:"updatedAt"`
-	AbortedLastRun         bool   `json:"abortedLastRun,omitempty"`
-	AbortCutoffMessageSid  string `json:"abortCutoffMessageSid,omitempty"`
-	AbortCutoffTimestamp   *int64 `json:"abortCutoffTimestamp,omitempty"`
+	SessionKey            string `json:"sessionKey"`
+	SessionID             string `json:"sessionId,omitempty"`
+	SessionFile           string `json:"sessionFile,omitempty"`
+	CreatedAt             int64  `json:"createdAt"`
+	UpdatedAt             int64  `json:"updatedAt"`
+	AbortedLastRun        bool   `json:"abortedLastRun,omitempty"`
+	AbortCutoffMessageSid string `json:"abortCutoffMessageSid,omitempty"`
+	AbortCutoffTimestamp  *int64 `json:"abortCutoffTimestamp,omitempty"`
 }
 
 // SessionStore provides read/write access to session entries.

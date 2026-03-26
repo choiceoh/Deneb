@@ -18,11 +18,11 @@ import (
 
 // CronEvent describes a cron system event for listeners.
 type CronEvent struct {
-	Type    string `json:"type"` // "job_started", "job_finished", "job_failed", "job_added", "job_removed"
-	JobID   string `json:"jobId,omitempty"`
-	Status  string `json:"status,omitempty"`
-	Error   string `json:"error,omitempty"`
-	Ts      int64  `json:"ts"`
+	Type   string `json:"type"` // "job_started", "job_finished", "job_failed", "job_added", "job_removed"
+	JobID  string `json:"jobId,omitempty"`
+	Status string `json:"status,omitempty"`
+	Error  string `json:"error,omitempty"`
+	Ts     int64  `json:"ts"`
 }
 
 // CronEventListener receives cron events.
@@ -50,8 +50,8 @@ type Service struct {
 	listeners []CronEventListener
 
 	// Error backoff: minimum 2s between refire to prevent spin loops (#17821).
-	lastFireAtMs int64
-	minRefireGap int64 // milliseconds (default 2000)
+	lastFireAtMs  int64
+	minRefireGap  int64 // milliseconds (default 2000)
 	maxTimerDelay int64 // milliseconds (default 60000)
 }
 

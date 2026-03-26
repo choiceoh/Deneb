@@ -36,7 +36,7 @@ const (
 
 // ExecDirectiveParse holds the result of parsing an /exec directive.
 type ExecDirectiveParse struct {
-	Cleaned     string
+	Cleaned      string
 	HasDirective bool
 
 	ExecHost     ExecHost

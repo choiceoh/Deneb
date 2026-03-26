@@ -43,11 +43,11 @@ type responsesResponse struct {
 }
 
 type responsesOutputItem struct {
-	Type    string                    `json:"type"`
-	ID      string                    `json:"id"`
-	Role    string                    `json:"role"`
-	Content []responsesContentBlock   `json:"content"`
-	Status  string                    `json:"status"`
+	Type    string                  `json:"type"`
+	ID      string                  `json:"id"`
+	Role    string                  `json:"role"`
+	Content []responsesContentBlock `json:"content"`
+	Status  string                  `json:"status"`
 }
 
 type responsesContentBlock struct {

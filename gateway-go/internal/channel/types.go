@@ -23,8 +23,8 @@ type OutboundMessage struct {
 
 // ConfigSchema describes a channel's configuration schema.
 type ConfigSchema struct {
-	Schema  map[string]any            `json:"schema"`
-	UIHints map[string]ConfigUIHint   `json:"uiHints,omitempty"`
+	Schema  map[string]any          `json:"schema"`
+	UIHints map[string]ConfigUIHint `json:"uiHints,omitempty"`
 }
 
 // ConfigUIHint provides display hints for config fields.

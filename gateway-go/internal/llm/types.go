@@ -112,9 +112,9 @@ type ContentBlock struct {
 	Input json.RawMessage `json:"input,omitempty"`
 
 	// tool_result block
-	ToolUseID  string `json:"tool_use_id,omitempty"`
-	Content    string `json:"content,omitempty"`
-	IsError    bool   `json:"is_error,omitempty"`
+	ToolUseID string `json:"tool_use_id,omitempty"`
+	Content   string `json:"content,omitempty"`
+	IsError   bool   `json:"is_error,omitempty"`
 
 	// image block (Anthropic: type="image", source.type/media_type/data)
 	Source *ImageSource `json:"source,omitempty"`
@@ -185,9 +185,9 @@ type ContentBlockStart struct {
 type ContentBlockDelta struct {
 	Index int `json:"index"`
 	Delta struct {
-		Type         string `json:"type"` // "text_delta" or "input_json_delta"
-		Text         string `json:"text,omitempty"`
-		PartialJSON  string `json:"partial_json,omitempty"`
+		Type        string `json:"type"` // "text_delta" or "input_json_delta"
+		Text        string `json:"text,omitempty"`
+		PartialJSON string `json:"partial_json,omitempty"`
 	} `json:"delta"`
 }
 

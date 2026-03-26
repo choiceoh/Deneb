@@ -31,9 +31,9 @@ type SendPolicyFunc func(sessionKey, channel, chatType string) string
 // Mirrors src/auto-reply/reply/commands-core.ts handleCommands().
 type CommandDispatcher struct {
 	handlers       []CommandHandlerFull
-	router         *CommandRouter     // bridge to existing handler system
-	registry       *CommandRegistry   // command normalization/detection
-	acpRegistry    *ACPRegistry       // sub-agent lifecycle tracking
+	router         *CommandRouter   // bridge to existing handler system
+	registry       *CommandRegistry // command normalization/detection
+	acpRegistry    *ACPRegistry     // sub-agent lifecycle tracking
 	sendPolicyFunc SendPolicyFunc
 	logger         *slog.Logger
 }

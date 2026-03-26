@@ -40,22 +40,22 @@ type CommandArgDefinition struct {
 
 // ChatCommandDefinition defines a chat command with aliases and metadata.
 type ChatCommandDefinition struct {
-	Key         string                `json:"key"`
-	NativeName  string                `json:"nativeName,omitempty"`
-	Description string                `json:"description"`
-	TextAliases []string              `json:"textAliases"`
-	AcceptsArgs bool                  `json:"acceptsArgs,omitempty"`
+	Key         string                 `json:"key"`
+	NativeName  string                 `json:"nativeName,omitempty"`
+	Description string                 `json:"description"`
+	TextAliases []string               `json:"textAliases"`
+	AcceptsArgs bool                   `json:"acceptsArgs,omitempty"`
 	Args        []CommandArgDefinition `json:"args,omitempty"`
-	ArgsParsing string                `json:"argsParsing,omitempty"` // "none" or "positional"
-	Scope       CommandScope          `json:"scope"`
-	Category    CommandCategory       `json:"category,omitempty"`
+	ArgsParsing string                 `json:"argsParsing,omitempty"` // "none" or "positional"
+	Scope       CommandScope           `json:"scope"`
+	Category    CommandCategory        `json:"category,omitempty"`
 }
 
 // NativeCommandSpec describes a command for native platform registration (Discord, Slack).
 type NativeCommandSpec struct {
-	Name        string                `json:"name"`
-	Description string                `json:"description"`
-	AcceptsArgs bool                  `json:"acceptsArgs"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	AcceptsArgs bool                   `json:"acceptsArgs"`
 	Args        []CommandArgDefinition `json:"args,omitempty"`
 }
 
@@ -80,9 +80,9 @@ type textAliasSpec struct {
 
 // CommandRegistry manages command definitions and provides detection/normalization.
 type CommandRegistry struct {
-	mu       sync.RWMutex
-	commands []ChatCommandDefinition
-	aliasMap map[string]*textAliasSpec
+	mu        sync.RWMutex
+	commands  []ChatCommandDefinition
+	aliasMap  map[string]*textAliasSpec
 	detection *CommandDetection
 }
 

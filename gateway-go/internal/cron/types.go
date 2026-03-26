@@ -70,7 +70,7 @@ type CronFailureAlert struct {
 	Channel    string `json:"channel,omitempty"`
 	To         string `json:"to,omitempty"`
 	CooldownMs int64  `json:"cooldownMs,omitempty"`
-	Mode       string `json:"mode,omitempty"`    // "announce" or "webhook"
+	Mode       string `json:"mode,omitempty"` // "announce" or "webhook"
 	AccountID  string `json:"accountId,omitempty"`
 }
 

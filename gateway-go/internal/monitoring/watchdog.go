@@ -34,10 +34,10 @@ type WatchdogDeps struct {
 
 // WatchdogConfig tunes the watchdog behavior.
 type WatchdogConfig struct {
-	CheckIntervalMs   int64 // default: 120000 (2 min)
-	StartupGraceMs    int64 // default: 180000 (3 min)
-	StaleThresholdMs  int64 // default: 1800000 (30 min)
-	MaxAutoRestarts   int   // default: 3 per hour
+	CheckIntervalMs  int64 // default: 120000 (2 min)
+	StartupGraceMs   int64 // default: 180000 (3 min)
+	StaleThresholdMs int64 // default: 1800000 (30 min)
+	MaxAutoRestarts  int   // default: 3 per hour
 }
 
 // DefaultWatchdogConfig returns sensible defaults.
@@ -52,9 +52,9 @@ func DefaultWatchdogConfig() WatchdogConfig {
 
 // Watchdog monitors gateway health and triggers restarts when stuck.
 type Watchdog struct {
-	deps    WatchdogDeps
-	cfg     WatchdogConfig
-	logger  *slog.Logger
+	deps   WatchdogDeps
+	cfg    WatchdogConfig
+	logger *slog.Logger
 
 	mu             sync.Mutex
 	startedAt      time.Time
@@ -204,7 +204,7 @@ type ChannelHealthMonitor struct {
 
 	mu             sync.Mutex
 	startedAt      time.Time
-	cooldowns      map[string]int   // channelID -> remaining cooldown cycles
+	cooldowns      map[string]int // channelID -> remaining cooldown cycles
 	restartHistory []time.Time
 }
 

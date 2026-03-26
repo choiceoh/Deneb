@@ -13,23 +13,23 @@ import (
 
 // ReplyPayload represents an outbound reply message.
 type ReplyPayload struct {
-	Text         string            `json:"text,omitempty"`
-	MediaURL     string            `json:"mediaUrl,omitempty"`
-	MediaURLs    []string          `json:"mediaUrls,omitempty"`
-	ReplyToID    string            `json:"replyToId,omitempty"`
-	AudioAsVoice bool              `json:"audioAsVoice,omitempty"`
-	IsError      bool              `json:"isError,omitempty"`
-	ChannelData  map[string]any    `json:"channelData,omitempty"`
+	Text         string         `json:"text,omitempty"`
+	MediaURL     string         `json:"mediaUrl,omitempty"`
+	MediaURLs    []string       `json:"mediaUrls,omitempty"`
+	ReplyToID    string         `json:"replyToId,omitempty"`
+	AudioAsVoice bool           `json:"audioAsVoice,omitempty"`
+	IsError      bool           `json:"isError,omitempty"`
+	ChannelData  map[string]any `json:"channelData,omitempty"`
 }
 
 // TypingPolicy describes the context that triggered a reply.
 type TypingPolicy string
 
 const (
-	TypingPolicyUserMessage    TypingPolicy = "user_message"
-	TypingPolicySystemEvent    TypingPolicy = "system_event"
-	TypingPolicyInternalWeb    TypingPolicy = "internal_webchat"
-	TypingPolicyHeartbeat      TypingPolicy = "heartbeat"
+	TypingPolicyUserMessage TypingPolicy = "user_message"
+	TypingPolicySystemEvent TypingPolicy = "system_event"
+	TypingPolicyInternalWeb TypingPolicy = "internal_webchat"
+	TypingPolicyHeartbeat   TypingPolicy = "heartbeat"
 )
 
 // ReplyDispatchKind identifies the stage of a reply in the dispatch pipeline.

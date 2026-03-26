@@ -16,34 +16,34 @@ type CommandContextFull struct {
 	From                  string
 	To                    string
 	// Internal marker to prevent duplicate reset-hook emission.
-	ResetHookTriggered    bool
+	ResetHookTriggered bool
 }
 
 // HandleCommandsFullParams holds the full parameter set for the commands dispatch pipeline.
 //
 // Mirrors HandleCommandsParams from src/auto-reply/reply/commands-types.ts.
 type HandleCommandsFullParams struct {
-	Ctx                        *MsgContext
-	RootCtx                    *MsgContext // ACP root context (may differ from Ctx)
-	Command                    CommandContextFull
-	AgentID                    string
-	AgentDir                   string
-	SessionKey                 string
-	WorkspaceDir               string
-	Provider                   string
-	Model                      string
-	ContextTokens              int
-	IsGroup                    bool
+	Ctx           *MsgContext
+	RootCtx       *MsgContext // ACP root context (may differ from Ctx)
+	Command       CommandContextFull
+	AgentID       string
+	AgentDir      string
+	SessionKey    string
+	WorkspaceDir  string
+	Provider      string
+	Model         string
+	ContextTokens int
+	IsGroup       bool
 
 	// Resolved inference levels.
-	ResolvedThinkLevel         ThinkLevel
-	ResolvedVerboseLevel       VerboseLevel
-	ResolvedReasoningLevel     ReasoningLevel
-	ResolvedElevatedLevel      ElevatedLevel
-	ResolvedBlockStreamBreak   string // "text_end" | "message_end"
+	ResolvedThinkLevel       ThinkLevel
+	ResolvedVerboseLevel     VerboseLevel
+	ResolvedReasoningLevel   ReasoningLevel
+	ResolvedElevatedLevel    ElevatedLevel
+	ResolvedBlockStreamBreak string // "text_end" | "message_end"
 
 	// Typing.
-	Typing                     *TypingController
+	Typing *TypingController
 
 	// Elevated mode state.
 	Elevated ElevatedState

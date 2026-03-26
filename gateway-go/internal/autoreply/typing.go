@@ -31,13 +31,13 @@ type TypingController struct {
 
 // TypingControllerConfig configures the typing controller.
 type TypingControllerConfig struct {
-	OnStart      func() // called when typing begins (and on each keepalive tick)
-	OnStop       func() // called when typing ends
-	OnCleanup    func() // called on cleanup
-	IntervalMs   int64  // keepalive interval (default 6000ms, matching TS)
-	TtlMs        int64  // typing auto-stop TTL (default 30000ms)
-	Policy       TypingPolicy
-	SilentToken  string // silent reply token (default: NO_REPLY)
+	OnStart     func() // called when typing begins (and on each keepalive tick)
+	OnStop      func() // called when typing ends
+	OnCleanup   func() // called on cleanup
+	IntervalMs  int64  // keepalive interval (default 6000ms, matching TS)
+	TtlMs       int64  // typing auto-stop TTL (default 30000ms)
+	Policy      TypingPolicy
+	SilentToken string // silent reply token (default: NO_REPLY)
 }
 
 // NewTypingController creates a new typing controller.

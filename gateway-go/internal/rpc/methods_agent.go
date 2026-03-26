@@ -358,7 +358,7 @@ func sessionsLifecycle(deps ExtendedDeps) HandlerFunc {
 					defer func() { recover() }()
 					deps.Hooks.Fire(context.Background(), evt, map[string]string{
 						"DENEB_SESSION_KEY": key,
-						"DENEB_PHASE":      phase,
+						"DENEB_PHASE":       phase,
 					})
 				}()
 			}

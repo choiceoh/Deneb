@@ -28,10 +28,10 @@ func newLifecycleMock(id string) *lifecycleMockPlugin {
 	}
 }
 
-func (m *lifecycleMockPlugin) ID() string                       { return m.id }
-func (m *lifecycleMockPlugin) Meta() Meta                       { return m.meta }
-func (m *lifecycleMockPlugin) Capabilities() Capabilities       { return m.caps }
-func (m *lifecycleMockPlugin) Status() Status                   { return m.status }
+func (m *lifecycleMockPlugin) ID() string                 { return m.id }
+func (m *lifecycleMockPlugin) Meta() Meta                 { return m.meta }
+func (m *lifecycleMockPlugin) Capabilities() Capabilities { return m.caps }
+func (m *lifecycleMockPlugin) Status() Status             { return m.status }
 
 func (m *lifecycleMockPlugin) Start(_ context.Context) error {
 	m.startCalled = true

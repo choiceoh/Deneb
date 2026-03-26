@@ -4,7 +4,7 @@ package autoreply
 
 // DebugCommand represents a parsed /debug action.
 type DebugCommand struct {
-	Action  string `json:"action"`            // "show", "reset", "set", "unset", "error"
+	Action  string `json:"action"` // "show", "reset", "set", "unset", "error"
 	Path    string `json:"path,omitempty"`
 	Value   any    `json:"value,omitempty"`
 	Message string `json:"message,omitempty"`

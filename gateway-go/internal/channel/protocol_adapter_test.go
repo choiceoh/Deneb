@@ -16,12 +16,12 @@ type mockPlugin struct {
 	stat channel.Status
 }
 
-func (p *mockPlugin) ID() string                        { return p.id }
-func (p *mockPlugin) Meta() channel.Meta                { return p.meta }
+func (p *mockPlugin) ID() string                         { return p.id }
+func (p *mockPlugin) Meta() channel.Meta                 { return p.meta }
 func (p *mockPlugin) Capabilities() channel.Capabilities { return p.caps }
-func (p *mockPlugin) Start(_ context.Context) error     { return nil }
-func (p *mockPlugin) Stop(_ context.Context) error      { return nil }
-func (p *mockPlugin) Status() channel.Status            { return p.stat }
+func (p *mockPlugin) Start(_ context.Context) error      { return nil }
+func (p *mockPlugin) Stop(_ context.Context) error       { return nil }
+func (p *mockPlugin) Status() channel.Status             { return p.stat }
 
 func TestProtocolAdapterListPlugins(t *testing.T) {
 	reg := channel.NewRegistry()

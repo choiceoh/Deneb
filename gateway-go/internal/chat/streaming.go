@@ -9,9 +9,9 @@ import (
 
 // Stream event names matching the TypeScript wire format.
 const (
-	eventChat     = "chat"
-	eventDelta    = "chat.delta"
-	eventTool     = "chat.tool"
+	eventChat  = "chat"
+	eventDelta = "chat.delta"
+	eventTool  = "chat.tool"
 )
 
 // Limits for broadcast payloads.

@@ -86,12 +86,12 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 	// Create session state if SaveSession is available.
 	if d.SaveSession != nil {
 		session := &SessionState{
-			SessionKey:     sessionKey,
-			AgentID:        agentID,
-			Channel:        "acp",
-			Model:          params.Model,
-			Provider:       params.Provider,
-			ThinkLevel:     params.ThinkLevel,
+			SessionKey:      sessionKey,
+			AgentID:         agentID,
+			Channel:         "acp",
+			Model:           params.Model,
+			Provider:        params.Provider,
+			ThinkLevel:      params.ThinkLevel,
 			GroupActivation: ActivationAlways,
 		}
 		if err := d.SaveSession(session); err != nil {

@@ -91,9 +91,9 @@ type HelloPolicy struct {
 
 // Snapshot represents the initial state snapshot included in HelloOk.
 type Snapshot struct {
-	Health   any              `json:"health,omitempty"`
-	Presence []PresenceEntry  `json:"presence,omitempty"`
-	Sessions any              `json:"sessions,omitempty"`
+	Health   any             `json:"health,omitempty"`
+	Presence []PresenceEntry `json:"presence,omitempty"`
+	Sessions any             `json:"sessions,omitempty"`
 }
 
 // PresenceEntry represents a connected client's presence.

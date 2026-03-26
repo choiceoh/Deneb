@@ -13,9 +13,9 @@ import (
 
 // Default memory flush thresholds.
 const (
-	DefaultMemoryFlushSoftTokens             = 4000
-	DefaultMemoryFlushForceTranscriptBytes   = 2 * 1024 * 1024 // 2 MB
-	DefaultPiCompactionReserveTokensFloor    = 8192
+	DefaultMemoryFlushSoftTokens           = 4000
+	DefaultMemoryFlushForceTranscriptBytes = 2 * 1024 * 1024 // 2 MB
+	DefaultPiCompactionReserveTokensFloor  = 8192
 )
 
 // SilentReplyToken is already declared in tokens.go as the marker
@@ -23,9 +23,9 @@ const (
 
 // Memory flush hint strings embedded in prompts.
 const (
-	memoryFlushTargetHint    = "Store durable memories only in memory/YYYY-MM-DD.md (create memory/ if needed)."
-	memoryFlushAppendHint    = "If memory/YYYY-MM-DD.md already exists, APPEND new content only and do not overwrite existing entries."
-	memoryFlushReadOnlyHint  = "Treat workspace bootstrap/reference files such as MEMORY.md, SOUL.md, TOOLS.md, and CLAUDE.md as read-only during this flush; never overwrite, replace, or edit them."
+	memoryFlushTargetHint   = "Store durable memories only in memory/YYYY-MM-DD.md (create memory/ if needed)."
+	memoryFlushAppendHint   = "If memory/YYYY-MM-DD.md already exists, APPEND new content only and do not overwrite existing entries."
+	memoryFlushReadOnlyHint = "Treat workspace bootstrap/reference files such as MEMORY.md, SOUL.md, TOOLS.md, and CLAUDE.md as read-only during this flush; never overwrite, replace, or edit them."
 )
 
 // DefaultMemoryFlushPrompt is the default user-turn prompt for memory flush.
@@ -193,8 +193,8 @@ type ShouldRunMemoryFlushParams struct {
 	MemoryFlushCompactionCount int  // -1 means "never flushed"
 	HasMemoryFlushCount        bool // true if MemoryFlushCompactionCount was explicitly set
 	// Transcript byte-size trigger (0 = disabled).
-	TranscriptBytes            int
-	ForceFlushTranscriptBytes  int
+	TranscriptBytes           int
+	ForceFlushTranscriptBytes int
 }
 
 // ShouldForceMemoryFlushByTranscriptSize returns true when the session transcript

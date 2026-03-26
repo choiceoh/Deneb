@@ -12,13 +12,13 @@ type ParsedFrontmatter map[string]string
 
 // DenebSkillMetadata represents parsed skill metadata from frontmatter.
 type DenebSkillMetadata struct {
-	Always     bool              `json:"always,omitempty"`
-	SkillKey   string            `json:"skillKey,omitempty"`
-	PrimaryEnv string            `json:"primaryEnv,omitempty"`
-	Emoji      string            `json:"emoji,omitempty"`
-	Homepage   string            `json:"homepage,omitempty"`
-	OS         []string          `json:"os,omitempty"`
-	Requires   *SkillRequires    `json:"requires,omitempty"`
+	Always     bool               `json:"always,omitempty"`
+	SkillKey   string             `json:"skillKey,omitempty"`
+	PrimaryEnv string             `json:"primaryEnv,omitempty"`
+	Emoji      string             `json:"emoji,omitempty"`
+	Homepage   string             `json:"homepage,omitempty"`
+	OS         []string           `json:"os,omitempty"`
+	Requires   *SkillRequires     `json:"requires,omitempty"`
 	Install    []SkillInstallSpec `json:"install,omitempty"`
 }
 

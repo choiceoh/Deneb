@@ -20,17 +20,17 @@ type ModelSelectionState struct {
 
 // ModelSelectionConfig configures model resolution.
 type ModelSelectionConfig struct {
-	DefaultProvider string
-	DefaultModel    string
-	SessionModel    string // from session store
-	SessionProvider string
-	ConfigModel     string // from config file
-	ConfigProvider  string
-	DirectiveModel  string // from /model directive
+	DefaultProvider   string
+	DefaultModel      string
+	SessionModel      string // from session store
+	SessionProvider   string
+	ConfigModel       string // from config file
+	ConfigProvider    string
+	DirectiveModel    string // from /model directive
 	DirectiveProvider string
-	DirectiveProfile string
-	Candidates      []ModelCandidate
-	FallbackModels  []string
+	DirectiveProfile  string
+	Candidates        []ModelCandidate
+	FallbackModels    []string
 }
 
 // ResolveModelSelection performs the full model resolution pipeline.
@@ -84,9 +84,9 @@ func ResolveModelSelection(cfg ModelSelectionConfig) ModelSelectionState {
 
 	// 4. System default.
 	return ModelSelectionState{
-		Provider:  cfg.DefaultProvider,
-		Model:     cfg.DefaultModel,
-		IsDefault: true,
+		Provider:   cfg.DefaultProvider,
+		Model:      cfg.DefaultModel,
+		IsDefault:  true,
 		SelectedBy: "default",
 	}
 }

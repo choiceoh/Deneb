@@ -7,16 +7,16 @@ import (
 
 // TemplateVars holds variables available for message template interpolation.
 type TemplateVars struct {
-	AgentID      string
-	SessionKey   string
-	Channel      string
-	From         string
-	To           string
-	Timestamp    time.Time
-	IsGroup      bool
-	Model        string
-	Provider     string
-	CurrentTime  string
+	AgentID     string
+	SessionKey  string
+	Channel     string
+	From        string
+	To          string
+	Timestamp   time.Time
+	IsGroup     bool
+	Model       string
+	Provider    string
+	CurrentTime string
 }
 
 // ApplyTemplate interpolates {{variable}} placeholders in a template string.

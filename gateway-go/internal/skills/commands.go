@@ -22,15 +22,15 @@ var leadingTrailingUnderscore = regexp.MustCompile(`^_+|_+$`)
 
 // SkillCommandSpec represents a slash command derived from a skill.
 type SkillCommandSpec struct {
-	Name        string                   `json:"name"`
-	SkillName   string                   `json:"skillName"`
-	Description string                   `json:"description"`
+	Name        string                    `json:"name"`
+	SkillName   string                    `json:"skillName"`
+	Description string                    `json:"description"`
 	Dispatch    *SkillCommandDispatchSpec `json:"dispatch,omitempty"`
 }
 
 // SkillCommandDispatchSpec describes how to dispatch a skill command invocation.
 type SkillCommandDispatchSpec struct {
-	Kind     string `json:"kind"`               // "tool"
+	Kind     string `json:"kind"` // "tool"
 	ToolName string `json:"toolName"`
 	ArgMode  string `json:"argMode,omitempty"` // "raw"
 }

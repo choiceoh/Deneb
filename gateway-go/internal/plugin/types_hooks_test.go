@@ -102,11 +102,11 @@ func TestStripPromptMutationFieldsFromLegacyResult(t *testing.T) {
 			"appendSystemContext":  "append",
 		}, nil},
 		{"mixed fields", map[string]any{
-			"systemPrompt":    "test",
-			"modelOverride":   "gpt-4",
+			"systemPrompt":     "test",
+			"modelOverride":    "gpt-4",
 			"providerOverride": "openai",
 		}, map[string]any{
-			"modelOverride":   "gpt-4",
+			"modelOverride":    "gpt-4",
 			"providerOverride": "openai",
 		}},
 		{"only override fields", map[string]any{
