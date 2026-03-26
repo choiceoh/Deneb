@@ -1,15 +1,14 @@
 # Deneb Multi-Language Build
 #
-# Orchestrates Rust (core-rs workspace), Go (gateway-go), and TypeScript (pnpm) builds.
+# Orchestrates Rust (core-rs workspace), Go (gateway-go), and CLI (cli-rs) builds.
 
 .PHONY: all rust rust-vega rust-dgx rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
        go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-clean go-binary go-binary-dgx gateway-prod gateway-dgx \
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
        cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 \
        cli-cross-win-x64 cli-cross-all \
-       ts ts-check ts-test \
-       test test-all clean check fmt \
-       proto proto-go proto-rust proto-ts proto-check proto-lint proto-watch \
+       test clean check fmt \
+       proto proto-go proto-rust proto-check proto-lint proto-watch \
        error-code-sync \
        info
 
@@ -21,7 +20,6 @@ all: rust go cli
 # Build core crate for CGo static linking (minimal — no vega/ml).
 # --no-default-features disables "napi_binding" (Node.js addon), producing
 # only the staticlib (.a) and rlib needed by the Go gateway via CGo.
-# Use `make rust-napi` for Node.js native addon builds (includes cdylib).
 # Use `make rust-dgx` for DGX Spark production builds (includes vega + ml + CUDA).
 rust:
 	cd core-rs && cargo build --release -p deneb-core --no-default-features
@@ -38,9 +36,6 @@ rust-dgx:
 # Build all workspace crates (core + vega + ml).
 rust-all:
 	cd core-rs && cargo build --release --workspace
-
-rust-napi:
-	cd core-rs && cargo build --release -p deneb-core
 
 rust-debug:
 	cd core-rs && cargo build --workspace
@@ -167,29 +162,15 @@ cli-cross-all: cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cl
 cli-install: cli
 	./cli-rs/scripts/install.sh
 
-# --- TypeScript (existing) ---
-
-ts:
-	pnpm build
-
-ts-check:
-	pnpm check
-
-ts-test:
-	pnpm test:fast
-
 # --- Combined operations ---
 
 test: rust-test go-test cli-test
 	@echo "Rust, Go, and CLI tests passed"
 
-test-all: rust-test go-test cli-test ts-test
-	@echo "All tests passed (Rust + Go + CLI + TypeScript)"
-
 clean: rust-clean go-clean cli-clean
 	@echo "Cleaned Rust, Go, and CLI build artifacts"
 
-check: proto-check error-code-sync rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-vet go-test ts-check
+check: proto-check error-code-sync rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-vet go-test
 	@echo "All checks passed"
 
 fmt:
@@ -207,9 +188,6 @@ proto-go:
 
 proto-rust:
 	./scripts/proto-gen.sh --rust
-
-proto-ts:
-	./scripts/proto-gen.sh --ts
 
 proto-check:
 	./scripts/proto-gen.sh --check
@@ -239,16 +217,14 @@ info:
 	@echo "  make cli        - Build Rust CLI (release)"
 	@echo "  make go-binary  - Build Go gateway binary to dist/"
 	@echo "  make gateway-dgx - Build DGX Spark production gateway (vega+ml+cuda)"
-	@echo "  make ts         - Build TypeScript (pnpm)"
 	@echo "  make test       - Run Rust + Go + CLI tests"
-	@echo "  make check      - Run all checks (Rust + Go + CLI + TS)"
+	@echo "  make check      - Run all checks (Rust + Go + CLI)"
 	@echo "  make clean      - Clean Rust, Go, and CLI build artifacts"
 	@echo "  make cli-bench  - Run CLI startup benchmark"
 	@echo "  make cli-cross-all - Cross-compile CLI for all platforms"
-	@echo "  make proto      - Generate protobuf code (Go + Rust + TS)"
+	@echo "  make proto      - Generate protobuf code (Go + Rust)"
 	@echo "  make proto-go   - Generate Go protobuf structs"
 	@echo "  make proto-rust - Generate Rust protobuf structs"
-	@echo "  make proto-ts   - Generate TypeScript protobuf types"
 	@echo "  make proto-check - Generate + verify no uncommitted diffs"
 	@echo "  make proto-lint  - Lint proto files only"
 	@echo "  make proto-watch - Watch proto files and regenerate on change"

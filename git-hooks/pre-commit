@@ -1,50 +1,16 @@
 #!/usr/bin/env bash
-
+# Pre-commit hook: run basic checks before committing.
 set -euo pipefail
 
-ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-RUN_NODE_TOOL="$ROOT_DIR/scripts/pre-commit/run-node-tool.sh"
-FILTER_FILES="$ROOT_DIR/scripts/pre-commit/filter-staged-files.mjs"
-
-if [[ ! -x "$RUN_NODE_TOOL" ]]; then
-  echo "Missing helper: $RUN_NODE_TOOL" >&2
-  exit 1
+# Rust format check (if core-rs or cli-rs files are staged)
+if git diff --cached --name-only | grep -qE '^(core-rs|cli-rs)/'; then
+  echo "[pre-commit] Checking Rust formatting..."
+  (cd core-rs && cargo fmt --all -- --check) || { echo "Rust format check failed. Run: cd core-rs && cargo fmt --all"; exit 1; }
+  (cd cli-rs && cargo fmt -- --check) || { echo "CLI Rust format check failed. Run: cd cli-rs && cargo fmt"; exit 1; }
 fi
 
-if [[ ! -f "$FILTER_FILES" ]]; then
-  echo "Missing helper: $FILTER_FILES" >&2
-  exit 1
+# Go vet (if gateway-go files are staged)
+if git diff --cached --name-only | grep -q '^gateway-go/'; then
+  echo "[pre-commit] Running Go vet..."
+  (cd gateway-go && go vet ./...) || { echo "Go vet failed."; exit 1; }
 fi
-
-# Security: avoid option-injection from malicious file names (e.g. "--all", "--force").
-# Robustness: NUL-delimited file list handles spaces/newlines safely.
-# Compatibility: use read loops instead of `mapfile` so this runs on macOS Bash 3.x.
-files=()
-while IFS= read -r -d '' file; do
-  files+=("$file")
-done < <(git diff --cached --name-only --diff-filter=ACMR -z)
-
-if [ "${#files[@]}" -eq 0 ]; then
-  exit 0
-fi
-
-lint_files=()
-while IFS= read -r -d '' file; do
-  lint_files+=("$file")
-done < <(node "$FILTER_FILES" lint -- "${files[@]}")
-
-format_files=()
-while IFS= read -r -d '' file; do
-  format_files+=("$file")
-done < <(node "$FILTER_FILES" format -- "${files[@]}")
-
-if [ "${#lint_files[@]}" -gt 0 ]; then
-  "$RUN_NODE_TOOL" oxlint --type-aware --fix -- "${lint_files[@]}"
-fi
-
-if [ "${#format_files[@]}" -gt 0 ]; then
-  "$RUN_NODE_TOOL" oxfmt --write --no-error-on-unmatched-pattern "${format_files[@]}"
-fi
-
-# Use -f so tracked files inside .gitignore'd directories (e.g. dist-runtime/) can be re-staged after lint/format fixes.
-git add -f -- "${files[@]}"
