@@ -125,16 +125,18 @@ func TestProviderRuntimeResolverCapabilities(t *testing.T) {
 	}
 }
 
-func TestMatchesProviderID(t *testing.T) {
+func TestGetByNormalizedIDWithAliases(t *testing.T) {
+	reg := NewRegistry()
 	tp := &testPlugin{
 		id:      "openai",
 		label:   "OpenAI",
 		aliases: []string{"oai"},
 	}
+	reg.Register(tp)
 
 	tests := []struct {
 		providerID string
-		want       bool
+		wantFound  bool
 	}{
 		{"openai", true},
 		{"OpenAI", true},
@@ -146,9 +148,10 @@ func TestMatchesProviderID(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := matchesProviderID(tp, tt.providerID)
-		if got != tt.want {
-			t.Errorf("matchesProviderID(openai, %q) = %v, want %v", tt.providerID, got, tt.want)
+		got := reg.GetByNormalizedID(tt.providerID)
+		found := got != nil
+		if found != tt.wantFound {
+			t.Errorf("GetByNormalizedID(%q) found=%v, want %v", tt.providerID, found, tt.wantFound)
 		}
 	}
 }

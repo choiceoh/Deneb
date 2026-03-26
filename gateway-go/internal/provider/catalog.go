@@ -23,10 +23,10 @@ func FindCatalogTemplate(entries []CatalogTemplateEntry, providerID string, temp
 	lowerProvider := strings.ToLower(providerID)
 	for _, templateID := range templateIDs {
 		lowerTemplate := strings.ToLower(templateID)
-		for i := range entries {
-			if strings.ToLower(entries[i].Provider) == lowerProvider &&
-				strings.ToLower(entries[i].ID) == lowerTemplate {
-				return &entries[i]
+		for idx := range entries {
+			if strings.ToLower(entries[idx].Provider) == lowerProvider &&
+				strings.ToLower(entries[idx].ID) == lowerTemplate {
+				return &entries[idx]
 			}
 		}
 	}

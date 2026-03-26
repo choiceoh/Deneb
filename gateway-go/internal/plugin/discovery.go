@@ -226,12 +226,13 @@ func (d *PluginDiscoverer) resolveCacheTTL(env map[string]string) time.Duration 
 }
 
 func (d *PluginDiscoverer) buildCacheKey(params DiscoverPluginsParams) string {
-	return fmt.Sprintf("%s::%d::%s::%s::%s",
+	return fmt.Sprintf("%s::%d::%s::%s::%d::%s",
 		params.WorkspaceDir,
 		params.OwnershipUID,
 		params.Roots.Global,
 		params.Roots.Stock,
-		strings.Join(params.ExtraPaths, ","),
+		len(params.ExtraPaths),
+		strings.Join(params.ExtraPaths, "\x00"),
 	)
 }
 

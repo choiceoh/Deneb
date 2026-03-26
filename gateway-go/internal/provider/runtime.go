@@ -56,8 +56,8 @@ func (r *ProviderRuntimeResolver) ResolvePlugin(providerID string) Plugin {
 		return cached
 	}
 
-	// Look up in registry.
-	plugin := r.registry.GetByNormalizedID(providerID)
+	// Look up in registry using the normalized ID.
+	plugin := r.registry.GetByNormalizedID(normalized)
 
 	// Cache the result (including nil for negative caching).
 	r.mu.Lock()
@@ -454,22 +454,4 @@ type AuthDoctorProvider interface {
 	BuildAuthDoctorHint(ctx context.Context, dctx AuthDoctorContext) (string, error)
 }
 
-// matchesProviderID checks if a plugin matches a provider ID using normalized comparison.
-func matchesProviderID(plugin Plugin, providerID string) bool {
-	normalized := NormalizeProviderID(providerID)
-	if normalized == "" {
-		return false
-	}
-	if NormalizeProviderID(plugin.ID()) == normalized {
-		return true
-	}
-	if ap, ok := plugin.(AliasProvider); ok {
-		for _, alias := range ap.Aliases() {
-			if NormalizeProviderID(alias) == normalized {
-				return true
-			}
-		}
-	}
-	return false
-}
 

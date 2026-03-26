@@ -11,7 +11,6 @@ package provider
 import (
 	"context"
 	"sort"
-	"strings"
 )
 
 // DiscoveryOrder determines the order in which provider catalogs are resolved.
@@ -78,13 +77,11 @@ func toDiscoveryProvider(plugin Plugin) *DiscoveryProvider {
 	hasDiscovery := false
 	order := DiscoveryOrderLate
 
-	if cp, ok := plugin.(CatalogProvider); ok {
+	if _, ok := plugin.(CatalogProvider); ok {
 		hasCatalog = true
-		_ = cp
 	}
-	if dp, ok := plugin.(discoveryProvider); ok {
+	if _, ok := plugin.(discoveryProvider); ok {
 		hasDiscovery = true
-		_ = dp
 	}
 
 	if !hasCatalog && !hasDiscovery {
@@ -136,7 +133,7 @@ func GroupDiscoveryProvidersByOrder(providers []DiscoveryProvider) map[Discovery
 
 	for _, order := range AllDiscoveryOrders {
 		sort.SliceStable(grouped[order], func(i, j int) bool {
-			return strings.Compare(grouped[order][i].Label, grouped[order][j].Label) < 0
+			return grouped[order][i].Label < grouped[order][j].Label
 		})
 	}
 
@@ -182,8 +179,8 @@ func RunProviderCatalog(ctx context.Context, dp DiscoveryProvider, cctx CatalogC
 		}
 	}
 	if dp.HasDiscovery {
-		if dp, ok := dp.Plugin.(discoveryProvider); ok {
-			return dp.Discovery(ctx, cctx)
+		if disc, ok := dp.Plugin.(discoveryProvider); ok {
+			return disc.Discovery(ctx, cctx)
 		}
 	}
 	return nil, nil

@@ -239,16 +239,22 @@ func normalizeWizardSetup(params normalizeWizardSetupParams) (*WizardSetupDef, [
 
 	if params.setup.ModelAllowlist != nil {
 		al := &ModelAllowlistDef{}
+		hasContent := false
 		if keys := normalizeTextList(params.setup.ModelAllowlist.AllowedKeys); keys != nil {
 			al.AllowedKeys = keys
+			hasContent = true
 		}
 		if sels := normalizeTextList(params.setup.ModelAllowlist.InitialSelections); sels != nil {
 			al.InitialSelections = sels
+			hasContent = true
 		}
 		if msg := normalizeText(params.setup.ModelAllowlist.Message); msg != "" {
 			al.Message = msg
+			hasContent = true
 		}
-		result.ModelAllowlist = al
+		if hasContent {
+			result.ModelAllowlist = al
+		}
 	}
 
 	return result, diagnostics
