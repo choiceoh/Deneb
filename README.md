@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Self-Hosted AI Agent with Lossless Memory</strong><br>
-  <a href="https://github.com/choiceoh/Deneb/releases"><img src="https://img.shields.io/badge/version-3.10.0-blue" alt="Version"></a>
+  <a href="https://github.com/choiceoh/Deneb/releases"><img src="https://img.shields.io/badge/version-3.11.4-blue" alt="Version"></a>
   <a href="https://github.com/choiceoh/Deneb/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-stable-dea584" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.24+-00ADD8" alt="Go"></a>
@@ -10,7 +10,7 @@
 
 ---
 
-**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. A ~85K-line multi-language server engine (Rust + Go) with a custom Aurora context engine — DAG-based compaction, proactive background summarization, and full memory recall across sessions.
+**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. A ~155K-line multi-language server engine (Rust + Go) with a custom Aurora context engine — DAG-based compaction, proactive background summarization, and full memory recall across sessions.
 
 **Memory-first, local-first, lean-first.**
 
@@ -28,6 +28,7 @@ Most AI agent frameworks hit the same wall: when conversations grow long, contex
 | **Memory persistence** | Session-scoped           | Workspace files + JSONL transcripts + Aurora DAG  |
 | **Performance**        | Pure JS/Python           | Rust core (FFI) + Go gateway                     |
 | **Local LLM**          | Optional                 | First-class: SGLang, Ollama, vLLM support         |
+| **Autonomy**           | Reactive only            | Goal-driven autonomous loop with attention system |
 
 ### Intentional Simplification
 
@@ -67,11 +68,30 @@ Spawn and manage sub-agents with bounded contexts for complex tasks.
 - **Result streaming** — Real-time progress from sub-agents to parent
 - **ACP (Agent Control Protocol)** — Standardized protocol for agent spawning and control
 
+### Vega Search Engine
+
+Rust-native search engine with SQLite FTS5 and optional ML-powered semantic search.
+
+- **Full-text search** — FTS5-backed keyword search with BM25 ranking
+- **Semantic search** — GGUF-based embedding and reranking (optional CUDA acceleration)
+- **Hybrid search** — Combines FTS and semantic results with score merging
+- **SIMD-accelerated** — Cosine similarity with SIMD optimization
+
+### Media Processing
+
+Rich media understanding and extraction pipeline.
+
+- **YouTube transcripts** — Full transcript extraction with timestamp mapping
+- **Video frame extraction** — Key frame capture for vision analysis
+- **Telegram attachments** — Photo, video, document, and voice message processing
+- **Link understanding** — Automatic content extraction from shared URLs
+- **Vision analysis** — Multi-image analysis with vision-capable models
+
 ### Skill System
 
-Extensible skill plugins for domain-specific capabilities:
+Extensible skill plugins for domain-specific capabilities (16 skills):
 
-`coding-agent` · `github` · `summarize` · `weather` · `healthcheck` · `nano-pdf` · `session-logs` · `xurl` · `tmux` · `node-connect` and more
+`coding-agent` · `github` · `gog` · `healthcheck` · `himalaya` · `imsg` · `mcporter` · `nano-pdf` · `node-connect` · `sag` · `session-logs` · `skill-creator` · `summarize` · `tmux` · `weather` · `xurl`
 
 ### Messaging Channels
 
@@ -81,25 +101,29 @@ Other channel configs (Discord, Signal, Slack, WhatsApp, iMessage) exist at the 
 
 ### Tool System
 
-| Tool       | Description                                  |
-| ---------- | -------------------------------------------- |
-| File I/O   | Read, write, edit workspace files            |
-| Web Search | Perplexity, Brave Search, auto-detect        |
-| Browser    | Playwright automation and scraping           |
-| PDF        | Native PDF analysis with vision models       |
-| Image      | Multi-image analysis with vision models      |
-| Memory     | Semantic search + Aurora expansion           |
-| Cron       | Scheduled tasks, heartbeats, morning letters |
-| Sub-agents | Spawn bounded sub-agents for complex tasks   |
-| MCP        | Model Context Protocol tool integration      |
+| Tool          | Description                                           |
+| ------------- | ----------------------------------------------------- |
+| File I/O      | Read, write, edit, grep, find, ls workspace files     |
+| Exec          | Shell execution and background process management     |
+| Web           | Web fetch, search (Perplexity, Brave, auto-detect)    |
+| Media         | YouTube transcripts, image/video analysis             |
+| Memory        | Semantic search + Aurora expansion + memory retrieval |
+| Cron          | Scheduled tasks, reminders, periodic jobs             |
+| Sub-agents    | Spawn bounded sub-agents with session isolation       |
+| Messaging     | Send, reply, react across channels                    |
+| Sessions      | List, history, spawn, steer active sessions           |
+| Nodes         | Discover, monitor, and run commands on connected nodes|
+| Gateway       | Restart, config, update gateway operations            |
+| Apply Patch   | Apply unified diffs to workspace files                |
+| MCP           | Model Context Protocol tool integration               |
 
 ### Model Providers
 
-**Cloud:** Anthropic · OpenAI · Google (Gemini) · Mistral · xAI (Grok) · Z.AI (GLM) · OpenRouter · Perplexity · Together AI · DeepSeek
+**Cloud:** Anthropic · DeepSeek · Google (Gemini) · Mistral · OpenAI · OpenRouter · Perplexity · Together AI · xAI (Grok) · Z.AI (GLM)
 
 **Self-Hosted:** Ollama · SGLang · vLLM · LiteLLM
 
-**Enterprise:** AWS Bedrock · Google Vertex AI · Azure OpenAI
+**Enterprise:** AWS Bedrock · Azure OpenAI · Google Vertex AI
 
 ## Quick Start
 
@@ -132,19 +156,23 @@ scripts/start-go-gateway.sh --port 18789 --bind loopback
 
 ```
 Deneb/
-├── core-rs/                    # Rust core library (~37K lines)
-│   ├── core/                   #   Protocol validation, security, media, markdown, memory, context engine
-│   ├── vega/                   #   Vega search engine (FTS5 + optional ML)
+├── core-rs/                    # Rust core library (~45K lines)
+│   ├── core/                   #   Protocol, security, media, markdown, memory, context engine
+│   ├── vega/                   #   Vega search engine (FTS5 + optional semantic ML)
 │   ├── ml/                     #   GGUF inference (llama.cpp, optional CUDA)
 │   └── agent-runtime/          #   Agent lifecycle & model selection
-├── gateway-go/                 # Go gateway server (~49K lines)
+├── gateway-go/                 # Go gateway server (~109K lines)
 │   ├── cmd/gateway/            #   Entry point
-│   └── internal/               #   Server, RPC, session, channel, FFI bindings, chat
+│   └── internal/               #   41 packages: server, RPC, session, channel,
+│                               #   chat, agent, autonomous, media, vega, and more
 ├── proto/                      # Shared Protobuf schemas
 │   ├── gateway.proto           #   Gateway frames, error codes
 │   ├── channel.proto           #   Channel capabilities & meta
-│   └── session.proto           #   Session lifecycle & state
-├── cli-rs/                     # Rust CLI
+│   ├── session.proto           #   Session lifecycle & state
+│   ├── agent.proto             #   Agent definitions
+│   ├── plugin.proto            #   Plugin interface
+│   └── provider.proto          #   Provider types
+├── cli-rs/                     # Rust CLI (~8K lines)
 ├── skills/                     # Skill plugins (16 skills)
 └── docs/                       # Mintlify documentation site
 ```
@@ -161,11 +189,14 @@ make all              # Build Rust + Go
 make test             # Run Rust + Go tests
 make check            # Full check (proto + Rust + Go)
 
-make rust             # Build Rust only
+make rust             # Build Rust only (minimal)
+make rust-vega        # Build Rust + Vega search (FTS)
+make rust-dgx         # Build Rust + Vega + ML + CUDA (DGX Spark)
 make rust-test        # Run Rust tests
 make go               # Build Go only
 make go-test          # Run Go tests
 make proto            # Generate protobuf code
+make gateway-dgx      # Full production binary (DGX Spark)
 ```
 
 ## License
