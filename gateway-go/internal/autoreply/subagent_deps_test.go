@@ -7,7 +7,7 @@ import (
 
 func TestSubagentCommandDeps_SpawnSubagent(t *testing.T) {
 	acpRegistry := NewACPRegistry()
-	deps := &SubagentCommandDeps{
+	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,
 	}
 
@@ -48,7 +48,7 @@ func TestSubagentCommandDeps_SpawnSubagent(t *testing.T) {
 
 func TestSubagentCommandDeps_SpawnSubagent_MaxDepth(t *testing.T) {
 	acpRegistry := NewACPRegistry()
-	deps := &SubagentCommandDeps{
+	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,
 	}
 
@@ -72,7 +72,7 @@ func TestSubagentCommandDeps_SpawnSubagent_MaxDepth(t *testing.T) {
 
 func TestSubagentCommandDeps_KillSubagent(t *testing.T) {
 	acpRegistry := NewACPRegistry()
-	deps := &SubagentCommandDeps{
+	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,
 	}
 
@@ -105,7 +105,7 @@ func TestSubagentCommandDeps_KillSubagent(t *testing.T) {
 
 func TestSubagentCommandDeps_ListSubagents(t *testing.T) {
 	acpRegistry := NewACPRegistry()
-	deps := &SubagentCommandDeps{
+	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,
 	}
 
@@ -129,7 +129,7 @@ func TestSubagentCommandDeps_ListSubagents(t *testing.T) {
 }
 
 func TestSubagentCommandDeps_NilRegistry(t *testing.T) {
-	deps := &SubagentCommandDeps{}
+	deps := &SubagentInfraDeps{}
 
 	result := deps.SpawnSubagent(context.Background(), SpawnSubagentParams{
 		Role: "test",

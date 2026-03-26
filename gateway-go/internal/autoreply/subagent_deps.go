@@ -8,10 +8,10 @@ import (
 	"time"
 )
 
-// SubagentCommandDeps provides the full dependency interface for subagent/ACP
-// command handlers. This connects the CommandRouter handlers to the actual
-// ACPRegistry, session manager, and followup queue infrastructure.
-type SubagentCommandDeps struct {
+// SubagentInfraDeps provides the full dependency interface for subagent/ACP
+// infrastructure. This connects to the actual ACPRegistry, session manager,
+// and followup queue infrastructure.
+type SubagentInfraDeps struct {
 	ACPRegistry   *ACPRegistry
 	ACPProjector  *ACPProjector
 	FollowupQueue *FollowupQueueRegistry
@@ -43,7 +43,7 @@ type SpawnSubagentResult struct {
 
 // SpawnSubagent creates a new sub-agent, registers it in the ACP registry,
 // and initializes its session state.
-func (d *SubagentCommandDeps) SpawnSubagent(ctx context.Context, params SpawnSubagentParams) SpawnSubagentResult {
+func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubagentParams) SpawnSubagentResult {
 	if d.ACPRegistry == nil {
 		return SpawnSubagentResult{Error: fmt.Errorf("ACP registry not available")}
 	}
@@ -109,7 +109,7 @@ func (d *SubagentCommandDeps) SpawnSubagent(ctx context.Context, params SpawnSub
 }
 
 // KillSubagent kills a sub-agent and its descendants.
-func (d *SubagentCommandDeps) KillSubagent(agentID string) error {
+func (d *SubagentInfraDeps) KillSubagent(agentID string) error {
 	if d.ACPRegistry == nil {
 		return fmt.Errorf("ACP registry not available")
 	}
@@ -137,7 +137,7 @@ func (d *SubagentCommandDeps) KillSubagent(agentID string) error {
 }
 
 // ListSubagents returns a display-formatted list of sub-agents.
-func (d *SubagentCommandDeps) ListSubagents(parentID string) string {
+func (d *SubagentInfraDeps) ListSubagents(parentID string) string {
 	if d.ACPRegistry == nil {
 		return "No subagent system available."
 	}
@@ -146,7 +146,7 @@ func (d *SubagentCommandDeps) ListSubagents(parentID string) string {
 }
 
 // ActiveSubagentCount returns the number of active sub-agents.
-func (d *SubagentCommandDeps) ActiveSubagentCount(parentID string) int {
+func (d *SubagentInfraDeps) ActiveSubagentCount(parentID string) int {
 	if d.ACPRegistry == nil {
 		return 0
 	}
@@ -154,7 +154,7 @@ func (d *SubagentCommandDeps) ActiveSubagentCount(parentID string) int {
 }
 
 // ResetSubagent performs an ACP reset-in-place for a bound conversation.
-func (d *SubagentCommandDeps) ResetSubagent(agentID, reason string) error {
+func (d *SubagentInfraDeps) ResetSubagent(agentID, reason string) error {
 	if d.ACPRegistry == nil {
 		return fmt.Errorf("ACP registry not available")
 	}
@@ -178,18 +178,24 @@ func (d *SubagentCommandDeps) ResetSubagent(agentID, reason string) error {
 }
 
 // EnqueueFollowup adds a followup message for a session.
-func (d *SubagentCommandDeps) EnqueueFollowup(sessionKey, text string, drainFn DrainFunc) {
+func (d *SubagentInfraDeps) EnqueueFollowup(sessionKey, text string, run *FollowupRunContext) {
 	if d.FollowupQueue == nil {
 		return
 	}
-	q := d.FollowupQueue.GetOrCreate(sessionKey)
-	q.Enqueue(QueueItem{
-		Text:       text,
-		SessionKey: sessionKey,
-	}, drainFn)
+	d.FollowupQueue.EnqueueFollowupRun(
+		sessionKey,
+		FollowupRun{
+			Prompt:     text,
+			Run:        run,
+			EnqueuedAt: time.Now().UnixMilli(),
+		},
+		FollowupQueueSettings{},
+		DedupeNone,
+		newRecentMessageIDCache(),
+	)
 }
 
-func (d *SubagentCommandDeps) logger() *slog.Logger {
+func (d *SubagentInfraDeps) logger() *slog.Logger {
 	if d.Logger != nil {
 		return d.Logger
 	}
