@@ -126,6 +126,7 @@ func TestResolveDefaultBaseURL(t *testing.T) {
 	}{
 		{"anthropic", llm.DefaultAnthropicBaseURL},
 		{"zai", defaultZaiBaseURL},
+		{"sglang", defaultSglangBaseURL},
 		{"openai", ""},
 		{"", ""},
 	}

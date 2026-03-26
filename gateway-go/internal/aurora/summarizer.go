@@ -42,9 +42,10 @@ IMPORTANT: This is an aggressive compression pass. Be significantly more concise
 )
 
 // NewLLMSummarizer creates a Summarizer backed by the given LLM client.
-// The model parameter specifies which model to use for summarization
-// (e.g. "claude-haiku-4-5-20251001" for cost efficiency).
-func NewLLMSummarizer(client *llm.Client, model string) Summarizer {
+// The model parameter specifies which model to use for summarization.
+// The apiType parameter selects the streaming method: "anthropic" for the
+// Anthropic Messages API, anything else for OpenAI-compatible /chat/completions.
+func NewLLMSummarizer(client *llm.Client, model string, apiType string) Summarizer {
 	return func(text string, aggressive bool, opts *SummarizeOptions) (string, error) {
 		if client == nil {
 			return deterministicFallback(text), nil
@@ -83,9 +84,15 @@ func NewLLMSummarizer(client *llm.Client, model string) Summarizer {
 			Stream:    true,
 		}
 
-		ch, err := client.StreamChat(ctx, req)
-		if err != nil {
-			return "", fmt.Errorf("summarize LLM call: %w", err)
+		var ch <-chan llm.StreamEvent
+		var streamErr error
+		if apiType == "anthropic" {
+			ch, streamErr = client.StreamChat(ctx, req)
+		} else {
+			ch, streamErr = client.StreamChatOpenAI(ctx, req)
+		}
+		if streamErr != nil {
+			return "", fmt.Errorf("summarize LLM call: %w", streamErr)
 		}
 
 		// Collect streamed text from content_block_delta events.

@@ -273,6 +273,23 @@ func executeAgentRun(
 				messages = compactedMsgs
 				continue
 			}
+
+			// Fallback to local sglang when a known remote provider fails
+			// (skip if already sglang, context cancelled, or unknown provider).
+			if providerID != "sglang" && providerID != "" && ctx.Err() == nil {
+				logger.Warn("primary model failed, falling back to sglang",
+					"provider", providerID, "model", model, "error", runErr)
+				fbClient := llm.NewClient(defaultSglangBaseURL, "", llm.WithLogger(logger))
+				fbCfg := cfg
+				fbCfg.Model = sglangModel
+				fbCfg.APIType = "openai"
+				agentResult, runErr = RunAgent(ctx, fbCfg, messages, fbClient, deps.tools, emitDelta, logger)
+				if runErr == nil {
+					break
+				}
+				logger.Error("sglang fallback also failed", "error", runErr)
+			}
+
 			return nil, runErr
 		}
 		break
@@ -455,6 +472,10 @@ const (
 	// Z.ai Coding Plan global endpoint (OpenAI-compatible).
 	// Matches ZAI_CODING_GLOBAL_BASE_URL in src/plugins/provider-model-definitions.ts.
 	defaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
+
+	// Local sglang server (OpenAI-compatible). Used as fallback and for lightweight tasks.
+	defaultSglangBaseURL = "http://127.0.0.1:30000/v1"
+	sglangModel          = "Qwen/Qwen3.5-35B-A3B"
 )
 
 // inferAPIType guesses the API type from the provider ID.
@@ -504,6 +525,8 @@ func resolveDefaultBaseURL(providerID string) string {
 		return llm.DefaultAnthropicBaseURL
 	case "zai":
 		return defaultZaiBaseURL
+	case "sglang":
+		return defaultSglangBaseURL
 	default:
 		return ""
 	}
