@@ -137,7 +137,7 @@ func main() {
 				return fmt.Errorf("daemon start failed: %w", err)
 			}
 
-			go provider.PrewarmModel(ctx, srv, logger)
+			go provider.PrewarmModel(ctx, logger)
 			logger.Info("deneb gateway starting (daemon mode)", "addr", addr, "pid", os.Getpid())
 			return srv.Run(ctx)
 		}, logger)
@@ -149,7 +149,7 @@ func main() {
 
 	// Non-daemon mode.
 	exitCode := runWithSignals(func(ctx context.Context) error {
-		go provider.PrewarmModel(ctx, srv, logger)
+		go provider.PrewarmModel(ctx, logger)
 		logger.Info("deneb gateway starting", "addr", addr)
 		return srv.Run(ctx)
 	}, logger)

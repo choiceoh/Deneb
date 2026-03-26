@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+	"github.com/choiceoh/deneb/gateway-go/internal/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
 const (
@@ -17,11 +19,18 @@ const (
 	prewarmRetryDelay = 2 * time.Second
 	// prewarmMaxRetries is the maximum number of prewarm attempts.
 	prewarmMaxRetries = 2
+	// prewarmDefaultModel is the fallback model when config has none.
+	prewarmDefaultModel = "zai/glm-5-turbo"
+	// prewarmDefaultBaseURL is the Z.ai Coding Plan global endpoint.
+	prewarmDefaultBaseURL = "https://api.z.ai/api/coding/paas/v4"
 )
 
-// RPCDispatcher can dispatch RPC requests. Implemented by server.Server.
-type RPCDispatcher interface {
-	DispatchRPC(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame
+// providerConfig holds credentials and endpoint for an LLM provider.
+// Mirrors chat.ProviderConfig to avoid a cross-package dependency.
+type providerConfig struct {
+	APIKey  string `json:"apiKey"`
+	BaseURL string `json:"baseUrl"`
+	API     string `json:"api"`
 }
 
 // PrewarmModel sends a minimal inference request to the primary model provider
@@ -32,10 +41,22 @@ type RPCDispatcher interface {
 // This function is designed to be called as a goroutine during gateway startup,
 // before channel plugins begin accepting messages. Failures are logged but
 // do not block startup.
-func PrewarmModel(ctx context.Context, dispatcher RPCDispatcher, logger *slog.Logger) {
-	if dispatcher == nil {
+func PrewarmModel(ctx context.Context, logger *slog.Logger) {
+	providerID, modelName, cfg := loadPrewarmConfig(logger)
+	if cfg == nil {
+		logger.Info("model prewarm skipped: no provider config available")
 		return
 	}
+
+	baseURL := cfg.BaseURL
+	if baseURL == "" {
+		baseURL = resolvePrewarmBaseURL(providerID)
+	}
+	client := llm.NewClient(baseURL, cfg.APIKey,
+		llm.WithLogger(logger),
+		llm.WithRetry(0, 0, 0), // No retries inside client; we handle retries here.
+	)
+	apiType := inferPrewarmAPIType(providerID, cfg.API)
 
 	for attempt := 0; attempt <= prewarmMaxRetries; attempt++ {
 		if attempt > 0 {
@@ -47,35 +68,148 @@ func PrewarmModel(ctx context.Context, dispatcher RPCDispatcher, logger *slog.Lo
 		}
 
 		prewarmCtx, cancel := context.WithTimeout(ctx, prewarmTimeout)
-		params, _ := json.Marshal(map[string]any{
-			"prompt":    "warmup",
-			"maxTokens": 1,
-		})
-		resp := dispatcher.DispatchRPC(prewarmCtx, &protocol.RequestFrame{
-			Type:   "req",
-			ID:     "go-model-prewarm",
-			Method: "provider.prewarm",
-			Params: params,
-		})
+		err := doPrewarmRequest(prewarmCtx, client, modelName, apiType)
 		cancel()
 
-		if resp == nil {
-			logger.Warn("model prewarm returned nil response", "attempt", attempt+1)
-			continue
-		}
-
-		if resp.OK {
+		if err == nil {
 			logger.Info("primary model prewarmed successfully")
 			return
 		}
 
-		if resp.Error != nil {
-			logger.Warn("model prewarm returned error",
-				"attempt", attempt+1,
-				"error", resp.Error,
-			)
-		}
+		logger.Warn("model prewarm returned error",
+			"attempt", attempt+1,
+			"error", err,
+		)
 	}
 
 	logger.Warn("model prewarm exhausted all retries, continuing without warmup")
+}
+
+// doPrewarmRequest sends a minimal 1-token inference request and drains the
+// streaming response.
+func doPrewarmRequest(ctx context.Context, client *llm.Client, model, apiType string) error {
+	req := llm.ChatRequest{
+		Model:     model,
+		Messages:  []llm.Message{llm.NewTextMessage("user", "warmup")},
+		MaxTokens: 1,
+		Stream:    true,
+	}
+
+	var events <-chan llm.StreamEvent
+	var err error
+	if apiType == "anthropic" {
+		events, err = client.StreamChat(ctx, req)
+	} else {
+		events, err = client.StreamChatOpenAI(ctx, req)
+	}
+	if err != nil {
+		return err
+	}
+
+	// Drain the stream to completion.
+	for range events {
+	}
+	return nil
+}
+
+// loadPrewarmConfig reads deneb.json to find the default model and its
+// provider config. Returns empty values if config is unavailable.
+func loadPrewarmConfig(logger *slog.Logger) (providerID, modelName string, cfg *providerConfig) {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
+		return "", "", nil
+	}
+
+	var root struct {
+		Models struct {
+			Providers map[string]providerConfig `json:"providers"`
+		} `json:"models"`
+		Agents struct {
+			DefaultModel string          `json:"defaultModel"`
+			Defaults     json.RawMessage `json:"defaults"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		logger.Warn("prewarm: failed to parse config", "error", err)
+		return "", "", nil
+	}
+
+	// Resolve default model (e.g. "zai/glm-5-turbo").
+	model := root.Agents.DefaultModel
+	if model == "" {
+		model = extractModelFromDefaults(root.Agents.Defaults)
+	}
+	if model == "" {
+		model = prewarmDefaultModel
+	}
+
+	// Split "provider/model" into parts.
+	providerID, modelName = splitModelID(model)
+	if providerID == "" || modelName == "" {
+		return "", "", nil
+	}
+
+	// Look up provider config.
+	pc, ok := root.Models.Providers[providerID]
+	if !ok || pc.APIKey == "" {
+		return "", "", nil
+	}
+
+	return providerID, modelName, &pc
+}
+
+// splitModelID splits "provider/model" into provider ID and model name.
+func splitModelID(model string) (providerID, modelName string) {
+	if i := strings.IndexByte(model, '/'); i > 0 {
+		return model[:i], model[i+1:]
+	}
+	return "", model
+}
+
+// extractModelFromDefaults handles both string and object forms of the
+// agents.defaults.model field.
+func extractModelFromDefaults(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var defaults struct {
+		Model json.RawMessage `json:"model"`
+	}
+	if err := json.Unmarshal(raw, &defaults); err != nil || len(defaults.Model) == 0 {
+		return ""
+	}
+	// Try string first.
+	var s string
+	if json.Unmarshal(defaults.Model, &s) == nil && s != "" {
+		return s
+	}
+	// Try object with primary field.
+	var obj struct {
+		Primary string `json:"primary"`
+	}
+	if json.Unmarshal(defaults.Model, &obj) == nil && obj.Primary != "" {
+		return obj.Primary
+	}
+	return ""
+}
+
+// inferPrewarmAPIType determines the API type from explicit config or provider ID.
+func inferPrewarmAPIType(providerID, configAPI string) string {
+	if configAPI != "" {
+		return configAPI
+	}
+	if providerID == "anthropic" {
+		return "anthropic"
+	}
+	return "openai"
+}
+
+// resolvePrewarmBaseURL returns the default base URL for known providers.
+func resolvePrewarmBaseURL(providerID string) string {
+	switch providerID {
+	case "zai":
+		return prewarmDefaultBaseURL
+	default:
+		return prewarmDefaultBaseURL
+	}
 }
