@@ -575,6 +575,8 @@ export const DenebSchema = z
       .strict()
       .optional(),
     channels: ChannelsSchema,
+    // Deprecated: canvas host (A2UI) was removed in Phase 0 (Rust+Go migration).
+    // Kept for backward-compat so existing configs with this key don't fail validation.
     canvasHost: z
       .object({
         enabled: z.boolean().optional(),

@@ -93,8 +93,8 @@
 
 **CLI system** (`src/cli/`):
 
-- `program/` — command tree builder, command registry, registration modules per domain.
-- Subcli modules: `gateway-cli/`, `daemon-cli/`, `autonomous-cli/`, `cron-cli/`, `browser-cli*.ts`, `nodes-cli/`, `update-cli/`, `send-runtime/`.
+- Flat file layout (no program/ subdirectory); command registration is inline.
+- Subcli modules: `send-runtime/` and various `*-cli.ts` files (memory, nodes, completion, etc.).
 - Core utilities: argv parsing, channel auth/options, config CLI, shell completions, progress output.
 
 **Commands** (`src/commands/`):
@@ -122,7 +122,7 @@
 
 **Built-in channels:**
 
-- `src/telegram/`, `src/discord/`, `src/slack/`, `src/signal/`, `src/imessage/`, `src/web/` (WhatsApp web).
+- Built-in channel code has been migrated to extensions. See `extensions/telegram/` for the active deployment target. Legacy references to `src/telegram/`, `src/discord/`, `src/slack/`, `src/signal/`, `src/imessage/`, `src/web/` may appear in docs but those directories no longer exist.
 
 **Agents** (`src/agents/`):
 
@@ -172,8 +172,6 @@
 - `src/autonomous/` — agent autonomy features.
 - `src/auto-reply/` — reply templates, heartbeat generation.
 - `src/hooks/` — hook definitions and bundled hooks (system commands, etc.).
-- `src/browser/` — headless browser automation.
-- `src/canvas-host/` — A2UI canvas rendering (bundled via `pnpm canvas:a2ui:bundle`).
 - `src/cron/` — scheduled task execution.
 - `src/daemon/` — daemon process management.
 - `src/sessions/` — session storage and lifecycle.
@@ -181,7 +179,7 @@
 - `src/security/` — security policies and validation.
 - `src/terminal/` — ANSI output, tables, palette (`palette.ts`), progress bars.
 - `src/logging/` — structured logging and filtering.
-- `src/tts/` — text-to-speech providers.
+- TTS providers are integrated via the plugin/provider system (no standalone `src/tts/` directory).
 - `src/image-generation/` — image generation providers.
 - `src/media-understanding/` — vision/media analysis integrations.
 - `src/web-search/` — search provider abstraction.
@@ -191,7 +189,7 @@
 - `src/markdown/` — markdown utilities.
 - `src/providers/` — LLM/model provider integrations.
 - `src/wizard/` — interactive setup wizards.
-- `src/compat/` — backward compatibility layers.
+- Backward compatibility layers are co-located with their respective subsystems (no standalone `src/compat/` directory).
 - `src/bindings/` — JavaScript/native bindings.
 - `src/utils/`, `src/shared/`, `src/types/` — general utilities and type definitions.
 
@@ -199,22 +197,11 @@
 
 **Channel extensions** (each implements `ChannelPlugin` from plugin-sdk):
 
-- `extensions/discord/` — Discord Bot API (discord.js).
-- `extensions/telegram/` — Telegram Bot API (grammy).
-- `extensions/slack/` — Slack workspace messaging (@slack/bolt).
-- `extensions/matrix/` — Matrix protocol (matrix-js-sdk).
-- `extensions/whatsapp/` — WhatsApp via Baileys library.
-- `extensions/line/` — LINE Bot API.
-- `extensions/twitch/` — Twitch chat/API (twurple).
-- `extensions/feishu/` — Feishu/Lark (ByteDance SDK).
+- `extensions/telegram/` — Telegram Bot API (grammy). Currently the only deployed extension.
 
 **Feature extensions:**
 
-- `extensions/memory-core/` — core memory search plugin.
-- `extensions/acpx/` — ACP runtime backend.
-- `extensions/diagnostics-otel/` — OpenTelemetry diagnostics exporters.
-
-**Shared:** `extensions/shared/` — shared utilities for extensions.
+- Memory core is implemented as a core plugin slot (`src/plugins/slots.ts`), not as an extension package.
 
 **Extension rules:**
 
@@ -297,7 +284,7 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 
 ### Key Architectural Flows
 
-1. **CLI execution:** `entry.ts` → `cli/run-main.ts` → `cli/program/build-program.ts` (command tree) → `commands/*` handlers.
+1. **CLI execution:** `entry.ts` → `cli/run-main.ts` → command registration → `commands/*` handlers.
 2. **Gateway message routing:** `gateway/server.ts` → session lifecycle state machine → channel registry → plugin hooks → RPC methods → channel plugin send/receive.
 3. **Plugin loading:** `plugins/loader.ts` → `plugins/manifest-registry.ts` → plugin-sdk contracts → `extensions/*` implementations.
 4. **Channel message flow:** `channels/registry.ts` → `channels/run-state-machine.ts` → transport layer → channel plugin (extension or built-in).
@@ -309,10 +296,10 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 ### Cross-Cutting Concerns
 
 - Installers served from `https://deneb.ai/*`: live in the sibling repo `../deneb.ai` (`public/install.sh`, `public/install-cli.sh`, `public/install.ps1`).
-- Messaging channels: always consider **all** built-in + extension channels when refactoring shared logic (routing, allowlists, pairing, command gating, onboarding, docs).
+- Messaging channels: always consider **all** extension channels when refactoring shared logic (routing, allowlists, pairing, command gating, onboarding, docs).
   - Core channel docs: `docs/channels/`
-  - Core channel code: `src/telegram`, `src/discord`, `src/slack`, `src/signal`, `src/imessage`, `src/web` (WhatsApp web), `src/channels`, `src/routing`
-  - Extensions (channel plugins): `extensions/*` (e.g. `extensions/telegram`)
+  - Core channel framework: `src/channels`, `src/routing`
+  - Channel plugins (extensions): `extensions/*` (e.g. `extensions/telegram`)
 - When adding channels/extensions/apps/docs, update `.github/labeler.yml` and create matching GitHub labels (use existing channel/extension label colors).
 
 ## Docs Linking (Mintlify)
@@ -768,7 +755,6 @@ This runs the smart gate, pushes, and creates the PR automatically. Options: `--
 - **Restart apps:** “restart iOS/Android apps” means rebuild (recompile/install) and relaunch, not just kill/launch.
 - **Device checks:** before testing, verify connected real devices (iOS/Android) before reaching for simulators/emulators.
 - iOS Team ID lookup: `security find-identity -p codesigning -v` → use Apple Development (…) TEAMID. Fallback: `defaults read com.apple.dt.Xcode IDEProvisioningTeamIdentifiers`.
-- A2UI bundle hash: `src/canvas-host/a2ui/.bundle.hash` is auto-generated; ignore unexpected changes, and only regenerate via `pnpm canvas:a2ui:bundle` (or `scripts/bundle-a2ui.sh`) when needed. Commit the hash as a separate commit.
 - Release signing/notary credentials are managed outside the repo; maintainers keep that setup in the private [maintainer release docs](https://github.com/deneb/maintainers/tree/main/release).
 - Lobster palette: use the shared CLI palette in `src/terminal/palette.ts` (no hardcoded colors); apply palette to onboarding/config prompts and other TTY UI output as needed.
 - When asked to open a “session” file, open the Pi session logs under `~/.deneb/agents/<agentId>/sessions/*.jsonl` (use the `agent=<id>` value in the Runtime line of the system prompt; newest unless a specific ID is given), not the default `sessions.json`. If logs are needed from another machine, SSH via Tailscale and read the same path there.
