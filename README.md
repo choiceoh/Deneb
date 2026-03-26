@@ -22,14 +22,14 @@ Most AI agent frameworks hit the same wall: when conversations grow long, contex
 
 ### What's Different
 
-|                        | Typical Agent Framework  | Deneb                                            |
-| ---------------------- | ------------------------ | ------------------------------------------------ |
-| **Long conversations** | Summarize → lose details | DAG-based compaction preserves everything        |
-| **Context recall**     | Vector search only       | Semantic search + DAG expansion + memory files   |
-| **Compaction latency** | Blocks on LLM call       | Background observer pre-computes summaries       |
-| **Memory persistence** | Session-scoped           | Workspace files + JSONL transcripts + Aurora DAG |
+|                        | Typical Agent Framework  | Deneb                                             |
+| ---------------------- | ------------------------ | ------------------------------------------------- |
+| **Long conversations** | Summarize → lose details | DAG-based compaction preserves everything         |
+| **Context recall**     | Vector search only       | Semantic search + DAG expansion + memory files    |
+| **Compaction latency** | Blocks on LLM call       | Background observer pre-computes summaries        |
+| **Memory persistence** | Session-scoped           | Workspace files + JSONL transcripts + Aurora DAG  |
 | **Performance**        | Pure JS/Python           | Rust core (FFI) + Go gateway + TypeScript runtime |
-| **Local LLM**          | Optional                 | First-class: SGLang, Ollama, vLLM support        |
+| **Local LLM**          | Optional                 | First-class: SGLang, Ollama, vLLM support         |
 
 ### Intentional Simplification
 
