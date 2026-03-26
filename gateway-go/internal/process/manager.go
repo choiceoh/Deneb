@@ -64,11 +64,12 @@ type ExecResult struct {
 // TrackedProcess represents a running or completed process.
 type TrackedProcess struct {
 	Request ExecRequest `json:"request"`
-	Result  *ExecResult `json:"result,omitempty"`
-	Status  RunStatus   `json:"status"`
-	mu      sync.Mutex
-	cmd     *exec.Cmd
-	cancel  context.CancelFunc
+
+	mu     sync.Mutex
+	Status RunStatus   `json:"status"`   // guarded by mu
+	Result *ExecResult `json:"result,omitempty"` // guarded by mu
+	cmd    *exec.Cmd
+	cancel context.CancelFunc
 }
 
 // ApprovalCallback is called when a command requires approval.
