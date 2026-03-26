@@ -148,7 +148,7 @@ jobs:
         run: test -z "$(gofmt -l .)" || (echo "Go files need formatting:"; gofmt -l .; exit 1)
 
       - name: Lint (golangci-lint)
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.5
           working-directory: gateway-go
