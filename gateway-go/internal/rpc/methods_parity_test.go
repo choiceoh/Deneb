@@ -136,10 +136,12 @@ func fullDispatcher() *Dispatcher {
 	deps := testDeps()
 	RegisterBuiltinMethods(d, deps)
 	RegisterExtendedMethods(d, ExtendedDeps{
-		Deps:      deps,
-		Processes: process.NewManager(testLogger()),
-		Cron:      cron.NewScheduler(testLogger()),
-		Hooks:     hooks.NewRegistry(testLogger()),
+		Sessions:    deps.Sessions,
+		Channels:    deps.Channels,
+		GatewaySubs: deps.GatewaySubs,
+		Processes:   process.NewManager(testLogger()),
+		Cron:        cron.NewScheduler(testLogger()),
+		Hooks:       hooks.NewRegistry(testLogger()),
 	})
 
 	// Phase 3: Native workflow methods.
@@ -161,7 +163,10 @@ func fullDispatcher() *Dispatcher {
 	})
 
 	// Session state methods (patch/reset/preview/resolve/compact).
-	RegisterSessionMethods(d, SessionDeps{Deps: deps})
+	RegisterSessionMethods(d, SessionDeps{
+		Sessions:    deps.Sessions,
+		GatewaySubs: deps.GatewaySubs,
+	})
 
 	// Phase 4: Native system methods.
 	RegisterUsageMethods(d, UsageDeps{Tracker: usage.New()})

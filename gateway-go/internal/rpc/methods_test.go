@@ -56,12 +56,10 @@ func TestBuiltinMethodsRegistered(t *testing.T) {
 		"context.assembly.new", "context.assembly.start", "context.assembly.step",
 		"context.expand.new", "context.expand.start", "context.expand.step",
 		"context.engine.drop",
-		// Vega FFI.
-		"vega.ffi.execute", "vega.ffi.search",
-		// ML FFI.
-		"ml.embed", "ml.rerank",
 		// Tools catalog (static core).
 		"tools.catalog",
+		// Note: vega.ffi.* and ml.* are registered separately via
+		// RegisterVegaMethods/RegisterBuiltinMethods and require backends.
 	}
 	set := make(map[string]bool)
 	for _, m := range methods {
@@ -195,6 +193,7 @@ func TestSessionsDelete_RunningBlocked(t *testing.T) {
 
 func TestVegaFFIExecute(t *testing.T) {
 	d := testDispatcher()
+	RegisterVegaMethods(d, VegaDeps{}) // register with nil backend
 	resp := dispatch(t, d, "vega.ffi.execute", map[string]string{"cmd": "test"})
 	if !resp.OK {
 		t.Fatalf("expected ok, got error: %+v", resp.Error)
@@ -203,6 +202,7 @@ func TestVegaFFIExecute(t *testing.T) {
 
 func TestVegaFFISearch(t *testing.T) {
 	d := testDispatcher()
+	RegisterVegaMethods(d, VegaDeps{})
 	resp := dispatch(t, d, "vega.ffi.search", map[string]string{"query": "test"})
 	if !resp.OK {
 		t.Fatalf("expected ok, got error: %+v", resp.Error)
@@ -211,6 +211,7 @@ func TestVegaFFISearch(t *testing.T) {
 
 func TestVegaFFIExecute_MissingParams(t *testing.T) {
 	d := testDispatcher()
+	RegisterVegaMethods(d, VegaDeps{})
 	resp := dispatch(t, d, "vega.ffi.execute", nil)
 	if resp.OK {
 		t.Error("expected error for missing params")
