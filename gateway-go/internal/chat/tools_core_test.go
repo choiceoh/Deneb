@@ -106,7 +106,8 @@ func TestRegisterCoreTools(t *testing.T) {
 		"exec", "process", "web",
 		"memory_search", "memory_get", "message",
 		"apply_patch", "cron", "gateway",
-		"sessions_list", "sessions_history", "sessions_send", "sessions_spawn",
+		"sessions_list", "sessions_history", "sessions_search", "sessions_restore",
+		"sessions_send", "sessions_spawn",
 		"subagents", "session_status", "image", "youtube_transcript", "nodes",
 	}
 

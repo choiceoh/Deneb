@@ -643,6 +643,8 @@ var coreSections = []coreSection{
 	{"sessions", "Sessions", []coreTool{
 		{"sessions_list", "List sessions", []ToolProfileID{ProfileCoding, ProfileMessaging}},
 		{"sessions_history", "Session history", []ToolProfileID{ProfileCoding, ProfileMessaging}},
+		{"sessions_search", "Search sessions", []ToolProfileID{ProfileCoding, ProfileMessaging}},
+		{"sessions_restore", "Restore session", []ToolProfileID{ProfileCoding, ProfileMessaging}},
 		{"sessions_send", "Send to session", []ToolProfileID{ProfileCoding, ProfileMessaging}},
 		{"sessions_spawn", "Spawn sub-agent", []ToolProfileID{ProfileCoding}},
 		{"sessions_yield", "End turn to receive sub-agent results", []ToolProfileID{ProfileCoding}},
