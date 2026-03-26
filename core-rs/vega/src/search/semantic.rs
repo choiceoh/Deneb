@@ -77,13 +77,12 @@ pub fn semantic_search(
          JOIN projects p ON p.id = c.project_id",
     );
 
+    let mut filter_params: Vec<i64> = Vec::new();
     if let Some(pids) = project_filter {
         if !pids.is_empty() {
-            let placeholders: Vec<String> = pids.iter().map(|id| id.to_string()).collect();
-            sql.push_str(&format!(
-                " WHERE c.project_id IN ({})",
-                placeholders.join(",")
-            ));
+            let ph: Vec<&str> = pids.iter().map(|_| "?").collect();
+            sql.push_str(&format!(" WHERE c.project_id IN ({})", ph.join(",")));
+            filter_params.extend_from_slice(pids);
         }
     }
 
@@ -96,7 +95,11 @@ pub fn semantic_search(
     };
 
     let mut results: Vec<SemanticResult> = Vec::new();
-    let rows = stmt.query_map([], |row| {
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = filter_params
+        .iter()
+        .map(|p| p as &dyn rusqlite::types::ToSql)
+        .collect();
+    let rows = stmt.query_map(param_refs.as_slice(), |row| {
         let chunk_id: i64 = row.get(0)?;
         let emb_blob: Vec<u8> = row.get(1)?;
         let project_id: i64 = row.get(2)?;

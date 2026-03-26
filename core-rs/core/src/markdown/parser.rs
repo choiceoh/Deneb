@@ -397,7 +397,11 @@ fn preprocess_spoilers(text: &str) -> String {
             idx += 2;
         } else {
             // Push the char (handle multi-byte UTF-8)
-            let ch = text[idx..].chars().next().unwrap();
+            // Safety: idx is always at a valid UTF-8 boundary (advanced by
+            // len_utf8()), but we guard defensively in case of unexpected state.
+            let Some(ch) = text[idx..].chars().next() else {
+                break;
+            };
             result.push(ch);
             idx += ch.len_utf8();
         }
@@ -417,7 +421,7 @@ fn trim_cell(cell: &TableCell) -> TableCell {
         .unwrap_or(text.len());
     let end = text
         .rfind(|c: char| !c.is_whitespace())
-        .map(|i| i + text[i..].chars().next().unwrap().len_utf8())
+        .and_then(|i| text[i..].chars().next().map(|ch| i + ch.len_utf8()))
         .unwrap_or(0);
 
     if start == 0 && end == text.len() {
