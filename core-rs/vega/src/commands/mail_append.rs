@@ -38,38 +38,25 @@ pub fn cmd_mail_append(args: &Value, config: &VegaConfig) -> CommandResult {
     if !md_path.exists() {
         return CommandResult::err(
             "mail-append",
-            &format!(
-                "프로젝트 파일을 찾을 수 없습니다: {}",
-                md_path.display()
-            ),
+            &format!("프로젝트 파일을 찾을 수 없습니다: {}", md_path.display()),
         );
     }
 
     // Read existing content
     let content = match fs::read_to_string(&md_path) {
         Ok(c) => c,
-        Err(e) => {
-            return CommandResult::err(
-                "mail-append",
-                &format!("파일 읽기 실패: {e}"),
-            )
-        }
+        Err(e) => return CommandResult::err("mail-append", &format!("파일 읽기 실패: {e}")),
     };
 
     // Format mail entry
-    let mail_entry = format!(
-        "\n### {date} - {subject}\n- **발신:** {sender}\n\n{body}\n",
-    );
+    let mail_entry = format!("\n### {date} - {subject}\n- **발신:** {sender}\n\n{body}\n",);
 
     // Insert into "## 메일" section or append at the end
     let new_content = insert_into_section(&content, "메일", &mail_entry);
 
     // Write back
     if let Err(e) = fs::write(&md_path, &new_content) {
-        return CommandResult::err(
-            "mail-append",
-            &format!("파일 쓰기 실패: {e}"),
-        );
+        return CommandResult::err("mail-append", &format!("파일 쓰기 실패: {e}"));
     }
 
     // Also log to comm_log in DB

@@ -14,11 +14,7 @@ use serde_json::{json, Value};
 use crate::config::VegaConfig;
 
 /// Process a single mail entry and append to the matching project .md file.
-pub fn process_mail(
-    mail_data: &Value,
-    config: &VegaConfig,
-    dry_run: bool,
-) -> Value {
+pub fn process_mail(mail_data: &Value, config: &VegaConfig, dry_run: bool) -> Value {
     let subject = mail_data
         .get("subject")
         .and_then(|v| v.as_str())
@@ -27,14 +23,8 @@ pub fn process_mail(
         .get("sender")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    let date = mail_data
-        .get("date")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let body = mail_data
-        .get("body")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let date = mail_data.get("date").and_then(|v| v.as_str()).unwrap_or("");
+    let body = mail_data.get("body").and_then(|v| v.as_str()).unwrap_or("");
     let summary = mail_data
         .get("summary")
         .and_then(|v| v.as_str())
@@ -101,11 +91,7 @@ pub fn process_mail(
 }
 
 /// Process a batch of mail entries.
-pub fn process_mail_batch(
-    mails: &[Value],
-    config: &VegaConfig,
-    dry_run: bool,
-) -> Value {
+pub fn process_mail_batch(mails: &[Value], config: &VegaConfig, dry_run: bool) -> Value {
     let mut results = Vec::new();
     let mut success_count = 0;
     let mut error_count = 0;
@@ -256,7 +242,10 @@ fn append_mail_to_md(
 
     let new_content = if let Some(m) = comm_re.find(&content) {
         // Insert after the heading line
-        let pos = content[m.end()..].find('\n').map(|p| m.end() + p + 1).unwrap_or(m.end());
+        let pos = content[m.end()..]
+            .find('\n')
+            .map(|p| m.end() + p + 1)
+            .unwrap_or(m.end());
         format!("{}{}{}", &content[..pos], entry, &content[pos..])
     } else if let Some(m) = history_re.find(&content) {
         // Insert before 이력 section

@@ -78,19 +78,12 @@ fn this_monday() -> String {
 /// Fetch projects that have activity (comms or chunks) since the given date.
 fn fetch_active_projects(conn: &Connection, since: &str) -> Result<Vec<Value>, String> {
     let mut stmt = conn
-        .prepare(
-            "SELECT id, name, client, status FROM projects ORDER BY name",
-        )
+        .prepare("SELECT id, name, client, status FROM projects ORDER BY name")
         .map_err(|e| format!("프로젝트 조회 실패: {e}"))?;
 
     let rows: Vec<(i64, String, Option<String>, Option<String>)> = stmt
         .query_map([], |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-            ))
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         })
         .map_err(|e| format!("프로젝트 조회 실패: {e}"))?
         .filter_map(|r| r.ok())
@@ -122,7 +115,11 @@ fn fetch_active_projects(conn: &Connection, since: &str) -> Result<Vec<Value>, S
 }
 
 /// Fetch comm_log entries for a project since a date.
-fn fetch_recent_comms(conn: &Connection, project_id: i64, since: &str) -> Result<Vec<Value>, String> {
+fn fetch_recent_comms(
+    conn: &Connection,
+    project_id: i64,
+    since: &str,
+) -> Result<Vec<Value>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT date, channel, summary FROM comm_log
@@ -150,7 +147,11 @@ fn fetch_recent_comms(conn: &Connection, project_id: i64, since: &str) -> Result
 }
 
 /// Fetch chunks modified/created for a project since a date.
-fn fetch_recent_chunks(conn: &Connection, project_id: i64, since: &str) -> Result<Vec<Value>, String> {
+fn fetch_recent_chunks(
+    conn: &Connection,
+    project_id: i64,
+    since: &str,
+) -> Result<Vec<Value>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT heading, updated_at FROM chunks

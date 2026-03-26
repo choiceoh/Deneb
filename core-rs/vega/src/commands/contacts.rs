@@ -139,12 +139,10 @@ fn extract_from_text(
     ).unwrap();
 
     // Phone patterns: Korean mobile/landline formats
-    let phone_re =
-        Regex::new(r"(0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})").unwrap();
+    let phone_re = Regex::new(r"(0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})").unwrap();
 
     // Email pattern
-    let email_re =
-        Regex::new(r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})").unwrap();
+    let email_re = Regex::new(r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})").unwrap();
 
     // For person_internal/person_external chunks, the first line is typically the name
     if chunk_type == "person_internal" || chunk_type == "person_external" {
@@ -158,9 +156,9 @@ fn extract_from_text(
                 .find(body)
                 .map(|m| m.as_str().to_string())
                 .unwrap_or_default();
-            let title_match = name_re.captures(first_line).and_then(|caps| {
-                caps.get(2).map(|m| m.as_str().to_string())
-            });
+            let title_match = name_re
+                .captures(first_line)
+                .and_then(|caps| caps.get(2).map(|m| m.as_str().to_string()));
 
             contacts.push(json!({
                 "name": first_line,

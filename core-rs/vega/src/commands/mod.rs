@@ -69,31 +69,49 @@ static ROUTE_PATTERNS: &[(&str, &str)] = &[
     // 긴급/관심 필요
     (r"급한|긴급|위험|관심.*필요|우선순위|blocked|막힌", "urgent"),
     (r"마감|기한|납기|데드라인|언제까지", "urgent"),
-    (r"이번\s*달|다음\s*달|할\s*일|할일|액션\s*아이템|해야.*할", "urgent"),
+    (
+        r"이번\s*달|다음\s*달|할\s*일|할일|액션\s*아이템|해야.*할",
+        "urgent",
+    ),
     // 크로스 분석
-    (r"연결고리|관련.*프로젝트|같은.*거래처|같은.*자재|인력.*충돌|시너지", "cross"),
+    (
+        r"연결고리|관련.*프로젝트|같은.*거래처|같은.*자재|인력.*충돌|시너지",
+        "cross",
+    ),
     (r"인력|팀\s*현황|인원|리소스", "cross"),
     // 브리프/최근
     (r"브리프|한눈에.*요약|빠른.*요약|간단.*브리핑", "brief"),
-    (r"최근.*활동|최근.*업데이트|최근.*변화|최신.*활동|latest", "recent"),
+    (
+        r"최근.*활동|최근.*업데이트|최근.*변화|최신.*활동|latest",
+        "recent",
+    ),
     // 비교/통계
     (r"비교|차이|다른점|공통점", "compare"),
     (r"통계|분석|수치|평균|활동량|빈도", "stats"),
     // 대시보드
     (r"현황|대시보드|전체.*상태|프로젝트.*몇|요약", "dashboard"),
     // 인물
-    (r"뭐\s*하고\s*있|맡은\s*거|담당하는|포트폴리오|업무.*현황", "person"),
+    (
+        r"뭐\s*하고\s*있|맡은\s*거|담당하는|포트폴리오|업무.*현황",
+        "person",
+    ),
     // 연락처
     (r"연락처|전화번호|이메일|담당자.*연락", "contacts"),
     // 파이프라인
-    (r"금액|매출|파이프라인|수주.*금|얼마|비용|원가|예산|단가|견적", "pipeline"),
+    (
+        r"금액|매출|파이프라인|수주.*금|얼마|비용|원가|예산|단가|견적",
+        "pipeline",
+    ),
     // 주간/변경
     (r"주간|이번.*주|리포트|보고", "weekly"),
     (r"뭐.*바뀌|변경", "changelog"),
     // 타임라인/일정
     (r"타임라인|이력|경과|순서|일정|스케줄|공정", "timeline"),
     // 프로젝트 목록
-    (r"프로젝트.*목록|프로젝트.*리스트|전체.*프로젝트|몇.*개", "list"),
+    (
+        r"프로젝트.*목록|프로젝트.*리스트|전체.*프로젝트|몇.*개",
+        "list",
+    ),
     // 문제/이슈
     (r"문제|이슈|결함|불량|장애|고장", "search"),
 ];
@@ -172,15 +190,23 @@ fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
         return CommandResult::err("ask", "query 파라미터가 필요합니다");
     }
 
-    let depth = args.get("depth").and_then(|v| v.as_str()).unwrap_or("normal");
-    let fmt = args.get("format").and_then(|v| v.as_str()).unwrap_or("summary");
+    let depth = args
+        .get("depth")
+        .and_then(|v| v.as_str())
+        .unwrap_or("normal");
+    let fmt = args
+        .get("format")
+        .and_then(|v| v.as_str())
+        .unwrap_or("summary");
 
     // E-5: Session-based pronoun resolution
     let resolved_query = {
         let session_path = crate::session::VegaSession::session_path(&config.db_path);
         let session = crate::session::VegaSession::load(&session_path);
         if let Ok(conn) = Connection::open(&config.db_path) {
-            session.resolve_pronouns(query, &conn).unwrap_or_else(|| query.to_string())
+            session
+                .resolve_pronouns(query, &conn)
+                .unwrap_or_else(|| query.to_string())
         } else {
             query.to_string()
         }
@@ -195,9 +221,16 @@ fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
     let mut result = execute(command, &inner_args, config);
 
     // E-7: Auto-correction on failure or 0 results
-    if !result.success || (result.success && command == "search"
-        && result.data.get("result_count").and_then(|rc| rc.get("projects"))
-            .and_then(|v| v.as_i64()).unwrap_or(-1) == 0)
+    if !result.success
+        || (result.success
+            && command == "search"
+            && result
+                .data
+                .get("result_count")
+                .and_then(|rc| rc.get("projects"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(-1)
+                == 0)
     {
         let conn = Connection::open(&config.db_path).ok();
         if let Some((corrected_cmd, corrected_query)) =
@@ -208,13 +241,16 @@ fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
             if corrected.success {
                 result = corrected;
                 if let Some(obj) = result.data.as_object_mut() {
-                    obj.insert("_meta".into(), json!({
-                        "routed_command": command,
-                        "auto_corrected_to": corrected_cmd,
-                        "original_query": query,
-                        "resolved_query": resolved_query,
-                        "confidence": confidence,
-                    }));
+                    obj.insert(
+                        "_meta".into(),
+                        json!({
+                            "routed_command": command,
+                            "auto_corrected_to": corrected_cmd,
+                            "original_query": query,
+                            "resolved_query": resolved_query,
+                            "confidence": confidence,
+                        }),
+                    );
                 }
                 // E-5: Update session with corrected result
                 let session_path = crate::session::VegaSession::session_path(&config.db_path);
@@ -239,24 +275,41 @@ fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
     if result.success {
         // E-3: AI behavioral hints (compute before mutable borrow)
         let ai_hint = crate::ai::build_ai_hint(command, &result.data);
-        let has_hints = ai_hint.get("hints").and_then(|v| v.as_array()).map(|a| !a.is_empty()).unwrap_or(false);
+        let has_hints = ai_hint
+            .get("hints")
+            .and_then(|v| v.as_array())
+            .map(|a| !a.is_empty())
+            .unwrap_or(false);
 
         // E-4: Proactive data bundle (compute before mutable borrow)
         let bundle = if depth != "brief" {
             let conn = Connection::open(&config.db_path).ok();
             let b = crate::ai::build_bundle(command, &result.data, conn.as_ref());
-            if b.as_object().map(|o| !o.is_empty()).unwrap_or(false) { Some(b) } else { None }
-        } else { None };
+            if b.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
+                Some(b)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         if let Some(obj) = result.data.as_object_mut() {
-            obj.insert("_meta".into(), json!({
-                "routed_command": command,
-                "original_query": query,
-                "resolved_query": resolved_query,
-                "confidence": confidence,
-            }));
-            if has_hints { obj.insert("_ai_hint".into(), ai_hint); }
-            if let Some(b) = bundle { obj.insert("_bundle".into(), b); }
+            obj.insert(
+                "_meta".into(),
+                json!({
+                    "routed_command": command,
+                    "original_query": query,
+                    "resolved_query": resolved_query,
+                    "confidence": confidence,
+                }),
+            );
+            if has_hints {
+                obj.insert("_ai_hint".into(), ai_hint);
+            }
+            if let Some(b) = bundle {
+                obj.insert("_bundle".into(), b);
+            }
         }
 
         // E-5: Update session
@@ -485,10 +538,10 @@ fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
             if proj_count == 0 {
                 // Zero results: suggestions + alternative commands
                 if let Ok(conn) = Connection::open(&config.db_path) {
-                    let suggestions =
-                        crate::utils::build_search_suggestions(&conn, query, 8);
+                    let suggestions = crate::utils::build_search_suggestions(&conn, query, 8);
                     if !suggestions.is_empty() {
-                        data["suggestions"] = serde_json::to_value(&suggestions).unwrap_or_default();
+                        data["suggestions"] =
+                            serde_json::to_value(&suggestions).unwrap_or_default();
                     }
                     // Auto-brief fallback via fuzzy match
                     if let Some((fz_pid, _name, fz_conf)) =
@@ -507,8 +560,10 @@ fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
                 );
             } else if proj_count == 1 {
                 let top_id = projects[0].get("id").and_then(|v| v.as_i64()).unwrap_or(0);
-                data["follow_up_hint"] =
-                    json!(format!("show {} / brief {} / timeline {}", top_id, top_id, top_id));
+                data["follow_up_hint"] = json!(format!(
+                    "show {} / brief {} / timeline {}",
+                    top_id, top_id, top_id
+                ));
                 // Auto-brief for single match
                 if let Ok(conn) = Connection::open(&config.db_path) {
                     if let Ok(auto_brief) = brief::build_single_brief(&conn, top_id) {
@@ -523,8 +578,10 @@ fn cmd_search(args: &Value, config: &VegaConfig) -> CommandResult {
                 ));
             } else {
                 let top_id = projects[0].get("id").and_then(|v| v.as_i64()).unwrap_or(0);
-                data["follow_up_hint"] =
-                    json!(format!("show {} / brief {} / timeline {}", top_id, top_id, top_id));
+                data["follow_up_hint"] = json!(format!(
+                    "show {} / brief {} / timeline {}",
+                    top_id, top_id, top_id
+                ));
             }
 
             CommandResult::ok("search", data)

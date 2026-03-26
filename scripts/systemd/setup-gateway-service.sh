@@ -12,8 +12,7 @@
 #
 # Prerequisites:
 #   - systemd with user service support
-#   - Node.js 22+
-#   - pnpm (for building)
+#   - Go 1.24+ and Rust toolchain (for building)
 
 set -euo pipefail
 
@@ -29,27 +28,23 @@ fi
 
 cd "$REPO_DIR"
 
-# Step 1: Ensure the project is built
-if [[ ! -d dist ]]; then
-  echo "Building deneb..."
-  pnpm build
+# Step 1: Ensure the gateway is built
+if [[ ! -f gateway-go/gateway ]]; then
+  echo "Building deneb gateway..."
+  make all
 fi
 
-# Step 2: Link deneb into PATH if not already available
+# Step 2: Link gateway into PATH if not already available
 if ! command -v deneb &>/dev/null; then
-  echo "Linking deneb into PATH..."
-  npm link 2>/dev/null || {
-    # Fallback: create symlink in a user-writable bin directory
-    mkdir -p "$HOME/.local/bin"
-    ln -sf "$REPO_DIR/deneb.mjs" "$HOME/.local/bin/deneb"
-    chmod +x "$REPO_DIR/deneb.mjs"
-    if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
-      echo "Add ~/.local/bin to your PATH:"
-      echo '  export PATH="$HOME/.local/bin:$PATH"'
-      echo "Add this to your ~/.bashrc or ~/.profile for persistence."
-      export PATH="$HOME/.local/bin:$PATH"
-    fi
-  }
+  echo "Linking deneb gateway into PATH..."
+  mkdir -p "$HOME/.local/bin"
+  ln -sf "$REPO_DIR/gateway-go/gateway" "$HOME/.local/bin/deneb"
+  if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
+    echo "Add ~/.local/bin to your PATH:"
+    echo '  export PATH="$HOME/.local/bin:$PATH"'
+    echo "Add this to your ~/.bashrc or ~/.profile for persistence."
+    export PATH="$HOME/.local/bin:$PATH"
+  fi
 fi
 
 # Step 3: Enable systemd user linger (allows user services to run without an active login session)

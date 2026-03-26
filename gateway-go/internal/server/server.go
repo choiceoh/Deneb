@@ -36,9 +36,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
+	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/node"
+	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
@@ -122,6 +124,9 @@ type Server struct {
 	// Phase 5: Enhanced RPC subsystems.
 	heartbeatState *rpc.HeartbeatState
 	presenceStore  *rpc.PresenceStore
+
+	// Phase 5: Plugin full registry (discovery, manifests, hooks).
+	pluginFullRegistry *plugin.FullRegistry
 
 	// Phase 5: HTTP routing for plugins.
 	pluginRouter *PluginHTTPRouter
@@ -262,6 +267,7 @@ func New(addr string, opts ...Option) *Server {
 	s.maintRunner = maintenance.NewRunner(denebDir)
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
+	s.dispatcher.UseMiddleware(middleware.Logging(s.logger))
 	s.registerBuiltinMethods()
 	rpc.RegisterBuiltinMethods(s.dispatcher, rpc.Deps{
 		Sessions:         s.sessions,
@@ -285,6 +291,13 @@ func New(addr string, opts ...Option) *Server {
 			Providers: s.providers,
 		})
 	}
+
+	// Initialize plugin full registry and register RPC methods.
+	s.pluginFullRegistry = plugin.NewFullRegistry(s.logger)
+	rpc.RegisterPluginMethods(s.dispatcher, rpc.PluginDeps{
+		Deps:           rpc.Deps{Sessions: s.sessions, Channels: s.channels},
+		PluginRegistry: &pluginRegistryAdapter{registry: s.pluginFullRegistry},
+	})
 
 	// Plugin HTTP router with auth check backed by the gateway auth validator.
 	var pluginAuthCheck func(r *http.Request) bool
@@ -854,7 +867,7 @@ func (s *Server) registerPhase2Methods() {
 	s.logger.Info("resolved agent workspace directory", "workspaceDir", workspaceDir)
 
 	// Register core tools (file I/O, exec, process, stubs for others).
-	chat.RegisterCoreTools(chatCfg.Tools, s.processes, workspaceDir)
+	chat.RegisterCoreTools(chatCfg.Tools, s.processes, workspaceDir, s.cron)
 	if s.authManager != nil {
 		chatCfg.AuthManager = s.authManager
 	}
@@ -1145,15 +1158,16 @@ func (s *Server) registerNativeSystemMethods(denebDir string) {
 		TelegramPlugin: s.telegramPlug,
 	})
 
-	// Wire Telegram update handler → chat.send pipeline.
+	// Wire Telegram update handler → autoreply preprocessing → chat.send pipeline.
 	if s.telegramPlug != nil && s.chatHandler != nil {
 		s.wireTelegramChatHandler()
 	}
 }
 
 // wireTelegramChatHandler connects the Telegram polling handler to the chat
-// handler so incoming messages are automatically processed by the LLM agent
-// and responses are sent back to Telegram.
+// handler via the autoreply inbound processor so incoming messages go through
+// command detection, directive parsing, and normalization before reaching the
+// LLM agent.
 func (s *Server) wireTelegramChatHandler() {
 	// Set reply function: delivers assistant responses back to Telegram.
 	s.chatHandler.SetReplyFunc(func(ctx context.Context, delivery *chat.DeliveryContext, text string) error {
@@ -1174,41 +1188,16 @@ func (s *Server) wireTelegramChatHandler() {
 		return err
 	})
 
-	// Set update handler: routes incoming Telegram messages to chat.send.
+	// Create the inbound processor that routes Telegram messages through
+	// the autoreply command/directive pipeline before dispatching to chat.send.
+	inbound := NewInboundProcessor(s)
+
+	// Set update handler: routes through autoreply preprocessing → chat.send.
 	s.telegramPlug.SetHandler(func(_ context.Context, update *telegram.Update) {
-		msg := update.Message
-		if msg == nil || msg.Text == "" {
-			return
-		}
-
-		chatID := fmt.Sprintf("%d", msg.Chat.ID)
-		sessionKey := "telegram:" + chatID
-
-		req, err := protocol.NewRequestFrame("tg-"+chatID+"-"+strconv.FormatInt(msg.MessageID, 10), "chat.send", map[string]any{
-			"sessionKey": sessionKey,
-			"message":    msg.Text,
-			"delivery": map[string]any{
-				"channel": "telegram",
-				"to":      chatID,
-			},
-		})
-		if err != nil {
-			s.logger.Error("failed to build chat.send request", "error", err)
-			return
-		}
-
-		sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer sendCancel()
-		resp := s.chatHandler.Send(sendCtx, req)
-		if resp != nil && !resp.OK {
-			s.logger.Warn("chat.send failed for telegram message",
-				"chatId", chatID,
-				"error", resp.Error,
-			)
-		}
+		inbound.HandleTelegramUpdate(update)
 	})
 
-	s.logger.Info("telegram chat handler wired")
+	s.logger.Info("telegram chat handler wired (with autoreply preprocessing)")
 }
 
 // loadTelegramConfig extracts Telegram channel config from deneb.json.
@@ -1571,4 +1560,35 @@ func (s *Server) registerBuiltinMethods() {
 		})
 		return resp
 	})
+}
+
+// pluginRegistryAdapter bridges plugin.FullRegistry to the rpc.PluginRegistry interface.
+type pluginRegistryAdapter struct {
+	registry *plugin.FullRegistry
+}
+
+func (a *pluginRegistryAdapter) ListPlugins() []protocol.PluginMeta {
+	raw := a.registry.ListPlugins()
+	result := make([]protocol.PluginMeta, len(raw))
+	for i, p := range raw {
+		result[i] = protocol.PluginMeta{
+			ID:      p.ID,
+			Name:    p.Label,
+			Kind:    protocol.PluginKind(p.Kind),
+			Version: p.Version,
+			Enabled: p.Enabled,
+		}
+	}
+	return result
+}
+
+func (a *pluginRegistryAdapter) GetPluginHealth(id string) *protocol.PluginHealthStatus {
+	p := a.registry.GetPlugin(id)
+	if p == nil {
+		return nil
+	}
+	return &protocol.PluginHealthStatus{
+		PluginID: p.ID,
+		Healthy:  p.Enabled,
+	}
 }

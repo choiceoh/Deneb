@@ -53,7 +53,7 @@ Deneb는 단일 사용자(DGX Spark)를 위한 다채널 AI 게이트웨이로, 
 
 - **TypeScript strict mode 전면 적용**: `strict: true`, `any` 금지, ESM 전용
 - **Oxlint + Oxfmt**: `correctness`, `perf`, `suspicious` 카테고리 모두 `error` 수준
-- **Pre-commit 하드 게이트**: `pnpm check` 통과 필수, main push 전 `pnpm test` + `pnpm build` 필수
+- **Pre-commit 하드 게이트**: `make check` 통과 필수, main push 전 `make test` 필수
 - **TODO/FIXME 최소**: 전체 `src/`에서 3개만 발견 -- 기술 부채 극소
 - **파일 크기 규율**: 대부분 200~700 LoC, 가이드라인 ~500 LoC
 
@@ -125,7 +125,7 @@ Deneb는 단일 사용자(DGX Spark)를 위한 다채널 AI 게이트웨이로, 
 - **6-shard 병렬 실행**: Node + Bun 호환성 레인
 - **경계 가드**: 13개 린트 규칙이 별도 CI 작업으로 실행
 - **다국어 체크**: Rust test + Go build/test + TS check + proto check
-- **Strict smoke build**: `pnpm build:strict-smoke`
+- **Strict smoke build**: `make all`
 - **데드코드 분석**: knip + ts-prune + ts-unused (CI 아티팩트)
 
 ---

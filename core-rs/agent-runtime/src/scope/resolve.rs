@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 pub const DEFAULT_AGENT_ID: &str = "main";
 
 // Pre-compiled regexes for agent ID normalization.
-static VALID_ID_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").unwrap());
+static VALID_ID_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").unwrap());
 static INVALID_CHARS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^a-z0-9_-]+").unwrap());
 static LEADING_DASH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^-+").unwrap());
 static TRAILING_DASH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"-+$").unwrap());
@@ -244,7 +245,12 @@ pub fn parse_agent_session_key(session_key: &str) -> Option<ParsedAgentSessionKe
 /// Resolve the agent ID from a session key. Falls back to DEFAULT_AGENT_ID.
 pub fn resolve_agent_id_from_session_key(session_key: &str) -> String {
     let parsed = parse_agent_session_key(session_key);
-    normalize_agent_id(parsed.as_ref().map(|p| p.agent_id.as_str()).unwrap_or(DEFAULT_AGENT_ID))
+    normalize_agent_id(
+        parsed
+            .as_ref()
+            .map(|p| p.agent_id.as_str())
+            .unwrap_or(DEFAULT_AGENT_ID),
+    )
 }
 
 /// Normalize a main key to lowercase with default fallback.
@@ -352,9 +358,8 @@ pub fn derive_session_chat_type(session_key: &str) -> SessionKeyChatType {
         return SessionKeyChatType::Direct;
     }
     // Legacy Discord keys: discord:<accountId>:guild-<guildId>:channel-<channelId>
-    static DISCORD_LEGACY_RE: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"^discord:(?:[^:]+:)?guild-[^:]+:channel-[^:]+$").unwrap()
-    });
+    static DISCORD_LEGACY_RE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"^discord:(?:[^:]+:)?guild-[^:]+:channel-[^:]+$").unwrap());
     if DISCORD_LEGACY_RE.is_match(&scoped) {
         return SessionKeyChatType::Channel;
     }
@@ -363,9 +368,7 @@ pub fn derive_session_chat_type(session_key: &str) -> SessionKeyChatType {
 
 /// Check if a session key represents a cron run.
 pub fn is_cron_run_session_key(session_key: &str) -> bool {
-    static CRON_RUN_RE: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"^cron:[^:]+:run:[^:]+$").unwrap()
-    });
+    static CRON_RUN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^cron:[^:]+:run:[^:]+$").unwrap());
     parse_agent_session_key(session_key)
         .map(|p| CRON_RUN_RE.is_match(&p.rest))
         .unwrap_or(false)
@@ -448,14 +451,15 @@ pub fn resolve_thread_parent_session_key(session_key: &str) -> Option<String> {
         return None;
     }
     let parent = raw[..pos].trim();
-    if parent.is_empty() { None } else { Some(parent.to_string()) }
+    if parent.is_empty() {
+        None
+    } else {
+        Some(parent.to_string())
+    }
 }
 
 /// Resolve the fallback agent ID from explicit agent ID or session key.
-pub fn resolve_fallback_agent_id(
-    agent_id: Option<&str>,
-    session_key: Option<&str>,
-) -> String {
+pub fn resolve_fallback_agent_id(agent_id: Option<&str>, session_key: Option<&str>) -> String {
     let explicit = agent_id
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
@@ -498,12 +502,20 @@ fn resolve_model_primary(raw: Option<&serde_json::Value>) -> Option<String> {
     match raw? {
         serde_json::Value::String(s) => {
             let trimmed = s.trim();
-            if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
         }
         serde_json::Value::Object(obj) => {
             let primary = obj.get("primary")?.as_str()?;
             let trimmed = primary.trim();
-            if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
         }
         _ => None,
     }
@@ -590,16 +602,14 @@ pub fn resolve_agent_model_fallback_values(model: Option<&serde_json::Value>) ->
         None => return Vec::new(),
     };
     match val {
-        serde_json::Value::Object(obj) => {
-            match obj.get("fallbacks") {
-                Some(serde_json::Value::Array(arr)) => arr
-                    .iter()
-                    .filter_map(|v| v.as_str().map(|s| s.trim().to_string()))
-                    .filter(|s| !s.is_empty())
-                    .collect(),
-                _ => Vec::new(),
-            }
-        }
+        serde_json::Value::Object(obj) => match obj.get("fallbacks") {
+            Some(serde_json::Value::Array(arr)) => arr
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.trim().to_string()))
+                .filter(|s| !s.is_empty())
+                .collect(),
+            _ => Vec::new(),
+        },
         _ => Vec::new(),
     }
 }
@@ -622,7 +632,8 @@ pub fn has_configured_model_fallbacks(
     agent_id: Option<&str>,
     session_key: Option<&str>,
 ) -> bool {
-    let fallbacks_override = resolve_run_model_fallbacks_override(agents_list, agent_id, session_key);
+    let fallbacks_override =
+        resolve_run_model_fallbacks_override(agents_list, agent_id, session_key);
     let default_fallbacks = resolve_agent_model_fallback_values(global_model);
     let effective = fallbacks_override.unwrap_or(default_fallbacks);
     !effective.is_empty()
@@ -684,12 +695,20 @@ pub fn build_group_history_key(
 ) -> String {
     let ch = {
         let t = channel.trim().to_lowercase();
-        if t.is_empty() { "unknown".to_string() } else { t }
+        if t.is_empty() {
+            "unknown".to_string()
+        } else {
+            t
+        }
     };
     let acct = normalize_account_id(account_id.unwrap_or(""));
     let pid = {
         let t = peer_id.trim().to_lowercase();
-        if t.is_empty() { "unknown".to_string() } else { t }
+        if t.is_empty() {
+            "unknown".to_string()
+        } else {
+            t
+        }
     };
     format!("{}:{}:{}:{}", ch, acct, peer_kind, pid)
 }
@@ -798,7 +817,11 @@ pub fn build_agent_peer_session_key(params: &BuildAgentPeerSessionKeyParams<'_>)
         if scope == "per-account-channel-peer" && !pid.is_empty() {
             let ch = {
                 let t = channel.trim().to_lowercase();
-                if t.is_empty() { "unknown".to_string() } else { t }
+                if t.is_empty() {
+                    "unknown".to_string()
+                } else {
+                    t
+                }
             };
             let acct = normalize_account_id(account_id.unwrap_or(""));
             return format!("agent:{}:{}:{}:direct:{}", aid, ch, acct, pid);
@@ -806,7 +829,11 @@ pub fn build_agent_peer_session_key(params: &BuildAgentPeerSessionKeyParams<'_>)
         if scope == "per-channel-peer" && !pid.is_empty() {
             let ch = {
                 let t = channel.trim().to_lowercase();
-                if t.is_empty() { "unknown".to_string() } else { t }
+                if t.is_empty() {
+                    "unknown".to_string()
+                } else {
+                    t
+                }
             };
             return format!("agent:{}:{}:direct:{}", aid, ch, pid);
         }
@@ -818,11 +845,19 @@ pub fn build_agent_peer_session_key(params: &BuildAgentPeerSessionKeyParams<'_>)
 
     let ch = {
         let t = channel.trim().to_lowercase();
-        if t.is_empty() { "unknown".to_string() } else { t }
+        if t.is_empty() {
+            "unknown".to_string()
+        } else {
+            t
+        }
     };
     let pid = {
         let t = peer_id.unwrap_or("").trim().to_lowercase();
-        if t.is_empty() { "unknown".to_string() } else { t }
+        if t.is_empty() {
+            "unknown".to_string()
+        } else {
+            t
+        }
     };
     format!("agent:{}:{}:{}:{}", aid, ch, kind, pid)
 }
@@ -905,9 +940,7 @@ mod tests {
 
     #[test]
     fn resolve_agent_config_found() {
-        let list = vec![
-            json!({"id": "alpha", "name": "Alpha Agent", "workspace": "/tmp/alpha"}),
-        ];
+        let list = vec![json!({"id": "alpha", "name": "Alpha Agent", "workspace": "/tmp/alpha"})];
         let config = resolve_agent_config(&list, "alpha").unwrap();
         assert_eq!(config.name.as_deref(), Some("Alpha Agent"));
         assert_eq!(config.workspace.as_deref(), Some("/tmp/alpha"));
@@ -939,9 +972,8 @@ mod tests {
 
     #[test]
     fn resolve_model_fallbacks_override() {
-        let list = vec![
-            json!({"id": "alpha", "model": {"primary": "m1", "fallbacks": ["m2", "m3"]}}),
-        ];
+        let list =
+            vec![json!({"id": "alpha", "model": {"primary": "m1", "fallbacks": ["m2", "m3"]}})];
         assert_eq!(
             resolve_agent_model_fallbacks_override(&list, "alpha"),
             Some(vec!["m2".to_string(), "m3".to_string()])
@@ -978,8 +1010,14 @@ mod tests {
 
     #[test]
     fn resolve_agent_id_from_session_key_basic() {
-        assert_eq!(resolve_agent_id_from_session_key("agent:mybot:main"), "mybot");
-        assert_eq!(resolve_agent_id_from_session_key("not-agent"), DEFAULT_AGENT_ID);
+        assert_eq!(
+            resolve_agent_id_from_session_key("agent:mybot:main"),
+            "mybot"
+        );
+        assert_eq!(
+            resolve_agent_id_from_session_key("not-agent"),
+            DEFAULT_AGENT_ID
+        );
     }
 
     #[test]
@@ -999,15 +1037,30 @@ mod tests {
     #[test]
     fn classify_session_key_shape_basic() {
         assert_eq!(classify_session_key_shape(""), SessionKeyShape::Missing);
-        assert_eq!(classify_session_key_shape("agent:bot:main"), SessionKeyShape::Agent);
-        assert_eq!(classify_session_key_shape("agent:"), SessionKeyShape::MalformedAgent);
-        assert_eq!(classify_session_key_shape("legacy-key"), SessionKeyShape::LegacyOrAlias);
+        assert_eq!(
+            classify_session_key_shape("agent:bot:main"),
+            SessionKeyShape::Agent
+        );
+        assert_eq!(
+            classify_session_key_shape("agent:"),
+            SessionKeyShape::MalformedAgent
+        );
+        assert_eq!(
+            classify_session_key_shape("legacy-key"),
+            SessionKeyShape::LegacyOrAlias
+        );
     }
 
     #[test]
     fn build_agent_main_session_key_basic() {
-        assert_eq!(build_agent_main_session_key("mybot", None), "agent:mybot:main");
-        assert_eq!(build_agent_main_session_key("mybot", Some("custom")), "agent:mybot:custom");
+        assert_eq!(
+            build_agent_main_session_key("mybot", None),
+            "agent:mybot:main"
+        );
+        assert_eq!(
+            build_agent_main_session_key("mybot", Some("custom")),
+            "agent:mybot:custom"
+        );
     }
 
     #[test]
@@ -1060,7 +1113,10 @@ mod tests {
     fn get_subagent_depth_basic() {
         assert_eq!(get_subagent_depth("agent:bot:main"), 0);
         assert_eq!(get_subagent_depth("agent:bot:subagent:child"), 1);
-        assert_eq!(get_subagent_depth("agent:bot:subagent:child:subagent:grandchild"), 2);
+        assert_eq!(
+            get_subagent_depth("agent:bot:subagent:child:subagent:grandchild"),
+            2
+        );
     }
 
     #[test]
@@ -1093,7 +1149,10 @@ mod tests {
     #[test]
     fn resolve_session_agent_id_basic() {
         let list = vec![json!({"id": "alpha"})];
-        assert_eq!(resolve_session_agent_id(&list, Some("agent:beta:main")), "beta");
+        assert_eq!(
+            resolve_session_agent_id(&list, Some("agent:beta:main")),
+            "beta"
+        );
         assert_eq!(resolve_session_agent_id(&list, None), "alpha");
     }
 
@@ -1128,9 +1187,7 @@ mod tests {
 
     #[test]
     fn resolve_run_model_fallbacks_override_basic() {
-        let list = vec![
-            json!({"id": "alpha", "model": {"primary": "m1", "fallbacks": ["m2"]}}),
-        ];
+        let list = vec![json!({"id": "alpha", "model": {"primary": "m1", "fallbacks": ["m2"]}})];
         assert_eq!(
             resolve_run_model_fallbacks_override(&list, Some("alpha"), None),
             Some(vec!["m2".to_string()])
@@ -1139,17 +1196,25 @@ mod tests {
 
     #[test]
     fn has_configured_model_fallbacks_agent_level() {
-        let list = vec![
-            json!({"id": "alpha", "model": {"primary": "m1", "fallbacks": ["m2"]}}),
-        ];
-        assert!(has_configured_model_fallbacks(&list, None, Some("alpha"), None));
+        let list = vec![json!({"id": "alpha", "model": {"primary": "m1", "fallbacks": ["m2"]}})];
+        assert!(has_configured_model_fallbacks(
+            &list,
+            None,
+            Some("alpha"),
+            None
+        ));
     }
 
     #[test]
     fn has_configured_model_fallbacks_global() {
         let list: Vec<serde_json::Value> = vec![];
         let global = json!({"primary": "m1", "fallbacks": ["m2"]});
-        assert!(has_configured_model_fallbacks(&list, Some(&global), None, None));
+        assert!(has_configured_model_fallbacks(
+            &list,
+            Some(&global),
+            None,
+            None
+        ));
     }
 
     #[test]
@@ -1160,9 +1225,7 @@ mod tests {
 
     #[test]
     fn resolve_effective_model_fallbacks_no_override() {
-        let list = vec![
-            json!({"id": "alpha", "model": {"primary": "m1", "fallbacks": ["m2"]}}),
-        ];
+        let list = vec![json!({"id": "alpha", "model": {"primary": "m1", "fallbacks": ["m2"]}})];
         assert_eq!(
             resolve_effective_model_fallbacks(&list, "alpha", None, false),
             Some(vec!["m2".to_string()])
@@ -1227,8 +1290,14 @@ mod tests {
     fn build_agent_peer_session_key_group() {
         assert_eq!(
             build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
-                agent_id: "bot", main_key: None, channel: "telegram", account_id: None,
-                peer_kind: Some("group"), peer_id: Some("123"), identity_links: None, dm_scope: None,
+                agent_id: "bot",
+                main_key: None,
+                channel: "telegram",
+                account_id: None,
+                peer_kind: Some("group"),
+                peer_id: Some("123"),
+                identity_links: None,
+                dm_scope: None,
             }),
             "agent:bot:telegram:group:123"
         );
@@ -1238,8 +1307,14 @@ mod tests {
     fn build_agent_peer_session_key_direct_main() {
         assert_eq!(
             build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
-                agent_id: "bot", main_key: None, channel: "telegram", account_id: None,
-                peer_kind: Some("direct"), peer_id: Some("user1"), identity_links: None, dm_scope: None,
+                agent_id: "bot",
+                main_key: None,
+                channel: "telegram",
+                account_id: None,
+                peer_kind: Some("direct"),
+                peer_id: Some("user1"),
+                identity_links: None,
+                dm_scope: None,
             }),
             "agent:bot:main"
         );
@@ -1249,8 +1324,14 @@ mod tests {
     fn build_agent_peer_session_key_per_peer() {
         assert_eq!(
             build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
-                agent_id: "bot", main_key: None, channel: "telegram", account_id: None,
-                peer_kind: Some("direct"), peer_id: Some("User1"), identity_links: None, dm_scope: Some("per-peer"),
+                agent_id: "bot",
+                main_key: None,
+                channel: "telegram",
+                account_id: None,
+                peer_kind: Some("direct"),
+                peer_id: Some("User1"),
+                identity_links: None,
+                dm_scope: Some("per-peer"),
             }),
             "agent:bot:direct:user1"
         );
@@ -1260,8 +1341,14 @@ mod tests {
     fn build_agent_peer_session_key_per_channel_peer() {
         assert_eq!(
             build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
-                agent_id: "bot", main_key: None, channel: "telegram", account_id: None,
-                peer_kind: Some("direct"), peer_id: Some("User1"), identity_links: None, dm_scope: Some("per-channel-peer"),
+                agent_id: "bot",
+                main_key: None,
+                channel: "telegram",
+                account_id: None,
+                peer_kind: Some("direct"),
+                peer_id: Some("User1"),
+                identity_links: None,
+                dm_scope: Some("per-channel-peer"),
             }),
             "agent:bot:telegram:direct:user1"
         );
@@ -1271,8 +1358,14 @@ mod tests {
     fn build_agent_peer_session_key_per_account_channel_peer() {
         assert_eq!(
             build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
-                agent_id: "bot", main_key: None, channel: "telegram", account_id: Some("acct1"),
-                peer_kind: Some("direct"), peer_id: Some("User1"), identity_links: None, dm_scope: Some("per-account-channel-peer"),
+                agent_id: "bot",
+                main_key: None,
+                channel: "telegram",
+                account_id: Some("acct1"),
+                peer_kind: Some("direct"),
+                peer_id: Some("User1"),
+                identity_links: None,
+                dm_scope: Some("per-account-channel-peer"),
             }),
             "agent:bot:telegram:acct1:direct:user1"
         );
@@ -1281,11 +1374,20 @@ mod tests {
     #[test]
     fn build_agent_peer_session_key_with_identity_links() {
         let mut links = std::collections::HashMap::new();
-        links.insert("canonical-user".to_string(), vec!["telegram:user1".to_string()]);
+        links.insert(
+            "canonical-user".to_string(),
+            vec!["telegram:user1".to_string()],
+        );
         assert_eq!(
             build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
-                agent_id: "bot", main_key: None, channel: "telegram", account_id: None,
-                peer_kind: Some("direct"), peer_id: Some("User1"), identity_links: Some(&links), dm_scope: Some("per-peer"),
+                agent_id: "bot",
+                main_key: None,
+                channel: "telegram",
+                account_id: None,
+                peer_kind: Some("direct"),
+                peer_id: Some("User1"),
+                identity_links: Some(&links),
+                dm_scope: Some("per-peer"),
             }),
             "agent:bot:direct:canonical-user"
         );
@@ -1297,8 +1399,14 @@ mod tests {
         links.insert("other-user".to_string(), vec!["discord:other".to_string()]);
         assert_eq!(
             build_agent_peer_session_key(&BuildAgentPeerSessionKeyParams {
-                agent_id: "bot", main_key: None, channel: "telegram", account_id: None,
-                peer_kind: Some("direct"), peer_id: Some("User1"), identity_links: Some(&links), dm_scope: Some("per-peer"),
+                agent_id: "bot",
+                main_key: None,
+                channel: "telegram",
+                account_id: None,
+                peer_kind: Some("direct"),
+                peer_id: Some("User1"),
+                identity_links: Some(&links),
+                dm_scope: Some("per-peer"),
             }),
             "agent:bot:direct:user1"
         );

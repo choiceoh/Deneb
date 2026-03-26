@@ -23,7 +23,6 @@
     "docs:spellcheck": "bash scripts/docs-spellcheck.sh",
     "docs:spellcheck:fix": "bash scripts/docs-spellcheck.sh --write",
     "core-rs:test": "cd core-rs && cargo test",
-    "rust:test": "cargo test --workspace",
-    "prepare": "command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git config core.hooksPath git-hooks || exit 0"
+    "rust:test": "cargo test --workspace"
   }
 }

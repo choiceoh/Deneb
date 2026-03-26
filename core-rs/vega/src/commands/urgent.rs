@@ -1,9 +1,9 @@
+use regex::Regex;
 use rusqlite::Connection;
 use serde_json::{json, Value};
-use regex::Regex;
 
+use super::{open_db, CommandResult};
 use crate::config::VegaConfig;
-use super::{CommandResult, open_db};
 
 /// Urgent items query: red-status projects, stale projects, overdue actions, overloaded persons.
 pub fn cmd_urgent(_args: &Value, config: &VegaConfig) -> CommandResult {
@@ -71,7 +71,9 @@ fn find_red_status_projects(conn: &Connection) -> Result<Vec<Value>, String> {
         ORDER BY p.name
     "#;
 
-    let mut stmt = conn.prepare(sql).map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
     let rows = stmt
         .query_map([], |row| {
             let id: i64 = row.get(0)?;
@@ -106,7 +108,9 @@ fn find_overdue_actions(conn: &Connection) -> Result<Vec<Value>, String> {
         WHERE c.chunk_type = 'next_action'
     "#;
 
-    let mut stmt = conn.prepare(sql).map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
     let rows = stmt
         .query_map([], |row| {
             let project_id: i64 = row.get(0)?;
@@ -117,20 +121,14 @@ fn find_overdue_actions(conn: &Connection) -> Result<Vec<Value>, String> {
         .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
 
     // Match dates like YYYY-MM-DD or YYYY.MM.DD or YYYY/MM/DD
-    let date_re =
-        Regex::new(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})").unwrap();
+    let date_re = Regex::new(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})").unwrap();
     let today = chrono_today_str();
 
     let mut items = Vec::new();
     for row in rows {
         if let Ok((project_id, name, content)) = row {
             for cap in date_re.captures_iter(&content) {
-                let date_str = format!(
-                    "{}-{:0>2}-{:0>2}",
-                    &cap[1],
-                    &cap[2],
-                    &cap[3]
-                );
+                let date_str = format!("{}-{:0>2}-{:0>2}", &cap[1], &cap[2], &cap[3]);
                 if date_str < today {
                     items.push(json!({
                         "type": "overdue",
@@ -163,7 +161,9 @@ fn find_overloaded_persons(conn: &Connection) -> Result<Vec<Value>, String> {
         ORDER BY cnt DESC
     "#;
 
-    let mut stmt = conn.prepare(sql).map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
     let rows = stmt
         .query_map([], |row| {
             let person: String = row.get(0)?;
@@ -204,7 +204,9 @@ fn find_stale_projects(conn: &Connection) -> Result<Vec<Value>, String> {
         ORDER BY last_comm ASC
     "#;
 
-    let mut stmt = conn.prepare(sql).map_err(|e| format!("쿼리 준비 실패: {}", e))?;
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
     let rows = stmt
         .query_map([], |row| {
             let id: i64 = row.get(0)?;
@@ -218,9 +220,7 @@ fn find_stale_projects(conn: &Connection) -> Result<Vec<Value>, String> {
     let mut items = Vec::new();
     for row in rows {
         if let Ok((id, name, _status, last_comm)) = row {
-            let comm_display = last_comm
-                .as_deref()
-                .unwrap_or("기록 없음");
+            let comm_display = last_comm.as_deref().unwrap_or("기록 없음");
             items.push(json!({
                 "type": "stale",
                 "priority": 3,

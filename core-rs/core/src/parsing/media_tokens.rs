@@ -589,7 +589,9 @@ mod tests {
 
     #[test]
     fn directive_key_value() {
-        let result = split_media_from_output("Hello [[audio_as_voice]] [[format=wav]]\nMEDIA: /tmp/voice.wav");
+        let result = split_media_from_output(
+            "Hello [[audio_as_voice]] [[format=wav]]\nMEDIA: /tmp/voice.wav",
+        );
         assert!(result.audio_as_voice);
         assert!(!result.text.contains("[["));
     }

@@ -196,8 +196,8 @@ pub fn split_trailing_auth_profile(raw: &str) -> (String, Option<String>) {
 
     // Check if @ is followed by YYYYMMDD (version suffix, not profile delimiter).
     let after_at = &trimmed[profile_delimiter + 1..];
-    let is_version_suffix = after_at.len() >= 8
-        && after_at.as_bytes()[..8].iter().all(|b| b.is_ascii_digit());
+    let is_version_suffix =
+        after_at.len() >= 8 && after_at.as_bytes()[..8].iter().all(|b| b.is_ascii_digit());
 
     if is_version_suffix {
         // Look for another @ after the 8-digit version suffix.
@@ -206,7 +206,9 @@ pub fn split_trailing_auth_profile(raw: &str) -> (String, Option<String>) {
             Some(profile_delimiter + 9)
         } else {
             // Search further for @.
-            after_at.get(9..).and_then(|rest| rest.find('@').map(|i| profile_delimiter + 9 + i))
+            after_at
+                .get(9..)
+                .and_then(|rest| rest.find('@').map(|i| profile_delimiter + 9 + i))
         };
         match next_at {
             Some(pos) => profile_delimiter = pos,
@@ -248,7 +250,11 @@ pub fn build_configured_allowlist_keys(
         .iter()
         .filter_map(|raw| resolve_allowlist_model_key(raw, default_provider))
         .collect();
-    if keys.is_empty() { None } else { Some(keys) }
+    if keys.is_empty() {
+        None
+    } else {
+        Some(keys)
+    }
 }
 
 /// Model alias index mapping aliases to model refs and reverse lookup.
@@ -314,13 +320,18 @@ pub fn resolve_model_ref_from_string(
 }
 
 /// Check if a provider is a CLI provider.
-pub fn is_cli_provider(provider: &str, cli_backends: Option<&std::collections::HashMap<String, serde_json::Value>>) -> bool {
+pub fn is_cli_provider(
+    provider: &str,
+    cli_backends: Option<&std::collections::HashMap<String, serde_json::Value>>,
+) -> bool {
     let normalized = normalize_provider_id(provider);
     if normalized == "claude-cli" || normalized == "codex-cli" {
         return true;
     }
     if let Some(backends) = cli_backends {
-        return backends.keys().any(|key| normalize_provider_id(key) == normalized);
+        return backends
+            .keys()
+            .any(|key| normalize_provider_id(key) == normalized);
     }
     false
 }
@@ -366,12 +377,20 @@ pub fn normalize_model_selection(value: &serde_json::Value) -> Option<String> {
     match value {
         serde_json::Value::String(s) => {
             let trimmed = s.trim();
-            if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
         }
         serde_json::Value::Object(obj) => {
             let primary = obj.get("primary")?.as_str()?;
             let trimmed = primary.trim();
-            if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
         }
         _ => None,
     }
@@ -401,7 +420,9 @@ pub fn resolve_thinking_default_for_model(
 
     // Claude 4.6+ models on Anthropic or Bedrock get adaptive thinking.
     if (normalized_provider == "anthropic" || normalized_provider == "amazon-bedrock")
-        && CLAUDE_46_PREFIXES.iter().any(|prefix| model_lower.starts_with(prefix))
+        && CLAUDE_46_PREFIXES
+            .iter()
+            .any(|prefix| model_lower.starts_with(prefix))
     {
         return ThinkLevel::Adaptive;
     }
@@ -471,9 +492,9 @@ pub fn find_model_in_catalog<'a>(
 ) -> Option<&'a ModelCatalogEntry> {
     let p = normalize_provider_id(provider);
     let m = model.to_lowercase();
-    catalog.iter().find(|e| {
-        normalize_provider_id(&e.provider) == p && e.id.to_lowercase() == m
-    })
+    catalog
+        .iter()
+        .find(|e| normalize_provider_id(&e.provider) == p && e.id.to_lowercase() == m)
 }
 
 /// Status of a model ref against allowlist and catalog.
@@ -493,7 +514,8 @@ pub fn get_model_ref_status(
     allowed_keys: Option<&std::collections::HashSet<String>>,
 ) -> ModelRefStatus {
     let key = model_key(&model_ref.provider, &model_ref.model);
-    let in_catalog = find_model_in_catalog(catalog, &model_ref.provider, &model_ref.model).is_some();
+    let in_catalog =
+        find_model_in_catalog(catalog, &model_ref.provider, &model_ref.model).is_some();
     let allow_any = allowed_keys.is_none();
     let allowed = allow_any
         || allowed_keys
@@ -775,8 +797,10 @@ pub fn build_allowed_model_set(
         }
         parse_model_ref(dm, default_provider).map(|r| model_key(&r.provider, &r.model))
     });
-    let catalog_keys: std::collections::HashSet<String> =
-        catalog.iter().map(|e| model_key(&e.provider, &e.id)).collect();
+    let catalog_keys: std::collections::HashSet<String> = catalog
+        .iter()
+        .map(|e| model_key(&e.provider, &e.id))
+        .collect();
 
     if allow_any {
         let mut keys = catalog_keys;
@@ -811,12 +835,10 @@ pub fn build_allowed_model_set(
     }
 
     // Add fallback models.
-    let agent_fallbacks = agent_id.and_then(|id| {
-        crate::scope::resolve_agent_model_fallbacks_override(agents_list, id)
-    });
-    let fallbacks = agent_fallbacks.unwrap_or_else(|| {
-        resolve_agent_model_fallback_values(agents_defaults_model)
-    });
+    let agent_fallbacks = agent_id
+        .and_then(|id| crate::scope::resolve_agent_model_fallbacks_override(agents_list, id));
+    let fallbacks = agent_fallbacks
+        .unwrap_or_else(|| resolve_agent_model_fallback_values(agents_defaults_model));
     for fallback in &fallbacks {
         if let Some(parsed) = parse_model_ref(fallback, default_provider) {
             let key = model_key(&parsed.provider, &parsed.model);
@@ -879,7 +901,9 @@ pub struct ResolveAllowedModelRefParams<'a> {
 /// Validate a model ref against the allowed set and return it or an error.
 /// Mirrors `src/agents/models/model-selection.ts#resolveAllowedModelRef`. Keep in sync.
 #[allow(clippy::too_many_arguments)]
-pub fn resolve_allowed_model_ref(params: &ResolveAllowedModelRefParams<'_>) -> Result<(ModelRef, String), String> {
+pub fn resolve_allowed_model_ref(
+    params: &ResolveAllowedModelRefParams<'_>,
+) -> Result<(ModelRef, String), String> {
     let raw = params.raw;
     let agents_list = params.agents_list;
     let raw_allowlist = params.raw_allowlist;
@@ -894,10 +918,11 @@ pub fn resolve_allowed_model_ref(params: &ResolveAllowedModelRefParams<'_>) -> R
     }
 
     let alias_index = build_model_alias_index(configured_models, default_provider);
-    let resolved = match resolve_model_ref_from_string(trimmed, default_provider, Some(&alias_index)) {
-        Some((model_ref, _alias)) => model_ref,
-        None => return Err(format!("invalid model: {}", trimmed)),
-    };
+    let resolved =
+        match resolve_model_ref_from_string(trimmed, default_provider, Some(&alias_index)) {
+            Some((model_ref, _alias)) => model_ref,
+            None => return Err(format!("invalid model: {}", trimmed)),
+        };
 
     let allowed = build_allowed_model_set(
         agents_list,
@@ -977,7 +1002,10 @@ mod tests {
 
     #[test]
     fn model_key_basic() {
-        assert_eq!(model_key("anthropic", "claude-opus-4-6"), "anthropic/claude-opus-4-6");
+        assert_eq!(
+            model_key("anthropic", "claude-opus-4-6"),
+            "anthropic/claude-opus-4-6"
+        );
         assert_eq!(model_key("", "claude-opus-4-6"), "claude-opus-4-6");
         assert_eq!(model_key("anthropic", ""), "anthropic");
     }
@@ -1072,17 +1100,35 @@ mod tests {
     #[test]
     fn think_level_parsing() {
         assert_eq!(ThinkLevel::from_str_opt("high"), Some(ThinkLevel::High));
-        assert_eq!(ThinkLevel::from_str_opt("ADAPTIVE"), Some(ThinkLevel::Adaptive));
+        assert_eq!(
+            ThinkLevel::from_str_opt("ADAPTIVE"),
+            Some(ThinkLevel::Adaptive)
+        );
         assert_eq!(ThinkLevel::from_str_opt("invalid"), None);
     }
 
     #[test]
     fn normalize_google_model_ids() {
-        assert_eq!(normalize_google_model_id("gemini-3-pro"), "gemini-3-pro-preview");
-        assert_eq!(normalize_google_model_id("gemini-3-flash"), "gemini-3-flash-preview");
-        assert_eq!(normalize_google_model_id("gemini-3.1-flash"), "gemini-3-flash-preview");
-        assert_eq!(normalize_google_model_id("gemini-3.1-flash-preview"), "gemini-3-flash-preview");
-        assert_eq!(normalize_google_model_id("gemini-3.1-flash-lite"), "gemini-3.1-flash-lite-preview");
+        assert_eq!(
+            normalize_google_model_id("gemini-3-pro"),
+            "gemini-3-pro-preview"
+        );
+        assert_eq!(
+            normalize_google_model_id("gemini-3-flash"),
+            "gemini-3-flash-preview"
+        );
+        assert_eq!(
+            normalize_google_model_id("gemini-3.1-flash"),
+            "gemini-3-flash-preview"
+        );
+        assert_eq!(
+            normalize_google_model_id("gemini-3.1-flash-preview"),
+            "gemini-3-flash-preview"
+        );
+        assert_eq!(
+            normalize_google_model_id("gemini-3.1-flash-lite"),
+            "gemini-3.1-flash-lite-preview"
+        );
         assert_eq!(normalize_google_model_id("unknown-model"), "unknown-model");
     }
 
@@ -1297,7 +1343,11 @@ mod tests {
             provider: "anthropic".to_string(),
             id: "claude-opus-4-6".to_string(),
             name: "Claude Opus 4.6".to_string(),
-            input: Some(vec![ModelInputType::Text, ModelInputType::Image, ModelInputType::Document]),
+            input: Some(vec![
+                ModelInputType::Text,
+                ModelInputType::Image,
+                ModelInputType::Document,
+            ]),
             reasoning: false,
             context_window: Some(200_000),
         };
@@ -1443,13 +1493,8 @@ mod tests {
     #[test]
     fn resolve_configured_model_ref_default() {
         let models = std::collections::HashMap::new();
-        let result = resolve_configured_model_ref(
-            None,
-            &models,
-            None,
-            DEFAULT_PROVIDER,
-            "claude-opus-4-6",
-        );
+        let result =
+            resolve_configured_model_ref(None, &models, None, DEFAULT_PROVIDER, "claude-opus-4-6");
         assert_eq!(result.provider, "anthropic");
         assert_eq!(result.model, "claude-opus-4-6");
     }
@@ -1458,13 +1503,7 @@ mod tests {
     fn resolve_default_model_for_agent_basic() {
         let agents = vec![serde_json::json!({"id": "alpha", "model": "openai/gpt-4o"})];
         let models = std::collections::HashMap::new();
-        let result = resolve_default_model_for_agent(
-            &agents,
-            None,
-            &models,
-            None,
-            Some("alpha"),
-        );
+        let result = resolve_default_model_for_agent(&agents, None, &models, None, Some("alpha"));
         assert_eq!(result.provider, "openai");
         assert_eq!(result.model, "gpt-4o");
     }
@@ -1491,26 +1530,14 @@ mod tests {
             "anthropic/claude-opus-4-6".to_string(),
             serde_json::json!({"params": {"thinking": "high"}}),
         );
-        let result = resolve_thinking_default(
-            "anthropic",
-            "claude-opus-4-6",
-            &models,
-            None,
-            None,
-        );
+        let result = resolve_thinking_default("anthropic", "claude-opus-4-6", &models, None, None);
         assert_eq!(result, ThinkLevel::High);
     }
 
     #[test]
     fn resolve_thinking_default_global_override() {
         let models = std::collections::HashMap::new();
-        let result = resolve_thinking_default(
-            "openai",
-            "gpt-4o",
-            &models,
-            Some("medium"),
-            None,
-        );
+        let result = resolve_thinking_default("openai", "gpt-4o", &models, Some("medium"), None);
         assert_eq!(result, ThinkLevel::Medium);
     }
 
@@ -1539,9 +1566,8 @@ mod tests {
             id: "claude-opus-4-6".to_string(),
             ..Default::default()
         }];
-        let result = build_allowed_model_set(
-            &agents, &[], &catalog, DEFAULT_PROVIDER, None, None, None,
-        );
+        let result =
+            build_allowed_model_set(&agents, &[], &catalog, DEFAULT_PROVIDER, None, None, None);
         assert!(result.allow_any);
         assert_eq!(result.allowed_catalog.len(), 1);
     }
@@ -1563,7 +1589,13 @@ mod tests {
         ];
         let allowlist = vec!["anthropic/claude-opus-4-6".to_string()];
         let result = build_allowed_model_set(
-            &agents, &allowlist, &catalog, DEFAULT_PROVIDER, None, None, None,
+            &agents,
+            &allowlist,
+            &catalog,
+            DEFAULT_PROVIDER,
+            None,
+            None,
+            None,
         );
         assert!(!result.allow_any);
         assert!(result.allowed_keys.contains("anthropic/claude-opus-4-6"));
@@ -1633,8 +1665,12 @@ mod tests {
         let agents: Vec<serde_json::Value> = vec![];
         let models = std::collections::HashMap::new();
         let result = resolve_subagent_spawn_model_selection(
-            &agents, None, &models, None,
-            "alpha", None,
+            &agents,
+            None,
+            &models,
+            None,
+            "alpha",
+            None,
             Some(&serde_json::json!("openai/gpt-4o")),
         );
         assert_eq!(result, "openai/gpt-4o");

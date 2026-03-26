@@ -134,8 +134,7 @@ pub fn normalize_usage(raw: &UsageLike) -> Option<NormalizedUsage> {
                 .and_then(|d| d.cached_tokens),
         ));
 
-    let cache_write = as_finite(raw.cache_write)
-        .or(as_finite(raw.cache_creation_input_tokens));
+    let cache_write = as_finite(raw.cache_write).or(as_finite(raw.cache_creation_input_tokens));
 
     let total = as_finite(raw.total).or(as_finite(raw.total_tokens));
 
@@ -158,9 +157,17 @@ pub fn normalize_usage(raw: &UsageLike) -> Option<NormalizedUsage> {
 }
 
 /// Derive prompt tokens from input + cache read + cache write.
-pub fn derive_prompt_tokens(input: Option<f64>, cache_read: Option<f64>, cache_write: Option<f64>) -> Option<f64> {
+pub fn derive_prompt_tokens(
+    input: Option<f64>,
+    cache_read: Option<f64>,
+    cache_write: Option<f64>,
+) -> Option<f64> {
     let sum = input.unwrap_or(0.0) + cache_read.unwrap_or(0.0) + cache_write.unwrap_or(0.0);
-    if sum > 0.0 { Some(sum) } else { None }
+    if sum > 0.0 {
+        Some(sum)
+    } else {
+        None
+    }
 }
 
 /// Derive session total tokens (prompt/context snapshot, excludes output).
@@ -268,7 +275,10 @@ mod tests {
 
     #[test]
     fn derive_prompt_tokens_basic() {
-        assert_eq!(derive_prompt_tokens(Some(100.0), Some(200.0), Some(10.0)), Some(310.0));
+        assert_eq!(
+            derive_prompt_tokens(Some(100.0), Some(200.0), Some(10.0)),
+            Some(310.0)
+        );
         assert_eq!(derive_prompt_tokens(None, None, None), None);
         assert_eq!(derive_prompt_tokens(Some(0.0), Some(0.0), Some(0.0)), None);
     }

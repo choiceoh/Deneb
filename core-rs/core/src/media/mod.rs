@@ -17,25 +17,19 @@ fn detect_ooxml(data: &[u8]) -> Option<&'static str> {
         || contains_bytes(window, b"xl/sharedStrings.xml")
         || contains_bytes(window, b"xl/styles.xml")
     {
-        return Some(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        );
+        return Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     }
     if contains_bytes(window, b"word/document.xml")
         || contains_bytes(window, b"word/styles.xml")
         || contains_bytes(window, b"word/settings.xml")
     {
-        return Some(
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        );
+        return Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     }
     if contains_bytes(window, b"ppt/presentation.xml")
         || contains_bytes(window, b"ppt/slides/")
         || contains_bytes(window, b"ppt/slideMasters/")
     {
-        return Some(
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        );
+        return Some("application/vnd.openxmlformats-officedocument.presentationml.presentation");
     }
     None
 }
@@ -43,9 +37,7 @@ fn detect_ooxml(data: &[u8]) -> Option<&'static str> {
 /// Simple byte substring search (no allocation).
 #[inline]
 fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack
-        .windows(needle.len())
-        .any(|w| w == needle)
+    haystack.windows(needle.len()).any(|w| w == needle)
 }
 
 /// Detect ISOBMFF-based formats from ftyp box at offset 4.

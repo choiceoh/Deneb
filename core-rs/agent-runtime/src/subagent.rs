@@ -113,7 +113,12 @@ impl SubagentRegistry {
     pub fn release(&mut self, run_id: &str) -> Option<SubagentRunRecord> {
         let record = self.runs.remove(run_id)?;
         // Only remove child key index if it still points to this run.
-        if self.by_child_key.get(&record.child_session_key).map(|s| s.as_str()) == Some(run_id) {
+        if self
+            .by_child_key
+            .get(&record.child_session_key)
+            .map(|s| s.as_str())
+            == Some(run_id)
+        {
             self.by_child_key.remove(&record.child_session_key);
         }
         Some(record)
@@ -180,9 +185,7 @@ impl SubagentRegistry {
     pub fn count_active_for_session(&self, requester_session_key: &str) -> usize {
         self.runs
             .values()
-            .filter(|r| {
-                r.requester_session_key == requester_session_key && !r.status.is_terminal()
-            })
+            .filter(|r| r.requester_session_key == requester_session_key && !r.status.is_terminal())
             .count()
     }
 

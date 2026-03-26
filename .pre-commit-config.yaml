@@ -19,7 +19,7 @@ repos:
         args: [--maxkb=500]
       - id: check-merge-conflict
       - id: detect-private-key
-        exclude: '(^|/)(\.secrets\.baseline$|\.detect-secrets\.cfg$|\.pre-commit-config\.yaml$|apps/ios/fastlane/Fastfile$)'
+        exclude: '(^|/)(\.secrets\.baseline$|\.detect-secrets\.cfg$|\.pre-commit-config\.yaml$)'
 
   # Secret detection (same as CI)
   - repo: https://github.com/Yelp/detect-secrets
@@ -30,7 +30,7 @@ repos:
           - --baseline
           - .secrets.baseline
           - --exclude-files
-          - '(^|/)pnpm-lock\.yaml$'
+          - '(^|/)Cargo\.lock$'
 
   # Shell script linting
   - repo: https://github.com/koalaman/shellcheck-precommit
