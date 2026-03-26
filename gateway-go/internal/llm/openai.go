@@ -163,6 +163,18 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 	if req.Temperature != nil {
 		oaiReq.Temperature = req.Temperature
 	}
+	if req.TopP != nil {
+		oaiReq.TopP = req.TopP
+	}
+	if req.FrequencyPenalty != nil {
+		oaiReq.FrequencyPenalty = req.FrequencyPenalty
+	}
+	if req.PresencePenalty != nil {
+		oaiReq.PresencePenalty = req.PresencePenalty
+	}
+	if len(req.StopSequences) > 0 {
+		oaiReq.Stop = req.StopSequences
+	}
 
 	body, err := json.Marshal(oaiReq)
 	if err != nil {
@@ -461,13 +473,17 @@ func emit(ctx context.Context, ch chan<- StreamEvent, ev StreamEvent) {
 // --- OpenAI request/response types ---
 
 type openAIRequest struct {
-	Model         string            `json:"model"`
-	Messages      []openAIMessage   `json:"messages"`
-	Stream        bool              `json:"stream"`
-	StreamOptions *openAIStreamOpts `json:"stream_options,omitempty"` // #6: request usage in stream
-	MaxTokens     int               `json:"max_tokens,omitempty"`
-	Temperature   *float64          `json:"temperature,omitempty"`
-	Tools         []openAITool      `json:"tools,omitempty"`
+	Model            string            `json:"model"`
+	Messages         []openAIMessage   `json:"messages"`
+	Stream           bool              `json:"stream"`
+	StreamOptions    *openAIStreamOpts `json:"stream_options,omitempty"`
+	MaxTokens        int               `json:"max_tokens,omitempty"`
+	Temperature      *float64          `json:"temperature,omitempty"`
+	TopP             *float64          `json:"top_p,omitempty"`
+	FrequencyPenalty *float64          `json:"frequency_penalty,omitempty"`
+	PresencePenalty  *float64          `json:"presence_penalty,omitempty"`
+	Stop             []string          `json:"stop,omitempty"`
+	Tools            []openAITool      `json:"tools,omitempty"`
 }
 
 // openAIStreamOpts controls streaming behavior.

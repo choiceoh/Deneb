@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -121,12 +122,25 @@ func executeAgentRun(
 		}
 	}
 
-	// 2. Assemble context (token-budgeted history).
+	// 2. Assemble system prompt.
 	systemPrompt := params.System
 	if systemPrompt == "" {
 		systemPrompt = deps.defaultSystem
 	}
+	if systemPrompt == "" && deps.tools != nil {
+		// Build system prompt from tool definitions, workspace context, and runtime info.
+		workspaceDir := resolveWorkspaceDirForPrompt()
+		systemPrompt = BuildSystemPrompt(SystemPromptParams{
+			WorkspaceDir: workspaceDir,
+			ToolDefs:     deps.tools.Definitions(),
+			UserTimezone: resolveTimezone(),
+			ContextFiles: LoadContextFiles(workspaceDir),
+			RuntimeInfo:  BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
+			Channel:      deliveryChannel(params.Delivery),
+		})
+	}
 
+	// 3. Assemble context (token-budgeted history).
 	var messages []llm.Message
 	if deps.transcript != nil {
 		result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger)
@@ -137,10 +151,26 @@ func executeAgentRun(
 		}
 	}
 
-	// If context assembly failed or had no history, just use the current message.
+	// If context assembly failed or had no history, build user message.
 	if len(messages) == 0 && params.Message != "" {
-		messages = []llm.Message{
-			llm.NewTextMessage("user", params.Message),
+		// Include attachments as multimodal content blocks if present.
+		if len(params.Attachments) > 0 {
+			blocks := []llm.ContentBlock{{Type: "text", Text: params.Message}}
+			for _, att := range params.Attachments {
+				if att.URL != "" && att.Type == "image" {
+					blocks = append(blocks, llm.ContentBlock{
+						Type: "image",
+						Source: &llm.ImageSource{
+							Type:      "url",
+							MediaType: att.MimeType,
+							Data:      att.URL,
+						},
+					})
+				}
+			}
+			messages = []llm.Message{llm.NewBlockMessage("user", blocks)}
+		} else {
+			messages = []llm.Message{llm.NewTextMessage("user", params.Message)}
 		}
 	}
 
@@ -163,18 +193,10 @@ func executeAgentRun(
 		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
 	}
 
-	// 5. Build tool list from registry.
+	// 5. Build tool list from registry (uses stored descriptions and schemas).
 	var tools []llm.Tool
 	if deps.tools != nil {
-		names := deps.tools.Names()
-		tools = make([]llm.Tool, len(names))
-		for i, name := range names {
-			tools[i] = llm.Tool{
-				Name:        name,
-				Description: "Tool: " + name,
-				InputSchema: map[string]any{"type": "object"},
-			}
-		}
+		tools = deps.tools.LLMTools()
 	}
 
 	// 6. Build agent config.
@@ -258,11 +280,19 @@ func handleRunSuccess(
 	}
 
 	// Deliver response back to the originating channel (e.g., Telegram).
+	// Suppress delivery if the LLM returned the silent reply token (NO_REPLY).
 	if deps.replyFunc != nil && params.Delivery != nil && result.Text != "" {
-		replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer replyCancel()
-		if err := deps.replyFunc(replyCtx, params.Delivery, result.Text); err != nil {
-			logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
+		if IsSilentReply(result.Text) {
+			logger.Info("suppressing silent reply (NO_REPLY)")
+		} else {
+			replyText := StripSilentToken(result.Text)
+			if replyText != "" {
+				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer replyCancel()
+				if err := deps.replyFunc(replyCtx, params.Delivery, replyText); err != nil {
+					logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
+				}
+			}
 		}
 	}
 
@@ -441,4 +471,34 @@ func stopReasonFromCtx(ctx context.Context) string {
 		return "timeout"
 	}
 	return "aborted"
+}
+
+// resolveWorkspaceDirForPrompt returns the workspace directory for system prompt assembly.
+func resolveWorkspaceDirForPrompt() string {
+	if cwd, err := os.Getwd(); err == nil {
+		return cwd
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return home
+	}
+	return "/tmp"
+}
+
+// deliveryChannel extracts the channel name from a delivery context.
+func deliveryChannel(d *DeliveryContext) string {
+	if d == nil {
+		return ""
+	}
+	return d.Channel
+}
+
+// Definitions returns all registered tool definitions (for system prompt assembly).
+func (r *ToolRegistry) Definitions() []ToolDef {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	defs := make([]ToolDef, 0, len(r.order))
+	for _, name := range r.order {
+		defs = append(defs, r.tools[name])
+	}
+	return defs
 }

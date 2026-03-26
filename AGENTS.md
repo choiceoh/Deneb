@@ -237,6 +237,13 @@ HTTP/WS gateway server scaffolding (Phase 2 target: replace Node.js gateway).
 - `internal/bridge/` — Node.js plugin host bridge via Unix socket frame protocol.
 - `pkg/protocol/` — Hand-written JSON wire types + generated protobuf types in `gen/`.
 - `pkg/protocol/consistency_test.go` — Bidirectional reflection tests ensuring hand-written and generated types stay in sync.
+- `internal/chat/tools_core.go` — Core tool registration (exec, process, read, write, edit, grep, find, ls, web_fetch) with full JSON schemas.
+- `internal/chat/tools_fs.go` — File system tool implementations (read with line numbers, write with dir creation, edit with uniqueness check, grep via rg, find via WalkDir, ls).
+- `internal/chat/system_prompt.go` — System prompt assembly (identity, tooling, tool call style, safety, skills, memory recall, workspace, reply tags, messaging, timestamp, context files, silent replies, runtime).
+- `internal/chat/context_files.go` — Workspace context file loader (AGENTS.md, CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md). Budget: 20K chars/file, 150K total.
+- `internal/chat/silent_reply.go` — SILENT_REPLY_TOKEN (NO_REPLY) detection and stripping for delivery suppression.
+- `internal/chat/slash_commands.go` — Slash command pre-processing (/reset, /status, /kill, /model, /think).
+- `internal/llm/types.go` — Sampling parameters: top_p, top_k, stop_sequences, frequency_penalty, presence_penalty. ImageSource for multimodal content.
 - Build: `cd gateway-go && go build ./...` or `make go`.
 - Test: `cd gateway-go && go test ./...` or `make go-test`.
 

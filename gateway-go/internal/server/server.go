@@ -840,7 +840,15 @@ func (s *Server) registerPhase2Methods() {
 	chatCfg.Transcript = transcriptStore
 	chatCfg.Tools = chat.NewToolRegistry()
 	chatCfg.JobTracker = s.jobTracker
-	chatCfg.DefaultModel = "zai/glm-5-turbo"
+
+	// Resolve default model from config; fall back to hardcoded default.
+	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
+
+	// Resolve workspace directory for file tool operations.
+	workspaceDir := resolveWorkspaceDir()
+
+	// Register core tools (file I/O, exec, process, stubs for others).
+	chat.RegisterCoreTools(chatCfg.Tools, s.processes, workspaceDir)
 	if s.authManager != nil {
 		chatCfg.AuthManager = s.authManager
 	}
@@ -1180,6 +1188,46 @@ func loadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {
 		logger.Info("loaded provider configs", "count", len(root.Models.Providers))
 	}
 	return root.Models.Providers
+}
+
+// resolveDefaultModel reads agents.defaultModel or agents.defaults.model from
+// deneb.json, falling back to a hardcoded default.
+func resolveDefaultModel(logger *slog.Logger) string {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
+		return "claude-sonnet-4-20250514"
+	}
+	var root struct {
+		Agents struct {
+			DefaultModel string `json:"defaultModel"`
+			Defaults     struct {
+				Model string `json:"model"`
+			} `json:"defaults"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		logger.Warn("failed to parse agents config for model", "error", err)
+		return "claude-sonnet-4-20250514"
+	}
+	if root.Agents.DefaultModel != "" {
+		return root.Agents.DefaultModel
+	}
+	if root.Agents.Defaults.Model != "" {
+		return root.Agents.Defaults.Model
+	}
+	return "claude-sonnet-4-20250514"
+}
+
+// resolveWorkspaceDir determines the workspace directory for file tool operations.
+// Uses current working directory as the workspace root.
+func resolveWorkspaceDir() string {
+	if cwd, err := os.Getwd(); err == nil {
+		return cwd
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return home
+	}
+	return "/tmp"
 }
 
 // resolveDenebDir returns the path to ~/.deneb.

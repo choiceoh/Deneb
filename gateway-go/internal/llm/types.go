@@ -9,13 +9,18 @@ import "encoding/json"
 
 // ChatRequest represents a streaming chat completion request.
 type ChatRequest struct {
-	Model       string   `json:"model"`
-	Messages    []Message `json:"messages"`
-	System      string   `json:"system,omitempty"`
-	MaxTokens   int      `json:"max_tokens"`
-	Tools       []Tool   `json:"tools,omitempty"`
-	Stream      bool     `json:"stream"`
-	Temperature *float64 `json:"temperature,omitempty"`
+	Model            string   `json:"model"`
+	Messages         []Message `json:"messages"`
+	System           string   `json:"system,omitempty"`
+	MaxTokens        int      `json:"max_tokens"`
+	Tools            []Tool   `json:"tools,omitempty"`
+	Stream           bool     `json:"stream"`
+	Temperature      *float64 `json:"temperature,omitempty"`
+	TopP             *float64 `json:"top_p,omitempty"`
+	TopK             *int     `json:"top_k,omitempty"`
+	StopSequences    []string `json:"stop_sequences,omitempty"`
+	FrequencyPenalty *float64 `json:"-"` // OpenAI only; excluded from Anthropic JSON
+	PresencePenalty  *float64 `json:"-"` // OpenAI only; excluded from Anthropic JSON
 }
 
 // Message represents a single message in a conversation.
@@ -58,6 +63,12 @@ type ContentBlock struct {
 
 	// image_url block (OpenAI: type="image_url", image_url.url)
 	ImageURL *ImageURL `json:"image_url,omitempty"`
+
+	// thinking block (Anthropic extended thinking)
+	Thinking string `json:"thinking,omitempty"`
+
+	// Cache control (Anthropic prompt caching + OpenAI-compatible).
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
 // ImageSource is an Anthropic-style inline image (base64).
@@ -71,6 +82,11 @@ type ImageSource struct {
 type ImageURL struct {
 	URL    string `json:"url"`
 	Detail string `json:"detail,omitempty"` // "auto", "low", "high"
+}
+
+// CacheControl marks a content block for prompt caching.
+type CacheControl struct {
+	Type string `json:"type"` // "ephemeral"
 }
 
 // Tool describes a tool available to the model.
