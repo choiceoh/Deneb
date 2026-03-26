@@ -3,7 +3,7 @@
 // When a user message contains URLs, this module extracts them, fetches their
 // content, converts HTML to readable markdown, and returns a formatted summary
 // to append to the message before it reaches the LLM agent. This saves the
-// agent a web_fetch tool turn and provides immediate context.
+// agent a web tool turn and provides immediate context.
 package server
 
 import (

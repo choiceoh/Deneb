@@ -525,7 +525,7 @@ Even with strong system prompts, **prompt injection is not solved**. System prom
 - Treat links, attachments, and pasted instructions as hostile by default.
 - Run sensitive tool execution in a sandbox; keep secrets out of the agent’s reachable filesystem.
 - Note: sandboxing is opt-in. If sandbox mode is off, exec runs on the gateway host even though tools.exec.host defaults to sandbox, and host exec does not require approvals unless you set host=gateway and configure exec approvals.
-- Limit high-risk tools (`exec`, `browser`, `web_fetch`, `web_search`) to trusted agents or explicit allowlists.
+- Limit high-risk tools (`exec`, `browser`, `web`) to trusted agents or explicit allowlists.
 - **Model choice matters:** older/smaller/legacy models are significantly less robust against prompt injection and tool misuse. For tool-enabled agents, use the strongest latest-generation, instruction-hardened model available.
 
 Red flags to treat as untrusted:
@@ -566,7 +566,7 @@ tool calls. Reduce the blast radius by:
 
 - Using a read-only or tool-disabled **reader agent** to summarize untrusted content,
   then pass the summary to your main agent.
-- Keeping `web_search` / `web_fetch` / `browser` off for tool-enabled agents unless needed.
+- Keeping `web` / `browser` off for tool-enabled agents unless needed.
 - For OpenResponses URL inputs (`input_file` / `input_image`), set tight
   `gateway.http.endpoints.responses.files.urlAllowlist` and
   `gateway.http.endpoints.responses.images.urlAllowlist`, and keep `maxUrlParts` low.
@@ -588,7 +588,7 @@ Recommendations:
 - **Use the latest generation, best-tier model** for any bot that can run tools or touch files/networks.
 - **Do not use older/weaker/smaller tiers** for tool-enabled agents or untrusted inboxes; the prompt-injection risk is too high.
 - If you must use a smaller model, **reduce blast radius** (read-only tools, strong sandboxing, minimal filesystem access, strict allowlists).
-- When running small models, **enable sandboxing for all sessions** and **disable web_search/web_fetch/browser** unless inputs are tightly controlled.
+- When running small models, **enable sandboxing for all sessions** and **disable web/browser** unless inputs are tightly controlled.
 - For chat-only personal assistants with trusted input and no tools, smaller models are usually fine.
 
 ## Reasoning & verbose output in groups
