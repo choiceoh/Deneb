@@ -408,47 +408,7 @@ func updateUserModel(ctx context.Context, store *Store, client *llm.Client, mode
 	return nil
 }
 
-// --- LLM helper ---
-
-// callLLM sends a streaming chat request to the local SGLang model and collects the full response.
+// callLLM is a convenience alias for callSglang (defined in sglang.go).
 func callLLM(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
-	events, err := client.StreamChatOpenAI(ctx, llm.ChatRequest{
-		Model:     model,
-		Messages:  []llm.Message{llm.NewTextMessage("user", user)},
-		System:    llm.SystemString(system),
-		MaxTokens: maxTokens,
-		Stream:    true,
-	})
-	if err != nil {
-		return "", err
-	}
-	return collectStreamText(ctx, events)
-}
-
-// collectStreamText gathers all text deltas from an OpenAI-compatible stream.
-func collectStreamText(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
-	var sb strings.Builder
-	for {
-		select {
-		case <-ctx.Done():
-			if sb.Len() > 0 {
-				return strings.TrimSpace(sb.String()), nil
-			}
-			return "", ctx.Err()
-		case ev, ok := <-events:
-			if !ok {
-				return strings.TrimSpace(sb.String()), nil
-			}
-			if ev.Type == "content_block_delta" {
-				var delta struct {
-					Delta struct {
-						Text string `json:"text"`
-					} `json:"delta"`
-				}
-				if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
-					sb.WriteString(delta.Delta.Text)
-				}
-			}
-		}
-	}
+	return callSglang(ctx, client, model, system, user, maxTokens)
 }

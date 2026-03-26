@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -24,8 +24,7 @@ type DreamingTrigger struct {
 	model    string
 	logger   *slog.Logger
 
-	mu       sync.Mutex
-	running  bool
+	running atomic.Bool
 }
 
 // NewDreamingTrigger creates a new dreaming trigger.
@@ -42,12 +41,9 @@ func NewDreamingTrigger(store *Store, embedder *Embedder, client *llm.Client, mo
 // IncrementTurnAndCheck increments the turn counter and checks if dreaming should fire.
 // If conditions are met, launches dreaming asynchronously and returns true.
 func (dt *DreamingTrigger) IncrementTurnAndCheck(ctx context.Context) bool {
-	dt.mu.Lock()
-	if dt.running {
-		dt.mu.Unlock()
+	if dt.running.Load() {
 		return false
 	}
-	dt.mu.Unlock()
 
 	// Increment turn count.
 	countStr, _ := dt.store.GetMeta(ctx, metaTurnCount)
@@ -57,8 +53,7 @@ func (dt *DreamingTrigger) IncrementTurnAndCheck(ctx context.Context) bool {
 
 	// Check turn threshold.
 	if count >= DreamingTurnThreshold {
-		dt.triggerAsync()
-		return true
+		return dt.triggerAsync()
 	}
 
 	// Check time threshold.
@@ -66,8 +61,7 @@ func (dt *DreamingTrigger) IncrementTurnAndCheck(ctx context.Context) bool {
 	if lastRunStr != "" {
 		if lastRun, err := time.Parse(time.RFC3339, lastRunStr); err == nil {
 			if time.Since(lastRun).Hours() >= float64(DreamingTimeIntervalH) {
-				dt.triggerAsync()
-				return true
+				return dt.triggerAsync()
 			}
 		}
 	} else {
@@ -79,21 +73,14 @@ func (dt *DreamingTrigger) IncrementTurnAndCheck(ctx context.Context) bool {
 }
 
 // triggerAsync launches a dreaming cycle in a background goroutine.
-func (dt *DreamingTrigger) triggerAsync() {
-	dt.mu.Lock()
-	if dt.running {
-		dt.mu.Unlock()
-		return
+// Uses atomic CAS to guarantee only one cycle runs at a time.
+func (dt *DreamingTrigger) triggerAsync() bool {
+	if !dt.running.CompareAndSwap(false, true) {
+		return false // another cycle already running
 	}
-	dt.running = true
-	dt.mu.Unlock()
 
 	go func() {
-		defer func() {
-			dt.mu.Lock()
-			dt.running = false
-			dt.mu.Unlock()
-		}()
+		defer dt.running.Store(false)
 
 		ctx := context.Background()
 		report, err := RunDreamingCycle(ctx, dt.store, dt.embedder, dt.client, dt.model, dt.logger)
@@ -114,6 +101,8 @@ func (dt *DreamingTrigger) triggerAsync() {
 			"duration", fmt.Sprintf("%.1fs", report.Duration.Seconds()),
 		)
 	}()
+
+	return true
 }
 
 // StartPeriodicTimer starts a background timer that checks dreaming conditions

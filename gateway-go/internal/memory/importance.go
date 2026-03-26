@@ -62,18 +62,7 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 		truncate(userMessage, 4000),
 		truncate(agentResponse, 8000))
 
-	events, err := client.StreamChatOpenAI(ctx, llm.ChatRequest{
-		Model:     model,
-		Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
-		System:    llm.SystemString(importanceSystemPrompt),
-		MaxTokens: importanceMaxTokens,
-		Stream:    true,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("importance extraction: %w", err)
-	}
-
-	text, err := collectStreamForJSON(ctx, events)
+	text, err := callSglang(ctx, client, model, importanceSystemPrompt, prompt, importanceMaxTokens)
 	if err != nil {
 		return nil, fmt.Errorf("importance extraction: %w", err)
 	}
@@ -212,34 +201,6 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
-}
-
-// collectStreamForJSON gathers all text from a streaming response.
-func collectStreamForJSON(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
-	var sb strings.Builder
-	for {
-		select {
-		case <-ctx.Done():
-			if sb.Len() > 0 {
-				return strings.TrimSpace(sb.String()), nil
-			}
-			return "", ctx.Err()
-		case ev, ok := <-events:
-			if !ok {
-				return strings.TrimSpace(sb.String()), nil
-			}
-			if ev.Type == "content_block_delta" {
-				var delta struct {
-					Delta struct {
-						Text string `json:"text"`
-					} `json:"delta"`
-				}
-				if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
-					sb.WriteString(delta.Delta.Text)
-				}
-			}
-		}
-	}
 }
 
 // parseBulletFallback handles the legacy unstructured bullet-point format.

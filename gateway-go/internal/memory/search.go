@@ -125,24 +125,38 @@ func (s *Store) vectorSearch(ctx context.Context, queryVec []float32) (map[int64
 // mergeAndRank combines FTS and vector scores with importance and recency.
 func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]float64, opts SearchOpts) []SearchResult {
 	// Collect all candidate fact IDs.
-	candidates := make(map[int64]bool)
+	ids := make([]int64, 0, len(ftsResults)+len(vecResults))
+	seen := make(map[int64]bool)
 	for id := range ftsResults {
-		candidates[id] = true
+		if !seen[id] {
+			ids = append(ids, id)
+			seen[id] = true
+		}
 	}
 	for id := range vecResults {
-		candidates[id] = true
+		if !seen[id] {
+			ids = append(ids, id)
+			seen[id] = true
+		}
 	}
 
-	// Load facts for scoring.
+	// Load all candidate facts in one pass (lock held briefly).
+	factMap := make(map[int64]*Fact, len(ids))
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	for _, id := range ids {
+		f, err := scanFactRow(s.db.QueryRow(`SELECT * FROM facts WHERE id = ? AND active = 1`, id))
+		if err == nil {
+			factMap[id] = f
+		}
+	}
+	s.mu.RUnlock()
 
 	now := time.Now()
 	var results []SearchResult
 
-	for id := range candidates {
-		fact, err := scanFactRow(s.db.QueryRow(`SELECT * FROM facts WHERE id = ? AND active = 1`, id))
-		if err != nil {
+	for _, id := range ids {
+		fact, ok := factMap[id]
+		if !ok {
 			continue
 		}
 
