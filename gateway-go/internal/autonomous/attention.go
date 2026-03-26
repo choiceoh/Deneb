@@ -77,8 +77,26 @@ func (a *Attention) Push(signal Signal) {
 
 	// Cooldown check: don't trigger too frequently.
 	if now-a.lastTrigger < a.cfg.CooldownMs {
-		a.logger.Debug("attention signal within cooldown, ignoring",
-			"kind", signal.Kind, "cooldownRemainMs", a.cfg.CooldownMs-(now-a.lastTrigger))
+		remainMs := a.cfg.CooldownMs - (now - a.lastTrigger)
+		// High-priority signals (e.g., goal added) are deferred until cooldown
+		// expires instead of being silently dropped.
+		if signal.Priority == SignalPriorityHigh {
+			svcCtx := a.svc.svcCtx
+			a.logger.Debug("high-priority signal deferred until cooldown expires",
+				"kind", signal.Kind, "deferMs", remainMs)
+			go func() {
+				timer := time.NewTimer(time.Duration(remainMs) * time.Millisecond)
+				defer timer.Stop()
+				select {
+				case <-timer.C:
+					a.Push(signal)
+				case <-svcCtx.Done():
+				}
+			}()
+		} else {
+			a.logger.Debug("attention signal within cooldown, ignoring",
+				"kind", signal.Kind, "cooldownRemainMs", remainMs)
+		}
 		return
 	}
 

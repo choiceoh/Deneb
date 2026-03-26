@@ -60,8 +60,31 @@ func buildDecisionPrompt(goals []Goal, lastCycle *CycleState, recentlyChanged ..
 		return b.String()
 	}
 
+	// Compute the most recent LastWorkedAtMs across all goals to detect starvation.
+	var maxWorkedAt int64
+	for _, g := range goals {
+		if g.LastWorkedAtMs > maxWorkedAt {
+			maxWorkedAt = g.LastWorkedAtMs
+		}
+	}
+
 	for i, g := range goals {
-		b.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, strings.ToUpper(g.Priority), g.Description))
+		// Starvation warning: goal hasn't been worked on while others have.
+		starved := g.CycleCount == 0 && maxWorkedAt > 0 && g.LastWorkedAtMs == 0
+		if !starved && maxWorkedAt > 0 && g.LastWorkedAtMs > 0 {
+			idleMs := maxWorkedAt - g.LastWorkedAtMs
+			// Flag if idle for 3+ cycle intervals (rough: 30 min assuming 10min cycles).
+			starved = idleMs > 30*60*1000
+		}
+
+		label := strings.ToUpper(g.Priority)
+		if g.IsStale() {
+			label += " ⚠️ 반복 정체"
+		} else if starved {
+			label += " ⚠️ 장기 미작업"
+		}
+
+		b.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, label, g.Description))
 		b.WriteString(fmt.Sprintf("   id: `%s`", g.ID))
 
 		// Show cycle count and age for stuck detection.
@@ -78,8 +101,15 @@ func buildDecisionPrompt(goals []Goal, lastCycle *CycleState, recentlyChanged ..
 		}
 		b.WriteString("\n")
 
+		// Show note history for context continuity (newest first).
 		if g.LastNote != "" {
-			b.WriteString(fmt.Sprintf("   마지막 진행: %s\n", g.LastNote))
+			b.WriteString(fmt.Sprintf("   최근 진행: %s\n", g.LastNote))
+			for j, note := range g.NoteHistory {
+				if j >= 2 { // show at most 2 previous notes
+					break
+				}
+				b.WriteString(fmt.Sprintf("   이전(%d): %s\n", j+2, note))
+			}
 		}
 		if g.PausedReason != "" && g.Status == StatusActive {
 			// Was paused before, reactivated — show previous block reason.
@@ -90,9 +120,11 @@ func buildDecisionPrompt(goals []Goal, lastCycle *CycleState, recentlyChanged ..
 	// ── Execution strategy ──────────────────────────────────────────────
 	b.WriteString("\n### 실행 전략\n\n")
 	b.WriteString("1. **목표 선택**: 우선순위가 가장 높고 지금 진행 가능한 목표 하나를 선택하라.\n")
+	b.WriteString("   - ⚠️ 장기 미작업 표시된 목표가 있으면, 우선순위가 같거나 비슷할 때 그 목표를 우선 선택하라.\n")
 	b.WriteString("2. **접근 방식 결정**:\n")
 	b.WriteString("   - 처음 작업하는 목표 → 먼저 현재 상태를 파악하라 (파일 읽기, 명령 실행 등)\n")
-	b.WriteString("   - 이전 진행이 있는 목표 → 마지막 진행 내용을 이어서 다음 단계를 실행하라\n")
+	b.WriteString("   - 이전 진행이 있는 목표 → '이전 진행' 이력을 확인하고 이어서 다음 단계를 실행하라\n")
+	b.WriteString("   - ⚠️ 반복 정체 표시된 목표 → 접근 방식을 근본적으로 바꾸거나 paused로 전환하라\n")
 	b.WriteString("   - 5회 이상 작업했는데 진전이 없는 목표 → paused로 전환하라\n")
 	b.WriteString("3. **실행**: 도구를 사용해 실제로 변화를 만들어라. 계획만 세우지 말 것.\n")
 	b.WriteString("4. **판단**:\n")
