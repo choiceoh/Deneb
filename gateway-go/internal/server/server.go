@@ -1230,8 +1230,10 @@ func (s *Server) wireTelegramChatHandler() {
 		if err != nil {
 			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
 		}
-		opts := telegram.SendOptions{ParseMode: "HTML"}
-		html := telegram.FormatHTML(text)
+		// Parse optional button directive from agent reply.
+		cleanText, keyboard := parseReplyButtons(text)
+		opts := telegram.SendOptions{ParseMode: "HTML", Keyboard: keyboard}
+		html := telegram.FormatHTML(cleanText)
 		_, err = telegram.SendText(ctx, client, chatID, html, opts)
 		return err
 	})
