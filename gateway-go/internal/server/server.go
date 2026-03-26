@@ -1234,12 +1234,27 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 		chatHandler: s.chatHandler,
 		jobTracker:  s.jobTracker,
 		transcript:  s.transcript,
+		sessions:    s.sessions,
 	}, s.logger)
 
 	// Broadcast autonomous cycle events to WebSocket clients.
 	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
 		broadcastFn("autonomous.cycle", event)
 	})
+
+	// Wire Telegram notifier for significant autonomous events (goal completion,
+	// auto-pause, consecutive errors). Single-user deployment: use the first
+	// allowed user ID as the DM chat ID.
+	if s.telegramPlug != nil {
+		tgCfg := s.telegramPlug.Config()
+		if tgCfg != nil && len(tgCfg.AllowFrom.IDs) > 0 {
+			s.autonomousSvc.SetNotifier(&telegramNotifier{
+				plugin: s.telegramPlug,
+				chatID: tgCfg.AllowFrom.IDs[0],
+				logger: s.logger,
+			})
+		}
+	}
 
 	rpc.RegisterAutonomousMethods(s.dispatcher, rpc.AutonomousDeps{
 		Autonomous: s.autonomousSvc,

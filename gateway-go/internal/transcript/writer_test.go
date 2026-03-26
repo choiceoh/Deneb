@@ -222,3 +222,43 @@ func readLines(t *testing.T, path string) []string {
 	}
 	return lines
 }
+
+func TestWriter_DeleteSession(t *testing.T) {
+	dir := t.TempDir()
+	w := NewWriter(dir, nil)
+
+	// Create a session with content.
+	w.EnsureSession("del-test", SessionHeader{ID: "del-test", Version: 1})
+	w.AppendMessage("del-test", json.RawMessage(`{"role":"user","content":"hello"}`))
+
+	// Verify file exists.
+	path, _ := w.SessionPath("del-test")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		t.Fatal("expected session file to exist before delete")
+	}
+
+	// Delete should succeed.
+	if err := w.DeleteSession("del-test"); err != nil {
+		t.Fatalf("DeleteSession: %v", err)
+	}
+
+	// File should be gone.
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("expected session file to be deleted")
+	}
+
+	// Delete again should not error (idempotent).
+	if err := w.DeleteSession("del-test"); err != nil {
+		t.Errorf("DeleteSession (idempotent): %v", err)
+	}
+}
+
+func TestWriter_DeleteSession_InvalidKey(t *testing.T) {
+	dir := t.TempDir()
+	w := NewWriter(dir, nil)
+
+	err := w.DeleteSession("../../etc/passwd")
+	if err == nil {
+		t.Error("expected error for unsafe session key")
+	}
+}

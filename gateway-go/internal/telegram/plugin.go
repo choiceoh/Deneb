@@ -173,6 +173,11 @@ func (p *Plugin) BotUser() *User {
 	return p.botUser
 }
 
+// Config returns the plugin's configuration. The returned pointer is read-only.
+func (p *Plugin) Config() *Config {
+	return p.config
+}
+
 // BotUserID returns the bot's user ID, or 0 if not yet verified.
 func (p *Plugin) BotUserID() int64 {
 	p.mu.Lock()

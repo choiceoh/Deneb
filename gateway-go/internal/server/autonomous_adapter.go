@@ -10,6 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -21,6 +22,7 @@ type autonomousAgentAdapter struct {
 	chatHandler *chat.Handler
 	jobTracker  *agent.JobTracker
 	transcript  *transcript.Writer
+	sessions    *session.Manager
 }
 
 // RunAgentTurn implements autonomous.AgentRunner.
@@ -72,8 +74,16 @@ func (a *autonomousAgentAdapter) RunAgentTurn(ctx context.Context, sessionKey, m
 	}
 
 	// Wait for the run to complete via JobTracker.
+	// Derive timeout from context deadline instead of hardcoding,
+	// so it stays in sync with ServiceConfig.CycleTimeoutMs.
 	if a.jobTracker != nil {
-		timeoutMs := int64(10 * 60 * 1000) // 10 minutes
+		timeoutMs := int64(10 * 60 * 1000) // fallback
+		if deadline, ok := ctx.Deadline(); ok {
+			timeoutMs = time.Until(deadline).Milliseconds()
+			if timeoutMs <= 0 {
+				timeoutMs = 1000
+			}
+		}
 		snap := a.jobTracker.WaitForJob(ctx, runID, timeoutMs, false)
 		if snap != nil && snap.Status == agent.RunStatusError {
 			return "", fmt.Errorf("agent run failed: %s", snap.Error)
@@ -85,4 +95,18 @@ func (a *autonomousAgentAdapter) RunAgentTurn(ctx context.Context, sessionKey, m
 	output := accumulated.String()
 	mu.Unlock()
 	return output, nil
+}
+
+// ResetSession implements autonomous.AgentRunner. Clears the transcript
+// and session state for the autonomous session key after each cycle.
+func (a *autonomousAgentAdapter) ResetSession(sessionKey string) error {
+	if a.transcript != nil {
+		if err := a.transcript.DeleteSession(sessionKey); err != nil {
+			return err
+		}
+	}
+	if a.sessions != nil {
+		a.sessions.ResetSession(sessionKey)
+	}
+	return nil
 }

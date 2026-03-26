@@ -77,6 +77,7 @@ type CycleState struct {
 	ConsecutiveErrors int    `json:"consecutiveErrors,omitempty"`
 	TotalCycles       int    `json:"totalCycles,omitempty"`
 	TotalErrors       int    `json:"totalErrors,omitempty"`
+	Enabled           *bool  `json:"enabled,omitempty"`           // nil = default (true)
 }
 
 // GoalStoreFile is the on-disk format for the goal store.
