@@ -6,31 +6,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 )
 
-func TestStripHTMLTags(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{"plain text", "hello world", "hello world"},
-		{"simple tags", "<p>hello</p>", "hello"},
-		{"nested tags", "<div><span>text</span></div>", "text"},
-		{"attributes", `<a href="link">click</a>`, "click"},
-		{"script content", "<script>alert('x')</script>", "alert('x')"},
-		{"empty", "", ""},
-		{"whitespace collapse", "<p>a</p>\n\n\n\n<p>b</p>", "a\n\nb"},
-		{"mixed content", "before <b>bold</b> after", "before bold after"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := stripHTMLTags(tt.input)
-			if got != tt.want {
-				t.Errorf("stripHTMLTags(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestFormatExecResult(t *testing.T) {
 	t.Run("stdout only", func(t *testing.T) {
 		r := &process.ExecResult{Stdout: "hello"}
@@ -84,7 +59,7 @@ func TestToolSchemas(t *testing.T) {
 	schemas := map[string]func() map[string]any{
 		"exec":               execToolSchema,
 		"process":            processToolSchema,
-		"webFetch":           webFetchToolSchema,
+		"web":               webToolSchema,
 		"youtubeTranscript":  youtubeTranscriptToolSchema,
 		"applyPatch":         applyPatchToolSchema,
 		"memorySearch":       memorySearchToolSchema,
@@ -128,9 +103,9 @@ func TestRegisterCoreTools(t *testing.T) {
 	// Verify expected tools are registered.
 	expectedTools := []string{
 		"read", "write", "edit", "grep", "find", "ls",
-		"exec", "process", "web_fetch",
+		"exec", "process", "web",
 		"memory_search", "memory_get", "message",
-		"apply_patch", "web_search", "cron", "gateway",
+		"apply_patch", "cron", "gateway",
 		"sessions_list", "sessions_history", "sessions_send", "sessions_spawn",
 		"subagents", "session_status", "image", "youtube_transcript", "nodes",
 	}

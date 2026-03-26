@@ -43,6 +43,8 @@ type FetchResult struct {
 	ContentType string `json:"contentType,omitempty"`
 	FileName    string `json:"fileName,omitempty"`
 	Size        int    `json:"size"`
+	FinalURL    string `json:"finalUrl,omitempty"`   // URL after redirects
+	StatusCode  int    `json:"statusCode,omitempty"` // HTTP status code
 }
 
 // FetchOptions configures a media fetch operation.
@@ -78,7 +80,7 @@ func Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error) {
 	client := opts.Client
 	if client == nil {
 		transport := &http.Transport{
-			DialContext: ssrfSafeDialer(),
+			DialContext: SSRFSafeDialer(),
 		}
 		client = &http.Client{
 			Transport: transport,
@@ -143,11 +145,19 @@ func Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error) {
 	contentType := resp.Header.Get("Content-Type")
 	fileName := parseContentDispositionFileName(resp.Header.Get("Content-Disposition"))
 
+	// Capture final URL after redirects.
+	finalURL := opts.URL
+	if resp.Request != nil && resp.Request.URL != nil {
+		finalURL = resp.Request.URL.String()
+	}
+
 	return &FetchResult{
 		Data:        data,
 		ContentType: contentType,
 		FileName:    fileName,
 		Size:        len(data),
+		FinalURL:    finalURL,
+		StatusCode:  resp.StatusCode,
 	}, nil
 }
 
@@ -201,8 +211,9 @@ func isPrivateIP(ip net.IP) bool {
 	return false
 }
 
-// ssrfSafeDialer returns a DialContext that validates resolved IPs.
-func ssrfSafeDialer() func(ctx context.Context, network, addr string) (net.Conn, error) {
+// SSRFSafeDialer returns a DialContext that validates resolved IPs.
+// Exported for use by cookie-jar clients that need SSRF protection.
+func SSRFSafeDialer() func(ctx context.Context, network, addr string) (net.Conn, error) {
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)

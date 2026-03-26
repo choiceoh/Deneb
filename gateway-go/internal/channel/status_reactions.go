@@ -78,7 +78,7 @@ var codingToolTokens = []string{
 }
 
 var webToolTokens = []string{
-	"web_search", "web-search", "web_fetch", "web-fetch", "browser",
+	"web", "web_search", "web-search", "web_fetch", "web-fetch", "browser",
 }
 
 // ResolveToolEmoji returns the appropriate emoji for a tool invocation.

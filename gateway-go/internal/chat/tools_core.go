@@ -88,12 +88,14 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolProcess(procMgr),
 	})
 
-	// -- Web tools --
+	// -- Web tool (unified search + fetch) --
+	webCache := NewFetchCache()
+	sglang := newSGLangExtractor()
 	registry.RegisterTool(ToolDef{
-		Name:        "web_fetch",
-		Description: "Fetch and extract readable content from a URL",
-		InputSchema: webFetchToolSchema(),
-		Fn:          toolWebFetch(),
+		Name:        "web",
+		Description: "Search the web, fetch URLs, or search and auto-fetch top results — all in one tool",
+		InputSchema: webToolSchema(),
+		Fn:          toolWeb(webCache, sglang),
 	})
 
 	// -- Memory tools --
@@ -124,14 +126,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Description: "Apply multi-file patches (unified diff format)",
 		InputSchema: applyPatchToolSchema(),
 		Fn:          toolApplyPatch(workspaceDir),
-	})
-
-	// -- Web search tool --
-	registry.RegisterTool(ToolDef{
-		Name:        "web_search",
-		Description: "Search the web (Brave API or DuckDuckGo fallback)",
-		InputSchema: webSearchToolSchema(),
-		Fn:          toolWebSearch(),
 	})
 
 	// -- Cron tool --
@@ -423,84 +417,6 @@ func toolProcess(procMgr *process.Manager) ToolFunc {
 	}
 }
 
-// --- Web fetch tool (basic implementation) ---
-
-func webFetchToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"url": map[string]any{
-				"type":        "string",
-				"description": "HTTP or HTTPS URL to fetch",
-			},
-			"maxChars": map[string]any{
-				"type":        "number",
-				"description": "Maximum characters to return",
-				"default":     50000,
-				"minimum":     1,
-			},
-		},
-		"required": []string{"url"},
-	}
-}
-
-func toolWebFetch() ToolFunc {
-	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		var p struct {
-			URL      string `json:"url"`
-			MaxChars int    `json:"maxChars"`
-		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid web_fetch params: %w", err)
-		}
-		if p.URL == "" {
-			return "", fmt.Errorf("url is required")
-		}
-
-		// Default max chars.
-		maxChars := 50000
-		if p.MaxChars > 0 {
-			maxChars = p.MaxChars
-		}
-
-		// Size limit: 2× maxChars raw bytes, capped at 5 MB.
-		maxBytes := int64(maxChars * 2)
-		if maxBytes > 5*1024*1024 {
-			maxBytes = 5 * 1024 * 1024
-		}
-
-		// Use SSRF-safe media.Fetch for the download.
-		fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-
-		result, err := media.Fetch(fetchCtx, media.FetchOptions{
-			URL:      p.URL,
-			MaxBytes: maxBytes,
-			Headers: map[string]string{
-				"User-Agent": "Deneb-Gateway/1.0",
-				"Accept":     "text/html,text/plain,application/json,*/*",
-			},
-		})
-		if err != nil {
-			return "", fmt.Errorf("fetch failed: %w", err)
-		}
-
-		content := string(result.Data)
-
-		// Basic HTML tag stripping for readability.
-		if strings.Contains(result.ContentType, "text/html") {
-			content = stripHTMLTags(content)
-		}
-
-		// Truncate to maxChars.
-		if len(content) > maxChars {
-			content = content[:maxChars] + "\n\n[...truncated at " + fmt.Sprintf("%d", maxChars) + " chars]"
-		}
-
-		return content, nil
-	}
-}
-
 // --- YouTube transcript tool ---
 
 func youtubeTranscriptToolSchema() map[string]any {
@@ -594,24 +510,3 @@ func toolApplyPatch(defaultDir string) ToolFunc {
 	}
 }
 
-// stripHTMLTags does a basic removal of HTML tags for text extraction.
-func stripHTMLTags(html string) string {
-	var sb strings.Builder
-	inTag := false
-	for _, r := range html {
-		switch {
-		case r == '<':
-			inTag = true
-		case r == '>':
-			inTag = false
-		case !inTag:
-			sb.WriteRune(r)
-		}
-	}
-	// Collapse excessive whitespace.
-	result := sb.String()
-	for strings.Contains(result, "\n\n\n") {
-		result = strings.ReplaceAll(result, "\n\n\n", "\n\n")
-	}
-	return strings.TrimSpace(result)
-}

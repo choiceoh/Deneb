@@ -146,7 +146,7 @@ Available groups:
 - `group:fs`: `read`, `write`, `edit`, `apply_patch`
 - `group:sessions`: `sessions_list`, `sessions_history`, `sessions_send`, `sessions_spawn`, `session_status`
 - `group:memory`: `memory_search`, `memory_get`
-- `group:web`: `web_search`, `web_fetch`
+- `group:web`: `web`
 - `group:ui`: `browser`, `canvas`
 - `group:automation`: `cron`, `gateway`
 - `group:messaging`: `message`
@@ -253,40 +253,31 @@ Enable with `tools.loopDetection.enabled: true` (default is `false`).
 - `pingPong`: alternating `A/B/A/B` no-progress patterns.
 - Per-agent override: `agents.list[].tools.loopDetection`.
 
-### `web_search`
+### `web`
 
-Search the web using Brave, Firecrawl, Gemini, Grok, Kimi, or Perplexity.
+Unified web tool: search, fetch URLs, or search and auto-fetch — all in one call.
 
-Core parameters:
+Three modes via parameter dispatch:
 
-- `query` (required)
-- `count` (1–10; default from `tools.web.search.maxResults`)
-
-Notes:
-
-- Requires an API key for the chosen provider (recommended: `deneb configure --section web`).
-- Enable via `tools.web.search.enabled`.
-- Responses are cached (default 15 min).
-- See [Web tools](/tools/web) for setup.
-
-### `web_fetch`
-
-Fetch and extract readable content from a URL (HTML → markdown/text).
+- `{"url": "..."}` — Fetch and extract readable content from a URL
+- `{"query": "..."}` — Search the web (Perplexity, Brave, or DuckDuckGo)
+- `{"query": "...", "fetch": N}` — Search then auto-fetch top N results
 
 Core parameters:
 
-- `url` (required)
-- `extractMode` (`markdown` | `text`)
-- `maxChars` (truncate long pages)
+- `url` — URL to fetch
+- `query` — Search query
+- `fetch` — Auto-fetch top N search results (1-3)
+- `maxChars` — Maximum content characters per result (default 50000)
+- `count` — Number of search results (default 5)
 
 Notes:
 
-- Enable via `tools.web.fetch.enabled`.
-- `maxChars` is clamped by `tools.web.fetch.maxCharsCap` (default 50000).
-- Responses are cached (default 15 min).
-- For JS-heavy sites, prefer the browser tool.
+- Replaces the former `web_search` and `web_fetch` tools.
+- Search provider priority: Perplexity (`PERPLEXITY_API_KEY`) → Brave (`BRAVE_API_KEY`) → DuckDuckGo (no key needed).
+- Fetched content includes structured metadata, noise removal, and bot-block evasion.
+- Responses are cached (default 5 min).
 - See [Web tools](/tools/web) for setup.
-- See [Firecrawl](/tools/firecrawl) for the optional anti-bot fallback.
 
 ### `browser`
 
