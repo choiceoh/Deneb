@@ -25,6 +25,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
@@ -134,6 +135,10 @@ type Server struct {
 
 	// Phase 5: Hooks HTTP webhook handler.
 	hooksHTTP *HooksHTTPHandler
+
+	// ACP subsystem.
+	acpDeps           *rpc.ACPDeps
+	acpLifecycleUnsub func()
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
@@ -266,6 +271,25 @@ func New(addr string, opts ...Option) *Server {
 	s.usageTracker = usage.New()
 	denebDir := resolveDenebDir()
 	s.maintRunner = maintenance.NewRunner(denebDir)
+
+	// ACP subsystem: registry, bindings, persistence, lifecycle sync.
+	acpRegistry := autoreply.NewACPRegistry()
+	acpBindings := autoreply.NewSessionBindingService()
+	acpBindingStore := autoreply.NewBindingStore(autoreply.DefaultBindingStorePath(denebDir))
+	if err := acpBindingStore.RestoreToService(acpBindings); err != nil {
+		s.logger.Warn("failed to restore ACP bindings", "error", err)
+	}
+	s.acpLifecycleUnsub = autoreply.StartACPLifecycleSync(acpRegistry, s.sessions.EventBusRef())
+	s.acpDeps = &rpc.ACPDeps{
+		Registry:     acpRegistry,
+		Bindings:     acpBindings,
+		Infra:        &autoreply.SubagentInfraDeps{ACPRegistry: acpRegistry},
+		Sessions:     s.sessions,
+		GatewaySubs:  s.gatewaySubs,
+		BindingStore: acpBindingStore,
+		Translator:   autoreply.NewACPTranslator(acpRegistry, acpBindings),
+	}
+	s.acpDeps.SetEnabled(true)
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.dispatcher.UseMiddleware(middleware.Logging(s.logger))
@@ -496,6 +520,16 @@ func (s *Server) doShutdown() error {
 	// 11. Close Vega backend.
 	if s.vegaBackend != nil {
 		s.vegaBackend.Close()
+	}
+
+	// 12. ACP cleanup: persist bindings and unsubscribe lifecycle sync.
+	if s.acpDeps != nil && s.acpDeps.BindingStore != nil && s.acpDeps.Bindings != nil {
+		if err := s.acpDeps.BindingStore.SyncFromService(s.acpDeps.Bindings); err != nil {
+			s.logger.Warn("failed to persist ACP bindings on shutdown", "error", err)
+		}
+	}
+	if s.acpLifecycleUnsub != nil {
+		s.acpLifecycleUnsub()
 	}
 
 	return httpErr
@@ -751,8 +785,11 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// registerExtendedMethods registers Phase 2 RPC methods (process, cron, hooks, agent).
+// registerExtendedMethods registers Phase 2 RPC methods (process, cron, hooks, agent, ACP).
 func (s *Server) registerExtendedMethods() {
+	// ACP RPC methods.
+	rpc.RegisterACPMethods(s.dispatcher, s.acpDeps)
+
 	rpc.RegisterExtendedMethods(s.dispatcher, rpc.ExtendedDeps{
 		Deps: rpc.Deps{
 			Sessions:    s.sessions,
