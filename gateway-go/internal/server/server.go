@@ -122,6 +122,10 @@ type Server struct {
 	// Phase 5: Enhanced RPC subsystems.
 	heartbeatState *rpc.HeartbeatState
 	presenceStore  *rpc.PresenceStore
+
+	// Phase 5: HTTP routing for Control UI and plugins.
+	controlUI    *ControlUIHandler
+	pluginRouter *PluginHTTPRouter
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
@@ -272,6 +276,31 @@ func New(addr string, opts ...Option) *Server {
 			Providers: s.providers,
 		})
 	}
+
+	// Phase 5: Control UI SPA serving and plugin HTTP routing.
+	controlUIEnabled := false
+	controlUIBasePath := ""
+	controlUIRoot := ""
+	if s.runtimeCfg != nil {
+		controlUIEnabled = s.runtimeCfg.ControlUIEnabled
+		controlUIBasePath = s.runtimeCfg.ControlUIBasePath
+		controlUIRoot = s.runtimeCfg.ControlUIRoot
+	}
+	s.controlUI = NewControlUIHandler(controlUIBasePath, controlUIRoot, s.version, controlUIEnabled, s.logger)
+
+	// Plugin HTTP router with auth check backed by the gateway auth validator.
+	var pluginAuthCheck func(r *http.Request) bool
+	if s.authValidator != nil {
+		pluginAuthCheck = func(r *http.Request) bool {
+			token := extractBearerToken(r)
+			if token == "" {
+				return false
+			}
+			_, err := s.authValidator.ValidateToken(token)
+			return err == nil
+		}
+	}
+	s.pluginRouter = NewPluginHTTPRouter(s.logger, pluginAuthCheck)
 
 	return s
 }
@@ -473,10 +502,24 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/v1/rpc", s.handleRPC)
 	mux.HandleFunc("GET /ws", s.handleWsUpgrade)
 
-	// Control UI routes.
-	// Control UI removed (Phase 0: Rust+Go migration).
+	// Catch-all handler: plugin HTTP routes → Control UI → root fallback.
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Plugin HTTP routes (checked first).
+		if s.pluginRouter != nil && s.pluginRouter.Handle(w, r) {
+			return
+		}
+		// Control UI SPA serving.
+		if s.controlUI != nil && s.controlUI.Handle(w, r) {
+			return
+		}
+		// Root fallback for exact "/" GET.
+		if r.Method == http.MethodGet && r.URL.Path == "/" {
+			s.handleRoot(w, r)
+			return
+		}
+		http.NotFound(w, r)
+	})
 
-	mux.HandleFunc("GET /{$}", s.handleRoot)
 	return mux
 }
 
