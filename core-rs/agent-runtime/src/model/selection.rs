@@ -502,6 +502,444 @@ pub fn resolve_reasoning_default(
         .unwrap_or(false)
 }
 
+/// Extract the primary model value from a config model entry (string or {primary}).
+/// Mirrors `src/config/model-input.ts#resolveAgentModelPrimaryValue`. Keep in sync.
+pub fn resolve_agent_model_primary_value(model: Option<&serde_json::Value>) -> Option<String> {
+    normalize_model_selection(model?)
+}
+
+/// Convert a model config value to a list-like structure { primary?, fallbacks? }.
+/// Mirrors `src/config/model-input.ts#toAgentModelListLike`. Keep in sync.
+pub fn to_agent_model_list_like(model: Option<&serde_json::Value>) -> Option<serde_json::Value> {
+    let val = model?;
+    match val {
+        serde_json::Value::String(s) => {
+            let primary = s.trim();
+            if primary.is_empty() {
+                None
+            } else {
+                Some(serde_json::json!({ "primary": primary }))
+            }
+        }
+        serde_json::Value::Object(_) => Some(val.clone()),
+        _ => None,
+    }
+}
+
+/// Provider config entry for configured model resolution.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ProviderConfigEntry {
+    pub models: Option<Vec<ProviderModelEntry>>,
+}
+
+/// Individual model entry within a provider config.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ProviderModelEntry {
+    pub id: Option<String>,
+    pub name: Option<String>,
+}
+
+/// Resolve the configured model ref from config, with alias resolution and provider fallback.
+/// Mirrors `src/agents/models/model-selection.ts#resolveConfiguredModelRef`. Keep in sync.
+pub fn resolve_configured_model_ref(
+    agents_defaults_model: Option<&serde_json::Value>,
+    configured_models: &std::collections::HashMap<String, serde_json::Value>,
+    configured_providers: Option<&std::collections::HashMap<String, serde_json::Value>>,
+    default_provider: &str,
+    default_model: &str,
+) -> ModelRef {
+    let raw_model = resolve_agent_model_primary_value(agents_defaults_model).unwrap_or_default();
+    if !raw_model.is_empty() {
+        let trimmed = raw_model.trim();
+        let alias_index = build_model_alias_index(configured_models, default_provider);
+
+        if !trimmed.contains('/') {
+            let alias_key = trimmed.to_lowercase();
+            if let Some((_alias, model_ref)) = alias_index.by_alias.get(&alias_key) {
+                return model_ref.clone();
+            }
+            // No alias match; default to anthropic for bare model names.
+            return ModelRef {
+                provider: "anthropic".to_string(),
+                model: trimmed.to_string(),
+            };
+        }
+
+        if let Some((model_ref, _)) =
+            resolve_model_ref_from_string(trimmed, default_provider, Some(&alias_index))
+        {
+            return model_ref;
+        }
+    }
+
+    // Before falling back to hardcoded default, check configured providers.
+    if let Some(providers) = configured_providers {
+        let has_default = providers.contains_key(default_provider);
+        if !has_default {
+            for (provider_name, provider_cfg) in providers {
+                if let Ok(entry) =
+                    serde_json::from_value::<ProviderConfigEntry>(provider_cfg.clone())
+                {
+                    if let Some(models) = &entry.models {
+                        if let Some(first) = models.first() {
+                            if let Some(id) = &first.id {
+                                if !id.is_empty() {
+                                    return ModelRef {
+                                        provider: provider_name.clone(),
+                                        model: id.clone(),
+                                    };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ModelRef {
+        provider: default_provider.to_string(),
+        model: default_model.to_string(),
+    }
+}
+
+/// Resolve the default model for a specific agent, considering agent-level overrides.
+/// Mirrors `src/agents/models/model-selection.ts#resolveDefaultModelForAgent`. Keep in sync.
+pub fn resolve_default_model_for_agent(
+    agents_list: &[serde_json::Value],
+    agents_defaults_model: Option<&serde_json::Value>,
+    configured_models: &std::collections::HashMap<String, serde_json::Value>,
+    configured_providers: Option<&std::collections::HashMap<String, serde_json::Value>>,
+    agent_id: Option<&str>,
+) -> ModelRef {
+    use crate::defaults::{DEFAULT_MODEL, DEFAULT_PROVIDER};
+    use crate::scope::resolve_agent_effective_model_primary;
+
+    let agent_model_override = agent_id.and_then(|id| {
+        resolve_agent_effective_model_primary(agents_list, id, agents_defaults_model)
+    });
+
+    let effective_model = if let Some(ref override_model) = agent_model_override {
+        if !override_model.is_empty() {
+            let base = to_agent_model_list_like(agents_defaults_model).unwrap_or(serde_json::json!({}));
+            let mut obj = match base {
+                serde_json::Value::Object(m) => m,
+                _ => serde_json::Map::new(),
+            };
+            obj.insert("primary".to_string(), serde_json::Value::String(override_model.clone()));
+            Some(serde_json::Value::Object(obj))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let model_ref = effective_model.as_ref().or(agents_defaults_model);
+
+    resolve_configured_model_ref(
+        model_ref,
+        configured_models,
+        configured_providers,
+        DEFAULT_PROVIDER,
+        DEFAULT_MODEL,
+    )
+}
+
+/// Resolve the subagent's configured model selection.
+/// Mirrors `src/agents/models/model-selection.ts#resolveSubagentConfiguredModelSelection`. Keep in sync.
+pub fn resolve_subagent_configured_model_selection(
+    agents_list: &[serde_json::Value],
+    agent_id: &str,
+    agents_defaults_subagents_model: Option<&serde_json::Value>,
+) -> Option<String> {
+    use crate::scope::resolve_agent_config;
+
+    let agent_config = resolve_agent_config(agents_list, agent_id);
+
+    // Try agent's subagent model override first.
+    if let Some(ref config) = agent_config {
+        if let Some(ref subagents) = config.subagents {
+            if let Some(model_val) = subagents.get("model") {
+                if let Some(s) = normalize_model_selection(model_val) {
+                    return Some(s);
+                }
+            }
+        }
+    }
+
+    // Try global subagent model default.
+    if let Some(val) = agents_defaults_subagents_model {
+        if let Some(s) = normalize_model_selection(val) {
+            return Some(s);
+        }
+    }
+
+    // Fall back to agent's own model.
+    if let Some(config) = agent_config {
+        if let Some(ref model) = config.model {
+            return normalize_model_selection(model);
+        }
+    }
+
+    None
+}
+
+/// Resolve the model selection for spawning a subagent.
+/// Mirrors `src/agents/models/model-selection.ts#resolveSubagentSpawnModelSelection`. Keep in sync.
+pub fn resolve_subagent_spawn_model_selection(
+    agents_list: &[serde_json::Value],
+    agents_defaults_model: Option<&serde_json::Value>,
+    configured_models: &std::collections::HashMap<String, serde_json::Value>,
+    configured_providers: Option<&std::collections::HashMap<String, serde_json::Value>>,
+    agent_id: &str,
+    agents_defaults_subagents_model: Option<&serde_json::Value>,
+    model_override: Option<&serde_json::Value>,
+) -> String {
+    // 1. Explicit runtime override.
+    if let Some(val) = model_override {
+        if let Some(s) = normalize_model_selection(val) {
+            return s;
+        }
+    }
+
+    // 2. Subagent-specific configured model.
+    if let Some(s) = resolve_subagent_configured_model_selection(
+        agents_list,
+        agent_id,
+        agents_defaults_subagents_model,
+    ) {
+        return s;
+    }
+
+    // 3. Global primary model.
+    if let Some(s) = resolve_agent_model_primary_value(agents_defaults_model) {
+        return s;
+    }
+
+    // 4. Runtime default.
+    let runtime_default = resolve_default_model_for_agent(
+        agents_list,
+        agents_defaults_model,
+        configured_models,
+        configured_providers,
+        Some(agent_id),
+    );
+    format!("{}/{}", runtime_default.provider, runtime_default.model)
+}
+
+/// Result of building an allowed model set.
+#[derive(Debug, Clone)]
+pub struct AllowedModelSet {
+    pub allow_any: bool,
+    pub allowed_catalog: Vec<ModelCatalogEntry>,
+    pub allowed_keys: std::collections::HashSet<String>,
+}
+
+/// Build the set of allowed models from config allowlist and catalog.
+/// Mirrors `src/agents/models/model-selection.ts#buildAllowedModelSet`. Keep in sync.
+pub fn build_allowed_model_set(
+    agents_list: &[serde_json::Value],
+    raw_allowlist: &[String],
+    catalog: &[ModelCatalogEntry],
+    default_provider: &str,
+    default_model: Option<&str>,
+    agent_id: Option<&str>,
+    agents_defaults_model: Option<&serde_json::Value>,
+) -> AllowedModelSet {
+    use crate::scope::resolve_agent_model_fallback_values;
+
+    let allow_any = raw_allowlist.is_empty();
+    let default_key = default_model.and_then(|dm| {
+        let dm = dm.trim();
+        if dm.is_empty() {
+            return None;
+        }
+        parse_model_ref(dm, default_provider).map(|r| model_key(&r.provider, &r.model))
+    });
+    let catalog_keys: std::collections::HashSet<String> =
+        catalog.iter().map(|e| model_key(&e.provider, &e.id)).collect();
+
+    if allow_any {
+        let mut keys = catalog_keys;
+        if let Some(ref dk) = default_key {
+            keys.insert(dk.clone());
+        }
+        return AllowedModelSet {
+            allow_any: true,
+            allowed_catalog: catalog.to_vec(),
+            allowed_keys: keys,
+        };
+    }
+
+    let mut allowed_keys = std::collections::HashSet::new();
+    let mut synthetic = std::collections::HashMap::new();
+
+    for raw in raw_allowlist {
+        if let Some(parsed) = parse_model_ref(raw, default_provider) {
+            let key = model_key(&parsed.provider, &parsed.model);
+            allowed_keys.insert(key.clone());
+            if !catalog_keys.contains(&key) && !synthetic.contains_key(&key) {
+                synthetic.insert(
+                    key,
+                    ModelCatalogEntry {
+                        provider: parsed.provider,
+                        id: parsed.model.clone(),
+                        ..Default::default()
+                    },
+                );
+            }
+        }
+    }
+
+    // Add fallback models.
+    let agent_fallbacks = agent_id.and_then(|id| {
+        crate::scope::resolve_agent_model_fallbacks_override(agents_list, id)
+    });
+    let fallbacks = agent_fallbacks.unwrap_or_else(|| {
+        resolve_agent_model_fallback_values(agents_defaults_model)
+    });
+    for fallback in &fallbacks {
+        if let Some(parsed) = parse_model_ref(fallback, default_provider) {
+            let key = model_key(&parsed.provider, &parsed.model);
+            allowed_keys.insert(key.clone());
+            if !catalog_keys.contains(&key) && !synthetic.contains_key(&key) {
+                synthetic.insert(
+                    key,
+                    ModelCatalogEntry {
+                        provider: parsed.provider,
+                        id: parsed.model.clone(),
+                        ..Default::default()
+                    },
+                );
+            }
+        }
+    }
+
+    if let Some(ref dk) = default_key {
+        allowed_keys.insert(dk.clone());
+    }
+
+    let mut allowed_catalog: Vec<ModelCatalogEntry> = catalog
+        .iter()
+        .filter(|e| allowed_keys.contains(&model_key(&e.provider, &e.id)))
+        .cloned()
+        .collect();
+    allowed_catalog.extend(synthetic.into_values());
+
+    if allowed_catalog.is_empty() && allowed_keys.is_empty() {
+        let mut keys = catalog_keys;
+        if let Some(ref dk) = default_key {
+            keys.insert(dk.clone());
+        }
+        return AllowedModelSet {
+            allow_any: true,
+            allowed_catalog: catalog.to_vec(),
+            allowed_keys: keys,
+        };
+    }
+
+    AllowedModelSet {
+        allow_any: false,
+        allowed_catalog,
+        allowed_keys,
+    }
+}
+
+/// Validate a model ref against the allowed set and return it or an error.
+/// Mirrors `src/agents/models/model-selection.ts#resolveAllowedModelRef`. Keep in sync.
+pub fn resolve_allowed_model_ref(
+    raw: &str,
+    agents_list: &[serde_json::Value],
+    raw_allowlist: &[String],
+    catalog: &[ModelCatalogEntry],
+    configured_models: &std::collections::HashMap<String, serde_json::Value>,
+    default_provider: &str,
+    default_model: Option<&str>,
+    agents_defaults_model: Option<&serde_json::Value>,
+) -> Result<(ModelRef, String), String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("invalid model: empty".to_string());
+    }
+
+    let alias_index = build_model_alias_index(configured_models, default_provider);
+    let resolved = match resolve_model_ref_from_string(trimmed, default_provider, Some(&alias_index)) {
+        Some((model_ref, _alias)) => model_ref,
+        None => return Err(format!("invalid model: {}", trimmed)),
+    };
+
+    let allowed = build_allowed_model_set(
+        agents_list,
+        raw_allowlist,
+        catalog,
+        default_provider,
+        default_model,
+        None,
+        agents_defaults_model,
+    );
+    let key = model_key(&resolved.provider, &resolved.model);
+    if !allowed.allow_any && !allowed.allowed_keys.contains(&key) {
+        return Err(format!("model not allowed: {}", key));
+    }
+
+    Ok((resolved, key))
+}
+
+/// Resolve thinking level with per-model config override and global default.
+/// Mirrors `src/agents/models/model-selection.ts#resolveThinkingDefault`. Keep in sync.
+pub fn resolve_thinking_default(
+    provider: &str,
+    model: &str,
+    configured_models: &std::collections::HashMap<String, serde_json::Value>,
+    thinking_default: Option<&str>,
+    catalog: Option<&[ThinkingCatalogEntry]>,
+) -> ThinkLevel {
+    // Check per-model thinking config.
+    let canonical_key = model_key(provider, model);
+    let legacy_key = legacy_model_key(provider, model);
+
+    let per_model_thinking = configured_models
+        .get(&canonical_key)
+        .or_else(|| legacy_key.as_ref().and_then(|k| configured_models.get(k)))
+        .and_then(|v| v.get("params"))
+        .and_then(|v| v.get("thinking"))
+        .and_then(|v| v.as_str());
+
+    if let Some(level_str) = per_model_thinking {
+        if let Some(level) = ThinkLevel::from_str_opt(level_str) {
+            return level;
+        }
+    }
+
+    // Check global thinking default.
+    if let Some(default_str) = thinking_default {
+        if let Some(level) = ThinkLevel::from_str_opt(default_str) {
+            return level;
+        }
+    }
+
+    // Fall back to model-based detection.
+    resolve_thinking_default_for_model(provider, model, catalog)
+}
+
+/// Resolve the model for Gmail hook processing.
+/// Mirrors `src/agents/models/model-selection.ts#resolveHooksGmailModel`. Keep in sync.
+pub fn resolve_hooks_gmail_model(
+    hooks_gmail_model: Option<&str>,
+    configured_models: &std::collections::HashMap<String, serde_json::Value>,
+    default_provider: &str,
+) -> Option<ModelRef> {
+    let model_str = hooks_gmail_model?.trim();
+    if model_str.is_empty() {
+        return None;
+    }
+
+    let alias_index = build_model_alias_index(configured_models, default_provider);
+    resolve_model_ref_from_string(model_str, default_provider, Some(&alias_index))
+        .map(|(model_ref, _)| model_ref)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
