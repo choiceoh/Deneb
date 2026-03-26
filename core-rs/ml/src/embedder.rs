@@ -33,10 +33,15 @@ impl LocalEmbedder {
         }
 
         let _model = self.manager.get_model(ModelRole::Embedder)?;
+        let _n_threads = self
+            .manager
+            .get_config(ModelRole::Embedder)
+            .map(|c| c.n_threads as i32)
+            .unwrap_or(4);
 
         #[cfg(feature = "llama")]
         {
-            self.embed_with_model(&_model.model, texts)
+            self.embed_with_model(&_model.model, texts, _n_threads)
         }
 
         #[cfg(not(feature = "llama"))]
@@ -64,13 +69,16 @@ impl LocalEmbedder {
         &self,
         model: &llama_cpp_2::LlamaModel,
         texts: &[&str],
+        n_threads: i32,
     ) -> Result<EmbeddingResult, MlError> {
         use llama_cpp_2::context::params::LlamaContextParams;
         use llama_cpp_2::llama_batch::LlamaBatch;
 
         let ctx_params = LlamaContextParams::default()
             .with_n_ctx(std::num::NonZeroU32::new(512))
-            .with_embeddings(true);
+            .with_embeddings(true)
+            .with_n_threads(n_threads)
+            .with_n_threads_batch(n_threads);
         let mut ctx = model
             .new_context(None, ctx_params)
             .map_err(|e| MlError::InferenceFailed(format!("context creation: {e}")))?;

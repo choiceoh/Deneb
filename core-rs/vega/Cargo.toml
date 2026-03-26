@@ -19,6 +19,7 @@ thiserror.workspace = true
 rusqlite = { version = "0.33", features = ["bundled", "vtab"] }
 regex.workspace = true
 log = "0.4"
+rayon.workspace = true
 md5 = "0.7"
 chrono = { version = "0.4", features = ["serde"] }
 walkdir = "2"

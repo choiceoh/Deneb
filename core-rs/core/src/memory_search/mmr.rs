@@ -1,6 +1,7 @@
 //! Maximal Marginal Relevance (MMR) re-ranking for search result diversity.
 
 use once_cell::sync::Lazy;
+use rayon::prelude::*;
 use regex::Regex;
 use std::collections::HashSet;
 
@@ -80,9 +81,9 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
         return indices;
     }
 
-    // Pre-tokenize all items
+    // Pre-tokenize all items in parallel (benefits from 20-core DGX Spark).
     let token_cache: Vec<HashSet<String>> =
-        items.iter().map(|item| tokenize(&item.content)).collect();
+        items.par_iter().map(|item| tokenize(&item.content)).collect();
 
     // Normalize scores to [0, 1], filtering NaN values
     let max_score = items
