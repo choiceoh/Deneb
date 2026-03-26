@@ -45,6 +45,23 @@ const ALL_EXPECTED_EXPORTS: Array<[string, string]> = [
   ["isRetryableErrorCode", "function"],
   // core-rs protocol schema validation (Phase 3)
   ["validateParams", "function"],
+  // core-rs security functions (input validation / sanitization)
+  ["isSafeInput", "function"],
+  ["sanitizeControlChars", "function"],
+  ["stripInvisibleUnicode", "function"],
+  // core-rs parsing functions
+  ["parsingHtmlToMarkdown", "function"],
+  ["parsingExtractLinks", "function"],
+  ["parsingSplitMediaFromOutput", "function"],
+  ["parsingEstimateBase64DecodedBytes", "function"],
+  ["parsingCanonicalizeBase64", "function"],
+  // core-rs media helper functions
+  ["mediaExtensionForMime", "function"],
+  ["mediaCategoryForMime", "function"],
+  ["mediaDetectMimeWithInfo", "function"],
+  ["mediaIsImage", "function"],
+  ["mediaIsAudio", "function"],
+  ["mediaIsVideo", "function"],
   // core-rs memory search functions
   ["memoryCosineSimilarity", "function"],
   ["memoryBm25RankToScore", "function"],

@@ -45,13 +45,27 @@ const EXT_BY_MIME: Record<string, string> = {
   "text/csv": ".csv",
   "text/plain": ".txt",
   "text/markdown": ".md",
+  "text/css": ".css",
+  "text/javascript": ".js",
+  "image/svg+xml": ".svg",
+  "image/tiff": ".tiff",
+  "image/bmp": ".bmp",
+  "image/x-icon": ".ico",
+  "image/avif": ".avif",
+  "video/webm": ".webm",
+  "video/x-msvideo": ".avi",
+  "video/ogg": ".ogv",
+  "audio/webm": ".weba",
+  "application/xml": ".xml",
+  "text/html": ".html",
 };
 
 const MIME_BY_EXT: Record<string, string> = {
   ...Object.fromEntries(Object.entries(EXT_BY_MIME).map(([mime, ext]) => [ext, mime])),
   // Additional extension aliases
   ".jpeg": "image/jpeg",
-  ".js": "text/javascript",
+  ".tif": "image/tiff",
+  ".htm": "text/html",
 };
 
 const AUDIO_FILE_EXTENSIONS = new Set([

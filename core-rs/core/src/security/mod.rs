@@ -166,6 +166,42 @@ pub fn sanitize_html(input: &str) -> String {
     unsafe { String::from_utf8_unchecked(out) }
 }
 
+/// Remove invisible Unicode characters that can be used for prompt injection.
+/// Strips: zero-width chars (U+200B-U+200F), bidi marks (U+202A-U+202E),
+/// word joiners (U+2060-U+2064), deprecated format chars (U+206A-U+206F),
+/// BOM (U+FEFF), and tag characters (U+E0000-U+E007F).
+/// Returns the input unchanged (zero-alloc via Cow) if no invisible characters are present.
+pub fn strip_invisible_unicode(input: &str) -> std::borrow::Cow<'_, str> {
+    if !input.chars().any(is_invisible_unicode) {
+        return std::borrow::Cow::Borrowed(input);
+    }
+    std::borrow::Cow::Owned(
+        input
+            .chars()
+            .filter(|c| !is_invisible_unicode(*c))
+            .collect(),
+    )
+}
+
+/// Returns true if the character is an invisible Unicode character that should be stripped.
+#[inline]
+fn is_invisible_unicode(c: char) -> bool {
+    matches!(c,
+        // Zero-width and joining chars
+        '\u{200B}'..='\u{200F}' |
+        // Bidi control characters
+        '\u{202A}'..='\u{202E}' |
+        // Word joiner and invisible operators
+        '\u{2060}'..='\u{2064}' |
+        // Deprecated format characters
+        '\u{206A}'..='\u{206F}' |
+        // Byte order mark
+        '\u{FEFF}' |
+        // Tag characters (U+E0000-U+E007F)
+        '\u{E0000}'..='\u{E007F}'
+    )
+}
+
 /// Basic SSRF protection: reject URLs targeting internal/private networks.
 /// Returns true if the URL appears safe for outbound requests.
 /// Only lowercases the scheme+host portion to avoid copying the full URL.
@@ -578,6 +614,32 @@ mod tests {
         assert!(!is_safe_url("\\\\?\\UNC\\server\\share"));
         assert!(!is_safe_url("//server/share"));
         assert!(!is_safe_url("//169.254.169.254/latest/meta-data"));
+    }
+
+    #[test]
+    fn test_strip_invisible_unicode() {
+        // No invisible chars — returns borrowed
+        assert_eq!(strip_invisible_unicode("hello world"), "hello world");
+        // Zero-width space
+        assert_eq!(strip_invisible_unicode("hello\u{200B}world"), "helloworld");
+        // BOM
+        assert_eq!(strip_invisible_unicode("\u{FEFF}hello"), "hello");
+        // Bidi marks
+        assert_eq!(
+            strip_invisible_unicode("hello\u{202A}\u{202C}world"),
+            "helloworld"
+        );
+        // Word joiner
+        assert_eq!(strip_invisible_unicode("a\u{2060}b"), "ab");
+        // Tag characters
+        assert_eq!(strip_invisible_unicode("a\u{E0001}b"), "ab");
+        // Mixed invisible chars
+        assert_eq!(
+            strip_invisible_unicode("\u{200B}\u{200C}\u{200D}\u{2060}\u{FEFF}text\u{E0000}\u{E007F}"),
+            "text"
+        );
+        // Preserves normal Unicode (emoji, CJK, accents)
+        assert_eq!(strip_invisible_unicode("café 🎉 한글"), "café 🎉 한글");
     }
 
     #[test]

@@ -12,6 +12,7 @@ use std::collections::HashSet;
 const DEFAULT_MAX_LINKS: usize = 5;
 
 /// Configuration for link extraction.
+#[derive(serde::Deserialize)]
 pub struct ExtractLinksConfig {
     pub max_links: usize,
 }

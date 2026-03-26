@@ -99,6 +99,132 @@ pub fn sanitize_control_chars(input: String) -> String {
     deneb_core::security::sanitize_control_chars(&input).into_owned()
 }
 
+/// Remove invisible Unicode characters (zero-width, bidi marks, tag chars, BOM, etc.).
+/// Returns the input unchanged if no invisible characters are present.
+#[napi]
+pub fn strip_invisible_unicode(input: String) -> String {
+    if input.len() > MAX_STRING_BYTES {
+        return input;
+    }
+    deneb_core::security::strip_invisible_unicode(&input).into_owned()
+}
+
+// ---------------------------------------------------------------------------
+// Parsing functions (HTML→Markdown, URL extraction, media tokens, base64)
+// ---------------------------------------------------------------------------
+
+/// Convert HTML to markdown. Returns JSON `{"text":"...","title":"..."}`.
+#[napi]
+pub fn parsing_html_to_markdown(html: String) -> String {
+    if html.len() > MAX_JSON_BYTES {
+        return r#"{"text":"","title":null}"#.to_string();
+    }
+    let result = deneb_core::parsing::html_to_markdown::html_to_markdown(&html);
+    serde_json::to_string(&result).unwrap_or_else(|_| r#"{"text":"","title":null}"#.to_string())
+}
+
+/// Extract safe links from text. Returns JSON array of URL strings.
+#[napi]
+pub fn parsing_extract_links(text: String, config_json: String) -> String {
+    if text.len() > MAX_JSON_BYTES {
+        return "[]".to_string();
+    }
+    let config: deneb_core::parsing::url_extract::ExtractLinksConfig =
+        serde_json::from_str(&config_json).unwrap_or_default();
+    let links = deneb_core::parsing::url_extract::extract_links(&text, &config);
+    serde_json::to_string(&links).unwrap_or_else(|_| "[]".to_string())
+}
+
+/// Parse MEDIA: tokens from command output. Returns JSON MediaParseResult.
+#[napi]
+pub fn parsing_split_media_from_output(raw: String) -> String {
+    if raw.len() > MAX_JSON_BYTES {
+        return r#"{"text":"","media_urls":[]}"#.to_string();
+    }
+    let result = deneb_core::parsing::media_tokens::split_media_from_output(&raw);
+    serde_json::to_string(&result)
+        .unwrap_or_else(|_| r#"{"text":"","media_urls":[]}"#.to_string())
+}
+
+/// Estimate decoded byte size from base64 string length.
+#[napi]
+pub fn parsing_estimate_base64_decoded_bytes(input: String) -> u32 {
+    deneb_core::parsing::base64_util::estimate_base64_decoded_bytes(&input) as u32
+}
+
+/// Normalize and validate a base64 string. Returns canonical form or null.
+#[napi]
+pub fn parsing_canonicalize_base64(input: String) -> Option<String> {
+    deneb_core::parsing::base64_util::canonicalize_base64(&input)
+}
+
+// ---------------------------------------------------------------------------
+// Media helper functions (extension, category, classification)
+// ---------------------------------------------------------------------------
+
+/// Get file extension for a MIME type (e.g., "image/png" → "png").
+#[napi]
+pub fn media_extension_for_mime(mime: String) -> String {
+    deneb_core::media::extensions::extension_for_mime(&mime).to_string()
+}
+
+/// Get media category for a MIME type.
+/// Returns one of: "image", "audio", "video", "document", "archive", "text", "unknown".
+#[napi]
+pub fn media_category_for_mime(mime: String) -> String {
+    let cat = deneb_core::media::extensions::category_for_mime(&mime);
+    match cat {
+        deneb_core::media::extensions::MediaCategory::Image => "image",
+        deneb_core::media::extensions::MediaCategory::Audio => "audio",
+        deneb_core::media::extensions::MediaCategory::Video => "video",
+        deneb_core::media::extensions::MediaCategory::Document => "document",
+        deneb_core::media::extensions::MediaCategory::Archive => "archive",
+        deneb_core::media::extensions::MediaCategory::Text => "text",
+        deneb_core::media::extensions::MediaCategory::Unknown => "unknown",
+    }
+    .to_string()
+}
+
+/// Detect MIME type from magic bytes and return full info as JSON.
+/// Returns `{"mime":"...","extension":"...","category":"..."}`.
+#[napi]
+pub fn media_detect_mime_with_info(data: Buffer) -> String {
+    let slice = data.as_ref();
+    let head = if slice.len() > 4096 { &slice[..4096] } else { slice };
+    let info = deneb_core::media::extensions::detect_mime_with_info(head);
+    let cat = match info.category {
+        deneb_core::media::extensions::MediaCategory::Image => "image",
+        deneb_core::media::extensions::MediaCategory::Audio => "audio",
+        deneb_core::media::extensions::MediaCategory::Video => "video",
+        deneb_core::media::extensions::MediaCategory::Document => "document",
+        deneb_core::media::extensions::MediaCategory::Archive => "archive",
+        deneb_core::media::extensions::MediaCategory::Text => "text",
+        deneb_core::media::extensions::MediaCategory::Unknown => "unknown",
+    };
+    format!(
+        r#"{{"mime":"{}","extension":"{}","category":"{}"}}"#,
+        info.mime, info.extension, cat
+    )
+}
+
+/// Check if a MIME type is an image format.
+#[napi]
+pub fn media_is_image(mime: String) -> bool {
+    deneb_core::media::extensions::is_image(&mime)
+}
+
+/// Check if a MIME type is an audio format.
+#[napi]
+pub fn media_is_audio(mime: String) -> bool {
+    deneb_core::media::extensions::is_audio(&mime)
+}
+
+/// Check if a MIME type is a video format.
+#[napi]
+pub fn media_is_video(mime: String) -> bool {
+    deneb_core::media::extensions::is_video(&mime)
+}
+
 // ---------------------------------------------------------------------------
 // Security & validation functions (Phase 2 — bridge Rust FFI to Node.js)
 // ---------------------------------------------------------------------------
