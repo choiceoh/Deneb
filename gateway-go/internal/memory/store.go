@@ -112,15 +112,27 @@ CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
 	tokenize='unicode61'
 );
 
+-- Trigram index for Korean/CJK substring matching (fallback when unicode61 misses).
+CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts_trigram USING fts5(
+	content,
+	content=facts,
+	content_rowid=id,
+	tokenize='trigram'
+);
+
 -- Triggers to keep FTS in sync with facts table.
 CREATE TRIGGER IF NOT EXISTS facts_ai AFTER INSERT ON facts BEGIN
 	INSERT INTO facts_fts(rowid, content, category)
 	VALUES (new.id, new.content, new.category);
+	INSERT INTO facts_fts_trigram(rowid, content)
+	VALUES (new.id, new.content);
 END;
 
 CREATE TRIGGER IF NOT EXISTS facts_ad AFTER DELETE ON facts BEGIN
 	INSERT INTO facts_fts(facts_fts, rowid, content, category)
 	VALUES ('delete', old.id, old.content, old.category);
+	INSERT INTO facts_fts_trigram(facts_fts_trigram, rowid, content)
+	VALUES ('delete', old.id, old.content);
 END;
 
 CREATE TRIGGER IF NOT EXISTS facts_au AFTER UPDATE OF content, category ON facts BEGIN
@@ -128,6 +140,10 @@ CREATE TRIGGER IF NOT EXISTS facts_au AFTER UPDATE OF content, category ON facts
 	VALUES ('delete', old.id, old.content, old.category);
 	INSERT INTO facts_fts(rowid, content, category)
 	VALUES (new.id, new.content, new.category);
+	INSERT INTO facts_fts_trigram(facts_fts_trigram, rowid, content)
+	VALUES ('delete', old.id, old.content);
+	INSERT INTO facts_fts_trigram(rowid, content)
+	VALUES (new.id, new.content);
 END;
 
 CREATE TABLE IF NOT EXISTS fact_embeddings (
@@ -189,6 +205,7 @@ func (s *Store) Close() error {
 }
 
 // InsertFact stores a new fact and returns its ID.
+// Checks for exact content duplicates before inserting.
 func (s *Store) InsertFact(ctx context.Context, f Fact) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -202,6 +219,23 @@ func (s *Store) InsertFact(ctx context.Context, f Fact) (int64, error) {
 	}
 	if f.Source == "" {
 		f.Source = SourceAutoExtract
+	}
+
+	// Dedup: skip if an active fact with identical content exists.
+	var existingID int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM facts WHERE content = ? AND active = 1 LIMIT 1`,
+		f.Content,
+	).Scan(&existingID)
+	if err == nil {
+		// Exact duplicate exists — update importance if new one is higher.
+		if f.Importance > 0 {
+			_, _ = s.db.ExecContext(ctx,
+				`UPDATE facts SET importance = MAX(importance, ?), updated_at = ? WHERE id = ?`,
+				f.Importance, now, existingID,
+			)
+		}
+		return existingID, nil
 	}
 
 	result, err := s.db.ExecContext(ctx,
@@ -290,6 +324,23 @@ func (s *Store) DeactivateFact(ctx context.Context, id int64) error {
 		now, id,
 	)
 	return err
+}
+
+// CleanupExpired deactivates all facts whose expires_at is in the past.
+// Returns the number of expired facts.
+func (s *Store) CleanupExpired(ctx context.Context) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Format(time.RFC3339)
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE facts SET active = 0, updated_at = ?
+		 WHERE active = 1 AND expires_at IS NOT NULL AND expires_at < ?`,
+		now, now,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 // SupersedeFact marks oldID as superseded by newID and deactivates it.
@@ -492,6 +543,58 @@ func (s *Store) ExportToFile(ctx context.Context, dir string) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(content), 0o644)
+}
+
+// ImportFromMarkdown parses a legacy MEMORY.md file and imports its entries as facts.
+// Handles the format produced by sglang_hooks.go: "## YYYY-MM-DD HH:MM\n\n- bullet\n- bullet\n"
+// Returns the number of imported facts.
+func (s *Store) ImportFromMarkdown(ctx context.Context, path string) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, fmt.Errorf("import memory: %w", err)
+	}
+
+	lines := strings.Split(string(data), "\n")
+	imported := 0
+	var currentDate string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Parse date header: "## 2026-01-15 14:30"
+		if strings.HasPrefix(line, "## ") {
+			currentDate = strings.TrimPrefix(line, "## ")
+			continue
+		}
+
+		// Parse bullet entries: "- fact content"
+		if (strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ")) && len(line) > 3 {
+			content := strings.TrimPrefix(strings.TrimPrefix(line, "- "), "* ")
+			if content == "" {
+				continue
+			}
+
+			fact := Fact{
+				Content:    content,
+				Category:   CategoryContext,
+				Importance: 0.5,
+				Source:      "migration",
+			}
+
+			// Try to parse the date for created_at.
+			if currentDate != "" {
+				if t, err := time.Parse("2006-01-02 15:04", currentDate); err == nil {
+					fact.CreatedAt = t
+				}
+			}
+
+			if _, err := s.InsertFact(ctx, fact); err == nil {
+				imported++
+			}
+		}
+	}
+
+	return imported, nil
 }
 
 // --- Internal helpers ---

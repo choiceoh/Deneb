@@ -343,6 +343,30 @@ func executeAgentRun(
 		APIType:   apiType,
 	}
 
+	// Mid-conversation memory extraction (Honcho Neuromancer-style).
+	// Every ~1000 tokens, asynchronously extract facts from accumulated context.
+	if deps.memoryStore != nil {
+		var lastExtractTokens int
+		cfg.OnTurn = func(turn int, accumulatedTokens int) {
+			delta := accumulatedTokens - lastExtractTokens
+			if delta >= memory.TokenThreshold {
+				lastExtractTokens = accumulatedTokens
+				go func() {
+					extractCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					defer cancel()
+					sglangClient := getSglangClient()
+					// Use the user message + accumulated context for mid-run extraction.
+					facts, err := memory.ExtractFacts(extractCtx, sglangClient, sglangModel,
+						params.Message, fmt.Sprintf("[mid-run turn %d, %d tokens]", turn, accumulatedTokens), logger)
+					if err == nil && len(facts) > 0 {
+						memory.InsertExtractedFacts(extractCtx, deps.memoryStore, deps.memoryEmbedder, facts, logger)
+						logger.Debug("mid-run memory extraction", "turn", turn, "facts", len(facts))
+					}
+				}()
+			}
+		}
+	}
+
 	// 10. Set up delta emitter for streaming.
 	var emitDelta func(string)
 	if broadcaster != nil {

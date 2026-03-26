@@ -39,7 +39,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/node"
@@ -936,6 +938,38 @@ func (s *Server) registerPhase2Methods() {
 	} else {
 		chatCfg.AuroraStore = auroraStore
 		s.logger.Info("aurora compaction store initialized")
+	}
+
+	// Initialize structured memory store (Honcho-style).
+	if home, err := os.UserHomeDir(); err == nil {
+		dbPath := filepath.Join(home, ".deneb", "memory.db")
+		memStore, err := memory.NewStore(dbPath)
+		if err != nil {
+			s.logger.Warn("memory store unavailable", "error", err)
+		} else {
+			chatCfg.MemoryStore = memStore
+
+			const sglangURL = "http://127.0.0.1:30000/v1"
+			const sglangModel = "Qwen/Qwen3.5-35B-A3B"
+
+			embedder := memory.NewEmbedder(sglangURL, sglangModel, memStore, s.logger)
+			chatCfg.MemoryEmbedder = embedder
+
+			sglangClient := llm.NewClient(sglangURL, "", llm.WithLogger(s.logger))
+			trigger := memory.NewDreamingTrigger(memStore, embedder, sglangClient, sglangModel, s.logger)
+			chatCfg.DreamingTrigger = trigger
+
+			// Auto-migrate existing MEMORY.md on first run.
+			count, _ := memStore.ActiveFactCount(context.Background())
+			if count == 0 {
+				memoryMdPath := filepath.Join(home, ".deneb", "MEMORY.md")
+				if imported, err := memStore.ImportFromMarkdown(context.Background(), memoryMdPath); err == nil && imported > 0 {
+					s.logger.Info("aurora-memory: imported legacy MEMORY.md", "facts", imported)
+				}
+			}
+
+			s.logger.Info("aurora-memory: structured store initialized", "db", dbPath)
+		}
 	}
 
 	// Resolve default model from config; fall back to hardcoded default.

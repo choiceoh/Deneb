@@ -1,5 +1,5 @@
-// dreaming_trigger.go — Triggers dreaming cycles based on turn count or time interval.
-// Tracks turn count in SQLite metadata and fires dreaming asynchronously.
+// dreaming_trigger.go — AuroraDream trigger: fires memory consolidation cycles
+// based on turn count (50 turns) or time interval (8 hours).
 package memory
 
 import (
@@ -85,7 +85,7 @@ func (dt *DreamingTrigger) triggerAsync() bool {
 		ctx := context.Background()
 		report, err := RunDreamingCycle(ctx, dt.store, dt.embedder, dt.client, dt.model, dt.logger)
 		if err != nil {
-			dt.logger.Error("dreaming: cycle failed", "error", err)
+			dt.logger.Error("aurora-dream: cycle failed", "error", err)
 			return
 		}
 
@@ -93,7 +93,7 @@ func (dt *DreamingTrigger) triggerAsync() bool {
 		_ = dt.store.SetMeta(ctx, metaTurnCount, "0")
 		_ = dt.store.SetMeta(ctx, metaLastDreaming, time.Now().UTC().Format(time.RFC3339))
 
-		dt.logger.Info("dreaming: async cycle finished",
+		dt.logger.Info("aurora-dream: async cycle finished",
 			"verified", report.FactsVerified,
 			"merged", report.FactsMerged,
 			"expired", report.FactsExpired,
@@ -117,7 +117,7 @@ func (dt *DreamingTrigger) StartPeriodicTimer(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				dt.logger.Info("dreaming: periodic timer fired")
+				dt.logger.Info("aurora-dream: periodic timer fired")
 				dt.triggerAsync()
 			}
 		}

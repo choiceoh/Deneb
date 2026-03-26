@@ -20,7 +20,12 @@ type AgentConfig struct {
 	Tools     []llm.Tool
 	MaxTokens int    // Max output tokens per LLM call. Default: 8192.
 	APIType   string // "openai" (default) or "anthropic"
+	OnTurn    TurnCallback // optional; called after each turn for mid-run hooks
 }
+
+// TurnCallback is called after each agent turn with accumulated token count.
+// Used for mid-conversation memory extraction (Honcho-style).
+type TurnCallback func(turn int, accumulatedTokens int)
 
 // DefaultAgentConfig returns sensible defaults.
 func DefaultAgentConfig() AgentConfig {
@@ -116,6 +121,11 @@ func RunAgent(
 		// Accumulate usage.
 		result.Usage.InputTokens += turnResult.usage.InputTokens
 		result.Usage.OutputTokens += turnResult.usage.OutputTokens
+
+		// Mid-run hook: notify caller of token accumulation (for memory extraction).
+		if cfg.OnTurn != nil {
+			cfg.OnTurn(turn+1, result.Usage.InputTokens+result.Usage.OutputTokens)
+		}
 
 		// If there's text output, keep it as the final text.
 		if turnResult.text != "" {

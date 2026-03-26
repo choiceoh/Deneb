@@ -102,7 +102,45 @@ func (s *Store) ftsSearch(ctx context.Context, query string, category string) (m
 		// FTS5 rank is negative (lower = better). Normalize to 0-1.
 		results[id] = rankToScore(rank)
 	}
+
+	// Korean/CJK fallback: if unicode61 found nothing, try trigram index.
+	if len(results) == 0 {
+		trigramResults := s.trigramSearch(ctx, query)
+		for id, score := range trigramResults {
+			results[id] = score
+		}
+	}
+
 	return results, nil
+}
+
+// trigramSearch uses the trigram FTS5 index for CJK/Korean substring matching.
+func (s *Store) trigramSearch(ctx context.Context, query string) map[int64]float64 {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT f.id, fts.rank
+		 FROM facts_fts_trigram fts
+		 JOIN facts f ON f.id = fts.rowid
+		 WHERE facts_fts_trigram MATCH ? AND f.active = 1
+		 ORDER BY fts.rank
+		 LIMIT 30`,
+		`"`+query+`"`,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	results := make(map[int64]float64)
+	for rows.Next() {
+		var id int64
+		var rank float64
+		if err := rows.Scan(&id, &rank); err != nil {
+			continue
+		}
+		// Slightly penalize trigram results vs unicode61.
+		results[id] = rankToScore(rank) * 0.8
+	}
+	return results
 }
 
 // vectorSearch computes cosine similarity against all active fact embeddings.

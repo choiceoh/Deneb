@@ -1,9 +1,11 @@
-// dreaming.go — Periodic memory consolidation inspired by Honcho's "Dreaming" feature.
+// dreaming.go — AuroraDream: periodic memory consolidation inspired by Honcho's "Dreaming" feature.
 // Runs every 50 turns or 8 hours to:
+//   0. Clean up expired facts
 //   1. Verify existing facts (still valid?)
 //   2. Merge duplicate/similar facts
-//   3. Extract meta-patterns from accumulated facts
-//   4. Update the user model
+//   3. Extract meta-patterns (inductive reasoning)
+//   4. Resolve contradictions between facts
+//   5. Update the user model
 package memory
 
 import (
@@ -44,12 +46,18 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 	start := time.Now()
 	report := &DreamingReport{}
 
-	logger.Info("dreaming: starting cycle")
+	logger.Info("aurora-dream: starting cycle")
+
+	// Phase 0: Clean up expired facts (by expires_at date).
+	if expiredCount, err := store.CleanupExpired(ctx); err == nil && expiredCount > 0 {
+		logger.Info("aurora-dream: cleaned up expired facts", "count", expiredCount)
+		report.FactsExpired += int(expiredCount)
+	}
 
 	// Phase 1: Fact verification.
 	verified, expired, err := verifyFacts(ctx, store, client, model, logger)
 	if err != nil {
-		logger.Warn("dreaming: verification phase failed", "error", err)
+		logger.Warn("aurora-dream: verification phase failed", "error", err)
 	} else {
 		report.FactsVerified = verified
 		report.FactsExpired = expired
@@ -58,7 +66,7 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 	// Phase 2: Duplicate merging.
 	merged, err := mergeDuplicates(ctx, store, embedder, client, model, logger)
 	if err != nil {
-		logger.Warn("dreaming: merge phase failed", "error", err)
+		logger.Warn("aurora-dream: merge phase failed", "error", err)
 	} else {
 		report.FactsMerged = merged
 	}
@@ -66,14 +74,23 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 	// Phase 3: Pattern extraction.
 	patterns, err := extractPatterns(ctx, store, client, model, logger)
 	if err != nil {
-		logger.Warn("dreaming: pattern extraction failed", "error", err)
+		logger.Warn("aurora-dream: pattern extraction failed", "error", err)
 	} else {
 		report.PatternsExtracted = patterns
 	}
 
-	// Phase 4: User model update.
+	// Phase 4: Conflict resolution (Honcho-style).
+	// Identify contradicting facts and resolve them via LLM.
+	conflicts, err := resolveConflicts(ctx, store, client, model, logger)
+	if err != nil {
+		logger.Warn("aurora-dream: conflict resolution failed", "error", err)
+	} else if conflicts > 0 {
+		report.FactsMerged += conflicts
+	}
+
+	// Phase 5: User model update.
 	if err := updateUserModel(ctx, store, client, model, logger); err != nil {
-		logger.Warn("dreaming: user model update failed", "error", err)
+		logger.Warn("aurora-dream: user model update failed", "error", err)
 	}
 
 	report.Duration = time.Since(start)
@@ -88,7 +105,7 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		DurationMs:        report.Duration.Milliseconds(),
 	})
 
-	logger.Info("dreaming: cycle complete",
+	logger.Info("aurora-dream: cycle complete",
 		"verified", report.FactsVerified,
 		"merged", report.FactsMerged,
 		"expired", report.FactsExpired,
@@ -101,12 +118,19 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 
 // --- Phase 1: Fact Verification ---
 
-const verifySystemPrompt = `You are a memory fact verifier.
-Given a list of stored facts (each with an ID), determine which are still valid.
-Return a JSON array of objects:
-- "id": the fact ID
-- "valid": true if still likely valid, false if outdated/incorrect
-- "reason": brief reason if invalid (Korean)
+const verifySystemPrompt = `You are a memory fact verifier performing "dreaming" consolidation.
+Given stored facts, determine validity using these criteria:
+
+1. **Temporal validity**: Is this fact still current? Technology choices, versions, and project states change.
+2. **Logical consistency**: Does this fact contradict newer information?
+3. **Relevance decay**: Is this fact about a completed/abandoned task?
+4. **Confidence calibration**: Was the original importance score accurate?
+
+Return a JSON array:
+- "id": fact ID
+- "valid": true/false
+- "reason": brief Korean explanation if invalid
+- "new_importance": (optional) adjusted importance if the score should change
 Return ONLY valid JSON array, no markdown fences.`
 
 func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (verified int, expired int, err error) {
@@ -125,7 +149,7 @@ func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model st
 
 		v, e, batchErr := verifyBatch(ctx, store, client, model, batch, logger)
 		if batchErr != nil {
-			logger.Debug("dreaming: verify batch failed", "error", batchErr)
+			logger.Debug("aurora-dream: verify batch failed", "error", batchErr)
 			continue
 		}
 		verified += v
@@ -148,9 +172,10 @@ func verifyBatch(ctx context.Context, store *Store, client *llm.Client, model st
 	}
 
 	var results []struct {
-		ID    int64  `json:"id"`
-		Valid bool   `json:"valid"`
-		Reason string `json:"reason"`
+		ID            int64   `json:"id"`
+		Valid         bool    `json:"valid"`
+		Reason        string  `json:"reason"`
+		NewImportance float64 `json:"new_importance,omitempty"`
 	}
 	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &results); err != nil {
 		return 0, 0, fmt.Errorf("parse verify response: %w", err)
@@ -160,11 +185,15 @@ func verifyBatch(ctx context.Context, store *Store, client *llm.Client, model st
 	for _, r := range results {
 		if r.Valid {
 			_ = store.MarkVerified(ctx, r.ID)
+			// Adjust importance if the LLM suggested a new value.
+			if r.NewImportance > 0 && r.NewImportance <= 1.0 {
+				_ = store.UpdateImportance(ctx, r.ID, r.NewImportance)
+			}
 			verified++
 		} else {
 			_ = store.DeactivateFact(ctx, r.ID)
 			expired++
-			logger.Info("dreaming: expired fact", "id", r.ID, "reason", r.Reason)
+			logger.Info("aurora-dream: expired fact", "id", r.ID, "reason", r.Reason)
 		}
 	}
 
@@ -273,24 +302,92 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		}
 
 		merged++
-		logger.Info("dreaming: merged facts", "old_a", p.a, "old_b", p.b, "new", newID)
+		logger.Info("aurora-dream: merged facts", "old_a", p.a, "old_b", p.b, "new", newID)
 	}
 
 	return merged, nil
 }
 
+// --- Phase 4: Conflict Resolution (Honcho-style) ---
+
+const conflictSystemPrompt = `You are a fact conflict resolution assistant.
+Given a list of facts in the same category, identify contradictions or superseded information.
+For each conflict found, return a JSON array of objects:
+- "keep_id": the fact ID to keep (more recent or more accurate)
+- "remove_id": the fact ID to deactivate
+- "reason": brief explanation (Korean)
+If no conflicts found, return [].
+Return ONLY valid JSON array, no markdown fences.`
+
+func resolveConflicts(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
+	facts, err := store.GetActiveFacts(ctx)
+	if err != nil || len(facts) < 5 {
+		return 0, err
+	}
+
+	// Group by category and check for conflicts within each group.
+	categories := map[string][]Fact{}
+	for _, f := range facts {
+		categories[f.Category] = append(categories[f.Category], f)
+	}
+
+	resolved := 0
+	for cat, catFacts := range categories {
+		if len(catFacts) < 3 {
+			continue // too few to have conflicts
+		}
+
+		var sb strings.Builder
+		limit := 20
+		if len(catFacts) < limit {
+			limit = len(catFacts)
+		}
+		for _, f := range catFacts[:limit] {
+			fmt.Fprintf(&sb, "ID %d [importance=%.1f, %s]: %s\n",
+				f.ID, f.Importance, f.CreatedAt.Format("2006-01-02"), f.Content)
+		}
+
+		resp, err := callLLM(ctx, client, model, conflictSystemPrompt, fmt.Sprintf("Category: %s\n\n%s", cat, sb.String()), dreamingMaxTokens)
+		if err != nil {
+			continue
+		}
+
+		var results []struct {
+			KeepID   int64  `json:"keep_id"`
+			RemoveID int64  `json:"remove_id"`
+			Reason   string `json:"reason"`
+		}
+		if err := json.Unmarshal([]byte(stripCodeFences(resp)), &results); err != nil {
+			continue
+		}
+
+		for _, r := range results {
+			if r.KeepID > 0 && r.RemoveID > 0 && r.KeepID != r.RemoveID {
+				_ = store.SupersedeFact(ctx, r.RemoveID, r.KeepID)
+				resolved++
+				logger.Info("aurora-dream: resolved conflict", "keep", r.KeepID, "remove", r.RemoveID, "reason", r.Reason)
+			}
+		}
+	}
+
+	return resolved, nil
+}
+
 // --- Phase 3: Pattern Extraction ---
 
-const patternSystemPrompt = `You are a pattern recognition assistant.
-Given a collection of user facts grouped by category, identify meta-patterns:
-- Recurring themes or preferences
-- Behavioral patterns
-- Expertise areas
-Return a JSON array of pattern objects:
-- "content": the pattern (Korean, concise)
+const patternSystemPrompt = `You are a meta-reasoning engine performing "dreaming" pattern extraction.
+This is the INDUCTIVE reasoning phase: from many specific observations, derive general patterns.
+
+Given accumulated facts, perform:
+1. **Pattern Induction**: What recurring themes emerge across multiple facts?
+2. **Behavioral Modeling**: What work habits, expertise areas, or decision patterns are visible?
+3. **Hypothesis Formation**: What predictions can you make about future behavior?
+
+Return a JSON array of discovered patterns:
+- "content": the pattern (Korean, concise, evidence-based)
 - "category": "user_model"
-- "importance": 0.8-1.0
-If no clear patterns, return [].
+- "importance": 0.8-1.0 (patterns are high-value by definition)
+If no clear patterns (< 3 supporting facts), return [].
 Return ONLY valid JSON array, no markdown fences.`
 
 func extractPatterns(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
@@ -400,11 +497,11 @@ func updateUserModel(ctx context.Context, store *Store, client *llm.Client, mode
 			continue
 		}
 		if err := store.SetUserModel(ctx, key, value, 0.8); err != nil {
-			logger.Debug("dreaming: failed to set user model", "key", key, "error", err)
+			logger.Debug("aurora-dream: failed to set user model", "key", key, "error", err)
 		}
 	}
 
-	logger.Info("dreaming: updated user model", "keys", len(profile))
+	logger.Info("aurora-dream: updated user model", "keys", len(profile))
 	return nil
 }
 

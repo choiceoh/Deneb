@@ -30,27 +30,49 @@ type ExtractedFact struct {
 	ExpiryHint string  `json:"expiry_hint,omitempty"` // ISO8601 or empty
 }
 
-const importanceSystemPrompt = `You are a memory extraction assistant for an AI agent system.
-Given a conversation segment, extract ONLY genuinely important facts worth remembering across sessions.
+// importanceSystemPrompt uses Honcho Neuromancer XR-style reasoning:
+// 1. Explicit extraction — what was directly stated
+// 2. Deductive reasoning — what can be logically inferred but wasn't said
+// 3. Structured output with category, importance, and confidence
+const importanceSystemPrompt = `You are Neuromancer, a memory inference engine for an AI agent system.
+Your job is NOT just to store what was said, but to REASON about what matters.
 
+## Reasoning Process (follow this order)
+
+### Step 1: Explicit Extraction
+What facts were directly stated? Look for:
+- Decisions made (architecture, tool, config choices)
+- Preferences expressed (communication style, language, workflow)
+- Solutions found (problem → fix mapping)
+- Technical context established
+
+### Step 2: Deductive Reasoning
+What can be LOGICALLY INFERRED but was NOT directly said?
+- If user chose tool X over Y → they likely value X's properties
+- If user solved problem in way Z → they have expertise in Z's domain
+- If user asked about topic T repeatedly → T is an area of active work
+- If user corrected the AI on X → X is a strong preference, not casual
+
+### Step 3: Output
 Return a JSON array. For each fact:
-- "content": the fact in Korean, concise (1-2 sentences max)
-- "category": one of ["decision", "preference", "solution", "context", "user_model"]
-  - decision: architecture choices, tool selections, config changes
-  - preference: user communication/work style preferences
-  - solution: problems solved and their solutions
-  - context: important project/technical context
-  - user_model: user expertise, personality traits, habits
-- "importance": 0.0-1.0 (how reusable across future sessions)
-  - 0.9+: critical decisions, core preferences
-  - 0.7-0.9: useful solutions, important context
-  - 0.5-0.7: minor context, temporary info
-  - <0.5: probably not worth storing
-- "expiry_hint": null or ISO8601 date if the fact is time-sensitive
+- "content": Korean, concise (1-2 sentences). Include the reasoning basis
+- "category": one of:
+  - "decision": choices made (explicit or inferred from actions)
+  - "preference": work style, communication, tool preferences
+  - "solution": problem-solution pairs
+  - "context": project/technical state that affects future interactions
+  - "user_model": expertise areas, personality, habits (INFERRED)
+- "importance": 0.0-1.0
+  - 0.9+: decisions that constrain future work, core identity traits
+  - 0.7-0.9: reusable solutions, strong preferences
+  - 0.5-0.7: useful context, weak signals
+- "expiry_hint": null or "YYYY-MM-DD" if time-sensitive
 
-If nothing is worth remembering, return an empty array [].
-Be very selective — only truly reusable knowledge. Max 5 facts per extraction.
-IMPORTANT: Return ONLY valid JSON array, no markdown fences, no explanation.`
+## Rules
+- Max 5 facts. Quality over quantity
+- Include at least 1 deductive inference if the conversation has substance
+- If nothing worth remembering, return []
+- Return ONLY valid JSON array, no markdown fences, no explanation`
 
 // ExtractFacts analyzes a conversation segment and returns structured facts.
 // Falls back to legacy bullet-point extraction if JSON parsing fails.
@@ -117,7 +139,7 @@ func InsertExtractedFacts(ctx context.Context, store *Store, embedder *Embedder,
 
 		id, err := store.InsertFact(ctx, fact)
 		if err != nil {
-			logger.Warn("memory: failed to insert fact", "error", err, "content", truncate(ef.Content, 50))
+			logger.Warn("aurora-memory: failed to insert fact", "error", err, "content", truncate(ef.Content, 50))
 			continue
 		}
 
@@ -127,7 +149,7 @@ func InsertExtractedFacts(ctx context.Context, store *Store, embedder *Embedder,
 				embedCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
 				if err := embedder.EmbedAndStore(embedCtx, factID, content); err != nil {
-					logger.Debug("memory: embedding failed", "fact_id", factID, "error", err)
+					logger.Debug("aurora-memory: embedding failed", "fact_id", factID, "error", err)
 				}
 			}(id, ef.Content)
 		}
@@ -137,7 +159,7 @@ func InsertExtractedFacts(ctx context.Context, store *Store, embedder *Embedder,
 			updateUserModelFromFact(ctx, store, ef, logger)
 		}
 
-		logger.Info("memory: stored fact",
+		logger.Info("aurora-memory: stored fact",
 			"id", id,
 			"category", ef.Category,
 			"importance", fmt.Sprintf("%.2f", ef.Importance),
@@ -159,7 +181,7 @@ func updateUserModelFromFact(ctx context.Context, store *Store, fact ExtractedFa
 		value = fact.Content
 	}
 	if err := store.SetUserModel(ctx, key, value, fact.Importance); err != nil {
-		logger.Debug("memory: failed to update user model", "error", err)
+		logger.Debug("aurora-memory: failed to update user model", "error", err)
 	}
 }
 
