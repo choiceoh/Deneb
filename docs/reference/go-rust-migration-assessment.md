@@ -154,11 +154,23 @@ Model selection/parsing/catalog/allowlist. 10+ provider ID normalization. Subage
 |------|-------|-------|
 | **Go gateway** | **95%** | All HTTP/RPC/WS features. 1,214 tests. Node.js bridge removed. |
 | **Rust core** | **95%** | 8 FFI functions complete, 684 tests. Vega ported. |
-| **Rust ML** | **40%** | Structure only. CUDA/llama-cpp behind feature flag. |
+| **Rust ML** | **95%** | Build chain complete. `make rust-dgx` enables CUDA inference. |
 | **Proto schemas** | **100%** | 3-language generation, consistency tests, CI verification. |
 | **Migration TODO** | **100%** | All P0-P3 items complete. |
 
-## Remaining Gaps
+## Build Targets for ML/Vega Activation
 
-1. **ML crate** -- Actual GGUF model inference is feature-gated. Additional work needed when activating on DGX Spark with CUDA.
-2. **Build environment** -- `libdeneb_core.a` must be built via `cargo build --release` before Go can link (expected in production build pipeline).
+| Target | Features | Use Case |
+|--------|----------|----------|
+| `make rust` | minimal (no vega/ml) | CI, non-DGX environments |
+| `make rust-vega` | vega (FTS-only) | Search without ML |
+| `make rust-dgx` | vega + ml + cuda | DGX Spark production |
+| `make gateway-dgx` | full stack | DGX Spark production binary |
+
+Cargo feature chain: `deneb-core/dgx` -> `vega-ml` + `cuda` -> `deneb-ml/cuda` -> `llama-cpp-2/cuda`
+
+Environment variables for model paths:
+- `VEGA_MODEL_EMBEDDER` -- Path to embedding GGUF (e.g., Qwen3-Embedding-8B)
+- `VEGA_MODEL_RERANKER` -- Path to reranker GGUF (e.g., Qwen3-Reranker-4B)
+- `VEGA_MODEL_EXPANDER` -- Path to expander GGUF (e.g., Qwen3.5-9B)
+- `VEGA_MODEL_TTL` -- Model unload TTL in seconds (default: 300)

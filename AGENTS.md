@@ -375,25 +375,28 @@ napi-rs Node.js addon for performance-critical TypeScript callers.
 
 ### Multi-Language Build (Makefile)
 
-| Command            | Description                                          |
-| ------------------ | ---------------------------------------------------- |
-| `make all`         | Build Rust + Go (release)                            |
-| `make rust`        | Build Rust core library (release)                    |
-| `make rust-test`   | Run Rust tests (`cargo test`)                        |
-| `make go`          | Build Go gateway                                     |
-| `make go-test`     | Run Go tests (`go test ./...`)                       |
-| `make go-run`      | Run Go gateway locally                               |
-| `make go-dev`      | Run Go gateway in dev mode (auto-restart on SIGUSR1) |
-| `make test`        | Run Rust + Go tests                                  |
-| `make check`       | Full check: proto-check + rust-test + go-test + ts   |
-| `make clean`       | Clean Rust + Go build artifacts                      |
-| `make proto`       | Generate protobuf code (Go + Rust + TS, parallel)    |
-| `make proto-go`    | Generate Go protobuf structs only                    |
-| `make proto-rust`  | Generate Rust protobuf structs only                  |
-| `make proto-ts`    | Generate TypeScript protobuf types only              |
-| `make proto-check` | Generate + verify no uncommitted diffs               |
-| `make proto-lint`  | Lint proto files only (buf lint)                     |
-| `make proto-watch` | Watch proto files and regenerate on change           |
+| Command             | Description                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| `make all`          | Build Rust + Go (release)                                    |
+| `make rust`         | Build Rust core library (release, minimal — no vega/ml)      |
+| `make rust-vega`    | Build Rust core + Vega search (FTS-only, no ML)              |
+| `make rust-dgx`     | Build Rust core + Vega + ML + CUDA (DGX Spark production)    |
+| `make rust-test`    | Run Rust tests (`cargo test`)                                |
+| `make go`           | Build Go gateway                                             |
+| `make go-test`      | Run Go tests (`go test ./...`)                               |
+| `make go-run`       | Run Go gateway locally                                       |
+| `make go-dev`       | Run Go gateway in dev mode (auto-restart on SIGUSR1)         |
+| `make gateway-dgx`  | Build DGX Spark production gateway (vega + ml + cuda)        |
+| `make test`         | Run Rust + Go tests                                          |
+| `make check`        | Full check: proto-check + rust-test + go-test + ts           |
+| `make clean`        | Clean Rust + Go build artifacts                              |
+| `make proto`        | Generate protobuf code (Go + Rust + TS, parallel)            |
+| `make proto-go`     | Generate Go protobuf structs only                            |
+| `make proto-rust`   | Generate Rust protobuf structs only                          |
+| `make proto-ts`     | Generate TypeScript protobuf types only                      |
+| `make proto-check`  | Generate + verify no uncommitted diffs                       |
+| `make proto-lint`   | Lint proto files only (buf lint)                             |
+| `make proto-watch`  | Watch proto files and regenerate on change                   |
 
 ### Development
 
@@ -796,7 +799,7 @@ This runs the smart gate, pushes, and creates the PR automatically. Options: `--
 
 ## Go Gateway Migration TODO (TS → Go 포팅 잔여 작업)
 
-Go 게이트웨이 마이그레이션 **사실상 완료** (2026-03-26 평가). Node.js 브릿지 완전 제거. RPC 130+ 메서드 parity test 통과. HTTP 레이어 포함 P0~P3 전항목 구현됨. 남은 격차는 ML 추론 활성화 정도.
+Go 게이트웨이 마이그레이션 **완료** (2026-03-26 평가). Node.js 브릿지 완전 제거. RPC 130+ 메서드 parity test 통과. HTTP 레이어 포함 P0~P3 전항목 및 ML 빌드 체인 구현됨.
 
 ### P0 (Critical) — 구현 완료
 
@@ -856,8 +859,11 @@ Go 게이트웨이 마이그레이션 **사실상 완료** (2026-03-26 평가). 
   - Go 구현: `gateway-go/internal/auth/credentials.go`
   - env → config 순서 해석, secret ref 거부, probe 역할 지원
 
-### 남은 격차 (미미)
+### 남은 격차 — 구현 완료
 
-- [ ] **ML 크레이트 활성화** — `core-rs/ml/` (v0.1.0)이 feature-gated 상태. DGX Spark에서 CUDA 빌드 + GGUF 모델 로드 시 추가 작업 필요.
-  - 임베딩: Qwen3-Embedding-8B, 리랭커: Qwen3-Reranker-4B (llama-cpp-2 기반)
-  - `ml` 피처 없으면 stub 모드 (BackendUnavailable 반환)
+- [x] **ML 크레이트 빌드 체인 활성화** — `make rust-dgx` / `make gateway-dgx` 추가
+  - Cargo feature 체인: `deneb-core/dgx` → `vega-ml` + `cuda` → `deneb-ml/cuda` → `llama-cpp-2/cuda`
+  - DGX Spark 프로덕션: `make gateway-dgx` (Vega FTS + 시맨틱 검색 + CUDA GGUF 추론)
+  - CUDA 없는 환경: `make rust-vega` (FTS-only 모드)
+  - 환경 변수: `VEGA_MODEL_EMBEDDER`, `VEGA_MODEL_RERANKER`, `VEGA_MODEL_EXPANDER` (GGUF 경로)
+  - 모델 자동 감지: `~/.deneb/models/*.gguf` (gateway-go/internal/vega/autodetect.go)

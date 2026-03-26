@@ -20,8 +20,12 @@ napi_binding = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
 vega = ["dep:deneb-vega"]
 # Enable local ML inference (GGUF models via llama.cpp).
 ml = ["dep:deneb-ml"]
+# Enable CUDA-accelerated ML inference (implies ml). Requires CUDA toolkit.
+cuda = ["ml", "deneb-ml/cuda"]
 # Enable ML-powered semantic search inside Vega (combines vega + ml).
 vega-ml = ["vega", "ml", "deneb-vega/ml"]
+# Full DGX Spark build: Vega + ML + CUDA.
+dgx = ["vega-ml", "cuda"]
 
 [dependencies]
 # Serialization
