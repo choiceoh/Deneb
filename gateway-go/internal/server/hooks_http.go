@@ -21,6 +21,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -31,14 +32,24 @@ import (
 // ───────────────────────────────────────────────────────────────────────
 
 const (
-	defaultHooksBasePath    = "/hooks"
+	defaultHooksBasePath     = "/hooks"
 	defaultHooksMaxBodyBytes = 256 * 1024 // 256 KB
-	hookAuthFailureLimit    = 20
-	hookAuthFailureWindowMs = 60_000
-	hookReplayCacheTTL      = 5 * time.Minute
-	hookReplayCacheMax      = 1000
-	maxIdempotencyKeyLen    = 256
+	hookAuthFailureLimit     = 20
+	hookAuthFailureWindowMs  = 60_000
+	hookReplayCacheTTL       = 5 * time.Minute
+	hookReplayCacheMax       = 1000
+	maxIdempotencyKeyLen     = 256
 )
+
+// templateExprRegex matches {{expr}} placeholders in templates.
+var templateExprRegex = regexp.MustCompile(`\{\{([^}]+)\}\}`)
+
+// blockedTemplateKeys prevents prototype pollution via template traversal.
+var blockedTemplateKeys = map[string]bool{
+	"__proto__":   true,
+	"prototype":   true,
+	"constructor": true,
+}
 
 // ───────────────────────────────────────────────────────────────────────
 // Configuration types.
@@ -103,17 +114,30 @@ type HookAgentPayload struct {
 
 // HookAgentDispatchPayload is the resolved payload passed to DispatchAgent.
 type HookAgentDispatchPayload struct {
-	Message        string
-	Name           string
-	AgentID        string
-	IdempotencyKey string
-	SessionKey     string
-	Deliver        *bool
-	Channel        string
-	To             string
-	Model          string
-	Thinking       string
-	TimeoutSeconds *int
+	Message                    string
+	Name                       string
+	AgentID                    string
+	IdempotencyKey             string
+	SessionKey                 string
+	Deliver                    *bool
+	Channel                    string
+	To                         string
+	Model                      string
+	Thinking                   string
+	TimeoutSeconds             *int
+	WakeMode                   string
+	AllowUnsafeExternalContent bool
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Template context for enhanced template rendering.
+// ───────────────────────────────────────────────────────────────────────
+
+type templateContext struct {
+	Payload map[string]any
+	Headers map[string]string
+	Query   map[string]string
+	Path    string
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -363,7 +387,8 @@ func (h *HooksHTTPHandler) Handle(w http.ResponseWriter, r *http.Request) bool {
 	subPath := strings.TrimPrefix(path, basePath)
 	subPath = strings.TrimLeft(subPath, "/")
 	if subPath == "" {
-		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "Not Found"})
+		// #15: Plain text 404 for consistency with TS implementation.
+		writeText(w, http.StatusNotFound, "Not Found")
 		return true
 	}
 
@@ -379,6 +404,9 @@ func (h *HooksHTTPHandler) Handle(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 
+	// Build template context from request for use by sub-handlers.
+	tmplCtx := buildTemplateContext(r, subPath, body)
+
 	// ── /hooks/wake ────────────────────────────────────────────────
 	if subPath == "wake" {
 		h.handleWake(w, body)
@@ -387,18 +415,19 @@ func (h *HooksHTTPHandler) Handle(w http.ResponseWriter, r *http.Request) bool {
 
 	// ── /hooks/agent ───────────────────────────────────────────────
 	if subPath == "agent" {
-		h.handleAgent(w, body, token)
+		h.handleAgent(w, r, body, token)
 		return true
 	}
 
 	// ── Custom mappings ────────────────────────────────────────────
 	if len(h.config.Mappings) > 0 {
-		if h.handleMapping(w, subPath, body, token) {
+		if h.handleMapping(w, r, subPath, body, token, tmplCtx) {
 			return true
 		}
 	}
 
-	writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "unknown hook endpoint"})
+	// #15: Plain text 404 for consistency with TS implementation.
+	writeText(w, http.StatusNotFound, "unknown hook endpoint")
 	return true
 }
 
@@ -408,6 +437,14 @@ func (h *HooksHTTPHandler) Handle(w http.ResponseWriter, r *http.Request) bool {
 
 func (h *HooksHTTPHandler) handleWake(w http.ResponseWriter, body map[string]any) {
 	text, _ := body["text"].(string)
+
+	// #1: Validate text after extraction.
+	text = strings.TrimSpace(text)
+	if text == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "text is required"})
+		return
+	}
+
 	mode, _ := body["mode"].(string)
 	if mode == "" {
 		mode = "now"
@@ -420,7 +457,7 @@ func (h *HooksHTTPHandler) handleWake(w http.ResponseWriter, body map[string]any
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "mode": mode})
 }
 
-func (h *HooksHTTPHandler) handleAgent(w http.ResponseWriter, body map[string]any, token string) {
+func (h *HooksHTTPHandler) handleAgent(w http.ResponseWriter, r *http.Request, body map[string]any, token string) {
 	var payload HookAgentPayload
 	// Re-marshal and unmarshal for clean type conversion.
 	raw, _ := json.Marshal(body)
@@ -431,6 +468,17 @@ func (h *HooksHTTPHandler) handleAgent(w http.ResponseWriter, body map[string]an
 	if strings.TrimSpace(payload.Message) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "message is required"})
 		return
+	}
+
+	// #13: Default name="Hook".
+	if payload.Name == "" {
+		payload.Name = "Hook"
+	}
+
+	// #2: Resolve wakeMode with validation.
+	wakeMode := "now"
+	if wm, ok := body["wakeMode"].(string); ok && (wm == "now" || wm == "next-heartbeat") {
+		wakeMode = wm
 	}
 
 	// Agent policy check.
@@ -449,6 +497,9 @@ func (h *HooksHTTPHandler) handleAgent(w http.ResponseWriter, body map[string]an
 	// Resolve target agent ID (fall back to default if unknown).
 	agentID := h.resolveAgentID(payload.AgentID)
 
+	// #4: Resolve idempotency key from headers first, then body.
+	idempotencyKey := resolveIdempotencyKey(r, body)
+
 	// Idempotency check.
 	scopeJSON, _ := json.Marshal(map[string]any{
 		"pathKey":    "agent",
@@ -457,7 +508,7 @@ func (h *HooksHTTPHandler) handleAgent(w http.ResponseWriter, body map[string]an
 		"message":    payload.Message,
 		"name":       payload.Name,
 	})
-	replayKey := h.replayCache.buildKey(token, string(scopeJSON), payload.IdempotencyKey)
+	replayKey := h.replayCache.buildKey(token, string(scopeJSON), idempotencyKey)
 	if cachedRunID, ok := h.replayCache.get(replayKey); ok {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "runId": cachedRunID})
 		return
@@ -467,7 +518,7 @@ func (h *HooksHTTPHandler) handleAgent(w http.ResponseWriter, body map[string]an
 		Message:        payload.Message,
 		Name:           payload.Name,
 		AgentID:        agentID,
-		IdempotencyKey: payload.IdempotencyKey,
+		IdempotencyKey: idempotencyKey,
 		SessionKey:     sessionKey,
 		Deliver:        payload.Deliver,
 		Channel:        payload.Channel,
@@ -475,6 +526,7 @@ func (h *HooksHTTPHandler) handleAgent(w http.ResponseWriter, body map[string]an
 		Model:          payload.Model,
 		Thinking:       payload.Thinking,
 		TimeoutSeconds: payload.TimeoutSeconds,
+		WakeMode:       wakeMode,
 	})
 
 	h.replayCache.set(replayKey, runID)
@@ -483,15 +535,29 @@ func (h *HooksHTTPHandler) handleAgent(w http.ResponseWriter, body map[string]an
 
 // handleMapping tries to match a subPath against configured mappings.
 // Returns true if a mapping matched and the response was written.
-func (h *HooksHTTPHandler) handleMapping(w http.ResponseWriter, subPath string, body map[string]any, token string) bool {
+func (h *HooksHTTPHandler) handleMapping(w http.ResponseWriter, r *http.Request, subPath string, body map[string]any, token string, tmplCtx templateContext) bool {
 	for _, m := range h.config.Mappings {
-		if !matchesMapping(m, subPath) {
+		if !matchesMapping(m, subPath, body) {
 			continue
+		}
+
+		// #10: If mapping has no action, return 204 No Content.
+		if m.Action == "" {
+			w.WriteHeader(http.StatusNoContent)
+			return true
 		}
 
 		switch m.Action {
 		case "wake":
-			text := resolveTemplate(m.TextTemplate, body)
+			text := resolveTemplate(m.TextTemplate, tmplCtx)
+
+			// #9: Validate text is non-empty after template resolution.
+			text = strings.TrimSpace(text)
+			if text == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "hook mapping requires text"})
+				return true
+			}
+
 			mode := m.WakeMode
 			if mode == "" {
 				mode = "now"
@@ -501,7 +567,7 @@ func (h *HooksHTTPHandler) handleMapping(w http.ResponseWriter, subPath string, 
 			return true
 
 		case "agent":
-			message := resolveTemplate(m.MessageTemplate, body)
+			message := resolveTemplate(m.MessageTemplate, tmplCtx)
 			if message == "" {
 				// Fall back to body's message field.
 				message, _ = body["message"].(string)
@@ -524,14 +590,26 @@ func (h *HooksHTTPHandler) handleMapping(w http.ResponseWriter, subPath string, 
 			}
 
 			agentID = h.resolveAgentID(agentID)
-			idempotencyKey, _ := body["idempotencyKey"].(string)
+
+			// #4: Resolve idempotency key from headers first, then body.
+			idempotencyKey := resolveIdempotencyKey(r, body)
+
+			// #12: Apply template rendering to mapping fields.
+			name := resolveTemplate(m.Name, tmplCtx)
+			if name == "" {
+				name = "Hook"
+			}
+			channel := resolveTemplate(m.Channel, tmplCtx)
+			to := resolveTemplate(m.To, tmplCtx)
+			model := resolveTemplate(m.Model, tmplCtx)
+			thinking := resolveTemplate(m.Thinking, tmplCtx)
 
 			scopeJSON, _ := json.Marshal(map[string]any{
 				"pathKey":    subPath,
 				"agentId":    agentID,
 				"sessionKey": sessionKey,
 				"message":    message,
-				"name":       m.Name,
+				"name":       name,
 			})
 			replayKey := h.replayCache.buildKey(token, string(scopeJSON), idempotencyKey)
 			if cachedRunID, ok := h.replayCache.get(replayKey); ok {
@@ -541,15 +619,15 @@ func (h *HooksHTTPHandler) handleMapping(w http.ResponseWriter, subPath string, 
 
 			runID := h.dispatchers.DispatchAgent(HookAgentDispatchPayload{
 				Message:        message,
-				Name:           m.Name,
+				Name:           name,
 				AgentID:        agentID,
 				IdempotencyKey: idempotencyKey,
 				SessionKey:     sessionKey,
 				Deliver:        m.Deliver,
-				Channel:        m.Channel,
-				To:             m.To,
-				Model:          m.Model,
-				Thinking:       m.Thinking,
+				Channel:        channel,
+				To:             to,
+				Model:          model,
+				Thinking:       thinking,
 				TimeoutSeconds: m.TimeoutSeconds,
 			})
 			h.replayCache.set(replayKey, runID)
@@ -629,6 +707,156 @@ func (h *HooksHTTPHandler) isSessionKeyAllowed(key string) bool {
 	}
 	return false
 }
+
+// ───────────────────────────────────────────────────────────────────────
+// Idempotency key resolution.
+// ───────────────────────────────────────────────────────────────────────
+
+// resolveIdempotencyKey checks HTTP headers first, then falls back to body.
+// Returns empty string if no valid key is found.
+func resolveIdempotencyKey(r *http.Request, body map[string]any) string {
+	// Check headers first.
+	if key := r.Header.Get("Idempotency-Key"); key != "" {
+		if len(key) <= maxIdempotencyKeyLen {
+			return key
+		}
+		return ""
+	}
+	if key := r.Header.Get("X-Deneb-Idempotency-Key"); key != "" {
+		if len(key) <= maxIdempotencyKeyLen {
+			return key
+		}
+		return ""
+	}
+	// Fall back to body.
+	if key, ok := body["idempotencyKey"].(string); ok && key != "" {
+		if len(key) <= maxIdempotencyKeyLen {
+			return key
+		}
+	}
+	return ""
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Template rendering.
+// ───────────────────────────────────────────────────────────────────────
+
+// buildTemplateContext creates a templateContext from the HTTP request and parsed body.
+func buildTemplateContext(r *http.Request, subPath string, payload map[string]any) templateContext {
+	headers := make(map[string]string)
+	for k := range r.Header {
+		headers[strings.ToLower(k)] = r.Header.Get(k)
+	}
+	query := make(map[string]string)
+	for k, v := range r.URL.Query() {
+		if len(v) > 0 {
+			query[k] = v[0]
+		}
+	}
+	return templateContext{
+		Payload: payload,
+		Headers: headers,
+		Query:   query,
+		Path:    subPath,
+	}
+}
+
+// resolveTemplate applies template expressions by replacing {{expr}} placeholders.
+// Supports: {{path}}, {{now}}, {{headers.<key>}}, {{query.<key>}}, {{payload.<dotpath>}}.
+// Blocked keys (__proto__, prototype, constructor) are rejected for security.
+func resolveTemplate(tmpl string, ctx templateContext) string {
+	if tmpl == "" {
+		return ""
+	}
+	result := templateExprRegex.ReplaceAllStringFunc(tmpl, func(match string) string {
+		expr := strings.TrimSpace(match[2 : len(match)-2])
+		return resolveTemplateExpr(expr, ctx)
+	})
+	return result
+}
+
+// resolveTemplateExpr resolves a single template expression.
+func resolveTemplateExpr(expr string, ctx templateContext) string {
+	if expr == "" {
+		return ""
+	}
+
+	// {{path}}
+	if expr == "path" {
+		return ctx.Path
+	}
+
+	// {{now}}
+	if expr == "now" {
+		return time.Now().UTC().Format(time.RFC3339)
+	}
+
+	// {{headers.<key>}}
+	if strings.HasPrefix(expr, "headers.") {
+		key := strings.ToLower(strings.TrimPrefix(expr, "headers."))
+		if key != "" && !blockedTemplateKeys[key] {
+			if v, ok := ctx.Headers[key]; ok {
+				return v
+			}
+		}
+		return ""
+	}
+
+	// {{query.<key>}}
+	if strings.HasPrefix(expr, "query.") {
+		key := strings.TrimPrefix(expr, "query.")
+		if key != "" && !blockedTemplateKeys[key] {
+			if v, ok := ctx.Query[key]; ok {
+				return v
+			}
+		}
+		return ""
+	}
+
+	// {{payload.<dotpath>}}
+	if strings.HasPrefix(expr, "payload.") {
+		dotPath := strings.TrimPrefix(expr, "payload.")
+		return resolvePayloadDotPath(ctx.Payload, dotPath)
+	}
+
+	// Direct key lookup in payload for backward compatibility.
+	if !blockedTemplateKeys[expr] {
+		if v, ok := ctx.Payload[expr]; ok {
+			return fmt.Sprintf("%v", v)
+		}
+	}
+
+	return ""
+}
+
+// resolvePayloadDotPath traverses a nested map using dot-separated keys.
+// Blocks __proto__, prototype, and constructor keys for security.
+func resolvePayloadDotPath(payload map[string]any, dotPath string) string {
+	if dotPath == "" || payload == nil {
+		return ""
+	}
+	parts := strings.Split(dotPath, ".")
+	var current any = payload
+	for _, part := range parts {
+		if blockedTemplateKeys[part] {
+			return ""
+		}
+		m, ok := current.(map[string]any)
+		if !ok {
+			return ""
+		}
+		current, ok = m[part]
+		if !ok {
+			return ""
+		}
+	}
+	if current == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", current)
+}
+
+// TODO: transform function support (requires Go plugin system or scripting engine)
 
 // ───────────────────────────────────────────────────────────────────────
 // Utility functions.
@@ -734,33 +962,31 @@ func generateUUID() string {
 		buf[0:4], buf[4:6], buf[6:8], buf[8:10], buf[10:16])
 }
 
-// matchesMapping checks if a subPath matches a mapping's criteria.
-func matchesMapping(m HookMapping, subPath string) bool {
+// matchesMapping checks if a subPath and payload match a mapping's criteria.
+// #7: Source matching now checks payload.source instead of subPath.
+func matchesMapping(m HookMapping, subPath string, payload map[string]any) bool {
+	pathMatches := true
 	if m.MatchPath != "" {
 		// Normalize: strip leading slash from both for comparison.
 		normalized := strings.TrimLeft(m.MatchPath, "/")
-		return normalized == subPath
+		pathMatches = normalized == subPath
 	}
-	// Source-based matching: subPath must contain the source identifier.
+
+	sourceMatches := true
 	if m.MatchSource != "" {
-		return strings.Contains(subPath, m.MatchSource)
+		payloadSource, _ := payload["source"].(string)
+		sourceMatches = payloadSource == m.MatchSource
+	}
+
+	// Both conditions must match if specified.
+	if m.MatchPath != "" && m.MatchSource != "" {
+		return pathMatches && sourceMatches
+	}
+	if m.MatchPath != "" {
+		return pathMatches
+	}
+	if m.MatchSource != "" {
+		return sourceMatches
 	}
 	return false
-}
-
-// resolveTemplate applies a simple template by replacing {{key}} placeholders
-// with values from the payload. This is intentionally simple — complex
-// transformations should be handled by the caller/dispatcher.
-func resolveTemplate(tmpl string, payload map[string]any) string {
-	if tmpl == "" {
-		return ""
-	}
-	result := tmpl
-	for key, val := range payload {
-		placeholder := "{{" + key + "}}"
-		if strings.Contains(result, placeholder) {
-			result = strings.ReplaceAll(result, placeholder, fmt.Sprintf("%v", val))
-		}
-	}
-	return result
 }
