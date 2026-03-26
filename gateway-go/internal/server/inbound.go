@@ -46,8 +46,14 @@ func NewInboundProcessor(s *Server) *InboundProcessor {
 
 // HandleTelegramUpdate processes an incoming Telegram update through the
 // autoreply pipeline: inbound normalization → command detection → directive
-// parsing → chat.send dispatch.
+// parsing → link enrichment → chat.send dispatch.
 func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
+	// Handle callback queries (inline button clicks).
+	if update.CallbackQuery != nil {
+		p.handleCallbackQuery(update.CallbackQuery)
+		return
+	}
+
 	msg := update.Message
 	if msg == nil || msg.Text == "" {
 		return
@@ -123,6 +129,13 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	agentMessage := directives.Cleaned
 	if agentMessage == "" {
 		agentMessage = msgCtx.BodyForAgent
+	}
+
+	// Enrich message with fetched link content.
+	if linkSummary := EnrichMessageWithLinks(
+		context.Background(), agentMessage, defaultLinkFetcher, p.logger,
+	); linkSummary != "" {
+		agentMessage = agentMessage + "\n\n" + linkSummary
 	}
 
 	// Dispatch to chat.send with the preprocessed message.
@@ -212,4 +225,56 @@ func buildSenderName(from *telegram.User) string {
 // isGroupChat checks if a Telegram chat is a group/supergroup.
 func isGroupChat(chat telegram.Chat) bool {
 	return chat.Type == "group" || chat.Type == "supergroup"
+}
+
+// handleCallbackQuery processes an inline keyboard button click.
+// Acknowledges the query to Telegram and routes the callback data as a text
+// message to the agent session.
+func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
+	if cb.Message == nil || cb.Data == "" {
+		return
+	}
+
+	chatID := fmt.Sprintf("%d", cb.Message.Chat.ID)
+	sessionKey := "telegram:" + chatID
+
+	// Acknowledge to Telegram (stops the loading spinner on the button).
+	client := p.server.telegramPlug.Client()
+	if client != nil {
+		ackCtx, ackCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer ackCancel()
+		if err := telegram.AnswerCallbackQuery(ackCtx, client, cb.ID, ""); err != nil {
+			p.logger.Warn("failed to answer callback query", "error", err)
+		}
+	}
+
+	// Route callback data as a text message to the agent.
+	agentMessage := fmt.Sprintf("[Button: %s]", cb.Data)
+
+	req, err := protocol.NewRequestFrame(
+		fmt.Sprintf("tg-%s-cb-%s", chatID, cb.ID),
+		"chat.send",
+		map[string]any{
+			"sessionKey": sessionKey,
+			"message":    agentMessage,
+			"delivery": map[string]any{
+				"channel": "telegram",
+				"to":      chatID,
+			},
+		},
+	)
+	if err != nil {
+		p.logger.Error("failed to build chat.send request for callback", "error", err)
+		return
+	}
+
+	sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer sendCancel()
+	resp := p.chatHandler.Send(sendCtx, req)
+	if resp != nil && !resp.OK {
+		p.logger.Warn("chat.send failed for callback query",
+			"chatId", chatID,
+			"error", resp.Error,
+		)
+	}
 }
