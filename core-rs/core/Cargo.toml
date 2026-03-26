@@ -41,7 +41,7 @@ prost-types.workspace = true
 thiserror.workspace = true
 
 # Node.js FFI via napi-rs (optional, behind "napi_binding" feature)
-napi = { version = "2", features = ["napi9", "serde-json"], optional = true }
+napi = { version = "3", features = ["napi9", "serde-json"], optional = true }
 napi-derive = { version = "2", optional = true }
 
 # Data parallelism (20-core DGX Spark utilization)
