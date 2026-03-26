@@ -32,71 +32,119 @@ const (
 	maxContextTotalChars = 150_000
 )
 
-// LoadContextFiles scans the workspace directory for known context files
-// (AGENTS.md, CLAUDE.md, SOUL.md, TOOLS.md, etc.) and returns their contents.
-// Files are truncated if they exceed size limits.
+// LoadContextFiles scans the workspace directory and its ancestors for known
+// context files (AGENTS.md, CLAUDE.md, SOUL.md, TOOLS.md, etc.) and returns
+// their contents. Files closer to the workspace root take precedence.
+// This mirrors the Node.js behavior of walking up the directory tree.
 func LoadContextFiles(workspaceDir string) []ContextFile {
 	if workspaceDir == "" {
 		return nil
 	}
 
+	// Collect search directories: workspace first, then parents up to root or ~/.
+	searchDirs := collectSearchDirs(workspaceDir)
+
 	var files []ContextFile
 	totalChars := 0
+	seen := make(map[string]bool) // track resolved paths for dedup
 
 	for _, name := range contextFileNames {
-		path := filepath.Join(workspaceDir, name)
+		for _, dir := range searchDirs {
+			path := filepath.Join(dir, name)
 
-		// Follow symlinks (CLAUDE.md is often a symlink to AGENTS.md).
-		resolved, err := filepath.EvalSymlinks(path)
-		if err != nil {
-			continue
-		}
+			// Follow symlinks (CLAUDE.md is often a symlink to AGENTS.md).
+			resolved, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				continue
+			}
 
-		data, err := os.ReadFile(resolved)
-		if err != nil {
-			continue
-		}
-
-		content := string(data)
-		if len(content) == 0 {
-			continue
-		}
-
-		// Skip if this would exceed total budget.
-		if totalChars+len(content) > maxContextTotalChars {
-			// Truncate to fit remaining budget.
-			remaining := maxContextTotalChars - totalChars
-			if remaining <= 0 {
+			// Skip if we already loaded this resolved path.
+			if seen[resolved] {
 				break
 			}
-			content = truncateContent(content, remaining)
-		}
 
-		// Truncate individual file if too large.
-		if len(content) > maxContextFileChars {
-			content = truncateContent(content, maxContextFileChars)
-		}
+			data, err := os.ReadFile(resolved)
+			if err != nil {
+				continue
+			}
 
-		// Check if we already loaded this content (symlink dedup).
-		isDup := false
-		for _, existing := range files {
-			if existing.Content == content {
-				isDup = true
+			content := string(data)
+			if len(content) == 0 {
+				continue
+			}
+
+			// Skip if this would exceed total budget.
+			if totalChars+len(content) > maxContextTotalChars {
+				remaining := maxContextTotalChars - totalChars
+				if remaining <= 0 {
+					break
+				}
+				content = truncateContent(content, remaining)
+			}
+
+			// Truncate individual file if too large.
+			if len(content) > maxContextFileChars {
+				content = truncateContent(content, maxContextFileChars)
+			}
+
+			// Content-based dedup (handles symlinks pointing to same file).
+			isDup := false
+			for _, existing := range files {
+				if existing.Content == content {
+					isDup = true
+					break
+				}
+			}
+			if isDup {
+				seen[resolved] = true
 				break
 			}
-		}
-		if isDup {
-			continue
-		}
 
-		files = append(files, ContextFile{
-			Path:    name,
-			Content: content,
-		})
-		totalChars += len(content)
+			// Use relative label: if from workspace root, just the filename;
+			// otherwise include relative path hint.
+			label := name
+			if dir != workspaceDir {
+				rel, _ := filepath.Rel(workspaceDir, filepath.Join(dir, name))
+				if rel != "" {
+					label = rel
+				}
+			}
+
+			files = append(files, ContextFile{
+				Path:    label,
+				Content: content,
+			})
+			totalChars += len(content)
+			seen[resolved] = true
+			break // Found for this filename, don't search further up
+		}
 	}
 
 	return files
+}
+
+// collectSearchDirs returns the workspace dir plus its ancestors, stopping
+// at the user's home directory or filesystem root (max 10 levels).
+func collectSearchDirs(workspaceDir string) []string {
+	dirs := []string{workspaceDir}
+
+	home, _ := os.UserHomeDir()
+	current := workspaceDir
+	for i := 0; i < 10; i++ {
+		parent := filepath.Dir(current)
+		if parent == current {
+			break // reached filesystem root
+		}
+		if home != "" && parent == home {
+			// Include home but don't go above it.
+			dirs = append(dirs, parent)
+			break
+		}
+		dirs = append(dirs, parent)
+		current = parent
+	}
+
+	return dirs
 }
 
 // truncateContent truncates content to maxChars using head (70%) + marker + tail (20%).

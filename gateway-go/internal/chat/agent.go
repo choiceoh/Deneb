@@ -221,6 +221,9 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, emitDelta
 						if emitDelta != nil && cbd.Delta.Text != "" {
 							emitDelta(cbd.Delta.Text)
 						}
+					case "thinking_delta":
+						// Extended thinking content — accumulate but don't emit to user.
+						currentBlock.block.Text += cbd.Delta.Text
 					case "input_json_delta":
 						currentBlock.jsonBuf = append(currentBlock.jsonBuf, cbd.Delta.PartialJSON...)
 					}
@@ -233,10 +236,16 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, emitDelta
 						currentBlock.block.Input = json.RawMessage(currentBlock.jsonBuf)
 					}
 					result.contentBlocks = append(result.contentBlocks, currentBlock.block)
-					if currentBlock.block.Type == "tool_use" {
+					switch currentBlock.block.Type {
+					case "tool_use":
 						result.toolCalls = append(result.toolCalls, currentBlock.block)
-					} else if currentBlock.block.Type == "text" {
+					case "text":
 						result.text += currentBlock.block.Text
+					case "thinking":
+						// Thinking blocks are part of extended thinking; preserve
+						// in contentBlocks but don't include in user-visible text.
+						currentBlock.block.Thinking = currentBlock.block.Text
+						currentBlock.block.Text = ""
 					}
 					currentBlock = nil
 				}

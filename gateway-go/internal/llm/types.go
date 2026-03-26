@@ -21,6 +21,15 @@ type ChatRequest struct {
 	StopSequences    []string `json:"stop_sequences,omitempty"`
 	FrequencyPenalty *float64 `json:"-"` // OpenAI only; excluded from Anthropic JSON
 	PresencePenalty  *float64 `json:"-"` // OpenAI only; excluded from Anthropic JSON
+
+	// Anthropic extended thinking support.
+	Thinking *ThinkingConfig `json:"thinking,omitempty"`
+}
+
+// ThinkingConfig controls Anthropic's extended thinking feature.
+type ThinkingConfig struct {
+	Type         string `json:"type"`          // "enabled" or "disabled"
+	BudgetTokens int    `json:"budget_tokens"` // max tokens for thinking
 }
 
 // Message represents a single message in a conversation.
@@ -43,7 +52,7 @@ func NewBlockMessage(role string, blocks []ContentBlock) Message {
 
 // ContentBlock represents a single content block in a message.
 type ContentBlock struct {
-	Type string `json:"type"` // "text", "tool_use", "tool_result", "image"
+	Type string `json:"type"` // "text", "tool_use", "tool_result", "image", "thinking"
 
 	// text block
 	Text string `json:"text,omitempty"`
@@ -91,9 +100,10 @@ type CacheControl struct {
 
 // Tool describes a tool available to the model.
 type Tool struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	InputSchema map[string]any `json:"input_schema"`
+	Name         string         `json:"name"`
+	Description  string         `json:"description"`
+	InputSchema  map[string]any `json:"input_schema"`
+	CacheControl *CacheControl  `json:"cache_control,omitempty"` // Anthropic prompt caching
 }
 
 // StreamEvent represents a single server-sent event from the LLM API.

@@ -77,6 +77,14 @@ func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspa
 		Fn:          toolWebFetch(),
 	})
 
+	// -- Apply patch tool --
+	registry.RegisterTool(ToolDef{
+		Name:        "apply_patch",
+		Description: "Apply multi-file patches (unified diff format)",
+		InputSchema: applyPatchToolSchema(),
+		Fn:          toolApplyPatch(workspaceDir),
+	})
+
 	// -- Stubbed tools (return descriptive unavailable message) --
 	stubs := []struct {
 		name string
@@ -372,6 +380,57 @@ func toolWebFetch() ToolFunc {
 		}
 
 		return content, nil
+	}
+}
+
+// --- Apply patch tool ---
+
+func applyPatchToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"patch": map[string]any{
+				"type":        "string",
+				"description": "The unified diff patch to apply",
+			},
+		},
+		"required": []string{"patch"},
+	}
+}
+
+func toolApplyPatch(defaultDir string) ToolFunc {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			Patch string `json:"patch"`
+		}
+		if err := json.Unmarshal(input, &p); err != nil {
+			return "", fmt.Errorf("invalid apply_patch params: %w", err)
+		}
+		if p.Patch == "" {
+			return "", fmt.Errorf("patch is required")
+		}
+
+		// Use `git apply` for reliable patch application.
+		cmd := exec.CommandContext(ctx, "git", "apply", "--allow-empty", "-")
+		cmd.Dir = defaultDir
+		cmd.Stdin = strings.NewReader(p.Patch)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			// Fall back to `patch -p1` if git apply fails.
+			cmd2 := exec.CommandContext(ctx, "patch", "-p1", "--no-backup-if-mismatch")
+			cmd2.Dir = defaultDir
+			cmd2.Stdin = strings.NewReader(p.Patch)
+			out2, err2 := cmd2.CombinedOutput()
+			if err2 != nil {
+				return fmt.Sprintf("git apply failed: %s\npatch -p1 failed: %s", string(out), string(out2)), nil
+			}
+			return fmt.Sprintf("Patch applied (via patch -p1):\n%s", string(out2)), nil
+		}
+		result := "Patch applied successfully."
+		if len(out) > 0 {
+			result += "\n" + string(out)
+		}
+		return result, nil
 	}
 }
 
