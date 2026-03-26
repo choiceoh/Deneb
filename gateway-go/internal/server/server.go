@@ -958,6 +958,7 @@ func (s *Server) registerPhase2Methods() {
 			sglangClient := llm.NewClient(sglangURL, "", llm.WithLogger(s.logger))
 			trigger := memory.NewDreamingTrigger(memStore, embedder, sglangClient, sglangModel, s.logger)
 			chatCfg.DreamingTrigger = trigger
+			trigger.StartPeriodicTimer(context.Background())
 
 			// Auto-migrate existing MEMORY.md on first run.
 			count, _ := memStore.ActiveFactCount(context.Background())
