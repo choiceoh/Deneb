@@ -36,6 +36,7 @@ type CommandDispatcher struct {
 	registry       *CommandRegistry // command normalization/detection
 	acpRegistry    *ACPRegistry     // sub-agent lifecycle tracking
 	sendPolicyFunc SendPolicyFunc
+	depsFactory    func() *CommandDeps // builds deps for command handlers
 	logger         *slog.Logger
 }
 
@@ -70,6 +71,11 @@ func (d *CommandDispatcher) SetACPRegistry(acpRegistry *ACPRegistry) {
 // SetSendPolicyFunc configures the send policy resolver.
 func (d *CommandDispatcher) SetSendPolicyFunc(fn SendPolicyFunc) {
 	d.sendPolicyFunc = fn
+}
+
+// SetDepsFactory configures the factory that builds CommandDeps for handlers.
+func (d *CommandDispatcher) SetDepsFactory(fn func() *CommandDeps) {
+	d.depsFactory = fn
 }
 
 // DispatchCommands runs the full command dispatch pipeline.
@@ -136,6 +142,10 @@ func (d *CommandDispatcher) DispatchCommands(params HandleCommandsFullParams) Co
 	if d.router != nil {
 		cmdKey := extractDispatchCommandKey(params.Command.CommandBodyNormalized)
 		if cmdKey != "" && d.router.HasHandler(cmdKey) {
+			deps := &CommandDeps{}
+			if d.depsFactory != nil {
+				deps = d.depsFactory()
+			}
 			routerCtx := CommandContext{
 				Command:    cmdKey,
 				Args:       extractDispatchCommandArgs(params.Command.CommandBodyNormalized, cmdKey),
@@ -156,7 +166,7 @@ func (d *CommandDispatcher) DispatchCommands(params HandleCommandsFullParams) Co
 					ReasoningLevel: params.ResolvedReasoningLevel,
 					ElevatedLevel:  params.ResolvedElevatedLevel,
 				},
-				Deps: &CommandDeps{},
+				Deps: deps,
 			}
 
 			routerResult, err := d.router.Dispatch(routerCtx)

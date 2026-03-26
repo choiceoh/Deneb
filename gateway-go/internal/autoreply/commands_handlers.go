@@ -46,6 +46,32 @@ type CommandDeps struct {
 	Allowlist       *AllowlistMatcher
 	SubagentRuns    func() []*SubagentRunRecord
 	McpStore        McpServerStore
+	Status          *StatusDeps // Server-level data for /status command.
+}
+
+// StatusDeps holds server-level data for the /status command.
+type StatusDeps struct {
+	Version       string
+	StartedAt     time.Time
+	RustFFI       bool
+	SessionCount  int
+	WSConnections int32
+	ProviderUsage map[string]*ProviderUsageStats
+	ChannelHealth []ChannelHealthEntry
+}
+
+// ProviderUsageStats holds per-provider API usage counters.
+type ProviderUsageStats struct {
+	Calls  int64
+	Input  int64
+	Output int64
+}
+
+// ChannelHealthEntry holds health status for a single channel.
+type ChannelHealthEntry struct {
+	ID      string
+	Healthy bool
+	Reason  string
 }
 
 // CommandResult holds the outcome of a command execution.
@@ -233,6 +259,17 @@ func handleStatusCommand(ctx CommandContext) (*CommandResult, error) {
 		ElevatedLevel:   s.ElevatedLevel,
 		SendPolicy:      s.SendPolicy,
 		GroupActivation: s.GroupActivation,
+	}
+	// Populate server-level fields from StatusDeps.
+	if ctx.Deps != nil && ctx.Deps.Status != nil {
+		sd := ctx.Deps.Status
+		report.Version = sd.Version
+		report.StartedAt = sd.StartedAt
+		report.RustFFI = sd.RustFFI
+		report.SessionCount = sd.SessionCount
+		report.WSConnections = sd.WSConnections
+		report.ProviderUsage = sd.ProviderUsage
+		report.ChannelHealth = sd.ChannelHealth
 	}
 	return &CommandResult{Reply: BuildStatusMessage(report), SkipAgent: true}, nil
 }

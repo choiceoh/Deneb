@@ -122,6 +122,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 					Channel:    "telegram",
 					IsGroup:    msgCtx.IsGroup,
 				},
+				Deps: p.buildCommandDeps(),
 			})
 			if err == nil && result != nil && result.SkipAgent {
 				// Command handled; send reply back to Telegram.
@@ -267,6 +268,51 @@ func (p *InboundProcessor) sendCommandReply(chatID string, result *autoreply.Com
 	if _, err := telegram.SendText(ctx, client, id, html, telegram.SendOptions{ParseMode: "HTML"}); err != nil {
 		p.logger.Warn("failed to send command reply", "chatId", chatID, "error", err)
 	}
+}
+
+// buildCommandDeps creates a CommandDeps populated with server-level status data.
+func (p *InboundProcessor) buildCommandDeps() *autoreply.CommandDeps {
+	sd := &autoreply.StatusDeps{
+		Version:   p.server.version,
+		StartedAt: p.server.startedAt,
+		RustFFI:   p.server.rustFFI,
+	}
+	if p.server.sessions != nil {
+		sd.SessionCount = p.server.sessions.Count()
+	}
+	sd.WSConnections = p.server.clientCnt.Load()
+
+	// Per-provider usage stats.
+	if p.server.usageTracker != nil {
+		report := p.server.usageTracker.Status()
+		if report != nil && len(report.Providers) > 0 {
+			sd.ProviderUsage = make(map[string]*autoreply.ProviderUsageStats, len(report.Providers))
+			for name, ps := range report.Providers {
+				sd.ProviderUsage[name] = &autoreply.ProviderUsageStats{
+					Calls:  ps.Calls,
+					Input:  ps.Tokens.Input,
+					Output: ps.Tokens.Output,
+				}
+			}
+		}
+	}
+
+	// Channel health.
+	if p.server.channelHealth != nil {
+		snapshot := p.server.channelHealth.HealthSnapshot()
+		if len(snapshot) > 0 {
+			sd.ChannelHealth = make([]autoreply.ChannelHealthEntry, len(snapshot))
+			for i, ch := range snapshot {
+				sd.ChannelHealth[i] = autoreply.ChannelHealthEntry{
+					ID:      ch.ChannelID,
+					Healthy: ch.Healthy,
+					Reason:  ch.Reason,
+				}
+			}
+		}
+	}
+
+	return &autoreply.CommandDeps{Status: sd}
 }
 
 // extractCommandKey pulls the command name from a slash-prefixed message.
