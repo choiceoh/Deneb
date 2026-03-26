@@ -101,7 +101,7 @@ func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Serv
 		agent:     agent,
 		logger:    logger.With("pkg", "autonomous"),
 		cfg:       cfg,
-		runLog:    NewRunLog(cfg.GoalStorePath),
+		runLog:    NewRunLog(cfg.GoalStorePath, logger),
 		enabled:   true,
 		svcCtx:    svcCtx,
 		svcCancel: svcCancel,
@@ -156,7 +156,7 @@ func (s *Service) Status() ServiceStatus {
 	active, _ := s.goals.ActiveGoals()
 
 	return ServiceStatus{
-		Running:        s.attention != nil,
+		Running:        s.attention != nil && s.attention.IsTimerActive(),
 		Enabled:        s.enabled,
 		CycleRunning:   s.cycleRunning,
 		ActiveGoals:    len(active),
@@ -413,12 +413,13 @@ func (s *Service) applyCycleOutcome(outcome *CycleOutcome) {
 		TotalCycles:       s.totalCycles,
 		TotalErrors:       s.totalErrors,
 	}
-	s.mu.Unlock()
 
-	// Persist cycle state to disk (non-critical if this fails).
+	// Persist cycle state to disk while still holding the lock,
+	// preventing a concurrent cycle from seeing stale persisted state.
 	if err := s.goals.UpdateCycleState(cs); err != nil {
 		s.logger.Warn("failed to persist cycle state", "error", err)
 	}
+	s.mu.Unlock()
 
 	// Append to run log.
 	s.runLog.Append(RunLogEntry{

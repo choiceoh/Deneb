@@ -146,7 +146,9 @@ func parseGoalUpdates(output string, activeGoalIDs []string) []GoalUpdate {
 
 	// Fallback: LLM didn't produce structured output.
 	// Save the tail of the output as a note on the first active goal
-	// so progress isn't completely lost.
+	// so progress isn't completely lost. Note: if the LLM worked on a
+	// non-first goal, this note lands on the wrong goal — accepted trade-off
+	// since the prompt instructs the LLM to always emit a goal_update block.
 	if len(activeGoalIDs) > 0 && output != "" {
 		note := extractFallbackNote(output)
 		if note != "" {
@@ -161,11 +163,18 @@ func parseGoalUpdates(output string, activeGoalIDs []string) []GoalUpdate {
 	return nil
 }
 
+// maxGoalUpdatesPerCycle caps how many goal updates a single cycle can produce,
+// guarding against pathological LLM output.
+const maxGoalUpdatesPerCycle = 10
+
 func validateUpdates(updates []GoalUpdate) []GoalUpdate {
 	valid := make([]GoalUpdate, 0, len(updates))
 	for _, u := range updates {
 		if u.ID == "" {
 			continue
+		}
+		if len(valid) >= maxGoalUpdatesPerCycle {
+			break
 		}
 		switch u.Status {
 		case StatusActive, StatusCompleted, StatusPaused:
@@ -173,7 +182,8 @@ func validateUpdates(updates []GoalUpdate) []GoalUpdate {
 		default:
 			u.Status = StatusActive
 		}
-		// Truncate excessively long notes.
+		// Truncate excessively long notes (silent; the note is internal context
+		// for the next cycle, not user-facing).
 		if len(u.Note) > 500 {
 			u.Note = u.Note[:497] + "..."
 		}
