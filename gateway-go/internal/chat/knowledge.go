@@ -13,13 +13,16 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
 // KnowledgeDeps holds optional dependencies for knowledge prefetch.
 type KnowledgeDeps struct {
-	VegaBackend  vega.Backend // nil → skip Vega search
-	WorkspaceDir string       // empty → skip Memory search
+	VegaBackend    vega.Backend     // nil → skip Vega search
+	WorkspaceDir   string           // empty → skip file-based Memory search
+	MemoryStore    *memory.Store    // nil → skip structured memory search
+	MemoryEmbedder *memory.Embedder // nil → FTS-only structured search
 }
 
 // Knowledge prefetch limits.
@@ -47,9 +50,10 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 	defer cancel()
 
 	var (
-		wg          sync.WaitGroup
-		vegaResults []vega.SearchResult
-		memMatches  []MemoryMatch
+		wg           sync.WaitGroup
+		vegaResults  []vega.SearchResult
+		memMatches   []MemoryMatch
+		structFacts  []memory.SearchResult
 	)
 
 	// Vega search (project knowledge DB).
@@ -64,8 +68,26 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 		}()
 	}
 
-	// Memory search (MEMORY.md + memory/*.md).
-	if deps.WorkspaceDir != "" {
+	// Structured memory search (Honcho-style SQLite store).
+	if deps.MemoryStore != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Optionally embed query for semantic search.
+			var queryVec []float32
+			if deps.MemoryEmbedder != nil {
+				vec, err := deps.MemoryEmbedder.EmbedQuery(ctx, message)
+				if err == nil {
+					queryVec = vec
+				}
+			}
+			results, err := deps.MemoryStore.SearchFacts(ctx, message, queryVec, memory.SearchOpts{Limit: knowledgeMaxMemory})
+			if err == nil {
+				structFacts = results
+			}
+		}()
+	} else if deps.WorkspaceDir != "" {
+		// Fallback: file-based memory search (legacy).
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -75,11 +97,11 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 
 	wg.Wait()
 
-	if len(vegaResults) == 0 && len(memMatches) == 0 {
+	if len(vegaResults) == 0 && len(memMatches) == 0 && len(structFacts) == 0 {
 		return ""
 	}
 
-	return formatKnowledge(vegaResults, memMatches)
+	return formatKnowledgeWithFacts(vegaResults, memMatches, structFacts)
 }
 
 // truncateRunes truncates s to at most maxRunes runes, appending "..." if truncated.
@@ -92,10 +114,14 @@ func truncateRunes(s string, maxRunes int) string {
 	return string(runes[:maxRunes]) + "..."
 }
 
-// formatKnowledge builds the "## 관련 지식" section from search results,
-// respecting the token budget. Uses incremental token counting via sb.Len()
-// deltas to avoid O(N * totalLen) re-scanning on each iteration.
+// formatKnowledge builds the "## 관련 지식" section from search results (legacy).
 func formatKnowledge(vegaResults []vega.SearchResult, memMatches []MemoryMatch) string {
+	return formatKnowledgeWithFacts(vegaResults, memMatches, nil)
+}
+
+// formatKnowledgeWithFacts builds the "## 관련 지식" section from search results,
+// respecting the token budget. Supports both legacy MemoryMatch and structured facts.
+func formatKnowledgeWithFacts(vegaResults []vega.SearchResult, memMatches []MemoryMatch, structFacts []memory.SearchResult) string {
 	var sb strings.Builder
 	sb.WriteString("## 관련 지식\n\n")
 	tokenCount := sb.Len() / charsPerToken
@@ -117,8 +143,26 @@ func formatKnowledge(vegaResults []vega.SearchResult, memMatches []MemoryMatch) 
 		}
 	}
 
-	// Memory matches.
-	if len(memMatches) > 0 && tokenCount < knowledgeMaxTokens {
+	// Structured memory facts (Honcho-style, importance-weighted).
+	if len(structFacts) > 0 && tokenCount < knowledgeMaxTokens {
+		before := sb.Len()
+		sb.WriteString("### 메모리\n")
+		tokenCount += (sb.Len() - before) / charsPerToken
+
+		for _, sr := range structFacts {
+			before = sb.Len()
+			content := truncateRunes(sr.Fact.Content, knowledgeMaxContentRunes)
+			fmt.Fprintf(&sb, "- [%.1f] {%s} %s\n", sr.Fact.Importance, sr.Fact.Category, content)
+			tokenCount += (sb.Len() - before) / charsPerToken
+
+			if tokenCount >= knowledgeMaxTokens {
+				break
+			}
+		}
+	}
+
+	// Legacy memory matches (file-based fallback).
+	if len(memMatches) > 0 && len(structFacts) == 0 && tokenCount < knowledgeMaxTokens {
 		before := sb.Len()
 		sb.WriteString("### 메모리\n")
 		tokenCount += (sb.Len() - before) / charsPerToken

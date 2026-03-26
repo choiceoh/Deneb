@@ -23,6 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -97,8 +98,11 @@ type Handler struct {
 	authManager     *provider.AuthManager
 	jobTracker      *agent.JobTracker
 	providerConfigs map[string]ProviderConfig
-	auroraStore     *aurora.Store // Aurora hierarchical compaction store
-	vegaBackend     vega.Backend // optional; knowledge prefetch
+	auroraStore     *aurora.Store    // Aurora hierarchical compaction store
+	vegaBackend     vega.Backend    // optional; knowledge prefetch
+	memoryStore     *memory.Store   // optional; structured memory (Honcho-style)
+	memoryEmbedder  *memory.Embedder // optional; fact embedding
+	dreamingTrigger *memory.DreamingTrigger // optional; dreaming cycle trigger
 
 	// Agent run configuration.
 	contextCfg    ContextConfig
@@ -137,6 +141,9 @@ type HandlerConfig struct {
 	ProviderConfigs map[string]ProviderConfig // provider ID → config
 	AuroraStore     *aurora.Store             // Aurora hierarchical compaction store
 	VegaBackend     vega.Backend              // optional; enables knowledge prefetch in chat
+	MemoryStore     *memory.Store            // optional; structured memory (Honcho-style)
+	MemoryEmbedder  *memory.Embedder         // optional; fact embedding via SGLang
+	DreamingTrigger *memory.DreamingTrigger  // optional; dreaming cycle trigger
 	ContextCfg      ContextConfig
 	CompactionCfg   CompactionConfig
 	DefaultModel    string
@@ -176,6 +183,9 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		providerConfigs: cfg.ProviderConfigs,
 		auroraStore:     cfg.AuroraStore,
 		vegaBackend:     cfg.VegaBackend,
+		memoryStore:     cfg.MemoryStore,
+		memoryEmbedder:  cfg.MemoryEmbedder,
+		dreamingTrigger: cfg.DreamingTrigger,
 		contextCfg:      cfg.ContextCfg,
 		compactionCfg:   cfg.CompactionCfg,
 		defaultModel:    cfg.DefaultModel,
@@ -631,6 +641,9 @@ func (h *Handler) buildRunDeps() runDeps {
 		logger:          h.logger,
 		auroraStore:     h.auroraStore,
 		vegaBackend:     h.vegaBackend,
+		memoryStore:     h.memoryStore,
+		memoryEmbedder:  h.memoryEmbedder,
+		dreamingTrigger: h.dreamingTrigger,
 		contextCfg:      h.contextCfg,
 		compactionCfg:   h.compactionCfg,
 		defaultModel:    h.defaultModel,
