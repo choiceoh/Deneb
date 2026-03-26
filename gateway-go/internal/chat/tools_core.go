@@ -10,13 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 )
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
 // Tools that require external subsystems (e.g., process manager) are wired here.
 // Tools not yet implemented return a descriptive "not available" message.
-func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspaceDir string) {
+func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspaceDir string, cronSched *cron.Scheduler) {
 	// -- File system tools (implemented in tools_fs.go) --
 	registry.RegisterTool(ToolDef{
 		Name:        "read",
@@ -120,7 +121,7 @@ func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspa
 		Name:        "cron",
 		Description: "Manage cron jobs and wake events (reminders, periodic tasks)",
 		InputSchema: cronToolSchema(),
-		Fn:          toolCron(),
+		Fn:          toolCron(cronSched),
 	})
 
 	// -- Gateway tool --

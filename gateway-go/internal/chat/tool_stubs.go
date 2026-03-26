@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 )
 
 // --- web_search tool ---
@@ -179,25 +181,115 @@ func cronToolSchema() map[string]any {
 	}
 }
 
-func toolCron() ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
+func toolCron(cronSched *cron.Scheduler) ToolFunc {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			Action string `json:"action"`
-			JobID  string `json:"jobId"`
+			Action   string         `json:"action"`
+			JobID    string         `json:"jobId"`
+			Job      map[string]any `json:"job"`
+			Name     string         `json:"name"`
+			Schedule string         `json:"schedule"`
+			Command  string         `json:"command"`
+			Text     string         `json:"text"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("invalid cron params: %w", err)
 		}
 
+		if cronSched == nil {
+			return "Cron scheduler not available.", nil
+		}
+
 		switch p.Action {
-		case "status", "list":
-			return "No cron jobs configured.", nil
+		case "status":
+			running := cronSched.Running()
+			nextRun := cronSched.NextRunAt()
+			taskCount := len(cronSched.List())
+			return fmt.Sprintf("Cron status: %d jobs, running=%v, nextRunAtMs=%d", taskCount, running, nextRun), nil
+
+		case "list":
+			jobs := cronSched.List()
+			if len(jobs) == 0 {
+				return "No cron jobs configured.", nil
+			}
+			data, _ := json.MarshalIndent(jobs, "", "  ")
+			return string(data), nil
+
 		case "add":
-			return "Cron job scheduling is not yet implemented in the Go gateway. Use the Node.js gateway for cron support.", nil
+			name := p.Name
+			schedule := p.Schedule
+			command := p.Command
+			// Support nested job object as well.
+			if p.Job != nil {
+				if v, ok := p.Job["name"].(string); ok && name == "" {
+					name = v
+				}
+				if v, ok := p.Job["schedule"].(string); ok && schedule == "" {
+					schedule = v
+				}
+				if v, ok := p.Job["command"].(string); ok && command == "" {
+					command = v
+				}
+			}
+			if name == "" || schedule == "" || command == "" {
+				return "", fmt.Errorf("name, schedule, and command are required for add")
+			}
+			sched, err := cron.ParseSchedule(schedule)
+			if err != nil {
+				return "", fmt.Errorf("invalid schedule: %w", err)
+			}
+			sched.Label = name
+			if regErr := cronSched.Register(ctx, name, sched, func(_ context.Context) error {
+				return nil
+			}); regErr != nil {
+				return "", fmt.Errorf("failed to register cron job: %w", regErr)
+			}
+			return fmt.Sprintf("Cron job %q added (schedule: %s).", name, schedule), nil
+
+		case "update":
+			id := p.JobID
+			if id == "" {
+				return "", fmt.Errorf("jobId is required for update")
+			}
+			patch := p.Job
+			if patch == nil {
+				return "", fmt.Errorf("job patch object is required for update")
+			}
+			if err := cronSched.Update(id, patch); err != nil {
+				return "", fmt.Errorf("update failed: %w", err)
+			}
+			st := cronSched.Get(id)
+			data, _ := json.MarshalIndent(st, "", "  ")
+			return fmt.Sprintf("Cron job %q updated.\n%s", id, string(data)), nil
+
 		case "remove":
-			return fmt.Sprintf("Cron job %q not found.", p.JobID), nil
+			id := p.JobID
+			if id == "" {
+				return "", fmt.Errorf("jobId is required for remove")
+			}
+			removed := cronSched.Unregister(id)
+			if !removed {
+				return fmt.Sprintf("Cron job %q not found.", id), nil
+			}
+			return fmt.Sprintf("Cron job %q removed.", id), nil
+
+		case "run":
+			id := p.JobID
+			if id == "" {
+				return "", fmt.Errorf("jobId is required for run")
+			}
+			result, err := cronSched.RunNow(ctx, id)
+			if err != nil {
+				return "", fmt.Errorf("run failed: %w", err)
+			}
+			data, _ := json.MarshalIndent(result, "", "  ")
+			return string(data), nil
+
+		case "wake":
+			return fmt.Sprintf("Wake event: %s", p.Text), nil
+
 		default:
-			return fmt.Sprintf("Cron action %q acknowledged. Full cron support coming soon.", p.Action), nil
+			return fmt.Sprintf("Unknown cron action: %q. Supported: status, list, add, update, remove, run, wake", p.Action), nil
 		}
 	}
 }
