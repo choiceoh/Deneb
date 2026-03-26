@@ -12,13 +12,13 @@ import (
 
 // AgentConfig configures the agent execution loop.
 type AgentConfig struct {
-	MaxTurns  int           // Maximum tool-call turns before stopping. Default: 25.
-	Timeout   time.Duration // Maximum wall time for the entire agent run. Default: 10m.
+	MaxTurns  int              // Maximum tool-call turns before stopping. Default: 25.
+	Timeout   time.Duration    // Maximum wall time for the entire agent run. Default: 10m.
 	Model     string
-	System    string
+	System    json.RawMessage  // System prompt: JSON string or array of ContentBlocks.
 	Tools     []llm.Tool
 	MaxTokens int    // Max output tokens per LLM call. Default: 8192.
-	APIType   string // "anthropic" (default) or "openai"
+	APIType   string // "openai" (default) or "anthropic"
 }
 
 // DefaultAgentConfig returns sensible defaults.
@@ -84,10 +84,11 @@ func RunAgent(
 
 		var events <-chan llm.StreamEvent
 		var err error
-		if cfg.APIType == "openai" {
-			events, err = client.StreamChatOpenAI(ctx, req)
-		} else {
+		if cfg.APIType == "anthropic" {
 			events, err = client.StreamChat(ctx, req)
+		} else {
+			// Default: OpenAI-compatible API (covers openai, zai, sglang, etc.)
+			events, err = client.StreamChatOpenAI(ctx, req)
 		}
 		if err != nil {
 			if ctx.Err() != nil {
@@ -221,6 +222,9 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, emitDelta
 						if emitDelta != nil && cbd.Delta.Text != "" {
 							emitDelta(cbd.Delta.Text)
 						}
+					case "thinking_delta":
+						// Extended thinking content — accumulate but don't emit to user.
+						currentBlock.block.Text += cbd.Delta.Text
 					case "input_json_delta":
 						currentBlock.jsonBuf = append(currentBlock.jsonBuf, cbd.Delta.PartialJSON...)
 					}
@@ -233,10 +237,16 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, emitDelta
 						currentBlock.block.Input = json.RawMessage(currentBlock.jsonBuf)
 					}
 					result.contentBlocks = append(result.contentBlocks, currentBlock.block)
-					if currentBlock.block.Type == "tool_use" {
+					switch currentBlock.block.Type {
+					case "tool_use":
 						result.toolCalls = append(result.toolCalls, currentBlock.block)
-					} else if currentBlock.block.Type == "text" {
+					case "text":
 						result.text += currentBlock.block.Text
+					case "thinking":
+						// Thinking blocks are part of extended thinking; preserve
+						// in contentBlocks but don't include in user-visible text.
+						currentBlock.block.Thinking = currentBlock.block.Text
+						currentBlock.block.Text = ""
 					}
 					currentBlock = nil
 				}
