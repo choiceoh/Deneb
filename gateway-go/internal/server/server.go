@@ -80,6 +80,7 @@ type Server struct {
 	broadcaster      *events.Broadcaster
 	processes        *process.Manager
 	cron             *cron.Scheduler
+	cronRunLog       *cron.PersistentRunLog
 	daemon           *daemon.Daemon
 	hooks            *hooks.Registry
 	runtimeCfg       *config.GatewayRuntimeConfig
@@ -249,6 +250,9 @@ func New(addr string, opts ...Option) *Server {
 	})
 	s.processes = process.NewManager(s.logger)
 	s.cron = cron.NewScheduler(s.logger)
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		s.cronRunLog = cron.NewPersistentRunLog(cron.DefaultCronStorePath(homeDir))
+	}
 	s.hooks = hooks.NewRegistry(s.logger)
 	s.channelLifecycle = channel.NewLifecycleManager(s.channels, s.logger)
 	s.activity = monitoring.NewActivityTracker()
@@ -1179,6 +1183,7 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 
 	rpc.RegisterCronAdvancedMethods(s.dispatcher, rpc.CronAdvancedDeps{
 		Cron:        s.cron,
+		RunLog:      s.cronRunLog,
 		Broadcaster: broadcastFn,
 	})
 

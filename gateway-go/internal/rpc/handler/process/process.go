@@ -733,6 +733,7 @@ func acpBindings(deps *ACPDeps) rpcutil.HandlerFunc {
 // CronAdvancedDeps holds the dependencies for advanced cron RPC methods.
 type CronAdvancedDeps struct {
 	Cron        *cron.Scheduler
+	RunLog      *cron.PersistentRunLog
 	Broadcaster BroadcastFunc
 }
 
@@ -982,8 +983,30 @@ func cronRuns(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			offset = 0
 		}
 
-		runs := deps.Cron.Runs(id, limit, offset)
+		// Prefer persistent run log when available; fall back to in-memory.
+		if deps.RunLog != nil {
+			opts := cron.RunLogReadOpts{
+				Limit:   limit,
+				Offset:  offset,
+				Status:  p.Status,
+				Query:   p.Query,
+				SortDir: p.SortDir,
+			}
+			var page cron.RunLogPageResult
+			if id != "" {
+				page = deps.RunLog.ReadPage(id, opts)
+			} else {
+				page = deps.RunLog.ReadPageAll(opts)
+			}
+			return protocol.MustResponseOK(req.ID, map[string]any{
+				"runs":       page.Entries,
+				"total":      page.Total,
+				"hasMore":    page.HasMore,
+				"nextOffset": page.NextOffset,
+			})
+		}
 
+		runs := deps.Cron.Runs(id, limit, offset)
 		resp := protocol.MustResponseOK(req.ID, map[string]any{
 			"runs":  runs,
 			"total": len(runs),

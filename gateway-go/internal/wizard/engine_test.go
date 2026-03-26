@@ -71,6 +71,83 @@ func TestCancelIdempotent(t *testing.T) {
 	}
 }
 
+func TestMultiStepWizard(t *testing.T) {
+	e := NewEngine()
+	steps := []Step{
+		{ID: "choose-provider", Prompt: "Select a provider"},
+		{ID: "enter-key", Prompt: "Enter API key"},
+		{ID: "confirm", Prompt: "Confirm settings"},
+	}
+	sess := e.StartWithSteps("setup", "", steps)
+	if sess.StepID != "choose-provider" {
+		t.Fatalf("expected step choose-provider, got %q", sess.StepID)
+	}
+	if sess.StepIndex != 0 {
+		t.Fatalf("expected stepIndex 0, got %d", sess.StepIndex)
+	}
+
+	// Step 1 → 2.
+	result, err := e.Next(sess.SessionID, &Answer{Value: "anthropic"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Done {
+		t.Fatal("expected not done after step 1")
+	}
+	if result.Status != StatusRunning {
+		t.Fatalf("expected running, got %s", result.Status)
+	}
+	if result.StepID != "enter-key" {
+		t.Fatalf("expected step enter-key, got %q", result.StepID)
+	}
+
+	// Step 2 → 3 (final).
+	result, err = e.Next(sess.SessionID, &Answer{Value: "sk-..."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Done {
+		t.Fatal("expected not done after step 2")
+	}
+	if result.StepID != "confirm" {
+		t.Fatalf("expected step confirm, got %q", result.StepID)
+	}
+
+	// Step 3 → done.
+	result, err = e.Next(sess.SessionID, &Answer{Value: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Done {
+		t.Fatal("expected done after final step")
+	}
+	if result.Status != StatusDone {
+		t.Fatalf("expected done status, got %s", result.Status)
+	}
+}
+
+func TestMultiStepWizardCancel(t *testing.T) {
+	e := NewEngine()
+	steps := []Step{
+		{ID: "step1"},
+		{ID: "step2"},
+		{ID: "step3"},
+	}
+	sess := e.StartWithSteps("setup", "", steps)
+
+	// Advance one step.
+	e.Next(sess.SessionID, &Answer{Value: "a"})
+
+	// Cancel mid-way.
+	result, err := e.Cancel(sess.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != StatusCancelled {
+		t.Fatalf("expected cancelled, got %s", result.Status)
+	}
+}
+
 func TestNotFound(t *testing.T) {
 	e := NewEngine()
 

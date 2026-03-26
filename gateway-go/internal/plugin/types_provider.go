@@ -98,14 +98,26 @@ type ResolvedProviderAuth struct {
 }
 
 // ModelProviderConfig holds configuration for a model provider.
-// Simplified from the TS ModelProviderConfig.
 type ModelProviderConfig struct {
-	ID      string         `json:"id,omitempty"`
-	BaseURL string         `json:"baseUrl,omitempty"`
-	ApiKey  string         `json:"apiKey,omitempty"`
-	API     string         `json:"api,omitempty"`
-	Models  map[string]any `json:"models,omitempty"`
-	Headers map[string]any `json:"headers,omitempty"`
+	ID           string            `json:"id,omitempty"`
+	BaseURL      string            `json:"baseUrl,omitempty"`
+	ApiKey       string            `json:"apiKey,omitempty"`
+	API          string            `json:"api,omitempty"`
+	Models       map[string]any    `json:"models,omitempty"`
+	ModelAliases map[string]string `json:"modelAliases,omitempty"`
+	Headers      map[string]any    `json:"headers,omitempty"`
+}
+
+// ResolveModelID returns the canonical model ID for the given input.
+// If the input matches a key in ModelAliases, the alias target is returned;
+// otherwise the input is returned unchanged.
+func (c *ModelProviderConfig) ResolveModelID(modelID string) string {
+	if c.ModelAliases != nil {
+		if resolved, ok := c.ModelAliases[modelID]; ok {
+			return resolved
+		}
+	}
+	return modelID
 }
 
 // ProviderCatalogResult is the result of a catalog discovery call.
