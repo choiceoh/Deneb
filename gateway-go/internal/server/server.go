@@ -1312,15 +1312,18 @@ func extractModelFromDefaults(raw json.RawMessage) string {
 }
 
 // resolveWorkspaceDir determines the workspace directory for file tool operations.
-// Uses current working directory as the workspace root.
+// Reads agents.defaults.workspace / agents.list[].workspace from config,
+// falling back to ~/.deneb/workspace (matching TS resolveAgentWorkspaceDir).
 func resolveWorkspaceDir() string {
-	if cwd, err := os.Getwd(); err == nil {
-		return cwd
+	snap, err := config.LoadConfigFromDefaultPath()
+	if err == nil && snap != nil {
+		dir := config.ResolveAgentWorkspaceDir(&snap.Config)
+		if dir != "" {
+			return dir
+		}
 	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return home
-	}
-	return "/tmp"
+	// Config unavailable — fall back to built-in default.
+	return config.ResolveAgentWorkspaceDir(nil)
 }
 
 // resolveDenebDir returns the path to ~/.deneb.

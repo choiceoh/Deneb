@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -509,14 +509,17 @@ func stopReasonFromCtx(ctx context.Context) string {
 }
 
 // resolveWorkspaceDirForPrompt returns the workspace directory for system prompt assembly.
+// Reads agents.defaults.workspace / agents.list[].workspace from config,
+// falling back to ~/.deneb/workspace (matching TS resolveAgentWorkspaceDir).
 func resolveWorkspaceDirForPrompt() string {
-	if cwd, err := os.Getwd(); err == nil {
-		return cwd
+	snap, err := config.LoadConfigFromDefaultPath()
+	if err == nil && snap != nil {
+		dir := config.ResolveAgentWorkspaceDir(&snap.Config)
+		if dir != "" {
+			return dir
+		}
 	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return home
-	}
-	return "/tmp"
+	return config.ResolveAgentWorkspaceDir(nil)
 }
 
 // deliveryChannel extracts the channel name from a delivery context.
