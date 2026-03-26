@@ -54,14 +54,16 @@ func toolRead(defaultDir string) ToolFunc {
 		}
 
 		lines := strings.Split(string(data), "\n")
+		totalLines := len(lines)
+		fileSize := len(data)
 
 		// Apply offset (1-based).
 		start := 0
 		if p.Offset > 0 {
 			start = p.Offset - 1
 		}
-		if start > len(lines) {
-			start = len(lines)
+		if start > totalLines {
+			start = totalLines
 		}
 
 		// Apply limit (default: 2000 lines).
@@ -70,14 +72,18 @@ func toolRead(defaultDir string) ToolFunc {
 			limit = p.Limit
 		}
 		end := start + limit
-		if end > len(lines) {
-			end = len(lines)
+		if end > totalLines {
+			end = totalLines
 		}
 
-		// Format with line numbers (cat -n style).
+		// Format with line numbers (cat -n style) and file metadata.
 		var sb strings.Builder
+		fmt.Fprintf(&sb, "[File: %s | %d lines | %d bytes]\n", p.FilePath, totalLines, fileSize)
 		for i := start; i < end; i++ {
 			fmt.Fprintf(&sb, "%6d\t%s\n", i+1, lines[i])
+		}
+		if end < totalLines {
+			fmt.Fprintf(&sb, "[... %d more lines. Use offset=%d to continue reading.]\n", totalLines-end, end+1)
 		}
 		return sb.String(), nil
 	}
@@ -142,11 +148,15 @@ func editToolSchema() map[string]any {
 			},
 			"old_string": map[string]any{
 				"type":        "string",
-				"description": "The text to replace (must be unique in the file)",
+				"description": "The text to replace (must be unique unless replace_all is true)",
 			},
 			"new_string": map[string]any{
 				"type":        "string",
 				"description": "The text to replace it with",
+			},
+			"replace_all": map[string]any{
+				"type":        "boolean",
+				"description": "Replace all occurrences instead of requiring a unique match (default: false)",
 			},
 		},
 		"required": []string{"file_path", "old_string", "new_string"},
@@ -156,9 +166,10 @@ func editToolSchema() map[string]any {
 func toolEdit(defaultDir string) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			FilePath  string `json:"file_path"`
-			OldString string `json:"old_string"`
-			NewString string `json:"new_string"`
+			FilePath   string `json:"file_path"`
+			OldString  string `json:"old_string"`
+			NewString  string `json:"new_string"`
+			ReplaceAll bool   `json:"replace_all"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("invalid edit params: %w", err)
@@ -181,13 +192,21 @@ func toolEdit(defaultDir string) ToolFunc {
 		if count == 0 {
 			return "", fmt.Errorf("old_string not found in file")
 		}
-		if count > 1 {
-			return "", fmt.Errorf("old_string is not unique in file (%d occurrences)", count)
+		if count > 1 && !p.ReplaceAll {
+			return "", fmt.Errorf("old_string is not unique in file (%d occurrences). Use replace_all=true to replace all", count)
 		}
 
-		newContent := strings.Replace(content, p.OldString, p.NewString, 1)
+		var newContent string
+		if p.ReplaceAll {
+			newContent = strings.ReplaceAll(content, p.OldString, p.NewString)
+		} else {
+			newContent = strings.Replace(content, p.OldString, p.NewString, 1)
+		}
 		if err := os.WriteFile(path, []byte(newContent), 0o644); err != nil {
 			return "", fmt.Errorf("failed to write file: %w", err)
+		}
+		if count > 1 {
+			return fmt.Sprintf("Successfully edited %s (%d replacements)", p.FilePath, count), nil
 		}
 		return fmt.Sprintf("Successfully edited %s", p.FilePath), nil
 	}
@@ -211,6 +230,22 @@ func grepToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Glob pattern to filter files (e.g. \"*.ts\")",
 			},
+			"contextLines": map[string]any{
+				"type":        "number",
+				"description": "Lines of context around each match (0-10, default: 0)",
+			},
+			"ignoreCase": map[string]any{
+				"type":        "boolean",
+				"description": "Case-insensitive search (default: false)",
+			},
+			"maxResults": map[string]any{
+				"type":        "number",
+				"description": "Maximum matches to return (default: 100, max: 500)",
+			},
+			"fileType": map[string]any{
+				"type":        "string",
+				"description": "File type filter for ripgrep --type (e.g. \"go\", \"py\", \"js\")",
+			},
 		},
 		"required": []string{"pattern"},
 	}
@@ -219,9 +254,13 @@ func grepToolSchema() map[string]any {
 func toolGrep(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			Pattern string `json:"pattern"`
-			Path    string `json:"path"`
-			Include string `json:"include"`
+			Pattern      string `json:"pattern"`
+			Path         string `json:"path"`
+			Include      string `json:"include"`
+			ContextLines int    `json:"contextLines"`
+			IgnoreCase   bool   `json:"ignoreCase"`
+			MaxResults   int    `json:"maxResults"`
+			FileType     string `json:"fileType"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("invalid grep params: %w", err)
@@ -235,10 +274,35 @@ func toolGrep(defaultDir string) ToolFunc {
 			searchPath = resolvePath(p.Path, defaultDir)
 		}
 
+		// Defaults and caps.
+		maxResults := p.MaxResults
+		if maxResults <= 0 {
+			maxResults = 100
+		}
+		if maxResults > 500 {
+			maxResults = 500
+		}
+		contextLines := p.ContextLines
+		if contextLines < 0 {
+			contextLines = 0
+		}
+		if contextLines > 10 {
+			contextLines = 10
+		}
+
 		// Try ripgrep first, fall back to grep.
-		args := []string{"-n", "--max-count=100"}
+		args := []string{"-n", fmt.Sprintf("--max-count=%d", maxResults)}
+		if p.IgnoreCase {
+			args = append(args, "-i")
+		}
+		if contextLines > 0 {
+			args = append(args, "-C", fmt.Sprintf("%d", contextLines))
+		}
 		if p.Include != "" {
 			args = append(args, "--glob", p.Include)
+		}
+		if p.FileType != "" {
+			args = append(args, "--type", p.FileType)
 		}
 		args = append(args, p.Pattern, searchPath)
 
@@ -249,8 +313,14 @@ func toolGrep(defaultDir string) ToolFunc {
 			if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
 				return "No matches found.", nil
 			}
-			// Fall back to grep.
-			grepArgs := []string{"-rn", "--max-count=100"}
+			// Fall back to grep (fileType is rg-only, skip it here).
+			grepArgs := []string{"-rn", fmt.Sprintf("--max-count=%d", maxResults)}
+			if p.IgnoreCase {
+				grepArgs = append(grepArgs, "-i")
+			}
+			if contextLines > 0 {
+				grepArgs = append(grepArgs, fmt.Sprintf("-C%d", contextLines))
+			}
 			if p.Include != "" {
 				grepArgs = append(grepArgs, "--include="+p.Include)
 			}
@@ -277,11 +347,15 @@ func findToolSchema() map[string]any {
 		"properties": map[string]any{
 			"pattern": map[string]any{
 				"type":        "string",
-				"description": "Glob pattern to match files against",
+				"description": "Glob pattern to match files (supports ** for recursive matching, e.g. \"**/*.go\")",
 			},
 			"path": map[string]any{
 				"type":        "string",
 				"description": "Directory to search in",
+			},
+			"showHidden": map[string]any{
+				"type":        "boolean",
+				"description": "Include hidden directories (starting with .) in search (default: false)",
 			},
 		},
 		"required": []string{"pattern"},
@@ -289,10 +363,11 @@ func findToolSchema() map[string]any {
 }
 
 func toolFind(defaultDir string) ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			Pattern string `json:"pattern"`
-			Path    string `json:"path"`
+			Pattern    string `json:"pattern"`
+			Path       string `json:"path"`
+			ShowHidden bool   `json:"showHidden"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("invalid find params: %w", err)
@@ -306,8 +381,21 @@ func toolFind(defaultDir string) ToolFunc {
 			searchDir = resolvePath(p.Path, defaultDir)
 		}
 
-		var matches []string
 		const maxResults = 200
+
+		// Use ripgrep for ** glob patterns (filepath.Match doesn't support **).
+		if strings.Contains(p.Pattern, "**") {
+			matches, err := findWithRipgrep(ctx, searchDir, p.Pattern, p.ShowHidden, maxResults)
+			if err == nil {
+				if len(matches) == 0 {
+					return "No files found matching pattern.", nil
+				}
+				return strings.Join(matches, "\n"), nil
+			}
+			// rg unavailable or failed — fall through to WalkDir.
+		}
+
+		var matches []string
 		err := filepath.WalkDir(searchDir, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
 				return nil // skip errors
@@ -315,9 +403,11 @@ func toolFind(defaultDir string) ToolFunc {
 			if len(matches) >= maxResults {
 				return filepath.SkipAll
 			}
-			// Skip hidden directories.
+			// Skip hidden directories unless showHidden is set.
 			if d.IsDir() && strings.HasPrefix(d.Name(), ".") && d.Name() != "." {
-				return filepath.SkipDir
+				if !p.ShowHidden {
+					return filepath.SkipDir
+				}
 			}
 			// Match against both the filename and the relative path.
 			rel, _ := filepath.Rel(searchDir, path)
@@ -341,6 +431,43 @@ func toolFind(defaultDir string) ToolFunc {
 		}
 		return strings.Join(matches, "\n"), nil
 	}
+}
+
+// findWithRipgrep uses `rg --files --glob` to find files matching ** patterns.
+func findWithRipgrep(ctx context.Context, dir, pattern string, showHidden bool, maxResults int) ([]string, error) {
+	args := []string{"--files", "--glob", pattern}
+	if showHidden {
+		args = append(args, "--hidden")
+	}
+	args = append(args, dir)
+
+	cmd := exec.CommandContext(ctx, "rg", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		// rg exit code 1 means no matches.
+		if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var matches []string
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		// Convert absolute paths to relative.
+		rel, relErr := filepath.Rel(dir, line)
+		if relErr != nil {
+			rel = line
+		}
+		matches = append(matches, rel)
+		if len(matches) >= maxResults {
+			break
+		}
+	}
+	return matches, nil
 }
 
 // --- Ls tool ---
