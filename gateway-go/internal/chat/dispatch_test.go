@@ -11,18 +11,18 @@ import (
 
 // mockChannelPlugin is a minimal channel.Plugin + MessagingAdapter for testing.
 type mockChannelPlugin struct {
-	id         string
-	sendErr    error
-	mu         sync.Mutex
-	sentMsgs   []channel.OutboundMessage
+	id       string
+	sendErr  error
+	mu       sync.Mutex
+	sentMsgs []channel.OutboundMessage
 }
 
-func (m *mockChannelPlugin) ID() string                      { return m.id }
-func (m *mockChannelPlugin) Meta() channel.Meta              { return channel.Meta{} }
+func (m *mockChannelPlugin) ID() string                         { return m.id }
+func (m *mockChannelPlugin) Meta() channel.Meta                 { return channel.Meta{} }
 func (m *mockChannelPlugin) Capabilities() channel.Capabilities { return channel.Capabilities{} }
-func (m *mockChannelPlugin) Start(_ context.Context) error   { return nil }
-func (m *mockChannelPlugin) Stop(_ context.Context) error    { return nil }
-func (m *mockChannelPlugin) Status() channel.Status          { return channel.Status{} }
+func (m *mockChannelPlugin) Start(_ context.Context) error      { return nil }
+func (m *mockChannelPlugin) Stop(_ context.Context) error       { return nil }
+func (m *mockChannelPlugin) Status() channel.Status             { return channel.Status{} }
 
 func (m *mockChannelPlugin) SendMessage(_ context.Context, msg channel.OutboundMessage) error {
 	m.mu.Lock()
@@ -36,12 +36,12 @@ type nonMessagingPlugin struct {
 	id string
 }
 
-func (p *nonMessagingPlugin) ID() string                      { return p.id }
-func (p *nonMessagingPlugin) Meta() channel.Meta              { return channel.Meta{} }
+func (p *nonMessagingPlugin) ID() string                         { return p.id }
+func (p *nonMessagingPlugin) Meta() channel.Meta                 { return channel.Meta{} }
 func (p *nonMessagingPlugin) Capabilities() channel.Capabilities { return channel.Capabilities{} }
-func (p *nonMessagingPlugin) Start(_ context.Context) error   { return nil }
-func (p *nonMessagingPlugin) Stop(_ context.Context) error    { return nil }
-func (p *nonMessagingPlugin) Status() channel.Status          { return channel.Status{} }
+func (p *nonMessagingPlugin) Start(_ context.Context) error      { return nil }
+func (p *nonMessagingPlugin) Stop(_ context.Context) error       { return nil }
+func (p *nonMessagingPlugin) Status() channel.Status             { return channel.Status{} }
 
 func TestDispatch_SingleTarget(t *testing.T) {
 	reg := channel.NewRegistry()

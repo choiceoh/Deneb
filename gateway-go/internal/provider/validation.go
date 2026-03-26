@@ -23,22 +23,22 @@ type ProviderDiagnostic struct {
 
 // ProviderAuthMethodDef describes a provider auth method definition.
 type ProviderAuthMethodDef struct {
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Hint   string `json:"hint,omitempty"`
-	Kind   string `json:"kind"` // "oauth", "api_key", "token", "device_code", "custom"
+	ID     string          `json:"id"`
+	Label  string          `json:"label"`
+	Hint   string          `json:"hint,omitempty"`
+	Kind   string          `json:"kind"` // "oauth", "api_key", "token", "device_code", "custom"
 	Wizard *WizardSetupDef `json:"wizard,omitempty"`
 }
 
 // WizardSetupDef describes wizard setup configuration.
 type WizardSetupDef struct {
-	ChoiceID       string            `json:"choiceId,omitempty"`
-	ChoiceLabel    string            `json:"choiceLabel,omitempty"`
-	ChoiceHint     string            `json:"choiceHint,omitempty"`
-	GroupID        string            `json:"groupId,omitempty"`
-	GroupLabel     string            `json:"groupLabel,omitempty"`
-	GroupHint      string            `json:"groupHint,omitempty"`
-	MethodID       string            `json:"methodId,omitempty"`
+	ChoiceID       string             `json:"choiceId,omitempty"`
+	ChoiceLabel    string             `json:"choiceLabel,omitempty"`
+	ChoiceHint     string             `json:"choiceHint,omitempty"`
+	GroupID        string             `json:"groupId,omitempty"`
+	GroupLabel     string             `json:"groupLabel,omitempty"`
+	GroupHint      string             `json:"groupHint,omitempty"`
+	MethodID       string             `json:"methodId,omitempty"`
 	ModelAllowlist *ModelAllowlistDef `json:"modelAllowlist,omitempty"`
 }
 

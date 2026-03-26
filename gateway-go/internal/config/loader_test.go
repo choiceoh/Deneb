@@ -89,7 +89,7 @@ func TestLoadConfigValid(t *testing.T) {
 			"port": port,
 			"bind": "lan",
 			"auth": map[string]any{
-				"mode":  "password",
+				"mode":     "password",
 				"password": "test-pw",
 			},
 		},

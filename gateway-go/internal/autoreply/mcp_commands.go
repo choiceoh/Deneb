@@ -4,7 +4,7 @@ package autoreply
 
 // McpCommand represents a parsed /mcp action.
 type McpCommand struct {
-	Action  string `json:"action"`            // "show", "set", "unset", "error"
+	Action  string `json:"action"` // "show", "set", "unset", "error"
 	Name    string `json:"name,omitempty"`
 	Value   any    `json:"value,omitempty"`
 	Message string `json:"message,omitempty"`

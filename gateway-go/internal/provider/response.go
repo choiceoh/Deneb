@@ -9,15 +9,15 @@ import (
 // Mirrors the OpenResponses schema from src/gateway/open-responses.schema.ts.
 type ContentPart struct {
 	Type     string          `json:"type"`               // "text", "image", "tool_use", "tool_result", "thinking"
-	Text     string          `json:"text,omitempty"`      // text content
-	URL      string          `json:"url,omitempty"`       // image/file URL
-	Base64   string          `json:"base64,omitempty"`    // base64-encoded content
-	MimeType string          `json:"mimeType,omitempty"`  // MIME type for image/file
-	ToolID   string          `json:"toolId,omitempty"`    // tool_use/tool_result ID
-	Name     string          `json:"name,omitempty"`      // tool name
-	Input    json.RawMessage `json:"input,omitempty"`     // tool_use input args
-	Content  json.RawMessage `json:"content,omitempty"`   // tool_result content
-	Thinking string          `json:"thinking,omitempty"`  // thinking content
+	Text     string          `json:"text,omitempty"`     // text content
+	URL      string          `json:"url,omitempty"`      // image/file URL
+	Base64   string          `json:"base64,omitempty"`   // base64-encoded content
+	MimeType string          `json:"mimeType,omitempty"` // MIME type for image/file
+	ToolID   string          `json:"toolId,omitempty"`   // tool_use/tool_result ID
+	Name     string          `json:"name,omitempty"`     // tool name
+	Input    json.RawMessage `json:"input,omitempty"`    // tool_use input args
+	Content  json.RawMessage `json:"content,omitempty"`  // tool_result content
+	Thinking string          `json:"thinking,omitempty"` // thinking content
 }
 
 // ProviderResponse represents a complete response from a model provider.

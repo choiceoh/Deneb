@@ -75,4 +75,3 @@ func (r *Registry) GetByNormalizedID(id string) Plugin {
 type AliasProvider interface {
 	Aliases() []string
 }
-

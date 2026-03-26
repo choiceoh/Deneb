@@ -39,9 +39,9 @@ const (
 type HookPriority int
 
 const (
-	HookPriorityEarly   HookPriority = -100
-	HookPriorityNormal  HookPriority = 0
-	HookPriorityLate    HookPriority = 100
+	HookPriorityEarly  HookPriority = -100
+	HookPriorityNormal HookPriority = 0
+	HookPriorityLate   HookPriority = 100
 )
 
 // HookOptions configures a hook registration.
@@ -52,11 +52,11 @@ type HookOptions struct {
 
 // HookResult holds the outcome of a single hook execution.
 type HookResult struct {
-	PluginID  string
-	HookName  HookName
-	Duration  time.Duration
-	Error     error
-	Payload   map[string]any // optional mutated payload
+	PluginID string
+	HookName HookName
+	Duration time.Duration
+	Error    error
+	Payload  map[string]any // optional mutated payload
 }
 
 // HookRunner manages and executes hooks with proper ordering and error handling.
@@ -67,8 +67,8 @@ type HookRunner struct {
 }
 
 type registeredHook struct {
-	entry    HookEntry
-	options  HookOptions
+	entry   HookEntry
+	options HookOptions
 }
 
 // NewHookRunner creates a new hook runner.

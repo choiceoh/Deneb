@@ -26,16 +26,16 @@ type FallbackNoticeState struct {
 
 // FallbackTransition describes the full state transition for a fallback event.
 type FallbackTransition struct {
-	SelectedModelRef    string
-	ActiveModelRef      string
-	FallbackActive      bool
+	SelectedModelRef     string
+	ActiveModelRef       string
+	FallbackActive       bool
 	FallbackTransitioned bool
-	FallbackCleared     bool
-	ReasonSummary       string
-	AttemptSummaries    []string
-	PreviousState       FallbackNoticeState
-	NextState           FallbackNoticeState
-	StateChanged        bool
+	FallbackCleared      bool
+	ReasonSummary        string
+	AttemptSummaries     []string
+	PreviousState        FallbackNoticeState
+	NextState            FallbackNoticeState
+	StateChanged         bool
 }
 
 // FormatProviderModelRef formats a provider/model reference string.
@@ -181,15 +181,15 @@ func ResolveFallbackTransition(
 		normalizeFallbackModelRef(prev.Reason) != normalizeFallbackModelRef(next.Reason)
 
 	return FallbackTransition{
-		SelectedModelRef:    selectedModelRef,
-		ActiveModelRef:      activeModelRef,
-		FallbackActive:      fallbackActive,
+		SelectedModelRef:     selectedModelRef,
+		ActiveModelRef:       activeModelRef,
+		FallbackActive:       fallbackActive,
 		FallbackTransitioned: fallbackTransitioned,
-		FallbackCleared:     fallbackCleared,
-		ReasonSummary:       reasonSummary,
-		AttemptSummaries:    attemptSummaries,
-		PreviousState:       prev,
-		NextState:           next,
-		StateChanged:        stateChanged,
+		FallbackCleared:      fallbackCleared,
+		ReasonSummary:        reasonSummary,
+		AttemptSummaries:     attemptSummaries,
+		PreviousState:        prev,
+		NextState:            next,
+		StateChanged:         stateChanged,
 	}
 }

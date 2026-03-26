@@ -26,10 +26,10 @@ func RegisterLogsMethods(d *Dispatcher, deps LogsDeps) {
 }
 
 const (
-	defaultLogLimit    = 500
-	maxLogLimit        = 5000
-	defaultMaxBytes    = 250 * 1024 // 250 KB
-	maxMaxBytes        = 1024 * 1024 // 1 MB
+	defaultLogLimit = 500
+	maxLogLimit     = 5000
+	defaultMaxBytes = 250 * 1024  // 250 KB
+	maxMaxBytes     = 1024 * 1024 // 1 MB
 )
 
 func logsTail(deps LogsDeps) HandlerFunc {

@@ -30,9 +30,9 @@ type subscription struct {
 
 // EventBus provides pub/sub for session lifecycle events.
 type EventBus struct {
-	mu      sync.RWMutex
-	subs    []subscription
-	nextID  uint64
+	mu     sync.RWMutex
+	subs   []subscription
+	nextID uint64
 }
 
 // NewEventBus creates a new event bus.

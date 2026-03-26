@@ -49,13 +49,13 @@ type PluginDiagnostic struct {
 
 // PluginRuntime describes a loaded plugin's runtime state.
 type PluginRuntime struct {
-	ID          string       `json:"id"`
-	PluginID    string       `json:"pluginId"`
-	Kind        PluginKind   `json:"kind"`
-	Label       string       `json:"label,omitempty"`
-	Version     string       `json:"version,omitempty"`
-	Origin      PluginOrigin `json:"origin"`
-	Enabled     bool         `json:"enabled"`
-	Source      string       `json:"source,omitempty"`
-	PackageDir  string       `json:"packageDir,omitempty"`
+	ID         string       `json:"id"`
+	PluginID   string       `json:"pluginId"`
+	Kind       PluginKind   `json:"kind"`
+	Label      string       `json:"label,omitempty"`
+	Version    string       `json:"version,omitempty"`
+	Origin     PluginOrigin `json:"origin"`
+	Enabled    bool         `json:"enabled"`
+	Source     string       `json:"source,omitempty"`
+	PackageDir string       `json:"packageDir,omitempty"`
 }

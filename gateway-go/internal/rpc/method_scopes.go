@@ -90,7 +90,7 @@ var methodScopes = map[string]auth.Scope{
 	"skills.discover":         auth.ScopeRead,
 	"skills.workspace_status": auth.ScopeRead,
 	"skills.entries":          auth.ScopeRead,
-	"tools.catalog":  auth.ScopeRead,
+	"tools.catalog":           auth.ScopeRead,
 
 	// --- Process (write) ---
 	"process.exec": auth.ScopeApprovals,
@@ -196,11 +196,11 @@ var methodScopes = map[string]auth.Scope{
 	"security.is_safe_url":          auth.ScopeRead,
 	"security.validate_error_code":  auth.ScopeRead,
 	"media.detect_mime":             auth.ScopeRead,
-	"parsing.extract_links":       auth.ScopeRead,
-	"parsing.html_to_markdown":    auth.ScopeRead,
-	"parsing.base64_estimate":     auth.ScopeRead,
-	"parsing.base64_canonicalize": auth.ScopeRead,
-	"parsing.media_tokens":        auth.ScopeRead,
+	"parsing.extract_links":         auth.ScopeRead,
+	"parsing.html_to_markdown":      auth.ScopeRead,
+	"parsing.base64_estimate":       auth.ScopeRead,
+	"parsing.base64_canonicalize":   auth.ScopeRead,
+	"parsing.media_tokens":          auth.ScopeRead,
 
 	// --- Memory search (read) ---
 	"memory.cosine_similarity":    auth.ScopeRead,

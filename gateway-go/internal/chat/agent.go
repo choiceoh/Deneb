@@ -12,10 +12,10 @@ import (
 
 // AgentConfig configures the agent execution loop.
 type AgentConfig struct {
-	MaxTurns  int              // Maximum tool-call turns before stopping. Default: 25.
-	Timeout   time.Duration    // Maximum wall time for the entire agent run. Default: 10m.
+	MaxTurns  int           // Maximum tool-call turns before stopping. Default: 25.
+	Timeout   time.Duration // Maximum wall time for the entire agent run. Default: 10m.
 	Model     string
-	System    json.RawMessage  // System prompt: JSON string or array of ContentBlocks.
+	System    json.RawMessage // System prompt: JSON string or array of ContentBlocks.
 	Tools     []llm.Tool
 	MaxTokens int    // Max output tokens per LLM call. Default: 8192.
 	APIType   string // "openai" (default) or "anthropic"
@@ -184,8 +184,8 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, emitDelta
 
 	// Track current content block being built.
 	type blockBuilder struct {
-		block    llm.ContentBlock
-		jsonBuf  []byte // accumulator for input_json_delta
+		block   llm.ContentBlock
+		jsonBuf []byte // accumulator for input_json_delta
 	}
 	var currentBlock *blockBuilder
 	var blockIndex int = -1
@@ -268,4 +268,3 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, emitDelta
 		}
 	}
 }
-

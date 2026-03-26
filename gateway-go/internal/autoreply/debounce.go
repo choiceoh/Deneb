@@ -32,14 +32,14 @@ type debounceBuffer[T any] struct {
 // Debouncer groups inbound items by key and flushes them after a debounce
 // timeout. This mirrors createInboundDebouncer() from the TypeScript codebase.
 type Debouncer[T any] struct {
-	mu         sync.Mutex
-	buffers    map[string]*debounceBuffer[T]
-	defaultMs  int
-	buildKey   DebounceKeyFunc[T]
-	onFlush    DebounceFlushFunc[T]
-	logger     *slog.Logger
-	ctx        context.Context
-	cancel     context.CancelFunc
+	mu        sync.Mutex
+	buffers   map[string]*debounceBuffer[T]
+	defaultMs int
+	buildKey  DebounceKeyFunc[T]
+	onFlush   DebounceFlushFunc[T]
+	logger    *slog.Logger
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
 const maxDebounceRetries = 3

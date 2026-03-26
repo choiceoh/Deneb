@@ -12,12 +12,12 @@ type mockPlugin struct {
 	status Status
 }
 
-func (m *mockPlugin) ID() string                       { return m.id }
-func (m *mockPlugin) Meta() Meta                       { return m.meta }
-func (m *mockPlugin) Capabilities() Capabilities       { return m.caps }
-func (m *mockPlugin) Start(ctx context.Context) error  { return nil }
-func (m *mockPlugin) Stop(ctx context.Context) error   { return nil }
-func (m *mockPlugin) Status() Status                   { return m.status }
+func (m *mockPlugin) ID() string                      { return m.id }
+func (m *mockPlugin) Meta() Meta                      { return m.meta }
+func (m *mockPlugin) Capabilities() Capabilities      { return m.caps }
+func (m *mockPlugin) Start(ctx context.Context) error { return nil }
+func (m *mockPlugin) Stop(ctx context.Context) error  { return nil }
+func (m *mockPlugin) Status() Status                  { return m.status }
 
 func TestRegistryRegisterAndGet(t *testing.T) {
 	reg := NewRegistry()

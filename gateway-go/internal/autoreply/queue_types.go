@@ -43,30 +43,30 @@ type FollowupQueueSettings struct {
 
 // FollowupRunContext holds the agent execution context for a queued followup run.
 type FollowupRunContext struct {
-	AgentID          string `json:"agentId"`
-	AgentDir         string `json:"agentDir"`
-	SessionID        string `json:"sessionId"`
-	SessionKey       string `json:"sessionKey,omitempty"`
-	SessionFile      string `json:"sessionFile"`
-	WorkspaceDir     string `json:"workspaceDir"`
-	Provider         string `json:"provider"`
-	Model            string `json:"model"`
-	AuthProfileID    string `json:"authProfileId,omitempty"`
-	TimeoutMs        int64  `json:"timeoutMs"`
-	MessageProvider  string `json:"messageProvider,omitempty"`
-	AgentAccountID   string `json:"agentAccountId,omitempty"`
-	GroupID          string `json:"groupId,omitempty"`
-	GroupChannel     string `json:"groupChannel,omitempty"`
-	GroupSpace       string `json:"groupSpace,omitempty"`
-	SenderID         string `json:"senderId,omitempty"`
-	SenderName       string `json:"senderName,omitempty"`
-	SenderUsername   string `json:"senderUsername,omitempty"`
-	SenderIsOwner    bool   `json:"senderIsOwner,omitempty"`
-	ThinkLevel       string `json:"thinkLevel,omitempty"`
-	VerboseLevel     string `json:"verboseLevel,omitempty"`
-	ReasoningLevel   string `json:"reasoningLevel,omitempty"`
-	ElevatedLevel    string `json:"elevatedLevel,omitempty"`
-	BlockReplyBreak  string `json:"blockReplyBreak,omitempty"`
+	AgentID         string `json:"agentId"`
+	AgentDir        string `json:"agentDir"`
+	SessionID       string `json:"sessionId"`
+	SessionKey      string `json:"sessionKey,omitempty"`
+	SessionFile     string `json:"sessionFile"`
+	WorkspaceDir    string `json:"workspaceDir"`
+	Provider        string `json:"provider"`
+	Model           string `json:"model"`
+	AuthProfileID   string `json:"authProfileId,omitempty"`
+	TimeoutMs       int64  `json:"timeoutMs"`
+	MessageProvider string `json:"messageProvider,omitempty"`
+	AgentAccountID  string `json:"agentAccountId,omitempty"`
+	GroupID         string `json:"groupId,omitempty"`
+	GroupChannel    string `json:"groupChannel,omitempty"`
+	GroupSpace      string `json:"groupSpace,omitempty"`
+	SenderID        string `json:"senderId,omitempty"`
+	SenderName      string `json:"senderName,omitempty"`
+	SenderUsername  string `json:"senderUsername,omitempty"`
+	SenderIsOwner   bool   `json:"senderIsOwner,omitempty"`
+	ThinkLevel      string `json:"thinkLevel,omitempty"`
+	VerboseLevel    string `json:"verboseLevel,omitempty"`
+	ReasoningLevel  string `json:"reasoningLevel,omitempty"`
+	ElevatedLevel   string `json:"elevatedLevel,omitempty"`
+	BlockReplyBreak string `json:"blockReplyBreak,omitempty"`
 }
 
 // FollowupRun represents a queued followup message with routing metadata.

@@ -150,7 +150,7 @@ user-invocable: true
 
 func TestResolveSkillInvocationPolicy(t *testing.T) {
 	fm := ParsedFrontmatter{
-		"user-invocable":          "false",
+		"user-invocable":           "false",
 		"disable-model-invocation": "true",
 	}
 	pol := ResolveSkillInvocationPolicy(fm)

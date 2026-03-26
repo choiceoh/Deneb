@@ -16,11 +16,21 @@ type mockSubscriber struct {
 	failSend       bool
 }
 
-func (m *mockSubscriber) ID() string              { return m.id }
-func (m *mockSubscriber) IsAuthenticated() bool    { return m.authed }
-func (m *mockSubscriber) Role() string             { if m.role == "" { return "operator" }; return m.role }
-func (m *mockSubscriber) Scopes() []string         { if m.scopes == nil { return []string{"read", "write", "admin"} }; return m.scopes }
-func (m *mockSubscriber) BufferedAmount() int64    { return m.bufferedAmount }
+func (m *mockSubscriber) ID() string            { return m.id }
+func (m *mockSubscriber) IsAuthenticated() bool { return m.authed }
+func (m *mockSubscriber) Role() string {
+	if m.role == "" {
+		return "operator"
+	}
+	return m.role
+}
+func (m *mockSubscriber) Scopes() []string {
+	if m.scopes == nil {
+		return []string{"read", "write", "admin"}
+	}
+	return m.scopes
+}
+func (m *mockSubscriber) BufferedAmount() int64 { return m.bufferedAmount }
 func (m *mockSubscriber) SendEvent(data []byte) error {
 	if m.failSend {
 		return &sendError{}
@@ -32,6 +42,7 @@ func (m *mockSubscriber) SendEvent(data []byte) error {
 }
 
 type sendError struct{}
+
 func (e *sendError) Error() string { return "send failed" }
 
 func TestBroadcast_AllSubscribers(t *testing.T) {

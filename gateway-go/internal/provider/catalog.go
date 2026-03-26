@@ -55,8 +55,8 @@ type PairedProviderCatalogResult struct {
 
 // CatalogBuilderContext provides context for building catalog results.
 type CatalogBuilderContext struct {
-	Config    map[string]any
-	ApiKey    string
+	Config     map[string]any
+	ApiKey     string
 	ProviderID string
 }
 
@@ -98,11 +98,11 @@ func BuildSingleProviderApiKeyCatalog(params SingleProviderCatalogParams) *Singl
 
 // SingleProviderCatalogParams holds parameters for BuildSingleProviderApiKeyCatalog.
 type SingleProviderCatalogParams struct {
-	Config              map[string]any
-	ProviderID          string
-	ApiKey              string
+	Config               map[string]any
+	ProviderID           string
+	ApiKey               string
 	AllowExplicitBaseUrl bool
-	BuildProvider       func() *ModelProviderCatalog
+	BuildProvider        func() *ModelProviderCatalog
 }
 
 // BuildPairedProviderApiKeyCatalog creates a catalog result for multiple

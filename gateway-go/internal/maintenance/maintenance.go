@@ -38,11 +38,11 @@ type Report struct {
 
 // Summary is a compact summary of the last report.
 type Summary struct {
-	RanAt          string  `json:"ranAt"`
-	SessionsCleaned int    `json:"sessionsCleaned"`
-	LogsCleaned     int    `json:"logsCleaned"`
+	RanAt           string  `json:"ranAt"`
+	SessionsCleaned int     `json:"sessionsCleaned"`
+	LogsCleaned     int     `json:"logsCleaned"`
 	FreedMB         float64 `json:"freedMB"`
-	DryRun          bool   `json:"dryRun"`
+	DryRun          bool    `json:"dryRun"`
 }
 
 // Runner manages maintenance operations.

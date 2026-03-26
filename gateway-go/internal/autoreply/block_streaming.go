@@ -16,20 +16,20 @@ const (
 
 // StreamBlock represents a single block in a streaming response.
 type StreamBlock struct {
-	Type     string `json:"type"` // "text", "code", "thinking", "tool_use", "tool_result"
-	Content  string `json:"content,omitempty"`
-	Language string `json:"language,omitempty"` // for code blocks
-	ToolName string `json:"toolName,omitempty"`
-	ToolID   string `json:"toolId,omitempty"`
-	IsPartial bool  `json:"isPartial,omitempty"`
+	Type      string `json:"type"` // "text", "code", "thinking", "tool_use", "tool_result"
+	Content   string `json:"content,omitempty"`
+	Language  string `json:"language,omitempty"` // for code blocks
+	ToolName  string `json:"toolName,omitempty"`
+	ToolID    string `json:"toolId,omitempty"`
+	IsPartial bool   `json:"isPartial,omitempty"`
 }
 
 // BlockCoalescer merges streaming text chunks into complete blocks.
 type BlockCoalescer struct {
-	mu       sync.Mutex
-	pending  strings.Builder
-	blocks   []StreamBlock
-	inFence  bool
+	mu        sync.Mutex
+	pending   strings.Builder
+	blocks    []StreamBlock
+	inFence   bool
 	fenceLang string
 }
 
@@ -106,9 +106,9 @@ func (c *BlockCoalescer) Flush() []StreamBlock {
 			blockType = "code"
 		}
 		blocks = append(blocks, StreamBlock{
-			Type:     blockType,
-			Content:  current.String(),
-			Language: c.fenceLang,
+			Type:      blockType,
+			Content:   current.String(),
+			Language:  c.fenceLang,
 			IsPartial: c.inFence,
 		})
 	}

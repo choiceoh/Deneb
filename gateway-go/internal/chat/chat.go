@@ -65,7 +65,7 @@ type ChatMessage struct {
 
 // ChatAttachment represents an attachment on a chat message.
 type ChatAttachment struct {
-	Type     string `json:"type"`               // "image", "file", "audio"
+	Type     string `json:"type"` // "image", "file", "audio"
 	MimeType string `json:"mimeType,omitempty"`
 	URL      string `json:"url,omitempty"`
 	Name     string `json:"name,omitempty"`
@@ -103,11 +103,11 @@ type Handler struct {
 	defaultSystem string
 	maxTokens     int
 
-	replyFunc   ReplyFunc // optional: delivers response to originating channel
+	replyFunc ReplyFunc // optional: delivers response to originating channel
 
-	abortMu     sync.Mutex
-	abortMap    map[string]*AbortEntry // clientRunId -> entry
-	done        chan struct{}          // signals abortGCLoop to stop
+	abortMu  sync.Mutex
+	abortMap map[string]*AbortEntry // clientRunId -> entry
+	done     chan struct{}          // signals abortGCLoop to stop
 
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
@@ -604,23 +604,23 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 // buildRunDeps assembles the dependency struct for runAgentAsync.
 func (h *Handler) buildRunDeps() runDeps {
 	return runDeps{
-		sessions:      h.sessions,
-		llmClient:     h.llmClient,
-		transcript:    h.transcript,
-		tools:         h.tools,
-		authManager:   h.authManager,
-		broadcast:     h.broadcast,
-		broadcastRaw:  h.broadcastRaw,
-		jobTracker:    h.jobTracker,
+		sessions:        h.sessions,
+		llmClient:       h.llmClient,
+		transcript:      h.transcript,
+		tools:           h.tools,
+		authManager:     h.authManager,
+		broadcast:       h.broadcast,
+		broadcastRaw:    h.broadcastRaw,
+		jobTracker:      h.jobTracker,
 		replyFunc:       h.replyFunc,
 		providerConfigs: h.providerConfigs,
 		logger:          h.logger,
-		auroraStore:   h.auroraStore,
-		contextCfg:    h.contextCfg,
-		compactionCfg: h.compactionCfg,
-		defaultModel:  h.defaultModel,
-		defaultSystem: h.defaultSystem,
-		maxTokens:     h.maxTokens,
+		auroraStore:     h.auroraStore,
+		contextCfg:      h.contextCfg,
+		compactionCfg:   h.compactionCfg,
+		defaultModel:    h.defaultModel,
+		defaultSystem:   h.defaultSystem,
+		maxTokens:       h.maxTokens,
 	}
 }
 

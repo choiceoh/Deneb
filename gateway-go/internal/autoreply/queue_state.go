@@ -26,11 +26,11 @@ type FollowupQueueState struct {
 	DropPolicy     FollowupDropPolicy  `json:"dropPolicy"`
 	DroppedCount   int                 `json:"droppedCount"`
 	SummaryLines   []string            `json:"summaryLines"`
-	LastRun        *FollowupRunContext  `json:"lastRun,omitempty"`
+	LastRun        *FollowupRunContext `json:"lastRun,omitempty"`
 }
 
 // Lock acquires the per-queue mutex.
-func (q *FollowupQueueState) Lock()   { q.mu.Lock() }
+func (q *FollowupQueueState) Lock() { q.mu.Lock() }
 
 // Unlock releases the per-queue mutex.
 func (q *FollowupQueueState) Unlock() { q.mu.Unlock() }

@@ -98,9 +98,9 @@ func TestBuildSingleProviderApiKeyCatalogWithExplicitBaseUrl(t *testing.T) {
 	}
 
 	result := BuildSingleProviderApiKeyCatalog(SingleProviderCatalogParams{
-		Config:              config,
-		ProviderID:          "openai",
-		ApiKey:              "sk-test",
+		Config:               config,
+		ProviderID:           "openai",
+		ApiKey:               "sk-test",
 		AllowExplicitBaseUrl: true,
 		BuildProvider: func() *ModelProviderCatalog {
 			return &ModelProviderCatalog{ID: "openai", BaseURL: "https://default.com"}

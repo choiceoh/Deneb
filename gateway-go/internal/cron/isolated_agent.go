@@ -28,12 +28,12 @@ type IsolatedAgentConfig struct {
 	DefaultTo      string
 	TimeoutMs      int64
 	// Model overrides from job payload.
-	Model      string
-	Thinking   string
-	Fallbacks  []string
+	Model     string
+	Thinking  string
+	Fallbacks []string
 	// Delivery configuration.
-	DeliveryTarget     *DeliveryTarget
-	DeliveryBestEffort bool
+	DeliveryTarget        *DeliveryTarget
+	DeliveryBestEffort    bool
 	SkipHeartbeatDelivery bool
 }
 

@@ -66,7 +66,7 @@ type FullTypingSignaler struct {
 func NewFullTypingSignaler(controller *TypingController, mode TypingMode, isHeartbeat bool) *FullTypingSignaler {
 	return &FullTypingSignaler{
 		controller:                controller,
-		Mode:                     mode,
+		Mode:                      mode,
 		ShouldStartImmediately:    mode == TypingModeInstant,
 		ShouldStartOnMessageStart: mode == TypingModeMessage,
 		ShouldStartOnText:         mode == TypingModeMessage || mode == TypingModeInstant,

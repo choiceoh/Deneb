@@ -11,25 +11,25 @@ import (
 // after applying CLI overrides, environment variables, and validation constraints.
 // This mirrors src/gateway/server-runtime-config.ts GatewayRuntimeConfig.
 type GatewayRuntimeConfig struct {
-	BindHost                       string
-	Port                           int
-	ControlUIEnabled               bool
-	ControlUIBasePath              string
-	ControlUIRoot                  string
-	OpenAIChatCompletionsEnabled   bool
-	OpenAIChatCompletionsConfig    *GatewayHTTPChatCompletionsConfig
-	OpenResponsesEnabled           bool
-	OpenResponsesConfig            *GatewayHTTPResponsesConfig
-	StrictTransportSecurityHeader  string
-	ResolvedAuth                   ResolvedGatewayAuth
-	AuthMode                       string
-	TailscaleConfig                GatewayTailscaleConfig
-	TailscaleMode                  string // "off" | "serve" | "funnel"
-	CanvasHostEnabled              bool
-	TrustedProxies                 []string
-	ChannelHealthCheckMinutes      int
-	ChannelStaleEventThresholdMin  int
-	ChannelMaxRestartsPerHour      int
+	BindHost                      string
+	Port                          int
+	ControlUIEnabled              bool
+	ControlUIBasePath             string
+	ControlUIRoot                 string
+	OpenAIChatCompletionsEnabled  bool
+	OpenAIChatCompletionsConfig   *GatewayHTTPChatCompletionsConfig
+	OpenResponsesEnabled          bool
+	OpenResponsesConfig           *GatewayHTTPResponsesConfig
+	StrictTransportSecurityHeader string
+	ResolvedAuth                  ResolvedGatewayAuth
+	AuthMode                      string
+	TailscaleConfig               GatewayTailscaleConfig
+	TailscaleMode                 string // "off" | "serve" | "funnel"
+	CanvasHostEnabled             bool
+	TrustedProxies                []string
+	ChannelHealthCheckMinutes     int
+	ChannelStaleEventThresholdMin int
+	ChannelMaxRestartsPerHour     int
 }
 
 // RuntimeConfigParams are the inputs for resolving the runtime config.
@@ -234,25 +234,25 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 	}
 
 	return &GatewayRuntimeConfig{
-		BindHost:                       bindHost,
-		Port:                           params.Port,
-		ControlUIEnabled:               controlUIEnabled,
-		ControlUIBasePath:              controlUIBasePath,
-		ControlUIRoot:                  controlUIRoot,
-		OpenAIChatCompletionsEnabled:   openAIChatCompletionsEnabled,
-		OpenAIChatCompletionsConfig:    openAIChatCompletionsConfig,
-		OpenResponsesEnabled:           openResponsesEnabled,
-		OpenResponsesConfig:            openResponsesConfig,
-		StrictTransportSecurityHeader:  stsHeader,
-		ResolvedAuth:                   resolvedAuth,
-		AuthMode:                       authMode,
-		TailscaleConfig:                tailscaleCfg,
-		TailscaleMode:                  tailscaleMode,
-		CanvasHostEnabled:              canvasHostEnabled,
-		TrustedProxies:                 trustedProxies,
-		ChannelHealthCheckMinutes:      channelHealthCheck,
-		ChannelStaleEventThresholdMin:  channelStale,
-		ChannelMaxRestartsPerHour:      channelMaxRestarts,
+		BindHost:                      bindHost,
+		Port:                          params.Port,
+		ControlUIEnabled:              controlUIEnabled,
+		ControlUIBasePath:             controlUIBasePath,
+		ControlUIRoot:                 controlUIRoot,
+		OpenAIChatCompletionsEnabled:  openAIChatCompletionsEnabled,
+		OpenAIChatCompletionsConfig:   openAIChatCompletionsConfig,
+		OpenResponsesEnabled:          openResponsesEnabled,
+		OpenResponsesConfig:           openResponsesConfig,
+		StrictTransportSecurityHeader: stsHeader,
+		ResolvedAuth:                  resolvedAuth,
+		AuthMode:                      authMode,
+		TailscaleConfig:               tailscaleCfg,
+		TailscaleMode:                 tailscaleMode,
+		CanvasHostEnabled:             canvasHostEnabled,
+		TrustedProxies:                trustedProxies,
+		ChannelHealthCheckMinutes:     channelHealthCheck,
+		ChannelStaleEventThresholdMin: channelStale,
+		ChannelMaxRestartsPerHour:     channelMaxRestarts,
 	}, nil
 }
 

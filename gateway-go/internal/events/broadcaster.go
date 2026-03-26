@@ -97,16 +97,16 @@ type Broadcaster struct {
 
 	// Session event subscriptions: connID -> subscribed.
 	sessionSubMu   sync.RWMutex
-	sessionSubs    map[string]bool             // connIDs subscribed to session events
-	sessionMsgSubs map[string]map[string]bool  // sessionKey -> set of connIDs
+	sessionSubs    map[string]bool            // connIDs subscribed to session events
+	sessionMsgSubs map[string]map[string]bool // sessionKey -> set of connIDs
 
 	// Tool event recipients: runId -> connID.
 	toolRecipientMu sync.RWMutex
 	toolRecipients  map[string]string
 
 	// Node session subscriptions: nodeID -> set of sessionKeys.
-	nodeSubMu  sync.RWMutex
-	nodeSubs   map[string]map[string]bool
+	nodeSubMu sync.RWMutex
+	nodeSubs  map[string]map[string]bool
 }
 
 type subscriberEntry struct {

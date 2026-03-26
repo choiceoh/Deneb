@@ -37,7 +37,11 @@ func TestNormalizeThinkLevel(t *testing.T) {
 }
 
 func TestNormalizeVerboseLevel(t *testing.T) {
-	tests := []struct{ raw string; want VerboseLevel; ok bool }{
+	tests := []struct {
+		raw  string
+		want VerboseLevel
+		ok   bool
+	}{
 		{"off", VerboseOff, true},
 		{"on", VerboseOn, true},
 		{"full", VerboseFull, true},
@@ -54,7 +58,11 @@ func TestNormalizeVerboseLevel(t *testing.T) {
 }
 
 func TestNormalizeElevatedLevel(t *testing.T) {
-	tests := []struct{ raw string; want ElevatedLevel; ok bool }{
+	tests := []struct {
+		raw  string
+		want ElevatedLevel
+		ok   bool
+	}{
 		{"off", ElevatedOff, true},
 		{"on", ElevatedOn, true},
 		{"ask", ElevatedAsk, true},
@@ -71,7 +79,11 @@ func TestNormalizeElevatedLevel(t *testing.T) {
 }
 
 func TestNormalizeReasoningLevel(t *testing.T) {
-	tests := []struct{ raw string; want ReasoningLevel; ok bool }{
+	tests := []struct {
+		raw  string
+		want ReasoningLevel
+		ok   bool
+	}{
 		{"off", ReasoningOff, true},
 		{"on", ReasoningOn, true},
 		{"stream", ReasoningStream, true},
@@ -88,7 +100,11 @@ func TestNormalizeReasoningLevel(t *testing.T) {
 }
 
 func TestNormalizeFastMode(t *testing.T) {
-	tests := []struct{ raw string; want bool; ok bool }{
+	tests := []struct {
+		raw  string
+		want bool
+		ok   bool
+	}{
 		{"on", true, true},
 		{"off", false, true},
 		{"fast", true, true},

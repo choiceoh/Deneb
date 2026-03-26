@@ -26,7 +26,7 @@ type RunOutcome struct {
 type Job struct {
 	ID        string             `json:"id"`
 	AgentID   string             `json:"agentId,omitempty"`
-	Command   string             `json:"command"`           // prompt or command text
+	Command   string             `json:"command"` // prompt or command text
 	Schedule  Schedule           `json:"schedule"`
 	Delivery  *JobDeliveryConfig `json:"delivery,omitempty"`
 	TimeoutMs int64              `json:"timeoutMs,omitempty"`

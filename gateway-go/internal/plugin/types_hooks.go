@@ -136,13 +136,13 @@ type HookLLMInputEvent struct {
 // --- llm_output ---
 
 type HookLLMOutputEvent struct {
-	RunID          string           `json:"runId"`
-	SessionID      string           `json:"sessionId"`
-	Provider       string           `json:"provider"`
-	Model          string           `json:"model"`
-	AssistantTexts []string         `json:"assistantTexts"`
-	LastAssistant  any              `json:"lastAssistant,omitempty"`
-	Usage          *HookUsageInfo   `json:"usage,omitempty"`
+	RunID          string         `json:"runId"`
+	SessionID      string         `json:"sessionId"`
+	Provider       string         `json:"provider"`
+	Model          string         `json:"model"`
+	AssistantTexts []string       `json:"assistantTexts"`
+	LastAssistant  any            `json:"lastAssistant,omitempty"`
+	Usage          *HookUsageInfo `json:"usage,omitempty"`
 }
 
 type HookUsageInfo struct {
@@ -165,11 +165,11 @@ type HookAgentEndEvent struct {
 // --- Compaction hooks ---
 
 type HookBeforeCompactionEvent struct {
-	MessageCount   int    `json:"messageCount"`
-	CompactingCount int   `json:"compactingCount,omitempty"`
-	TokenCount     int    `json:"tokenCount,omitempty"`
-	Messages       []any  `json:"messages,omitempty"`
-	SessionFile    string `json:"sessionFile,omitempty"`
+	MessageCount    int    `json:"messageCount"`
+	CompactingCount int    `json:"compactingCount,omitempty"`
+	TokenCount      int    `json:"tokenCount,omitempty"`
+	Messages        []any  `json:"messages,omitempty"`
+	SessionFile     string `json:"sessionFile,omitempty"`
 }
 
 type HookAfterCompactionEvent struct {
@@ -344,8 +344,8 @@ type HookSessionContext struct {
 // --- session_start ---
 
 type HookSessionStartEvent struct {
-	SessionID  string `json:"sessionId"`
-	SessionKey string `json:"sessionKey,omitempty"`
+	SessionID   string `json:"sessionId"`
+	SessionKey  string `json:"sessionKey,omitempty"`
 	ResumedFrom string `json:"resumedFrom,omitempty"`
 }
 

@@ -38,7 +38,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
 	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
-	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/node"
 	"github.com/choiceoh/deneb/gateway-go/internal/plugin"
@@ -49,6 +48,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
+	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
@@ -67,29 +67,29 @@ const (
 
 // Server is the main gateway server.
 type Server struct {
-	addr        string
-	httpServer  *http.Server
-	dispatcher  *rpc.Dispatcher
-	sessions    *session.Manager
+	addr             string
+	httpServer       *http.Server
+	dispatcher       *rpc.Dispatcher
+	sessions         *session.Manager
 	channels         *channel.Registry
 	channelLifecycle *channel.LifecycleManager
 	keyCache         *session.KeyCache
 	dedupe           *dedupe.Tracker
-	broadcaster *events.Broadcaster
-	processes   *process.Manager
-	cron        *cron.Scheduler
-	daemon      *daemon.Daemon
-	hooks       *hooks.Registry
-	runtimeCfg    *config.GatewayRuntimeConfig
-	authValidator *auth.Validator
-	clients     sync.Map // connID -> *WsClient
-	clientCnt   atomic.Int32
-	startedAt   time.Time
-	version     string
-	rustFFI     bool // true when Rust FFI is available
-	logger      *slog.Logger
-	ready       atomic.Bool
-	shutdownOnce sync.Once
+	broadcaster      *events.Broadcaster
+	processes        *process.Manager
+	cron             *cron.Scheduler
+	daemon           *daemon.Daemon
+	hooks            *hooks.Registry
+	runtimeCfg       *config.GatewayRuntimeConfig
+	authValidator    *auth.Validator
+	clients          sync.Map // connID -> *WsClient
+	clientCnt        atomic.Int32
+	startedAt        time.Time
+	version          string
+	rustFFI          bool // true when Rust FFI is available
+	logger           *slog.Logger
+	ready            atomic.Bool
+	shutdownOnce     sync.Once
 
 	// Phase 2 additions.
 	gatewaySubs     *events.GatewayEventSubscriptions
@@ -105,14 +105,14 @@ type Server struct {
 	vegaBackend     vega.Backend
 
 	// Phase 3: Advanced workflow subsystems.
-	approvals  *approval.Store
-	nodes      *node.Manager
-	devices    *device.Manager
-	agents     *agent.Store
-	skills     *skill.Manager
-	wizardEng  *wizard.Engine
-	secrets    *secret.Resolver
-	talkState  *talk.State
+	approvals *approval.Store
+	nodes     *node.Manager
+	devices   *device.Manager
+	agents    *agent.Store
+	skills    *skill.Manager
+	wizardEng *wizard.Engine
+	secrets   *secret.Resolver
+	talkState *talk.State
 
 	// Phase 4: Native system methods (migrated from bridge).
 	usageTracker *usage.Tracker
@@ -316,7 +316,6 @@ func New(addr string, opts ...Option) *Server {
 
 	return s
 }
-
 
 // initAndListen creates the HTTP server, binds to the address, and starts
 // background subsystems (tick broadcaster, monitoring, process pruner, hooks).
@@ -601,19 +600,19 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	s.writeJSON(w, http.StatusOK, map[string]any{
-		"status":          "ok",
-		"version":         s.version,
-		"runtime":         "go",
-		"uptime":          time.Since(s.startedAt).Milliseconds(),
-		"connections":     s.clientCnt.Load(),
-		"sessions":        s.sessions.Count(),
-		"rust_core":       s.rustFFI,
-		"auth_mode":       authMode,
-		"providers":       providerCount,
-		"processes":       activeProcesses,
-		"cronTasks":       cronTasks,
-		"hooks":           hooksCount,
-		"channelHealth":   channelHealthSummary,
+		"status":        "ok",
+		"version":       s.version,
+		"runtime":       "go",
+		"uptime":        time.Since(s.startedAt).Milliseconds(),
+		"connections":   s.clientCnt.Load(),
+		"sessions":      s.sessions.Count(),
+		"rust_core":     s.rustFFI,
+		"auth_mode":     authMode,
+		"providers":     providerCount,
+		"processes":     activeProcesses,
+		"cronTasks":     cronTasks,
+		"hooks":         hooksCount,
+		"channelHealth": channelHealthSummary,
 	})
 }
 
@@ -1588,10 +1587,10 @@ func (s *Server) registerBuiltinMethods() {
 			return resp
 		}
 		resp := protocol.MustResponseOK(req.ID, map[string]any{
-			"bindHost":       s.runtimeCfg.BindHost,
-			"port":           s.runtimeCfg.Port,
-			"authMode":       s.runtimeCfg.AuthMode,
-			"tailscaleMode":  s.runtimeCfg.TailscaleMode,
+			"bindHost":      s.runtimeCfg.BindHost,
+			"port":          s.runtimeCfg.Port,
+			"authMode":      s.runtimeCfg.AuthMode,
+			"tailscaleMode": s.runtimeCfg.TailscaleMode,
 		})
 		return resp
 	})

@@ -115,8 +115,8 @@ type InvokeResult struct {
 // Manager manages node pairing, discovery, and pending actions.
 type Manager struct {
 	mu             sync.RWMutex
-	pairRequests   map[string]*PairRequest // requestID -> PairRequest
-	pairedNodes    map[string]*PairedNode  // nodeID -> PairedNode
+	pairRequests   map[string]*PairRequest     // requestID -> PairRequest
+	pairedNodes    map[string]*PairedNode      // nodeID -> PairedNode
 	pendingActions map[string][]*PendingAction // nodeID -> actions
 	canvas         *CanvasCapability
 

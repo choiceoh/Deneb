@@ -14,10 +14,10 @@ import (
 // with the fields needed by inbound-meta.ts.
 type InboundMetaContext struct {
 	// Session / routing.
-	SessionKey         string
-	AgentID            string
-	Channel            string
-	IsGroup            bool
+	SessionKey string
+	AgentID    string
+	Channel    string
+	IsGroup    bool
 
 	// Channel identity.
 	OriginatingChannel string
@@ -27,51 +27,51 @@ type InboundMetaContext struct {
 	ChatType           string
 
 	// Identifiers.
-	AccountID          string
-	MessageSid         string
-	MessageSidFull     string
-	SenderId           string
-	SenderName         string
-	SenderUsername     string
-	SenderTag          string
-	SenderE164         string
-	ReplyToId          string
+	AccountID      string
+	MessageSid     string
+	MessageSidFull string
+	SenderId       string
+	SenderName     string
+	SenderUsername string
+	SenderTag      string
+	SenderE164     string
+	ReplyToId      string
 
 	// Message context.
-	ConversationLabel  string
-	WasMentioned       bool
-	Timestamp          *int64 // epoch ms
+	ConversationLabel string
+	WasMentioned      bool
+	Timestamp         *int64 // epoch ms
 
 	// Group context.
-	GroupSubject       string
-	GroupChannel       string
-	GroupSpace         string
+	GroupSubject string
+	GroupChannel string
+	GroupSpace   string
 
 	// Thread context.
-	ThreadLabel        string
-	MessageThreadId    *int64
-	IsForum            bool
+	ThreadLabel     string
+	MessageThreadId *int64
+	IsForum         bool
 
 	// Reply/forward context.
-	ReplyToBody        string
-	ReplyToSender      string
-	ReplyToIsQuote     bool
-	ForwardedFrom      string
-	ForwardedFromType  string
-	ForwardedFromUsername string
-	ForwardedFromTitle string
+	ReplyToBody            string
+	ReplyToSender          string
+	ReplyToIsQuote         bool
+	ForwardedFrom          string
+	ForwardedFromType      string
+	ForwardedFromUsername  string
+	ForwardedFromTitle     string
 	ForwardedFromSignature string
-	ForwardedFromChatType string
-	ForwardedDate      *int64
+	ForwardedFromChatType  string
+	ForwardedDate          *int64
 
 	// Envelope formatting.
-	Timezone           string // "utc", "local", or IANA timezone
+	Timezone string // "utc", "local", or IANA timezone
 
 	// Thread starter.
-	ThreadStarterBody  string
+	ThreadStarterBody string
 
 	// Chat history.
-	InboundHistory     []InboundHistoryEntry
+	InboundHistory []InboundHistoryEntry
 }
 
 // InboundHistoryEntry represents a single chat history entry.

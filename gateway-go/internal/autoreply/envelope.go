@@ -10,18 +10,18 @@ import (
 // EnvelopeFormatOptions controls how inbound/outbound envelopes are formatted.
 type EnvelopeFormatOptions struct {
 	ShowTimestamp bool   `json:"showTimestamp,omitempty"`
-	Timezone     string `json:"timezone,omitempty"` // "utc", "local", or IANA string
-	ShowSender   bool   `json:"showSender,omitempty"`
-	ShowChannel  bool   `json:"showChannel,omitempty"`
+	Timezone      string `json:"timezone,omitempty"` // "utc", "local", or IANA string
+	ShowSender    bool   `json:"showSender,omitempty"`
+	ShowChannel   bool   `json:"showChannel,omitempty"`
 }
 
 // DefaultEnvelopeOptions returns sensible defaults for envelope formatting.
 func DefaultEnvelopeOptions() EnvelopeFormatOptions {
 	return EnvelopeFormatOptions{
 		ShowTimestamp: true,
-		Timezone:     "utc",
-		ShowSender:   true,
-		ShowChannel:  false,
+		Timezone:      "utc",
+		ShowSender:    true,
+		ShowChannel:   false,
 	}
 }
 

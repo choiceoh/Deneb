@@ -44,10 +44,10 @@ type PluginMeta struct {
 // It holds registered plugins (channels, providers, hooks) and provides
 // lookup methods for the gateway runtime.
 type Registry struct {
-	mu       sync.RWMutex
-	plugins  map[string]*PluginMeta
-	hooks    []HookEntry
-	logger   *slog.Logger
+	mu      sync.RWMutex
+	plugins map[string]*PluginMeta
+	hooks   []HookEntry
+	logger  *slog.Logger
 }
 
 // NewRegistry creates a new plugin registry.
@@ -115,15 +115,15 @@ func (r *Registry) IsEnabled(id string) bool {
 type HookName string
 
 const (
-	HookBeforeAgentStart  HookName = "before_agent_start"
-	HookAfterAgentEnd     HookName = "after_agent_end"
-	HookBeforeSend        HookName = "before_send"
-	HookAfterSend         HookName = "after_send"
-	HookMessageReceived   HookName = "message_received"
-	HookSessionCreated    HookName = "session_created"
-	HookSessionReset      HookName = "session_reset"
-	HookCronJobStart      HookName = "cron_job_start"
-	HookCronJobEnd        HookName = "cron_job_end"
+	HookBeforeAgentStart HookName = "before_agent_start"
+	HookAfterAgentEnd    HookName = "after_agent_end"
+	HookBeforeSend       HookName = "before_send"
+	HookAfterSend        HookName = "after_send"
+	HookMessageReceived  HookName = "message_received"
+	HookSessionCreated   HookName = "session_created"
+	HookSessionReset     HookName = "session_reset"
+	HookCronJobStart     HookName = "cron_job_start"
+	HookCronJobEnd       HookName = "cron_job_end"
 )
 
 // HookFunc is the signature for hook handlers.
@@ -177,11 +177,11 @@ func (r *Registry) RunHooks(ctx context.Context, name HookName, payload map[stri
 
 // ProviderConfig holds the configuration for a model provider.
 type ProviderConfig struct {
-	ID       string `json:"id"`
-	Label    string `json:"label,omitempty"`
-	BaseURL  string `json:"baseUrl,omitempty"`
-	APIKey   string `json:"apiKey,omitempty"`
-	Default  bool   `json:"default,omitempty"`
+	ID      string `json:"id"`
+	Label   string `json:"label,omitempty"`
+	BaseURL string `json:"baseUrl,omitempty"`
+	APIKey  string `json:"apiKey,omitempty"`
+	Default bool   `json:"default,omitempty"`
 }
 
 // ProviderCatalog manages available model providers.

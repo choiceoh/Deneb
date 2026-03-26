@@ -23,13 +23,13 @@ const (
 
 // PairedDevice represents a successfully paired device.
 type PairedDevice struct {
-	DeviceID    string    `json:"deviceId"`
-	Label       string    `json:"label,omitempty"`
-	Platform    string    `json:"platform,omitempty"`
-	Token       string    `json:"token"`
-	PairedAtMs  int64     `json:"pairedAtMs"`
-	LastSeenMs  int64     `json:"lastSeenMs,omitempty"`
-	State       PairState `json:"state"`
+	DeviceID   string    `json:"deviceId"`
+	Label      string    `json:"label,omitempty"`
+	Platform   string    `json:"platform,omitempty"`
+	Token      string    `json:"token"`
+	PairedAtMs int64     `json:"pairedAtMs"`
+	LastSeenMs int64     `json:"lastSeenMs,omitempty"`
+	State      PairState `json:"state"`
 }
 
 // PairEntry represents a pending or resolved device pair request.
@@ -45,7 +45,7 @@ type PairEntry struct {
 // Manager manages device pairing and token lifecycle.
 type Manager struct {
 	mu           sync.RWMutex
-	pairRequests map[string]*PairEntry   // requestID -> entry
+	pairRequests map[string]*PairEntry    // requestID -> entry
 	devices      map[string]*PairedDevice // deviceID -> device
 }
 

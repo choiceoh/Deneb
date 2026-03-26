@@ -195,8 +195,8 @@ func nodeDescribe(deps NodeDeps) HandlerFunc {
 		}
 
 		resp := protocol.MustResponseOK(req.ID, map[string]any{
-			"ts":    time.Now().UnixMilli(),
-			"nodeId": info.NodeID,
+			"ts":              time.Now().UnixMilli(),
+			"nodeId":          info.NodeID,
 			"displayName":     info.DisplayName,
 			"platform":        info.Platform,
 			"version":         info.Version,

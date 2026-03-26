@@ -24,30 +24,30 @@ import (
 
 // PluginCandidate describes a discovered plugin candidate.
 type PluginCandidate struct {
-	IDHint             string              `json:"idHint"`
-	Source             string              `json:"source"`
-	SetupSource        string              `json:"setupSource,omitempty"`
-	RootDir            string              `json:"rootDir"`
-	Origin             PluginOrigin        `json:"origin"`
-	Format             PluginFormat        `json:"format,omitempty"`
-	BundleFormat       PluginBundleFormat  `json:"bundleFormat,omitempty"`
-	WorkspaceDir       string              `json:"workspaceDir,omitempty"`
-	PackageName        string              `json:"packageName,omitempty"`
-	PackageVersion     string              `json:"packageVersion,omitempty"`
-	PackageDescription string              `json:"packageDescription,omitempty"`
-	PackageDir         string              `json:"packageDir,omitempty"`
+	IDHint             string                `json:"idHint"`
+	Source             string                `json:"source"`
+	SetupSource        string                `json:"setupSource,omitempty"`
+	RootDir            string                `json:"rootDir"`
+	Origin             PluginOrigin          `json:"origin"`
+	Format             PluginFormat          `json:"format,omitempty"`
+	BundleFormat       PluginBundleFormat    `json:"bundleFormat,omitempty"`
+	WorkspaceDir       string                `json:"workspaceDir,omitempty"`
+	PackageName        string                `json:"packageName,omitempty"`
+	PackageVersion     string                `json:"packageVersion,omitempty"`
+	PackageDescription string                `json:"packageDescription,omitempty"`
+	PackageDir         string                `json:"packageDir,omitempty"`
 	PackageManifest    *DenebPackageManifest `json:"packageManifest,omitempty"`
 }
 
 // DenebPackageManifest holds the deneb-specific section of a package.json.
 type DenebPackageManifest struct {
-	ID          string   `json:"id,omitempty"`
-	Extensions  []string `json:"extensions,omitempty"`
-	SetupEntry  string   `json:"setupEntry,omitempty"`
-	Channels    []string `json:"channels,omitempty"`
-	Providers   []string `json:"providers,omitempty"`
-	Skills      []string `json:"skills,omitempty"`
-	Hooks       []string `json:"hooks,omitempty"`
+	ID         string   `json:"id,omitempty"`
+	Extensions []string `json:"extensions,omitempty"`
+	SetupEntry string   `json:"setupEntry,omitempty"`
+	Channels   []string `json:"channels,omitempty"`
+	Providers  []string `json:"providers,omitempty"`
+	Skills     []string `json:"skills,omitempty"`
+	Hooks      []string `json:"hooks,omitempty"`
 }
 
 // PluginDiscoveryResult holds the result of plugin discovery.
@@ -60,22 +60,22 @@ type PluginDiscoveryResult struct {
 type CandidateBlockReason string
 
 const (
-	BlockSourceEscapesRoot    CandidateBlockReason = "source_escapes_root"
-	BlockPathStatFailed       CandidateBlockReason = "path_stat_failed"
-	BlockPathWorldWritable    CandidateBlockReason = "path_world_writable"
-	BlockSuspiciousOwnership  CandidateBlockReason = "path_suspicious_ownership"
+	BlockSourceEscapesRoot   CandidateBlockReason = "source_escapes_root"
+	BlockPathStatFailed      CandidateBlockReason = "path_stat_failed"
+	BlockPathWorldWritable   CandidateBlockReason = "path_world_writable"
+	BlockSuspiciousOwnership CandidateBlockReason = "path_suspicious_ownership"
 )
 
 type candidateBlockIssue struct {
-	reason        CandidateBlockReason
-	sourcePath    string
-	rootPath      string
-	targetPath    string
+	reason         CandidateBlockReason
+	sourcePath     string
+	rootPath       string
+	targetPath     string
 	sourceRealPath string
-	rootRealPath  string
-	modeBits      uint32
-	foundUID      uint32
-	expectedUID   uint32
+	rootRealPath   string
+	modeBits       uint32
+	foundUID       uint32
+	expectedUID    uint32
 }
 
 // PluginSourceRoots holds the root directories for plugin discovery.
@@ -99,9 +99,9 @@ const defaultDiscoveryCacheMs = 1000
 
 // PluginDiscoverer discovers plugin candidates from filesystem roots.
 type PluginDiscoverer struct {
-	mu          sync.Mutex
-	cache       map[string]*discoveryEntry
-	logger      *slog.Logger
+	mu     sync.Mutex
+	cache  map[string]*discoveryEntry
+	logger *slog.Logger
 }
 
 type discoveryEntry struct {
@@ -416,10 +416,10 @@ func readPackageManifest(dir string) (*packageJSON, error) {
 }
 
 type packageJSON struct {
-	Name        string                `json:"name"`
-	Version     string                `json:"version"`
-	Description string                `json:"description"`
-	Deneb       *packageDenebSection  `json:"deneb"`
+	Name        string               `json:"name"`
+	Version     string               `json:"version"`
+	Description string               `json:"description"`
+	Deneb       *packageDenebSection `json:"deneb"`
 }
 
 type packageDenebSection struct {

@@ -26,7 +26,7 @@ type ProviderStats struct {
 // StatusReport is returned by usage.status.
 type StatusReport struct {
 	Uptime    string                    `json:"uptime"`
-	StartedAt string                   `json:"startedAt"`
+	StartedAt string                    `json:"startedAt"`
 	Providers map[string]*ProviderStats `json:"providers"`
 }
 

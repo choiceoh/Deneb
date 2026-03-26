@@ -29,12 +29,12 @@ const (
 
 // InternalHookEvent is a rich event passed to internal hook handlers.
 type InternalHookEvent struct {
-	Type       InternalHookEventType  `json:"type"`
-	Action     string                 `json:"action"`
-	SessionKey string                 `json:"sessionKey"`
-	Context    map[string]any         `json:"context,omitempty"`
-	Timestamp  time.Time              `json:"timestamp"`
-	Messages   []string               `json:"messages,omitempty"`
+	Type       InternalHookEventType `json:"type"`
+	Action     string                `json:"action"`
+	SessionKey string                `json:"sessionKey"`
+	Context    map[string]any        `json:"context,omitempty"`
+	Timestamp  time.Time             `json:"timestamp"`
+	Messages   []string              `json:"messages,omitempty"`
 }
 
 // EventKey returns the fully qualified event key (type:action).
@@ -47,14 +47,14 @@ type InternalHookHandler func(ctx context.Context, event *InternalHookEvent) err
 
 // DenebHookMetadata is parsed metadata from a HOOK.md frontmatter.
 type DenebHookMetadata struct {
-	Always   bool           `json:"always,omitempty"`
-	HookKey  string         `json:"hookKey,omitempty"`
-	Emoji    string         `json:"emoji,omitempty"`
-	Homepage string         `json:"homepage,omitempty"`
-	Events   []string       `json:"events"`
-	Export   string         `json:"export,omitempty"`
-	OS       []string       `json:"os,omitempty"`
-	Requires *HookRequires  `json:"requires,omitempty"`
+	Always   bool              `json:"always,omitempty"`
+	HookKey  string            `json:"hookKey,omitempty"`
+	Emoji    string            `json:"emoji,omitempty"`
+	Homepage string            `json:"homepage,omitempty"`
+	Events   []string          `json:"events"`
+	Export   string            `json:"export,omitempty"`
+	OS       []string          `json:"os,omitempty"`
+	Requires *HookRequires     `json:"requires,omitempty"`
 	Install  []HookInstallSpec `json:"install,omitempty"`
 }
 
@@ -215,10 +215,10 @@ func (r *InternalRegistry) ListHandlers() map[string][]string {
 
 // EligibilityContext provides runtime info for evaluating hook eligibility.
 type EligibilityContext struct {
-	Platform       string // runtime.GOOS
-	EnvLookup      func(string) string
-	BinLookup      func(string) bool
-	ConfigLookup   func(string) bool
+	Platform     string // runtime.GOOS
+	EnvLookup    func(string) string
+	BinLookup    func(string) bool
+	ConfigLookup func(string) bool
 }
 
 // DefaultEligibilityContext creates an eligibility context using the current runtime.

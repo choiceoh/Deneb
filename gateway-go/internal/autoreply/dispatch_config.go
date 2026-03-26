@@ -141,7 +141,7 @@ func (r *DispatcherRegistry) Get(sessionKey string) *ReplyDispatcher {
 
 // FollowupRunner handles multi-turn follow-up executions.
 type FollowupRunner struct {
-	agent   AgentExecutor
+	agent    AgentExecutor
 	maxTurns int
 }
 
@@ -190,9 +190,9 @@ func needsFollowup(result *AgentTurnResult) bool {
 
 // ACPDispatch handles ACP (Agent Control Protocol) routing.
 type ACPDispatch struct {
-	Enabled    bool
+	Enabled     bool
 	TargetAgent string
-	Mode       string // "stream", "batch"
+	Mode        string // "stream", "batch"
 }
 
 // ACPDelivery handles delivering ACP results.

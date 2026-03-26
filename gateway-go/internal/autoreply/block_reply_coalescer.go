@@ -11,11 +11,11 @@ import (
 
 // BlockStreamingCoalescing configures the coalescing behavior for block streaming.
 type BlockStreamingCoalescing struct {
-	MinChars      int    `json:"minChars"`
-	MaxChars      int    `json:"maxChars"`
-	IdleMs        int    `json:"idleMs"`
-	Joiner        string `json:"joiner,omitempty"`
-	FlushOnEnqueue bool  `json:"flushOnEnqueue,omitempty"`
+	MinChars       int    `json:"minChars"`
+	MaxChars       int    `json:"maxChars"`
+	IdleMs         int    `json:"idleMs"`
+	Joiner         string `json:"joiner,omitempty"`
+	FlushOnEnqueue bool   `json:"flushOnEnqueue,omitempty"`
 }
 
 // BlockReplyCoalescer buffers and coalesces reply payloads, flushing them

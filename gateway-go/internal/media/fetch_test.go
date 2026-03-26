@@ -79,4 +79,3 @@ func TestDetectMIME(t *testing.T) {
 		t.Errorf("DetectMIME(nil) = %q, want application/octet-stream", got)
 	}
 }
-

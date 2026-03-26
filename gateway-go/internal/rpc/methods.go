@@ -113,11 +113,11 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 func healthCheck(deps Deps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		resp := protocol.MustResponseOK(req.ID, map[string]any{
-			"status":       "ok",
-			"runtime":      "go",
-			"ffi":          ffi.Available,
-			"sessions":     deps.Sessions.Count(),
-			"channels":     deps.Channels.List(),
+			"status":   "ok",
+			"runtime":  "go",
+			"ffi":      ffi.Available,
+			"sessions": deps.Sessions.Count(),
+			"channels": deps.Channels.List(),
 		})
 		return resp
 	}

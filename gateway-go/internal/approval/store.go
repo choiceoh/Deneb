@@ -113,22 +113,22 @@ func (s *Store) CreateRequest(params CreateRequestParams) *Request {
 	}
 
 	req := &Request{
-		ID:           id,
-		Command:      params.Command,
-		CommandArgv:  params.CommandArgv,
-		Env:          params.Env,
-		Cwd:          params.Cwd,
+		ID:            id,
+		Command:       params.Command,
+		CommandArgv:   params.CommandArgv,
+		Env:           params.Env,
+		Cwd:           params.Cwd,
 		SystemRunPlan: params.SystemRunPlan,
-		NodeID:       params.NodeID,
-		Host:         params.Host,
-		Security:     params.Security,
-		Ask:          params.Ask,
-		AgentID:      params.AgentID,
-		ResolvedPath: params.ResolvedPath,
-		SessionKey:   params.SessionKey,
-		TwoPhase:     params.TwoPhase,
-		CreatedAtMs:  now,
-		ExpiresAtMs:  now + ttl.Milliseconds(),
+		NodeID:        params.NodeID,
+		Host:          params.Host,
+		Security:      params.Security,
+		Ask:           params.Ask,
+		AgentID:       params.AgentID,
+		ResolvedPath:  params.ResolvedPath,
+		SessionKey:    params.SessionKey,
+		TwoPhase:      params.TwoPhase,
+		CreatedAtMs:   now,
+		ExpiresAtMs:   now + ttl.Milliseconds(),
 	}
 	if params.TurnSource != nil {
 		req.TurnSourceInfo = params.TurnSource
@@ -143,22 +143,22 @@ func (s *Store) CreateRequest(params CreateRequestParams) *Request {
 
 // CreateRequestParams holds input for creating an approval request.
 type CreateRequestParams struct {
-	ID           string
-	Command      string
-	CommandArgv  []string
-	Env          map[string]string
-	Cwd          string
+	ID            string
+	Command       string
+	CommandArgv   []string
+	Env           map[string]string
+	Cwd           string
 	SystemRunPlan any
-	NodeID       string
-	Host         string
-	Security     string
-	Ask          string
-	AgentID      string
-	ResolvedPath string
-	SessionKey   string
-	TimeoutMs    int64
-	TwoPhase     bool
-	TurnSource   *TurnSourceInfo
+	NodeID        string
+	Host          string
+	Security      string
+	Ask           string
+	AgentID       string
+	ResolvedPath  string
+	SessionKey    string
+	TimeoutMs     int64
+	TwoPhase      bool
+	TurnSource    *TurnSourceInfo
 }
 
 // Get returns an approval request by ID, or nil if not found.

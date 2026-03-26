@@ -60,10 +60,10 @@ func ApplySessionUpdate(session *SessionState, update SessionUpdate) {
 
 // SessionForkParams configures a session fork.
 type SessionForkParams struct {
-	ParentKey    string
-	NewKey       string
-	ResetModel   bool
-	ResetPrompt  bool
+	ParentKey   string
+	NewKey      string
+	ResetModel  bool
+	ResetPrompt bool
 }
 
 // ForkSession creates a new session based on a parent session.

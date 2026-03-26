@@ -44,20 +44,20 @@ type AgentTurnConfig struct {
 
 // AgentTurnResult holds the outcome of an agent turn.
 type AgentTurnResult struct {
-	Payloads       []ReplyPayload
-	ToolMeta       *ToolMeta
-	OutputText     string
-	Summary        string
-	TokensUsed     TokenUsage
-	ModelUsed      string
-	ProviderUsed   string
-	DurationMs     int64
-	WasAborted     bool
-	Error          error
-	FallbackActive bool
+	Payloads         []ReplyPayload
+	ToolMeta         *ToolMeta
+	OutputText       string
+	Summary          string
+	TokensUsed       TokenUsage
+	ModelUsed        string
+	ProviderUsed     string
+	DurationMs       int64
+	WasAborted       bool
+	Error            error
+	FallbackActive   bool
 	FallbackAttempts []FallbackAttempt
-	CompactedAt    int64
-	TurnCount      int
+	CompactedAt      int64
+	TurnCount        int
 }
 
 // TokenUsage tracks token consumption for an agent turn.
@@ -116,12 +116,12 @@ type LLMStreamIterator interface {
 
 // LLMStreamEvent represents a single streaming event.
 type LLMStreamEvent struct {
-	Type       string     // "text", "tool_use_start", "tool_use_input", "tool_use_end", "thinking", "done"
-	Text       string     // for "text" events
-	ToolCall   *ToolCall  // for "tool_use_start"
-	ToolInput  string     // for "tool_use_input" (JSON delta)
+	Type       string      // "text", "tool_use_start", "tool_use_input", "tool_use_end", "thinking", "done"
+	Text       string      // for "text" events
+	ToolCall   *ToolCall   // for "tool_use_start"
+	ToolInput  string      // for "tool_use_input" (JSON delta)
 	Usage      *TokenUsage // for "done" events
-	StopReason string     // for "done" events
+	StopReason string      // for "done" events
 }
 
 // ToolExecutor runs tool calls and returns results.
@@ -530,23 +530,23 @@ type ThinkingConfig struct {
 
 // AgentMessage is a single message in the agent conversation.
 type AgentMessage struct {
-	Role       string          `json:"role"`
-	Content    string          `json:"content,omitempty"`
-	ToolUseID  string          `json:"tool_use_id,omitempty"`  // for tool_result
-	IsError    bool            `json:"is_error,omitempty"`     // for tool_result
+	Role          string         `json:"role"`
+	Content       string         `json:"content,omitempty"`
+	ToolUseID     string         `json:"tool_use_id,omitempty"`    // for tool_result
+	IsError       bool           `json:"is_error,omitempty"`       // for tool_result
 	ContentBlocks []ContentBlock `json:"content_blocks,omitempty"` // for multi-block messages
 }
 
 // ContentBlock represents a block within a message (text, tool_use, tool_result, thinking).
 type ContentBlock struct {
-	Type      string         `json:"type"` // "text", "tool_use", "tool_result", "thinking"
-	Text      string         `json:"text,omitempty"`
-	ID        string         `json:"id,omitempty"`
-	Name      string         `json:"name,omitempty"`
-	Input     map[string]any `json:"input,omitempty"`
-	Content   string         `json:"content,omitempty"`
-	IsError   bool           `json:"is_error,omitempty"`
-	Thinking  string         `json:"thinking,omitempty"`
+	Type     string         `json:"type"` // "text", "tool_use", "tool_result", "thinking"
+	Text     string         `json:"text,omitempty"`
+	ID       string         `json:"id,omitempty"`
+	Name     string         `json:"name,omitempty"`
+	Input    map[string]any `json:"input,omitempty"`
+	Content  string         `json:"content,omitempty"`
+	IsError  bool           `json:"is_error,omitempty"`
+	Thinking string         `json:"thinking,omitempty"`
 }
 
 // AgentToolDef describes a tool available to the agent.
@@ -603,8 +603,8 @@ type AgentRunnerMemory struct {
 	maxTokens  int
 	usedTokens int
 	// compaction tracking
-	compactionCount  int
-	totalCompacted   int
+	compactionCount int
+	totalCompacted  int
 }
 
 func NewAgentRunnerMemory(maxTokens int) *AgentRunnerMemory {
@@ -686,8 +686,8 @@ func (m *AgentRunnerMemory) CompactWithSummary(summary string) int {
 	}
 
 	newHistory := make([]AgentMessage, 0, 1+1+keepTail)
-	newHistory = append(newHistory, m.history[0])       // system prompt
-	newHistory = append(newHistory, summaryMsg)          // summary
+	newHistory = append(newHistory, m.history[0])                           // system prompt
+	newHistory = append(newHistory, summaryMsg)                             // summary
 	newHistory = append(newHistory, m.history[len(m.history)-keepTail:]...) // recent
 
 	m.history = newHistory

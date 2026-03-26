@@ -40,9 +40,9 @@ func (lm *LifecycleManager) StartAll(ctx context.Context) map[string]error {
 	plugins := lm.registry.Snapshot()
 
 	var (
-		mu     sync.Mutex
-		wg     sync.WaitGroup
-		errs   map[string]error
+		mu   sync.Mutex
+		wg   sync.WaitGroup
+		errs map[string]error
 	)
 
 	for id, p := range plugins {

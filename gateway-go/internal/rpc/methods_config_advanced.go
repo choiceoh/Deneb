@@ -102,11 +102,11 @@ func configSet(deps ConfigAdvancedDeps) HandlerFunc {
 func configApply(deps ConfigAdvancedDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			Raw             string `json:"raw"`
-			BaseHash        string `json:"baseHash"`
-			SessionKey      string `json:"sessionKey,omitempty"`
-			Note            string `json:"note,omitempty"`
-			RestartDelayMs  int    `json:"restartDelayMs,omitempty"`
+			Raw            string `json:"raw"`
+			BaseHash       string `json:"baseHash"`
+			SessionKey     string `json:"sessionKey,omitempty"`
+			Note           string `json:"note,omitempty"`
+			RestartDelayMs int    `json:"restartDelayMs,omitempty"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -160,11 +160,11 @@ func configApply(deps ConfigAdvancedDeps) HandlerFunc {
 func configPatch(deps ConfigAdvancedDeps) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
-			Raw             string `json:"raw"`
-			BaseHash        string `json:"baseHash"`
-			SessionKey      string `json:"sessionKey,omitempty"`
-			Note            string `json:"note,omitempty"`
-			RestartDelayMs  int    `json:"restartDelayMs,omitempty"`
+			Raw            string `json:"raw"`
+			BaseHash       string `json:"baseHash"`
+			SessionKey     string `json:"sessionKey,omitempty"`
+			Note           string `json:"note,omitempty"`
+			RestartDelayMs int    `json:"restartDelayMs,omitempty"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -264,4 +264,3 @@ func configSchemaLookup(_ ConfigAdvancedDeps) HandlerFunc {
 		return resp
 	}
 }
-

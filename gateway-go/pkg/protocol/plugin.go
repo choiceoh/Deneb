@@ -10,9 +10,9 @@ type PluginKind string
 
 const (
 	PluginKindUnspecified PluginKind = ""
-	PluginKindChannel    PluginKind = "channel"
-	PluginKindProvider   PluginKind = "provider"
-	PluginKindFeature    PluginKind = "feature"
+	PluginKindChannel     PluginKind = "channel"
+	PluginKindProvider    PluginKind = "provider"
+	PluginKindFeature     PluginKind = "feature"
 )
 
 // PluginMeta describes a registered plugin.

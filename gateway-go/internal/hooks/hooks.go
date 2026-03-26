@@ -21,15 +21,15 @@ import (
 type Event string
 
 const (
-	EventSessionStart   Event = "session.start"
-	EventSessionEnd     Event = "session.end"
-	EventMessageReceive Event = "message.receive"
-	EventMessageSend    Event = "message.send"
-	EventChannelConnect Event = "channel.connect"
+	EventSessionStart      Event = "session.start"
+	EventSessionEnd        Event = "session.end"
+	EventMessageReceive    Event = "message.receive"
+	EventMessageSend       Event = "message.send"
+	EventChannelConnect    Event = "channel.connect"
 	EventChannelDisconnect Event = "channel.disconnect"
-	EventGatewayStart   Event = "gateway.start"
-	EventGatewayStop    Event = "gateway.stop"
-	EventToolUse        Event = "tool.use"
+	EventGatewayStart      Event = "gateway.start"
+	EventGatewayStop       Event = "gateway.stop"
+	EventToolUse           Event = "tool.use"
 )
 
 // Hook defines a user-configured hook.

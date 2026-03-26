@@ -42,13 +42,13 @@ type InlineDirectives struct {
 
 // Regex patterns for directive extraction.
 var (
-	thinkDirectiveRe    = regexp.MustCompile(`(?i)(?:^|\s)/think(?:\s+([a-zA-Z0-9_-]+))?\s*`)
-	verboseDirectiveRe  = regexp.MustCompile(`(?i)(?:^|\s)/verbose(?:\s+([a-zA-Z0-9_-]+))?\s*`)
-	fastDirectiveRe     = regexp.MustCompile(`(?i)(?:^|\s)/fast(?:\s+([a-zA-Z0-9_-]+))?\s*`)
+	thinkDirectiveRe     = regexp.MustCompile(`(?i)(?:^|\s)/think(?:\s+([a-zA-Z0-9_-]+))?\s*`)
+	verboseDirectiveRe   = regexp.MustCompile(`(?i)(?:^|\s)/verbose(?:\s+([a-zA-Z0-9_-]+))?\s*`)
+	fastDirectiveRe      = regexp.MustCompile(`(?i)(?:^|\s)/fast(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	reasoningDirectiveRe = regexp.MustCompile(`(?i)(?:^|\s)/reasoning(?:\s+([a-zA-Z0-9_-]+))?\s*`)
-	elevatedDirectiveRe = regexp.MustCompile(`(?i)(?:^|\s)/elevated(?:\s+([a-zA-Z0-9_-]+))?\s*`)
-	statusDirectiveRe   = regexp.MustCompile(`(?i)(?:^|\s)/status\s*$`)
-	queueDirectiveRe    = regexp.MustCompile(`(?i)(?:^|\s)/queue(?:\s+([a-zA-Z0-9_-]+))?\s*`)
+	elevatedDirectiveRe  = regexp.MustCompile(`(?i)(?:^|\s)/elevated(?:\s+([a-zA-Z0-9_-]+))?\s*`)
+	statusDirectiveRe    = regexp.MustCompile(`(?i)(?:^|\s)/status\s*$`)
+	queueDirectiveRe     = regexp.MustCompile(`(?i)(?:^|\s)/queue(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 )
 
 // ParseInlineDirectives extracts all inline directives from a message body.

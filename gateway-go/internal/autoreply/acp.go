@@ -14,15 +14,15 @@ import (
 
 // ACPAgent represents a spawned sub-agent.
 type ACPAgent struct {
-	ID           string    `json:"id"`
-	ParentID     string    `json:"parentId,omitempty"`
-	Role         string    `json:"role,omitempty"`
-	Status       string    `json:"status"` // "idle", "running", "done", "failed", "killed"
-	SessionKey   string    `json:"sessionKey"`
-	SpawnedAt    int64     `json:"spawnedAt"`
-	EndedAt      int64     `json:"endedAt,omitempty"`
-	WorkspaceDir string    `json:"workspaceDir,omitempty"`
-	Depth        int       `json:"depth"`
+	ID           string `json:"id"`
+	ParentID     string `json:"parentId,omitempty"`
+	Role         string `json:"role,omitempty"`
+	Status       string `json:"status"` // "idle", "running", "done", "failed", "killed"
+	SessionKey   string `json:"sessionKey"`
+	SpawnedAt    int64  `json:"spawnedAt"`
+	EndedAt      int64  `json:"endedAt,omitempty"`
+	WorkspaceDir string `json:"workspaceDir,omitempty"`
+	Depth        int    `json:"depth"`
 }
 
 // ACPRegistry tracks spawned sub-agents.

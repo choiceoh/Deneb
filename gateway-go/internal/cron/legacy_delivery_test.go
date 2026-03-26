@@ -75,12 +75,12 @@ func TestMergeLegacyDeliveryInto(t *testing.T) {
 
 func TestStripLegacyDeliveryFieldsFromPayload(t *testing.T) {
 	payload := map[string]any{
-		"deliver":          true,
-		"channel":          "telegram",
-		"provider":         "telegram",
-		"to":               "12345",
+		"deliver":           true,
+		"channel":           "telegram",
+		"provider":          "telegram",
+		"to":                "12345",
 		"bestEffortDeliver": true,
-		"message":          "keep this",
+		"message":           "keep this",
 	}
 	StripLegacyDeliveryFieldsFromPayload(payload)
 	for _, field := range []string{"deliver", "channel", "provider", "to", "bestEffortDeliver"} {

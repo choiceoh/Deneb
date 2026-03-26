@@ -4,12 +4,12 @@ import "testing"
 
 func TestExtractModelDirective(t *testing.T) {
 	tests := []struct {
-		name         string
-		body         string
-		aliases      []string
-		wantCleaned  string
-		wantModel    string
-		wantProfile  string
+		name          string
+		body          string
+		aliases       []string
+		wantCleaned   string
+		wantModel     string
+		wantProfile   string
 		wantDirective bool
 	}{
 		{"no directive", "hello world", nil, "hello world", "", "", false},

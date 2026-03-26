@@ -40,7 +40,7 @@ func TestFullRegistry_Providers(t *testing.T) {
 func TestFullRegistry_Tools(t *testing.T) {
 	r := NewFullRegistry(testLogger())
 	r.RegisterTool(ToolRegistration{
-		PluginID: "core",
+		PluginID:   "core",
 		Definition: ToolDefinition{Name: "bash", Description: "Run bash"},
 		Handler: func(_ context.Context, _ map[string]any) (string, error) {
 			return "ok", nil

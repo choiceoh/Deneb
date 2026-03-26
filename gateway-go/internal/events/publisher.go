@@ -13,22 +13,22 @@ import (
 
 // SessionSnapshot holds a point-in-time session state for broadcast payloads.
 type SessionSnapshot struct {
-	SessionKey       string  `json:"sessionKey"`
-	SessionID        string  `json:"sessionId,omitempty"`
-	Kind             string  `json:"kind,omitempty"`
-	Channel          string  `json:"channel,omitempty"`
-	Label            string  `json:"label,omitempty"`
-	DisplayName      string  `json:"displayName,omitempty"`
-	ParentSessionKey string  `json:"parentSessionKey,omitempty"`
-	Status           string  `json:"status,omitempty"`
-	Model            string  `json:"model,omitempty"`
-	ModelProvider    string  `json:"modelProvider,omitempty"`
-	StartedAt        *int64  `json:"startedAt,omitempty"`
-	EndedAt          *int64  `json:"endedAt,omitempty"`
-	RuntimeMs        *int64  `json:"runtimeMs,omitempty"`
-	TotalTokens      *int64  `json:"totalTokens,omitempty"`
+	SessionKey       string   `json:"sessionKey"`
+	SessionID        string   `json:"sessionId,omitempty"`
+	Kind             string   `json:"kind,omitempty"`
+	Channel          string   `json:"channel,omitempty"`
+	Label            string   `json:"label,omitempty"`
+	DisplayName      string   `json:"displayName,omitempty"`
+	ParentSessionKey string   `json:"parentSessionKey,omitempty"`
+	Status           string   `json:"status,omitempty"`
+	Model            string   `json:"model,omitempty"`
+	ModelProvider    string   `json:"modelProvider,omitempty"`
+	StartedAt        *int64   `json:"startedAt,omitempty"`
+	EndedAt          *int64   `json:"endedAt,omitempty"`
+	RuntimeMs        *int64   `json:"runtimeMs,omitempty"`
+	TotalTokens      *int64   `json:"totalTokens,omitempty"`
 	EstimatedCostUsd *float64 `json:"estimatedCostUsd,omitempty"`
-	AbortedLastRun   bool    `json:"abortedLastRun,omitempty"`
+	AbortedLastRun   bool     `json:"abortedLastRun,omitempty"`
 }
 
 // SessionSnapshotProvider resolves session snapshots for event enrichment.

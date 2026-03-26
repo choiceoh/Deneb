@@ -21,8 +21,8 @@ import (
 type MediaFetchErrorCode string
 
 const (
-	ErrMaxBytes   MediaFetchErrorCode = "max_bytes"
-	ErrHTTPError  MediaFetchErrorCode = "http_error"
+	ErrMaxBytes    MediaFetchErrorCode = "max_bytes"
+	ErrHTTPError   MediaFetchErrorCode = "http_error"
 	ErrFetchFailed MediaFetchErrorCode = "fetch_failed"
 )
 

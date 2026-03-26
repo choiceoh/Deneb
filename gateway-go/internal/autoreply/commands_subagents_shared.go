@@ -28,13 +28,13 @@ const (
 
 // Subagent command prefixes.
 const (
-	SubagentsCmdPrefix     = "/subagents"
-	SubagentsCmdKill       = "/kill"
-	SubagentsCmdSteer      = "/steer"
-	SubagentsCmdTell       = "/tell"
-	SubagentsCmdFocus      = "/focus"
-	SubagentsCmdUnfocus    = "/unfocus"
-	SubagentsCmdAgents     = "/agents"
+	SubagentsCmdPrefix  = "/subagents"
+	SubagentsCmdKill    = "/kill"
+	SubagentsCmdSteer   = "/steer"
+	SubagentsCmdTell    = "/tell"
+	SubagentsCmdFocus   = "/focus"
+	SubagentsCmdUnfocus = "/unfocus"
+	SubagentsCmdAgents  = "/agents"
 )
 
 // RecentWindowMinutes is the lookback for "recent" subagent display.
@@ -59,36 +59,36 @@ var validSubagentsActions = map[string]SubagentsAction{
 
 // SubagentRunRecord mirrors the TS SubagentRunRecord.
 type SubagentRunRecord struct {
-	RunID              string `json:"runId"`
-	ChildSessionKey    string `json:"childSessionKey"`
-	ControllerKey      string `json:"controllerSessionKey,omitempty"`
-	RequesterKey       string `json:"requesterSessionKey"`
+	RunID               string `json:"runId"`
+	ChildSessionKey     string `json:"childSessionKey"`
+	ControllerKey       string `json:"controllerSessionKey,omitempty"`
+	RequesterKey        string `json:"requesterSessionKey"`
 	RequesterDisplayKey string `json:"requesterDisplayKey"`
-	Task               string `json:"task"`
-	Cleanup            string `json:"cleanup"` // "delete" or "keep"
-	Label              string `json:"label,omitempty"`
-	Model              string `json:"model,omitempty"`
-	WorkspaceDir       string `json:"workspaceDir,omitempty"`
-	RunTimeoutSeconds  int    `json:"runTimeoutSeconds,omitempty"`
-	SpawnMode          string `json:"spawnMode,omitempty"` // "run" or "session"
-	CreatedAt          int64  `json:"createdAt"`
-	StartedAt          int64  `json:"startedAt,omitempty"`
-	SessionStartedAt   int64  `json:"sessionStartedAt,omitempty"`
-	EndedAt            int64  `json:"endedAt,omitempty"`
-	OutcomeStatus      string `json:"outcomeStatus,omitempty"`
-	OutcomeError       string `json:"outcomeError,omitempty"`
-	ArchiveAtMs        int64  `json:"archiveAtMs,omitempty"`
-	CleanupHandled     bool   `json:"cleanupHandled,omitempty"`
+	Task                string `json:"task"`
+	Cleanup             string `json:"cleanup"` // "delete" or "keep"
+	Label               string `json:"label,omitempty"`
+	Model               string `json:"model,omitempty"`
+	WorkspaceDir        string `json:"workspaceDir,omitempty"`
+	RunTimeoutSeconds   int    `json:"runTimeoutSeconds,omitempty"`
+	SpawnMode           string `json:"spawnMode,omitempty"` // "run" or "session"
+	CreatedAt           int64  `json:"createdAt"`
+	StartedAt           int64  `json:"startedAt,omitempty"`
+	SessionStartedAt    int64  `json:"sessionStartedAt,omitempty"`
+	EndedAt             int64  `json:"endedAt,omitempty"`
+	OutcomeStatus       string `json:"outcomeStatus,omitempty"`
+	OutcomeError        string `json:"outcomeError,omitempty"`
+	ArchiveAtMs         int64  `json:"archiveAtMs,omitempty"`
+	CleanupHandled      bool   `json:"cleanupHandled,omitempty"`
 	// Depth tracking for nested subagent hierarchies.
-	SpawnDepth         int    `json:"spawnDepth,omitempty"`
-	PendingDescendants int    `json:"pendingDescendants,omitempty"`
+	SpawnDepth         int `json:"spawnDepth,omitempty"`
+	PendingDescendants int `json:"pendingDescendants,omitempty"`
 	// Announce state for completion message delivery.
-	FrozenResultText   string `json:"frozenResultText,omitempty"`
-	EndedReason        string `json:"endedReason,omitempty"` // "complete", "error", "killed"
+	FrozenResultText string `json:"frozenResultText,omitempty"`
+	EndedReason      string `json:"endedReason,omitempty"` // "complete", "error", "killed"
 	// Accumulated runtime from prior completed runs (for session-mode restarts).
 	AccumulatedRuntimeMs int64 `json:"accumulatedRuntimeMs,omitempty"`
 	// Whether the run expects a completion message to be delivered.
-	ExpectsCompletion  bool   `json:"expectsCompletionMessage,omitempty"`
+	ExpectsCompletion bool `json:"expectsCompletionMessage,omitempty"`
 }
 
 // SubagentsCommandContext holds context for a subagent command execution.
@@ -108,8 +108,8 @@ type SubagentsCommandContext struct {
 
 // SubagentCommandResult holds the result of a subagent command.
 type SubagentCommandResult struct {
-	Reply        string
-	ShouldStop   bool
+	Reply      string
+	ShouldStop bool
 }
 
 // stopWithText creates a result that stops command processing with a message.

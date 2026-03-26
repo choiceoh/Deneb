@@ -21,16 +21,16 @@ const (
 
 // BootstrapResult is the result of the gateway config bootstrap sequence.
 type BootstrapResult struct {
-	Config                 DenebConfig
-	Snapshot               *ConfigSnapshot
-	Auth                   ResolvedGatewayAuth
-	GeneratedToken         string
+	Config                  DenebConfig
+	Snapshot                *ConfigSnapshot
+	Auth                    ResolvedGatewayAuth
+	GeneratedToken          string
 	PersistedGeneratedToken bool
 }
 
 // ResolvedGatewayAuth holds the fully resolved gateway authentication state.
 type ResolvedGatewayAuth struct {
-	Mode     string `json:"mode"`     // "none" | "token" | "password" | "trusted-proxy"
+	Mode     string `json:"mode"` // "none" | "token" | "password" | "trusted-proxy"
 	Token    string `json:"token,omitempty"`
 	Password string `json:"password,omitempty"`
 
@@ -120,10 +120,10 @@ func BootstrapGatewayConfig(opts BootstrapOptions) (*BootstrapResult, error) {
 	}
 
 	return &BootstrapResult{
-		Config:                 cfg,
-		Snapshot:               snap,
-		Auth:                   *resolved,
-		GeneratedToken:         generatedToken,
+		Config:                  cfg,
+		Snapshot:                snap,
+		Auth:                    *resolved,
+		GeneratedToken:          generatedToken,
 		PersistedGeneratedToken: persisted,
 	}, nil
 }

@@ -24,14 +24,14 @@ func TestNormalizeDeliveryTarget(t *testing.T) {
 
 func TestMatchesDeliveryTarget(t *testing.T) {
 	tests := []struct {
-		name     string
-		provider string
-		targetTo string
+		name      string
+		provider  string
+		targetTo  string
 		targetAcc string
-		ch       string
-		delivTo  string
-		delivAcc string
-		want     bool
+		ch        string
+		delivTo   string
+		delivAcc  string
+		want      bool
 	}{
 		{"exact match", "telegram", "12345", "", "telegram", "12345", "", true},
 		{"provider message", "message", "12345", "", "telegram", "12345", "", true},

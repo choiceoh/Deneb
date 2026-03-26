@@ -236,9 +236,9 @@ func TestSanitizeInput(t *testing.T) {
 		{"hello\tworld", "hello\tworld"},
 		{"hello\nworld", "hello\nworld"},
 		{"  trimmed  ", "trimmed"},
-		{"hello\x00world", "helloworld"},       // null byte stripped
-		{"hello\x07world", "helloworld"},       // bell stripped
-		{"hello\x1bworld", "helloworld"},       // escape stripped
+		{"hello\x00world", "helloworld"}, // null byte stripped
+		{"hello\x07world", "helloworld"}, // bell stripped
+		{"hello\x1bworld", "helloworld"}, // escape stripped
 	}
 	for _, tt := range tests {
 		got := sanitizeInput(tt.input)

@@ -4,7 +4,7 @@ package autoreply
 
 // StandardSetUnsetAction is a typed action from a set/unset slash command.
 type StandardSetUnsetAction struct {
-	Action  string `json:"action"`  // "show", "set", "unset", "error", or custom
+	Action  string `json:"action"` // "show", "set", "unset", "error", or custom
 	Path    string `json:"path,omitempty"`
 	Value   any    `json:"value,omitempty"`
 	Name    string `json:"name,omitempty"`

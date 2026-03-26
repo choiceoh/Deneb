@@ -23,10 +23,10 @@ const (
 // For single-user DGX Spark deployment, this is significantly simplified
 // from the TypeScript version (no remote mode, no Tailscale, no secret refs).
 type CredentialPlan struct {
-	Mode     AuthMode         `json:"mode"`     // "token", "password", "none"
-	Token    string           `json:"-"`         // resolved token (never serialized)
-	Password string           `json:"-"`         // resolved password (never serialized)
-	Source   CredentialSource `json:"source"`    // where the winning credential came from
+	Mode     AuthMode         `json:"mode"`   // "token", "password", "none"
+	Token    string           `json:"-"`      // resolved token (never serialized)
+	Password string           `json:"-"`      // resolved password (never serialized)
+	Source   CredentialSource `json:"source"` // where the winning credential came from
 }
 
 // CredentialConfig holds the config-file credential values needed for resolution.

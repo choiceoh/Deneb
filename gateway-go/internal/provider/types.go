@@ -15,9 +15,9 @@ type AuthMethod struct {
 
 // CatalogContext provides context for catalog discovery.
 type CatalogContext struct {
-	Config    map[string]any `json:"config,omitempty"`
-	AgentDir  string         `json:"agentDir,omitempty"`
-	Env       map[string]string
+	Config   map[string]any `json:"config,omitempty"`
+	AgentDir string         `json:"agentDir,omitempty"`
+	Env      map[string]string
 }
 
 // CatalogEntry represents a single model in the provider catalog.

@@ -105,7 +105,7 @@ func TestErrorShapeConsistency(t *testing.T) {
 			// Hand-written uses pointer prefix naming for optional fields.
 		},
 		[]string{"Details", "RetryAfterMs"}, // hand-written extras not yet in proto
-		nil,                                  // no generated extras
+		nil,                                 // no generated extras
 	)
 }
 

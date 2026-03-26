@@ -128,10 +128,10 @@ func buildCoreToolCatalog() []ToolCatalogGroup {
 			}
 		}
 		groups = append(groups, ToolCatalogGroup{
-			ID:    sec.ID,
-			Label: sec.Label,
+			ID:     sec.ID,
+			Label:  sec.Label,
 			Source: "core",
-			Tools: entries,
+			Tools:  entries,
 		})
 	}
 	return groups

@@ -205,7 +205,7 @@ func TestResolveMediaCleanupTTLMs(t *testing.T) {
 		hours    int
 		expected int64
 	}{
-		{0, 1 * 60 * 60_000},     // Clamped to 1 hour.
+		{0, 1 * 60 * 60_000}, // Clamped to 1 hour.
 		{1, 1 * 60 * 60_000},
 		{24, 24 * 60 * 60_000},
 		{200, 168 * 60 * 60_000}, // Clamped to 168 hours.

@@ -148,4 +148,3 @@ func TestCheckExistingDaemon_CurrentProcess(t *testing.T) {
 		t.Errorf("expected PID %d, got %d", os.Getpid(), info.PID)
 	}
 }
-

@@ -72,8 +72,8 @@ func sessionsOverflowCheck(_ SessionDeps) HandlerFunc {
 		isOverflow := usage > 0.9 // 90% threshold
 
 		return protocol.MustResponseOK(req.ID, map[string]any{
-			"isOverflow":         isOverflow,
-			"usage":              usage,
+			"isOverflow":          isOverflow,
+			"usage":               usage,
 			"emergencyPruneRatio": min(max((usage-0.7)/usage, 0), 0.5),
 		})
 	}

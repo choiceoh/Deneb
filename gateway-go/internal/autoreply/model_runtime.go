@@ -2,10 +2,10 @@ package autoreply
 
 // ModelRuntimeInfo holds capacity and token information for a model.
 type ModelRuntimeInfo struct {
-	Provider       string
-	Model          string
-	MaxTokens      int
-	ContextTokens  int
+	Provider         string
+	Model            string
+	MaxTokens        int
+	ContextTokens    int
 	ReasoningCapable bool
 }
 

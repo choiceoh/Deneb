@@ -23,15 +23,15 @@ type CommandHandler func(ctx CommandContext) (*CommandResult, error)
 
 // CommandContext provides context for command execution.
 type CommandContext struct {
-	Command     string
-	Args        *CommandArgs
-	Body        string
-	SessionKey  string
-	Channel     string
-	AccountID   string
-	IsGroup     bool
-	Msg         *MsgContext
-	Session     *SessionState
+	Command    string
+	Args       *CommandArgs
+	Body       string
+	SessionKey string
+	Channel    string
+	AccountID  string
+	IsGroup    bool
+	Msg        *MsgContext
+	Session    *SessionState
 	// Dependencies for handlers that need them.
 	Deps *CommandDeps
 }
@@ -49,12 +49,12 @@ type CommandDeps struct {
 
 // CommandResult holds the outcome of a command execution.
 type CommandResult struct {
-	Reply       string
-	Payloads    []ReplyPayload
-	SessionMod  *SessionModification
-	SkipAgent   bool
-	IsError     bool
-	BtwContext  *BtwContext
+	Reply      string
+	Payloads   []ReplyPayload
+	SessionMod *SessionModification
+	SkipAgent  bool
+	IsError    bool
+	BtwContext *BtwContext
 }
 
 // BtwContext signals that a command is a /btw side question.
@@ -79,8 +79,8 @@ type SessionModification struct {
 	SystemPrompt    *string
 	Label           *string
 	// Session lifecycle.
-	IdleTimeoutMs   int64
-	MaxAgeMs        int64
+	IdleTimeoutMs int64
+	MaxAgeMs      int64
 }
 
 // CommandRouter dispatches commands to their handlers.

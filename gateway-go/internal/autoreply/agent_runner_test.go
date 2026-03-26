@@ -142,7 +142,7 @@ func TestDefaultAgentRunner_ElevatedBlocked(t *testing.T) {
 
 func TestDefaultAgentRunner_Timeout(t *testing.T) {
 	runner := NewDefaultAgentRunner(AgentRunnerConfig{
-		LLM: &mockLLM{responses: []*LLMResponse{}}, // no responses → will error
+		LLM:    &mockLLM{responses: []*LLMResponse{}}, // no responses → will error
 		Logger: testSlogLogger(),
 	})
 
@@ -263,7 +263,7 @@ func TestFormatUsageSummary(t *testing.T) {
 func TestDefaultAgentRunner_ContextOverflowRecovery(t *testing.T) {
 	resetCalled := false
 	runner := NewDefaultAgentRunner(AgentRunnerConfig{
-		LLM: &mockLLM{responses: []*LLMResponse{}}, // will error
+		LLM:    &mockLLM{responses: []*LLMResponse{}}, // will error
 		Logger: testSlogLogger(),
 	})
 	runner.onSessionReset = func(key, reason string) {
@@ -344,7 +344,10 @@ func (m *errorLLM) ChatStream(_ context.Context, _ AgentRunnerPayload) (LLMStrea
 }
 
 func TestFormatDuration(t *testing.T) {
-	tests := []struct{ ms int64; want string }{
+	tests := []struct {
+		ms   int64
+		want string
+	}{
 		{500, "500ms"},
 		{1500, "1.5s"},
 		{65000, "1m5s"},

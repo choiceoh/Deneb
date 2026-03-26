@@ -12,8 +12,8 @@ type testProvider struct {
 	label string
 }
 
-func (p *testProvider) ID() string               { return p.id }
-func (p *testProvider) Label() string             { return p.label }
+func (p *testProvider) ID() string    { return p.id }
+func (p *testProvider) Label() string { return p.label }
 func (p *testProvider) AuthMethods() []provider.AuthMethod {
 	return []provider.AuthMethod{
 		{ID: "api_key", Label: "API Key", Kind: "api_key", Hint: "TEST_API_KEY"},

@@ -2,7 +2,9 @@
 //
 // This ports src/agents/skills/workspace.ts:loadSkillEntries() to Go.
 // Skills are loaded from 6 sources in precedence order:
-//   extra < bundled < managed < agents-personal < agents-project < workspace
+//
+//	extra < bundled < managed < agents-personal < agents-project < workspace
+//
 // Later sources override earlier ones by skill name.
 package skills
 

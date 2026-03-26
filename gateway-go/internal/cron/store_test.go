@@ -29,9 +29,9 @@ func TestStoreAddAndGet(t *testing.T) {
 	s := NewStore(storePath)
 
 	job := StoreJob{
-		ID:      "test-1",
-		Name:    "Test Job",
-		Enabled: true,
+		ID:       "test-1",
+		Name:     "Test Job",
+		Enabled:  true,
 		Schedule: StoreSchedule{Kind: "every", EveryMs: 60000},
 		Payload:  StorePayload{Kind: "agentTurn", Message: "hello"},
 	}

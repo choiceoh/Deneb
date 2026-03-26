@@ -8,12 +8,12 @@ func TestShouldSkipMessageByAbortCutoff(t *testing.T) {
 	ts := func(v int64) *int64 { return &v }
 
 	tests := []struct {
-		name        string
-		cutoffSid   string
-		cutoffTs    *int64
-		msgSid      string
-		msgTs       *int64
-		wantSkip    bool
+		name      string
+		cutoffSid string
+		cutoffTs  *int64
+		msgSid    string
+		msgTs     *int64
+		wantSkip  bool
 	}{
 		{"both empty", "", nil, "", nil, false},
 		{"equal numeric SIDs", "100", nil, "100", nil, true},

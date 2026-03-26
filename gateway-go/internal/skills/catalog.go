@@ -37,10 +37,10 @@ const (
 
 // SkillEntry is a fully resolved skill with parsed metadata.
 type SkillEntry struct {
-	Skill      Skill                  `json:"skill"`
-	Frontmatter ParsedFrontmatter    `json:"frontmatter,omitempty"`
-	Metadata   *DenebSkillMetadata    `json:"metadata,omitempty"`
-	Invocation *SkillInvocationPolicy `json:"invocation,omitempty"`
+	Skill       Skill                  `json:"skill"`
+	Frontmatter ParsedFrontmatter      `json:"frontmatter,omitempty"`
+	Metadata    *DenebSkillMetadata    `json:"metadata,omitempty"`
+	Invocation  *SkillInvocationPolicy `json:"invocation,omitempty"`
 }
 
 // SkillSnapshot represents a point-in-time view of the skill catalog.
@@ -51,10 +51,10 @@ type SkillSnapshot struct {
 
 // Catalog manages the skill catalog and provides filtered views.
 type Catalog struct {
-	mu       sync.RWMutex
-	entries  map[string]*SkillEntry // keyed by skill key
-	version  int64
-	logger   *slog.Logger
+	mu      sync.RWMutex
+	entries map[string]*SkillEntry // keyed by skill key
+	version int64
+	logger  *slog.Logger
 }
 
 // NewCatalog creates a new skill catalog.

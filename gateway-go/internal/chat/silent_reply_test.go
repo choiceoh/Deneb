@@ -11,8 +11,8 @@ func TestIsSilentReply(t *testing.T) {
 		{"  NO_REPLY  ", true},
 		{"\nNO_REPLY\n", true},
 		{"NO_REPLY\n", true},
-		{"Hello NO_REPLY", false},        // Substantive content before token
-		{"NO_REPLY Hello", false},        // Content after token
+		{"Hello NO_REPLY", false},         // Substantive content before token
+		{"NO_REPLY Hello", false},         // Content after token
 		{"Thanks for the update.", false}, // Normal reply
 		{"", false},
 		{"NO", false},

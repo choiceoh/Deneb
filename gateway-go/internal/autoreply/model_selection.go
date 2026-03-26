@@ -7,11 +7,11 @@ import (
 
 // ModelSelection holds the resolved model for a reply.
 type ModelSelection struct {
-	Provider     string
-	Model        string
-	IsOverride   bool
-	IsFallback   bool
-	AuthProfile  string
+	Provider    string
+	Model       string
+	IsOverride  bool
+	IsFallback  bool
+	AuthProfile string
 }
 
 // ModelCandidate is a model available for selection.
@@ -129,8 +129,8 @@ func boundedLevenshtein(a, b string, maxDist int) int {
 				cost = 0
 			}
 			curr[j] = min3(
-				prev[j]+1,     // deletion
-				curr[j-1]+1,   // insertion
+				prev[j]+1,      // deletion
+				curr[j-1]+1,    // insertion
 				prev[j-1]+cost, // substitution
 			)
 			if curr[j] < minInRow {

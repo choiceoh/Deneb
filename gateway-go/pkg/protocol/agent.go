@@ -10,11 +10,11 @@ type AgentStatus string
 
 const (
 	AgentStatusUnspecified AgentStatus = ""
-	AgentStatusSpawning   AgentStatus = "spawning"
-	AgentStatusRunning    AgentStatus = "running"
-	AgentStatusCompleted  AgentStatus = "completed"
-	AgentStatusFailed     AgentStatus = "failed"
-	AgentStatusKilled     AgentStatus = "killed"
+	AgentStatusSpawning    AgentStatus = "spawning"
+	AgentStatusRunning     AgentStatus = "running"
+	AgentStatusCompleted   AgentStatus = "completed"
+	AgentStatusFailed      AgentStatus = "failed"
+	AgentStatusKilled      AgentStatus = "killed"
 )
 
 // AgentSpawnRequest initiates a new agent execution.

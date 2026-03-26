@@ -10,7 +10,7 @@ type ChunkMode string
 
 const (
 	ChunkModeLength  ChunkMode = "length"  // split only when exceeding limit
-	ChunkModeNewline ChunkMode = "newline"  // prefer breaking on paragraph boundaries
+	ChunkModeNewline ChunkMode = "newline" // prefer breaking on paragraph boundaries
 )
 
 // DefaultChunkLimit is the default maximum characters per outbound message chunk.

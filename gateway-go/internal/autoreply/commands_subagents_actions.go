@@ -155,7 +155,7 @@ func HandleSubagentsKillAction(ctx *SubagentsCommandContext, deps *SubagentKillD
 			return subagentStopWithText("No active subagents to kill.")
 		}
 		return &SubagentCommandResult{
-			Reply:    fmt.Sprintf("Killed %d subagent(s).", killed),
+			Reply:      fmt.Sprintf("Killed %d subagent(s).", killed),
 			ShouldStop: true,
 		}
 	}

@@ -27,11 +27,11 @@ type Agent struct {
 
 // FileEntry represents a file belonging to an agent.
 type FileEntry struct {
-	Name         string `json:"name"`
-	Path         string `json:"path"`
-	Missing      bool   `json:"missing"`
-	Size         int64  `json:"size,omitempty"`
-	UpdatedAtMs  int64  `json:"updatedAtMs,omitempty"`
+	Name          string `json:"name"`
+	Path          string `json:"path"`
+	Missing       bool   `json:"missing"`
+	Size          int64  `json:"size,omitempty"`
+	UpdatedAtMs   int64  `json:"updatedAtMs,omitempty"`
 	ContentBase64 string `json:"contentBase64,omitempty"`
 }
 

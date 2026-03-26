@@ -17,10 +17,10 @@ const (
 // gatewayHTTPToolDeny is the deny list for tools invoked via the HTTP endpoint.
 // These tools are too dangerous to expose over HTTP (matches TS DEFAULT_GATEWAY_HTTP_TOOL_DENY).
 var gatewayHTTPToolDeny = map[string]bool{
-	"browser":         true,
-	"computer":        true,
-	"file_editor":     true,
-	"text_editor":     true,
+	"browser":            true,
+	"computer":           true,
+	"file_editor":        true,
+	"text_editor":        true,
 	"str_replace_editor": true,
 }
 

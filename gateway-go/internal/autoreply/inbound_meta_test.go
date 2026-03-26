@@ -58,13 +58,13 @@ func TestBuildInboundMetaSystemPrompt_WebchatOmitsChannel(t *testing.T) {
 func TestBuildInboundUserContextPrefix_ConversationInfo(t *testing.T) {
 	ts := int64(1700000000000)
 	ctx := &InboundMetaContext{
-		ChatType:      "group",
-		SenderId:      "user-123",
-		SenderName:    "Alice",
-		WasMentioned:  true,
-		GroupSubject:   "Test Group",
-		Surface:       "telegram",
-		Timestamp:     &ts,
+		ChatType:     "group",
+		SenderId:     "user-123",
+		SenderName:   "Alice",
+		WasMentioned: true,
+		GroupSubject: "Test Group",
+		Surface:      "telegram",
+		Timestamp:    &ts,
 	}
 
 	result := BuildInboundUserContextPrefix(ctx)
@@ -104,8 +104,8 @@ func TestBuildInboundUserContextPrefix_SenderInfo(t *testing.T) {
 
 func TestBuildInboundUserContextPrefix_ReplyContext(t *testing.T) {
 	ctx := &InboundMetaContext{
-		ChatType:     "group",
-		ReplyToBody:  "original message",
+		ChatType:      "group",
+		ReplyToBody:   "original message",
 		ReplyToSender: "Alice",
 		Surface:       "telegram",
 	}
@@ -122,10 +122,10 @@ func TestBuildInboundUserContextPrefix_ReplyContext(t *testing.T) {
 
 func TestBuildInboundUserContextPrefix_ForwardedContext(t *testing.T) {
 	ctx := &InboundMetaContext{
-		ChatType:      "group",
-		ForwardedFrom: "Channel News",
+		ChatType:          "group",
+		ForwardedFrom:     "Channel News",
 		ForwardedFromType: "channel",
-		Surface:        "telegram",
+		Surface:           "telegram",
 	}
 
 	result := BuildInboundUserContextPrefix(ctx)
@@ -172,9 +172,9 @@ func TestBuildInboundUserContextPrefix_Empty(t *testing.T) {
 
 func TestResolveSenderLabel(t *testing.T) {
 	tests := []struct {
-		name     string
-		ctx      InboundMetaContext
-		want     string
+		name string
+		ctx  InboundMetaContext
+		want string
 	}{
 		{
 			name: "name and id",

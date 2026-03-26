@@ -137,10 +137,10 @@ func (g CommandGate) IsCommandGated(command string) bool {
 
 // BashCommandConfig configures bash command execution.
 type BashCommandConfig struct {
-	Enabled      bool
-	Allowlist    *AllowlistMatcher
+	Enabled         bool
+	Allowlist       *AllowlistMatcher
 	RequireApproval bool
-	Timeout      int64 // milliseconds
+	Timeout         int64 // milliseconds
 }
 
 // DefaultBashConfig returns the default bash command configuration.

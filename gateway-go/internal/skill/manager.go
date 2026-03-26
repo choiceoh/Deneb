@@ -12,8 +12,8 @@ import (
 
 // Status represents the overall skill status for an agent.
 type Status struct {
-	Skills      []SkillEntry `json:"skills"`
-	RequiredBins []string    `json:"requiredBins,omitempty"`
+	Skills       []SkillEntry `json:"skills"`
+	RequiredBins []string     `json:"requiredBins,omitempty"`
 }
 
 // SkillEntry represents a single skill and its state.
