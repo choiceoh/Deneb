@@ -8,6 +8,7 @@ package cron
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -703,7 +704,7 @@ func (s *Service) scheduleJobLocked(ctx context.Context, job StoreJob) error {
 	return s.scheduler.Register(ctx, job.ID, sched, func(taskCtx context.Context) error {
 		outcome := s.executeJobFull(taskCtx, jobCopy)
 		if outcome.Status == "error" {
-			return fmt.Errorf("%s", outcome.Error)
+			return errors.New(outcome.Error)
 		}
 		return nil
 	})
