@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
@@ -139,6 +140,9 @@ type Server struct {
 	// ACP subsystem.
 	acpDeps           *rpc.ACPDeps
 	acpLifecycleUnsub func()
+
+	// Phase 5: Autonomous goal-driven execution.
+	autonomousSvc *autonomous.Service
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
@@ -380,6 +384,13 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		})
 	}
 
+	// Start autonomous service (Phase 2 attention timer).
+	if s.autonomousSvc != nil {
+		s.safeGo("autonomous:start", func() {
+			s.autonomousSvc.Start(ctx, autonomous.DefaultAttentionConfig())
+		})
+	}
+
 	// Fire gateway.start hooks.
 	if s.hooks != nil {
 		addr := ln.Addr().String()
@@ -493,6 +504,11 @@ func (s *Server) doShutdown() error {
 	// 6. Stop cron scheduler.
 	if s.cron != nil {
 		s.cron.Close()
+	}
+
+	// 6b. Stop autonomous service.
+	if s.autonomousSvc != nil {
+		s.autonomousSvc.Stop()
 	}
 
 	// 7. Fire gateway.stop hooks.
@@ -1209,6 +1225,38 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 	rpc.RegisterTalkMethods(s.dispatcher, rpc.TalkDeps{
 		Talk: s.talkState,
 	})
+
+	// Autonomous goal-driven execution.
+	homeDir, _ := os.UserHomeDir()
+	s.autonomousSvc = autonomous.NewService(autonomous.ServiceConfig{
+		GoalStorePath: autonomous.DefaultGoalStorePath(homeDir),
+	}, &autonomousAgentAdapter{
+		chatHandler: s.chatHandler,
+		jobTracker:  s.jobTracker,
+		transcript:  s.transcript,
+	}, s.logger)
+
+	// Broadcast autonomous cycle events to WebSocket clients.
+	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
+		broadcastFn("autonomous.cycle", event)
+	})
+
+	rpc.RegisterAutonomousMethods(s.dispatcher, rpc.AutonomousDeps{
+		Autonomous: s.autonomousSvc,
+	})
+
+	// Wire autonomous wake dispatcher into hooks HTTP handler.
+	if s.hooksHTTP != nil {
+		s.hooksHTTP.SetAutonomousWakeDispatcher(func(text string) {
+			if s.autonomousSvc != nil && s.autonomousSvc.Goals() != nil {
+				s.safeGo("autonomous:external-wake", func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+					defer cancel()
+					s.autonomousSvc.RunCycle(ctx)
+				})
+			}
+		})
+	}
 }
 
 // registerNativeSystemMethods registers native Go system RPC methods:

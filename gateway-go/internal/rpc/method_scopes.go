@@ -110,6 +110,16 @@ var methodScopes = map[string]auth.Scope{
 	"cron.run":        auth.ScopeWrite,
 	"cron.unregister": auth.ScopeWrite,
 
+	// --- Autonomous (read/write) ---
+	"autonomous.status":       auth.ScopeRead,
+	"autonomous.goals.list":   auth.ScopeRead,
+	"autonomous.goals.add":    auth.ScopeWrite,
+	"autonomous.goals.update": auth.ScopeWrite,
+	"autonomous.goals.remove": auth.ScopeWrite,
+	"autonomous.cycle.run":    auth.ScopeWrite,
+	"autonomous.cycle.stop":   auth.ScopeWrite,
+	"autonomous.enable":       auth.ScopeWrite,
+
 	// --- Hooks (read/admin) ---
 	"hooks.list":       auth.ScopeRead,
 	"hooks.register":   auth.ScopeAdmin,
