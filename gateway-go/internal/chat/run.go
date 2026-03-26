@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
 // cachedWorkspaceDir caches the resolved workspace directory at startup
@@ -63,6 +64,7 @@ type runDeps struct {
 	logger          *slog.Logger              // required (defaults to slog.Default)
 
 	auroraStore   *aurora.Store // optional; enables Aurora compaction
+	vegaBackend   vega.Backend // optional; enables knowledge prefetch
 	contextCfg    ContextConfig
 	compactionCfg CompactionConfig
 	defaultModel  string
@@ -181,6 +183,21 @@ func executeAgentRun(
 		systemPrompt = llm.SystemString(BuildSystemPrompt(spp))
 	}
 
+	// 2.5. Knowledge prefetch: search Vega + Memory for relevant context,
+	// append results to system prompt so the LLM sees them as background knowledge.
+	// Stored in knowledgeAddition so it survives Anthropic ContentBlock rebuilds below.
+	var knowledgeAddition string
+	if params.Message != "" {
+		kDeps := KnowledgeDeps{
+			VegaBackend:  deps.vegaBackend,
+			WorkspaceDir: resolveWorkspaceDirForPrompt(),
+		}
+		knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
+		if knowledgeAddition != "" {
+			systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
+		}
+	}
+
 	// 3. Assemble context (token-budgeted history).
 	var messages []llm.Message
 	if deps.transcript != nil {
@@ -238,6 +255,10 @@ func executeAgentRun(
 	if apiType == "anthropic" {
 		if systemPromptParams != nil {
 			systemPrompt = llm.SystemBlocks(BuildSystemPromptBlocks(*systemPromptParams))
+			// Re-apply knowledge prefetch (the rebuild above replaces the prompt).
+			if knowledgeAddition != "" {
+				systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
+			}
 		}
 		if len(tools) > 0 {
 			tools[len(tools)-1].CacheControl = &llm.CacheControl{Type: "ephemeral"}
