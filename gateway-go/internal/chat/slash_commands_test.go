@@ -21,6 +21,9 @@ func TestParseSlashCommand(t *testing.T) {
 		{"hello", true, "", ""},
 		{"", true, "", ""},
 		{" /reset ", false, "reset", ""},
+		{"/reset@MyBot", false, "reset", ""},
+		{"/model@MyBot claude-opus-4-6", false, "model", "claude-opus-4-6"},
+		{"/status@mybot", false, "status", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
