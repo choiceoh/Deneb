@@ -14,6 +14,8 @@ const (
 	ctxKeySessionKey
 	// ctxKeyMediaSendFunc stores the MediaSendFunc for sending files to the channel.
 	ctxKeyMediaSendFunc
+	// ctxKeyTurnContext stores the *TurnContext for cross-tool result sharing within a turn.
+	ctxKeyTurnContext
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -58,4 +60,15 @@ func WithMediaSendFunc(ctx context.Context, fn MediaSendFunc) context.Context {
 func MediaSendFuncFromContext(ctx context.Context) MediaSendFunc {
 	fn, _ := ctx.Value(ctxKeyMediaSendFunc).(MediaSendFunc)
 	return fn
+}
+
+// WithTurnContext attaches a TurnContext to the context for cross-tool result sharing.
+func WithTurnContext(ctx context.Context, tc *TurnContext) context.Context {
+	return context.WithValue(ctx, ctxKeyTurnContext, tc)
+}
+
+// TurnContextFromContext extracts the TurnContext from a context.
+func TurnContextFromContext(ctx context.Context) *TurnContext {
+	tc, _ := ctx.Value(ctxKeyTurnContext).(*TurnContext)
+	return tc
 }

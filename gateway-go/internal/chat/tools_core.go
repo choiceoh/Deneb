@@ -254,10 +254,13 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Registered last: uses the registry itself to execute source tools.
 	registry.RegisterTool(ToolDef{
 		Name:        "pilot",
-		Description: "Fast local AI that runs tools + analyzes results in one call. Provide task + sources (tool calls from registry) or shortcuts (file, exec, grep, url). Replaces multi-turn read→analyze patterns with a single call",
+		Description: "Fast local AI that runs tools + analyzes results in one call. Provide task + sources (tool calls from registry) or shortcuts (file, exec, grep, url, http, kv, memory). Supports conditional sources (only_if/skip_if) and post_process steps. Replaces multi-turn read→analyze patterns with a single call",
 		InputSchema: pilotToolSchema(),
 		Fn:          toolPilot(registry, workspaceDir),
 	})
+
+	// -- Post-processing pipeline --
+	RegisterDefaultPostProcessors(registry)
 }
 
 // --- Exec tool ---

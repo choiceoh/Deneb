@@ -86,7 +86,7 @@ var coreToolSummaries = map[string]string{
 	"http":               "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
 	"kv":                 "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
 	"clipboard":          "Temporary in-memory clipboard (ring buffer, 32 items max). Actions: set, get, list, clear",
-	"pilot":              "Fast local AI (sglang) that orchestrates tools in one call. sources: [{tool:'read',input:{file_path:'x.go'}}, {tool:'exec',input:{command:'...'}}] or shortcuts: file, exec, grep, url. Pilot runs the tools, then analyzes all results. output_format: text/json/list. Use for tasks that need data gathering + quick analysis without a full subagent",
+	"pilot":              "Fast local AI (sglang) that orchestrates tools in one call. sources: [{tool:'read',input:{...}}, {tool:'exec',input:{...}}] or shortcuts: file, exec, grep, url, http, kv_key, memory. Supports conditional sources (only_if/skip_if) and post_process steps (filter_lines, head, tail, unique, sort). output_format: text/json/list",
 }
 
 // toolOrder defines the display order for tools in the system prompt.
@@ -135,6 +135,13 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section)\n")
 	sb.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools.\n\n")
 
+	// Tool Chaining.
+	sb.WriteString("## Tool Chaining ($ref)\n")
+	sb.WriteString("When calling multiple tools in one turn, a tool can reference another tool's output via `\"$ref\": \"<tool_use_id>\"` in its input.\n")
+	sb.WriteString("The referenced tool's output is injected as `_ref_content` in the input JSON. The tool waits up to 30s for the referenced result.\n")
+	sb.WriteString("Example: call grep (id: toolu_1) and pilot (id: toolu_2) together — pilot input includes `\"$ref\": \"toolu_1\"` to receive grep's output.\n")
+	sb.WriteString("Use this for dependent parallel calls: the independent tool runs immediately while the dependent tool waits for its data.\n\n")
+
 	// Pilot tool guide.
 	sb.WriteString("## Pilot (Local AI Helper)\n")
 	sb.WriteString("The `pilot` tool runs tasks on the local sglang model (fast, free, no external API cost).\n")
@@ -145,7 +152,14 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("- Processing grep results: `pilot(task:'패턴 정리', grep:'TODO', path:'src/')`\n")
 	sb.WriteString("- Comparing multiple files: `pilot(task:'차이점 분석', files:['a.go','b.go'])`\n")
 	sb.WriteString("- Batch processing: `pilot(task:'각각 분류해줘', items:[...], output_format:'json')`\n")
-	sb.WriteString("- Any multi-tool gather+analyze: `pilot(task:'...', sources:[{tool:'read',input:{...}}, {tool:'exec',input:{...}}])`\n\n")
+	sb.WriteString("- Any multi-tool gather+analyze: `pilot(task:'...', sources:[{tool:'read',input:{...}}, {tool:'exec',input:{...}}])`\n")
+	sb.WriteString("- HTTP API data: `pilot(task:'분석', http:'https://api.example.com/data')`\n")
+	sb.WriteString("- KV store lookup: `pilot(task:'확인', kv_key:'config.theme')`\n")
+	sb.WriteString("- Memory-augmented analysis: `pilot(task:'관련 결정 정리', memory:'배포', file:'deploy.yaml')`\n\n")
+	sb.WriteString("**Conditional sources:** Use `only_if`/`skip_if` on sources to conditionally execute based on another source's success.\n")
+	sb.WriteString("Example: `sources:[{tool:'memory_search', input:{query:'설정'}, label:'mem'}, {tool:'read', input:{file_path:'config.go'}, only_if:'mem'}]`\n\n")
+	sb.WriteString("**Post-processing:** Add `post_process` steps to filter/transform gathered data before LLM analysis.\n")
+	sb.WriteString("Actions: filter_lines (regex), head/tail (N lines), unique, sort. Applied to all source outputs.\n\n")
 	sb.WriteString("**When NOT to use pilot:**\n")
 	sb.WriteString("- Complex multi-turn reasoning (use your own thinking)\n")
 	sb.WriteString("- Tasks that need tool calling (pilot can't use tools during its analysis)\n")
