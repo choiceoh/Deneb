@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
@@ -14,6 +15,8 @@ import (
 // Compaction defaults.
 const (
 	defaultContextThreshold = 0.75
+	// summarizationModel is used for compaction summaries (cost-efficient).
+	summarizationModel = "claude-haiku-4-5-20251001"
 )
 
 // CompactionConfig configures compaction behavior.
@@ -57,10 +60,101 @@ func evaluateCompaction(cfg CompactionConfig, storedTokens, liveTokens, tokenBud
 	return &decision, nil
 }
 
-// runCompactionSweep executes a compaction sweep via FFI state machine.
-// The sweep condenses old messages into summaries to reduce token usage.
-// Returns true if compaction was performed successfully.
-func runCompactionSweep(
+// handleContextOverflowAurora handles context overflow using the Aurora compaction system.
+// When the Aurora store is available, it runs a full hierarchical sweep via Rust FFI.
+// Falls back to legacy transcript-based compaction otherwise.
+func handleContextOverflowAurora(
+	deps runDeps,
+	params RunParams,
+	llmClient *llm.Client,
+	logger *slog.Logger,
+) ([]llm.Message, error) {
+	// Try Aurora compaction first.
+	if deps.auroraStore != nil {
+		logger.Info("aurora: running compaction sweep on overflow")
+		sweepCfg := aurora.DefaultSweepConfig()
+		sweepCfg.ContextThreshold = deps.compactionCfg.ContextThreshold
+		sweepCfg.FreshTailCount = uint32(deps.compactionCfg.FreshTailCount)
+
+		summarizer := aurora.NewLLMSummarizer(llmClient, summarizationModel)
+
+		result, err := aurora.RunSweep(
+			deps.auroraStore,
+			1, // single-user conversation ID
+			deps.contextCfg.TokenBudget,
+			sweepCfg,
+			summarizer,
+			true,  // force (overflow already detected)
+			true,  // hard trigger
+			logger,
+		)
+		if err != nil {
+			logger.Warn("aurora sweep failed, falling back", "error", err)
+		} else if result != nil && result.ActionTaken {
+			// Reassemble context from Aurora store.
+			asmCfg := aurora.AssemblyConfig{
+				TokenBudget:    deps.contextCfg.TokenBudget,
+				FreshTailCount: deps.contextCfg.FreshTailCount,
+				MaxMessages:    deps.contextCfg.MaxMessages,
+			}
+			asmResult, err := aurora.Assemble(deps.auroraStore, 1, asmCfg, logger)
+			if err != nil {
+				return nil, fmt.Errorf("aurora reassemble after compaction: %w", err)
+			}
+			return asmResult.Messages, nil
+		}
+	}
+
+	// Legacy fallback: use transcript store directly.
+	return handleContextOverflowLegacy(
+		deps.transcript, params.SessionKey,
+		deps.contextCfg, deps.compactionCfg, logger,
+	)
+}
+
+// handleContextOverflowLegacy is the original overflow handler using transcript-based compaction.
+func handleContextOverflowLegacy(
+	store TranscriptStore,
+	sessionKey string,
+	ctxCfg ContextConfig,
+	compCfg CompactionConfig,
+	logger *slog.Logger,
+) ([]llm.Message, error) {
+	estimatedStored := ctxCfg.TokenBudget + ctxCfg.TokenBudget/5
+	decision, err := evaluateCompaction(compCfg, estimatedStored, estimatedStored, ctxCfg.TokenBudget)
+	if err != nil {
+		logger.Warn("compaction evaluation failed", "error", err)
+	}
+
+	if decision != nil && decision.ShouldCompact {
+		swept, err := runCompactionSweepLegacy(store, sessionKey, compCfg, ctxCfg.TokenBudget, logger)
+		if err != nil {
+			logger.Warn("compaction sweep failed", "error", err)
+		}
+		if swept {
+			result, err := assembleContext(store, sessionKey, ctxCfg, logger)
+			if err != nil {
+				return nil, fmt.Errorf("reassemble after compaction: %w", err)
+			}
+			return result.Messages, nil
+		}
+	}
+
+	// Fallback: halve the context window.
+	reducedCfg := ctxCfg
+	reducedCfg.TokenBudget /= 2
+	if reducedCfg.MaxMessages > 10 {
+		reducedCfg.MaxMessages /= 2
+	}
+	result, err := assembleContext(store, sessionKey, reducedCfg, logger)
+	if err != nil {
+		return nil, fmt.Errorf("reassemble with reduced budget: %w", err)
+	}
+	return result.Messages, nil
+}
+
+// runCompactionSweepLegacy is the original stub-based sweep for backward compatibility.
+func runCompactionSweepLegacy(
 	store TranscriptStore,
 	sessionKey string,
 	cfg CompactionConfig,
@@ -77,17 +171,12 @@ func runCompactionSweep(
 		return false, fmt.Errorf("marshal compaction config: %w", err)
 	}
 
-	// Use fixed conversation ID for single-user deployment.
 	var conversationID uint64 = 1
 	nowMs := time.Now().UnixMilli()
 
 	handle, err := ffi.CompactionSweepNew(
-		string(configJSON),
-		conversationID,
-		tokenBudget,
-		false, // force
-		true,  // hardTrigger (context overflow triggered this)
-		nowMs,
+		string(configJSON), conversationID, tokenBudget,
+		false, true, nowMs,
 	)
 	if err != nil {
 		return false, fmt.Errorf("create compaction sweep: %w", err)
@@ -99,7 +188,6 @@ func runCompactionSweep(
 		return false, fmt.Errorf("start compaction sweep: %w", err)
 	}
 
-	// Load all messages for the sweep engine.
 	allMsgs, _, err := store.Load(sessionKey, 0)
 	if err != nil {
 		return false, fmt.Errorf("load transcript for sweep: %w", err)
@@ -118,7 +206,7 @@ func runCompactionSweep(
 			return true, nil
 		}
 
-		response, err := handleSweepCommand(cmdJSON, allMsgs, logger)
+		response, err := handleSweepCommandLegacy(cmdJSON, allMsgs, logger)
 		if err != nil {
 			return false, fmt.Errorf("handle sweep command: %w", err)
 		}
@@ -135,8 +223,8 @@ func runCompactionSweep(
 	}
 }
 
-// handleSweepCommand processes a command from the Rust sweep engine.
-func handleSweepCommand(cmdJSON json.RawMessage, msgs []ChatMessage, logger *slog.Logger) (any, error) {
+// handleSweepCommandLegacy is the original stub handler (kept for no-Aurora fallback).
+func handleSweepCommandLegacy(cmdJSON json.RawMessage, msgs []ChatMessage, logger *slog.Logger) (any, error) {
 	var cmd struct {
 		Type string `json:"type"`
 	}
@@ -146,7 +234,6 @@ func handleSweepCommand(cmdJSON json.RawMessage, msgs []ChatMessage, logger *slo
 
 	switch cmd.Type {
 	case "fetchCandidates":
-		// Return messages eligible for compaction (all except tail).
 		items := make([]map[string]any, len(msgs))
 		for i, msg := range msgs {
 			tokenCount := estimateTokens(msg.Content)
@@ -164,19 +251,13 @@ func handleSweepCommand(cmdJSON json.RawMessage, msgs []ChatMessage, logger *slo
 		}, nil
 
 	case "summarize":
-		// The sweep engine wants an LLM-generated summary.
-		// For now, return a simple concatenation as placeholder.
-		// In production, this would call the LLM.
 		var summarizeCmd struct {
 			MessageIDs []int `json:"messageIds"`
 		}
 		if err := json.Unmarshal(cmdJSON, &summarizeCmd); err != nil {
 			logger.Warn("failed to parse summarize command", "error", err)
 		}
-		logger.Info("compaction sweep: summarize requested",
-			"messageCount", len(summarizeCmd.MessageIDs))
 
-		// Build a condensed summary from the referenced messages.
 		var parts []string
 		for _, id := range summarizeCmd.MessageIDs {
 			if id >= 0 && id < len(msgs) {
@@ -189,58 +270,12 @@ func handleSweepCommand(cmdJSON json.RawMessage, msgs []ChatMessage, logger *slo
 		}
 		summary := strings.Join(parts, "\n")
 		return map[string]any{
-			"type":    "summary",
-			"text":    summary,
+			"type":       "summary",
+			"text":       summary,
 			"tokenCount": estimateTokens(summary),
 		}, nil
 
 	default:
 		return map[string]any{"type": "empty"}, nil
 	}
-}
-
-// handleContextOverflow is called when the LLM returns a context overflow error.
-// It evaluates compaction, runs a sweep if needed, and rebuilds messages.
-func handleContextOverflow(
-	store TranscriptStore,
-	sessionKey string,
-	ctxCfg ContextConfig,
-	compCfg CompactionConfig,
-	logger *slog.Logger,
-) ([]llm.Message, error) {
-	// Evaluate whether compaction would help.
-	// We know context overflowed, so estimate stored tokens at ~120% of budget
-	// to ensure the threshold check triggers compaction.
-	estimatedStored := ctxCfg.TokenBudget + ctxCfg.TokenBudget/5
-	decision, err := evaluateCompaction(compCfg, estimatedStored, estimatedStored, ctxCfg.TokenBudget)
-	if err != nil {
-		logger.Warn("compaction evaluation failed", "error", err)
-	}
-
-	if decision != nil && decision.ShouldCompact {
-		swept, err := runCompactionSweep(store, sessionKey, compCfg, ctxCfg.TokenBudget, logger)
-		if err != nil {
-			logger.Warn("compaction sweep failed", "error", err)
-		}
-		if swept {
-			// Reload with reduced context.
-			result, err := assembleContext(store, sessionKey, ctxCfg, logger)
-			if err != nil {
-				return nil, fmt.Errorf("reassemble after compaction: %w", err)
-			}
-			return result.Messages, nil
-		}
-	}
-
-	// Fallback: halve the context window and reload.
-	reducedCfg := ctxCfg
-	reducedCfg.TokenBudget /= 2
-	if reducedCfg.MaxMessages > 10 {
-		reducedCfg.MaxMessages /= 2
-	}
-	result, err := assembleContext(store, sessionKey, reducedCfg, logger)
-	if err != nil {
-		return nil, fmt.Errorf("reassemble with reduced budget: %w", err)
-	}
-	return result.Messages, nil
 }

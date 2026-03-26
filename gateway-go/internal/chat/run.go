@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
@@ -51,6 +52,7 @@ type runDeps struct {
 	providerConfigs map[string]ProviderConfig // optional; config-based provider credentials
 	logger          *slog.Logger             // required (defaults to slog.Default)
 
+	auroraStore   *aurora.Store         // optional; enables Aurora compaction
 	contextCfg    ContextConfig
 	compactionCfg CompactionConfig
 	defaultModel  string
@@ -119,7 +121,7 @@ func executeAgentRun(
 	broadcaster *streamBroadcaster,
 	logger *slog.Logger,
 ) (*AgentResult, error) {
-	// 1. Persist user message to transcript.
+	// 1. Persist user message to transcript + Aurora store.
 	if deps.transcript != nil && params.Message != "" {
 		userMsg := ChatMessage{
 			Role:      "user",
@@ -128,7 +130,13 @@ func executeAgentRun(
 		}
 		if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
 			logger.Error("failed to persist user message", "error", err)
-			// Continue anyway — don't block the agent run.
+		}
+	}
+	// Sync to Aurora store for compaction tracking.
+	if deps.auroraStore != nil && params.Message != "" {
+		tokenCount := uint64(estimateTokens(params.Message))
+		if _, err := deps.auroraStore.SyncMessage(1, "user", params.Message, tokenCount); err != nil {
+			logger.Warn("aurora: failed to sync user message", "error", err)
 		}
 	}
 
@@ -248,9 +256,8 @@ func executeAgentRun(
 			// Check for context overflow error.
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
 				logger.Info("context overflow, attempting compaction", "error", runErr)
-				compactedMsgs, compErr := handleContextOverflow(
-					deps.transcript, params.SessionKey,
-					deps.contextCfg, deps.compactionCfg, logger,
+				compactedMsgs, compErr := handleContextOverflowAurora(
+					deps, params, client, logger,
 				)
 				if compErr != nil {
 					return nil, fmt.Errorf("compaction failed: %w (original: %w)", compErr, runErr)
@@ -276,7 +283,7 @@ func handleRunSuccess(
 	result *AgentResult,
 	now int64,
 ) {
-	// Persist assistant message to transcript.
+	// Persist assistant message to transcript + Aurora store.
 	if deps.transcript != nil && result.Text != "" {
 		assistantMsg := ChatMessage{
 			Role:      "assistant",
@@ -285,6 +292,12 @@ func handleRunSuccess(
 		}
 		if err := deps.transcript.Append(params.SessionKey, assistantMsg); err != nil {
 			logger.Error("failed to persist assistant message", "error", err)
+		}
+	}
+	if deps.auroraStore != nil && result.Text != "" {
+		tokenCount := uint64(estimateTokens(result.Text))
+		if _, err := deps.auroraStore.SyncMessage(1, "assistant", result.Text, tokenCount); err != nil {
+			logger.Warn("aurora: failed to sync assistant message", "error", err)
 		}
 	}
 

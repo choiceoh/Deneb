@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -93,6 +94,7 @@ type Handler struct {
 	authManager     *provider.AuthManager
 	jobTracker      *agent.JobTracker
 	providerConfigs map[string]ProviderConfig
+	auroraStore     *aurora.Store // Aurora hierarchical compaction store
 
 	// Agent run configuration.
 	contextCfg    ContextConfig
@@ -128,6 +130,7 @@ type HandlerConfig struct {
 	AuthManager     *provider.AuthManager
 	JobTracker      *agent.JobTracker
 	ProviderConfigs map[string]ProviderConfig // provider ID → config
+	AuroraStore     *aurora.Store             // Aurora hierarchical compaction store
 	ContextCfg      ContextConfig
 	CompactionCfg   CompactionConfig
 	DefaultModel    string
@@ -165,6 +168,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		authManager:     cfg.AuthManager,
 		jobTracker:      cfg.JobTracker,
 		providerConfigs: cfg.ProviderConfigs,
+		auroraStore:     cfg.AuroraStore,
 		contextCfg:      cfg.ContextCfg,
 		compactionCfg:   cfg.CompactionCfg,
 		defaultModel:    cfg.DefaultModel,
@@ -611,6 +615,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		replyFunc:       h.replyFunc,
 		providerConfigs: h.providerConfigs,
 		logger:          h.logger,
+		auroraStore:   h.auroraStore,
 		contextCfg:    h.contextCfg,
 		compactionCfg: h.compactionCfg,
 		defaultModel:  h.defaultModel,
