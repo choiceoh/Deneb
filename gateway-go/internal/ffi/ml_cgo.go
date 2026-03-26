@@ -13,6 +13,7 @@ extern int deneb_ml_rerank(
 */
 import "C"
 import (
+	"errors"
 	"unsafe"
 )
 
