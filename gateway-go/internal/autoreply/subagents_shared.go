@@ -244,12 +244,12 @@ type SubagentRunListEntry struct {
 }
 
 // BuildSubagentRunListEntries builds formatted list entries split into active and recent.
+// Active and recent are indexed independently (both start at #1).
 func BuildSubagentRunListEntries(runs []*SubagentRunRecord, recentMinutes, taskMaxChars int) (active, recent []SubagentRunListEntry) {
 	sorted := SortSubagentRuns(runs)
 	now := time.Now().UnixMilli()
 	recentCutoff := now - int64(recentMinutes)*60_000
 
-	idx := 1
 	for _, r := range sorted {
 		isActive := r.EndedAt == nil
 		isRecent := !isActive && r.EndedAt != nil && *r.EndedAt >= recentCutoff
@@ -269,21 +269,27 @@ func BuildSubagentRunListEntries(runs []*SubagentRunRecord, recentMinutes, taskM
 			runtime = FormatDurationCompact(endMs - *r.StartedAt)
 		}
 
-		entry := SubagentRunListEntry{
-			Index:   idx,
-			RunID:   r.RunID,
-			Label:   label,
-			Status:  status,
-			Runtime: runtime,
-			Line:    fmt.Sprintf("#%d [%s] %s (%s)", idx, status, label, runtime),
-		}
-
 		if isActive {
-			active = append(active, entry)
+			idx := len(active) + 1
+			active = append(active, SubagentRunListEntry{
+				Index:   idx,
+				RunID:   r.RunID,
+				Label:   label,
+				Status:  status,
+				Runtime: runtime,
+				Line:    fmt.Sprintf("#%d [%s] %s (%s)", idx, status, label, runtime),
+			})
 		} else {
-			recent = append(recent, entry)
+			idx := len(recent) + 1
+			recent = append(recent, SubagentRunListEntry{
+				Index:   idx,
+				RunID:   r.RunID,
+				Label:   label,
+				Status:  status,
+				Runtime: runtime,
+				Line:    fmt.Sprintf("#%d [%s] %s (%s)", idx, status, label, runtime),
+			})
 		}
-		idx++
 	}
 	return
 }

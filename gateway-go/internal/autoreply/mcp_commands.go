@@ -13,16 +13,7 @@ type McpCommand struct {
 // ParseMcpCommand parses a /mcp slash command.
 // Returns nil if the text is not a /mcp command.
 func ParseMcpCommand(raw string) *McpCommand {
-	result, ok := ParseStandardSetUnsetSlashCommand(struct {
-		Raw            string
-		Slash          string
-		InvalidMessage string
-		UsageMessage   string
-		OnKnownAction  func(action, args string) (*StandardSetUnsetAction, bool)
-		OnSet          func(path string, value any) *StandardSetUnsetAction
-		OnUnset        func(path string) *StandardSetUnsetAction
-		OnError        func(message string) *StandardSetUnsetAction
-	}{
+	result, ok := ParseStandardSetUnsetSlashCommand(StandardSetUnsetParams{
 		Raw:            raw,
 		Slash:          "/mcp",
 		InvalidMessage: "Invalid /mcp syntax.",
@@ -43,7 +34,6 @@ func ParseMcpCommand(raw string) *McpCommand {
 		OnUnset: func(name string) *StandardSetUnsetAction {
 			return &StandardSetUnsetAction{Action: "unset", Name: name}
 		},
-		OnError: nil,
 	})
 	if !ok || result == nil {
 		return nil

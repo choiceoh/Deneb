@@ -60,7 +60,9 @@ func ApplyAbortCutoffToSessionEntry(entry *SessionAbortCutoffEntry, cutoff *Abor
 	entry.AbortCutoffTimestamp = cutoff.Timestamp
 }
 
-// ClearAbortCutoffInSession clears the abort cutoff from a session entry.
+// ClearAbortCutoffInSession clears the abort cutoff fields on the entry struct.
+// This is a pure data mutation; callers must persist the entry themselves
+// (see ClearSessionAbortCutoff in commands_session_store.go for the full persist flow).
 func ClearAbortCutoffInSession(entry *SessionAbortCutoffEntry) bool {
 	if entry == nil || !HasAbortCutoff(entry) {
 		return false

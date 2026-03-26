@@ -102,20 +102,31 @@ func TestBuildSubagentRunListEntries(t *testing.T) {
 	runs := []*SubagentRunRecord{
 		{RunID: "r1", Label: "worker", CreatedAt: now - 10000, StartedAt: &started},
 		{RunID: "r2", Label: "builder", CreatedAt: now - 20000, StartedAt: &started, EndedAt: &now},
+		{RunID: "r3", Label: "tester", CreatedAt: now - 30000, StartedAt: &started},
 	}
 
 	active, recent := BuildSubagentRunListEntries(runs, 60, 72)
-	if len(active) != 1 {
+	if len(active) != 2 {
 		t.Errorf("active count = %d", len(active))
 	}
 	if len(recent) != 1 {
 		t.Errorf("recent count = %d", len(recent))
 	}
-	if active[0].Label != "worker" {
-		t.Errorf("active label = %q", active[0].Label)
+
+	// Active entries indexed independently: #1, #2.
+	if active[0].Index != 1 || active[1].Index != 2 {
+		t.Errorf("active indices = %d, %d", active[0].Index, active[1].Index)
 	}
-	if !strings.Contains(active[0].Line, "worker") {
+	// Recent entry indexed independently: #1.
+	if recent[0].Index != 1 {
+		t.Errorf("recent index = %d", recent[0].Index)
+	}
+
+	if !strings.Contains(active[0].Line, "#1") {
 		t.Errorf("active line = %q", active[0].Line)
+	}
+	if !strings.Contains(recent[0].Line, "#1") {
+		t.Errorf("recent line = %q", recent[0].Line)
 	}
 }
 

@@ -13,16 +13,7 @@ type DebugCommand struct {
 // ParseDebugCommand parses a /debug slash command.
 // Returns nil if the text is not a /debug command.
 func ParseDebugCommand(raw string) *DebugCommand {
-	result, ok := ParseStandardSetUnsetSlashCommand(struct {
-		Raw            string
-		Slash          string
-		InvalidMessage string
-		UsageMessage   string
-		OnKnownAction  func(action, args string) (*StandardSetUnsetAction, bool)
-		OnSet          func(path string, value any) *StandardSetUnsetAction
-		OnUnset        func(path string) *StandardSetUnsetAction
-		OnError        func(message string) *StandardSetUnsetAction
-	}{
+	result, ok := ParseStandardSetUnsetSlashCommand(StandardSetUnsetParams{
 		Raw:            raw,
 		Slash:          "/debug",
 		InvalidMessage: "Invalid /debug syntax.",
@@ -36,9 +27,6 @@ func ParseDebugCommand(raw string) *DebugCommand {
 			}
 			return nil, false
 		},
-		OnSet:   nil,
-		OnUnset: nil,
-		OnError: nil,
 	})
 	if !ok || result == nil {
 		return nil

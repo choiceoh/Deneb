@@ -54,6 +54,14 @@ type CommandResult struct {
 	SessionMod  *SessionModification
 	SkipAgent   bool
 	IsError     bool
+	BtwContext  *BtwContext
+}
+
+// BtwContext signals that a command is a /btw side question.
+// The dispatch layer should use isolated think settings (ThinkOff, ReasoningOff)
+// for the agent turn without modifying the main session state.
+type BtwContext struct {
+	Question string `json:"question"`
 }
 
 // SessionModification describes changes to apply to the session.
@@ -887,15 +895,15 @@ func handleBtwCommand(ctx CommandContext) (*CommandResult, error) {
 		}, nil
 	}
 
-	// BTW side questions are delegated to the agent with thinking off
-	// for quick, low-latency responses.
+	// BTW side questions are delegated to the agent. The agent runner should
+	// use thinking=off for quick responses, but we do NOT modify the main
+	// session's ThinkLevel/ReasoningLevel — those are per-BTW-turn only.
+	// The BtwContext on the result signals to the dispatch layer that this
+	// is a side question needing isolated think settings.
 	return &CommandResult{
-		Reply: question,
-		SessionMod: &SessionModification{
-			ThinkLevel:     ThinkOff,
-			ReasoningLevel: ReasoningOff,
-		},
-		SkipAgent: false,
+		Reply:      question,
+		SkipAgent:  false,
+		BtwContext: &BtwContext{Question: question},
 	}, nil
 }
 

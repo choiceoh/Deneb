@@ -90,9 +90,8 @@ func ParseSetUnsetCommandAction[T any](slash, action, args string, cb SetUnsetCa
 	}
 }
 
-// ParseSlashCommandWithSetUnset parses a full slash command supporting
-// set/unset actions plus custom known-action callbacks.
-func ParseSlashCommandWithSetUnset[T any](params struct {
+// SetUnsetSlashParams holds the parameters for parsing a slash command with set/unset.
+type SetUnsetSlashParams[T any] struct {
 	Raw            string
 	Slash          string
 	InvalidMessage string
@@ -101,7 +100,11 @@ func ParseSlashCommandWithSetUnset[T any](params struct {
 	OnSet          func(path string, value any) T
 	OnUnset        func(path string) T
 	OnError        func(message string) T
-}) (T, bool) {
+}
+
+// ParseSlashCommandWithSetUnset parses a full slash command supporting
+// set/unset actions plus custom known-action callbacks.
+func ParseSlashCommandWithSetUnset[T any](params SetUnsetSlashParams[T]) (T, bool) {
 	parsed := ParseSlashCommandOrNull(params.Raw, params.Slash, params.InvalidMessage, "")
 	if parsed == nil {
 		var zero T

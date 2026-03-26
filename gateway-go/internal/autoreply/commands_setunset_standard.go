@@ -11,54 +11,27 @@ type StandardSetUnsetAction struct {
 	Message string `json:"message,omitempty"`
 }
 
+// StandardSetUnsetParams holds the parameters for parsing a standard set/unset command.
+type StandardSetUnsetParams = SetUnsetSlashParams[*StandardSetUnsetAction]
+
 // ParseStandardSetUnsetSlashCommand parses a slash command with standard
 // set/unset/error action shapes. Custom known actions are handled via onKnownAction.
-func ParseStandardSetUnsetSlashCommand(params struct {
-	Raw            string
-	Slash          string
-	InvalidMessage string
-	UsageMessage   string
-	OnKnownAction  func(action, args string) (*StandardSetUnsetAction, bool)
-	OnSet          func(path string, value any) *StandardSetUnsetAction
-	OnUnset        func(path string) *StandardSetUnsetAction
-	OnError        func(message string) *StandardSetUnsetAction
-}) (*StandardSetUnsetAction, bool) {
-	onSet := params.OnSet
-	if onSet == nil {
-		onSet = func(path string, value any) *StandardSetUnsetAction {
+// Nil callbacks get default implementations that produce standard action shapes.
+func ParseStandardSetUnsetSlashCommand(params StandardSetUnsetParams) (*StandardSetUnsetAction, bool) {
+	if params.OnSet == nil {
+		params.OnSet = func(path string, value any) *StandardSetUnsetAction {
 			return &StandardSetUnsetAction{Action: "set", Path: path, Value: value}
 		}
 	}
-	onUnset := params.OnUnset
-	if onUnset == nil {
-		onUnset = func(path string) *StandardSetUnsetAction {
+	if params.OnUnset == nil {
+		params.OnUnset = func(path string) *StandardSetUnsetAction {
 			return &StandardSetUnsetAction{Action: "unset", Path: path}
 		}
 	}
-	onError := params.OnError
-	if onError == nil {
-		onError = func(message string) *StandardSetUnsetAction {
+	if params.OnError == nil {
+		params.OnError = func(message string) *StandardSetUnsetAction {
 			return &StandardSetUnsetAction{Action: "error", Message: message}
 		}
 	}
-
-	return ParseSlashCommandWithSetUnset(struct {
-		Raw            string
-		Slash          string
-		InvalidMessage string
-		UsageMessage   string
-		OnKnownAction  func(action, args string) (*StandardSetUnsetAction, bool)
-		OnSet          func(path string, value any) *StandardSetUnsetAction
-		OnUnset        func(path string) *StandardSetUnsetAction
-		OnError        func(message string) *StandardSetUnsetAction
-	}{
-		Raw:            params.Raw,
-		Slash:          params.Slash,
-		InvalidMessage: params.InvalidMessage,
-		UsageMessage:   params.UsageMessage,
-		OnKnownAction:  params.OnKnownAction,
-		OnSet:          onSet,
-		OnUnset:        onUnset,
-		OnError:        onError,
-	})
+	return ParseSlashCommandWithSetUnset(params)
 }

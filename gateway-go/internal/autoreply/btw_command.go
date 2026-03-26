@@ -8,8 +8,12 @@ import (
 )
 
 var (
-	btwCommandRe  = regexp.MustCompile(`(?i)^/btw(?::|\s|$)`)
-	btwExtractRe  = regexp.MustCompile(`(?i)^/btw(?:\s+(.*))?$`)
+	btwCommandRe = regexp.MustCompile(`(?i)^/btw(?::|\s|$)`)
+	// Matches /btw with optional whitespace args OR colon args:
+	// /btw question  →  "question"
+	// /btw:question  →  "question"
+	// /btw           →  ""
+	btwExtractRe = regexp.MustCompile(`(?i)^/btw(?:(?:\s+|:\s*)([\s\S]*))?$`)
 )
 
 // IsBtwRequestText returns true if the text is a /btw command.

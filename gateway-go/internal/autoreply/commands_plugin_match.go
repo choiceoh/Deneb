@@ -46,16 +46,20 @@ func MatchPluginCommand(body string, registry *plugin.FullRegistry) *PluginComma
 	return nil
 }
 
-// ExecutePluginCommand runs a matched plugin command and returns the reply text.
+// ExecutePluginCommand runs a matched plugin command.
+// The handler is responsible for side effects (replies, state changes);
+// this function only surfaces errors.
 func ExecutePluginCommand(ctx context.Context, match *PluginCommandMatch) (string, error) {
 	if match == nil || match.Command.Handler == nil {
 		return "", nil
 	}
-	err := match.Command.Handler(ctx, match.Args)
-	if err != nil {
-		return "⚠️ Plugin command error: " + err.Error(), nil
+	if err := match.Command.Handler(ctx, match.Args); err != nil {
+		return "⚠️ Plugin command error: " + err.Error(), err
 	}
-	return "✅ Plugin command executed.", nil
+	// Handler ran successfully; the handler itself is responsible for
+	// delivering replies through its own channel (e.g. sendReply callback).
+	// Return empty text — the caller should treat this as "handled, no inline reply".
+	return "", nil
 }
 
 // HandlePluginCommandInPipeline is the pipeline handler that checks for

@@ -47,16 +47,7 @@ func TestParseSlashCommandWithSetUnset(t *testing.T) {
 	}
 
 	parse := func(raw string) (result, bool) {
-		return ParseSlashCommandWithSetUnset(struct {
-			Raw            string
-			Slash          string
-			InvalidMessage string
-			UsageMessage   string
-			OnKnownAction  func(action, args string) (result, bool)
-			OnSet          func(path string, value any) result
-			OnUnset        func(path string) result
-			OnError        func(message string) result
-		}{
+		return ParseSlashCommandWithSetUnset(SetUnsetSlashParams[result]{
 			Raw:            raw,
 			Slash:          "/debug",
 			InvalidMessage: "invalid",

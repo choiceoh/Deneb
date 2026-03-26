@@ -44,4 +44,10 @@ func TestExtractBtwQuestion(t *testing.T) {
 	if !ok || q != "what is Go?" {
 		t.Errorf("btw question: q=%q", q)
 	}
+
+	// /btw:question (colon syntax).
+	q, ok = ExtractBtwQuestion("/btw:what is Go?", "", nil)
+	if !ok || q != "what is Go?" {
+		t.Errorf("btw colon: q=%q ok=%v", q, ok)
+	}
 }
