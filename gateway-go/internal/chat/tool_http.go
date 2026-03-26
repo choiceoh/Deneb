@@ -22,7 +22,9 @@ func httpToolSchema() map[string]any {
 			},
 			"method": map[string]any{
 				"type":        "string",
-				"description": "HTTP method: GET, POST, PUT, PATCH, DELETE (default: GET)",
+				"description": "HTTP method",
+				"enum":        []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
+				"default":     "GET",
 			},
 			"headers": map[string]any{
 				"type":        "object",
@@ -38,11 +40,15 @@ func httpToolSchema() map[string]any {
 			},
 			"timeout": map[string]any{
 				"type":        "number",
-				"description": "Timeout in seconds (default: 30, max: 120)",
+				"description": "Timeout in seconds",
+				"default":     30,
+				"minimum":     1,
+				"maximum":     120,
 			},
 			"max_response_chars": map[string]any{
 				"type":        "number",
-				"description": "Maximum response characters to return (default: 50000)",
+				"description": "Maximum response characters to return",
+				"default":     50000,
 			},
 		},
 		"required": []string{"url"},

@@ -23,10 +23,13 @@ func readToolSchema() map[string]any {
 			"offset": map[string]any{
 				"type":        "number",
 				"description": "The line number to start reading from (1-based)",
+				"minimum":     1,
 			},
 			"limit": map[string]any{
 				"type":        "number",
-				"description": "The number of lines to read",
+				"description": "The number of lines to read (default: 2000)",
+				"default":     2000,
+				"minimum":     1,
 			},
 		},
 		"required": []string{"file_path"},
@@ -157,6 +160,7 @@ func editToolSchema() map[string]any {
 			"replace_all": map[string]any{
 				"type":        "boolean",
 				"description": "Replace all occurrences instead of requiring a unique match (default: false)",
+				"default":     false,
 			},
 		},
 		"required": []string{"file_path", "old_string", "new_string"},
@@ -232,15 +236,22 @@ func grepToolSchema() map[string]any {
 			},
 			"contextLines": map[string]any{
 				"type":        "number",
-				"description": "Lines of context around each match (0-10, default: 0)",
+				"description": "Lines of context around each match (0-10)",
+				"default":     0,
+				"minimum":     0,
+				"maximum":     10,
 			},
 			"ignoreCase": map[string]any{
 				"type":        "boolean",
-				"description": "Case-insensitive search (default: false)",
+				"description": "Case-insensitive search",
+				"default":     false,
 			},
 			"maxResults": map[string]any{
 				"type":        "number",
-				"description": "Maximum matches to return (default: 100, max: 500)",
+				"description": "Maximum matches to return",
+				"default":     100,
+				"minimum":     1,
+				"maximum":     500,
 			},
 			"fileType": map[string]any{
 				"type":        "string",
@@ -355,7 +366,8 @@ func findToolSchema() map[string]any {
 			},
 			"showHidden": map[string]any{
 				"type":        "boolean",
-				"description": "Include hidden directories (starting with .) in search (default: false)",
+				"description": "Include hidden directories (starting with .) in search",
+				"default":     false,
 			},
 		},
 		"required": []string{"pattern"},

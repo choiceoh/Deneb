@@ -86,7 +86,8 @@ func clipboardToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: set, get, list, clear",
+				"description": "Clipboard action",
+				"enum":        []string{"set", "get", "list", "clear"},
 			},
 			"content": map[string]any{
 				"type":        "string",

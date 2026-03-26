@@ -104,7 +104,8 @@ func kvToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: get, set, delete, list",
+				"description": "KV store action",
+				"enum":        []string{"get", "set", "delete", "list"},
 			},
 			"key": map[string]any{
 				"type":        "string",

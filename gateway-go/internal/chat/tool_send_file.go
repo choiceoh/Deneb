@@ -26,7 +26,8 @@ func sendFileToolSchema() map[string]any {
 			},
 			"type": map[string]any{
 				"type":        "string",
-				"description": "Media type: photo, document, video, audio, voice. Auto-detected from MIME if omitted.",
+				"description": "Media type. Auto-detected from MIME if omitted",
+				"enum":        []string{"photo", "document", "video", "audio", "voice"},
 			},
 			"caption": map[string]any{
 				"type":        "string",

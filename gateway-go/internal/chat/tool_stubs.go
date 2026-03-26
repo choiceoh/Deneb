@@ -33,7 +33,10 @@ func webSearchToolSchema() map[string]any {
 			},
 			"count": map[string]any{
 				"type":        "number",
-				"description": "Number of results to return (default: 5)",
+				"description": "Number of results to return",
+				"default":     5,
+				"minimum":     1,
+				"maximum":     20,
 			},
 		},
 		"required": []string{"query"},
@@ -170,7 +173,8 @@ func cronToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Cron action: status, list, add, update, remove, run, wake",
+				"description": "Cron action",
+				"enum":        []string{"status", "list", "add", "update", "remove", "run", "wake"},
 			},
 			"jobId": map[string]any{
 				"type":        "string",
@@ -324,7 +328,8 @@ func gatewayToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Gateway action: restart, config.get, config.schema.lookup, config.apply, config.patch, update.run",
+				"description": "Gateway action",
+				"enum":        []string{"restart", "config.get", "config.schema.lookup", "config.apply", "config.patch", "update.run"},
 			},
 			"path": map[string]any{
 				"type":        "string",
@@ -480,11 +485,13 @@ func sessionsListToolSchema() map[string]any {
 			"limit": map[string]any{
 				"type":        "number",
 				"description": "Maximum sessions to return",
+				"default":     50,
+				"minimum":     1,
 			},
 			"kinds": map[string]any{
-				"type":        "array",
-				"items":       map[string]any{"type": "string"},
-				"description": "Filter by session kind: main, group, cron, hook",
+				"type":  "array",
+				"items": map[string]any{"type": "string", "enum": []string{"main", "group", "cron", "hook"}},
+				"description": "Filter by session kind",
 			},
 		},
 	}
@@ -556,6 +563,8 @@ func sessionsHistoryToolSchema() map[string]any {
 			"limit": map[string]any{
 				"type":        "number",
 				"description": "Number of messages to return",
+				"default":     20,
+				"minimum":     1,
 			},
 		},
 		"required": []string{"sessionKey"},
@@ -726,7 +735,8 @@ func subagentsToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: list, kill, steer",
+				"description": "Sub-agent management action",
+				"enum":        []string{"list", "kill", "steer"},
 			},
 			"target": map[string]any{
 				"type":        "string",
@@ -1245,7 +1255,8 @@ func nodesToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: status, describe, notify, camera_snap, location_get, run, invoke",
+				"description": "Node action",
+				"enum":        []string{"status", "describe", "notify", "camera_snap", "location_get", "run", "invoke"},
 			},
 			"node": map[string]any{
 				"type":        "string",
