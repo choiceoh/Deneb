@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.11.4](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.3...deneb-v3.11.4) (2026-03-26)
+
+
+### Bug Fixes
+
+* correct FFI error codes for session key validation and buffer-too-small returns ([#352](https://github.com/choiceoh/Deneb/issues/352)) ([8f882cc](https://github.com/choiceoh/Deneb/commit/8f882ccaffee5b0a8e722bf7146b3f3d326750bc))
+
 ## [3.11.3](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.2...deneb-v3.11.3) (2026-03-26)
 
 
