@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 )
@@ -133,7 +134,7 @@ func RunJob(ctx context.Context, job Job, deps RunnerDeps) RunOutcome {
 		// Skip delivery if the output is just a heartbeat ack.
 		stripped := autoreply.StripHeartbeatToken(output, autoreply.StripModeHeartbeat, 0)
 		if !stripped.ShouldSkip {
-			payloads := []autoreply.ReplyPayload{{Text: stripped.Text}}
+			payloads := []types.ReplyPayload{{Text: stripped.Text}}
 			bestEffort := false
 			if job.Delivery != nil {
 				bestEffort = job.Delivery.BestEffort

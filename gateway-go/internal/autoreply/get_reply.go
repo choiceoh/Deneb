@@ -5,13 +5,14 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 )
 
 // GetReplyFromConfig is the main entry point for generating a reply.
 // It orchestrates the full pipeline: session init → directives → model selection
 // → agent execution → reply normalization.
-func GetReplyFromConfig(ctx context.Context, msg *MsgContext, opts GetReplyOptions, deps ReplyDeps) ([]ReplyPayload, error) {
+func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.GetReplyOptions, deps ReplyDeps) ([]types.ReplyPayload, error) {
 	// 1. Initialize session state.
 	session := InitSessionForReply(msg, deps)
 
@@ -80,18 +81,18 @@ type ReplyDeps struct {
 	Registry    *CommandRegistry
 	Router      *CommandRouter
 	History     *HistoryTracker
-	SessionFunc func(key string) *SessionState // resolve session by key
+	SessionFunc func(key string) *types.SessionState // resolve session by key
 }
 
 // InitSessionForReply initializes or retrieves session state for a reply.
-func InitSessionForReply(msg *MsgContext, deps ReplyDeps) *SessionState {
+func InitSessionForReply(msg *types.MsgContext, deps ReplyDeps) *types.SessionState {
 	if deps.SessionFunc != nil {
 		existing := deps.SessionFunc(msg.SessionKey)
 		if existing != nil {
 			return existing
 		}
 	}
-	return &SessionState{
+	return &types.SessionState{
 		SessionKey: msg.SessionKey,
 		Channel:    msg.Channel,
 		AccountID:  msg.AccountID,
@@ -102,7 +103,7 @@ func InitSessionForReply(msg *MsgContext, deps ReplyDeps) *SessionState {
 
 // ApplyDirectivesToSession applies parsed directives to the session state.
 // Returns reply payloads if the directive was handled inline (e.g., status query).
-func ApplyDirectivesToSession(directives InlineDirectives, session *SessionState, deps ReplyDeps) []ReplyPayload {
+func ApplyDirectivesToSession(directives InlineDirectives, session *types.SessionState, deps ReplyDeps) []types.ReplyPayload {
 	if directives.HasThinkDirective {
 		session.ThinkLevel = directives.ThinkLevel
 	}
@@ -129,7 +130,7 @@ func ApplyDirectivesToSession(directives InlineDirectives, session *SessionState
 			Session: session,
 		})
 		if result != nil && result.Reply != "" {
-			return []ReplyPayload{{Text: result.Reply}}
+			return []types.ReplyPayload{{Text: result.Reply}}
 		}
 	}
 
@@ -137,7 +138,7 @@ func ApplyDirectivesToSession(directives InlineDirectives, session *SessionState
 }
 
 // ResolveModelForReply determines the model to use for a reply.
-func ResolveModelForReply(session *SessionState, directives InlineDirectives, deps ReplyDeps) ModelSelection {
+func ResolveModelForReply(session *types.SessionState, directives InlineDirectives, deps ReplyDeps) ModelSelection {
 	model := session.Model
 	provider := session.Provider
 

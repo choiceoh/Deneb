@@ -4,6 +4,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 	"sync"
 	"time"
@@ -37,11 +38,11 @@ type BlockReplyCoalescer struct {
 	stopCh    chan struct{}
 
 	shouldAbort func() bool
-	onFlush     func(payload ReplyPayload)
+	onFlush     func(payload types.ReplyPayload)
 }
 
 // NewBlockReplyCoalescer creates a new coalescer matching the TS createBlockReplyCoalescer.
-func NewBlockReplyCoalescer(config BlockStreamingCoalescing, shouldAbort func() bool, onFlush func(payload ReplyPayload)) *BlockReplyCoalescer {
+func NewBlockReplyCoalescer(config BlockStreamingCoalescing, shouldAbort func() bool, onFlush func(payload types.ReplyPayload)) *BlockReplyCoalescer {
 	minChars := config.MinChars
 	if minChars < 1 {
 		minChars = 1
@@ -113,7 +114,7 @@ func (c *BlockReplyCoalescer) flushLocked(force bool) {
 		c.scheduleIdleFlush()
 		return
 	}
-	payload := ReplyPayload{
+	payload := types.ReplyPayload{
 		Text:      c.bufferText,
 		ReplyToID: c.bufferReplyToID,
 	}
@@ -127,7 +128,7 @@ func (c *BlockReplyCoalescer) flushLocked(force bool) {
 }
 
 // Enqueue adds a payload to the coalescer buffer.
-func (c *BlockReplyCoalescer) Enqueue(payload ReplyPayload) {
+func (c *BlockReplyCoalescer) Enqueue(payload types.ReplyPayload) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

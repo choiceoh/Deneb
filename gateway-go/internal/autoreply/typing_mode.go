@@ -1,5 +1,9 @@
 package autoreply
 
+import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
+
 // TypingMode controls when typing indicators are shown.
 type TypingMode string
 
@@ -19,7 +23,7 @@ type TypingModeContext struct {
 	IsGroupChat    bool
 	WasMentioned   bool
 	IsHeartbeat    bool
-	TypingPolicy   TypingPolicy
+	TypingPolicy   types.TypingPolicy
 	SuppressTyping bool
 }
 
@@ -29,9 +33,9 @@ type TypingModeContext struct {
 func ResolveTypingMode(ctx TypingModeContext) TypingMode {
 	// Suppress typing for heartbeats, system events, and internal webchat.
 	if ctx.IsHeartbeat ||
-		ctx.TypingPolicy == TypingPolicyHeartbeat ||
-		ctx.TypingPolicy == TypingPolicySystemEvent ||
-		ctx.TypingPolicy == TypingPolicyInternalWeb ||
+		ctx.TypingPolicy == types.TypingPolicyHeartbeat ||
+		ctx.TypingPolicy == types.TypingPolicySystemEvent ||
+		ctx.TypingPolicy == types.TypingPolicyInternalWeb ||
 		ctx.SuppressTyping {
 		return TypingModeNever
 	}

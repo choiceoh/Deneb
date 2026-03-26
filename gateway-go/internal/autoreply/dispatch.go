@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"fmt"
 	"log/slog"
@@ -11,63 +12,30 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
 
-// ReplyPayload represents an outbound reply message.
-type ReplyPayload struct {
-	Text         string         `json:"text,omitempty"`
-	MediaURL     string         `json:"mediaUrl,omitempty"`
-	MediaURLs    []string       `json:"mediaUrls,omitempty"`
-	ReplyToID    string         `json:"replyToId,omitempty"`
-	AudioAsVoice bool           `json:"audioAsVoice,omitempty"`
-	IsError      bool           `json:"isError,omitempty"`
-	ChannelData  map[string]any `json:"channelData,omitempty"`
-}
-
-// TypingPolicy describes the context that triggered a reply.
-type TypingPolicy string
-
-const (
-	TypingPolicyUserMessage TypingPolicy = "user_message"
-	TypingPolicySystemEvent TypingPolicy = "system_event"
-	TypingPolicyInternalWeb TypingPolicy = "internal_webchat"
-	TypingPolicyHeartbeat   TypingPolicy = "heartbeat"
-)
-
-// ReplyDispatchKind identifies the stage of a reply in the dispatch pipeline.
-type ReplyDispatchKind string
-
-const (
-	DispatchKindTool  ReplyDispatchKind = "tool"
-	DispatchKindBlock ReplyDispatchKind = "block"
-	DispatchKindFinal ReplyDispatchKind = "final"
-)
-
-// DeliverFunc delivers a single reply payload to the originating channel.
-type DeliverFunc func(ctx context.Context, payload ReplyPayload, kind ReplyDispatchKind) error
-
 // ReplyDispatcher manages serialized delivery of tool results, block replies,
 // and final replies. This mirrors the TS ReplyDispatcher.
 type ReplyDispatcher struct {
 	mu       sync.Mutex
-	deliver  DeliverFunc
+	deliver  types.DeliverFunc
 	logger   *slog.Logger
 	ctx      context.Context
-	counts   map[ReplyDispatchKind]int
+	counts   map[types.ReplyDispatchKind]int
 	complete bool
 }
 
 // NewReplyDispatcher creates a new dispatcher.
-func NewReplyDispatcher(ctx context.Context, deliver DeliverFunc, logger *slog.Logger) *ReplyDispatcher {
+func NewReplyDispatcher(ctx context.Context, deliver types.DeliverFunc, logger *slog.Logger) *ReplyDispatcher {
 	return &ReplyDispatcher{
 		deliver: deliver,
 		logger:  logger,
 		ctx:     ctx,
-		counts:  make(map[ReplyDispatchKind]int),
+		counts:  make(map[types.ReplyDispatchKind]int),
 	}
 }
 
 // Send delivers a reply payload with the given dispatch kind.
 // Returns false if the dispatcher has been marked complete.
-func (d *ReplyDispatcher) Send(payload ReplyPayload, kind ReplyDispatchKind) bool {
+func (d *ReplyDispatcher) Send(payload types.ReplyPayload, kind types.ReplyDispatchKind) bool {
 	d.mu.Lock()
 	if d.complete {
 		d.mu.Unlock()
@@ -90,10 +58,10 @@ func (d *ReplyDispatcher) MarkComplete() {
 }
 
 // Counts returns the number of sends per dispatch kind.
-func (d *ReplyDispatcher) Counts() map[ReplyDispatchKind]int {
+func (d *ReplyDispatcher) Counts() map[types.ReplyDispatchKind]int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	result := make(map[ReplyDispatchKind]int)
+	result := make(map[types.ReplyDispatchKind]int)
 	for k, v := range d.counts {
 		result[k] = v
 	}
@@ -104,7 +72,7 @@ func (d *ReplyDispatcher) Counts() map[ReplyDispatchKind]int {
 type InboundDispatchResult struct {
 	Handled    bool
 	CommandKey string
-	Replies    []ReplyPayload
+	Replies    []types.ReplyPayload
 	Error      error
 }
 
@@ -176,7 +144,7 @@ func RouteReply(
 	channels *channel.Registry,
 	channelID string,
 	to string,
-	payload ReplyPayload,
+	payload types.ReplyPayload,
 	chunkLimit int,
 	chunkMode ChunkMode,
 ) error {

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
 
@@ -43,7 +44,7 @@ type IsolatedAgentResult struct {
 	DeliveryResult *DeliveryResult
 	Summary        string
 	OutputText     string
-	Payloads       []autoreply.ReplyPayload
+	Payloads       []types.ReplyPayload
 	WasHeartbeat   bool
 	SessionKey     string
 }
@@ -145,7 +146,7 @@ func RunIsolatedAgentTurn(
 		deliveryText = stripped.Text
 	}
 	if deliveryText != "" {
-		result.Payloads = append(result.Payloads, autoreply.ReplyPayload{Text: deliveryText})
+		result.Payloads = append(result.Payloads, types.ReplyPayload{Text: deliveryText})
 	}
 
 	// 7. Deliver to target.

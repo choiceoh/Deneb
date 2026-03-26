@@ -1,49 +1,4 @@
-package autoreply
-
-// GetReplyOptions holds the full configuration for generating a reply.
-type GetReplyOptions struct {
-	RunID                  string
-	IsHeartbeat            bool
-	HeartbeatModelOverride string
-	TypingPolicy           TypingPolicy
-	SuppressTyping         bool
-	SuppressToolErrors     bool
-	SkillFilter            []string
-	TimeoutOverrideMs      int64
-	// Callbacks
-	OnAgentRunStart func(params AgentRunStartParams)
-	OnReplyStart    func()
-	OnTypingCleanup func()
-	OnBlockReply    func(payload ReplyPayload)
-	OnToolResult    func(payload ReplyPayload)
-}
-
-// AgentRunStartParams contains metadata about an agent run starting.
-type AgentRunStartParams struct {
-	SessionKey string
-	RunID      string
-	Model      string
-	Provider   string
-}
-
-// BlockReplyContext provides context for block-level reply delivery.
-type BlockReplyContext struct {
-	SessionKey string
-	Channel    string
-	To         string
-	AccountID  string
-	ThreadID   string
-}
-
-// ModelSelectedContext tracks the resolved model for a reply.
-type ModelSelectedContext struct {
-	Provider   string
-	Model      string
-	ThinkLevel ThinkLevel
-	FastMode   bool
-	IsOverride bool
-	IsFallback bool
-}
+package types
 
 // MsgContext represents the inbound message context (mirrors TS MsgContext).
 type MsgContext struct {
@@ -88,4 +43,49 @@ type TemplateContext struct {
 	MediaPaths []string
 	MediaUrl   string
 	MediaUrls  []string
+}
+
+// BlockReplyContext provides context for block-level reply delivery.
+type BlockReplyContext struct {
+	SessionKey string
+	Channel    string
+	To         string
+	AccountID  string
+	ThreadID   string
+}
+
+// ModelSelectedContext tracks the resolved model for a reply.
+type ModelSelectedContext struct {
+	Provider   string
+	Model      string
+	ThinkLevel ThinkLevel
+	FastMode   bool
+	IsOverride bool
+	IsFallback bool
+}
+
+// AgentRunStartParams contains metadata about an agent run starting.
+type AgentRunStartParams struct {
+	SessionKey string
+	RunID      string
+	Model      string
+	Provider   string
+}
+
+// GetReplyOptions holds the full configuration for generating a reply.
+type GetReplyOptions struct {
+	RunID                  string
+	IsHeartbeat            bool
+	HeartbeatModelOverride string
+	TypingPolicy           TypingPolicy
+	SuppressTyping         bool
+	SuppressToolErrors     bool
+	SkillFilter            []string
+	TimeoutOverrideMs      int64
+	// Callbacks
+	OnAgentRunStart func(params AgentRunStartParams)
+	OnReplyStart    func()
+	OnTypingCleanup func()
+	OnBlockReply    func(payload ReplyPayload)
+	OnToolResult    func(payload ReplyPayload)
 }

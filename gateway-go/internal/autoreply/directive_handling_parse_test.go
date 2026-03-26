@@ -1,14 +1,17 @@
 package autoreply
 
-import "testing"
+import (
+	"testing"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
 
 func TestParseFullInlineDirectives_WithExec(t *testing.T) {
 	result := ParseFullInlineDirectives("/think high /exec host=sandbox hello", nil)
 	if !result.HasThinkDirective {
 		t.Fatal("expected think directive")
 	}
-	if result.ThinkLevel != ThinkHigh {
-		t.Fatalf("expected ThinkHigh, got %q", result.ThinkLevel)
+	if result.ThinkLevel != types.ThinkHigh {
+		t.Fatalf("expected types.ThinkHigh, got %q", result.ThinkLevel)
 	}
 	if !result.HasExecDirective {
 		t.Fatal("expected exec directive")

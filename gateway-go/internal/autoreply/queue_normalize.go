@@ -2,47 +2,50 @@
 // Mirrors src/auto-reply/reply/queue/normalize.ts (47 LOC).
 package autoreply
 
-import "strings"
+import (
+	"strings"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
 
-// NormalizeFollowupQueueMode parses a raw string into a FollowupQueueMode.
+// NormalizeFollowupQueueMode parses a raw string into a types.FollowupQueueMode.
 // Returns empty string if the input is not recognized.
-func NormalizeFollowupQueueMode(raw string) FollowupQueueMode {
+func NormalizeFollowupQueueMode(raw string) types.FollowupQueueMode {
 	if raw == "" {
 		return ""
 	}
 	cleaned := strings.TrimSpace(strings.ToLower(raw))
 	switch cleaned {
 	case "queue", "queued":
-		return FollowupModeSteer
+		return types.FollowupModeSteer
 	case "interrupt", "interrupts", "abort":
-		return FollowupModeInterrupt
+		return types.FollowupModeInterrupt
 	case "steer", "steering":
-		return FollowupModeSteer
+		return types.FollowupModeSteer
 	case "followup", "follow-ups", "followups":
-		return FollowupModeFollowup
+		return types.FollowupModeFollowup
 	case "collect", "coalesce":
-		return FollowupModeCollect
+		return types.FollowupModeCollect
 	case "steer+backlog", "steer-backlog", "steer_backlog":
-		return FollowupModeSteerBacklog
+		return types.FollowupModeSteerBacklog
 	default:
 		return ""
 	}
 }
 
-// NormalizeFollowupDropPolicy parses a raw string into a FollowupDropPolicy.
+// NormalizeFollowupDropPolicy parses a raw string into a types.FollowupDropPolicy.
 // Returns empty string if the input is not recognized.
-func NormalizeFollowupDropPolicy(raw string) FollowupDropPolicy {
+func NormalizeFollowupDropPolicy(raw string) types.FollowupDropPolicy {
 	if raw == "" {
 		return ""
 	}
 	cleaned := strings.TrimSpace(strings.ToLower(raw))
 	switch cleaned {
 	case "old", "oldest":
-		return FollowupDropOld
+		return types.FollowupDropOld
 	case "new", "newest":
-		return FollowupDropNew
+		return types.FollowupDropNew
 	case "summarize", "summary":
-		return FollowupDropSummarize
+		return types.FollowupDropSummarize
 	default:
 		return ""
 	}

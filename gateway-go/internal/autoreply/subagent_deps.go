@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"fmt"
 	"log/slog"
@@ -15,8 +16,8 @@ type SubagentInfraDeps struct {
 	ACPRegistry   *ACPRegistry
 	ACPProjector  *ACPProjector
 	FollowupQueue *FollowupQueueRegistry
-	SessionStore  func(key string) *SessionState
-	SaveSession   func(session *SessionState) error
+	SessionStore  func(key string) *types.SessionState
+	SaveSession   func(session *types.SessionState) error
 	AbortSession  func(sessionKey string) error
 	Logger        *slog.Logger
 }
@@ -29,7 +30,7 @@ type SpawnSubagentParams struct {
 	WorkspaceDir     string
 	Model            string
 	Provider         string
-	ThinkLevel       ThinkLevel
+	ThinkLevel       types.ThinkLevel
 	InitialMessage   string
 	MaxDepth         int
 }
@@ -85,14 +86,14 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 
 	// Create session state if SaveSession is available.
 	if d.SaveSession != nil {
-		session := &SessionState{
+		session := &types.SessionState{
 			SessionKey:      sessionKey,
 			AgentID:         agentID,
 			Channel:         "acp",
 			Model:           params.Model,
 			Provider:        params.Provider,
 			ThinkLevel:      params.ThinkLevel,
-			GroupActivation: ActivationAlways,
+			GroupActivation: types.ActivationAlways,
 		}
 		if err := d.SaveSession(session); err != nil {
 			d.logger().Warn("failed to save subagent session",
@@ -178,19 +179,19 @@ func (d *SubagentInfraDeps) ResetSubagent(agentID, reason string) error {
 }
 
 // EnqueueFollowup adds a followup message for a session.
-func (d *SubagentInfraDeps) EnqueueFollowup(sessionKey, text string, run *FollowupRunContext) {
+func (d *SubagentInfraDeps) EnqueueFollowup(sessionKey, text string, run *types.FollowupRunContext) {
 	if d.FollowupQueue == nil {
 		return
 	}
 	d.FollowupQueue.EnqueueFollowupRun(
 		sessionKey,
-		FollowupRun{
+		types.FollowupRun{
 			Prompt:     text,
 			Run:        run,
 			EnqueuedAt: time.Now().UnixMilli(),
 		},
-		FollowupQueueSettings{},
-		DedupeNone,
+		types.FollowupQueueSettings{},
+		types.DedupeNone,
 		newRecentMessageIDCache(),
 	)
 }

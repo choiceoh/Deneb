@@ -12,6 +12,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 )
 
@@ -37,10 +38,10 @@ type FullInlineDirectives struct {
 	InvalidExecNode  bool
 
 	// Queue options (full, from QueueDirective).
-	QueueModeResolved FollowupQueueMode
+	QueueModeResolved types.FollowupQueueMode
 	DebounceMs        int
 	Cap               int
-	DropPolicy        FollowupDropPolicy
+	DropPolicy        types.FollowupDropPolicy
 	RawDebounce       string
 	RawCap            string
 	RawDrop           string
@@ -102,7 +103,7 @@ func ParseFullInlineDirectives(body string, opts *FullDirectiveParseOptions) Ful
 	// Step 3: Re-extract /queue from the original body with full options.
 	// The basic parser only captured HasQueueDirective + RawQueueMode.
 	// Now extract debounce/cap/drop args using the token-based parser
-	// which returns QueueDirective with FollowupQueueMode/FollowupDropPolicy.
+	// which returns QueueDirective with types.FollowupQueueMode/types.FollowupDropPolicy.
 	if result.HasQueueDirective {
 		qd := ExtractQueueDirective(body)
 		if qd.HasDirective {

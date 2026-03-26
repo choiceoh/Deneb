@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 )
 
@@ -8,7 +9,7 @@ import (
 // - Filters empty/silent/heartbeat replies
 // - Strips silent tokens
 // - Applies response prefix templates
-func NormalizeReplyPayload(payload ReplyPayload, opts NormalizeOpts) (ReplyPayload, bool) {
+func NormalizeReplyPayload(payload types.ReplyPayload, opts NormalizeOpts) (types.ReplyPayload, bool) {
 	text := strings.TrimSpace(payload.Text)
 
 	// Check for silent reply.
@@ -51,8 +52,8 @@ type NormalizeOpts struct {
 
 // FilterReplyPayloads normalizes a slice of payloads, removing those that
 // should be skipped.
-func FilterReplyPayloads(payloads []ReplyPayload, opts NormalizeOpts) []ReplyPayload {
-	var result []ReplyPayload
+func FilterReplyPayloads(payloads []types.ReplyPayload, opts NormalizeOpts) []types.ReplyPayload {
+	var result []types.ReplyPayload
 	for _, p := range payloads {
 		normalized, ok := NormalizeReplyPayload(p, opts)
 		if ok {
@@ -63,9 +64,9 @@ func FilterReplyPayloads(payloads []ReplyPayload, opts NormalizeOpts) []ReplyPay
 }
 
 // DeduplicateReplyPayloads removes duplicate text and media from payloads.
-func DeduplicateReplyPayloads(payloads []ReplyPayload) []ReplyPayload {
+func DeduplicateReplyPayloads(payloads []types.ReplyPayload) []types.ReplyPayload {
 	seen := make(map[string]bool)
-	var result []ReplyPayload
+	var result []types.ReplyPayload
 	for _, p := range payloads {
 		key := p.Text
 		if key == "" {

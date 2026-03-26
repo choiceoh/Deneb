@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 	"testing"
 )
@@ -10,7 +11,7 @@ func TestHandleDirectives_ThinkOnly(t *testing.T) {
 	if result.SessionMod == nil {
 		t.Fatal("expected session mod")
 	}
-	if result.SessionMod.ThinkLevel != ThinkHigh {
+	if result.SessionMod.ThinkLevel != types.ThinkHigh {
 		t.Errorf("think = %q", result.SessionMod.ThinkLevel)
 	}
 	if result.IsDirectiveOnly != true {
@@ -26,7 +27,7 @@ func TestHandleDirectives_MultipleWithText(t *testing.T) {
 	if result.SessionMod == nil {
 		t.Fatal("expected session mod")
 	}
-	if result.SessionMod.ThinkLevel != ThinkMedium {
+	if result.SessionMod.ThinkLevel != types.ThinkMedium {
 		t.Errorf("think = %q", result.SessionMod.ThinkLevel)
 	}
 	if !strings.Contains(result.CleanedBody, "hello") {
@@ -64,15 +65,15 @@ func TestHandleDirectives_ElevatedBlocked(t *testing.T) {
 }
 
 func TestPersistDirectives(t *testing.T) {
-	session := &SessionState{}
+	session := &types.SessionState{}
 	result := DirectiveHandlingResult{
 		SessionMod: &SessionModification{
-			ThinkLevel: ThinkHigh,
+			ThinkLevel: types.ThinkHigh,
 			FastMode:   boolPtr(true),
 		},
 	}
 	PersistDirectives(session, result)
-	if session.ThinkLevel != ThinkHigh {
+	if session.ThinkLevel != types.ThinkHigh {
 		t.Errorf("think = %q", session.ThinkLevel)
 	}
 	if !session.FastMode {

@@ -3,6 +3,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,12 +14,12 @@ import (
 type QueueDirective struct {
 	Cleaned      string
 	HasDirective bool
-	QueueMode    FollowupQueueMode
+	QueueMode    types.FollowupQueueMode
 	QueueReset   bool
 	RawMode      string
 	DebounceMs   int
 	Cap          int
-	DropPolicy   FollowupDropPolicy
+	DropPolicy   types.FollowupDropPolicy
 	RawDebounce  string
 	RawCap       string
 	RawDrop      string
@@ -70,12 +71,12 @@ func ExtractQueueDirective(body string) QueueDirective {
 
 type queueDirectiveParseResult struct {
 	consumed    int
-	queueMode   FollowupQueueMode
+	queueMode   types.FollowupQueueMode
 	queueReset  bool
 	rawMode     string
 	debounceMs  int
 	cap         int
-	dropPolicy  FollowupDropPolicy
+	dropPolicy  types.FollowupDropPolicy
 	rawDebounce string
 	rawCap      string
 	rawDrop     string

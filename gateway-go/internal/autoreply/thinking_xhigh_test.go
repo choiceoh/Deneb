@@ -1,6 +1,9 @@
 package autoreply
 
-import "testing"
+import (
+	"testing"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
 
 func TestSupportsBuiltInXHighThinking(t *testing.T) {
 	tests := []struct {
@@ -43,38 +46,38 @@ func TestResolveThinkingDefaultForModel(t *testing.T) {
 		provider string
 		model    string
 		catalog  []ThinkingCatalogEntry
-		want     ThinkLevel
+		want     types.ThinkLevel
 	}{
 		{
 			name:     "anthropic claude 4.6 defaults to adaptive",
 			provider: "anthropic",
 			model:    "claude-opus-4.6",
-			want:     ThinkAdaptive,
+			want:     types.ThinkAdaptive,
 		},
 		{
 			name:     "anthropic claude 4-6 variant defaults to adaptive",
 			provider: "anthropic",
 			model:    "claude-sonnet-4-6",
-			want:     ThinkAdaptive,
+			want:     types.ThinkAdaptive,
 		},
 		{
 			name:     "amazon-bedrock claude 4.6 defaults to adaptive",
 			provider: "amazon-bedrock",
 			model:    "claude-opus-4.6",
-			want:     ThinkAdaptive,
+			want:     types.ThinkAdaptive,
 		},
 		{
 			name:     "catalog model with reasoning defaults to low",
 			provider: "custom",
 			model:    "my-model",
 			catalog:  []ThinkingCatalogEntry{{Provider: "custom", ID: "my-model", Reasoning: true}},
-			want:     ThinkLow,
+			want:     types.ThinkLow,
 		},
 		{
 			name:     "unknown model defaults to off",
 			provider: "openai",
 			model:    "gpt-4o",
-			want:     ThinkOff,
+			want:     types.ThinkOff,
 		},
 	}
 
@@ -92,7 +95,7 @@ func TestListThinkingLevels_WithXHigh(t *testing.T) {
 	levels := ListThinkingLevels("openai", "gpt-5.4")
 	found := false
 	for _, l := range levels {
-		if l == ThinkXHigh {
+		if l == types.ThinkXHigh {
 			found = true
 			break
 		}
@@ -102,8 +105,8 @@ func TestListThinkingLevels_WithXHigh(t *testing.T) {
 	}
 	// xhigh should come before adaptive.
 	for i, l := range levels {
-		if l == ThinkXHigh {
-			if i+1 >= len(levels) || levels[i+1] != ThinkAdaptive {
+		if l == types.ThinkXHigh {
+			if i+1 >= len(levels) || levels[i+1] != types.ThinkAdaptive {
 				t.Error("xhigh should be inserted before adaptive")
 			}
 			break
@@ -114,7 +117,7 @@ func TestListThinkingLevels_WithXHigh(t *testing.T) {
 func TestListThinkingLevels_WithoutXHigh(t *testing.T) {
 	levels := ListThinkingLevels("anthropic", "claude-opus-4.6")
 	for _, l := range levels {
-		if l == ThinkXHigh {
+		if l == types.ThinkXHigh {
 			t.Error("unexpected xhigh for anthropic model")
 		}
 	}
@@ -123,13 +126,13 @@ func TestListThinkingLevels_WithoutXHigh(t *testing.T) {
 func TestResolveResponseUsageMode(t *testing.T) {
 	tests := []struct {
 		raw  string
-		want UsageDisplayLevel
+		want types.UsageDisplayLevel
 	}{
-		{"", UsageOff},
-		{"tokens", UsageTokens},
-		{"full", UsageFull},
-		{"off", UsageOff},
-		{"garbage", UsageOff},
+		{"", types.UsageOff},
+		{"tokens", types.UsageTokens},
+		{"full", types.UsageFull},
+		{"off", types.UsageOff},
+		{"garbage", types.UsageOff},
 	}
 
 	for _, tt := range tests {

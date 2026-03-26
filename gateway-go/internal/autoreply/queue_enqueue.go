@@ -3,6 +3,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 	"sync"
 	"time"
@@ -74,7 +75,7 @@ func (c *recentMessageIDCache) prune() {
 }
 
 // buildRecentMessageIDKey builds a dedup key for a followup run.
-func buildRecentMessageIDKey(run FollowupRun, queueKey string) string {
+func buildRecentMessageIDKey(run types.FollowupRun, queueKey string) string {
 	messageID := strings.TrimSpace(run.MessageID)
 	if messageID == "" {
 		return ""
@@ -91,8 +92,8 @@ func buildRecentMessageIDKey(run FollowupRun, queueKey string) string {
 }
 
 // isRunAlreadyQueued checks if a run is already in the queue.
-func isRunAlreadyQueued(run FollowupRun, items []FollowupRun, allowPromptFallback bool) bool {
-	hasSameRouting := func(item FollowupRun) bool {
+func isRunAlreadyQueued(run types.FollowupRun, items []types.FollowupRun, allowPromptFallback bool) bool {
+	hasSameRouting := func(item types.FollowupRun) bool {
 		return item.OriginatingChannel == run.OriginatingChannel &&
 			item.OriginatingTo == run.OriginatingTo &&
 			item.OriginatingAccountID == run.OriginatingAccountID &&
@@ -123,16 +124,16 @@ func isRunAlreadyQueued(run FollowupRun, items []FollowupRun, allowPromptFallbac
 // Returns true if the run was enqueued, false if it was deduplicated or dropped.
 func (r *FollowupQueueRegistry) EnqueueFollowupRun(
 	key string,
-	run FollowupRun,
-	settings FollowupQueueSettings,
-	dedupeMode FollowupDedupeMode,
+	run types.FollowupRun,
+	settings types.FollowupQueueSettings,
+	dedupeMode types.FollowupDedupeMode,
 	recentIDs *recentMessageIDCache,
 ) bool {
 	queue := r.GetOrCreate(key, settings)
 
 	// Check recent message ID cache (lock-free, cache has its own mutex).
 	var recentKey string
-	if dedupeMode != DedupeNone {
+	if dedupeMode != types.DedupeNone {
 		recentKey = buildRecentMessageIDKey(run, key)
 		if recentKey != "" && recentIDs.peek(recentKey) {
 			return false
@@ -144,8 +145,8 @@ func (r *FollowupQueueRegistry) EnqueueFollowupRun(
 	defer queue.Unlock()
 
 	// Check in-queue deduplication.
-	allowPrompt := dedupeMode == DedupePrompt
-	if dedupeMode != DedupeNone && isRunAlreadyQueued(run, queue.Items, allowPrompt) {
+	allowPrompt := dedupeMode == types.DedupePrompt
+	if dedupeMode != types.DedupeNone && isRunAlreadyQueued(run, queue.Items, allowPrompt) {
 		return false
 	}
 
@@ -155,15 +156,15 @@ func (r *FollowupQueueRegistry) EnqueueFollowupRun(
 	// Apply drop policy if at capacity.
 	if len(queue.Items) >= queue.Cap {
 		switch queue.DropPolicy {
-		case FollowupDropNew:
+		case types.FollowupDropNew:
 			queue.DroppedCount++
 			return false
-		case FollowupDropOld:
+		case types.FollowupDropOld:
 			if len(queue.Items) > 0 {
 				queue.Items = queue.Items[1:]
 			}
 			queue.DroppedCount++
-		case FollowupDropSummarize:
+		case types.FollowupDropSummarize:
 			summary := strings.TrimSpace(run.SummaryLine)
 			if summary == "" {
 				summary = strings.TrimSpace(run.Prompt)

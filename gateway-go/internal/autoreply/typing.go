@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"sync"
 	"time"
 )
@@ -25,7 +26,7 @@ type TypingController struct {
 	intervalMs   int64
 	ttlMs        int64 // auto-stop after TTL expires (default 30000ms)
 	ttlDeadline  time.Time
-	policy       TypingPolicy
+	policy       types.TypingPolicy
 	silentToken  string
 }
 
@@ -36,7 +37,7 @@ type TypingControllerConfig struct {
 	OnCleanup   func() // called on cleanup
 	IntervalMs  int64  // keepalive interval (default 6000ms, matching TS)
 	TtlMs       int64  // typing auto-stop TTL (default 30000ms)
-	Policy      TypingPolicy
+	Policy      types.TypingPolicy
 	SilentToken string // silent reply token (default: NO_REPLY)
 }
 

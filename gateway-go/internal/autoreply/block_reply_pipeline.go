@@ -9,6 +9,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -20,7 +21,7 @@ import (
 // BlockReplyPipelineConfig configures the block reply pipeline.
 type BlockReplyPipelineConfig struct {
 	// OnBlockReply delivers a single payload to the channel.
-	OnBlockReply func(ctx context.Context, payload ReplyPayload) error
+	OnBlockReply func(ctx context.Context, payload types.ReplyPayload) error
 	// TimeoutMs per-payload delivery timeout.
 	TimeoutMs int
 	// Coalescing config (optional). When nil, payloads are sent directly.
@@ -33,24 +34,24 @@ type BlockReplyPipelineConfig struct {
 
 // BlockReplyBufferStrategy allows certain payloads to be buffered until flush.
 type BlockReplyBufferStrategy interface {
-	ShouldBuffer(payload ReplyPayload) bool
-	OnEnqueue(payload ReplyPayload)
-	Finalize(payload ReplyPayload) ReplyPayload
+	ShouldBuffer(payload types.ReplyPayload) bool
+	OnEnqueue(payload types.ReplyPayload)
+	Finalize(payload types.ReplyPayload) types.ReplyPayload
 }
 
 // AudioAsVoiceBuffer buffers audio payloads and applies audioAsVoice flag at finalize.
 type AudioAsVoiceBuffer struct {
 	mu               sync.Mutex
-	isAudioPayload   func(payload ReplyPayload) bool
+	isAudioPayload   func(payload types.ReplyPayload) bool
 	seenAudioAsVoice bool
 }
 
 // NewAudioAsVoiceBuffer creates a new audio buffer strategy.
-func NewAudioAsVoiceBuffer(isAudioPayload func(ReplyPayload) bool) *AudioAsVoiceBuffer {
+func NewAudioAsVoiceBuffer(isAudioPayload func(types.ReplyPayload) bool) *AudioAsVoiceBuffer {
 	return &AudioAsVoiceBuffer{isAudioPayload: isAudioPayload}
 }
 
-func (b *AudioAsVoiceBuffer) OnEnqueue(payload ReplyPayload) {
+func (b *AudioAsVoiceBuffer) OnEnqueue(payload types.ReplyPayload) {
 	if payload.AudioAsVoice {
 		b.mu.Lock()
 		b.seenAudioAsVoice = true
@@ -58,11 +59,11 @@ func (b *AudioAsVoiceBuffer) OnEnqueue(payload ReplyPayload) {
 	}
 }
 
-func (b *AudioAsVoiceBuffer) ShouldBuffer(payload ReplyPayload) bool {
+func (b *AudioAsVoiceBuffer) ShouldBuffer(payload types.ReplyPayload) bool {
 	return b.isAudioPayload(payload)
 }
 
-func (b *AudioAsVoiceBuffer) Finalize(payload ReplyPayload) ReplyPayload {
+func (b *AudioAsVoiceBuffer) Finalize(payload types.ReplyPayload) types.ReplyPayload {
 	b.mu.Lock()
 	seen := b.seenAudioAsVoice
 	b.mu.Unlock()
@@ -74,7 +75,7 @@ func (b *AudioAsVoiceBuffer) Finalize(payload ReplyPayload) ReplyPayload {
 
 // sendItem is queued for sequential delivery.
 type sendItem struct {
-	payload ReplyPayload
+	payload types.ReplyPayload
 	pk      string // payloadKey
 	ck      string // contentKey
 }
@@ -93,7 +94,7 @@ type BlockReplyPipelineFull struct {
 	seenKeys          map[string]bool
 	bufferedKeys      map[string]bool
 	bufferedPayloadKs map[string]bool
-	bufferedPayloads  []ReplyPayload
+	bufferedPayloads  []types.ReplyPayload
 
 	coalescer *BlockReplyCoalescer
 
@@ -128,7 +129,7 @@ func NewBlockReplyPipelineFull(ctx context.Context, cfg BlockReplyPipelineConfig
 	go p.sendLoop()
 
 	if cfg.Coalescing != nil {
-		p.coalescer = NewBlockReplyCoalescer(*cfg.Coalescing, p.IsAborted, func(payload ReplyPayload) {
+		p.coalescer = NewBlockReplyCoalescer(*cfg.Coalescing, p.IsAborted, func(payload types.ReplyPayload) {
 			p.mu.Lock()
 			p.bufferedKeys = make(map[string]bool)
 			p.mu.Unlock()
@@ -191,11 +192,11 @@ func (p *BlockReplyPipelineFull) sendLoop() {
 
 // PayloadKey generates a full dedup key including text, media, and threading.
 // Exported for testing parity with TS createBlockReplyPayloadKey.
-func PayloadKey(p ReplyPayload) string {
+func PayloadKey(p types.ReplyPayload) string {
 	return payloadKey(p)
 }
 
-func payloadKey(p ReplyPayload) string {
+func payloadKey(p types.ReplyPayload) string {
 	text := strings.TrimSpace(p.Text)
 	key := struct {
 		Text      string   `json:"text"`
@@ -215,11 +216,11 @@ func payloadKey(p ReplyPayload) string {
 
 // ContentKey generates a content-only dedup key (ignores threading).
 // Exported for testing parity with TS createBlockReplyContentKey.
-func ContentKey(p ReplyPayload) string {
+func ContentKey(p types.ReplyPayload) string {
 	return contentKey(p)
 }
 
-func contentKey(p ReplyPayload) string {
+func contentKey(p types.ReplyPayload) string {
 	text := strings.TrimSpace(p.Text)
 	key := struct {
 		Text      string   `json:"text"`
@@ -232,7 +233,7 @@ func contentKey(p ReplyPayload) string {
 	return string(b)
 }
 
-func (p *BlockReplyPipelineFull) enqueueSend(payload ReplyPayload, bypassSeenCheck bool) {
+func (p *BlockReplyPipelineFull) enqueueSend(payload types.ReplyPayload, bypassSeenCheck bool) {
 	p.mu.Lock()
 	if p.aborted {
 		p.droppedCount++
@@ -272,7 +273,7 @@ func (p *BlockReplyPipelineFull) enqueueSend(payload ReplyPayload, bypassSeenChe
 	}
 }
 
-func (p *BlockReplyPipelineFull) bufferPayload(payload ReplyPayload) bool {
+func (p *BlockReplyPipelineFull) bufferPayload(payload types.ReplyPayload) bool {
 	if p.cfg.Buffer == nil {
 		return false
 	}
@@ -300,7 +301,7 @@ func (p *BlockReplyPipelineFull) flushBuffered() {
 		p.mu.Unlock()
 		return
 	}
-	payloads := make([]ReplyPayload, len(p.bufferedPayloads))
+	payloads := make([]types.ReplyPayload, len(p.bufferedPayloads))
 	copy(payloads, p.bufferedPayloads)
 	p.bufferedPayloads = p.bufferedPayloads[:0]
 	p.bufferedPayloadKs = make(map[string]bool)
@@ -316,7 +317,7 @@ func (p *BlockReplyPipelineFull) flushBuffered() {
 }
 
 // Enqueue adds a payload to the pipeline for delivery.
-func (p *BlockReplyPipelineFull) Enqueue(payload ReplyPayload) {
+func (p *BlockReplyPipelineFull) Enqueue(payload types.ReplyPayload) {
 	p.mu.Lock()
 	if p.aborted {
 		p.mu.Unlock()
@@ -410,7 +411,7 @@ func (p *BlockReplyPipelineFull) DroppedAfterAbort() int {
 // HasSentPayload checks if a payload with the same content was already sent.
 // Uses content-only key so a streamed threaded payload and the later final
 // payload still collapse when they carry the same content.
-func (p *BlockReplyPipelineFull) HasSentPayload(payload ReplyPayload) bool {
+func (p *BlockReplyPipelineFull) HasSentPayload(payload types.ReplyPayload) bool {
 	ck := contentKey(payload)
 	p.mu.Lock()
 	defer p.mu.Unlock()

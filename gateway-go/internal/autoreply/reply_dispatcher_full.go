@@ -3,6 +3,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"log/slog"
 	"sync"
@@ -24,10 +25,10 @@ func DefaultHumanDelay() HumanDelayConfig {
 // wrapping, idle signaling, and pending count reservation.
 type FullReplyDispatcher struct {
 	mu          sync.Mutex
-	deliver     DeliverFunc
+	deliver     types.DeliverFunc
 	logger      *slog.Logger
 	ctx         context.Context
-	counts      map[ReplyDispatchKind]int
+	counts      map[types.ReplyDispatchKind]int
 	pending     int
 	complete    bool
 	idleCh      chan struct{}
@@ -39,7 +40,7 @@ type FullReplyDispatcher struct {
 
 // FullDispatcherConfig configures the full reply dispatcher.
 type FullDispatcherConfig struct {
-	Deliver     DeliverFunc
+	Deliver     types.DeliverFunc
 	Logger      *slog.Logger
 	HumanDelay  HumanDelayConfig
 	SendTimeout time.Duration
@@ -56,7 +57,7 @@ func NewFullReplyDispatcher(ctx context.Context, cfg FullDispatcherConfig) *Full
 		deliver:     cfg.Deliver,
 		logger:      cfg.Logger,
 		ctx:         ctx,
-		counts:      make(map[ReplyDispatchKind]int),
+		counts:      make(map[types.ReplyDispatchKind]int),
 		idleCh:      make(chan struct{}),
 		humanDelay:  cfg.HumanDelay,
 		sendTimeout: sendTimeout,
@@ -65,21 +66,21 @@ func NewFullReplyDispatcher(ctx context.Context, cfg FullDispatcherConfig) *Full
 }
 
 // SendTool delivers a tool result payload.
-func (d *FullReplyDispatcher) SendTool(payload ReplyPayload) bool {
-	return d.send(payload, DispatchKindTool)
+func (d *FullReplyDispatcher) SendTool(payload types.ReplyPayload) bool {
+	return d.send(payload, types.DispatchKindTool)
 }
 
 // SendBlock delivers a block reply payload (streaming chunk).
-func (d *FullReplyDispatcher) SendBlock(payload ReplyPayload) bool {
-	return d.send(payload, DispatchKindBlock)
+func (d *FullReplyDispatcher) SendBlock(payload types.ReplyPayload) bool {
+	return d.send(payload, types.DispatchKindBlock)
 }
 
 // SendFinal delivers the final reply payload.
-func (d *FullReplyDispatcher) SendFinal(payload ReplyPayload) bool {
-	return d.send(payload, DispatchKindFinal)
+func (d *FullReplyDispatcher) SendFinal(payload types.ReplyPayload) bool {
+	return d.send(payload, types.DispatchKindFinal)
 }
 
-func (d *FullReplyDispatcher) send(payload ReplyPayload, kind ReplyDispatchKind) bool {
+func (d *FullReplyDispatcher) send(payload types.ReplyPayload, kind types.ReplyDispatchKind) bool {
 	d.mu.Lock()
 	if d.complete {
 		d.mu.Unlock()
@@ -173,10 +174,10 @@ func (d *FullReplyDispatcher) WaitForIdle(timeout time.Duration) bool {
 }
 
 // Counts returns the number of sends per dispatch kind.
-func (d *FullReplyDispatcher) Counts() map[ReplyDispatchKind]int {
+func (d *FullReplyDispatcher) Counts() map[types.ReplyDispatchKind]int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	result := make(map[ReplyDispatchKind]int)
+	result := make(map[types.ReplyDispatchKind]int)
 	for k, v := range d.counts {
 		result[k] = v
 	}

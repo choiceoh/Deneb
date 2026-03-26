@@ -3,6 +3,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"fmt"
 	"strings"
 	"sync"
@@ -10,7 +11,7 @@ import (
 )
 
 // FollowupDrainCallback runs a single followup item.
-type FollowupDrainCallback func(run FollowupRun) error
+type FollowupDrainCallback func(run types.FollowupRun) error
 
 // FollowupDrainCallbacks stores the most recent drain callback per queue key
 // so that enqueue can restart a drain that finished and deleted the queue.
@@ -171,7 +172,7 @@ func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, 
 		mode := queue.Mode
 		queue.Unlock()
 
-		if mode == FollowupModeCollect {
+		if mode == types.FollowupModeCollect {
 			if !collectForceIndividual {
 				queue.Lock()
 				isCross := hasCrossChannelItems(queue.Items)
@@ -248,7 +249,7 @@ func (s *FollowupDrainService) trySummaryDrain(key string, queue *FollowupQueueS
 	queue.Items = queue.Items[1:]
 	queue.Unlock()
 
-	err := runFollowup(FollowupRun{
+	err := runFollowup(types.FollowupRun{
 		Prompt:               summaryPrompt,
 		Run:                  lastRun,
 		EnqueuedAt:           time.Now().UnixMilli(),
@@ -276,7 +277,7 @@ func (s *FollowupDrainService) drainCollect(queue *FollowupQueueState, runFollow
 	}
 
 	// Snapshot items for the batch.
-	items := make([]FollowupRun, len(queue.Items))
+	items := make([]types.FollowupRun, len(queue.Items))
 	copy(items, queue.Items)
 	run := queue.LastRun
 	if len(items) > 0 && items[len(items)-1].Run != nil {
@@ -301,7 +302,7 @@ func (s *FollowupDrainService) drainCollect(queue *FollowupQueueState, runFollow
 	routing := resolveOriginRoutingMetadata(items)
 
 	// Execute callback without holding the lock.
-	err := runFollowup(FollowupRun{
+	err := runFollowup(types.FollowupRun{
 		Prompt:               strings.Join(lines, "\n"),
 		Run:                  run,
 		EnqueuedAt:           time.Now().UnixMilli(),
@@ -339,7 +340,7 @@ type originRoutingMetadata struct {
 }
 
 // resolveOriginRoutingMetadata picks the first non-empty routing from items.
-func resolveOriginRoutingMetadata(items []FollowupRun) originRoutingMetadata {
+func resolveOriginRoutingMetadata(items []types.FollowupRun) originRoutingMetadata {
 	var result originRoutingMetadata
 	for _, item := range items {
 		if result.OriginatingChannel == "" && item.OriginatingChannel != "" {
@@ -381,7 +382,7 @@ func clearFollowupSummaryState(state *FollowupQueueState) {
 
 // hasCrossChannelItems returns true if items target different channel/to/account/thread combinations.
 // Caller must hold queue.mu.
-func hasCrossChannelItems(items []FollowupRun) bool {
+func hasCrossChannelItems(items []types.FollowupRun) bool {
 	if len(items) <= 1 {
 		return false
 	}
@@ -395,7 +396,7 @@ func hasCrossChannelItems(items []FollowupRun) bool {
 }
 
 // crossChannelKey builds a routing key for cross-channel comparison.
-func crossChannelKey(item FollowupRun) string {
+func crossChannelKey(item types.FollowupRun) string {
 	return item.OriginatingChannel + "|" + item.OriginatingTo + "|" +
 		item.OriginatingAccountID + "|" + item.OriginatingThreadID
 }

@@ -1,6 +1,4 @@
-// queue_types.go — Extended queue types for the followup queue system.
-// Mirrors src/auto-reply/reply/queue/types.ts (94 LOC).
-package autoreply
+package types
 
 // FollowupQueueMode defines how followup messages are processed.
 // This extends the simpler QueueMode used in the basic message queue.

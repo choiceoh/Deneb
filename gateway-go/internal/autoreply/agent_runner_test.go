@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"fmt"
 	"testing"
@@ -90,7 +91,7 @@ func TestDefaultAgentRunner_ToolExecution(t *testing.T) {
 		SessionKey:    "test",
 		Model:         "test-model",
 		Message:       "List files",
-		ElevatedLevel: ElevatedOn,
+		ElevatedLevel: types.ElevatedOn,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +127,7 @@ func TestDefaultAgentRunner_ElevatedBlocked(t *testing.T) {
 		SessionKey:    "test",
 		Model:         "test-model",
 		Message:       "run something",
-		ElevatedLevel: ElevatedOff, // blocked
+		ElevatedLevel: types.ElevatedOff, // blocked
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -218,7 +219,7 @@ func TestAgentRunnerMemory_CompactWithSummary(t *testing.T) {
 func TestBuildAgentPayload_ThinkingConfig(t *testing.T) {
 	cfg := AgentTurnConfig{
 		Model:      "claude-3",
-		ThinkLevel: ThinkHigh,
+		ThinkLevel: types.ThinkHigh,
 		MaxTokens:  4096,
 	}
 	payload := BuildAgentPayload(cfg, nil, nil)

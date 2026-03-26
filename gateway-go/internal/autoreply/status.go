@@ -3,6 +3,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"fmt"
 	"strings"
 )
@@ -15,13 +16,13 @@ type StatusReport struct {
 	Provider        string
 	Channel         string
 	IsGroup         bool
-	ThinkLevel      ThinkLevel
+	ThinkLevel      types.ThinkLevel
 	FastMode        bool
-	VerboseLevel    VerboseLevel
-	ReasoningLevel  ReasoningLevel
-	ElevatedLevel   ElevatedLevel
+	VerboseLevel    types.VerboseLevel
+	ReasoningLevel  types.ReasoningLevel
+	ElevatedLevel   types.ElevatedLevel
 	SendPolicy      string
-	GroupActivation GroupActivationMode
+	GroupActivation types.GroupActivationMode
 	Usage           *SessionUsage
 	RunCount        int
 }
@@ -41,19 +42,19 @@ func BuildStatusMessage(report StatusReport) string {
 
 	// Mode settings.
 	var modes []string
-	if report.ThinkLevel != "" && report.ThinkLevel != ThinkOff {
+	if report.ThinkLevel != "" && report.ThinkLevel != types.ThinkOff {
 		modes = append(modes, fmt.Sprintf("Think: %s", report.ThinkLevel))
 	}
 	if report.FastMode {
 		modes = append(modes, "Fast: on")
 	}
-	if report.VerboseLevel != "" && report.VerboseLevel != VerboseOff {
+	if report.VerboseLevel != "" && report.VerboseLevel != types.VerboseOff {
 		modes = append(modes, fmt.Sprintf("Verbose: %s", report.VerboseLevel))
 	}
-	if report.ReasoningLevel != "" && report.ReasoningLevel != ReasoningOff {
+	if report.ReasoningLevel != "" && report.ReasoningLevel != types.ReasoningOff {
 		modes = append(modes, fmt.Sprintf("Reasoning: %s", report.ReasoningLevel))
 	}
-	if report.ElevatedLevel != "" && report.ElevatedLevel != ElevatedOff {
+	if report.ElevatedLevel != "" && report.ElevatedLevel != types.ElevatedOff {
 		modes = append(modes, fmt.Sprintf("Elevated: %s", report.ElevatedLevel))
 	}
 	if len(modes) > 0 {

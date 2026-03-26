@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"regexp"
 	"strings"
 )
@@ -46,7 +47,7 @@ func matchesExactOrPrefix(modelID string, ids []string) bool {
 //
 // Mirrors src/auto-reply/thinking.shared.ts supportsBuiltInXHighThinking().
 func SupportsBuiltInXHighThinking(provider, model string) bool {
-	providerID := NormalizeProviderId(provider)
+	providerID := types.NormalizeProviderId(provider)
 	modelID := strings.ToLower(strings.TrimSpace(model))
 	if providerID == "" || modelID == "" {
 		return false
@@ -67,14 +68,14 @@ func SupportsBuiltInXHighThinking(provider, model string) bool {
 }
 
 // ListThinkingLevels returns available thinking levels, optionally including xhigh.
-func ListThinkingLevels(provider, model string) []ThinkLevel {
-	levels := make([]ThinkLevel, len(BaseThinkingLevels()))
-	copy(levels, BaseThinkingLevels())
+func ListThinkingLevels(provider, model string) []types.ThinkLevel {
+	levels := make([]types.ThinkLevel, len(types.BaseThinkingLevels()))
+	copy(levels, types.BaseThinkingLevels())
 	if SupportsBuiltInXHighThinking(provider, model) {
 		// Insert xhigh before the last element (adaptive).
-		result := make([]ThinkLevel, 0, len(levels)+1)
+		result := make([]types.ThinkLevel, 0, len(levels)+1)
 		result = append(result, levels[:len(levels)-1]...)
-		result = append(result, ThinkXHigh)
+		result = append(result, types.ThinkXHigh)
 		result = append(result, levels[len(levels)-1])
 		return result
 	}
@@ -83,7 +84,7 @@ func ListThinkingLevels(provider, model string) []ThinkLevel {
 
 // ListThinkingLevelLabelsWithModel returns labels considering both provider and model.
 func ListThinkingLevelLabelsWithModel(provider, model string) []string {
-	if IsBinaryThinkingProvider(provider) {
+	if types.IsBinaryThinkingProvider(provider) {
 		return []string{"off", "on"}
 	}
 	levels := ListThinkingLevels(provider, model)
@@ -111,34 +112,34 @@ func FormatXHighModelHint() string {
 // provider/model combination.
 //
 // Mirrors src/auto-reply/thinking.shared.ts resolveThinkingDefaultForModel().
-func ResolveThinkingDefaultForModel(provider, model string, catalog []ThinkingCatalogEntry) ThinkLevel {
-	normalizedProvider := NormalizeProviderId(provider)
+func ResolveThinkingDefaultForModel(provider, model string, catalog []ThinkingCatalogEntry) types.ThinkLevel {
+	normalizedProvider := types.NormalizeProviderId(provider)
 	modelID := strings.TrimSpace(model)
 
 	// Anthropic Claude 4.6+ defaults to adaptive.
 	if normalizedProvider == "anthropic" && anthropicClaude46ModelRe.MatchString(modelID) {
-		return ThinkAdaptive
+		return types.ThinkAdaptive
 	}
 	// Amazon Bedrock Claude 4.6+ defaults to adaptive.
 	if normalizedProvider == "amazon-bedrock" && amazonBedrockClaude46ModelRe.MatchString(modelID) {
-		return ThinkAdaptive
+		return types.ThinkAdaptive
 	}
 
 	// Check catalog for reasoning flag.
 	for _, entry := range catalog {
 		if entry.Provider == provider && entry.ID == model && entry.Reasoning {
-			return ThinkLow
+			return types.ThinkLow
 		}
 	}
 
-	return ThinkOff
+	return types.ThinkOff
 }
 
 // ResolveResponseUsageMode resolves the usage display mode, defaulting to "off".
-func ResolveResponseUsageMode(raw string) UsageDisplayLevel {
-	level, ok := NormalizeUsageDisplay(raw)
+func ResolveResponseUsageMode(raw string) types.UsageDisplayLevel {
+	level, ok := types.NormalizeUsageDisplay(raw)
 	if !ok {
-		return UsageOff
+		return types.UsageOff
 	}
 	return level
 }

@@ -1,26 +1,27 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"sync"
 	"testing"
 	"time"
 )
 
 func TestBlockReplyCoalescer_BasicFlush(t *testing.T) {
-	var flushed []ReplyPayload
+	var flushed []types.ReplyPayload
 	var mu sync.Mutex
 
 	c := NewBlockReplyCoalescer(BlockStreamingCoalescing{
 		MinChars: 10,
 		MaxChars: 100,
 		IdleMs:   0,
-	}, func() bool { return false }, func(p ReplyPayload) {
+	}, func() bool { return false }, func(p types.ReplyPayload) {
 		mu.Lock()
 		flushed = append(flushed, p)
 		mu.Unlock()
 	})
 
-	c.Enqueue(ReplyPayload{Text: "hello world this is a test"})
+	c.Enqueue(types.ReplyPayload{Text: "hello world this is a test"})
 	c.Flush(true)
 
 	mu.Lock()
@@ -34,17 +35,17 @@ func TestBlockReplyCoalescer_BasicFlush(t *testing.T) {
 }
 
 func TestBlockReplyCoalescer_MediaFlushesImmediately(t *testing.T) {
-	var flushed []ReplyPayload
+	var flushed []types.ReplyPayload
 	c := NewBlockReplyCoalescer(BlockStreamingCoalescing{
 		MinChars: 100,
 		MaxChars: 200,
 		IdleMs:   0,
-	}, func() bool { return false }, func(p ReplyPayload) {
+	}, func() bool { return false }, func(p types.ReplyPayload) {
 		flushed = append(flushed, p)
 	})
 
-	c.Enqueue(ReplyPayload{Text: "buffered text"})
-	c.Enqueue(ReplyPayload{MediaURL: "https://example.com/image.png"})
+	c.Enqueue(types.ReplyPayload{Text: "buffered text"})
+	c.Enqueue(types.ReplyPayload{MediaURL: "https://example.com/image.png"})
 
 	// The buffered text should have been flushed before media, and media sent directly.
 	if len(flushed) < 2 {
@@ -53,18 +54,18 @@ func TestBlockReplyCoalescer_MediaFlushesImmediately(t *testing.T) {
 }
 
 func TestBlockReplyCoalescer_CoalescesText(t *testing.T) {
-	var flushed []ReplyPayload
+	var flushed []types.ReplyPayload
 	c := NewBlockReplyCoalescer(BlockStreamingCoalescing{
 		MinChars: 20,
 		MaxChars: 200,
 		IdleMs:   0,
 		Joiner:   "\n",
-	}, func() bool { return false }, func(p ReplyPayload) {
+	}, func() bool { return false }, func(p types.ReplyPayload) {
 		flushed = append(flushed, p)
 	})
 
-	c.Enqueue(ReplyPayload{Text: "hello"})
-	c.Enqueue(ReplyPayload{Text: "world"})
+	c.Enqueue(types.ReplyPayload{Text: "hello"})
+	c.Enqueue(types.ReplyPayload{Text: "world"})
 	c.Flush(true)
 
 	if len(flushed) != 1 {
@@ -76,17 +77,17 @@ func TestBlockReplyCoalescer_CoalescesText(t *testing.T) {
 }
 
 func TestBlockReplyCoalescer_MaxCharsForceFlush(t *testing.T) {
-	var flushed []ReplyPayload
+	var flushed []types.ReplyPayload
 	c := NewBlockReplyCoalescer(BlockStreamingCoalescing{
 		MinChars: 1,
 		MaxChars: 10,
 		IdleMs:   0,
-	}, func() bool { return false }, func(p ReplyPayload) {
+	}, func() bool { return false }, func(p types.ReplyPayload) {
 		flushed = append(flushed, p)
 	})
 
-	c.Enqueue(ReplyPayload{Text: "12345"})
-	c.Enqueue(ReplyPayload{Text: "67890"})
+	c.Enqueue(types.ReplyPayload{Text: "12345"})
+	c.Enqueue(types.ReplyPayload{Text: "67890"})
 
 	// Should flush when exceeding maxChars.
 	if len(flushed) < 1 {
@@ -95,18 +96,18 @@ func TestBlockReplyCoalescer_MaxCharsForceFlush(t *testing.T) {
 }
 
 func TestBlockReplyCoalescer_FlushOnEnqueue(t *testing.T) {
-	var flushed []ReplyPayload
+	var flushed []types.ReplyPayload
 	c := NewBlockReplyCoalescer(BlockStreamingCoalescing{
 		MinChars:       1,
 		MaxChars:       1000,
 		IdleMs:         0,
 		FlushOnEnqueue: true,
-	}, func() bool { return false }, func(p ReplyPayload) {
+	}, func() bool { return false }, func(p types.ReplyPayload) {
 		flushed = append(flushed, p)
 	})
 
-	c.Enqueue(ReplyPayload{Text: "one"})
-	c.Enqueue(ReplyPayload{Text: "two"})
+	c.Enqueue(types.ReplyPayload{Text: "one"})
+	c.Enqueue(types.ReplyPayload{Text: "two"})
 
 	if len(flushed) != 2 {
 		t.Fatalf("expected 2 flushed payloads (flush on enqueue), got %d", len(flushed))
@@ -114,17 +115,17 @@ func TestBlockReplyCoalescer_FlushOnEnqueue(t *testing.T) {
 }
 
 func TestBlockReplyCoalescer_ReplyToConflict(t *testing.T) {
-	var flushed []ReplyPayload
+	var flushed []types.ReplyPayload
 	c := NewBlockReplyCoalescer(BlockStreamingCoalescing{
 		MinChars: 1,
 		MaxChars: 1000,
 		IdleMs:   0,
-	}, func() bool { return false }, func(p ReplyPayload) {
+	}, func() bool { return false }, func(p types.ReplyPayload) {
 		flushed = append(flushed, p)
 	})
 
-	c.Enqueue(ReplyPayload{Text: "hello", ReplyToID: "msg-1"})
-	c.Enqueue(ReplyPayload{Text: "world", ReplyToID: "msg-2"})
+	c.Enqueue(types.ReplyPayload{Text: "hello", ReplyToID: "msg-1"})
+	c.Enqueue(types.ReplyPayload{Text: "world", ReplyToID: "msg-2"})
 	c.Flush(true)
 
 	// Should flush separately due to reply-to conflict.
@@ -135,18 +136,18 @@ func TestBlockReplyCoalescer_ReplyToConflict(t *testing.T) {
 
 func TestBlockReplyCoalescer_Abort(t *testing.T) {
 	aborted := false
-	var flushed []ReplyPayload
+	var flushed []types.ReplyPayload
 	c := NewBlockReplyCoalescer(BlockStreamingCoalescing{
 		MinChars: 1,
 		MaxChars: 1000,
 		IdleMs:   0,
-	}, func() bool { return aborted }, func(p ReplyPayload) {
+	}, func() bool { return aborted }, func(p types.ReplyPayload) {
 		flushed = append(flushed, p)
 	})
 
-	c.Enqueue(ReplyPayload{Text: "before abort"})
+	c.Enqueue(types.ReplyPayload{Text: "before abort"})
 	aborted = true
-	c.Enqueue(ReplyPayload{Text: "after abort"})
+	c.Enqueue(types.ReplyPayload{Text: "after abort"})
 	c.Flush(true)
 
 	// Only the first payload should be flushed (buffer cleared on abort).
@@ -156,20 +157,20 @@ func TestBlockReplyCoalescer_Abort(t *testing.T) {
 }
 
 func TestBlockReplyCoalescer_IdleTimer(t *testing.T) {
-	var flushed []ReplyPayload
+	var flushed []types.ReplyPayload
 	var mu sync.Mutex
 
 	c := NewBlockReplyCoalescer(BlockStreamingCoalescing{
 		MinChars: 3, // Low threshold so idle flush succeeds.
 		MaxChars: 1000,
 		IdleMs:   50, // 50ms idle timer.
-	}, func() bool { return false }, func(p ReplyPayload) {
+	}, func() bool { return false }, func(p types.ReplyPayload) {
 		mu.Lock()
 		flushed = append(flushed, p)
 		mu.Unlock()
 	})
 
-	c.Enqueue(ReplyPayload{Text: "short"})
+	c.Enqueue(types.ReplyPayload{Text: "short"})
 
 	// Wait for idle timer.
 	time.Sleep(150 * time.Millisecond)

@@ -7,6 +7,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"fmt"
 	"time"
 )
@@ -15,19 +16,19 @@ import (
 type SessionUpdate struct {
 	Model           *string
 	Provider        *string
-	ThinkLevel      *ThinkLevel
+	ThinkLevel      *types.ThinkLevel
 	FastMode        *bool
-	VerboseLevel    *VerboseLevel
-	ReasoningLevel  *ReasoningLevel
-	ElevatedLevel   *ElevatedLevel
+	VerboseLevel    *types.VerboseLevel
+	ReasoningLevel  *types.ReasoningLevel
+	ElevatedLevel   *types.ElevatedLevel
 	SendPolicy      *string
-	GroupActivation *GroupActivationMode
+	GroupActivation *types.GroupActivationMode
 	SystemPrompt    *string
 	Label           *string
 }
 
 // ApplySessionUpdate applies an update to a session state.
-func ApplySessionUpdate(session *SessionState, update SessionUpdate) {
+func ApplySessionUpdate(session *types.SessionState, update SessionUpdate) {
 	if update.Model != nil {
 		session.Model = *update.Model
 	}
@@ -67,7 +68,7 @@ type SessionForkParams struct {
 }
 
 // ForkSession creates a new session based on a parent session.
-func ForkSession(parent *SessionState, params SessionForkParams) *SessionState {
+func ForkSession(parent *types.SessionState, params SessionForkParams) *types.SessionState {
 	forked := *parent
 	forked.SessionKey = params.NewKey
 	forked.IsNew = true
@@ -82,14 +83,14 @@ func ForkSession(parent *SessionState, params SessionForkParams) *SessionState {
 }
 
 // ResetSessionModel clears the model override on a session.
-func ResetSessionModel(session *SessionState) {
+func ResetSessionModel(session *types.SessionState) {
 	session.Model = ""
 	session.Provider = ""
 	session.UpdatedAt = time.Now().UnixMilli()
 }
 
 // ResetSessionPrompt clears the system prompt override on a session.
-func ResetSessionPrompt(session *SessionState) {
+func ResetSessionPrompt(session *types.SessionState) {
 	session.UpdatedAt = time.Now().UnixMilli()
 }
 
@@ -163,7 +164,7 @@ type SessionDelivery struct {
 }
 
 // BuildSessionDelivery creates delivery info from session state.
-func BuildSessionDelivery(session *SessionState, msg *MsgContext) SessionDelivery {
+func BuildSessionDelivery(session *types.SessionState, msg *types.MsgContext) SessionDelivery {
 	delivery := SessionDelivery{
 		Channel:   session.Channel,
 		To:        msg.To,

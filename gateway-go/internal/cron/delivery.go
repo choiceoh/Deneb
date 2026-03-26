@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
 
@@ -140,7 +141,7 @@ func DeliverCronOutput(
 	ctx context.Context,
 	channels *channel.Registry,
 	target DeliveryTarget,
-	payloads []autoreply.ReplyPayload,
+	payloads []types.ReplyPayload,
 	opts DeliverOutputOptions,
 ) DeliveryResult {
 	start := time.Now()

@@ -10,6 +10,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"regexp"
 	"strings"
 )
@@ -72,7 +73,7 @@ type TelegramContext struct {
 }
 
 // ExtractInboundText extracts the text body from an inbound message context.
-func ExtractInboundText(msg *MsgContext) string {
+func ExtractInboundText(msg *types.MsgContext) string {
 	if msg.Body != "" {
 		return msg.Body
 	}
@@ -125,7 +126,7 @@ type ReplyThreading struct {
 }
 
 // ResolveReplyThreading determines the threading for a reply payload.
-func ResolveReplyThreading(payload ReplyPayload, msg *MsgContext) ReplyThreading {
+func ResolveReplyThreading(payload types.ReplyPayload, msg *types.MsgContext) ReplyThreading {
 	threading := ReplyThreading{}
 
 	// Check for explicit reply-to tag.

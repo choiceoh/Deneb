@@ -1,4 +1,6 @@
-package autoreply
+// Package types defines shared data types for the autoreply subsystem.
+// These are pure value types with no dependencies on autoreply internals.
+package types
 
 import (
 	"regexp"

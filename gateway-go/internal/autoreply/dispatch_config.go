@@ -6,6 +6,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"sync"
 )
@@ -22,18 +23,18 @@ type DispatchConfig struct {
 	Provider     string
 	IsGroup      bool
 	IsHeartbeat  bool
-	ReplyOptions GetReplyOptions
+	ReplyOptions types.GetReplyOptions
 }
 
 // DispatchResult holds the outcome of a full dispatch cycle.
 type DispatchResult struct {
-	Payloads []ReplyPayload
+	Payloads []types.ReplyPayload
 	Handled  bool
 	Error    error
 }
 
 // DispatchFromConfig runs the full reply dispatch pipeline from config.
-func DispatchFromConfig(ctx context.Context, msg *MsgContext, cfg DispatchConfig, deps ReplyDeps) DispatchResult {
+func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg DispatchConfig, deps ReplyDeps) DispatchResult {
 	// 1. Check for abort trigger.
 	if IsAbortRequestText(msg.Body) {
 		return DispatchResult{Handled: true}
@@ -55,9 +56,9 @@ func DispatchFromConfig(ctx context.Context, msg *MsgContext, cfg DispatchConfig
 				Msg:        msg,
 			})
 			if err == nil && result != nil && result.SkipAgent {
-				var payloads []ReplyPayload
+				var payloads []types.ReplyPayload
 				if result.Reply != "" {
-					payloads = append(payloads, ReplyPayload{Text: result.Reply, IsError: result.IsError})
+					payloads = append(payloads, types.ReplyPayload{Text: result.Reply, IsError: result.IsError})
 				}
 				payloads = append(payloads, result.Payloads...)
 				return DispatchResult{Payloads: payloads, Handled: true}
@@ -96,7 +97,7 @@ type OriginRouting struct {
 }
 
 // ResolveOriginRouting extracts routing info from the inbound message.
-func ResolveOriginRouting(msg *MsgContext) OriginRouting {
+func ResolveOriginRouting(msg *types.MsgContext) OriginRouting {
 	return OriginRouting{
 		Channel:   msg.Channel,
 		To:        msg.To,
@@ -154,8 +155,8 @@ func NewFollowupRunner(agent AgentExecutor, maxTurns int) *FollowupRunner {
 }
 
 // RunFollowups executes follow-up turns until the agent signals completion.
-func (f *FollowupRunner) RunFollowups(ctx context.Context, initial AgentTurnConfig, firstResult *AgentTurnResult) ([]ReplyPayload, error) {
-	allPayloads := make([]ReplyPayload, 0)
+func (f *FollowupRunner) RunFollowups(ctx context.Context, initial AgentTurnConfig, firstResult *AgentTurnResult) ([]types.ReplyPayload, error) {
+	allPayloads := make([]types.ReplyPayload, 0)
 	allPayloads = append(allPayloads, firstResult.Payloads...)
 
 	for turn := 1; turn < f.maxTurns; turn++ {

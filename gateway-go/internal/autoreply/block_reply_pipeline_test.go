@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"fmt"
 	"sync"
@@ -10,10 +11,10 @@ import (
 
 func TestBlockReplyPipelineFull_BasicSend(t *testing.T) {
 	var mu sync.Mutex
-	var sent []ReplyPayload
+	var sent []types.ReplyPayload
 	ctx := context.Background()
 	p := NewBlockReplyPipelineFull(ctx, BlockReplyPipelineConfig{
-		OnBlockReply: func(_ context.Context, payload ReplyPayload) error {
+		OnBlockReply: func(_ context.Context, payload types.ReplyPayload) error {
 			mu.Lock()
 			sent = append(sent, payload)
 			mu.Unlock()
@@ -22,7 +23,7 @@ func TestBlockReplyPipelineFull_BasicSend(t *testing.T) {
 		TimeoutMs: 5000,
 	})
 
-	p.Enqueue(ReplyPayload{Text: "hello"})
+	p.Enqueue(types.ReplyPayload{Text: "hello"})
 	p.FlushAndWait(true)
 
 	if len(sent) != 1 {
@@ -42,7 +43,7 @@ func TestBlockReplyPipelineFull_SequentialDelivery(t *testing.T) {
 	var order []int
 	ctx := context.Background()
 	p := NewBlockReplyPipelineFull(ctx, BlockReplyPipelineConfig{
-		OnBlockReply: func(_ context.Context, payload ReplyPayload) error {
+		OnBlockReply: func(_ context.Context, payload types.ReplyPayload) error {
 			// Small delay to make ordering visible.
 			time.Sleep(5 * time.Millisecond)
 			mu.Lock()
@@ -56,7 +57,7 @@ func TestBlockReplyPipelineFull_SequentialDelivery(t *testing.T) {
 	})
 
 	for i := 0; i < 5; i++ {
-		p.Enqueue(ReplyPayload{Text: fmt.Sprintf("msg-%d", i)})
+		p.Enqueue(types.ReplyPayload{Text: fmt.Sprintf("msg-%d", i)})
 	}
 	p.FlushAndWait(true)
 
@@ -74,10 +75,10 @@ func TestBlockReplyPipelineFull_SequentialDelivery(t *testing.T) {
 
 func TestBlockReplyPipelineFull_Dedup(t *testing.T) {
 	var mu sync.Mutex
-	var sent []ReplyPayload
+	var sent []types.ReplyPayload
 	ctx := context.Background()
 	p := NewBlockReplyPipelineFull(ctx, BlockReplyPipelineConfig{
-		OnBlockReply: func(_ context.Context, payload ReplyPayload) error {
+		OnBlockReply: func(_ context.Context, payload types.ReplyPayload) error {
 			mu.Lock()
 			sent = append(sent, payload)
 			mu.Unlock()
@@ -86,8 +87,8 @@ func TestBlockReplyPipelineFull_Dedup(t *testing.T) {
 		TimeoutMs: 5000,
 	})
 
-	p.Enqueue(ReplyPayload{Text: "hello"})
-	p.Enqueue(ReplyPayload{Text: "hello"}) // duplicate
+	p.Enqueue(types.ReplyPayload{Text: "hello"})
+	p.Enqueue(types.ReplyPayload{Text: "hello"}) // duplicate
 	p.FlushAndWait(true)
 
 	if len(sent) != 1 {
@@ -98,10 +99,10 @@ func TestBlockReplyPipelineFull_Dedup(t *testing.T) {
 func TestBlockReplyPipelineFull_DifferentThreadingNotDeduped(t *testing.T) {
 	// Same text with different replyToId should be sent separately.
 	var mu sync.Mutex
-	var sent []ReplyPayload
+	var sent []types.ReplyPayload
 	ctx := context.Background()
 	p := NewBlockReplyPipelineFull(ctx, BlockReplyPipelineConfig{
-		OnBlockReply: func(_ context.Context, payload ReplyPayload) error {
+		OnBlockReply: func(_ context.Context, payload types.ReplyPayload) error {
 			mu.Lock()
 			sent = append(sent, payload)
 			mu.Unlock()
@@ -110,8 +111,8 @@ func TestBlockReplyPipelineFull_DifferentThreadingNotDeduped(t *testing.T) {
 		TimeoutMs: 5000,
 	})
 
-	p.Enqueue(ReplyPayload{Text: "response text", ReplyToID: "thread-root-1"})
-	p.Enqueue(ReplyPayload{Text: "response text"})
+	p.Enqueue(types.ReplyPayload{Text: "response text", ReplyToID: "thread-root-1"})
+	p.Enqueue(types.ReplyPayload{Text: "response text"})
 	p.FlushAndWait(true)
 
 	if len(sent) != 2 {
@@ -122,37 +123,37 @@ func TestBlockReplyPipelineFull_DifferentThreadingNotDeduped(t *testing.T) {
 func TestBlockReplyPipelineFull_HasSentPayloadIgnoresThreading(t *testing.T) {
 	ctx := context.Background()
 	p := NewBlockReplyPipelineFull(ctx, BlockReplyPipelineConfig{
-		OnBlockReply: func(_ context.Context, _ ReplyPayload) error { return nil },
+		OnBlockReply: func(_ context.Context, _ types.ReplyPayload) error { return nil },
 		TimeoutMs:    5000,
 	})
 
-	p.Enqueue(ReplyPayload{Text: "response text", ReplyToID: "thread-root-1"})
+	p.Enqueue(types.ReplyPayload{Text: "response text", ReplyToID: "thread-root-1"})
 	p.FlushAndWait(true)
 
 	// Content-only key should match regardless of replyToId.
-	if !p.HasSentPayload(ReplyPayload{Text: "response text"}) {
+	if !p.HasSentPayload(types.ReplyPayload{Text: "response text"}) {
 		t.Fatal("expected HasSentPayload to match without replyToId")
 	}
-	if !p.HasSentPayload(ReplyPayload{Text: "response text", ReplyToID: "other-id"}) {
+	if !p.HasSentPayload(types.ReplyPayload{Text: "response text", ReplyToID: "other-id"}) {
 		t.Fatal("expected HasSentPayload to match with different replyToId")
 	}
-	if p.HasSentPayload(ReplyPayload{Text: "different text"}) {
+	if p.HasSentPayload(types.ReplyPayload{Text: "different text"}) {
 		t.Fatal("expected HasSentPayload to not match different content")
 	}
 }
 
 func TestPayloadKey_WhitespaceTrimming(t *testing.T) {
-	a := PayloadKey(ReplyPayload{Text: "  hello  "})
-	b := PayloadKey(ReplyPayload{Text: "hello"})
+	a := PayloadKey(types.ReplyPayload{Text: "  hello  "})
+	b := PayloadKey(types.ReplyPayload{Text: "hello"})
 	if a != b {
 		t.Fatal("payload keys should be equal after whitespace trimming")
 	}
 }
 
 func TestPayloadKey_DifferentThreading(t *testing.T) {
-	p1 := ReplyPayload{Text: "hello", ReplyToID: "msg-1"}
-	p2 := ReplyPayload{Text: "hello", ReplyToID: "msg-2"}
-	p3 := ReplyPayload{Text: "hello"}
+	p1 := types.ReplyPayload{Text: "hello", ReplyToID: "msg-1"}
+	p2 := types.ReplyPayload{Text: "hello", ReplyToID: "msg-2"}
+	p3 := types.ReplyPayload{Text: "hello"}
 
 	k1 := PayloadKey(p1)
 	k2 := PayloadKey(p2)
@@ -167,17 +168,17 @@ func TestPayloadKey_DifferentThreading(t *testing.T) {
 }
 
 func TestPayloadKey_DifferentMedia(t *testing.T) {
-	a := PayloadKey(ReplyPayload{Text: "hello", MediaURLs: []string{"file:///a.png"}})
-	b := PayloadKey(ReplyPayload{Text: "hello", MediaURLs: []string{"file:///b.png"}})
+	a := PayloadKey(types.ReplyPayload{Text: "hello", MediaURLs: []string{"file:///a.png"}})
+	b := PayloadKey(types.ReplyPayload{Text: "hello", MediaURLs: []string{"file:///b.png"}})
 	if a == b {
 		t.Fatal("different media should produce different payload keys")
 	}
 }
 
 func TestContentKey_IgnoresThreading(t *testing.T) {
-	p1 := ReplyPayload{Text: "hello", ReplyToID: "msg-1"}
-	p2 := ReplyPayload{Text: "hello", ReplyToID: "msg-2"}
-	p3 := ReplyPayload{Text: "hello"}
+	p1 := types.ReplyPayload{Text: "hello", ReplyToID: "msg-1"}
+	p2 := types.ReplyPayload{Text: "hello", ReplyToID: "msg-2"}
+	p3 := types.ReplyPayload{Text: "hello"}
 
 	c1 := ContentKey(p1)
 	c2 := ContentKey(p2)

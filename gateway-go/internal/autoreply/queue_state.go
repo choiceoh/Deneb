@@ -3,13 +3,14 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"sync"
 )
 
 const (
 	DefaultFollowupDebounceMs = 1000
 	DefaultFollowupCap        = 20
-	DefaultFollowupDrop       = FollowupDropSummarize
+	DefaultFollowupDrop       = types.FollowupDropSummarize
 )
 
 // FollowupQueueState tracks the runtime state of a single followup queue.
@@ -17,16 +18,16 @@ const (
 // enqueue caller and the drain goroutine.
 type FollowupQueueState struct {
 	mu             sync.Mutex          `json:"-"`
-	Items          []FollowupRun       `json:"items"`
+	Items          []types.FollowupRun       `json:"items"`
 	Draining       bool                `json:"draining"`
 	LastEnqueuedAt int64               `json:"lastEnqueuedAt"`
-	Mode           FollowupQueueMode   `json:"mode"`
+	Mode           types.FollowupQueueMode   `json:"mode"`
 	DebounceMs     int                 `json:"debounceMs"`
 	Cap            int                 `json:"cap"`
-	DropPolicy     FollowupDropPolicy  `json:"dropPolicy"`
+	DropPolicy     types.FollowupDropPolicy  `json:"dropPolicy"`
 	DroppedCount   int                 `json:"droppedCount"`
 	SummaryLines   []string            `json:"summaryLines"`
-	LastRun        *FollowupRunContext `json:"lastRun,omitempty"`
+	LastRun        *types.FollowupRunContext `json:"lastRun,omitempty"`
 }
 
 // Lock acquires the per-queue mutex.
@@ -61,7 +62,7 @@ func (r *FollowupQueueRegistry) GetExisting(key string) *FollowupQueueState {
 
 // GetOrCreate returns an existing queue or creates one with the given settings.
 // The returned queue is NOT locked; callers must lock before accessing fields.
-func (r *FollowupQueueRegistry) GetOrCreate(key string, settings FollowupQueueSettings) *FollowupQueueState {
+func (r *FollowupQueueRegistry) GetOrCreate(key string, settings types.FollowupQueueSettings) *FollowupQueueState {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -87,7 +88,7 @@ func (r *FollowupQueueRegistry) GetOrCreate(key string, settings FollowupQueueSe
 	}
 
 	created := &FollowupQueueState{
-		Items:        make([]FollowupRun, 0),
+		Items:        make([]types.FollowupRun, 0),
 		Mode:         settings.Mode,
 		DebounceMs:   debounce,
 		Cap:          cap,
@@ -147,7 +148,7 @@ func (r *FollowupQueueRegistry) Depth(key string) int {
 
 // applyFollowupQueueSettings updates a queue's runtime settings.
 // Caller must hold q.mu.
-func applyFollowupQueueSettings(state *FollowupQueueState, settings FollowupQueueSettings) {
+func applyFollowupQueueSettings(state *FollowupQueueState, settings types.FollowupQueueSettings) {
 	if settings.Mode != "" {
 		state.Mode = settings.Mode
 	}

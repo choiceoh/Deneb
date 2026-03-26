@@ -2,9 +2,13 @@
 // Mirrors src/auto-reply/reply/queue/settings.ts (72 LOC).
 package autoreply
 
+import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+)
+
 // ResolveFollowupQueueSettings resolves the effective queue settings from config,
 // session entry, inline overrides, and per-channel defaults.
-func ResolveFollowupQueueSettings(params ResolveFollowupQueueSettingsParams) FollowupQueueSettings {
+func ResolveFollowupQueueSettings(params types.ResolveFollowupQueueSettingsParams) types.FollowupQueueSettings {
 	// Resolve mode: inline > session > config > channel default.
 	mode := params.InlineMode
 	if mode == "" {
@@ -35,7 +39,7 @@ func ResolveFollowupQueueSettings(params ResolveFollowupQueueSettingsParams) Fol
 		drop = DefaultFollowupDrop
 	}
 
-	return FollowupQueueSettings{
+	return types.FollowupQueueSettings{
 		Mode:       mode,
 		DebounceMs: debounce,
 		Cap:        cap,
@@ -44,6 +48,6 @@ func ResolveFollowupQueueSettings(params ResolveFollowupQueueSettingsParams) Fol
 }
 
 // defaultFollowupQueueModeForChannel returns the default queue mode per channel.
-func defaultFollowupQueueModeForChannel(_ string) FollowupQueueMode {
-	return FollowupModeCollect
+func defaultFollowupQueueModeForChannel(_ string) types.FollowupQueueMode {
+	return types.FollowupModeCollect
 }

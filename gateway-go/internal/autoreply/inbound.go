@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"regexp"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ type InboundMeta struct {
 }
 
 // FinalizeInboundContext normalizes inbound message fields for consistent processing.
-func FinalizeInboundContext(ctx *MsgContext) {
+func FinalizeInboundContext(ctx *types.MsgContext) {
 	if ctx == nil {
 		return
 	}
