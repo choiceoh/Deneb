@@ -1,6 +1,11 @@
 // block_reply_pipeline.go — Full streaming pipeline with dedup, timeout, abort.
 // Mirrors src/auto-reply/reply/block-reply-pipeline.ts (261 LOC).
 // Orchestrates reply delivery with deduplication, coalescing, buffering, and timeout.
+//
+// Critical difference from the basic BlockReplyPipeline in block_streaming.go:
+// this pipeline guarantees SEQUENTIAL delivery order via a send queue (matching
+// the TS sendChain = sendChain.then(...) pattern), while performing deduplication
+// using both full payload keys (including threading) and content-only keys.
 package autoreply
 
 import (
@@ -67,6 +72,13 @@ func (b *AudioAsVoiceBuffer) Finalize(payload ReplyPayload) ReplyPayload {
 	return payload
 }
 
+// sendItem is queued for sequential delivery.
+type sendItem struct {
+	payload ReplyPayload
+	pk      string // payloadKey
+	ck      string // contentKey
+}
+
 // BlockReplyPipelineFull is the full streaming pipeline with deduplication and abort.
 type BlockReplyPipelineFull struct {
 	mu sync.Mutex
@@ -85,12 +97,14 @@ type BlockReplyPipelineFull struct {
 
 	coalescer *BlockReplyCoalescer
 
-	aborted          bool
-	didStreamFlag    bool
-	didLogTimeout    bool
-	droppedCount     int
+	// Sequential send queue — mirrors TS sendChain promise chain.
+	sendCh chan sendItem
+	doneCh chan struct{} // closed when send loop exits
 
-	wg sync.WaitGroup
+	aborted       bool
+	didStreamFlag bool
+	didLogTimeout bool
+	droppedCount  int
 }
 
 // NewBlockReplyPipelineFull creates a new full pipeline.
@@ -106,28 +120,83 @@ func NewBlockReplyPipelineFull(ctx context.Context, cfg BlockReplyPipelineConfig
 		seenKeys:          make(map[string]bool),
 		bufferedKeys:      make(map[string]bool),
 		bufferedPayloadKs: make(map[string]bool),
+		sendCh:            make(chan sendItem, 256),
+		doneCh:            make(chan struct{}),
 	}
+
+	// Start the sequential send loop.
+	go p.sendLoop()
 
 	if cfg.Coalescing != nil {
 		p.coalescer = NewBlockReplyCoalescer(*cfg.Coalescing, p.IsAborted, func(payload ReplyPayload) {
 			p.mu.Lock()
-			// Clear buffered keys on coalescer flush since they represent pre-coalesced state.
 			p.bufferedKeys = make(map[string]bool)
 			p.mu.Unlock()
-			p.sendPayload(payload, true)
+			p.enqueueSend(payload, true)
 		})
 	}
 
 	return p
 }
 
-// payloadKey generates a full dedup key including text, media, and threading.
+// sendLoop processes sends sequentially, matching the TS sendChain pattern.
+func (p *BlockReplyPipelineFull) sendLoop() {
+	defer close(p.doneCh)
+	for item := range p.sendCh {
+		p.mu.Lock()
+		if p.aborted {
+			p.droppedCount++
+			delete(p.pendingKeys, item.pk)
+			p.mu.Unlock()
+			continue
+		}
+		p.mu.Unlock()
+
+		timeoutMs := p.cfg.TimeoutMs
+		if timeoutMs <= 0 {
+			timeoutMs = 15000
+		}
+
+		deliverCtx, cancel := context.WithTimeout(p.ctx, time.Duration(timeoutMs)*time.Millisecond)
+		err := p.cfg.OnBlockReply(deliverCtx, item.payload)
+		cancel()
+
+		p.mu.Lock()
+		delete(p.pendingKeys, item.pk)
+
+		if err != nil {
+			if deliverCtx.Err() == context.DeadlineExceeded {
+				p.aborted = true
+				if !p.didLogTimeout && p.cfg.Logger != nil {
+					p.didLogTimeout = true
+					p.cfg.Logger.Warn("block reply pipeline aborted: delivery timed out",
+						"timeoutMs", timeoutMs)
+				}
+				p.mu.Unlock()
+				continue
+			}
+			p.mu.Unlock()
+			if p.cfg.Logger != nil {
+				p.cfg.Logger.Warn("block reply delivery failed", "error", err)
+			}
+			continue
+		}
+
+		p.sentKeys[item.pk] = true
+		p.sentContentKeys[item.ck] = true
+		p.didStreamFlag = true
+		p.mu.Unlock()
+	}
+}
+
+// PayloadKey generates a full dedup key including text, media, and threading.
+// Exported for testing parity with TS createBlockReplyPayloadKey.
+func PayloadKey(p ReplyPayload) string {
+	return payloadKey(p)
+}
+
 func payloadKey(p ReplyPayload) string {
 	text := strings.TrimSpace(p.Text)
-	replyToID := p.ReplyToID
-	if replyToID == "" {
-		replyToID = ""
-	}
 	key := struct {
 		Text      string   `json:"text"`
 		MediaList []string `json:"mediaList"`
@@ -136,14 +205,20 @@ func payloadKey(p ReplyPayload) string {
 		Text:      text,
 		MediaList: p.MediaURLs,
 	}
-	if replyToID != "" {
-		key.ReplyToID = &replyToID
+	if p.ReplyToID != "" {
+		id := p.ReplyToID
+		key.ReplyToID = &id
 	}
 	b, _ := json.Marshal(key)
 	return string(b)
 }
 
-// contentKey generates a content-only dedup key (ignores threading).
+// ContentKey generates a content-only dedup key (ignores threading).
+// Exported for testing parity with TS createBlockReplyContentKey.
+func ContentKey(p ReplyPayload) string {
+	return contentKey(p)
+}
+
 func contentKey(p ReplyPayload) string {
 	text := strings.TrimSpace(p.Text)
 	key := struct {
@@ -157,7 +232,7 @@ func contentKey(p ReplyPayload) string {
 	return string(b)
 }
 
-func (p *BlockReplyPipelineFull) sendPayload(payload ReplyPayload, bypassSeenCheck bool) {
+func (p *BlockReplyPipelineFull) enqueueSend(payload ReplyPayload, bypassSeenCheck bool) {
 	p.mu.Lock()
 	if p.aborted {
 		p.droppedCount++
@@ -190,48 +265,11 @@ func (p *BlockReplyPipelineFull) sendPayload(payload ReplyPayload, bypassSeenChe
 	p.pendingKeys[pk] = true
 	p.mu.Unlock()
 
-	timeoutMs := p.cfg.TimeoutMs
-	if timeoutMs <= 0 {
-		timeoutMs = 15000
+	// Non-blocking send to the sequential queue.
+	select {
+	case p.sendCh <- sendItem{payload: payload, pk: pk, ck: ck}:
+	case <-p.ctx.Done():
 	}
-
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		defer func() {
-			p.mu.Lock()
-			delete(p.pendingKeys, pk)
-			p.mu.Unlock()
-		}()
-
-		deliverCtx, cancel := context.WithTimeout(p.ctx, time.Duration(timeoutMs)*time.Millisecond)
-		defer cancel()
-
-		err := p.cfg.OnBlockReply(deliverCtx, payload)
-		if err != nil {
-			if deliverCtx.Err() == context.DeadlineExceeded {
-				p.mu.Lock()
-				p.aborted = true
-				if !p.didLogTimeout && p.cfg.Logger != nil {
-					p.didLogTimeout = true
-					p.cfg.Logger.Warn("block reply pipeline aborted: delivery timed out",
-						"timeoutMs", timeoutMs)
-				}
-				p.mu.Unlock()
-				return
-			}
-			if p.cfg.Logger != nil {
-				p.cfg.Logger.Warn("block reply delivery failed", "error", err)
-			}
-			return
-		}
-
-		p.mu.Lock()
-		p.sentKeys[pk] = true
-		p.sentContentKeys[ck] = true
-		p.didStreamFlag = true
-		p.mu.Unlock()
-	}()
 }
 
 func (p *BlockReplyPipelineFull) bufferPayload(payload ReplyPayload) bool {
@@ -273,7 +311,7 @@ func (p *BlockReplyPipelineFull) flushBuffered() {
 		if p.cfg.Buffer != nil {
 			finalPayload = p.cfg.Buffer.Finalize(payload)
 		}
-		p.sendPayload(finalPayload, true)
+		p.enqueueSend(finalPayload, true)
 	}
 }
 
@@ -295,7 +333,7 @@ func (p *BlockReplyPipelineFull) Enqueue(payload ReplyPayload) {
 		if p.coalescer != nil {
 			p.coalescer.Flush(true)
 		}
-		p.sendPayload(payload, false)
+		p.enqueueSend(payload, false)
 		return
 	}
 
@@ -313,7 +351,7 @@ func (p *BlockReplyPipelineFull) Enqueue(payload ReplyPayload) {
 		return
 	}
 
-	p.sendPayload(payload, false)
+	p.enqueueSend(payload, false)
 }
 
 // FlushAndWait flushes any buffered content and waits for all pending sends.
@@ -322,7 +360,9 @@ func (p *BlockReplyPipelineFull) FlushAndWait(force bool) {
 		p.coalescer.Flush(force)
 	}
 	p.flushBuffered()
-	p.wg.Wait()
+	// Close the send channel to signal the loop, then wait for it to drain.
+	close(p.sendCh)
+	<-p.doneCh
 }
 
 // Stop cancels timers and prevents further sends.
@@ -368,6 +408,8 @@ func (p *BlockReplyPipelineFull) DroppedAfterAbort() int {
 }
 
 // HasSentPayload checks if a payload with the same content was already sent.
+// Uses content-only key so a streamed threaded payload and the later final
+// payload still collapse when they carry the same content.
 func (p *BlockReplyPipelineFull) HasSentPayload(payload ReplyPayload) bool {
 	ck := contentKey(payload)
 	p.mu.Lock()

@@ -1,11 +1,17 @@
 // directive_handling_parse.go — Full directive parser with exec and queue options.
 // Mirrors src/auto-reply/reply/directive-handling.parse.ts (229 LOC).
-// Extends the basic ParseInlineDirectives with exec directive and queue options.
+//
+// Chains extraction in the same order as TS:
+// think → verbose → fast → reasoning → elevated → exec → status → model → queue
+//
+// The basic ParseInlineDirectives already handles think through queue (basic).
+// This layer adds:
+// - Full /exec directive parsing with key=value args
+// - Full /queue directive parsing with debounce/cap/drop options
+// - isDirectiveOnly with structural prefix + mention stripping
 package autoreply
 
 import (
-	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -30,15 +36,15 @@ type FullInlineDirectives struct {
 	InvalidExecAsk   bool
 	InvalidExecNode  bool
 
-	// Queue options.
-	QueueMode      QueueMode
-	DebounceMs     int
-	Cap            int
-	DropPolicy     QueueDropPolicy
-	RawDebounce    string
-	RawCap         string
-	RawDrop        string
-	HasQueueOpts   bool
+	// Queue options (full).
+	QueueModeResolved QueueMode
+	DebounceMs        *int // nil = not specified
+	Cap               *int // nil = not specified
+	DropPolicy        QueueDropPolicy
+	RawDebounce       string
+	RawCap            string
+	RawDrop           string
+	HasQueueOpts      bool
 }
 
 // FullDirectiveParseOptions configures the full directive parser.
@@ -48,12 +54,14 @@ type FullDirectiveParseOptions struct {
 	AllowStatusDirective bool // defaults to true if unset
 }
 
-// queueOptionRe matches key=value options after the /queue directive.
-var queueOptionRe = regexp.MustCompile(`(?i)\b(debounce|cap|drop)\s*[=:]\s*([^\s]+)`)
-
 // ParseFullInlineDirectives parses all inline directives from a message body,
 // including /exec and full /queue options. This matches the full TS pipeline
 // from directive-handling.parse.ts.
+//
+// The chain order mirrors TS: think → verbose → fast → reasoning → elevated
+// → exec → status → model → queue. The basic ParseInlineDirectives handles
+// think through model+queue(basic). This function then re-extracts /exec with
+// full key=value args and /queue with debounce/cap/drop options.
 func ParseFullInlineDirectives(body string, opts *FullDirectiveParseOptions) FullInlineDirectives {
 	if opts == nil {
 		opts = &FullDirectiveParseOptions{AllowStatusDirective: true}
@@ -91,62 +99,25 @@ func ParseFullInlineDirectives(body string, opts *FullDirectiveParseOptions) Ful
 		result.Cleaned = execParsed.Cleaned
 	}
 
-	// Step 3: Parse queue options from the raw queue mode text.
+	// Step 3: Re-extract /queue from the original body with full options.
+	// The basic parser only captured HasQueueDirective + RawQueueMode.
+	// Now extract debounce/cap/drop args using the token-based parser.
 	if result.HasQueueDirective {
-		result.QueueMode = normalizeQueueMode(result.RawQueueMode)
-		result.QueueReset = strings.EqualFold(result.RawQueueMode, "reset")
-
-		// Parse additional queue options from cleaned text.
-		remaining := result.Cleaned
-		matches := queueOptionRe.FindAllStringSubmatch(remaining, -1)
-		for _, m := range matches {
-			key := strings.ToLower(m[1])
-			val := m[2]
-			switch key {
-			case "debounce":
-				result.RawDebounce = val
-				if ms, err := strconv.Atoi(val); err == nil && ms >= 0 {
-					result.DebounceMs = ms
-					result.HasQueueOpts = true
-				}
-			case "cap":
-				result.RawCap = val
-				if c, err := strconv.Atoi(val); err == nil && c >= 0 {
-					result.Cap = c
-					result.HasQueueOpts = true
-				}
-			case "drop":
-				result.RawDrop = val
-				switch strings.ToLower(val) {
-				case "oldest":
-					result.DropPolicy = QueueDropOldest
-					result.HasQueueOpts = true
-				case "newest":
-					result.DropPolicy = QueueDropNewest
-					result.HasQueueOpts = true
-				}
-			}
-		}
-		// Strip matched queue options from cleaned text.
-		if len(matches) > 0 {
-			cleaned := queueOptionRe.ReplaceAllString(remaining, "")
-			result.Cleaned = strings.TrimSpace(multiSpaceRe.ReplaceAllString(cleaned, " "))
+		queueResult := ExtractQueueDirective(body)
+		if queueResult.HasDirective {
+			result.QueueModeResolved = queueResult.QueueMode
+			result.QueueReset = queueResult.QueueReset
+			result.DebounceMs = queueResult.DebounceMs
+			result.Cap = queueResult.Cap
+			result.DropPolicy = queueResult.DropPolicy
+			result.RawDebounce = queueResult.RawDebounce
+			result.RawCap = queueResult.RawCap
+			result.RawDrop = queueResult.RawDrop
+			result.HasQueueOpts = queueResult.HasOptions
 		}
 	}
 
 	return result
-}
-
-func normalizeQueueMode(raw string) QueueMode {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "auto":
-		return QueueModeAuto
-	case "manual":
-		return QueueModeManual
-	case "off":
-		return QueueModeOff
-	}
-	return ""
 }
 
 // IsFullDirectiveOnly returns true if the message contains only directives
