@@ -13,75 +13,109 @@ import (
 const autonomousSessionKey = "autonomous:cycle"
 
 // buildDecisionPrompt constructs the LLM prompt for a decision cycle.
-// Includes active goals, recently changed goals, last cycle summary, current time,
-// and structured output instructions.
+//
+// Design principles:
+//   - System prompt already provides tools, time, workspace, safety — don't repeat.
+//   - This prompt is the "user message" in the autonomous session. It must clearly
+//     establish the autonomous context so the agent doesn't think it's in a normal conversation.
+//   - Guide strategic thinking, not just task selection.
+//   - Warn about common autonomous execution anti-patterns.
+//   - Make the output format robust against LLM formatting quirks.
 func buildDecisionPrompt(goals []Goal, lastCycle *CycleState, recentlyChanged ...Goal) string {
 	var b strings.Builder
 
-	// Header with timestamp for time-aware decisions.
-	now := time.Now()
-	b.WriteString("# 자율 실행 모드 — Decision Cycle\n\n")
-	b.WriteString(fmt.Sprintf("현재 시각: %s\n\n", now.Format("2006-01-02 15:04 (Mon)")))
+	// ── Identity & context ──────────────────────────────────────────────
+	b.WriteString("[자율 실행 사이클]\n\n")
+	b.WriteString("너는 지금 자율 실행 모드로 동작 중이다. 사용자가 직접 메시지를 보낸 것이 아니라, 시스템 타이머가 이 사이클을 트리거했다. ")
+	b.WriteString("사용자에게 질문하거나 확인을 요청할 수 없다 — 스스로 판단하고 실행해야 한다.\n\n")
 
-	// Last cycle summary for continuity.
+	// ── Last cycle continuity ───────────────────────────────────────────
 	if lastCycle != nil && lastCycle.LastSummary != "" {
-		b.WriteString("## 이전 사이클 결과\n\n")
+		b.WriteString("### 이전 사이클\n")
 		b.WriteString(lastCycle.LastSummary)
 		b.WriteString("\n\n")
 	}
 
-	// Active goals.
-	b.WriteString("## 활성 목표\n\n")
-	if len(goals) == 0 {
-		b.WriteString("활성 목표가 없습니다.\n\n")
-		return b.String()
-	}
-	for i, g := range goals {
-		b.WriteString(fmt.Sprintf("%d. **[%s]** %s (id: `%s`)\n",
-			i+1, priorityLabel(g.Priority), g.Description, g.ID))
-		if g.LastNote != "" {
-			b.WriteString(fmt.Sprintf("   이전 진행: %s\n", g.LastNote))
-		}
-		age := time.Since(time.UnixMilli(g.CreatedAtMs))
-		if age > 24*time.Hour {
-			b.WriteString(fmt.Sprintf("   생성: %d일 전\n", int(age.Hours()/24)))
-		}
-	}
-
-	// Recently completed/paused goals for context.
+	// ── Recently completed/paused for context ───────────────────────────
 	if len(recentlyChanged) > 0 {
-		b.WriteString("\n## 최근 상태 변경\n\n")
+		b.WriteString("### 최근 변경된 목표\n")
 		for _, g := range recentlyChanged {
-			label := "완료됨"
+			label := "✓ 완료"
 			if g.Status == StatusPaused {
-				label = "중단됨"
+				label = "⏸ 중단"
 			}
-			b.WriteString(fmt.Sprintf("- **%s**: %s", label, g.Description))
+			b.WriteString(fmt.Sprintf("- %s: %s", label, g.Description))
 			if g.LastNote != "" {
 				b.WriteString(fmt.Sprintf(" — %s", g.LastNote))
 			}
 			b.WriteString("\n")
 		}
+		b.WriteString("\n")
 	}
 
-	// Instructions.
-	b.WriteString("\n## 실행 지침\n\n")
-	b.WriteString("1. 우선순위가 가장 높은 목표 중 지금 실행 가능한 것을 하나 선택하라.\n")
-	b.WriteString("2. 사용 가능한 도구(exec, read, write, web_fetch 등)를 적극 활용해 실제 진행을 만들어라.\n")
-	b.WriteString("3. 한 사이클에 하나의 목표에만 집중하라.\n")
-	b.WriteString("4. 실행이 불가능하거나 외부 의존성으로 막힌 목표는 \"paused\"로 전환하고 이유를 설명하라.\n")
-	b.WriteString("5. 목표가 완전히 달성되면 \"completed\"로 전환하라.\n")
-	b.WriteString("6. 도구 실행 결과가 예상과 다르면 한 단계 더 시도하되, 같은 실패가 반복되면 paused로 전환하라.\n\n")
+	// ── Active goals ────────────────────────────────────────────────────
+	b.WriteString("### 활성 목표\n\n")
+	if len(goals) == 0 {
+		b.WriteString("활성 목표 없음. 이 사이클은 건너뛴다.\n")
+		return b.String()
+	}
 
-	// Output format.
-	b.WriteString("## 출력 형식 (필수)\n\n")
-	b.WriteString("작업 완료 후 반드시 응답 끝에 아래 형식의 목표 업데이트 블록을 포함하라:\n\n")
+	for i, g := range goals {
+		b.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, strings.ToUpper(g.Priority), g.Description))
+		b.WriteString(fmt.Sprintf("   id: `%s`", g.ID))
+
+		// Show cycle count and age for stuck detection.
+		var meta []string
+		if g.CycleCount > 0 {
+			meta = append(meta, fmt.Sprintf("%d회 작업", g.CycleCount))
+		}
+		age := time.Since(time.UnixMilli(g.CreatedAtMs))
+		if age > 24*time.Hour {
+			meta = append(meta, fmt.Sprintf("%d일 경과", int(age.Hours()/24)))
+		}
+		if len(meta) > 0 {
+			b.WriteString(fmt.Sprintf(" · %s", strings.Join(meta, ", ")))
+		}
+		b.WriteString("\n")
+
+		if g.LastNote != "" {
+			b.WriteString(fmt.Sprintf("   마지막 진행: %s\n", g.LastNote))
+		}
+		if g.PausedReason != "" && g.Status == StatusActive {
+			// Was paused before, reactivated — show previous block reason.
+			b.WriteString(fmt.Sprintf("   (이전 중단 이유: %s)\n", g.PausedReason))
+		}
+	}
+
+	// ── Execution strategy ──────────────────────────────────────────────
+	b.WriteString("\n### 실행 전략\n\n")
+	b.WriteString("1. **목표 선택**: 우선순위가 가장 높고 지금 진행 가능한 목표 하나를 선택하라.\n")
+	b.WriteString("2. **접근 방식 결정**:\n")
+	b.WriteString("   - 처음 작업하는 목표 → 먼저 현재 상태를 파악하라 (파일 읽기, 명령 실행 등)\n")
+	b.WriteString("   - 이전 진행이 있는 목표 → 마지막 진행 내용을 이어서 다음 단계를 실행하라\n")
+	b.WriteString("   - 5회 이상 작업했는데 진전이 없는 목표 → paused로 전환하라\n")
+	b.WriteString("3. **실행**: 도구를 사용해 실제로 변화를 만들어라. 계획만 세우지 말 것.\n")
+	b.WriteString("4. **판단**:\n")
+	b.WriteString("   - 완전히 달성됨 → completed\n")
+	b.WriteString("   - 진행했지만 아직 미완 → active (note에 다음 단계 기록)\n")
+	b.WriteString("   - 외부 의존성/권한 부족/불가능 → paused (note에 사유 기록)\n\n")
+
+	// ── Anti-patterns ───────────────────────────────────────────────────
+	b.WriteString("### 하지 말 것\n\n")
+	b.WriteString("- 사용자에게 질문하거나 확인을 요청하지 마라 (자율 모드에서는 응답받을 수 없다)\n")
+	b.WriteString("- 실제 실행 없이 \"계획을 세웠습니다\" 같은 보고만 하지 마라\n")
+	b.WriteString("- 이미 완료된 작업을 다시 하지 마라 (이전 진행 내용을 확인하라)\n")
+	b.WriteString("- 검증 없이 \"완료\"로 표시하지 마라 (결과를 확인한 후 completed로 전환하라)\n\n")
+
+	// ── Output format ───────────────────────────────────────────────────
+	b.WriteString("### 출력 형식\n\n")
+	b.WriteString("작업 후 반드시 응답 마지막에 아래 블록을 포함하라:\n\n")
 	b.WriteString("```goal_update\n")
-	b.WriteString(`{"goalUpdates": [{"id": "GOAL_ID", "status": "active", "note": "이번 사이클에서 수행한 내용"}]}`)
-	b.WriteString("\n```\n\n")
-	b.WriteString("- status 값: `active` (진행 중), `completed` (완료), `paused` (중단)\n")
-	b.WriteString("- note: 한국어로 간결하게 작성 (50자 이내 권장)\n")
-	b.WriteString("- goal_update 블록이 없으면 진행 기록이 남지 않으니 반드시 포함할 것\n")
+	b.WriteString("{\"goalUpdates\": [{\"id\": \"ID\", \"status\": \"STATUS\", \"note\": \"NOTE\"}]}\n")
+	b.WriteString("```\n\n")
+	b.WriteString("- STATUS: `active` | `completed` | `paused`\n")
+	b.WriteString("- NOTE: 한국어, 이번 사이클에서 한 일 또는 중단 사유. 다음 사이클의 나 자신이 읽는다.\n")
+	b.WriteString("- 이 블록이 없으면 진행 기록이 유실된다.\n")
 
 	return b.String()
 }
@@ -164,7 +198,6 @@ func validateUpdates(updates []GoalUpdate) []GoalUpdate {
 // extractFallbackNote extracts the last meaningful paragraph from output
 // as a fallback progress note (max 200 chars).
 func extractFallbackNote(output string) string {
-	// Take the last non-empty paragraph.
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	var lastPara string
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -180,7 +213,6 @@ func extractFallbackNote(output string) string {
 		} else {
 			lastPara = line + " " + lastPara
 		}
-		// Don't collect too much.
 		if len(lastPara) > 200 {
 			break
 		}
