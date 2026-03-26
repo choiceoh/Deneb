@@ -79,6 +79,16 @@ type SubagentRunRecord struct {
 	OutcomeError       string `json:"outcomeError,omitempty"`
 	ArchiveAtMs        int64  `json:"archiveAtMs,omitempty"`
 	CleanupHandled     bool   `json:"cleanupHandled,omitempty"`
+	// Depth tracking for nested subagent hierarchies.
+	SpawnDepth         int    `json:"spawnDepth,omitempty"`
+	PendingDescendants int    `json:"pendingDescendants,omitempty"`
+	// Announce state for completion message delivery.
+	FrozenResultText   string `json:"frozenResultText,omitempty"`
+	EndedReason        string `json:"endedReason,omitempty"` // "complete", "error", "killed"
+	// Accumulated runtime from prior completed runs (for session-mode restarts).
+	AccumulatedRuntimeMs int64 `json:"accumulatedRuntimeMs,omitempty"`
+	// Whether the run expects a completion message to be delivered.
+	ExpectsCompletion  bool   `json:"expectsCompletionMessage,omitempty"`
 }
 
 // SubagentsCommandContext holds context for a subagent command execution.

@@ -47,6 +47,18 @@ func (d *FollowupDrainCallbacks) Delete(key string) {
 	delete(d.callbacks, key)
 }
 
+// backoffDelays defines exponential backoff durations for consecutive failures.
+var backoffDelays = []time.Duration{
+	1 * time.Second,
+	2 * time.Second,
+	4 * time.Second,
+	8 * time.Second,
+	16 * time.Second,
+}
+
+// maxConsecutiveFailures caps the backoff index.
+const maxConsecutiveFailures = 5
+
 // FollowupDrainService manages followup queue draining.
 type FollowupDrainService struct {
 	registry  *FollowupQueueRegistry
@@ -104,6 +116,9 @@ func (s *FollowupDrainService) ScheduleDrain(key string, runFollowup FollowupDra
 	s.callbacks.Set(key, runFollowup)
 
 	go func() {
+		consecutiveFailures := 0
+		collectForceIndividual := false
+
 		defer func() {
 			queue.Draining = false
 			if len(queue.Items) == 0 && queue.DroppedCount == 0 {
@@ -120,11 +135,37 @@ func (s *FollowupDrainService) ScheduleDrain(key string, runFollowup FollowupDra
 				time.Sleep(time.Duration(queue.DebounceMs) * time.Millisecond)
 			}
 
-			if queue.Mode == FollowupModeCollect {
-				if !s.drainCollect(queue, runFollowup) {
-					break
+			// Apply exponential backoff on consecutive failures.
+			if consecutiveFailures > 0 {
+				idx := consecutiveFailures - 1
+				if idx >= len(backoffDelays) {
+					idx = len(backoffDelays) - 1
 				}
-				continue
+				time.Sleep(backoffDelays[idx])
+			}
+
+			if queue.Mode == FollowupModeCollect {
+				// Once items span multiple channels, switch to individual drain
+				// to preserve per-message routing. This is sticky within a drain cycle.
+				isCrossChannel := !collectForceIndividual && hasCrossChannelItems(queue.Items)
+				if isCrossChannel {
+					collectForceIndividual = true
+				}
+
+				if !collectForceIndividual {
+					ok := s.drainCollect(queue, runFollowup)
+					if !ok {
+						consecutiveFailures++
+						if consecutiveFailures >= maxConsecutiveFailures {
+							s.logError(fmt.Sprintf("followup queue drain giving up for %s after %d failures", key, consecutiveFailures))
+							break
+						}
+						continue
+					}
+					consecutiveFailures = 0
+					continue
+				}
+				// Fall through to individual drain for cross-channel items.
 			}
 
 			// Drain summary prompt if accumulated.
@@ -144,9 +185,14 @@ func (s *FollowupDrainService) ScheduleDrain(key string, runFollowup FollowupDra
 							OriginatingThreadID:  item.OriginatingThreadID,
 						})
 						if err != nil {
+							consecutiveFailures++
 							s.logError(fmt.Sprintf("followup queue drain summary failed for %s: %s", key, err))
-							break
+							if consecutiveFailures >= maxConsecutiveFailures {
+								break
+							}
+							continue
 						}
+						consecutiveFailures = 0
 					}
 					clearFollowupSummaryState(queue)
 					continue
@@ -161,9 +207,14 @@ func (s *FollowupDrainService) ScheduleDrain(key string, runFollowup FollowupDra
 			queue.Items = queue.Items[1:]
 			if err := runFollowup(item); err != nil {
 				queue.LastEnqueuedAt = time.Now().UnixMilli()
+				consecutiveFailures++
 				s.logError(fmt.Sprintf("followup queue drain failed for %s: %s", key, err))
-				break
+				if consecutiveFailures >= maxConsecutiveFailures {
+					break
+				}
+				continue
 			}
+			consecutiveFailures = 0
 		}
 	}()
 }
@@ -266,4 +317,24 @@ func buildFollowupSummaryPrompt(state *FollowupQueueState) string {
 func clearFollowupSummaryState(state *FollowupQueueState) {
 	state.DroppedCount = 0
 	state.SummaryLines = state.SummaryLines[:0]
+}
+
+// hasCrossChannelItems returns true if items target different channel/to/account/thread combinations.
+func hasCrossChannelItems(items []FollowupRun) bool {
+	if len(items) <= 1 {
+		return false
+	}
+	ref := crossChannelKey(items[0])
+	for _, item := range items[1:] {
+		if crossChannelKey(item) != ref {
+			return true
+		}
+	}
+	return false
+}
+
+// crossChannelKey builds a routing key for cross-channel comparison.
+func crossChannelKey(item FollowupRun) string {
+	return item.OriginatingChannel + "|" + item.OriginatingTo + "|" +
+		item.OriginatingAccountID + "|" + item.OriginatingThreadID
 }

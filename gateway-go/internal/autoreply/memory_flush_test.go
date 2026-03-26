@@ -111,6 +111,43 @@ func TestShouldRunMemoryFlush(t *testing.T) {
 	}
 }
 
+func TestShouldForceMemoryFlushByTranscriptSize(t *testing.T) {
+	// Below byte threshold.
+	if ShouldForceMemoryFlushByTranscriptSize(ShouldRunMemoryFlushParams{
+		TranscriptBytes:           1024 * 1024, // 1 MB
+		ForceFlushTranscriptBytes: 2 * 1024 * 1024,
+	}) {
+		t.Error("expected no force flush below byte threshold")
+	}
+
+	// Above byte threshold.
+	if !ShouldForceMemoryFlushByTranscriptSize(ShouldRunMemoryFlushParams{
+		TranscriptBytes:           3 * 1024 * 1024, // 3 MB
+		ForceFlushTranscriptBytes: 2 * 1024 * 1024,
+	}) {
+		t.Error("expected force flush above byte threshold")
+	}
+
+	// Already flushed.
+	if ShouldForceMemoryFlushByTranscriptSize(ShouldRunMemoryFlushParams{
+		TranscriptBytes:            3 * 1024 * 1024,
+		ForceFlushTranscriptBytes:  2 * 1024 * 1024,
+		CompactionCount:            2,
+		MemoryFlushCompactionCount: 2,
+		HasMemoryFlushCount:        true,
+	}) {
+		t.Error("expected no force flush when already flushed")
+	}
+
+	// Disabled (0 threshold).
+	if ShouldForceMemoryFlushByTranscriptSize(ShouldRunMemoryFlushParams{
+		TranscriptBytes:           3 * 1024 * 1024,
+		ForceFlushTranscriptBytes: 0,
+	}) {
+		t.Error("expected no force flush when disabled")
+	}
+}
+
 func TestHasAlreadyFlushedForCurrentCompaction(t *testing.T) {
 	if !HasAlreadyFlushedForCurrentCompaction(3, 3) {
 		t.Error("expected true when counts match")

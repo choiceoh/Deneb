@@ -192,6 +192,25 @@ type ShouldRunMemoryFlushParams struct {
 	CompactionCount            int
 	MemoryFlushCompactionCount int  // -1 means "never flushed"
 	HasMemoryFlushCount        bool // true if MemoryFlushCompactionCount was explicitly set
+	// Transcript byte-size trigger (0 = disabled).
+	TranscriptBytes            int
+	ForceFlushTranscriptBytes  int
+}
+
+// ShouldForceMemoryFlushByTranscriptSize returns true when the session transcript
+// exceeds the byte-size threshold, regardless of token counts. This catches cases
+// where the token counter is stale but the transcript is known to be large.
+func ShouldForceMemoryFlushByTranscriptSize(params ShouldRunMemoryFlushParams) bool {
+	if params.ForceFlushTranscriptBytes <= 0 || params.TranscriptBytes <= 0 {
+		return false
+	}
+	if params.TranscriptBytes < params.ForceFlushTranscriptBytes {
+		return false
+	}
+	if params.HasMemoryFlushCount && HasAlreadyFlushedForCurrentCompaction(params.CompactionCount, params.MemoryFlushCompactionCount) {
+		return false
+	}
+	return true
 }
 
 // HasAlreadyFlushedForCurrentCompaction returns true when a memory flush has
