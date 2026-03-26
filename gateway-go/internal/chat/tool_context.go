@@ -12,6 +12,8 @@ const (
 	ctxKeyReplyFunc
 	// ctxKeySessionKey stores the session key for the current run.
 	ctxKeySessionKey
+	// ctxKeyMediaSendFunc stores the MediaSendFunc for sending files to the channel.
+	ctxKeyMediaSendFunc
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -45,4 +47,15 @@ func WithSessionKey(ctx context.Context, key string) context.Context {
 func SessionKeyFromContext(ctx context.Context) string {
 	s, _ := ctx.Value(ctxKeySessionKey).(string)
 	return s
+}
+
+// WithMediaSendFunc attaches a MediaSendFunc to the context.
+func WithMediaSendFunc(ctx context.Context, fn MediaSendFunc) context.Context {
+	return context.WithValue(ctx, ctxKeyMediaSendFunc, fn)
+}
+
+// MediaSendFuncFromContext extracts the MediaSendFunc from a context.
+func MediaSendFuncFromContext(ctx context.Context) MediaSendFunc {
+	fn, _ := ctx.Value(ctxKeyMediaSendFunc).(MediaSendFunc)
+	return fn
 }
