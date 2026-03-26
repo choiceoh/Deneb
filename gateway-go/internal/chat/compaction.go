@@ -79,7 +79,7 @@ func handleContextOverflowAurora(
 		sweepCfg.FreshTailCount = uint32(deps.compactionCfg.FreshTailCount)
 
 		// Use local sglang for cost-efficient compaction summaries.
-		sglangClient := llm.NewClient(defaultSglangBaseURL, "", llm.WithLogger(logger))
+		sglangClient := getSglangClient()
 		summarizer := aurora.NewLLMSummarizer(sglangClient, summarizationModel, "openai")
 
 		result, err := aurora.RunSweep(
