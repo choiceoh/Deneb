@@ -242,6 +242,14 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolKV(),
 	})
 
+	// -- Gmail tool (structured Gmail operations via gog CLI) --
+	registry.RegisterTool(ToolDef{
+		Name:        "gmail",
+		Description: "Gmail: inbox summary, search, read, send, reply, labels with contact aliases",
+		InputSchema: gmailToolSchema(),
+		Fn:          toolGmail(),
+	})
+
 	// -- Clipboard tool (temporary content sharing) --
 	registry.RegisterTool(ToolDef{
 		Name:        "clipboard",
