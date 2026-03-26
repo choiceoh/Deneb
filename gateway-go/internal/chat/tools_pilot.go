@@ -106,15 +106,17 @@ func shouldUseThinking(task string, sourceCount int) bool {
 
 func buildPilotSystemPrompt(workspaceDir string, thinking bool) string {
 	var sb strings.Builder
-	sb.WriteString(`You are Pilot, a fast local AI assistant.
+	sb.WriteString(`You are Pilot, a fast local AI assistant. Your output goes to Telegram (4096 char limit).
 Rules:
 - Execute the task directly. No preamble, no pleasantries.
 - Match the user's language (Korean if Korean input, English if English).
-- If output_format is "json", return valid JSON only.
-- If output_format is "list", return a numbered list.
+- If output_format is "json", return valid JSON only (no markdown fences).
+- If output_format is "list", return a clean numbered list (1. 2. 3.).
 - If processing multiple sources, reference each by its label.
 - When referencing code, include file path and line numbers.
-- Use code blocks with language tags for code snippets.
+- Use fenced code blocks with language tags for code snippets.
+- Always close opened code blocks (matching triple backticks).
+- Avoid nested markdown formatting inside code blocks.
 - Be concise. Substance over length.`)
 
 	if thinking {
@@ -305,10 +307,8 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 			}
 		}
 
-		// Clean JSON output if requested.
-		if p.OutputFormat == "json" {
-			result = cleanJSONResponse(result)
-		}
+		// Post-process output based on format.
+		result = postProcessOutput(result, p.OutputFormat, p.MaxLength)
 
 		// Metrics logging.
 		totalInput := 0
@@ -622,6 +622,206 @@ func cleanJSONResponse(s string) string {
 	}
 
 	return s
+}
+
+// --- Output post-processing ---
+
+// Hard limits for output length enforcement.
+const (
+	briefMaxChars    = 500
+	detailedMaxChars = 8000
+)
+
+// postProcessOutput applies format-specific cleaning and length enforcement.
+func postProcessOutput(result, outputFormat, maxLength string) string {
+	result = strings.TrimSpace(result)
+	if result == "" {
+		return result
+	}
+
+	// Format-specific cleaning.
+	switch outputFormat {
+	case "json":
+		result = cleanJSONResponse(result)
+	case "list":
+		result = cleanListResponse(result)
+	default:
+		result = normalizeMarkdown(result)
+	}
+
+	// Hard length enforcement — LLM hints are unreliable.
+	switch maxLength {
+	case "brief":
+		result = enforceMaxLength(result, briefMaxChars)
+	case "detailed":
+		// Allow longer output but still cap at reasonable limit.
+		result = enforceMaxLength(result, detailedMaxChars)
+	}
+
+	return result
+}
+
+// cleanListResponse normalizes numbered list output from the LLM.
+// Ensures consistent numbering and removes non-list preamble.
+func cleanListResponse(s string) string {
+	lines := strings.Split(s, "\n")
+	var listLines []string
+	var preface []string
+	inList := false
+	num := 1
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if inList {
+				listLines = append(listLines, "")
+			}
+			continue
+		}
+
+		// Detect list items: "1.", "2.", "- ", "* ", etc.
+		if isListItem(trimmed) {
+			inList = true
+			// Re-number for consistency.
+			content := stripListPrefix(trimmed)
+			listLines = append(listLines, fmt.Sprintf("%d. %s", num, content))
+			num++
+		} else if inList {
+			// Continuation line within list — append to last item.
+			if len(listLines) > 0 {
+				listLines[len(listLines)-1] += " " + trimmed
+			}
+		} else {
+			preface = append(preface, trimmed)
+		}
+	}
+
+	if len(listLines) == 0 {
+		return s // No list found, return as-is.
+	}
+
+	// Include preface if it's brief (1-2 lines), otherwise drop it.
+	var sb strings.Builder
+	if len(preface) <= 2 {
+		for _, p := range preface {
+			sb.WriteString(p)
+			sb.WriteByte('\n')
+		}
+		if len(preface) > 0 {
+			sb.WriteByte('\n')
+		}
+	}
+	sb.WriteString(strings.Join(listLines, "\n"))
+	return strings.TrimSpace(sb.String())
+}
+
+// isListItem checks if a line starts with a list marker.
+func isListItem(s string) bool {
+	if len(s) < 2 {
+		return false
+	}
+	// Numbered: "1. ", "2. ", etc.
+	if s[0] >= '0' && s[0] <= '9' {
+		for i := 1; i < len(s); i++ {
+			if s[i] == '.' && i+1 < len(s) && s[i+1] == ' ' {
+				return true
+			}
+			if s[i] < '0' || s[i] > '9' {
+				break
+			}
+		}
+	}
+	// Bullet: "- " or "* "
+	if (s[0] == '-' || s[0] == '*') && s[1] == ' ' {
+		return true
+	}
+	return false
+}
+
+// stripListPrefix removes the list marker from a line.
+func stripListPrefix(s string) string {
+	// Numbered: "1. content" → "content"
+	if s[0] >= '0' && s[0] <= '9' {
+		for i := 1; i < len(s); i++ {
+			if s[i] == '.' && i+1 < len(s) && s[i+1] == ' ' {
+				return strings.TrimSpace(s[i+2:])
+			}
+			if s[i] < '0' || s[i] > '9' {
+				break
+			}
+		}
+	}
+	// Bullet: "- content" or "* content"
+	if (s[0] == '-' || s[0] == '*') && len(s) > 1 && s[1] == ' ' {
+		return strings.TrimSpace(s[2:])
+	}
+	return s
+}
+
+// normalizeMarkdown fixes common Qwen3.5 markdown issues:
+//   - closes unclosed code blocks
+//   - collapses 3+ consecutive blank lines to 2
+//   - trims trailing whitespace per line
+func normalizeMarkdown(s string) string {
+	lines := strings.Split(s, "\n")
+	var out []string
+	blankCount := 0
+	codeBlockOpen := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimRight(line, " \t")
+
+		// Track code block state.
+		if strings.HasPrefix(trimmed, "```") {
+			codeBlockOpen = !codeBlockOpen
+			blankCount = 0
+			out = append(out, trimmed)
+			continue
+		}
+
+		// Collapse excessive blank lines (max 2 consecutive).
+		if trimmed == "" {
+			blankCount++
+			if blankCount <= 2 {
+				out = append(out, "")
+			}
+			continue
+		}
+
+		blankCount = 0
+		out = append(out, trimmed)
+	}
+
+	// Close unclosed code block.
+	if codeBlockOpen {
+		out = append(out, "```")
+	}
+
+	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+// enforceMaxLength hard-truncates output to maxChars, cutting at the last
+// complete line or sentence boundary.
+func enforceMaxLength(s string, maxChars int) string {
+	if len(s) <= maxChars {
+		return s
+	}
+
+	// Try to cut at a line boundary.
+	cut := s[:maxChars]
+	if idx := strings.LastIndex(cut, "\n"); idx > maxChars/2 {
+		return strings.TrimSpace(cut[:idx]) + "\n…"
+	}
+
+	// Try to cut at a sentence boundary.
+	for _, sep := range []string{". ", "。", "! ", "? "} {
+		if idx := strings.LastIndex(cut, sep); idx > maxChars/2 {
+			return cut[:idx+len(sep)] + "…"
+		}
+	}
+
+	// Hard cut at maxChars.
+	return strings.TrimSpace(cut) + "…"
 }
 
 // --- Chaining ---

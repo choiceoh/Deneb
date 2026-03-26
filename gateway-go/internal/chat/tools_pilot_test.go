@@ -236,6 +236,145 @@ func TestTruncateHead(t *testing.T) {
 	}
 }
 
+func TestNormalizeMarkdown(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			"unclosed code block",
+			"```go\nfunc main() {\n  fmt.Println(\"hello\")",
+			"```go\nfunc main() {\n  fmt.Println(\"hello\")\n```",
+		},
+		{
+			"excessive blank lines",
+			"line1\n\n\n\n\nline2",
+			"line1\n\n\nline2",
+		},
+		{
+			"trailing whitespace",
+			"hello   \nworld  ",
+			"hello\nworld",
+		},
+		{
+			"already clean",
+			"line1\nline2\n```\ncode\n```",
+			"line1\nline2\n```\ncode\n```",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeMarkdown(tt.input)
+			if got != tt.want {
+				t.Errorf("normalizeMarkdown() =\n%q\nwant\n%q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCleanListResponse(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			"numbered list",
+			"1. First item\n2. Second item\n3. Third item",
+			"1. First item\n2. Second item\n3. Third item",
+		},
+		{
+			"bullet list to numbered",
+			"- First\n- Second\n- Third",
+			"1. First\n2. Second\n3. Third",
+		},
+		{
+			"mixed with preamble",
+			"Here are the results:\n\n1. Alpha\n2. Beta",
+			"Here are the results:\n\n1. Alpha\n2. Beta",
+		},
+		{
+			"no list at all",
+			"Just plain text with no list items.",
+			"Just plain text with no list items.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := cleanListResponse(tt.input)
+			if got != tt.want {
+				t.Errorf("cleanListResponse() =\n%q\nwant\n%q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEnforceMaxLength(t *testing.T) {
+	short := "hello world"
+	if got := enforceMaxLength(short, 100); got != short {
+		t.Error("short string should not be truncated")
+	}
+
+	// Line boundary cut.
+	multiline := "Line one.\nLine two.\nLine three.\nLine four.\nLine five."
+	result := enforceMaxLength(multiline, 30)
+	if len(result) > 35 { // some overhead for ellipsis
+		t.Errorf("enforceMaxLength too long: %d chars", len(result))
+	}
+	if !contains(result, "…") {
+		t.Error("should contain ellipsis")
+	}
+
+	// Sentence boundary cut.
+	prose := "This is the first sentence. This is the second sentence. This is very long text that keeps going."
+	result = enforceMaxLength(prose, 60)
+	if !contains(result, "…") {
+		t.Error("should contain ellipsis")
+	}
+}
+
+func TestPostProcessOutput(t *testing.T) {
+	// Brief mode enforces length.
+	long := strings.Repeat("가나다라 ", 200) // ~1000 chars Korean
+	result := postProcessOutput(long, "text", "brief")
+	if len(result) > briefMaxChars+10 {
+		t.Errorf("brief mode should enforce length, got %d chars", len(result))
+	}
+
+	// JSON mode cleans fences.
+	jsonWithFence := "```json\n{\"key\": \"value\"}\n```"
+	result = postProcessOutput(jsonWithFence, "json", "")
+	if result != `{"key": "value"}` {
+		t.Errorf("json mode should strip fences, got %q", result)
+	}
+
+	// List mode normalizes.
+	bullets := "- Alpha\n- Beta\n- Gamma"
+	result = postProcessOutput(bullets, "list", "")
+	if !contains(result, "1. Alpha") {
+		t.Errorf("list mode should normalize bullets, got %q", result)
+	}
+}
+
+func TestIsListItem(t *testing.T) {
+	positives := []string{"1. item", "2. item", "10. item", "- item", "* item"}
+	for _, s := range positives {
+		if !isListItem(s) {
+			t.Errorf("expected %q to be a list item", s)
+		}
+	}
+
+	negatives := []string{"hello", "1x item", ".item", ""}
+	for _, s := range negatives {
+		if isListItem(s) {
+			t.Errorf("expected %q to NOT be a list item", s)
+		}
+	}
+}
+
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
