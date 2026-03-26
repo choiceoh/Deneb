@@ -10,6 +10,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -200,7 +202,8 @@ type ListOptions struct {
 	IncludeDisabled bool
 }
 
-// ListPage returns a paginated list of jobs.
+// ListPage returns a paginated list of jobs with filtering and sorting.
+// Mirrors ops.ts listPage() with query search, enabled filter, sort options.
 func (s *Service) ListPage(opts ListPageOptions) ListPageResult {
 	storeData, _ := s.store.Load()
 	if storeData == nil {
@@ -208,6 +211,8 @@ func (s *Service) ListPage(opts ListPageOptions) ListPageResult {
 	}
 
 	jobs := storeData.Jobs
+
+	// Filter by enabled/disabled.
 	if !opts.IncludeDisabled {
 		var filtered []StoreJob
 		for _, j := range jobs {
@@ -218,9 +223,27 @@ func (s *Service) ListPage(opts ListPageOptions) ListPageResult {
 		jobs = filtered
 	}
 
+	// Text search across name, ID, payload text/message.
+	if opts.Query != "" {
+		query := strings.ToLower(opts.Query)
+		var filtered []StoreJob
+		for _, j := range jobs {
+			if strings.Contains(strings.ToLower(j.Name), query) ||
+				strings.Contains(strings.ToLower(j.ID), query) ||
+				strings.Contains(strings.ToLower(j.Payload.Text), query) ||
+				strings.Contains(strings.ToLower(j.Payload.Message), query) {
+				filtered = append(filtered, j)
+			}
+		}
+		jobs = filtered
+	}
+
+	// Sort.
+	sortJobs(jobs, opts.SortBy, opts.SortDir)
+
 	total := len(jobs)
 	limit := opts.Limit
-	if limit <= 0 {
+	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	offset := opts.Offset
@@ -248,6 +271,9 @@ type ListPageOptions struct {
 	Limit           int
 	Offset          int
 	IncludeDisabled bool
+	Query           string // text search across name, ID, payload
+	SortBy          string // "name", "nextRunAtMs", "updatedAtMs" (default: nextRunAtMs)
+	SortDir         string // "asc" or "desc" (default: asc)
 }
 
 type ListPageResult struct {
@@ -595,8 +621,67 @@ func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome) {
 		}
 	}
 
-	state.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, time.Now().UnixMilli())
+	// Handle deleteAfterRun one-shot jobs.
+	nowMs := time.Now().UnixMilli()
+	state.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, nowMs)
+
 	s.store.UpdateJobState(job.ID, state)
+}
+
+// ShouldSendFailureAlert checks if a failure alert should be sent for a job.
+// Respects cooldown period and error status.
+func ShouldSendFailureAlert(state JobState, failureAlert *CronFailureAlert, outcomeStatus string, nowMs int64) bool {
+	if outcomeStatus != "error" {
+		return false
+	}
+	if failureAlert == nil {
+		return false
+	}
+	// Respect "after" threshold.
+	if failureAlert.After > 0 && state.ConsecutiveErrors < failureAlert.After {
+		return false
+	}
+	// Respect cooldown.
+	if failureAlert.CooldownMs > 0 && state.LastFailureAlertAtMs > 0 {
+		if nowMs-state.LastFailureAlertAtMs < failureAlert.CooldownMs {
+			return false
+		}
+	}
+	return true
+}
+
+// sortJobs sorts jobs by the given field and direction (mirrors ops.ts sortJobs).
+func sortJobs(jobs []StoreJob, sortBy, sortDir string) {
+	if sortBy == "" {
+		sortBy = "nextRunAtMs"
+	}
+	asc := sortDir != "desc"
+
+	sort.SliceStable(jobs, func(i, j int) bool {
+		var less bool
+		switch sortBy {
+		case "name":
+			less = strings.ToLower(jobs[i].Name) < strings.ToLower(jobs[j].Name)
+		case "updatedAtMs":
+			less = jobs[i].UpdatedAtMs < jobs[j].UpdatedAtMs
+		default: // "nextRunAtMs"
+			// 0 (no next run) sorts last.
+			ni, nj := jobs[i].State.NextRunAtMs, jobs[j].State.NextRunAtMs
+			if ni == 0 && nj == 0 {
+				less = jobs[i].ID < jobs[j].ID
+			} else if ni == 0 {
+				less = false
+			} else if nj == 0 {
+				less = true
+			} else {
+				less = ni < nj
+			}
+		}
+		if !asc {
+			return !less
+		}
+		return less
+	})
 }
 
 // --- Internal helpers ---
