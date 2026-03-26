@@ -1,246 +1,153 @@
-// subagents_utils.go — Subagent run record utilities.
-// Mirrors src/auto-reply/reply/subagents-utils.ts (109 LOC).
+// subagents_utils.go — Subagent run utilities for commands_handlers.go.
+// Provides BuildSubagentRunListEntries, ResolveSubagentEntryForToken,
+// and FormatSubagentInfo which are used by the legacy command handler layer.
 package autoreply
 
 import (
-	"sort"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// SubagentRunRecord represents a single subagent run entry.
-// Full parity with TS SubagentRunRecord from subagent-registry.types.ts.
-type SubagentRunRecord struct {
-	RunID                     string              `json:"runId"`
-	ChildSessionKey           string              `json:"childSessionKey"`
-	ControllerSessionKey      string              `json:"controllerSessionKey,omitempty"`
-	RequesterSessionKey       string              `json:"requesterSessionKey"`
-	RequesterDisplayKey       string              `json:"requesterDisplayKey"`
-	Task                      string              `json:"task"`
-	Cleanup                   string              `json:"cleanup"` // "delete" or "keep"
-	Label                     string              `json:"label,omitempty"`
-	Model                     string              `json:"model,omitempty"`
-	WorkspaceDir              string              `json:"workspaceDir,omitempty"`
-	RunTimeoutSeconds         *int                `json:"runTimeoutSeconds,omitempty"`
-	SpawnMode                 string              `json:"spawnMode,omitempty"`
-	CreatedAt                 int64               `json:"createdAt"`
-	StartedAt                 *int64              `json:"startedAt,omitempty"`
-	SessionStartedAt          *int64              `json:"sessionStartedAt,omitempty"`
-	AccumulatedRuntimeMs      *int64              `json:"accumulatedRuntimeMs,omitempty"`
-	EndedAt                   *int64              `json:"endedAt,omitempty"`
-	Outcome                   *SubagentRunOutcome `json:"outcome,omitempty"`
-	ArchiveAtMs               *int64              `json:"archiveAtMs,omitempty"`
-	CleanupCompletedAt        *int64              `json:"cleanupCompletedAt,omitempty"`
-	CleanupHandled            bool                `json:"cleanupHandled,omitempty"`
-	SuppressAnnounceReason    string              `json:"suppressAnnounceReason,omitempty"` // "steer-restart" | "killed"
-	ExpectsCompletionMessage  bool                `json:"expectsCompletionMessage,omitempty"`
-	AnnounceRetryCount        int                 `json:"announceRetryCount,omitempty"`
-	LastAnnounceRetryAt       *int64              `json:"lastAnnounceRetryAt,omitempty"`
-	EndedReason               string              `json:"endedReason,omitempty"`
-	WakeOnDescendantSettle    bool                `json:"wakeOnDescendantSettle,omitempty"`
-	FrozenResultText          *string             `json:"frozenResultText,omitempty"`
-	FrozenResultCapturedAt    *int64              `json:"frozenResultCapturedAt,omitempty"`
+// SubagentRunListEntry holds a formatted run entry for display.
+type SubagentRunListEntry struct {
+	Entry *SubagentRunRecord
+	Line  string
 }
 
-// SubagentRunOutcome records the outcome of a subagent run.
-type SubagentRunOutcome struct {
-	Status string `json:"status"`          // "ok", "error", "timeout"
-	Error  string `json:"error,omitempty"`
+// BuildSubagentRunListEntries builds formatted entries for the /agents list.
+func BuildSubagentRunListEntries(runs []*SubagentRunRecord, recentWindowMinutes int, maxLabelLen int) (active, recent []SubagentRunListEntry) {
+	sorted := sortSubagentRunPtrs(runs)
+	recentCutoff := time.Now().UnixMilli() - int64(recentWindowMinutes)*60_000
+	if maxLabelLen <= 0 {
+		maxLabelLen = 110
+	}
+
+	idx := 1
+	for _, e := range sorted {
+		if e.EndedAt != 0 {
+			continue
+		}
+		label := FormatRunLabel(*e)
+		line := fmt.Sprintf("#%d %s — %s", idx, label, FormatRunStatus(*e))
+		active = append(active, SubagentRunListEntry{Entry: e, Line: line})
+		idx++
+	}
+	for _, e := range sorted {
+		if e.EndedAt == 0 {
+			continue
+		}
+		if e.EndedAt < recentCutoff {
+			continue
+		}
+		label := FormatRunLabel(*e)
+		line := fmt.Sprintf("#%d %s — %s", idx, label, FormatRunStatus(*e))
+		recent = append(recent, SubagentRunListEntry{Entry: e, Line: line})
+		idx++
+	}
+	return active, recent
 }
 
-// ResolveSubagentLabel returns a display label for the run record.
-func ResolveSubagentLabel(entry *SubagentRunRecord, fallback string) string {
-	if fallback == "" {
-		fallback = "subagent"
-	}
-	if label := strings.TrimSpace(entry.Label); label != "" {
-		return label
-	}
-	if task := strings.TrimSpace(entry.Task); task != "" {
-		return task
-	}
-	return fallback
-}
-
-// FormatRunLabel returns a truncated display label.
-func FormatRunLabel(entry *SubagentRunRecord, maxLength int) string {
-	raw := ResolveSubagentLabel(entry, "")
-	if maxLength <= 0 {
-		maxLength = 72
-	}
-	if len(raw) > maxLength {
-		return strings.TrimRight(raw[:maxLength], " \t") + "…"
-	}
-	return raw
-}
-
-// FormatRunStatus returns a human-readable status string.
-func FormatRunStatus(entry *SubagentRunRecord) string {
-	if entry.EndedAt == nil {
-		return "running"
-	}
-	status := "done"
-	if entry.Outcome != nil && entry.Outcome.Status != "" {
-		status = entry.Outcome.Status
-	}
-	if status == "ok" {
-		return "done"
-	}
-	return status
-}
-
-// SortSubagentRuns returns a copy sorted by start/create time descending (newest first).
-func SortSubagentRuns(runs []*SubagentRunRecord) []*SubagentRunRecord {
+func sortSubagentRunPtrs(runs []*SubagentRunRecord) []*SubagentRunRecord {
 	sorted := make([]*SubagentRunRecord, len(runs))
 	copy(sorted, runs)
-	sort.Slice(sorted, func(i, j int) bool {
-		return runTime(sorted[i]) > runTime(sorted[j])
-	})
+	// Active first, then by creation time descending.
+	for i := 0; i < len(sorted); i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			iActive := sorted[i].EndedAt == 0
+			jActive := sorted[j].EndedAt == 0
+			if (!iActive && jActive) || (iActive == jActive && sorted[i].CreatedAt < sorted[j].CreatedAt) {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
+		}
+	}
 	return sorted
 }
 
-func runTime(r *SubagentRunRecord) int64 {
-	if r.StartedAt != nil {
-		return *r.StartedAt
-	}
-	return r.CreatedAt
-}
-
-// SubagentTargetResolution holds the result of resolving a subagent target.
-type SubagentTargetResolution struct {
-	Entry *SubagentRunRecord
-	Error string
-}
-
-// SubagentTargetErrors provides error message templates for target resolution.
-type SubagentTargetErrors struct {
-	MissingTarget      string
-	InvalidIndex       func(value string) string
-	UnknownSession     func(value string) string
-	AmbiguousLabel     func(value string) string
-	AmbiguousLabelPfx  func(value string) string
-	AmbiguousRunIDPfx  func(value string) string
-	UnknownTarget      func(value string) string
-}
-
-// ResolveSubagentTargetFromRuns finds a subagent run by token (index, session key, label, or run ID prefix).
-func ResolveSubagentTargetFromRuns(
-	runs []*SubagentRunRecord,
-	token string,
-	recentWindowMinutes int,
-	labelFn func(*SubagentRunRecord) string,
-	isActiveFn func(*SubagentRunRecord) bool,
-	errors SubagentTargetErrors,
-) SubagentTargetResolution {
+// ResolveSubagentEntryForToken finds a subagent by token (index, session key, label, or run ID prefix).
+func ResolveSubagentEntryForToken(runs []*SubagentRunRecord, token string) (*SubagentRunRecord, *CommandResult) {
 	trimmed := strings.TrimSpace(token)
 	if trimmed == "" {
-		return SubagentTargetResolution{Error: errors.MissingTarget}
+		return nil, &CommandResult{Reply: "⚠️ Missing subagent target.", SkipAgent: true, IsError: true}
 	}
 
-	sorted := SortSubagentRuns(runs)
+	sorted := sortSubagentRunPtrs(runs)
 
-	// "last" shortcut.
 	if trimmed == "last" {
 		if len(sorted) > 0 {
-			return SubagentTargetResolution{Entry: sorted[0]}
+			return sorted[0], nil
 		}
-		return SubagentTargetResolution{Error: errors.MissingTarget}
+		return nil, &CommandResult{Reply: "⚠️ No subagent runs found.", SkipAgent: true, IsError: true}
 	}
-
-	if isActiveFn == nil {
-		isActiveFn = func(e *SubagentRunRecord) bool { return e.EndedAt == nil }
-	}
-
-	recentCutoff := time.Now().UnixMilli() - int64(recentWindowMinutes)*60_000
 
 	// Build numeric order: active first, then recently ended.
-	var numericOrder []*SubagentRunRecord
+	var numOrder []*SubagentRunRecord
 	for _, e := range sorted {
-		if isActiveFn(e) {
-			numericOrder = append(numericOrder, e)
+		if e.EndedAt == 0 {
+			numOrder = append(numOrder, e)
 		}
 	}
 	for _, e := range sorted {
-		if !isActiveFn(e) && e.EndedAt != nil && *e.EndedAt >= recentCutoff {
-			numericOrder = append(numericOrder, e)
+		if e.EndedAt != 0 {
+			numOrder = append(numOrder, e)
 		}
 	}
 
 	// Numeric index (1-based).
-	if isDigits(trimmed) {
-		idx, err := strconv.Atoi(trimmed)
-		if err != nil || idx <= 0 || idx > len(numericOrder) {
-			return SubagentTargetResolution{Error: errors.InvalidIndex(trimmed)}
-		}
-		return SubagentTargetResolution{Entry: numericOrder[idx-1]}
+	if n, err := strconv.Atoi(trimmed); err == nil && n > 0 && n <= len(numOrder) {
+		return numOrder[n-1], nil
 	}
 
-	// Session key (contains ":").
+	// Session key.
 	if strings.Contains(trimmed, ":") {
 		for _, e := range sorted {
 			if e.ChildSessionKey == trimmed {
-				return SubagentTargetResolution{Entry: e}
+				return e, nil
 			}
 		}
-		return SubagentTargetResolution{Error: errors.UnknownSession(trimmed)}
+		return nil, &CommandResult{Reply: fmt.Sprintf("⚠️ No subagent with session key %q.", trimmed), SkipAgent: true, IsError: true}
 	}
 
 	lowered := strings.ToLower(trimmed)
 
-	// Exact label match.
-	var exactMatches []*SubagentRunRecord
+	// Label match.
 	for _, e := range sorted {
-		if strings.ToLower(labelFn(e)) == lowered {
-			exactMatches = append(exactMatches, e)
+		if strings.ToLower(e.Label) == lowered {
+			return e, nil
 		}
 	}
-	if len(exactMatches) == 1 {
-		return SubagentTargetResolution{Entry: exactMatches[0]}
-	}
-	if len(exactMatches) > 1 {
-		return SubagentTargetResolution{Error: errors.AmbiguousLabel(trimmed)}
-	}
-
-	// Label prefix match.
-	var prefixMatches []*SubagentRunRecord
 	for _, e := range sorted {
-		if strings.HasPrefix(strings.ToLower(labelFn(e)), lowered) {
-			prefixMatches = append(prefixMatches, e)
+		if strings.HasPrefix(strings.ToLower(e.Label), lowered) {
+			return e, nil
 		}
 	}
-	if len(prefixMatches) == 1 {
-		return SubagentTargetResolution{Entry: prefixMatches[0]}
-	}
-	if len(prefixMatches) > 1 {
-		return SubagentTargetResolution{Error: errors.AmbiguousLabelPfx(trimmed)}
-	}
 
-	// Run ID prefix match.
-	var idMatches []*SubagentRunRecord
+	// Run ID prefix.
 	for _, e := range sorted {
 		if strings.HasPrefix(e.RunID, trimmed) {
-			idMatches = append(idMatches, e)
+			return e, nil
 		}
 	}
-	if len(idMatches) == 1 {
-		return SubagentTargetResolution{Entry: idMatches[0]}
-	}
-	if len(idMatches) > 1 {
-		return SubagentTargetResolution{Error: errors.AmbiguousRunIDPfx(trimmed)}
-	}
 
-	return SubagentTargetResolution{Error: errors.UnknownTarget(trimmed)}
+	return nil, &CommandResult{Reply: fmt.Sprintf("⚠️ No subagent matching %q.", trimmed), SkipAgent: true, IsError: true}
 }
 
-func isDigits(s string) bool {
-	if s == "" {
-		return false
+// FormatSubagentInfo returns a detailed info string for a subagent run.
+func FormatSubagentInfo(entry *SubagentRunRecord, indent int) string {
+	var lines []string
+	prefix := strings.Repeat(" ", indent)
+	lines = append(lines, prefix+"Label: "+FormatRunLabel(*entry))
+	lines = append(lines, prefix+"Status: "+FormatRunStatus(*entry))
+	lines = append(lines, prefix+"RunID: "+entry.RunID)
+	lines = append(lines, prefix+"Session: "+entry.ChildSessionKey)
+	if entry.Task != "" {
+		lines = append(lines, prefix+"Task: "+entry.Task)
 	}
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false
-		}
+	if entry.Model != "" {
+		lines = append(lines, prefix+"Model: "+entry.Model)
 	}
-	return true
+	lines = append(lines, prefix+"Cleanup: "+entry.Cleanup)
+	lines = append(lines, prefix+"Created: "+FormatTimestampWithAge(entry.CreatedAt))
+	return strings.Join(lines, "\n")
 }

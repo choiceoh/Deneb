@@ -248,16 +248,6 @@ func FormatDurationCompact(ms int64) string {
 	return fmt.Sprintf("%.1fh", d.Hours())
 }
 
-// FormatTimestampWithAge formats a timestamp as ISO + relative age.
-func FormatTimestampWithAge(valueMs int64) string {
-	if valueMs <= 0 {
-		return "n/a"
-	}
-	t := time.UnixMilli(valueMs)
-	age := time.Since(t)
-	return fmt.Sprintf("%s (%s ago)", t.UTC().Format(time.RFC3339), FormatDurationCompact(age.Milliseconds()))
-}
-
 // SortSubagentRuns sorts runs with active first, then by creation time descending.
 func SortSubagentRuns(runs []SubagentRunRecord) []SubagentRunRecord {
 	sorted := make([]SubagentRunRecord, len(runs))

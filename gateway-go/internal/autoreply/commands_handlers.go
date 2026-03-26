@@ -970,7 +970,7 @@ func handleFocusCommand(ctx CommandContext) (*CommandResult, error) {
 		return errResult, nil
 	}
 	return &CommandResult{
-		Reply:     fmt.Sprintf("🎯 Focused on `%s` (%s).", FormatRunLabel(entry, 0), entry.ChildSessionKey),
+		Reply:     fmt.Sprintf("🎯 Focused on `%s` (%s).", FormatRunLabel(*entry), entry.ChildSessionKey),
 		SkipAgent: true,
 	}, nil
 }

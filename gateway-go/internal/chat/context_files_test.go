@@ -59,7 +59,7 @@ func TestLoadContextFilesSymlinkDedup(t *testing.T) {
 func TestTruncateContent(t *testing.T) {
 	content := strings.Repeat("a", 100)
 	result := truncateContent(content, 50)
-	if len(result) > 60 { // 50 + marker overhead
+	if len(result) > 70 { // 50 + marker overhead (~20 chars for "[...truncated...]" + newlines)
 		t.Errorf("truncated content too long: %d chars", len(result))
 	}
 	if !strings.Contains(result, "[...truncated...]") {
