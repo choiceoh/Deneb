@@ -1,7 +1,5 @@
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
-#[cfg(feature = "ml")]
-use std::collections::HashMap;
 use std::fs;
 
 use crate::config::VegaConfig;
@@ -305,11 +303,6 @@ pub fn cmd_memory_embed(_args: &Value, config: &VegaConfig) -> CommandResult {
         "memory-embed",
         "임베딩 백엔드가 설정되지 않았습니다 (VEGA_INFERENCE=sglang 권장)",
     )
-}
-
-#[cfg(feature = "ml")]
-fn f32_vec_to_bytes(vec: &[f32]) -> Vec<u8> {
-    vec.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
 
 /// Return file/chunk/embedding counts and status.

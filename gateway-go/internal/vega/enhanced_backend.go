@@ -144,11 +144,11 @@ func (eb *EnhancedBackend) searchWithVector(ctx context.Context, query string, q
 		return nil, fmt.Errorf("vega enhanced: ffi search: %w", err)
 	}
 
-	return parseSearchResults(resultBytes, opts)
+	return parseSearchResults(resultBytes)
 }
 
 // parseSearchResults parses the Rust FFI search response.
-func parseSearchResults(resultBytes []byte, opts SearchOpts) ([]SearchResult, error) {
+func parseSearchResults(resultBytes []byte) ([]SearchResult, error) {
 	var rawResult struct {
 		Unified []struct {
 			ProjectID   int64   `json:"project_id"`
@@ -178,10 +178,6 @@ func parseSearchResults(resultBytes []byte, opts SearchOpts) ([]SearchResult, er
 			Content:     u.Content,
 			Score:       u.Score,
 		})
-	}
-
-	if opts.Limit > 0 && len(results) > opts.Limit {
-		results = results[:opts.Limit]
 	}
 
 	return results, nil
