@@ -203,11 +203,7 @@ Security boundary notes:
 
 - Sandbox media validation allows absolute temp paths only under the Deneb-managed temp root.
 - Arbitrary host tmp paths are not treated as trusted media roots.
-- Plugin/extension code should use Deneb temp helpers (`resolvePreferredDenebTmpDir`, `buildRandomTempFilePath`, `withTempDownloadPath`) rather than raw `os.tmpdir()` defaults when handling media files.
-- Enforcement reference points:
-  - temp root resolver: `src/infra/tmp-deneb-dir.ts`
-  - SDK temp helpers: `src/plugin-sdk/temp-path.ts`
-  - messaging/channel tmp guardrail: `scripts/check-no-random-messaging-tmp.mjs`
+- Temp file handling is implemented in the Go gateway (`gateway-go/internal/infra/`).
 
 ## Operational Guidance
 

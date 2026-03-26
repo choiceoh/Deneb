@@ -4,15 +4,13 @@
   <strong>Self-Hosted AI Agent with Lossless Memory</strong><br>
   <a href="https://github.com/choiceoh/Deneb/releases"><img src="https://img.shields.io/badge/version-3.10.0-blue" alt="Version"></a>
   <a href="https://github.com/choiceoh/Deneb/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.x-3178c6" alt="TypeScript"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-stable-dea584" alt="Rust"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.24+-00ADD8" alt="Go"></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22.16+-339933" alt="Node.js"></a>
 </p>
 
 ---
 
-**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. A ~250K-line multi-language server engine (TypeScript + Rust + Go + Python) with a custom Aurora context engine — DAG-based compaction, proactive background summarization, and full memory recall across sessions.
+**Deneb** is a self-hosted AI agent framework focused on one thing: **never losing context**. A ~85K-line multi-language server engine (Rust + Go) with a custom Aurora context engine — DAG-based compaction, proactive background summarization, and full memory recall across sessions.
 
 **Memory-first, local-first, lean-first.**
 
@@ -28,7 +26,7 @@ Most AI agent frameworks hit the same wall: when conversations grow long, contex
 | **Context recall**     | Vector search only       | Semantic search + DAG expansion + memory files    |
 | **Compaction latency** | Blocks on LLM call       | Background observer pre-computes summaries        |
 | **Memory persistence** | Session-scoped           | Workspace files + JSONL transcripts + Aurora DAG  |
-| **Performance**        | Pure JS/Python           | Rust core (FFI) + Go gateway + TypeScript runtime |
+| **Performance**        | Pure JS/Python           | Rust core (FFI) + Go gateway                     |
 | **Local LLM**          | Optional                 | First-class: SGLang, Ollama, vLLM support         |
 
 ### Intentional Simplification
@@ -107,7 +105,6 @@ Other channel configs (Discord, Signal, Slack, WhatsApp, iMessage) exist at the 
 
 ### Prerequisites
 
-- Node.js 22.16+ (Node 24 recommended)
 - Rust (stable, via rustup) — for core-rs
 - Go 1.24+ — for gateway-go
 - An LLM API key (or a local model server)
@@ -135,43 +132,26 @@ scripts/start-go-gateway.sh --port 18789 --bind loopback
 
 ```
 Deneb/
-├── src/                        # Core TypeScript runtime (~127K lines)
-│   ├── context-engine/aurora/  #   Aurora engine — compaction, observer, DAG
-│   ├── autonomous/             #   Autonomous loop engine
-│   ├── agents/                 #   Agent loop, sessions, compaction
-│   ├── gateway/                #   Gateway server (~150 files)
-│   ├── channels/               #   Channel plugin framework
-│   ├── plugin-sdk/             #   Plugin SDK (160+ subpath exports)
-│   ├── memory/                 #   Semantic memory search
-│   ├── cron/                   #   Scheduled tasks & heartbeat
-│   ├── config/                 #   Config schema & validation
-│   ├── routing/                #   Message routing
-│   ├── media/                  #   Media processing (FFmpeg, image, audio, PDF)
-│   ├── infra/                  #   Infrastructure (env, process, fs, net)
-│   ├── providers/              #   LLM/model provider integrations
-│   └── ...
-├── core-rs/                    # Rust core library (~26K lines)
-│   └── src/                    #   Protocol validation, security, media detection (C FFI)
+├── core-rs/                    # Rust core library (~37K lines)
+│   ├── core/                   #   Protocol validation, security, media, markdown, memory, context engine
+│   ├── vega/                   #   Vega search engine (FTS5 + optional ML)
+│   ├── ml/                     #   GGUF inference (llama.cpp, optional CUDA)
+│   └── agent-runtime/          #   Agent lifecycle & model selection
 ├── gateway-go/                 # Go gateway server (~49K lines)
 │   ├── cmd/gateway/            #   Entry point
-│   └── internal/               #   Server, RPC, session, channel, bridge
+│   └── internal/               #   Server, RPC, session, channel, FFI bindings, chat
 ├── proto/                      # Shared Protobuf schemas
 │   ├── gateway.proto           #   Gateway frames, error codes
 │   ├── channel.proto           #   Channel capabilities & meta
 │   └── session.proto           #   Session lifecycle & state
-├── extensions/                 # Channel extensions
-│   └── telegram/               #   Telegram Bot API (grammy)
+├── cli-rs/                     # Rust CLI
 ├── skills/                     # Skill plugins (16 skills)
-├── vega/                       # Python project management tool (~12K lines)
-├── ui/                         # Lit-based web control UI
 └── docs/                       # Mintlify documentation site
 ```
 
 ### Multi-Language IPC
 
-- **Go ↔ Rust:** CGo FFI (in-process, zero overhead)
-- **Go ↔ Node.js:** Unix domain socket + gateway frame protocol
-- **Go ↔ Python:** Subprocess + JSONL/MCP
+- **Go ↔ Rust:** CGo FFI (in-process, zero overhead via static linking)
 - **Proto schemas** are the cross-language source of truth
 
 ## Development
