@@ -82,6 +82,10 @@ type Session struct {
 	InputTokens  *int64 `json:"inputTokens,omitempty"`
 	OutputTokens *int64 `json:"outputTokens,omitempty"`
 	TotalTokens  *int64 `json:"totalTokens,omitempty"`
+
+	// LastOutput stores the last assistant output text for the session.
+	// Used by cron runner to retrieve the agent's response after completion.
+	LastOutput string `json:"lastOutput,omitempty"`
 }
 
 // Manager tracks active sessions in memory.
