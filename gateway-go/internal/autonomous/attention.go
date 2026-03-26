@@ -112,11 +112,16 @@ func (a *Attention) StartTimer(ctx context.Context) {
 	a.logger.Info("attention timer started", "interval", a.cfg.CycleInterval)
 }
 
-// StopTimer stops the periodic timer.
+// StopTimer stops the periodic timer. Safe to call from any goroutine.
 func (a *Attention) StopTimer() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.stopTimerLocked()
+}
 
+// stopTimerLocked cancels the timer without acquiring a.mu.
+// Use this from code paths that already hold the lock (e.g. timerLoop).
+func (a *Attention) stopTimerLocked() {
 	if a.timerCancel != nil {
 		a.timerCancel()
 		a.timerCancel = nil
@@ -143,7 +148,9 @@ func (a *Attention) timerLoop(ctx context.Context) {
 			// Auto-stop after 10 consecutive failures.
 			if consErr >= 10 {
 				a.logger.Warn("10 consecutive failures, stopping attention timer")
-				a.StopTimer()
+				a.mu.Lock()
+				a.stopTimerLocked()
+				a.mu.Unlock()
 				return
 			}
 

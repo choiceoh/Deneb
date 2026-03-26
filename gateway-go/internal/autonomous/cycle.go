@@ -120,19 +120,6 @@ func buildDecisionPrompt(goals []Goal, lastCycle *CycleState, recentlyChanged ..
 	return b.String()
 }
 
-func priorityLabel(p string) string {
-	switch p {
-	case PriorityHigh:
-		return "높음"
-	case PriorityMedium:
-		return "보통"
-	case PriorityLow:
-		return "낮음"
-	default:
-		return p
-	}
-}
-
 // goalUpdateBlockRegex matches a fenced ```goal_update ... ``` block.
 var goalUpdateBlockRegex = regexp.MustCompile("(?s)```goal_update\\s*\n(.+?)\\s*```")
 
