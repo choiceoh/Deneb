@@ -16,8 +16,57 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 	"unsafe"
 )
+
+// mdIRCache caches MarkdownToIR results by input hash to avoid redundant
+// FFI calls for identical markdown content. Uses a bounded LRU-like map
+// with simple eviction when capacity is reached.
+var mdIRCache = &markdownCache{entries: make(map[uint64]json.RawMessage)}
+
+const mdCacheMaxEntries = 128
+
+type markdownCache struct {
+	mu      sync.Mutex
+	entries map[uint64]json.RawMessage
+}
+
+// fnv1a64 is a fast non-cryptographic hash for cache keys.
+func fnv1a64(s string) uint64 {
+	const offset64 = 14695981039346656037
+	const prime64 = 1099511628211
+	h := uint64(offset64)
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= prime64
+	}
+	return h
+}
+
+func (c *markdownCache) get(key uint64) (json.RawMessage, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v, ok := c.entries[key]
+	return v, ok
+}
+
+func (c *markdownCache) put(key uint64, val json.RawMessage) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.entries) >= mdCacheMaxEntries {
+		// Simple eviction: clear half the entries.
+		i := 0
+		for k := range c.entries {
+			if i >= mdCacheMaxEntries/2 {
+				break
+			}
+			delete(c.entries, k)
+			i++
+		}
+	}
+	c.entries[key] = val
+}
 
 // MarkdownToIR parses markdown text into an intermediate representation.
 // Returns JSON-encoded IR with text, styles, links, and code block detection.
@@ -25,6 +74,12 @@ import (
 func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) {
 	if len(markdown) == 0 {
 		return json.RawMessage(`{"text":"","styles":[],"links":[],"has_code_blocks":false}`), nil
+	}
+
+	// Check cache for identical markdown (common in streaming where chunks repeat).
+	cacheKey := fnv1a64(markdown + "|" + optionsJSON)
+	if cached, ok := mdIRCache.get(cacheKey); ok {
+		return cached, nil
 	}
 
 	// Output is typically larger than input due to JSON structure.
@@ -53,7 +108,9 @@ func MarkdownToIR(markdown string, optionsJSON string) (json.RawMessage, error) 
 	if rc < 0 {
 		return nil, ffiError("markdown_to_ir", int(rc))
 	}
-	return json.RawMessage(out[:rc]), nil
+	result := json.RawMessage(out[:rc])
+	mdIRCache.put(cacheKey, result)
+	return result, nil
 }
 
 // MarkdownDetectFences detects fenced code blocks in markdown text.

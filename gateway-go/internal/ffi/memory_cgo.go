@@ -81,9 +81,12 @@ func MemoryMergeHybridResults(paramsJSON string) (json.RawMessage, error) {
 		return nil, fmt.Errorf("ffi: memory_merge: empty params")
 	}
 
-	initialSize := len(paramsJSON) * 2
-	if initialSize < 8192 {
-		initialSize = 8192
+	// Pre-estimate output size: merged results are typically 3-5x input size
+	// due to JSON structure expansion. Use 4x with 16 KB floor to minimize
+	// grow-and-retry FFI round trips.
+	initialSize := len(paramsJSON) * 4
+	if initialSize < 16384 {
+		initialSize = 16384
 	}
 
 	paramsPtr := (*C.uchar)(unsafe.Pointer(unsafe.StringData(paramsJSON)))
