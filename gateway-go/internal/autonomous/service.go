@@ -166,6 +166,13 @@ func (s *Service) Stop() {
 	s.logger.Info("autonomous service stopped")
 }
 
+// IsRunning reports whether the autonomous service is active (attention timer running).
+func (s *Service) IsRunning() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.attention != nil && s.attention.IsTimerActive()
+}
+
 // Status returns the current service state.
 func (s *Service) Status() ServiceStatus {
 	s.mu.Lock()
