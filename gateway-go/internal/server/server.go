@@ -122,6 +122,12 @@ type Server struct {
 	// Phase 5: Enhanced RPC subsystems.
 	heartbeatState *rpc.HeartbeatState
 	presenceStore  *rpc.PresenceStore
+
+	// Phase 5: HTTP routing for plugins.
+	pluginRouter *PluginHTTPRouter
+
+	// Phase 5: Hooks HTTP webhook handler.
+	hooksHTTP *HooksHTTPHandler
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
@@ -191,6 +197,13 @@ func WithProviders(r *provider.Registry) Option {
 func WithTranscript(w *transcript.Writer) Option {
 	return func(s *Server) {
 		s.transcript = w
+	}
+}
+
+// WithHooksHTTP sets the hooks HTTP webhook handler.
+func WithHooksHTTP(h *HooksHTTPHandler) Option {
+	return func(s *Server) {
+		s.hooksHTTP = h
 	}
 }
 
@@ -272,6 +285,20 @@ func New(addr string, opts ...Option) *Server {
 			Providers: s.providers,
 		})
 	}
+
+	// Plugin HTTP router with auth check backed by the gateway auth validator.
+	var pluginAuthCheck func(r *http.Request) bool
+	if s.authValidator != nil {
+		pluginAuthCheck = func(r *http.Request) bool {
+			token := extractBearerToken(r)
+			if token == "" {
+				return false
+			}
+			_, err := s.authValidator.ValidateToken(token)
+			return err == nil
+		}
+	}
+	s.pluginRouter = NewPluginHTTPRouter(s.logger, pluginAuthCheck)
 
 	return s
 }
@@ -478,10 +505,39 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /sessions/{key}/kill", s.handleSessionKill)
 	mux.HandleFunc("GET /sessions/{key}/history", s.handleSessionHistory)
 
-	// Control UI routes.
-	// Control UI removed (Phase 0: Rust+Go migration).
+	// OpenAI-compatible HTTP API endpoints.
+	mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
+	mux.HandleFunc("POST /v1/responses", s.handleResponses)
 
-	mux.HandleFunc("GET /{$}", s.handleRoot)
+	// Hooks HTTP webhook endpoint — intercepts /hooks/* before the fallback.
+	if s.hooksHTTP != nil {
+		hooksHandler := s.hooksHTTP
+		mux.HandleFunc("/hooks/", func(w http.ResponseWriter, r *http.Request) {
+			if !hooksHandler.Handle(w, r) {
+				http.NotFound(w, r)
+			}
+		})
+		mux.HandleFunc("/hooks", func(w http.ResponseWriter, r *http.Request) {
+			if !hooksHandler.Handle(w, r) {
+				http.NotFound(w, r)
+			}
+		})
+	}
+
+	// Catch-all handler: plugin HTTP routes → root fallback.
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Plugin HTTP routes.
+		if s.pluginRouter != nil && s.pluginRouter.Handle(w, r) {
+			return
+		}
+		// Root fallback for exact "/" GET.
+		if r.Method == http.MethodGet && r.URL.Path == "/" {
+			s.handleRoot(w, r)
+			return
+		}
+		http.NotFound(w, r)
+	})
+
 	return mux
 }
 

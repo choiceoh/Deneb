@@ -812,16 +812,9 @@ Go 게이트웨이 마이그레이션 완료 후 누락된 기능 목록. Node.j
   - 기능: Open Responses 프로토콜, 클라이언트 제공 도구, SSE 스트리밍 (10종 이벤트)
   - Go 현재: 미구현
 
-- [ ] **Control UI (SPA)** — 웹 대시보드
-  - TS 참조: `src/gateway/dashboard/control-ui.ts`
-  - 기능: SPA 서빙, 아바타, CSP, bootstrap config
-  - Go 현재: `server.go:477` "Control UI removed (Phase 0)" 주석으로 제거됨
+- [x] ~~**Control UI (SPA)** — 불필요 (단일 유저 Telegram 전용 배포이므로 제거)~~
 
-- [ ] **Plugin HTTP 라우팅 프레임워크** — `/plugins/<pluginId>/*`
-  - TS 참조: `src/gateway/server/plugins-http.ts`
-  - 기능: 플러그인별 HTTP 핸들러 등록, 인증 강제, 실행 컨텍스트
-  - Go 현재: Telegram은 네이티브 구현, 범용 프레임워크 없음
-  - 영향: 현재 Telegram만 사용하므로 즉시 영향 없음
+- [x] **Plugin HTTP 라우팅 프레임워크** — 구현 완료 (`gateway-go/internal/server/plugin_http.go`)
 
 ### P2 (Medium) — 구현 완료
 
