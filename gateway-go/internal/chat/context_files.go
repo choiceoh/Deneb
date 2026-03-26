@@ -161,7 +161,8 @@ func truncateContent(content string, maxChars int) string {
 }
 
 // FormatContextFilesForPrompt formats loaded context files for inclusion
-// in the system prompt.
+// in the system prompt. If SOUL.md is present, an explicit instruction to
+// embody its persona/tone is injected (mirrors the TS system-prompt behavior).
 func FormatContextFilesForPrompt(files []ContextFile) string {
 	if len(files) == 0 {
 		return ""
@@ -169,6 +170,22 @@ func FormatContextFilesForPrompt(files []ContextFile) string {
 
 	var sb strings.Builder
 	sb.WriteString("# Project Context\n\n")
+
+	// Detect SOUL.md presence.
+	hasSoulFile := false
+	for _, f := range files {
+		base := filepath.Base(f.Path)
+		if strings.EqualFold(base, "SOUL.md") {
+			hasSoulFile = true
+			break
+		}
+	}
+
+	sb.WriteString("The following project context files have been loaded:\n")
+	if hasSoulFile {
+		sb.WriteString("If SOUL.md is present, embody its persona and tone. Avoid stiff, generic replies; follow its guidance unless higher-priority instructions override it.\n")
+	}
+	sb.WriteString("\n")
 
 	for _, f := range files {
 		fmt.Fprintf(&sb, "## %s\n\n%s\n\n", f.Path, strings.TrimSpace(f.Content))
