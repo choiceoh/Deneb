@@ -786,3 +786,67 @@ This runs the smart gate, pushes, and creates the PR automatically. Options: `--
 - For manual `deneb message send` messages that include `!`, use the heredoc pattern noted below to avoid the Bash tool’s escaping.
 - Release guardrails: do not change version numbers without operator’s explicit consent; always ask permission before running any npm publish/release step.
 - Beta release guardrail: when using a beta Git tag (for example `vYYYY.M.D-beta.N`), publish npm with a matching beta version suffix (for example `YYYY.M.D-beta.N`) rather than a plain version on `--tag beta`; otherwise the plain version name gets consumed/blocked.
+
+## Go Gateway Migration TODO (TS → Go 포팅 잔여 작업)
+
+Go 게이트웨이 마이그레이션 완료 후 누락된 기능 목록. Node.js 브릿지는 이미 완전 제거됨.
+RPC 메서드는 parity test로 관리되어 대부분 포팅 완료. **주요 격차는 HTTP 레이어**에 집중.
+
+### P0 (Critical)
+
+- [ ] **Hooks HTTP 엔드포인트** — 외부 webhook 수신 (`POST /hooks/*`)
+  - TS 참조: `src/gateway/http/server-http.ts`, `src/gateway/hooks.ts`, `src/gateway/hooks-mapping.ts`
+  - 기능: Bearer 토큰 인증, rate limiting, idempotency, wake/agent 디스패치, 매핑 시스템, 템플릿, transform 함수
+  - Go 현재: `gateway-go/internal/hooks/`는 내부 이벤트 핸들러만 (HTTP webhook 수신 없음)
+  - 영향: GitHub, Gmail, CI/CD, Slack 등 외부 서비스에서 에이전트 트리거 불가
+
+### P1 (High)
+
+- [ ] **OpenAI Chat Completions HTTP API** — `POST /v1/chat/completions`
+  - TS 참조: `src/gateway/openai-http.ts`
+  - 기능: OpenAI-호환 JSON/SSE 스트리밍, 이미지 지원 (max 8개/20MB), 에이전트 통합
+  - Go 현재: outbound 클라이언트만 (`gateway-go/internal/llm/openai.go`), 서버 측 없음
+  - 영향: LangChain, OpenAI SDK 래퍼 등 외부 클라이언트 연동 불가
+
+- [ ] **Open Responses HTTP API** — `POST /v1/responses`
+  - TS 참조: `src/gateway/openresponses-http.ts`
+  - 기능: Open Responses 프로토콜, 클라이언트 제공 도구, SSE 스트리밍 (10종 이벤트)
+  - Go 현재: 미구현
+
+- [ ] **Control UI (SPA)** — 웹 대시보드
+  - TS 참조: `src/gateway/dashboard/control-ui.ts`
+  - 기능: SPA 서빙, 아바타, CSP, bootstrap config
+  - Go 현재: `server.go:477` "Control UI removed (Phase 0)" 주석으로 제거됨
+
+- [ ] **Plugin HTTP 라우팅 프레임워크** — `/plugins/<pluginId>/*`
+  - TS 참조: `src/gateway/server/plugins-http.ts`
+  - 기능: 플러그인별 HTTP 핸들러 등록, 인증 강제, 실행 컨텍스트
+  - Go 현재: Telegram은 네이티브 구현, 범용 프레임워크 없음
+  - 영향: 현재 Telegram만 사용하므로 즉시 영향 없음
+
+### P2 (Medium)
+
+- [ ] **Tools Invoke HTTP** — `POST /tools/invoke`
+  - TS 참조: `src/gateway/tools-invoke-http.ts`
+
+- [ ] **Session Kill HTTP** — `POST /sessions/<key>/kill`
+  - TS 참조: `src/gateway/session/session-kill-http.ts`
+
+- [ ] **Session History HTTP** — `GET /sessions/<key>/history` (JSON + SSE)
+  - TS 참조: `src/gateway/session/sessions-history-http.ts`
+
+- [ ] **`channels.logout` 실제 구현** — 현재 stub (`server.go:885`)
+  - TS 참조: `src/gateway/server-methods/channels/channels.ts:272`
+
+- [ ] **Config hot reload 서브시스템 전파** — 채널/크론/헬스 모니터 재시작
+  - TS 참조: `src/gateway/server-reload-handlers.ts`
+  - Go 현재: `config.reload` RPC는 있으나 config 파일 재로드 + hooks 이벤트만
+
+- [ ] **Auth: input allowlist + security path**
+  - TS 참조: `src/gateway/auth/input-allowlist.ts`, `src/gateway/auth/security-path.ts`
+
+### P3 (Low)
+
+- [ ] **Vega/ML feature flag 활성화** — GGUF 모델 배포 후 (`core-rs/vega/`, `core-rs/ml/`)
+- [ ] **`connect.challenge` 이벤트** — WebSocket 챌린지 인증 루프
+- [ ] **Credential planner / Probe auth** — 단일 유저 배포에서 낮은 영향
