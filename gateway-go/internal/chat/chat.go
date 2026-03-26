@@ -214,7 +214,9 @@ func (h *Handler) HandleBtw(_ context.Context, sessionKey, question string) (str
 		Text string `json:"text"`
 	}
 	if len(resp.Payload) > 0 {
-		_ = json.Unmarshal(resp.Payload, &result)
+		if err := json.Unmarshal(resp.Payload, &result); err != nil {
+			return "", fmt.Errorf("btw response unmarshal failed: %w", err)
+		}
 	}
 	return result.Text, nil
 }
@@ -260,6 +262,11 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 	if p.Message == "" && len(p.Attachments) == 0 {
 		return protocol.NewResponseError(req.ID, protocol.NewError(
 			protocol.ErrMissingParam, "message or attachments required"))
+	}
+	if len(p.Message) > h.maxMessageBytes {
+		return protocol.NewResponseError(req.ID, protocol.NewError(
+			protocol.ErrInvalidRequest,
+			fmt.Sprintf("message too large: %d bytes exceeds limit of %d", len(p.Message), h.maxMessageBytes)))
 	}
 
 	// Interrupt any active run on this session to prevent concurrent runs.
