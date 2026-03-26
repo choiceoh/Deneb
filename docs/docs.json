@@ -905,6 +905,7 @@
               {
                 "group": "Fundamentals",
                 "pages": [
+                  "concepts/design-philosophy",
                   "concepts/pi",
                   "concepts/architecture",
                   "concepts/agent",

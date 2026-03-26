@@ -20,6 +20,12 @@ Deneb runs as a multi-language gateway with three cooperating runtimes:
 
 A single long-lived Gateway owns all messaging surfaces (Telegram via grammY, Discord, Slack, WhatsApp via Baileys, Signal, iMessage, WebChat, and extension channels).
 
+<Tip>
+Telegram is the primary production channel. Other channels exist in the
+codebase but may not receive the same depth of optimization. See
+[design philosophy](/concepts/design-philosophy) for details.
+</Tip>
+
 Control-plane clients (macOS app, CLI, web UI, automations) connect over **WebSocket** on the configured bind host (default `127.0.0.1:18789`).
 
 **Nodes** (macOS/iOS/Android/headless) also connect over **WebSocket**, but declare `role: node` with explicit caps/commands.
