@@ -10,23 +10,43 @@ import (
 )
 
 // SubagentRunRecord represents a single subagent run entry.
+// Full parity with TS SubagentRunRecord from subagent-registry.types.ts.
 type SubagentRunRecord struct {
-	RunID               string             `json:"runId"`
-	ChildSessionKey     string             `json:"childSessionKey"`
-	RequesterSessionKey string             `json:"requesterSessionKey"`
-	RequesterDisplayKey string             `json:"requesterDisplayKey"`
-	Task                string             `json:"task"`
-	Label               string             `json:"label,omitempty"`
-	Model               string             `json:"model,omitempty"`
-	CreatedAt           int64              `json:"createdAt"`
-	StartedAt           *int64             `json:"startedAt,omitempty"`
-	EndedAt             *int64             `json:"endedAt,omitempty"`
-	Outcome             *SubagentRunOutcome `json:"outcome,omitempty"`
+	RunID                     string              `json:"runId"`
+	ChildSessionKey           string              `json:"childSessionKey"`
+	ControllerSessionKey      string              `json:"controllerSessionKey,omitempty"`
+	RequesterSessionKey       string              `json:"requesterSessionKey"`
+	RequesterDisplayKey       string              `json:"requesterDisplayKey"`
+	Task                      string              `json:"task"`
+	Cleanup                   string              `json:"cleanup"` // "delete" or "keep"
+	Label                     string              `json:"label,omitempty"`
+	Model                     string              `json:"model,omitempty"`
+	WorkspaceDir              string              `json:"workspaceDir,omitempty"`
+	RunTimeoutSeconds         *int                `json:"runTimeoutSeconds,omitempty"`
+	SpawnMode                 string              `json:"spawnMode,omitempty"`
+	CreatedAt                 int64               `json:"createdAt"`
+	StartedAt                 *int64              `json:"startedAt,omitempty"`
+	SessionStartedAt          *int64              `json:"sessionStartedAt,omitempty"`
+	AccumulatedRuntimeMs      *int64              `json:"accumulatedRuntimeMs,omitempty"`
+	EndedAt                   *int64              `json:"endedAt,omitempty"`
+	Outcome                   *SubagentRunOutcome `json:"outcome,omitempty"`
+	ArchiveAtMs               *int64              `json:"archiveAtMs,omitempty"`
+	CleanupCompletedAt        *int64              `json:"cleanupCompletedAt,omitempty"`
+	CleanupHandled            bool                `json:"cleanupHandled,omitempty"`
+	SuppressAnnounceReason    string              `json:"suppressAnnounceReason,omitempty"` // "steer-restart" | "killed"
+	ExpectsCompletionMessage  bool                `json:"expectsCompletionMessage,omitempty"`
+	AnnounceRetryCount        int                 `json:"announceRetryCount,omitempty"`
+	LastAnnounceRetryAt       *int64              `json:"lastAnnounceRetryAt,omitempty"`
+	EndedReason               string              `json:"endedReason,omitempty"`
+	WakeOnDescendantSettle    bool                `json:"wakeOnDescendantSettle,omitempty"`
+	FrozenResultText          *string             `json:"frozenResultText,omitempty"`
+	FrozenResultCapturedAt    *int64              `json:"frozenResultCapturedAt,omitempty"`
 }
 
 // SubagentRunOutcome records the outcome of a subagent run.
 type SubagentRunOutcome struct {
-	Status string `json:"status"` // "ok", "error", "timeout"
+	Status string `json:"status"`          // "ok", "error", "timeout"
+	Error  string `json:"error,omitempty"`
 }
 
 // ResolveSubagentLabel returns a display label for the run record.
