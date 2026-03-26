@@ -24,6 +24,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
+	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
@@ -858,6 +859,15 @@ func (s *Server) registerPhase2Methods() {
 	chatCfg.Transcript = transcriptStore
 	chatCfg.Tools = chat.NewToolRegistry()
 	chatCfg.JobTracker = s.jobTracker
+
+	// Initialize Aurora compaction store.
+	auroraStore, err := aurora.NewStore(aurora.DefaultStoreConfig(), s.logger)
+	if err != nil {
+		s.logger.Warn("aurora store unavailable, compaction will use legacy fallback", "error", err)
+	} else {
+		chatCfg.AuroraStore = auroraStore
+		s.logger.Info("aurora compaction store initialized")
+	}
 
 	// Resolve default model from config; fall back to hardcoded default.
 	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
