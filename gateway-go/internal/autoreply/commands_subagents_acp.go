@@ -135,6 +135,68 @@ func (s *SessionBindingService) ListForSession(sessionKey string) []AgentBinding
 	return entries
 }
 
+// StoredBinding is the on-disk representation of a session binding.
+type StoredBinding struct {
+	Channel          string `json:"channel"`
+	AccountID        string `json:"accountId"`
+	ConversationID   string `json:"conversationId"`
+	TargetSessionKey string `json:"targetSessionKey"`
+	BoundBy          string `json:"boundBy,omitempty"`
+}
+
+// Snapshot returns all bindings as StoredBinding entries for persistence.
+func (s *SessionBindingService) Snapshot() []StoredBinding {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var entries []StoredBinding
+	for convoKey, bindingID := range s.byConvo {
+		binding := s.bindings[bindingID]
+		if binding == nil {
+			continue
+		}
+		parts := strings.SplitN(convoKey, ":", 3)
+		entry := StoredBinding{
+			TargetSessionKey: binding.TargetSessionKey,
+			BoundBy:          binding.BoundBy,
+		}
+		if len(parts) >= 1 {
+			entry.Channel = parts[0]
+		}
+		if len(parts) >= 2 {
+			entry.AccountID = parts[1]
+		}
+		if len(parts) >= 3 {
+			entry.ConversationID = parts[2]
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+// RestoreAll replaces all bindings from a slice of StoredBinding entries.
+func (s *SessionBindingService) RestoreAll(entries []StoredBinding) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.bindings = make(map[string]*SessionBindingEntry)
+	s.byConvo = make(map[string]string)
+	s.nextID = 0
+
+	for _, e := range entries {
+		s.nextID++
+		bindingID := fmt.Sprintf("bind_%d", s.nextID)
+		convoKey := fmt.Sprintf("%s:%s:%s", e.Channel, e.AccountID, e.ConversationID)
+
+		s.bindings[bindingID] = &SessionBindingEntry{
+			BindingID:        bindingID,
+			TargetSessionKey: e.TargetSessionKey,
+			BoundBy:          e.BoundBy,
+		}
+		s.byConvo[convoKey] = bindingID
+	}
+}
+
 // NewSubagentCommandDepsFromACP creates a SubagentCommandDeps backed by
 // the given ACPRegistry. Optional config provides full infrastructure wiring.
 func NewSubagentCommandDepsFromACP(registry *ACPRegistry, cfg ...ACPCommandDepsConfig) *SubagentCommandDeps {

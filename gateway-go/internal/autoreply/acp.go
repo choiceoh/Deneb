@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
 )
 
 // ACPAgent represents a spawned sub-agent.
@@ -105,6 +107,60 @@ func (r *ACPRegistry) Remove(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.agents, id)
+}
+
+// UpdateStatusBySessionKey finds an agent by session key and updates its status.
+// Returns true if an agent was found and updated.
+func (r *ACPRegistry) UpdateStatusBySessionKey(sessionKey, status string, endedAt int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, a := range r.agents {
+		if a.SessionKey == sessionKey {
+			a.Status = status
+			if endedAt > 0 {
+				a.EndedAt = endedAt
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// mapSessionStatusToACP converts a session RunStatus to an ACP agent status string.
+func mapSessionStatusToACP(status session.RunStatus) string {
+	switch status {
+	case session.StatusRunning:
+		return "running"
+	case session.StatusDone:
+		return "done"
+	case session.StatusFailed:
+		return "failed"
+	case session.StatusKilled:
+		return "killed"
+	case session.StatusTimeout:
+		return "failed"
+	default:
+		return ""
+	}
+}
+
+// StartACPLifecycleSync subscribes to session lifecycle events and keeps
+// the ACPRegistry agent statuses in sync. Returns an unsubscribe function.
+func StartACPLifecycleSync(registry *ACPRegistry, eventBus *session.EventBus) func() {
+	return eventBus.Subscribe(func(event session.Event) {
+		if event.Kind != session.EventStatusChanged {
+			return
+		}
+		acpStatus := mapSessionStatusToACP(event.NewStatus)
+		if acpStatus == "" {
+			return
+		}
+		var endedAt int64
+		if event.NewStatus != session.StatusRunning {
+			endedAt = time.Now().UnixMilli()
+		}
+		registry.UpdateStatusBySessionKey(event.Key, acpStatus, endedAt)
+	})
 }
 
 // ACPProjector projects ACP sub-agent results into the parent chat.
