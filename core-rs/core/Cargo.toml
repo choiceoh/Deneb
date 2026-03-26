@@ -30,7 +30,7 @@ dgx = ["vega-ml", "cuda"]
 # Serialization
 serde.workspace = true
 serde_json.workspace = true
-jsonschema = "0.28"
+jsonschema = "0.45"
 memchr = "2"
 
 # Protobuf runtime
