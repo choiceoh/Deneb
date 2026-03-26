@@ -31,7 +31,7 @@ const (
 	defaultMaxTokens        = 8192
 	defaultMaxTurns         = 25
 	defaultAgentTimeout     = 10 * time.Minute
-	defaultModel            = "claude-sonnet-4-20250514"
+	defaultModel            = "zai/glm-5"
 	maxCompactionRetries    = 2
 )
 
@@ -196,7 +196,7 @@ func executeAgentRun(
 		model = defaultModel
 	}
 
-	// Parse provider prefix from model (e.g., "zai/glm-5-turbo" → provider="zai", model="glm-5-turbo").
+	// Parse provider prefix from model (e.g., "zai/glm-5" → provider="zai", model="glm-5").
 	providerID, modelName := parseModelID(model)
 	model = modelName
 
@@ -404,37 +404,39 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) (*llm.C
 		}
 	}
 
-	// 2. Try auth manager (Anthropic credentials).
+	// 2. Try auth manager.
 	if deps.authManager != nil {
 		target := providerID
 		if target == "" {
-			target = "anthropic"
+			target = "openai"
 		}
 		cred := deps.authManager.Resolve(target, "")
 		if cred != nil && !cred.IsExpired() && cred.APIKey != "" {
 			base := cred.BaseURL
-			if base == "" {
+			apiType := inferAPIType(target)
+			if base == "" && apiType == "anthropic" {
 				base = llm.DefaultAnthropicBaseURL
 			}
-			return llm.NewClient(base, cred.APIKey, llm.WithLogger(logger)), "anthropic"
+			return llm.NewClient(base, cred.APIKey, llm.WithLogger(logger)), apiType
 		}
 	}
 
-	// 3. Fall back to pre-configured client.
+	// 3. Fall back to pre-configured client (OpenAI-compatible by default).
 	if deps.llmClient != nil {
-		return deps.llmClient, "anthropic"
+		return deps.llmClient, "openai"
 	}
 
 	return nil, ""
 }
 
 // inferAPIType guesses the API type from the provider ID.
+// OpenAI-compatible is the default; Anthropic is special-cased.
 func inferAPIType(providerID string) string {
 	switch providerID {
 	case "anthropic":
 		return "anthropic"
 	default:
-		// Most providers (zai, sglang, openai, etc.) use OpenAI-compatible API.
+		// Default: OpenAI-compatible API (openai, zai, sglang, deepseek, etc.)
 		return "openai"
 	}
 }

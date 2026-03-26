@@ -107,39 +107,83 @@ func RegisterCoreTools(registry *ToolRegistry, procMgr *process.Manager, workspa
 		Fn:          toolApplyPatch(workspaceDir),
 	})
 
-	// -- Stubbed tools (return descriptive unavailable message) --
-	stubs := []struct {
-		name string
-		desc string
-	}{
-		{"web_search", "Search the web"},
-		// memory tools are registered separately with full implementation.
-		// {"memory_search", "Semantic memory search"},
-		// {"memory_get", "Read memory files"},
-		// message tool is registered separately with full implementation.
-		// {"message", "Send messages and channel actions"},
-		{"cron", "Manage cron jobs and wake events"},
-		{"gateway", "Gateway control (restart, config, update)"},
-		{"sessions_list", "List other sessions"},
-		{"sessions_history", "Fetch history for another session"},
-		{"sessions_send", "Send a message to another session"},
-		{"sessions_spawn", "Spawn an isolated sub-agent session"},
-		{"subagents", "List, steer, or kill sub-agent runs"},
-		{"session_status", "Show session status and usage"},
-		{"image", "Analyze images with a vision model"},
-		{"nodes", "Discover and control paired nodes"},
-	}
-	for _, s := range stubs {
-		name := s.name
-		registry.RegisterTool(ToolDef{
-			Name:        name,
-			Description: s.desc,
-			InputSchema: map[string]any{"type": "object"},
-			Fn: func(_ context.Context, _ json.RawMessage) (string, error) {
-				return fmt.Sprintf("Tool %q is not yet available in the Go gateway.", name), nil
-			},
-		})
-	}
+	// -- Web search tool --
+	registry.RegisterTool(ToolDef{
+		Name:        "web_search",
+		Description: "Search the web (Brave API or DuckDuckGo fallback)",
+		InputSchema: webSearchToolSchema(),
+		Fn:          toolWebSearch(),
+	})
+
+	// -- Cron tool --
+	registry.RegisterTool(ToolDef{
+		Name:        "cron",
+		Description: "Manage cron jobs and wake events (reminders, periodic tasks)",
+		InputSchema: cronToolSchema(),
+		Fn:          toolCron(),
+	})
+
+	// -- Gateway tool --
+	registry.RegisterTool(ToolDef{
+		Name:        "gateway",
+		Description: "Gateway control (restart, config, update)",
+		InputSchema: gatewayToolSchema(),
+		Fn:          toolGateway(),
+	})
+
+	// -- Session tools --
+	registry.RegisterTool(ToolDef{
+		Name:        "sessions_list",
+		Description: "List other sessions with optional filters",
+		InputSchema: sessionsListToolSchema(),
+		Fn:          toolSessionsList(),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "sessions_history",
+		Description: "Fetch history for another session",
+		InputSchema: sessionsHistoryToolSchema(),
+		Fn:          toolSessionsHistory(),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "sessions_send",
+		Description: "Send a message to another session",
+		InputSchema: sessionsSendToolSchema(),
+		Fn:          toolSessionsSend(),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "sessions_spawn",
+		Description: "Spawn an isolated sub-agent session",
+		InputSchema: sessionsSpawnToolSchema(),
+		Fn:          toolSessionsSpawn(),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "subagents",
+		Description: "List, steer, or kill sub-agent runs",
+		InputSchema: subagentsToolSchema(),
+		Fn:          toolSubagents(),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "session_status",
+		Description: "Show session status and usage (📊 session_status)",
+		InputSchema: sessionStatusToolSchema(),
+		Fn:          toolSessionStatus(),
+	})
+
+	// -- Image tool --
+	registry.RegisterTool(ToolDef{
+		Name:        "image",
+		Description: "Analyze images with a vision model",
+		InputSchema: imageToolSchema(),
+		Fn:          toolImage(),
+	})
+
+	// -- Nodes tool --
+	registry.RegisterTool(ToolDef{
+		Name:        "nodes",
+		Description: "Discover and control paired nodes (status/notify/camera/run)",
+		InputSchema: nodesToolSchema(),
+		Fn:          toolNodes(),
+	})
 }
 
 // --- Exec tool ---

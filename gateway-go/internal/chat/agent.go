@@ -18,7 +18,7 @@ type AgentConfig struct {
 	System    json.RawMessage  // System prompt: JSON string or array of ContentBlocks.
 	Tools     []llm.Tool
 	MaxTokens int    // Max output tokens per LLM call. Default: 8192.
-	APIType   string // "anthropic" (default) or "openai"
+	APIType   string // "openai" (default) or "anthropic"
 }
 
 // DefaultAgentConfig returns sensible defaults.
@@ -84,10 +84,11 @@ func RunAgent(
 
 		var events <-chan llm.StreamEvent
 		var err error
-		if cfg.APIType == "openai" {
-			events, err = client.StreamChatOpenAI(ctx, req)
-		} else {
+		if cfg.APIType == "anthropic" {
 			events, err = client.StreamChat(ctx, req)
+		} else {
+			// Default: OpenAI-compatible API (covers openai, zai, sglang, etc.)
+			events, err = client.StreamChatOpenAI(ctx, req)
 		}
 		if err != nil {
 			if ctx.Err() != nil {
