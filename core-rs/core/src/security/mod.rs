@@ -24,9 +24,10 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-/// Pre-built case-insensitive finders for dangerous patterns.
-/// Each entry: (lowercase pattern bytes, memmem::Finder for the lowercase version).
-/// We search the lowercased haystack for a match using SIMD-accelerated memmem.
+/// Pre-built case-insensitive finders for XSS/injection patterns.
+/// Uses the `memchr` crate's SIMD-accelerated substring search to detect
+/// dangerous patterns like `<script`, `javascript:`, `data:text/html`, etc.
+/// Patterns are matched against a lowercased copy of the input.
 struct DangerousPatterns {
     finders: Vec<memmem::Finder<'static>>,
 }

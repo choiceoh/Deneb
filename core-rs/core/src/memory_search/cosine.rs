@@ -1,4 +1,9 @@
 //! Cosine similarity computation for vector search.
+//!
+//! Measures the cosine of the angle between two vectors:
+//! `cos(θ) = (A·B) / (‖A‖ × ‖B‖)`, yielding a value in [-1, 1].
+//! On x86_64, uses SSE2 intrinsics to process two f64 lanes at once;
+//! on other architectures, falls back to a scalar loop.
 
 /// Cosine similarity between two f64 vectors.
 /// Returns 0.0 for empty or zero-norm vectors.
@@ -24,6 +29,9 @@ pub fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
     }
 }
 
+/// SSE2-accelerated cosine similarity: processes two f64 elements per iteration
+/// using 128-bit SIMD registers. Accumulates dot product and squared norms in
+/// parallel, then reduces via horizontal sum. A scalar tail handles odd-length vectors.
 #[cfg(target_arch = "x86_64")]
 fn cosine_similarity_sse2(a: &[f64], b: &[f64]) -> f64 {
     use std::arch::x86_64::*;
@@ -33,6 +41,7 @@ fn cosine_similarity_sse2(a: &[f64], b: &[f64]) -> f64 {
     let remainder = len % 2;
 
     unsafe {
+        // Accumulators: each __m128d holds two f64 partial sums.
         let mut dot_vec = _mm_setzero_pd();
         let mut norm_a_vec = _mm_setzero_pd();
         let mut norm_b_vec = _mm_setzero_pd();
@@ -46,12 +55,12 @@ fn cosine_similarity_sse2(a: &[f64], b: &[f64]) -> f64 {
             norm_b_vec = _mm_add_pd(norm_b_vec, _mm_mul_pd(vb, vb));
         }
 
-        // Horizontal sum of 2-wide vectors
+        // Reduce 2-wide SIMD accumulators to scalar sums.
         let dot = horizontal_sum_pd(dot_vec);
         let mut norm_a = horizontal_sum_pd(norm_a_vec);
         let mut norm_b = horizontal_sum_pd(norm_b_vec);
 
-        // Handle remainder
+        // Scalar tail for odd-length vectors.
         if remainder > 0 {
             let idx = chunks * 2;
             let av = a[idx];
@@ -65,12 +74,13 @@ fn cosine_similarity_sse2(a: &[f64], b: &[f64]) -> f64 {
     }
 }
 
+/// Reduce a 2-wide f64 SIMD vector to a single scalar sum: [lo, hi] → lo + hi.
 #[cfg(target_arch = "x86_64")]
 #[inline]
 unsafe fn horizontal_sum_pd(v: std::arch::x86_64::__m128d) -> f64 {
     use std::arch::x86_64::*;
-    let high = _mm_unpackhi_pd(v, v);
-    let sum = _mm_add_sd(v, high);
+    let high = _mm_unpackhi_pd(v, v); // broadcast high lane → [hi, hi]
+    let sum = _mm_add_sd(v, high); // lo + hi in low lane
     _mm_cvtsd_f64(sum)
 }
 
@@ -89,6 +99,8 @@ fn cosine_similarity_scalar(a: &[f64], b: &[f64]) -> f64 {
     finish(dot, norm_a, norm_b)
 }
 
+/// Final cosine computation: dot / (√norm_a × √norm_b).
+/// Returns 0.0 for zero-norm vectors to avoid division by zero.
 #[inline]
 fn finish(dot: f64, norm_a: f64, norm_b: f64) -> f64 {
     if norm_a == 0.0 || norm_b == 0.0 {

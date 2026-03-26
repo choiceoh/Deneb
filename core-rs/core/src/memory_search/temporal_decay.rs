@@ -1,4 +1,8 @@
 //! Temporal decay scoring — applies recency bias to memory search results.
+//!
+//! Uses exponential decay: `score × exp(−λ × age_days)` where λ = ln(2) / half_life.
+//! Memories older than the half-life have their score halved; evergreen files
+//! (e.g., `MEMORY.md`) are exempt from decay.
 
 use once_cell::sync::Lazy;
 use regex::Regex;

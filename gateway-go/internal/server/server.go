@@ -84,8 +84,8 @@ type Server struct {
 	hooks            *hooks.Registry
 	runtimeCfg       *config.GatewayRuntimeConfig
 	authValidator    *auth.Validator
-	clients          sync.Map // connID -> *WsClient
-	clientCnt        atomic.Int32
+	clients          sync.Map   // connID → *WsClient; concurrent-safe client tracking
+	clientCnt        atomic.Int32 // current WebSocket connection count (capped at maxWebSocketClients)
 	startedAt        time.Time
 	version          string
 	rustFFI          bool // true when Rust FFI is available

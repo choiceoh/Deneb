@@ -1,7 +1,8 @@
 // Package session manages gateway session lifecycle.
 //
-// This implements the session state machine from
-// src/gateway/session/ in Go.
+// Sessions follow a state machine: IDLE → RUNNING → {DONE | FAILED | KILLED | TIMEOUT}.
+// The Manager tracks sessions in memory and emits events on state transitions.
+// A background GC goroutine evicts terminal sessions after gcMaxAge (1 hour).
 package session
 
 import (

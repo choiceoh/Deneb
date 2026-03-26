@@ -131,12 +131,15 @@ impl Default for CompactionConfig {
     }
 }
 
-/// Compaction decision reason.
+/// Compaction decision reason — why the sweep was triggered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CompactionReason {
+    /// Context token count exceeded the configured threshold fraction.
     Threshold,
+    /// Operator explicitly requested compaction.
     Manual,
+    /// Compaction was evaluated but not needed.
     None,
 }
 
@@ -150,20 +153,25 @@ pub struct CompactionDecision {
     pub threshold: u64,
 }
 
-/// Summarization escalation level.
+/// Summarization escalation level — controls compression aggressiveness.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CompactionLevel {
+    /// Standard LLM summarization at the configured target token count.
     Normal,
+    /// Tighter compression when normal summaries still exceed the budget.
     Aggressive,
+    /// Deterministic truncation when LLM summarization fails or is unavailable.
     Fallback,
 }
 
-/// Summary kind.
+/// Summary kind — position in the hierarchical summary tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SummaryKind {
+    /// Depth-0 summary created directly from raw messages.
     Leaf,
+    /// Higher-depth summary created by condensing existing summaries.
     Condensed,
 }
 

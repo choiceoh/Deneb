@@ -3,8 +3,9 @@ package ffi
 import "runtime"
 
 // Handle wraps a Rust-side opaque handle (uint32) with automatic cleanup.
-// If Drop is not called explicitly, the finalizer releases the Rust resources
-// when the Handle is garbage-collected, preventing resource leaks.
+// Uses Go's GC finalizer as a safety net: if Drop is not called explicitly,
+// the finalizer calls the Rust `*_drop(handle)` function to prevent resource
+// leaks. Callers should still prefer explicit Drop() for deterministic cleanup.
 type Handle struct {
 	id      uint32
 	dropFn  func(uint32)

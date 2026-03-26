@@ -1,6 +1,7 @@
 // Session model definitions.
 //
-// These mirror the TypeScript definitions in src/gateway/session/session-utils.types.ts.
+// A session represents a single agent conversation with lifecycle state tracking,
+// model/inference settings, token accounting, and spawn lineage.
 
 syntax = "proto3";
 
@@ -8,7 +9,8 @@ package deneb.session;
 
 option go_package = "github.com/choiceoh/deneb/gateway-go/pkg/protocol/gen";
 
-// SessionRunStatus matches the TypeScript union type.
+// SessionRunStatus represents the lifecycle state of a session run.
+// Transitions: RUNNING → {DONE | FAILED | KILLED | TIMEOUT}.
 enum SessionRunStatus {
   SESSION_RUN_STATUS_UNSPECIFIED = 0;
   SESSION_RUN_STATUS_RUNNING = 1;
@@ -18,7 +20,7 @@ enum SessionRunStatus {
   SESSION_RUN_STATUS_TIMEOUT = 5;
 }
 
-// SessionKind matches the TypeScript "direct" | "group" | "global" | "unknown".
+// SessionKind identifies the conversation scope of a session.
 enum SessionKind {
   SESSION_KIND_UNSPECIFIED = 0;
   SESSION_KIND_DIRECT = 1;

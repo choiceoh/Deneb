@@ -1,6 +1,10 @@
 // Gateway protocol frame definitions.
 //
-// These mirror the TypeScript definitions in src/gateway/protocol/schema/frames.ts.
+// Defines the three frame types exchanged over WebSocket:
+//   - RequestFrame: client → server RPC calls
+//   - ResponseFrame: server → client RPC responses
+//   - EventFrame: server → client async notifications
+//
 // Protocol version: 3
 
 syntax = "proto3";
@@ -34,14 +38,14 @@ enum ErrorCode {
   ERROR_CODE_FEATURE_DISABLED = 22;
 }
 
-// ErrorShape matches the TypeScript ErrorShape in frames.ts.
+// ErrorShape is the structured error payload embedded in ResponseFrame.error.
 message ErrorShape {
-  string code = 1;
-  string message = 2;
-  google.protobuf.Value details = 3;
-  optional bool retryable = 4;
-  optional uint64 retry_after_ms = 5;
-  optional string cause = 6;
+  string code = 1;    // ErrorCode string (e.g., "NOT_FOUND").
+  string message = 2; // Human-readable error description.
+  google.protobuf.Value details = 3; // Optional structured details (varies by error code).
+  optional bool retryable = 4;       // Hint: client may retry the request.
+  optional uint64 retry_after_ms = 5; // Suggested retry delay in milliseconds.
+  optional string cause = 6;         // Underlying cause for debugging.
 }
 
 // RequestFrame — client-to-server RPC request.
@@ -61,10 +65,11 @@ message ResponseFrame {
   ErrorShape error = 4;
 }
 
-// StateVersion tracks snapshot versioning for event diffing.
+// StateVersion tracks monotonic version counters for client-side cache invalidation.
+// Clients compare these against their local state to decide when to re-fetch.
 message StateVersion {
-  uint64 presence = 1;
-  uint64 health = 2;
+  uint64 presence = 1; // Incremented on any presence change (connect/disconnect/update).
+  uint64 health = 2;   // Incremented on channel health state changes.
 }
 
 // EventFrame — server-to-client async event.
