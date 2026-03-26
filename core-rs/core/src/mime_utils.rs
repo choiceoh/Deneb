@@ -1,8 +1,8 @@
-/// MIME type normalization utilities.
-///
-/// Ports pure functions from `src/media/mime.ts`:
-/// - `normalizeMimeType` — split on `;`, trim, lowercase
-/// - `isGenericMime` — check for generic container types
+//! MIME type normalization utilities.
+//!
+//! Ports pure functions from `src/media/mime.ts`:
+//! - `normalizeMimeType` — split on `;`, trim, lowercase
+//! - `isGenericMime` — check for generic container types
 
 #[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::*;

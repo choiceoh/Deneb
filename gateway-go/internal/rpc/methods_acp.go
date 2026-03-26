@@ -138,8 +138,8 @@ func acpStop(deps *ACPDeps) HandlerFunc {
 		}
 
 		return protocol.MustResponseOK(req.ID, map[string]any{
-			"enabled":       false,
-			"wasEnabled":    wasEnabled,
+			"enabled":        false,
+			"wasEnabled":     wasEnabled,
 			"stoppedAtEpoch": time.Now().UnixMilli(),
 		})
 	}

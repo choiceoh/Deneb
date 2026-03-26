@@ -34,11 +34,11 @@ type ThreadBindingSpawnPolicy struct {
 
 // threadBindingsShape represents the thread bindings configuration block.
 type threadBindingsShape struct {
-	Enabled              *bool    `json:"enabled,omitempty"`
-	IdleHours            *float64 `json:"idleHours,omitempty"`
-	MaxAgeHours          *float64 `json:"maxAgeHours,omitempty"`
-	SpawnSubagentSessions *bool   `json:"spawnSubagentSessions,omitempty"`
-	SpawnAcpSessions     *bool    `json:"spawnAcpSessions,omitempty"`
+	Enabled               *bool    `json:"enabled,omitempty"`
+	IdleHours             *float64 `json:"idleHours,omitempty"`
+	MaxAgeHours           *float64 `json:"maxAgeHours,omitempty"`
+	SpawnSubagentSessions *bool    `json:"spawnSubagentSessions,omitempty"`
+	SpawnAcpSessions      *bool    `json:"spawnAcpSessions,omitempty"`
 }
 
 // ResolveThreadBindingIdleTimeoutMs resolves the idle timeout in milliseconds.
@@ -170,7 +170,7 @@ func resolveChannelThreadBindings(rawChannels json.RawMessage, channel, accountI
 		return nil, nil
 	}
 	var chConfig struct {
-		ThreadBindings *threadBindingsShape            `json:"threadBindings,omitempty"`
+		ThreadBindings *threadBindingsShape `json:"threadBindings,omitempty"`
 		Accounts       map[string]*struct {
 			ThreadBindings *threadBindingsShape `json:"threadBindings,omitempty"`
 		} `json:"accounts,omitempty"`

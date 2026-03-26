@@ -297,7 +297,7 @@ acquire_lock
 trap 'cleanup_on_signal' INT TERM
 trap 'release_lock' EXIT
 
-case "$1" in
+case "${1:-all}" in
   --go)
     check_prereqs buf
     gen_go

@@ -207,7 +207,6 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		return m.failProcess(tracked, req.ID, startedAt, err.Error())
 	}
 
-
 	// Capture output (bounded). We must fully drain both pipes even beyond the
 	// capture limit, otherwise the subprocess blocks on a full pipe buffer and
 	// cmd.Wait() hangs forever.
@@ -354,7 +353,6 @@ func drainBounded(r io.Reader, limit int) []byte {
 	io.Copy(io.Discard, r)
 	return kept
 }
-
 
 // Prune removes completed/failed processes older than the given duration.
 func (m *Manager) Prune(maxAge time.Duration) int {

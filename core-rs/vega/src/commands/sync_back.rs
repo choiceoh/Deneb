@@ -26,14 +26,15 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
         .prepare("SELECT id, name, source_file, status, client, person_internal FROM projects WHERE source_file IS NOT NULL")
         .unwrap();
 
-    let projects: Vec<(
+    type ProjectRow = (
         i64,
         String,
         String,
         Option<String>,
         Option<String>,
         Option<String>,
-    )> = stmt
+    );
+    let projects: Vec<ProjectRow> = stmt
         .query_map([], |r| {
             Ok((
                 r.get::<_, i64>(0)?,
@@ -51,6 +52,7 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
     let mut synced = 0;
     let mut skipped = 0;
     let mut errors = Vec::new();
+    let status_re = regex::Regex::new(r"(?m)^\|\s*\*?\*?상태\*?\*?\s*\|\s*(.*?)\s*\|").unwrap();
 
     for (_pid, name, source_file, status, _client, _person) in &projects {
         let clean = source_file
@@ -84,11 +86,10 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
         // Update status in table if present
         let mut new_content = content.clone();
         if let Some(st) = status {
-            let re = regex::Regex::new(r"(?m)^\|\s*\*?\*?상태\*?\*?\s*\|\s*(.*?)\s*\|").unwrap();
-            if let Some(cap) = re.captures(&content) {
+            if let Some(cap) = status_re.captures(&content) {
                 let old = cap.get(1).unwrap().as_str();
                 if old.trim() != st.trim() {
-                    new_content = re
+                    new_content = status_re
                         .replace(&new_content, |caps: &regex::Captures| {
                             caps[0].replace(old, st)
                         })

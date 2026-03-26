@@ -119,7 +119,6 @@ func main() {
 		}
 	}
 
-
 	// Daemon mode: manage PID file and check for existing daemon.
 	if *daemonMode || *pidFile != "" {
 		pidPath := *pidFile

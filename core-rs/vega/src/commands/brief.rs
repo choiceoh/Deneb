@@ -73,10 +73,9 @@ pub fn build_single_brief(conn: &Connection, pid: i64) -> Result<Value, String> 
         .collect();
 
     // Bucket by chunk_type
-    let mut bucket: std::collections::HashMap<
-        String,
-        Vec<&(String, String, String, Option<String>)>,
-    > = std::collections::HashMap::new();
+    type ChunkBucket<'a> =
+        std::collections::HashMap<String, Vec<&'a (String, String, String, Option<String>)>>;
+    let mut bucket: ChunkBucket = std::collections::HashMap::new();
     for chunk in &chunks {
         bucket.entry(chunk.2.clone()).or_default().push(chunk);
     }

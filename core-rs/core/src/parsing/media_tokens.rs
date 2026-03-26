@@ -162,7 +162,7 @@ fn is_bare_filename(candidate: &str) -> bool {
     }
     if let Some(dot_pos) = candidate.rfind('.') {
         let ext_len = candidate.len() - dot_pos - 1;
-        if ext_len >= 1 && ext_len <= 10 {
+        if (1..=10).contains(&ext_len) {
             let name = &candidate[..dot_pos];
             // Name must be non-empty and contain no path separators
             return !name.is_empty() && !name.contains('/') && !name.contains('\\');

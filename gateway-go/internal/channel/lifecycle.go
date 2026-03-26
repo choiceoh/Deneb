@@ -19,18 +19,18 @@ type ChannelHealth struct {
 
 // Restart backoff constants.
 const (
-	restartBaseDelay = 1 * time.Second
-	restartMaxDelay  = 30 * time.Second
+	restartBaseDelay  = 1 * time.Second
+	restartMaxDelay   = 30 * time.Second
 	restartMaxRetries = 5
 )
 
 // LifecycleManager orchestrates channel plugin lifecycle (start/stop/health).
 type LifecycleManager struct {
-	registry       *Registry
-	logger         *slog.Logger
-	mu             sync.RWMutex
-	startedAt      map[string]int64 // channel ID → start timestamp
-	restartCount   map[string]int   // channel ID → consecutive restart attempts
+	registry     *Registry
+	logger       *slog.Logger
+	mu           sync.RWMutex
+	startedAt    map[string]int64 // channel ID → start timestamp
+	restartCount map[string]int   // channel ID → consecutive restart attempts
 }
 
 // NewLifecycleManager creates a lifecycle manager for the given registry.
