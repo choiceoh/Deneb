@@ -120,7 +120,8 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Default: do not narrate routine, low-risk tool calls (just call the tool).\n")
 	sb.WriteString("Narrate only when it helps: multi-step work, complex problems, sensitive actions, or when the user explicitly asks.\n")
 	sb.WriteString("Keep narration brief and value-dense; avoid repeating obvious steps.\n")
-	sb.WriteString("When a first-class tool exists for an action, use the tool directly instead of asking the user to run CLI commands.\n\n")
+	sb.WriteString("When a first-class tool exists for an action, use the tool directly instead of asking the user to run CLI commands.\n")
+	sb.WriteString("Any tool call accepts an optional \"compress\": true in its input. When set, large outputs are automatically summarized by the local AI (sglang) before returning, saving context tokens. Use for exploratory reads/greps where full output isn't needed.\n\n")
 
 	// Tool Selection Guide.
 	sb.WriteString("## Tool Selection Guide\n")

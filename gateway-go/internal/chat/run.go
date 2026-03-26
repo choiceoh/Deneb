@@ -370,6 +370,19 @@ func handleRunSuccess(
 	finishRun(deps, params, session.PhaseEnd, "completed", "done", now)
 	emitJobEvent(deps, params.ClientRunID, "end", false, "", now)
 
+	// Auto-memory: extract key learnings asynchronously via local sglang.
+	if params.Message != "" && result.Text != "" {
+		go func() {
+			memCtx, memCancel := context.WithTimeout(context.Background(), autoMemoryTimeout)
+			defer memCancel()
+			notes := extractAutoMemory(memCtx, params.Message, result.Text, logger)
+			if notes != "" {
+				workspaceDir := resolveWorkspaceDirForPrompt()
+				appendToMemoryFile(workspaceDir, notes, logger)
+			}
+		}()
+	}
+
 	logger.Info("agent run completed",
 		"stopReason", result.StopReason,
 		"turns", result.Turns,

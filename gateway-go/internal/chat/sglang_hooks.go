@@ -1,0 +1,246 @@
+package chat
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// sglang_hooks.go — local sglang model hooks into the agent pipeline:
+//
+//  1. Proactive Context: before agent run, scan related files/memory to enrich system prompt
+//  2. Tool Output Compression: after tool execution, compress large outputs
+//  3. Auto Memory: after successful run, extract key learnings to MEMORY.md
+
+// --- 1. Proactive Context ---
+// Injected in executeAgentRun, between context assembly and agent loop.
+// The local model analyzes the user's message and gathers relevant context.
+
+const (
+	proactiveTimeout    = 30 * time.Second
+	proactiveMaxTokens  = 1024
+	proactiveMinMsgLen  = 20 // skip for very short messages
+)
+
+const proactiveSystemPrompt = `You are a context preparation assistant.
+Given the user's message and workspace info, identify what context would help answer it.
+Return a brief context note (max 5 lines) with:
+- Relevant file names or paths the main AI should look at
+- Related past decisions from memory (if any)
+- Key technical context to keep in mind
+Reply in Korean. Be extremely concise. If no special context is needed, reply with just "N/A".`
+
+// buildProactiveContext uses the local sglang model to analyze the user's
+// message and generate a context hint for the main agent.
+// Returns empty string if proactive context is not needed or fails.
+func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string, logger *slog.Logger) string {
+	if len(userMessage) < proactiveMinMsgLen {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, proactiveTimeout)
+	defer cancel()
+
+	// Gather workspace signals: recent file list + memory file snippets.
+	var contextInfo strings.Builder
+	contextInfo.WriteString("User message: ")
+	contextInfo.WriteString(userMessage)
+
+	// List workspace top-level files for orientation.
+	if entries, err := os.ReadDir(workspaceDir); err == nil {
+		contextInfo.WriteString("\n\nWorkspace files: ")
+		names := make([]string, 0, 20)
+		for _, e := range entries {
+			if !strings.HasPrefix(e.Name(), ".") {
+				names = append(names, e.Name())
+			}
+			if len(names) >= 20 {
+				break
+			}
+		}
+		contextInfo.WriteString(strings.Join(names, ", "))
+	}
+
+	// Include memory file heads if they exist.
+	memoryPath := filepath.Join(workspaceDir, "MEMORY.md")
+	if data, err := os.ReadFile(memoryPath); err == nil {
+		snippet := string(data)
+		if len(snippet) > 2000 {
+			snippet = snippet[:2000]
+		}
+		contextInfo.WriteString("\n\nMEMORY.md (first 2000 chars):\n")
+		contextInfo.WriteString(snippet)
+	}
+
+	result, err := callLocalLLM(ctx, proactiveSystemPrompt, contextInfo.String(), proactiveMaxTokens)
+	if err != nil {
+		logger.Debug("proactive context failed", "error", err)
+		return ""
+	}
+
+	result = strings.TrimSpace(result)
+	if result == "" || result == "N/A" || strings.ToLower(result) == "n/a" {
+		return ""
+	}
+
+	return result
+}
+
+// --- 2. Tool Output Compression ---
+// Called in the agent loop after tool execution, before feeding results back to LLM.
+
+const (
+	compressThreshold      = 8000 // chars — only compress outputs larger than this
+	compressMaxTokens      = 1024
+	compressTimeout        = 30 * time.Second
+	// Tools whose output should never be compressed (they're already structured/small).
+	toolCompressSkipPrefix = "pilot" // pilot already uses sglang, don't double-process
+)
+
+// toolCompressSkipSet contains tools whose output should not be compressed.
+var toolCompressSkipSet = map[string]bool{
+	"pilot":          true,
+	"memory_search":  true,
+	"memory_get":     true,
+	"kv":             true,
+	"clipboard":      true,
+	"session_status": true,
+	"sessions_list":  true,
+}
+
+const compressSystemPrompt = `You are a tool output compressor.
+Condense the tool output to its essential information. Preserve:
+- Error messages and exit codes
+- Key data points and numbers
+- File paths and line numbers
+- Important patterns and findings
+Remove verbose boilerplate, repeated lines, and padding.
+Keep the same language. Be concise but don't lose critical details.
+Max 30 lines.`
+
+// compressToolOutput shrinks a large tool output using the local sglang model.
+// Returns the original output if compression is not needed or fails.
+func compressToolOutput(ctx context.Context, toolName, output string, logger *slog.Logger) string {
+	if len(output) < compressThreshold {
+		return output
+	}
+	if toolCompressSkipSet[toolName] {
+		return output
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, compressTimeout)
+	defer cancel()
+
+	prompt := fmt.Sprintf("Tool: %s\nOutput (%d chars):\n%s", toolName, len(output), output)
+	if len(prompt) > 32000 {
+		prompt = prompt[:32000] + "\n[... truncated]"
+	}
+
+	compressed, err := callLocalLLM(ctx, compressSystemPrompt, prompt, compressMaxTokens)
+	if err != nil {
+		logger.Debug("tool output compression failed, using original", "tool", toolName, "error", err)
+		return output
+	}
+
+	if len(compressed) == 0 || len(compressed) >= len(output) {
+		return output
+	}
+
+	logger.Info("compressed tool output",
+		"tool", toolName,
+		"original", len(output),
+		"compressed", len(compressed),
+		"ratio", fmt.Sprintf("%.0f%%", float64(len(compressed))/float64(len(output))*100),
+	)
+
+	return fmt.Sprintf("[compressed by pilot — original %d chars]\n%s", len(output), compressed)
+}
+
+// --- 3. Auto Memory ---
+// Called asynchronously after handleRunSuccess.
+
+const (
+	autoMemoryTimeout   = 45 * time.Second
+	autoMemoryMaxTokens = 512
+	autoMemoryMinInput  = 100  // skip for very short conversations
+	autoMemoryMinOutput = 50
+)
+
+const autoMemorySystemPrompt = `You are a memory extraction assistant.
+Given a user's question and the AI's response, extract ONLY genuinely important
+information worth remembering for future sessions:
+- Decisions made (architecture, tool choices, config changes)
+- User preferences learned
+- Important facts discovered
+- Problems solved and their solutions
+
+Rules:
+- If nothing is worth remembering, reply with just "SKIP"
+- Format as bullet points starting with "- "
+- Max 5 bullets
+- Write in Korean
+- Be very selective — only truly reusable knowledge`
+
+// extractAutoMemory analyzes a conversation turn and returns memory-worthy notes.
+// Returns empty string if nothing worth remembering.
+func extractAutoMemory(ctx context.Context, userMessage, agentResponse string, logger *slog.Logger) string {
+	if len(userMessage) < autoMemoryMinInput || len(agentResponse) < autoMemoryMinOutput {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, autoMemoryTimeout)
+	defer cancel()
+
+	prompt := fmt.Sprintf("User:\n%s\n\nAssistant:\n%s",
+		truncateInput(userMessage, 4000),
+		truncateInput(agentResponse, 8000))
+
+	result, err := callLocalLLM(ctx, autoMemorySystemPrompt, prompt, autoMemoryMaxTokens)
+	if err != nil {
+		logger.Debug("auto memory extraction failed", "error", err)
+		return ""
+	}
+
+	result = strings.TrimSpace(result)
+	if result == "" || result == "SKIP" || strings.ToLower(result) == "skip" {
+		return ""
+	}
+
+	return result
+}
+
+// appendToMemoryFile appends extracted memories to MEMORY.md.
+func appendToMemoryFile(workspaceDir, content string, logger *slog.Logger) {
+	memoryPath := filepath.Join(workspaceDir, "MEMORY.md")
+
+	// Create file with header if it doesn't exist.
+	if _, err := os.Stat(memoryPath); os.IsNotExist(err) {
+		header := "# Memory\n\nAuto-recorded learnings and decisions.\n\n"
+		if err := os.WriteFile(memoryPath, []byte(header), 0o644); err != nil {
+			logger.Error("failed to create MEMORY.md", "error", err)
+			return
+		}
+	}
+
+	// Append with timestamp.
+	entry := fmt.Sprintf("\n## %s\n\n%s\n",
+		time.Now().Format("2006-01-02 15:04"),
+		content)
+
+	f, err := os.OpenFile(memoryPath, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		logger.Error("failed to open MEMORY.md for append", "error", err)
+		return
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(entry); err != nil {
+		logger.Error("failed to append to MEMORY.md", "error", err)
+	} else {
+		logger.Info("auto-memory saved", "chars", len(content))
+	}
+}
