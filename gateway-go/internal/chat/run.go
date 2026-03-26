@@ -259,10 +259,10 @@ func handleRunSuccess(
 	// Deliver response back to the originating channel (e.g., Telegram).
 	if deps.replyFunc != nil && params.Delivery != nil && result.Text != "" {
 		replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer replyCancel()
 		if err := deps.replyFunc(replyCtx, params.Delivery, result.Text); err != nil {
 			logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
 		}
-		replyCancel()
 	}
 
 	finishRun(deps, params, session.PhaseEnd, "completed", "done", now)

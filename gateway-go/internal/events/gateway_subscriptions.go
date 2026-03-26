@@ -8,6 +8,7 @@ package events
 import (
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -52,6 +53,12 @@ type GatewayEventSubscriptions struct {
 	transcriptCh chan TranscriptUpdate
 	lifecycleCh  chan LifecycleChangeEvent
 	done         chan struct{}
+
+	// Drop counters for observability (atomic, no lock needed).
+	agentDrops      atomic.Int64
+	heartbeatDrops  atomic.Int64
+	transcriptDrops atomic.Int64
+	lifecycleDrops  atomic.Int64
 }
 
 // GatewaySubscriptionParams provides dependencies for event subscription wiring.
@@ -75,6 +82,7 @@ func NewGatewayEventSubscriptions(params GatewaySubscriptionParams) *GatewayEven
 	go g.runHeartbeatLoop(params)
 	go g.runTranscriptLoop(params)
 	go g.runLifecycleLoop(params)
+	go g.runDropLogger(params.Logger)
 
 	return g
 }
@@ -84,6 +92,7 @@ func (g *GatewayEventSubscriptions) EmitAgent(evt AgentEvent) {
 	select {
 	case g.agentCh <- evt:
 	default:
+		g.agentDrops.Add(1)
 	}
 }
 
@@ -92,6 +101,7 @@ func (g *GatewayEventSubscriptions) EmitHeartbeat(evt HeartbeatEvent) {
 	select {
 	case g.heartbeatCh <- evt:
 	default:
+		g.heartbeatDrops.Add(1)
 	}
 }
 
@@ -100,6 +110,7 @@ func (g *GatewayEventSubscriptions) EmitTranscript(evt TranscriptUpdate) {
 	select {
 	case g.transcriptCh <- evt:
 	default:
+		g.transcriptDrops.Add(1)
 	}
 }
 
@@ -108,6 +119,7 @@ func (g *GatewayEventSubscriptions) EmitLifecycle(evt LifecycleChangeEvent) {
 	select {
 	case g.lifecycleCh <- evt:
 	default:
+		g.lifecycleDrops.Add(1)
 	}
 }
 
@@ -220,6 +232,35 @@ func (g *GatewayEventSubscriptions) runLifecycleLoop(params GatewaySubscriptionP
 			}
 
 			params.Broadcaster.BroadcastToConnIDs("sessions.changed", payload, connIDs)
+		}
+	}
+}
+
+// runDropLogger periodically logs dropped event counts for observability.
+func (g *GatewayEventSubscriptions) runDropLogger(logger *slog.Logger) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-g.done:
+			return
+		case <-ticker.C:
+			agent := g.agentDrops.Swap(0)
+			heartbeat := g.heartbeatDrops.Swap(0)
+			transcript := g.transcriptDrops.Swap(0)
+			lifecycle := g.lifecycleDrops.Swap(0)
+			total := agent + heartbeat + transcript + lifecycle
+			if total > 0 {
+				logger.Warn("gateway event subscriptions dropped events",
+					"agent", agent,
+					"heartbeat", heartbeat,
+					"transcript", transcript,
+					"lifecycle", lifecycle,
+				)
+			}
 		}
 	}
 }
