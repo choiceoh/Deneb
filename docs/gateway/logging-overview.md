@@ -219,7 +219,7 @@ Notes:
 
 - Flag logs go to the standard log file (same as `logging.file`).
 - Output is still redacted according to `logging.redactSensitive`.
-- Full guide: [/diagnostics/flags](/diagnostics/flags).
+- Full guide: [Diagnostics flags](/help/diagnostics-flags).
 
 ### Export to OpenTelemetry
 

@@ -16,7 +16,7 @@ See [/concepts/oauth](/concepts/oauth) for the full OAuth flow and storage
 layout.
 For SecretRef-based auth (`env`/`file`/`exec` providers), see [Secrets Management](/gateway/secrets).
 For credential eligibility/reason-code rules used by `models status --probe`, see
-[Auth Credential Semantics](/auth-credential-semantics).
+[Auth Credential Semantics](/gateway/auth-credential-semantics).
 
 ## Recommended setup (API key, any provider)
 

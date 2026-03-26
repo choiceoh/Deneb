@@ -246,7 +246,7 @@ Quick answers plus deeper troubleshooting for real-world setups (local dev, VPS,
    tail -f "$(ls -t /tmp/deneb/deneb-*.log | head -1)"
    ```
 
-   File logs are separate from service logs; see [Logging](/logging) and [Troubleshooting](/gateway/troubleshooting).
+   File logs are separate from service logs; see [Logging](/gateway/logging-overview) and [Troubleshooting](/gateway/troubleshooting).
 
 6. **Run the doctor (repairs)**
 

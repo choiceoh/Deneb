@@ -8,7 +8,7 @@ title: "Logging"
 
 # Logging
 
-For a user-facing overview (CLI + Control UI + config), see [/logging](/logging).
+For a user-facing overview (CLI + Control UI + config), see [Logging overview](/gateway/logging-overview).
 
 Deneb has two log “surfaces”:
 
