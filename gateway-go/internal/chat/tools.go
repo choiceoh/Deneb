@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"sync"
 
@@ -62,6 +63,10 @@ func (r *ToolRegistry) RegisterTool(def ToolDef) {
 }
 
 // Execute runs the named tool. Returns an error if the tool is not found.
+//
+// If the input contains "compress": true, the tool output is automatically
+// compressed via the local sglang model before returning. This lets the AI
+// agent opt-in to compression on a per-call basis to save context tokens.
 func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawMessage) (string, error) {
 	r.mu.RLock()
 	def, ok := r.tools[name]
@@ -69,7 +74,32 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	if !ok {
 		return "", fmt.Errorf("unknown tool: %q", name)
 	}
-	return def.Fn(ctx, input)
+
+	// Check for compress flag before executing (avoids re-parsing in every tool).
+	wantCompress := extractCompressFlag(input)
+
+	output, err := def.Fn(ctx, input)
+	if err != nil {
+		return output, err
+	}
+
+	// Apply compression if requested by the agent.
+	if wantCompress && len(output) > 0 {
+		output = compressToolOutput(ctx, name, output, slog.Default())
+	}
+
+	return output, nil
+}
+
+// extractCompressFlag checks if input JSON contains "compress": true.
+func extractCompressFlag(input json.RawMessage) bool {
+	var meta struct {
+		Compress bool `json:"compress"`
+	}
+	if json.Unmarshal(input, &meta) == nil {
+		return meta.Compress
+	}
+	return false
 }
 
 // Names returns all registered tool names in registration order.

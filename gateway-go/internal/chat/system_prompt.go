@@ -84,6 +84,7 @@ var coreToolSummaries = map[string]string{
 	"http":               "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
 	"kv":                 "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
 	"clipboard":          "Temporary in-memory clipboard (ring buffer, 32 items max). Actions: set, get, list, clear",
+	"pilot":              "Fast local AI (sglang) that orchestrates tools in one call. sources: [{tool:'read',input:{file_path:'x.go'}}, {tool:'exec',input:{command:'...'}}] or shortcuts: file, exec, grep, url. Pilot runs the tools, then analyzes all results. output_format: text/json/list. Use for tasks that need data gathering + quick analysis without a full subagent",
 }
 
 // toolOrder defines the display order for tools in the system prompt.
@@ -96,7 +97,7 @@ var toolOrder = []string{
 	"nodes", "cron", "message", "gateway",
 	"sessions_list", "sessions_history", "sessions_send",
 	"sessions_spawn", "subagents", "session_status", "image", "youtube_transcript",
-	"send_file", "http", "kv", "clipboard",
+	"send_file", "http", "kv", "clipboard", "pilot",
 }
 
 // BuildSystemPrompt assembles the full system prompt from all components.
@@ -119,7 +120,8 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Default: do not narrate routine, low-risk tool calls (just call the tool).\n")
 	sb.WriteString("Narrate only when it helps: multi-step work, complex problems, sensitive actions, or when the user explicitly asks.\n")
 	sb.WriteString("Keep narration brief and value-dense; avoid repeating obvious steps.\n")
-	sb.WriteString("When a first-class tool exists for an action, use the tool directly instead of asking the user to run CLI commands.\n\n")
+	sb.WriteString("When a first-class tool exists for an action, use the tool directly instead of asking the user to run CLI commands.\n")
+	sb.WriteString("Any tool call accepts an optional \"compress\": true in its input. When set, large outputs are automatically summarized by the local AI (sglang) before returning, saving context tokens. Use for exploratory reads/greps where full output isn't needed.\n\n")
 
 	// Tool Selection Guide.
 	sb.WriteString("## Tool Selection Guide\n")
@@ -130,6 +132,22 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
 	sb.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section)\n")
 	sb.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools.\n\n")
+
+	// Pilot tool guide.
+	sb.WriteString("## Pilot (Local AI Helper)\n")
+	sb.WriteString("The `pilot` tool runs tasks on the local sglang model (fast, free, no external API cost).\n")
+	sb.WriteString("It can orchestrate other tools and analyze their results in a single call.\n\n")
+	sb.WriteString("**When to use pilot instead of doing it yourself:**\n")
+	sb.WriteString("- Summarizing/analyzing file contents: `pilot(task:'리뷰해줘', file:'main.go')`\n")
+	sb.WriteString("- Analyzing command output: `pilot(task:'문제 찾아줘', exec:'docker logs app')`\n")
+	sb.WriteString("- Processing grep results: `pilot(task:'패턴 정리', grep:'TODO', path:'src/')`\n")
+	sb.WriteString("- Comparing multiple files: `pilot(task:'차이점 분석', files:['a.go','b.go'])`\n")
+	sb.WriteString("- Batch processing: `pilot(task:'각각 분류해줘', items:[...], output_format:'json')`\n")
+	sb.WriteString("- Any multi-tool gather+analyze: `pilot(task:'...', sources:[{tool:'read',input:{...}}, {tool:'exec',input:{...}}])`\n\n")
+	sb.WriteString("**When NOT to use pilot:**\n")
+	sb.WriteString("- Complex multi-turn reasoning (use your own thinking)\n")
+	sb.WriteString("- Tasks that need tool calling (pilot can't use tools during its analysis)\n")
+	sb.WriteString("- When you need the full uncompressed tool output for precise editing\n\n")
 
 	// Safety.
 	sb.WriteString("## Safety\n")

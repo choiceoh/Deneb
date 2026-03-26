@@ -237,6 +237,15 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		InputSchema: clipboardToolSchema(),
 		Fn:          toolClipboard(),
 	})
+
+	// -- Pilot tool (fast local AI that orchestrates other tools) --
+	// Registered last: uses the registry itself to execute source tools.
+	registry.RegisterTool(ToolDef{
+		Name:        "pilot",
+		Description: "Fast local AI that runs tools + analyzes results in one call. Provide task + sources (tool calls from registry) or shortcuts (file, exec, grep, url). Replaces multi-turn read→analyze patterns with a single call",
+		InputSchema: pilotToolSchema(),
+		Fn:          toolPilot(registry),
+	})
 }
 
 // --- Exec tool ---

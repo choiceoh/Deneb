@@ -9,6 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/copilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
@@ -160,6 +161,9 @@ func fullDispatcher() *Dispatcher {
 		Autonomous: autonomous.NewService(autonomous.ServiceConfig{
 			GoalStorePath: "/tmp/test-autonomous-goals.json",
 		}, nil, testLogger()),
+	})
+	RegisterCopilotMethods(d, CopilotDeps{
+		Copilot: copilot.NewService(copilot.ServiceConfig{}, testLogger()),
 	})
 
 	// Session state methods (patch/reset/preview/resolve/compact).
