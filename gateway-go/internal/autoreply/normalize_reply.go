@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 )
@@ -13,16 +14,16 @@ func NormalizeReplyPayload(payload types.ReplyPayload, opts NormalizeOpts) (type
 	text := strings.TrimSpace(payload.Text)
 
 	// Check for silent reply.
-	if IsSilentReplyText(text, "") {
+	if tokens.IsSilentReplyText(text, "") {
 		return payload, false // skip delivery
 	}
 
 	// Strip trailing silent token from mixed content.
-	text = StripSilentToken(text, "")
+	text = tokens.StripSilentToken(text, "")
 
 	// Handle heartbeat token in the text.
-	if strings.Contains(text, HeartbeatToken) {
-		result := StripHeartbeatToken(text, opts.HeartbeatMode, opts.HeartbeatAckMaxChars)
+	if strings.Contains(text, tokens.HeartbeatToken) {
+		result := tokens.StripHeartbeatToken(text, opts.HeartbeatMode, opts.HeartbeatAckMaxChars)
 		if result.ShouldSkip {
 			return payload, false
 		}
@@ -46,7 +47,7 @@ func NormalizeReplyPayload(payload types.ReplyPayload, opts NormalizeOpts) (type
 // NormalizeOpts configures reply normalization.
 type NormalizeOpts struct {
 	ResponsePrefix       string
-	HeartbeatMode        StripHeartbeatMode
+	HeartbeatMode        tokens.StripHeartbeatMode
 	HeartbeatAckMaxChars int
 }
 

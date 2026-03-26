@@ -1,4 +1,4 @@
-package autoreply
+package tokens
 
 import (
 	"regexp"

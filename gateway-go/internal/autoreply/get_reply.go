@@ -5,6 +5,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 )
@@ -68,8 +69,8 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 
 	// 8. Normalize and filter payloads.
 	normalized := FilterReplyPayloads(result.Payloads, NormalizeOpts{
-		HeartbeatMode:        StripModeMessage,
-		HeartbeatAckMaxChars: DefaultHeartbeatAckChars,
+		HeartbeatMode:        tokens.StripModeMessage,
+		HeartbeatAckMaxChars: tokens.DefaultHeartbeatAckChars,
 	})
 
 	return normalized, nil

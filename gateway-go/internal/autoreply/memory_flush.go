@@ -6,6 +6,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"fmt"
 	"strings"
 	"time"
@@ -18,7 +19,7 @@ const (
 	DefaultPiCompactionReserveTokensFloor  = 8192
 )
 
-// SilentReplyToken is already declared in tokens.go as the marker
+// tokens.SilentReplyToken is already declared in tokens.go as the marker
 // that suppresses delivery of agent replies. Use that constant.
 
 // Memory flush hint strings embedded in prompts.
@@ -35,7 +36,7 @@ var DefaultMemoryFlushPrompt = strings.Join([]string{
 	memoryFlushReadOnlyHint,
 	memoryFlushAppendHint,
 	"Do NOT create timestamped variant files (e.g., YYYY-MM-DD-HHMM.md); always use the canonical YYYY-MM-DD.md filename.",
-	fmt.Sprintf("If nothing to store, reply with %s.", SilentReplyToken),
+	fmt.Sprintf("If nothing to store, reply with %s.", tokens.SilentReplyToken),
 }, " ")
 
 // DefaultMemoryFlushSystemPrompt is the default system prompt for memory flush.
@@ -45,7 +46,7 @@ var DefaultMemoryFlushSystemPrompt = strings.Join([]string{
 	memoryFlushTargetHint,
 	memoryFlushReadOnlyHint,
 	memoryFlushAppendHint,
-	fmt.Sprintf("You may reply, but usually %s is correct.", SilentReplyToken),
+	fmt.Sprintf("You may reply, but usually %s is correct.", tokens.SilentReplyToken),
 }, " ")
 
 // MemoryFlushSettings holds the resolved settings for a memory flush.
@@ -221,10 +222,10 @@ func HasAlreadyFlushedForCurrentCompaction(compactionCount, memoryFlushCompactio
 
 // ensureNoReplyHint appends the NO_REPLY hint if not already present.
 func ensureNoReplyHint(text string) string {
-	if strings.Contains(text, SilentReplyToken) {
+	if strings.Contains(text, tokens.SilentReplyToken) {
 		return text
 	}
-	return fmt.Sprintf("%s\n\nIf no user-visible reply is needed, start with %s.", text, SilentReplyToken)
+	return fmt.Sprintf("%s\n\nIf no user-visible reply is needed, start with %s.", text, tokens.SilentReplyToken)
 }
 
 // ensureMemoryFlushSafetyHints ensures all required safety hints are present.

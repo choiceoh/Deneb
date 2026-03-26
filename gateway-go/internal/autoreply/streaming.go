@@ -5,6 +5,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
@@ -17,7 +18,7 @@ type StreamingDirective struct {
 // DetectStreamingDirective checks if streamed text contains an inline directive.
 func DetectStreamingDirective(text string) *StreamingDirective {
 	// During streaming, we watch for [[directives]] in the output.
-	tags := ExtractReplyTags(text)
+	tags := tokens.ExtractReplyTags(text)
 	for _, tag := range tags {
 		switch tag.Name {
 		case "think":
@@ -78,7 +79,7 @@ func SanitizeUntrustedContent(text string, policy UntrustedContentPolicy) string
 
 	// Strip system tags if enabled.
 	if policy.StripSystemTags {
-		result = StripReplyTags(result)
+		result = tokens.StripReplyTags(result)
 	}
 
 	return result

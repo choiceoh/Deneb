@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
@@ -119,7 +119,7 @@ func RunIsolatedAgentTurn(
 	result.Summary = PickSummaryFromOutput(output)
 
 	// 4. Check if output is heartbeat-only.
-	stripped := autoreply.StripHeartbeatToken(output, autoreply.StripModeHeartbeat, autoreply.DefaultHeartbeatAckChars)
+	stripped := tokens.StripHeartbeatToken(output, tokens.StripModeHeartbeat, tokens.DefaultHeartbeatAckChars)
 	if stripped.ShouldSkip {
 		result.WasHeartbeat = true
 		if cfg.SkipHeartbeatDelivery {

@@ -10,6 +10,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"regexp"
 	"strings"
 )
@@ -251,11 +252,11 @@ func ParseReplyDirectives(raw string, currentMessageID string, silentToken strin
 	text, mediaURLs, mediaURL, audioAsVoice := splitMediaFromOutput(raw)
 
 	// Extract reply threading tags.
-	replyToID, replyToCurrent := ApplyReplyThreading(text, "")
+	replyToID, replyToCurrent := tokens.ApplyReplyThreading(text, "")
 	hasReplyTag := replyToCurrent || replyToID != ""
 
 	if hasReplyTag {
-		text = StripReplyTags(text)
+		text = tokens.StripReplyTags(text)
 	}
 
 	// Apply current message ID for reply_to_current.
@@ -265,9 +266,9 @@ func ParseReplyDirectives(raw string, currentMessageID string, silentToken strin
 
 	// Check for silent reply token.
 	if silentToken == "" {
-		silentToken = SilentReplyToken
+		silentToken = tokens.SilentReplyToken
 	}
-	isSilent := IsSilentReplyText(text, silentToken)
+	isSilent := tokens.IsSilentReplyText(text, silentToken)
 	if isSilent {
 		text = ""
 	}

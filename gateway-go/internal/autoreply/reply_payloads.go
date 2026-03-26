@@ -5,6 +5,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 )
@@ -116,15 +117,15 @@ func NormalizeReplyPayloadDirectives(payload types.ReplyPayload, currentMessageI
 	}
 
 	// Check for [[silent]] tag.
-	if HasReplyTag(payload.Text, "silent") || HasReplyTag(payload.Text, "no_reply") {
+	if tokens.HasReplyTag(payload.Text, "silent") || tokens.HasReplyTag(payload.Text, "no_reply") {
 		return types.ReplyPayload{} // suppress
 	}
 
 	// Strip all tags from output text.
-	cleaned := StripReplyTags(payload.Text)
+	cleaned := tokens.StripReplyTags(payload.Text)
 
 	// Handle reply threading tags.
-	replyTo, replyToCurrent := ApplyReplyThreading(payload.Text, "")
+	replyTo, replyToCurrent := tokens.ApplyReplyThreading(payload.Text, "")
 	if replyToCurrent && currentMessageID != "" {
 		payload.ReplyToID = currentMessageID
 	} else if replyTo != "" {
@@ -145,14 +146,14 @@ func BuildReplyPayloads(params types.BuildReplyPayloadsParams) []types.ReplyPayl
 	if !params.IsHeartbeat {
 		var sanitized []types.ReplyPayload
 		for _, p := range payloads {
-			if p.Text != "" && strings.Contains(p.Text, HeartbeatToken) {
-				stripped := StripHeartbeatToken(p.Text, StripModeMessage, 0)
+			if p.Text != "" && strings.Contains(p.Text, tokens.HeartbeatToken) {
+				stripped := tokens.StripHeartbeatToken(p.Text, tokens.StripModeMessage, 0)
 				if stripped.ShouldSkip && p.MediaURL == "" && len(p.MediaURLs) == 0 {
 					continue
 				}
 				p.Text = stripped.Text
 			}
-			if IsSilentReplyText(p.Text, "") {
+			if tokens.IsSilentReplyText(p.Text, "") {
 				continue
 			}
 			sanitized = append(sanitized, p)
@@ -162,7 +163,7 @@ func BuildReplyPayloads(params types.BuildReplyPayloadsParams) []types.ReplyPayl
 
 	// 2. Apply reply threading.
 	for i := range payloads {
-		payloads[i] = NormalizeReplyPayloadDirectives(payloads[i], params.CurrentMessageID, SilentReplyToken)
+		payloads[i] = NormalizeReplyPayloadDirectives(payloads[i], params.CurrentMessageID, tokens.SilentReplyToken)
 	}
 
 	// 3. Filter non-renderable.

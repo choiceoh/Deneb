@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
@@ -177,7 +177,7 @@ func DeliverCronOutput(
 
 	for _, payload := range payloads {
 		// Skip silent replies.
-		if autoreply.IsSilentReplyText(payload.Text, "") {
+		if tokens.IsSilentReplyText(payload.Text, "") {
 			continue
 		}
 

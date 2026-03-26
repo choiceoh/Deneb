@@ -3,7 +3,7 @@
 // This mirrors src/auto-reply/ from the TypeScript codebase: command registry,
 // dispatch, text chunking, inbound debouncing, heartbeat token handling,
 // group activation, model directive extraction, and fallback state tracking.
-package autoreply
+package tokens
 
 import (
 	"regexp"

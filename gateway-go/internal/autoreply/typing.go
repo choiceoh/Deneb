@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"sync"
 	"time"
@@ -53,7 +54,7 @@ func NewTypingController(cfg TypingControllerConfig) *TypingController {
 	}
 	silentToken := cfg.SilentToken
 	if silentToken == "" {
-		silentToken = SilentReplyToken
+		silentToken = tokens.SilentReplyToken
 	}
 	return &TypingController{
 		onStart:     cfg.OnStart,
@@ -137,7 +138,7 @@ func (tc *TypingController) StartTypingOnText(text string) {
 		return
 	}
 	// Skip silent reply tokens and their streamed prefixes.
-	if IsSilentReplyText(trimmed, tc.silentToken) || IsSilentReplyPrefixText(trimmed, tc.silentToken) {
+	if tokens.IsSilentReplyText(trimmed, tc.silentToken) || tokens.IsSilentReplyPrefixText(trimmed, tc.silentToken) {
 		return
 	}
 	tc.StartTypingLoop()

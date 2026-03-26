@@ -1,6 +1,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
@@ -111,7 +112,7 @@ func (s *FullTypingSignaler) SignalTextDelta(text string) {
 	if trimmed == "" {
 		return
 	}
-	renderable := !IsSilentReplyText(trimmed, SilentReplyToken)
+	renderable := !tokens.IsSilentReplyText(trimmed, tokens.SilentReplyToken)
 	if renderable {
 		s.hasRenderableText = true
 	} else {

@@ -5,7 +5,7 @@ package cron
 import (
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 )
 
 // HeartbeatDeliveryPayload is a minimal payload for heartbeat detection.
@@ -31,7 +31,7 @@ func ShouldSkipHeartbeatOnlyDelivery(payloads []HeartbeatDeliveryPayload, ackMax
 
 	// Check if any payload is heartbeat-only.
 	for _, p := range payloads {
-		result := autoreply.StripHeartbeatToken(p.Text, autoreply.StripModeHeartbeat, ackMaxChars)
+		result := tokens.StripHeartbeatToken(p.Text, tokens.StripModeHeartbeat, ackMaxChars)
 		if result.ShouldSkip {
 			return true
 		}
