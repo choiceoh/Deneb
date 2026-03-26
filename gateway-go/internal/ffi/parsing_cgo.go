@@ -34,6 +34,9 @@ func ExtractLinks(text string, maxLinks int) ([]string, error) {
 	if len(text) == 0 {
 		return nil, nil
 	}
+	if maxLinks <= 0 {
+		maxLinks = 5
+	}
 	config := fmt.Sprintf(`{"max_links":%d}`, maxLinks)
 
 	// Output buffer: URLs are shorter than input text.

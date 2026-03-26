@@ -221,7 +221,7 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 		toolSet[def.Name] = true
 	}
 	if toolSet["memory_search"] || toolSet["memory_get"] {
-		sb.WriteString("## Memory & Knowledge Recall\n")
+		sb.WriteString("## Memory Recall\n")
 		sb.WriteString("관련 프로젝트 지식과 메모리가 이 프롬프트의 '관련 지식' 섹션에 자동 포함됩니다.\n")
 		sb.WriteString("추가 정보가 필요하면 memory_search로 메모리 파일을 더 탐색하세요.\n\n")
 	}
@@ -388,7 +388,7 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	}
 
 	if toolSet["memory_search"] || toolSet["memory_get"] {
-		dynamic.WriteString("## Memory & Knowledge Recall\n")
+		dynamic.WriteString("## Memory Recall\n")
 		dynamic.WriteString("관련 프로젝트 지식과 메모리가 이 프롬프트의 '관련 지식' 섹션에 자동 포함됩니다.\n")
 		dynamic.WriteString("추가 정보가 필요하면 memory_search로 메모리 파일을 더 탐색하세요.\n\n")
 	}

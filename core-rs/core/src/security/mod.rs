@@ -302,9 +302,22 @@ pub fn is_safe_url(url: &str) -> bool {
         return false;
     }
 
-    // Block private IPv4 ranges (10.x, 172.16-31.x, 192.168.x).
-    if host_normalized.starts_with("10.") || host_normalized.starts_with("192.168.") {
+    // Block private IPv4 ranges (10.x, 172.16-31.x, 192.168.x, 169.254.x, 100.64-127.x).
+    if host_normalized.starts_with("10.")
+        || host_normalized.starts_with("192.168.")
+        || host_normalized.starts_with("169.254.")
+    {
         return false;
+    }
+    // Block CGNAT range (100.64.0.0/10).
+    if host_normalized.starts_with("100.") {
+        if let Some(second) = host_normalized.split('.').nth(1) {
+            if let Ok(n) = second.parse::<u8>() {
+                if (64..=127).contains(&n) {
+                    return false;
+                }
+            }
+        }
     }
     if host_normalized.starts_with("172.") {
         if let Some(second) = host_normalized.split('.').nth(1) {
@@ -423,6 +436,10 @@ fn is_private_ipv4_u32(ip: u32) -> bool {
     }
     // 169.254.0.0/16 (link-local / cloud metadata)
     if a == 169 && b == 254 {
+        return true;
+    }
+    // 100.64.0.0/10 (CGNAT)
+    if a == 100 && (64..=127).contains(&b) {
         return true;
     }
     false

@@ -36,7 +36,7 @@ const (
 // prompt, or "" if nothing relevant was found.
 // minPrefetchRunes is the minimum message length to trigger knowledge prefetch.
 // Skips very short messages (greetings, reactions) that are unlikely to benefit.
-const minPrefetchRunes = 4
+const minPrefetchRunes = 2
 
 func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) string {
 	if utf8.RuneCountInString(message) < minPrefetchRunes {
