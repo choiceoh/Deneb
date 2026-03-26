@@ -1,9 +1,13 @@
+use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use super::{open_db, CommandResult};
 use crate::config::VegaConfig;
+
+static DATE_EXTRACT_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})").unwrap());
 
 /// Urgent items query: red-status projects, stale projects, overdue actions, overloaded persons.
 pub fn cmd_urgent(_args: &Value, config: &VegaConfig) -> CommandResult {
@@ -119,8 +123,7 @@ fn find_overdue_actions(conn: &Connection) -> Result<Vec<Value>, String> {
         })
         .map_err(|e| format!("쿼리 실행 실패: {}", e))?;
 
-    // Match dates like YYYY-MM-DD or YYYY.MM.DD or YYYY/MM/DD
-    let date_re = Regex::new(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})").unwrap();
+    let date_re = &*DATE_EXTRACT_RE;
     let today = chrono_today_str();
 
     let mut items = Vec::new();

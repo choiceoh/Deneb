@@ -7,7 +7,39 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 )
+
+const memoryFileCacheTTL = 2 * time.Second
+
+// memFileCache caches the result of collectMemoryFiles to avoid repeated
+// os.Stat + os.ReadDir calls within a short window. TTL-based invalidation
+// follows the plugin discovery cache pattern.
+var memFileCache = &memoryFileListCache{}
+
+type memoryFileListCache struct {
+	mu        sync.Mutex
+	workspace string
+	files     []string
+	expiresAt time.Time
+}
+
+func (c *memoryFileListCache) get(workspace string) ([]string, bool) {
+	if c.workspace != workspace {
+		return nil, false
+	}
+	if time.Now().After(c.expiresAt) {
+		return nil, false
+	}
+	return c.files, true
+}
+
+func (c *memoryFileListCache) set(workspace string, files []string) {
+	c.workspace = workspace
+	c.files = files
+	c.expiresAt = time.Now().Add(memoryFileCacheTTL)
+}
 
 // memorySearchToolSchema returns the JSON Schema for the memory_search tool.
 func memorySearchToolSchema() map[string]any {
@@ -171,7 +203,23 @@ func toolMemoryGet(workspaceDir string) ToolFunc {
 }
 
 // collectMemoryFiles finds MEMORY.md and memory/*.md in the workspace.
+// Results are cached with a short TTL to avoid repeated directory scans
+// within the same agent turn.
 func collectMemoryFiles(workspaceDir string) []string {
+	memFileCache.mu.Lock()
+	defer memFileCache.mu.Unlock()
+
+	if cached, ok := memFileCache.get(workspaceDir); ok {
+		return cached
+	}
+
+	files := scanMemoryFiles(workspaceDir)
+	memFileCache.set(workspaceDir, files)
+	return files
+}
+
+// scanMemoryFiles performs the actual filesystem scan for memory files.
+func scanMemoryFiles(workspaceDir string) []string {
 	var files []string
 
 	// Check MEMORY.md at workspace root.

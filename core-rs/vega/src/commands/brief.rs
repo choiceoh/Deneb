@@ -4,12 +4,16 @@
 //! next_actions, risks, key_points, recent_comms, recommended_commands.
 //! Supports multi-project brief ("brief 5 10 15").
 
+use once_cell::sync::Lazy;
 use regex::Regex;
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
 use crate::config::VegaConfig;
 use crate::utils::extract_bullets;
+
+static RISK_KEYWORD_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(이슈|리스크|지연|미정|보류|주의|대응|중단|긴급)").unwrap());
 
 use super::{find_project_id, open_db, CommandResult};
 
@@ -99,10 +103,9 @@ pub fn build_single_brief(conn: &Connection, pid: i64) -> Result<Value, String> 
     }
     if risks.is_empty() {
         // Scan status chunks for risk keywords
-        let risk_re = Regex::new(r"(이슈|리스크|지연|미정|보류|주의|대응|중단|긴급)").unwrap();
         for ch in bucket.get("status").unwrap_or(&Vec::new()).iter().take(2) {
             for bullet in extract_bullets(&ch.1, 4) {
-                if risk_re.is_match(&bullet) {
+                if RISK_KEYWORD_RE.is_match(&bullet) {
                     risks.push(bullet);
                 }
             }
