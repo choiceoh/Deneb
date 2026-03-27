@@ -11,11 +11,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 )
 
-// EnhancedBackend wraps RustBackend with Gemini embedding and query expansion.
-// Uses Gemini Embedding API for semantic search while keeping Rust FTS and cosine similarity.
+// EnhancedBackend wraps RustBackend with Gemini embedding, query expansion,
+// and cross-encoder reranking via Jina Reranker API.
 type EnhancedBackend struct {
 	rust     *RustBackend
 	embedder *embedding.GeminiEmbedder
+	reranker *Reranker
 	expander *LLMExpander
 	logger   *slog.Logger
 	cache    *searchCache
@@ -29,6 +30,10 @@ type EnhancedBackendConfig struct {
 
 	// Embedder is the Gemini embedding client. If nil, search falls back to FTS-only.
 	Embedder *embedding.GeminiEmbedder
+
+	// JinaAPIKey enables cross-encoder reranking via the Jina Reranker API.
+	// If empty, reranking is skipped and results use cosine+BM25 fusion order.
+	JinaAPIKey string
 }
 
 // NewEnhancedBackend creates a Vega backend with Gemini embedding and query expansion.
@@ -40,14 +45,20 @@ func NewEnhancedBackend(cfg EnhancedBackendConfig) *EnhancedBackend {
 	rust := NewRustBackend(RustBackendConfig{Logger: cfg.Logger})
 	expander := NewLLMExpander(cfg.SglangURL, cfg.SglangModel, cfg.Logger)
 
-	if cfg.Embedder != nil {
-		cfg.Logger.Info("vega: using EnhancedBackend (Gemini embedding + expansion + Rust FTS)")
-	} else {
-		cfg.Logger.Info("vega: using EnhancedBackend (expansion + Rust FTS, no embedding)")
-	}
+	// Reranker uses Jina Reranker API if API key is configured.
+	reranker := NewReranker(RerankConfig{
+		APIKey: cfg.JinaAPIKey,
+		Logger: cfg.Logger,
+	})
+
+	cfg.Logger.Info("vega: using EnhancedBackend",
+		"embedding", cfg.Embedder != nil,
+		"reranking", reranker != nil,
+	)
 	return &EnhancedBackend{
 		rust:     rust,
 		embedder: cfg.Embedder,
+		reranker: reranker,
 		expander: expander,
 		logger:   cfg.Logger,
 		cache:    newSearchCache(),
@@ -59,13 +70,13 @@ func (eb *EnhancedBackend) Execute(ctx context.Context, cmd string, args map[str
 	return eb.rust.Execute(ctx, cmd, args)
 }
 
-// Search runs a Vega search with SGLang embedding and query expansion.
+// Search runs a Vega search with Gemini embedding, query expansion, and cross-encoder reranking.
 //
 // Pipeline:
-//  1. Parallel: SGLang query embedding + SGLang query expansion + original FTS
+//  1. Parallel: Gemini query embedding + SGLang query expansion
 //  2. If embedding succeeded, pass vector to Rust for cosine similarity search
 //  3. If expansion succeeded and FTS results are sparse, run supplemental FTS
-//  4. Results ranked by cosine similarity + BM25 fusion (no ML reranker)
+//  4. Cross-encoder reranking via Jina Reranker API if available
 func (eb *EnhancedBackend) Search(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, error) {
 	// Check cache first — avoids redundant SGLang + FFI calls.
 	cacheKey := searchCacheKey(query, opts)
@@ -126,6 +137,11 @@ func (eb *EnhancedBackend) Search(ctx context.Context, query string, opts Search
 		if err == nil && len(moreResults) > 0 {
 			results = mergeResults(results, moreResults)
 		}
+	}
+
+	// Phase 4: Cross-encoder reranking (optional).
+	if eb.reranker != nil && len(results) > 1 {
+		results = eb.rerankResults(ctx, query, results)
 	}
 
 	// Apply limit.
@@ -220,6 +236,39 @@ func mergeResults(existing, additional []SearchResult) []SearchResult {
 		}
 	}
 	return existing
+}
+
+// rerankResults reorders search results using the cross-encoder reranker.
+// On failure, returns the original results unchanged (graceful fallback).
+func (eb *EnhancedBackend) rerankResults(ctx context.Context, query string, results []SearchResult) []SearchResult {
+	docs := make([]string, len(results))
+	for i, r := range results {
+		if r.Section != "" {
+			docs[i] = r.Section + ": " + r.Content
+		} else {
+			docs[i] = r.Content
+		}
+	}
+
+	ranked, err := eb.reranker.Rerank(ctx, query, docs, len(results))
+	if err != nil {
+		eb.logger.Debug("vega: reranking failed, using fusion order", "error", err)
+		return results
+	}
+
+	reranked := make([]SearchResult, 0, len(ranked))
+	for _, r := range ranked {
+		if r.Index >= 0 && r.Index < len(results) {
+			res := results[r.Index]
+			res.Score = r.RelevanceScore
+			reranked = append(reranked, res)
+		}
+	}
+
+	if len(reranked) == 0 {
+		return results
+	}
+	return reranked
 }
 
 // Close is a no-op.

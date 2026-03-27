@@ -117,11 +117,14 @@ func main() {
 		logger.Info("gemini: embedding disabled (GEMINI_API_KEY not set)")
 	}
 
-	// Initialize Vega backend (Gemini embedding + SGLang expansion + Rust FTS).
+	// Initialize Vega backend (Gemini embedding + SGLang expansion + Jina reranking + Rust FTS).
 	initVega(srv, logger, geminiEmbedder)
 
-	// Share Gemini embedder with the memory subsystem.
+	// Share Gemini embedder and Jina API key with the memory subsystem.
 	srv.SetGeminiEmbedder(geminiEmbedder)
+	if jinaKey := vega.GetJinaAPIKey(); jinaKey != "" {
+		srv.SetJinaAPIKey(jinaKey)
+	}
 
 	if bootstrap.GeneratedToken != "" {
 		logger.Info("gateway auth token auto-generated",
@@ -255,6 +258,7 @@ func initVega(srv *server.Server, logger *slog.Logger, embedder *embedding.Gemin
 		SglangURL:   sglangURL,
 		SglangModel: sglangModel,
 		Embedder:    embedder,
+		JinaAPIKey:  vega.GetJinaAPIKey(),
 	}
 
 	backend := vega.NewEnhancedBackend(cfg)

@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -41,26 +42,26 @@ const ExportMinImportance = 0.7
 
 // Fact represents a single stored memory fact.
 type Fact struct {
-	ID             int64     `json:"id"`
-	Content        string    `json:"content"`
-	Category       string    `json:"category"`
-	Importance     float64   `json:"importance"`
-	Source         string    `json:"source"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             int64      `json:"id"`
+	Content        string     `json:"content"`
+	Category       string     `json:"category"`
+	Importance     float64    `json:"importance"`
+	Source         string     `json:"source"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 	LastAccessedAt *time.Time `json:"last_accessed_at,omitempty"`
-	AccessCount    int       `json:"access_count"`
+	AccessCount    int        `json:"access_count"`
 	VerifiedAt     *time.Time `json:"verified_at,omitempty"`
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
-	SupersededBy   *int64    `json:"superseded_by,omitempty"`
-	Active         bool      `json:"active"`
+	SupersededBy   *int64     `json:"superseded_by,omitempty"`
+	Active         bool       `json:"active"`
 }
 
 // UserModelEntry is a key-value pair in the user model table.
 type UserModelEntry struct {
-	Key        string  `json:"key"`
-	Value      string  `json:"value"`
-	Confidence float64 `json:"confidence"`
+	Key        string    `json:"key"`
+	Value      string    `json:"value"`
+	Confidence float64   `json:"confidence"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
@@ -78,8 +79,10 @@ type DreamingLogEntry struct {
 
 // Store is the structured memory database.
 type Store struct {
-	db *sql.DB
-	mu sync.RWMutex
+	db       *sql.DB
+	mu       sync.RWMutex
+	reranker RerankFunc // optional cross-encoder reranker (nil = disabled)
+	logger   *slog.Logger
 }
 
 // schema v1 for the memory store.
@@ -233,7 +236,7 @@ func NewStore(dbPath string) (*Store, error) {
 	// Schema migrations for existing databases.
 	migrateSchema(db)
 
-	store := &Store{db: db}
+	store := &Store{db: db, logger: slog.Default()}
 
 	// One-time compaction: clean accumulated low-quality noise on first upgrade.
 	ctx := context.Background()
@@ -246,6 +249,12 @@ func NewStore(dbPath string) (*Store, error) {
 	}
 
 	return store, nil
+}
+
+// SetReranker configures an optional cross-encoder reranker for search results.
+// When set, SearchFacts will rerank results after hybrid scoring.
+func (s *Store) SetReranker(fn RerankFunc) {
+	s.reranker = fn
 }
 
 // Close closes the database connection.
@@ -691,7 +700,7 @@ func (s *Store) ImportFromMarkdown(ctx context.Context, path string) (int, error
 				Content:    content,
 				Category:   CategoryContext,
 				Importance: 0.5,
-				Source:      "migration",
+				Source:     "migration",
 			}
 
 			// Try to parse the date for created_at.
