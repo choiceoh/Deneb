@@ -7,14 +7,15 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 )
 
-// EnhancedBackend wraps RustBackend with SGLang-powered embedding and query expansion.
-// Replaces GGUF models with SGLang HTTP calls while keeping Rust FTS and cosine similarity.
+// EnhancedBackend wraps RustBackend with Gemini embedding and query expansion.
+// Uses Gemini Embedding API for semantic search while keeping Rust FTS and cosine similarity.
 type EnhancedBackend struct {
 	rust     *RustBackend
-	embedder *SglangEmbedder
+	embedder *embedding.GeminiEmbedder
 	expander *LLMExpander
 	logger   *slog.Logger
 	cache    *searchCache
@@ -26,39 +27,27 @@ type EnhancedBackendConfig struct {
 	SglangURL   string // e.g. "http://127.0.0.1:30000/v1" — used for chat/expansion
 	SglangModel string // e.g. "Qwen/Qwen3.5-35B-A3B" — chat model for expansion
 
-	// EmbedURL and EmbedModel configure a separate embedding endpoint.
-	// The embedding server must be launched with --is-embedding.
-	// If empty, embedding is skipped and search falls back to FTS-only.
-	EmbedURL   string // e.g. "http://127.0.0.1:30001/v1"
-	EmbedModel string // e.g. "BAAI/bge-m3"
+	// Embedder is the Gemini embedding client. If nil, search falls back to FTS-only.
+	Embedder *embedding.GeminiEmbedder
 }
 
-// NewEnhancedBackend creates a Vega backend with SGLang embedding and query expansion.
+// NewEnhancedBackend creates a Vega backend with Gemini embedding and query expansion.
 func NewEnhancedBackend(cfg EnhancedBackendConfig) *EnhancedBackend {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
 
 	rust := NewRustBackend(RustBackendConfig{Logger: cfg.Logger})
-
-	// Embedder uses a dedicated embedding endpoint if configured;
-	// otherwise nil so search gracefully falls back to FTS-only.
-	var embedder *SglangEmbedder
-	if cfg.EmbedURL != "" && cfg.EmbedModel != "" {
-		embedder = NewSglangEmbedder(cfg.EmbedURL, cfg.EmbedModel, cfg.Logger)
-	}
-
 	expander := NewLLMExpander(cfg.SglangURL, cfg.SglangModel, cfg.Logger)
 
-	if embedder != nil {
-		cfg.Logger.Info("vega: using EnhancedBackend (embedding + expansion + Rust FTS)",
-			"embed_url", cfg.EmbedURL, "embed_model", cfg.EmbedModel)
+	if cfg.Embedder != nil {
+		cfg.Logger.Info("vega: using EnhancedBackend (Gemini embedding + expansion + Rust FTS)")
 	} else {
 		cfg.Logger.Info("vega: using EnhancedBackend (expansion + Rust FTS, no embedding)")
 	}
 	return &EnhancedBackend{
 		rust:     rust,
-		embedder: embedder,
+		embedder: cfg.Embedder,
 		expander: expander,
 		logger:   cfg.Logger,
 		cache:    newSearchCache(),

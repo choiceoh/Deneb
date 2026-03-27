@@ -14,10 +14,10 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"syscall"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
+	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
@@ -109,30 +109,19 @@ func main() {
 		server.WithLogColor(useColor),
 	)
 
-	// Detect or auto-launch embedding server (DGX Spark).
-	embedResult := vega.DetectOrLaunchEmbedServer(logger)
-	stopEmbed := func() {
-		if embedResult.Server != nil {
-			embedResult.Server.Stop()
-		}
+	// Initialize Gemini embedder for semantic search and memory.
+	geminiEmbedder := embedding.NewGeminiEmbedder(os.Getenv("GEMINI_API_KEY"), logger)
+	if geminiEmbedder != nil {
+		logger.Info("gemini: embedding enabled (gemini-embedding-2-preview)")
+	} else {
+		logger.Info("gemini: embedding disabled (GEMINI_API_KEY not set)")
 	}
 
-	// If we auto-launched the server, wait for it to become healthy before
-	// wiring the endpoint into Vega and memory subsystems.
-	if embedResult.Server != nil && embedResult.Endpoint != nil {
-		waitCtx, waitCancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		if !embedResult.Server.WaitReady(waitCtx) {
-			logger.Warn("embed-server: not ready in time, disabling embedding")
-			embedResult.Endpoint = nil
-		}
-		waitCancel()
-	}
+	// Initialize Vega backend (Gemini embedding + SGLang expansion + Rust FTS).
+	initVega(srv, logger, geminiEmbedder)
 
-	// Initialize Vega backend (SGLang-enhanced search).
-	initVega(srv, logger, embedResult.Endpoint)
-
-	// Share embedding endpoint with the memory subsystem.
-	srv.SetEmbedEndpoint(embedResult.Endpoint)
+	// Share Gemini embedder with the memory subsystem.
+	srv.SetGeminiEmbedder(geminiEmbedder)
 
 	if bootstrap.GeneratedToken != "" {
 		logger.Info("gateway auth token auto-generated",
@@ -201,7 +190,6 @@ func main() {
 
 		// Explicitly stop services before os.Exit (defers won't run).
 		d.Stop()
-		stopEmbed()
 		os.Exit(exitCode)
 	}
 
@@ -211,7 +199,6 @@ func main() {
 		logging.PrintBanner(os.Stderr, bannerInfo, useColor)
 		return srv.Run(ctx)
 	}, logger)
-	stopEmbed()
 	os.Exit(exitCode)
 }
 
@@ -251,8 +238,8 @@ func runWithSignals(run func(ctx context.Context) error, logger *slog.Logger) in
 	return 0
 }
 
-// initVega sets up the Vega search backend with SGLang embedding and query expansion.
-func initVega(srv *server.Server, logger *slog.Logger, embed *vega.EmbedEndpoint) {
+// initVega sets up the Vega search backend with Gemini embedding and query expansion.
+func initVega(srv *server.Server, logger *slog.Logger, embedder *embedding.GeminiEmbedder) {
 	const (
 		sglangURL   = "http://127.0.0.1:30000/v1"
 		sglangModel = "Qwen/Qwen3.5-35B-A3B"
@@ -267,10 +254,7 @@ func initVega(srv *server.Server, logger *slog.Logger, embed *vega.EmbedEndpoint
 		Logger:      logger,
 		SglangURL:   sglangURL,
 		SglangModel: sglangModel,
-	}
-	if embed != nil {
-		cfg.EmbedURL = embed.URL
-		cfg.EmbedModel = embed.Model
+		Embedder:    embedder,
 	}
 
 	backend := vega.NewEnhancedBackend(cfg)

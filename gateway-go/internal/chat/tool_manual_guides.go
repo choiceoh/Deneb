@@ -85,25 +85,20 @@ Rust workspace crate (core-rs/vega/) with Go bindings (gateway-go/internal/vega/
 
 ### Go Side (gateway-go/internal/vega/)
 - types.go: Backend interface, SearchOpts, SearchResult
-- autodetect.go: probe default ports (localhost:30001/v1, 30002/v1), env var overrides
-- enhanced_backend.go: full Vega with embedding support
+- autodetect.go: Vega activation checks
+- enhanced_backend.go: full Vega with Gemini embedding support
 - rust_backend.go: FFI wrapper to Rust crate
-- embed_server.go: SGLang embedder server lifecycle
-- sglang_embedder.go: SGLang embedding endpoint integration
 - llm_expander.go: LLM query expansion
 
+### Embedding (gateway-go/internal/embedding/)
+- gemini.go: Gemini Embedding API client (gemini-embedding-2-preview)
+
 ## Embedding Backends
-- SGLang server (default on DGX Spark): auto-detected at localhost:30001/v1, 30002/v1
-- Local deneb-ml (GGUF models via llama-cpp-2)
-- No-op fallback (BM25 only, used when no embedding backend available)
+- Gemini Embedding API (gemini-embedding-2-preview, via GEMINI_API_KEY)
+- No-op fallback (BM25 only, used when no API key available)
 
 ## Environment Variables
-- VEGA_MODEL_EMBEDDER: path to embedding GGUF model
-- VEGA_MODEL_RERANKER: path to reranker GGUF model
-- VEGA_MODEL_EXPANDER: path to query expansion GGUF model
-
-## Model Auto-detection
-~/.deneb/models/*.gguf scanned at startup (autodetect.go). Filenames pattern-matched to role (embedder/reranker/expander).
+- GEMINI_API_KEY: Google AI API key for Gemini embedding
 
 ## Build Variants
 - make rust: minimal (no Vega)
