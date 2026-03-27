@@ -8,7 +8,7 @@ const compactionGuide = `Compaction summarizes older conversation history to sta
 - Summary persists in session JSONL history
 
 ## Auto-Compaction (default on)
-Triggers when session nears/exceeds model context window (threshold: 75%).
+Triggers when session nears/exceeds context budget (Go threshold: 85%, Rust threshold: 75%).
 Deneb retries the original request with compacted context (maxCompactionRetries=2).
 
 ## Manual Compaction
@@ -112,8 +112,8 @@ Global processors (all tools):
 - ErrorEnricher: adds actionable hints to common errors
 
 Tool-specific:
-- grep: GrepResultSummarizer — caps at 200 lines
-- find: FindResultSummarizer — caps at 500 entries, groups by directory
+- grep: GrepResultSummarizer — caps at 200 lines; max search results: 500
+- find: FindResultSummarizer — caps at 500 entries, groups by directory; max results: 200
 - exec: ExecAnnotator — emphasizes exit code on failure
 
 ## Tool Categories (35 tools)

@@ -36,8 +36,9 @@ Every model run triggers four lifecycle points:
 - **aurora_expand_query**: deep recall (~120s). Expands a natural-language query into context-relevant messages. Expensive — use only when normal search is insufficient.
 
 ## Token Budget Constants
-- Context threshold: 0.75 (compact when usage exceeds 75% of context window)
-- Fresh tail: 32 messages (always kept intact, never compacted)
+- Go defaults: tokenBudget=100K, freshTailCount=48, maxMessages=100, charsPerToken=4
+- Rust defaults: context threshold 0.75, fresh tail 32
+- Go compaction threshold: 0.85 (compact when usage exceeds 85% of Go-side budget)
 - Three-tier resolution order: env var > plugin config > hardcoded defaults
 
 ## Rust Implementation (core-rs/core/src/context_engine/)
@@ -139,6 +140,8 @@ const agentLoopGuide = `The agent loop is the core execution cycle: intake → c
 - MaxTokens: 8192 (max output tokens per LLM call)
 - defaultModel: "zai/glm-5-turbo"
 - maxCompactionRetries: 2 (retry with compacted context on overflow)
+- Context: tokenBudget=100K, freshTailCount=48, maxMessages=100
+- Stop reasons: end_turn, max_tokens, timeout, aborted, max_turns
 
 ## Go Implementation (gateway-go/internal/chat/)
 - agent.go: AgentConfig, RunAgent(), consumeStream(), StreamHooks (OnTextDelta, OnThinking, OnToolStart)

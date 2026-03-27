@@ -84,10 +84,16 @@ IDLE → RUNNING → DONE / FAILED / KILLED / TIMEOUT
 - subagents: list/kill/steer running sub-agents
 - session_status: current session info (key, time, kind, status, model, tokens)
 
+## Session GC
+- gcInterval: 10 minutes (scan frequency for stale sessions)
+- gcMaxAge: 1 hour (terminal sessions evicted after this)
+- Evicts: done/failed/killed/timeout sessions older than gcMaxAge
+
 ## Storage
 - Store: ~/.deneb/agents/<agentId>/sessions/sessions.json (metadata)
 - Transcripts: <SessionId>.jsonl (message history, append-only)
 - Event pub/sub bus for real-time session state changes
+- KeyCache: 256 entries, 1s negative TTL for session key lookups
 
 ## Key Files
 - docs/concepts/session.md
