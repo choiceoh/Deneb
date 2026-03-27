@@ -104,7 +104,7 @@ func TestRegisterCoreTools(t *testing.T) {
 	expectedTools := []string{
 		"read", "write", "edit", "grep", "find", "ls",
 		"exec", "process", "web",
-		"memory_search", "memory_get", "message",
+		"memory_search", "memory_get", "system_manual", "message",
 		"apply_patch", "cron", "gateway",
 		"sessions_list", "sessions_history", "sessions_search", "sessions_restore",
 		"sessions_send", "sessions_spawn",

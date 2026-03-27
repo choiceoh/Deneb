@@ -117,6 +117,14 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolMemoryGet(workspaceDir),
 	})
 
+	// -- System manual tool (queryable Deneb documentation) --
+	registry.RegisterTool(ToolDef{
+		Name:        "polaris",
+		Description: "Query Deneb system documentation and AI-curated guides",
+		InputSchema: systemManualToolSchema(),
+		Fn:          toolSystemManual(workspaceDir),
+	})
+
 	// -- Message tool (proactive channel sends via context-injected ReplyFunc) --
 	registry.RegisterTool(ToolDef{
 		Name:        "message",
