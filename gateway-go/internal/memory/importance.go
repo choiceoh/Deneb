@@ -178,18 +178,39 @@ func InsertExtractedFacts(ctx context.Context, store *Store, embedder *Embedder,
 	}
 }
 
-// updateUserModelFromFact infers user model key-value from a user_model category fact.
+// updateUserModelFromFact infers user model key-value from a user_model/mutual category fact.
 func updateUserModelFromFact(ctx context.Context, store *Store, fact ExtractedFact, logger *slog.Logger) {
 	// Simple heuristic: use the fact content as a value for a general "traits" key.
 	// The dreaming engine will later consolidate these into proper keys.
 	key := "traits"
-	existing, _ := store.GetMeta(ctx, "user_model_traits")
+	if fact.Category == CategoryMutual {
+		key = "mu_signals_raw"
+	}
+
+	// Read existing value from user_model table (not metadata).
+	var existing string
+	entries, _ := store.GetUserModel(ctx)
+	for _, e := range entries {
+		if e.Key == key {
+			existing = e.Value
+			break
+		}
+	}
+
 	var value string
 	if existing != "" {
 		value = existing + "\n" + fact.Content
 	} else {
 		value = fact.Content
 	}
+
+	// Keep only last 20 entries to bound growth; dreaming consolidates periodically.
+	lines := strings.Split(value, "\n")
+	if len(lines) > 20 {
+		lines = lines[len(lines)-20:]
+		value = strings.Join(lines, "\n")
+	}
+
 	if err := store.SetUserModel(ctx, key, value, fact.Importance); err != nil {
 		logger.Debug("aurora-memory: failed to update user model", "error", err)
 	}
