@@ -261,6 +261,24 @@ Shared type definitions compiled to Go and Rust.
 - Changelog placement: in the active version block, append new entries to the end of the target section (`### Changes` or `### Fixes`); do not insert new entries at the top of a section.
 - Pure test additions/fixes generally do **not** need a changelog entry unless they alter user-facing behavior or the user asks for one.
 
+## Conventional Commit Format (REQUIRED)
+
+All commits MUST use Conventional Commit format. Module-only prefixes (e.g., `chat:`, `pilot:`, `memory:`) are NOT recognized by release-please and will be silently dropped from changelogs.
+
+**Correct format:**
+- `feat(chat): add send_file, http, kv, clipboard agent tools`
+- `fix(memory): resolve deadlock in concurrent stream helpers`
+- `perf(vega): optimize FTS query latency with batched lookups`
+- `refactor(rpc): extract session handlers into domain subpackages`
+
+**Incorrect format (will be dropped from changelogs):**
+- `chat: add send_file, http, kv, clipboard agent tools` ❌
+- `pilot: add health check and thinking mode` ❌
+- `memory: fix deadlock and race condition` ❌
+
+**Allowed types:** feat, fix, perf, refactor, docs, test, chore, ci, build
+**Allowed scopes:** any module name (chat, pilot, memory, vega, aurora, telegram, etc.)
+
 ## Commit & Pull Request Guidelines
 
 - Use `$deneb-pr-maintainer` at `.agents/skills/deneb-pr-maintainer/SKILL.md` for maintainer PR triage, review, close, search, and landing workflows.
