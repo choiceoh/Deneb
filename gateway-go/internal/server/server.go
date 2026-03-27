@@ -1295,6 +1295,9 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 		sessions:    s.sessions,
 	}, s.logger)
 
+	// Wire autonomous service into agent tools (late-binding, same as SessionSendFn).
+	toolDeps.AutonomousSvc = s.autonomousSvc
+
 	// Broadcast autonomous cycle events to WebSocket clients.
 	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
 		broadcastFn("autonomous.cycle", event)
