@@ -163,12 +163,13 @@ Rust yields commands (FetchMessages, Summarize), Go executes I/O, feeds response
 
 ## Gateway Internal Subsystems (gateway-go/internal/, 40+)
 Core: server/, rpc/, session/, channel/, chat/, auth/, ffi/
-AI: llm/, vega/, memory/, aurora/
+AI: llm/, provider/ (plugin registry, model discovery, auth), vega/, memory/, aurora/
 Automation: cron/, autonomous/, hooks/
-Infrastructure: config/, logging/, metrics/, monitoring/, middleware/
-Media: media/, liteparse/
+Infrastructure: config/, logging/, metrics/ (Prometheus /metrics endpoint), monitoring/, middleware/
+Media: media/, liteparse/ (PDF/Office/CSV document parsing via lit CLI)
 Tools: process/, plugin/, skills/, skill/
-Other: approval/, autoreply/, dedupe/, device/, events/, node/, secret/, telegram/, transcript/, usage/, wizard/
+Persistence: transcript/ (JSONL session history), usage/ (token tracking)
+Other: approval/, autoreply/ (agent execution engine), dedupe/, device/, events/ (pub/sub broadcasting), node/, secret/, telegram/, wizard/
 
 ## Key Files
 - docs/concepts/architecture.md (20KB)

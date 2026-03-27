@@ -45,6 +45,21 @@ Extracted text content (truncated at maxChars)
 - connection_refused, connection_reset, timeout: retryable
 - Each error includes a "retryable" boolean flag
 
+## Document Parsing (LiteParse Integration)
+Binary documents (PDF, Office, CSV) detected by MIME type are automatically parsed:
+- processDocument() extracts filename from URL, calls liteparse.Parse()
+- Supported: PDF, DOCX/XLSX/PPTX, DOC/XLS/PPT, ODT/ODS/ODP, CSV
+- Max document size: 50 MB, max extracted text: 200 KB
+- Requires lit CLI (npm i -g @llamaindex/liteparse); skipped gracefully if unavailable
+
+## Stealth Fetch (Bot Detection Bypass)
+Three-stage escalation for blocked requests:
+1. Chrome 131 macOS profile (no cookie jar, no backoff)
+2. Firefox 133 Windows profile (cookie jar enabled, 800ms backoff)
+3. Chrome macOS + Google Cache fallback (1200ms backoff)
+
+Soft block detection: Cloudflare challenges (cf-challenge-running, cf_chl_opt), CAPTCHAs (reCAPTCHA, hCaptcha, Turnstile), bot management (PerimeterX, DataDome, Imperva/Incapsula).
+
 ## Limits
 - Max download: 5 MB
 - Default maxChars: 50,000
@@ -52,6 +67,9 @@ Extracted text content (truncated at maxChars)
 
 ## Key Files
 - gateway-go/internal/chat/tool_web.go (tool implementation)
+- gateway-go/internal/chat/web_fetch.go (fetch pipeline, document processing)
+- gateway-go/internal/chat/web_fetch_stealth.go (stealth profiles, block detection)
+- gateway-go/internal/liteparse/ (document parsing)
 - docs/tools/web.md (17KB, comprehensive user docs)`
 
 const execGuide = `The exec tool runs shell commands, and the process tool manages long-running background sessions.

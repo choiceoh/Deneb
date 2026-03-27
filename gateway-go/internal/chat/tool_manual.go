@@ -204,12 +204,104 @@ func systemManualToolSchema() map[string]any {
 	}
 }
 
+// --- Docs directory resolution ---
+
+// resolveDocsDir finds the docs/ directory by checking multiple locations:
+//  1. workspaceDir/docs (agent workspace)
+//  2. Executable's parent directories (binary lives in repo under gateway-go/)
+//  3. Current working directory ancestors (gateway often runs from repo root)
+//
+// Result is cached after first successful resolution.
+var (
+	resolvedDocsDir     string
+	resolvedDocsDirOnce sync.Once
+)
+
+func resolveDocsDir(workspaceDir string) string {
+	resolvedDocsDirOnce.Do(func() {
+		// 1. Check workspace directory.
+		candidate := filepath.Join(workspaceDir, "docs")
+		if hasDocsContent(candidate) {
+			resolvedDocsDir = candidate
+			return
+		}
+
+		// 2. Walk up from executable path (e.g. /repo/gateway-go/deneb-gateway → /repo/docs).
+		if exe, err := os.Executable(); err == nil {
+			dir := filepath.Dir(exe)
+			for i := 0; i < 5; i++ {
+				candidate = filepath.Join(dir, "docs")
+				if hasDocsContent(candidate) {
+					resolvedDocsDir = candidate
+					return
+				}
+				parent := filepath.Dir(dir)
+				if parent == dir {
+					break
+				}
+				dir = parent
+			}
+		}
+
+		// 3. Walk up from cwd (gateway often started from repo root).
+		if cwd, err := os.Getwd(); err == nil {
+			dir := cwd
+			for i := 0; i < 5; i++ {
+				candidate = filepath.Join(dir, "docs")
+				if hasDocsContent(candidate) {
+					resolvedDocsDir = candidate
+					return
+				}
+				parent := filepath.Dir(dir)
+				if parent == dir {
+					break
+				}
+				dir = parent
+			}
+		}
+
+		// Fallback: use workspace/docs even if empty (preserves old behavior).
+		resolvedDocsDir = filepath.Join(workspaceDir, "docs")
+	})
+	return resolvedDocsDir
+}
+
+// hasDocsContent checks that a directory exists and contains at least one .md file.
+func hasDocsContent(dir string) bool {
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	// Quick check: look for any .md file in the top two levels.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+			return true
+		}
+		if e.IsDir() {
+			subPath := filepath.Join(dir, e.Name())
+			subEntries, err := os.ReadDir(subPath)
+			if err != nil {
+				continue
+			}
+			for _, se := range subEntries {
+				if !se.IsDir() && strings.HasSuffix(se.Name(), ".md") {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // --- Tool implementation ---
 
 func toolSystemManual(workspaceDir string) ToolFunc {
-	docsDir := filepath.Join(workspaceDir, "docs")
-
 	return func(_ context.Context, input json.RawMessage) (string, error) {
+		docsDir := resolveDocsDir(workspaceDir)
 		var p struct {
 			Action string `json:"action"`
 			Query  string `json:"query"`
@@ -556,6 +648,7 @@ var builtinGuideOrder = []string{
 	"telegram", "skills", "pilot", "cron", "autonomous",
 	"web", "exec", "gateway-tool", "media", "gmail",
 	"data-tools", "sessions-tools", "message",
+	"provider", "liteparse", "metrics", "nodes", "transcript",
 }
 
 // builtinGuides contains AI-curated system knowledge.
@@ -698,6 +791,36 @@ var builtinGuides = map[string]guideEntry{
 		Title:   "Message Tool",
 		Summary: "Send, reply, thread-reply, react via channels",
 		Content: messageGuide,
+	},
+	"provider": {
+		Key:     "provider",
+		Title:   "Provider & Model System",
+		Summary: "LLM provider plugins, model discovery, catalog, auth, normalization",
+		Content: providerGuide,
+	},
+	"liteparse": {
+		Key:     "liteparse",
+		Title:   "Document Parsing (LiteParse)",
+		Summary: "PDF, Office, CSV text extraction via lit CLI",
+		Content: liteparseGuide,
+	},
+	"metrics": {
+		Key:     "metrics",
+		Title:   "Metrics & Observability",
+		Summary: "Prometheus-compatible counters, histograms, /metrics endpoint",
+		Content: metricsGuide,
+	},
+	"nodes": {
+		Key:     "nodes",
+		Title:   "Mobile Nodes",
+		Summary: "Paired device discovery, notify, camera, location, command execution",
+		Content: nodesGuide,
+	},
+	"transcript": {
+		Key:     "transcript",
+		Title:   "Transcript Storage",
+		Summary: "JSONL session history, append-only persistence, compaction integration",
+		Content: transcriptGuide,
 	},
 }
 
