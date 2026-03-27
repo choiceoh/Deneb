@@ -288,14 +288,50 @@ func formatMutualUnderstanding(entries []memory.UserModelEntry) string {
 		return ""
 	}
 
-	// Behavioral guidance: tell the AI HOW to use this information.
+	// Section 3: Recent unprocessed signals (real-time, between dreaming cycles).
+	// These haven't been consolidated yet but give the AI immediate awareness
+	// of recent relationship dynamics so it can adapt mid-session.
+	if tokenCount < mutualUnderstandingMaxTokens {
+		if raw, ok := byKey["mu_signals_raw"]; ok && raw.Value != "" {
+			lines := strings.Split(strings.TrimSpace(raw.Value), "\n")
+			// Show only the most recent signals to keep it concise.
+			maxRecent := 5
+			if len(lines) > maxRecent {
+				lines = lines[len(lines)-maxRecent:]
+			}
+			before := sb.Len()
+			sb.WriteString("### 최근 시그널 (미통합)\n")
+			for _, line := range lines {
+				if line = strings.TrimSpace(line); line != "" {
+					fmt.Fprintf(&sb, "- %s\n", truncateRunes(line, 200))
+				}
+			}
+			sb.WriteString("\n")
+			tokenCount += (sb.Len() - before) / charsPerToken
+		}
+	}
+
+	// Section 4: Relationship history snapshot (multi-cycle evolution).
+	if tokenCount < mutualUnderstandingMaxTokens {
+		if hist, ok := byKey["mu_history"]; ok && hist.Value != "" {
+			before := sb.Len()
+			sb.WriteString("### 관계 변화 이력\n")
+			sb.WriteString(truncateRunes(hist.Value, 300))
+			sb.WriteString("\n\n")
+			tokenCount += (sb.Len() - before) / charsPerToken
+		}
+	}
+
+	// Section 5: Behavioral guidance with priority framework.
 	if tokenCount < mutualUnderstandingMaxTokens {
 		sb.WriteString("### 활용 지침\n")
-		sb.WriteString("위 상호 인식은 대화를 통해 축적된 이해입니다. 이를 바탕으로:\n")
-		sb.WriteString("- 적응 메모의 지시사항을 즉시 적용하세요\n")
-		sb.WriteString("- 사용자 프로필에 맞게 답변 스타일을 조절하세요\n")
-		sb.WriteString("- 관계 역학을 고려해 톤과 상세도를 맞추세요\n")
-		sb.WriteString("- 이 정보를 사용자에게 직접 언급하지 마세요 (자연스럽게 반영만)\n\n")
+		sb.WriteString("위 상호 인식은 대화를 통해 축적된 이해입니다. 적용 우선순위:\n")
+		sb.WriteString("1. **적응 메모** (최우선): 구체적 행동 지시사항을 즉시 적용\n")
+		sb.WriteString("2. **최근 시그널** (높음): 아직 통합되지 않은 최신 피드백 — 적응 메모보다 최신이면 이쪽 우선\n")
+		sb.WriteString("3. **사용자 프로필** (중간): 답변 길이, 톤, 상세도를 프로필에 맞춤\n")
+		sb.WriteString("4. **관계 역학** (배경): 전반적 관계 톤과 신뢰 수준을 고려\n\n")
+		sb.WriteString("충돌 시: 최신 시그널 > 적응 메모 > 프로필 > 역학 (더 최근의 정보가 우선)\n")
+		sb.WriteString("이 정보를 사용자에게 직접 언급하지 마세요 — 자연스럽게 반영만 하세요.\n\n")
 	}
 
 	return sb.String()

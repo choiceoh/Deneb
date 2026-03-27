@@ -384,13 +384,21 @@ const patternSystemPrompt = `You are a meta-reasoning engine performing "dreamin
 This is the INDUCTIVE reasoning phase: from many specific observations, derive general patterns.
 
 Given accumulated facts, perform:
-1. **Pattern Induction**: What recurring themes emerge across multiple facts?
-2. **Behavioral Modeling**: What work habits, expertise areas, or decision patterns are visible?
-3. **Hypothesis Formation**: What predictions can you make about future behavior?
+
+1. **행동 패턴 (Behavioral)**: What work habits, expertise areas, or decision patterns are visible?
+   → category: "user_model"
+2. **관계 패턴 (Relational)**: What patterns exist in how the user interacts with the AI?
+   - Does the user consistently correct the AI on certain topics? → adaptation needed
+   - Does the user's trust level follow a pattern? (e.g., trusts for code, verifies for decisions)
+   - Are there recurring frustration triggers? Recurring satisfaction sources?
+   - How does the user's communication style shift based on context? (urgent vs relaxed)
+   → category: "mutual"
+3. **예측 (Hypothesis)**: What predictions can you make about future behavior or needs?
+   → category: "user_model" or "mutual" depending on whether it's about the user or the relationship
 
 Return a JSON array of discovered patterns:
-- "content": the pattern (Korean, concise, evidence-based)
-- "category": "user_model"
+- "content": the pattern (Korean, concise, evidence-based — cite specific supporting facts)
+- "category": "user_model" or "mutual"
 - "importance": 0.8-1.0 (patterns are high-value by definition)
 If no clear patterns (< 3 supporting facts), return [].
 Return ONLY valid JSON array, no markdown fences.`
@@ -439,9 +447,14 @@ func extractPatterns(ctx context.Context, store *Store, client *llm.Client, mode
 		if p.Content == "" {
 			continue
 		}
+		// Accept user_model or mutual category from the LLM; default to user_model.
+		cat := CategoryUserModel
+		if p.Category == CategoryMutual {
+			cat = CategoryMutual
+		}
 		_, err := store.InsertFact(ctx, Fact{
 			Content:    p.Content,
-			Category:   CategoryUserModel,
+			Category:   cat,
 			Importance: clamp(p.Importance, 0.7, 1.0),
 			Source:     SourceDreaming,
 		})
@@ -513,183 +526,6 @@ func updateUserModel(ctx context.Context, store *Store, client *llm.Client, mode
 
 	logger.Info("aurora-dream: updated user model", "keys", len(profile))
 	return nil
-}
-
-// --- Phase 6: Mutual Understanding Synthesis (상호 인식) ---
-//
-// Unlike Phase 5 (static user profile), Phase 6 tracks the EVOLVING relationship:
-// - Reads previous mutual understanding state for continuity
-// - Analyzes new mutual signals since last cycle
-// - Produces updated understanding that reflects temporal changes
-// - Cleans up consumed mu_signals_raw after synthesis
-
-const mutualUnderstandingSystemPrompt = `You are an AI-user relationship analyst performing "dreaming" mutual understanding synthesis.
-You will receive TWO inputs:
-1. **이전 상태**: The previous mutual understanding state (may be empty on first run)
-2. **새로운 시그널**: Recently accumulated relationship signals and contextual facts
-
-Your job: EVOLVE the understanding — don't start from scratch. Build on the previous state,
-incorporate new signals, and note what CHANGED.
-
-## Analysis Framework
-
-### 사용자 → AI 인식 (user_sees_ai)
-Synthesize how the user perceives the AI. Look for:
-- Satisfaction trajectory: improving, declining, or stable? Why?
-- Trust level: does user verify AI output, or delegate freely?
-- Unmet expectations: what does the user want that the AI isn't delivering?
-- Emotional tone: warm/collaborative, neutral/transactional, or frustrated/distant?
-
-### AI → 사용자 이해 (ai_understands_user)
-Synthesize the AI's accumulated understanding of the user. Include:
-- Core personality traits (communication style, decision-making approach)
-- Expertise depth map (what they know deeply vs superficially)
-- Emotional patterns (what triggers frustration, what brings satisfaction)
-- Work rhythm (when they work, how they context-switch, attention patterns)
-
-### 관계 역학 (relationship_dynamics)
-Analyze the relationship trajectory:
-- Rapport trend: deepening, plateauing, or degrading?
-- Communication efficiency: is less explanation needed over time?
-- Shared context growth: inside references, assumed knowledge
-- Power dynamic: does user lead, collaborate, or delegate?
-
-### 적응 메모 (adaptation_notes)
-CONCRETE behavioral directives for the AI. Not vague — specific and actionable:
-- "사용자가 X를 물을 때 Y 방식으로 답변할 것" (not "더 잘 답변할 것")
-- "Z 상황에서는 확인 없이 바로 실행할 것" (trust-based delegation)
-- "W 주제는 간결하게, V 주제는 상세하게" (topic-specific adaptation)
-
-## Output Format
-Return a JSON object (Korean values, 2-4 sentences per key):
-- "user_sees_ai": "..."
-- "ai_understands_user": "..."
-- "relationship_dynamics": "..."
-- "adaptation_notes": "..."
-
-If a previous state exists, note what evolved (e.g., "이전보다 신뢰가 높아짐: ~").
-If insufficient data for a key, omit it.
-Return ONLY valid JSON object, no markdown fences.`
-
-func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) error {
-	facts, err := store.GetActiveFacts(ctx)
-	if err != nil {
-		return err
-	}
-
-	if len(facts) < 5 {
-		return nil // not enough data to synthesize
-	}
-
-	// Load previous mutual understanding state for continuity.
-	prevState := loadPreviousMutualState(ctx, store)
-
-	// Gather relevant facts with priority ordering.
-	var sb strings.Builder
-
-	// Section 1: Previous state (if exists).
-	if prevState != "" {
-		fmt.Fprintf(&sb, "## 이전 상태\n%s\n\n", prevState)
-	}
-
-	// Section 2: New mutual signals (highest priority).
-	sb.WriteString("## 새로운 시그널\n")
-	mutualFacts := 0
-	for _, f := range facts {
-		if f.Category == CategoryMutual && mutualFacts < 25 {
-			fmt.Fprintf(&sb, "[mutual, %.1f, %s] %s\n",
-				f.Importance, f.CreatedAt.Format("01-02"), f.Content)
-			mutualFacts++
-		}
-	}
-
-	// Section 3: Raw accumulated signals (from between dreaming cycles).
-	entries, _ := store.GetUserModel(ctx)
-	for _, e := range entries {
-		if e.Key == "mu_signals_raw" && e.Value != "" {
-			fmt.Fprintf(&sb, "\n## 미처리 시그널\n%s\n", e.Value)
-			break
-		}
-	}
-
-	// Section 4: Supporting context from other categories.
-	sb.WriteString("\n## 맥락\n")
-	supportCats := map[string]bool{CategoryPreference: true, CategoryUserModel: true, CategoryDecision: true}
-	support := 0
-	for _, f := range facts {
-		if supportCats[f.Category] && support < 15 {
-			fmt.Fprintf(&sb, "[%s, %.1f] %s\n", f.Category, f.Importance, f.Content)
-			support++
-		}
-	}
-
-	if mutualFacts == 0 && prevState == "" && support < 5 {
-		return nil // not enough data
-	}
-
-	// Use higher token budget for richer synthesis.
-	resp, err := callLLM(ctx, client, model, mutualUnderstandingSystemPrompt, sb.String(), 768)
-	if err != nil {
-		return err
-	}
-
-	var profile map[string]string
-	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &profile); err != nil {
-		return nil // non-fatal
-	}
-
-	mutualKeys := map[string]bool{
-		"user_sees_ai":          true,
-		"ai_understands_user":   true,
-		"relationship_dynamics": true,
-		"adaptation_notes":      true,
-	}
-
-	updated := 0
-	for key, value := range profile {
-		if value == "" || !mutualKeys[key] {
-			continue
-		}
-		if err := store.SetUserModel(ctx, key, value, 0.85); err != nil {
-			logger.Debug("aurora-dream: failed to set mutual understanding", "key", key, "error", err)
-		} else {
-			updated++
-		}
-	}
-
-	// Clear consumed mu_signals_raw after successful synthesis.
-	if updated > 0 {
-		_ = store.SetUserModel(ctx, "mu_signals_raw", "", 0)
-		logger.Info("aurora-dream: updated mutual understanding", "keys", updated, "signals_consumed", mutualFacts)
-	}
-
-	return nil
-}
-
-// loadPreviousMutualState reads the current mutual understanding keys
-// and formats them as context for the next synthesis cycle.
-func loadPreviousMutualState(ctx context.Context, store *Store) string {
-	entries, err := store.GetUserModel(ctx)
-	if err != nil {
-		return ""
-	}
-
-	labels := map[string]string{
-		"user_sees_ai":          "사용자 → AI 인식",
-		"ai_understands_user":   "AI → 사용자 이해",
-		"relationship_dynamics": "관계 역학",
-		"adaptation_notes":      "적응 메모",
-	}
-
-	var sb strings.Builder
-	for _, e := range entries {
-		label, ok := labels[e.Key]
-		if !ok || e.Value == "" {
-			continue
-		}
-		fmt.Fprintf(&sb, "- %s: %s\n", label, e.Value)
-	}
-	return sb.String()
 }
 
 // callLLM is a convenience alias for callSglang (defined in sglang.go).
