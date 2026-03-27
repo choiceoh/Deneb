@@ -11,14 +11,127 @@
     }
   },
   "changelog-sections": [
-    { "type": "feat", "section": "✨ Features" },
-    { "type": "fix", "section": "🐛 Bug Fixes" },
-    { "type": "perf", "section": "⚡ Performance" },
-    { "type": "refactor", "section": "🔧 Internal", "hidden": false },
-    { "type": "docs", "section": "📝 Documentation", "hidden": true },
-    { "type": "test", "section": "🧪 Tests", "hidden": true },
-    { "type": "chore", "section": "🔧 Internal", "hidden": true },
-    { "type": "ci", "section": "🔧 Internal", "hidden": true },
-    { "type": "build", "section": "🔧 Internal", "hidden": true }
+    {
+      "type": "feat",
+      "section": "✨ Features"
+    },
+    {
+      "type": "fix",
+      "section": "🐛 Bug Fixes"
+    },
+    {
+      "type": "perf",
+      "section": "⚡ Performance"
+    },
+    {
+      "type": "refactor",
+      "section": "🔧 Internal",
+      "hidden": false
+    },
+    {
+      "type": "docs",
+      "section": "📝 Documentation",
+      "hidden": true
+    },
+    {
+      "type": "test",
+      "section": "🧪 Tests",
+      "hidden": true
+    },
+    {
+      "type": "chore",
+      "section": "🔧 Internal",
+      "hidden": true
+    },
+    {
+      "type": "ci",
+      "section": "🔧 Internal",
+      "hidden": true
+    },
+    {
+      "type": "build",
+      "section": "🔧 Internal",
+      "hidden": true
+    },
+    {
+      "type": "chat",
+      "section": "✨ Features"
+    },
+    {
+      "type": "pilot",
+      "section": "✨ Features"
+    },
+    {
+      "type": "memory",
+      "section": "✨ Features"
+    },
+    {
+      "type": "aurora",
+      "section": "✨ Features"
+    },
+    {
+      "type": "aurora-dream",
+      "section": "✨ Features"
+    },
+    {
+      "type": "vega",
+      "section": "✨ Features"
+    },
+    {
+      "type": "telegram",
+      "section": "✨ Features"
+    },
+    {
+      "type": "autonomous",
+      "section": "✨ Features"
+    },
+    {
+      "type": "process",
+      "section": "🔧 Internal"
+    },
+    {
+      "type": "server",
+      "section": "🔧 Internal"
+    },
+    {
+      "type": "status",
+      "section": "🔧 Internal"
+    },
+    {
+      "type": "logging",
+      "section": "🔧 Internal"
+    },
+    {
+      "type": "cache",
+      "section": "🔧 Internal"
+    },
+    {
+      "type": "gateway",
+      "section": "🔧 Internal"
+    },
+    {
+      "type": "provider",
+      "section": "🔧 Internal"
+    },
+    {
+      "type": "watchdog",
+      "section": "🔧 Internal"
+    },
+    {
+      "type": "compaction",
+      "section": "🔧 Internal"
+    },
+    {
+      "type": "ffi",
+      "section": "🔧 Internal"
+    },
+    {
+      "type": "core-rs",
+      "section": "🔧 Internal"
+    },
+    {
+      "type": "cron",
+      "section": "🔧 Internal"
+    }
   ]
 }
