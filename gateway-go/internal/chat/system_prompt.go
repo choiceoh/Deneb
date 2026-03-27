@@ -87,7 +87,7 @@ var coreToolSummaries = map[string]string{
 	"kv":                 "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
 	"clipboard":          "Temporary in-memory clipboard (ring buffer, 32 items max). Actions: set, get, list, clear",
 	"gmail":              "Gmail API (native OAuth2). Actions: inbox (unread summary + important), search (structured results), read (message by ID), send (with contact alias), reply, label (list/add/remove). Contact aliases auto-resolved from KV store. Setup: place Google OAuth client_secret as ~/.deneb/credentials/gmail_client.json, token (with refresh_token) as ~/.deneb/credentials/gmail_token.json",
-	"polaris":            "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (AI-curated internal system guides: aurora, vega, agent-loop, compaction, tools, system-prompt, memory, sessions, architecture, channels)",
+	"polaris":            "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (AI-curated internal system guides: aurora, vega, agent-loop, compaction, tools, system-prompt, memory, sessions, architecture, channels, telegram, skills, pilot, cron, autonomous)",
 	"apply_patch":        "Apply multi-file unified diff patches. Tries git apply first, falls back to patch -p1",
 	"autonomous":         "Manage autonomous goals and execution cycles. Actions: status, goals, add_goal, update_goal, remove_goal, cycle_run, cycle_stop, enable, disable, recent_runs",
 	"pilot":              "Fast local AI (sglang) that orchestrates tools in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory. Options: chain, max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-thinking for complex tasks. Falls back to raw results if sglang is down",
@@ -231,13 +231,7 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 
 	// Polaris (System Manual).
 	if toolSet["polaris"] {
-		sb.WriteString("## Polaris (System Manual)\n")
-		sb.WriteString("데네브 시스템에 대해 모를 때 polaris로 문서를 조회하세요.\n")
-		sb.WriteString("- polaris(action:'guides') → AI 전용 내부 시스템 가이드 목록\n")
-		sb.WriteString("- polaris(action:'guides', topic:'aurora') → 특정 가이드 읽기\n")
-		sb.WriteString("- polaris(action:'topics') → 전체 문서 트리 구조\n")
-		sb.WriteString("- polaris(action:'search', query:'webhook') → 키워드 검색\n")
-		sb.WriteString("- polaris(action:'read', topic:'concepts/session') → 토픽 읽기\n\n")
+		writePolarisSection(&sb)
 	}
 
 	// Workspace.
@@ -410,13 +404,7 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 
 	// Polaris (System Manual).
 	if toolSet["polaris"] {
-		dynamic.WriteString("## Polaris (System Manual)\n")
-		dynamic.WriteString("데네브 시스템에 대해 모를 때 polaris로 문서를 조회하세요.\n")
-		dynamic.WriteString("- polaris(action:'guides') → AI 전용 내부 시스템 가이드 목록\n")
-		dynamic.WriteString("- polaris(action:'guides', topic:'aurora') → 특정 가이드 읽기\n")
-		dynamic.WriteString("- polaris(action:'topics') → 전체 문서 트리 구조\n")
-		dynamic.WriteString("- polaris(action:'search', query:'webhook') → 키워드 검색\n")
-		dynamic.WriteString("- polaris(action:'read', topic:'concepts/session') → 토픽 읽기\n\n")
+		writePolarisSection(&dynamic)
 	}
 
 	dynamic.WriteString("## Workspace\n")
@@ -478,6 +466,18 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 		{Type: "text", Text: static.String(), CacheControl: ephemeral},
 		{Type: "text", Text: dynamic.String(), CacheControl: ephemeral},
 	}
+}
+
+// writePolarisSection writes the Polaris system manual usage guide.
+// Shared by both BuildSystemPrompt and BuildSystemPromptBlocks.
+func writePolarisSection(sb *strings.Builder) {
+	sb.WriteString("## Polaris (System Manual)\n")
+	sb.WriteString("데네브 시스템에 대해 모를 때 polaris로 문서를 조회하세요.\n")
+	sb.WriteString("- polaris(action:'guides') → AI 전용 내부 시스템 가이드 목록\n")
+	sb.WriteString("- polaris(action:'guides', topic:'aurora') → 특정 가이드 읽기\n")
+	sb.WriteString("- polaris(action:'topics') → 전체 문서 트리 구조\n")
+	sb.WriteString("- polaris(action:'search', query:'webhook') → 키워드 검색\n")
+	sb.WriteString("- polaris(action:'read', topic:'concepts/session') → 토픽 읽기\n\n")
 }
 
 // writeToolList writes the formatted tool list to the string builder.
