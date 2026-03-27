@@ -28,6 +28,26 @@ func callSglang(ctx context.Context, client *llm.Client, model, system, user str
 	return collectStream(ctx, events)
 }
 
+// callSglangJSON is like callSglang but requests JSON-formatted output
+// via response_format. Use for endpoints that must return valid JSON.
+func callSglangJSON(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
+	events, err := client.StreamChatOpenAI(ctx, llm.ChatRequest{
+		Model:          model,
+		Messages:       []llm.Message{llm.NewTextMessage("user", user)},
+		System:         llm.SystemString(system),
+		MaxTokens:      maxTokens,
+		Stream:         true,
+		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+	})
+	if err != nil {
+		return "", err
+	}
+	if events == nil {
+		return "", fmt.Errorf("sglang: nil event channel")
+	}
+	return collectStream(ctx, events)
+}
+
 // collectStream gathers all text deltas from an OpenAI-compatible streaming response.
 func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
 	var sb strings.Builder
