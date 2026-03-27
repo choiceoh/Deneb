@@ -110,7 +110,7 @@ type Handler struct {
 	vegaBackend     vega.Backend    // optional; knowledge prefetch
 	memoryStore     *memory.Store   // optional; structured memory (Honcho-style)
 	memoryEmbedder  *memory.Embedder // optional; fact embedding
-	dreamingTrigger *memory.DreamingTrigger // optional; dreaming cycle trigger
+	dreamTurnFn func(ctx context.Context) // optional; increments dream turn via autonomous
 
 	// Agent run configuration.
 	contextCfg    ContextConfig
@@ -153,7 +153,7 @@ type HandlerConfig struct {
 	VegaBackend     vega.Backend              // optional; enables knowledge prefetch in chat
 	MemoryStore     *memory.Store            // optional; structured memory (Honcho-style)
 	MemoryEmbedder  *memory.Embedder         // optional; fact embedding via SGLang
-	DreamingTrigger *memory.DreamingTrigger  // optional; dreaming cycle trigger
+	DreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
 	ContextCfg      ContextConfig
 	CompactionCfg   CompactionConfig
 	DefaultModel    string
@@ -195,7 +195,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		vegaBackend:     cfg.VegaBackend,
 		memoryStore:     cfg.MemoryStore,
 		memoryEmbedder:  cfg.MemoryEmbedder,
-		dreamingTrigger: cfg.DreamingTrigger,
+		dreamTurnFn:     cfg.DreamTurnFn,
 		contextCfg:      cfg.ContextCfg,
 		compactionCfg:   cfg.CompactionCfg,
 		defaultModel:    cfg.DefaultModel,
@@ -667,7 +667,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		vegaBackend:     h.vegaBackend,
 		memoryStore:     h.memoryStore,
 		memoryEmbedder:  h.memoryEmbedder,
-		dreamingTrigger: h.dreamingTrigger,
+		dreamTurnFn:     h.dreamTurnFn,
 		contextCfg:      h.contextCfg,
 		compactionCfg:   h.compactionCfg,
 		defaultModel:    h.defaultModel,

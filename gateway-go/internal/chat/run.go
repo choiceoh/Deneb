@@ -72,7 +72,7 @@ type runDeps struct {
 	vegaBackend     vega.Backend            // optional; enables knowledge prefetch
 	memoryStore     *memory.Store           // optional; structured memory (Honcho-style)
 	memoryEmbedder  *memory.Embedder        // optional; fact embedding
-	dreamingTrigger *memory.DreamingTrigger // optional; dreaming trigger
+	dreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
 	contextCfg    ContextConfig
 	compactionCfg CompactionConfig
 	defaultModel  string
@@ -606,9 +606,9 @@ func handleRunSuccess(
 					}
 				}
 
-				// Check dreaming trigger.
-				if deps.dreamingTrigger != nil {
-					deps.dreamingTrigger.IncrementTurnAndCheck(memCtx)
+				// Increment dream turn via autonomous service.
+				if deps.dreamTurnFn != nil {
+					deps.dreamTurnFn(memCtx)
 				}
 			} else {
 				// Legacy: append bullet points to MEMORY.md.

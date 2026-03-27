@@ -60,6 +60,10 @@ type Service struct {
 	enabled   bool // false = timer paused, manual cycle.run still works
 	listeners []EventListener
 	notifier  Notifier // optional: delivers significant events to the user
+
+	// AuroraDream: memory consolidation integrated into autonomous lifecycle.
+	dreamer       Dreamer
+	dreamRunning  bool
 }
 
 // EventListener receives autonomous cycle events.
@@ -67,9 +71,10 @@ type EventListener func(event CycleEvent)
 
 // CycleEvent describes a cycle lifecycle event for external consumers.
 type CycleEvent struct {
-	Type       string       `json:"type"` // "cycle_started", "cycle_completed", "cycle_failed", "cycle_skipped"
-	Outcome    *CycleOutcome `json:"outcome,omitempty"`
-	Ts         int64        `json:"ts"`
+	Type        string        `json:"type"` // "cycle_started", "cycle_completed", "cycle_failed", "cycle_skipped", "dreaming_started", "dreaming_completed", "dreaming_failed"
+	Outcome     *CycleOutcome `json:"outcome,omitempty"`
+	DreamReport *DreamReport  `json:"dreamReport,omitempty"`
+	Ts          int64         `json:"ts"`
 }
 
 // CycleOutcome describes the result of a single decision cycle.
@@ -252,6 +257,101 @@ func (s *Service) SetNotifier(n Notifier) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.notifier = n
+}
+
+// SetDreamer sets the optional dreamer for AuroraDream memory consolidation.
+// When set, dreaming cycles are triggered after goal cycles and on turn increments.
+func (s *Service) SetDreamer(d Dreamer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dreamer = d
+}
+
+// IncrementDreamTurn records a conversation turn and triggers dreaming if conditions are met.
+// Called from the chat handler after each agent turn.
+func (s *Service) IncrementDreamTurn(ctx context.Context) {
+	s.mu.Lock()
+	dreamer := s.dreamer
+	dreamRunning := s.dreamRunning
+	s.mu.Unlock()
+
+	if dreamer == nil || dreamRunning {
+		return
+	}
+
+	dreamer.IncrementTurn(ctx)
+
+	if dreamer.ShouldDream(ctx) {
+		s.runDreamingAsync()
+	}
+}
+
+// runDreamingAsync launches a dreaming cycle in a background goroutine.
+func (s *Service) runDreamingAsync() {
+	s.mu.Lock()
+	if s.dreamRunning || s.dreamer == nil {
+		s.mu.Unlock()
+		return
+	}
+	s.dreamRunning = true
+	dreamer := s.dreamer
+	svcCtx := s.svcCtx
+	s.mu.Unlock()
+
+	go func() {
+		defer func() {
+			s.mu.Lock()
+			s.dreamRunning = false
+			s.mu.Unlock()
+		}()
+
+		s.emit(CycleEvent{Type: "dreaming_started"})
+
+		report, err := dreamer.RunDream(svcCtx)
+		if err != nil {
+			s.logger.Error("aurora-dream: cycle failed", "error", err)
+			s.emit(CycleEvent{Type: "dreaming_failed"})
+			s.notifyDreaming(nil, err)
+			return
+		}
+
+		s.logger.Info("aurora-dream: cycle finished",
+			"verified", report.FactsVerified,
+			"merged", report.FactsMerged,
+			"expired", report.FactsExpired,
+			"patterns", report.PatternsExtracted,
+			"durationMs", report.DurationMs,
+		)
+		s.emit(CycleEvent{Type: "dreaming_completed", DreamReport: report})
+		s.notifyDreaming(report, nil)
+	}()
+}
+
+// notifyDreaming sends a Telegram notification for dreaming cycle results.
+func (s *Service) notifyDreaming(report *DreamReport, err error) {
+	s.mu.Lock()
+	notifier := s.notifier
+	s.mu.Unlock()
+	if notifier == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(s.svcCtx, 15*time.Second)
+	defer cancel()
+
+	var msg string
+	if err != nil {
+		msg = fmt.Sprintf("⚠️ Aurora Dream 실패: %s", truncateOutput(err.Error(), 100))
+	} else if report != nil {
+		msg = fmt.Sprintf("🌙 Aurora Dream 완료: 검증 %d, 병합 %d, 만료 %d, 패턴 %d (%.1fs)",
+			report.FactsVerified, report.FactsMerged, report.FactsExpired,
+			report.PatternsExtracted, float64(report.DurationMs)/1000)
+	}
+	if msg != "" {
+		if notifyErr := notifier.Notify(ctx, msg); notifyErr != nil {
+			s.logger.Warn("aurora-dream: notification failed", "error", notifyErr)
+		}
+	}
 }
 
 func (s *Service) emit(event CycleEvent) {
@@ -527,6 +627,15 @@ func (s *Service) applyCycleOutcome(outcome *CycleOutcome) {
 		"durationMs", outcome.DurationMs,
 		"goalUpdates", len(outcome.GoalUpdates),
 		"consecutiveErrors", s.consecutiveErr)
+
+	// Check if dreaming is due after the goal cycle.
+	s.mu.Lock()
+	dreamer := s.dreamer
+	dreamRunning := s.dreamRunning
+	s.mu.Unlock()
+	if dreamer != nil && !dreamRunning && dreamer.ShouldDream(s.svcCtx) {
+		s.runDreamingAsync()
+	}
 }
 
 // buildCycleSummary creates a short summary for the next cycle's prompt.
