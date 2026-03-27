@@ -556,6 +556,7 @@ var builtinGuideOrder = []string{
 	"telegram", "skills", "pilot", "cron", "autonomous",
 	"web", "exec", "gateway-tool", "media", "gmail",
 	"data-tools", "sessions-tools", "message",
+	"provider", "liteparse", "metrics", "nodes", "transcript",
 }
 
 // builtinGuides contains AI-curated system knowledge.
@@ -698,6 +699,36 @@ var builtinGuides = map[string]guideEntry{
 		Title:   "Message Tool",
 		Summary: "Send, reply, thread-reply, react via channels",
 		Content: messageGuide,
+	},
+	"provider": {
+		Key:     "provider",
+		Title:   "Provider & Model System",
+		Summary: "LLM provider plugins, model discovery, catalog, auth, normalization",
+		Content: providerGuide,
+	},
+	"liteparse": {
+		Key:     "liteparse",
+		Title:   "Document Parsing (LiteParse)",
+		Summary: "PDF, Office, CSV text extraction via lit CLI",
+		Content: liteparseGuide,
+	},
+	"metrics": {
+		Key:     "metrics",
+		Title:   "Metrics & Observability",
+		Summary: "Prometheus-compatible counters, histograms, /metrics endpoint",
+		Content: metricsGuide,
+	},
+	"nodes": {
+		Key:     "nodes",
+		Title:   "Mobile Nodes",
+		Summary: "Paired device discovery, notify, camera, location, command execution",
+		Content: nodesGuide,
+	},
+	"transcript": {
+		Key:     "transcript",
+		Title:   "Transcript Storage",
+		Summary: "JSONL session history, append-only persistence, compaction integration",
+		Content: transcriptGuide,
 	},
 }
 

@@ -61,7 +61,7 @@ The active context engine owns compaction behavior:
 - gateway-go/internal/chat/compaction.go
 - gateway-go/internal/transcript/compressor.go`
 
-const toolsGuide = `The tool system provides the AI agent with 35 capabilities to interact with the filesystem, execute commands, search the web, and more.
+const toolsGuide = `The tool system provides the AI agent with 34 capabilities to interact with the filesystem, execute commands, search the web, and more.
 
 ## Core Architecture
 
@@ -116,16 +116,16 @@ Tool-specific:
 - find: FindResultSummarizer — caps at 500 entries, groups by directory; max results: 200
 - exec: ExecAnnotator — emphasizes exit code on failure
 
-## Tool Categories (35 tools)
-Filesystem: read, write, edit, apply_patch, grep, find, ls
-Execution: exec, process
-Speed: pilot (local sglang orchestrator)
+## Tool Categories (34 tools)
+File: read, write, edit, apply_patch, grep, find, ls
+Exec: exec, process
+AI: pilot (local sglang orchestrator)
 Web: web (search + fetch + search+fetch), http
 Memory: memory_search, memory_get, polaris
-System: nodes, cron, message, gateway, autonomous
+System: nodes, cron, autonomous, message, gateway
 Sessions: sessions_list/history/search/restore/send/spawn, subagents, session_status
 Media: image, youtube_transcript, send_file
-Data: kv, clipboard, gmail
+Data: gmail, kv, clipboard
 
 ## Compression
 Any tool call accepts "compress": true. Large outputs auto-summarized by local sglang (SGLANG_BASE_URL, default http://127.0.0.1:30000/v1).
