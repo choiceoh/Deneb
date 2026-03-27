@@ -274,7 +274,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Autonomous tool (goal-driven execution management) --
 	registry.RegisterTool(ToolDef{
 		Name:        "autonomous",
-		Description: "Manage autonomous goals and execution cycles. Actions: status, goals, add_goal, update_goal, remove_goal, cycle_run, cycle_stop, enable, disable, recent_runs",
+		Description: "Manage autonomous goals and execution cycles. Autonomous cycles let Deneb act without waiting for user input — essential for callbacks like sub-agent completion notifications, scheduled checks, and deferred task follow-ups that would otherwise stay unread until the user speaks. Actions: status, goals, add_goal, update_goal, remove_goal, cycle_run, cycle_stop, enable, disable, recent_runs",
 		InputSchema: autonomousToolSchema(),
 		Fn:          toolAutonomous(deps),
 	})
