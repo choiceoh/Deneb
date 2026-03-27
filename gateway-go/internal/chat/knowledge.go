@@ -140,8 +140,10 @@ var categoryVolatileDays = map[string]int{
 	"mutual":     180, // relationship dynamics evolve slowly
 }
 
-// volatileHint returns "⚠변경 가능" if the fact is past its category shelf life,
-// or "" if still within expected validity.
+// volatileHint returns a staleness hint based on how far past the category shelf life:
+//   - past 50% of shelf life → "확인 필요" (should verify)
+//   - past 100% of shelf life → "⚠변경 가능" (likely stale)
+//   - within 50% → "" (still fresh)
 func volatileHint(category string, updatedAt time.Time, now time.Time) string {
 	if updatedAt.IsZero() {
 		return ""
@@ -151,10 +153,15 @@ func volatileHint(category string, updatedAt time.Time, now time.Time) string {
 		shelfDays = 60 // conservative default
 	}
 	age := now.Sub(updatedAt)
-	if age > time.Duration(shelfDays)*24*time.Hour {
+	shelf := time.Duration(shelfDays) * 24 * time.Hour
+	switch {
+	case age > shelf:
 		return "⚠변경 가능"
+	case age > shelf/2:
+		return "확인 필요"
+	default:
+		return ""
 	}
-	return ""
 }
 
 // relativeTimeSince returns a concise Korean relative time label for t relative to now.
@@ -175,7 +182,14 @@ func relativeTimeSince(t time.Time, now time.Time) string {
 		return fmt.Sprintf("%d시간 전", h)
 	case d < 7*24*time.Hour:
 		days := int(d.Hours() / 24)
-		return fmt.Sprintf("%d일 전", days)
+		switch days {
+		case 1:
+			return "어제"
+		case 2:
+			return "그저께"
+		default:
+			return fmt.Sprintf("%d일 전", days)
+		}
 	case d < 30*24*time.Hour:
 		weeks := int(d.Hours() / 24 / 7)
 		return fmt.Sprintf("%d주 전", weeks)
@@ -268,6 +282,7 @@ func formatKnowledge(vegaResults []vega.SearchResult, memMatches []MemoryMatch) 
 // formatKnowledgeWithFacts builds the "## 관련 지식" section from search results,
 // respecting the token budget. Supports both legacy MemoryMatch and structured facts.
 func formatKnowledgeWithFacts(vegaResults []vega.SearchResult, memMatches []MemoryMatch, structFacts []memory.SearchResult) string {
+	now := time.Now() // capture once for consistent temporal annotations across all facts
 	var sb strings.Builder
 	sb.WriteString("## 관련 지식\n\n")
 	tokenCount := sb.Len() / charsPerToken
@@ -302,7 +317,7 @@ func formatKnowledgeWithFacts(vegaResults []vega.SearchResult, memMatches []Memo
 			// 1. Relative time (how old)
 			// 2. CreatedAt/UpdatedAt separation (when significantly different)
 			// 3. Volatility hint (past shelf life for this category)
-			timeAnnotation := factTemporalAnnotation(sr.Fact, time.Now())
+			timeAnnotation := factTemporalAnnotation(sr.Fact, now)
 			if timeAnnotation != "" {
 				fmt.Fprintf(&sb, "- [%.1f] {%s} (%s) %s\n", sr.Fact.Importance, sr.Fact.Category, timeAnnotation, content)
 			} else {

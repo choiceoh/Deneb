@@ -253,7 +253,8 @@ func TestRelativeTimeSince(t *testing.T) {
 		{"1 hour ago", now.Add(-time.Hour), "1시간 전"},
 		{"3 hours ago", now.Add(-3 * time.Hour), "3시간 전"},
 		{"23 hours ago", now.Add(-23 * time.Hour), "23시간 전"},
-		{"1 day ago", now.Add(-25 * time.Hour), "1일 전"},
+		{"1 day ago", now.Add(-25 * time.Hour), "어제"},
+		{"2 days ago", now.Add(-2 * 24 * time.Hour), "그저께"},
 		{"3 days ago", now.Add(-3 * 24 * time.Hour), "3일 전"},
 		{"6 days ago", now.Add(-6 * 24 * time.Hour), "6일 전"},
 		{"1 week ago", now.Add(-8 * 24 * time.Hour), "1주 전"},
@@ -283,11 +284,14 @@ func TestVolatileHint(t *testing.T) {
 		age      time.Duration
 		want     string
 	}{
-		{"context within shelf life", "context", 20 * 24 * time.Hour, ""},
+		{"context fresh", "context", 10 * 24 * time.Hour, ""},
+		{"context needs verification (50%)", "context", 20 * 24 * time.Hour, "확인 필요"},
 		{"context past shelf life", "context", 45 * 24 * time.Hour, "⚠변경 가능"},
-		{"preference within shelf life", "preference", 300 * 24 * time.Hour, ""},
+		{"preference fresh", "preference", 100 * 24 * time.Hour, ""},
+		{"preference needs verification", "preference", 200 * 24 * time.Hour, "확인 필요"},
 		{"preference past shelf life", "preference", 400 * 24 * time.Hour, "⚠변경 가능"},
 		{"decision past shelf life", "decision", 90 * 24 * time.Hour, "⚠변경 가능"},
+		{"decision needs verification", "decision", 40 * 24 * time.Hour, "확인 필요"},
 		{"unknown category default 60d", "unknown", 70 * 24 * time.Hour, "⚠변경 가능"},
 		{"zero time", "context", 0, ""},
 	}
@@ -331,8 +335,8 @@ func TestFactTemporalAnnotation(t *testing.T) {
 		if !strings.Contains(got, "갱신:") {
 			t.Errorf("expected 갱신: separator for large gap, got %q", got)
 		}
-		if !strings.Contains(got, "1일 전") {
-			t.Errorf("expected '1일 전' for updated, got %q", got)
+		if !strings.Contains(got, "어제") {
+			t.Errorf("expected '어제' for updated, got %q", got)
 		}
 	})
 
