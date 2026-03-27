@@ -952,13 +952,20 @@ func (s *Server) registerPhase2Methods() {
 			const sglangURL = "http://127.0.0.1:30000/v1"
 			const sglangModel = "Qwen/Qwen3.5-35B-A3B"
 
-			embedder := memory.NewEmbedder(sglangURL, sglangModel, memStore, s.logger)
-			chatCfg.MemoryEmbedder = embedder
+			// Embedding uses a dedicated server (--is-embedding) if configured.
+			embedURL := os.Getenv("DENEB_EMBED_URL")
+			embedModel := os.Getenv("DENEB_EMBED_MODEL")
+			if embedURL != "" && embedModel != "" {
+				embedder := memory.NewEmbedder(embedURL, embedModel, memStore, s.logger)
+				chatCfg.MemoryEmbedder = embedder
 
-			sglangClient := llm.NewClient(sglangURL, "", llm.WithLogger(s.logger))
-			trigger := memory.NewDreamingTrigger(memStore, embedder, sglangClient, sglangModel, s.logger)
-			chatCfg.DreamingTrigger = trigger
-			trigger.StartPeriodicTimer(context.Background())
+				sglangClient := llm.NewClient(sglangURL, "", llm.WithLogger(s.logger))
+				trigger := memory.NewDreamingTrigger(memStore, embedder, sglangClient, sglangModel, s.logger)
+				chatCfg.DreamingTrigger = trigger
+				trigger.StartPeriodicTimer(context.Background())
+			} else {
+				s.logger.Info("aurora-memory: embedding disabled (DENEB_EMBED_URL / DENEB_EMBED_MODEL not set)")
+			}
 
 			// Auto-migrate existing MEMORY.md on first run.
 			count, _ := memStore.ActiveFactCount(context.Background())

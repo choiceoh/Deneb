@@ -224,16 +224,24 @@ func initVega(srv *server.Server, logger *slog.Logger) {
 		return
 	}
 
+	// Embedding requires a dedicated server launched with --is-embedding.
+	embedURL := os.Getenv("DENEB_EMBED_URL")
+	embedModel := os.Getenv("DENEB_EMBED_MODEL")
+
 	backend := vega.NewEnhancedBackend(vega.EnhancedBackendConfig{
 		Logger:      logger,
 		SglangURL:   sglangURL,
 		SglangModel: sglangModel,
+		EmbedURL:    embedURL,
+		EmbedModel:  embedModel,
 	})
 	srv.SetVega(backend)
 
 	logger.Info("vega: EnhancedBackend initialized",
 		"sglang_url", sglangURL,
 		"model", sglangModel,
+		"embed_url", embedURL,
+		"embed_model", embedModel,
 	)
 }
 
