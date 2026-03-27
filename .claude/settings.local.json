@@ -13,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd /home/user/Deneb && make rust 2>&1 | tail -5"
+            "command": "cd /home/user/Deneb && GOPROXY=direct make rust 2>&1 | tail -5"
           }
         ]
       }
