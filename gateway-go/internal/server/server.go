@@ -936,6 +936,11 @@ func (s *Server) registerExtendedMethods() {
 		return resp
 	})
 
+	// Aurora channel methods (desktop app communication).
+	rpc.RegisterAuroraChannelMethods(s.dispatcher, rpc.AuroraChannelDeps{
+		Chat: s.chatHandler,
+	})
+
 	// Event broadcasting method.
 	s.dispatcher.Register("events.broadcast", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {

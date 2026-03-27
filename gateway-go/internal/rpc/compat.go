@@ -8,6 +8,7 @@ package rpc
 
 import (
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/agent"
+	handleraurorachannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/aurora_channel"
 	handlerchannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/channel"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
 	handlerffi "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/ffi"
@@ -59,6 +60,7 @@ type SessionDeps = handlersession.Deps
 type HeartbeatDeps = handlerpresence.HeartbeatDeps
 type PresenceDeps = handlerpresence.Deps
 type VegaDeps = handlerffi.VegaDeps
+type AuroraChannelDeps = handleraurorachannel.Deps
 
 // HeartbeatState and PresenceStore re-exports.
 type HeartbeatState = handlerpresence.HeartbeatState
@@ -221,6 +223,10 @@ func RegisterPresenceMethods(d *Dispatcher, deps PresenceDeps) {
 
 func RegisterVegaMethods(d *Dispatcher, deps VegaDeps) {
 	d.RegisterDomain(handlerffi.VegaMethods(deps))
+}
+
+func RegisterAuroraChannelMethods(d *Dispatcher, deps AuroraChannelDeps) {
+	d.RegisterDomain(handleraurorachannel.Methods(deps))
 }
 
 // RegisterBuiltinMethods registers the core Go-native RPC methods.
