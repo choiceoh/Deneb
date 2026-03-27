@@ -155,7 +155,7 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 	}
 
 	// Use higher token budget for richer synthesis.
-	resp, err := callLLM(ctx, client, model, mutualUnderstandingSystemPrompt, sb.String(), 768)
+	resp, err := callLLM(ctx, client, model, mutualUnderstandingSystemPrompt, sb.String(), 1024)
 	if err != nil {
 		return err
 	}
