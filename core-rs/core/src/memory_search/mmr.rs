@@ -9,19 +9,50 @@ use super::types::{MmrConfig, MmrItem};
 
 static MMR_TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[a-z0-9_]+").unwrap());
 
-/// Tokenize text for Jaccard similarity.
-/// Extracts lowercase alphanumeric tokens.
-pub fn tokenize(text: &str) -> HashSet<String> {
-    let lower = text.to_lowercase();
-    MMR_TOKEN_RE
-        .find_iter(&lower)
-        .map(|m| m.as_str().to_string())
-        .collect()
+/// Pre-tokenized text that avoids per-token heap allocations.
+/// Stores a single lowercase copy and byte ranges into it.
+pub struct TokenSet {
+    lowered: String,
+    ranges: Vec<(usize, usize)>,
 }
 
-/// Jaccard similarity between two token sets.
-/// Returns a value in [0, 1] where 1 means identical sets.
-pub fn jaccard_similarity(set_a: &HashSet<String>, set_b: &HashSet<String>) -> f64 {
+impl TokenSet {
+    /// Tokenize text: lowercase once, collect match byte ranges.
+    pub fn new(text: &str) -> Self {
+        let lowered = text.to_lowercase();
+        let ranges: Vec<(usize, usize)> = MMR_TOKEN_RE
+            .find_iter(&lowered)
+            .map(|m| (m.start(), m.end()))
+            .collect();
+        Self { lowered, ranges }
+    }
+
+    /// Iterate over token slices (borrows from the internal lowercase string).
+    fn tokens(&self) -> impl Iterator<Item = &str> {
+        self.ranges.iter().map(|&(s, e)| &self.lowered[s..e])
+    }
+
+    /// Build a borrowed HashSet for Jaccard computation.
+    fn as_set(&self) -> HashSet<&str> {
+        self.tokens().collect()
+    }
+
+    /// Whether the token set has no tokens.
+    #[allow(dead_code)]
+    fn is_empty(&self) -> bool {
+        self.ranges.is_empty()
+    }
+}
+
+/// Tokenize text for Jaccard similarity (convenience wrapper).
+/// Returns a TokenSet with zero per-token heap allocations.
+pub fn tokenize(text: &str) -> HashSet<String> {
+    let ts = TokenSet::new(text);
+    ts.tokens().map(|s| s.to_string()).collect()
+}
+
+/// Jaccard similarity between two token sets (borrowed).
+fn jaccard_similarity_sets(set_a: &HashSet<&str>, set_b: &HashSet<&str>) -> f64 {
     if set_a.is_empty() && set_b.is_empty() {
         return 1.0;
     }
@@ -45,9 +76,37 @@ pub fn jaccard_similarity(set_a: &HashSet<String>, set_b: &HashSet<String>) -> f
     }
 }
 
+/// Jaccard similarity between two owned token sets.
+/// Kept for backward compatibility with callers using `HashSet<String>`.
+pub fn jaccard_similarity(set_a: &HashSet<String>, set_b: &HashSet<String>) -> f64 {
+    if set_a.is_empty() && set_b.is_empty() {
+        return 1.0;
+    }
+    if set_a.is_empty() || set_b.is_empty() {
+        return 0.0;
+    }
+
+    let (smaller, larger) = if set_a.len() <= set_b.len() {
+        (set_a, set_b)
+    } else {
+        (set_b, set_a)
+    };
+
+    let intersection_size = smaller.iter().filter(|t| larger.contains(t.as_str())).count();
+    let union_size = set_a.len() + set_b.len() - intersection_size;
+
+    if union_size == 0 {
+        0.0
+    } else {
+        intersection_size as f64 / union_size as f64
+    }
+}
+
 /// Text similarity using Jaccard on tokens.
 pub fn text_similarity(content_a: &str, content_b: &str) -> f64 {
-    jaccard_similarity(&tokenize(content_a), &tokenize(content_b))
+    let ts_a = TokenSet::new(content_a);
+    let ts_b = TokenSet::new(content_b);
+    jaccard_similarity_sets(&ts_a.as_set(), &ts_b.as_set())
 }
 
 /// Compute MMR score: lambda * relevance - (1-lambda) * max_similarity.
@@ -82,8 +141,14 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
     }
 
     // Pre-tokenize all items in parallel (benefits from 20-core DGX Spark).
-    let token_cache: Vec<HashSet<String>> =
-        items.par_iter().map(|item| tokenize(&item.content)).collect();
+    // Uses TokenSet to avoid per-token String allocations.
+    let token_cache: Vec<TokenSet> = items
+        .par_iter()
+        .map(|item| TokenSet::new(&item.content))
+        .collect();
+
+    // Build borrowed HashSets for Jaccard computation.
+    let set_cache: Vec<HashSet<&str>> = token_cache.iter().map(TokenSet::as_set).collect();
 
     // Normalize scores to [0, 1], filtering NaN values
     let max_score = items
@@ -129,9 +194,9 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
                     let max_sim = selected
                         .iter()
                         .map(|&sel_idx| {
-                            jaccard_similarity(
-                                &token_cache[candidate_idx],
-                                &token_cache[sel_idx],
+                            jaccard_similarity_sets(
+                                &set_cache[candidate_idx],
+                                &set_cache[sel_idx],
                             )
                         })
                         .fold(0.0_f64, f64::max);
@@ -158,9 +223,9 @@ pub fn mmr_rerank(items: &[MmrItem], config: &MmrConfig) -> Vec<usize> {
                     let max_sim = selected
                         .iter()
                         .map(|&sel_idx| {
-                            jaccard_similarity(
-                                &token_cache[candidate_idx],
-                                &token_cache[sel_idx],
+                            jaccard_similarity_sets(
+                                &set_cache[candidate_idx],
+                                &set_cache[sel_idx],
                             )
                         })
                         .fold(0.0_f64, f64::max);
@@ -232,6 +297,24 @@ mod tests {
     }
 
     #[test]
+    fn test_token_set_basic() {
+        let ts = TokenSet::new("Hello World 123");
+        let set = ts.as_set();
+        assert!(set.contains("hello"));
+        assert!(set.contains("world"));
+        assert!(set.contains("123"));
+        assert_eq!(set.len(), 3);
+    }
+
+    #[test]
+    fn test_token_set_empty() {
+        let ts = TokenSet::new("");
+        assert!(ts.is_empty());
+        let ts2 = TokenSet::new("!@#");
+        assert!(ts2.is_empty());
+    }
+
+    #[test]
     fn test_jaccard_identical() {
         let a = tokenize("hello world");
         let b = tokenize("hello world");
@@ -259,6 +342,14 @@ mod tests {
         let b = tokenize("hello world bar");
         // intersection=2, union=4 => 0.5
         assert!((jaccard_similarity(&a, &b) - 0.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_jaccard_sets_borrowed() {
+        let ts_a = TokenSet::new("hello world foo");
+        let ts_b = TokenSet::new("hello world bar");
+        let sim = jaccard_similarity_sets(&ts_a.as_set(), &ts_b.as_set());
+        assert!((sim - 0.5).abs() < 1e-10);
     }
 
     #[test]

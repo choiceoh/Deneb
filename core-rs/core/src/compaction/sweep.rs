@@ -10,6 +10,7 @@
 
 use super::*;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 // ── I/O protocol ────────────────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct SummarizeOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub previous_summary: Option<String>,
+    pub previous_summary: Option<Arc<str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_condensed: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -95,7 +96,7 @@ pub enum SweepCommand {
     },
     /// Call the LLM summarizer.
     Summarize {
-        text: String,
+        text: Arc<str>,
         aggressive: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         options: Option<SummarizeOptions>,
@@ -225,11 +226,11 @@ pub struct SweepEngine {
     current_chunk_ordinals: Vec<u64>,
     current_chunk_message_ids: Vec<u64>,
     current_chunk_summary_ids: Vec<String>,
-    current_source_text: String,
+    current_source_text: Arc<str>,
     current_source_tokens: u64,
     current_summary_content: String,
     current_pass_tokens_before: u64,
-    previous_summary_content: Option<String>,
+    previous_summary_content: Option<Arc<str>>,
     current_target_depth: u32,
 
     // Timestamp for summary ID generation
@@ -268,7 +269,7 @@ impl SweepEngine {
             current_chunk_ordinals: Vec::new(),
             current_chunk_message_ids: Vec::new(),
             current_chunk_summary_ids: Vec::new(),
-            current_source_text: String::new(),
+            current_source_text: Arc::from(""),
             current_source_tokens: 0,
             current_summary_content: String::new(),
             current_pass_tokens_before: 0,
@@ -439,7 +440,7 @@ impl SweepEngine {
                 .filter(|s| !s.is_empty())
                 .collect();
             if !context.is_empty() {
-                self.previous_summary_content = Some(context.join("\n\n"));
+                self.previous_summary_content = Some(Arc::from(context.join("\n\n")));
             }
         }
 
@@ -468,7 +469,7 @@ impl SweepEngine {
             .filter(|s| !s.is_empty())
             .collect();
         if !context.is_empty() {
-            self.previous_summary_content = Some(context.join("\n\n"));
+            self.previous_summary_content = Some(Arc::from(context.join("\n\n")));
         }
 
         self.prepare_leaf_summarize()
@@ -483,7 +484,7 @@ impl SweepEngine {
             .collect();
 
         let tz = resolve_timezone(&self.config);
-        self.current_source_text = build_leaf_source_text(&msgs, tz);
+        self.current_source_text = Arc::from(build_leaf_source_text(&msgs, tz));
         self.current_source_tokens = estimate_tokens(&self.current_source_text).max(1);
 
         if self.current_source_text.trim().is_empty() {
@@ -582,7 +583,7 @@ impl SweepEngine {
             .unwrap_or(0);
 
         self.created_summary_id = Some(summary_id.clone());
-        self.previous_summary_content = Some(self.current_summary_content.clone());
+        self.previous_summary_content = Some(Arc::from(self.current_summary_content.as_str()));
         self.current_pass_tokens_before = self.previous_tokens;
 
         self.phase = Phase::LeafPersist;
@@ -787,7 +788,7 @@ impl SweepEngine {
                 .filter(|s| !s.is_empty())
                 .collect();
             if !context.is_empty() {
-                self.previous_summary_content = Some(context.join("\n\n"));
+                self.previous_summary_content = Some(Arc::from(context.join("\n\n")));
             } else {
                 self.previous_summary_content = None;
             }
@@ -827,7 +828,7 @@ impl SweepEngine {
             .filter(|s| !s.is_empty())
             .collect();
         if !context.is_empty() {
-            self.previous_summary_content = Some(context.join("\n\n"));
+            self.previous_summary_content = Some(Arc::from(context.join("\n\n")));
         }
 
         self.emit_condensed_summarize()
@@ -841,7 +842,7 @@ impl SweepEngine {
             .collect();
 
         let tz = resolve_timezone(&self.config);
-        self.current_source_text = build_condensed_source_text(&recs, tz);
+        self.current_source_text = Arc::from(build_condensed_source_text(&recs, tz));
         self.current_source_tokens = estimate_tokens(&self.current_source_text).max(1);
 
         if self.current_source_text.trim().is_empty() {

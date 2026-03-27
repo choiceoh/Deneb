@@ -3,9 +3,11 @@
 // Caches the full converted content keyed by URL. Truncation to maxChars
 // happens at retrieval time so different maxChars values share cache entries.
 // Single-user deployment: sync.Mutex is sufficient.
+// Uses a doubly-linked list + map index for O(1) insert/remove/evict.
 package chat
 
 import (
+	"container/list"
 	"sync"
 	"time"
 )
@@ -20,11 +22,17 @@ type fetchCacheEntry struct {
 	createdAt time.Time
 }
 
+// fetchCacheItem pairs the cache entry with its position in the LRU list.
+type fetchCacheItem struct {
+	entry   *fetchCacheEntry
+	element *list.Element
+}
+
 // FetchCache is a bounded TTL cache for web_fetch results.
 type FetchCache struct {
 	mu      sync.Mutex
-	entries map[string]*fetchCacheEntry
-	order   []string // insertion order for FIFO eviction
+	items   map[string]*fetchCacheItem
+	order   *list.List // front = oldest, back = newest
 	maxSize int
 	ttl     time.Duration
 }
@@ -40,7 +48,8 @@ func NewFetchCacheWithTTL(maxSize int, ttl time.Duration) *FetchCache {
 		maxSize = fetchCacheDefaultMaxSize
 	}
 	return &FetchCache{
-		entries: make(map[string]*fetchCacheEntry, maxSize),
+		items:   make(map[string]*fetchCacheItem, maxSize),
+		order:   list.New(),
 		maxSize: maxSize,
 		ttl:     ttl,
 	}
@@ -51,17 +60,16 @@ func (c *FetchCache) Get(url string) (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	entry, ok := c.entries[url]
+	item, ok := c.items[url]
 	if !ok {
 		return "", false
 	}
-	if time.Since(entry.createdAt) > c.ttl {
+	if time.Since(item.entry.createdAt) > c.ttl {
 		// Expired — lazy delete.
-		delete(c.entries, url)
-		c.removeFromOrder(url)
+		c.removeLocked(url)
 		return "", false
 	}
-	return entry.content, true
+	return item.entry.content, true
 }
 
 // Put stores content for the URL. Evicts the oldest entry if at capacity.
@@ -69,30 +77,36 @@ func (c *FetchCache) Put(url string, content string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Update existing entry: refresh data and move to end of order (LRU).
-	if _, exists := c.entries[url]; exists {
-		c.entries[url] = &fetchCacheEntry{content: content, createdAt: time.Now()}
-		c.removeFromOrder(url)
-		c.order = append(c.order, url)
+	entry := &fetchCacheEntry{content: content, createdAt: time.Now()}
+
+	// Update existing entry: refresh data and move to back (newest).
+	if item, exists := c.items[url]; exists {
+		item.entry = entry
+		c.order.MoveToBack(item.element)
 		return
 	}
 
 	// Evict oldest if at capacity.
-	for len(c.entries) >= c.maxSize && len(c.order) > 0 {
-		oldest := c.order[0]
-		c.order = c.order[1:]
-		delete(c.entries, oldest)
+	for len(c.items) >= c.maxSize {
+		front := c.order.Front()
+		if front == nil {
+			break
+		}
+		oldest := front.Value.(string)
+		c.order.Remove(front)
+		delete(c.items, oldest)
 	}
 
-	c.entries[url] = &fetchCacheEntry{content: content, createdAt: time.Now()}
-	c.order = append(c.order, url)
+	elem := c.order.PushBack(url)
+	c.items[url] = &fetchCacheItem{entry: entry, element: elem}
 }
 
-func (c *FetchCache) removeFromOrder(url string) {
-	for i, u := range c.order {
-		if u == url {
-			c.order = append(c.order[:i], c.order[i+1:]...)
-			return
-		}
+// removeLocked removes an entry by key. Must be called with mu held.
+func (c *FetchCache) removeLocked(url string) {
+	item, ok := c.items[url]
+	if !ok {
+		return
 	}
+	c.order.Remove(item.element)
+	delete(c.items, url)
 }

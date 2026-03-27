@@ -80,6 +80,24 @@ fn score_sqlite_chunks(
     let mut name_by_id: HashMap<i64, String> = HashMap::new();
     let mut id_by_name: HashMap<String, i64> = HashMap::new();
 
+    // Pre-lowercase all tokens once to avoid per-chunk allocations.
+    let structural_groups: Vec<(&str, Vec<String>)> = vec![
+        ("structural", extracted.clients.iter().map(|t| t.to_lowercase()).collect()),
+        ("structural", extracted.persons.iter().map(|t| t.to_lowercase()).collect()),
+        ("structural", extracted.statuses.iter().map(|t| t.to_lowercase()).collect()),
+        ("structural", extracted.tags.iter().map(|t| t.to_lowercase()).collect()),
+        ("keywords", extracted.keywords.iter().map(|t| t.to_lowercase()).collect()),
+    ];
+    // Pre-compute keyword char counts for weight calculation.
+    let keyword_char_counts: Vec<usize> = extracted
+        .keywords
+        .iter()
+        .map(|t| t.chars().count())
+        .collect();
+
+    // Reusable buffer for building haystack strings.
+    let mut haystack_buf = String::with_capacity(512);
+
     for (rank, row) in chunks.iter().enumerate() {
         let pid = row.project_id;
         name_by_id.insert(pid, row.name.clone());
@@ -89,28 +107,40 @@ fn score_sqlite_chunks(
 
         let mut score = (60.0 - rank as f64).max(0.0);
 
-        let haystack = format!(
-            "{} {} {} {} {} {}",
-            row.name, row.client, row.status, row.person_internal, row.section_heading, row.content
-        )
-        .to_lowercase();
+        // Build haystack in reusable buffer to avoid per-chunk allocation.
+        haystack_buf.clear();
+        for (i, field) in [
+            &row.name,
+            &row.client,
+            &row.status,
+            &row.person_internal,
+            &row.section_heading,
+            &row.content,
+        ]
+        .iter()
+        .enumerate()
+        {
+            if i > 0 {
+                haystack_buf.push(' ');
+            }
+            haystack_buf.push_str(field);
+        }
+        let haystack = haystack_buf.to_lowercase();
 
-        // Token match bonuses
-        for group in [
-            ("structural", &extracted.clients),
-            ("structural", &extracted.persons),
-            ("structural", &extracted.statuses),
-            ("structural", &extracted.tags),
-            ("keywords", &extracted.keywords),
-        ] {
-            for token in group.1 {
-                if !token.is_empty() && haystack.contains(&token.to_lowercase()) {
-                    if group.0 == "structural" {
+        // Token match bonuses (tokens are already lowercased).
+        let mut keyword_idx = 0;
+        for (group_type, tokens) in &structural_groups {
+            for token in tokens {
+                if !token.is_empty() && haystack.contains(token.as_str()) {
+                    if *group_type == "structural" {
                         score += 8.0;
                     } else {
-                        // Longer keywords get higher weight
-                        score += 4.0 + (token.chars().count().saturating_sub(2) as f64) * 2.0;
+                        let char_count = keyword_char_counts.get(keyword_idx).copied().unwrap_or(0);
+                        score += 4.0 + (char_count.saturating_sub(2) as f64) * 2.0;
                     }
+                }
+                if *group_type == "keywords" {
+                    keyword_idx += 1;
                 }
             }
         }
@@ -129,12 +159,14 @@ fn score_sqlite_chunks(
         }
     }
 
-    // Project name direct match bonus
-    let all_tokens: Vec<&String> = extracted
+    // Project name direct match bonus.
+    // Pre-lowercase all tokens once to avoid per-project allocations.
+    let all_tokens_lower: Vec<String> = extracted
         .keywords
         .iter()
         .chain(&extracted.clients)
         .chain(&extracted.persons)
+        .map(|t| t.to_lowercase())
         .collect();
 
     for (pid, name) in &name_by_id {
@@ -148,11 +180,10 @@ fn score_sqlite_chunks(
             .collect();
 
         let mut best_bonus = 0.0f64;
-        for token in &all_tokens {
-            let tl = token.to_lowercase();
-            if tl == name_lower || (!name_words.is_empty() && tl == name_words[0]) {
+        for tl in &all_tokens_lower {
+            if *tl == name_lower || (!name_words.is_empty() && tl.as_str() == name_words[0]) {
                 best_bonus = best_bonus.max(30.0);
-            } else if name_lower.contains(&tl) {
+            } else if name_lower.contains(tl.as_str()) {
                 best_bonus = best_bonus.max(20.0);
             }
         }

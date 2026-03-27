@@ -17,6 +17,7 @@ type EnhancedBackend struct {
 	embedder *SglangEmbedder
 	expander *LLMExpander
 	logger   *slog.Logger
+	cache    *searchCache
 }
 
 // EnhancedBackendConfig configures the EnhancedBackend.
@@ -60,6 +61,7 @@ func NewEnhancedBackend(cfg EnhancedBackendConfig) *EnhancedBackend {
 		embedder: embedder,
 		expander: expander,
 		logger:   cfg.Logger,
+		cache:    newSearchCache(),
 	}
 }
 
@@ -76,6 +78,13 @@ func (eb *EnhancedBackend) Execute(ctx context.Context, cmd string, args map[str
 //  3. If expansion succeeded and FTS results are sparse, run supplemental FTS
 //  4. Results ranked by cosine similarity + BM25 fusion (no ML reranker)
 func (eb *EnhancedBackend) Search(ctx context.Context, query string, opts SearchOpts) ([]SearchResult, error) {
+	// Check cache first — avoids redundant SGLang + FFI calls.
+	cacheKey := searchCacheKey(query, opts)
+	if cached, ok := eb.cache.get(cacheKey); ok {
+		eb.logger.Debug("vega: cache hit", "query", query)
+		return cached, nil
+	}
+
 	var (
 		queryVec []float32
 		expanded []string
@@ -134,6 +143,9 @@ func (eb *EnhancedBackend) Search(ctx context.Context, query string, opts Search
 	if opts.Limit > 0 && len(results) > opts.Limit {
 		results = results[:opts.Limit]
 	}
+
+	// Cache results for future identical queries.
+	eb.cache.put(cacheKey, results)
 
 	return results, nil
 }
