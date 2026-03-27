@@ -54,13 +54,32 @@ What can be LOGICALLY INFERRED but was NOT directly said?
 - If user corrected the AI on X → X is a strong preference, not casual
 
 ### Step 2.5: Mutual Understanding Signals (상호 인식)
-Detect relationship dynamics between user and AI:
-- User correction/frustration → AI needs to adapt (what specifically?)
-- User praise/satisfaction → AI approach is working (what specifically?)
-- User trust signals (delegating complex tasks, accepting suggestions without pushback)
-- Repeated similar requests → AI should learn proactive behavior
-- Communication style shifts (formal↔casual, brief↔detailed) → adapt accordingly
-- Expectations gap: what the user expected vs what AI delivered
+Detect AI-user relationship dynamics. For each signal, note WHAT happened and its INTENSITY (strong/mild/subtle).
+
+**Correction signals** (user pushes back on AI behavior):
+- Explicit correction: "아니, 그게 아니라..." → strong signal, AI was wrong about X
+- Repeated clarification: user explains the same thing twice → AI didn't listen
+- Style correction: "더 짧게" / "자세히 설명해줘" → communication mismatch
+
+**Satisfaction signals** (user is pleased with AI):
+- Explicit praise: "좋아", "완벽해" → strong positive
+- Implicit acceptance: user builds on AI's suggestion without questioning → trust
+- Emotional warmth: humor, casual tone, sharing personal context → rapport
+
+**Frustration signals** (user is unhappy):
+- Short/curt responses after long AI output → AI is being too verbose
+- Re-asking the same question differently → AI missed the point
+- "이미 말했잖아" / referencing past context AI forgot → memory gap frustration
+
+**Trust/delegation signals**:
+- Delegating without detailed instructions → high trust in AI's judgment
+- Accepting AI suggestions without verification → strong trust
+- Sharing sensitive/personal information → deep rapport
+
+**Expectation signals**:
+- "항상 ~해줘" / "매번 ~하지 마" → persistent behavioral expectation
+- Comparing to past interactions: "저번에는 잘 했는데..." → regression detected
+- Proactive requests: user expects AI to anticipate needs
 
 ### Step 3: Output
 Return a JSON array. For each fact:
@@ -71,16 +90,17 @@ Return a JSON array. For each fact:
   - "solution": problem-solution pairs
   - "context": project/technical state that affects future interactions
   - "user_model": expertise areas, personality, habits (INFERRED)
-  - "mutual": 상호 인식 — AI-user relationship signals (corrections, praise, trust, frustration, adaptation needs)
+  - "mutual": 상호 인식 — AI-user relationship signals. Format: "[signal_type:intensity] description". signal_type: correction|satisfaction|frustration|trust|expectation. intensity: strong|mild|subtle
 - "importance": 0.0-1.0
-  - 0.9+: decisions that constrain future work, core identity traits
-  - 0.7-0.9: reusable solutions, strong preferences
-  - 0.5-0.7: useful context, weak signals
+  - 0.9+: decisions that constrain future work, core identity traits, strong corrections/expectations
+  - 0.7-0.9: reusable solutions, strong preferences, clear satisfaction/frustration signals
+  - 0.5-0.7: useful context, weak signals, subtle relationship cues
 - "expiry_hint": null or "YYYY-MM-DD" if time-sensitive
 
 ## Rules
-- Max 5 facts. Quality over quantity
+- Max 7 facts. Quality over quantity
 - Include at least 1 deductive inference if the conversation has substance
+- Include at least 1 mutual signal if any relationship dynamics are detectable (most conversations have at least a subtle signal)
 - If nothing worth remembering, return []
 - Return ONLY valid JSON array, no markdown fences, no explanation`
 

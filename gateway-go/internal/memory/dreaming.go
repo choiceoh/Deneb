@@ -455,17 +455,22 @@ func extractPatterns(ctx context.Context, store *Store, client *llm.Client, mode
 
 // --- Phase 4: User Model Update ---
 
-const userModelSystemPrompt = `You are a user profile synthesizer.
-Given facts about a user (category: user_model and other categories),
-synthesize a structured user profile with these keys:
-- communication_style: how the user communicates
-- expertise_areas: what the user is expert in
-- tech_preferences: preferred technologies and tools
-- common_tasks: typical tasks the user performs
-- work_patterns: how the user works
+const userModelSystemPrompt = `You are a deep user profile synthesizer for a personal AI assistant.
+Given facts about a user across all categories, synthesize a rich, evidence-based profile.
 
-Return a JSON object with these keys and Korean values.
-If a key cannot be determined, omit it.
+## Profile Keys
+
+- communication_style: 소통 스타일 — 선호하는 답변 길이, 형식성 수준, 유머 사용 여부, 설명 깊이 선호도. 예: "간결한 답변 선호, 불릿 포인트 형식, 캐주얼한 톤, 불필요한 설명 싫어함"
+- expertise_areas: 전문 영역 — 깊은 전문성 vs 얕은 관심사 구분. 예: "Go/Rust 깊은 전문성, 인프라(DGX/CUDA) 실무 수준, ML 이론보다 실용 중심"
+- tech_preferences: 기술 선호 — 선호하는 도구, 프레임워크, 아키텍처 패턴, 기피하는 기술. 예: "SQLite > PostgreSQL, 단순한 구조 선호, 불필요한 추상화 기피"
+- common_tasks: 주요 작업 — 자주 요청하는 작업 유형과 패턴. 예: "Go/Rust 코드 작성, 시스템 설계, 버그 디버깅, 문서 작성은 거의 안 함"
+- work_patterns: 작업 패턴 — 작업 리듬, 멀티태스킹 성향, 맥락 전환 패턴. 예: "깊은 집중 세션, 동시에 여러 에이전트 활용, 야간 작업 빈번"
+
+## Rules
+- All values in Korean
+- Be SPECIFIC and evidence-based (cite the pattern, not generic descriptions)
+- "X를 선호함" 보다 "3번의 대화에서 일관되게 X를 선택함 — Y 이유로 추정" 식의 근거 기반 서술
+- If a key cannot be determined from available data, omit it
 Return ONLY valid JSON object, no markdown fences.`
 
 func updateUserModel(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) error {
@@ -511,23 +516,58 @@ func updateUserModel(ctx context.Context, store *Store, client *llm.Client, mode
 }
 
 // --- Phase 6: Mutual Understanding Synthesis (상호 인식) ---
+//
+// Unlike Phase 5 (static user profile), Phase 6 tracks the EVOLVING relationship:
+// - Reads previous mutual understanding state for continuity
+// - Analyzes new mutual signals since last cycle
+// - Produces updated understanding that reflects temporal changes
+// - Cleans up consumed mu_signals_raw after synthesis
 
 const mutualUnderstandingSystemPrompt = `You are an AI-user relationship analyst performing "dreaming" mutual understanding synthesis.
-Given accumulated facts (especially mutual, preference, and user_model categories),
-synthesize the bidirectional understanding state between the AI and user.
+You will receive TWO inputs:
+1. **이전 상태**: The previous mutual understanding state (may be empty on first run)
+2. **새로운 시그널**: Recently accumulated relationship signals and contextual facts
 
-Analyze from these perspectives:
-1. **사용자 → AI 인식**: How the user perceives the AI — satisfaction level, trust signals, expectations, areas of frustration or delight
-2. **AI → 사용자 이해**: What the AI has learned about the user — personality, communication style, expertise, work patterns, emotional tendencies
-3. **관계 역학**: Relationship dynamics — rapport level, communication adaptation history, areas needing improvement
-4. **적응 메모**: Specific behavioral adaptations the AI should apply in future conversations — based on corrections, preference shifts, repeated patterns
+Your job: EVOLVE the understanding — don't start from scratch. Build on the previous state,
+incorporate new signals, and note what CHANGED.
 
-Return a JSON object with these keys (Korean values, concise but substantive):
-- "user_sees_ai": user's perception of the AI (1-3 sentences)
-- "ai_understands_user": AI's understanding of the user (1-3 sentences)
-- "relationship_dynamics": relationship state and trends (1-3 sentences)
-- "adaptation_notes": concrete behavioral changes for the AI (1-3 bullet points as a single string)
+## Analysis Framework
 
+### 사용자 → AI 인식 (user_sees_ai)
+Synthesize how the user perceives the AI. Look for:
+- Satisfaction trajectory: improving, declining, or stable? Why?
+- Trust level: does user verify AI output, or delegate freely?
+- Unmet expectations: what does the user want that the AI isn't delivering?
+- Emotional tone: warm/collaborative, neutral/transactional, or frustrated/distant?
+
+### AI → 사용자 이해 (ai_understands_user)
+Synthesize the AI's accumulated understanding of the user. Include:
+- Core personality traits (communication style, decision-making approach)
+- Expertise depth map (what they know deeply vs superficially)
+- Emotional patterns (what triggers frustration, what brings satisfaction)
+- Work rhythm (when they work, how they context-switch, attention patterns)
+
+### 관계 역학 (relationship_dynamics)
+Analyze the relationship trajectory:
+- Rapport trend: deepening, plateauing, or degrading?
+- Communication efficiency: is less explanation needed over time?
+- Shared context growth: inside references, assumed knowledge
+- Power dynamic: does user lead, collaborate, or delegate?
+
+### 적응 메모 (adaptation_notes)
+CONCRETE behavioral directives for the AI. Not vague — specific and actionable:
+- "사용자가 X를 물을 때 Y 방식으로 답변할 것" (not "더 잘 답변할 것")
+- "Z 상황에서는 확인 없이 바로 실행할 것" (trust-based delegation)
+- "W 주제는 간결하게, V 주제는 상세하게" (topic-specific adaptation)
+
+## Output Format
+Return a JSON object (Korean values, 2-4 sentences per key):
+- "user_sees_ai": "..."
+- "ai_understands_user": "..."
+- "relationship_dynamics": "..."
+- "adaptation_notes": "..."
+
+If a previous state exists, note what evolved (e.g., "이전보다 신뢰가 높아짐: ~").
 If insufficient data for a key, omit it.
 Return ONLY valid JSON object, no markdown fences.`
 
@@ -541,34 +581,54 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 		return nil // not enough data to synthesize
 	}
 
-	// Gather relevant facts: mutual, preference, user_model categories get priority,
-	// but include other categories for broader context.
+	// Load previous mutual understanding state for continuity.
+	prevState := loadPreviousMutualState(ctx, store)
+
+	// Gather relevant facts with priority ordering.
 	var sb strings.Builder
-	priorityCats := map[string]bool{CategoryMutual: true, CategoryPreference: true, CategoryUserModel: true}
 
-	// Priority facts first (up to 20).
-	count := 0
+	// Section 1: Previous state (if exists).
+	if prevState != "" {
+		fmt.Fprintf(&sb, "## 이전 상태\n%s\n\n", prevState)
+	}
+
+	// Section 2: New mutual signals (highest priority).
+	sb.WriteString("## 새로운 시그널\n")
+	mutualFacts := 0
 	for _, f := range facts {
-		if priorityCats[f.Category] && count < 20 {
-			fmt.Fprintf(&sb, "[%s, %.1f] %s\n", f.Category, f.Importance, f.Content)
-			count++
+		if f.Category == CategoryMutual && mutualFacts < 25 {
+			fmt.Fprintf(&sb, "[mutual, %.1f, %s] %s\n",
+				f.Importance, f.CreatedAt.Format("01-02"), f.Content)
+			mutualFacts++
 		}
 	}
 
-	// Fill remaining budget with other facts (up to 15 more).
-	other := 0
-	for _, f := range facts {
-		if !priorityCats[f.Category] && other < 15 {
-			fmt.Fprintf(&sb, "[%s, %.1f] %s\n", f.Category, f.Importance, f.Content)
-			other++
+	// Section 3: Raw accumulated signals (from between dreaming cycles).
+	entries, _ := store.GetUserModel(ctx)
+	for _, e := range entries {
+		if e.Key == "mu_signals_raw" && e.Value != "" {
+			fmt.Fprintf(&sb, "\n## 미처리 시그널\n%s\n", e.Value)
+			break
 		}
 	}
 
-	if count == 0 && other < 5 {
-		return nil // not enough relevant data
+	// Section 4: Supporting context from other categories.
+	sb.WriteString("\n## 맥락\n")
+	supportCats := map[string]bool{CategoryPreference: true, CategoryUserModel: true, CategoryDecision: true}
+	support := 0
+	for _, f := range facts {
+		if supportCats[f.Category] && support < 15 {
+			fmt.Fprintf(&sb, "[%s, %.1f] %s\n", f.Category, f.Importance, f.Content)
+			support++
+		}
 	}
 
-	resp, err := callLLM(ctx, client, model, mutualUnderstandingSystemPrompt, sb.String(), dreamingMaxTokens)
+	if mutualFacts == 0 && prevState == "" && support < 5 {
+		return nil // not enough data
+	}
+
+	// Use higher token budget for richer synthesis.
+	resp, err := callLLM(ctx, client, model, mutualUnderstandingSystemPrompt, sb.String(), 768)
 	if err != nil {
 		return err
 	}
@@ -597,10 +657,39 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 		}
 	}
 
+	// Clear consumed mu_signals_raw after successful synthesis.
 	if updated > 0 {
-		logger.Info("aurora-dream: updated mutual understanding", "keys", updated)
+		_ = store.SetUserModel(ctx, "mu_signals_raw", "", 0)
+		logger.Info("aurora-dream: updated mutual understanding", "keys", updated, "signals_consumed", mutualFacts)
 	}
+
 	return nil
+}
+
+// loadPreviousMutualState reads the current mutual understanding keys
+// and formats them as context for the next synthesis cycle.
+func loadPreviousMutualState(ctx context.Context, store *Store) string {
+	entries, err := store.GetUserModel(ctx)
+	if err != nil {
+		return ""
+	}
+
+	labels := map[string]string{
+		"user_sees_ai":          "사용자 → AI 인식",
+		"ai_understands_user":   "AI → 사용자 이해",
+		"relationship_dynamics": "관계 역학",
+		"adaptation_notes":      "적응 메모",
+	}
+
+	var sb strings.Builder
+	for _, e := range entries {
+		label, ok := labels[e.Key]
+		if !ok || e.Value == "" {
+			continue
+		}
+		fmt.Fprintf(&sb, "- %s: %s\n", label, e.Value)
+	}
+	return sb.String()
 }
 
 // callLLM is a convenience alias for callSglang (defined in sglang.go).

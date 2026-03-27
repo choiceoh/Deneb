@@ -208,8 +208,19 @@ func formatKnowledgeWithFacts(vegaResults []vega.SearchResult, memMatches []Memo
 	return sb.String()
 }
 
-// mutualUnderstandingKeys defines the display order and Korean labels
-// for user_model keys that form the mutual understanding section.
+// userProfileKeys defines display order and Korean labels for Phase 5 user model keys.
+var userProfileKeys = []struct {
+	Key   string
+	Label string
+}{
+	{"communication_style", "소통 스타일"},
+	{"expertise_areas", "전문 영역"},
+	{"tech_preferences", "기술 선호"},
+	{"common_tasks", "주요 작업"},
+	{"work_patterns", "작업 패턴"},
+}
+
+// mutualUnderstandingKeys defines display order and Korean labels for Phase 6 mutual keys.
 var mutualUnderstandingKeys = []struct {
 	Key   string
 	Label string
@@ -220,11 +231,12 @@ var mutualUnderstandingKeys = []struct {
 	{"adaptation_notes", "적응 메모"},
 }
 
-// mutualUnderstandingMaxTokens caps the mutual understanding section.
-const mutualUnderstandingMaxTokens = 1000
+// mutualUnderstandingMaxTokens caps the entire mutual understanding + user profile section.
+const mutualUnderstandingMaxTokens = 1500
 
 // formatMutualUnderstanding builds the "## 상호 인식" section from user_model entries.
-// Returns empty string if no mutual understanding keys are populated.
+// Includes both the user profile (Phase 5) and relationship dynamics (Phase 6),
+// plus behavioral guidance so the AI knows HOW to use this information.
 func formatMutualUnderstanding(entries []memory.UserModelEntry) string {
 	if len(entries) == 0 {
 		return ""
@@ -238,27 +250,67 @@ func formatMutualUnderstanding(entries []memory.UserModelEntry) string {
 
 	var sb strings.Builder
 	tokenCount := 0
+	hasContent := false
 
+	// Section 1: User profile (Phase 5 data).
+	profileContent := formatKeySection(byKey, userProfileKeys)
+	if profileContent != "" {
+		sb.WriteString("## 상호 인식\n\n")
+		sb.WriteString("### 사용자 프로필\n")
+		sb.WriteString(profileContent)
+		sb.WriteString("\n")
+		tokenCount += sb.Len() / charsPerToken
+		hasContent = true
+	}
+
+	// Section 2: Relationship dynamics (Phase 6 data).
 	for _, mk := range mutualUnderstandingKeys {
+		if tokenCount >= mutualUnderstandingMaxTokens {
+			break
+		}
 		e, ok := byKey[mk.Key]
 		if !ok || e.Value == "" {
 			continue
 		}
 
-		// Lazy write header on first match.
-		if sb.Len() == 0 {
+		if !hasContent {
 			sb.WriteString("## 상호 인식\n\n")
+			hasContent = true
 		}
 
 		before := sb.Len()
 		content := truncateRunes(e.Value, knowledgeMaxContentRunes)
 		fmt.Fprintf(&sb, "### %s\n%s\n\n", mk.Label, content)
 		tokenCount += (sb.Len() - before) / charsPerToken
-
-		if tokenCount >= mutualUnderstandingMaxTokens {
-			break
-		}
 	}
 
+	if !hasContent {
+		return ""
+	}
+
+	// Behavioral guidance: tell the AI HOW to use this information.
+	if tokenCount < mutualUnderstandingMaxTokens {
+		sb.WriteString("### 활용 지침\n")
+		sb.WriteString("위 상호 인식은 대화를 통해 축적된 이해입니다. 이를 바탕으로:\n")
+		sb.WriteString("- 적응 메모의 지시사항을 즉시 적용하세요\n")
+		sb.WriteString("- 사용자 프로필에 맞게 답변 스타일을 조절하세요\n")
+		sb.WriteString("- 관계 역학을 고려해 톤과 상세도를 맞추세요\n")
+		sb.WriteString("- 이 정보를 사용자에게 직접 언급하지 마세요 (자연스럽게 반영만)\n\n")
+	}
+
+	return sb.String()
+}
+
+// formatKeySection formats a set of user_model keys into "- Label: value" lines.
+func formatKeySection(byKey map[string]memory.UserModelEntry, keys []struct{ Key, Label string }) string {
+	var sb strings.Builder
+	for _, k := range keys {
+		e, ok := byKey[k.Key]
+		if !ok || e.Value == "" {
+			continue
+		}
+		content := truncateRunes(e.Value, knowledgeMaxContentRunes)
+		fmt.Fprintf(&sb, "- **%s**: %s\n", k.Label, content)
+	}
 	return sb.String()
 }
