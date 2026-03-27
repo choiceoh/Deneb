@@ -150,7 +150,8 @@ type Server struct {
 	acpLifecycleUnsub func()
 
 	// Phase 5: Autonomous goal-driven execution.
-	autonomousSvc *autonomous.Service
+	autonomousSvc  *autonomous.Service
+	dreamingAdapter *memory.DreamingAdapter // stored in phase 2, wired to autonomous in phase 3
 
 	// toolDeps holds core tool dependencies; stored on the server so late-binding
 	// fields (e.g. AutonomousSvc) can be set from other init phases.
@@ -1028,9 +1029,14 @@ func (s *Server) registerPhase2Methods() {
 				chatCfg.MemoryEmbedder = embedder
 
 				sglangClient := llm.NewClient(sglangURL, "", llm.WithLogger(s.logger))
-				trigger := memory.NewDreamingTrigger(memStore, embedder, sglangClient, sglangModel, s.logger)
-				chatCfg.DreamingTrigger = trigger
-				trigger.StartPeriodicTimer(context.Background())
+				s.dreamingAdapter = memory.NewDreamingAdapter(memStore, embedder, sglangClient, sglangModel, s.logger)
+				// DreamTurnFn is wired after autonomous service is created (phase 3).
+				// Use a closure that captures s so the autonomous svc reference resolves at call time.
+				chatCfg.DreamTurnFn = func(ctx context.Context) {
+					if svc := s.autonomousSvc; svc != nil {
+						svc.IncrementDreamTurn(ctx)
+					}
+				}
 			} else {
 				s.logger.Info("aurora-memory: embedding disabled (no embedding server detected)")
 			}
@@ -1355,9 +1361,18 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 	// Wire autonomous service into agent tools (late-binding, same as SessionSendFn).
 	s.toolDeps.AutonomousSvc = s.autonomousSvc
 
-	// Broadcast autonomous cycle events to WebSocket clients.
+	// Wire AuroraDream adapter if available (created in phase 2).
+	if s.dreamingAdapter != nil {
+		s.autonomousSvc.SetDreamer(s.dreamingAdapter)
+	}
+
+	// Broadcast autonomous cycle events (including dreaming) to WebSocket clients.
 	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
-		broadcastFn("autonomous.cycle", event)
+		if strings.HasPrefix(event.Type, "dreaming_") {
+			broadcastFn("dreaming.cycle", event)
+		} else {
+			broadcastFn("autonomous.cycle", event)
+		}
 	})
 
 	// Wire Telegram notifier for significant autonomous events (goal completion,
