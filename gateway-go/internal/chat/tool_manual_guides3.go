@@ -304,6 +304,14 @@ const cronGuide = `Cron manages scheduled jobs that trigger agent turns at confi
 
 const autonomousGuide = `Autonomous mode runs goal-driven agent cycles without user interaction.
 
+## Why Autonomous?
+Normal agent operation is reactive: the agent only runs when the user sends a message.
+This means sub-agent results delivered via session_send, scheduled checks, and deferred
+follow-ups sit unprocessed until the user speaks. Autonomous mode solves this by giving
+the agent its own turn — each cycle checks pending work (e.g. sub-agent callbacks,
+monitoring alerts) and acts on it proactively, enabling true "I'll let you know when
+it's done" behavior.
+
 ## Goals
 - Max 20 goals, each with: description, priority (high/medium/low), status (active/completed/paused)
 - NoteHistory: last 3 progress notes (newest first)
