@@ -11,6 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
@@ -119,33 +120,26 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 	ctx = WithSessionKey(ctx, params.SessionKey)
 
-	// Start typing indicator keepalive for channel delivery (e.g., Telegram).
-	// Sends "typing" action immediately, then every 5 seconds until the run ends.
-	var stopTyping func()
+	// Set up phase-aware typing indicator for channel delivery (e.g., Telegram).
+	// Uses TypingController (5s keepalive matching Telegram's sendChatAction TTL)
+	// with FullTypingSignaler for phase-aware signals (text, thinking, tool use).
+	var typingSignaler *autoreply.FullTypingSignaler
 	if deps.typingFn != nil && params.Delivery != nil {
-		typingCtx, typingCancel := context.WithCancel(ctx)
-		go func() {
-			_ = deps.typingFn(typingCtx, params.Delivery)
-			ticker := time.NewTicker(5 * time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-typingCtx.Done():
-					return
-				case <-ticker.C:
-					_ = deps.typingFn(typingCtx, params.Delivery)
-				}
-			}
-		}()
-		stopTyping = typingCancel
+		delivery := params.Delivery
+		typingCtrl := autoreply.NewTypingController(autoreply.TypingControllerConfig{
+			OnStart:    func() { _ = deps.typingFn(ctx, delivery) },
+			IntervalMs: 5000, // Telegram typing expires after 5s
+		})
+		typingSignaler = autoreply.NewFullTypingSignaler(typingCtrl, autoreply.TypingModeInstant, false)
+		typingSignaler.SignalRunStart()
 	}
 
 	// Run the agent and capture result.
-	result, err := executeAgentRun(ctx, params, deps, broadcaster, logger)
+	result, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, logger)
 
 	// Stop typing indicator before delivering the reply.
-	if stopTyping != nil {
-		stopTyping()
+	if typingSignaler != nil {
+		typingSignaler.Stop()
 	}
 
 	// Handle completion.
@@ -165,6 +159,7 @@ func executeAgentRun(
 	params RunParams,
 	deps runDeps,
 	broadcaster *streamBroadcaster,
+	typingSignaler *autoreply.FullTypingSignaler,
 	logger *slog.Logger,
 ) (*AgentResult, error) {
 	runStart := time.Now()
@@ -394,10 +389,25 @@ func executeAgentRun(
 		}
 	}
 
-	// 10. Set up delta emitter for streaming.
-	var emitDelta func(string)
+	// 10. Set up stream hooks: compose broadcaster (WS deltas) + typing signaler.
+	var hooks StreamHooks
 	if broadcaster != nil {
-		emitDelta = broadcaster.EmitDelta
+		hooks.OnTextDelta = broadcaster.EmitDelta
+	}
+	if typingSignaler != nil {
+		prevOnDelta := hooks.OnTextDelta
+		hooks.OnTextDelta = func(text string) {
+			if prevOnDelta != nil {
+				prevOnDelta(text)
+			}
+			typingSignaler.SignalTextDelta(text)
+		}
+		hooks.OnThinking = func() {
+			typingSignaler.SignalReasoningDelta()
+		}
+		hooks.OnToolStart = func(_ string) {
+			typingSignaler.SignalToolStart()
+		}
 	}
 
 	logger.Info("pipeline: prep complete, starting agent loop",
@@ -416,7 +426,7 @@ func executeAgentRun(
 		}
 
 		var runErr error
-		agentResult, runErr = RunAgent(ctx, cfg, messages, client, deps.tools, emitDelta, logger)
+		agentResult, runErr = RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger)
 		if runErr != nil {
 			// Check for context overflow error.
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
@@ -443,7 +453,7 @@ func executeAgentRun(
 				fbCfg := cfg
 				fbCfg.Model = sglangModel
 				fbCfg.APIType = "openai"
-				agentResult, runErr = RunAgent(ctx, fbCfg, messages, fbClient, deps.tools, emitDelta, logger)
+				agentResult, runErr = RunAgent(ctx, fbCfg, messages, fbClient, deps.tools, hooks, logger)
 				if runErr == nil {
 					break
 				}
@@ -722,7 +732,7 @@ func executeAgentRunWithDelta(
 		return 1
 	})
 	broadcaster := newStreamBroadcaster(deltaRaw, params.SessionKey, params.ClientRunID)
-	return executeAgentRun(ctx, params, deps, broadcaster, logger)
+	return executeAgentRun(ctx, params, deps, broadcaster, nil, logger)
 }
 
 // resolveDefaultBaseURL returns the default API base URL for a known provider
