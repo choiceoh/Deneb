@@ -245,7 +245,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Gmail tool (structured Gmail operations via native API) --
 	registry.RegisterTool(ToolDef{
 		Name:        "gmail",
-		Description: "Gmail: inbox summary, search, read, send, reply, labels with contact aliases",
+		Description: "Gmail (native OAuth2): inbox summary, search, read, send, reply, labels with contact aliases. Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
 		InputSchema: gmailToolSchema(),
 		Fn:          toolGmail(),
 	})
