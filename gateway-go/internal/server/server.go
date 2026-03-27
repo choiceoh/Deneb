@@ -1452,6 +1452,23 @@ func (s *Server) wireTelegramChatHandler() {
 		return err
 	})
 
+	// Set typing indicator function: sends "typing" chat action to Telegram
+	// periodically during agent runs so the user sees "typing..." in the chat.
+	s.chatHandler.SetTypingFunc(func(ctx context.Context, delivery *chat.DeliveryContext) error {
+		if delivery == nil || delivery.Channel != "telegram" {
+			return nil
+		}
+		client := s.telegramPlug.Client()
+		if client == nil {
+			return nil
+		}
+		chatID, err := strconv.ParseInt(delivery.To, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
+		}
+		return client.SendChatAction(ctx, chatID, "typing")
+	})
+
 	// Create the inbound processor that routes Telegram messages through
 	// the autoreply command/directive pipeline before dispatching to chat.send.
 	inbound := NewInboundProcessor(s)

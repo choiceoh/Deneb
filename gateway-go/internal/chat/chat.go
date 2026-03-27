@@ -40,6 +40,10 @@ type BroadcastRawFunc func(event string, data []byte) int
 // Called with the delivery context (channel + recipient) and the response text.
 type ReplyFunc func(ctx context.Context, delivery *DeliveryContext, text string) error
 
+// TypingFunc signals a typing indicator to the originating channel.
+// Called periodically during an agent run to show "typing..." status.
+type TypingFunc func(ctx context.Context, delivery *DeliveryContext) error
+
 // ProviderConfig holds credentials and endpoint for an LLM provider.
 type ProviderConfig struct {
 	APIKey  string `json:"apiKey"`
@@ -113,6 +117,7 @@ type Handler struct {
 
 	replyFunc    ReplyFunc    // optional: delivers response to originating channel
 	mediaSendFn  MediaSendFunc // optional: delivers files to originating channel
+	typingFn     TypingFunc    // optional: sends typing indicator during agent run
 
 	abortMu  sync.Mutex
 	abortMap map[string]*AbortEntry // clientRunId -> entry
@@ -217,6 +222,12 @@ func (h *Handler) SetReplyFunc(fn ReplyFunc) {
 // originating channel (e.g., Telegram). Used by the send_file tool.
 func (h *Handler) SetMediaSendFunc(fn MediaSendFunc) {
 	h.mediaSendFn = fn
+}
+
+// SetTypingFunc sets the function that sends typing indicators to the
+// originating channel (e.g., Telegram "typing..." status) during agent runs.
+func (h *Handler) SetTypingFunc(fn TypingFunc) {
+	h.typingFn = fn
 }
 
 // HandleBtw processes a side question (/btw) without affecting the main
@@ -637,6 +648,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		jobTracker:      h.jobTracker,
 		replyFunc:       h.replyFunc,
 		mediaSendFn:     h.mediaSendFn,
+		typingFn:        h.typingFn,
 		providerConfigs: h.providerConfigs,
 		logger:          h.logger,
 		auroraStore:     h.auroraStore,

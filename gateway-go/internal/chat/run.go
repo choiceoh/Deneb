@@ -61,6 +61,7 @@ type runDeps struct {
 	jobTracker      *agent.JobTracker         // optional
 	replyFunc       ReplyFunc                 // optional; delivers response to originating channel
 	mediaSendFn     MediaSendFunc             // optional; delivers files to originating channel
+	typingFn        TypingFunc                // optional; sends typing indicator during run
 	providerConfigs map[string]ProviderConfig // optional; config-based provider credentials
 	logger          *slog.Logger              // required (defaults to slog.Default)
 
@@ -118,8 +119,34 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 	ctx = WithSessionKey(ctx, params.SessionKey)
 
+	// Start typing indicator keepalive for channel delivery (e.g., Telegram).
+	// Sends "typing" action immediately, then every 5 seconds until the run ends.
+	var stopTyping func()
+	if deps.typingFn != nil && params.Delivery != nil {
+		typingCtx, typingCancel := context.WithCancel(ctx)
+		go func() {
+			_ = deps.typingFn(typingCtx, params.Delivery)
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-typingCtx.Done():
+					return
+				case <-ticker.C:
+					_ = deps.typingFn(typingCtx, params.Delivery)
+				}
+			}
+		}()
+		stopTyping = typingCancel
+	}
+
 	// Run the agent and capture result.
 	result, err := executeAgentRun(ctx, params, deps, broadcaster, logger)
+
+	// Stop typing indicator before delivering the reply.
+	if stopTyping != nil {
+		stopTyping()
+	}
 
 	// Handle completion.
 	now := time.Now().UnixMilli()
