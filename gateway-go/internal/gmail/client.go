@@ -13,11 +13,12 @@ import (
 	"time"
 )
 
-const (
-	tokenURL = "https://oauth2.googleapis.com/token"
-	apiBase  = "https://gmail.googleapis.com/gmail/v1/users/me"
+var tokenURL = "https://oauth2.googleapis.com/token"
 
-)
+const apiBase = "https://gmail.googleapis.com/gmail/v1/users/me"
+
+// setTokenURL overrides the token endpoint URL (for testing).
+func setTokenURL(u string) { tokenURL = u }
 
 // clientCredentials matches the Google OAuth2 client_secret JSON format.
 type clientCredentials struct {
@@ -72,6 +73,12 @@ func credentialsDir() string {
 
 func newClient() (*Client, error) {
 	dir := credentialsDir()
+	return newClientFromDir(dir)
+}
+
+// newClientFromDir loads credentials and token from the given directory.
+// Extracted for testability.
+func newClientFromDir(dir string) (*Client, error) {
 	clientPath := filepath.Join(dir, "gmail_client.json")
 	tokenPath := filepath.Join(dir, "gmail_token.json")
 
