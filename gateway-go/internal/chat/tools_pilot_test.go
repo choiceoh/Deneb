@@ -405,6 +405,109 @@ func TestExpandShortcuts_Memory(t *testing.T) {
 	}
 }
 
+func TestExpandShortcuts_Gmail(t *testing.T) {
+	p := pilotParams{Task: "summarize", Gmail: "from:alice subject:회의"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "gmail" {
+		t.Errorf("expected 1 gmail spec, got %d", len(specs))
+	}
+	if specs[0].Label != "gmail: from:alice subject:회의" {
+		t.Errorf("unexpected label: %q", specs[0].Label)
+	}
+}
+
+func TestExpandShortcuts_YouTube(t *testing.T) {
+	p := pilotParams{Task: "summarize", YouTube: "https://youtube.com/watch?v=abc123"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "youtube_transcript" {
+		t.Errorf("expected 1 youtube_transcript spec, got %d", len(specs))
+	}
+}
+
+func TestExpandShortcuts_Polaris(t *testing.T) {
+	p := pilotParams{Task: "explain", Polaris: "aurora context engine"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "polaris" {
+		t.Errorf("expected 1 polaris spec, got %d", len(specs))
+	}
+}
+
+func TestExpandShortcuts_Image(t *testing.T) {
+	p := pilotParams{Task: "describe", Image: "/tmp/screenshot.png"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "image" {
+		t.Errorf("expected 1 image spec, got %d", len(specs))
+	}
+}
+
+func TestExpandShortcuts_Clipboard(t *testing.T) {
+	p := pilotParams{Task: "analyze", Clipboard: "latest"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "clipboard" {
+		t.Errorf("expected 1 clipboard spec, got %d", len(specs))
+	}
+}
+
+func TestExpandShortcuts_Ls(t *testing.T) {
+	p := pilotParams{Task: "overview", Ls: "/home/user/project"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "ls" {
+		t.Errorf("expected 1 ls spec, got %d", len(specs))
+	}
+}
+
+func TestExpandShortcuts_Vega(t *testing.T) {
+	p := pilotParams{Task: "search", Vega: "비금도 진행상황"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "vega" {
+		t.Errorf("expected 1 vega spec, got %d", len(specs))
+	}
+}
+
+func TestExpandShortcuts_AllNew(t *testing.T) {
+	p := pilotParams{
+		Task:      "analyze everything",
+		Gmail:     "invoice",
+		YouTube:   "https://youtube.com/watch?v=x",
+		Polaris:   "tools",
+		Image:     "/tmp/img.png",
+		Clipboard: "draft",
+		Ls:        "/tmp",
+		Vega:      "프로젝트 현황",
+	}
+	specs := expandShortcuts(p)
+	if len(specs) != 7 {
+		t.Fatalf("expected 7 specs, got %d", len(specs))
+	}
+	tools := make([]string, len(specs))
+	for i, s := range specs {
+		tools[i] = s.Tool
+	}
+	expected := []string{"gmail", "youtube_transcript", "polaris", "image", "clipboard", "ls", "vega"}
+	for i, want := range expected {
+		if tools[i] != want {
+			t.Errorf("spec[%d].Tool = %q, want %q", i, tools[i], want)
+		}
+	}
+}
+
+func TestSourceTypeFromTool_NewTools(t *testing.T) {
+	tests := map[string]string{
+		"ls":                  "file",
+		"gmail":              "content",
+		"youtube_transcript": "content",
+		"polaris":            "content",
+		"clipboard":          "content",
+		"image":              "content",
+		"vega":               "content",
+	}
+	for tool, want := range tests {
+		if got := sourceTypeFromTool(tool); got != want {
+			t.Errorf("sourceTypeFromTool(%q) = %q, want %q", tool, got, want)
+		}
+	}
+}
+
 func TestSourceSucceeded(t *testing.T) {
 	results := []sourceResult{
 		{label: "mem", content: "some results", sourceType: "content"},

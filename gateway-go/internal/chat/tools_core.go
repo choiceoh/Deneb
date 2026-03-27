@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
 // CoreToolDeps holds all dependencies for core agent tools.
@@ -33,6 +34,10 @@ type CoreToolDeps struct {
 	// AutonomousSvc is set after Handler creation to avoid init-order deps.
 	// The autonomous tool gracefully degrades when this is nil.
 	AutonomousSvc *autonomous.Service
+
+	// VegaBackend is the optional Vega search backend.
+	// The vega tool gracefully degrades when this is nil.
+	VegaBackend vega.Backend
 }
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
@@ -115,6 +120,14 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Description: "Read specific line range from a memory file. Use after memory_search to get full context",
 		InputSchema: memoryGetToolSchema(),
 		Fn:          toolMemoryGet(workspaceDir),
+	})
+
+	// -- Vega tool (project knowledge search) --
+	registry.RegisterTool(ToolDef{
+		Name:        "vega",
+		Description: "Search project knowledge base (Vega). Hybrid BM25 + semantic search across all projects. Actions: search (default), ask",
+		InputSchema: vegaToolSchema(),
+		Fn:          toolVega(deps),
 	})
 
 	// -- System manual tool (queryable Deneb documentation) --
@@ -303,7 +316,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Registered last: uses the registry itself to execute source tools.
 	registry.RegisterTool(ToolDef{
 		Name:        "pilot",
-		Description: "Fast local AI that runs tools + analyzes results in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory. Options: chain (follow-up tools), max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-enables thinking for complex tasks. Falls back to raw results if sglang is down",
+		Description: "Fast local AI that runs tools + analyzes results in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory, gmail, youtube, polaris, image, clipboard, ls, vega. Options: chain (follow-up tools), max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-enables thinking for complex tasks. Falls back to raw results if sglang is down",
 		InputSchema: pilotToolSchema(),
 		Fn:          toolPilot(registry, workspaceDir),
 	})

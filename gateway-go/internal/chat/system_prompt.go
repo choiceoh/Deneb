@@ -64,7 +64,7 @@ var toolCategories = []struct {
 	{"Exec", []string{"exec", "process"}},
 	{"AI", []string{"pilot"}},
 	{"Web", []string{"web", "http"}},
-	{"Memory", []string{"memory_search", "memory_get", "polaris"}},
+	{"Memory", []string{"memory_search", "memory_get", "polaris", "vega"}},
 	{"System", []string{"nodes", "cron", "autonomous", "message", "gateway"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_restore", "sessions_send", "sessions_spawn", "subagents", "session_status"}},
 	{"Media", []string{"image", "youtube_transcript", "send_file"}},
@@ -106,7 +106,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, dynamicText str
 	if toolSet["pilot"] {
 		s.WriteString("## Pilot & Chaining\n")
 		s.WriteString("- `pilot` runs tasks on local sglang (fast, free). Gathers tool outputs + analyzes in one call.\n")
-		s.WriteString("- Use pilot for: file analysis, command output review, grep result processing, multi-source comparison.\n")
+		s.WriteString("- Use pilot for: file analysis, command output review, grep result processing, multi-source comparison, email summarization (gmail), video transcript analysis (youtube), system docs lookup (polaris), project knowledge search (vega), image analysis, directory overview (ls).\n")
 		s.WriteString("- Do NOT use pilot for: complex multi-turn reasoning, or when you need full uncompressed output.\n")
 		s.WriteString("- Multiple independent reads/greps → call them in parallel directly (no pilot needed).\n")
 		s.WriteString("- Long-running autonomous task → sessions_spawn instead of pilot.\n")

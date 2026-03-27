@@ -224,6 +224,34 @@ func pilotToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Shortcut: search memory for this query (expands to sources:[{tool:'memory_search', input:{query:...}}])",
 			},
+			"gmail": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: search Gmail for this query (expands to sources:[{tool:'gmail', input:{action:'search', query:...}}])",
+			},
+			"youtube": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: get YouTube transcript (expands to sources:[{tool:'youtube_transcript', input:{url:...}}])",
+			},
+			"polaris": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: search Deneb system manual (expands to sources:[{tool:'polaris', input:{action:'search', query:...}}])",
+			},
+			"image": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: analyze image file or URL (expands to sources:[{tool:'image', input:{paths:[...]}}])",
+			},
+			"clipboard": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: get clipboard item by key (expands to sources:[{tool:'clipboard', input:{action:'get', key:...}}])",
+			},
+			"ls": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: list directory contents (expands to sources:[{tool:'ls', input:{path:...}}])",
+			},
+			"vega": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: search project knowledge base (expands to sources:[{tool:'vega', input:{query:...}}])",
+			},
 			"post_process": map[string]any{
 				"type": "array",
 				"items": map[string]any{
@@ -389,16 +417,23 @@ type pilotParams struct {
 	PostProcess  []postProcessStep `json:"post_process"`
 
 	// Shortcuts.
-	File   string   `json:"file"`
-	Files  []string `json:"files"`
-	Exec   string   `json:"exec"`
-	Grep   string   `json:"grep"`
-	Find   string   `json:"find"`
-	Path   string   `json:"path"`
-	URL    string   `json:"url"`
-	HTTP   string   `json:"http"`
-	KVKey  string   `json:"kv_key"`
-	Memory string   `json:"memory"`
+	File      string   `json:"file"`
+	Files     []string `json:"files"`
+	Exec      string   `json:"exec"`
+	Grep      string   `json:"grep"`
+	Find      string   `json:"find"`
+	Path      string   `json:"path"`
+	URL       string   `json:"url"`
+	HTTP      string   `json:"http"`
+	KVKey     string   `json:"kv_key"`
+	Memory    string   `json:"memory"`
+	Gmail     string   `json:"gmail"`
+	YouTube   string   `json:"youtube"`
+	Polaris   string   `json:"polaris"`
+	Image     string   `json:"image"`
+	Clipboard string   `json:"clipboard"`
+	Ls        string   `json:"ls"`
+	Vega      string   `json:"vega"`
 }
 
 // postProcessStep is a programmatic transformation applied to gathered data.
@@ -509,6 +544,62 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 		})
 	}
 
+	if p.Gmail != "" {
+		specs = append(specs, sourceSpec{
+			Tool:  "gmail",
+			Input: mustJSON(map[string]any{"action": "search", "query": p.Gmail}),
+			Label: "gmail: " + p.Gmail,
+		})
+	}
+
+	if p.YouTube != "" {
+		specs = append(specs, sourceSpec{
+			Tool:  "youtube_transcript",
+			Input: mustJSON(map[string]any{"url": p.YouTube}),
+			Label: "youtube: " + p.YouTube,
+		})
+	}
+
+	if p.Polaris != "" {
+		specs = append(specs, sourceSpec{
+			Tool:  "polaris",
+			Input: mustJSON(map[string]any{"action": "search", "query": p.Polaris}),
+			Label: "polaris: " + p.Polaris,
+		})
+	}
+
+	if p.Image != "" {
+		specs = append(specs, sourceSpec{
+			Tool:  "image",
+			Input: mustJSON(map[string]any{"paths": []string{p.Image}}),
+			Label: "image: " + p.Image,
+		})
+	}
+
+	if p.Clipboard != "" {
+		specs = append(specs, sourceSpec{
+			Tool:  "clipboard",
+			Input: mustJSON(map[string]any{"action": "get", "key": p.Clipboard}),
+			Label: "clipboard: " + p.Clipboard,
+		})
+	}
+
+	if p.Ls != "" {
+		specs = append(specs, sourceSpec{
+			Tool:  "ls",
+			Input: mustJSON(map[string]any{"path": p.Ls}),
+			Label: "ls: " + p.Ls,
+		})
+	}
+
+	if p.Vega != "" {
+		specs = append(specs, sourceSpec{
+			Tool:  "vega",
+			Input: mustJSON(map[string]any{"query": p.Vega}),
+			Label: "vega: " + p.Vega,
+		})
+	}
+
 	return specs
 }
 
@@ -527,6 +618,10 @@ func sourceTypeFromTool(tool string) string {
 		return "find"
 	case "web_fetch":
 		return "url"
+	case "ls":
+		return "file"
+	case "gmail", "youtube_transcript", "polaris", "clipboard", "image", "vega":
+		return "content"
 	default:
 		return "content"
 	}
