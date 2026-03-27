@@ -34,6 +34,7 @@ type DreamingReport struct {
 	FactsVerified     int           `json:"facts_verified"`
 	FactsMerged       int           `json:"facts_merged"`
 	FactsExpired      int           `json:"facts_expired"`
+	FactsPruned       int           `json:"facts_pruned"`
 	PatternsExtracted int           `json:"patterns_extracted"`
 	Duration          time.Duration `json:"duration"`
 }
@@ -52,6 +53,12 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 	if expiredCount, err := store.CleanupExpired(ctx); err == nil && expiredCount > 0 {
 		logger.Info("aurora-dream: cleaned up expired facts", "count", expiredCount)
 		report.FactsExpired += int(expiredCount)
+	}
+
+	// Phase 0.5: Prune low-importance noise (context/auto_extract, unaccessed, unverified, >7 days).
+	if pruned, err := store.PruneNoiseFacts(ctx, 0.6, 7*24*time.Hour); err == nil && pruned > 0 {
+		logger.Info("aurora-dream: pruned noise facts", "count", pruned)
+		report.FactsPruned = int(pruned)
 	}
 
 	// Phase 1: Fact verification.
@@ -101,6 +108,7 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		FactsVerified:     report.FactsVerified,
 		FactsMerged:       report.FactsMerged,
 		FactsExpired:      report.FactsExpired,
+		FactsPruned:       report.FactsPruned,
 		PatternsExtracted: report.PatternsExtracted,
 		DurationMs:        report.Duration.Milliseconds(),
 	})
@@ -109,6 +117,7 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		"verified", report.FactsVerified,
 		"merged", report.FactsMerged,
 		"expired", report.FactsExpired,
+		"pruned", report.FactsPruned,
 		"patterns", report.PatternsExtracted,
 		"duration", report.Duration.Round(time.Second),
 	)

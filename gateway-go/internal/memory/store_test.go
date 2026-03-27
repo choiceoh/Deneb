@@ -2,10 +2,12 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func tempStore(t *testing.T) *Store {
@@ -122,7 +124,7 @@ func TestExportToFile(t *testing.T) {
 	s := tempStore(t)
 	ctx := context.Background()
 
-	_, _ = s.InsertFact(ctx, Fact{Content: "테스트 팩트", Category: CategoryContext, Importance: 0.5})
+	_, _ = s.InsertFact(ctx, Fact{Content: "테스트 팩트", Category: CategoryContext, Importance: 0.8})
 
 	dir := t.TempDir()
 	if err := s.ExportToFile(ctx, dir); err != nil {
@@ -135,6 +137,118 @@ func TestExportToFile(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "테스트 팩트") {
 		t.Error("expected fact content in MEMORY.md")
+	}
+}
+
+func TestExportToMarkdownFiltersLowImportance(t *testing.T) {
+	s := tempStore(t)
+	ctx := context.Background()
+
+	_, _ = s.InsertFact(ctx, Fact{Content: "노이즈 팩트", Category: CategoryContext, Importance: 0.5})
+	_, _ = s.InsertFact(ctx, Fact{Content: "중요한 결정", Category: CategoryDecision, Importance: 0.9})
+
+	md, err := s.ExportToMarkdown(ctx)
+	if err != nil {
+		t.Fatalf("ExportToMarkdown: %v", err)
+	}
+	if strings.Contains(md, "노이즈 팩트") {
+		t.Error("low-importance fact should not appear in export")
+	}
+	if !strings.Contains(md, "중요한 결정") {
+		t.Error("high-importance fact should appear in export")
+	}
+}
+
+func TestPruneNoiseFacts(t *testing.T) {
+	s := tempStore(t)
+	ctx := context.Background()
+
+	// Insert noise: low importance, context, auto_extract, old timestamp.
+	noiseID, _ := s.InsertFact(ctx, Fact{
+		Content:    "대화 내용 분석 중",
+		Category:   CategoryContext,
+		Importance: 0.5,
+		Source:     SourceAutoExtract,
+	})
+	// Backdate the noise fact to 10 days ago.
+	tenDaysAgo := time.Now().Add(-10 * 24 * time.Hour).UTC().Format(time.RFC3339)
+	_, _ = s.db.ExecContext(ctx, `UPDATE facts SET created_at = ? WHERE id = ?`, tenDaysAgo, noiseID)
+
+	// Insert valuable fact: high importance decision.
+	_, _ = s.InsertFact(ctx, Fact{
+		Content:    "Podman 사용 결정",
+		Category:   CategoryDecision,
+		Importance: 0.9,
+		Source:     SourceAutoExtract,
+	})
+
+	// Insert low-importance but manually sourced (should be preserved).
+	manualID, _ := s.InsertFact(ctx, Fact{
+		Content:    "메모",
+		Category:   CategoryContext,
+		Importance: 0.5,
+		Source:     SourceManual,
+	})
+	_, _ = s.db.ExecContext(ctx, `UPDATE facts SET created_at = ? WHERE id = ?`, tenDaysAgo, manualID)
+
+	pruned, err := s.PruneNoiseFacts(ctx, 0.6, 7*24*time.Hour)
+	if err != nil {
+		t.Fatalf("PruneNoiseFacts: %v", err)
+	}
+	if pruned != 1 {
+		t.Errorf("expected 1 pruned fact, got %d", pruned)
+	}
+
+	// Verify noise is deactivated.
+	f, _ := s.GetFact(ctx, noiseID)
+	if f.Active {
+		t.Error("noise fact should be inactive after pruning")
+	}
+
+	// Verify manual fact is still active.
+	m, _ := s.GetFact(ctx, manualID)
+	if !m.Active {
+		t.Error("manual fact should remain active")
+	}
+
+	// Verify valuable fact count.
+	count, _ := s.ActiveFactCount(ctx)
+	if count != 2 {
+		t.Errorf("expected 2 active facts, got %d", count)
+	}
+}
+
+func TestCompactMemory(t *testing.T) {
+	s := tempStore(t)
+	ctx := context.Background()
+
+	// Insert several noise facts (no age restriction for compact).
+	for i := 0; i < 5; i++ {
+		_, _ = s.InsertFact(ctx, Fact{
+			Content:    fmt.Sprintf("noise %d", i),
+			Category:   CategoryContext,
+			Importance: 0.5,
+			Source:     SourceAutoExtract,
+		})
+	}
+	// Insert a valuable fact.
+	_, _ = s.InsertFact(ctx, Fact{
+		Content:    "핵심 결정",
+		Category:   CategoryDecision,
+		Importance: 0.9,
+	})
+
+	compacted, err := s.CompactMemory(ctx)
+	if err != nil {
+		t.Fatalf("CompactMemory: %v", err)
+	}
+	if compacted != 5 {
+		t.Errorf("expected 5 compacted, got %d", compacted)
+	}
+
+	count, _ := s.ActiveFactCount(ctx)
+	if count != 1 {
+		t.Errorf("expected 1 active fact remaining, got %d", count)
 	}
 }
 

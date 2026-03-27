@@ -158,7 +158,12 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			Enabled: true,
 			Adapter: channel.StatusReactionAdapter{
 				SetReaction: func(emoji string) error {
-					return deps.reactionFn(ctx, delivery, emoji)
+					// Detach from the run context so the final reaction (done/error)
+					// survives runCancel(). WithoutCancel preserves context values
+					// while removing the cancellation signal.
+					rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+					defer cancel()
+					return deps.reactionFn(rctx, delivery, emoji)
 				},
 			},
 			Emojis: &telegramEmojis,
@@ -182,7 +187,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	if err != nil {
 		if statusCtrl != nil {
 			statusCtrl.SetError()
-			statusCtrl.Close()
+			statusCtrl.CloseAfterDrain()
 		}
 		handleRunError(ctx, params, deps, broadcaster, logger, err, now)
 		return
@@ -190,7 +195,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 
 	if statusCtrl != nil {
 		statusCtrl.SetDone()
-		statusCtrl.Close()
+		statusCtrl.CloseAfterDrain()
 	}
 	handleRunSuccess(ctx, params, deps, broadcaster, logger, result, now)
 }
@@ -409,29 +414,8 @@ func executeAgentRun(
 		APIType:   apiType,
 	}
 
-	// Mid-conversation memory extraction (Honcho Neuromancer-style).
-	// Every ~1000 tokens, asynchronously extract facts from accumulated context.
-	if deps.memoryStore != nil {
-		var lastExtractTokens int
-		cfg.OnTurn = func(turn int, accumulatedTokens int) {
-			delta := accumulatedTokens - lastExtractTokens
-			if delta >= memory.TokenThreshold {
-				lastExtractTokens = accumulatedTokens
-				go func() {
-					extractCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-					defer cancel()
-					sglangClient := getSglangClient()
-					// Use the user message + accumulated context for mid-run extraction.
-					facts, err := memory.ExtractFacts(extractCtx, sglangClient, sglangModel,
-						params.Message, fmt.Sprintf("[mid-run turn %d, %d tokens]", turn, accumulatedTokens), logger)
-					if err == nil && len(facts) > 0 {
-						memory.InsertExtractedFacts(extractCtx, deps.memoryStore, deps.memoryEmbedder, facts, logger)
-						logger.Debug("mid-run memory extraction", "turn", turn, "facts", len(facts))
-					}
-				}()
-			}
-		}
-	}
+	// Mid-run memory extraction removed: it used placeholder context ("[mid-run turn N, M tokens]")
+	// producing low-quality facts. End-of-run extraction (below) has full response text.
 
 	// 10. Set up stream hooks: compose broadcaster (WS deltas) + typing + status reactions.
 	var hooks StreamHooks

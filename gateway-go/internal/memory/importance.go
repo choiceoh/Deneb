@@ -18,8 +18,6 @@ import (
 const (
 	importanceTimeout   = 30 * time.Second
 	importanceMaxTokens = 512
-	// TokenThreshold is the number of conversation tokens between importance evaluations.
-	TokenThreshold = 1000
 )
 
 // ExtractedFact is the structured output from the importance extraction LLM call.
@@ -97,8 +95,8 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 
 	var facts []ExtractedFact
 	if err := json.Unmarshal([]byte(text), &facts); err != nil {
-		logger.Debug("importance: JSON parse failed, trying fallback", "error", err, "raw", text)
-		return parseBulletFallback(text), nil
+		logger.Debug("importance: JSON parse failed, dropping", "error", err, "raw", truncate(text, 200))
+		return nil, nil
 	}
 
 	// Validate and clamp values.
@@ -225,21 +223,3 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-// parseBulletFallback handles the legacy unstructured bullet-point format.
-func parseBulletFallback(text string) []ExtractedFact {
-	var facts []ExtractedFact
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") {
-			content := strings.TrimPrefix(strings.TrimPrefix(line, "- "), "* ")
-			if content != "" {
-				facts = append(facts, ExtractedFact{
-					Content:    content,
-					Category:   CategoryContext,
-					Importance: 0.5,
-				})
-			}
-		}
-	}
-	return facts
-}

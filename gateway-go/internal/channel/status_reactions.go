@@ -409,6 +409,21 @@ func (c *StatusReactionController) RestoreInitial() {
 	})
 }
 
+// CloseAfterDrain waits for all enqueued operations (including the terminal
+// emoji from SetDone/SetError) to complete before stopping the run loop.
+// Times out after 15 seconds to avoid blocking indefinitely.
+func (c *StatusReactionController) CloseAfterDrain() {
+	drained := make(chan struct{})
+	c.enqueue(func() {
+		close(drained)
+	})
+	select {
+	case <-drained:
+	case <-time.After(15 * time.Second):
+	}
+	c.Close()
+}
+
 // Close stops the controller's serialization goroutine.
 func (c *StatusReactionController) Close() {
 	select {
