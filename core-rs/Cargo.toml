@@ -3,7 +3,7 @@ members = ["core", "vega", "ml", "agent-runtime"]
 resolver = "2"
 
 [workspace.dependencies]
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["raw_value"] }
 prost = "0.13"
 prost-types = "0.13"

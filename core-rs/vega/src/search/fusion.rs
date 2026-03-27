@@ -40,6 +40,7 @@ pub struct ProjectScore {
 
 /// Negate a date string for reverse-chronological sort key.
 /// Each digit d → (9-d), empty → "z" (sorts last).
+#[cfg(test)]
 fn negate_date_str(date_str: &str) -> String {
     if date_str.is_empty() {
         return "z".to_string();
@@ -80,6 +81,35 @@ fn score_sqlite_chunks(
     let mut name_by_id: HashMap<i64, String> = HashMap::new();
     let mut id_by_name: HashMap<String, i64> = HashMap::new();
 
+    // Pre-lowercase all tokens once to avoid per-chunk allocations.
+    // Each token stores (lowered_text, bonus_weight) so scoring is self-contained.
+    let structural_tokens: Vec<(String, f64)> = [
+        &extracted.clients,
+        &extracted.persons,
+        &extracted.statuses,
+        &extracted.tags,
+    ]
+    .iter()
+    .flat_map(|group| group.iter().map(|t| (t.to_lowercase(), 8.0)))
+    .collect();
+
+    let keyword_tokens: Vec<(String, f64)> = extracted
+        .keywords
+        .iter()
+        .map(|t| {
+            let weight = 4.0 + (t.chars().count().saturating_sub(2) as f64) * 2.0;
+            (t.to_lowercase(), weight)
+        })
+        .collect();
+
+    let all_scored_tokens: Vec<&(String, f64)> = structural_tokens
+        .iter()
+        .chain(keyword_tokens.iter())
+        .collect();
+
+    // Reusable buffer for building haystack strings.
+    let mut haystack_buf = String::with_capacity(512);
+
     for (rank, row) in chunks.iter().enumerate() {
         let pid = row.project_id;
         name_by_id.insert(pid, row.name.clone());
@@ -89,29 +119,30 @@ fn score_sqlite_chunks(
 
         let mut score = (60.0 - rank as f64).max(0.0);
 
-        let haystack = format!(
-            "{} {} {} {} {} {}",
-            row.name, row.client, row.status, row.person_internal, row.section_heading, row.content
-        )
-        .to_lowercase();
+        // Build haystack in reusable buffer to avoid per-chunk allocation.
+        haystack_buf.clear();
+        for (i, field) in [
+            &row.name,
+            &row.client,
+            &row.status,
+            &row.person_internal,
+            &row.section_heading,
+            &row.content,
+        ]
+        .iter()
+        .enumerate()
+        {
+            if i > 0 {
+                haystack_buf.push(' ');
+            }
+            haystack_buf.push_str(field);
+        }
+        let haystack = haystack_buf.to_lowercase();
 
-        // Token match bonuses
-        for group in [
-            ("structural", &extracted.clients),
-            ("structural", &extracted.persons),
-            ("structural", &extracted.statuses),
-            ("structural", &extracted.tags),
-            ("keywords", &extracted.keywords),
-        ] {
-            for token in group.1 {
-                if !token.is_empty() && haystack.contains(&token.to_lowercase()) {
-                    if group.0 == "structural" {
-                        score += 8.0;
-                    } else {
-                        // Longer keywords get higher weight
-                        score += 4.0 + (token.chars().count().saturating_sub(2) as f64) * 2.0;
-                    }
-                }
+        // Token match bonuses (tokens are already lowercased with pre-computed weights).
+        for &(ref token, weight) in &all_scored_tokens {
+            if !token.is_empty() && haystack.contains(token.as_str()) {
+                score += weight;
             }
         }
 
@@ -129,12 +160,14 @@ fn score_sqlite_chunks(
         }
     }
 
-    // Project name direct match bonus
-    let all_tokens: Vec<&String> = extracted
+    // Project name direct match bonus.
+    // Pre-lowercase all tokens once to avoid per-project allocations.
+    let all_tokens_lower: Vec<String> = extracted
         .keywords
         .iter()
         .chain(&extracted.clients)
         .chain(&extracted.persons)
+        .map(|t| t.to_lowercase())
         .collect();
 
     for (pid, name) in &name_by_id {
@@ -148,11 +181,10 @@ fn score_sqlite_chunks(
             .collect();
 
         let mut best_bonus = 0.0f64;
-        for token in &all_tokens {
-            let tl = token.to_lowercase();
-            if tl == name_lower || (!name_words.is_empty() && tl == name_words[0]) {
+        for tl in &all_tokens_lower {
+            if *tl == name_lower || (!name_words.is_empty() && tl.as_str() == name_words[0]) {
                 best_bonus = best_bonus.max(30.0);
-            } else if name_lower.contains(&tl) {
+            } else if name_lower.contains(tl.as_str()) {
                 best_bonus = best_bonus.max(20.0);
             }
         }
@@ -216,7 +248,7 @@ pub fn rerank_fusion(
         let ord_b = order.get(&b.project_id).copied().unwrap_or(usize::MAX);
         ord_a
             .cmp(&ord_b)
-            .then_with(|| negate_date_str(&a.entry_date).cmp(&negate_date_str(&b.entry_date)))
+            .then_with(|| b.entry_date.cmp(&a.entry_date)) // reverse for newest-first
             .then_with(|| a.chunk_id.cmp(&b.chunk_id))
     });
 
