@@ -106,8 +106,19 @@ func main() {
 		server.WithConfig(rtCfg),
 	)
 
+	// Detect or auto-launch embedding server (DGX Spark).
+	embedResult := vega.DetectOrLaunchEmbedServer(logger)
+	stopEmbed := func() {
+		if embedResult.Server != nil {
+			embedResult.Server.Stop()
+		}
+	}
+
 	// Initialize Vega backend (SGLang-enhanced search).
-	initVega(srv, logger)
+	initVega(srv, logger, embedResult.Endpoint)
+
+	// Share embedding endpoint with the memory subsystem.
+	srv.SetEmbedEndpoint(embedResult.Endpoint)
 
 	if bootstrap.GeneratedToken != "" {
 		logger.Info("gateway auth token auto-generated",
@@ -162,8 +173,9 @@ func main() {
 			return srv.Run(ctx)
 		}, logger)
 
-		// Explicitly stop daemon before os.Exit (defers won't run).
+		// Explicitly stop services before os.Exit (defers won't run).
 		d.Stop()
+		stopEmbed()
 		os.Exit(exitCode)
 	}
 
@@ -173,6 +185,7 @@ func main() {
 		logger.Info("deneb gateway starting", "addr", addr)
 		return srv.Run(ctx)
 	}, logger)
+	stopEmbed()
 	os.Exit(exitCode)
 }
 
@@ -213,7 +226,7 @@ func runWithSignals(run func(ctx context.Context) error, logger *slog.Logger) in
 }
 
 // initVega sets up the Vega search backend with SGLang embedding and query expansion.
-func initVega(srv *server.Server, logger *slog.Logger) {
+func initVega(srv *server.Server, logger *slog.Logger, embed *vega.EmbedEndpoint) {
 	const (
 		sglangURL   = "http://127.0.0.1:30000/v1"
 		sglangModel = "Qwen/Qwen3.5-35B-A3B"
@@ -224,17 +237,18 @@ func initVega(srv *server.Server, logger *slog.Logger) {
 		return
 	}
 
-	backend := vega.NewEnhancedBackend(vega.EnhancedBackendConfig{
+	cfg := vega.EnhancedBackendConfig{
 		Logger:      logger,
 		SglangURL:   sglangURL,
 		SglangModel: sglangModel,
-	})
-	srv.SetVega(backend)
+	}
+	if embed != nil {
+		cfg.EmbedURL = embed.URL
+		cfg.EmbedModel = embed.Model
+	}
 
-	logger.Info("vega: EnhancedBackend initialized",
-		"sglang_url", sglangURL,
-		"model", sglangModel,
-	)
+	backend := vega.NewEnhancedBackend(cfg)
+	srv.SetVega(backend)
 }
 
 func parseLogLevel(s string) slog.Level {

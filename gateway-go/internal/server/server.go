@@ -109,6 +109,7 @@ type Server struct {
 	activity        *monitoring.ActivityTracker
 	channelEvents   *monitoring.ChannelEventTracker
 	vegaBackend     vega.Backend
+	embedEndpoint   *vega.EmbedEndpoint
 
 	// Phase 3: Advanced workflow subsystems.
 	approvals *approval.Store
@@ -897,6 +898,11 @@ func (s *Server) SetVega(backend vega.Backend) {
 	rpc.RegisterVegaMethods(s.dispatcher, rpc.VegaDeps{Backend: backend})
 }
 
+// SetEmbedEndpoint stores the auto-detected embedding endpoint for the memory subsystem.
+func (s *Server) SetEmbedEndpoint(ep *vega.EmbedEndpoint) {
+	s.embedEndpoint = ep
+}
+
 // Broadcaster returns the event broadcaster for external use.
 func (s *Server) Broadcaster() *events.Broadcaster {
 	return s.broadcaster
@@ -952,13 +958,18 @@ func (s *Server) registerPhase2Methods() {
 			const sglangURL = "http://127.0.0.1:30000/v1"
 			const sglangModel = "Qwen/Qwen3.5-35B-A3B"
 
-			embedder := memory.NewEmbedder(sglangURL, sglangModel, memStore, s.logger)
-			chatCfg.MemoryEmbedder = embedder
+			// Use the embedding endpoint set during gateway init.
+			if s.embedEndpoint != nil {
+				embedder := memory.NewEmbedder(s.embedEndpoint.URL, s.embedEndpoint.Model, memStore, s.logger)
+				chatCfg.MemoryEmbedder = embedder
 
-			sglangClient := llm.NewClient(sglangURL, "", llm.WithLogger(s.logger))
-			trigger := memory.NewDreamingTrigger(memStore, embedder, sglangClient, sglangModel, s.logger)
-			chatCfg.DreamingTrigger = trigger
-			trigger.StartPeriodicTimer(context.Background())
+				sglangClient := llm.NewClient(sglangURL, "", llm.WithLogger(s.logger))
+				trigger := memory.NewDreamingTrigger(memStore, embedder, sglangClient, sglangModel, s.logger)
+				chatCfg.DreamingTrigger = trigger
+				trigger.StartPeriodicTimer(context.Background())
+			} else {
+				s.logger.Info("aurora-memory: embedding disabled (no embedding server detected)")
+			}
 
 			// Auto-migrate existing MEMORY.md on first run.
 			count, _ := memStore.ActiveFactCount(context.Background())

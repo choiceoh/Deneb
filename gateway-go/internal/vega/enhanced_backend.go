@@ -21,9 +21,15 @@ type EnhancedBackend struct {
 
 // EnhancedBackendConfig configures the EnhancedBackend.
 type EnhancedBackendConfig struct {
-	Logger     *slog.Logger
-	SglangURL  string // e.g. "http://127.0.0.1:30000/v1"
-	SglangModel string // e.g. "Qwen/Qwen3.5-35B-A3B"
+	Logger      *slog.Logger
+	SglangURL   string // e.g. "http://127.0.0.1:30000/v1" — used for chat/expansion
+	SglangModel string // e.g. "Qwen/Qwen3.5-35B-A3B" — chat model for expansion
+
+	// EmbedURL and EmbedModel configure a separate embedding endpoint.
+	// The embedding server must be launched with --is-embedding.
+	// If empty, embedding is skipped and search falls back to FTS-only.
+	EmbedURL   string // e.g. "http://127.0.0.1:30001/v1"
+	EmbedModel string // e.g. "BAAI/bge-m3"
 }
 
 // NewEnhancedBackend creates a Vega backend with SGLang embedding and query expansion.
@@ -33,10 +39,22 @@ func NewEnhancedBackend(cfg EnhancedBackendConfig) *EnhancedBackend {
 	}
 
 	rust := NewRustBackend(RustBackendConfig{Logger: cfg.Logger})
-	embedder := NewSglangEmbedder(cfg.SglangURL, cfg.SglangModel, cfg.Logger)
+
+	// Embedder uses a dedicated embedding endpoint if configured;
+	// otherwise nil so search gracefully falls back to FTS-only.
+	var embedder *SglangEmbedder
+	if cfg.EmbedURL != "" && cfg.EmbedModel != "" {
+		embedder = NewSglangEmbedder(cfg.EmbedURL, cfg.EmbedModel, cfg.Logger)
+	}
+
 	expander := NewLLMExpander(cfg.SglangURL, cfg.SglangModel, cfg.Logger)
 
-	cfg.Logger.Info("vega: using EnhancedBackend (SGLang + Rust FTS)")
+	if embedder != nil {
+		cfg.Logger.Info("vega: using EnhancedBackend (embedding + expansion + Rust FTS)",
+			"embed_url", cfg.EmbedURL, "embed_model", cfg.EmbedModel)
+	} else {
+		cfg.Logger.Info("vega: using EnhancedBackend (expansion + Rust FTS, no embedding)")
+	}
 	return &EnhancedBackend{
 		rust:     rust,
 		embedder: embedder,
@@ -68,18 +86,20 @@ func (eb *EnhancedBackend) Search(ctx context.Context, query string, opts Search
 	// Both are best-effort — failures fall back to FTS-only.
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		vec, err := eb.embedder.EmbedQuery(ctx, query)
-		if err != nil {
-			eb.logger.Debug("vega: embedding failed, falling back to FTS", "error", err)
-			return
-		}
-		mu.Lock()
-		queryVec = vec
-		mu.Unlock()
-	}()
+	if eb.embedder != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			vec, err := eb.embedder.EmbedQuery(ctx, query)
+			if err != nil {
+				eb.logger.Debug("vega: embedding failed, falling back to FTS", "error", err)
+				return
+			}
+			mu.Lock()
+			queryVec = vec
+			mu.Unlock()
+		}()
+	}
 
 	wg.Add(1)
 	go func() {
