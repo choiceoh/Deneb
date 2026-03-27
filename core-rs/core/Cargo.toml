@@ -70,6 +70,9 @@ pulldown-cmark = { version = "0.12", default-features = false, features = ["simd
 deneb-vega = { path = "../vega", optional = true }
 deneb-ml = { path = "../ml", optional = true }
 
+[dev-dependencies]
+proptest = "1.5"
+
 [lints]
 workspace = true
 
