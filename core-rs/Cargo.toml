@@ -6,7 +6,7 @@ resolver = "2"
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["raw_value"] }
 prost = "0.13"
-prost-types = "0.13"
+prost-types = "0.14"
 thiserror = "2"
 regex = "1"
 # Fancy regex for patterns with lookahead/lookbehind (e.g., secret ref ID validation).
