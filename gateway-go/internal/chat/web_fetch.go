@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/liteparse"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
 )
 
@@ -180,6 +181,7 @@ func webFetchURL(ctx context.Context, cache *FetchCache, sglang *sglangExtractor
 		strings.Contains(result.ContentType, "application/xhtml")
 	isJSON := strings.Contains(result.ContentType, "application/json") ||
 		strings.Contains(result.ContentType, "+json")
+	isDocument := liteparse.Available() && liteparse.SupportedMIME(result.ContentType)
 
 	var content string
 	switch {
@@ -187,6 +189,9 @@ func webFetchURL(ctx context.Context, cache *FetchCache, sglang *sglangExtractor
 		content = processHTML(ctx, rawContent, targetURL, sglang, &meta)
 	case isJSON:
 		content = processJSON(rawContent)
+	case isDocument:
+		// Use raw bytes (not charset-normalized string) for binary documents.
+		content = processDocument(ctx, result.Data, targetURL)
 	default:
 		content = rawContent
 	}
@@ -307,6 +312,31 @@ func processJSON(raw string) string {
 		return raw
 	}
 	return string(pretty)
+}
+
+// processDocument extracts text from a binary document (PDF, Office, etc.)
+// using the LiteParse CLI. Falls back to a notice if parsing fails.
+func processDocument(ctx context.Context, data []byte, url string) string {
+	name := "document"
+	if url != "" {
+		// Extract filename from URL path.
+		if idx := strings.LastIndex(url, "/"); idx >= 0 {
+			name = url[idx+1:]
+		}
+		// Strip query string.
+		if idx := strings.Index(name, "?"); idx >= 0 {
+			name = name[:idx]
+		}
+	}
+
+	text, err := liteparse.Parse(ctx, data, name)
+	if err != nil {
+		return fmt.Sprintf("(문서 파싱 실패: %s)", err)
+	}
+	if strings.TrimSpace(text) == "" {
+		return "(문서에서 텍스트를 추출하지 못했습니다)"
+	}
+	return text
 }
 
 func fetchYouTube(ctx context.Context, url string) (string, error) {
