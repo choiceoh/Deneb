@@ -178,6 +178,9 @@ func (c *Client) StreamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 	if len(req.StopSequences) > 0 {
 		oaiReq.Stop = req.StopSequences
 	}
+	if req.ResponseFormat != nil {
+		oaiReq.ResponseFormat = req.ResponseFormat
+	}
 
 	body, err := json.Marshal(oaiReq)
 	if err != nil {
@@ -490,6 +493,7 @@ type openAIRequest struct {
 	PresencePenalty  *float64          `json:"presence_penalty,omitempty"`
 	Stop             []string          `json:"stop,omitempty"`
 	Tools            []openAITool      `json:"tools,omitempty"`
+	ResponseFormat   *ResponseFormat   `json:"response_format,omitempty"`
 }
 
 // openAIStreamOpts controls streaming behavior.

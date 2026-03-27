@@ -112,7 +112,7 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 		truncate(userMessage, 4000),
 		truncate(agentResponse, 8000))
 
-	text, err := callSglang(ctx, client, model, importanceSystemPrompt, prompt, importanceMaxTokens)
+	text, err := callSglangJSON(ctx, client, model, importanceSystemPrompt, prompt, importanceMaxTokens)
 	if err != nil {
 		return nil, fmt.Errorf("importance extraction: %w", err)
 	}
@@ -125,8 +125,18 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 
 	var facts []ExtractedFact
 	if err := json.Unmarshal([]byte(text), &facts); err != nil {
-		logger.Debug("importance: JSON parse failed, dropping", "error", err, "raw", truncate(text, 200))
-		return nil, nil
+		// Fallback: try to extract a JSON array from within the text.
+		if extracted, ok := extractJSONArray(text); ok {
+			if err2 := json.Unmarshal([]byte(extracted), &facts); err2 != nil {
+				logger.Debug("importance: JSON parse failed after extraction fallback",
+					"error", err2, "raw", truncate(text, 200))
+				return nil, nil
+			}
+		} else {
+			logger.Debug("importance: JSON parse failed, no array found",
+				"error", err, "raw", truncate(text, 200))
+			return nil, nil
+		}
 	}
 
 	// Validate, clamp values, and enforce max count.
@@ -243,6 +253,20 @@ func updateUserModelFromFact(ctx context.Context, store *Store, fact ExtractedFa
 }
 
 // --- Helpers ---
+
+// extractJSONArray finds the first '[' and last ']' in s and returns the
+// substring between them. Handles cases where the model wraps JSON in prose.
+func extractJSONArray(s string) (string, bool) {
+	start := strings.Index(s, "[")
+	if start == -1 {
+		return "", false
+	}
+	end := strings.LastIndex(s, "]")
+	if end == -1 || end <= start {
+		return "", false
+	}
+	return s[start : end+1], true
+}
 
 func stripCodeFences(s string) string {
 	s = strings.TrimSpace(s)

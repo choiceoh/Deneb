@@ -27,8 +27,17 @@ type ChatRequest struct {
 	FrequencyPenalty *float64        `json:"-"` // OpenAI only; excluded from Anthropic JSON
 	PresencePenalty  *float64        `json:"-"` // OpenAI only; excluded from Anthropic JSON
 
+	// ResponseFormat requests structured output (OpenAI-compatible).
+	// Use &ResponseFormat{Type: "json_object"} for JSON mode.
+	ResponseFormat *ResponseFormat `json:"-"` // OpenAI only; excluded from Anthropic JSON
+
 	// Anthropic extended thinking support.
 	Thinking *ThinkingConfig `json:"thinking,omitempty"`
+}
+
+// ResponseFormat controls the output format for OpenAI-compatible endpoints.
+type ResponseFormat struct {
+	Type string `json:"type"` // "json_object" or "text"
 }
 
 // SystemString is a convenience for setting a plain string system prompt.
