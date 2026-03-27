@@ -400,6 +400,9 @@ func (s *Store) GetUserModelEntry(ctx context.Context, key string) (*UserModelEn
 	err := s.db.QueryRowContext(ctx,
 		`SELECT key, value, confidence, updated_at FROM user_model WHERE key = ?`, key,
 	).Scan(&e.Key, &e.Value, &e.Confidence, &updatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

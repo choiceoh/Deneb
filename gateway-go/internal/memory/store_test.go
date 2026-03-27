@@ -211,3 +211,86 @@ func TestCosineSimilarity(t *testing.T) {
 	}
 }
 
+func TestGetUserModelEntry(t *testing.T) {
+	s := tempStore(t)
+	ctx := context.Background()
+
+	// Non-existent key returns nil, nil.
+	entry, err := s.GetUserModelEntry(ctx, "nonexistent")
+	if err != nil {
+		t.Fatalf("expected nil error for missing key, got %v", err)
+	}
+	if entry != nil {
+		t.Fatalf("expected nil entry for missing key, got %+v", entry)
+	}
+
+	// Insert and retrieve.
+	_ = s.SetUserModel(ctx, "mu_test", "테스트 값", 0.75)
+	entry, err = s.GetUserModelEntry(ctx, "mu_test")
+	if err != nil {
+		t.Fatalf("GetUserModelEntry: %v", err)
+	}
+	if entry == nil || entry.Value != "테스트 값" || entry.Confidence != 0.75 {
+		t.Errorf("unexpected entry: %+v", entry)
+	}
+}
+
+func TestGetFactReadOnly(t *testing.T) {
+	s := tempStore(t)
+	ctx := context.Background()
+
+	id, _ := s.InsertFact(ctx, Fact{
+		Content:  "읽기 전용 테스트",
+		Category: CategoryContext,
+	})
+
+	// ReadOnly should not increment access_count.
+	f, err := s.GetFactReadOnly(ctx, id)
+	if err != nil {
+		t.Fatalf("GetFactReadOnly: %v", err)
+	}
+	if f.AccessCount != 0 {
+		t.Errorf("expected access_count=0 after ReadOnly, got %d", f.AccessCount)
+	}
+
+	// Regular GetFact should increment.
+	f2, _ := s.GetFact(ctx, id)
+	if f2.AccessCount != 1 {
+		t.Errorf("expected access_count=1 after GetFact, got %d", f2.AccessCount)
+	}
+}
+
+func TestFormatPreviousState(t *testing.T) {
+	empty := formatPreviousState(map[string]string{})
+	if empty != "" {
+		t.Errorf("expected empty string for empty map, got %q", empty)
+	}
+
+	m := map[string]string{
+		"user_sees_ai":    "만족도 높음",
+		"adaptation_notes": "간결하게 답변할 것",
+	}
+	result := formatPreviousState(m)
+	if !strings.Contains(result, "사용자 → AI 인식") || !strings.Contains(result, "만족도 높음") {
+		t.Errorf("expected user_sees_ai label+value, got %q", result)
+	}
+	if !strings.Contains(result, "적응 메모") || !strings.Contains(result, "간결하게") {
+		t.Errorf("expected adaptation_notes label+value, got %q", result)
+	}
+}
+
+func TestTruncateRuneSafe(t *testing.T) {
+	// Korean text: each character is 3 bytes but 1 rune.
+	korean := "가나다라마바사아자차카타파하"
+	result := truncate(korean, 5)
+	if result != "가나다라마..." {
+		t.Errorf("expected 5 Korean runes + ellipsis, got %q", result)
+	}
+
+	// Short string should pass through unchanged.
+	short := "abc"
+	if truncate(short, 10) != "abc" {
+		t.Errorf("short string should pass through unchanged")
+	}
+}
+

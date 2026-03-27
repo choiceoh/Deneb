@@ -184,15 +184,17 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 		}
 	}
 
-	// Clear consumed mu_signals_raw after successful synthesis.
-	if updated > 0 {
-		_ = store.SetUserModel(ctx, "mu_signals_raw", "", 0)
+	// Always clear consumed mu_signals_raw after successful LLM call,
+	// even if no keys were updated — prevents unbounded accumulation
+	// when the LLM produces empty/unrecognized output.
+	_ = store.SetUserModel(ctx, "mu_signals_raw", "", 0)
 
+	if updated > 0 {
 		// Append a history snapshot: concise summary of what changed this cycle.
 		appendRelationshipHistory(ctx, store, entryMap, profile, logger)
-
-		logger.Info("aurora-dream: updated mutual understanding", "keys", updated, "signals_consumed", mutualFacts)
 	}
+
+	logger.Info("aurora-dream: mutual understanding synthesis done", "keys_updated", updated, "signals_consumed", mutualFacts)
 
 	return nil
 }
@@ -206,11 +208,12 @@ func appendRelationshipHistory(ctx context.Context, store *Store, entryMap map[s
 	date := time.Now().Format("01-02")
 	var parts []string
 	if v := profile["relationship_dynamics"]; v != "" {
-		// Take first sentence only for compactness.
-		if idx := strings.IndexAny(v, ".。"); idx > 0 && idx < 80 {
+		// Take first sentence only for compactness. Use rune-safe operations.
+		runes := []rune(v)
+		if idx := strings.IndexAny(v, ".。"); idx > 0 && len([]rune(v[:idx])) < 80 {
 			parts = append(parts, v[:idx+1])
-		} else if len(v) > 80 {
-			parts = append(parts, v[:80]+"…")
+		} else if len(runes) > 80 {
+			parts = append(parts, string(runes[:80])+"…")
 		} else {
 			parts = append(parts, v)
 		}
@@ -220,9 +223,10 @@ func appendRelationshipHistory(ctx context.Context, store *Store, entryMap map[s
 		lines := strings.SplitN(v, "\n", 2)
 		first := strings.TrimLeft(lines[0], "- •")
 		first = strings.TrimSpace(first)
-		if first != "" && len(first) > 3 {
-			if len(first) > 60 {
-				first = first[:60] + "…"
+		firstRunes := []rune(first)
+		if len(firstRunes) > 3 {
+			if len(firstRunes) > 60 {
+				first = string(firstRunes[:60]) + "…"
 			}
 			parts = append(parts, "적응: "+first)
 		}

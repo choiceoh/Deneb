@@ -277,11 +277,14 @@ func clamp(v, min, max float64) float64 {
 	return v
 }
 
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+// truncate truncates s to at most maxRunes runes, appending "..." if truncated.
+// Rune-safe for Korean/CJK multi-byte UTF-8.
+func truncate(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
 		return s
 	}
-	return s[:maxLen] + "..."
+	return string(runes[:maxRunes]) + "..."
 }
 
 // parseBulletFallback handles the legacy unstructured bullet-point format.
