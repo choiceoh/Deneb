@@ -58,6 +58,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
+	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
@@ -112,7 +113,7 @@ type Server struct {
 	activity        *monitoring.ActivityTracker
 	channelEvents   *monitoring.ChannelEventTracker
 	vegaBackend     vega.Backend
-	embedEndpoint   *vega.EmbedEndpoint
+	geminiEmbedder  *embedding.GeminiEmbedder
 
 	// Phase 3: Advanced workflow subsystems.
 	approvals *approval.Store
@@ -968,9 +969,9 @@ func (s *Server) SetVega(backend vega.Backend) {
 	rpc.RegisterVegaMethods(s.dispatcher, rpc.VegaDeps{Backend: backend})
 }
 
-// SetEmbedEndpoint stores the auto-detected embedding endpoint for the memory subsystem.
-func (s *Server) SetEmbedEndpoint(ep *vega.EmbedEndpoint) {
-	s.embedEndpoint = ep
+// SetGeminiEmbedder stores the Gemini embedder for the memory subsystem.
+func (s *Server) SetGeminiEmbedder(e *embedding.GeminiEmbedder) {
+	s.geminiEmbedder = e
 }
 
 // Broadcaster returns the event broadcaster for external use.
@@ -1028,9 +1029,9 @@ func (s *Server) registerPhase2Methods() {
 			const sglangURL = "http://127.0.0.1:30000/v1"
 			const sglangModel = "Qwen/Qwen3.5-35B-A3B"
 
-			// Use the embedding endpoint set during gateway init.
-			if s.embedEndpoint != nil {
-				embedder := memory.NewEmbedder(s.embedEndpoint.URL, s.embedEndpoint.Model, memStore, s.logger)
+			// Use the Gemini embedder set during gateway init.
+			if s.geminiEmbedder != nil {
+				embedder := memory.NewEmbedder(s.geminiEmbedder, memStore, s.logger)
 				chatCfg.MemoryEmbedder = embedder
 
 				sglangClient := llm.NewClient(sglangURL, "", llm.WithLogger(s.logger))
@@ -1043,7 +1044,7 @@ func (s *Server) registerPhase2Methods() {
 					}
 				}
 			} else {
-				s.logger.Info("aurora-memory: embedding disabled (no embedding server detected)")
+				s.logger.Info("aurora-memory: embedding disabled (GEMINI_API_KEY not set)")
 			}
 
 			// Auto-migrate existing MEMORY.md on first run.
