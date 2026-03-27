@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.16.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.15.0...deneb-v3.16.0) (2026-03-27)
+
+
+### ✨ Features
+
+* **chat:** add temporal context awareness to memory fact display ([bfe14a5](https://github.com/choiceoh/Deneb/commit/bfe14a50bd04c5099325336cdc5e5c5b761ea478))
+* **polaris:** add FFI bridge, RPC, auth details to architecture guide ([19d5dcf](https://github.com/choiceoh/Deneb/commit/19d5dcf18c1ec65c47df74e7e8c9075c431746fc))
+* **polaris:** enrich 15 existing guides and add 8 new tool guides ([3124ed7](https://github.com/choiceoh/Deneb/commit/3124ed7af32d293160c0e06822a332109054cebe))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** improve temporal annotations with natural Korean and two-tier volatility ([3ca53ee](https://github.com/choiceoh/Deneb/commit/3ca53ee90b2651e97d9f21b62413bf4553aae4a0))
+* **core:** replace mutex unwrap with poison-recovery in NAPI FFI boundary ([c250eaf](https://github.com/choiceoh/Deneb/commit/c250eaf1b57f757912c7f1d848d6fa3fb17756b7))
+* **memory:** align importance JSON parsing with json_object response format ([abb8e32](https://github.com/choiceoh/Deneb/commit/abb8e3285d479a0458355a3e5c50b563ef12106f))
+* **polaris:** correct constants from code review (thresholds, GC, limits) ([04341b7](https://github.com/choiceoh/Deneb/commit/04341b773008167fad124391d59f1754eafa65cb))
+
+
+### 🔧 Internal
+
+* **chat:** remove dead relativeTime wrapper, simplify factTemporalAnnotation ([ff21f7c](https://github.com/choiceoh/Deneb/commit/ff21f7c9125bcf0d2e3627ad746792a1e68a3562))
+
 ## [3.15.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.14.0...deneb-v3.15.0) (2026-03-27)
 
 
