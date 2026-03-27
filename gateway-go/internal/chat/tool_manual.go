@@ -276,24 +276,34 @@ func manualTopics(docsDir, filter string) (string, error) {
 	sort.Strings(groupOrder)
 
 	var sb strings.Builder
-	total := len(entries)
-	if filter != "" {
-		total = 0
-		for _, g := range groups {
-			total += len(g.entries)
+
+	// Compact mode: no filter → show category summary only.
+	if filter == "" {
+		fmt.Fprintf(&sb, "Deneb System Manual (%d docs, %d categories)\n\n", len(entries), len(groupOrder))
+		for _, cat := range groupOrder {
+			g := groups[cat]
+			desc := categoryDescription(g.entries)
+			if cat == "." {
+				fmt.Fprintf(&sb, "  %-16s (%2d docs)  — %s\n", "(root)", len(g.entries), desc)
+			} else {
+				fmt.Fprintf(&sb, "  %-16s (%2d docs)  — %s\n", cat+"/", len(g.entries), desc)
+			}
 		}
-		fmt.Fprintf(&sb, "Deneb System Manual — %s/ (%d docs)\n\n", filter, total)
-	} else {
-		fmt.Fprintf(&sb, "Deneb System Manual (%d docs)\n\n", total)
+		sb.WriteString("\nUse polaris(action:'topics', topic:'<category>') to browse a category.\n")
+		sb.WriteString("Use polaris(action:'search', query:'<keyword>') to search.\n")
+		sb.WriteString("Use polaris(action:'guides') for AI-curated system guides.\n")
+		return sb.String(), nil
 	}
+
+	// Detail mode: filter specified → show docs in category with summaries.
+	total := 0
+	for _, g := range groups {
+		total += len(g.entries)
+	}
+	fmt.Fprintf(&sb, "Deneb System Manual — %s/ (%d docs)\n\n", filter, total)
 
 	for _, cat := range groupOrder {
 		g := groups[cat]
-		if cat == "." {
-			fmt.Fprintf(&sb, "(root) (%d docs)\n", len(g.entries))
-		} else {
-			fmt.Fprintf(&sb, "%s/ (%d docs)\n", cat, len(g.entries))
-		}
 		for i, e := range g.entries {
 			prefix := "  |-- "
 			if i == len(g.entries)-1 {
@@ -301,7 +311,6 @@ func manualTopics(docsDir, filter string) (string, error) {
 			}
 			label := e.Title
 			if label == "" {
-				// Fall back to filename.
 				parts := strings.SplitN(e.Path, "/", 2)
 				if len(parts) > 1 {
 					label = parts[1]
@@ -310,17 +319,42 @@ func manualTopics(docsDir, filter string) (string, error) {
 				}
 			}
 			if e.Summary != "" {
-				fmt.Fprintf(&sb, "%s%s — %s\n", prefix, e.Path, label)
+				fmt.Fprintf(&sb, "%s%s — %s: %s\n", prefix, e.Path, label, e.Summary)
 			} else {
 				fmt.Fprintf(&sb, "%s%s — %s\n", prefix, e.Path, label)
 			}
 		}
-		sb.WriteString("\n")
 	}
 
-	sb.WriteString("Use polaris(action:'read', topic:'<path>') to read a doc.\n")
+	sb.WriteString("\nUse polaris(action:'read', topic:'<path>') to read a doc.\n")
 	sb.WriteString("Use polaris(action:'search', query:'<keyword>') to search.\n")
 	return sb.String(), nil
+}
+
+// categoryDescription generates a brief description from the first few doc titles.
+func categoryDescription(entries []docEntry) string {
+	const maxTitles = 3
+	var titles []string
+	for i, e := range entries {
+		if i >= maxTitles {
+			break
+		}
+		t := e.Title
+		if t == "" {
+			parts := strings.SplitN(e.Path, "/", 2)
+			if len(parts) > 1 {
+				t = parts[1]
+			} else {
+				t = parts[0]
+			}
+		}
+		titles = append(titles, t)
+	}
+	desc := strings.Join(titles, ", ")
+	if len(entries) > maxTitles {
+		desc += ", ..."
+	}
+	return desc
 }
 
 // --- search action ---
@@ -329,41 +363,99 @@ func manualSearch(docsDir, query string) (string, error) {
 	if query == "" {
 		return "", fmt.Errorf("query is required for search action")
 	}
-	if _, err := os.Stat(docsDir); err != nil {
-		return "No docs/ directory found in workspace.", nil
-	}
 
 	keywords := strings.Fields(strings.ToLower(query))
 	if len(keywords) == 0 {
 		return "No keywords provided.", nil
 	}
 
-	entries := getDocTree(docsDir)
-
 	type searchMatch struct {
-		File    string
-		Line    int
-		Snippet string
+		File     string
+		Line     int
+		Snippet  string
+		HitCount int // total keyword hits in document for relevance sorting
+		IsGuide  bool
 	}
 
 	var matches []searchMatch
-	for _, e := range entries {
-		absPath := filepath.Join(docsDir, e.Path+".md")
-		content, err := readDocFile(absPath)
-		if err != nil {
-			continue
-		}
-		_, _, body := parseFrontmatter(content)
-		lines := strings.Split(body, "\n")
 
-		matchedLines := make(map[int]bool)
-		for i, line := range lines {
-			if matchedLines[i] {
+	// Search docs/ files.
+	if _, err := os.Stat(docsDir); err == nil {
+		entries := getDocTree(docsDir)
+		for _, e := range entries {
+			absPath := filepath.Join(docsDir, e.Path+".md")
+			content, err := readDocFile(absPath)
+			if err != nil {
 				continue
 			}
-			lower := strings.ToLower(line)
+			_, _, body := parseFrontmatter(content)
+			lower := strings.ToLower(body)
+
+			// AND matching: all keywords must appear in the document.
+			allPresent := true
+			hitCount := 0
 			for _, kw := range keywords {
-				if strings.Contains(lower, kw) {
+				count := strings.Count(lower, kw)
+				if count == 0 {
+					allPresent = false
+					break
+				}
+				hitCount += count
+			}
+			if !allPresent {
+				continue
+			}
+
+			// Extract best matching snippet.
+			lines := strings.Split(body, "\n")
+			for i, line := range lines {
+				lineLower := strings.ToLower(line)
+				for _, kw := range keywords {
+					if strings.Contains(lineLower, kw) {
+						start := i - 2
+						if start < 0 {
+							start = 0
+						}
+						end := i + 3
+						if end > len(lines) {
+							end = len(lines)
+						}
+						matches = append(matches, searchMatch{
+							File:     e.Path,
+							Line:     i + 1,
+							Snippet:  strings.Join(lines[start:end], "\n"),
+							HitCount: hitCount,
+						})
+						goto nextDoc
+					}
+				}
+			}
+		nextDoc:
+		}
+	}
+
+	// Search builtin guides.
+	for _, key := range builtinGuideOrder {
+		g := builtinGuides[key]
+		lower := strings.ToLower(g.Content)
+		allPresent := true
+		hitCount := 0
+		for _, kw := range keywords {
+			count := strings.Count(lower, kw)
+			if count == 0 {
+				allPresent = false
+				break
+			}
+			hitCount += count
+		}
+		if !allPresent {
+			continue
+		}
+		lines := strings.Split(g.Content, "\n")
+		for i, line := range lines {
+			lineLower := strings.ToLower(line)
+			for _, kw := range keywords {
+				if strings.Contains(lineLower, kw) {
 					start := i - 2
 					if start < 0 {
 						start = 0
@@ -372,24 +464,16 @@ func manualSearch(docsDir, query string) (string, error) {
 					if end > len(lines) {
 						end = len(lines)
 					}
-					for j := start; j < end; j++ {
-						matchedLines[j] = true
-					}
-					snippet := strings.Join(lines[start:end], "\n")
 					matches = append(matches, searchMatch{
-						File:    e.Path,
-						Line:    i + 1,
-						Snippet: snippet,
+						File:     key,
+						Line:     i + 1,
+						Snippet:  strings.Join(lines[start:end], "\n"),
+						HitCount: hitCount,
+						IsGuide:  true,
 					})
 					break
 				}
 			}
-			if len(matches) >= manualMaxSearchResults {
-				break
-			}
-		}
-		if len(matches) >= manualMaxSearchResults {
-			break
 		}
 	}
 
@@ -397,12 +481,28 @@ func manualSearch(docsDir, query string) (string, error) {
 		return fmt.Sprintf("No matches found for %q in documentation.", query), nil
 	}
 
+	// Sort by relevance (hit count descending).
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].HitCount > matches[j].HitCount
+	})
+
+	// Cap results.
+	truncated := false
+	if len(matches) > manualMaxSearchResults {
+		matches = matches[:manualMaxSearchResults]
+		truncated = true
+	}
+
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Found %d matches for %q:\n\n", len(matches), query)
 	for _, m := range matches {
-		fmt.Fprintf(&sb, "### %s (line %d)\n%s\n\n", m.File, m.Line, m.Snippet)
+		tag := ""
+		if m.IsGuide {
+			tag = "[guide] "
+		}
+		fmt.Fprintf(&sb, "### %s%s (line %d)\n%s\n\n", tag, m.File, m.Line, m.Snippet)
 	}
-	if len(matches) >= manualMaxSearchResults {
+	if truncated {
 		sb.WriteString("... (showing first 15 results, refine your query for more specific results)\n")
 	}
 	return sb.String(), nil
@@ -429,10 +529,10 @@ func manualRead(docsDir, topic string) (string, error) {
 	_, _, body := parseFrontmatter(content)
 	body = strings.TrimSpace(body)
 
-	// Truncate if too long.
+	// Truncate if too long: head 75% + tail 25% to minimize content loss.
 	if len(body) > manualMaxReadChars {
-		headSize := manualMaxReadChars * 70 / 100
-		tailSize := manualMaxReadChars * 20 / 100
+		headSize := manualMaxReadChars * 3 / 4
+		tailSize := manualMaxReadChars - headSize
 		body = body[:headSize] + "\n\n... [truncated — use search for specific sections] ...\n\n" + body[len(body)-tailSize:]
 	}
 
@@ -453,6 +553,7 @@ type guideEntry struct {
 var builtinGuideOrder = []string{
 	"aurora", "vega", "agent-loop", "compaction", "tools",
 	"system-prompt", "memory", "sessions", "architecture", "channels",
+	"telegram", "skills", "pilot", "cron", "autonomous",
 }
 
 // builtinGuides contains AI-curated system knowledge.
@@ -517,6 +618,36 @@ var builtinGuides = map[string]guideEntry{
 		Title:   "Channel System",
 		Summary: "Plugin registry, Telegram optimization, routing, groups",
 		Content: channelsGuide,
+	},
+	"telegram": {
+		Key:     "telegram",
+		Title:   "Telegram Integration",
+		Summary: "Bot API, MarkdownV2, inline keyboards, forum topics, access control",
+		Content: telegramGuide,
+	},
+	"skills": {
+		Key:     "skills",
+		Title:   "Skills System",
+		Summary: "Skill discovery, eligibility, prompt injection, SKILL.md format",
+		Content: skillsGuide,
+	},
+	"pilot": {
+		Key:     "pilot",
+		Title:   "Pilot Tool",
+		Summary: "Local sglang AI orchestrator, shortcuts, chaining, conditional sources",
+		Content: pilotGuide,
+	},
+	"cron": {
+		Key:     "cron",
+		Title:   "Cron Scheduler",
+		Summary: "Job scheduling, delivery modes, session keys, failure alerts",
+		Content: cronGuide,
+	},
+	"autonomous": {
+		Key:     "autonomous",
+		Title:   "Autonomous System",
+		Summary: "Goal-driven cycles, stale detection, starvation alerts, memory consolidation",
+		Content: autonomousGuide,
 	},
 }
 

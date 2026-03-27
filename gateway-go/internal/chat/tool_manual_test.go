@@ -55,19 +55,26 @@ func TestSystemManualTopics(t *testing.T) {
 	root := repoRoot(t)
 	result := invokeManual(t, root, map[string]string{"action": "topics"})
 
-	// Should contain the header.
+	// Should contain the header with category count.
 	if !strings.Contains(result, "Deneb System Manual") {
 		t.Error("expected 'Deneb System Manual' header in output")
 	}
-	// Should list categories that exist in docs/.
+	if !strings.Contains(result, "categories") {
+		t.Error("expected 'categories' count in compact output")
+	}
+	// Compact mode: should list categories that exist in docs/.
 	for _, cat := range []string{"gateway/", "concepts/", "channels/"} {
 		if !strings.Contains(result, cat) {
 			t.Errorf("expected category %q in topics output", cat)
 		}
 	}
-	// Should contain usage hint.
-	if !strings.Contains(result, "polaris(action:'read'") {
-		t.Error("expected read usage hint")
+	// Compact mode: should NOT list individual doc paths (only category summary).
+	if strings.Contains(result, "  |-- ") || strings.Contains(result, "  `-- ") {
+		t.Error("compact mode should not list individual docs with tree prefixes")
+	}
+	// Should contain category browse hint.
+	if !strings.Contains(result, "polaris(action:'topics', topic:'<category>')") {
+		t.Error("expected category browse usage hint")
 	}
 }
 
@@ -82,9 +89,17 @@ func TestSystemManualTopicsWithFilter(t *testing.T) {
 	if !strings.Contains(result, "gateway/") {
 		t.Error("expected 'gateway/' in filtered output")
 	}
+	// Detail mode: should list individual docs with tree prefixes.
+	if !strings.Contains(result, "  |-- ") && !strings.Contains(result, "  `-- ") {
+		t.Error("filtered mode should list individual docs with tree prefixes")
+	}
 	// Should NOT contain other categories.
 	if strings.Contains(result, "channels/ (") {
 		t.Error("filtered output should not contain channels/ category")
+	}
+	// Should contain read usage hint.
+	if !strings.Contains(result, "polaris(action:'read'") {
+		t.Error("expected read usage hint in filtered mode")
 	}
 }
 
@@ -239,5 +254,88 @@ func TestParseFrontmatterNoFrontmatter(t *testing.T) {
 	}
 	if body != content {
 		t.Error("body should equal the original content when no frontmatter present")
+	}
+}
+
+// --- search: AND matching ---
+
+func TestSystemManualSearchMultiKeyword(t *testing.T) {
+	root := repoRoot(t)
+	// Multi-keyword AND: both words must appear in the same document.
+	result := invokeManual(t, root, map[string]string{
+		"action": "search",
+		"query":  "session lifecycle",
+	})
+
+	if strings.Contains(result, "No matches found") {
+		t.Error("expected matches for 'session lifecycle' (AND matching)")
+	}
+	if !strings.Contains(result, "matches for") {
+		t.Error("expected match count header")
+	}
+}
+
+// --- search: guide content ---
+
+func TestSystemManualSearchGuides(t *testing.T) {
+	root := repoRoot(t)
+	// "Aurora" appears in the aurora guide content.
+	result := invokeManual(t, root, map[string]string{
+		"action": "search",
+		"query":  "ownsCompaction",
+	})
+
+	// ownsCompaction is a term specific to the aurora guide.
+	if !strings.Contains(result, "[guide]") {
+		t.Error("expected guide search results marked with [guide] tag")
+	}
+}
+
+// --- guides: new entries ---
+
+func TestSystemManualGuidesNewEntries(t *testing.T) {
+	root := repoRoot(t)
+	result := invokeManual(t, root, map[string]string{
+		"action": "guides",
+	})
+
+	for _, key := range []string{"telegram", "skills", "pilot", "cron", "autonomous"} {
+		if !strings.Contains(result, key) {
+			t.Errorf("expected new guide %q in listing", key)
+		}
+	}
+}
+
+func TestSystemManualGuidesReadNewGuide(t *testing.T) {
+	root := repoRoot(t)
+	for _, tc := range []struct {
+		key   string
+		title string
+	}{
+		{"telegram", "Telegram Integration"},
+		{"skills", "Skills System"},
+		{"pilot", "Pilot Tool"},
+		{"cron", "Cron Scheduler"},
+		{"autonomous", "Autonomous System"},
+	} {
+		result := invokeManual(t, root, map[string]string{
+			"action": "guides",
+			"topic":  tc.key,
+		})
+		if !strings.Contains(result, tc.title) {
+			t.Errorf("guide %q: expected title %q in content", tc.key, tc.title)
+		}
+	}
+}
+
+// --- topics: category description ---
+
+func TestSystemManualTopicsCategoryDescription(t *testing.T) {
+	root := repoRoot(t)
+	result := invokeManual(t, root, map[string]string{"action": "topics"})
+
+	// Compact mode should include doc count with "docs" text for each category.
+	if !strings.Contains(result, "docs)") {
+		t.Error("expected doc count in category description")
 	}
 }
