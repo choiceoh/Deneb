@@ -1,5 +1,5 @@
 // dreaming.go — AuroraDream: periodic memory consolidation inspired by Honcho's "Dreaming" feature.
-// Runs every 50 turns or 8 hours to:
+// Runs every 50 turns, 8 hours, or when active facts exceed 200 to:
 //   0. Clean up expired facts
 //   1. Verify existing facts (still valid?)
 //   2. Merge duplicate/similar facts
@@ -21,11 +21,12 @@ import (
 
 // Dreaming configuration.
 const (
-	DreamingTurnThreshold  = 50
-	DreamingTimeIntervalH  = 8
-	dreamingTimeout        = 5 * time.Minute
-	dreamingBatchSize      = 20
-	dreamingMaxTokens      = 1024
+	DreamingTurnThreshold    = 50
+	DreamingTimeIntervalH    = 8
+	DreamingDataThreshold    = 200 // active fact count that triggers dreaming regardless of time/turns
+	dreamingTimeout          = 5 * time.Minute
+	dreamingBatchSize        = 20
+	dreamingMaxTokens        = 1024
 	similarityMergeThreshold = 0.85
 )
 

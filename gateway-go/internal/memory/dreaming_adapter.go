@@ -44,13 +44,25 @@ func (da *DreamingAdapter) IncrementTurn(ctx context.Context) {
 	_ = da.store.SetMeta(ctx, metaTurnCount, strconv.Itoa(count))
 }
 
-// ShouldDream checks if dreaming conditions are met: turn count >= 50 or time >= 8 hours.
+// ShouldDream checks if dreaming conditions are met:
+// turn count >= 50, time >= 8 hours, or active facts >= data threshold.
 func (da *DreamingAdapter) ShouldDream(ctx context.Context) bool {
 	// Check turn threshold.
 	countStr, _ := da.store.GetMeta(ctx, metaTurnCount)
 	count, _ := strconv.Atoi(countStr)
 	if count >= DreamingTurnThreshold {
 		return true
+	}
+
+	// Check data volume threshold — trigger when stored facts accumulate
+	// beyond the threshold, even if time and turns haven't reached limits.
+	if factCount, err := da.store.ActiveFactCount(ctx); err == nil && factCount >= DreamingDataThreshold {
+		// Only trigger if there has been at least one turn since last dream,
+		// to avoid re-triggering immediately after a cycle that didn't reduce
+		// fact count below the threshold.
+		if count > 0 {
+			return true
+		}
 	}
 
 	// Check time threshold.
