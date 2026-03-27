@@ -35,6 +35,9 @@ const (
 	SourceManual      = "manual"
 )
 
+// ExportMinImportance is the minimum importance for a fact to appear in MEMORY.md.
+const ExportMinImportance = 0.7
+
 // Fact represents a single stored memory fact.
 type Fact struct {
 	ID             int64     `json:"id"`
@@ -67,6 +70,7 @@ type DreamingLogEntry struct {
 	FactsVerified     int       `json:"facts_verified"`
 	FactsMerged       int       `json:"facts_merged"`
 	FactsExpired      int       `json:"facts_expired"`
+	FactsPruned       int       `json:"facts_pruned"`
 	PatternsExtracted int       `json:"patterns_extracted"`
 	DurationMs        int64     `json:"duration_ms"`
 }
@@ -177,6 +181,35 @@ CREATE TABLE IF NOT EXISTS metadata (
 );
 `
 
+// migrateSchema applies incremental schema changes for existing databases.
+func migrateSchema(db *sql.DB) {
+	// v1 → v2: add facts_pruned column to dreaming_log.
+	_, _ = db.Exec(`ALTER TABLE dreaming_log ADD COLUMN facts_pruned INTEGER NOT NULL DEFAULT 0`)
+}
+
+// CompactMemory is a one-time bulk cleanup that deactivates all low-importance
+// noise facts regardless of age. Same criteria as PruneNoiseFacts but without
+// the age restriction. Safe: uses soft-delete (active = 0).
+func (s *Store) CompactMemory(ctx context.Context) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Format(time.RFC3339)
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE facts SET active = 0, updated_at = ?
+		 WHERE active = 1
+		   AND importance <= 0.6
+		   AND category = ?
+		   AND source = ?
+		   AND access_count = 0
+		   AND verified_at IS NULL`,
+		now, CategoryContext, SourceAutoExtract,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 // NewStore opens or creates a memory database at dbPath.
 func NewStore(dbPath string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
@@ -196,7 +229,22 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("memory store: init schema: %w", err)
 	}
 
-	return &Store{db: db}, nil
+	// Schema migrations for existing databases.
+	migrateSchema(db)
+
+	store := &Store{db: db}
+
+	// One-time compaction: clean accumulated low-quality noise on first upgrade.
+	ctx := context.Background()
+	if v, _ := store.GetMeta(ctx, "compaction_v1"); v == "" {
+		if n, err := store.CompactMemory(ctx); err == nil && n > 0 {
+			// Log to stderr since slog may not be available yet.
+			fmt.Fprintf(os.Stderr, "aurora-memory: one-time compaction removed %d noise facts\n", n)
+		}
+		_ = store.SetMeta(ctx, "compaction_v1", "done")
+	}
+
+	return store, nil
 }
 
 // Close closes the database connection.
@@ -272,6 +320,15 @@ func (s *Store) GetActiveFacts(ctx context.Context) ([]Fact, error) {
 		`SELECT * FROM facts WHERE active = 1 ORDER BY importance DESC, created_at DESC`)
 }
 
+// GetActiveFactsAboveImportance returns active facts at or above a minimum importance score.
+func (s *Store) GetActiveFactsAboveImportance(ctx context.Context, minImportance float64) ([]Fact, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.queryFacts(ctx,
+		`SELECT * FROM facts WHERE active = 1 AND importance >= ? ORDER BY importance DESC, created_at DESC`,
+		minImportance)
+}
+
 // GetFactsByCategory returns active facts of a given category.
 func (s *Store) GetFactsByCategory(ctx context.Context, category string) ([]Fact, error) {
 	s.mu.RLock()
@@ -336,6 +393,31 @@ func (s *Store) CleanupExpired(ctx context.Context) (int64, error) {
 		`UPDATE facts SET active = 0, updated_at = ?
 		 WHERE active = 1 AND expires_at IS NOT NULL AND expires_at < ?`,
 		now, now,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// PruneNoiseFacts deactivates low-quality noise facts matching ALL criteria:
+// context category, auto_extract source, importance <= maxImportance,
+// older than maxAge, never accessed, and never verified by dreaming.
+func (s *Store) PruneNoiseFacts(ctx context.Context, maxImportance float64, maxAge time.Duration) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC()
+	cutoff := now.Add(-maxAge).Format(time.RFC3339)
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE facts SET active = 0, updated_at = ?
+		 WHERE active = 1
+		   AND importance <= ?
+		   AND category = ?
+		   AND source = ?
+		   AND created_at < ?
+		   AND access_count = 0
+		   AND verified_at IS NULL`,
+		now.Format(time.RFC3339), maxImportance, CategoryContext, SourceAutoExtract, cutoff,
 	)
 	if err != nil {
 		return 0, err
@@ -411,10 +493,10 @@ func (s *Store) InsertDreamingLog(ctx context.Context, entry DreamingLogEntry) e
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO dreaming_log (ran_at, facts_verified, facts_merged, facts_expired, patterns_extracted, duration_ms)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO dreaming_log (ran_at, facts_verified, facts_merged, facts_expired, facts_pruned, patterns_extracted, duration_ms)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		entry.RanAt.UTC().Format(time.RFC3339),
-		entry.FactsVerified, entry.FactsMerged, entry.FactsExpired,
+		entry.FactsVerified, entry.FactsMerged, entry.FactsExpired, entry.FactsPruned,
 		entry.PatternsExtracted, entry.DurationMs,
 	)
 	return err
@@ -494,9 +576,9 @@ func (s *Store) LoadEmbeddings(ctx context.Context) (map[int64][]float32, error)
 
 // --- Export ---
 
-// ExportToMarkdown generates MEMORY.md content from active facts.
+// ExportToMarkdown generates MEMORY.md content from active facts above ExportMinImportance.
 func (s *Store) ExportToMarkdown(ctx context.Context) (string, error) {
-	facts, err := s.GetActiveFacts(ctx)
+	facts, err := s.GetActiveFactsAboveImportance(ctx, ExportMinImportance)
 	if err != nil {
 		return "", err
 	}
