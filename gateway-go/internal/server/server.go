@@ -39,6 +39,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
@@ -94,6 +95,7 @@ type Server struct {
 	startedAt        time.Time
 	version          string
 	rustFFI          bool // true when Rust FFI is available
+	logColor         bool // true when ANSI color output is enabled
 	logger           *slog.Logger
 	ready            atomic.Bool
 	shutdownOnce     sync.Once
@@ -191,6 +193,13 @@ func WithVersion(version string) Option {
 func WithConfig(cfg *config.GatewayRuntimeConfig) Option {
 	return func(s *Server) {
 		s.runtimeCfg = cfg
+	}
+}
+
+// WithLogColor enables ANSI color in startup/shutdown banners.
+func WithLogColor(color bool) Option {
+	return func(s *Server) {
+		s.logColor = color
 	}
 }
 
@@ -480,7 +489,7 @@ func (s *Server) shutdown() error {
 
 func (s *Server) doShutdown() error {
 	s.ready.Store(false)
-	s.logger.Info("gateway server shutting down")
+	logging.PrintShutdown(os.Stderr, time.Since(s.startedAt), s.logColor)
 
 	// 1. Broadcast shutdown event to all connected clients.
 	s.broadcastShutdownEvent()
@@ -693,42 +702,85 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 
+	uptime := time.Since(s.startedAt)
 	s.writeJSON(w, http.StatusOK, map[string]any{
-		"status":        "ok",
-		"version":       s.version,
-		"runtime":       "go",
-		"uptime":        time.Since(s.startedAt).Milliseconds(),
-		"connections":   s.clientCnt.Load(),
-		"sessions":      s.sessions.Count(),
-		"rust_core":     s.rustFFI,
-		"auth_mode":     authMode,
-		"providers":     providerCount,
-		"processes":     activeProcesses,
-		"cronTasks":     cronTasks,
-		"hooks":         hooksCount,
-		"channelHealth": channelHealthSummary,
+		"status":    "ok",
+		"version":   s.version,
+		"uptime":    formatUptimeHTTP(uptime),
+		"uptime_ms": uptime.Milliseconds(),
+		"subsystems": map[string]any{
+			"core": coreLabel(s.rustFFI),
+			"vega": s.vegaBackend != nil,
+			"auth": authMode,
+		},
+		"connections": s.clientCnt.Load(),
+		"sessions":    s.sessions.Count(),
+		"channels":    channelHealthSummary,
+		"workers": map[string]int{
+			"processes": activeProcesses,
+			"cron":      cronTasks,
+			"hooks":     hooksCount,
+		},
+		"providers": providerCount,
 	})
 }
 
 // handleReady responds with readiness status.
 func (s *Server) handleReady(w http.ResponseWriter, _ *http.Request) {
 	ready := s.ready.Load()
-	status := http.StatusOK
+	httpStatus := http.StatusOK
+	statusLabel := "ok"
 	if !ready {
-		status = http.StatusServiceUnavailable
+		httpStatus = http.StatusServiceUnavailable
+		statusLabel = "unavailable"
 	}
-	s.writeJSON(w, status, map[string]any{"ready": ready})
+	s.writeJSON(w, httpStatus, map[string]any{
+		"status": statusLabel,
+		"ready":  ready,
+	})
 }
 
 // writeJSON encodes v as JSON to the response writer, logging any encoding errors.
 func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Server", "deneb-gateway")
 	if status != http.StatusOK {
 		w.WriteHeader(status)
 	}
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		s.logger.Error("json encode error", "error", err)
 	}
+}
+
+// coreLabel returns a human-readable label for the core backend.
+func coreLabel(rustFFI bool) string {
+	if rustFFI {
+		return "rust-ffi"
+	}
+	return "go"
+}
+
+// formatUptimeHTTP returns a human-readable uptime string for HTTP responses.
+func formatUptimeHTTP(d time.Duration) string {
+	d = d.Round(time.Second)
+	s := int(d.Seconds())
+	if s < 60 {
+		return fmt.Sprintf("%ds", s)
+	}
+	m := s / 60
+	rs := s % 60
+	if m < 60 {
+		if rs == 0 {
+			return fmt.Sprintf("%dm", m)
+		}
+		return fmt.Sprintf("%dm %ds", m, rs)
+	}
+	h := m / 60
+	rm := m % 60
+	if rm == 0 {
+		return fmt.Sprintf("%dh", h)
+	}
+	return fmt.Sprintf("%dh %dm", h, rm)
 }
 
 // handleRPC processes HTTP JSON-RPC requests via the dispatcher.
@@ -824,10 +876,10 @@ func extractBearerToken(r *http.Request) string {
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
-	s.writeJSON(w, http.StatusOK, map[string]string{
-		"service": "deneb-gateway",
-		"runtime": "go",
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"name":    "deneb-gateway",
 		"version": s.version,
+		"status":  "ok",
 	})
 }
 
