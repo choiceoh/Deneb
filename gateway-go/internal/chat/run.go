@@ -137,16 +137,33 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 
 	// Set up status reaction controller for phase-aware emoji on the user's message.
-	// Shows: 👀 queued → 🤔 thinking → 🔥 tool → 👨‍💻 coding → ⚡ web → 👍 done.
+	// Uses Telegram Bot API-compatible emojis only.
+	// Shows: 👀 queued → 🤔 thinking → 🔥 tool → ⚡ web → 👍 done.
 	var statusCtrl *channel.StatusReactionController
 	if deps.reactionFn != nil && params.Delivery != nil && params.Delivery.MessageID != "" {
 		delivery := params.Delivery
+		telegramEmojis := channel.StatusReactionEmojis{
+			Queued:     "👀",
+			Thinking:   "🤔",
+			Tool:       "🔥",
+			Coding:     "🔥", // Telegram bots may not support 👨‍💻 ZWJ; use 🔥
+			Web:        "⚡",
+			Done:       "👍",
+			Error:      "😱",
+			StallSoft:  "🥱",
+			StallHard:  "😨",
+			Compacting: "🤔",
+		}
 		statusCtrl = channel.NewStatusReactionController(channel.StatusReactionControllerParams{
 			Enabled: true,
 			Adapter: channel.StatusReactionAdapter{
 				SetReaction: func(emoji string) error {
 					return deps.reactionFn(ctx, delivery, emoji)
 				},
+			},
+			Emojis: &telegramEmojis,
+			OnError: func(err error) {
+				logger.Warn("status reaction failed", "error", err)
 			},
 		})
 		statusCtrl.SetQueued()
