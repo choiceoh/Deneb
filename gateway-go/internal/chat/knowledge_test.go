@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -233,6 +234,212 @@ func TestFormatMutualUnderstanding(t *testing.T) {
 		result := formatMutualUnderstanding(entries)
 		if strings.Contains(result, "최근 시그널") {
 			t.Errorf("should not show recent signals for empty raw, got %q", result)
+		}
+	})
+}
+
+func TestRelativeTimeSince(t *testing.T) {
+	now := time.Date(2026, 3, 27, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name string
+		t    time.Time
+		want string
+	}{
+		{"zero", time.Time{}, ""},
+		{"future", now.Add(time.Hour), "방금"},
+		{"30 seconds ago", now.Add(-30 * time.Second), "방금"},
+		{"59 minutes ago", now.Add(-59 * time.Minute), "방금"},
+		{"1 hour ago", now.Add(-time.Hour), "1시간 전"},
+		{"3 hours ago", now.Add(-3 * time.Hour), "3시간 전"},
+		{"23 hours ago", now.Add(-23 * time.Hour), "23시간 전"},
+		{"1 day ago", now.Add(-25 * time.Hour), "어제"},
+		{"2 days ago", now.Add(-2 * 24 * time.Hour), "그저께"},
+		{"3 days ago", now.Add(-3 * 24 * time.Hour), "3일 전"},
+		{"6 days ago", now.Add(-6 * 24 * time.Hour), "6일 전"},
+		{"1 week ago", now.Add(-8 * 24 * time.Hour), "1주 전"},
+		{"3 weeks ago", now.Add(-22 * 24 * time.Hour), "3주 전"},
+		{"1 month ago", now.Add(-35 * 24 * time.Hour), "1개월 전"},
+		{"6 months ago", now.Add(-180 * 24 * time.Hour), "6개월 전"},
+		{"1 year ago", now.Add(-400 * 24 * time.Hour), "1년 전"},
+		{"2 years ago", now.Add(-730 * 24 * time.Hour), "2년 전"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := relativeTimeSince(tt.t, now)
+			if got != tt.want {
+				t.Errorf("relativeTimeSince(%v, now) = %q, want %q", tt.t, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestVolatileHint(t *testing.T) {
+	now := time.Date(2026, 3, 27, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		category string
+		age      time.Duration
+		want     string
+	}{
+		{"context fresh", "context", 10 * 24 * time.Hour, ""},
+		{"context needs verification (50%)", "context", 20 * 24 * time.Hour, "확인 필요"},
+		{"context past shelf life", "context", 45 * 24 * time.Hour, "⚠변경 가능"},
+		{"preference fresh", "preference", 100 * 24 * time.Hour, ""},
+		{"preference needs verification", "preference", 200 * 24 * time.Hour, "확인 필요"},
+		{"preference past shelf life", "preference", 400 * 24 * time.Hour, "⚠변경 가능"},
+		{"decision past shelf life", "decision", 90 * 24 * time.Hour, "⚠변경 가능"},
+		{"decision needs verification", "decision", 40 * 24 * time.Hour, "확인 필요"},
+		{"unknown category default 60d", "unknown", 70 * 24 * time.Hour, "⚠변경 가능"},
+		{"zero time", "context", 0, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			updatedAt := now.Add(-tt.age)
+			if tt.name == "zero time" {
+				updatedAt = time.Time{}
+			}
+			got := volatileHint(tt.category, updatedAt, now)
+			if got != tt.want {
+				t.Errorf("volatileHint(%q, age=%v) = %q, want %q", tt.category, tt.age, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFactTemporalAnnotation(t *testing.T) {
+	now := time.Date(2026, 3, 27, 12, 0, 0, 0, time.UTC)
+
+	t.Run("simple recent fact", func(t *testing.T) {
+		f := memory.Fact{
+			Category:  "decision",
+			CreatedAt: now.Add(-3 * 24 * time.Hour),
+			UpdatedAt: now.Add(-3 * 24 * time.Hour),
+		}
+		got := factTemporalAnnotation(f, now)
+		if got != "3일 전" {
+			t.Errorf("got %q, want %q", got, "3일 전")
+		}
+	})
+
+	t.Run("created/updated gap shows both", func(t *testing.T) {
+		f := memory.Fact{
+			Category:  "context",
+			CreatedAt: now.Add(-90 * 24 * time.Hour),  // 3 months ago
+			UpdatedAt: now.Add(-1 * 24 * time.Hour),    // yesterday
+		}
+		got := factTemporalAnnotation(f, now)
+		if !strings.Contains(got, "갱신:") {
+			t.Errorf("expected 갱신: separator for large gap, got %q", got)
+		}
+		if !strings.Contains(got, "어제") {
+			t.Errorf("expected '어제' for updated, got %q", got)
+		}
+	})
+
+	t.Run("small gap uses single time", func(t *testing.T) {
+		f := memory.Fact{
+			Category:  "decision",
+			CreatedAt: now.Add(-5 * 24 * time.Hour),
+			UpdatedAt: now.Add(-3 * 24 * time.Hour),
+		}
+		got := factTemporalAnnotation(f, now)
+		if strings.Contains(got, "갱신:") {
+			t.Errorf("should not show 갱신 for small gap, got %q", got)
+		}
+	})
+
+	t.Run("stale context shows volatility", func(t *testing.T) {
+		f := memory.Fact{
+			Category:  "context",
+			CreatedAt: now.Add(-60 * 24 * time.Hour),
+			UpdatedAt: now.Add(-45 * 24 * time.Hour), // past 30-day shelf life
+		}
+		got := factTemporalAnnotation(f, now)
+		if !strings.Contains(got, "⚠변경 가능") {
+			t.Errorf("expected volatility hint, got %q", got)
+		}
+	})
+
+	t.Run("stable preference no volatility", func(t *testing.T) {
+		f := memory.Fact{
+			Category:  "preference",
+			CreatedAt: now.Add(-200 * 24 * time.Hour),
+			UpdatedAt: now.Add(-200 * 24 * time.Hour),
+		}
+		got := factTemporalAnnotation(f, now)
+		if strings.Contains(got, "⚠변경 가능") {
+			t.Errorf("preference within 365d should not be volatile, got %q", got)
+		}
+	})
+
+	t.Run("zero times returns empty", func(t *testing.T) {
+		f := memory.Fact{Category: "context"}
+		got := factTemporalAnnotation(f, now)
+		if got != "" {
+			t.Errorf("expected empty for zero times, got %q", got)
+		}
+	})
+}
+
+func TestFormatKnowledgeWithFacts_TemporalAnnotation(t *testing.T) {
+	now := time.Now()
+
+	t.Run("shows temporal label", func(t *testing.T) {
+		facts := []memory.SearchResult{{
+			Fact: memory.Fact{
+				Content:    "Go 1.22로 업그레이드 결정",
+				Category:   "decision",
+				Importance: 0.8,
+				CreatedAt:  now.Add(-3 * 24 * time.Hour),
+				UpdatedAt:  now.Add(-3 * 24 * time.Hour),
+			},
+			Score: 0.9,
+		}}
+		result := formatKnowledgeWithFacts(nil, nil, facts)
+		if !strings.Contains(result, "(3일 전)") {
+			t.Errorf("expected temporal label '(3일 전)', got: %q", result)
+		}
+	})
+
+	t.Run("shows created/updated separation", func(t *testing.T) {
+		facts := []memory.SearchResult{{
+			Fact: memory.Fact{
+				Content:    "test fact",
+				Category:   "context",
+				Importance: 0.5,
+				CreatedAt:  now.Add(-90 * 24 * time.Hour), // 3 months ago
+				UpdatedAt:  now.Add(-2 * time.Hour),       // 2 hours ago
+			},
+			Score: 0.8,
+		}}
+		result := formatKnowledgeWithFacts(nil, nil, facts)
+		if !strings.Contains(result, "갱신:") {
+			t.Errorf("expected created/updated separation, got: %q", result)
+		}
+		if !strings.Contains(result, "2시간 전") {
+			t.Errorf("expected '2시간 전' from UpdatedAt, got: %q", result)
+		}
+	})
+
+	t.Run("graceful degradation for zero time", func(t *testing.T) {
+		facts := []memory.SearchResult{{
+			Fact: memory.Fact{
+				Content:    "no timestamp fact",
+				Category:   "context",
+				Importance: 0.5,
+			},
+			Score: 0.7,
+		}}
+		result := formatKnowledgeWithFacts(nil, nil, facts)
+		if strings.Contains(result, "()") {
+			t.Errorf("should not show empty parens, got: %q", result)
+		}
+		if !strings.Contains(result, "no timestamp fact") {
+			t.Errorf("fact content should still appear, got: %q", result)
 		}
 	})
 }

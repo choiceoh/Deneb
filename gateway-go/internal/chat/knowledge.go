@@ -127,6 +127,127 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 	return strings.Join(parts, "\n")
 }
 
+// categoryVolatileDays defines "shelf life" per fact category.
+// Facts older than this threshold (relative to UpdatedAt) get a staleness hint.
+// Stable facts (names, preferences) have long shelf lives; volatile facts (context, decisions)
+// go stale faster.
+var categoryVolatileDays = map[string]int{
+	"context":    30,  // project context changes frequently
+	"decision":   60,  // decisions may be revisited
+	"solution":   90,  // solutions stay relevant longer
+	"preference": 365, // preferences are relatively stable
+	"user_model": 365, // user traits rarely change
+	"mutual":     180, // relationship dynamics evolve slowly
+}
+
+// volatileHint returns a staleness hint based on how far past the category shelf life:
+//   - past 50% of shelf life → "확인 필요" (should verify)
+//   - past 100% of shelf life → "⚠변경 가능" (likely stale)
+//   - within 50% → "" (still fresh)
+func volatileHint(category string, updatedAt time.Time, now time.Time) string {
+	if updatedAt.IsZero() {
+		return ""
+	}
+	shelfDays, ok := categoryVolatileDays[category]
+	if !ok {
+		shelfDays = 60 // conservative default
+	}
+	age := now.Sub(updatedAt)
+	shelf := time.Duration(shelfDays) * 24 * time.Hour
+	switch {
+	case age > shelf:
+		return "⚠변경 가능"
+	case age > shelf/2:
+		return "확인 필요"
+	default:
+		return ""
+	}
+}
+
+// relativeTimeSince returns a concise Korean relative time label for t relative to now.
+// Returns "" for zero time. Used to give the LLM temporal context for memory facts.
+func relativeTimeSince(t time.Time, now time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	d := now.Sub(t)
+	if d < 0 {
+		return "방금"
+	}
+	switch {
+	case d < time.Hour:
+		return "방금"
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		return fmt.Sprintf("%d시간 전", h)
+	case d < 7*24*time.Hour:
+		days := int(d.Hours() / 24)
+		switch days {
+		case 1:
+			return "어제"
+		case 2:
+			return "그저께"
+		default:
+			return fmt.Sprintf("%d일 전", days)
+		}
+	case d < 30*24*time.Hour:
+		weeks := int(d.Hours() / 24 / 7)
+		return fmt.Sprintf("%d주 전", weeks)
+	case d < 365*24*time.Hour:
+		months := int(d.Hours() / 24 / 30)
+		if months < 1 {
+			months = 1
+		}
+		return fmt.Sprintf("%d개월 전", months)
+	default:
+		years := int(d.Hours() / 24 / 365)
+		if years < 1 {
+			years = 1
+		}
+		return fmt.Sprintf("%d년 전", years)
+	}
+}
+
+// factTemporalAnnotation builds a compact temporal label for a memory fact.
+// Combines relative time, CreatedAt/UpdatedAt separation, and volatility hints.
+// Examples:
+//   - "3일 전" — simple case (created == updated or small gap)
+//   - "3개월 전, 갱신: 어제" — created long ago but recently re-confirmed
+//   - "6개월 전, ⚠변경 가능" — past shelf life for its category
+func factTemporalAnnotation(f memory.Fact, now time.Time) string {
+	hasCreated := !f.CreatedAt.IsZero()
+	hasUpdated := !f.UpdatedAt.IsZero()
+
+	if !hasCreated && !hasUpdated {
+		return ""
+	}
+
+	var parts []string
+
+	// Show CreatedAt/UpdatedAt separately when both exist and differ significantly (>7 days).
+	// "3개월 전, 갱신: 어제" = long-known, recently confirmed.
+	// "3일 전" = recently created, no meaningful gap.
+	if hasCreated && hasUpdated && f.UpdatedAt.Sub(f.CreatedAt) > 7*24*time.Hour {
+		parts = append(parts,
+			relativeTimeSince(f.CreatedAt, now)+", 갱신: "+relativeTimeSince(f.UpdatedAt, now))
+	} else if hasUpdated {
+		parts = append(parts, relativeTimeSince(f.UpdatedAt, now))
+	} else {
+		parts = append(parts, relativeTimeSince(f.CreatedAt, now))
+	}
+
+	// Volatility hint: use UpdatedAt (or CreatedAt fallback) to check shelf life.
+	refTime := f.UpdatedAt
+	if !hasUpdated {
+		refTime = f.CreatedAt
+	}
+	if hint := volatileHint(f.Category, refTime, now); hint != "" {
+		parts = append(parts, hint)
+	}
+
+	return strings.Join(parts, ", ")
+}
+
 // truncateRunes truncates s to at most maxRunes runes, appending "..." if truncated.
 // Safe for multibyte UTF-8 (Korean, etc.).
 func truncateRunes(s string, maxRunes int) string {
@@ -145,6 +266,7 @@ func formatKnowledge(vegaResults []vega.SearchResult, memMatches []MemoryMatch) 
 // formatKnowledgeWithFacts builds the "## 관련 지식" section from search results,
 // respecting the token budget. Supports both legacy MemoryMatch and structured facts.
 func formatKnowledgeWithFacts(vegaResults []vega.SearchResult, memMatches []MemoryMatch, structFacts []memory.SearchResult) string {
+	now := time.Now() // capture once for consistent temporal annotations across all facts
 	var sb strings.Builder
 	sb.WriteString("## 관련 지식\n\n")
 	tokenCount := sb.Len() / charsPerToken
@@ -175,7 +297,16 @@ func formatKnowledgeWithFacts(vegaResults []vega.SearchResult, memMatches []Memo
 		for _, sr := range structFacts {
 			before = sb.Len()
 			content := truncateRunes(sr.Fact.Content, knowledgeMaxContentRunes)
-			fmt.Fprintf(&sb, "- [%.1f] {%s} %s\n", sr.Fact.Importance, sr.Fact.Category, content)
+			// Temporal annotation with three layers:
+			// 1. Relative time (how old)
+			// 2. CreatedAt/UpdatedAt separation (when significantly different)
+			// 3. Volatility hint (past shelf life for this category)
+			timeAnnotation := factTemporalAnnotation(sr.Fact, now)
+			if timeAnnotation != "" {
+				fmt.Fprintf(&sb, "- [%.1f] {%s} (%s) %s\n", sr.Fact.Importance, sr.Fact.Category, timeAnnotation, content)
+			} else {
+				fmt.Fprintf(&sb, "- [%.1f] {%s} %s\n", sr.Fact.Importance, sr.Fact.Category, content)
+			}
 			tokenCount += (sb.Len() - before) / charsPerToken
 
 			if tokenCount >= knowledgeMaxTokens {
