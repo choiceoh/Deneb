@@ -40,6 +40,7 @@ pub struct ProjectScore {
 
 /// Negate a date string for reverse-chronological sort key.
 /// Each digit d → (9-d), empty → "z" (sorts last).
+#[cfg(test)]
 fn negate_date_str(date_str: &str) -> String {
     if date_str.is_empty() {
         return "z".to_string();
@@ -247,7 +248,7 @@ pub fn rerank_fusion(
         let ord_b = order.get(&b.project_id).copied().unwrap_or(usize::MAX);
         ord_a
             .cmp(&ord_b)
-            .then_with(|| negate_date_str(&a.entry_date).cmp(&negate_date_str(&b.entry_date)))
+            .then_with(|| b.entry_date.cmp(&a.entry_date)) // reverse for newest-first
             .then_with(|| a.chunk_id.cmp(&b.chunk_id))
     });
 

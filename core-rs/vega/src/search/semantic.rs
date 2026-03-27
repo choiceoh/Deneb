@@ -9,7 +9,6 @@ use rusqlite::params;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "ml")]
 use rayon::prelude::*;
 
 use super::fts_search::ChunkRow;
@@ -273,47 +272,48 @@ pub fn semantic_search_with_vec(
         return Vec::new();
     }
 
-    // Parallel similarity computation (SIMD-accelerated, leverages DGX Spark cores).
-    let mut results: Vec<SemanticResult> = all_rows
+    // Separate embeddings from metadata for parallel SIMD computation.
+    // Rayon can't par_iter over large tuples, so we split: compute scores
+    // in parallel over (index, embedding) pairs, then build results sequentially.
+    let embeddings: Vec<Vec<f32>> = all_rows
         .iter()
-        .filter_map(|row| {
-            let (
-                chunk_id,
-                emb_blob,
-                project_id,
-                name,
-                client,
-                status,
-                person,
-                heading,
-                content,
-                chunk_type,
-                entry_date,
-            ) = row;
+        .map(|row| blob_to_f32_vec(&row.1))
+        .collect();
 
-            let chunk_vec = blob_to_f32_vec(emb_blob);
+    // Parallel cosine similarity (SIMD-accelerated, leverages DGX Spark cores).
+    let scores: Vec<(usize, f64)> = (0..embeddings.len())
+        .into_par_iter()
+        .filter_map(|i: usize| {
+            let chunk_vec: &Vec<f32> = &embeddings[i];
             if chunk_vec.len() != query_vec.len() {
                 return None;
             }
-
-            let score = dot_product_simd(query_vec, &chunk_vec);
-
+            let score = dot_product_simd(query_vec, chunk_vec);
             if score >= config.min_score {
-                Some(SemanticResult {
-                    chunk_id: *chunk_id,
-                    project_id: *project_id,
-                    project_name: name.clone(),
-                    client: client.clone(),
-                    status: status.clone(),
-                    person_internal: person.clone(),
-                    section_heading: heading.clone(),
-                    content: content.clone(),
-                    chunk_type: chunk_type.clone(),
-                    entry_date: entry_date.clone(),
-                    score,
-                })
+                Some((i, score))
             } else {
                 None
+            }
+        })
+        .collect();
+
+    // Build results from scored indices.
+    let mut results: Vec<SemanticResult> = scores
+        .into_iter()
+        .map(|(i, score)| {
+            let row = &all_rows[i];
+            SemanticResult {
+                chunk_id: row.0,
+                project_id: row.2,
+                project_name: row.3.clone(),
+                client: row.4.clone(),
+                status: row.5.clone(),
+                person_internal: row.6.clone(),
+                section_heading: row.7.clone(),
+                content: row.8.clone(),
+                chunk_type: row.9.clone(),
+                entry_date: row.10.clone(),
+                score,
             }
         })
         .collect();
