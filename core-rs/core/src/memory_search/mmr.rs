@@ -44,9 +44,9 @@ impl TokenSet {
     }
 }
 
-/// Tokenize text for Jaccard similarity (convenience wrapper).
-/// Returns a TokenSet with zero per-token heap allocations.
-pub fn tokenize(text: &str) -> HashSet<String> {
+/// Tokenize text for Jaccard similarity (test-only convenience wrapper).
+#[cfg(test)]
+fn tokenize(text: &str) -> HashSet<String> {
     let ts = TokenSet::new(text);
     ts.tokens().map(|s| s.to_string()).collect()
 }
@@ -76,9 +76,9 @@ fn jaccard_similarity_sets(set_a: &HashSet<&str>, set_b: &HashSet<&str>) -> f64 
     }
 }
 
-/// Jaccard similarity between two owned token sets.
-/// Kept for backward compatibility with callers using `HashSet<String>`.
-pub fn jaccard_similarity(set_a: &HashSet<String>, set_b: &HashSet<String>) -> f64 {
+/// Jaccard similarity between two owned token sets (test-only).
+#[cfg(test)]
+fn jaccard_similarity(set_a: &HashSet<String>, set_b: &HashSet<String>) -> f64 {
     if set_a.is_empty() && set_b.is_empty() {
         return 1.0;
     }

@@ -82,18 +82,29 @@ fn score_sqlite_chunks(
     let mut id_by_name: HashMap<String, i64> = HashMap::new();
 
     // Pre-lowercase all tokens once to avoid per-chunk allocations.
-    let structural_groups: Vec<(&str, Vec<String>)> = vec![
-        ("structural", extracted.clients.iter().map(|t| t.to_lowercase()).collect()),
-        ("structural", extracted.persons.iter().map(|t| t.to_lowercase()).collect()),
-        ("structural", extracted.statuses.iter().map(|t| t.to_lowercase()).collect()),
-        ("structural", extracted.tags.iter().map(|t| t.to_lowercase()).collect()),
-        ("keywords", extracted.keywords.iter().map(|t| t.to_lowercase()).collect()),
-    ];
-    // Pre-compute keyword char counts for weight calculation.
-    let keyword_char_counts: Vec<usize> = extracted
+    // Each token stores (lowered_text, bonus_weight) so scoring is self-contained.
+    let structural_tokens: Vec<(String, f64)> = [
+        &extracted.clients,
+        &extracted.persons,
+        &extracted.statuses,
+        &extracted.tags,
+    ]
+    .iter()
+    .flat_map(|group| group.iter().map(|t| (t.to_lowercase(), 8.0)))
+    .collect();
+
+    let keyword_tokens: Vec<(String, f64)> = extracted
         .keywords
         .iter()
-        .map(|t| t.chars().count())
+        .map(|t| {
+            let weight = 4.0 + (t.chars().count().saturating_sub(2) as f64) * 2.0;
+            (t.to_lowercase(), weight)
+        })
+        .collect();
+
+    let all_scored_tokens: Vec<&(String, f64)> = structural_tokens
+        .iter()
+        .chain(keyword_tokens.iter())
         .collect();
 
     // Reusable buffer for building haystack strings.
@@ -128,21 +139,10 @@ fn score_sqlite_chunks(
         }
         let haystack = haystack_buf.to_lowercase();
 
-        // Token match bonuses (tokens are already lowercased).
-        let mut keyword_idx = 0;
-        for (group_type, tokens) in &structural_groups {
-            for token in tokens {
-                if !token.is_empty() && haystack.contains(token.as_str()) {
-                    if *group_type == "structural" {
-                        score += 8.0;
-                    } else {
-                        let char_count = keyword_char_counts.get(keyword_idx).copied().unwrap_or(0);
-                        score += 4.0 + (char_count.saturating_sub(2) as f64) * 2.0;
-                    }
-                }
-                if *group_type == "keywords" {
-                    keyword_idx += 1;
-                }
+        // Token match bonuses (tokens are already lowercased with pre-computed weights).
+        for &(ref token, weight) in &all_scored_tokens {
+            if !token.is_empty() && haystack.contains(token.as_str()) {
+                score += weight;
             }
         }
 
