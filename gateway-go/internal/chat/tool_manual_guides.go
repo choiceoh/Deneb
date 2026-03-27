@@ -26,24 +26,35 @@ Every model run triggers four lifecycle points:
 - **Delegating mode**: set ownsCompaction: false, call delegateCompactionToRuntime() in compact()
 
 ## AssembleResult
-- messages: ordered messages for the model
-- estimatedTokens (required): engine's token estimate for threshold decisions
-- systemPromptAddition (optional): prepended to system prompt
+- messages: ordered messages for the model (required)
+- estimatedTokens: engine's token estimate for threshold decisions (required — drives compaction decisions)
+- systemPromptAddition: prepended to system prompt (optional)
+
+## Aurora Tools (agent-callable)
+- **aurora_grep**: search messages and summaries by keyword. Returns matching message IDs + snippets.
+- **aurora_describe**: inspect a message's lineage — parents, children, summaries, depth.
+- **aurora_expand_query**: deep recall (~120s). Expands a natural-language query into context-relevant messages. Expensive — use only when normal search is insufficient.
+
+## Token Budget Constants
+- Context threshold: 0.75 (compact when usage exceeds 75% of context window)
+- Fresh tail: 32 messages (always kept intact, never compacted)
+- Three-tier resolution order: env var > plugin config > hardcoded defaults
 
 ## Rust Implementation (core-rs/core/src/context_engine/)
 - assembler.rs: DAG-aware token budgeting state machine
-- Aurora tools: aurora_grep (search messages/summaries), aurora_describe (inspect lineage), aurora_expand_query (deep recall ~120s)
-- Three-tier resolution: env > plugin config > hardcoded defaults
-- Token budget: context threshold 0.75, fresh tail 32 messages
+- retrieval.rs: message retrieval with lineage tracking
+- mod.rs: handle-based FFI pattern — aurora_new() → handle → aurora_start(handle) → aurora_step(handle, response) → aurora_drop(handle)
 
 ## Go Integration
 - gateway-go/internal/chat/compaction.go: context overflow handling via Aurora sweep
 - gateway-go/internal/server/server.go: Aurora store initialization
+- gateway-go/internal/aurora/: Aurora desktop RPC channel handlers
 
 ## Key Files
 - docs/concepts/context-engine.md
 - core-rs/core/src/context_engine/mod.rs, assembler.rs, retrieval.rs
-- gateway-go/internal/chat/compaction.go`
+- gateway-go/internal/chat/compaction.go
+- gateway-go/internal/aurora/`
 
 const vegaGuide = `Vega is Deneb's project search engine providing BM25 + semantic hybrid search over indexed content.
 
@@ -51,6 +62,13 @@ const vegaGuide = `Vega is Deneb's project search engine providing BM25 + semant
 - **bm25**: SQLite FTS5 full-text search (exact token matching)
 - **semantic**: embedding-based vector similarity (meaning-based)
 - **hybrid**: weighted fusion of BM25 + semantic scores (best of both)
+
+## Query Routing (query_analyzer.rs)
+Natural language queries are analyzed and routed to the best search mode:
+- Short exact terms → BM25
+- Conceptual/semantic questions → semantic
+- Mixed or complex queries → hybrid fusion
+- Fusion: BM25 + semantic score weighted merge, MMR re-ranking for diversity
 
 ## Architecture
 Rust workspace crate (core-rs/vega/) with Go bindings (gateway-go/internal/vega/).
@@ -61,7 +79,7 @@ Rust workspace crate (core-rs/vega/) with Go bindings (gateway-go/internal/vega/
 - search/fusion.rs: score fusion and reranking (BM25 + semantic)
 - search/query_analyzer.rs: natural language query routing
 - db/: schema, importer, parser, classifier (mail/project categorization)
-- commands/: 20+ handlers (health, changelog, dashboard, brief, weekly, urgent, contacts)
+- commands/: 20+ handlers (health, changelog, dashboard, brief, weekly, urgent, contacts, search, import)
 - ai.rs: LLM-based command expansion
 
 ### Go Side (gateway-go/internal/vega/)
@@ -74,9 +92,9 @@ Rust workspace crate (core-rs/vega/) with Go bindings (gateway-go/internal/vega/
 - llm_expander.go: LLM query expansion
 
 ## Embedding Backends
-- SGLang server (default on DGX Spark)
+- SGLang server (default on DGX Spark): auto-detected at localhost:30001/v1, 30002/v1
 - Local deneb-ml (GGUF models via llama-cpp-2)
-- No-op fallback (BM25 only)
+- No-op fallback (BM25 only, used when no embedding backend available)
 
 ## Environment Variables
 - VEGA_MODEL_EMBEDDER: path to embedding GGUF model
@@ -84,7 +102,7 @@ Rust workspace crate (core-rs/vega/) with Go bindings (gateway-go/internal/vega/
 - VEGA_MODEL_EXPANDER: path to query expansion GGUF model
 
 ## Model Auto-detection
-~/.deneb/models/*.gguf scanned at startup (autodetect.go)
+~/.deneb/models/*.gguf scanned at startup (autodetect.go). Filenames pattern-matched to role (embedder/reranker/expander).
 
 ## Build Variants
 - make rust: minimal (no Vega)
@@ -106,19 +124,37 @@ const agentLoopGuide = `The agent loop is the core execution cycle: intake → c
 1. agent RPC validates params, resolves session, returns {runId, acceptedAt}
 2. Resolve model + thinking/verbose defaults, load skills snapshot
 3. Serialize via per-session + global queues (prevents races)
-4. Build system prompt from: identity + tools + skills + context files + memory + time
-5. LLM call → parse tool_use blocks → execute tools in parallel → feed results back
-6. Repeat until end_turn or limits hit (maxTurns=25, timeout=600s)
-7. Emit lifecycle end/error event
+4. Persist user message to transcript + Aurora store
+5. Spawn proactive context (parallel, min 50 chars trigger)
+6. Build system prompt (deferred format for Anthropic cache_control)
+7. Run knowledge prefetch + context assembly in parallel
+8. Resolve model & LLM client from provider config
+9. LLM call → parse tool_use blocks → execute tools in parallel → feed results back
+10. Repeat until end_turn or limits hit
+11. Emit lifecycle end/error event, persist result
+
+## AgentConfig Defaults
+- MaxTurns: 25
+- Timeout: 10 minutes (wall-time)
+- MaxTokens: 8192 (max output tokens per LLM call)
+- defaultModel: "zai/glm-5-turbo"
+- maxCompactionRetries: 2 (retry with compacted context on overflow)
 
 ## Go Implementation (gateway-go/internal/chat/)
-- agent.go: AgentConfig (MaxTurns, Timeout, Model, Tools, MaxTokens), RunAgent(), consumeStream()
-- run.go: RunParams, runDeps, defaults (maxTokens=8192, maxTurns=25, timeout=10m)
+- agent.go: AgentConfig, RunAgent(), consumeStream(), StreamHooks (OnTextDelta, OnThinking, OnToolStart)
+- run.go: RunParams, runDeps (sessions, llmClient, transcript, tools, aurora, vega, memory, etc.)
 
 ## Queueing
 - Runs serialized per session key (session lane) + optional global lane
 - Prevents tool/session races and keeps history consistent
-- Channels choose queue modes: collect, steer, followup
+- Channel queue modes: collect, steer, followup
+
+## Status Emojis (Telegram reactions)
+Queued: 👀, Thinking: 🤔, Tool/Coding: 🔥, Web: ⚡, Done: 👍, Error: 😱, StallSoft: 🥱, StallHard: 😨, Compacting: 🤔
+
+## Typing Signaler
+- Interval: 5000ms (matches Telegram's 5s typing action TTL)
+- Mode: TypingModeInstant (sends immediately on run start)
 
 ## Event Streams
 Three streams emitted during a run:
@@ -141,18 +177,13 @@ Three streams emitted during a run:
 ## Streaming
 - Assistant deltas streamed as events
 - Block streaming: partial replies on text_end or message_end
-- NO_REPLY token filtered from outgoing payloads
-
-## Timeouts
-- agent.wait default: 30s (wait only, does not stop agent)
-- Agent runtime: agents.defaults.timeoutSeconds = 600s
-- Enforced via abort timer in RunAgent
+- NO_REPLY (__SILENT_REPLY__) token filtered from outgoing payloads
 
 ## Tool Execution
-- Tools execute in parallel goroutines within each turn
+- Tools execute in parallel goroutines within each turn (WaitGroup)
 - TurnContext enables cross-tool result sharing via $ref
-- 30s timeout for $ref resolution
-- Post-processors: OutputTrimmer (64K), ErrorEnricher, GrepSummarizer, FindSummarizer
+- 30s timeout for $ref resolution (refWaitTimeout)
+- Post-processors: OutputTrimmer (64K), ErrorEnricher, GrepSummarizer (200 lines), FindSummarizer (500 entries)
 
 ## Key Files
 - docs/concepts/agent-loop.md

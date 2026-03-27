@@ -554,6 +554,8 @@ var builtinGuideOrder = []string{
 	"aurora", "vega", "agent-loop", "compaction", "tools",
 	"system-prompt", "memory", "sessions", "architecture", "channels",
 	"telegram", "skills", "pilot", "cron", "autonomous",
+	"web", "exec", "gateway-tool", "media", "gmail",
+	"data-tools", "sessions-tools", "message",
 }
 
 // builtinGuides contains AI-curated system knowledge.
@@ -648,6 +650,54 @@ var builtinGuides = map[string]guideEntry{
 		Title:   "Autonomous System",
 		Summary: "Goal-driven cycles, stale detection, starvation alerts, memory consolidation",
 		Content: autonomousGuide,
+	},
+	"web": {
+		Key:     "web",
+		Title:   "Web Tool",
+		Summary: "Search, fetch, search+fetch modes, SGLang extraction, error classification",
+		Content: webGuide,
+	},
+	"exec": {
+		Key:     "exec",
+		Title:   "Exec & Process Tools",
+		Summary: "Shell commands, background sessions, process management",
+		Content: execGuide,
+	},
+	"gateway-tool": {
+		Key:     "gateway-tool",
+		Title:   "Gateway Self-Management",
+		Summary: "Config CRUD, restart (SIGUSR1), self-update (git pull + make)",
+		Content: gatewayToolGuide,
+	},
+	"media": {
+		Key:     "media",
+		Title:   "Media Tools",
+		Summary: "Image vision analysis, YouTube transcripts, file delivery, MIME detection",
+		Content: mediaGuide,
+	},
+	"gmail": {
+		Key:     "gmail",
+		Title:   "Gmail Integration",
+		Summary: "OAuth2 inbox, search, read, send, reply, labels, contact aliases",
+		Content: gmailGuide,
+	},
+	"data-tools": {
+		Key:     "data-tools",
+		Title:   "Data Tools (KV, Clipboard, HTTP)",
+		Summary: "Persistent KV store, in-memory clipboard, HTTP API client",
+		Content: dataToolsGuide,
+	},
+	"sessions-tools": {
+		Key:     "sessions-tools",
+		Title:   "Session Management Tools",
+		Summary: "List, history, search, restore, send, spawn, subagents, status",
+		Content: sessionToolsGuide,
+	},
+	"message": {
+		Key:     "message",
+		Title:   "Message Tool",
+		Summary: "Send, reply, thread-reply, react via channels",
+		Content: messageGuide,
 	},
 }
 
