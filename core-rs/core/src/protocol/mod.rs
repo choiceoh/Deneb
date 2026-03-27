@@ -473,4 +473,89 @@ mod tests {
         let json = r#"{"type":"REQ","id":"1","method":"test"}"#;
         assert!(validate_frame(json).is_err());
     }
+
+    // --- Property-based tests (proptest) ---
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        /// Strategy for non-empty strings that fit within MAX_SHORT_FIELD_LEN.
+        fn short_nonempty_string() -> impl Strategy<Value = String> {
+            "[a-zA-Z0-9_.]{1,64}"
+        }
+
+        proptest! {
+            #[test]
+            fn valid_request_frame_roundtrips(
+                id in short_nonempty_string(),
+                method in short_nonempty_string(),
+            ) {
+                let json = serde_json::json!({
+                    "type": "req",
+                    "id": id,
+                    "method": method,
+                    "params": { "key": "value" }
+                }).to_string();
+                let frame = validate_frame(&json).unwrap();
+                match frame {
+                    GatewayFrame::Request(req) => {
+                        prop_assert_eq!(req.id, id);
+                        prop_assert_eq!(req.method, method);
+                    }
+                    _ => prop_assert!(false, "expected Request frame"),
+                }
+            }
+
+            #[test]
+            fn valid_response_frame_roundtrips(
+                id in short_nonempty_string(),
+                ok in any::<bool>(),
+            ) {
+                let json = serde_json::json!({
+                    "type": "res",
+                    "id": id,
+                    "ok": ok,
+                    "payload": null
+                }).to_string();
+                let frame = validate_frame(&json).unwrap();
+                match frame {
+                    GatewayFrame::Response(res) => {
+                        prop_assert_eq!(res.id, id);
+                        prop_assert_eq!(res.ok, ok);
+                    }
+                    _ => prop_assert!(false, "expected Response frame"),
+                }
+            }
+
+            #[test]
+            fn valid_event_frame_roundtrips(
+                event in short_nonempty_string(),
+                seq in proptest::option::of(0u64..1_000_000),
+            ) {
+                let mut obj = serde_json::json!({
+                    "type": "event",
+                    "event": event,
+                });
+                if let Some(s) = seq {
+                    obj["seq"] = serde_json::json!(s);
+                }
+                let json = obj.to_string();
+                let frame = validate_frame(&json).unwrap();
+                match frame {
+                    GatewayFrame::Event(ev) => {
+                        prop_assert_eq!(ev.event, event);
+                        prop_assert_eq!(ev.seq, seq);
+                    }
+                    _ => prop_assert!(false, "expected Event frame"),
+                }
+            }
+
+            #[test]
+            fn garbage_strings_never_panic(s in "\\PC{0,512}") {
+                // validate_frame must not panic on arbitrary input; errors are fine.
+                let _ = validate_frame(&s);
+            }
+        }
+    }
 }

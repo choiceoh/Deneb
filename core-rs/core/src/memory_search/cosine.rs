@@ -264,4 +264,95 @@ mod tests {
         assert!((cosine_similarity(&[3.0], &[3.0]) - 1.0).abs() < 1e-10);
         assert!((cosine_similarity(&[3.0], &[-3.0]) - (-1.0)).abs() < 1e-10);
     }
+
+    // --- Property-based tests (proptest) ---
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        /// Naive scalar cosine similarity for cross-checking the SIMD implementation.
+        fn naive_cosine(a: &[f64], b: &[f64]) -> f64 {
+            let len = a.len().min(b.len());
+            if len == 0 {
+                return 0.0;
+            }
+            let mut dot = 0.0_f64;
+            let mut na = 0.0_f64;
+            let mut nb = 0.0_f64;
+            for i in 0..len {
+                dot += a[i] * b[i];
+                na += a[i] * a[i];
+                nb += b[i] * b[i];
+            }
+            if na == 0.0 || nb == 0.0 {
+                return 0.0;
+            }
+            let raw = dot / (na.sqrt() * nb.sqrt());
+            if raw.is_nan() {
+                0.0
+            } else {
+                raw.clamp(-1.0, 1.0)
+            }
+        }
+
+        /// Strategy for finite f64 vectors (no NaN/Inf to keep arithmetic deterministic).
+        fn finite_vec(max_len: usize) -> impl Strategy<Value = Vec<f64>> {
+            prop::collection::vec(-1e6_f64..1e6_f64, 1..=max_len)
+        }
+
+        proptest! {
+            #[test]
+            fn result_always_in_range(
+                a in prop::collection::vec(-1e6_f64..1e6_f64, 0..128),
+                b in prop::collection::vec(-1e6_f64..1e6_f64, 0..128),
+            ) {
+                let sim = cosine_similarity(&a, &b);
+                prop_assert!(sim >= -1.0 && sim <= 1.0,
+                    "result {} out of [-1, 1]", sim);
+            }
+
+            #[test]
+            fn self_similarity_is_one(a in finite_vec(128)) {
+                // Skip all-zero vectors (norm = 0 → returns 0.0).
+                let norm: f64 = a.iter().map(|x| x * x).sum();
+                if norm > 0.0 {
+                    let sim = cosine_similarity(&a, &a);
+                    prop_assert!((sim - 1.0).abs() < 1e-9,
+                        "self-similarity = {}, expected ~1.0", sim);
+                }
+            }
+
+            #[test]
+            fn negated_similarity_is_minus_one(a in finite_vec(128)) {
+                let norm: f64 = a.iter().map(|x| x * x).sum();
+                if norm > 0.0 {
+                    let neg_a: Vec<f64> = a.iter().map(|x| -x).collect();
+                    let sim = cosine_similarity(&a, &neg_a);
+                    prop_assert!((sim - (-1.0)).abs() < 1e-9,
+                        "negated similarity = {}, expected ~-1.0", sim);
+                }
+            }
+
+            #[test]
+            fn simd_matches_naive(
+                a in finite_vec(256),
+                b in finite_vec(256),
+            ) {
+                let sim = cosine_similarity(&a, &b);
+                let expected = naive_cosine(&a, &b);
+                prop_assert!((sim - expected).abs() < 1e-9,
+                    "SIMD result {} differs from naive {} by more than 1e-9", sim, expected);
+            }
+
+            #[test]
+            fn empty_vectors_return_zero(
+                a in prop::collection::vec(-1e6_f64..1e6_f64, 0..64),
+            ) {
+                prop_assert_eq!(cosine_similarity(&[], &a), 0.0);
+                prop_assert_eq!(cosine_similarity(&a, &[]), 0.0);
+                prop_assert_eq!(cosine_similarity(&[], &[]), 0.0);
+            }
+        }
+    }
 }
