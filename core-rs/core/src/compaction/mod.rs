@@ -669,11 +669,9 @@ pub fn resolve_prior_summary_ids(
     items
         .iter()
         .filter(|item| {
-            item.ordinal < start_ordinal
-                && item.item_type == ContextItemType::Summary
-                && item.summary_id.is_some()
+            item.ordinal < start_ordinal && item.item_type == ContextItemType::Summary
         })
-        .map(|item| item.summary_id.clone().unwrap())
+        .filter_map(|item| item.summary_id.clone())
         .collect::<Vec<_>>()
         .into_iter()
         .rev()
@@ -696,18 +694,15 @@ pub fn resolve_prior_summary_ids_at_depth(
     items
         .iter()
         .filter(|item| {
-            item.ordinal < start_ordinal
-                && item.item_type == ContextItemType::Summary
-                && item.summary_id.is_some()
+            item.ordinal < start_ordinal && item.item_type == ContextItemType::Summary
         })
         .filter(|item| {
             item.summary_id
                 .as_ref()
                 .and_then(|id| summaries.get(id))
-                .map(|s| s.depth == target_depth)
-                .unwrap_or(false)
+                .is_some_and(|s| s.depth == target_depth)
         })
-        .map(|item| item.summary_id.clone().unwrap())
+        .filter_map(|item| item.summary_id.clone())
         .collect::<Vec<_>>()
         .into_iter()
         .rev()

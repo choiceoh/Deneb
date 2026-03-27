@@ -58,6 +58,13 @@ impl ContextEngineStore {
     }
 }
 
+/// Lock the context engine store, recovering from poisoned mutex.
+fn lock_context_store() -> std::sync::MutexGuard<'static, ContextEngineStore> {
+    CONTEXT_ENGINES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 // ── Assembly engine exports ──────────────────────────────────────────────────
 
 /// Create a new assembly engine. Returns a handle (u32).
@@ -68,14 +75,14 @@ pub fn context_assembly_new(conversation_id: u32, token_budget: u32, fresh_tail_
         token_budget as u64,
         fresh_tail_count,
     );
-    let mut store = CONTEXT_ENGINES.lock().unwrap();
+    let mut store = lock_context_store();
     store.insert(EngineInstance::Assembly(engine))
 }
 
 /// Start an assembly engine. Returns the first AssemblyCommand as JSON.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn context_assembly_start(handle: u32) -> String {
-    let mut store = CONTEXT_ENGINES.lock().unwrap();
+    let mut store = lock_context_store();
     match store.engines.get_mut(&handle) {
         Some(EngineInstance::Assembly(engine)) => {
             let cmd = engine.start();
@@ -92,7 +99,7 @@ pub fn context_assembly_step(handle: u32, response_json: String) -> String {
         Ok(r) => r,
         Err(e) => return format!(r#"{{"type":"done","result":{{"error":"{}"}}}}"#, e),
     };
-    let mut store = CONTEXT_ENGINES.lock().unwrap();
+    let mut store = lock_context_store();
     match store.engines.get_mut(&handle) {
         Some(EngineInstance::Assembly(engine)) => {
             let cmd = engine.step(response);
@@ -117,14 +124,14 @@ pub fn context_expand_new(
     token_cap: u32,
 ) -> u32 {
     let engine = ExpandEngine::new(summary_id, max_depth, include_messages, token_cap as u64);
-    let mut store = CONTEXT_ENGINES.lock().unwrap();
+    let mut store = lock_context_store();
     store.insert(EngineInstance::Expand(engine))
 }
 
 /// Start an expand engine. Returns the first RetrievalCommand as JSON.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn context_expand_start(handle: u32) -> String {
-    let mut store = CONTEXT_ENGINES.lock().unwrap();
+    let mut store = lock_context_store();
     match store.engines.get_mut(&handle) {
         Some(EngineInstance::Expand(engine)) => {
             let cmd = engine.start();
@@ -141,7 +148,7 @@ pub fn context_expand_step(handle: u32, response_json: String) -> String {
         Ok(r) => r,
         Err(e) => return format!(r#"{{"type":"expandDone","result":{{"error":"{}"}}}}"#, e),
     };
-    let mut store = CONTEXT_ENGINES.lock().unwrap();
+    let mut store = lock_context_store();
     match store.engines.get_mut(&handle) {
         Some(EngineInstance::Expand(engine)) => {
             let cmd = engine.step(response);
@@ -186,14 +193,14 @@ pub fn context_grep_new(
         before_ms.map(|ms| ms as i64),
         limit,
     );
-    let mut store = CONTEXT_ENGINES.lock().unwrap();
+    let mut store = lock_context_store();
     store.insert(EngineInstance::Grep(engine))
 }
 
 /// Start a grep engine. Returns the RetrievalCommand as JSON.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn context_grep_start(handle: u32) -> String {
-    let store = CONTEXT_ENGINES.lock().unwrap();
+    let store = lock_context_store();
     match store.engines.get(&handle) {
         Some(EngineInstance::Grep(engine)) => {
             let cmd = engine.start();
@@ -210,7 +217,7 @@ pub fn context_grep_step(handle: u32, response_json: String) -> String {
         Ok(r) => r,
         Err(e) => return format!(r#"{{"type":"grepDone","result":{{"error":"{}"}}}}"#, e),
     };
-    let mut store = CONTEXT_ENGINES.lock().unwrap();
+    let mut store = lock_context_store();
     match store.engines.get_mut(&handle) {
         Some(EngineInstance::Grep(engine)) => {
             let cmd = engine.step(response);
@@ -230,14 +237,14 @@ fn empty_grep_done() -> String {
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn context_describe_new(id: String) -> u32 {
     let engine = DescribeEngine::new(id);
-    let mut store = CONTEXT_ENGINES.lock().unwrap();
+    let mut store = lock_context_store();
     store.insert(EngineInstance::Describe(engine))
 }
 
 /// Start a describe engine. Returns the RetrievalCommand as JSON.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn context_describe_start(handle: u32) -> String {
-    let store = CONTEXT_ENGINES.lock().unwrap();
+    let store = lock_context_store();
     match store.engines.get(&handle) {
         Some(EngineInstance::Describe(engine)) => {
             let cmd = engine.start();
@@ -254,7 +261,7 @@ pub fn context_describe_step(handle: u32, response_json: String) -> String {
         Ok(r) => r,
         Err(e) => return format!(r#"{{"type":"describeDone","result":{{"error":"{}"}}}}"#, e),
     };
-    let mut store = CONTEXT_ENGINES.lock().unwrap();
+    let mut store = lock_context_store();
     match store.engines.get_mut(&handle) {
         Some(EngineInstance::Describe(engine)) => {
             let cmd = engine.step(response);
@@ -273,7 +280,7 @@ fn empty_describe_done() -> String {
 /// Drop any context engine, freeing its resources.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn context_engine_drop(handle: u32) {
-    let mut store = CONTEXT_ENGINES.lock().unwrap();
+    let mut store = lock_context_store();
     store.remove(handle);
 }
 

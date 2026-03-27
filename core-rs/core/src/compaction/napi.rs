@@ -55,6 +55,13 @@ impl EngineStore {
     }
 }
 
+/// Lock the engine store, recovering from poisoned mutex.
+fn lock_engine_store() -> std::sync::MutexGuard<'static, EngineStore> {
+    ENGINES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 // ── Pure function exports ───────────────────────────────────────────────────
 
 /// Estimate token count from text (ceil(len/4)).
@@ -167,14 +174,14 @@ pub fn compaction_sweep_new(
         hard_trigger,
         now_ms as i64,
     );
-    let mut store = ENGINES.lock().unwrap();
+    let mut store = lock_engine_store();
     store.insert(engine)
 }
 
 /// Start a sweep engine. Returns the first SweepCommand as JSON.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn compaction_sweep_start(handle: u32) -> String {
-    let mut store = ENGINES.lock().unwrap();
+    let mut store = lock_engine_store();
     match store.get_mut(handle) {
         Some(engine) => {
             let cmd = engine.start();
@@ -191,7 +198,7 @@ pub fn compaction_sweep_step(handle: u32, response_json: String) -> String {
         Ok(r) => r,
         Err(e) => return format!(r#"{{"type":"done","result":{{"error":"{}"}}}}"#, e),
     };
-    let mut store = ENGINES.lock().unwrap();
+    let mut store = lock_engine_store();
     match store.get_mut(handle) {
         Some(engine) => {
             let cmd = engine.step(response);
@@ -204,7 +211,7 @@ pub fn compaction_sweep_step(handle: u32, response_json: String) -> String {
 /// Drop a sweep engine, freeing its resources.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn compaction_sweep_drop(handle: u32) {
-    let mut store = ENGINES.lock().unwrap();
+    let mut store = lock_engine_store();
     store.remove(handle);
 }
 
