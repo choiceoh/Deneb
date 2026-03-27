@@ -229,15 +229,15 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 		sb.WriteString("추가 정보가 필요하면 memory_search로 메모리 파일을 더 탐색하세요.\n\n")
 	}
 
-	// System Manual.
-	if toolSet["system_manual"] {
-		sb.WriteString("## System Manual\n")
-		sb.WriteString("데네브 시스템에 대해 모를 때 system_manual로 문서를 조회하세요.\n")
-		sb.WriteString("- system_manual(action:'guides') → AI 전용 내부 시스템 가이드 목록\n")
-		sb.WriteString("- system_manual(action:'guides', topic:'aurora') → 특정 가이드 읽기\n")
-		sb.WriteString("- system_manual(action:'topics') → 전체 문서 트리 구조\n")
-		sb.WriteString("- system_manual(action:'search', query:'webhook') → 키워드 검색\n")
-		sb.WriteString("- system_manual(action:'read', topic:'concepts/session') → 토픽 읽기\n\n")
+	// Polaris (System Manual).
+	if toolSet["polaris"] {
+		sb.WriteString("## Polaris (System Manual)\n")
+		sb.WriteString("데네브 시스템에 대해 모를 때 polaris로 문서를 조회하세요.\n")
+		sb.WriteString("- polaris(action:'guides') → AI 전용 내부 시스템 가이드 목록\n")
+		sb.WriteString("- polaris(action:'guides', topic:'aurora') → 특정 가이드 읽기\n")
+		sb.WriteString("- polaris(action:'topics') → 전체 문서 트리 구조\n")
+		sb.WriteString("- polaris(action:'search', query:'webhook') → 키워드 검색\n")
+		sb.WriteString("- polaris(action:'read', topic:'concepts/session') → 토픽 읽기\n\n")
 	}
 
 	// Workspace.
@@ -408,15 +408,15 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 		dynamic.WriteString("추가 정보가 필요하면 memory_search로 메모리 파일을 더 탐색하세요.\n\n")
 	}
 
-	// System Manual.
-	if toolSet["system_manual"] {
-		dynamic.WriteString("## System Manual\n")
-		dynamic.WriteString("데네브 시스템에 대해 모를 때 system_manual로 문서를 조회하세요.\n")
-		dynamic.WriteString("- system_manual(action:'guides') → AI 전용 내부 시스템 가이드 목록\n")
-		dynamic.WriteString("- system_manual(action:'guides', topic:'aurora') → 특정 가이드 읽기\n")
-		dynamic.WriteString("- system_manual(action:'topics') → 전체 문서 트리 구조\n")
-		dynamic.WriteString("- system_manual(action:'search', query:'webhook') → 키워드 검색\n")
-		dynamic.WriteString("- system_manual(action:'read', topic:'concepts/session') → 토픽 읽기\n\n")
+	// Polaris (System Manual).
+	if toolSet["polaris"] {
+		dynamic.WriteString("## Polaris (System Manual)\n")
+		dynamic.WriteString("데네브 시스템에 대해 모를 때 polaris로 문서를 조회하세요.\n")
+		dynamic.WriteString("- polaris(action:'guides') → AI 전용 내부 시스템 가이드 목록\n")
+		dynamic.WriteString("- polaris(action:'guides', topic:'aurora') → 특정 가이드 읽기\n")
+		dynamic.WriteString("- polaris(action:'topics') → 전체 문서 트리 구조\n")
+		dynamic.WriteString("- polaris(action:'search', query:'webhook') → 키워드 검색\n")
+		dynamic.WriteString("- polaris(action:'read', topic:'concepts/session') → 토픽 읽기\n\n")
 	}
 
 	dynamic.WriteString("## Workspace\n")

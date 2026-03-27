@@ -1,6 +1,6 @@
 package chat
 
-// Guide content constants for the system_manual tool's "guides" action.
+// Guide content constants for the polaris tool's "guides" action.
 // Each guide is a curated summary of a Deneb subsystem, written for AI agents.
 
 const auroraGuide = `Aurora is the context engine that controls how Deneb assembles model context.

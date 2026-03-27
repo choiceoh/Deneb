@@ -216,7 +216,7 @@ func toolSystemManual(workspaceDir string) ToolFunc {
 			Topic  string `json:"topic"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid system_manual params: %w", err)
+			return "", fmt.Errorf("invalid polaris params: %w", err)
 		}
 
 		switch p.Action {
@@ -318,8 +318,8 @@ func manualTopics(docsDir, filter string) (string, error) {
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString("Use system_manual(action:'read', topic:'<path>') to read a doc.\n")
-	sb.WriteString("Use system_manual(action:'search', query:'<keyword>') to search.\n")
+	sb.WriteString("Use polaris(action:'read', topic:'<path>') to read a doc.\n")
+	sb.WriteString("Use polaris(action:'search', query:'<keyword>') to search.\n")
 	return sb.String(), nil
 }
 
@@ -422,7 +422,7 @@ func manualRead(docsDir, topic string) (string, error) {
 		absPath = filepath.Join(docsDir, topic, "index.md")
 		content, err = readDocFile(absPath)
 		if err != nil {
-			return fmt.Sprintf("Document not found: %q. Use system_manual(action:'topics') to browse available docs.", topic), nil
+			return fmt.Sprintf("Document not found: %q. Use polaris(action:'topics') to browse available docs.", topic), nil
 		}
 	}
 
@@ -529,13 +529,13 @@ func manualGuides(topic string) (string, error) {
 			g := builtinGuides[key]
 			fmt.Fprintf(&sb, "  %-16s — %s\n", g.Key, g.Summary)
 		}
-		sb.WriteString("\nUse system_manual(action:'guides', topic:'<key>') to read a guide.\n")
+		sb.WriteString("\nUse polaris(action:'guides', topic:'<key>') to read a guide.\n")
 		return sb.String(), nil
 	}
 
 	g, ok := builtinGuides[topic]
 	if !ok {
-		return fmt.Sprintf("Unknown guide %q. Use system_manual(action:'guides') to list available guides.", topic), nil
+		return fmt.Sprintf("Unknown guide %q. Use polaris(action:'guides') to list available guides.", topic), nil
 	}
 	return fmt.Sprintf("# %s\n\n%s", g.Title, g.Content), nil
 }

@@ -107,7 +107,7 @@ Filesystem: read, write, edit, apply_patch, grep, find, ls
 Execution: exec, process
 Speed: pilot (local sglang orchestrator)
 Web: web (search + fetch + search+fetch)
-Memory: memory_search, memory_get, system_manual
+Memory: memory_search, memory_get, polaris
 System: nodes, cron, message, gateway
 Sessions: sessions_list/history/search/restore/send/spawn, subagents, session_status
 Media: image, youtube_transcript, send_file

@@ -66,7 +66,7 @@ func TestSystemManualTopics(t *testing.T) {
 		}
 	}
 	// Should contain usage hint.
-	if !strings.Contains(result, "system_manual(action:'read'") {
+	if !strings.Contains(result, "polaris(action:'read'") {
 		t.Error("expected read usage hint")
 	}
 }
@@ -200,7 +200,7 @@ func TestSystemManualGuidesUnknown(t *testing.T) {
 		t.Errorf("expected 'Unknown guide' message, got: %s", result)
 	}
 	// Should suggest listing guides.
-	if !strings.Contains(result, "system_manual(action:'guides')") {
+	if !strings.Contains(result, "polaris(action:'guides')") {
 		t.Error("expected suggestion to list available guides")
 	}
 }
