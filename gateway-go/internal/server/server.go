@@ -150,6 +150,10 @@ type Server struct {
 	// Phase 5: Autonomous goal-driven execution.
 	autonomousSvc *autonomous.Service
 
+	// toolDeps holds core tool dependencies; stored on the server so late-binding
+	// fields (e.g. AutonomousSvc) can be set from other init phases.
+	toolDeps *chat.CoreToolDeps
+
 	// Copilot: background system monitor using local sglang.
 	copilotSvc *copilot.Service
 }
@@ -999,8 +1003,9 @@ func (s *Server) registerPhase2Methods() {
 	workspaceDir := resolveWorkspaceDir()
 	s.logger.Info("resolved agent workspace directory", "workspaceDir", workspaceDir)
 
-	// Build core tool dependencies.
-	toolDeps := &chat.CoreToolDeps{
+	// Build core tool dependencies. Stored on the server so later init phases
+	// (e.g. registerAdvancedWorkflowMethods) can late-bind fields like AutonomousSvc.
+	s.toolDeps = &chat.CoreToolDeps{
 		ProcessMgr:   s.processes,
 		WorkspaceDir: workspaceDir,
 		CronSched:    s.cron,
@@ -1010,7 +1015,7 @@ func (s *Server) registerPhase2Methods() {
 	}
 
 	// Register core tools (file I/O, exec, process, sessions, gateway, cron, image).
-	chat.RegisterCoreTools(chatCfg.Tools, toolDeps)
+	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
 	if s.authManager != nil {
 		chatCfg.AuthManager = s.authManager
 	}
@@ -1024,7 +1029,7 @@ func (s *Server) registerPhase2Methods() {
 	)
 
 	// Wire SessionSendFn after handler creation to avoid circular deps.
-	toolDeps.SessionSendFn = func(sessionKey, message string) error {
+	s.toolDeps.SessionSendFn = func(sessionKey, message string) error {
 		fakeReq := &protocol.RequestFrame{
 			ID:     fmt.Sprintf("tool_send_%d", time.Now().UnixNano()),
 			Method: "sessions.send",
@@ -1294,6 +1299,9 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 		transcript:  s.transcript,
 		sessions:    s.sessions,
 	}, s.logger)
+
+	// Wire autonomous service into agent tools (late-binding, same as SessionSendFn).
+	s.toolDeps.AutonomousSvc = s.autonomousSvc
 
 	// Broadcast autonomous cycle events to WebSocket clients.
 	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {

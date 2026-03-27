@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
@@ -28,6 +29,10 @@ type CoreToolDeps struct {
 	// SessionSendFn is a callback that sends a message to a target session,
 	// triggering an agent run. Set after Handler creation to avoid circular deps.
 	SessionSendFn func(sessionKey, message string) error
+
+	// AutonomousSvc is set after Handler creation to avoid init-order deps.
+	// The autonomous tool gracefully degrades when this is nil.
+	AutonomousSvc *autonomous.Service
 }
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
@@ -256,6 +261,14 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Description: "In-memory clipboard for temporary content storage and retrieval",
 		InputSchema: clipboardToolSchema(),
 		Fn:          toolClipboard(),
+	})
+
+	// -- Autonomous tool (goal-driven execution management) --
+	registry.RegisterTool(ToolDef{
+		Name:        "autonomous",
+		Description: "Manage autonomous goals and execution cycles (status, goals, add/update/remove goals, run/stop cycles, enable/disable)",
+		InputSchema: autonomousToolSchema(),
+		Fn:          toolAutonomous(deps),
 	})
 
 	// -- Pilot tool (fast local AI that orchestrates other tools) --
