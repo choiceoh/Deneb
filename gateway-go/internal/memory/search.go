@@ -26,11 +26,37 @@ type SearchResult struct {
 
 // Scoring weights.
 const (
-	weightHybrid  = 0.60
+	weightHybrid     = 0.50
 	weightImportance = 0.25
-	weightRecency = 0.15
-	recencyHalfLifeDays = 30.0
+	weightRecency    = 0.10
+	weightFrequency  = 0.15
 )
+
+// categoryImportanceMultiplier adjusts the importance weight by fact category.
+// Decisions and preferences constrain future behavior → boost.
+// Context is time-sensitive → attenuate.
+var categoryImportanceMultiplier = map[string]float64{
+	CategoryDecision:   1.20,
+	CategoryPreference: 1.10,
+	CategorySolution:   1.00,
+	CategoryContext:    0.80,
+	CategoryUserModel:  1.15,
+	CategoryMutual:     0.90,
+}
+
+// categoryHalfLifeDays controls recency decay speed per category.
+// Long-lived categories (user_model, decision) decay slowly;
+// ephemeral categories (context) decay fast.
+var categoryHalfLifeDays = map[string]float64{
+	CategoryDecision:   90.0,
+	CategoryPreference: 60.0,
+	CategorySolution:   45.0,
+	CategoryContext:    14.0,
+	CategoryUserModel:  120.0,
+	CategoryMutual:     60.0,
+}
+
+const defaultHalfLifeDays = 30.0
 
 // SearchFacts performs a hybrid FTS + semantic search over active facts,
 // then applies importance and recency weighting.
@@ -192,6 +218,15 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 	now := time.Now()
 	var results []SearchResult
 
+	// Find max access count across candidates for frequency normalization.
+	maxAccessCount := 1
+	for _, f := range factMap {
+		if f.AccessCount > maxAccessCount {
+			maxAccessCount = f.AccessCount
+		}
+	}
+	logMaxAccess := math.Log2(1 + float64(maxAccessCount))
+
 	for _, id := range ids {
 		fact, ok := factMap[id]
 		if !ok {
@@ -212,15 +247,31 @@ func (s *Store) mergeAndRank(ftsResults map[int64]float64, vecResults map[int64]
 			hybridScore = math.Max(ftsScore, vecScore)
 		}
 
-		// Recency score based on last access or creation time.
+		// Category-adjusted importance: boost decisions/preferences, attenuate context.
+		adjustedImportance := fact.Importance
+		if mult, ok := categoryImportanceMultiplier[fact.Category]; ok {
+			adjustedImportance = math.Min(1.0, adjustedImportance*mult)
+		}
+
+		// Category-adaptive recency: different half-lives per category.
+		halfLife := defaultHalfLifeDays
+		if hl, ok := categoryHalfLifeDays[fact.Category]; ok {
+			halfLife = hl
+		}
 		refTime := fact.CreatedAt
 		if fact.LastAccessedAt != nil {
 			refTime = *fact.LastAccessedAt
 		}
 		daysSince := now.Sub(refTime).Hours() / 24
-		recencyScore := math.Exp(-math.Ln2 * daysSince / recencyHalfLifeDays)
+		recencyScore := math.Exp(-math.Ln2 * daysSince / halfLife)
 
-		finalScore := weightHybrid*hybridScore + weightImportance*fact.Importance + weightRecency*recencyScore
+		// Frequency score: logarithmic scaling of access count.
+		frequencyScore := math.Log2(1+float64(fact.AccessCount)) / logMaxAccess
+
+		finalScore := weightHybrid*hybridScore +
+			weightImportance*adjustedImportance +
+			weightRecency*recencyScore +
+			weightFrequency*frequencyScore
 
 		if opts.MinScore > 0 && finalScore < opts.MinScore {
 			continue
