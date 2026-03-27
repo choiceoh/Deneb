@@ -26,7 +26,7 @@ func stripThinkingTags(s string) string {
 
 const (
 	importanceTimeout   = 30 * time.Second
-	importanceMaxTokens = 512
+	importanceMaxTokens = 1536
 )
 
 // ExtractedFact is the structured output from the importance extraction LLM call.
@@ -310,6 +310,49 @@ func parseFactsResponse(text string) ([]ExtractedFact, bool) {
 		}
 	}
 
+	// Case 6: truncated JSON recovery — find last complete fact object boundary.
+	if recovered, ok := tryRecoverTruncatedJSON(text); ok {
+		return recovered, true
+	}
+
+	return nil, false
+}
+
+// tryRecoverTruncatedJSON attempts to recover parseable facts from JSON that was
+// truncated mid-stream (e.g. token limit hit). It finds the last complete '}' that
+// closes a fact object, then wraps the recovered portion into valid JSON.
+// Example truncated input:
+//
+//	{"facts": [{"content": "...", "importance": 0.6}, {"content": "터미널 로그 확
+//
+// Recovery: finds the last '}' after the first complete fact, closes the array/object.
+func tryRecoverTruncatedJSON(text string) ([]ExtractedFact, bool) {
+	// Look for an opening array bracket — the start of the facts list.
+	arrStart := strings.Index(text, "[")
+	if arrStart == -1 {
+		return nil, false
+	}
+
+	// Walk backwards from the end to find the last '}' — end of last complete object.
+	sub := text[arrStart:]
+	lastBrace := strings.LastIndex(sub, "}")
+	if lastBrace == -1 {
+		return nil, false
+	}
+
+	// Close the array.
+	candidate := sub[:lastBrace+1] + "]"
+
+	var facts []ExtractedFact
+	if err := json.Unmarshal([]byte(candidate), &facts); err != nil {
+		return nil, false
+	}
+	// Must have recovered at least one fact with content.
+	for _, f := range facts {
+		if f.Content != "" {
+			return facts, true
+		}
+	}
 	return nil, false
 }
 
