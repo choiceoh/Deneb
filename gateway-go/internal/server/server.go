@@ -1452,6 +1452,44 @@ func (s *Server) wireTelegramChatHandler() {
 		return err
 	})
 
+	// Set typing indicator function: sends "typing" chat action to Telegram
+	// periodically during agent runs so the user sees "typing..." in the chat.
+	s.chatHandler.SetTypingFunc(func(ctx context.Context, delivery *chat.DeliveryContext) error {
+		if delivery == nil || delivery.Channel != "telegram" {
+			return nil
+		}
+		client := s.telegramPlug.Client()
+		if client == nil {
+			return nil
+		}
+		chatID, err := strconv.ParseInt(delivery.To, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
+		}
+		return client.SendChatAction(ctx, chatID, "typing")
+	})
+
+	// Set reaction function: sets emoji reactions on the user's triggering message
+	// to show agent status phases (👀→🤔→🔥→👍).
+	s.chatHandler.SetReactionFunc(func(ctx context.Context, delivery *chat.DeliveryContext, emoji string) error {
+		if delivery == nil || delivery.Channel != "telegram" || delivery.MessageID == "" {
+			return nil
+		}
+		client := s.telegramPlug.Client()
+		if client == nil {
+			return nil
+		}
+		chatID, err := strconv.ParseInt(delivery.To, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
+		}
+		msgID, err := strconv.ParseInt(delivery.MessageID, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid message ID %q: %w", delivery.MessageID, err)
+		}
+		return client.SetMessageReaction(ctx, chatID, msgID, emoji)
+	})
+
 	// Create the inbound processor that routes Telegram messages through
 	// the autoreply command/directive pipeline before dispatching to chat.send.
 	inbound := NewInboundProcessor(s)

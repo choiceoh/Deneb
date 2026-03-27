@@ -44,18 +44,26 @@ type AgentResult struct {
 	Turns      int
 }
 
+// StreamHooks contains optional callbacks for agent streaming events.
+// All fields are optional — nil callbacks are silently skipped.
+type StreamHooks struct {
+	OnTextDelta func(text string) // text delta streamed from LLM
+	OnThinking  func()           // reasoning/thinking delta received
+	OnToolStart func(name string) // tool invocation about to execute
+}
+
 // RunAgent executes the agent tool-call loop: call LLM → detect tool_use →
 // execute tool → feed result → repeat until the model stops or limits are hit.
 //
-// emitDelta is called for each text delta (streaming output to clients).
-// It may be nil if streaming is not needed.
+// hooks provides optional callbacks for streaming events (text deltas,
+// thinking phases, tool starts). Pass nil or zero-value if not needed.
 func RunAgent(
 	ctx context.Context,
 	cfg AgentConfig,
 	messages []llm.Message,
 	client *llm.Client,
 	tools ToolExecutor,
-	emitDelta func(text string),
+	hooks StreamHooks,
 	logger *slog.Logger,
 ) (*AgentResult, error) {
 	if cfg.MaxTurns <= 0 {
@@ -109,7 +117,7 @@ func RunAgent(
 		}
 
 		// Consume the stream for this turn.
-		turnResult, err := consumeStream(ctx, events, emitDelta)
+		turnResult, err := consumeStream(ctx, events, hooks)
 		if err != nil {
 			if ctx.Err() != nil {
 				result.StopReason = stopReasonFromCtx(ctx)
@@ -150,6 +158,9 @@ func RunAgent(
 		toolResults := make([]llm.ContentBlock, len(turnResult.toolCalls))
 		var wg sync.WaitGroup
 		for i, tc := range turnResult.toolCalls {
+			if hooks.OnToolStart != nil {
+				hooks.OnToolStart(tc.Name)
+			}
 			wg.Add(1)
 			go func(idx int, tc llm.ContentBlock) {
 				defer wg.Done()
@@ -211,7 +222,7 @@ type turnResult struct {
 
 // consumeStream reads all events from a streaming LLM response and assembles
 // the turn result.
-func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, emitDelta func(text string)) (*turnResult, error) {
+func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks StreamHooks) (*turnResult, error) {
 	result := &turnResult{}
 
 	// Track current content block being built.
@@ -251,12 +262,15 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, emitDelta
 					switch cbd.Delta.Type {
 					case "text_delta":
 						currentBlock.block.Text += cbd.Delta.Text
-						if emitDelta != nil && cbd.Delta.Text != "" {
-							emitDelta(cbd.Delta.Text)
+						if hooks.OnTextDelta != nil && cbd.Delta.Text != "" {
+							hooks.OnTextDelta(cbd.Delta.Text)
 						}
 					case "thinking_delta":
 						// Extended thinking content — accumulate but don't emit to user.
 						currentBlock.block.Text += cbd.Delta.Text
+						if hooks.OnThinking != nil {
+							hooks.OnThinking()
+						}
 					case "input_json_delta":
 						currentBlock.jsonBuf = append(currentBlock.jsonBuf, cbd.Delta.PartialJSON...)
 					}
