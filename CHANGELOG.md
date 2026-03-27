@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.12.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.7...deneb-v3.12.0) (2026-03-27)
+
+
+### ✨ Features
+
+* auto-detect embedding server on DGX Spark startup ([affd107](https://github.com/choiceoh/Deneb/commit/affd107512bea1ad75993eff3bf0558045992ba0))
+* auto-launch SGLang embedding server on DGX Spark ([08620fe](https://github.com/choiceoh/Deneb/commit/08620fe4641780790eb2d4a9120a50a48439941a))
+
+
+### 🐛 Bug Fixes
+
+* separate embedding model from chat model to prevent SGLang 400 errors ([c0c2a01](https://github.com/choiceoh/Deneb/commit/c0c2a0126263556b39639c8bfbd3ee98c727a86d))
+* separate embedding model from chat model, auto-launch on DGX Spark ([a626c70](https://github.com/choiceoh/Deneb/commit/a626c70a5f30ebe2d7a7c0a9eeeeac2b14a9bb0d))
+
 ## [3.11.7](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.6...deneb-v3.11.7) (2026-03-26)
 
 
