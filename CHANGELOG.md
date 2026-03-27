@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.17.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.16.0...deneb-v3.17.0) (2026-03-27)
+
+
+### ✨ Features
+
+* **autonomous:** auto-set goals from recalled memory facts during knowledge prefetch ([97a285a](https://github.com/choiceoh/Deneb/commit/97a285a8f5a166bdadc74d537942ad6c16a62bdd))
+* **chat:** add multi_edit, tree, diff coding tools ([4e1f9dd](https://github.com/choiceoh/Deneb/commit/4e1f9dde35896982b8978100cec40c384ec2eb4e))
+* **memory:** add category-aware importance, recency, and frequency weighting ([4437e71](https://github.com/choiceoh/Deneb/commit/4437e71c0d84f87bc94f36240e282845f28bde34))
+* **pilot:** add shortcuts for gmail, youtube, polaris, image, clipboard, ls, vega and register vega chat tool ([7f17030](https://github.com/choiceoh/Deneb/commit/7f170300d3cb7e9017158bb31221095d770eefc7))
+* **polaris:** add 5 new guides and update existing guide content ([ee55306](https://github.com/choiceoh/Deneb/commit/ee553069f263677722768d4c84798fe614da8a8d))
+
+
+### 🐛 Bug Fixes
+
+* **memory:** enforce JSON mode and strip thinking tags in AuroraDream dreaming ([86527f5](https://github.com/choiceoh/Deneb/commit/86527f5a64d800d7fbf0c0399a5125125404c088))
+* **polaris:** resolve docs directory from repo root, not just workspace ([2a9c873](https://github.com/choiceoh/Deneb/commit/2a9c873f4f99737546334fa176e197a917edbe8f))
+
 ## [3.16.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.15.0...deneb-v3.16.0) (2026-03-27)
 
 
