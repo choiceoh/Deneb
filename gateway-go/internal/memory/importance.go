@@ -9,11 +9,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
+
+// thinkingTagRe matches <think>...</think> blocks that Qwen3.5 may emit.
+var thinkingTagRe = regexp.MustCompile(`(?s)<think>.*?</think>\s*`)
+
+// stripThinkingTags removes <think>...</think> blocks from Qwen3.5 responses.
+func stripThinkingTags(s string) string {
+	return thinkingTagRe.ReplaceAllString(s, "")
+}
 
 const (
 	importanceTimeout   = 30 * time.Second
@@ -319,6 +328,7 @@ func extractJSONArray(s string) (string, bool) {
 }
 
 func stripCodeFences(s string) string {
+	s = stripThinkingTags(s)
 	s = strings.TrimSpace(s)
 	if strings.HasPrefix(s, "```json") {
 		s = strings.TrimPrefix(s, "```json")

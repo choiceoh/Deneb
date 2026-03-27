@@ -25,7 +25,7 @@ const (
 	DreamingTimeIntervalH  = 8
 	dreamingTimeout        = 5 * time.Minute
 	dreamingBatchSize      = 20
-	dreamingMaxTokens      = 512
+	dreamingMaxTokens      = 1024
 	similarityMergeThreshold = 0.85
 )
 
@@ -140,12 +140,9 @@ Given stored facts, determine validity using these criteria:
 3. **Relevance decay**: Is this fact about a completed/abandoned task?
 4. **Confidence calibration**: Was the original importance score accurate?
 
-Return a JSON array:
-- "id": fact ID
-- "valid": true/false
-- "reason": brief Korean explanation if invalid
-- "new_importance": (optional) adjusted importance if the score should change
-Return ONLY valid JSON array, no markdown fences.`
+Return a JSON object with a "results" array:
+{"results": [{"id": <fact ID>, "valid": true/false, "reason": "brief Korean explanation if invalid", "new_importance": <optional adjusted importance>}, ...]}
+Return ONLY valid JSON.`
 
 func verifyFacts(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (verified int, expired int, err error) {
 	facts, err := store.GetFactsForDreaming(ctx)
@@ -185,15 +182,19 @@ func verifyBatch(ctx context.Context, store *Store, client *llm.Client, model st
 		return 0, 0, err
 	}
 
-	var results []struct {
+	type verifyResult struct {
 		ID            int64   `json:"id"`
 		Valid         bool    `json:"valid"`
 		Reason        string  `json:"reason"`
 		NewImportance float64 `json:"new_importance,omitempty"`
 	}
-	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &results); err != nil {
+	var wrapper struct {
+		Results []verifyResult `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &wrapper); err != nil {
 		return 0, 0, fmt.Errorf("parse verify response: %w", err)
 	}
+	results := wrapper.Results
 
 	verified, expired := 0, 0
 	for _, r := range results {
@@ -326,12 +327,10 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 
 const conflictSystemPrompt = `You are a fact conflict resolution assistant.
 Given a list of facts in the same category, identify contradictions or superseded information.
-For each conflict found, return a JSON array of objects:
-- "keep_id": the fact ID to keep (more recent or more accurate)
-- "remove_id": the fact ID to deactivate
-- "reason": brief explanation (Korean)
-If no conflicts found, return [].
-Return ONLY valid JSON array, no markdown fences.`
+Return a JSON object with a "conflicts" array:
+{"conflicts": [{"keep_id": <fact ID to keep>, "remove_id": <fact ID to deactivate>, "reason": "brief explanation (Korean)"}, ...]}
+If no conflicts found, return {"conflicts": []}.
+Return ONLY valid JSON.`
 
 func resolveConflicts(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
 	facts, err := store.GetActiveFacts(ctx)
@@ -366,16 +365,19 @@ func resolveConflicts(ctx context.Context, store *Store, client *llm.Client, mod
 			continue
 		}
 
-		var results []struct {
+		type conflictResult struct {
 			KeepID   int64  `json:"keep_id"`
 			RemoveID int64  `json:"remove_id"`
 			Reason   string `json:"reason"`
 		}
-		if err := json.Unmarshal([]byte(stripCodeFences(resp)), &results); err != nil {
+		var wrapper struct {
+			Conflicts []conflictResult `json:"conflicts"`
+		}
+		if err := json.Unmarshal([]byte(stripCodeFences(resp)), &wrapper); err != nil {
 			continue
 		}
 
-		for _, r := range results {
+		for _, r := range wrapper.Conflicts {
 			if r.KeepID > 0 && r.RemoveID > 0 && r.KeepID != r.RemoveID {
 				_ = store.SupersedeFact(ctx, r.RemoveID, r.KeepID)
 				resolved++
@@ -405,12 +407,10 @@ Given accumulated facts, perform:
 3. **예측 (Hypothesis)**: What predictions can you make about future behavior or needs?
    → category: "user_model" or "mutual" depending on whether it's about the user or the relationship
 
-Return a JSON array of discovered patterns:
-- "content": the pattern (Korean, concise, evidence-based — cite specific supporting facts)
-- "category": "user_model" or "mutual"
-- "importance": 0.8-1.0 (patterns are high-value by definition)
-If no clear patterns (< 3 supporting facts), return [].
-Return ONLY valid JSON array, no markdown fences.`
+Return a JSON object with a "patterns" array:
+{"patterns": [{"content": "pattern (Korean, concise, evidence-based)", "category": "user_model" or "mutual", "importance": 0.8-1.0}, ...]}
+If no clear patterns (< 3 supporting facts), return {"patterns": []}.
+Return ONLY valid JSON.`
 
 func extractPatterns(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
 	facts, err := store.GetActiveFacts(ctx)
@@ -446,13 +446,15 @@ func extractPatterns(ctx context.Context, store *Store, client *llm.Client, mode
 		return 0, err
 	}
 
-	var patterns []ExtractedFact
-	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &patterns); err != nil {
+	var wrapper struct {
+		Patterns []ExtractedFact `json:"patterns"`
+	}
+	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &wrapper); err != nil {
 		return 0, nil
 	}
 
 	count := 0
-	for _, p := range patterns {
+	for _, p := range wrapper.Patterns {
 		if p.Content == "" {
 			continue
 		}
@@ -537,7 +539,14 @@ func updateUserModel(ctx context.Context, store *Store, client *llm.Client, mode
 	return nil
 }
 
-// callLLM is a convenience alias for callSglang (defined in sglang.go).
+// callLLM calls the local SGLang model with JSON mode enforced.
+// All dreaming phases expect structured JSON output, so we use
+// response_format: json_object and strip any thinking tags the
+// Qwen3.5 model may emit before the JSON payload.
 func callLLM(ctx context.Context, client *llm.Client, model, system, user string, maxTokens int) (string, error) {
-	return callSglang(ctx, client, model, system, user, maxTokens)
+	resp, err := callSglangJSON(ctx, client, model, system, user, maxTokens)
+	if err != nil {
+		return "", err
+	}
+	return stripThinkingTags(resp), nil
 }
