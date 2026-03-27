@@ -44,37 +44,37 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- File system tools (implemented in tools_fs.go) --
 	registry.RegisterTool(ToolDef{
 		Name:        "read",
-		Description: "Read file contents",
+		Description: "Read file contents with line numbers (default: 2000 lines). Use offset/limit for large files",
 		InputSchema: readToolSchema(),
 		Fn:          toolRead(workspaceDir),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "write",
-		Description: "Create or overwrite files",
+		Description: "Create or overwrite a file. Auto-creates parent directories. Use edit for partial changes",
 		InputSchema: writeToolSchema(),
 		Fn:          toolWrite(workspaceDir),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "edit",
-		Description: "Make precise edits to files",
+		Description: "Search-and-replace in a file. old_string must be unique unless replace_all=true. Read first to find the exact string",
 		InputSchema: editToolSchema(),
 		Fn:          toolEdit(workspaceDir),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "grep",
-		Description: "Search file contents for patterns",
+		Description: "Regex search across files (ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
 		InputSchema: grepToolSchema(),
 		Fn:          toolGrep(workspaceDir),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "find",
-		Description: "Find files by glob pattern",
+		Description: "Find files by glob pattern (e.g. \"**/*.go\"). Use grep to search inside files instead",
 		InputSchema: findToolSchema(),
 		Fn:          toolFind(workspaceDir),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "ls",
-		Description: "List directory contents",
+		Description: "List directory contents with sizes. Use find for recursive search",
 		InputSchema: lsToolSchema(),
 		Fn:          toolLs(workspaceDir),
 	})
@@ -82,13 +82,13 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Exec/process tools --
 	registry.RegisterTool(ToolDef{
 		Name:        "exec",
-		Description: "Run shell commands",
+		Description: "Run a shell command (bash -c). Default timeout 30s, max 5min. Use background=true for long tasks, then process to check",
 		InputSchema: execToolSchema(),
 		Fn:          toolExec(procMgr, workspaceDir),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "process",
-		Description: "Manage background exec sessions",
+		Description: "Manage background exec sessions: list running, poll/log output, kill by sessionId",
 		InputSchema: processToolSchema(),
 		Fn:          toolProcess(procMgr),
 	})
@@ -98,7 +98,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	sglang := newSGLangExtractor()
 	registry.RegisterTool(ToolDef{
 		Name:        "web",
-		Description: "Search the web, fetch URLs, or search and auto-fetch top results — all in one tool",
+		Description: "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch, {query:...} search, {query:...,fetch:N} search+fetch",
 		InputSchema: webToolSchema(),
 		Fn:          toolWeb(webCache, sglang),
 	})
@@ -106,13 +106,13 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Memory tools --
 	registry.RegisterTool(ToolDef{
 		Name:        "memory_search",
-		Description: "Search memory files (MEMORY.md, memory/*.md) by keyword",
+		Description: "Search MEMORY.md + memory/*.md by keyword. Returns matched lines with context",
 		InputSchema: memorySearchToolSchema(),
 		Fn:          toolMemorySearch(workspaceDir),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "memory_get",
-		Description: "Read specific lines from a memory file",
+		Description: "Read specific line range from a memory file. Use after memory_search to get full context",
 		InputSchema: memoryGetToolSchema(),
 		Fn:          toolMemoryGet(workspaceDir),
 	})
@@ -120,7 +120,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- System manual tool (queryable Deneb documentation) --
 	registry.RegisterTool(ToolDef{
 		Name:        "polaris",
-		Description: "Query Deneb system documentation and AI-curated guides",
+		Description: "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (AI-curated internal system guides: aurora, vega, agent-loop, compaction, tools, system-prompt, memory, sessions, architecture, channels, telegram, skills, pilot, cron, autonomous)",
 		InputSchema: systemManualToolSchema(),
 		Fn:          toolSystemManual(workspaceDir),
 	})
@@ -128,7 +128,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Message tool (proactive channel sends via context-injected ReplyFunc) --
 	registry.RegisterTool(ToolDef{
 		Name:        "message",
-		Description: "Send messages and channel actions (send, reply, react)",
+		Description: "Send messages to the user's channel. Actions: send, reply, react, thread-reply. Use for proactive sends",
 		InputSchema: messageToolSchema(),
 		Fn:          toolMessage(),
 	})
@@ -136,7 +136,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Apply patch tool --
 	registry.RegisterTool(ToolDef{
 		Name:        "apply_patch",
-		Description: "Apply multi-file patches (unified diff format)",
+		Description: "Apply multi-file unified diff patches. Tries git apply first, falls back to patch -p1",
 		InputSchema: applyPatchToolSchema(),
 		Fn:          toolApplyPatch(workspaceDir),
 	})
@@ -144,7 +144,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Cron tool --
 	registry.RegisterTool(ToolDef{
 		Name:        "cron",
-		Description: "Manage cron jobs and wake events (reminders, periodic tasks)",
+		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
 		InputSchema: cronToolSchema(),
 		Fn:          toolCron(cronSched, deps),
 	})
@@ -152,7 +152,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Gateway tool --
 	registry.RegisterTool(ToolDef{
 		Name:        "gateway",
-		Description: "Gateway control (restart, config, update)",
+		Description: "Gateway self-management: config read/write, restart (SIGUSR1), git pull + rebuild",
 		InputSchema: gatewayToolSchema(),
 		Fn:          toolGateway(workspaceDir),
 	})
@@ -160,13 +160,13 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Session tools --
 	registry.RegisterTool(ToolDef{
 		Name:        "sessions_list",
-		Description: "List other sessions with optional filters",
+		Description: "List active sessions with kind/status. Filter by kinds: main, group, cron, hook",
 		InputSchema: sessionsListToolSchema(),
 		Fn:          toolSessionsList(deps.Sessions),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "sessions_history",
-		Description: "Fetch history for another session",
+		Description: "Fetch message history from another session (default: last 20 messages)",
 		InputSchema: sessionsHistoryToolSchema(),
 		Fn:          toolSessionsHistory(deps.Transcript),
 	})
@@ -178,31 +178,31 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "sessions_restore",
-		Description: "Restore a past session's history into the current session",
+		Description: "Restore a past session's conversation into the current session for continuation",
 		InputSchema: sessionsRestoreToolSchema(),
 		Fn:          toolSessionsRestore(deps.Transcript),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "sessions_send",
-		Description: "Send a message to another session",
+		Description: "Send a message to another session (defaults to \"main\" if sessionKey omitted)",
 		InputSchema: sessionsSendToolSchema(),
 		Fn:          toolSessionsSend(deps),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "sessions_spawn",
-		Description: "Spawn an isolated sub-agent session",
+		Description: "Create an isolated sub-agent session for parallel work. Use subagents to monitor",
 		InputSchema: sessionsSpawnToolSchema(),
 		Fn:          toolSessionsSpawn(deps),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "subagents",
-		Description: "List, steer, or kill sub-agent runs",
+		Description: "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
 		InputSchema: subagentsToolSchema(),
 		Fn:          toolSubagents(deps),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "session_status",
-		Description: "Show session status and usage (📊 session_status)",
+		Description: "Show current session info: kind, status, model, token usage, runtime",
 		InputSchema: sessionStatusToolSchema(),
 		Fn:          toolSessionStatus(deps.Sessions),
 	})
@@ -210,7 +210,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Image tool --
 	registry.RegisterTool(ToolDef{
 		Name:        "image",
-		Description: "Analyze images with a vision model",
+		Description: "Analyze images with a vision model (up to 20 local files or URLs). Accepts optional prompt",
 		InputSchema: imageToolSchema(),
 		Fn:          toolImage(deps.LLMClient),
 	})
@@ -226,7 +226,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Nodes tool --
 	registry.RegisterTool(ToolDef{
 		Name:        "nodes",
-		Description: "Discover and control paired nodes (status/notify/camera/run)",
+		Description: "Discover and control paired mobile nodes (status/notify/camera/run)",
 		InputSchema: nodesToolSchema(),
 		Fn:          toolNodes(),
 	})
@@ -234,7 +234,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Send file tool (media delivery to channel) --
 	registry.RegisterTool(ToolDef{
 		Name:        "send_file",
-		Description: "Send a file to the user (photo, document, video, audio, voice)",
+		Description: "Send a file to the user (auto-detects: photo/video/audio/document). Max 50 MB",
 		InputSchema: sendFileToolSchema(),
 		Fn:          toolSendFile(),
 	})
@@ -242,7 +242,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- HTTP tool (structured API requests) --
 	registry.RegisterTool(ToolDef{
 		Name:        "http",
-		Description: "Make HTTP requests (GET, POST, PUT, PATCH, DELETE) with headers and JSON body",
+		Description: "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
 		InputSchema: httpToolSchema(),
 		Fn:          toolHTTP(),
 	})
@@ -250,7 +250,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- KV tool (lightweight key-value persistence) --
 	registry.RegisterTool(ToolDef{
 		Name:        "kv",
-		Description: "Persistent key-value store for agent state across sessions",
+		Description: "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
 		InputSchema: kvToolSchema(),
 		Fn:          toolKV(),
 	})
@@ -266,7 +266,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Clipboard tool (temporary content sharing) --
 	registry.RegisterTool(ToolDef{
 		Name:        "clipboard",
-		Description: "In-memory clipboard for temporary content storage and retrieval",
+		Description: "Temporary in-memory clipboard (ring buffer, 32 items max). Actions: set, get, list, clear",
 		InputSchema: clipboardToolSchema(),
 		Fn:          toolClipboard(),
 	})
@@ -274,7 +274,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- Autonomous tool (goal-driven execution management) --
 	registry.RegisterTool(ToolDef{
 		Name:        "autonomous",
-		Description: "Manage autonomous goals and execution cycles (status, goals, add/update/remove goals, run/stop cycles, enable/disable)",
+		Description: "Manage autonomous goals and execution cycles. Actions: status, goals, add_goal, update_goal, remove_goal, cycle_run, cycle_stop, enable, disable, recent_runs",
 		InputSchema: autonomousToolSchema(),
 		Fn:          toolAutonomous(deps),
 	})

@@ -30,7 +30,7 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 	sections := []string{
 		"You are a personal assistant running inside Deneb.",
 		"## Tooling",
-		"## Tool Call Style",
+		"## Tool Usage",
 		"## Safety",
 		"## Memory Recall",
 		"## Workspace",
@@ -54,26 +54,33 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptToolOrder(t *testing.T) {
+func TestBuildSystemPromptCompactToolList(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
-			{Name: "exec", Description: "Run commands"},
 			{Name: "read", Description: "Read files"},
 			{Name: "write", Description: "Write files"},
+			{Name: "exec", Description: "Run commands"},
+			{Name: "pilot", Description: "Local AI"},
 		},
 	}
 
 	prompt := BuildSystemPrompt(params)
 
-	// read should appear before exec in the prompt (per toolOrder).
-	readIdx := strings.Index(prompt, "- read:")
-	execIdx := strings.Index(prompt, "- exec:")
-	if readIdx < 0 || execIdx < 0 {
-		t.Fatal("missing read or exec in prompt")
+	// Should contain categorized tool list format.
+	if !strings.Contains(prompt, "File: read, write") {
+		t.Error("expected compact File category with read, write")
 	}
-	if readIdx > execIdx {
-		t.Error("read should appear before exec in tool list")
+	if !strings.Contains(prompt, "Exec: exec") {
+		t.Error("expected compact Exec category")
+	}
+	if !strings.Contains(prompt, "AI: pilot") {
+		t.Error("expected compact AI category")
+	}
+
+	// Should NOT contain verbose per-tool descriptions in the tool list.
+	if strings.Contains(prompt, "- read: Read files") {
+		t.Error("expected compact list, not verbose per-tool descriptions")
 	}
 }
 
@@ -185,60 +192,6 @@ func TestBuildRuntimeLine_DefaultModel(t *testing.T) {
 	}
 }
 
-func TestWriteToolList_OrderAndDedup(t *testing.T) {
-	defs := []ToolDef{
-		{Name: "custom_tool", Description: "A custom tool"},
-		{Name: "exec", Description: "Run commands"},
-		{Name: "read", Description: "Read files"},
-		{Name: "write", Description: "Write files"},
-	}
-
-	var sb strings.Builder
-	writeToolList(&sb, defs)
-	output := sb.String()
-
-	// Ordered tools should appear first in preferred order
-	readIdx := strings.Index(output, "- read:")
-	writeIdx := strings.Index(output, "- write:")
-	execIdx := strings.Index(output, "- exec:")
-	customIdx := strings.Index(output, "- custom_tool:")
-
-	if readIdx < 0 || writeIdx < 0 || execIdx < 0 || customIdx < 0 {
-		t.Fatalf("missing tools in output: %s", output)
-	}
-
-	// read < write < exec (per toolOrder)
-	if readIdx > writeIdx {
-		t.Error("read should appear before write")
-	}
-	if writeIdx > execIdx {
-		t.Error("write should appear before exec")
-	}
-
-	// custom_tool is not in toolOrder, so it comes after ordered tools
-	if customIdx < execIdx {
-		t.Error("custom_tool should appear after ordered tools")
-	}
-}
-
-func TestWriteToolList_CoreSummaryOverride(t *testing.T) {
-	defs := []ToolDef{
-		{Name: "read", Description: "Generic description"},
-	}
-
-	var sb strings.Builder
-	writeToolList(&sb, defs)
-	output := sb.String()
-
-	// Should use the coreToolSummaries description instead of the generic one
-	if strings.Contains(output, "Generic description") {
-		t.Error("expected core summary to override generic description")
-	}
-	if !strings.Contains(output, "Read file contents") {
-		t.Errorf("expected core summary 'Read file contents', got: %s", output)
-	}
-}
-
 func TestBuildSystemPrompt_MessageToolSilentReply(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
@@ -284,5 +237,79 @@ func TestBuildDefaultRuntimeInfo(t *testing.T) {
 	}
 	if info.Arch == "" {
 		t.Error("expected Arch to be set from runtime.GOARCH")
+	}
+}
+
+func TestBuildSystemPromptPilotSection(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs: []ToolDef{
+			{Name: "pilot", Description: "Fast local AI"},
+		},
+	}
+
+	prompt := BuildSystemPrompt(params)
+	if !strings.Contains(prompt, "## Pilot & Chaining") {
+		t.Error("expected Pilot & Chaining section when pilot tool registered")
+	}
+	if !strings.Contains(prompt, "$ref") {
+		t.Error("expected tool chaining info in Pilot & Chaining section")
+	}
+}
+
+func TestBuildSystemPromptNoPilotSection(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs: []ToolDef{
+			{Name: "read", Description: "Read files"},
+		},
+	}
+
+	prompt := BuildSystemPrompt(params)
+	if strings.Contains(prompt, "## Pilot & Chaining") {
+		t.Error("Pilot section should not appear when pilot tool not registered")
+	}
+}
+
+func TestBuildSystemPromptBlocksMatchesString(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs: []ToolDef{
+			{Name: "read", Description: "Read files"},
+			{Name: "exec", Description: "Run commands"},
+			{Name: "pilot", Description: "Local AI"},
+		},
+		UserTimezone: "UTC",
+	}
+
+	stringPrompt := BuildSystemPrompt(params)
+	blocks := BuildSystemPromptBlocks(params)
+
+	// Blocks should concatenate to the same content as string version.
+	var combined strings.Builder
+	for _, b := range blocks {
+		combined.WriteString(b.Text)
+	}
+
+	if combined.String() != stringPrompt {
+		t.Error("BuildSystemPromptBlocks content should match BuildSystemPrompt")
+	}
+}
+
+func TestWriteCompactToolList_UncategorizedTools(t *testing.T) {
+	toolSet := map[string]bool{
+		"read":        true,
+		"custom_tool": true,
+	}
+
+	var sb strings.Builder
+	writeCompactToolList(&sb, toolSet)
+	output := sb.String()
+
+	if !strings.Contains(output, "File: read") {
+		t.Error("expected categorized read in File group")
+	}
+	if !strings.Contains(output, "Other: custom_tool") {
+		t.Error("expected uncategorized tool in Other group")
 	}
 }
