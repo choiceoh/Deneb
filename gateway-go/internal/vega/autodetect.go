@@ -2,8 +2,11 @@ package vega
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -45,4 +48,93 @@ func IsSglangReachable(baseURL string) bool {
 	}
 	resp.Body.Close()
 	return resp.StatusCode >= 200 && resp.StatusCode < 300
+}
+
+// EmbedEndpoint holds the auto-detected embedding server URL and model name.
+type EmbedEndpoint struct {
+	URL   string // e.g. "http://127.0.0.1:30001/v1"
+	Model string // e.g. "BAAI/bge-m3"
+}
+
+// defaultEmbedCandidates lists ports to probe for an embedding server on localhost.
+// Port 30001 is the conventional DGX Spark embedding port.
+var defaultEmbedCandidates = []string{
+	"http://127.0.0.1:30001/v1",
+	"http://127.0.0.1:30002/v1",
+}
+
+// DetectEmbedEndpoint auto-detects a running embedding server.
+// Priority: DENEB_EMBED_URL/DENEB_EMBED_MODEL env vars → probe default ports.
+// Returns nil if no embedding server is found.
+func DetectEmbedEndpoint(logger *slog.Logger) *EmbedEndpoint {
+	// 1. Explicit env var override — skip probing.
+	envURL, envModel := getEmbedEnv()
+	if envURL != "" && envModel != "" {
+		if logger != nil {
+			logger.Info("vega: using explicit embedding endpoint",
+				"url", envURL, "model", envModel)
+		}
+		return &EmbedEndpoint{URL: envURL, Model: envModel}
+	}
+
+	// 2. Probe default candidate ports for a running embedding server.
+	for _, candidate := range defaultEmbedCandidates {
+		if model := probeEmbedModel(candidate); model != "" {
+			if logger != nil {
+				logger.Info("vega: auto-detected embedding server",
+					"url", candidate, "model", model)
+			}
+			return &EmbedEndpoint{URL: candidate, Model: model}
+		}
+	}
+
+	if logger != nil {
+		logger.Info("vega: no embedding server detected, embedding disabled")
+	}
+	return nil
+}
+
+// getEmbedEnv reads DENEB_EMBED_URL and DENEB_EMBED_MODEL from environment.
+func getEmbedEnv() (string, string) {
+	return os.Getenv("DENEB_EMBED_URL"), os.Getenv("DENEB_EMBED_MODEL")
+}
+
+// probeEmbedModel calls /v1/models on the given base URL and returns
+// the first model ID, or "" if the server is unreachable/empty.
+func probeEmbedModel(baseURL string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)
+	if err != nil {
+		return ""
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return ""
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return ""
+	}
+
+	var result struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return ""
+	}
+	if len(result.Data) == 0 {
+		return ""
+	}
+	return result.Data[0].ID
 }

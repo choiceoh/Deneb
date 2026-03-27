@@ -224,25 +224,21 @@ func initVega(srv *server.Server, logger *slog.Logger) {
 		return
 	}
 
-	// Embedding requires a dedicated server launched with --is-embedding.
-	embedURL := os.Getenv("DENEB_EMBED_URL")
-	embedModel := os.Getenv("DENEB_EMBED_MODEL")
+	// Auto-detect embedding server (env vars → probe default ports).
+	embed := vega.DetectEmbedEndpoint(logger)
 
-	backend := vega.NewEnhancedBackend(vega.EnhancedBackendConfig{
+	cfg := vega.EnhancedBackendConfig{
 		Logger:      logger,
 		SglangURL:   sglangURL,
 		SglangModel: sglangModel,
-		EmbedURL:    embedURL,
-		EmbedModel:  embedModel,
-	})
-	srv.SetVega(backend)
+	}
+	if embed != nil {
+		cfg.EmbedURL = embed.URL
+		cfg.EmbedModel = embed.Model
+	}
 
-	logger.Info("vega: EnhancedBackend initialized",
-		"sglang_url", sglangURL,
-		"model", sglangModel,
-		"embed_url", embedURL,
-		"embed_model", embedModel,
-	)
+	backend := vega.NewEnhancedBackend(cfg)
+	srv.SetVega(backend)
 }
 
 func parseLogLevel(s string) slog.Level {
