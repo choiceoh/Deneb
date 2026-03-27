@@ -28,6 +28,12 @@ type ExtractedFact struct {
 	ExpiryHint string  `json:"expiry_hint,omitempty"` // ISO8601 or empty
 }
 
+// factsResponse is the expected top-level JSON object from the LLM.
+// response_format: json_object always returns an object, so we ask for {"facts": [...]}.
+type factsResponse struct {
+	Facts []ExtractedFact `json:"facts"`
+}
+
 // importanceSystemPrompt uses Honcho Neuromancer XR-style reasoning:
 // 1. Explicit extraction — what was directly stated
 // 2. Deductive reasoning — what can be logically inferred but wasn't said
@@ -80,7 +86,8 @@ Detect AI-user relationship dynamics. For each signal, note WHAT happened and it
 - Proactive requests: user expects AI to anticipate needs
 
 ### Step 3: Output
-Return a JSON array. For each fact:
+Return a JSON object with a "facts" key containing an array of fact objects.
+Each fact object has:
 - "content": Korean, concise (1-2 sentences). Include the reasoning basis
 - "category": one of:
   - "decision": choices made (explicit or inferred from actions)
@@ -95,12 +102,14 @@ Return a JSON array. For each fact:
   - 0.5-0.7: useful context, weak signals, subtle relationship cues
 - "expiry_hint": null or "YYYY-MM-DD" (e.g. "2026-04-15") if time-sensitive
 
+Example: {"facts": [{"content": "사용자가 Python보다 Go를 선호함", "category": "preference", "importance": 0.8, "expiry_hint": null}]}
+
 ## Rules
 - Max 7 facts. Quality over quantity
 - Include at least 1 deductive inference if the conversation has substance
 - Include at least 1 mutual signal if any relationship dynamics are detectable (most conversations have at least a subtle signal)
-- If nothing worth remembering, return []
-- Return ONLY valid JSON array, no markdown fences, no explanation`
+- If nothing worth remembering, return {"facts": []}
+- Return ONLY valid JSON object with "facts" key, no markdown fences, no explanation`
 
 // ExtractFacts analyzes a conversation segment and returns structured facts.
 // Falls back to legacy bullet-point extraction if JSON parsing fails.
@@ -123,20 +132,11 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 	// Strip markdown code fences if present.
 	text = stripCodeFences(text)
 
-	var facts []ExtractedFact
-	if err := json.Unmarshal([]byte(text), &facts); err != nil {
-		// Fallback: try to extract a JSON array from within the text.
-		if extracted, ok := extractJSONArray(text); ok {
-			if err2 := json.Unmarshal([]byte(extracted), &facts); err2 != nil {
-				logger.Debug("importance: JSON parse failed after extraction fallback",
-					"error", err2, "raw", truncate(text, 200))
-				return nil, nil
-			}
-		} else {
-			logger.Debug("importance: JSON parse failed, no array found",
-				"error", err, "raw", truncate(text, 200))
-			return nil, nil
-		}
+	facts, ok := parseFactsResponse(text)
+	if !ok {
+		logger.Debug("importance: could not parse facts from response",
+			"raw", truncate(text, 200))
+		return nil, nil
 	}
 
 	// Validate, clamp values, and enforce max count.
@@ -253,6 +253,56 @@ func updateUserModelFromFact(ctx context.Context, store *Store, fact ExtractedFa
 }
 
 // --- Helpers ---
+
+// parseFactsResponse attempts to parse LLM JSON output into []ExtractedFact.
+// Handles multiple response shapes since json_object format always returns an object:
+//  1. {"facts": [...]}  — expected format (matches prompt)
+//  2. [...]             — bare array (if model ignores json_object constraint)
+//  3. {"<any_key>": [...]} — array under an arbitrary key
+//  4. {"content": "...", "category": "...", ...} — single fact as object
+func parseFactsResponse(text string) ([]ExtractedFact, bool) {
+	// Case 1: expected object with "facts" key.
+	var resp factsResponse
+	if err := json.Unmarshal([]byte(text), &resp); err == nil && resp.Facts != nil {
+		return resp.Facts, true
+	}
+
+	// Case 2: bare JSON array.
+	var arr []ExtractedFact
+	if err := json.Unmarshal([]byte(text), &arr); err == nil {
+		return arr, true
+	}
+
+	// Case 3: object with array under an arbitrary key.
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(text), &obj); err == nil {
+		for _, v := range obj {
+			trimmed := strings.TrimSpace(string(v))
+			if len(trimmed) > 0 && trimmed[0] == '[' {
+				var nested []ExtractedFact
+				if err := json.Unmarshal(v, &nested); err == nil && len(nested) > 0 {
+					return nested, true
+				}
+			}
+		}
+
+		// Case 4: single fact object.
+		var single ExtractedFact
+		if err := json.Unmarshal([]byte(text), &single); err == nil && single.Content != "" {
+			return []ExtractedFact{single}, true
+		}
+	}
+
+	// Case 5: bracket extraction fallback (prose-wrapped arrays).
+	if extracted, ok := extractJSONArray(text); ok {
+		var fallback []ExtractedFact
+		if err := json.Unmarshal([]byte(extracted), &fallback); err == nil {
+			return fallback, true
+		}
+	}
+
+	return nil, false
+}
 
 // extractJSONArray finds the first '[' and last ']' in s and returns the
 // substring between them. Handles cases where the model wraps JSON in prose.
