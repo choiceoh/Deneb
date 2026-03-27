@@ -3,10 +3,11 @@
 # Orchestrates Rust (core-rs workspace), Go (gateway-go), and CLI (cli-rs) builds.
 
 .PHONY: all rust rust-vega rust-dgx rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
-       go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-binary go-binary-dgx gateway-prod gateway-dgx \
+       go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary go-binary-dgx gateway-prod gateway-dgx \
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
        cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 \
        cli-cross-win-x64 cli-cross-all \
+       deny machete \
        test clean check fmt \
        proto proto-go proto-rust proto-check proto-lint proto-watch \
        error-code-sync \
@@ -173,6 +174,20 @@ cli-cross-all: cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cl
 cli-install: cli
 	./cli-rs/scripts/install.sh
 
+# --- Audit / quality tools ---
+
+# Run cargo-deny to check Rust dependencies for vulnerabilities, license issues, and bans.
+deny:
+	cargo deny check
+
+# Run cargo-machete to detect unused Rust dependencies.
+machete:
+	cd core-rs && cargo machete
+
+# Run Go benchmarks with memory allocation stats.
+go-bench:
+	cd gateway-go && go test -bench=. -benchmem -run='^$$' ./...
+
 # --- Combined operations ---
 
 test: rust-test go-test cli-test
@@ -233,6 +248,9 @@ info:
 	@echo "  make go-fmt     - Check Go formatting"
 	@echo "  make check      - Run all checks (Rust + Go + CLI)"
 	@echo "  make clean      - Clean Rust, Go, and CLI build artifacts"
+	@echo "  make go-bench   - Run Go gateway benchmarks"
+	@echo "  make deny       - Check Rust deps (security, license, bans)"
+	@echo "  make machete    - Detect unused Rust dependencies"
 	@echo "  make cli-bench  - Run CLI startup benchmark"
 	@echo "  make cli-cross-all - Cross-compile CLI for all platforms"
 	@echo "  make proto      - Generate protobuf code (Go + Rust)"
