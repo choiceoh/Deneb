@@ -71,6 +71,24 @@ func TestParseFactsResponse(t *testing.T) {
 			wantOK:    true,
 			wantCount: 1,
 		},
+		{
+			name:      "truncated JSON mid-fact recovers complete facts",
+			input:     `{"facts": [{"content": "사용자가 Go를 선호", "category": "preference", "importance": 0.8}, {"content": "터미널 로그 확`,
+			wantOK:    true,
+			wantCount: 1,
+		},
+		{
+			name:      "truncated JSON after two complete facts",
+			input:     `{"facts": [{"content": "fact1", "category": "decision", "importance": 0.9}, {"content": "fact2", "category": "context", "importance": 0.6}, {"content": "잘린`,
+			wantOK:    true,
+			wantCount: 2,
+		},
+		{
+			name:      "truncated JSON no complete fact",
+			input:     `{"facts": [{"content": "잘린 내`,
+			wantOK:    false,
+			wantCount: 0,
+		},
 	}
 
 	for _, tt := range tests {
