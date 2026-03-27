@@ -1,5 +1,34 @@
 # Changelog
 
+## [3.14.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.13.0...deneb-v3.14.0) (2026-03-27)
+
+
+### ✨ Features
+
+* add autonomous tool to agent tool registry ([903755f](https://github.com/choiceoh/Deneb/commit/903755f794dc196ff218b2e64e286188d16fabea))
+* add autonomous tool to system prompt descriptions and tool order ([88871ec](https://github.com/choiceoh/Deneb/commit/88871ec29b2e7e24e4a7cd30379c73c934f53000))
+* add mutual understanding tracking to Aurora Dream ([b6c7de9](https://github.com/choiceoh/Deneb/commit/b6c7de9faa965cf960061d082d319884b71af411))
+* add system_manual tool for queryable Deneb documentation ([60eff64](https://github.com/choiceoh/Deneb/commit/60eff64d798cab3a4adc0e279eafb01cd239f6b1))
+* compaction + quality filtering for MEMORY.md ([ab06a40](https://github.com/choiceoh/Deneb/commit/ab06a40372e0b833b8d96b71be339d63cee00316))
+* deepen mutual understanding tracking ([347529a](https://github.com/choiceoh/Deneb/commit/347529ae0303fb6d0ac2ef04a535c82058c42c25))
+* deepen mutual understanding with real-time signals, history, and cross-phase integration ([e97e0c1](https://github.com/choiceoh/Deneb/commit/e97e0c1e271375492cac868601d1390a55a98488))
+* fix review issues — 2 bugs, 4 logic, 2 prompt, 1 style ([dab41be](https://github.com/choiceoh/Deneb/commit/dab41be151ea2ba7980576047ad72113146a9f31))
+* fix second review — UTF-8 safety, sql.ErrNoRows, signal cleanup, tests ([f4755cc](https://github.com/choiceoh/Deneb/commit/f4755cc468052d72413cd03f12379cfac0affb00))
+* fix updateUserModelFromFact reading from wrong table ([9a51dae](https://github.com/choiceoh/Deneb/commit/9a51dae03598fd690e6ce87ce3435270048ac767))
+* rename system_manual tool to polaris ([815d438](https://github.com/choiceoh/Deneb/commit/815d4383b447d2c4df1aadf90125b91500e997d1))
+
+
+### 🐛 Bug Fixes
+
+* add module prefixes to release-please changelog-sections ([e7471e7](https://github.com/choiceoh/Deneb/commit/e7471e753aa012c8fc784651e14d6ed9f4a4d852))
+* promote toolDeps to server field for cross-phase late-binding ([89382ad](https://github.com/choiceoh/Deneb/commit/89382adddde798373d847589388a48b164dcc1ac))
+* **telegram:** prevent status reaction context canceled on run completion ([aade952](https://github.com/choiceoh/Deneb/commit/aade9520c4a3a08d81644ae13aa345216833758f))
+
+
+### 🔧 Internal
+
+* **gateway:** refine startup banner, console logging, and HTTP responses ([68751bb](https://github.com/choiceoh/Deneb/commit/68751bbefc70d06fa5a2aa4b317ccdb2ea59e688))
+
 ## [3.13.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.12.0...deneb-v3.13.0) (2026-03-27)
 
 ### ✨ Features
