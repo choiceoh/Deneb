@@ -28,11 +28,14 @@ const (
 
 // EmbedServer manages an SGLang embedding server subprocess.
 type EmbedServer struct {
-	cmd    *exec.Cmd
-	model  string
-	port   int
-	url    string // e.g. "http://127.0.0.1:30001/v1"
-	logger *slog.Logger
+	cmd      *exec.Cmd
+	model    string
+	port     int
+	url      string // e.g. "http://127.0.0.1:30001/v1"
+	logger   *slog.Logger
+	logFile  *os.File      // log file handle, closed on Stop()
+	exited   chan struct{}  // closed when the process exits
+	ready    chan struct{}  // closed when the server becomes healthy
 }
 
 // EmbedServerConfig configures the auto-launched embedding server.
@@ -85,25 +88,39 @@ func LaunchEmbedServer(cfg EmbedServerConfig) (*EmbedServer, *EmbedEndpoint) {
 	)
 
 	// Log to file so stdout/stderr don't clutter the gateway.
+	var lf *os.File
 	logPath := embedServerLogPath()
-	if logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
-		cmd.Stdout = logFile
-		cmd.Stderr = logFile
+	if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+		lf = f
+		cmd.Stdout = f
+		cmd.Stderr = f
 		cfg.Logger.Info("embed-server: logging to", "path", logPath)
 	}
 
 	if err := cmd.Start(); err != nil {
 		cfg.Logger.Warn("embed-server: failed to start", "error", err)
+		if lf != nil {
+			lf.Close()
+		}
 		return nil, nil
 	}
 
 	es := &EmbedServer{
-		cmd:    cmd,
-		model:  cfg.Model,
-		port:   cfg.Port,
-		url:    url,
-		logger: cfg.Logger,
+		cmd:     cmd,
+		model:   cfg.Model,
+		port:    cfg.Port,
+		url:     url,
+		logger:  cfg.Logger,
+		logFile: lf,
+		exited:  make(chan struct{}),
+		ready:   make(chan struct{}),
 	}
+
+	// Monitor process exit so waitForReady can detect premature crashes.
+	go func() {
+		cmd.Wait()
+		close(es.exited)
+	}()
 
 	// Wait for it to become healthy in the background.
 	// Return the handle immediately so gateway startup isn't blocked.
@@ -120,22 +137,30 @@ func (es *EmbedServer) Stop() {
 
 	es.logger.Info("embed-server: stopping", "pid", es.cmd.Process.Pid)
 
-	// SIGTERM for graceful shutdown.
-	if err := es.cmd.Process.Signal(os.Interrupt); err != nil {
-		es.logger.Debug("embed-server: interrupt failed, killing", "error", err)
-		es.cmd.Process.Kill()
+	// Already exited? Nothing to signal.
+	select {
+	case <-es.exited:
+		es.logger.Info("embed-server: already exited")
+	default:
+		// SIGTERM for graceful shutdown.
+		if err := es.cmd.Process.Signal(os.Interrupt); err != nil {
+			es.logger.Debug("embed-server: interrupt failed, killing", "error", err)
+			es.cmd.Process.Kill()
+		}
+
+		// Wait with timeout.
+		select {
+		case <-es.exited:
+			es.logger.Info("embed-server: stopped")
+		case <-time.After(10 * time.Second):
+			es.logger.Warn("embed-server: shutdown timed out, killing")
+			es.cmd.Process.Kill()
+		}
 	}
 
-	// Wait with timeout.
-	done := make(chan error, 1)
-	go func() { done <- es.cmd.Wait() }()
-
-	select {
-	case <-done:
-		es.logger.Info("embed-server: stopped")
-	case <-time.After(10 * time.Second):
-		es.logger.Warn("embed-server: shutdown timed out, killing")
-		es.cmd.Process.Kill()
+	// Close log file handle.
+	if es.logFile != nil {
+		es.logFile.Close()
 	}
 }
 
@@ -152,27 +177,42 @@ func (es *EmbedServer) waitForReady() {
 	ctx, cancel := context.WithTimeout(context.Background(), embedServerStartTimeout)
 	defer cancel()
 
+	ticker := time.NewTicker(embedServerPollInterval)
+	defer ticker.Stop()
+
 	for {
+		if model := probeEmbedModel(es.url); model != "" {
+			es.logger.Info("embed-server: ready", "model", model, "url", es.url)
+			close(es.ready)
+			return
+		}
+
 		select {
 		case <-ctx.Done():
 			es.logger.Warn("embed-server: start timed out, embedding may not work")
 			return
-		default:
-		}
-
-		if model := probeEmbedModel(es.url); model != "" {
-			es.logger.Info("embed-server: ready", "model", model, "url", es.url)
+		case <-es.exited:
+			es.logger.Warn("embed-server: process exited prematurely")
 			return
+		case <-ticker.C:
+			// next poll iteration
 		}
+	}
+}
 
-		// Check if process died.
-		if es.cmd.ProcessState != nil {
-			es.logger.Warn("embed-server: process exited prematurely",
-				"exit_code", es.cmd.ProcessState.ExitCode())
-			return
-		}
-
-		time.Sleep(embedServerPollInterval)
+// WaitReady blocks until the server is healthy or the context expires.
+// Returns true if the server is ready, false on timeout/exit.
+func (es *EmbedServer) WaitReady(ctx context.Context) bool {
+	if es == nil {
+		return false
+	}
+	select {
+	case <-es.ready:
+		return true
+	case <-es.exited:
+		return false
+	case <-ctx.Done():
+		return false
 	}
 }
 
