@@ -42,6 +42,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
+	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
 	"github.com/choiceoh/deneb/gateway-go/internal/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/node"
@@ -306,7 +307,7 @@ func New(addr string, opts ...Option) *Server {
 	s.acpDeps.SetEnabled(true)
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
-	s.dispatcher.UseMiddleware(middleware.Logging(s.logger))
+	s.dispatcher.UseMiddleware(metrics.RPCInstrumentation(), middleware.Logging(s.logger))
 	s.registerBuiltinMethods()
 	rpc.RegisterBuiltinMethods(s.dispatcher, rpc.Deps{
 		Sessions:         s.sessions,
@@ -591,6 +592,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /ready", s.handleReady)
 	mux.HandleFunc("GET /readyz", s.handleReady)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	mux.HandleFunc("POST /api/v1/rpc", s.handleRPC)
 	mux.HandleFunc("GET /ws", s.handleWsUpgrade)
 
@@ -633,6 +635,12 @@ func (s *Server) buildMux() *http.ServeMux {
 	})
 
 	return mux
+}
+
+// handleMetrics responds with Prometheus-compatible text exposition of all metrics.
+func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	metrics.WriteMetrics(w)
 }
 
 // handleHealth responds with gateway health status including subsystem state.
