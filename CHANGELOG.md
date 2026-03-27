@@ -127,6 +127,7 @@
 * core-rs: add SAFETY comments, fix Mutex unwrap, add module docs ([71e49fb](https://github.com/choiceoh/Deneb/commit/71e49fb))
 * cleanup: remove unused folders and files ([722e881](https://github.com/choiceoh/Deneb/commit/722e881))
 * Refactor RPC handlers into domain-based subpackages ([75063a7](https://github.com/choiceoh/Deneb/commit/75063a7))
+* Extract session and reply types to dedicated types package ([c39e4e4](https://github.com/choiceoh/Deneb/commit/c39e4e4))
 
 ## [3.11.4](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.3...deneb-v3.11.4) (2026-03-26)
 
@@ -163,7 +164,7 @@
 ### 🐛 Bug Fixes
 
 * handle agents.defaults.model as json.RawMessage (string or object) ([339](https://github.com/choiceoh/Deneb/issues/339)) ([ad11af9fcd58abe4f175034020034cc0b90d3a91](https://github.com/choiceoh/Deneb/commit/ad11af9fcd58abe4f175034020034cc0b90d3a91))
-* fix: agents.defaults.model parsing + memory_search diagnostics ([c08f09e](https://github.com/choiceoh/Deneb/commit/c08f09e))
+* agents.defaults.model parsing + memory_search diagnostics ([c08f09e](https://github.com/choiceoh/Deneb/commit/c08f09e))
 
 ### 🔧 Internal
 
@@ -182,18 +183,49 @@
 
 ## [3.11.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.10.0...deneb-v3.11.0) (2026-03-26)
 
+### ✨ Features
 
-### Features
+* complete Python-to-Rust migration for Vega ([#304](https://github.com/choiceoh/Deneb/issues/304)) ([e93e541](https://github.com/choiceoh/Deneb/commit/e93e541))
+* skills: enhance GitHub skill with diff, review, search, labels, releases, and best practices ([955a8ac](https://github.com/choiceoh/Deneb/commit/955a8ac))
+* telegram: use detached context for polling goroutine ([ca80cac](https://github.com/choiceoh/Deneb/commit/ca80cac))
+* telegram: fix HTTP client timeout shorter than long-poll timeout ([70aed49](https://github.com/choiceoh/Deneb/commit/70aed49))
+* telegram: store handler on Plugin so it survives until bot Start ([3a8fa10](https://github.com/choiceoh/Deneb/commit/3a8fa10))
+* telegram: add edited_message, edited_channel_post, my_chat_member handlers and narrow allowed-updates ([4950861](https://github.com/choiceoh/Deneb/commit/4950861))
+* add tool calling and vision support to OpenAI streaming ([9619444](https://github.com/choiceoh/Deneb/commit/9619444))
+* enhance media parsing, MIME detection, and security filtering ([e36509d](https://github.com/choiceoh/Deneb/commit/e36509d))
+* agent-runtime: scaffold Rust crate for agent subsystem port ([ebfab22](https://github.com/choiceoh/Deneb/commit/ebfab22))
+* add HTTP webhook handlers for hooks, OpenAI chat, and Responses APIs ([98e5b78](https://github.com/choiceoh/Deneb/commit/98e5b78))
+* vega: port missing Python features to Rust (E-2 through E-7) ([b6a6ee9](https://github.com/choiceoh/Deneb/commit/b6a6ee9))
+* add HTTP API endpoints and auth security hardening ([a8f633a](https://github.com/choiceoh/Deneb/commit/a8f633a))
+* implement core agent tools and system prompt generation ([7394e6c](https://github.com/choiceoh/Deneb/commit/7394e6c))
+* port cron store migration, delivery, and validation logic to Go ([25331a6](https://github.com/choiceoh/Deneb/commit/25331a6))
+* port subagent commands and utility infrastructure from TypeScript ([6163555](https://github.com/choiceoh/Deneb/commit/6163555))
+* port plugin discovery, provider runtime, and validation to Go ([54e15c1](https://github.com/choiceoh/Deneb/commit/54e15c1))
+* port subagent commands and followup queue system to Go ([e049ec9](https://github.com/choiceoh/Deneb/commit/e049ec9))
+* port auto-reply core logic from TypeScript to Go ([363801f](https://github.com/choiceoh/Deneb/commit/363801f))
+* port autoreply directive parsing and pipeline logic from TypeScript to Go ([05b75d7](https://github.com/choiceoh/Deneb/commit/05b75d7))
 
-* complete Python-to-Rust migration for Vega ([#304](https://github.com/choiceoh/Deneb/issues/304)) ([e93e541](https://github.com/choiceoh/Deneb/commit/e93e541fadb2d58e5d6dca58415156f425be2bc4))
+### 🐛 Bug Fixes
 
+* correct Rust base64 test assertion, Go ML test stub handling, and format drift ([#316](https://github.com/choiceoh/Deneb/issues/316)) ([19712ee](https://github.com/choiceoh/Deneb/commit/19712ee))
+* **gateway-go:** fix Telegram chat handler bugs — unique request IDs, reply timeouts, strict channel filter ([#311](https://github.com/choiceoh/Deneb/issues/311)) ([3a96b01](https://github.com/choiceoh/Deneb/commit/3a96b01))
+* harden Go/Rust FFI build — buffer growth, handle safety, error codes ([#298](https://github.com/choiceoh/Deneb/issues/298)) ([93c68a6](https://github.com/choiceoh/Deneb/commit/93c68a6))
+* autoreply: fix duplicate type declarations causing build failure ([ef1c183](https://github.com/choiceoh/Deneb/commit/ef1c183))
 
-### Bug Fixes
+### 🔧 Internal
 
-* correct Rust base64 test assertion, Go ML test stub handling, and format drift ([#316](https://github.com/choiceoh/Deneb/issues/316)) ([19712ee](https://github.com/choiceoh/Deneb/commit/19712ee5a3e7cdb03feedc340735b36da48a3021))
-* **gateway-go:** fix Telegram chat handler bugs — unique request IDs, reply timeouts, strict channel filter ([#311](https://github.com/choiceoh/Deneb/issues/311)) ([3a96b01](https://github.com/choiceoh/Deneb/commit/3a96b0123850a9311adf0010cba80acf6f8c868f))
-* harden Go/Rust FFI build — buffer growth, handle safety, error codes ([#298](https://github.com/choiceoh/Deneb/issues/298)) ([93c68a6](https://github.com/choiceoh/Deneb/commit/93c68a68281eb8a2f26151ac266f56c248c91bbb))
-
+* fix chat test compilation after bridge removal ([d3ad4d7](https://github.com/choiceoh/Deneb/commit/d3ad4d7))
+* add SIGUSR1 graceful restart support ([677165b](https://github.com/choiceoh/Deneb/commit/677165b))
+* replace TypeScript Compiler API with oxc-parser, switch tsc to tsgo ([bf85c21](https://github.com/choiceoh/Deneb/commit/bf85c21))
+* auto-start registered channels on gateway boot ([bc1c962](https://github.com/choiceoh/Deneb/commit/bc1c962))
+* enhance RPC methods — cleanup, new methods, improvements ([20cb4f8](https://github.com/choiceoh/Deneb/commit/20cb4f8))
+* wire Telegram messages to chat handler for end-to-end replies ([c6d6d3f](https://github.com/choiceoh/Deneb/commit/c6d6d3f))
+* replace Python legacy with Go and shell native alternatives ([64fcf93](https://github.com/choiceoh/Deneb/commit/64fcf93))
+* add OpenAI-compatible LLM client and config-based provider resolution ([f7798fa](https://github.com/choiceoh/Deneb/commit/f7798fa))
+* fix silent error handling, add message size validation, and event drop logging ([fc07810](https://github.com/choiceoh/Deneb/commit/fc07810))
+* identify and fix missing connections across codebase ([1302f6f](https://github.com/choiceoh/Deneb/commit/1302f6f))
+* port Phase 4 TS business logic to Go ([8a379f3](https://github.com/choiceoh/Deneb/commit/8a379f3))
+* unify HybridVectorResult/HybridKeywordResult into single HybridResult ([4de1a39](https://github.com/choiceoh/Deneb/commit/4de1a39))
 ## [3.10.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.9.0...deneb-v3.10.0) (2026-03-25)
 
 ### Features
