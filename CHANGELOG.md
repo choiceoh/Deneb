@@ -1,5 +1,34 @@
 # Changelog
 
+## [3.15.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.14.0...deneb-v3.15.0) (2026-03-27)
+
+
+### ✨ Features
+
+* **aurora:** add Aurora desktop RPC channel handlers ([d2efd4e](https://github.com/choiceoh/Deneb/commit/d2efd4e12308fe1cbb6c3a12016d1f68470f98eb))
+* **aurora:** Aurora 데스크톱 RPC 채널 핸들러 ([467cff3](https://github.com/choiceoh/Deneb/commit/467cff3ce07811dd5838569152550957c47ee87a))
+* **polaris:** improve manual with compact topics, better search, new guides ([31ecdc5](https://github.com/choiceoh/Deneb/commit/31ecdc58097e96b7da438f5d47e42dc7a149922f))
+
+
+### 🐛 Bug Fixes
+
+* **gateway:** rollback Go version from 1.25.0 to 1.24.7 ([0091bd9](https://github.com/choiceoh/Deneb/commit/0091bd90f3aed53a9f08be0bd6aaf67d4572fc64))
+* **memory:** prevent JSON parse failures in importance extraction ([3fb0f5b](https://github.com/choiceoh/Deneb/commit/3fb0f5b0c8f05f185827ae361c8e8a35800c8b5f))
+* **metrics:** prevent double-cumulative histogram bucket counts ([9c5adc9](https://github.com/choiceoh/Deneb/commit/9c5adc9b60361be513dd9aa64a04b741741ab40f))
+* **vega:** fix embedding server auto-spawn process exit detection and readiness ([880f59c](https://github.com/choiceoh/Deneb/commit/880f59c102e69bf691104a1e1f5b4a5e2e242135))
+
+
+### ⚡ Performance
+
+* optimize cache eviction, MMR tokenization, compaction cloning, and search caching ([d953ae1](https://github.com/choiceoh/Deneb/commit/d953ae14e333100617eec02153a4863f633577c4))
+* **vega:** parallelize semantic search and eliminate sort allocations ([bf54fa5](https://github.com/choiceoh/Deneb/commit/bf54fa5eb1d3dcf53ca6fc8d0132035c207c0f33))
+
+
+### 🔧 Internal
+
+* **chat:** optimize agent context by deduplicating system prompt and removing redundant tool descriptions ([0bde806](https://github.com/choiceoh/Deneb/commit/0bde8060e32976255e2777ba4bea0450b18726f2))
+* restrict test-only helpers to #[cfg(test)] and simplify fusion scoring ([0095fef](https://github.com/choiceoh/Deneb/commit/0095fef2e04cb52f9548d08eb81a069893f24709))
+
 ## [3.14.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.13.0...deneb-v3.14.0) (2026-03-27)
 
 
