@@ -4,11 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
 )
 
 // gmailParams holds parsed input for the gmail tool.
@@ -98,60 +97,46 @@ func gmailToolSchema() map[string]any {
 	}
 }
 
-// toolGmail implements the gmail tool for structured Gmail operations via gog CLI.
+// toolGmail implements the gmail tool for structured Gmail operations via native API.
 func toolGmail() ToolFunc {
-	return func(ctx context.Context, input json.RawMessage) (string, error) {
+	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p gmailParams
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("invalid gmail params: %w", err)
 		}
 
-		if _, err := exec.LookPath("gog"); err != nil {
-			return "gog CLI를 찾을 수 없습니다. Gmail 도구를 사용하려면 gog를 설치하세요.", nil
+		client, err := gmail.GetClient()
+		if err != nil {
+			return fmt.Sprintf("Gmail 인증 정보를 찾을 수 없습니다: %s\n~/.deneb/credentials/에 gmail_client.json과 gmail_token.json을 설정하세요.", err), nil
 		}
-
-		timeout := resolveGmailTimeout(p.Timeout)
 
 		switch p.Action {
 		case "inbox":
-			return gmailInbox(ctx, p, timeout)
+			return gmailInbox(client, p)
 		case "search":
-			return gmailSearch(ctx, p, timeout)
+			return gmailSearch(client, p)
 		case "read":
-			return gmailRead(ctx, p, timeout)
+			return gmailRead(client, p)
 		case "send":
-			return gmailSend(ctx, p, timeout)
+			return gmailSend(client, p)
 		case "reply":
-			return gmailReply(ctx, p, timeout)
+			return gmailReply(client, p)
 		case "label":
-			return gmailLabel(ctx, p, timeout)
+			return gmailLabel(client, p)
 		default:
 			return fmt.Sprintf("알 수 없는 gmail 액션: %q. 지원: inbox, search, read, send, reply, label", p.Action), nil
 		}
 	}
 }
 
-// resolveGmailTimeout returns a clamped duration from the user-supplied seconds.
-func resolveGmailTimeout(secs float64) time.Duration {
-	if secs <= 0 {
-		return 30 * time.Second
-	}
-	d := time.Duration(secs * float64(time.Second))
-	if d > 60*time.Second {
-		d = 60 * time.Second
-	}
-	return d
-}
-
 // --- inbox: structured inbox summary ---
 
-func gmailInbox(ctx context.Context, p gmailParams, timeout time.Duration) (string, error) {
+func gmailInbox(client *gmail.Client, p gmailParams) (string, error) {
 	max := clampGmailMax(p.Max, 10)
 
-	// Run unread + important searches in parallel.
 	type result struct {
-		output string
-		err    error
+		msgs []gmail.MessageSummary
+		err  error
 	}
 	var wg sync.WaitGroup
 	unreadCh := make(chan result, 1)
@@ -160,13 +145,13 @@ func gmailInbox(ctx context.Context, p gmailParams, timeout time.Duration) (stri
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		out, err := runGog(ctx, timeout, "", "gmail", "search", "is:unread", "--max", strconv.Itoa(max))
-		unreadCh <- result{out, err}
+		msgs, err := client.Search("is:unread", max)
+		unreadCh <- result{msgs, err}
 	}()
 	go func() {
 		defer wg.Done()
-		out, err := runGog(ctx, timeout, "", "gmail", "search", "is:important is:unread", "--max", "5")
-		importantCh <- result{out, err}
+		msgs, err := client.Search("is:important is:unread", 5)
+		importantCh <- result{msgs, err}
 	}()
 	wg.Wait()
 
@@ -176,26 +161,24 @@ func gmailInbox(ctx context.Context, p gmailParams, timeout time.Duration) (stri
 	var sb strings.Builder
 	sb.WriteString("## 📬 받은편지함 요약\n\n")
 
-	// Unread section.
 	if unread.err != nil {
 		fmt.Fprintf(&sb, "안 읽은 메일 조회 실패: %s\n\n", unread.err)
 	} else {
-		lines := countNonEmptyLines(unread.output)
-		fmt.Fprintf(&sb, "### 안 읽은 메일 (%d건)\n\n", lines)
-		if unread.output != "" {
-			sb.WriteString(unread.output)
+		count := len(unread.msgs)
+		fmt.Fprintf(&sb, "### 안 읽은 메일 (%d건)\n\n", count)
+		if count > 0 {
+			sb.WriteString(gmail.FormatSearchResults(unread.msgs))
 			sb.WriteString("\n\n")
 		} else {
 			sb.WriteString("안 읽은 메일이 없습니다.\n\n")
 		}
 	}
 
-	// Important section.
 	if important.err != nil {
 		fmt.Fprintf(&sb, "중요 메일 조회 실패: %s\n\n", important.err)
-	} else if important.output != "" {
+	} else if len(important.msgs) > 0 {
 		sb.WriteString("### ⭐ 중요 + 안 읽은 메일\n\n")
-		sb.WriteString(important.output)
+		sb.WriteString(gmail.FormatSearchResults(important.msgs))
 		sb.WriteString("\n")
 	}
 
@@ -204,47 +187,44 @@ func gmailInbox(ctx context.Context, p gmailParams, timeout time.Duration) (stri
 
 // --- search: structured search results ---
 
-func gmailSearch(ctx context.Context, p gmailParams, timeout time.Duration) (string, error) {
+func gmailSearch(client *gmail.Client, p gmailParams) (string, error) {
 	if p.Query == "" {
 		return "", fmt.Errorf("query는 search 액션에 필수입니다")
 	}
 	max := clampGmailMax(p.Max, 10)
 
-	out, err := runGog(ctx, timeout, "", "gmail", "search", p.Query, "--max", strconv.Itoa(max))
+	msgs, err := client.Search(p.Query, max)
 	if err != nil {
 		return "", err
 	}
-	if out == "" {
+	if len(msgs) == 0 {
 		return fmt.Sprintf("검색 결과 없음: %q", p.Query), nil
 	}
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "## 검색 결과: %s\n\n", p.Query)
-	sb.WriteString(out)
+	sb.WriteString(gmail.FormatSearchResults(msgs))
 	return sb.String(), nil
 }
 
 // --- read: structured email with metadata separation ---
 
-func gmailRead(ctx context.Context, p gmailParams, timeout time.Duration) (string, error) {
+func gmailRead(client *gmail.Client, p gmailParams) (string, error) {
 	if p.MessageID == "" {
 		return "", fmt.Errorf("message_id는 read 액션에 필수입니다")
 	}
 
-	out, err := runGog(ctx, timeout, "", "gmail", "messages", "get", p.MessageID)
+	msg, err := client.GetMessage(p.MessageID)
 	if err != nil {
 		return "", err
 	}
-	if out == "" {
-		return fmt.Sprintf("메일을 찾을 수 없음: %s", p.MessageID), nil
-	}
 
-	return out, nil
+	return gmail.FormatMessage(msg), nil
 }
 
 // --- send: email with contact alias resolution ---
 
-func gmailSend(ctx context.Context, p gmailParams, timeout time.Duration) (string, error) {
+func gmailSend(client *gmail.Client, p gmailParams) (string, error) {
 	if p.To == "" {
 		return "", fmt.Errorf("to는 send 액션에 필수입니다")
 	}
@@ -256,45 +236,29 @@ func gmailSend(ctx context.Context, p gmailParams, timeout time.Duration) (strin
 	}
 
 	to := resolveRecipient(p.To)
-
-	args := []string{"gmail", "send", "--to", to, "--subject", p.Subject}
-
+	cc := ""
 	if p.CC != "" {
-		args = append(args, "--cc", resolveRecipients(p.CC))
+		cc = resolveRecipients(p.CC)
 	}
+	bcc := ""
 	if p.BCC != "" {
-		args = append(args, "--bcc", resolveRecipients(p.BCC))
+		bcc = resolveRecipients(p.BCC)
 	}
 
-	// Use stdin for body to handle multi-line safely.
-	if p.HTML {
-		args = append(args, "--body-html", p.Body)
-	} else {
-		args = append(args, "--body-file", "-")
-	}
-
-	stdin := ""
-	if !p.HTML {
-		stdin = p.Body
-	}
-
-	out, err := runGog(ctx, timeout, stdin, args...)
+	msgID, err := client.Send(to, cc, bcc, p.Subject, p.Body, p.HTML)
 	if err != nil {
-		return fmt.Sprintf("발송 실패: %s\n%s", err, out), nil
+		return fmt.Sprintf("발송 실패: %s", err), nil
 	}
 
 	// Auto-learn contact after successful send.
 	learnContact(to)
 
-	if out == "" {
-		return fmt.Sprintf("✉️ 메일 발송 완료 → %s", to), nil
-	}
-	return fmt.Sprintf("✉️ 메일 발송 완료 → %s\n%s", to, out), nil
+	return fmt.Sprintf("✉️ 메일 발송 완료 → %s (ID: %s)", to, msgID), nil
 }
 
 // --- reply ---
 
-func gmailReply(ctx context.Context, p gmailParams, timeout time.Duration) (string, error) {
+func gmailReply(client *gmail.Client, p gmailParams) (string, error) {
 	if p.MessageID == "" {
 		return "", fmt.Errorf("message_id는 reply 액션에 필수입니다")
 	}
@@ -302,37 +266,22 @@ func gmailReply(ctx context.Context, p gmailParams, timeout time.Duration) (stri
 		return "", fmt.Errorf("body는 reply 액션에 필수입니다")
 	}
 
-	args := []string{"gmail", "send", "--reply-to-message-id", p.MessageID}
-
+	to := ""
 	if p.To != "" {
-		args = append(args, "--to", resolveRecipient(p.To))
+		to = resolveRecipient(p.To)
 	}
 
-	if p.HTML {
-		args = append(args, "--body-html", p.Body)
-	} else {
-		args = append(args, "--body-file", "-")
-	}
-
-	stdin := ""
-	if !p.HTML {
-		stdin = p.Body
-	}
-
-	out, err := runGog(ctx, timeout, stdin, args...)
+	msgID, err := client.Reply(p.MessageID, to, p.Body, p.HTML)
 	if err != nil {
-		return fmt.Sprintf("답장 실패: %s\n%s", err, out), nil
+		return fmt.Sprintf("답장 실패: %s", err), nil
 	}
 
-	if out == "" {
-		return "↩️ 답장 발송 완료", nil
-	}
-	return fmt.Sprintf("↩️ 답장 발송 완료\n%s", out), nil
+	return fmt.Sprintf("↩️ 답장 발송 완료 (ID: %s)", msgID), nil
 }
 
 // --- label management ---
 
-func gmailLabel(ctx context.Context, p gmailParams, timeout time.Duration) (string, error) {
+func gmailLabel(client *gmail.Client, p gmailParams) (string, error) {
 	action := p.LabelAction
 	if action == "" {
 		action = "list"
@@ -340,14 +289,14 @@ func gmailLabel(ctx context.Context, p gmailParams, timeout time.Duration) (stri
 
 	switch action {
 	case "list":
-		out, err := runGog(ctx, timeout, "", "gmail", "labels", "list")
+		labels, err := client.ListLabels()
 		if err != nil {
 			return "", err
 		}
-		if out == "" {
+		if len(labels) == 0 {
 			return "라벨 없음", nil
 		}
-		return fmt.Sprintf("## 라벨 목록\n\n%s", out), nil
+		return fmt.Sprintf("## 라벨 목록\n\n%s", gmail.FormatLabels(labels)), nil
 
 	case "add":
 		if p.MessageID == "" {
@@ -356,9 +305,8 @@ func gmailLabel(ctx context.Context, p gmailParams, timeout time.Duration) (stri
 		if p.LabelName == "" {
 			return "", fmt.Errorf("label_name은 label add에 필수입니다")
 		}
-		out, err := runGog(ctx, timeout, "", "gmail", "labels", "add", p.MessageID, p.LabelName)
-		if err != nil {
-			return fmt.Sprintf("라벨 추가 실패: %s\n%s", err, out), nil
+		if err := client.ModifyLabels(p.MessageID, []string{p.LabelName}, nil); err != nil {
+			return fmt.Sprintf("라벨 추가 실패: %s", err), nil
 		}
 		return fmt.Sprintf("🏷️ 라벨 '%s' 추가 완료", p.LabelName), nil
 
@@ -369,9 +317,8 @@ func gmailLabel(ctx context.Context, p gmailParams, timeout time.Duration) (stri
 		if p.LabelName == "" {
 			return "", fmt.Errorf("label_name은 label remove에 필수입니다")
 		}
-		out, err := runGog(ctx, timeout, "", "gmail", "labels", "remove", p.MessageID, p.LabelName)
-		if err != nil {
-			return fmt.Sprintf("라벨 제거 실패: %s\n%s", err, out), nil
+		if err := client.ModifyLabels(p.MessageID, nil, []string{p.LabelName}); err != nil {
+			return fmt.Sprintf("라벨 제거 실패: %s", err), nil
 		}
 		return fmt.Sprintf("🏷️ 라벨 '%s' 제거 완료", p.LabelName), nil
 
@@ -381,35 +328,6 @@ func gmailLabel(ctx context.Context, p gmailParams, timeout time.Duration) (stri
 }
 
 // --- helpers ---
-
-// runGog executes a gog CLI command and returns its combined output.
-// If stdinData is non-empty, it is piped to the command's stdin.
-func runGog(ctx context.Context, timeout time.Duration, stdinData string, args ...string) (string, error) {
-	execCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(execCtx, "gog", args...)
-	if stdinData != "" {
-		cmd.Stdin = strings.NewReader(stdinData)
-	}
-
-	out, err := cmd.CombinedOutput()
-	result := strings.TrimSpace(string(out))
-
-	// Cap output at 32K chars.
-	const maxOutput = 32000
-	if len(result) > maxOutput {
-		result = result[:maxOutput] + "\n\n[... 출력 생략됨]"
-	}
-
-	if err != nil {
-		if result != "" {
-			return result, fmt.Errorf("gog 실행 실패: %w", err)
-		}
-		return "", fmt.Errorf("gog 실행 실패: %w", err)
-	}
-	return result, nil
-}
 
 // resolveRecipient resolves a contact alias to an email address via KV store.
 // If the input already contains '@', it is returned as-is.
@@ -422,7 +340,6 @@ func resolveRecipient(to string) string {
 	if email, ok := store.get(key); ok && email != "" {
 		return email
 	}
-	// Return as-is; gog will report the error if it's not a valid address.
 	return to
 }
 
@@ -440,7 +357,6 @@ func resolveRecipients(list string) string {
 }
 
 // learnContact stores a recipient email in the KV store for future alias resolution.
-// Extracts the local part of the email as the alias key.
 func learnContact(email string) {
 	if !strings.Contains(email, "@") {
 		return
@@ -448,7 +364,6 @@ func learnContact(email string) {
 	store := getKVStore()
 	local := strings.ToLower(strings.SplitN(email, "@", 2)[0])
 	key := "gmail.contacts." + local
-	// Only store if not already present (don't overwrite manual aliases).
 	if _, ok := store.get(key); !ok {
 		_ = store.set(key, email)
 	}
@@ -463,18 +378,4 @@ func clampGmailMax(max, defaultMax int) int {
 		return 50
 	}
 	return max
-}
-
-// countNonEmptyLines counts non-empty lines in a string.
-func countNonEmptyLines(s string) int {
-	if s == "" {
-		return 0
-	}
-	count := 0
-	for _, line := range strings.Split(s, "\n") {
-		if strings.TrimSpace(line) != "" {
-			count++
-		}
-	}
-	return count
 }
