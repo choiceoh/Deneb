@@ -1,12 +1,15 @@
 // Package media — media understanding pipeline for inbound Telegram messages.
 //
-// Extracts images, videos, animations, and image-like documents from Telegram
-// messages, downloads them via the Bot API, and produces ChatAttachment objects
-// with base64-encoded data ready for LLM vision analysis.
+// Extracts images, videos, animations, and documents from Telegram messages,
+// downloads them via the Bot API, and produces ChatAttachment objects ready for
+// LLM consumption.
 //
 // Video handling: downloads the video file, extracts representative frames
 // using ffmpeg, and returns each frame as a separate image attachment so the
 // LLM can reason about the video content.
+//
+// Document handling: PDFs, Office files (DOCX/XLSX/PPTX), and OpenDocument
+// formats are parsed via the LiteParse CLI (lit) to extract text content.
 package media
 
 import (
@@ -17,6 +20,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/liteparse"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 )
 
@@ -24,9 +28,9 @@ import (
 // avoid an import cycle. The caller (inbound processor) converts these to
 // chat.ChatAttachment before dispatching to chat.send.
 type Attachment struct {
-	Type     string // "image", "video"
+	Type     string // "image", "video", "document_text"
 	MimeType string
-	Data     string // base64-encoded
+	Data     string // base64-encoded for images; plain text for document_text
 	Name     string
 	Size     int64
 }
@@ -38,13 +42,14 @@ const maxImageDownloadSize = 20 * 1024 * 1024
 const maxVideoDownloadSize = 50 * 1024 * 1024
 
 // ExtractAttachments extracts downloadable media from a Telegram message and
-// returns base64-encoded attachments suitable for LLM vision input.
+// returns attachments suitable for LLM consumption.
 //
 // Supported media types:
 //   - Photo ([]PhotoSize) — picks the highest-resolution variant
 //   - Video — downloads and extracts representative frames via ffmpeg
 //   - Animation (GIF) — extracts a single representative frame
-//   - Document — only if it's an image (image/* MIME type)
+//   - Document (image/*) — downloaded as image attachment
+//   - Document (PDF, Office, OpenDocument) — text extracted via LiteParse
 //
 // Audio, voice, stickers, and video notes are skipped (per user requirements:
 // audio transcription not needed).
@@ -90,20 +95,33 @@ func ExtractAttachments(ctx context.Context, client *telegram.Client, msg *teleg
 		}
 	}
 
-	// 4. Document — only if it's an image.
-	if msg.Document != nil && strings.HasPrefix(msg.Document.MimeType, "image/") {
+	// 4. Document — image or parseable document (PDF, Office, etc.).
+	if msg.Document != nil {
 		d := msg.Document
-		if d.FileSize > 0 && d.FileSize > maxImageDownloadSize {
-			logger.Warn("skipping oversized document image", "fileId", d.FileID, "size", d.FileSize)
-		} else {
-			mime := d.MimeType
-			if mime == "" {
-				mime = "image/jpeg"
+		switch {
+		case strings.HasPrefix(d.MimeType, "image/"):
+			if d.FileSize > 0 && d.FileSize > maxImageDownloadSize {
+				logger.Warn("skipping oversized document image", "fileId", d.FileID, "size", d.FileSize)
+			} else {
+				mime := d.MimeType
+				if mime == "" {
+					mime = "image/jpeg"
+				}
+				att := downloadImage(ctx, client, d.FileID, mime, logger)
+				if att != nil {
+					att.Name = d.FileName
+					attachments = append(attachments, *att)
+				}
 			}
-			att := downloadImage(ctx, client, d.FileID, mime, logger)
-			if att != nil {
-				att.Name = d.FileName
-				attachments = append(attachments, *att)
+
+		case liteparse.Available() && liteparse.SupportedMIME(d.MimeType):
+			if d.FileSize > 0 && d.FileSize > maxVideoDownloadSize {
+				logger.Warn("skipping oversized document", "fileId", d.FileID, "size", d.FileSize)
+			} else {
+				att := parseDocument(ctx, client, d, logger)
+				if att != nil {
+					attachments = append(attachments, *att)
+				}
 			}
 		}
 	}
@@ -126,8 +144,14 @@ func HasMedia(msg *telegram.Message) bool {
 	if msg.Animation != nil {
 		return true
 	}
-	if msg.Document != nil && strings.HasPrefix(msg.Document.MimeType, "image/") {
-		return true
+	if msg.Document != nil {
+		mime := msg.Document.MimeType
+		if strings.HasPrefix(mime, "image/") {
+			return true
+		}
+		if liteparse.Available() && liteparse.SupportedMIME(mime) {
+			return true
+		}
 	}
 	return false
 }
@@ -228,6 +252,35 @@ func extractAnimationAttachments(ctx context.Context, client *telegram.Client, a
 		})
 	}
 	return attachments
+}
+
+// parseDocument downloads a document from Telegram and extracts its text
+// content using the LiteParse CLI. Returns nil on failure (logged but not fatal).
+func parseDocument(ctx context.Context, client *telegram.Client, d *telegram.Document, logger *slog.Logger) *Attachment {
+	data, _, err := client.DownloadFile(ctx, d.FileID)
+	if err != nil {
+		logger.Warn("failed to download document", "fileId", d.FileID, "error", err)
+		return nil
+	}
+
+	text, err := liteparse.Parse(ctx, data, d.FileName)
+	if err != nil {
+		logger.Warn("liteparse failed", "fileName", d.FileName, "error", err)
+		return nil
+	}
+
+	if strings.TrimSpace(text) == "" {
+		logger.Info("liteparse returned empty text", "fileName", d.FileName)
+		return nil
+	}
+
+	return &Attachment{
+		Type:     "document_text",
+		MimeType: d.MimeType,
+		Data:     text, // plain text, not base64
+		Name:     d.FileName,
+		Size:     int64(len(data)),
+	}
 }
 
 // videoThumbnailFallback downloads the video thumbnail as a single-frame fallback.

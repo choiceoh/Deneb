@@ -722,27 +722,38 @@ func buildAttachmentBlocks(text string, attachments []ChatAttachment) []llm.Cont
 		blocks = append(blocks, llm.ContentBlock{Type: "text", Text: text})
 	}
 	for _, att := range attachments {
-		if att.Type != "image" {
-			continue
-		}
-		if att.Data != "" {
-			// Base64-encoded inline image (from Telegram download).
+		switch att.Type {
+		case "image":
+			if att.Data != "" {
+				// Base64-encoded inline image (from Telegram download).
+				blocks = append(blocks, llm.ContentBlock{
+					Type: "image",
+					Source: &llm.ImageSource{
+						Type:      "base64",
+						MediaType: att.MimeType,
+						Data:      att.Data,
+					},
+				})
+			} else if att.URL != "" {
+				blocks = append(blocks, llm.ContentBlock{
+					Type: "image",
+					Source: &llm.ImageSource{
+						Type:      "url",
+						MediaType: att.MimeType,
+						Data:      att.URL,
+					},
+				})
+			}
+
+		case "document_text":
+			// Text extracted from a document (PDF, Office, etc.) via LiteParse.
+			label := att.Name
+			if label == "" {
+				label = "document"
+			}
 			blocks = append(blocks, llm.ContentBlock{
-				Type: "image",
-				Source: &llm.ImageSource{
-					Type:      "base64",
-					MediaType: att.MimeType,
-					Data:      att.Data,
-				},
-			})
-		} else if att.URL != "" {
-			blocks = append(blocks, llm.ContentBlock{
-				Type: "image",
-				Source: &llm.ImageSource{
-					Type:      "url",
-					MediaType: att.MimeType,
-					Data:      att.URL,
-				},
+				Type: "text",
+				Text: fmt.Sprintf("[%s]\n\n%s", label, att.Data),
 			})
 		}
 	}
