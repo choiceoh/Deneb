@@ -113,38 +113,67 @@ const architectureGuide = `Deneb: multi-language gateway with three cooperating 
 - CLI ↔ Gateway: WebSocket
 - Proto schemas (proto/): shared cross-language types (gateway.proto, channel.proto, session.proto)
 
+## Rust FFI Bridge (30+ exports)
+### Error Codes
+FFI_ERR_NULL_PTR=-1, INVALID_UTF8=-2, OUTPUT_TOO_SMALL=-3, INPUT_TOO_LARGE=-4, JSON=-5, OVERFLOW=-6, VALIDATION=-7, PANIC=-99
+
+### Safety Patterns
+- FFI_MAX_INPUT_LEN: 16 MB (DoS protection)
+- ffi_catch(): wraps all exports to prevent Rust panics from crashing Go
+- Output buffers grow automatically (ffiCallWithGrow helper)
+- Handle-based resource management: u32 IDs for Rust objects across FFI
+
+### FFI Function Groups (core-rs/core/src/lib.rs → gateway-go/internal/ffi/)
+- **Protocol**: deneb_validate_frame, deneb_validate_error_code, deneb_validate_params
+- **Security**: deneb_constant_time_eq, deneb_sanitize_html, deneb_is_safe_url (SSRF), deneb_validate_session_key (max 512 chars)
+- **Media**: deneb_detect_mime (magic-byte detection, 21 formats)
+- **Memory Search**: deneb_memory_cosine_similarity (SIMD, 2M cap), deneb_memory_bm25_rank_to_score, deneb_memory_build_fts_query, deneb_memory_merge_hybrid_results, deneb_memory_extract_keywords
+- **Markdown**: deneb_markdown_to_ir (128-entry LRU cache, FNV1a64 hash), deneb_markdown_detect_fences
+- **Parsing**: deneb_extract_links, deneb_html_to_markdown, deneb_base64_estimate, deneb_parse_media_tokens
+- **Compaction**: deneb_compaction_evaluate, deneb_compaction_sweep_new/_start/_step/_drop
+- **Context**: deneb_context_assembly_new/_start/_step, deneb_context_expand_new/_start/_step, deneb_context_engine_drop
+- **Vega**: deneb_vega_execute, deneb_vega_search
+- **ML** (feature-gated): deneb_ml_embed, deneb_ml_rerank
+
+### Stateful FFI Pattern (compaction, context engine)
+*_new() → handle → *_start(handle) → *_step(handle, response) → *_drop(handle)
+Rust yields commands (FetchMessages, Summarize), Go executes I/O, feeds responses back. Avoids callbacks across FFI.
+
 ## Rust Crates (core-rs/)
-- deneb-core: 30+ FFI exports (deneb_* C functions). Modules: protocol, security, media, memory_search, markdown, context_engine, compaction, parsing
+- deneb-core: 30+ FFI exports. Modules: protocol, security, media, memory_search, markdown, context_engine, compaction, parsing
 - deneb-vega: SQLite FTS5 search engine (optional ml feature for semantic)
 - deneb-ml: GGUF inference via llama-cpp-2 (optional cuda feature for GPU)
 - deneb-agent-runtime: agent lifecycle, model selection
 - Feature flag chain: default → vega → ml → cuda → dgx (full DGX Spark)
-- Stateful FFI pattern: *_new() → handle → *_start(handle) → *_step(handle, response) → *_drop(handle)
+
+## RPC System (gateway-go/internal/rpc/)
+- Dispatcher: routes methods, middleware chain, panic recovery
+- Worker pool: 2× NumCPU workers (clamped [4, 64])
+- Core methods: health.check, sessions.list/get/delete, channels.list/get/status/health, system.info
+
+## Auth System (gateway-go/internal/auth/)
+- Token format: hex(hmac-sha256(payload)):payload
+- Roles: operator, viewer, agent, probe
+- Scopes: admin, read, write, approvals, pairing
 
 ## Hardware Profiles
 - DGX Spark: 10 concurrency, 8 embedding batch, CUDA, local SGLang inference
 - Desktop GPU: 8 concurrency, 6 batch, CUDA
 - CPU-only: 4 concurrency, 2 batch, software fallback
 
-## Gateway Internal Subsystems (gateway-go/internal/)
+## Gateway Internal Subsystems (gateway-go/internal/, 40+)
 Core: server/, rpc/, session/, channel/, chat/, auth/, ffi/
 AI: llm/, vega/, memory/, aurora/
 Automation: cron/, autonomous/, hooks/
 Infrastructure: config/, logging/, metrics/, monitoring/, middleware/
 Media: media/, liteparse/
-Tools: process/, plugin/, skills/
+Tools: process/, plugin/, skills/, skill/
 Other: approval/, autoreply/, dedupe/, device/, events/, node/, secret/, telegram/, transcript/, usage/, wizard/
 
-## Build Commands
-- make all: Rust + Go (release)
-- make rust-dgx: full production (Vega + ML + CUDA)
-- make gateway-dgx: Go gateway + full Rust core
-- make check: proto-check + rust-test + go-test + ts
-
 ## Key Files
-- docs/concepts/architecture.md
+- docs/concepts/architecture.md (20KB)
 - gateway-go/cmd/gateway/main.go (entry, --port/--bind, graceful shutdown)
-- core-rs/core/src/lib.rs (FFI exports)
+- core-rs/core/src/lib.rs (30+ FFI exports, error codes, constants)
 - gateway-go/internal/ffi/ (8 *_cgo.go files + *_noffi.go fallbacks)`
 
 const channelsGuide = `Channels are messaging surface plugins connecting external platforms to Deneb.
