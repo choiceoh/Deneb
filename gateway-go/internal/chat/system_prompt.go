@@ -88,6 +88,7 @@ var coreToolSummaries = map[string]string{
 	"clipboard":          "Temporary in-memory clipboard (ring buffer, 32 items max). Actions: set, get, list, clear",
 	"gmail":              "Gmail via gog CLI. Actions: inbox (unread summary + important), search (structured results), read (message by ID), send (with contact alias), reply, label (list/add/remove). Contact aliases auto-resolved from KV store",
 	"apply_patch":        "Apply multi-file unified diff patches. Tries git apply first, falls back to patch -p1",
+	"autonomous":         "Manage autonomous goals and execution cycles. Actions: status, goals, add_goal, update_goal, remove_goal, cycle_run, cycle_stop, enable, disable, recent_runs",
 	"pilot":              "Fast local AI (sglang) that orchestrates tools in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory. Options: chain, max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-thinking for complex tasks. Falls back to raw results if sglang is down",
 }
 
@@ -99,7 +100,7 @@ var toolOrder = []string{
 	"pilot", // speed tool — promoted for discoverability
 	"web",
 	"memory_search", "memory_get",
-	"nodes", "cron", "message", "gateway",
+	"nodes", "cron", "autonomous", "message", "gateway",
 	"sessions_list", "sessions_history", "sessions_search", "sessions_restore", "sessions_send",
 	"sessions_spawn", "subagents", "session_status", "image", "youtube_transcript",
 	"send_file", "http", "gmail", "kv", "clipboard",
@@ -146,6 +147,7 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Long commands: exec with background=true → process poll/log to check output\n")
 	sb.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
 	sb.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section). Project knowledge is auto-prefetched\n")
+	sb.WriteString("Autonomous goals: autonomous {action:'status'} (상태) → autonomous {action:'goals'} (목록) → autonomous {action:'add_goal', description:'...'} (추가). 자율 실행 사이클과 목표를 직접 관리\n")
 	sb.WriteString("Gmail: gmail {action:'inbox'} (요약) → gmail {action:'search', query:'...'} (검색) → gmail {action:'read', message_id:'...'} (읽기). 연락처 별명은 KV에서 자동 해석 (gmail.contacts.<alias>)\n")
 	sb.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools. Prefer gmail over exec+gog.\n\n")
 
@@ -329,6 +331,7 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	static.WriteString("Long commands: exec with background=true → process poll/log to check output\n")
 	static.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
 	static.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section). Project knowledge is auto-prefetched\n")
+	static.WriteString("Autonomous goals: autonomous {action:'status'} (상태) → autonomous {action:'goals'} (목록) → autonomous {action:'add_goal', description:'...'} (추가). 자율 실행 사이클과 목표를 직접 관리\n")
 	static.WriteString("Gmail: gmail {action:'inbox'} (요약) → gmail {action:'search', query:'...'} (검색) → gmail {action:'read', message_id:'...'} (읽기). 연락처 별명은 KV에서 자동 해석 (gmail.contacts.<alias>)\n")
 	static.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools. Prefer gmail over exec+gog.\n\n")
 
