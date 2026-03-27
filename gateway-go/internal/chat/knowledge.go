@@ -208,53 +208,37 @@ func relativeTimeSince(t time.Time, now time.Time) string {
 	}
 }
 
-// relativeTime returns a concise Korean relative time label for t relative to now.
-func relativeTime(t time.Time) string {
-	return relativeTimeSince(t, time.Now())
-}
-
 // factTemporalAnnotation builds a compact temporal label for a memory fact.
 // Combines relative time, CreatedAt/UpdatedAt separation, and volatility hints.
 // Examples:
-//   - "3일 전" — simple case (created == updated)
+//   - "3일 전" — simple case (created == updated or small gap)
 //   - "3개월 전, 갱신: 어제" — created long ago but recently re-confirmed
 //   - "6개월 전, ⚠변경 가능" — past shelf life for its category
 func factTemporalAnnotation(f memory.Fact, now time.Time) string {
-	created := relativeTimeSince(f.CreatedAt, now)
-	updated := relativeTimeSince(f.UpdatedAt, now)
+	hasCreated := !f.CreatedAt.IsZero()
+	hasUpdated := !f.UpdatedAt.IsZero()
 
-	if created == "" && updated == "" {
+	if !hasCreated && !hasUpdated {
 		return ""
-	}
-
-	// If only one is available, use it.
-	if created == "" {
-		created = updated
-	}
-	if updated == "" {
-		updated = created
 	}
 
 	var parts []string
 
-	// Show CreatedAt/UpdatedAt separately when they differ significantly (>7 days apart).
-	// "생성: 3개월 전 / 갱신: 어제" = long-known, recently confirmed.
+	// Show CreatedAt/UpdatedAt separately when both exist and differ significantly (>7 days).
+	// "3개월 전, 갱신: 어제" = long-known, recently confirmed.
 	// "3일 전" = recently created, no meaningful gap.
-	createdUpdatedGap := f.UpdatedAt.Sub(f.CreatedAt)
-	if !f.CreatedAt.IsZero() && !f.UpdatedAt.IsZero() && createdUpdatedGap > 7*24*time.Hour {
-		parts = append(parts, created+", 갱신: "+updated)
+	if hasCreated && hasUpdated && f.UpdatedAt.Sub(f.CreatedAt) > 7*24*time.Hour {
+		parts = append(parts,
+			relativeTimeSince(f.CreatedAt, now)+", 갱신: "+relativeTimeSince(f.UpdatedAt, now))
+	} else if hasUpdated {
+		parts = append(parts, relativeTimeSince(f.UpdatedAt, now))
 	} else {
-		// Use the more recent of the two (UpdatedAt preferred).
-		if !f.UpdatedAt.IsZero() {
-			parts = append(parts, updated)
-		} else {
-			parts = append(parts, created)
-		}
+		parts = append(parts, relativeTimeSince(f.CreatedAt, now))
 	}
 
-	// Volatility hint: flag facts past their category shelf life.
+	// Volatility hint: use UpdatedAt (or CreatedAt fallback) to check shelf life.
 	refTime := f.UpdatedAt
-	if refTime.IsZero() {
+	if !hasUpdated {
 		refTime = f.CreatedAt
 	}
 	if hint := volatileHint(f.Category, refTime, now); hint != "" {
