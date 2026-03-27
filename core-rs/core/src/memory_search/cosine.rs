@@ -37,6 +37,7 @@ pub fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
 /// using 128-bit SIMD registers. Accumulates dot product and squared norms in
 /// parallel, then reduces via horizontal sum. A scalar tail handles odd-length vectors.
 #[cfg(target_arch = "x86_64")]
+#[allow(unsafe_code)]
 fn cosine_similarity_sse2(a: &[f64], b: &[f64]) -> f64 {
     use std::arch::x86_64::*;
 

@@ -132,7 +132,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.25"
           cache-dependency-path: gateway-go/go.sum
 
       - name: Build (no FFI)
@@ -171,7 +171,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.25"
           cache-dependency-path: gateway-go/go.sum
 
       - uses: actions/download-artifact@v8

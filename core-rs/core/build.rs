@@ -1,7 +1,7 @@
 //! Build script for napi-rs setup and protobuf code generation via prost.
 //!
 //! - napi-rs: sets up Node.js native addon build hooks.
-//! - prost: compiles .proto files from ../../proto/ into Rust structs in OUT_DIR,
+//! - prost: compiles .proto files from ../../proto/ into Rust structs in `OUT_DIR`,
 //!   which are then included by src/protocol/gen.rs.
 
 use std::path::PathBuf;
