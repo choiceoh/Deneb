@@ -140,26 +140,26 @@ Two build modes:
   - Dynamic block: skills + context files + runtime (changes per request)
 
 ## Prompt Sections (in order)
+**Static block:**
 1. Identity: "You are a personal assistant running inside Deneb"
-2. Tooling: list of available tools with descriptions (coreToolSummaries)
-3. Tool Call Style: when to narrate vs silently call tools
-4. Efficiency & Speed: parallel calls, pilot usage, compress flag
-5. Tool Selection Guide: workflow patterns (file exploration, modification, web research)
-6. Tool Chaining: $ref pattern for result injection
-7. Pilot vs direct tools decision matrix
-8. Pilot Tool Guide: shortcuts, sources, conditional execution
-9. Safety: no self-preservation, prioritize oversight
-10. Deneb CLI Quick Reference
-11. Skills: XML available_skills block (from skills/prompt.go)
-12. Memory Recall: guidance on memory_search usage
-13. Workspace: working directory
-14. Reply Tags: [[reply_to_current]] for native replies
-15. Messaging: channel routing, sessions_send, message tool
-16. Response Style: Korean default, concise for Telegram (4096 char limit)
-17. Current Date & Time: local time with timezone
-18. Context Files: CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md
-19. Silent Replies: NO_REPLY token for suppressing delivery
-20. Runtime: agentId, host, OS, model, channel
+2. Tooling: compact categorized tool name list (descriptions in tool schemas)
+3. Tool Usage: parallel calls, first-class tools, compress flag, auto-trimming
+4. Pilot & Chaining: when to use pilot, $ref chaining, when NOT to use pilot
+5. Safety: no self-preservation, prioritize oversight
+6. Deneb CLI Quick Reference
+
+**Dynamic block:**
+7. Skills: XML available_skills block (from skills/prompt.go)
+8. Memory Recall: guidance on memory_search usage
+9. Polaris: system manual tool guidance
+10. Workspace: working directory
+11. Reply Tags: [[reply_to_current]] for native replies
+12. Messaging: channel routing, sessions_send, message tool
+13. Response Style: Korean default, concise for Telegram (4096 char limit)
+14. Current Date & Time: local time with timezone
+15. Context Files: CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md
+16. Silent Replies: NO_REPLY token for suppressing delivery
+17. Runtime: agentId, host, OS, model, channel
 
 ## Context Files (context_files.go)
 Load order: CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md
@@ -174,8 +174,8 @@ Load order: CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md
 - none: no system prompt
 
 ## Tool Display
-- coreToolSummaries: detailed one-line descriptions per tool
-- toolOrder: defines display order (filesystem → exec → web → memory → system → sessions)
+- toolCategories: categorized tool name groups (File, Exec, AI, Web, Memory, System, Sessions, Media, Data)
+- Tool descriptions live in ToolDef.Description (sent via tool schemas, not duplicated in prompt)
 
 ## Key Files
 - gateway-go/internal/chat/system_prompt.go
