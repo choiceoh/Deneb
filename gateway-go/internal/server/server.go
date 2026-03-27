@@ -967,6 +967,10 @@ func (s *Server) SetDaemon(d *daemon.Daemon) {
 func (s *Server) SetVega(backend vega.Backend) {
 	s.vegaBackend = backend
 	rpc.RegisterVegaMethods(s.dispatcher, rpc.VegaDeps{Backend: backend})
+	// Late-bind Vega backend into core tool deps so the vega chat tool works.
+	if s.toolDeps != nil {
+		s.toolDeps.VegaBackend = backend
+	}
 }
 
 // SetGeminiEmbedder stores the Gemini embedder for the memory subsystem.

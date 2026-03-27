@@ -71,6 +71,7 @@ func TestToolSchemas(t *testing.T) {
 		"grep":               grepToolSchema,
 		"find":               findToolSchema,
 		"ls":                 lsToolSchema,
+		"vega":               vegaToolSchema,
 	}
 
 	for name, fn := range schemas {
@@ -104,7 +105,7 @@ func TestRegisterCoreTools(t *testing.T) {
 	expectedTools := []string{
 		"read", "write", "edit", "grep", "find", "ls",
 		"exec", "process", "web",
-		"memory_search", "memory_get", "polaris", "message",
+		"memory_search", "memory_get", "polaris", "vega", "message",
 		"apply_patch", "cron", "gateway",
 		"sessions_list", "sessions_history", "sessions_search", "sessions_restore",
 		"sessions_send", "sessions_spawn",
