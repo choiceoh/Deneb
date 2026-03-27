@@ -12,8 +12,13 @@ Goal: Gmail watch -> Pub/Sub push -> `gog gmail watch serve` -> Deneb webhook.
 
 ## Prereqs
 
+<Note>
+The Gmail **chat tool** (`gmail` action) no longer requires `gog` -- it uses the native Gmail API client.
+This page covers the **Pub/Sub watcher** pipeline, which still requires `gog gmail watch serve`.
+</Note>
+
 - `gcloud` installed and logged in ([install guide](https://docs.cloud.google.com/sdk/docs/install-sdk)).
-- `gog` (gogcli) installed and authorized for the Gmail account ([gogcli.sh](https://gogcli.sh/)).
+- `gog` (gogcli) installed and authorized for the Gmail account ([gogcli.sh](https://gogcli.sh/)). Only needed for the Pub/Sub watcher.
 - Deneb hooks enabled (see [Webhooks](/automation/webhook)).
 - `tailscale` logged in ([tailscale.com](https://tailscale.com/)). Supported setup uses Tailscale Funnel for the public HTTPS endpoint.
   Other tunnel services can work, but are DIY/unsupported and require manual wiring.

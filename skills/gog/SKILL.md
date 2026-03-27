@@ -1,6 +1,6 @@
 ---
 name: gog
-description: Google Workspace CLI for Gmail, Calendar, Drive, Contacts, Sheets, and Docs.
+description: Google Workspace CLI for Calendar, Drive, Contacts, Sheets, and Docs. Gmail operations are handled natively by the `gmail` tool.
 homepage: https://gogcli.sh
 metadata:
   {
@@ -24,7 +24,9 @@ metadata:
 
 # gog
 
-Use `gog` for Gmail/Calendar/Drive/Contacts/Sheets/Docs. Requires OAuth setup.
+Use `gog` for Calendar/Drive/Contacts/Sheets/Docs. Requires OAuth setup.
+
+> **Note:** Gmail read/send/search/label operations are now handled natively by the `gmail` chat tool (no `gog` needed). The `gog gmail` commands below are kept for reference and for the Pub/Sub watcher only.
 
 Setup (once)
 

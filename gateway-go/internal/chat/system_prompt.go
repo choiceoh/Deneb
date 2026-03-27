@@ -86,7 +86,7 @@ var coreToolSummaries = map[string]string{
 	"http":               "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
 	"kv":                 "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
 	"clipboard":          "Temporary in-memory clipboard (ring buffer, 32 items max). Actions: set, get, list, clear",
-	"gmail":              "Gmail via gog CLI. Actions: inbox (unread summary + important), search (structured results), read (message by ID), send (with contact alias), reply, label (list/add/remove). Contact aliases auto-resolved from KV store",
+	"gmail":              "Gmail API (native OAuth2). Actions: inbox (unread summary + important), search (structured results), read (message by ID), send (with contact alias), reply, label (list/add/remove). Contact aliases auto-resolved from KV store. Setup: place Google OAuth client_secret as ~/.deneb/credentials/gmail_client.json, token (with refresh_token) as ~/.deneb/credentials/gmail_token.json",
 	"apply_patch":        "Apply multi-file unified diff patches. Tries git apply first, falls back to patch -p1",
 	"pilot":              "Fast local AI (sglang) that orchestrates tools in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory. Options: chain, max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-thinking for complex tasks. Falls back to raw results if sglang is down",
 }
@@ -146,8 +146,8 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 	sb.WriteString("Long commands: exec with background=true → process poll/log to check output\n")
 	sb.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
 	sb.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section). Project knowledge is auto-prefetched\n")
-	sb.WriteString("Gmail: gmail {action:'inbox'} (요약) → gmail {action:'search', query:'...'} (검색) → gmail {action:'read', message_id:'...'} (읽기). 연락처 별명은 KV에서 자동 해석 (gmail.contacts.<alias>)\n")
-	sb.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools. Prefer gmail over exec+gog.\n\n")
+	sb.WriteString("Gmail: gmail {action:'inbox'} (요약) → gmail {action:'search', query:'...'} (검색) → gmail {action:'read', message_id:'...'} (읽기). 연락처 별명은 KV에서 자동 해석 (gmail.contacts.<alias>). 인증: ~/.deneb/credentials/gmail_client.json (OAuth client_secret) + gmail_token.json (refresh_token 포함)\n")
+	sb.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools. Prefer gmail tool over manual API calls.\n\n")
 
 	// Tool Chaining.
 	sb.WriteString("## Tool Chaining ($ref)\n")
@@ -329,8 +329,8 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	static.WriteString("Long commands: exec with background=true → process poll/log to check output\n")
 	static.WriteString("Parallel work: sessions_spawn (delegate task) → subagents list (check progress) → subagents steer/kill (control)\n")
 	static.WriteString("Memory: memory_search (find relevant info) → memory_get (read full section). Project knowledge is auto-prefetched\n")
-	static.WriteString("Gmail: gmail {action:'inbox'} (요약) → gmail {action:'search', query:'...'} (검색) → gmail {action:'read', message_id:'...'} (읽기). 연락처 별명은 KV에서 자동 해석 (gmail.contacts.<alias>)\n")
-	static.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools. Prefer gmail over exec+gog.\n\n")
+	static.WriteString("Gmail: gmail {action:'inbox'} (요약) → gmail {action:'search', query:'...'} (검색) → gmail {action:'read', message_id:'...'} (읽기). 연락처 별명은 KV에서 자동 해석 (gmail.contacts.<alias>). 인증: ~/.deneb/credentials/gmail_client.json (OAuth client_secret) + gmail_token.json (refresh_token 포함)\n")
+	static.WriteString("Prefer grep over exec+grep. Prefer read over exec+cat. Prefer edit over exec+sed. Use first-class tools. Prefer gmail tool over manual API calls.\n\n")
 
 	static.WriteString("**pilot vs direct tools vs subagent:**\n")
 	static.WriteString("- Single file/command + analysis → pilot (1 turn instead of 2+)\n")
