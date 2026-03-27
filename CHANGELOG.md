@@ -2,77 +2,183 @@
 
 ## [3.13.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.12.0...deneb-v3.13.0) (2026-03-27)
 
-
 ### ✨ Features
 
-* add cargo-deny config, DuckDB analytics scripts, and Makefile targets ([9793986](https://github.com/choiceoh/Deneb/commit/9793986c25b600ad38ebcf1a2b22ca9cafb26b5d))
-* **go:** add property-based and benchmark tests for session and RPC ([bee0d07](https://github.com/choiceoh/Deneb/commit/bee0d077e6f7b8d0f89e865c010f8cc90308480d))
-* **go:** add stdlib metrics package with Prometheus-compatible /metrics endpoint ([dd9861d](https://github.com/choiceoh/Deneb/commit/dd9861d4de54628e8da1763a275219a0e31dd280))
-* **rust:** add proptest property tests for protocol frames and cosine similarity ([2261202](https://github.com/choiceoh/Deneb/commit/22612028307ed571158339519fd764e4f509c316))
+* add LiteParse integration for document parsing ([9b91fda](https://github.com/choiceoh/Deneb/commit/9b91fda))
+* replace simple typing ticker with phase-aware FullTypingSignaler ([def5a92](https://github.com/choiceoh/Deneb/commit/def5a92))
+* add status reaction emoji on user message during agent runs ([3351488](https://github.com/choiceoh/Deneb/commit/3351488))
+* add cargo-deny config, DuckDB analytics scripts, and Makefile targets ([9793986c25b600ad38ebcf1a2b22ca9cafb26b5d](https://github.com/choiceoh/Deneb/commit/9793986c25b600ad38ebcf1a2b22ca9cafb26b5d))
+* **go:** add property-based and benchmark tests for session and RPC ([bee0d077e6f7b8d0f89e865c010f8cc90308480d](https://github.com/choiceoh/Deneb/commit/bee0d077e6f7b8d0f89e865c010f8cc90308480d))
+* **go:** add stdlib metrics package with Prometheus-compatible /metrics endpoint ([dd9861d4de54628e8da1763a275219a0e31dd280](https://github.com/choiceoh/Deneb/commit/dd9861d4de54628e8da1763a275219a0e31dd280))
+* **rust:** add proptest property tests for protocol frames and cosine similarity ([22612028307ed571158339519fd764e4f509c316](https://github.com/choiceoh/Deneb/commit/22612028307ed571158339519fd764e4f509c316))
+
+### 🐛 Bug Fixes
+
+* fix status reactions with Telegram-compatible emojis and error logging ([41a5099](https://github.com/choiceoh/Deneb/commit/41a5099))
 
 ## [3.12.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.7...deneb-v3.12.0) (2026-03-27)
 
-
 ### ✨ Features
 
-* auto-detect embedding server on DGX Spark startup ([affd107](https://github.com/choiceoh/Deneb/commit/affd107512bea1ad75993eff3bf0558045992ba0))
-* auto-launch SGLang embedding server on DGX Spark ([08620fe](https://github.com/choiceoh/Deneb/commit/08620fe4641780790eb2d4a9120a50a48439941a))
-
+* auto-detect embedding server on DGX Spark startup ([affd107512bea1ad75993eff3bf0558045992ba0](https://github.com/choiceoh/Deneb/commit/affd107512bea1ad75993eff3bf0558045992ba0))
+* auto-launch SGLang embedding server on DGX Spark ([08620fe4641780790eb2d4a9120a50a48439941a](https://github.com/choiceoh/Deneb/commit/08620fe4641780790eb2d4a9120a50a48439941a))
 
 ### 🐛 Bug Fixes
 
-* separate embedding model from chat model to prevent SGLang 400 errors ([c0c2a01](https://github.com/choiceoh/Deneb/commit/c0c2a0126263556b39639c8bfbd3ee98c727a86d))
-* separate embedding model from chat model, auto-launch on DGX Spark ([a626c70](https://github.com/choiceoh/Deneb/commit/a626c70a5f30ebe2d7a7c0a9eeeeac2b14a9bb0d))
+* separate embedding model from chat model to prevent SGLang 400 errors ([c0c2a0126263556b39639c8bfbd3ee98c727a86d](https://github.com/choiceoh/Deneb/commit/c0c2a0126263556b39639c8bfbd3ee98c727a86d))
+* separate embedding model from chat model, auto-launch on DGX Spark ([a626c70a5f30ebe2d7a7c0a9eeeeac2b14a9bb0d](https://github.com/choiceoh/Deneb/commit/a626c70a5f30ebe2d7a7c0a9eeeeac2b14a9bb0d))
 
 ## [3.11.7](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.6...deneb-v3.11.7) (2026-03-26)
 
+### ✨ Features
+
+* enhance inter-tool integration ([08c061f](https://github.com/choiceoh/Deneb/commit/08c061f))
+* enrich tool descriptions in system prompt ([47f70c7](https://github.com/choiceoh/Deneb/commit/47f70c7))
+* replace GGUF models with SGLang for embedding and query expansion ([a15721e](https://github.com/choiceoh/Deneb/commit/a15721e))
+* add gmail tool with inbox summary, search, send, reply, labels and contact aliases ([4cf9158](https://github.com/choiceoh/Deneb/commit/4cf9158))
+* add gmail tool usage guide to system prompt tool selection ([39c24d2](https://github.com/choiceoh/Deneb/commit/39c24d2))
+* add Honcho-inspired structured memory system with SGLang ([8b37aa2](https://github.com/choiceoh/Deneb/commit/8b37aa2))
+* deep improvements — gateway init, dedup, migration, conflict resolution, Korean FTS, mid-run extraction, Neuromancer-style prompts ([fb317cd](https://github.com/choiceoh/Deneb/commit/fb317cd))
+* wire StartPeriodicTimer at gateway init ([0b9aad0](https://github.com/choiceoh/Deneb/commit/0b9aad0))
+
+### ⚡ Performance
+
+* optimize inbound pipeline latency (async handler, reduced timeouts) ([f0c6d3c](https://github.com/choiceoh/Deneb/commit/f0c6d3c))
+* improve cache utilization across hot paths ([54e1d4a](https://github.com/choiceoh/Deneb/commit/54e1d4a))
+* parallelize knowledge+context prep, add pipeline timing, reduce proactive timeout ([7cfec95](https://github.com/choiceoh/Deneb/commit/7cfec95))
+* reduce compress timeout (30s→10s) and raise threshold (8K→16K) ([e27790d](https://github.com/choiceoh/Deneb/commit/e27790d))
 
 ### 🐛 Bug Fixes
 
-* resolve all failing tests across Rust core and Go gateway ([6dc20d9](https://github.com/choiceoh/Deneb/commit/6dc20d9677438868800493f3b55bca95df12030c))
+* resolve all failing tests across Rust core and Go gateway ([6dc20d9677438868800493f3b55bca95df12030c](https://github.com/choiceoh/Deneb/commit/6dc20d9677438868800493f3b55bca95df12030c))
+* fix code review issues ([9d7804d](https://github.com/choiceoh/Deneb/commit/9d7804d))
+* fix deadlock, race condition, and deduplicate stream helpers ([276146c](https://github.com/choiceoh/Deneb/commit/276146c))
 
 ## [3.11.6](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.5...deneb-v3.11.6) (2026-03-26)
 
+### ✨ Features
+
+* include workspace directory in sglang system prompt ([046cd6d](https://github.com/choiceoh/Deneb/commit/046cd6d))
+* add .env file loading and upgrade Perplexity to sonar-reasoning-pro ([664af90](https://github.com/choiceoh/Deneb/commit/664af90))
+* Add sessions_search and sessions_restore tools for transcript management ([545b45e](https://github.com/choiceoh/Deneb/commit/545b45e))
+* add health check, thinking mode, chaining, smart truncation, and metrics ([75061a7](https://github.com/choiceoh/Deneb/commit/75061a7))
+* add JSON response cleaning for output_format json ([6bd62be](https://github.com/choiceoh/Deneb/commit/6bd62be))
+* integrate Vega + Memory knowledge prefetch into context assembly ([b531601](https://github.com/choiceoh/Deneb/commit/b531601))
+* improve agent tool usage, response speed, and action efficiency ([e82df17](https://github.com/choiceoh/Deneb/commit/e82df17))
+* add output post-processing — markdown normalization, list cleaning, length enforcement ([5d6b14c](https://github.com/choiceoh/Deneb/commit/5d6b14c))
+
+### 🐛 Bug Fixes
+
+* add missing errors import in ml_cgo.go ([599d403](https://github.com/choiceoh/Deneb/commit/599d403))
+* fix truncation overlap panic, brief+thinking conflict, chain self-call guard ([35f7f8e](https://github.com/choiceoh/Deneb/commit/35f7f8e))
+* fix review issues — UTF-8 truncation, Anthropic path, short message filter ([d0014f2](https://github.com/choiceoh/Deneb/commit/d0014f2))
+* use MarkdownToTelegramHTML for reply formatting (fixes fenced code blocks) ([5db3d35](https://github.com/choiceoh/Deneb/commit/5db3d35))
 
 ### 🔧 Internal
 
-* split oversized commands_handlers.go and parser.rs into focused domain files ([d1aa584](https://github.com/choiceoh/Deneb/commit/d1aa584899654f2469d584a832c7698d5305b836))
+* split oversized commands_handlers.go and parser.rs into focused domain files ([d1aa584899654f2469d584a832c7698d5305b836](https://github.com/choiceoh/Deneb/commit/d1aa584899654f2469d584a832c7698d5305b836))
+* modernize console handler with decisecond timestamps, pkg tags, separator, and human-friendly durations ([a983420](https://github.com/choiceoh/Deneb/commit/a983420))
 
 ## [3.11.5](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.4...deneb-v3.11.5) (2026-03-26)
 
+### ✨ Features
 
-### Performance
+* graceful SIGTERM before SIGKILL and process group isolation ([86a66b8](https://github.com/choiceoh/Deneb/commit/86a66b8))
+* add link understanding and interactive replies ([b550469](https://github.com/choiceoh/Deneb/commit/b550469))
+* implement subagents tool with session manager integration ([ea085d2](https://github.com/choiceoh/Deneb/commit/ea085d2))
+* implement full ACP RPC subsystem ([dda6764](https://github.com/choiceoh/Deneb/commit/dda6764))
+* Port channel utilities from TypeScript to Go ([68b9806](https://github.com/choiceoh/Deneb/commit/68b9806))
+* Add link understanding and reply context for Telegram messages ([5bfe66a](https://github.com/choiceoh/Deneb/commit/5bfe66a))
+* Add media extraction: YouTube transcripts, video frames, and Telegram attachments ([efd5dbd](https://github.com/choiceoh/Deneb/commit/efd5dbd))
+* Add human-readable console log handler with optional color output ([b672520](https://github.com/choiceoh/Deneb/commit/b672520))
+* Add autonomous goal-driven execution system with attention-based triggering ([4db1867](https://github.com/choiceoh/Deneb/commit/4db1867))
+* Add goal starvation detection, note history, and stale goal auto-pause ([ab82843](https://github.com/choiceoh/Deneb/commit/ab82843))
+* enhance /status with server-level system info ([b31e28a](https://github.com/choiceoh/Deneb/commit/b31e28a))
+* deepen TS→Go port: ChannelsConfig types, cron run log wiring, wizard multi-step ([73a0ebd](https://github.com/choiceoh/Deneb/commit/73a0ebd))
+* Increase context limits and adjust chat configuration defaults ([2a519db](https://github.com/choiceoh/Deneb/commit/2a519db))
+* add sglang fallback and local summarization ([9b48bf8](https://github.com/choiceoh/Deneb/commit/9b48bf8))
+* add send_file, http, kv, clipboard agent tools ([37c6645](https://github.com/choiceoh/Deneb/commit/37c6645))
+* optimize AI agent tools for parallel execution and richer schemas ([b616bd6](https://github.com/choiceoh/Deneb/commit/b616bd6))
+* enhance tool schemas with enum/default constraints ([99e9150](https://github.com/choiceoh/Deneb/commit/99e9150))
+* Unified web tool: search, fetch, and search+fetch in one ([6a34382](https://github.com/choiceoh/Deneb/commit/6a34382))
+* Add Pilot tool and Copilot background monitor with local sglang ([78a33fb](https://github.com/choiceoh/Deneb/commit/78a33fb))
 
-* DGX Spark 20-core CPU utilization + chat latency optimization ([#405](https://github.com/choiceoh/Deneb/issues/405)) ([1162f35](https://github.com/choiceoh/Deneb/commit/1162f35f5372dc0ad0ca619afabea1be66b0747b))
+### ⚡ Performance
+
+* DGX Spark 20-core CPU utilization + chat latency optimization ([405](https://github.com/choiceoh/Deneb/issues/405)) ([1162f35f5372dc0ad0ca619afabea1be66b0747b](https://github.com/choiceoh/Deneb/commit/1162f35f5372dc0ad0ca619afabea1be66b0747b))
+* bypass RPC for model prewarm, call LLM directly ([7696cfe](https://github.com/choiceoh/Deneb/commit/7696cfe))
+* add mtime-based context file caching, TTL memory file list cache, Anthropic prompt cache_control breakpoints ([dbec372](https://github.com/choiceoh/Deneb/commit/dbec372))
+* Optimize for DGX Spark: SIMD, parallelism, and caching ([957aa1b](https://github.com/choiceoh/Deneb/commit/957aa1b))
+
+### 🐛 Bug Fixes
+
+* fix signal killed by OOM and graceful shutdown ([6da475a](https://github.com/choiceoh/Deneb/commit/6da475a))
+* remove OOM score adjustment logic ([64ae762](https://github.com/choiceoh/Deneb/commit/64ae762))
+* fix clippy errors, Go formatting, proto generation ([8e75340](https://github.com/choiceoh/Deneb/commit/8e75340))
+* autonomous: fix bugs, deadlock risks, and add comprehensive tests ([1a66bda](https://github.com/choiceoh/Deneb/commit/1a66bda))
+* core-rs: harden markdown parser and parameterize SQL ID lists ([2ce5ec2](https://github.com/choiceoh/Deneb/commit/2ce5ec2))
+* autonomous: fix production issues — transcript reset, error tracking, enabled persistence ([dba1f21](https://github.com/choiceoh/Deneb/commit/dba1f21))
+* watchdog: skip stale-activity restart when autonomous service is running ([8c44fd6](https://github.com/choiceoh/Deneb/commit/8c44fd6))
+* compaction: fix SystemPromptAddition loss, improve summary quality ([c625798](https://github.com/choiceoh/Deneb/commit/c625798))
+
+### 🔧 Internal
+
+* Improve code clarity: add mutex guards and simplify error handling ([b8d0ce6](https://github.com/choiceoh/Deneb/commit/b8d0ce6))
+* core-rs: add SAFETY comments, fix Mutex unwrap, add module docs ([71e49fb](https://github.com/choiceoh/Deneb/commit/71e49fb))
+* cleanup: remove unused folders and files ([722e881](https://github.com/choiceoh/Deneb/commit/722e881))
+* Refactor RPC handlers into domain-based subpackages ([75063a7](https://github.com/choiceoh/Deneb/commit/75063a7))
 
 ## [3.11.4](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.3...deneb-v3.11.4) (2026-03-26)
 
+### ✨ Features
 
-### Bug Fixes
+* add SOUL.md activation instruction to system prompt ([5284377](https://github.com/choiceoh/Deneb/commit/5284377))
+* implement Go host-side orchestration for Rust compaction engine ([8406e00](https://github.com/choiceoh/Deneb/commit/8406e00))
+* implement stub tools and ACP wiring ([6d375cd](https://github.com/choiceoh/Deneb/commit/6d375cd))
 
-* correct FFI error codes for session key validation and buffer-too-small returns ([#352](https://github.com/choiceoh/Deneb/issues/352)) ([8f882cc](https://github.com/choiceoh/Deneb/commit/8f882ccaffee5b0a8e722bf7146b3f3d326750bc))
+### 🐛 Bug Fixes
+
+* correct FFI error codes for session key validation and buffer-too-small returns ([352](https://github.com/choiceoh/Deneb/issues/352)) ([8f882ccaffee5b0a8e722bf7146b3f3d326750bc](https://github.com/choiceoh/Deneb/commit/8f882ccaffee5b0a8e722bf7146b3f3d326750bc))
+* downgrade context canceled polling error to info level ([90bba33](https://github.com/choiceoh/Deneb/commit/90bba33))
+* fix WebSocket connectivity, session GC, and channel restart reliability ([6eab080](https://github.com/choiceoh/Deneb/commit/6eab080))
 
 ## [3.11.3](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.2...deneb-v3.11.3) (2026-03-26)
 
+### ✨ Features
 
-### Bug Fixes
+* wire agent cron tool to actual scheduler instead of stubs ([0c0334c](https://github.com/choiceoh/Deneb/commit/0c0334c))
+* wire disconnected packages to RPC/server layer ([43ee8fb](https://github.com/choiceoh/Deneb/commit/43ee8fb))
 
-* strip Telegram [@bot](https://github.com/bot) suffix from slash commands ([#344](https://github.com/choiceoh/Deneb/issues/344)) ([2b94c45](https://github.com/choiceoh/Deneb/commit/2b94c45246d37a9adb8079ae3d7766aa972ac11e))
+### 🐛 Bug Fixes
+
+* strip Telegram @bot suffix from slash commands ([344](https://github.com/choiceoh/Deneb/issues/344)) ([2b94c45246d37a9adb8079ae3d7766aa972ac11e](https://github.com/choiceoh/Deneb/commit/2b94c45246d37a9adb8079ae3d7766aa972ac11e))
+
+### 🔧 Internal
+
+* remove AGENTS.md symlink, make CLAUDE.md the real file ([44fb8a9](https://github.com/choiceoh/Deneb/commit/44fb8a9))
+* remove JS/TS/Python dependencies and all references ([4da9110](https://github.com/choiceoh/Deneb/commit/4da9110))
 
 ## [3.11.2](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.1...deneb-v3.11.2) (2026-03-26)
 
+### 🐛 Bug Fixes
 
-### Bug Fixes
+* handle agents.defaults.model as json.RawMessage (string or object) ([339](https://github.com/choiceoh/Deneb/issues/339)) ([ad11af9fcd58abe4f175034020034cc0b90d3a91](https://github.com/choiceoh/Deneb/commit/ad11af9fcd58abe4f175034020034cc0b90d3a91))
+* fix: agents.defaults.model parsing + memory_search diagnostics ([c08f09e](https://github.com/choiceoh/Deneb/commit/c08f09e))
 
-* handle agents.defaults.model as json.RawMessage (string or object) ([#339](https://github.com/choiceoh/Deneb/issues/339)) ([ad11af9](https://github.com/choiceoh/Deneb/commit/ad11af9fcd58abe4f175034020034cc0b90d3a91))
+### 🔧 Internal
+
+* Go/Rust 마이그레이션 평가 및 잔여 격차 해소 ([8a44a86](https://github.com/choiceoh/Deneb/commit/8a44a86))
 
 ## [3.11.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.0...deneb-v3.11.1) (2026-03-26)
 
+### 🐛 Bug Fixes
 
-### Bug Fixes
+* resolve autoreply duplicate declarations and model config parsing ([334](https://github.com/choiceoh/Deneb/issues/334)) ([f7737bdc0b157a24db2fc1f588ca4d34f185e8d6](https://github.com/choiceoh/Deneb/commit/f7737bdc0b157a24db2fc1f588ca4d34f185e8d6))
+* resolve Go gateway workspace dir from config instead of os.Getwd() ([337](https://github.com/choiceoh/Deneb/issues/337)) ([ae6b9a06a67b401868df151bc3699a7e109d1c9f](https://github.com/choiceoh/Deneb/commit/ae6b9a06a67b401868df151bc3699a7e109d1c9f))
 
-* resolve autoreply duplicate declarations and model config parsing ([#334](https://github.com/choiceoh/Deneb/issues/334)) ([f7737bd](https://github.com/choiceoh/Deneb/commit/f7737bdc0b157a24db2fc1f588ca4d34f185e8d6))
-* resolve Go gateway workspace dir from config instead of os.Getwd() ([#337](https://github.com/choiceoh/Deneb/issues/337)) ([ae6b9a0](https://github.com/choiceoh/Deneb/commit/ae6b9a06a67b401868df151bc3699a7e109d1c9f))
+### 🔧 Internal
+
+* Remove TypeScript codebase entirely ([50aba9c](https://github.com/choiceoh/Deneb/commit/50aba9c))
 
 ## [3.11.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.10.0...deneb-v3.11.0) (2026-03-26)
 
