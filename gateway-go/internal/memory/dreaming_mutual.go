@@ -147,8 +147,11 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 		}
 	}
 
-	if mutualFacts == 0 && prevState == "" && support < 5 {
-		return nil // not enough data
+	// Skip LLM call if there's nothing relationship-specific to synthesize.
+	// Require at least some mutual signals (facts, raw, or previous state).
+	hasRaw := entryMap["mu_signals_raw"] != ""
+	if mutualFacts == 0 && !hasRaw && prevState == "" {
+		return nil // no relationship data to synthesize
 	}
 
 	// Use higher token budget for richer synthesis.
@@ -186,7 +189,7 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 		_ = store.SetUserModel(ctx, "mu_signals_raw", "", 0)
 
 		// Append a history snapshot: concise summary of what changed this cycle.
-		appendRelationshipHistory(ctx, store, profile, logger)
+		appendRelationshipHistory(ctx, store, entryMap, profile, logger)
 
 		logger.Info("aurora-dream: updated mutual understanding", "keys", updated, "signals_consumed", mutualFacts)
 	}
@@ -197,7 +200,8 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 // appendRelationshipHistory maintains a rolling log of relationship evolution
 // in the "mu_history" user_model key. Keeps the last 8 entries to stay concise
 // while preserving multi-cycle trajectory visibility.
-func appendRelationshipHistory(ctx context.Context, store *Store, profile map[string]string, logger *slog.Logger) {
+// entryMap is the already-loaded user_model map to avoid redundant DB reads.
+func appendRelationshipHistory(ctx context.Context, store *Store, entryMap map[string]string, profile map[string]string, logger *slog.Logger) {
 	// Build a one-line snapshot from the current synthesis.
 	date := time.Now().Format("01-02")
 	var parts []string
@@ -230,15 +234,8 @@ func appendRelationshipHistory(ctx context.Context, store *Store, profile map[st
 
 	entry := fmt.Sprintf("[%s] %s", date, strings.Join(parts, " | "))
 
-	// Read existing history.
-	entries, _ := store.GetUserModel(ctx)
-	var existing string
-	for _, e := range entries {
-		if e.Key == "mu_history" {
-			existing = e.Value
-			break
-		}
-	}
+	// Use already-loaded history from entryMap instead of re-reading DB.
+	existing := entryMap["mu_history"]
 
 	var history string
 	if existing != "" {

@@ -60,7 +60,7 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		logger.Warn("aurora-dream: verification phase failed", "error", err)
 	} else {
 		report.FactsVerified = verified
-		report.FactsExpired = expired
+		report.FactsExpired += expired
 	}
 
 	// Phase 2: Duplicate merging.
@@ -255,11 +255,11 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 			break
 		}
 
-		factA, err := store.GetFact(ctx, p.a)
+		factA, err := store.GetFactReadOnly(ctx, p.a)
 		if err != nil || !factA.Active {
 			continue
 		}
-		factB, err := store.GetFact(ctx, p.b)
+		factB, err := store.GetFactReadOnly(ctx, p.b)
 		if err != nil || !factB.Active {
 			continue
 		}
@@ -313,7 +313,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 	return merged, nil
 }
 
-// --- Phase 4: Conflict Resolution (Honcho-style) ---
+// --- Phase 4: Conflict Resolution ---
 
 const conflictSystemPrompt = `You are a fact conflict resolution assistant.
 Given a list of facts in the same category, identify contradictions or superseded information.
@@ -466,7 +466,7 @@ func extractPatterns(ctx context.Context, store *Store, client *llm.Client, mode
 	return count, nil
 }
 
-// --- Phase 4: User Model Update ---
+// --- Phase 5: User Model Update ---
 
 const userModelSystemPrompt = `You are a deep user profile synthesizer for a personal AI assistant.
 Given facts about a user across all categories, synthesize a rich, evidence-based profile.

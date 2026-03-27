@@ -95,7 +95,7 @@ Return a JSON array. For each fact:
   - 0.9+: decisions that constrain future work, core identity traits, strong corrections/expectations
   - 0.7-0.9: reusable solutions, strong preferences, clear satisfaction/frustration signals
   - 0.5-0.7: useful context, weak signals, subtle relationship cues
-- "expiry_hint": null or "YYYY-MM-DD" if time-sensitive
+- "expiry_hint": null or "YYYY-MM-DD" (e.g. "2026-04-15") if time-sensitive
 
 ## Rules
 - Max 7 facts. Quality over quantity
@@ -131,11 +131,15 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 		return parseBulletFallback(text), nil
 	}
 
-	// Validate and clamp values.
+	// Validate, clamp values, and enforce max count.
+	const maxFacts = 7
 	var valid []ExtractedFact
 	for _, f := range facts {
 		if f.Content == "" {
 			continue
+		}
+		if len(valid) >= maxFacts {
+			break
 		}
 		f.Importance = clamp(f.Importance, 0, 1)
 		if !isValidCategory(f.Category) {
@@ -207,14 +211,12 @@ func updateUserModelFromFact(ctx context.Context, store *Store, fact ExtractedFa
 		key = "mu_signals_raw"
 	}
 
-	// Read existing value from user_model table (not metadata).
+	// Read existing entry for this specific key (single-row lookup, not full table scan).
 	var existing string
-	entries, _ := store.GetUserModel(ctx)
-	for _, e := range entries {
-		if e.Key == key {
-			existing = e.Value
-			break
-		}
+	var existingConfidence float64
+	if entry, err := store.GetUserModelEntry(ctx, key); err == nil && entry != nil {
+		existing = entry.Value
+		existingConfidence = entry.Confidence
 	}
 
 	var value string
@@ -231,7 +233,13 @@ func updateUserModelFromFact(ctx context.Context, store *Store, fact ExtractedFa
 		value = strings.Join(lines, "\n")
 	}
 
-	if err := store.SetUserModel(ctx, key, value, fact.Importance); err != nil {
+	// Use the higher of existing and new confidence to avoid regression.
+	confidence := fact.Importance
+	if existingConfidence > confidence {
+		confidence = existingConfidence
+	}
+
+	if err := store.SetUserModel(ctx, key, value, confidence); err != nil {
 		logger.Debug("aurora-memory: failed to update user model", "error", err)
 	}
 }

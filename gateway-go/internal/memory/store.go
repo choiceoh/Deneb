@@ -265,6 +265,14 @@ func (s *Store) GetFact(ctx context.Context, id int64) (*Fact, error) {
 	return s.scanFact(ctx, `SELECT * FROM facts WHERE id = ?`, id)
 }
 
+// GetFactReadOnly retrieves a fact by ID without updating access counts.
+// Use for internal operations (dreaming, merging) that shouldn't inflate access stats.
+func (s *Store) GetFactReadOnly(ctx context.Context, id int64) (*Fact, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.scanFact(ctx, `SELECT * FROM facts WHERE id = ?`, id)
+}
+
 // GetActiveFacts returns all active facts, ordered by importance desc.
 func (s *Store) GetActiveFacts(ctx context.Context) ([]Fact, error) {
 	s.mu.RLock()
@@ -379,6 +387,24 @@ func (s *Store) SetUserModel(ctx context.Context, key, value string, confidence 
 		key, value, confidence, now,
 	)
 	return err
+}
+
+// GetUserModelEntry returns a single user model entry by key.
+// Returns nil if the key does not exist.
+func (s *Store) GetUserModelEntry(ctx context.Context, key string) (*UserModelEntry, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var e UserModelEntry
+	var updatedAt string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT key, value, confidence, updated_at FROM user_model WHERE key = ?`, key,
+	).Scan(&e.Key, &e.Value, &e.Confidence, &updatedAt)
+	if err != nil {
+		return nil, err
+	}
+	e.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+	return &e, nil
 }
 
 // GetUserModel returns all user model entries.
