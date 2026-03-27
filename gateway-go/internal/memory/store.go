@@ -21,11 +21,12 @@ import (
 
 // Fact categories matching Honcho's structured memory model.
 const (
-	CategoryDecision  = "decision"
+	CategoryDecision   = "decision"
 	CategoryPreference = "preference"
-	CategorySolution  = "solution"
-	CategoryContext   = "context"
-	CategoryUserModel = "user_model"
+	CategorySolution   = "solution"
+	CategoryContext    = "context"
+	CategoryUserModel  = "user_model"
+	CategoryMutual     = "mutual" // 상호 인식: AI-user relationship dynamics
 )
 
 // Fact sources.
@@ -505,13 +506,14 @@ func (s *Store) ExportToMarkdown(ctx context.Context) (string, error) {
 	sb.WriteString("# Memory\n\nAuto-recorded learnings and decisions.\n\n")
 
 	// Group by category for readability.
-	categories := []string{CategoryDecision, CategoryPreference, CategorySolution, CategoryContext, CategoryUserModel}
+	categories := []string{CategoryDecision, CategoryPreference, CategorySolution, CategoryContext, CategoryUserModel, CategoryMutual}
 	categoryNames := map[string]string{
-		CategoryDecision:  "결정사항",
+		CategoryDecision:   "결정사항",
 		CategoryPreference: "선호도",
-		CategorySolution:  "해결방법",
-		CategoryContext:   "맥락",
-		CategoryUserModel: "사용자 모델",
+		CategorySolution:   "해결방법",
+		CategoryContext:    "맥락",
+		CategoryUserModel:  "사용자 모델",
+		CategoryMutual:     "상호 인식",
 	}
 
 	for _, cat := range categories {

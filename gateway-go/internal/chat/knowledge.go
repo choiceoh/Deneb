@@ -50,10 +50,11 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 	defer cancel()
 
 	var (
-		wg           sync.WaitGroup
-		vegaResults  []vega.SearchResult
-		memMatches   []MemoryMatch
-		structFacts  []memory.SearchResult
+		wg              sync.WaitGroup
+		vegaResults     []vega.SearchResult
+		memMatches      []MemoryMatch
+		structFacts     []memory.SearchResult
+		userModelEntries []memory.UserModelEntry
 	)
 
 	// Vega search (project knowledge DB).
@@ -86,6 +87,16 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 				structFacts = results
 			}
 		}()
+
+		// Fetch mutual understanding / user model (parallel).
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			entries, err := deps.MemoryStore.GetUserModel(ctx)
+			if err == nil {
+				userModelEntries = entries
+			}
+		}()
 	} else if deps.WorkspaceDir != "" {
 		// Fallback: file-based memory search (legacy).
 		wg.Add(1)
@@ -97,11 +108,23 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 
 	wg.Wait()
 
-	if len(vegaResults) == 0 && len(memMatches) == 0 && len(structFacts) == 0 {
-		return ""
+	// Build the combined knowledge section.
+	var parts []string
+
+	// Knowledge section (Vega + memory facts).
+	if len(vegaResults) > 0 || len(memMatches) > 0 || len(structFacts) > 0 {
+		parts = append(parts, formatKnowledgeWithFacts(vegaResults, memMatches, structFacts))
 	}
 
-	return formatKnowledgeWithFacts(vegaResults, memMatches, structFacts)
+	// Mutual understanding section (user model).
+	if mu := formatMutualUnderstanding(userModelEntries); mu != "" {
+		parts = append(parts, mu)
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "\n")
 }
 
 // truncateRunes truncates s to at most maxRunes runes, appending "..." if truncated.
@@ -182,5 +205,60 @@ func formatKnowledgeWithFacts(vegaResults []vega.SearchResult, memMatches []Memo
 	if tokenCount < 10 {
 		return "" // too little content to be useful
 	}
+	return sb.String()
+}
+
+// mutualUnderstandingKeys defines the display order and Korean labels
+// for user_model keys that form the mutual understanding section.
+var mutualUnderstandingKeys = []struct {
+	Key   string
+	Label string
+}{
+	{"user_sees_ai", "사용자 → AI 인식"},
+	{"ai_understands_user", "AI → 사용자 이해"},
+	{"relationship_dynamics", "관계 역학"},
+	{"adaptation_notes", "적응 메모"},
+}
+
+// mutualUnderstandingMaxTokens caps the mutual understanding section.
+const mutualUnderstandingMaxTokens = 1000
+
+// formatMutualUnderstanding builds the "## 상호 인식" section from user_model entries.
+// Returns empty string if no mutual understanding keys are populated.
+func formatMutualUnderstanding(entries []memory.UserModelEntry) string {
+	if len(entries) == 0 {
+		return ""
+	}
+
+	// Index entries by key for fast lookup.
+	byKey := make(map[string]memory.UserModelEntry, len(entries))
+	for _, e := range entries {
+		byKey[e.Key] = e
+	}
+
+	var sb strings.Builder
+	tokenCount := 0
+
+	for _, mk := range mutualUnderstandingKeys {
+		e, ok := byKey[mk.Key]
+		if !ok || e.Value == "" {
+			continue
+		}
+
+		// Lazy write header on first match.
+		if sb.Len() == 0 {
+			sb.WriteString("## 상호 인식\n\n")
+		}
+
+		before := sb.Len()
+		content := truncateRunes(e.Value, knowledgeMaxContentRunes)
+		fmt.Fprintf(&sb, "### %s\n%s\n\n", mk.Label, content)
+		tokenCount += (sb.Len() - before) / charsPerToken
+
+		if tokenCount >= mutualUnderstandingMaxTokens {
+			break
+		}
+	}
+
 	return sb.String()
 }

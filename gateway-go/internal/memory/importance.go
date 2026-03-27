@@ -53,6 +53,15 @@ What can be LOGICALLY INFERRED but was NOT directly said?
 - If user asked about topic T repeatedly → T is an area of active work
 - If user corrected the AI on X → X is a strong preference, not casual
 
+### Step 2.5: Mutual Understanding Signals (상호 인식)
+Detect relationship dynamics between user and AI:
+- User correction/frustration → AI needs to adapt (what specifically?)
+- User praise/satisfaction → AI approach is working (what specifically?)
+- User trust signals (delegating complex tasks, accepting suggestions without pushback)
+- Repeated similar requests → AI should learn proactive behavior
+- Communication style shifts (formal↔casual, brief↔detailed) → adapt accordingly
+- Expectations gap: what the user expected vs what AI delivered
+
 ### Step 3: Output
 Return a JSON array. For each fact:
 - "content": Korean, concise (1-2 sentences). Include the reasoning basis
@@ -62,6 +71,7 @@ Return a JSON array. For each fact:
   - "solution": problem-solution pairs
   - "context": project/technical state that affects future interactions
   - "user_model": expertise areas, personality, habits (INFERRED)
+  - "mutual": 상호 인식 — AI-user relationship signals (corrections, praise, trust, frustration, adaptation needs)
 - "importance": 0.0-1.0
   - 0.9+: decisions that constrain future work, core identity traits
   - 0.7-0.9: reusable solutions, strong preferences
@@ -154,8 +164,8 @@ func InsertExtractedFacts(ctx context.Context, store *Store, embedder *Embedder,
 			}(id, ef.Content)
 		}
 
-		// If this is a user_model fact, also update the user model table.
-		if ef.Category == CategoryUserModel {
+		// If this is a user_model or mutual fact, also update the user model table.
+		if ef.Category == CategoryUserModel || ef.Category == CategoryMutual {
 			updateUserModelFromFact(ctx, store, ef, logger)
 		}
 
@@ -202,7 +212,7 @@ func stripCodeFences(s string) string {
 
 func isValidCategory(c string) bool {
 	switch c {
-	case CategoryDecision, CategoryPreference, CategorySolution, CategoryContext, CategoryUserModel:
+	case CategoryDecision, CategoryPreference, CategorySolution, CategoryContext, CategoryUserModel, CategoryMutual:
 		return true
 	}
 	return false

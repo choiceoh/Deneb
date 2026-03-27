@@ -93,6 +93,11 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		logger.Warn("aurora-dream: user model update failed", "error", err)
 	}
 
+	// Phase 6: Mutual understanding synthesis (상호 인식).
+	if err := synthesizeMutualUnderstanding(ctx, store, client, model, logger); err != nil {
+		logger.Warn("aurora-dream: mutual understanding synthesis failed", "error", err)
+	}
+
 	report.Duration = time.Since(start)
 
 	// Log the dreaming cycle.
@@ -502,6 +507,99 @@ func updateUserModel(ctx context.Context, store *Store, client *llm.Client, mode
 	}
 
 	logger.Info("aurora-dream: updated user model", "keys", len(profile))
+	return nil
+}
+
+// --- Phase 6: Mutual Understanding Synthesis (상호 인식) ---
+
+const mutualUnderstandingSystemPrompt = `You are an AI-user relationship analyst performing "dreaming" mutual understanding synthesis.
+Given accumulated facts (especially mutual, preference, and user_model categories),
+synthesize the bidirectional understanding state between the AI and user.
+
+Analyze from these perspectives:
+1. **사용자 → AI 인식**: How the user perceives the AI — satisfaction level, trust signals, expectations, areas of frustration or delight
+2. **AI → 사용자 이해**: What the AI has learned about the user — personality, communication style, expertise, work patterns, emotional tendencies
+3. **관계 역학**: Relationship dynamics — rapport level, communication adaptation history, areas needing improvement
+4. **적응 메모**: Specific behavioral adaptations the AI should apply in future conversations — based on corrections, preference shifts, repeated patterns
+
+Return a JSON object with these keys (Korean values, concise but substantive):
+- "user_sees_ai": user's perception of the AI (1-3 sentences)
+- "ai_understands_user": AI's understanding of the user (1-3 sentences)
+- "relationship_dynamics": relationship state and trends (1-3 sentences)
+- "adaptation_notes": concrete behavioral changes for the AI (1-3 bullet points as a single string)
+
+If insufficient data for a key, omit it.
+Return ONLY valid JSON object, no markdown fences.`
+
+func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) error {
+	facts, err := store.GetActiveFacts(ctx)
+	if err != nil {
+		return err
+	}
+
+	if len(facts) < 5 {
+		return nil // not enough data to synthesize
+	}
+
+	// Gather relevant facts: mutual, preference, user_model categories get priority,
+	// but include other categories for broader context.
+	var sb strings.Builder
+	priorityCats := map[string]bool{CategoryMutual: true, CategoryPreference: true, CategoryUserModel: true}
+
+	// Priority facts first (up to 20).
+	count := 0
+	for _, f := range facts {
+		if priorityCats[f.Category] && count < 20 {
+			fmt.Fprintf(&sb, "[%s, %.1f] %s\n", f.Category, f.Importance, f.Content)
+			count++
+		}
+	}
+
+	// Fill remaining budget with other facts (up to 15 more).
+	other := 0
+	for _, f := range facts {
+		if !priorityCats[f.Category] && other < 15 {
+			fmt.Fprintf(&sb, "[%s, %.1f] %s\n", f.Category, f.Importance, f.Content)
+			other++
+		}
+	}
+
+	if count == 0 && other < 5 {
+		return nil // not enough relevant data
+	}
+
+	resp, err := callLLM(ctx, client, model, mutualUnderstandingSystemPrompt, sb.String(), dreamingMaxTokens)
+	if err != nil {
+		return err
+	}
+
+	var profile map[string]string
+	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &profile); err != nil {
+		return nil // non-fatal
+	}
+
+	mutualKeys := map[string]bool{
+		"user_sees_ai":          true,
+		"ai_understands_user":   true,
+		"relationship_dynamics": true,
+		"adaptation_notes":      true,
+	}
+
+	updated := 0
+	for key, value := range profile {
+		if value == "" || !mutualKeys[key] {
+			continue
+		}
+		if err := store.SetUserModel(ctx, key, value, 0.85); err != nil {
+			logger.Debug("aurora-dream: failed to set mutual understanding", "key", key, "error", err)
+		} else {
+			updated++
+		}
+	}
+
+	if updated > 0 {
+		logger.Info("aurora-dream: updated mutual understanding", "keys", updated)
+	}
 	return nil
 }
 
