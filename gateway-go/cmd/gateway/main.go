@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
@@ -114,6 +115,17 @@ func main() {
 		if embedResult.Server != nil {
 			embedResult.Server.Stop()
 		}
+	}
+
+	// If we auto-launched the server, wait for it to become healthy before
+	// wiring the endpoint into Vega and memory subsystems.
+	if embedResult.Server != nil && embedResult.Endpoint != nil {
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		if !embedResult.Server.WaitReady(waitCtx) {
+			logger.Warn("embed-server: not ready in time, disabling embedding")
+			embedResult.Endpoint = nil
+		}
+		waitCancel()
 	}
 
 	// Initialize Vega backend (SGLang-enhanced search).
