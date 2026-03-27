@@ -63,10 +63,18 @@ var defaultEmbedCandidates = []string{
 	"http://127.0.0.1:30002/v1",
 }
 
-// DetectEmbedEndpoint auto-detects a running embedding server.
-// Priority: DENEB_EMBED_URL/DENEB_EMBED_MODEL env vars → probe default ports.
-// Returns nil if no embedding server is found.
-func DetectEmbedEndpoint(logger *slog.Logger) *EmbedEndpoint {
+// EmbedDetectResult holds the auto-detection result including an optional
+// server handle that must be stopped on gateway shutdown.
+type EmbedDetectResult struct {
+	Endpoint *EmbedEndpoint
+	Server   *EmbedServer // non-nil if we auto-launched the server
+}
+
+// DetectOrLaunchEmbedServer auto-detects a running embedding server, or
+// launches one if a GPU is available (DGX Spark).
+// Priority: env vars → probe default ports → auto-launch on GPU hosts.
+// Caller must call result.Server.Stop() on shutdown if Server is non-nil.
+func DetectOrLaunchEmbedServer(logger *slog.Logger) *EmbedDetectResult {
 	// 1. Explicit env var override — skip probing.
 	envURL, envModel := getEmbedEnv()
 	if envURL != "" && envModel != "" {
@@ -74,7 +82,9 @@ func DetectEmbedEndpoint(logger *slog.Logger) *EmbedEndpoint {
 			logger.Info("vega: using explicit embedding endpoint",
 				"url", envURL, "model", envModel)
 		}
-		return &EmbedEndpoint{URL: envURL, Model: envModel}
+		return &EmbedDetectResult{
+			Endpoint: &EmbedEndpoint{URL: envURL, Model: envModel},
+		}
 	}
 
 	// 2. Probe default candidate ports for a running embedding server.
@@ -84,14 +94,34 @@ func DetectEmbedEndpoint(logger *slog.Logger) *EmbedEndpoint {
 				logger.Info("vega: auto-detected embedding server",
 					"url", candidate, "model", model)
 			}
-			return &EmbedEndpoint{URL: candidate, Model: model}
+			return &EmbedDetectResult{
+				Endpoint: &EmbedEndpoint{URL: candidate, Model: model},
+			}
+		}
+	}
+
+	// 3. No running server found. If we have a GPU, auto-launch one.
+	if HasGPU() {
+		if logger != nil {
+			logger.Info("vega: GPU detected, auto-launching embedding server")
+		}
+		srv, ep := LaunchEmbedServer(EmbedServerConfig{Logger: logger})
+		if ep != nil {
+			return &EmbedDetectResult{Endpoint: ep, Server: srv}
 		}
 	}
 
 	if logger != nil {
 		logger.Info("vega: no embedding server detected, embedding disabled")
 	}
-	return nil
+	return &EmbedDetectResult{}
+}
+
+// DetectEmbedEndpoint is a convenience wrapper that returns only the endpoint.
+// Use DetectOrLaunchEmbedServer when you need the server handle for cleanup.
+func DetectEmbedEndpoint(logger *slog.Logger) *EmbedEndpoint {
+	result := DetectOrLaunchEmbedServer(logger)
+	return result.Endpoint
 }
 
 // getEmbedEnv reads DENEB_EMBED_URL and DENEB_EMBED_MODEL from environment.
