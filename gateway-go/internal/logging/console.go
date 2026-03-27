@@ -29,10 +29,12 @@ const (
 	ansiRed      = "\033[31m"
 	ansiGreen    = "\033[32m"
 	ansiYellow   = "\033[33m"
+	ansiBlue     = "\033[34m"
 	ansiCyan     = "\033[36m"
 	ansiBoldRed  = "\033[1;31m"
 	ansiBoldGrn  = "\033[1;32m"
 	ansiBoldYel  = "\033[1;33m"
+	ansiBoldBlu  = "\033[1;34m"
 	ansiBoldCyn  = "\033[1;36m"
 	ansiDimCyn   = "\033[2;36m"
 )
@@ -124,10 +126,10 @@ func (h *ConsoleHandler) Handle(_ context.Context, r slog.Record) error {
 		buf = append(buf, lvl...)
 		buf = append(buf, ansiReset...)
 
-		// Dim separator dot.
+		// Dim separator bar.
 		buf = append(buf, ' ')
 		buf = append(buf, ansiDim...)
-		buf = append(buf, "·"...)
+		buf = append(buf, "│"...)
 		buf = append(buf, ansiReset...)
 
 		// Package tag (if present).
@@ -154,7 +156,7 @@ func (h *ConsoleHandler) Handle(_ context.Context, r slog.Record) error {
 		buf = appendTimestamp(buf, t)
 		buf = append(buf, ' ')
 		buf = append(buf, lvl...)
-		buf = append(buf, " · "...)
+		buf = append(buf, " │ "...)
 
 		// Package tag (if present).
 		if pkgVal != "" {
@@ -349,7 +351,7 @@ func levelLabel(l slog.Level) (string, string) {
 	case l < slog.LevelInfo:
 		return "DBG", ansiBoldCyn
 	case l < slog.LevelWarn:
-		return "INF", ansiBoldGrn
+		return "INF", ansiBoldBlu
 	case l < slog.LevelError:
 		return "WRN", ansiBoldYel
 	default:

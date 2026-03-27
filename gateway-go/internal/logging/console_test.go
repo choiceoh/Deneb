@@ -32,7 +32,7 @@ func TestConsoleHandler_BasicFormat(t *testing.T) {
 	}
 
 	got := buf.String()
-	want := "14:05:09.1 INF · server started addr=127.0.0.1:8080 port=8080\n"
+	want := "14:05:09.1 INF │ server started addr=127.0.0.1:8080 port=8080\n"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
@@ -165,7 +165,7 @@ func TestConsoleHandler_ColorLevelStyles(t *testing.T) {
 		want  string
 	}{
 		{slog.LevelDebug, ansiBoldCyn},
-		{slog.LevelInfo, ansiBoldGrn},
+		{slog.LevelInfo, ansiBoldBlu},
 		{slog.LevelWarn, ansiBoldYel},
 		{slog.LevelError, ansiBoldRed},
 	}
@@ -246,7 +246,7 @@ func TestConsoleHandler_BoolAttr(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	want := "14:05:09.1 DBG · rpc method=health ok=true ms=5\n"
+	want := "14:05:09.1 DBG │ rpc method=health ok=true ms=5\n"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
@@ -299,25 +299,25 @@ func TestConsoleHandler_InfoMessageBold(t *testing.T) {
 // --- New tests for modernized features ---
 
 func TestConsoleHandler_Separator(t *testing.T) {
-	// No-color mode should contain the · separator.
+	// No-color mode should contain the │ separator.
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 	r := newTestRecord(slog.LevelInfo, "test")
 	h.Handle(nil, r)
 
 	got := buf.String()
-	if !strings.Contains(got, " · ") {
-		t.Errorf("expected · separator in no-color output: %q", got)
+	if !strings.Contains(got, " │ ") {
+		t.Errorf("expected │ separator in no-color output: %q", got)
 	}
 
-	// Color mode should also contain ·.
+	// Color mode should also contain │.
 	buf.Reset()
 	h2 := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
 	h2.Handle(nil, r)
 
 	got = buf.String()
-	if !strings.Contains(got, "·") {
-		t.Errorf("expected · separator in color output: %q", got)
+	if !strings.Contains(got, "│") {
+		t.Errorf("expected │ separator in color output: %q", got)
 	}
 }
 
@@ -331,7 +331,7 @@ func TestConsoleHandler_PkgTag(t *testing.T) {
 	h2.Handle(nil, r)
 
 	got := buf.String()
-	want := "14:05:09.1 INF · [server] request status=200\n"
+	want := "14:05:09.1 INF │ [server] request status=200\n"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
@@ -388,7 +388,7 @@ func TestConsoleHandler_NoPkgTag(t *testing.T) {
 	h.Handle(nil, r)
 
 	got := buf.String()
-	want := "14:05:09.1 INF · hello\n"
+	want := "14:05:09.1 INF │ hello\n"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}

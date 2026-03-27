@@ -29,8 +29,8 @@ func TestHealthEndpoint(t *testing.T) {
 	if resp["status"] != "ok" {
 		t.Errorf("expected status ok, got %v", resp["status"])
 	}
-	if resp["runtime"] != "go" {
-		t.Errorf("expected runtime go, got %v", resp["runtime"])
+	if _, ok := resp["subsystems"]; !ok {
+		t.Errorf("expected subsystems field in health response")
 	}
 }
 

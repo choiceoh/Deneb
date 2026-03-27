@@ -100,10 +100,12 @@ func main() {
 
 	addr := fmt.Sprintf("%s:%d", rtCfg.BindHost, rtCfg.Port)
 
+	useColor := logFormat != "json"
 	srv := server.New(addr,
 		server.WithLogger(logger),
 		server.WithVersion(*version),
 		server.WithConfig(rtCfg),
+		server.WithLogColor(useColor),
 	)
 
 	// Detect or auto-launch embedding server (DGX Spark).
@@ -126,6 +128,17 @@ func main() {
 			"configPath", bootstrap.Snapshot.Path,
 		)
 	}
+
+	// Collect banner info for startup display.
+	bannerInfo := logging.BannerInfo{
+		Version:     *version,
+		Addr:        addr,
+		AuthMode:    rtCfg.AuthMode,
+		RustFFI:     ffi.Available,
+		VegaEnabled: embedResult.Endpoint != nil,
+	}
+	// Resolve active channels from config snapshot.
+	bannerInfo.Channels = config.ConfiguredChannelIDs(bootstrap.Snapshot)
 
 	// Resolve config directory for PID file fallback.
 	cfgDir := ""
@@ -163,13 +176,14 @@ func main() {
 
 		srv.SetDaemon(d)
 
+		bannerInfo.PID = os.Getpid()
 		exitCode := runWithSignals(func(ctx context.Context) error {
 			if err := d.Start(func() {}); err != nil {
 				return fmt.Errorf("daemon start failed: %w", err)
 			}
 
 			go provider.PrewarmModel(ctx, logger)
-			logger.Info("deneb gateway starting (daemon mode)", "addr", addr, "pid", os.Getpid())
+			logging.PrintBanner(os.Stderr, bannerInfo, useColor)
 			return srv.Run(ctx)
 		}, logger)
 
@@ -182,7 +196,7 @@ func main() {
 	// Non-daemon mode.
 	exitCode := runWithSignals(func(ctx context.Context) error {
 		go provider.PrewarmModel(ctx, logger)
-		logger.Info("deneb gateway starting", "addr", addr)
+		logging.PrintBanner(os.Stderr, bannerInfo, useColor)
 		return srv.Run(ctx)
 	}, logger)
 	stopEmbed()
