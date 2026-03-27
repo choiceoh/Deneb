@@ -60,7 +60,7 @@ var toolCategories = []struct {
 	Label string
 	Names []string
 }{
-	{"File", []string{"read", "write", "edit", "apply_patch", "grep", "find", "ls"}},
+	{"File", []string{"read", "write", "edit", "multi_edit", "apply_patch", "grep", "find", "ls", "tree", "diff"}},
 	{"Exec", []string{"exec", "process"}},
 	{"AI", []string{"pilot"}},
 	{"Web", []string{"web", "http"}},
@@ -112,6 +112,14 @@ func buildPromptSections(params SystemPromptParams) (staticText, dynamicText str
 		s.WriteString("- Long-running autonomous task → sessions_spawn instead of pilot.\n")
 		s.WriteString("- Tool chaining: use `\"$ref\": \"<tool_use_id>\"` to pass one tool's output to another (injected as `_ref_content`, 30s timeout).\n\n")
 	}
+
+	// Coding.
+	s.WriteString("## Coding\n")
+	s.WriteString("- Use `tree` to understand project structure before diving into code.\n")
+	s.WriteString("- Use `multi_edit` for coordinated changes across files (renames, refactors, import updates).\n")
+	s.WriteString("- Use `diff` to review changes before committing. `diff(mode:'all')` shows everything vs HEAD.\n")
+	s.WriteString("- For large refactors: tree → grep → read → multi_edit → diff → exec(tests).\n")
+	s.WriteString("- Always verify edits compile: run build/lint after multi-file changes.\n\n")
 
 	// Safety.
 	s.WriteString("## Safety\n")
