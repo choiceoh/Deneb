@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.13.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.12.0...deneb-v3.13.0) (2026-03-27)
+
+
+### ✨ Features
+
+* add cargo-deny config, DuckDB analytics scripts, and Makefile targets ([9793986](https://github.com/choiceoh/Deneb/commit/9793986c25b600ad38ebcf1a2b22ca9cafb26b5d))
+* **go:** add property-based and benchmark tests for session and RPC ([bee0d07](https://github.com/choiceoh/Deneb/commit/bee0d077e6f7b8d0f89e865c010f8cc90308480d))
+* **go:** add stdlib metrics package with Prometheus-compatible /metrics endpoint ([dd9861d](https://github.com/choiceoh/Deneb/commit/dd9861d4de54628e8da1763a275219a0e31dd280))
+* **rust:** add proptest property tests for protocol frames and cosine similarity ([2261202](https://github.com/choiceoh/Deneb/commit/22612028307ed571158339519fd764e4f509c316))
+
 ## [3.12.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.11.7...deneb-v3.12.0) (2026-03-27)
 
 
