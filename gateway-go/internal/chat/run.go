@@ -158,7 +158,12 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			Enabled: true,
 			Adapter: channel.StatusReactionAdapter{
 				SetReaction: func(emoji string) error {
-					return deps.reactionFn(ctx, delivery, emoji)
+					// Detach from the run context so the final reaction (done/error)
+					// survives runCancel(). WithoutCancel preserves context values
+					// while removing the cancellation signal.
+					rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+					defer cancel()
+					return deps.reactionFn(rctx, delivery, emoji)
 				},
 			},
 			Emojis: &telegramEmojis,
@@ -182,7 +187,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	if err != nil {
 		if statusCtrl != nil {
 			statusCtrl.SetError()
-			statusCtrl.Close()
+			statusCtrl.CloseAfterDrain()
 		}
 		handleRunError(ctx, params, deps, broadcaster, logger, err, now)
 		return
@@ -190,7 +195,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 
 	if statusCtrl != nil {
 		statusCtrl.SetDone()
-		statusCtrl.Close()
+		statusCtrl.CloseAfterDrain()
 	}
 	handleRunSuccess(ctx, params, deps, broadcaster, logger, result, now)
 }
