@@ -51,6 +51,34 @@ What can be LOGICALLY INFERRED but was NOT directly said?
 - If user asked about topic T repeatedly → T is an area of active work
 - If user corrected the AI on X → X is a strong preference, not casual
 
+### Step 2.5: Mutual Understanding Signals (상호 인식)
+Detect AI-user relationship dynamics. For each signal, note WHAT happened and its INTENSITY (strong/mild/subtle).
+
+**Correction signals** (user pushes back on AI behavior):
+- Explicit correction: "아니, 그게 아니라..." → strong signal, AI was wrong about X
+- Repeated clarification: user explains the same thing twice → AI didn't listen
+- Style correction: "더 짧게" / "자세히 설명해줘" → communication mismatch
+
+**Satisfaction signals** (user is pleased with AI):
+- Explicit praise: "좋아", "완벽해" → strong positive
+- Implicit acceptance: user builds on AI's suggestion without questioning → trust
+- Emotional warmth: humor, casual tone, sharing personal context → rapport
+
+**Frustration signals** (user is unhappy):
+- Short/curt responses after long AI output → AI is being too verbose
+- Re-asking the same question differently → AI missed the point
+- "이미 말했잖아" / referencing past context AI forgot → memory gap frustration
+
+**Trust/delegation signals**:
+- Delegating without detailed instructions → high trust in AI's judgment
+- Accepting AI suggestions without verification → strong trust
+- Sharing sensitive/personal information → deep rapport
+
+**Expectation signals**:
+- "항상 ~해줘" / "매번 ~하지 마" → persistent behavioral expectation
+- Comparing to past interactions: "저번에는 잘 했는데..." → regression detected
+- Proactive requests: user expects AI to anticipate needs
+
 ### Step 3: Output
 Return a JSON array. For each fact:
 - "content": Korean, concise (1-2 sentences). Include the reasoning basis
@@ -60,15 +88,17 @@ Return a JSON array. For each fact:
   - "solution": problem-solution pairs
   - "context": project/technical state that affects future interactions
   - "user_model": expertise areas, personality, habits (INFERRED)
+  - "mutual": 상호 인식 — AI-user relationship signals. Format: "[signal_type:intensity] description". signal_type: correction|satisfaction|frustration|trust|expectation. intensity: strong|mild|subtle
 - "importance": 0.0-1.0
-  - 0.9+: decisions that constrain future work, core identity traits
-  - 0.7-0.9: reusable solutions, strong preferences
-  - 0.5-0.7: useful context, weak signals
-- "expiry_hint": null or "YYYY-MM-DD" if time-sensitive
+  - 0.9+: decisions that constrain future work, core identity traits, strong corrections/expectations
+  - 0.7-0.9: reusable solutions, strong preferences, clear satisfaction/frustration signals
+  - 0.5-0.7: useful context, weak signals, subtle relationship cues
+- "expiry_hint": null or "YYYY-MM-DD" (e.g. "2026-04-15") if time-sensitive
 
 ## Rules
-- Max 5 facts. Quality over quantity
+- Max 7 facts. Quality over quantity
 - Include at least 1 deductive inference if the conversation has substance
+- Include at least 1 mutual signal if any relationship dynamics are detectable (most conversations have at least a subtle signal)
 - If nothing worth remembering, return []
 - Return ONLY valid JSON array, no markdown fences, no explanation`
 
@@ -99,11 +129,15 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 		return nil, nil
 	}
 
-	// Validate and clamp values.
+	// Validate, clamp values, and enforce max count.
+	const maxFacts = 7
 	var valid []ExtractedFact
 	for _, f := range facts {
 		if f.Content == "" {
 			continue
+		}
+		if len(valid) >= maxFacts {
+			break
 		}
 		f.Importance = clamp(f.Importance, 0, 1)
 		if !isValidCategory(f.Category) {
@@ -152,8 +186,8 @@ func InsertExtractedFacts(ctx context.Context, store *Store, embedder *Embedder,
 			}(id, ef.Content)
 		}
 
-		// If this is a user_model fact, also update the user model table.
-		if ef.Category == CategoryUserModel {
+		// If this is a user_model or mutual fact, also update the user model table.
+		if ef.Category == CategoryUserModel || ef.Category == CategoryMutual {
 			updateUserModelFromFact(ctx, store, ef, logger)
 		}
 
@@ -166,19 +200,44 @@ func InsertExtractedFacts(ctx context.Context, store *Store, embedder *Embedder,
 	}
 }
 
-// updateUserModelFromFact infers user model key-value from a user_model category fact.
+// updateUserModelFromFact infers user model key-value from a user_model/mutual category fact.
 func updateUserModelFromFact(ctx context.Context, store *Store, fact ExtractedFact, logger *slog.Logger) {
 	// Simple heuristic: use the fact content as a value for a general "traits" key.
 	// The dreaming engine will later consolidate these into proper keys.
 	key := "traits"
-	existing, _ := store.GetMeta(ctx, "user_model_traits")
+	if fact.Category == CategoryMutual {
+		key = "mu_signals_raw"
+	}
+
+	// Read existing entry for this specific key (single-row lookup, not full table scan).
+	var existing string
+	var existingConfidence float64
+	if entry, err := store.GetUserModelEntry(ctx, key); err == nil && entry != nil {
+		existing = entry.Value
+		existingConfidence = entry.Confidence
+	}
+
 	var value string
 	if existing != "" {
 		value = existing + "\n" + fact.Content
 	} else {
 		value = fact.Content
 	}
-	if err := store.SetUserModel(ctx, key, value, fact.Importance); err != nil {
+
+	// Keep only last 20 entries to bound growth; dreaming consolidates periodically.
+	lines := strings.Split(value, "\n")
+	if len(lines) > 20 {
+		lines = lines[len(lines)-20:]
+		value = strings.Join(lines, "\n")
+	}
+
+	// Use the higher of existing and new confidence to avoid regression.
+	confidence := fact.Importance
+	if existingConfidence > confidence {
+		confidence = existingConfidence
+	}
+
+	if err := store.SetUserModel(ctx, key, value, confidence); err != nil {
 		logger.Debug("aurora-memory: failed to update user model", "error", err)
 	}
 }
@@ -200,7 +259,7 @@ func stripCodeFences(s string) string {
 
 func isValidCategory(c string) bool {
 	switch c {
-	case CategoryDecision, CategoryPreference, CategorySolution, CategoryContext, CategoryUserModel:
+	case CategoryDecision, CategoryPreference, CategorySolution, CategoryContext, CategoryUserModel, CategoryMutual:
 		return true
 	}
 	return false
@@ -216,10 +275,13 @@ func clamp(v, min, max float64) float64 {
 	return v
 }
 
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+// truncate truncates s to at most maxRunes runes, appending "..." if truncated.
+// Rune-safe for Korean/CJK multi-byte UTF-8.
+func truncate(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
 		return s
 	}
-	return s[:maxLen] + "..."
+	return string(runes[:maxRunes]) + "..."
 }
 

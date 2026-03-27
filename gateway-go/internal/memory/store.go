@@ -21,11 +21,12 @@ import (
 
 // Fact categories matching Honcho's structured memory model.
 const (
-	CategoryDecision  = "decision"
+	CategoryDecision   = "decision"
 	CategoryPreference = "preference"
-	CategorySolution  = "solution"
-	CategoryContext   = "context"
-	CategoryUserModel = "user_model"
+	CategorySolution   = "solution"
+	CategoryContext    = "context"
+	CategoryUserModel  = "user_model"
+	CategoryMutual     = "mutual" // 상호 인식: AI-user relationship dynamics
 )
 
 // Fact sources.
@@ -312,6 +313,14 @@ func (s *Store) GetFact(ctx context.Context, id int64) (*Fact, error) {
 	return s.scanFact(ctx, `SELECT * FROM facts WHERE id = ?`, id)
 }
 
+// GetFactReadOnly retrieves a fact by ID without updating access counts.
+// Use for internal operations (dreaming, merging) that shouldn't inflate access stats.
+func (s *Store) GetFactReadOnly(ctx context.Context, id int64) (*Fact, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.scanFact(ctx, `SELECT * FROM facts WHERE id = ?`, id)
+}
+
 // GetActiveFacts returns all active facts, ordered by importance desc.
 func (s *Store) GetActiveFacts(ctx context.Context) ([]Fact, error) {
 	s.mu.RLock()
@@ -462,6 +471,27 @@ func (s *Store) SetUserModel(ctx context.Context, key, value string, confidence 
 	return err
 }
 
+// GetUserModelEntry returns a single user model entry by key.
+// Returns nil if the key does not exist.
+func (s *Store) GetUserModelEntry(ctx context.Context, key string) (*UserModelEntry, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var e UserModelEntry
+	var updatedAt string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT key, value, confidence, updated_at FROM user_model WHERE key = ?`, key,
+	).Scan(&e.Key, &e.Value, &e.Confidence, &updatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	e.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+	return &e, nil
+}
+
 // GetUserModel returns all user model entries.
 func (s *Store) GetUserModel(ctx context.Context) ([]UserModelEntry, error) {
 	s.mu.RLock()
@@ -587,13 +617,14 @@ func (s *Store) ExportToMarkdown(ctx context.Context) (string, error) {
 	sb.WriteString("# Memory\n\nAuto-recorded learnings and decisions.\n\n")
 
 	// Group by category for readability.
-	categories := []string{CategoryDecision, CategoryPreference, CategorySolution, CategoryContext, CategoryUserModel}
+	categories := []string{CategoryDecision, CategoryPreference, CategorySolution, CategoryContext, CategoryUserModel, CategoryMutual}
 	categoryNames := map[string]string{
-		CategoryDecision:  "결정사항",
+		CategoryDecision:   "결정사항",
 		CategoryPreference: "선호도",
-		CategorySolution:  "해결방법",
-		CategoryContext:   "맥락",
-		CategoryUserModel: "사용자 모델",
+		CategorySolution:   "해결방법",
+		CategoryContext:    "맥락",
+		CategoryUserModel:  "사용자 모델",
+		CategoryMutual:     "상호 인식",
 	}
 
 	for _, cat := range categories {

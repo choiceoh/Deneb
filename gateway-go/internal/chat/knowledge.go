@@ -50,10 +50,11 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 	defer cancel()
 
 	var (
-		wg           sync.WaitGroup
-		vegaResults  []vega.SearchResult
-		memMatches   []MemoryMatch
-		structFacts  []memory.SearchResult
+		wg              sync.WaitGroup
+		vegaResults     []vega.SearchResult
+		memMatches      []MemoryMatch
+		structFacts     []memory.SearchResult
+		userModelEntries []memory.UserModelEntry
 	)
 
 	// Vega search (project knowledge DB).
@@ -86,6 +87,16 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 				structFacts = results
 			}
 		}()
+
+		// Fetch mutual understanding / user model (parallel).
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			entries, err := deps.MemoryStore.GetUserModel(ctx)
+			if err == nil {
+				userModelEntries = entries
+			}
+		}()
 	} else if deps.WorkspaceDir != "" {
 		// Fallback: file-based memory search (legacy).
 		wg.Add(1)
@@ -97,11 +108,23 @@ func PrefetchKnowledge(ctx context.Context, message string, deps KnowledgeDeps) 
 
 	wg.Wait()
 
-	if len(vegaResults) == 0 && len(memMatches) == 0 && len(structFacts) == 0 {
-		return ""
+	// Build the combined knowledge section.
+	var parts []string
+
+	// Knowledge section (Vega + memory facts).
+	if len(vegaResults) > 0 || len(memMatches) > 0 || len(structFacts) > 0 {
+		parts = append(parts, formatKnowledgeWithFacts(vegaResults, memMatches, structFacts))
 	}
 
-	return formatKnowledgeWithFacts(vegaResults, memMatches, structFacts)
+	// Mutual understanding section (user model).
+	if mu := formatMutualUnderstanding(userModelEntries); mu != "" {
+		parts = append(parts, mu)
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "\n")
 }
 
 // truncateRunes truncates s to at most maxRunes runes, appending "..." if truncated.
@@ -181,6 +204,149 @@ func formatKnowledgeWithFacts(vegaResults []vega.SearchResult, memMatches []Memo
 
 	if tokenCount < 10 {
 		return "" // too little content to be useful
+	}
+	return sb.String()
+}
+
+// userProfileKeys defines display order and Korean labels for Phase 5 user model keys.
+var userProfileKeys = []struct {
+	Key   string
+	Label string
+}{
+	{"communication_style", "소통 스타일"},
+	{"expertise_areas", "전문 영역"},
+	{"tech_preferences", "기술 선호"},
+	{"common_tasks", "주요 작업"},
+	{"work_patterns", "작업 패턴"},
+}
+
+// mutualUnderstandingKeys defines display order and Korean labels for Phase 6 mutual keys.
+var mutualUnderstandingKeys = []struct {
+	Key   string
+	Label string
+}{
+	{"user_sees_ai", "사용자 → AI 인식"},
+	{"ai_understands_user", "AI → 사용자 이해"},
+	{"relationship_dynamics", "관계 역학"},
+	{"adaptation_notes", "적응 메모"},
+}
+
+// mutualUnderstandingMaxTokens caps the entire mutual understanding + user profile section.
+const mutualUnderstandingMaxTokens = 1500
+
+// formatMutualUnderstanding builds the "## 상호 인식" section from user_model entries.
+// Includes both the user profile (Phase 5) and relationship dynamics (Phase 6),
+// plus behavioral guidance so the AI knows HOW to use this information.
+func formatMutualUnderstanding(entries []memory.UserModelEntry) string {
+	if len(entries) == 0 {
+		return ""
+	}
+
+	// Index entries by key for fast lookup.
+	byKey := make(map[string]memory.UserModelEntry, len(entries))
+	for _, e := range entries {
+		byKey[e.Key] = e
+	}
+
+	var sb strings.Builder
+	tokenCount := 0
+	hasContent := false
+
+	// Section 1: User profile (Phase 5 data).
+	profileContent := formatKeySection(byKey, userProfileKeys)
+	if profileContent != "" {
+		sb.WriteString("## 상호 인식\n\n")
+		sb.WriteString("### 사용자 프로필\n")
+		sb.WriteString(profileContent)
+		sb.WriteString("\n")
+		tokenCount += sb.Len() / charsPerToken
+		hasContent = true
+	}
+
+	// Section 2: Relationship dynamics (Phase 6 data).
+	for _, mk := range mutualUnderstandingKeys {
+		if tokenCount >= mutualUnderstandingMaxTokens {
+			break
+		}
+		e, ok := byKey[mk.Key]
+		if !ok || e.Value == "" {
+			continue
+		}
+
+		if !hasContent {
+			sb.WriteString("## 상호 인식\n\n")
+			hasContent = true
+		}
+
+		before := sb.Len()
+		content := truncateRunes(e.Value, knowledgeMaxContentRunes)
+		fmt.Fprintf(&sb, "### %s\n%s\n\n", mk.Label, content)
+		tokenCount += (sb.Len() - before) / charsPerToken
+	}
+
+	if !hasContent {
+		return ""
+	}
+
+	// Section 3: Recent unprocessed signals (real-time, between dreaming cycles).
+	// These haven't been consolidated yet but give the AI immediate awareness
+	// of recent relationship dynamics so it can adapt mid-session.
+	if tokenCount < mutualUnderstandingMaxTokens {
+		if raw, ok := byKey["mu_signals_raw"]; ok && raw.Value != "" {
+			lines := strings.Split(strings.TrimSpace(raw.Value), "\n")
+			// Show only the most recent signals to keep it concise.
+			maxRecent := 5
+			if len(lines) > maxRecent {
+				lines = lines[len(lines)-maxRecent:]
+			}
+			before := sb.Len()
+			sb.WriteString("### 최근 시그널 (미통합)\n")
+			for _, line := range lines {
+				if line = strings.TrimSpace(line); line != "" {
+					fmt.Fprintf(&sb, "- %s\n", truncateRunes(line, 200))
+				}
+			}
+			sb.WriteString("\n")
+			tokenCount += (sb.Len() - before) / charsPerToken
+		}
+	}
+
+	// Section 4: Relationship history snapshot (multi-cycle evolution).
+	if tokenCount < mutualUnderstandingMaxTokens {
+		if hist, ok := byKey["mu_history"]; ok && hist.Value != "" {
+			before := sb.Len()
+			sb.WriteString("### 관계 변화 이력\n")
+			sb.WriteString(truncateRunes(hist.Value, 300))
+			sb.WriteString("\n\n")
+			tokenCount += (sb.Len() - before) / charsPerToken
+		}
+	}
+
+	// Section 5: Behavioral guidance with priority framework.
+	if tokenCount < mutualUnderstandingMaxTokens {
+		sb.WriteString("### 활용 지침\n")
+		sb.WriteString("위 상호 인식은 대화를 통해 축적된 이해입니다. 적용 우선순위:\n")
+		sb.WriteString("1. **적응 메모** (최우선): 구체적 행동 지시사항을 즉시 적용\n")
+		sb.WriteString("2. **최근 시그널** (높음): 아직 통합되지 않은 최신 피드백 — 적응 메모보다 최신이면 이쪽 우선\n")
+		sb.WriteString("3. **사용자 프로필** (중간): 답변 길이, 톤, 상세도를 프로필에 맞춤\n")
+		sb.WriteString("4. **관계 역학** (배경): 전반적 관계 톤과 신뢰 수준을 고려\n\n")
+		sb.WriteString("충돌 시: 최신 시그널 > 적응 메모 > 프로필 > 역학 (더 최근의 정보가 우선)\n")
+		sb.WriteString("이 정보를 사용자에게 직접 언급하지 마세요 — 자연스럽게 반영만 하세요.\n\n")
+	}
+
+	return sb.String()
+}
+
+// formatKeySection formats a set of user_model keys into "- Label: value" lines.
+func formatKeySection(byKey map[string]memory.UserModelEntry, keys []struct{ Key, Label string }) string {
+	var sb strings.Builder
+	for _, k := range keys {
+		e, ok := byKey[k.Key]
+		if !ok || e.Value == "" {
+			continue
+		}
+		content := truncateRunes(e.Value, knowledgeMaxContentRunes)
+		fmt.Fprintf(&sb, "- **%s**: %s\n", k.Label, content)
 	}
 	return sb.String()
 }

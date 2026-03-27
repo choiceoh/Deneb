@@ -67,7 +67,7 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 		logger.Warn("aurora-dream: verification phase failed", "error", err)
 	} else {
 		report.FactsVerified = verified
-		report.FactsExpired = expired
+		report.FactsExpired += expired
 	}
 
 	// Phase 2: Duplicate merging.
@@ -98,6 +98,11 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 	// Phase 5: User model update.
 	if err := updateUserModel(ctx, store, client, model, logger); err != nil {
 		logger.Warn("aurora-dream: user model update failed", "error", err)
+	}
+
+	// Phase 6: Mutual understanding synthesis (상호 인식).
+	if err := synthesizeMutualUnderstanding(ctx, store, client, model, logger); err != nil {
+		logger.Warn("aurora-dream: mutual understanding synthesis failed", "error", err)
 	}
 
 	report.Duration = time.Since(start)
@@ -259,11 +264,11 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 			break
 		}
 
-		factA, err := store.GetFact(ctx, p.a)
+		factA, err := store.GetFactReadOnly(ctx, p.a)
 		if err != nil || !factA.Active {
 			continue
 		}
-		factB, err := store.GetFact(ctx, p.b)
+		factB, err := store.GetFactReadOnly(ctx, p.b)
 		if err != nil || !factB.Active {
 			continue
 		}
@@ -317,7 +322,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 	return merged, nil
 }
 
-// --- Phase 4: Conflict Resolution (Honcho-style) ---
+// --- Phase 4: Conflict Resolution ---
 
 const conflictSystemPrompt = `You are a fact conflict resolution assistant.
 Given a list of facts in the same category, identify contradictions or superseded information.
@@ -388,13 +393,21 @@ const patternSystemPrompt = `You are a meta-reasoning engine performing "dreamin
 This is the INDUCTIVE reasoning phase: from many specific observations, derive general patterns.
 
 Given accumulated facts, perform:
-1. **Pattern Induction**: What recurring themes emerge across multiple facts?
-2. **Behavioral Modeling**: What work habits, expertise areas, or decision patterns are visible?
-3. **Hypothesis Formation**: What predictions can you make about future behavior?
+
+1. **행동 패턴 (Behavioral)**: What work habits, expertise areas, or decision patterns are visible?
+   → category: "user_model"
+2. **관계 패턴 (Relational)**: What patterns exist in how the user interacts with the AI?
+   - Does the user consistently correct the AI on certain topics? → adaptation needed
+   - Does the user's trust level follow a pattern? (e.g., trusts for code, verifies for decisions)
+   - Are there recurring frustration triggers? Recurring satisfaction sources?
+   - How does the user's communication style shift based on context? (urgent vs relaxed)
+   → category: "mutual"
+3. **예측 (Hypothesis)**: What predictions can you make about future behavior or needs?
+   → category: "user_model" or "mutual" depending on whether it's about the user or the relationship
 
 Return a JSON array of discovered patterns:
-- "content": the pattern (Korean, concise, evidence-based)
-- "category": "user_model"
+- "content": the pattern (Korean, concise, evidence-based — cite specific supporting facts)
+- "category": "user_model" or "mutual"
 - "importance": 0.8-1.0 (patterns are high-value by definition)
 If no clear patterns (< 3 supporting facts), return [].
 Return ONLY valid JSON array, no markdown fences.`
@@ -443,9 +456,14 @@ func extractPatterns(ctx context.Context, store *Store, client *llm.Client, mode
 		if p.Content == "" {
 			continue
 		}
+		// Accept user_model or mutual category from the LLM; default to user_model.
+		cat := CategoryUserModel
+		if p.Category == CategoryMutual {
+			cat = CategoryMutual
+		}
 		_, err := store.InsertFact(ctx, Fact{
 			Content:    p.Content,
-			Category:   CategoryUserModel,
+			Category:   cat,
 			Importance: clamp(p.Importance, 0.7, 1.0),
 			Source:     SourceDreaming,
 		})
@@ -457,19 +475,24 @@ func extractPatterns(ctx context.Context, store *Store, client *llm.Client, mode
 	return count, nil
 }
 
-// --- Phase 4: User Model Update ---
+// --- Phase 5: User Model Update ---
 
-const userModelSystemPrompt = `You are a user profile synthesizer.
-Given facts about a user (category: user_model and other categories),
-synthesize a structured user profile with these keys:
-- communication_style: how the user communicates
-- expertise_areas: what the user is expert in
-- tech_preferences: preferred technologies and tools
-- common_tasks: typical tasks the user performs
-- work_patterns: how the user works
+const userModelSystemPrompt = `You are a deep user profile synthesizer for a personal AI assistant.
+Given facts about a user across all categories, synthesize a rich, evidence-based profile.
 
-Return a JSON object with these keys and Korean values.
-If a key cannot be determined, omit it.
+## Profile Keys
+
+- communication_style: 소통 스타일 — 선호하는 답변 길이, 형식성 수준, 유머 사용 여부, 설명 깊이 선호도. 예: "간결한 답변 선호, 불릿 포인트 형식, 캐주얼한 톤, 불필요한 설명 싫어함"
+- expertise_areas: 전문 영역 — 깊은 전문성 vs 얕은 관심사 구분. 예: "Go/Rust 깊은 전문성, 인프라(DGX/CUDA) 실무 수준, ML 이론보다 실용 중심"
+- tech_preferences: 기술 선호 — 선호하는 도구, 프레임워크, 아키텍처 패턴, 기피하는 기술. 예: "SQLite > PostgreSQL, 단순한 구조 선호, 불필요한 추상화 기피"
+- common_tasks: 주요 작업 — 자주 요청하는 작업 유형과 패턴. 예: "Go/Rust 코드 작성, 시스템 설계, 버그 디버깅, 문서 작성은 거의 안 함"
+- work_patterns: 작업 패턴 — 작업 리듬, 멀티태스킹 성향, 맥락 전환 패턴. 예: "깊은 집중 세션, 동시에 여러 에이전트 활용, 야간 작업 빈번"
+
+## Rules
+- All values in Korean
+- Be SPECIFIC and evidence-based (cite the pattern, not generic descriptions)
+- "X를 선호함" 보다 "3번의 대화에서 일관되게 X를 선택함 — Y 이유로 추정" 식의 근거 기반 서술
+- If a key cannot be determined from available data, omit it
 Return ONLY valid JSON object, no markdown fences.`
 
 func updateUserModel(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) error {

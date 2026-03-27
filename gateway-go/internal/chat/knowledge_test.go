@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 )
 
@@ -153,6 +154,85 @@ func TestSearchMemoryFiles_Shared(t *testing.T) {
 		matches := searchMemoryFiles(dir, "", 10)
 		if len(matches) != 0 {
 			t.Fatalf("expected 0 matches for empty query, got %d", len(matches))
+		}
+	})
+}
+
+func TestFormatMutualUnderstanding(t *testing.T) {
+	t.Run("empty entries", func(t *testing.T) {
+		result := formatMutualUnderstanding(nil)
+		if result != "" {
+			t.Errorf("expected empty for nil entries, got %q", result)
+		}
+	})
+
+	t.Run("profile only", func(t *testing.T) {
+		entries := []memory.UserModelEntry{
+			{Key: "communication_style", Value: "간결한 답변 선호"},
+		}
+		result := formatMutualUnderstanding(entries)
+		if !strings.Contains(result, "소통 스타일") || !strings.Contains(result, "간결한 답변") {
+			t.Errorf("expected profile content, got %q", result)
+		}
+		if !strings.Contains(result, "사용자 프로필") {
+			t.Errorf("expected profile header, got %q", result)
+		}
+	})
+
+	t.Run("mutual keys", func(t *testing.T) {
+		entries := []memory.UserModelEntry{
+			{Key: "user_sees_ai", Value: "높은 신뢰"},
+			{Key: "adaptation_notes", Value: "코드 리뷰는 자세하게"},
+		}
+		result := formatMutualUnderstanding(entries)
+		if !strings.Contains(result, "사용자 → AI 인식") || !strings.Contains(result, "높은 신뢰") {
+			t.Errorf("expected user_sees_ai content, got %q", result)
+		}
+		if !strings.Contains(result, "적응 메모") {
+			t.Errorf("expected adaptation_notes header, got %q", result)
+		}
+	})
+
+	t.Run("recent signals", func(t *testing.T) {
+		entries := []memory.UserModelEntry{
+			{Key: "mu_signals_raw", Value: "[satisfaction:strong] 잘했어\n[correction:mild] 좀 더 짧게"},
+			{Key: "user_sees_ai", Value: "만족"},
+		}
+		result := formatMutualUnderstanding(entries)
+		if !strings.Contains(result, "최근 시그널") {
+			t.Errorf("expected recent signals section, got %q", result)
+		}
+	})
+
+	t.Run("guidance section", func(t *testing.T) {
+		entries := []memory.UserModelEntry{
+			{Key: "user_sees_ai", Value: "test"},
+		}
+		result := formatMutualUnderstanding(entries)
+		if !strings.Contains(result, "활용 지침") || !strings.Contains(result, "최우선") {
+			t.Errorf("expected guidance with priority framework, got %q", result)
+		}
+	})
+
+	t.Run("history section", func(t *testing.T) {
+		entries := []memory.UserModelEntry{
+			{Key: "mu_history", Value: "[03-27] 신뢰 수준 상승"},
+			{Key: "user_sees_ai", Value: "test"},
+		}
+		result := formatMutualUnderstanding(entries)
+		if !strings.Contains(result, "관계 변화 이력") {
+			t.Errorf("expected history section, got %q", result)
+		}
+	})
+
+	t.Run("skips empty mu_signals_raw", func(t *testing.T) {
+		entries := []memory.UserModelEntry{
+			{Key: "mu_signals_raw", Value: ""},
+			{Key: "user_sees_ai", Value: "test"},
+		}
+		result := formatMutualUnderstanding(entries)
+		if strings.Contains(result, "최근 시그널") {
+			t.Errorf("should not show recent signals for empty raw, got %q", result)
 		}
 	})
 }
