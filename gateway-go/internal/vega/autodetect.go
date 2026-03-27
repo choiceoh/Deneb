@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -45,4 +46,10 @@ func IsSglangReachable(baseURL string) bool {
 	}
 	resp.Body.Close()
 	return resp.StatusCode >= 200 && resp.StatusCode < 300
+}
+
+// GetJinaAPIKey reads the Jina AI API key from the JINA_API_KEY environment variable.
+// Returns empty string if not configured (reranking will be disabled).
+func GetJinaAPIKey() string {
+	return os.Getenv("JINA_API_KEY")
 }

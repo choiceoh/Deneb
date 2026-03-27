@@ -9,19 +9,29 @@ import (
 	"time"
 )
 
+// RerankFunc is a function that reranks documents by query relevance.
+// Returns (index, score) pairs sorted by descending relevance.
+type RerankFunc func(ctx context.Context, query string, docs []string, topN int) ([]RerankResult, error)
+
+// RerankResult holds a reranked document's original index and relevance score.
+type RerankResult struct {
+	Index          int
+	RelevanceScore float64
+}
+
 // SearchOpts configures a memory search.
 type SearchOpts struct {
-	Limit    int      // max results (default 10)
-	Category string   // filter by category (empty = all)
-	MinScore float64  // minimum final score threshold
+	Limit    int     // max results (default 10)
+	Category string  // filter by category (empty = all)
+	MinScore float64 // minimum final score threshold
 }
 
 // SearchResult is a scored fact from a search query.
 type SearchResult struct {
-	Fact       Fact    `json:"fact"`
-	Score      float64 `json:"score"`
-	FTSScore   float64 `json:"fts_score,omitempty"`
-	VecScore   float64 `json:"vec_score,omitempty"`
+	Fact     Fact    `json:"fact"`
+	Score    float64 `json:"score"`
+	FTSScore float64 `json:"fts_score,omitempty"`
+	VecScore float64 `json:"vec_score,omitempty"`
 }
 
 // Scoring weights.
@@ -82,7 +92,14 @@ func (s *Store) SearchFacts(ctx context.Context, query string, queryVec []float3
 	}
 
 	// Phase 3: Merge and score.
-	return s.mergeAndRank(ftsResults, vecResults, opts), nil
+	results := s.mergeAndRank(ftsResults, vecResults, opts)
+
+	// Phase 4: Cross-encoder reranking (optional).
+	if s.reranker != nil && len(results) > 1 {
+		results = s.rerankFacts(ctx, query, results)
+	}
+
+	return results, nil
 }
 
 // ftsSearch performs FTS5 search and returns scored fact IDs.
@@ -361,6 +378,38 @@ func joinOr(parts []string) string {
 		result += " OR " + p
 	}
 	return result
+}
+
+// rerankFacts reorders memory search results using the cross-encoder reranker.
+// On failure, returns the original results unchanged (graceful fallback).
+func (s *Store) rerankFacts(ctx context.Context, query string, results []SearchResult) []SearchResult {
+	docs := make([]string, len(results))
+	for i, r := range results {
+		docs[i] = r.Fact.Content
+	}
+
+	ranked, err := s.reranker(ctx, query, docs, len(results))
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Debug("memory: reranking failed, using hybrid order", "error", err)
+		}
+		return results
+	}
+
+	reranked := make([]SearchResult, 0, len(ranked))
+	for _, r := range ranked {
+		if r.Index >= 0 && r.Index < len(results) {
+			res := results[r.Index]
+			// Blend reranker score with existing score to preserve importance/recency signal.
+			res.Score = 0.7*r.RelevanceScore + 0.3*res.Score
+			reranked = append(reranked, res)
+		}
+	}
+
+	if len(reranked) == 0 {
+		return results
+	}
+	return reranked
 }
 
 // rankToScore converts FTS5 rank (negative, lower = better) to 0-1 score.

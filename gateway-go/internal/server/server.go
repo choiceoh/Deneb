@@ -23,10 +23,10 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
+	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
@@ -36,11 +36,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/device"
+	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
-	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/maintenance"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
@@ -58,7 +59,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
-	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
@@ -91,7 +91,7 @@ type Server struct {
 	hooks            *hooks.Registry
 	runtimeCfg       *config.GatewayRuntimeConfig
 	authValidator    *auth.Validator
-	clients          sync.Map   // connID → *WsClient; concurrent-safe client tracking
+	clients          sync.Map     // connID → *WsClient; concurrent-safe client tracking
 	clientCnt        atomic.Int32 // current WebSocket connection count (capped at maxWebSocketClients)
 	startedAt        time.Time
 	version          string
@@ -114,6 +114,7 @@ type Server struct {
 	channelEvents   *monitoring.ChannelEventTracker
 	vegaBackend     vega.Backend
 	geminiEmbedder  *embedding.GeminiEmbedder
+	jinaAPIKey      string
 
 	// Phase 3: Advanced workflow subsystems.
 	approvals *approval.Store
@@ -151,7 +152,7 @@ type Server struct {
 	acpLifecycleUnsub func()
 
 	// Phase 5: Autonomous goal-driven execution.
-	autonomousSvc  *autonomous.Service
+	autonomousSvc   *autonomous.Service
 	dreamingAdapter *memory.DreamingAdapter // stored in phase 2, wired to autonomous in phase 3
 
 	// toolDeps holds core tool dependencies; stored on the server so late-binding
@@ -978,6 +979,11 @@ func (s *Server) SetGeminiEmbedder(e *embedding.GeminiEmbedder) {
 	s.geminiEmbedder = e
 }
 
+// SetJinaAPIKey stores the Jina API key for cross-encoder reranking.
+func (s *Server) SetJinaAPIKey(key string) {
+	s.jinaAPIKey = key
+}
+
 // Broadcaster returns the event broadcaster for external use.
 func (s *Server) Broadcaster() *events.Broadcaster {
 	return s.broadcaster
@@ -1049,6 +1055,28 @@ func (s *Server) registerPhase2Methods() {
 				}
 			} else {
 				s.logger.Info("aurora-memory: embedding disabled (GEMINI_API_KEY not set)")
+			}
+
+			// Wire cross-encoder reranker if Jina API key is configured.
+			if s.jinaAPIKey != "" {
+				reranker := vega.NewReranker(vega.RerankConfig{
+					APIKey: s.jinaAPIKey,
+					Logger: s.logger,
+				})
+				if reranker != nil {
+					memStore.SetReranker(func(ctx context.Context, query string, docs []string, topN int) ([]memory.RerankResult, error) {
+						vegaResults, err := reranker.Rerank(ctx, query, docs, topN)
+						if err != nil {
+							return nil, err
+						}
+						results := make([]memory.RerankResult, len(vegaResults))
+						for i, r := range vegaResults {
+							results[i] = memory.RerankResult{Index: r.Index, RelevanceScore: r.RelevanceScore}
+						}
+						return results, nil
+					})
+					s.logger.Info("aurora-memory: cross-encoder reranking enabled (Jina)")
+				}
 			}
 
 			// Auto-migrate existing MEMORY.md on first run.
