@@ -141,6 +141,26 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolApplyPatch(workspaceDir),
 	})
 
+	// -- Coding tools (implemented in tools_coding.go) --
+	registry.RegisterTool(ToolDef{
+		Name:        "multi_edit",
+		Description: "Batch search-and-replace across multiple files in one call. Up to 50 edits. Essential for refactoring, renaming symbols, updating imports",
+		InputSchema: multiEditToolSchema(),
+		Fn:          toolMultiEdit(workspaceDir),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "tree",
+		Description: "Display directory tree with depth control. Filters: dirs_only, pattern glob, show_hidden. Skips node_modules/.git/target etc",
+		InputSchema: treeToolSchema(),
+		Fn:          toolTree(workspaceDir),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "diff",
+		Description: "Git diff and file comparison. Modes: staged, unstaged, all (vs HEAD), commit (show commit), branch (compare branches), files (compare two files). Options: stat_only, context_lines, path filter",
+		InputSchema: diffToolSchema(),
+		Fn:          toolDiff(workspaceDir),
+	})
+
 	// -- Cron tool --
 	registry.RegisterTool(ToolDef{
 		Name:        "cron",
@@ -562,4 +582,3 @@ func toolApplyPatch(defaultDir string) ToolFunc {
 		return result, nil
 	}
 }
-
