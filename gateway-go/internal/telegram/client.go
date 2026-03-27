@@ -348,6 +348,21 @@ func (c *Client) SendChatAction(ctx context.Context, chatID int64, action string
 	return err
 }
 
+// SetMessageReaction sets an emoji reaction on a message.
+// Pass an empty emoji to remove all reactions.
+func (c *Client) SetMessageReaction(ctx context.Context, chatID, messageID int64, emoji string) error {
+	var reaction []map[string]string
+	if emoji != "" {
+		reaction = []map[string]string{{"type": "emoji", "emoji": emoji}}
+	}
+	_, err := c.CallIdempotent(ctx, "setMessageReaction", map[string]any{
+		"chat_id":    chatID,
+		"message_id": messageID,
+		"reaction":   reaction,
+	})
+	return err
+}
+
 // AnswerCallbackQuery sends a response to a callback query.
 func (c *Client) AnswerCallbackQuery(ctx context.Context, callbackQueryID, text string) error {
 	_, err := c.CallIdempotent(ctx, "answerCallbackQuery", map[string]any{

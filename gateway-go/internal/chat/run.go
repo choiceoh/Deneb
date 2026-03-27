@@ -12,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
@@ -63,6 +64,7 @@ type runDeps struct {
 	replyFunc       ReplyFunc                 // optional; delivers response to originating channel
 	mediaSendFn     MediaSendFunc             // optional; delivers files to originating channel
 	typingFn        TypingFunc                // optional; sends typing indicator during run
+	reactionFn      ReactionFunc              // optional; sets emoji reaction for status phases
 	providerConfigs map[string]ProviderConfig // optional; config-based provider credentials
 	logger          *slog.Logger              // required (defaults to slog.Default)
 
@@ -134,8 +136,24 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		typingSignaler.SignalRunStart()
 	}
 
+	// Set up status reaction controller for phase-aware emoji on the user's message.
+	// Shows: 👀 queued → 🤔 thinking → 🔥 tool → 👨‍💻 coding → ⚡ web → 👍 done.
+	var statusCtrl *channel.StatusReactionController
+	if deps.reactionFn != nil && params.Delivery != nil && params.Delivery.MessageID != "" {
+		delivery := params.Delivery
+		statusCtrl = channel.NewStatusReactionController(channel.StatusReactionControllerParams{
+			Enabled: true,
+			Adapter: channel.StatusReactionAdapter{
+				SetReaction: func(emoji string) error {
+					return deps.reactionFn(ctx, delivery, emoji)
+				},
+			},
+		})
+		statusCtrl.SetQueued()
+	}
+
 	// Run the agent and capture result.
-	result, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, logger)
+	result, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, statusCtrl, logger)
 
 	// Stop typing indicator before delivering the reply.
 	if typingSignaler != nil {
@@ -145,10 +163,18 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	// Handle completion.
 	now := time.Now().UnixMilli()
 	if err != nil {
+		if statusCtrl != nil {
+			statusCtrl.SetError()
+			statusCtrl.Close()
+		}
 		handleRunError(ctx, params, deps, broadcaster, logger, err, now)
 		return
 	}
 
+	if statusCtrl != nil {
+		statusCtrl.SetDone()
+		statusCtrl.Close()
+	}
 	handleRunSuccess(ctx, params, deps, broadcaster, logger, result, now)
 }
 
@@ -160,6 +186,7 @@ func executeAgentRun(
 	deps runDeps,
 	broadcaster *streamBroadcaster,
 	typingSignaler *autoreply.FullTypingSignaler,
+	statusCtrl *channel.StatusReactionController,
 	logger *slog.Logger,
 ) (*AgentResult, error) {
 	runStart := time.Now()
@@ -389,7 +416,7 @@ func executeAgentRun(
 		}
 	}
 
-	// 10. Set up stream hooks: compose broadcaster (WS deltas) + typing signaler.
+	// 10. Set up stream hooks: compose broadcaster (WS deltas) + typing + status reactions.
 	var hooks StreamHooks
 	if broadcaster != nil {
 		hooks.OnTextDelta = broadcaster.EmitDelta
@@ -407,6 +434,31 @@ func executeAgentRun(
 		}
 		hooks.OnToolStart = func(_ string) {
 			typingSignaler.SignalToolStart()
+		}
+	}
+	if statusCtrl != nil {
+		prevOnThinking := hooks.OnThinking
+		hooks.OnThinking = func() {
+			if prevOnThinking != nil {
+				prevOnThinking()
+			}
+			statusCtrl.SetThinking()
+		}
+		prevOnToolStart := hooks.OnToolStart
+		hooks.OnToolStart = func(name string) {
+			if prevOnToolStart != nil {
+				prevOnToolStart(name)
+			}
+			statusCtrl.SetTool(name)
+		}
+		prevOnDelta := hooks.OnTextDelta
+		hooks.OnTextDelta = func(text string) {
+			if prevOnDelta != nil {
+				prevOnDelta(text)
+			}
+			// First text delta means we moved past thinking — set thinking
+			// emoji if not already in a tool phase.
+			statusCtrl.SetThinking()
 		}
 	}
 
@@ -732,7 +784,7 @@ func executeAgentRunWithDelta(
 		return 1
 	})
 	broadcaster := newStreamBroadcaster(deltaRaw, params.SessionKey, params.ClientRunID)
-	return executeAgentRun(ctx, params, deps, broadcaster, nil, logger)
+	return executeAgentRun(ctx, params, deps, broadcaster, nil, nil, logger)
 }
 
 // resolveDefaultBaseURL returns the default API base URL for a known provider

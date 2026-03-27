@@ -44,6 +44,10 @@ type ReplyFunc func(ctx context.Context, delivery *DeliveryContext, text string)
 // Called periodically during an agent run to show "typing..." status.
 type TypingFunc func(ctx context.Context, delivery *DeliveryContext) error
 
+// ReactionFunc sets/removes an emoji reaction on the triggering message.
+// Pass an empty emoji to remove reactions.
+type ReactionFunc func(ctx context.Context, delivery *DeliveryContext, emoji string) error
+
 // ProviderConfig holds credentials and endpoint for an LLM provider.
 type ProviderConfig struct {
 	APIKey  string `json:"apiKey"`
@@ -118,6 +122,7 @@ type Handler struct {
 	replyFunc    ReplyFunc    // optional: delivers response to originating channel
 	mediaSendFn  MediaSendFunc // optional: delivers files to originating channel
 	typingFn     TypingFunc    // optional: sends typing indicator during agent run
+	reactionFn   ReactionFunc  // optional: sets emoji reaction on triggering message
 
 	abortMu  sync.Mutex
 	abortMap map[string]*AbortEntry // clientRunId -> entry
@@ -228,6 +233,12 @@ func (h *Handler) SetMediaSendFunc(fn MediaSendFunc) {
 // originating channel (e.g., Telegram "typing..." status) during agent runs.
 func (h *Handler) SetTypingFunc(fn TypingFunc) {
 	h.typingFn = fn
+}
+
+// SetReactionFunc sets the function that manages emoji reactions on the
+// triggering message to indicate agent status phases (thinking, tool use, done).
+func (h *Handler) SetReactionFunc(fn ReactionFunc) {
+	h.reactionFn = fn
 }
 
 // HandleBtw processes a side question (/btw) without affecting the main
@@ -649,6 +660,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		replyFunc:       h.replyFunc,
 		mediaSendFn:     h.mediaSendFn,
 		typingFn:        h.typingFn,
+		reactionFn:      h.reactionFn,
 		providerConfigs: h.providerConfigs,
 		logger:          h.logger,
 		auroraStore:     h.auroraStore,
