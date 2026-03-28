@@ -6,7 +6,6 @@ package plugin
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sort"
 	"strings"
@@ -25,17 +24,15 @@ type TypedHookRegistration struct {
 
 // TypedHookRunner provides typed hook execution with merge strategies.
 type TypedHookRunner struct {
-	mu          sync.RWMutex
-	hooks       []TypedHookRegistration
-	logger      *slog.Logger
-	catchErrors bool
+	mu     sync.RWMutex
+	hooks  []TypedHookRegistration
+	logger *slog.Logger
 }
 
 // NewTypedHookRunner creates a new typed hook runner.
-func NewTypedHookRunner(logger *slog.Logger, catchErrors bool) *TypedHookRunner {
+func NewTypedHookRunner(logger *slog.Logger) *TypedHookRunner {
 	return &TypedHookRunner{
-		logger:      logger,
-		catchErrors: catchErrors,
+		logger: logger,
 	}
 }
 
@@ -328,12 +325,11 @@ func (r *TypedHookRunner) RunTargetedInboundClaim(ctx context.Context, pluginID 
 // --- Error handling ---
 
 func (r *TypedHookRunner) handleError(name HookName, pluginID string, err error) {
-	msg := fmt.Sprintf("[hooks] %s handler from %s failed: %s", name, pluginID, sanitizeHookError(err))
-	if r.catchErrors {
-		r.logger.Error(msg)
-		return
-	}
-	panic(msg)
+	r.logger.Error("[hooks] hook handler failed",
+		"hook", string(name),
+		"plugin", pluginID,
+		"error", sanitizeHookError(err),
+	)
 }
 
 func sanitizeHookError(err error) string {
