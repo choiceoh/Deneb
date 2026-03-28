@@ -228,3 +228,19 @@ fn get_status_counts(conn: &Connection) -> Value {
     }
     Value::Object(map)
 }
+
+pub struct CompareHandler;
+
+impl super::CommandHandler for CompareHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_compare(args, config)
+    }
+}
+
+pub struct StatsHandler;
+
+impl super::CommandHandler for StatsHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_stats(args, config)
+    }
+}

@@ -198,3 +198,11 @@ fn fetch_recent_chunks_filtered(
 
     Ok(rows)
 }
+
+pub struct RecentHandler;
+
+impl super::CommandHandler for RecentHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_recent(args, config)
+    }
+}

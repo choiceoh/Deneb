@@ -362,3 +362,11 @@ fn find_tech_synergy(conn: &Connection) -> Result<Vec<(String, Vec<String>)>, St
     results.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
     Ok(results)
 }
+
+pub struct CrossHandler;
+
+impl super::CommandHandler for CrossHandler {
+    fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
+        cmd_cross(args, config)
+    }
+}
