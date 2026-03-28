@@ -262,7 +262,7 @@ fn analyze_tokens_for_nested_repetition(tokens: &[PatternToken]) -> bool {
     for token in tokens {
         match token {
             PatternToken::Simple => {
-                let frame = frames.last_mut().unwrap();
+                let frame = frames.last_mut().expect("frame stack non-empty");
                 let ts = TokenState {
                     contains_repetition: false,
                     has_ambiguous_alternation: false,
@@ -278,7 +278,7 @@ fn analyze_tokens_for_nested_repetition(tokens: &[PatternToken]) -> bool {
             }
             PatternToken::GroupClose => {
                 if frames.len() > 1 {
-                    let mut closed = frames.pop().unwrap();
+                    let mut closed = frames.pop().expect("frame stack non-empty");
                     if closed.has_alternation {
                         record_alternative(&mut closed);
                     }
@@ -301,7 +301,7 @@ fn analyze_tokens_for_nested_repetition(tokens: &[PatternToken]) -> bool {
                         min_length: group_min,
                         max_length: group_max,
                     };
-                    let frame = frames.last_mut().unwrap();
+                    let frame = frames.last_mut().expect("frame stack non-empty");
                     if ts.contains_repetition {
                         frame.contains_repetition = true;
                     }
@@ -311,7 +311,7 @@ fn analyze_tokens_for_nested_repetition(tokens: &[PatternToken]) -> bool {
                 }
             }
             PatternToken::Alternation => {
-                let frame = frames.last_mut().unwrap();
+                let frame = frames.last_mut().expect("frame stack non-empty");
                 frame.has_alternation = true;
                 record_alternative(frame);
                 frame.branch_min_length = 0.0;
@@ -319,7 +319,7 @@ fn analyze_tokens_for_nested_repetition(tokens: &[PatternToken]) -> bool {
                 frame.last_token = None;
             }
             PatternToken::Quantifier(q) => {
-                let frame = frames.last_mut().unwrap();
+                let frame = frames.last_mut().expect("frame stack non-empty");
                 let previous = match &mut frame.last_token {
                     Some(t) => t,
                     None => continue,

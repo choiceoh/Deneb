@@ -67,7 +67,7 @@ pub fn extract_tags(
         }
     }
     if let Some(person) = meta.get("person_internal") {
-        let splitter = Regex::new(r"[,/·]").unwrap();
+        let splitter = Regex::new(r"[,/·]").expect("valid regex");
         for p in splitter.split(person) {
             let p = p.trim();
             if !p.is_empty() {

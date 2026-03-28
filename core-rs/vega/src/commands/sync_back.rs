@@ -13,7 +13,7 @@ use crate::config::VegaConfig;
 use super::{open_db, CommandResult};
 
 static STATUS_TABLE_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?m)^\|\s*\*?\*?상태\*?\*?\s*\|\s*(.*?)\s*\|").unwrap()
+    Regex::new(r"(?m)^\|\s*\*?\*?상태\*?\*?\s*\|\s*(.*?)\s*\|").expect("valid regex")
 });
 
 /// Sync database changes back to markdown files.
@@ -28,9 +28,12 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
         Err(e) => return CommandResult::err("sync-back", &e),
     };
 
-    let mut stmt = conn
+    let mut stmt = match conn
         .prepare("SELECT id, name, source_file, status, client, person_internal FROM projects WHERE source_file IS NOT NULL")
-        .unwrap();
+    {
+        Ok(s) => s,
+        Err(e) => return CommandResult::err("sync-back", &format!("쿼리 준비 실패: {e}")),
+    };
 
     type ProjectRow = (
         i64,
@@ -40,20 +43,19 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
         Option<String>,
         Option<String>,
     );
-    let projects: Vec<ProjectRow> = stmt
-        .query_map([], |r| {
-            Ok((
-                r.get::<_, i64>(0)?,
-                r.get::<_, Option<String>>(1)?.unwrap_or_default(),
-                r.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                r.get::<_, Option<String>>(3)?,
-                r.get::<_, Option<String>>(4)?,
-                r.get::<_, Option<String>>(5)?,
-            ))
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+    let projects: Vec<ProjectRow> = match stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+            r.get::<_, Option<String>>(2)?.unwrap_or_default(),
+            r.get::<_, Option<String>>(3)?,
+            r.get::<_, Option<String>>(4)?,
+            r.get::<_, Option<String>>(5)?,
+        ))
+    }) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(e) => return CommandResult::err("sync-back", &format!("쿼리 실행 실패: {e}")),
+    };
 
     let mut synced = 0;
     let mut skipped = 0;
@@ -93,7 +95,7 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
         let mut new_content = content.clone();
         if let Some(st) = status {
             if let Some(cap) = status_re.captures(&content) {
-                let old = cap.get(1).unwrap().as_str();
+                let old = cap.get(1).expect("capture group 1 exists").as_str();
                 if old.trim() != st.trim() {
                     new_content = status_re
                         .replace(&new_content, |caps: &regex::Captures| {

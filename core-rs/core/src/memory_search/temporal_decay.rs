@@ -8,7 +8,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 static DATED_MEMORY_PATH_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?:^|/)memory/(\d{4})-(\d{2})-(\d{2})\.md$").unwrap());
+    Lazy::new(|| Regex::new(r"(?:^|/)memory/(\d{4})-(\d{2})-(\d{2})\.md$").expect("valid regex"));
 
 /// Compute the decay constant lambda from a half-life in days.
 pub fn to_decay_lambda(half_life_days: f64) -> f64 {
@@ -94,7 +94,7 @@ pub fn date_to_ms(year: i32, month: u32, day: u32) -> f64 {
     let date = NaiveDate::from_ymd_opt(year, month, day);
     match date {
         Some(d) => {
-            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+            let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).expect("epoch date is valid");
             let days = (d - epoch).num_days();
             days as f64 * 24.0 * 60.0 * 60.0 * 1000.0
         }

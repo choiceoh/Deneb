@@ -302,7 +302,7 @@ pub fn build_bundle(command: &str, data: &Value, conn: Option<&Connection>) -> V
                     if let Ok(rows) =
                         stmt.query_map(rusqlite::params![pid], |r| r.get::<_, String>(0))
                     {
-                        let re = Regex::new(r"20\d{2}[-/]\d{2}[-/]\d{2}").unwrap();
+                        let re = Regex::new(r"20\d{2}[-/]\d{2}[-/]\d{2}").expect("valid regex");
                         for content in rows.flatten() {
                             for m in re.find_iter(&content) {
                                 let d = m.as_str().replace('/', "-");

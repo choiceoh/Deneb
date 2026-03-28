@@ -640,53 +640,57 @@ fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
     };
 
     // Chunks
-    let mut stmt = conn
+    let mut stmt = match conn
         .prepare("SELECT section_heading, content, chunk_type, entry_date FROM chunks WHERE project_id=?1 ORDER BY id")
-        .unwrap();
-    let chunks: Vec<Value> = stmt
-        .query_map(params![project_id], |r| {
-            Ok(json!({
-                "heading": r.get::<_, Option<String>>(0)?,
-                "content": r.get::<_, Option<String>>(1)?,
-                "type": r.get::<_, Option<String>>(2)?,
-                "date": r.get::<_, Option<String>>(3)?,
-            }))
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+    {
+        Ok(s) => s,
+        Err(e) => return CommandResult::err("show", &format!("청크 쿼리 준비 실패: {e}")),
+    };
+    let chunks: Vec<Value> = match stmt.query_map(params![project_id], |r| {
+        Ok(json!({
+            "heading": r.get::<_, Option<String>>(0)?,
+            "content": r.get::<_, Option<String>>(1)?,
+            "type": r.get::<_, Option<String>>(2)?,
+            "date": r.get::<_, Option<String>>(3)?,
+        }))
+    }) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(e) => return CommandResult::err("show", &format!("청크 쿼리 실행 실패: {e}")),
+    };
 
     // Tags
-    let mut stmt = conn
-        .prepare(
-            "SELECT DISTINCT t.name FROM tags t
+    let mut stmt = match conn.prepare(
+        "SELECT DISTINCT t.name FROM tags t
              JOIN chunk_tags ct ON ct.tag_id = t.id
              JOIN chunks c ON c.id = ct.chunk_id
              WHERE c.project_id = ?1",
-        )
-        .unwrap();
-    let tags: Vec<String> = stmt
-        .query_map(params![project_id], |r| r.get(0))
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+    ) {
+        Ok(s) => s,
+        Err(e) => return CommandResult::err("show", &format!("태그 쿼리 준비 실패: {e}")),
+    };
+    let tags: Vec<String> = match stmt.query_map(params![project_id], |r| r.get(0)) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(e) => return CommandResult::err("show", &format!("태그 쿼리 실행 실패: {e}")),
+    };
 
     // Recent comms
-    let mut stmt = conn
+    let mut stmt = match conn
         .prepare("SELECT log_date, sender, subject, summary FROM comm_log WHERE project_id=?1 ORDER BY log_date DESC LIMIT 10")
-        .unwrap();
-    let comms: Vec<Value> = stmt
-        .query_map(params![project_id], |r| {
-            Ok(json!({
-                "date": r.get::<_, Option<String>>(0)?,
-                "sender": r.get::<_, Option<String>>(1)?,
-                "subject": r.get::<_, Option<String>>(2)?,
-                "summary": r.get::<_, Option<String>>(3)?,
-            }))
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+    {
+        Ok(s) => s,
+        Err(e) => return CommandResult::err("show", &format!("통신 쿼리 준비 실패: {e}")),
+    };
+    let comms: Vec<Value> = match stmt.query_map(params![project_id], |r| {
+        Ok(json!({
+            "date": r.get::<_, Option<String>>(0)?,
+            "sender": r.get::<_, Option<String>>(1)?,
+            "subject": r.get::<_, Option<String>>(2)?,
+            "summary": r.get::<_, Option<String>>(3)?,
+        }))
+    }) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(e) => return CommandResult::err("show", &format!("통신 쿼리 실행 실패: {e}")),
+    };
 
     CommandResult::ok(
         "show",
@@ -781,31 +785,31 @@ fn cmd_list(_args: &Value, config: &VegaConfig) -> CommandResult {
         Err(e) => return CommandResult::err("list", &e),
     };
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT p.id, p.name, p.client, p.status, p.person_internal, p.capacity,
+    let mut stmt = match conn.prepare(
+        "SELECT p.id, p.name, p.client, p.status, p.person_internal, p.capacity,
                     (SELECT COUNT(*) FROM chunks WHERE project_id=p.id) as chunks,
                     (SELECT COUNT(*) FROM comm_log WHERE project_id=p.id) as comms
              FROM projects p ORDER BY p.id",
-        )
-        .unwrap();
+    ) {
+        Ok(s) => s,
+        Err(e) => return CommandResult::err("list", &format!("프로젝트 목록 쿼리 실패: {e}")),
+    };
 
-    let projects: Vec<Value> = stmt
-        .query_map([], |r| {
-            Ok(json!({
-                "id": r.get::<_, i64>(0)?,
-                "name": r.get::<_, Option<String>>(1)?,
-                "client": r.get::<_, Option<String>>(2)?,
-                "status": r.get::<_, Option<String>>(3)?,
-                "person": r.get::<_, Option<String>>(4)?,
-                "capacity": r.get::<_, Option<String>>(5)?,
-                "chunks": r.get::<_, i64>(6)?,
-                "comms": r.get::<_, i64>(7)?,
-            }))
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+    let projects: Vec<Value> = match stmt.query_map([], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "name": r.get::<_, Option<String>>(1)?,
+            "client": r.get::<_, Option<String>>(2)?,
+            "status": r.get::<_, Option<String>>(3)?,
+            "person": r.get::<_, Option<String>>(4)?,
+            "capacity": r.get::<_, Option<String>>(5)?,
+            "chunks": r.get::<_, i64>(6)?,
+            "comms": r.get::<_, i64>(7)?,
+        }))
+    }) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(e) => return CommandResult::err("list", &format!("프로젝트 목록 쿼리 실패: {e}")),
+    };
 
     CommandResult::ok("list", json!({ "projects": projects }))
 }
@@ -817,26 +821,26 @@ fn cmd_tags(_args: &Value, config: &VegaConfig) -> CommandResult {
         Err(e) => return CommandResult::err("tags", &e),
     };
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT t.name, COUNT(DISTINCT c.project_id) as cnt
+    let mut stmt = match conn.prepare(
+        "SELECT t.name, COUNT(DISTINCT c.project_id) as cnt
              FROM tags t
              JOIN chunk_tags ct ON ct.tag_id = t.id
              JOIN chunks c ON c.id = ct.chunk_id
              GROUP BY t.name ORDER BY t.name",
-        )
-        .unwrap();
+    ) {
+        Ok(s) => s,
+        Err(e) => return CommandResult::err("tags", &format!("태그 쿼리 실패: {e}")),
+    };
 
-    let tags: Vec<Value> = stmt
-        .query_map([], |r| {
-            Ok(json!({
-                "name": r.get::<_, String>(0)?,
-                "project_count": r.get::<_, i64>(1)?,
-            }))
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+    let tags: Vec<Value> = match stmt.query_map([], |r| {
+        Ok(json!({
+            "name": r.get::<_, String>(0)?,
+            "project_count": r.get::<_, i64>(1)?,
+        }))
+    }) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(e) => return CommandResult::err("tags", &format!("태그 쿼리 실패: {e}")),
+    };
 
     CommandResult::ok("tags", json!({ "tags": tags }))
 }
@@ -874,22 +878,24 @@ fn cmd_timeline(args: &Value, config: &VegaConfig) -> CommandResult {
         )
         .unwrap_or_default();
 
-    let mut stmt = conn
+    let mut stmt = match conn
         .prepare("SELECT log_date, sender, subject, summary FROM comm_log WHERE project_id=?1 ORDER BY log_date DESC")
-        .unwrap();
+    {
+        Ok(s) => s,
+        Err(e) => return CommandResult::err("timeline", &format!("타임라인 쿼리 실패: {e}")),
+    };
 
-    let entries: Vec<Value> = stmt
-        .query_map(params![project_id], |r| {
-            Ok(json!({
-                "date": r.get::<_, Option<String>>(0)?,
-                "sender": r.get::<_, Option<String>>(1)?,
-                "subject": r.get::<_, Option<String>>(2)?,
-                "summary": r.get::<_, Option<String>>(3)?,
-            }))
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+    let entries: Vec<Value> = match stmt.query_map(params![project_id], |r| {
+        Ok(json!({
+            "date": r.get::<_, Option<String>>(0)?,
+            "sender": r.get::<_, Option<String>>(1)?,
+            "subject": r.get::<_, Option<String>>(2)?,
+            "summary": r.get::<_, Option<String>>(3)?,
+        }))
+    }) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(e) => return CommandResult::err("timeline", &format!("타임라인 쿼리 실패: {e}")),
+    };
 
     CommandResult::ok(
         "timeline",

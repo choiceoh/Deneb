@@ -111,7 +111,7 @@ pub fn update_meta_field(
             .unwrap_or_default();
         let new_content = re
             .replace(&content, |caps: &regex::Captures| {
-                caps[0].replace(caps.get(1).unwrap().as_str(), new_value)
+                caps[0].replace(caps.get(1).expect("capture group 1 exists").as_str(), new_value)
             })
             .to_string();
 
@@ -192,7 +192,7 @@ fn add_to_section(md_path: &Path, section_name: &str, text: &str) -> (bool, Stri
         };
 
         // Find next section heading to insert before it
-        let section_end_re = Regex::new(r"(?m)^##\s+").unwrap();
+        let section_end_re = Regex::new(r"(?m)^##\s+").expect("valid regex");
         let actual_insert = if let Some(next_heading) = section_end_re.find(&content[insert_pos..])
         {
             // Insert before next heading, after last content

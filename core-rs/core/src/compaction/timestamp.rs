@@ -10,8 +10,11 @@ use chrono_tz::Tz;
 ///
 /// Falls back to UTC formatting if the timezone string is invalid.
 pub fn format_timestamp(epoch_ms: i64, timezone: &str) -> String {
-    let dt = DateTime::from_timestamp_millis(epoch_ms)
-        .unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap());
+    let dt = DateTime::from_timestamp_millis(epoch_ms).unwrap_or_else(|| {
+        Utc.timestamp_opt(0, 0)
+            .single()
+            .expect("Unix epoch is always valid")
+    });
 
     if timezone == "UTC" || timezone.is_empty() {
         return format!("{} UTC", dt.format("%Y-%m-%d %H:%M"));

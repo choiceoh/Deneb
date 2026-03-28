@@ -12,10 +12,10 @@ pub const DEFAULT_AGENT_ID: &str = "main";
 
 // Pre-compiled regexes for agent ID normalization.
 static VALID_ID_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").unwrap());
-static INVALID_CHARS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^a-z0-9_-]+").unwrap());
-static LEADING_DASH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^-+").unwrap());
-static TRAILING_DASH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"-+$").unwrap());
+    Lazy::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").expect("valid regex"));
+static INVALID_CHARS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^a-z0-9_-]+").expect("valid regex"));
+static LEADING_DASH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^-+").expect("valid regex"));
+static TRAILING_DASH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"-+$").expect("valid regex"));
 
 /// Normalize an agent ID to a path-safe, shell-friendly form.
 pub fn normalize_agent_id(value: &str) -> String {
@@ -359,7 +359,7 @@ pub fn derive_session_chat_type(session_key: &str) -> SessionKeyChatType {
     }
     // Legacy Discord keys: discord:<accountId>:guild-<guildId>:channel-<channelId>
     static DISCORD_LEGACY_RE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"^discord:(?:[^:]+:)?guild-[^:]+:channel-[^:]+$").unwrap());
+        Lazy::new(|| Regex::new(r"^discord:(?:[^:]+:)?guild-[^:]+:channel-[^:]+$").expect("valid regex"));
     if DISCORD_LEGACY_RE.is_match(&scoped) {
         return SessionKeyChatType::Channel;
     }
@@ -368,7 +368,7 @@ pub fn derive_session_chat_type(session_key: &str) -> SessionKeyChatType {
 
 /// Check if a session key represents a cron run.
 pub fn is_cron_run_session_key(session_key: &str) -> bool {
-    static CRON_RUN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^cron:[^:]+:run:[^:]+$").unwrap());
+    static CRON_RUN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^cron:[^:]+:run:[^:]+$").expect("valid regex"));
     parse_agent_session_key(session_key)
         .map(|p| CRON_RUN_RE.is_match(&p.rest))
         .unwrap_or(false)
@@ -658,7 +658,7 @@ pub fn resolve_effective_model_fallbacks(
 pub const DEFAULT_ACCOUNT_ID: &str = "default";
 
 static VALID_ACCOUNT_ID_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").unwrap());
+    Lazy::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").expect("valid regex"));
 
 /// Normalize an account ID to a path-safe form. Defaults to DEFAULT_ACCOUNT_ID.
 /// Mirrors `src/routing/account-id.ts#normalizeAccountId`. Keep in sync.

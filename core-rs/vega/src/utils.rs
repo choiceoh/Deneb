@@ -10,15 +10,15 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 // Pre-compiled regex patterns for hot-path functions.
-static KOREAN_TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9]+").unwrap());
-static DAYS_FLAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"--days\s+(\d+)").unwrap());
-static DAYS_IL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*일").unwrap());
-static DAYS_JU_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*주").unwrap());
-static DAYS_GAEWOL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*개월").unwrap());
-static LIMIT_FLAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"--limit\s+(\d+)").unwrap());
-static LIMIT_GAE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*개").unwrap());
-static BULLET_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[\-•*]+\s*").unwrap());
-static NUMBERED_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+[.)]\s*").unwrap());
+static KOREAN_TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9]+").expect("valid regex"));
+static DAYS_FLAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"--days\s+(\d+)").expect("valid regex"));
+static DAYS_IL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*일").expect("valid regex"));
+static DAYS_JU_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*주").expect("valid regex"));
+static DAYS_GAEWOL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*개월").expect("valid regex"));
+static LIMIT_FLAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"--limit\s+(\d+)").expect("valid regex"));
+static LIMIT_GAE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*개").expect("valid regex"));
+static BULLET_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[\-•*]+\s*").expect("valid regex"));
+static NUMBERED_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+[.)]\s*").expect("valid regex"));
 
 /// Escape special SQL LIKE characters (%, _, \).
 /// Use with `ESCAPE '\'` in the LIKE clause.
@@ -276,7 +276,7 @@ pub fn find_project_id_in_text(
 
     for (id, name) in &rows {
         let score = fuzzy_match_score(text, name);
-        if score >= threshold && (best.is_none() || score > best.as_ref().unwrap().2) {
+        if score >= threshold && best.as_ref().is_none_or(|b| score > b.2) {
             best = Some((*id, name.clone(), score));
         }
     }
