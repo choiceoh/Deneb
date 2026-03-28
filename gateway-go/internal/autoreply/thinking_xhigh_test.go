@@ -21,9 +21,6 @@ func TestSupportsBuiltInXHighThinking(t *testing.T) {
 		{"openai-codex", "gpt-5.3-codex", true},
 		{"openai-codex", "gpt-5.3-codex-spark", true},
 		{"openai-codex", "gpt-4o", false},
-		{"github-copilot", "gpt-5.2", true},
-		{"github-copilot", "gpt-5.2-codex", true},
-		{"github-copilot", "gpt-5.4", false},
 		{"anthropic", "claude-opus-4-6", false},
 		{"", "gpt-5.4", false},
 	}

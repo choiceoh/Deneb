@@ -27,9 +27,7 @@ var (
 	openaiCodexXHighModelIDs = []string{
 		"gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2-codex", "gpt-5.1-codex",
 	}
-	githubCopilotXHighModelIDs = []string{
-		"gpt-5.2", "gpt-5.2-codex",
-	}
+
 )
 
 // matchesExactOrPrefix checks if a model ID exactly matches or is a prefix match
@@ -57,12 +55,6 @@ func SupportsBuiltInXHighThinking(provider, model string) bool {
 		return matchesExactOrPrefix(modelID, openaiXHighModelIDs)
 	case "openai-codex":
 		return matchesExactOrPrefix(modelID, openaiCodexXHighModelIDs)
-	case "github-copilot":
-		for _, id := range githubCopilotXHighModelIDs {
-			if modelID == id {
-				return true
-			}
-		}
 	}
 	return false
 }
