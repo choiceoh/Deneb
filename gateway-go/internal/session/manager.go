@@ -194,9 +194,9 @@ func (m *Manager) Set(s *Session) error {
 	newStatus := s.Status
 	// Validate status transition for existing sessions with known statuses.
 	if old != nil && oldStatus != "" && newStatus != "" && oldStatus != newStatus {
-		if !IsValidTransition(oldStatus, newStatus) {
+		if err := ValidateTransition(oldStatus, newStatus); err != nil {
 			m.mu.Unlock()
-			return &TransitionError{From: oldStatus, To: newStatus}
+			return err
 		}
 	}
 	m.sessions[s.Key] = s

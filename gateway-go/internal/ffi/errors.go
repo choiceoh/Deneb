@@ -49,9 +49,8 @@ func ffiError(fn string, rc int) error {
 // ffiCallWithGrow calls an FFI function that writes into an output buffer,
 // automatically growing the buffer and retrying when the Rust side returns
 // rcOutputTooSmall. The buffer doubles each retry up to maxGrowBufSize (16 MB).
-//
-// initialSize is capped at maxGrowBufSize to prevent oversized initial
-// allocations from large inputs causing excessive memory usage.
+// initialSize is capped at maxGrowBufSize so callers with large computed sizes
+// don't skip directly to the ceiling on the first attempt.
 //
 // The call function receives the output buffer and must return the FFI return
 // code: positive = bytes written, negative = error code.
