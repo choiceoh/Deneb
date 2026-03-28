@@ -103,6 +103,7 @@ type Manager struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session
 	eventBus *EventBus
+	gcOnce   sync.Once // ensures StartGC spawns at most one GC goroutine
 }
 
 // NewManager creates an empty session manager with an integrated event bus.
@@ -115,20 +116,23 @@ func NewManager() *Manager {
 
 // StartGC starts a background goroutine that periodically evicts terminal
 // sessions (done/failed/killed/timeout) older than gcMaxAge.
-// Stops when ctx is canceled.
+// Stops when ctx is canceled. Safe to call multiple times — only the first
+// call starts a goroutine; subsequent calls are no-ops.
 func (m *Manager) StartGC(ctx context.Context) {
-	go func() {
-		ticker := time.NewTicker(gcInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				m.evictStale()
+	m.gcOnce.Do(func() {
+		go func() {
+			ticker := time.NewTicker(gcInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					m.evictStale()
+				}
 			}
-		}
-	}()
+		}()
+	})
 }
 
 // evictStale removes terminal sessions whose UpdatedAt is older than gcMaxAge.

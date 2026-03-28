@@ -40,19 +40,26 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	s.startProcessPruner(ctx)
 	s.sessions.StartGC(ctx)
 
-	// Mark ready after all background subsystems have started.
-	s.ready.Store(true)
-
-	// Auto-start all registered channel plugins.
-	if s.channelLifecycle != nil {
-		s.safeGo("channels:start-all", func() {
-			if errs := s.channelLifecycle.StartAll(ctx); len(errs) > 0 {
-				for id, err := range errs {
-					s.logger.Warn("channel auto-start failed", "channel", id, "error", err)
-				}
-			}
-		})
+	// Propagate server lifecycle context to the chat handler so background
+	// goroutines (auto-memory extraction) stop cleanly on shutdown.
+	if s.chatHandler != nil {
+		s.chatHandler.SetShutdownCtx(ctx)
 	}
+
+	// Auto-start all registered channel plugins synchronously so that RPC
+	// serving only becomes available after all channels are ready.
+	// Running in a goroutine (as before) caused requests to be routed to
+	// plugins that had not yet completed Start(), leading to spurious errors.
+	if s.channelLifecycle != nil {
+		if errs := s.channelLifecycle.StartAll(ctx); len(errs) > 0 {
+			for id, err := range errs {
+				s.logger.Warn("channel auto-start failed", "channel", id, "error", err)
+			}
+		}
+	}
+
+	// Mark ready only after all channel plugins have had a chance to start.
+	s.ready.Store(true)
 
 	// Start autonomous service (dreaming lifecycle).
 	if s.autonomousSvc != nil {

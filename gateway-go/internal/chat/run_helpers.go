@@ -86,7 +86,14 @@ func handleRunSuccess(
 	// This ensures dreaming triggers reliably even for tool-only or silent runs.
 	if params.Message != "" {
 		go func() {
-			memCtx, memCancel := context.WithTimeout(context.Background(), autoMemoryTimeout)
+			// Bound by the server shutdown context (if set) so the goroutine
+			// exits when the process is shutting down rather than leaking until
+			// autoMemoryTimeout fires against a dead process.
+			base := deps.shutdownCtx
+			if base == nil {
+				base = context.Background()
+			}
+			memCtx, memCancel := context.WithTimeout(base, autoMemoryTimeout)
 			defer memCancel()
 
 			if deps.memoryStore != nil {

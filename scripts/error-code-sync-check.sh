@@ -51,14 +51,21 @@ rust_ffi=$(grep -oP 'const FFI_ERR_\K[A-Z_]+:\s*i32\s*=\s*-?\d+' "$RUST_FFI_FILE
 
 # Extract Go FFI error codes: `rcFooBar = -N` → map to UPPER_SNAKE = -N
 # Go uses camelCase (rcNullPointer), Rust uses UPPER_SNAKE (NULL_PTR).
-# We compare by numeric value since naming conventions differ.
+# Compare numeric values (naming conventions differ) AND counts so that a new
+# Rust code without a matching Go entry is never silently missed.
 rust_ffi_values=$(grep -oP 'const FFI_ERR_[A-Z_]+:\s*i32\s*=\s*\K-?\d+' "$RUST_FFI_FILE" | sort -n)
 go_ffi_values=$(grep -oP 'rc[A-Z][a-zA-Z]+\s*=\s*\K-?\d+' "$GO_FFI_FILE" | sort -n)
 
+rust_ffi_count=$(echo "$rust_ffi_values" | grep -c . || true)
+go_ffi_count=$(echo "$go_ffi_values" | grep -c . || true)
+
 diff_ffi=$(diff <(echo "$rust_ffi_values") <(echo "$go_ffi_values") || true)
-if [[ -n "$diff_ffi" ]]; then
+if [[ -n "$diff_ffi" ]] || [[ "$rust_ffi_count" -ne "$go_ffi_count" ]]; then
   echo "MISMATCH: Rust FFI vs Go FFI error code values"
-  echo "$diff_ffi"
+  if [[ "$rust_ffi_count" -ne "$go_ffi_count" ]]; then
+    echo "  Count mismatch: Rust has $rust_ffi_count, Go has $go_ffi_count"
+  fi
+  [[ -n "$diff_ffi" ]] && echo "$diff_ffi"
   echo ""
   echo "  Rust ($RUST_FFI_FILE):"
   echo "$rust_ffi" | sed 's/^/    /'
@@ -67,7 +74,7 @@ if [[ -n "$diff_ffi" ]]; then
   errors=1
 fi
 
-ffi_count=$(echo "$rust_ffi_values" | wc -l)
+ffi_count=$rust_ffi_count
 
 # =========================================================================
 # Summary

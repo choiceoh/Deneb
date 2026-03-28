@@ -236,7 +236,18 @@ func RunAgent(
 				})
 			}(i, tc)
 		}
-		wg.Wait()
+
+		// Wait for all tool goroutines, but bail immediately if ctx is cancelled
+		// (agent abort/kill). The goroutines still run to completion in the
+		// background — they hold their own index and don't share state.
+		wgDone := make(chan struct{})
+		go func() { wg.Wait(); close(wgDone) }()
+		select {
+		case <-wgDone:
+		case <-ctx.Done():
+			result.StopReason = stopReasonFromCtx(ctx)
+			return result, nil
+		}
 
 		if ctx.Err() != nil {
 			result.StopReason = stopReasonFromCtx(ctx)
