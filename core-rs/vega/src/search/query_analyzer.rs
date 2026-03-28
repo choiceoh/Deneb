@@ -140,8 +140,6 @@ static TRAILING_PUNCT: Lazy<Regex> = Lazy::new(|| Regex::new(r"[?？！!.。]+$"
 static TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9&+/.\-]+").unwrap());
 static STRIP_NONALPHA: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[^가-힣A-Za-z0-9]+|[^가-힣A-Za-z0-9]+$").unwrap());
-#[allow(dead_code)]
-static HAS_ALNUM: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣a-zA-Z0-9]").unwrap());
 
 /// Normalize a query: remove trailing punctuation, then filler suffixes.
 pub fn normalize_query(query: &str) -> String {
