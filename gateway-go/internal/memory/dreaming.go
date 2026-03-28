@@ -192,7 +192,7 @@ func verifyBatch(ctx context.Context, store *Store, client *llm.Client, model st
 	var wrapper struct {
 		Results []verifyResult `json:"results"`
 	}
-	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &wrapper); err != nil {
+	if err := json.Unmarshal([]byte(extractJSONObject(resp)), &wrapper); err != nil {
 		return 0, 0, fmt.Errorf("parse verify response: %w", err)
 	}
 	results := wrapper.Results
@@ -286,7 +286,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 			Category      string  `json:"category"`
 			Importance    float64 `json:"importance"`
 		}
-		if err := json.Unmarshal([]byte(stripCodeFences(resp)), &result); err != nil {
+		if err := json.Unmarshal([]byte(extractJSONObject(resp)), &result); err != nil {
 			continue
 		}
 
@@ -374,7 +374,7 @@ func resolveConflicts(ctx context.Context, store *Store, client *llm.Client, mod
 		var wrapper struct {
 			Conflicts []conflictResult `json:"conflicts"`
 		}
-		if err := json.Unmarshal([]byte(stripCodeFences(resp)), &wrapper); err != nil {
+		if err := json.Unmarshal([]byte(extractJSONObject(resp)), &wrapper); err != nil {
 			continue
 		}
 
@@ -450,7 +450,7 @@ func extractPatterns(ctx context.Context, store *Store, client *llm.Client, mode
 	var wrapper struct {
 		Patterns []ExtractedFact `json:"patterns"`
 	}
-	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &wrapper); err != nil {
+	if err := json.Unmarshal([]byte(extractJSONObject(resp)), &wrapper); err != nil {
 		return 0, nil
 	}
 
@@ -523,7 +523,7 @@ func updateUserModel(ctx context.Context, store *Store, client *llm.Client, mode
 	}
 
 	var profile map[string]string
-	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &profile); err != nil {
+	if err := json.Unmarshal([]byte(extractJSONObject(resp)), &profile); err != nil {
 		return nil // non-fatal
 	}
 

@@ -161,7 +161,7 @@ func synthesizeMutualUnderstanding(ctx context.Context, store *Store, client *ll
 	}
 
 	var profile map[string]string
-	if err := json.Unmarshal([]byte(stripCodeFences(resp)), &profile); err != nil {
+	if err := json.Unmarshal([]byte(extractJSONObject(resp)), &profile); err != nil {
 		return nil // non-fatal
 	}
 

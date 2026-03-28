@@ -16,8 +16,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
-// thinkingTagRe matches <think>...</think> blocks that Qwen3.5 may emit.
-var thinkingTagRe = regexp.MustCompile(`(?s)<think>.*?</think>\s*`)
+// thinkingTagRe matches <think>...</think> and <thinking>...</thinking> blocks
+// that Qwen3.5 and other reasoning models may emit.
+var thinkingTagRe = regexp.MustCompile(`(?s)<think(?:ing)?>.*?</think(?:ing)?>\s*`)
 
 // stripThinkingTags removes <think>...</think> blocks from Qwen3.5 responses.
 func stripThinkingTags(s string) string {
@@ -382,6 +383,29 @@ func stripCodeFences(s string) string {
 		s = strings.TrimSuffix(s, "```")
 	}
 	return strings.TrimSpace(s)
+}
+
+// extractJSONObject extracts the outermost JSON object ({...}) from a string
+// that may contain surrounding prose, code fences, or thinking tags.
+// Falls back to stripCodeFences if no brace-delimited object is found.
+func extractJSONObject(s string) string {
+	s = stripCodeFences(s)
+
+	// If it already starts with '{', return as-is.
+	if strings.HasPrefix(s, "{") {
+		return s
+	}
+
+	// Find the first '{' and last '}' — extract the JSON object from prose.
+	start := strings.Index(s, "{")
+	if start == -1 {
+		return s
+	}
+	end := strings.LastIndex(s, "}")
+	if end == -1 || end <= start {
+		return s
+	}
+	return s[start : end+1]
 }
 
 func isValidCategory(c string) bool {

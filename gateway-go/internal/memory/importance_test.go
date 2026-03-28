@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -99,6 +100,112 @@ func TestParseFactsResponse(t *testing.T) {
 			}
 			if len(facts) != tt.wantCount {
 				t.Errorf("parseFactsResponse() returned %d facts, want %d", len(facts), tt.wantCount)
+			}
+		})
+	}
+}
+
+func TestExtractJSONObject(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantValid bool // whether the result is valid JSON
+	}{
+		{
+			name:      "clean JSON object",
+			input:     `{"results": [{"id": 1, "valid": true}]}`,
+			wantValid: true,
+		},
+		{
+			name:      "JSON wrapped in code fences",
+			input:     "```json\n{\"results\": [{\"id\": 1, \"valid\": true}]}\n```",
+			wantValid: true,
+		},
+		{
+			name:      "prose before JSON",
+			input:     "Here is the result:\n{\"results\": [{\"id\": 1, \"valid\": true}]}",
+			wantValid: true,
+		},
+		{
+			name:      "prose before and after JSON",
+			input:     "분석 결과입니다:\n{\"conflicts\": []}\n이상입니다.",
+			wantValid: true,
+		},
+		{
+			name:      "thinking tags wrapping JSON",
+			input:     "<think>Let me analyze...</think>\n{\"patterns\": []}",
+			wantValid: true,
+		},
+		{
+			name:      "thinking tags (long form) wrapping JSON",
+			input:     "<thinking>Reasoning about facts...</thinking>\n{\"results\": []}",
+			wantValid: true,
+		},
+		{
+			name:      "code fences with prose before",
+			input:     "결과:\n```json\n{\"merged_content\": \"test\", \"category\": \"decision\", \"importance\": 0.8}\n```",
+			wantValid: true,
+		},
+		{
+			name:      "empty input",
+			input:     "",
+			wantValid: false,
+		},
+		{
+			name:      "no JSON at all",
+			input:     "This is just plain text with no JSON",
+			wantValid: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractJSONObject(tt.input)
+			var obj map[string]json.RawMessage
+			err := json.Unmarshal([]byte(result), &obj)
+			if tt.wantValid && err != nil {
+				t.Errorf("extractJSONObject() result is not valid JSON: %v\nresult: %s", err, result)
+			}
+			if !tt.wantValid && err == nil {
+				t.Errorf("extractJSONObject() unexpectedly returned valid JSON: %s", result)
+			}
+		})
+	}
+}
+
+func TestStripThinkingTags(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "think tags",
+			input: "<think>reasoning here</think>\n{\"facts\": []}",
+			want:  "{\"facts\": []}",
+		},
+		{
+			name:  "thinking tags",
+			input: "<thinking>reasoning here</thinking>\n{\"facts\": []}",
+			want:  "{\"facts\": []}",
+		},
+		{
+			name:  "multiline thinking",
+			input: "<thinking>\nstep 1\nstep 2\n</thinking>\n{\"result\": true}",
+			want:  "{\"result\": true}",
+		},
+		{
+			name:  "no tags",
+			input: "{\"facts\": []}",
+			want:  "{\"facts\": []}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripThinkingTags(tt.input)
+			if got != tt.want {
+				t.Errorf("stripThinkingTags() = %q, want %q", got, tt.want)
 			}
 		})
 	}
