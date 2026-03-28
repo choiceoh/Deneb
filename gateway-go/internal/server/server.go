@@ -1875,8 +1875,9 @@ func (s *Server) wirePropusChatHandler() {
 		}
 	})
 
-	// Inbound: Propus client StopGeneration → abort active run.
+	// Inbound: Propus client StopGeneration → abort active run + concurrent response.
 	s.propusPlug.SetSessionAbort(func(sessionKey string) {
+		s.chatHandler.CancelConcurrentResponse(sessionKey)
 		s.chatHandler.InterruptActiveRun(sessionKey)
 		if s.sessions != nil {
 			s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{

@@ -379,7 +379,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 	}
 
 	// Default path: interrupt any active run + concurrent response, start new task.
-	h.cancelConcurrentResponse(p.SessionKey)
+	h.CancelConcurrentResponse(p.SessionKey)
 	h.InterruptActiveRun(p.SessionKey)
 
 	return h.startAsyncRun(req.ID, runParams, false)
@@ -404,7 +404,8 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 			protocol.ErrMissingParam, "key is required"))
 	}
 
-	// Interrupt any active run for this session.
+	// Interrupt any active run + concurrent response for this session.
+	h.CancelConcurrentResponse(p.Key)
 	h.InterruptActiveRun(p.Key)
 
 	runID := p.IdempotencyKey
@@ -438,7 +439,8 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 			protocol.ErrMissingParam, "key is required"))
 	}
 
-	// Interrupt any active run for this session.
+	// Interrupt any active run + concurrent response for this session.
+	h.CancelConcurrentResponse(p.Key)
 	h.InterruptActiveRun(p.Key)
 
 	runID := shortid.New("steer")
@@ -488,6 +490,11 @@ func (h *Handler) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *
 		}
 	}
 	h.abortMu.Unlock()
+
+	// Cancel any concurrent response for the resolved session.
+	if sessionKey != "" {
+		h.CancelConcurrentResponse(sessionKey)
+	}
 
 	if abortedRunID == "" {
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
@@ -565,7 +572,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	go func() {
 		defer runCancel()
 		defer h.cleanupAbort(params.ClientRunID)
-		defer h.clearTaskProgress(params.SessionKey)
+		defer h.clearTaskProgressIfOwner(params.SessionKey, tp)
 		defer func() {
 			if r := recover(); r != nil {
 				h.logger.Error("panic in agent run",
@@ -628,15 +635,20 @@ func (h *Handler) setTaskProgress(sessionKey string, tp *TaskProgress) {
 	h.taskProgress[sessionKey] = tp
 }
 
-// clearTaskProgress removes the task progress tracker when a run completes.
-func (h *Handler) clearTaskProgress(sessionKey string) {
+// clearTaskProgressIfOwner removes the task progress tracker only if the
+// caller's tp is still the active one. This prevents a race where goroutine G1
+// (from a cancelled run) clears G2's (the new run's) task progress.
+func (h *Handler) clearTaskProgressIfOwner(sessionKey string, tp *TaskProgress) {
 	h.taskProgressMu.Lock()
 	defer h.taskProgressMu.Unlock()
-	delete(h.taskProgress, sessionKey)
+	if h.taskProgress[sessionKey] == tp {
+		delete(h.taskProgress, sessionKey)
+	}
 }
 
-// cancelConcurrentResponse cancels any active concurrent response for a session.
-func (h *Handler) cancelConcurrentResponse(sessionKey string) {
+// CancelConcurrentResponse cancels any active concurrent response for a session.
+// Exported so that external abort paths (e.g., Propus StopGeneration) can clean up.
+func (h *Handler) CancelConcurrentResponse(sessionKey string) {
 	h.concRespMu.Lock()
 	defer h.concRespMu.Unlock()
 	if cancel, ok := h.concRespCancel[sessionKey]; ok {
@@ -657,7 +669,7 @@ func (h *Handler) startConcurrentResponse(reqID string, params RunParams, progre
 	}
 
 	// Cancel any previous concurrent response for this session.
-	h.cancelConcurrentResponse(params.SessionKey)
+	h.CancelConcurrentResponse(params.SessionKey)
 
 	// Create a cancellable context for this concurrent response.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -706,7 +718,8 @@ func (h *Handler) handleSlashCommand(
 ) *protocol.ResponseFrame {
 	switch cmd.Command {
 	case "reset":
-		// Abort any active run and clear transcript.
+		// Abort any active run, concurrent response, and clear transcript.
+		h.CancelConcurrentResponse(sessionKey)
 		h.InterruptActiveRun(sessionKey)
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
@@ -720,6 +733,7 @@ func (h *Handler) handleSlashCommand(
 		h.deliverSlashResponse(delivery, "세션이 초기화되었습니다.")
 
 	case "kill":
+		h.CancelConcurrentResponse(sessionKey)
 		h.InterruptActiveRun(sessionKey)
 		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
@@ -889,6 +903,13 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 	if !found {
 		return protocol.NewResponseError(req.ID, protocol.NewError(
 			protocol.ErrNotFound, "no active run found"))
+	}
+
+	// Cancel any concurrent response for the resolved session.
+	if resolvedKey != "" {
+		h.CancelConcurrentResponse(resolvedKey)
+	} else if p.SessionKey != "" {
+		h.CancelConcurrentResponse(p.SessionKey)
 	}
 
 	// Transition session to killed.

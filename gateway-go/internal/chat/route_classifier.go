@@ -27,6 +27,12 @@ var interruptKeywords = []string{
 	"stop", "cancel", "abort", "kill",
 }
 
+// negationSuffixes follow an interrupt keyword to negate it.
+// e.g., "중단하지 마" (don't stop), "취소하지마" (don't cancel).
+var negationSuffixes = []string{
+	"하지 마", "하지마", "지 마", "지마", "말고", "말아",
+}
+
 // interruptSlashPrefixes are slash commands that imply task interruption.
 var interruptSlashPrefixes = []string{
 	"/kill", "/stop", "/reset", "/new",
@@ -61,10 +67,30 @@ func classifyRoute(message string) RouteDecision {
 	if utf8.RuneCountInString(lower) <= 30 {
 		for _, kw := range interruptKeywords {
 			if strings.Contains(lower, kw) {
+				// Check for negation: "중단하지 마" means "don't stop".
+				if isNegated(lower, kw) {
+					return RouteConcurrent
+				}
 				return RouteInterrupt
 			}
 		}
 	}
 
 	return RouteConcurrent
+}
+
+// isNegated checks if the keyword in the message is followed by a negation
+// suffix (e.g., "하지 마", "지마"), which reverses the interrupt intent.
+func isNegated(message, keyword string) bool {
+	idx := strings.Index(message, keyword)
+	if idx < 0 {
+		return false
+	}
+	after := message[idx+len(keyword):]
+	for _, neg := range negationSuffixes {
+		if strings.HasPrefix(after, neg) {
+			return true
+		}
+	}
+	return false
 }
