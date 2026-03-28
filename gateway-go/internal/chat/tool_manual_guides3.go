@@ -133,7 +133,6 @@ FFI_ERR_NULL_PTR=-1, INVALID_UTF8=-2, OUTPUT_TOO_SMALL=-3, INPUT_TOO_LARGE=-4, J
 - **Compaction**: deneb_compaction_evaluate, deneb_compaction_sweep_new/_start/_step/_drop
 - **Context**: deneb_context_assembly_new/_start/_step, deneb_context_expand_new/_start/_step, deneb_context_engine_drop
 - **Vega**: deneb_vega_execute, deneb_vega_search
-- **ML** (feature-gated): deneb_ml_embed, deneb_ml_rerank
 
 ### Stateful FFI Pattern (compaction, context engine)
 *_new() → handle → *_start(handle) → *_step(handle, response) → *_drop(handle)

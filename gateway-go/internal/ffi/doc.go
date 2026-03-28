@@ -48,10 +48,6 @@
 //   - VegaExecute: Execute a Vega command
 //   - VegaSearch: Execute a Vega search query
 //
-// ML FFI (requires "ml" feature in deneb-core):
-//   - MLEmbed: Generate text embeddings
-//   - MLRerank: Rerank documents against a query
-//
 // Build requirements:
 //   - Rust toolchain with cargo
 //   - Run `make rust` first to produce the static library

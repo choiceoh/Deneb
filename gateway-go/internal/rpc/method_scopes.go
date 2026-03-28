@@ -248,10 +248,6 @@ var methodScopes = map[string]auth.Scope{
 	"context.expand.step":    auth.ScopeWrite,
 	"context.engine.drop":    auth.ScopeWrite,
 
-	// --- ML (read) ---
-	"ml.embed":  auth.ScopeRead,
-	"ml.rerank": auth.ScopeRead,
-
 	// --- Providers (read) ---
 	"providers.list":    auth.ScopeRead,
 	"providers.catalog": auth.ScopeRead,

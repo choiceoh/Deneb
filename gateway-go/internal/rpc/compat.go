@@ -246,7 +246,6 @@ func RegisterBuiltinMethods(d *Dispatcher, deps Deps) {
 	d.RegisterDomain(handlerffi.MarkdownMethods())
 	d.RegisterDomain(handlerffi.CompactionMethods())
 	d.RegisterDomain(handlerffi.ContextEngineMethods())
-	d.RegisterDomain(handlerffi.MLMethods())
 
 	// Tools catalog (static core tool definitions).
 	d.RegisterDomain(handlerskill.CatalogMethods())

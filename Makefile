@@ -2,8 +2,8 @@
 #
 # Orchestrates Rust (core-rs workspace), Go (gateway-go), and CLI (cli-rs) builds.
 
-.PHONY: all rust rust-vega rust-dgx rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
-       go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary go-binary-dgx gateway-prod gateway-dgx \
+.PHONY: all rust rust-vega rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
+       go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod \
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
        cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 \
        cli-cross-win-x64 cli-cross-all \
@@ -25,16 +25,11 @@ all: rust go cli
 rust:
 	cd core-rs && cargo build --release -p deneb-core --no-default-features
 
-# Build core with Vega search engine enabled (FTS-only, no ML).
+# Build core with Vega search engine enabled (FTS-only).
 rust-vega:
 	cd core-rs && cargo build --release -p deneb-core --no-default-features --features vega
 
-# Build core with Vega + ML + CUDA for DGX Spark (GGUF inference).
-# Requires: llama.cpp build deps + CUDA toolkit on the host.
-rust-dgx:
-	cd core-rs && cargo build --release -p deneb-core --no-default-features --features dgx
-
-# Build all workspace crates (core + vega + ml).
+# Build all workspace crates.
 rust-all:
 	cd core-rs && cargo build --release --workspace
 
@@ -113,19 +108,10 @@ go-lint-all:
 go-binary: rust go
 	cd gateway-go && go build -o ../dist/deneb-gateway ./cmd/gateway/
 
-# Build DGX Spark production binary (Rust with vega + ml + CUDA, then Go).
-go-binary-dgx: rust-dgx go
-	cd gateway-go && go build -o ../dist/deneb-gateway ./cmd/gateway/
-
 # Build production gateway: Go binary + CLI, copies both to dist/.
 gateway-prod: go-binary cli
 	cp cli-rs/target/release/deneb dist/deneb-rs 2>/dev/null || true
 	@echo "Production gateway ready: dist/deneb-gateway + dist/deneb-rs"
-
-# Build DGX Spark production gateway (with Vega + ML + CUDA).
-gateway-dgx: go-binary-dgx cli
-	cp cli-rs/target/release/deneb dist/deneb-rs 2>/dev/null || true
-	@echo "DGX Spark production gateway ready: dist/deneb-gateway + dist/deneb-rs (vega+ml+cuda)"
 
 go-clean:
 	cd gateway-go && go clean ./...
@@ -236,13 +222,11 @@ info:
 	@echo ""
 	@echo "  make rust       - Build Rust core crate (release, CGo, minimal)"
 	@echo "  make rust-vega  - Build Rust core + Vega search (FTS-only)"
-	@echo "  make rust-dgx   - Build Rust core + Vega + ML + CUDA (DGX Spark)"
 	@echo "  make rust-all   - Build all Rust workspace crates"
 	@echo "  make go         - Build Go gateway"
 	@echo "  make go-dev     - Run Go gateway in dev mode (auto-restart on SIGUSR1)"
 	@echo "  make cli        - Build Rust CLI (release)"
 	@echo "  make go-binary  - Build Go gateway binary to dist/"
-	@echo "  make gateway-dgx - Build DGX Spark production gateway (vega+ml+cuda)"
 	@echo "  make test       - Run Rust + Go + CLI tests"
 	@echo "  make go-lint    - Run golangci-lint on Go gateway"
 	@echo "  make go-fmt     - Check Go formatting"

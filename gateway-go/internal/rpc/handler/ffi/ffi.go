@@ -1,7 +1,7 @@
 // Package ffi provides RPC method handlers for all Rust FFI-backed methods.
 //
 // This consolidates protocol validation, security, media, parsing, memory
-// search, markdown, compaction, context engine, Vega, and ML handlers that
+// search, markdown, compaction, context engine, and Vega handlers that
 // delegate to the deneb-core Rust library via CGo FFI.
 package ffi
 
@@ -833,47 +833,5 @@ func vegaBackendHandler(backend vega.Backend, cmd string) rpcutil.HandlerFunc {
 		}
 
 		return protocol.MustResponseOKRaw(req.ID, result)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// ML (Rust FFI — requires "ml" feature in deneb-core)
-// ---------------------------------------------------------------------------
-
-// MLMethods returns handlers for ML inference RPC methods.
-func MLMethods() map[string]rpcutil.HandlerFunc {
-	return map[string]rpcutil.HandlerFunc{
-		"ml.embed":  mlEmbed(),
-		"ml.rerank": mlRerank(),
-	}
-}
-
-func mlEmbed() rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if len(req.Params) == 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "params required"))
-		}
-		result, err := ffipkg.MLEmbed(string(req.Params))
-		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, err.Error()))
-		}
-		return protocol.MustResponseOK(req.ID, json.RawMessage(result))
-	}
-}
-
-func mlRerank() rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if len(req.Params) == 0 {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "params required"))
-		}
-		result, err := ffipkg.MLRerank(string(req.Params))
-		if err != nil {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrDependencyFailed, err.Error()))
-		}
-		return protocol.MustResponseOK(req.ID, json.RawMessage(result))
 	}
 }

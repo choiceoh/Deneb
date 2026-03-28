@@ -61,7 +61,7 @@
 
 ### Top-Level Directory Map
 
-- `core-rs/` — Rust core library (protocol validation, security, media, memory search, markdown, context engine, compaction, Vega search, ML inference). Workspace with 4 crates. Builds as staticlib (Go CGo) + rlib.
+- `core-rs/` — Rust core library (protocol validation, security, media, memory search, markdown, context engine, compaction, Vega search). Workspace with 3 crates. Builds as staticlib (Go CGo) + rlib.
 - `gateway-go/` — Go gateway server (HTTP/WS server, RPC dispatch, session management, channel registry, chat/LLM, tools, auth). The primary runtime.
 - `cli-rs/` — Rust CLI entry point.
 - `proto/` — shared Protobuf schemas (gateway frames, channel types, session models). Source of truth for cross-language types.
@@ -90,15 +90,13 @@ Rust workspace with 4 crates, exposed to Go via C FFI (CGo static linking).
 - `build.rs` — prost-build code generation from `proto/*.proto`.
 - Crate types: `staticlib` (Go CGo linking), `rlib` (workspace consumers).
 
-**deneb-vega** (`vega/`): SQLite FTS5 search engine. Optional `ml` feature for semantic search.
-
-**deneb-ml** (`ml/`): GGUF inference via llama-cpp-2. Optional `cuda` feature for GPU acceleration.
+**deneb-vega** (`vega/`): SQLite FTS5 search engine with semantic search support (pre-computed embeddings from Gemini API).
 
 **deneb-agent-runtime** (`agent-runtime/`): Agent lifecycle, model selection.
 
-**Feature flags** (deneb-core): `vega` → `ml` → `cuda` → `vega-ml` → `dgx` (full DGX Spark).
+**Feature flags** (deneb-core): `vega` (enables Vega search engine).
 
-- Build: `make rust` (minimal), `make rust-vega` (FTS), `make rust-dgx` (full).
+- Build: `make rust` (minimal), `make rust-vega` (FTS + semantic search).
 - Test: `cd core-rs && cargo test` or `make rust-test`.
 
 ### Go Gateway (`gateway-go/`)
@@ -208,14 +206,12 @@ Shared type definitions compiled to Go and Rust.
 | ------------------- | ------------------------------------------------------------ |
 | `make all`          | Build Rust + Go (release)                                    |
 | `make rust`         | Build Rust core library (release, minimal — no vega/ml)      |
-| `make rust-vega`    | Build Rust core + Vega search (FTS-only, no ML)              |
-| `make rust-dgx`     | Build Rust core + Vega + ML + CUDA (DGX Spark production)    |
+| `make rust-vega`    | Build Rust core + Vega search (FTS + semantic)               |
 | `make rust-test`    | Run Rust tests (`cargo test`)                                |
 | `make go`           | Build Go gateway                                             |
 | `make go-test`      | Run Go tests (`go test ./...`)                               |
 | `make go-run`       | Run Go gateway locally                                       |
 | `make go-dev`       | Run Go gateway in dev mode (auto-restart on SIGUSR1)         |
-| `make gateway-dgx`  | Build DGX Spark production gateway (vega + ml + cuda)        |
 | `make test`         | Run Rust + Go tests                                          |
 | `make check`        | Full check: proto-check + rust-test + go-test + ts           |
 | `make clean`        | Clean Rust + Go build artifacts                              |
@@ -349,7 +345,6 @@ All commits MUST use Conventional Commit format. Module-only prefixes (e.g., `ch
 
 ## DGX Spark Production Build
 
-- `make gateway-dgx` — Full production binary: Go gateway + Rust core (Vega FTS + semantic search + CUDA GGUF inference).
-- CUDA 없는 환경: `make rust-vega` (FTS-only 모드).
-- 환경 변수: `VEGA_MODEL_EMBEDDER`, `VEGA_MODEL_RERANKER`, `VEGA_MODEL_EXPANDER` (GGUF 경로).
-- 모델 자동 감지: `~/.deneb/models/*.gguf` (`gateway-go/internal/vega/autodetect.go`).
+- `make rust-vega` — Production Rust build: Vega FTS + semantic search (embeddings via Gemini API).
+- `make gateway-prod` — Full production binary: Go gateway + Rust core + CLI.
+- 환경 변수: `GEMINI_API_KEY` (임베딩), `JINA_API_KEY` (리랭킹).

@@ -41,42 +41,22 @@ pub struct SearchMeta {
 }
 
 /// Main search router. Analyzes queries, runs SQLite search, optionally runs
-/// semantic search via pre-computed embeddings (SGLang) or deneb-ml fallback,
+/// semantic search via pre-computed embeddings (Gemini API, passed from Go),
 /// and applies fusion ranking.
 pub struct SearchRouter {
     config: VegaConfig,
-    #[cfg(feature = "ml")]
-    ml_manager: Option<deneb_ml::ModelManager>,
 }
 
 impl SearchRouter {
     pub fn new(config: VegaConfig) -> Self {
-        // ML manager is no longer used — embeddings come from SGLang via Go.
-        #[cfg(feature = "ml")]
-        let ml_manager: Option<deneb_ml::ModelManager> = None;
-
-        Self {
-            config,
-            #[cfg(feature = "ml")]
-            ml_manager,
-        }
+        Self { config }
     }
 
     /// Check if semantic search is available.
-    /// In sglang mode, semantic is available when a query_embedding is provided.
-    /// In local mode, requires ML models to be configured.
+    /// Semantic is available when embeddings are provided externally by Go
+    /// (via Gemini Embedding API).
     fn semantic_available(&self) -> bool {
-        if self.config.has_sglang() {
-            return true; // Embeddings provided externally by Go
-        }
-        #[cfg(feature = "ml")]
-        {
-            self.ml_manager.is_some()
-        }
-        #[cfg(not(feature = "ml"))]
-        {
-            false
-        }
+        self.config.has_sglang()
     }
 
     /// Execute a full search (no pre-computed embedding).
@@ -149,7 +129,7 @@ impl SearchRouter {
                 None
             };
 
-            // Try pre-computed vector first (SGLang mode), then GGUF fallback.
+            // Use pre-computed vector from Gemini Embedding API (passed from Go).
             let sem_results = if let Some(qvec) = query_embedding {
                 semantic::semantic_search_with_vec(
                     &conn,
@@ -158,25 +138,7 @@ impl SearchRouter {
                     project_filter,
                 )
             } else {
-                // GGUF fallback (only with ml feature).
-                #[cfg(feature = "ml")]
-                {
-                    if let Some(ref mgr) = self.ml_manager {
-                        semantic::semantic_search(
-                            &conn,
-                            &query,
-                            &semantic::SemanticConfig::default(),
-                            project_filter,
-                            mgr,
-                        )
-                    } else {
-                        Vec::new()
-                    }
-                }
-                #[cfg(not(feature = "ml"))]
-                {
-                    Vec::new()
-                }
+                Vec::new()
             };
 
             if !sem_results.is_empty() {
@@ -255,10 +217,6 @@ impl SearchRouter {
         })
     }
 }
-
-// build_ml_manager removed — GGUF model loading is no longer used.
-// Embeddings are now generated externally via SGLang HTTP API (Go side).
-// The ml feature flag and deneb_ml dependency can be removed in a follow-up cleanup.
 
 #[cfg(test)]
 mod tests {
