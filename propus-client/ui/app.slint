@@ -1,0 +1,1061 @@
+import { Button, VerticalBox, HorizontalBox, LineEdit, ScrollView, TextEdit, ListView } from "std-widgets.slint";
+
+// ═══ Data Structures ═══
+
+struct ChatMessage {
+    role: string,
+    content: string,
+    is-tool: bool,
+    tool-name: string,
+    is-expanded: bool,
+}
+
+struct MessageSegment {
+    text: string,
+    is-code: bool,
+    language: string,
+}
+
+// ═══ Custom Components ═══
+
+component SidebarButton inherits Rectangle {
+    in property <string> label;
+    callback clicked;
+
+    height: 36px;
+    background: touch.has-hover ? #343952 : transparent;
+    border-radius: 8px;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        alignment: start;
+
+        Text {
+            text: label;
+            color: touch.has-hover ? #c0caf5 : #a9b1d6;
+            font-size: 13px;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component NewChatButton inherits Rectangle {
+    callback clicked;
+
+    height: 40px;
+    background: touch.has-hover ? #7aa2f7 : #3d59a1;
+    border-radius: 8px;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 8px;
+        alignment: center;
+
+        Text {
+            text: "+";
+            color: #c0caf5;
+            font-size: 18px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: "새 대화";
+            color: #c0caf5;
+            font-size: 13px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component SuggestionCard inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <string> prompt-text;
+    callback clicked;
+
+    width: 200px;
+    height: 72px;
+    background: touch.has-hover ? #2a2e42 : #24283b;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: touch.has-hover ? #3d59a1 : #292e42;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+        mouse-cursor: pointer;
+    }
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 6px;
+
+        Text {
+            text: icon;
+            font-size: 18px;
+        }
+
+        Text {
+            text: label;
+            color: touch.has-hover ? #c0caf5 : #a9b1d6;
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+    }
+}
+
+component ToolMessage inherits Rectangle {
+    in property <string> tool-name;
+    in property <string> content;
+    in-out property <bool> expanded: false;
+
+    background: #1a1e30;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: #292e42;
+
+    VerticalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        spacing: 4px;
+
+        // Header (always visible, clickable)
+        Rectangle {
+            height: 28px;
+
+            tool-touch := TouchArea {
+                clicked => { expanded = !expanded; }
+                mouse-cursor: pointer;
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+
+                // Tool icon badge
+                Rectangle {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 5px;
+                    background: #2d3220;
+
+                    Text {
+                        text: "T";
+                        color: #e0af68;
+                        font-size: 10px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Text {
+                    text: tool-name;
+                    color: #e0af68;
+                    font-size: 12px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+
+                // Expand indicator
+                Text {
+                    text: expanded ? "▼" : "▶";
+                    color: #565f89;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Expandable content
+        if expanded : Rectangle {
+            background: #141620;
+            border-radius: 6px;
+
+            VerticalLayout {
+                padding: 10px;
+
+                Text {
+                    text: content;
+                    color: #7a7f96;
+                    font-size: 11px;
+                    font-family: "monospace";
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}
+
+component CodeBlock inherits Rectangle {
+    in property <string> code;
+    in property <string> language;
+
+    background: #141620;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: #292e42;
+
+    VerticalLayout {
+        // Language label
+        if language != "" : Rectangle {
+            height: 28px;
+            background: #1a1e30;
+            border-radius: 8px;
+
+            HorizontalLayout {
+                padding-left: 12px;
+
+                Text {
+                    text: language;
+                    color: #565f89;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Code content
+        Rectangle {
+            VerticalLayout {
+                padding: 14px;
+
+                Text {
+                    text: code;
+                    color: #a9b1d6;
+                    font-size: 13px;
+                    font-family: "monospace";
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}
+
+component StreamingDot inherits Rectangle {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    background: #e0af68;
+    opacity: 1.0;
+
+    animate opacity {
+        duration: 800ms;
+        iteration-count: -1;
+        easing: ease-in-out;
+    }
+
+    init => {
+        self.opacity = 0.3;
+    }
+}
+
+// ═══ Reconnect Banner ═══
+
+component ReconnectBanner inherits Rectangle {
+    callback reconnect;
+
+    height: 44px;
+    background: #2d2020;
+    border-width: 0px;
+
+    HorizontalLayout {
+        padding-left: 20px;
+        padding-right: 20px;
+        alignment: space-between;
+
+        HorizontalLayout {
+            spacing: 8px;
+
+            Text {
+                text: "●";
+                color: #f7768e;
+                font-size: 10px;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: "서버 연결이 끊겼습니다";
+                color: #f7768e;
+                font-size: 13px;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            width: 80px;
+            height: 30px;
+            background: reconnect-touch.has-hover ? #f7768e : #5a2020;
+            border-radius: 6px;
+
+            reconnect-touch := TouchArea {
+                clicked => { reconnect(); }
+                mouse-cursor: pointer;
+            }
+
+            Text {
+                text: "재연결";
+                color: #c0caf5;
+                font-size: 12px;
+                font-weight: 600;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+
+// ═══ Main Application ═══
+
+export component App inherits Window {
+    title: "Propus - AI Coding Assistant";
+    preferred-width: 1100px;
+    preferred-height: 750px;
+    min-width: 600px;
+    min-height: 400px;
+    background: #1a1b26;
+
+    // Callbacks
+    callback send-message(string);
+    callback clear-chat();
+    callback save-session();
+    callback submit-api-key(string);
+    callback connect-server(string);
+    callback stop-generation();
+    callback reconnect();
+    callback request-scroll-to-bottom();
+
+    // Properties
+    in-out property <[ChatMessage]> messages: [];
+    in-out property <[MessageSegment]> current-segments: [];
+    in-out property <string> status-text: "서버 연결 대기 중...";
+    in-out property <string> model-name: "";
+    in-out property <string> service-name: "";
+    in-out property <string> current-dir: "";
+    in-out property <string> streaming-text: "";
+    in-out property <bool> is-streaming: false;
+    in-out property <string> usage-text: "";
+    in-out property <int> msg-count: 0;
+    in-out property <bool> needs-api-key: false;
+    in-out property <bool> needs-server-url: true;
+    in-out property <string> connection-status: "disconnected";
+    in-out property <bool> sidebar-visible: true;
+
+    // ═══ Server Connection Screen ═══
+    if needs-server-url : Rectangle {
+        background: #1a1b26;
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 16px;
+            padding: 40px;
+
+            Text {
+                text: "PROPUS";
+                color: #7aa2f7;
+                font-size: 42px;
+                font-weight: 800;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: "AI Coding Assistant";
+                color: #565f89;
+                font-size: 14px;
+                horizontal-alignment: center;
+            }
+
+            Rectangle { height: 24px; }
+
+            Rectangle {
+                max-width: 480px;
+                background: #24283b;
+                border-radius: 14px;
+                border-width: 1px;
+                border-color: #292e42;
+                horizontal-stretch: 0;
+
+                VerticalLayout {
+                    padding: 32px;
+                    spacing: 16px;
+
+                    Text {
+                        text: "서버 연결";
+                        color: #c0caf5;
+                        font-size: 18px;
+                        font-weight: 700;
+                    }
+
+                    Text {
+                        text: "Propus 서버의 WebSocket 주소를 입력하세요.";
+                        color: #565f89;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+
+                    server-url-input := LineEdit {
+                        placeholder-text: "ws://192.168.1.100:3710/ws";
+                        accepted(text) => {
+                            if text != "" {
+                                connect-server(text);
+                            }
+                        }
+                    }
+
+                    Button {
+                        text: "연결";
+                        primary: true;
+                        clicked => {
+                            if server-url-input.text != "" {
+                                connect-server(server-url-input.text);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text {
+                text: status-text;
+                color: #3b4261;
+                font-size: 11px;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    // ═══ API Key Setup Screen ═══
+    if !needs-server-url && needs-api-key : Rectangle {
+        background: #1a1b26;
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 16px;
+            padding: 40px;
+
+            Text {
+                text: "PROPUS";
+                color: #7aa2f7;
+                font-size: 42px;
+                font-weight: 800;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: "Z.AI 코딩플랜 전용 AI 코딩 어시스턴트";
+                color: #565f89;
+                font-size: 14px;
+                horizontal-alignment: center;
+            }
+
+            Rectangle { height: 24px; }
+
+            Rectangle {
+                max-width: 480px;
+                background: #24283b;
+                border-radius: 14px;
+                border-width: 1px;
+                border-color: #292e42;
+                horizontal-stretch: 0;
+
+                VerticalLayout {
+                    padding: 32px;
+                    spacing: 16px;
+
+                    Text {
+                        text: "API 키 설정";
+                        color: #c0caf5;
+                        font-size: 18px;
+                        font-weight: 700;
+                    }
+
+                    Text {
+                        text: "Z.AI 코딩플랜 API 키를 입력하세요.\n서버에 전송되어 저장됩니다.";
+                        color: #565f89;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+
+                    api-key-input := LineEdit {
+                        placeholder-text: "API 키를 붙여넣으세요...";
+                        accepted(text) => {
+                            if text != "" {
+                                submit-api-key(text);
+                            }
+                        }
+                    }
+
+                    Button {
+                        text: "시작하기";
+                        primary: true;
+                        clicked => {
+                            if api-key-input.text != "" {
+                                submit-api-key(api-key-input.text);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text {
+                text: "엔드포인트: api.z.ai/api/coding/paas/v4";
+                color: #3b4261;
+                font-size: 11px;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    // ═══ Main App ═══
+    if !needs-server-url && !needs-api-key : VerticalLayout {
+
+        // ═══ Reconnect Banner (shown when disconnected) ═══
+        if connection-status != "connected" && !needs-server-url && !needs-api-key : ReconnectBanner {
+            reconnect => { root.reconnect(); }
+        }
+
+        // ═══ Title Bar ═══
+        Rectangle {
+            height: 48px;
+            background: #1f2335;
+
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                alignment: space-between;
+
+                HorizontalLayout {
+                    alignment: start;
+                    spacing: 12px;
+                    padding-top: 10px;
+
+                    Text {
+                        text: "PROPUS";
+                        color: #7aa2f7;
+                        font-size: 16px;
+                        font-weight: 800;
+                        vertical-alignment: center;
+                    }
+
+                    Text {
+                        text: "v0.1";
+                        color: #3b4261;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
+                }
+
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 16px;
+                    padding-top: 10px;
+
+                    Text {
+                        text: service-name != "" ? service-name + " · " + model-name : "";
+                        color: #565f89;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                    }
+
+                    // Status indicator
+                    HorizontalLayout {
+                        spacing: 6px;
+
+                        if is-streaming : StreamingDot { }
+
+                        if !is-streaming : Rectangle {
+                            width: 8px;
+                            height: 8px;
+                            border-radius: 4px;
+                            background: connection-status == "connected" ? #9ece6a : #f7768e;
+                            y: 4px;
+                        }
+
+                        Text {
+                            text: status-text;
+                            color: is-streaming ? #e0af68 :
+                                   connection-status == "connected" ? #9ece6a : #f7768e;
+                            font-size: 12px;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Separator
+        Rectangle {
+            height: 1px;
+            background: #292e42;
+        }
+
+        // ═══ Main Content ═══
+        HorizontalLayout {
+            // ─── Sidebar ───
+            if sidebar-visible : Rectangle {
+                width: 240px;
+                background: #1f2335;
+
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 4px;
+
+                    // New Chat Button (prominent)
+                    NewChatButton {
+                        clicked => { clear-chat(); }
+                    }
+
+                    Rectangle { height: 12px; }
+
+                    // Section: Actions
+                    Text {
+                        text: "작업";
+                        color: #565f89;
+                        font-size: 11px;
+                        font-weight: 700;
+                        letter-spacing: 1px;
+                    }
+
+                    Rectangle { height: 4px; }
+
+                    SidebarButton {
+                        label: "세션 저장";
+                        clicked => { save-session(); }
+                    }
+
+                    Rectangle { height: 8px; }
+
+                    // Section: Guide
+                    Text {
+                        text: "사용법";
+                        color: #565f89;
+                        font-size: 11px;
+                        font-weight: 700;
+                        letter-spacing: 1px;
+                    }
+
+                    Rectangle { height: 4px; }
+
+                    Text {
+                        text: "코드 작성 및 수정\n파일 검색 및 분석\n빌드, 테스트 실행\nGit 커밋 / 브랜치 관리";
+                        color: #3b4261;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+
+                    // Spacer
+                    Rectangle { vertical-stretch: 1; }
+
+                    // Stats
+                    Rectangle {
+                        height: 1px;
+                        background: #292e42;
+                    }
+
+                    Rectangle { height: 6px; }
+
+                    Text {
+                        text: usage-text;
+                        color: #3b4261;
+                        font-size: 11px;
+                        wrap: word-wrap;
+                    }
+
+                    Text {
+                        text: msg-count > 0 ? "메시지 " + msg-count : "";
+                        color: #3b4261;
+                        font-size: 11px;
+                    }
+                }
+            }
+
+            // Sidebar border
+            if sidebar-visible : Rectangle {
+                width: 1px;
+                background: #292e42;
+            }
+
+            // ─── Chat Area ───
+            VerticalLayout {
+                // Messages
+                chat-scroll := ScrollView {
+                    vertical-stretch: 1;
+
+                    VerticalLayout {
+                        padding-left: 40px;
+                        padding-right: 40px;
+                        padding-top: 24px;
+                        padding-bottom: 24px;
+                        spacing: 8px;
+                        alignment: start;
+
+                        // ─── Welcome Screen ───
+                        if messages.length == 0 && streaming-text == "" : VerticalLayout {
+                            alignment: center;
+                            spacing: 12px;
+                            padding-top: 100px;
+
+                            Text {
+                                text: "PROPUS";
+                                color: #7aa2f7;
+                                font-size: 52px;
+                                font-weight: 800;
+                                horizontal-alignment: center;
+                            }
+                            Text {
+                                text: "무엇을 도와드릴까요?";
+                                color: #565f89;
+                                font-size: 16px;
+                                horizontal-alignment: center;
+                            }
+
+                            Rectangle { height: 32px; }
+
+                            // Suggestion cards
+                            HorizontalLayout {
+                                spacing: 12px;
+                                alignment: center;
+
+                                SuggestionCard {
+                                    icon: "📂";
+                                    label: "프로젝트 구조 분석";
+                                    prompt-text: "이 프로젝트의 구조를 분석해줘";
+                                    clicked => { send-message(self.prompt-text); }
+                                }
+
+                                SuggestionCard {
+                                    icon: "📖";
+                                    label: "README 요약";
+                                    prompt-text: "README.md를 읽고 요약해줘";
+                                    clicked => { send-message(self.prompt-text); }
+                                }
+
+                                SuggestionCard {
+                                    icon: "🔍";
+                                    label: "코드 리뷰";
+                                    prompt-text: "최근 변경사항을 리뷰해줘";
+                                    clicked => { send-message(self.prompt-text); }
+                                }
+
+                                SuggestionCard {
+                                    icon: "🧪";
+                                    label: "테스트 실행";
+                                    prompt-text: "테스트를 실행하고 결과를 알려줘";
+                                    clicked => { send-message(self.prompt-text); }
+                                }
+                            }
+                        }
+
+                        // ─── Message List ───
+                        for msg[idx] in messages : Rectangle {
+                            if msg.is-tool : ToolMessage {
+                                tool-name: msg.tool-name;
+                                content: msg.content;
+                                expanded: msg.is-expanded;
+                            }
+
+                            if !msg.is-tool : Rectangle {
+                                background: msg.role == "user" ? #1f2335 : transparent;
+                                border-radius: 10px;
+                                border-width: msg.role == "user" ? 1px : 0px;
+                                border-color: #292e42;
+
+                                VerticalLayout {
+                                    padding-left: 16px;
+                                    padding-right: 16px;
+                                    padding-top: 14px;
+                                    padding-bottom: 14px;
+                                    spacing: 8px;
+
+                                    // Header
+                                    HorizontalLayout {
+                                        spacing: 10px;
+                                        alignment: start;
+
+                                        Rectangle {
+                                            width: 28px;
+                                            height: 28px;
+                                            border-radius: 14px;
+                                            background: msg.role == "user" ? #3d59a1 : #2d3250;
+
+                                            Text {
+                                                text: msg.role == "user" ? "U" : "P";
+                                                color: msg.role == "user" ? #c0caf5 : #7dcfff;
+                                                font-size: 12px;
+                                                font-weight: 700;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        Text {
+                                            text: msg.role == "user" ? "You" : "Propus";
+                                            color: msg.role == "user" ? #c0caf5 : #7dcfff;
+                                            font-size: 14px;
+                                            font-weight: 600;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    // Content
+                                    Text {
+                                        text: msg.content;
+                                        color: #c0caf5;
+                                        font-size: 14px;
+                                        wrap: word-wrap;
+                                        horizontal-alignment: left;
+                                    }
+                                }
+                            }
+                        }
+
+                        // ─── Streaming Response ───
+                        if streaming-text != "" : Rectangle {
+                            border-radius: 10px;
+
+                            VerticalLayout {
+                                padding-left: 16px;
+                                padding-right: 16px;
+                                padding-top: 14px;
+                                padding-bottom: 14px;
+                                spacing: 8px;
+
+                                HorizontalLayout {
+                                    spacing: 10px;
+
+                                    Rectangle {
+                                        width: 28px;
+                                        height: 28px;
+                                        border-radius: 14px;
+                                        background: #2d3250;
+
+                                        Text {
+                                            text: "P";
+                                            color: #7dcfff;
+                                            font-size: 12px;
+                                            font-weight: 700;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    Text {
+                                        text: "Propus";
+                                        color: #7dcfff;
+                                        font-size: 14px;
+                                        font-weight: 600;
+                                        vertical-alignment: center;
+                                    }
+
+                                    if is-streaming : StreamingDot { }
+                                }
+
+                                // Segments rendering
+                                for seg in current-segments : Rectangle {
+                                    if seg.is-code : CodeBlock {
+                                        code: seg.text;
+                                        language: seg.language;
+                                    }
+
+                                    if !seg.is-code : Text {
+                                        text: seg.text;
+                                        color: #c0caf5;
+                                        font-size: 14px;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
+                        }
+
+                        // ─── Thinking Indicator (streaming but no text yet) ───
+                        if is-streaming && streaming-text == "" : Rectangle {
+                            border-radius: 10px;
+
+                            VerticalLayout {
+                                padding-left: 16px;
+                                padding-right: 16px;
+                                padding-top: 14px;
+                                padding-bottom: 14px;
+
+                                HorizontalLayout {
+                                    spacing: 10px;
+
+                                    Rectangle {
+                                        width: 28px;
+                                        height: 28px;
+                                        border-radius: 14px;
+                                        background: #2d3250;
+
+                                        Text {
+                                            text: "P";
+                                            color: #7dcfff;
+                                            font-size: 12px;
+                                            font-weight: 700;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    Text {
+                                        text: "Propus";
+                                        color: #7dcfff;
+                                        font-size: 14px;
+                                        font-weight: 600;
+                                        vertical-alignment: center;
+                                    }
+
+                                    StreamingDot { }
+
+                                    Text {
+                                        text: "생각하는 중...";
+                                        color: #565f89;
+                                        font-size: 13px;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ─── Input Area ───
+                Rectangle {
+                    height: 1px;
+                    background: #292e42;
+                }
+
+                Rectangle {
+                    min-height: 68px;
+                    max-height: 180px;
+                    background: #1a1b26;
+
+                    VerticalLayout {
+                        padding-left: 24px;
+                        padding-right: 16px;
+                        padding-top: 12px;
+                        padding-bottom: 12px;
+
+                        Rectangle {
+                            background: #1f2335;
+                            border-radius: 12px;
+                            border-width: 1px;
+                            border-color: input-focus-scope.has-focus ? #3d59a1 : #292e42;
+
+                            HorizontalLayout {
+                                padding-left: 4px;
+                                padding-right: 4px;
+                                padding-top: 4px;
+                                padding-bottom: 4px;
+                                spacing: 8px;
+
+                                input-focus-scope := FocusScope {
+                                    horizontal-stretch: 1;
+
+                                    key-pressed(event) => {
+                                        if event.text == "\n" && !event.modifiers.shift {
+                                            // Enter without Shift → send
+                                            if !is-streaming && input-field.text != "" {
+                                                send-message(input-field.text);
+                                                input-field.text = "";
+                                            }
+                                            return accept;
+                                        }
+                                        if event.text == Key.Escape {
+                                            if is-streaming {
+                                                stop-generation();
+                                            }
+                                            return accept;
+                                        }
+                                        return reject;
+                                    }
+
+                                    input-field := TextEdit {
+                                        horizontal-stretch: 1;
+                                        read-only: is-streaming;
+                                    }
+                                }
+
+                                // Send / Stop button
+                                VerticalLayout {
+                                    alignment: end;
+                                    padding-bottom: 4px;
+
+                                    if !is-streaming : Rectangle {
+                                        width: 40px;
+                                        height: 36px;
+                                        background: send-touch.has-hover ? #7aa2f7 : #3d59a1;
+                                        border-radius: 8px;
+
+                                        send-touch := TouchArea {
+                                            clicked => {
+                                                if input-field.text != "" {
+                                                    send-message(input-field.text);
+                                                    input-field.text = "";
+                                                }
+                                            }
+                                        }
+
+                                        Text {
+                                            text: "↑";
+                                            color: #c0caf5;
+                                            font-size: 18px;
+                                            font-weight: 700;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    if is-streaming : Rectangle {
+                                        width: 40px;
+                                        height: 36px;
+                                        background: stop-touch.has-hover ? #f7768e : #5a2020;
+                                        border-radius: 8px;
+
+                                        stop-touch := TouchArea {
+                                            clicked => {
+                                                stop-generation();
+                                            }
+                                        }
+
+                                        Text {
+                                            text: "■";
+                                            color: #f7768e;
+                                            font-size: 14px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Helper text
+                        HorizontalLayout {
+                            padding-top: 4px;
+                            padding-left: 4px;
+
+                            Text {
+                                text: is-streaming ? "Esc로 중지" : "Enter로 전송 · Shift+Enter로 줄바꿈";
+                                color: #3b4261;
+                                font-size: 11px;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
