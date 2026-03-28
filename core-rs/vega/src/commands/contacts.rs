@@ -247,7 +247,7 @@ mod tests {
         let contacts = extract_from_text(body, "note", "테스트 프로젝트", 1);
         assert!(!contacts.is_empty(), "expected at least one contact");
         // Find the contact with the phone number
-        let c = contacts.iter().find(|c| c["phone"] == "010-1234-5678").unwrap();
+        let c = contacts.iter().find(|c| c["phone"] == "010-1234-5678").expect("contact with phone 010-1234-5678");
         assert_eq!(c["name"], "김철수");
         assert_eq!(c["title"], "과장");
     }

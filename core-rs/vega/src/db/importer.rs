@@ -446,37 +446,35 @@ mod tests {
     use std::io::Write;
     use tempfile::TempDir;
 
-    fn setup_test_dir() -> TempDir {
-        let dir = TempDir::new().unwrap();
+    fn setup_test_dir() -> Result<TempDir, Box<dyn std::error::Error>> {
+        let dir = TempDir::new()?;
         let md = "# Test Project\n\n| 발주처 | TestClient |\n| 상태 | 진행중 |\n\n## 현재 상황\n\nSome status info here with enough content.\n\n## 2025-03-01\n\n- **미팅 완료** (김대희)\n> 내용 정리 완료\n";
-        let mut f = std::fs::File::create(dir.path().join("test.md")).unwrap();
-        f.write_all(md.as_bytes()).unwrap();
-        dir
+        let mut f = std::fs::File::create(dir.path().join("test.md"))?;
+        f.write_all(md.as_bytes())?;
+        Ok(dir)
     }
 
     #[test]
-    fn test_import_and_query() {
-        let dir = setup_test_dir();
+    fn test_import_and_query() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = setup_test_dir()?;
         let db_path = dir.path().join("test.db");
-        let conn = Connection::open(&db_path).unwrap();
-        init_db(&conn).unwrap();
+        let conn = Connection::open(&db_path)?;
+        init_db(&conn)?;
 
         let fpath = dir.path().join("test.md");
-        let result = import_single_file(&conn, &fpath).unwrap();
+        let result = import_single_file(&conn, &fpath)?;
         assert_eq!(result, UpsertResult::Updated);
 
         // Verify project exists
         let name: String = conn
-            .query_row("SELECT name FROM projects WHERE id=1", [], |r| r.get(0))
-            .unwrap();
+            .query_row("SELECT name FROM projects WHERE id=1", [], |r| r.get(0))?;
         assert_eq!(name, "Test Project");
 
         // Verify chunks
         let chunk_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM chunks WHERE project_id=1", [], |r| {
                 r.get(0)
-            })
-            .unwrap();
+            })?;
         assert!(chunk_count >= 2, "Should have at least 2 sections");
 
         // Verify comm log
@@ -485,8 +483,7 @@ mod tests {
                 "SELECT COUNT(*) FROM comm_log WHERE project_id=1",
                 [],
                 |r| r.get(0),
-            )
-            .unwrap();
+            )?;
         assert_eq!(comm_count, 1);
 
         // Verify FTS works
@@ -495,8 +492,8 @@ mod tests {
                 "SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH '\"status\"'",
                 [],
                 |r| r.get(0),
-            )
-            .unwrap();
+            )?;
         assert!(fts_count >= 0); // Triggers should have populated FTS
+        Ok(())
     }
 }

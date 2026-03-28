@@ -262,10 +262,10 @@ mod tests {
     fn test_extract_table_meta() {
         let md = "# 비금도 해상태양광\n\n| 항목 | 내용 |\n|---|---|\n| 발주처 | 한국전력 |\n| 상태 | 🟢 진행중 |\n| 사내 담당 | 김대희 |\n";
         let meta = extract_table_meta(md);
-        assert_eq!(meta.get("name").unwrap(), "비금도 해상태양광");
-        assert_eq!(meta.get("client").unwrap(), "한국전력");
-        assert_eq!(meta.get("status").unwrap(), "진행중");
-        assert_eq!(meta.get("person_internal").unwrap(), "김대희");
+        assert_eq!(meta.get("name").expect("key 'name' should exist"), "비금도 해상태양광");
+        assert_eq!(meta.get("client").expect("key 'client' should exist"), "한국전력");
+        assert_eq!(meta.get("status").expect("key 'status' should exist"), "진행중");
+        assert_eq!(meta.get("person_internal").expect("key 'person_internal' should exist"), "김대희");
     }
 
     #[test]

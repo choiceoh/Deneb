@@ -214,7 +214,7 @@ mod tests {
     }
 
     #[test]
-    fn update_snapshot() {
+    fn update_snapshot() -> Result<(), Box<dyn std::error::Error>> {
         let mut tracker = EmbeddedRunTracker::new();
         tracker.set_active("s1", make_meta("s1"));
         tracker.update_snapshot(
@@ -224,8 +224,9 @@ mod tests {
                 in_flight_prompt: None,
             },
         );
-        let snap = tracker.get_snapshot("s1").unwrap();
+        let snap = tracker.get_snapshot("s1").ok_or("get_snapshot returned None")?;
         assert_eq!(snap.transcript_leaf_id.as_deref(), Some("leaf1"));
+        Ok(())
     }
 
     #[test]

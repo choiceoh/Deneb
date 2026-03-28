@@ -284,9 +284,9 @@ mod tests {
         let current: HashMap<i64, Value> = HashMap::new();
         let diff = diff_snapshots(&prev, &current);
 
-        assert_eq!(diff["new_projects"].as_array().unwrap().len(), 0);
-        assert_eq!(diff["removed_projects"].as_array().unwrap().len(), 0);
-        assert_eq!(diff["status_changes"].as_array().unwrap().len(), 0);
+        assert_eq!(diff["new_projects"].as_array().expect("new_projects as array").len(), 0);
+        assert_eq!(diff["removed_projects"].as_array().expect("removed_projects as array").len(), 0);
+        assert_eq!(diff["status_changes"].as_array().expect("status_changes as array").len(), 0);
     }
 
     #[test]
@@ -296,7 +296,7 @@ mod tests {
         current.insert(1, make_project("Project A", "active", 0));
 
         let diff = diff_snapshots(&prev, &current);
-        let new_projects = diff["new_projects"].as_array().unwrap();
+        let new_projects = diff["new_projects"].as_array().expect("new_projects as array");
         assert_eq!(new_projects.len(), 1);
         assert_eq!(new_projects[0]["name"], "Project A");
     }
@@ -308,7 +308,7 @@ mod tests {
         let current: HashMap<i64, Value> = HashMap::new();
 
         let diff = diff_snapshots(&prev, &current);
-        let removed = diff["removed_projects"].as_array().unwrap();
+        let removed = diff["removed_projects"].as_array().expect("removed_projects as array");
         assert_eq!(removed.len(), 1);
         assert_eq!(removed[0]["name"], "Project A");
     }
@@ -322,7 +322,7 @@ mod tests {
         current.insert(1, make_project("Project A", "completed", 5));
 
         let diff = diff_snapshots(&prev, &current);
-        let changes = diff["status_changes"].as_array().unwrap();
+        let changes = diff["status_changes"].as_array().expect("status_changes as array");
         assert_eq!(changes.len(), 1);
         assert_eq!(changes[0]["old_status"], "active");
         assert_eq!(changes[0]["new_status"], "completed");
@@ -337,7 +337,7 @@ mod tests {
         current.insert(1, make_project("Project A", "active", 7));
 
         let diff = diff_snapshots(&prev, &current);
-        let comms = diff["new_comms"].as_array().unwrap();
+        let comms = diff["new_comms"].as_array().expect("new_comms as array");
         assert_eq!(comms.len(), 1);
         assert_eq!(comms[0]["new_entries"], 4);
     }
@@ -374,11 +374,11 @@ mod tests {
         );
 
         let diff = diff_snapshots(&prev, &current);
-        let modified = diff["modified_chunks"].as_array().unwrap();
+        let modified = diff["modified_chunks"].as_array().expect("modified_chunks as array");
         assert_eq!(modified.len(), 1);
         assert_eq!(modified[0]["heading"], "overview");
 
-        let new_chunks = diff["new_chunks"].as_array().unwrap();
+        let new_chunks = diff["new_chunks"].as_array().expect("new_chunks as array");
         assert_eq!(new_chunks.len(), 1);
         assert_eq!(new_chunks[0]["heading"], "contacts");
     }
@@ -392,10 +392,10 @@ mod tests {
         current.insert(1, make_project("Project A", "active", 5));
 
         let diff = diff_snapshots(&prev, &current);
-        assert_eq!(diff["new_projects"].as_array().unwrap().len(), 0);
-        assert_eq!(diff["removed_projects"].as_array().unwrap().len(), 0);
-        assert_eq!(diff["status_changes"].as_array().unwrap().len(), 0);
-        assert_eq!(diff["new_comms"].as_array().unwrap().len(), 0);
+        assert_eq!(diff["new_projects"].as_array().expect("new_projects as array").len(), 0);
+        assert_eq!(diff["removed_projects"].as_array().expect("removed_projects as array").len(), 0);
+        assert_eq!(diff["status_changes"].as_array().expect("status_changes as array").len(), 0);
+        assert_eq!(diff["new_comms"].as_array().expect("new_comms as array").len(), 0);
     }
 }
 

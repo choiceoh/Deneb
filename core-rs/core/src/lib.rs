@@ -1455,15 +1455,16 @@ mod tests {
     }
 
     #[test]
-    fn test_sanitize_html_ffi() {
+    fn test_sanitize_html_ffi() -> Result<(), Box<dyn std::error::Error>> {
         let input = "<b>hi</b>";
         let mut out = [0u8; 256];
         let len = unsafe {
             deneb_sanitize_html(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len())
         };
         assert!(len > 0);
-        let result = std::str::from_utf8(&out[..len as usize]).unwrap();
+        let result = std::str::from_utf8(&out[..len as usize])?;
         assert_eq!(result, "&lt;b&gt;hi&lt;/b&gt;");
+        Ok(())
     }
 
     #[test]
@@ -1494,41 +1495,44 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_mime() {
+    fn test_detect_mime() -> Result<(), Box<dyn std::error::Error>> {
         let png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
         let mut out = [0u8; 64];
         let len =
             unsafe { deneb_detect_mime(png.as_ptr(), png.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
-        let mime = std::str::from_utf8(&out[..len as usize]).unwrap();
+        let mime = std::str::from_utf8(&out[..len as usize])?;
         assert_eq!(mime, "image/png");
+        Ok(())
     }
 
     #[test]
-    fn test_vega_execute_stub() {
+    fn test_vega_execute_stub() -> Result<(), Box<dyn std::error::Error>> {
         let cmd = r#"{"command":"search","query":"test"}"#;
         let mut out = [0u8; 256];
         let len =
             unsafe { deneb_vega_execute(cmd.as_ptr(), cmd.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
-        let result = std::str::from_utf8(&out[..len as usize]).unwrap();
+        let result = std::str::from_utf8(&out[..len as usize])?;
         assert!(result.contains("vega_not_implemented"));
+        Ok(())
     }
 
     #[test]
-    fn test_vega_search_stub() {
+    fn test_vega_search_stub() -> Result<(), Box<dyn std::error::Error>> {
         let query = r#"{"query":"test"}"#;
         let mut out = [0u8; 256];
         let len =
             unsafe { deneb_vega_search(query.as_ptr(), query.len(), out.as_mut_ptr(), out.len()) };
         assert!(len > 0);
-        let result = std::str::from_utf8(&out[..len as usize]).unwrap();
+        let result = std::str::from_utf8(&out[..len as usize])?;
         assert!(result.contains("results"));
+        Ok(())
     }
 
 
     #[test]
-    fn test_extract_links_ffi() {
+    fn test_extract_links_ffi() -> Result<(), Box<dyn std::error::Error>> {
         let text = "Check https://example.com and https://rust-lang.org please";
         let config = r#"{"max_links":5}"#;
         let mut out = [0u8; 1024];
@@ -1543,13 +1547,14 @@ mod tests {
             )
         };
         assert!(len > 0);
-        let result = std::str::from_utf8(&out[..len as usize]).unwrap();
+        let result = std::str::from_utf8(&out[..len as usize])?;
         assert!(result.contains("https://example.com"));
         assert!(result.contains("https://rust-lang.org"));
+        Ok(())
     }
 
     #[test]
-    fn test_html_to_markdown_ffi() {
+    fn test_html_to_markdown_ffi() -> Result<(), Box<dyn std::error::Error>> {
         let html =
             "<html><head><title>Test</title></head><body><h1>Hello</h1><p>World</p></body></html>";
         let mut out = [0u8; 4096];
@@ -1557,10 +1562,11 @@ mod tests {
             deneb_html_to_markdown(html.as_ptr(), html.len(), out.as_mut_ptr(), out.len())
         };
         assert!(len > 0);
-        let result = std::str::from_utf8(&out[..len as usize]).unwrap();
+        let result = std::str::from_utf8(&out[..len as usize])?;
         assert!(result.contains("Hello"));
         assert!(result.contains("World"));
         assert!(result.contains("Test"));
+        Ok(())
     }
 
     #[test]
@@ -1571,15 +1577,16 @@ mod tests {
     }
 
     #[test]
-    fn test_base64_canonicalize_ffi() {
+    fn test_base64_canonicalize_ffi() -> Result<(), Box<dyn std::error::Error>> {
         let input = " A A A A ";
         let mut out = [0u8; 256];
         let len = unsafe {
             deneb_base64_canonicalize(input.as_ptr(), input.len(), out.as_mut_ptr(), out.len())
         };
         assert!(len > 0);
-        let result = std::str::from_utf8(&out[..len as usize]).unwrap();
+        let result = std::str::from_utf8(&out[..len as usize])?;
         assert_eq!(result, "AAAA");
+        Ok(())
     }
 
     #[test]
@@ -1593,15 +1600,16 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_media_tokens_ffi() {
+    fn test_parse_media_tokens_ffi() -> Result<(), Box<dyn std::error::Error>> {
         let text = "Here is output\nMEDIA: https://example.com/img.png\nDone.";
         let mut out = [0u8; 4096];
         let len = unsafe {
             deneb_parse_media_tokens(text.as_ptr(), text.len(), out.as_mut_ptr(), out.len())
         };
         assert!(len > 0);
-        let result = std::str::from_utf8(&out[..len as usize]).unwrap();
+        let result = std::str::from_utf8(&out[..len as usize])?;
         assert!(result.contains("https://example.com/img.png"));
         assert!(result.contains("media_urls"));
+        Ok(())
     }
 }

@@ -1197,28 +1197,30 @@ mod tests {
     }
 
     #[test]
-    fn test_sweep_command_serde_roundtrip() {
+    fn test_sweep_command_serde_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let cmd = SweepCommand::FetchMessages {
             message_ids: vec![1, 2, 3],
         };
-        let json = serde_json::to_string(&cmd).unwrap();
-        let parsed: SweepCommand = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&cmd)?;
+        let parsed: SweepCommand = serde_json::from_str(&json)?;
         match parsed {
             SweepCommand::FetchMessages { message_ids } => {
                 assert_eq!(message_ids, vec![1, 2, 3]);
             }
             _ => panic!("Wrong variant"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_sweep_response_serde_roundtrip() {
+    fn test_sweep_response_serde_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let resp = SweepResponse::TokenCount { count: 42 };
-        let json = serde_json::to_string(&resp).unwrap();
-        let parsed: SweepResponse = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&resp)?;
+        let parsed: SweepResponse = serde_json::from_str(&json)?;
         match parsed {
             SweepResponse::TokenCount { count } => assert_eq!(count, 42),
             _ => panic!("Wrong variant"),
         }
+        Ok(())
     }
 }

@@ -309,13 +309,14 @@ mod tests {
     }
 
     #[test]
-    fn update_status() {
+    fn update_status() -> Result<(), Box<dyn std::error::Error>> {
         let mut reg = SubagentRegistry::new();
         reg.register(make_run("r1", "child:1", "parent:main"));
         assert!(reg.update_status("r1", SubagentRunStatus::Completed, Some(2000)));
-        let run = reg.get_by_child_session_key("child:1").unwrap();
+        let run = reg.get_by_child_session_key("child:1").ok_or("get_by_child_session_key returned None")?;
         assert_eq!(run.status, SubagentRunStatus::Completed);
         assert_eq!(run.ended_at_ms, Some(2000));
+        Ok(())
     }
 
     #[test]

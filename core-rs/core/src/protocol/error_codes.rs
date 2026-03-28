@@ -119,7 +119,7 @@ mod tests {
     fn test_roundtrip() {
         for code in ALL_ERROR_CODES {
             let s = code.as_str();
-            let parsed = ErrorCode::parse(s).unwrap();
+            let parsed = ErrorCode::parse(s).expect("known code should round-trip through parse");
             assert_eq!(*code, parsed);
         }
     }

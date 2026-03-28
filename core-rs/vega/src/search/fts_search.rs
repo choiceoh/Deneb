@@ -570,41 +570,37 @@ mod tests {
     use super::*;
     use crate::db::schema::init_db;
 
-    fn setup_test_db() -> Connection {
-        let conn = Connection::open_in_memory().unwrap();
-        init_db(&conn).unwrap();
+    fn setup_test_db() -> Result<Connection, Box<dyn std::error::Error>> {
+        let conn = Connection::open_in_memory()?;
+        init_db(&conn)?;
 
         conn.execute(
             "INSERT INTO projects (name, client, status, person_internal)
              VALUES ('비금도 태양광', '한국전력', '진행중', '김대희')",
             [],
-        )
-        .unwrap();
+        )?;
         conn.execute(
             "INSERT INTO chunks (project_id, section_heading, content, chunk_type)
              VALUES (1, '현재 상황', '해저케이블 154kV 설치 진행중', 'status')",
             [],
-        )
-        .unwrap();
+        )?;
         conn.execute(
             "INSERT INTO chunks (project_id, section_heading, content, chunk_type)
              VALUES (1, '기술 사양', 'EPC 시공 방식으로 진행', 'technical')",
             [],
-        )
-        .unwrap();
+        )?;
         conn.execute(
             "INSERT INTO comm_log (project_id, log_date, sender, subject, summary)
              VALUES (1, '2025-03-01', '김대희', '미팅 결과', '설계 검토 완료')",
             [],
-        )
-        .unwrap();
+        )?;
 
-        conn
+        Ok(conn)
     }
 
     #[test]
-    fn test_fts_search() {
-        let conn = setup_test_db();
+    fn test_fts_search() -> Result<(), Box<dyn std::error::Error>> {
+        let conn = setup_test_db()?;
         let extracted = ExtractedFields {
             keywords: vec!["해저케이블".into()],
             ..Default::default()
@@ -614,11 +610,12 @@ mod tests {
             !result.chunks.is_empty(),
             "Should find chunks via FTS or LIKE"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_client_filter() {
-        let conn = setup_test_db();
+    fn test_client_filter() -> Result<(), Box<dyn std::error::Error>> {
+        let conn = setup_test_db()?;
         let extracted = ExtractedFields {
             clients: vec!["한국전력".into()],
             ..Default::default()
@@ -626,6 +623,7 @@ mod tests {
         let result = sqlite_search(&conn, "한국전력", &extracted);
         assert!(!result.chunks.is_empty());
         assert!(result.chunks.iter().all(|r| r.client.contains("한국전력")));
+        Ok(())
     }
 
     #[test]

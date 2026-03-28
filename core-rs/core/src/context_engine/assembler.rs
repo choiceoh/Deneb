@@ -503,7 +503,7 @@ mod tests {
 
         match cmd {
             AssemblyCommand::Done { result } => {
-                let guidance = result.system_prompt_addition.unwrap();
+                let guidance = result.system_prompt_addition.expect("expected system_prompt_addition for deep compaction");
                 // Deep compaction → full guidance with precision rules
                 assert!(guidance.contains("Precision Rules"));
                 assert!(guidance.contains("Uncertainty Checklist"));
@@ -536,7 +536,7 @@ mod tests {
 
         match cmd {
             AssemblyCommand::Done { result } => {
-                let guidance = result.system_prompt_addition.unwrap();
+                let guidance = result.system_prompt_addition.expect("expected system_prompt_addition for shallow compaction");
                 // Shallow → minimal guidance
                 assert!(guidance.contains("Context Recall (Aurora)"));
                 assert!(!guidance.contains("Precision Rules"));
@@ -546,27 +546,28 @@ mod tests {
     }
 
     #[test]
-    fn test_assembly_command_serde_roundtrip() {
+    fn test_assembly_command_serde_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let cmd = AssemblyCommand::FetchContextItems {
             conversation_id: 42,
         };
-        let json = serde_json::to_string(&cmd).unwrap();
-        let parsed: AssemblyCommand = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&cmd)?;
+        let parsed: AssemblyCommand = serde_json::from_str(&json)?;
         match parsed {
             AssemblyCommand::FetchContextItems { conversation_id } => {
                 assert_eq!(conversation_id, 42);
             }
             _ => panic!("Wrong variant"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_assembly_response_serde_roundtrip() {
+    fn test_assembly_response_serde_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let resp = AssemblyResponse::ContextItems {
             items: vec![make_message_item(0, 100)],
         };
-        let json = serde_json::to_string(&resp).unwrap();
-        let parsed: AssemblyResponse = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&resp)?;
+        let parsed: AssemblyResponse = serde_json::from_str(&json)?;
         match parsed {
             AssemblyResponse::ContextItems { items } => {
                 assert_eq!(items.len(), 1);
@@ -574,5 +575,6 @@ mod tests {
             }
             _ => panic!("Wrong variant"),
         }
+        Ok(())
     }
 }

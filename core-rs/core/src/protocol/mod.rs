@@ -240,9 +240,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_valid_request_frame() {
+    fn test_valid_request_frame() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{"type":"req","id":"abc","method":"chat.send","params":{"text":"hello"}}"#;
-        let frame = validate_frame(json).unwrap();
+        let frame = validate_frame(json)?;
         match frame {
             GatewayFrame::Request(req) => {
                 assert_eq!(req.id, "abc");
@@ -251,12 +251,13 @@ mod tests {
             }
             _ => panic!("expected request frame"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_valid_response_frame() {
+    fn test_valid_response_frame() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{"type":"res","id":"abc","ok":true,"payload":{"data":1}}"#;
-        let frame = validate_frame(json).unwrap();
+        let frame = validate_frame(json)?;
         match frame {
             GatewayFrame::Response(res) => {
                 assert_eq!(res.id, "abc");
@@ -265,12 +266,13 @@ mod tests {
             }
             _ => panic!("expected response frame"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_valid_event_frame() {
+    fn test_valid_event_frame() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{"type":"event","event":"health","seq":5}"#;
-        let frame = validate_frame(json).unwrap();
+        let frame = validate_frame(json)?;
         match frame {
             GatewayFrame::Event(ev) => {
                 assert_eq!(ev.event, "health");
@@ -278,21 +280,23 @@ mod tests {
             }
             _ => panic!("expected event frame"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_response_with_error() {
+    fn test_response_with_error() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{"type":"res","id":"x","ok":false,"error":{"code":"NOT_FOUND","message":"session not found","retryable":false}}"#;
-        let frame = validate_frame(json).unwrap();
+        let frame = validate_frame(json)?;
         match frame {
             GatewayFrame::Response(res) => {
                 assert!(!res.ok);
-                let err = res.error.unwrap();
+                let err = res.error.expect("error field should be Some");
                 assert_eq!(err.code, "NOT_FOUND");
                 assert_eq!(err.retryable, Some(false));
             }
             _ => panic!("expected response frame"),
         }
+        Ok(())
     }
 
     #[test]
@@ -351,7 +355,7 @@ mod tests {
         };
         assert_eq!(frame.event, "health");
         assert_eq!(frame.seq, Some(42));
-        assert_eq!(frame.state_version.unwrap().presence, 1);
+        assert_eq!(frame.state_version.expect("state_version should be Some").presence, 1);
     }
 
     #[test]
@@ -396,7 +400,7 @@ mod tests {
     }
 
     #[test]
-    fn test_gen_presence_entry_roundtrip() {
+    fn test_gen_presence_entry_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let entry = gen::gateway::PresenceEntry {
             host: Some("myhost".into()),
             ts: 1700000000,
@@ -404,16 +408,17 @@ mod tests {
             roles: vec!["owner".into()],
             ..Default::default()
         };
-        let json = serde_json::to_string(&entry).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&entry)?;
+        let parsed: serde_json::Value = serde_json::from_str(&json)?;
         assert_eq!(parsed["host"], "myhost");
         assert_eq!(parsed["ts"], 1700000000u64);
         assert_eq!(parsed["tags"][0], "admin");
         assert_eq!(parsed["roles"][0], "owner");
+        Ok(())
     }
 
     #[test]
-    fn test_gen_channel_roundtrip() {
+    fn test_gen_channel_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let meta = gen::channel::ChannelMeta {
             id: "telegram".into(),
             label: "Telegram".into(),
@@ -422,12 +427,13 @@ mod tests {
             blurb: "Telegram Bot API".into(),
             ..Default::default()
         };
-        let json = serde_json::to_string(&meta).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&meta)?;
+        let parsed: serde_json::Value = serde_json::from_str(&json)?;
         assert_eq!(parsed["id"], "telegram");
         assert_eq!(parsed["label"], "Telegram");
         // prost + serde uses snake_case field names by default.
         assert_eq!(parsed["selection_label"], "Telegram Bot");
+        Ok(())
     }
 
     #[test]
@@ -438,13 +444,14 @@ mod tests {
     }
 
     #[test]
-    fn test_zero_seq_accepted() {
+    fn test_zero_seq_accepted() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{"type":"event","event":"health","seq":0}"#;
-        let frame = validate_frame(json).unwrap();
+        let frame = validate_frame(json)?;
         match frame {
             GatewayFrame::Event(ev) => assert_eq!(ev.seq, Some(0)),
             _ => panic!("expected event frame"),
         }
+        Ok(())
     }
 
     #[test]
@@ -497,7 +504,7 @@ mod tests {
                     "method": method,
                     "params": { "key": "value" }
                 }).to_string();
-                let frame = validate_frame(&json).unwrap();
+                let frame = validate_frame(&json).expect("valid request json should parse");
                 match frame {
                     GatewayFrame::Request(req) => {
                         prop_assert_eq!(req.id, id);
@@ -518,7 +525,7 @@ mod tests {
                     "ok": ok,
                     "payload": null
                 }).to_string();
-                let frame = validate_frame(&json).unwrap();
+                let frame = validate_frame(&json).expect("valid response json should parse");
                 match frame {
                     GatewayFrame::Response(res) => {
                         prop_assert_eq!(res.id, id);
@@ -541,7 +548,7 @@ mod tests {
                     obj["seq"] = serde_json::json!(s);
                 }
                 let json = obj.to_string();
-                let frame = validate_frame(&json).unwrap();
+                let frame = validate_frame(&json).expect("valid event json should parse");
                 match frame {
                     GatewayFrame::Event(ev) => {
                         prop_assert_eq!(ev.event, event);

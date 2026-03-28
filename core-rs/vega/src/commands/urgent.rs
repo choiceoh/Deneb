@@ -313,7 +313,7 @@ mod tests {
         assert_eq!(&today[4..5], "-");
         assert_eq!(&today[7..8], "-");
         // Year should be reasonable
-        let year: i32 = today[0..4].parse().unwrap();
+        let year: i32 = today[0..4].parse().expect("year as i32");
         assert!(year >= 2024 && year <= 2100);
     }
 }

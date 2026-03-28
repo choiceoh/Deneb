@@ -316,31 +316,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_assembly_lifecycle() {
+    fn test_assembly_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
         let handle = context_assembly_new(1, 10_000, 8);
         assert!(handle > 0);
 
         let cmd_json = context_assembly_start(handle);
-        let cmd: AssemblyCommand = serde_json::from_str(&cmd_json).unwrap();
+        let cmd: AssemblyCommand = serde_json::from_str(&cmd_json)?;
         assert!(matches!(cmd, AssemblyCommand::FetchContextItems { .. }));
 
         // Empty items → Done
         let resp =
-            serde_json::to_string(&AssemblyResponse::ContextItems { items: vec![] }).unwrap();
+            serde_json::to_string(&AssemblyResponse::ContextItems { items: vec![] })?;
         let cmd_json = context_assembly_step(handle, resp);
-        let cmd: AssemblyCommand = serde_json::from_str(&cmd_json).unwrap();
+        let cmd: AssemblyCommand = serde_json::from_str(&cmd_json)?;
         assert!(matches!(cmd, AssemblyCommand::Done { .. }));
 
         context_engine_drop(handle);
+        Ok(())
     }
 
     #[test]
-    fn test_expand_lifecycle() {
+    fn test_expand_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
         let handle = context_expand_new("sum_abc".to_string(), 1, true, 10_000);
         assert!(handle > 0);
 
         let cmd_json = context_expand_start(handle);
-        let cmd: RetrievalCommand = serde_json::from_str(&cmd_json).unwrap();
+        let cmd: RetrievalCommand = serde_json::from_str(&cmd_json)?;
         assert!(matches!(cmd, RetrievalCommand::FetchSummary { .. }));
 
         // Leaf summary → fetch messages
@@ -350,17 +351,17 @@ mod tests {
             depth: 0,
             content: "content".to_string(),
             token_count: 100,
-        })
-        .unwrap();
+        })?;
         let cmd_json = context_expand_step(handle, resp);
-        let cmd: RetrievalCommand = serde_json::from_str(&cmd_json).unwrap();
+        let cmd: RetrievalCommand = serde_json::from_str(&cmd_json)?;
         assert!(matches!(cmd, RetrievalCommand::FetchSourceMessages { .. }));
 
         context_engine_drop(handle);
+        Ok(())
     }
 
     #[test]
-    fn test_grep_lifecycle() {
+    fn test_grep_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
         let handle = context_grep_new(
             "test".to_string(),
             "regex".to_string(),
@@ -373,38 +374,42 @@ mod tests {
         assert!(handle > 0);
 
         let cmd_json = context_grep_start(handle);
-        let cmd: RetrievalCommand = serde_json::from_str(&cmd_json).unwrap();
+        let cmd: RetrievalCommand = serde_json::from_str(&cmd_json)?;
         assert!(matches!(cmd, RetrievalCommand::Grep { .. }));
 
         context_engine_drop(handle);
+        Ok(())
     }
 
     #[test]
-    fn test_describe_lifecycle() {
+    fn test_describe_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
         let handle = context_describe_new("sum_xyz".to_string());
         assert!(handle > 0);
 
         let cmd_json = context_describe_start(handle);
-        let cmd: RetrievalCommand = serde_json::from_str(&cmd_json).unwrap();
+        let cmd: RetrievalCommand = serde_json::from_str(&cmd_json)?;
         assert!(matches!(cmd, RetrievalCommand::FetchLineage { .. }));
 
         context_engine_drop(handle);
+        Ok(())
     }
 
     #[test]
-    fn test_resolve_config_valid() {
+    fn test_resolve_config_valid() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{"contextThreshold": 0.5, "freshTailCount": 16}"#;
         let result = context_resolve_config(json.to_string());
-        let config: AuroraConfig = serde_json::from_str(&result).unwrap();
+        let config: AuroraConfig = serde_json::from_str(&result)?;
         assert_eq!(config.context_threshold, 0.5);
         assert_eq!(config.fresh_tail_count, 16);
+        Ok(())
     }
 
     #[test]
-    fn test_resolve_config_invalid_returns_defaults() {
+    fn test_resolve_config_invalid_returns_defaults() -> Result<(), Box<dyn std::error::Error>> {
         let result = context_resolve_config("not-json".to_string());
-        let config: AuroraConfig = serde_json::from_str(&result).unwrap();
+        let config: AuroraConfig = serde_json::from_str(&result)?;
         assert_eq!(config.context_threshold, 0.75);
+        Ok(())
     }
 
     #[test]

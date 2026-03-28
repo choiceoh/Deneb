@@ -313,21 +313,23 @@ mod tests {
     }
 
     #[test]
-    fn test_aurora_config_serde_roundtrip() {
+    fn test_aurora_config_serde_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let config = AuroraConfig::default();
-        let json = serde_json::to_string(&config).unwrap();
-        let parsed: AuroraConfig = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&config)?;
+        let parsed: AuroraConfig = serde_json::from_str(&json)?;
         assert_eq!(parsed.context_threshold, 0.75);
         assert_eq!(parsed.fresh_tail_count, 32);
+        Ok(())
     }
 
     #[test]
-    fn test_aurora_config_partial_json() {
+    fn test_aurora_config_partial_json() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{"contextThreshold": 0.5, "freshTailCount": 16}"#;
-        let config: AuroraConfig = serde_json::from_str(json).unwrap();
+        let config: AuroraConfig = serde_json::from_str(json)?;
         assert_eq!(config.context_threshold, 0.5);
         assert_eq!(config.fresh_tail_count, 16);
         assert_eq!(config.leaf_chunk_tokens, 30_000); // default
+        Ok(())
     }
 
     #[test]
@@ -355,7 +357,7 @@ mod tests {
     }
 
     #[test]
-    fn test_context_engine_info_serde() {
+    fn test_context_engine_info_serde() -> Result<(), Box<dyn std::error::Error>> {
         let info = ContextEngineInfo {
             id: "aurora".to_string(),
             name: "Aurora Context Engine".to_string(),
@@ -363,14 +365,15 @@ mod tests {
             owns_compaction: Some(true),
             accepts_session_key: Some(true),
         };
-        let json = serde_json::to_string(&info).unwrap();
-        let parsed: ContextEngineInfo = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&info)?;
+        let parsed: ContextEngineInfo = serde_json::from_str(&json)?;
         assert_eq!(parsed.id, "aurora");
         assert_eq!(parsed.accepts_session_key, Some(true));
+        Ok(())
     }
 
     #[test]
-    fn test_assemble_result_serde() {
+    fn test_assemble_result_serde() -> Result<(), Box<dyn std::error::Error>> {
         let result = AssembleResult {
             estimated_tokens: 5000,
             raw_message_count: 10,
@@ -379,9 +382,10 @@ mod tests {
             system_prompt_addition: Some("guidance".to_string()),
             selected_item_ids: vec!["msg_1".to_string(), "sum_abc".to_string()],
         };
-        let json = serde_json::to_string(&result).unwrap();
-        let parsed: AssembleResult = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&result)?;
+        let parsed: AssembleResult = serde_json::from_str(&json)?;
         assert_eq!(parsed.estimated_tokens, 5000);
         assert_eq!(parsed.selected_item_ids.len(), 2);
+        Ok(())
     }
 }

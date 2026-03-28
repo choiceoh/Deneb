@@ -717,18 +717,32 @@ mod tests {
     fn test_build_ai_hint_search_no_results() {
         let data = json!({"result_count": {"projects": 0}});
         let hint = build_ai_hint("search", &data);
-        let hints = hint.get("hints").unwrap().as_array().unwrap();
+        let hints = hint
+            .get("hints")
+            .expect("hints field should be present")
+            .as_array()
+            .expect("hints should be an array");
         assert!(!hints.is_empty());
-        assert_eq!(hints[0].get("situation").unwrap(), "no_results");
+        assert_eq!(
+            hints[0].get("situation").expect("situation field should be present"),
+            "no_results"
+        );
     }
 
     #[test]
     fn test_build_ai_hint_urgent_critical() {
         let data = json!({"critical": 3, "total": 5});
         let hint = build_ai_hint("urgent", &data);
-        let hints = hint.get("hints").unwrap().as_array().unwrap();
+        let hints = hint
+            .get("hints")
+            .expect("hints field should be present")
+            .as_array()
+            .expect("hints should be an array");
         assert!(!hints.is_empty());
-        assert_eq!(hints[0].get("situation").unwrap(), "has_critical");
+        assert_eq!(
+            hints[0].get("situation").expect("situation field should be present"),
+            "has_critical"
+        );
     }
 
     #[test]
@@ -750,7 +764,11 @@ mod tests {
     fn test_apply_format_ids() {
         let data = json!({"projects": [{"id": 1}, {"id": 2}]});
         let result = apply_format(&data, "search", "ids");
-        let ids = result.get("ids").unwrap().as_array().unwrap();
+        let ids = result
+            .get("ids")
+            .expect("ids field should be present")
+            .as_array()
+            .expect("ids should be an array");
         assert_eq!(ids.len(), 2);
     }
 

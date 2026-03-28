@@ -237,29 +237,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_schema_creation() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_db(&conn).unwrap();
-        assert!(check_schema_version(&conn).unwrap());
+    fn test_schema_creation() -> Result<(), Box<dyn std::error::Error>> {
+        let conn = Connection::open_in_memory()?;
+        init_db(&conn)?;
+        assert!(check_schema_version(&conn)?);
+        Ok(())
     }
 
     #[test]
-    fn test_fts_triggers_work() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_db(&conn).unwrap();
+    fn test_fts_triggers_work() -> Result<(), Box<dyn std::error::Error>> {
+        let conn = Connection::open_in_memory()?;
+        init_db(&conn)?;
 
         // Insert a project and chunk — FTS trigger should fire
         conn.execute(
             "INSERT INTO projects (name, client, status) VALUES (?1, ?2, ?3)",
             rusqlite::params!["Test Project", "Test Client", "진행중"],
-        )
-        .unwrap();
+        )?;
         conn.execute(
             "INSERT INTO chunks (project_id, section_heading, content, chunk_type)
              VALUES (1, '개요', 'Test content', 'status')",
             [],
-        )
-        .unwrap();
+        )?;
 
         // FTS should find the chunk
         let count: i64 = conn
@@ -267,29 +266,27 @@ mod tests {
                 "SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH '\"Test\"'",
                 [],
                 |r| r.get(0),
-            )
-            .unwrap();
+            )?;
         assert!(count > 0, "FTS trigger should have indexed the chunk");
+        Ok(())
     }
 
     #[test]
-    fn test_rebuild_fts() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_db(&conn).unwrap();
+    fn test_rebuild_fts() -> Result<(), Box<dyn std::error::Error>> {
+        let conn = Connection::open_in_memory()?;
+        init_db(&conn)?;
 
         conn.execute(
             "INSERT INTO projects (name, client) VALUES ('TestProj', 'Client')",
             [],
-        )
-        .unwrap();
+        )?;
         conn.execute(
             "INSERT INTO chunks (project_id, section_heading, content, chunk_type)
              VALUES (1, '섹션', '내용 테스트', 'other')",
             [],
-        )
-        .unwrap();
+        )?;
 
-        rebuild_fts(&conn).unwrap();
+        rebuild_fts(&conn)?;
 
         // Verify FTS works by searching (COUNT(*) on external-content FTS reads
         // from the content table, but MATCH queries use the actual index)
@@ -298,8 +295,8 @@ mod tests {
                 "SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH '\"TestProj\"'",
                 [],
                 |r| r.get(0),
-            )
-            .unwrap();
+            )?;
         assert!(count > 0, "FTS should find rebuilt index data");
+        Ok(())
     }
 }

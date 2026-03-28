@@ -631,30 +631,33 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_params_valid_sessions_list() {
-        let result = validate_params("sessions.list", "{}").unwrap();
+    fn test_validate_params_valid_sessions_list() -> Result<(), Box<dyn std::error::Error>> {
+        let result = validate_params("sessions.list", "{}")?;
         assert!(
             result.valid,
             "empty object should be valid for sessions.list (all fields optional)"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_validate_params_additional_properties() {
-        let result = validate_params("sessions.list", r#"{"unknownField": true}"#).unwrap();
+    fn test_validate_params_additional_properties() -> Result<(), Box<dyn std::error::Error>> {
+        let result = validate_params("sessions.list", r#"{"unknownField": true}"#)?;
         assert!(!result.valid, "unknown properties should fail");
         assert_eq!(result.errors[0].keyword, "additionalProperties");
+        Ok(())
     }
 
     #[test]
-    fn test_validation_result_serialization() {
+    fn test_validation_result_serialization() -> Result<(), Box<dyn std::error::Error>> {
         let result = ValidationResult::from_errors(vec![ValidationError {
             path: "/key".to_string(),
             message: "must be non-empty".to_string(),
             keyword: "minLength",
         }]);
-        let json = serde_json::to_string(&result).unwrap();
+        let json = serde_json::to_string(&result)?;
         assert!(json.contains("\"valid\":false"));
         assert!(json.contains("\"minLength\""));
+        Ok(())
     }
 }
