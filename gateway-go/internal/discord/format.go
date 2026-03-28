@@ -34,6 +34,15 @@ func ChunkText(text string, maxLen int) []string {
 		remaining = remaining[splitAt:]
 	}
 
+	// Rebalance fence tokens across adjacent chunks when a closing fence lands at
+	// the very beginning of the next chunk.
+	for i := 0; i+1 < len(chunks); i++ {
+		if strings.Count(chunks[i], "```")%2 == 1 && strings.HasPrefix(chunks[i+1], "```") {
+			chunks[i] += "```"
+			chunks[i+1] = chunks[i+1][3:]
+		}
+	}
+
 	return chunks
 }
 
@@ -49,7 +58,7 @@ func findCodeBlockAwareSplit(text string, maxLen int) int {
 	}
 
 	// We're inside a code block. Try to split before the code block starts.
-	if openIdx > maxLen/4 {
+	if openIdx >= maxLen/4 {
 		// Find good split point before the code block.
 		before := text[:openIdx]
 		if idx := strings.LastIndex(before, "\n\n"); idx > maxLen/4 {
@@ -62,13 +71,21 @@ func findCodeBlockAwareSplit(text string, maxLen int) int {
 	}
 
 	// Code block starts near the beginning — split inside it but preserve markers.
-	// Close the block at split point and add a continuation note.
+	// Prefer splitting right after a closing fence if one exists in range.
+	if closeIdx := strings.Index(text[openIdx+3:], "```"); closeIdx >= 0 {
+		closePos := openIdx + 3 + closeIdx + 3
+		// Prefer keeping fences balanced, even if that means one oversized chunk.
+		// This path triggers only when a code block starts near the chunk start.
+		if closePos <= maxLen*2 {
+			// Split immediately after the closing fence so the chunk remains balanced.
+			return closePos
+		}
+	}
+
+	// Otherwise split on line boundaries inside the block.
 	lineEnd := strings.LastIndex(text[:maxLen], "\n")
 	if lineEnd > openIdx {
-		// Insert closing ``` at the line boundary.
-		// The caller will need to re-open the code block in the next chunk.
-		// We handle this by appending closing markers.
-		_ = lang // lang available for continuation if needed
+		_ = lang // retained for potential future continuation strategy.
 		return lineEnd + 1
 	}
 
@@ -214,11 +231,6 @@ type FormattedReply struct {
 // If the reply contains a single large code block (>1500 chars), it extracts
 // the code block as a file attachment and replaces it with a summary.
 func FormatReply(text string) FormattedReply {
-	// If text fits in a single message, send as-is.
-	if len(text) <= TextChunkLimit {
-		return FormattedReply{Text: text}
-	}
-
 	// Try to extract a dominant code block.
 	block, lang, before, after := extractLargestCodeBlock(text)
 	if block == "" || len(block) < 800 {
@@ -340,4 +352,3 @@ func langToFileExt(lang string) string {
 		return ".txt"
 	}
 }
-
