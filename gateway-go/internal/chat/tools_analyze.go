@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // --- Code analysis tool ---
@@ -59,8 +61,8 @@ func analyzeToolSchema() map[string]any {
 func toolAnalyze(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p analyzeParams
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid analyze params: %w", err)
+		if err := jsonutil.UnmarshalInto("analyze params", input, &p); err != nil {
+			return "", err
 		}
 
 		switch p.Action {

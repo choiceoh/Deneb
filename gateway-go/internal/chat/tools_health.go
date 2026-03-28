@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // healthCheckToolSchema returns the JSON Schema for the health_check tool.
@@ -30,8 +31,8 @@ func toolHealthCheck(deps *CoreToolDeps) ToolFunc {
 		var p struct {
 			Component string `json:"component"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid health_check params: %w", err)
+		if err := jsonutil.UnmarshalInto("health_check params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Component == "" {
 			p.Component = "all"

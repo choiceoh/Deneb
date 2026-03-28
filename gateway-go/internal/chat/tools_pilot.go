@@ -303,8 +303,8 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 		logger := slog.Default()
 
 		var p pilotParams
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid pilot input: %w", err)
+		if err := jsonutil.UnmarshalInto("pilot params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Task == "" {
 			return "", fmt.Errorf("task is required")
