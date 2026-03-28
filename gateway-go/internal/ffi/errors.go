@@ -5,22 +5,9 @@ import (
 	"unsafe"
 )
 
-// FFI return codes from core-rs C ABI functions.
-// These MUST stay in sync with the Rust definitions in:
-//   - core-rs/core/src/lib.rs          (C ABI return values)
-//   - core-rs/core/src/protocol/error_codes.rs (canonical Rust error codes)
-// When adding a new code here, mirror it in both Rust files and run:
-//   make error-code-sync
-const (
-	rcNullPointer    = -1
-	rcInvalidUTF8    = -2
-	rcOutputTooSmall = -3
-	rcInputTooLarge  = -4
-	rcJSONError      = -5
-	rcOverflow       = -6
-	rcValidation     = -7
-	rcRustPanic      = -99
-)
+// FFI return codes are defined in ffi_error_codes_gen.go (auto-generated from
+// core-rs/core/src/ffi_utils.rs). To add or modify a code, edit ffi_utils.rs
+// and run: make ffi-gen
 
 // maxGrowBufSize is the upper limit for automatic buffer growth (16 MB).
 const maxGrowBufSize = 16 * 1024 * 1024

@@ -10,14 +10,14 @@
 /// Prevents DoS via pathologically large inputs.
 pub(crate) const FFI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
 
-pub(crate) const FFI_ERR_NULL_PTR: i32 = -1;
+pub(crate) const FFI_ERR_NULL_POINTER: i32 = -1;
 pub(crate) const FFI_ERR_INVALID_UTF8: i32 = -2;
 pub(crate) const FFI_ERR_OUTPUT_TOO_SMALL: i32 = -3;
 pub(crate) const FFI_ERR_INPUT_TOO_LARGE: i32 = -4;
-pub(crate) const FFI_ERR_JSON: i32 = -5;
+pub(crate) const FFI_ERR_JSON_ERROR: i32 = -5;
 pub(crate) const FFI_ERR_OVERFLOW: i32 = -6;
 pub(crate) const FFI_ERR_VALIDATION: i32 = -7;
-pub(crate) const FFI_ERR_PANIC: i32 = -99;
+pub(crate) const FFI_ERR_RUST_PANIC: i32 = -99;
 
 /// Wraps an FFI body in `catch_unwind` to prevent Rust panics from aborting
 /// the Go process. Returns `panic_rc` if the closure panics.
