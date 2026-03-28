@@ -112,7 +112,7 @@
 Rust workspace with 4 crates, exposed to Go via C FFI (CGo static linking).
 
 **deneb-core** (main crate, `core/`):
-- `src/lib.rs` — 30+ C FFI exports (`deneb_*` functions). Error codes synced with `gateway-go/internal/ffi/errors.go`.
+- `src/lib.rs` — 30+ C FFI exports (`deneb_*` functions). FFI error codes generated from `ffi_utils.rs`; protocol `ErrorCode` generated from `proto/gateway.proto`.
 - `src/protocol/` — Gateway frame validation. Types: `RequestFrame`, `ResponseFrame`, `EventFrame`, `ErrorShape`, `StateVersion`.
 - `src/security/` — `constant_time_eq`, `sanitize_html`, `is_safe_url` (SSRF), `is_valid_session_key`.
 - `src/media/` — Magic-byte MIME detection (21 formats), MIME-to-extension mapping (35+ types), `MediaCategory`.

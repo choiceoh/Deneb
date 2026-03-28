@@ -40,7 +40,8 @@ Rust core is linked as a static library via CGo. Each FFI module has two files:
 
 Modules: `core`, `memory`, `markdown`, `parsing`, `context_engine`, `compaction`, `vega`
 
-Error codes in `internal/ffi/errors.go` must stay in sync with Rust (`core-rs/core/src/protocol/error_codes.rs`) and Proto (`proto/gateway.proto`).
+FFI error codes in `internal/ffi/ffi_error_codes_gen.go` are generated from `core-rs/core/src/ffi_utils.rs` via `make ffi-gen`.
+Protocol error codes (`ErrorCode` enum) are defined in `proto/gateway.proto` and auto-generated into `core-rs/core/src/protocol/error_codes.rs` via `make proto-error-codes-gen`.
 
 ## Common Tasks
 
