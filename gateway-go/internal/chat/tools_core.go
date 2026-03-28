@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -172,6 +173,30 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Description: "Git diff and file comparison. Modes: staged, unstaged, all (vs HEAD), commit (show commit), branch (compare branches), files (compare two files). Options: stat_only, context_lines, path filter",
 		InputSchema: diffToolSchema(),
 		Fn:          toolDiff(workspaceDir),
+	})
+
+	// -- Git tool (structured git operations, complements diff) --
+	registry.RegisterTool(ToolDef{
+		Name:        "git",
+		Description: "Git operations: status, commit, log, branch, stash, blame, tag, merge, rebase, cherry_pick, reset, remote, clean. Use diff tool for viewing diffs, apply_patch for applying patches",
+		InputSchema: gitToolSchema(),
+		Fn:          toolGit(workspaceDir),
+	})
+
+	// -- Code analysis tool (Go AST + regex-based for Rust/others) --
+	registry.RegisterTool(ToolDef{
+		Name:        "analyze",
+		Description: "Code analysis: outline (file structure), symbols (find definitions), references (find usages), imports (dependency graph), signature (function signatures). Supports Go (AST) and Rust (regex)",
+		InputSchema: analyzeToolSchema(),
+		Fn:          toolAnalyze(workspaceDir),
+	})
+
+	// -- Test/build runner tool --
+	registry.RegisterTool(ToolDef{
+		Name:        "test",
+		Description: "Run tests/builds with structured results. Actions: run (tests with pass/fail/skip counts), build (compile check), check (lint/vet). Frameworks: go, cargo, make. Parses go test -json for structured output",
+		InputSchema: testToolSchema(),
+		Fn:          toolTest(workspaceDir),
 	})
 
 	// -- Cron tool --
@@ -351,6 +376,11 @@ func execToolSchema() map[string]any {
 				"description": "Run in background immediately, then use process tool to check output",
 				"default":     false,
 			},
+			"structured": map[string]any{
+				"type":        "boolean",
+				"description": "Return JSON with stdout, stderr, exit_code, runtime_ms instead of plain text",
+				"default":     false,
+			},
 		},
 		"required": []string{"command"},
 	}
@@ -363,6 +393,7 @@ func toolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 			Workdir    string  `json:"workdir"`
 			Timeout    float64 `json:"timeout"`
 			Background bool    `json:"background"`
+			Structured bool    `json:"structured"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("invalid exec params: %w", err)
@@ -374,6 +405,11 @@ func toolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 		workDir := p.Workdir
 		if workDir == "" {
 			workDir = defaultDir
+		}
+
+		// Validate working directory exists.
+		if info, err := os.Stat(workDir); err != nil || !info.IsDir() {
+			return "", fmt.Errorf("working directory does not exist: %s", workDir)
 		}
 
 		timeoutMs := int64(30000)
@@ -392,20 +428,61 @@ func toolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 				WorkingDir: workDir,
 				TimeoutMs:  timeoutMs,
 			})
+			if p.Structured {
+				return formatExecResultJSON(result), nil
+			}
 			return formatExecResult(result), nil
 		}
 
 		// Fallback: direct exec without process manager.
 		execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 		defer cancel()
+		start := time.Now()
 		cmd := exec.CommandContext(execCtx, "bash", "-c", p.Command)
 		cmd.Dir = workDir
 		out, err := cmd.CombinedOutput()
+		elapsed := time.Since(start)
+
+		if p.Structured {
+			exitCode := 0
+			if err != nil {
+				if exitErr, ok := err.(*exec.ExitError); ok {
+					exitCode = exitErr.ExitCode()
+				} else {
+					exitCode = -1
+				}
+			}
+			result := map[string]any{
+				"stdout":     string(out),
+				"stderr":     "",
+				"exit_code":  exitCode,
+				"runtime_ms": elapsed.Milliseconds(),
+				"timed_out":  execCtx.Err() != nil,
+			}
+			data, _ := json.MarshalIndent(result, "", "  ")
+			return string(data), nil
+		}
+
 		if err != nil {
 			return fmt.Sprintf("%s\n\nError: %s", string(out), err.Error()), nil
 		}
 		return string(out), nil
 	}
+}
+
+// formatExecResultJSON returns process manager result as JSON.
+func formatExecResultJSON(r *process.ExecResult) string {
+	result := map[string]any{
+		"stdout":     r.Stdout,
+		"stderr":     r.Stderr,
+		"exit_code":  r.ExitCode,
+		"runtime_ms": r.RuntimeMs,
+	}
+	if r.Error != "" {
+		result["error"] = r.Error
+	}
+	data, _ := json.MarshalIndent(result, "", "  ")
+	return string(data)
 }
 
 func formatExecResult(r *process.ExecResult) string {
