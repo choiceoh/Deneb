@@ -26,9 +26,15 @@
       "csp": null
     }
   },
+  "bundle": {
+    "active": true,
+    "icon": []
+  },
   "plugins": {
     "updater": {
-      "endpoints": ["https://github.com/choiceoh/deneb/releases/latest/download/latest.json"],
+      "endpoints": [
+        "https://github.com/choiceoh/deneb/releases/latest/download/latest.json"
+      ],
       "pubkey": ""
     }
   }
