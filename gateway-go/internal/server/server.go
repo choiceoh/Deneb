@@ -50,6 +50,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
+	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
@@ -123,6 +124,7 @@ type Server struct {
 	usageTracker *usage.Tracker
 	maintRunner  *maintenance.Runner
 	telegramPlug *telegram.Plugin
+	discordPlug  *discord.Plugin
 
 	// Phase 4: Native agent execution.
 	jobTracker *agent.JobTracker

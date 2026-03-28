@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -568,6 +569,20 @@ func (s *Server) registerNativeSystemMethods(denebDir string) {
 	// Wire Telegram update handler → autoreply preprocessing → chat.send pipeline.
 	if s.telegramPlug != nil && s.chatHandler != nil {
 		s.wireTelegramChatHandler()
+	}
+
+	// Discord native channel plugin (coding-focused).
+	if s.runtimeCfg != nil {
+		dcCfg := loadDiscordConfig(s.runtimeCfg)
+		if dcCfg != nil && dcCfg.BotToken != "" {
+			s.discordPlug = discord.NewPlugin(dcCfg, s.logger)
+			s.channels.Register(s.discordPlug)
+		}
+	}
+
+	// Wire Discord message handler → chat.send pipeline.
+	if s.discordPlug != nil && s.chatHandler != nil {
+		s.wireDiscordChatHandler()
 	}
 
 }

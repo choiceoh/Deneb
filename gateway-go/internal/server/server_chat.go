@@ -13,8 +13,10 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 func (s *Server) initGmailPoll() {
@@ -237,6 +239,177 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 		return nil
 	}
 	return root.Channels.Telegram
+}
+
+// wireDiscordChatHandler connects the Discord Gateway message handler to the
+// chat handler for coding-focused agent sessions. It wraps the existing
+// channel handlers so both Telegram and Discord can coexist.
+func (s *Server) wireDiscordChatHandler() {
+	// Recent-send dedup cache.
+	var recentMu sync.Mutex
+	recentSends := make(map[string]time.Time)
+	const recentTTL = 10 * time.Second
+
+	// Chain reply function: wraps existing replyFunc to add Discord support.
+	prevReply := s.chatHandler.ReplyFunc()
+	s.chatHandler.SetReplyFunc(func(ctx context.Context, delivery *chat.DeliveryContext, text string) error {
+		if delivery == nil || delivery.Channel != "discord" {
+			if prevReply != nil {
+				return prevReply(ctx, delivery, text)
+			}
+			return nil
+		}
+		client := s.discordPlug.Client()
+		if client == nil {
+			return fmt.Errorf("discord client not connected")
+		}
+
+		// Dedup.
+		dedupKey := delivery.To + ":" + truncateForDedup(text, 200)
+		recentMu.Lock()
+		if sentAt, dup := recentSends[dedupKey]; dup && time.Since(sentAt) < recentTTL {
+			recentMu.Unlock()
+			return nil
+		}
+		for k, t := range recentSends {
+			if time.Since(t) >= recentTTL {
+				delete(recentSends, k)
+			}
+		}
+		recentSends[dedupKey] = time.Now()
+		recentMu.Unlock()
+
+		_, err := discord.SendText(ctx, client, delivery.To, text, delivery.MessageID)
+		return err
+	})
+
+	// Chain media send function.
+	prevMedia := s.chatHandler.MediaSendFunc()
+	s.chatHandler.SetMediaSendFunc(func(ctx context.Context, delivery *chat.DeliveryContext, filePath, mediaType, caption string, silent bool) error {
+		if delivery == nil || delivery.Channel != "discord" {
+			if prevMedia != nil {
+				return prevMedia(ctx, delivery, filePath, mediaType, caption, silent)
+			}
+			return nil
+		}
+		client := s.discordPlug.Client()
+		if client == nil {
+			return fmt.Errorf("discord client not connected")
+		}
+
+		fileData, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("read file: %w", err)
+		}
+
+		fileName := filepath.Base(filePath)
+		_, err = client.SendMessageWithFile(ctx, delivery.To, caption, fileName, fileData)
+		return err
+	})
+
+	// Chain typing indicator.
+	prevTyping := s.chatHandler.TypingFunc()
+	s.chatHandler.SetTypingFunc(func(ctx context.Context, delivery *chat.DeliveryContext) error {
+		if delivery == nil || delivery.Channel != "discord" {
+			if prevTyping != nil {
+				return prevTyping(ctx, delivery)
+			}
+			return nil
+		}
+		client := s.discordPlug.Client()
+		if client == nil {
+			return nil
+		}
+		return client.TriggerTyping(ctx, delivery.To)
+	})
+
+	// Chain reaction function.
+	prevReaction := s.chatHandler.ReactionFunc()
+	s.chatHandler.SetReactionFunc(func(ctx context.Context, delivery *chat.DeliveryContext, emoji string) error {
+		if delivery == nil || delivery.Channel != "discord" || delivery.MessageID == "" {
+			if prevReaction != nil {
+				return prevReaction(ctx, delivery, emoji)
+			}
+			return nil
+		}
+		client := s.discordPlug.Client()
+		if client == nil {
+			return nil
+		}
+		return client.CreateReaction(ctx, delivery.To, delivery.MessageID, emoji)
+	})
+
+	// Set message handler: routes Discord messages to the chat pipeline.
+	s.discordPlug.SetHandler(func(_ context.Context, msg *discord.Message) {
+		if msg == nil || msg.Content == "" {
+			return
+		}
+
+		// Build session key from channel ID.
+		sessionKey := "discord:" + msg.ChannelID
+
+		// Build delivery context.
+		delivery := map[string]any{
+			"channel":   "discord",
+			"to":        msg.ChannelID,
+			"messageId": msg.ID,
+		}
+		if msg.Author != nil {
+			delivery["accountId"] = msg.Author.ID
+		}
+
+		// Build chat.send params.
+		sendParams := map[string]any{
+			"sessionKey": sessionKey,
+			"message":    msg.Content,
+			"delivery":   delivery,
+		}
+
+		req, err := protocol.NewRequestFrame(
+			"dc-"+msg.ChannelID+"-"+msg.ID,
+			"chat.send",
+			sendParams,
+		)
+		if err != nil {
+			s.logger.Error("failed to build chat.send request for discord", "error", err)
+			return
+		}
+
+		sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer sendCancel()
+		resp := s.chatHandler.Send(sendCtx, req)
+		if resp != nil && !resp.OK {
+			s.logger.Warn("chat.send failed for discord message",
+				"channelId", msg.ChannelID,
+				"error", resp.Error,
+			)
+		}
+	})
+
+	s.logger.Info("discord chat handler wired (coding channel)")
+}
+
+// loadDiscordConfig extracts Discord channel config from deneb.json.
+// Returns nil if Discord is not configured.
+func loadDiscordConfig(_ *config.GatewayRuntimeConfig) *discord.Config {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || !snapshot.Valid {
+		return nil
+	}
+
+	if snapshot.Raw == "" {
+		return nil
+	}
+
+	var root struct {
+		Channels struct {
+			Discord *discord.Config `json:"discord"`
+		} `json:"channels"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		return nil
+	}
+	return root.Channels.Discord
 }
 
 // loadProviderConfigs reads LLM provider configs (apiKey, baseUrl, api) from deneb.json.

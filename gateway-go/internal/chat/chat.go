@@ -246,6 +246,26 @@ func (h *Handler) SetReactionFunc(fn ReactionFunc) {
 	h.reactionFn = fn
 }
 
+// ReplyFunc returns the current reply function (for chaining).
+func (h *Handler) ReplyFunc() ReplyFunc {
+	return h.replyFunc
+}
+
+// MediaSendFunc returns the current media send function (for chaining).
+func (h *Handler) MediaSendFunc() MediaSendFunc {
+	return h.mediaSendFn
+}
+
+// TypingFunc returns the current typing function (for chaining).
+func (h *Handler) TypingFunc() TypingFunc {
+	return h.typingFn
+}
+
+// ReactionFunc returns the current reaction function (for chaining).
+func (h *Handler) ReactionFunc() ReactionFunc {
+	return h.reactionFn
+}
+
 // DefaultModel returns the configured default LLM model name.
 func (h *Handler) DefaultModel() string {
 	return h.defaultModel
