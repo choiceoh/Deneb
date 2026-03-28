@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 
 use crate::config::VegaConfig;
 
-use super::{find_project_id, open_db, CommandResult};
+use super::{CommandContext, CommandResult};
 
 pub struct ShowHandler;
 
@@ -17,6 +17,11 @@ impl super::CommandHandler for ShowHandler {
 
 /// show: Display detailed project info.
 pub(super) fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
+    let ctx = match CommandContext::new(config) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err("show", &e),
+    };
+
     let project_id = args
         .get("id")
         .or_else(|| args.get("project_id"))
@@ -29,19 +34,14 @@ pub(super) fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
             if query.is_empty() {
                 return CommandResult::err("show", "프로젝트 ID 또는 이름이 필요합니다");
             }
-            match find_project_id(config, query) {
+            match ctx.find_project(query) {
                 Some(id) => id,
                 None => return CommandResult::err("show", &format!("프로젝트 '{}' 없음", query)),
             }
         }
     };
 
-    let conn = match open_db(config) {
-        Ok(c) => c,
-        Err(e) => return CommandResult::err("show", &e),
-    };
-
-    let proj = conn.query_row(
+    let proj = ctx.conn.query_row(
         "SELECT id, name, client, status, capacity, biz_type, person_internal, person_external, partner
          FROM projects WHERE id=?1",
         params![project_id],
@@ -66,7 +66,7 @@ pub(super) fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
     };
 
     // Chunks
-    let mut stmt = match conn
+    let mut stmt = match ctx.conn
         .prepare("SELECT section_heading, content, chunk_type, entry_date FROM chunks WHERE project_id=?1 ORDER BY id")
     {
         Ok(s) => s,
@@ -85,7 +85,7 @@ pub(super) fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
     };
 
     // Tags
-    let mut stmt = match conn.prepare(
+    let mut stmt = match ctx.conn.prepare(
         "SELECT DISTINCT t.name FROM tags t
              JOIN chunk_tags ct ON ct.tag_id = t.id
              JOIN chunks c ON c.id = ct.chunk_id
@@ -100,7 +100,7 @@ pub(super) fn cmd_show(args: &Value, config: &VegaConfig) -> CommandResult {
     };
 
     // Recent comms
-    let mut stmt = match conn
+    let mut stmt = match ctx.conn
         .prepare("SELECT log_date, sender, subject, summary FROM comm_log WHERE project_id=?1 ORDER BY log_date DESC LIMIT 10")
     {
         Ok(s) => s,

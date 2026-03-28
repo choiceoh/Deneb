@@ -1,12 +1,17 @@
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
-use super::{find_project_id, open_db, CommandResult};
+use super::{CommandContext, CommandResult};
 use crate::config::VegaConfig;
 
 /// Compare two projects: shared/unique vendors, materials, persons, tags.
 /// Args: { "project_a": "프로젝트A", "project_b": "프로젝트B" }
 pub fn cmd_compare(args: &Value, config: &VegaConfig) -> CommandResult {
+    let ctx = match CommandContext::new(config) {
+        Ok(c) => c,
+        Err(e) => return CommandResult::err("compare", &e),
+    };
+
     let proj_a = match args.get("project_a").and_then(|v| v.as_str()) {
         Some(s) => s.trim(),
         None => return CommandResult::err("compare", "project_a를 입력해주세요"),
@@ -16,7 +21,7 @@ pub fn cmd_compare(args: &Value, config: &VegaConfig) -> CommandResult {
         None => return CommandResult::err("compare", "project_b를 입력해주세요"),
     };
 
-    let id_a = match find_project_id(config, proj_a) {
+    let id_a = match ctx.find_project(proj_a) {
         Some(id) => id,
         None => {
             return CommandResult::err(
@@ -25,7 +30,7 @@ pub fn cmd_compare(args: &Value, config: &VegaConfig) -> CommandResult {
             )
         }
     };
-    let id_b = match find_project_id(config, proj_b) {
+    let id_b = match ctx.find_project(proj_b) {
         Some(id) => id,
         None => {
             return CommandResult::err(
@@ -35,16 +40,11 @@ pub fn cmd_compare(args: &Value, config: &VegaConfig) -> CommandResult {
         }
     };
 
-    let conn = match open_db(config) {
-        Ok(c) => c,
-        Err(e) => return CommandResult::err("compare", &e),
-    };
-
     // Compare each dimension
-    let vendors = compare_dimension(&conn, id_a, id_b, "vendor");
-    let materials = compare_dimension(&conn, id_a, id_b, "material");
-    let persons = compare_dimension(&conn, id_a, id_b, "person");
-    let tags = compare_tags(&conn, id_a, id_b);
+    let vendors = compare_dimension(&ctx.conn, id_a, id_b, "vendor");
+    let materials = compare_dimension(&ctx.conn, id_a, id_b, "material");
+    let persons = compare_dimension(&ctx.conn, id_a, id_b, "person");
+    let tags = compare_tags(&ctx.conn, id_a, id_b);
 
     CommandResult::ok(
         "compare",
@@ -138,25 +138,25 @@ fn compare_tags(conn: &Connection, id_a: i64, id_b: i64) -> Value {
 /// Project statistics: counts of projects, chunks, comm_logs, tags.
 /// Args: {} (no args needed)
 pub fn cmd_stats(_args: &Value, config: &VegaConfig) -> CommandResult {
-    let conn = match open_db(config) {
+    let ctx = match CommandContext::new(config) {
         Ok(c) => c,
         Err(e) => return CommandResult::err("stats", &e),
     };
 
-    let project_count = count_rows(&conn, "SELECT COUNT(*) FROM projects");
+    let project_count = count_rows(&ctx.conn, "SELECT COUNT(*) FROM projects");
     let active_count = count_rows(
-        &conn,
+        &ctx.conn,
         "SELECT COUNT(*) FROM projects WHERE status NOT LIKE '%완료%' AND status NOT LIKE '%중단%'",
     );
-    let chunk_count = count_rows(&conn, "SELECT COUNT(*) FROM chunks");
-    let comm_count = count_rows(&conn, "SELECT COUNT(*) FROM comm_log");
-    let tag_count = count_rows(&conn, "SELECT COUNT(*) FROM tags");
+    let chunk_count = count_rows(&ctx.conn, "SELECT COUNT(*) FROM chunks");
+    let comm_count = count_rows(&ctx.conn, "SELECT COUNT(*) FROM comm_log");
+    let tag_count = count_rows(&ctx.conn, "SELECT COUNT(*) FROM tags");
 
     // Chunk type breakdown
-    let chunk_types = get_chunk_type_counts(&conn);
+    let chunk_types = get_chunk_type_counts(&ctx.conn);
 
     // Status breakdown
-    let status_groups = get_status_counts(&conn);
+    let status_groups = get_status_counts(&ctx.conn);
 
     CommandResult::ok(
         "stats",
