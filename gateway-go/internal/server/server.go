@@ -1618,6 +1618,13 @@ func (s *Server) registerNativeSystemMethods(denebDir string) {
 // command detection, directive parsing, and normalization before reaching the
 // LLM agent.
 func (s *Server) wireTelegramChatHandler() {
+	// Recent-send dedup cache: prevents the same text from being delivered
+	// to the same chat twice within a short window (e.g. when the LLM uses
+	// the message tool AND also produces a text response without NO_REPLY).
+	var recentMu sync.Mutex
+	recentSends := make(map[string]time.Time) // key: "chatID:text[:200]"
+	const recentTTL = 10 * time.Second
+
 	// Set reply function: delivers assistant responses back to Telegram.
 	s.chatHandler.SetReplyFunc(func(ctx context.Context, delivery *chat.DeliveryContext, text string) error {
 		if delivery == nil || delivery.Channel != "telegram" {
@@ -1631,6 +1638,25 @@ func (s *Server) wireTelegramChatHandler() {
 		if err != nil {
 			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
 		}
+
+		// Dedup: skip if the same text was sent to this chat recently.
+		dedupKey := delivery.To + ":" + truncateForDedup(text, 200)
+		recentMu.Lock()
+		if sentAt, dup := recentSends[dedupKey]; dup && time.Since(sentAt) < recentTTL {
+			recentMu.Unlock()
+			s.logger.Info("suppressed duplicate reply to telegram",
+				"chatId", delivery.To, "textLen", len(text))
+			return nil
+		}
+		// Evict stale entries (cheap, single-user so map stays tiny).
+		for k, t := range recentSends {
+			if time.Since(t) >= recentTTL {
+				delete(recentSends, k)
+			}
+		}
+		recentSends[dedupKey] = time.Now()
+		recentMu.Unlock()
+
 		// Parse optional button directive from agent reply.
 		cleanText, keyboard := parseReplyButtons(text)
 		opts := telegram.SendOptions{ParseMode: "HTML", Keyboard: keyboard}
@@ -2298,4 +2324,12 @@ func (a *pluginRegistryAdapter) GetPluginHealth(id string) *protocol.PluginHealt
 		PluginID: p.ID,
 		Healthy:  p.Enabled,
 	}
+}
+
+// truncateForDedup returns at most maxLen bytes of s for use as a dedup key.
+func truncateForDedup(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen]
 }
