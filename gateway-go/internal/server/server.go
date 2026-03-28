@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
@@ -1013,10 +1014,18 @@ func (s *Server) registerPhase2Methods() {
 			chat.NewFileTranscriptStore(transcriptDir), 0)
 	}
 
+	// Initialize agent detail log writer.
+	var agentLogWriter *agentlog.Writer
+	if home, err := os.UserHomeDir(); err == nil {
+		agentLogWriter = agentlog.NewWriter(home + "/.deneb/agent-logs")
+		s.logger.Info("agent detail log initialized", "dir", home+"/.deneb/agent-logs")
+	}
+
 	chatCfg := chat.DefaultHandlerConfig()
 	chatCfg.Transcript = transcriptStore
 	chatCfg.Tools = chat.NewToolRegistry()
 	chatCfg.JobTracker = s.jobTracker
+	chatCfg.AgentLog = agentLogWriter
 
 	// Initialize Aurora compaction store.
 	auroraStore, err := aurora.NewStore(aurora.DefaultStoreConfig(), s.logger)
@@ -1108,6 +1117,7 @@ func (s *Server) registerPhase2Methods() {
 		Sessions:     s.sessions,
 		LLMClient:    chatCfg.LLMClient,
 		Transcript:   transcriptStore,
+		AgentLog:     agentLogWriter,
 	}
 
 	// Register core tools (file I/O, exec, process, sessions, gateway, cron, image).

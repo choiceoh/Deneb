@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -39,6 +40,10 @@ type CoreToolDeps struct {
 	// VegaBackend is the optional Vega search backend.
 	// The vega tool gracefully degrades when this is nil.
 	VegaBackend vega.Backend
+
+	// AgentLog is the optional agent detail log writer.
+	// The agent_logs tool gracefully degrades when this is nil.
+	AgentLog *agentlog.Writer
 }
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
@@ -319,6 +324,14 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Description: "Manage autonomous goals and execution cycles. Autonomous cycles let Deneb act without waiting for user input — essential for callbacks like sub-agent completion notifications, scheduled checks, and deferred task follow-ups that would otherwise stay unread until the user speaks. Actions: status, goals, add_goal, update_goal, remove_goal, cycle_run, cycle_stop, enable, disable, recent_runs",
 		InputSchema: autonomousToolSchema(),
 		Fn:          toolAutonomous(deps),
+	})
+
+	// -- Agent logs tool (query past run detail logs for diagnostics) --
+	registry.RegisterTool(ToolDef{
+		Name:        "agent_logs",
+		Description: "현재 세션의 이전 에이전트 런 상세 로그를 조회합니다. 문제 진단, 이전 실행 결과 확인, 도구 실행 시간 분석에 사용합니다",
+		InputSchema: agentLogsToolSchema(),
+		Fn:          toolAgentLogs(deps.AgentLog),
 	})
 
 	// -- Pilot tool (fast local AI that orchestrates other tools) --

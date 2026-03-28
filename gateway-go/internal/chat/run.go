@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -69,17 +70,18 @@ type runDeps struct {
 	providerConfigs map[string]ProviderConfig // optional; config-based provider credentials
 	logger          *slog.Logger              // required (defaults to slog.Default)
 
-	auroraStore     *aurora.Store            // optional; enables Aurora compaction
-	vegaBackend     vega.Backend            // optional; enables knowledge prefetch
-	memoryStore     *memory.Store            // optional; structured memory (Honcho-style)
-	memoryEmbedder  *memory.Embedder         // optional; fact embedding
-	goalStore       *autonomous.GoalStore    // optional; auto-goal creation from recalled facts
-	dreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
-	contextCfg    ContextConfig
-	compactionCfg CompactionConfig
-	defaultModel  string
-	defaultSystem string
-	maxTokens     int
+	auroraStore    *aurora.Store             // optional; enables Aurora compaction
+	vegaBackend    vega.Backend              // optional; enables knowledge prefetch
+	memoryStore    *memory.Store             // optional; structured memory (Honcho-style)
+	memoryEmbedder *memory.Embedder          // optional; fact embedding
+	goalStore      *autonomous.GoalStore     // optional; auto-goal creation from recalled facts
+	dreamTurnFn    func(ctx context.Context) // optional; increments dream turn via autonomous
+	agentLog       *agentlog.Writer          // optional; enables agent detail logging
+	contextCfg     ContextConfig
+	compactionCfg  CompactionConfig
+	defaultModel   string
+	defaultSystem  string
+	maxTokens      int
 }
 
 // runAgentAsync is the background goroutine that executes an agent run.
@@ -176,8 +178,11 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		statusCtrl.SetQueued()
 	}
 
+	// Create agent detail logger for this run.
+	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
+
 	// Run the agent and capture result.
-	result, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, statusCtrl, logger)
+	result, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, statusCtrl, logger, runLog)
 
 	// Stop typing indicator before delivering the reply.
 	if typingSignaler != nil {
@@ -191,7 +196,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			statusCtrl.SetError()
 			statusCtrl.CloseAfterDrain()
 		}
-		handleRunError(ctx, params, deps, broadcaster, logger, err, now)
+		handleRunError(ctx, params, deps, broadcaster, logger, err, now, runLog)
 		return
 	}
 
@@ -199,7 +204,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		statusCtrl.SetDone()
 		statusCtrl.CloseAfterDrain()
 	}
-	handleRunSuccess(ctx, params, deps, broadcaster, logger, result, now)
+	handleRunSuccess(ctx, params, deps, broadcaster, logger, result, now, runLog)
 }
 
 // executeAgentRun performs the core agent execution: persist user msg, assemble context,
@@ -212,6 +217,7 @@ func executeAgentRun(
 	typingSignaler *autoreply.FullTypingSignaler,
 	statusCtrl *channel.StatusReactionController,
 	logger *slog.Logger,
+	runLog *agentlog.RunLogger,
 ) (*AgentResult, error) {
 	runStart := time.Now()
 
@@ -369,6 +375,22 @@ func executeAgentRun(
 	providerID, modelName := parseModelID(model)
 	model = modelName
 
+	// Log run.start with resolved model/provider info.
+	runLog.LogStart(agentlog.RunStartData{
+		Model:    model,
+		Provider: providerID,
+		Message:  params.Message,
+		Channel:  deliveryChannel(params.Delivery),
+	})
+
+	// Log run.prep with context assembly metrics.
+	runLog.LogPrep(agentlog.RunPrepData{
+		SystemPromptChars: len(systemPrompt),
+		ContextMessages:   len(messages),
+		KnowledgeChars:    len(knowledgeAddition),
+		PrepMs:            time.Since(runStart).Milliseconds(),
+	})
+
 	// 7. Resolve LLM client from provider config, auth manager, or pre-configured client.
 	client, apiType := resolveClient(deps, providerID, logger)
 	if client == nil {
@@ -482,7 +504,7 @@ func executeAgentRun(
 		}
 
 		var runErr error
-		agentResult, runErr = RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger)
+		agentResult, runErr = RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
 		if runErr != nil {
 			// Check for context overflow error.
 			if isContextOverflow(runErr) && attempt < maxCompactionRetries {
@@ -509,7 +531,7 @@ func executeAgentRun(
 				fbCfg := cfg
 				fbCfg.Model = sglangModel
 				fbCfg.APIType = "openai"
-				agentResult, runErr = RunAgent(ctx, fbCfg, messages, fbClient, deps.tools, hooks, logger)
+				agentResult, runErr = RunAgent(ctx, fbCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
 				if runErr == nil {
 					break
 				}
@@ -540,7 +562,16 @@ func handleRunSuccess(
 	logger *slog.Logger,
 	result *AgentResult,
 	now int64,
+	runLog *agentlog.RunLogger,
 ) {
+	// Log run completion to agent detail log.
+	runLog.LogEnd(agentlog.RunEndData{
+		StopReason:   result.StopReason,
+		Turns:        result.Turns,
+		InputTokens:  result.Usage.InputTokens,
+		OutputTokens: result.Usage.OutputTokens,
+		TextLen:      len(result.Text),
+	})
 	// Persist assistant message to transcript + Aurora store.
 	if deps.transcript != nil && result.Text != "" {
 		assistantMsg := ChatMessage{
@@ -647,8 +678,15 @@ func handleRunError(
 	logger *slog.Logger,
 	err error,
 	now int64,
+	runLog *agentlog.RunLogger,
 ) {
 	aborted := ctx.Err() != nil
+
+	// Log run error to agent detail log.
+	runLog.LogError(agentlog.RunErrorData{
+		Error:   err.Error(),
+		Aborted: aborted,
+	})
 
 	if aborted {
 		logger.Info("agent run aborted", "error", err)
@@ -794,7 +832,8 @@ func executeAgentRunWithDelta(
 		return 1
 	})
 	broadcaster := newStreamBroadcaster(deltaRaw, params.SessionKey, params.ClientRunID)
-	return executeAgentRun(ctx, params, deps, broadcaster, nil, nil, logger)
+	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
+	return executeAgentRun(ctx, params, deps, broadcaster, nil, nil, logger, runLog)
 }
 
 // resolveDefaultBaseURL returns the default API base URL for a known provider

@@ -64,7 +64,7 @@ func TestRunAgent_SimpleTextResponse(t *testing.T) {
 		[]llm.Message{llm.NewTextMessage("user", "hi")},
 		client, nil,
 		StreamHooks{OnTextDelta: func(text string) { deltas = append(deltas, text) }},
-		nil,
+		nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("RunAgent error: %v", err)
@@ -116,7 +116,7 @@ func TestRunAgent_ToolCallLoop(t *testing.T) {
 	result, err := RunAgent(
 		context.Background(), cfg,
 		[]llm.Message{llm.NewTextMessage("user", "use echo")},
-		client, reg, StreamHooks{}, nil,
+		client, reg, StreamHooks{}, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("RunAgent error: %v", err)
@@ -157,7 +157,7 @@ func TestRunAgent_MaxTurns(t *testing.T) {
 	result, err := RunAgent(
 		context.Background(), cfg,
 		[]llm.Message{llm.NewTextMessage("user", "loop forever")},
-		client, reg, StreamHooks{}, nil,
+		client, reg, StreamHooks{}, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("RunAgent error: %v", err)
@@ -194,7 +194,7 @@ func TestRunAgent_Timeout(t *testing.T) {
 	result, err := RunAgent(
 		context.Background(), cfg,
 		[]llm.Message{llm.NewTextMessage("user", "hello")},
-		client, nil, StreamHooks{}, nil,
+		client, nil, StreamHooks{}, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("RunAgent error: %v", err)
@@ -235,7 +235,7 @@ func TestRunAgent_Abort(t *testing.T) {
 	result, err := RunAgent(
 		ctx, cfg,
 		[]llm.Message{llm.NewTextMessage("user", "hello")},
-		client, nil, StreamHooks{}, nil,
+		client, nil, StreamHooks{}, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("RunAgent error: %v", err)
@@ -276,7 +276,7 @@ func TestRunAgent_ToolError(t *testing.T) {
 	result, err := RunAgent(
 		context.Background(), cfg,
 		[]llm.Message{llm.NewTextMessage("user", "use fail tool")},
-		client, reg, StreamHooks{}, nil,
+		client, reg, StreamHooks{}, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("RunAgent error: %v", err)

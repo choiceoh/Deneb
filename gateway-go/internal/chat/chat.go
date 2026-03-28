@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -107,12 +108,13 @@ type Handler struct {
 	authManager     *provider.AuthManager
 	jobTracker      *agent.JobTracker
 	providerConfigs map[string]ProviderConfig
-	auroraStore     *aurora.Store    // Aurora hierarchical compaction store
-	vegaBackend     vega.Backend    // optional; knowledge prefetch
-	memoryStore     *memory.Store            // optional; structured memory (Honcho-style)
-	memoryEmbedder  *memory.Embedder         // optional; fact embedding
-	goalStore       *autonomous.GoalStore    // optional; auto-goal creation from recalled facts
-	dreamTurnFn func(ctx context.Context) // optional; increments dream turn via autonomous
+	auroraStore     *aurora.Store             // Aurora hierarchical compaction store
+	vegaBackend     vega.Backend              // optional; knowledge prefetch
+	memoryStore     *memory.Store             // optional; structured memory (Honcho-style)
+	memoryEmbedder  *memory.Embedder          // optional; fact embedding
+	goalStore       *autonomous.GoalStore     // optional; auto-goal creation from recalled facts
+	dreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
+	agentLog        *agentlog.Writer          // optional; agent detail logging
 
 	// Agent run configuration.
 	contextCfg    ContextConfig
@@ -121,10 +123,10 @@ type Handler struct {
 	defaultSystem string
 	maxTokens     int
 
-	replyFunc    ReplyFunc    // optional: delivers response to originating channel
-	mediaSendFn  MediaSendFunc // optional: delivers files to originating channel
-	typingFn     TypingFunc    // optional: sends typing indicator during agent run
-	reactionFn   ReactionFunc  // optional: sets emoji reaction on triggering message
+	replyFunc   ReplyFunc     // optional: delivers response to originating channel
+	mediaSendFn MediaSendFunc // optional: delivers files to originating channel
+	typingFn    TypingFunc    // optional: sends typing indicator during agent run
+	reactionFn  ReactionFunc  // optional: sets emoji reaction on triggering message
 
 	abortMu  sync.Mutex
 	abortMap map[string]*AbortEntry // clientRunId -> entry
@@ -153,10 +155,11 @@ type HandlerConfig struct {
 	ProviderConfigs map[string]ProviderConfig // provider ID → config
 	AuroraStore     *aurora.Store             // Aurora hierarchical compaction store
 	VegaBackend     vega.Backend              // optional; enables knowledge prefetch in chat
-	MemoryStore     *memory.Store            // optional; structured memory (Honcho-style)
-	MemoryEmbedder  *memory.Embedder         // optional; fact embedding via SGLang
-	GoalStore       *autonomous.GoalStore    // optional; auto-goal creation from recalled memory facts
+	MemoryStore     *memory.Store             // optional; structured memory (Honcho-style)
+	MemoryEmbedder  *memory.Embedder          // optional; fact embedding via SGLang
+	GoalStore       *autonomous.GoalStore     // optional; auto-goal creation from recalled memory facts
 	DreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
+	AgentLog        *agentlog.Writer          // optional; agent detail logging
 	ContextCfg      ContextConfig
 	CompactionCfg   CompactionConfig
 	DefaultModel    string
@@ -200,6 +203,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		memoryEmbedder:  cfg.MemoryEmbedder,
 		goalStore:       cfg.GoalStore,
 		dreamTurnFn:     cfg.DreamTurnFn,
+		agentLog:        cfg.AgentLog,
 		contextCfg:      cfg.ContextCfg,
 		compactionCfg:   cfg.CompactionCfg,
 		defaultModel:    cfg.DefaultModel,
@@ -680,6 +684,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		memoryEmbedder:  h.memoryEmbedder,
 		goalStore:       h.goalStore,
 		dreamTurnFn:     h.dreamTurnFn,
+		agentLog:        h.agentLog,
 		contextCfg:      h.contextCfg,
 		compactionCfg:   h.compactionCfg,
 		defaultModel:    h.defaultModel,
