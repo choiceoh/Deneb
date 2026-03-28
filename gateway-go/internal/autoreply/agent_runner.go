@@ -39,9 +39,9 @@ type AgentTurnConfig struct {
 	TimeoutMs      int64
 	SkillFilter    []string
 	// Execution environment.
-	ExecHost     string // "local", "sandbox"
-	ExecSecurity string // "standard", "strict"
-	ExecAsk      string // "always", "elevated-only", "never"
+	ExecHost     ExecHost     // "local", "sandbox"
+	ExecSecurity ExecSecurity // "standard", "strict"
+	ExecAsk      ExecAsk      // "always", "elevated-only", "never"
 	// Model fallback.
 	FallbackModels []string
 	AuthProfile    string
@@ -125,6 +125,49 @@ const (
 	RoleOrderingMessage      = "⚠️ Message ordering conflict. I've reset the conversation - please try again."
 	CompactionFailureMessage = "⚠️ Context limit exceeded during compaction. I've reset our conversation to start fresh - please try again."
 	TransientRetryDelayMs    = 2500
+)
+
+// ContentBlockKind represents content block type values in agent messages.
+type ContentBlockKind string
+
+const (
+	ContentBlockText       ContentBlockKind = "text"
+	ContentBlockToolUse    ContentBlockKind = "tool_use"
+	ContentBlockToolResult ContentBlockKind = "tool_result"
+	ContentBlockThinking   ContentBlockKind = "thinking"
+)
+
+// ThinkingType represents the reasoning mode in LLM payloads.
+type ThinkingType string
+
+const (
+	ThinkingTypeEnabled  ThinkingType = "enabled"
+	ThinkingTypeDisabled ThinkingType = "disabled"
+)
+
+// ExecHost represents where tools execute.
+type ExecHost string
+
+const (
+	ExecHostLocal   ExecHost = "local"
+	ExecHostSandbox ExecHost = "sandbox"
+)
+
+// ExecSecurity represents tool execution security level.
+type ExecSecurity string
+
+const (
+	ExecSecurityStandard ExecSecurity = "standard"
+	ExecSecurityStrict   ExecSecurity = "strict"
+)
+
+// ExecAsk represents approval behavior for tool execution.
+type ExecAsk string
+
+const (
+	ExecAskAlways       ExecAsk = "always"
+	ExecAskElevatedOnly ExecAsk = "elevated-only"
+	ExecAskNever        ExecAsk = "never"
 )
 
 // IsContextOverflowError checks if an error message indicates context overflow.
@@ -456,7 +499,7 @@ func (r *DefaultAgentRunner) executeTool(ctx context.Context, call ToolCall, cfg
 	}
 
 	// Check approval requirement.
-	if cfg.ExecAsk == "always" && (call.Name == "bash" || call.Name == "execute") {
+	if cfg.ExecAsk == ExecAskAlways && (call.Name == "bash" || call.Name == "execute") {
 		// In approval mode, we'd normally pause and wait for user approval.
 		// For now, auto-approve in the Go gateway (matches DGX Spark single-user model).
 	}
@@ -511,8 +554,8 @@ type AgentRunnerPayload struct {
 
 // ThinkingConfig configures the thinking/reasoning mode for the LLM request.
 type ThinkingConfig struct {
-	Type         string `json:"type"`                    // "enabled" or "disabled"
-	BudgetTokens int    `json:"budget_tokens,omitempty"` // token budget for thinking
+	Type         ThinkingType `json:"type"`                    // "enabled" or "disabled"
+	BudgetTokens int          `json:"budget_tokens,omitempty"` // token budget for thinking
 }
 
 // AgentMessage is a single message in the agent conversation.
@@ -526,7 +569,7 @@ type AgentMessage struct {
 
 // ContentBlock represents a block within a message (text, tool_use, tool_result, thinking).
 type ContentBlock struct {
-	Type     string         `json:"type"` // "text", "tool_use", "tool_result", "thinking"
+	Type     ContentBlockKind `json:"type"` // "text", "tool_use", "tool_result", "thinking"
 	Text     string         `json:"text,omitempty"`
 	ID       string         `json:"id,omitempty"`
 	Name     string         `json:"name,omitempty"`
@@ -567,17 +610,17 @@ func BuildAgentPayload(cfg AgentTurnConfig, history []AgentMessage, tools []Agen
 	case types.ThinkOff, "":
 		// No thinking config needed.
 	case types.ThinkMinimal:
-		payload.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 1024}
+		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 1024}
 	case types.ThinkLow:
-		payload.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 4096}
+		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 4096}
 	case types.ThinkMedium:
-		payload.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 10240}
+		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 10240}
 	case types.ThinkHigh:
-		payload.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
+		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 32768}
 	case types.ThinkXHigh:
-		payload.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 65536}
+		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 65536}
 	case types.ThinkAdaptive:
-		payload.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 16384}
+		payload.Thinking = &ThinkingConfig{Type: ThinkingTypeEnabled, BudgetTokens: 16384}
 	}
 
 	return payload
