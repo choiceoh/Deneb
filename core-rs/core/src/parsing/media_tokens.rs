@@ -118,7 +118,7 @@ fn is_valid_media(candidate: &str) -> bool {
         return false;
     }
     // No whitespace allowed in simple mode.
-    if candidate.chars().any(|c| c.is_whitespace()) {
+    if candidate.chars().any(char::is_whitespace) {
         return false;
     }
     is_valid_media_core(candidate) || is_bare_filename(candidate)

@@ -8,7 +8,7 @@ use napi::bindgen_prelude::*;
 
 use super::{bm25, cosine, fts, merge, mmr, query_expansion, temporal_decay, types};
 
-/// Maximum input size for napi string/JSON functions (16 MB, matching FFI_MAX_INPUT_LEN).
+/// Maximum input size for napi string/JSON functions (16 MB, matching `FFI_MAX_INPUT_LEN`).
 const NAPI_MAX_INPUT_LEN: usize = 16 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ pub fn memory_apply_temporal_decay(score: f64, age_in_days: f64, half_life_days:
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn memory_parse_memory_date_from_path(file_path: String) -> Option<String> {
     temporal_decay::parse_memory_date_from_path(&file_path)
-        .map(|(y, m, d)| format!("{:04}-{:02}-{:02}", y, m, d))
+        .map(|(y, m, d)| format!("{y:04}-{m:02}-{d:02}"))
 }
 
 #[cfg_attr(feature = "napi_binding", napi)]
@@ -109,7 +109,7 @@ pub fn memory_is_query_stop_word(token: String) -> bool {
     query_expansion::is_query_stop_word_token(&token)
 }
 
-/// Returns JSON ExpandedQuery.
+/// Returns JSON `ExpandedQuery`.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn memory_expand_query_for_fts(query: String) -> String {
     let result = query_expansion::expand_query_for_fts(&query);
@@ -120,7 +120,7 @@ pub fn memory_expand_query_for_fts(query: String) -> String {
 // Hybrid merge (composite pipeline)
 // ---------------------------------------------------------------------------
 
-/// Takes JSON MergeParams, returns JSON array of MergedResult.
+/// Takes JSON `MergeParams`, returns JSON array of `MergedResult`.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn memory_merge_hybrid_results(params_json: String) -> String {
     if params_json.len() > NAPI_MAX_INPUT_LEN {

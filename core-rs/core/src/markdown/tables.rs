@@ -4,7 +4,7 @@
 //! bullet-list or fenced-code-block representations, appending to the
 //! main `RenderState`.
 
-use super::parser::{RenderState, TableCell, TableState};
+use super::parser::{RenderState, TableCell};
 use super::spans::{LinkSpan, MarkdownStyle, StyleSpan};
 
 /// Close remaining open styles in a cell render target and return the finished cell.
@@ -222,7 +222,7 @@ pub(crate) fn render_table_as_code(state: &mut RenderState) {
 
     let column_count = headers
         .len()
-        .max(rows.iter().map(|r| r.len()).max().unwrap_or(0));
+        .max(rows.iter().map(std::vec::Vec::len).max().unwrap_or(0));
     if column_count == 0 {
         return;
     }
@@ -230,7 +230,7 @@ pub(crate) fn render_table_as_code(state: &mut RenderState) {
     let mut widths = vec![0usize; column_count];
     let update_widths = |widths: &mut Vec<usize>, cells: &[TableCell]| {
         for (i, w) in widths.iter_mut().enumerate().take(column_count) {
-            let cell_width = cells.get(i).map(|c| c.text.len()).unwrap_or(0);
+            let cell_width = cells.get(i).map_or(0, |c| c.text.len());
             if cell_width > *w {
                 *w = cell_width;
             }
@@ -250,7 +250,7 @@ pub(crate) fn render_table_as_code(state: &mut RenderState) {
             if let Some(cell) = cells.get(i) {
                 append_cell_text_only(state, cell);
             }
-            let cell_len = cells.get(i).map(|c| c.text.len()).unwrap_or(0);
+            let cell_len = cells.get(i).map_or(0, |c| c.text.len());
             let pad = width.saturating_sub(cell_len);
             if pad > 0 {
                 state.text.extend(std::iter::repeat_n(' ', pad));

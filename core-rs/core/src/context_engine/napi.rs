@@ -62,7 +62,7 @@ impl ContextEngineStore {
 fn lock_context_store() -> std::sync::MutexGuard<'static, ContextEngineStore> {
     CONTEXT_ENGINES
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 // ── Assembly engine exports ──────────────────────────────────────────────────
@@ -79,14 +79,14 @@ pub fn context_assembly_new(conversation_id: u32, token_budget: u32, fresh_tail_
     store.insert(EngineInstance::Assembly(engine))
 }
 
-/// Start an assembly engine. Returns the first AssemblyCommand as JSON.
+/// Start an assembly engine. Returns the first `AssemblyCommand` as JSON.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn context_assembly_start(handle: u32) -> String {
     let mut store = lock_context_store();
     match store.engines.get_mut(&handle) {
         Some(EngineInstance::Assembly(engine)) => {
             let cmd = engine.start();
-            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#))
         }
         _ => empty_assembly_done(),
     }
@@ -97,13 +97,13 @@ pub fn context_assembly_start(handle: u32) -> String {
 pub fn context_assembly_step(handle: u32, response_json: String) -> String {
     let response: AssemblyResponse = match serde_json::from_str(&response_json) {
         Ok(r) => r,
-        Err(e) => return format!(r#"{{"type":"done","result":{{"error":"{}"}}}}"#, e),
+        Err(e) => return format!(r#"{{"type":"done","result":{{"error":"{e}"}}}}"#),
     };
     let mut store = lock_context_store();
     match store.engines.get_mut(&handle) {
         Some(EngineInstance::Assembly(engine)) => {
             let cmd = engine.step(response);
-            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#))
         }
         _ => empty_assembly_done(),
     }
@@ -128,14 +128,14 @@ pub fn context_expand_new(
     store.insert(EngineInstance::Expand(engine))
 }
 
-/// Start an expand engine. Returns the first RetrievalCommand as JSON.
+/// Start an expand engine. Returns the first `RetrievalCommand` as JSON.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn context_expand_start(handle: u32) -> String {
     let mut store = lock_context_store();
     match store.engines.get_mut(&handle) {
         Some(EngineInstance::Expand(engine)) => {
             let cmd = engine.start();
-            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#))
         }
         _ => empty_expand_done(),
     }
@@ -146,13 +146,13 @@ pub fn context_expand_start(handle: u32) -> String {
 pub fn context_expand_step(handle: u32, response_json: String) -> String {
     let response: RetrievalResponse = match serde_json::from_str(&response_json) {
         Ok(r) => r,
-        Err(e) => return format!(r#"{{"type":"expandDone","result":{{"error":"{}"}}}}"#, e),
+        Err(e) => return format!(r#"{{"type":"expandDone","result":{{"error":"{e}"}}}}"#),
     };
     let mut store = lock_context_store();
     match store.engines.get_mut(&handle) {
         Some(EngineInstance::Expand(engine)) => {
             let cmd = engine.step(response);
-            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#))
         }
         _ => empty_expand_done(),
     }
@@ -197,14 +197,14 @@ pub fn context_grep_new(
     store.insert(EngineInstance::Grep(engine))
 }
 
-/// Start a grep engine. Returns the RetrievalCommand as JSON.
+/// Start a grep engine. Returns the `RetrievalCommand` as JSON.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn context_grep_start(handle: u32) -> String {
     let store = lock_context_store();
     match store.engines.get(&handle) {
         Some(EngineInstance::Grep(engine)) => {
             let cmd = engine.start();
-            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#))
         }
         _ => empty_grep_done(),
     }
@@ -215,13 +215,13 @@ pub fn context_grep_start(handle: u32) -> String {
 pub fn context_grep_step(handle: u32, response_json: String) -> String {
     let response: RetrievalResponse = match serde_json::from_str(&response_json) {
         Ok(r) => r,
-        Err(e) => return format!(r#"{{"type":"grepDone","result":{{"error":"{}"}}}}"#, e),
+        Err(e) => return format!(r#"{{"type":"grepDone","result":{{"error":"{e}"}}}}"#),
     };
     let mut store = lock_context_store();
     match store.engines.get_mut(&handle) {
         Some(EngineInstance::Grep(engine)) => {
             let cmd = engine.step(response);
-            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#))
         }
         _ => empty_grep_done(),
     }
@@ -241,14 +241,14 @@ pub fn context_describe_new(id: String) -> u32 {
     store.insert(EngineInstance::Describe(engine))
 }
 
-/// Start a describe engine. Returns the RetrievalCommand as JSON.
+/// Start a describe engine. Returns the `RetrievalCommand` as JSON.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn context_describe_start(handle: u32) -> String {
     let store = lock_context_store();
     match store.engines.get(&handle) {
         Some(EngineInstance::Describe(engine)) => {
             let cmd = engine.start();
-            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#))
         }
         _ => empty_describe_done(),
     }
@@ -259,13 +259,13 @@ pub fn context_describe_start(handle: u32) -> String {
 pub fn context_describe_step(handle: u32, response_json: String) -> String {
     let response: RetrievalResponse = match serde_json::from_str(&response_json) {
         Ok(r) => r,
-        Err(e) => return format!(r#"{{"type":"describeDone","result":{{"error":"{}"}}}}"#, e),
+        Err(e) => return format!(r#"{{"type":"describeDone","result":{{"error":"{e}"}}}}"#),
     };
     let mut store = lock_context_store();
     match store.engines.get_mut(&handle) {
         Some(EngineInstance::Describe(engine)) => {
             let cmd = engine.step(response);
-            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#))
         }
         _ => empty_describe_done(),
     }
@@ -292,13 +292,13 @@ pub fn context_resolve_config(config_json: String) -> String {
     match serde_json::from_str::<AuroraConfig>(&config_json) {
         Ok(config) => {
             let validated = config.validated();
-            serde_json::to_string(&validated).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+            serde_json::to_string(&validated).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#))
         }
         Err(e) => {
             // Return defaults on parse failure
             let default_config = AuroraConfig::default();
             serde_json::to_string(&default_config)
-                .unwrap_or_else(|_| format!(r#"{{"error":"{}"}}"#, e))
+                .unwrap_or_else(|_| format!(r#"{{"error":"{e}"}}"#))
         }
     }
 }

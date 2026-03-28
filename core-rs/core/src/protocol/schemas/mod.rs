@@ -1,6 +1,6 @@
 //! Per-domain schema validators.
 //!
-//! Each module validates RPC parameters matching the TypeScript TypeBox schemas
+//! Each module validates RPC parameters matching the TypeScript `TypeBox` schemas
 //! in `src/gateway/protocol/schema/`.
 
 pub mod agent;

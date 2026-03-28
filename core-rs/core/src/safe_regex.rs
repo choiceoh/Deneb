@@ -1,10 +1,10 @@
-//! ReDoS (Regular Expression Denial of Service) prevention.
+//! `ReDoS` (Regular Expression Denial of Service) prevention.
 //!
 //! Ports the tokenizer + nested-repetition analyzer from
 //! `src/security/safe-regex.ts` to Rust for CPU-bound safety checks.
 //!
 //! Only the safety analysis (`has_nested_repetition`) is in Rust.
-//! `compileSafeRegex` stays in TypeScript because it creates V8 RegExp objects.
+//! `compileSafeRegex` stays in TypeScript because it creates V8 `RegExp` objects.
 
 #[cfg(feature = "napi_binding")]
 use napi::bindgen_prelude::*;
@@ -358,7 +358,7 @@ fn analyze_tokens_for_nested_repetition(tokens: &[PatternToken]) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Check whether a regex source pattern contains nested repetition
-/// that could cause catastrophic backtracking (ReDoS).
+/// that could cause catastrophic backtracking (`ReDoS`).
 pub fn has_nested_repetition_impl(source: &str) -> bool {
     analyze_tokens_for_nested_repetition(&tokenize_pattern(source.as_bytes()))
 }
@@ -367,7 +367,7 @@ pub fn has_nested_repetition_impl(source: &str) -> bool {
 // napi exports
 // ---------------------------------------------------------------------------
 
-/// Check whether a regex source pattern contains nested repetition (ReDoS risk).
+/// Check whether a regex source pattern contains nested repetition (`ReDoS` risk).
 ///
 /// This is the Rust equivalent of `hasNestedRepetition` from `src/security/safe-regex.ts`.
 #[cfg_attr(feature = "napi_binding", napi)]

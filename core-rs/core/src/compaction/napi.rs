@@ -59,7 +59,7 @@ impl EngineStore {
 fn lock_engine_store() -> std::sync::MutexGuard<'static, EngineStore> {
     ENGINES
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 // ── Pure function exports ───────────────────────────────────────────────────
@@ -76,7 +76,7 @@ pub fn compaction_format_timestamp(epoch_ms: i64, tz: String) -> String {
     timestamp::format_timestamp(epoch_ms, &tz)
 }
 
-/// Evaluate whether compaction is needed. Returns JSON CompactionDecision.
+/// Evaluate whether compaction is needed. Returns JSON `CompactionDecision`.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn compaction_evaluate(
     config_json: String,
@@ -126,7 +126,7 @@ pub fn compaction_resolve_fresh_tail_ordinal(items_json: String, fresh_tail_coun
 pub fn compaction_build_leaf_source_text(messages_json: String, tz: String) -> String {
     let messages: Vec<MessageRecord> = match serde_json::from_str(&messages_json) {
         Ok(m) => m,
-        Err(e) => return format!("error: {}", e),
+        Err(e) => return format!("error: {e}"),
     };
     build_leaf_source_text(&messages, &tz)
 }
@@ -136,7 +136,7 @@ pub fn compaction_build_leaf_source_text(messages_json: String, tz: String) -> S
 pub fn compaction_build_condensed_source_text(summaries_json: String, tz: String) -> String {
     let summaries: Vec<SummaryRecord> = match serde_json::from_str(&summaries_json) {
         Ok(s) => s,
-        Err(e) => return format!("error: {}", e),
+        Err(e) => return format!("error: {e}"),
     };
     build_condensed_source_text(&summaries, &tz)
 }
@@ -178,31 +178,31 @@ pub fn compaction_sweep_new(
     store.insert(engine)
 }
 
-/// Start a sweep engine. Returns the first SweepCommand as JSON.
+/// Start a sweep engine. Returns the first `SweepCommand` as JSON.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn compaction_sweep_start(handle: u32) -> String {
     let mut store = lock_engine_store();
     match store.get_mut(handle) {
         Some(engine) => {
             let cmd = engine.start();
-            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#))
         }
         None => r#"{"type":"done","result":{"actionTaken":false,"tokensBefore":0,"tokensAfter":0,"condensed":false}}"#.to_string(),
     }
 }
 
-/// Step a sweep engine with a host response. Returns the next SweepCommand as JSON.
+/// Step a sweep engine with a host response. Returns the next `SweepCommand` as JSON.
 #[cfg_attr(feature = "napi_binding", napi)]
 pub fn compaction_sweep_step(handle: u32, response_json: String) -> String {
     let response: SweepResponse = match serde_json::from_str(&response_json) {
         Ok(r) => r,
-        Err(e) => return format!(r#"{{"type":"done","result":{{"error":"{}"}}}}"#, e),
+        Err(e) => return format!(r#"{{"type":"done","result":{{"error":"{e}"}}}}"#),
     };
     let mut store = lock_engine_store();
     match store.get_mut(handle) {
         Some(engine) => {
             let cmd = engine.step(response);
-            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{}"}}"#, e))
+            serde_json::to_string(&cmd).unwrap_or_else(|e| format!(r#"{{"error":"{e}"}}"#))
         }
         None => r#"{"type":"done","result":{"actionTaken":false,"tokensBefore":0,"tokensAfter":0,"condensed":false}}"#.to_string(),
     }

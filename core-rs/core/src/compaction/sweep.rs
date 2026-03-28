@@ -199,7 +199,7 @@ pub enum SweepCommand {
     FetchSummaries { summary_ids: Vec<String> },
     /// Fetch the total context token count.
     FetchTokenCount { conversation_id: u64 },
-    /// Fetch distinct summary depths in context (below max_ordinal).
+    /// Fetch distinct summary depths in context (below `max_ordinal`).
     FetchDistinctDepths {
         conversation_id: u64,
         max_ordinal: u64,

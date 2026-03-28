@@ -18,11 +18,8 @@ pub struct HtmlToMarkdownResult {
 pub fn html_to_markdown(html: &str) -> HtmlToMarkdownResult {
     // Wrap extract_title in catch_unwind so a panic in title extraction
     // doesn't abort the entire conversion via the FFI layer.
-    let title = {
-        let h = html.to_owned();
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| extract_title(&h)))
-            .unwrap_or(None)
-    };
+    let title = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| extract_title(html)))
+        .unwrap_or(None);
 
     let mut text = String::with_capacity(html.len());
     text.push_str(html);
@@ -53,8 +50,10 @@ pub fn html_to_markdown(html: &str) -> HtmlToMarkdownResult {
     ];
 
     for step in steps {
-        let input = text.clone();
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| step(&input))) {
+        // Pass a reference to avoid cloning the entire HTML string at each step.
+        // After catch_unwind returns the closure (and its borrow of `text`) is
+        // dropped, so `text = output` below is safe under NLL.
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| step(&text))) {
             Ok(output) => text = output,
             Err(_) => {
                 // Skip this step and continue with the current text.
@@ -89,8 +88,8 @@ fn extract_title(html: &str) -> Option<String> {
 /// Strip a paired tag block: `<tag ...>...</tag>` (case-insensitive).
 fn strip_tag_block(input: &str, tag: &str) -> String {
     let lower = input.to_ascii_lowercase();
-    let open_prefix = format!("<{}", tag);
-    let close_tag = format!("</{}>", tag);
+    let open_prefix = format!("<{tag}");
+    let close_tag = format!("</{tag}>");
 
     let mut result = String::with_capacity(input.len());
     let mut cursor = 0;
@@ -201,7 +200,7 @@ fn convert_links(input: &str) -> String {
 /// Extract an attribute value from a tag string like `<a href="value">`.
 fn extract_attr(tag: &str, attr: &str) -> Option<String> {
     let lower = tag.to_ascii_lowercase();
-    let pattern = format!("{}=", attr);
+    let pattern = format!("{attr}=");
     let idx = lower.find(&pattern)?;
     let after_eq = idx + pattern.len();
     let bytes = tag.as_bytes();
@@ -219,8 +218,7 @@ fn extract_attr(tag: &str, attr: &str) -> Option<String> {
         let rest = tag.get(start..)?;
         let end = rest
             .find(|c: char| c.is_ascii_whitespace() || c == '>')
-            .map(|e| start + e)
-            .unwrap_or(tag.len());
+            .map_or(tag.len(), |e| start + e);
         Some(tag.get(start..end)?.to_string())
     }
 }
@@ -242,7 +240,7 @@ fn convert_headings(input: &str) -> String {
                     // Find closing > of opening tag.
                     if let Some(gt) = input.get(after_h..).and_then(|s| s.find('>')) {
                         let body_start = after_h + gt + 1;
-                        let close = format!("</h{}>", level);
+                        let close = format!("</h{level}>");
                         if let Some(rel_close) =
                             lower.get(body_start..).and_then(|s| s.find(&close))
                         {
@@ -443,10 +441,7 @@ fn decode_entities(input: &str) -> String {
 }
 
 fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)> {
-    let rest = match input.get(pos..) {
-        Some(s) => s,
-        None => return None,
-    };
+    let rest = input.get(pos..)?;
 
     // Named entities (case-insensitive).
     let named: &[(&str, char)] = &[

@@ -117,7 +117,7 @@ pub struct AuroraConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
 
-    /// Path to the Aurora SQLite database.
+    /// Path to the Aurora `SQLite` database.
     #[serde(default = "default_database_path")]
     pub database_path: String,
 
@@ -242,7 +242,7 @@ impl Default for AuroraConfig {
 }
 
 impl AuroraConfig {
-    /// Clamp context_threshold to [0.1, 1.0].
+    /// Clamp `context_threshold` to [0.1, 1.0].
     pub fn validated(mut self) -> Self {
         self.context_threshold = self.context_threshold.clamp(0.1, 1.0);
         self

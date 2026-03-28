@@ -115,7 +115,7 @@ pub fn check_string(
     }
 }
 
-/// Check that a string value has `minLength >= 1` (NonEmptyString).
+/// Check that a string value has `minLength >= 1` (`NonEmptyString`).
 pub fn check_non_empty_string(
     value: &serde_json::Value,
     path: &str,

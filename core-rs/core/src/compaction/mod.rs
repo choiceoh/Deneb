@@ -362,8 +362,7 @@ pub fn resolve_fresh_tail_ordinal(items: &[ContextItem], fresh_tail_count: u32) 
         .saturating_sub(fresh_tail_count as usize);
     raw_message_items
         .get(tail_start_idx)
-        .map(|item| item.ordinal)
-        .unwrap_or(u64::MAX)
+        .map_or(u64::MAX, |item| item.ordinal)
 }
 
 /// Resolve token count for a message with content-length fallback.
@@ -421,8 +420,7 @@ pub fn select_leaf_chunk<'a>(
 
         let msg_tokens = messages
             .get(&msg_id)
-            .map(resolve_message_token_count)
-            .unwrap_or(0);
+            .map_or(0, resolve_message_token_count);
 
         if !chunk.is_empty() && chunk_tokens + msg_tokens > limit {
             break;
@@ -455,8 +453,7 @@ pub fn count_raw_tokens_outside_fresh_tail(
         if let Some(msg_id) = item.message_id {
             total += messages
                 .get(&msg_id)
-                .map(resolve_message_token_count)
-                .unwrap_or(0);
+                .map_or(0, resolve_message_token_count);
         }
     }
     total
@@ -603,7 +600,7 @@ pub fn generate_summary_id(content: &str, now_ms: i64) -> String {
     sha2::Digest::update(&mut hasher, content.as_bytes());
     // Write timestamp as string bytes
     let mut ts_buf = Vec::with_capacity(20);
-    let _ = write!(ts_buf, "{}", now_ms);
+    let _ = write!(ts_buf, "{now_ms}");
     sha2::Digest::update(&mut hasher, &ts_buf);
     let hash = sha2::Digest::finalize(hasher);
     let hex = hex_encode(&hash);
@@ -623,7 +620,7 @@ pub fn deterministic_fallback(source: &str, input_tokens: u64) -> String {
     } else {
         trimmed
     };
-    format!("{}\n[Truncated from {} tokens]", truncated, input_tokens)
+    format!("{truncated}\n[Truncated from {input_tokens} tokens]")
 }
 
 /// Deduplicate IDs preserving order.
@@ -729,7 +726,7 @@ fn safe_char_boundary(s: &str, max_bytes: usize) -> usize {
 
 /// Encode bytes as hex string.
 fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
