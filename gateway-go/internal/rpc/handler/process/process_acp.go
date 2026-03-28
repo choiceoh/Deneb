@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
@@ -19,13 +19,13 @@ import (
 
 // ACPDeps holds dependencies for ACP RPC methods.
 type ACPDeps struct {
-	Registry     *autoreply.ACPRegistry
-	Bindings     *autoreply.SessionBindingService
-	Infra        *autoreply.SubagentInfraDeps
+	Registry     *acp.ACPRegistry
+	Bindings     *acp.SessionBindingService
+	Infra        *acp.SubagentInfraDeps
 	Sessions     *session.Manager
 	GatewaySubs  *events.GatewayEventSubscriptions
-	BindingStore *autoreply.BindingStore
-	Translator   *autoreply.ACPTranslator
+	BindingStore *acp.BindingStore
+	Translator   *acp.ACPTranslator
 
 	// SessionSendFn sends a message to a session, triggering an agent run.
 	SessionSendFn func(sessionKey, message string) error
@@ -198,7 +198,7 @@ func acpSpawn(deps *ACPDeps) rpcutil.HandlerFunc {
 				protocol.ErrMissingParam, "role is required"))
 		}
 
-		result := deps.Infra.SpawnSubagent(ctx, autoreply.SpawnSubagentParams{
+		result := deps.Infra.SpawnSubagent(ctx, acp.SpawnSubagentParams{
 			ParentSessionKey: p.ParentSessionKey,
 			ParentAgentID:    p.ParentAgentID,
 			Role:             p.Role,
@@ -341,7 +341,7 @@ func acpBind(deps *ACPDeps) rpcutil.HandlerFunc {
 				protocol.ErrMissingParam, "targetSessionKey is required"))
 		}
 
-		result := deps.Bindings.Bind(autoreply.SessionBindParams{
+		result := deps.Bindings.Bind(acp.SessionBindParams{
 			Channel:          p.Channel,
 			AccountID:        p.AccountID,
 			ConversationID:   p.ConversationID,

@@ -21,7 +21,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
@@ -312,21 +312,21 @@ func New(addr string, opts ...Option) *Server {
 	s.maintRunner = maintenance.NewRunner(denebDir)
 
 	// ACP subsystem: registry, bindings, persistence, lifecycle sync.
-	acpRegistry := autoreply.NewACPRegistry()
-	acpBindings := autoreply.NewSessionBindingService()
-	acpBindingStore := autoreply.NewBindingStore(autoreply.DefaultBindingStorePath(denebDir))
+	acpRegistry := acp.NewACPRegistry()
+	acpBindings := acp.NewSessionBindingService()
+	acpBindingStore := acp.NewBindingStore(acp.DefaultBindingStorePath(denebDir))
 	if err := acpBindingStore.RestoreToService(acpBindings); err != nil {
 		s.logger.Warn("failed to restore ACP bindings", "error", err)
 	}
-	s.acpLifecycleUnsub = autoreply.StartACPLifecycleSync(acpRegistry, s.sessions.EventBusRef())
+	s.acpLifecycleUnsub = acp.StartACPLifecycleSync(acpRegistry, s.sessions.EventBusRef())
 	s.acpDeps = &rpc.ACPDeps{
 		Registry:     acpRegistry,
 		Bindings:     acpBindings,
-		Infra:        &autoreply.SubagentInfraDeps{ACPRegistry: acpRegistry},
+		Infra:        &acp.SubagentInfraDeps{ACPRegistry: acpRegistry},
 		Sessions:     s.sessions,
 		GatewaySubs:  s.gatewaySubs,
 		BindingStore: acpBindingStore,
-		Translator:   autoreply.NewACPTranslator(acpRegistry, acpBindings),
+		Translator:   acp.NewACPTranslator(acpRegistry, acpBindings),
 	}
 	s.acpDeps.SetEnabled(true)
 
