@@ -11,6 +11,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+const (
+	ciHealthMethod = "health.check"
+	ciValidFrame   = `{"type":"req","id":"1","method":"ping"}`
+	ciInvalidFrame = `{"type":"unknown"}`
+)
+
 func testDeps() Deps {
 	return Deps{
 		Sessions: session.NewManager(),
@@ -74,7 +80,7 @@ func TestBuiltinMethodsRegistered(t *testing.T) {
 
 func TestHealthCheck(t *testing.T) {
 	d := testDispatcher()
-	resp := dispatch(t, d, "health.check", nil)
+	resp := dispatch(t, d, ciHealthMethod, nil)
 	if !resp.OK {
 		t.Fatalf("expected ok, got error: %+v", resp.Error)
 	}
@@ -101,33 +107,112 @@ func TestSystemInfo(t *testing.T) {
 	}
 }
 
-func TestProtocolValidate_Valid(t *testing.T) {
+func TestRPCSmokeFrequentMethods(t *testing.T) {
 	d := testDispatcher()
-	resp := dispatch(t, d, "protocol.validate", map[string]string{
-		"frame": `{"type":"req","id":"1","method":"ping"}`,
-	})
-	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	tests := []struct {
+		name         string
+		method       string
+		params       any
+		expectOK     bool
+		expectErr    string
+		expectFields []string
+	}{
+		{
+			name:         "health check",
+			method:       ciHealthMethod,
+			expectOK:     true,
+			expectFields: []string{"status", "runtime", "ffi", "sessions", "channels"},
+		},
+		{
+			name:         "system info",
+			method:       "system.info",
+			expectOK:     true,
+			expectFields: []string{"runtime", "version", "goVersion", "os", "arch", "numCPU", "ffiAvailable"},
+		},
+		{
+			name:     "sessions list",
+			method:   "sessions.list",
+			expectOK: true,
+		},
+		{
+			name:     "channels status",
+			method:   "channels.status",
+			expectOK: true,
+		},
+		{
+			name:         "channels health",
+			method:       "channels.health",
+			expectOK:     true,
+			expectFields: []string{"channels"},
+		},
+		{
+			name:      "unknown method",
+			method:    "nonexistent.method",
+			expectOK:  false,
+			expectErr: protocol.ErrNotFound,
+		},
 	}
-	var payload map[string]any
-	json.Unmarshal(resp.Payload, &payload)
-	if payload["valid"] != true {
-		t.Errorf("expected valid=true, got %v", payload["valid"])
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := dispatch(t, d, tc.method, tc.params)
+			if tc.expectOK != resp.OK {
+				t.Fatalf("expected ok=%v, got ok=%v (error=%+v)", tc.expectOK, resp.OK, resp.Error)
+			}
+			if tc.expectErr != "" {
+				if resp.Error == nil || resp.Error.Code != tc.expectErr {
+					t.Fatalf("expected error code %q, got %+v", tc.expectErr, resp.Error)
+				}
+			}
+			if len(tc.expectFields) == 0 {
+				return
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(resp.Payload, &payload); err != nil {
+				t.Fatalf("unmarshal payload: %v", err)
+			}
+			for _, field := range tc.expectFields {
+				if _, ok := payload[field]; !ok {
+					t.Errorf("missing %q in payload: %#v", field, payload)
+				}
+			}
+		})
 	}
 }
 
-func TestProtocolValidate_Invalid(t *testing.T) {
+func TestProtocolValidate_FrameContracts(t *testing.T) {
 	d := testDispatcher()
-	resp := dispatch(t, d, "protocol.validate", map[string]string{
-		"frame": `{"type":"unknown"}`,
-	})
-	if !resp.OK {
-		t.Fatalf("expected ok (with valid=false), got error: %+v", resp.Error)
+	tests := []struct {
+		name        string
+		frame       string
+		expectValid bool
+	}{
+		{
+			name:        "valid request frame",
+			frame:       ciValidFrame,
+			expectValid: true,
+		},
+		{
+			name:        "invalid frame type",
+			frame:       ciInvalidFrame,
+			expectValid: false,
+		},
 	}
-	var payload map[string]any
-	json.Unmarshal(resp.Payload, &payload)
-	if payload["valid"] != false {
-		t.Errorf("expected valid=false, got %v", payload["valid"])
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := dispatch(t, d, "protocol.validate", map[string]string{"frame": tc.frame})
+			if !resp.OK {
+				t.Fatalf("expected ok (validation result in payload), got error: %+v", resp.Error)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(resp.Payload, &payload); err != nil {
+				t.Fatalf("unmarshal payload: %v", err)
+			}
+			if payload["valid"] != tc.expectValid {
+				t.Errorf("expected valid=%v, got %v", tc.expectValid, payload["valid"])
+			}
+		})
 	}
 }
 
@@ -226,7 +311,6 @@ func TestVegaFFISearch_MissingParams(t *testing.T) {
 	}
 }
 
-
 // ---------------------------------------------------------------------------
 // Protocol validate_params RPC tests
 // ---------------------------------------------------------------------------
@@ -247,7 +331,7 @@ func TestProtocolValidateParams_MissingMethod(t *testing.T) {
 func TestProtocolValidateParams_MissingParams(t *testing.T) {
 	d := testDispatcher()
 	resp := dispatch(t, d, "protocol.validate_params", map[string]string{
-		"method": "health.check",
+		"method": ciHealthMethod,
 	})
 	if resp.OK {
 		t.Error("expected error for missing params")

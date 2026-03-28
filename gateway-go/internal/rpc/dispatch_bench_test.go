@@ -11,7 +11,8 @@ import (
 func BenchmarkDispatchHit(b *testing.B) {
 	d := NewDispatcher(slog.Default())
 	d.Register("bench.echo", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.NewResponseOk(req.ID, nil)
+		resp, _ := protocol.NewResponseOK(req.ID, nil)
+		return resp
 	})
 
 	req := &protocol.RequestFrame{
@@ -43,7 +44,8 @@ func BenchmarkDispatchMiss(b *testing.B) {
 func BenchmarkRegister(b *testing.B) {
 	d := NewDispatcher(slog.Default())
 	handler := func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return protocol.NewResponseOk(req.ID, nil)
+		resp, _ := protocol.NewResponseOK(req.ID, nil)
+		return resp
 	}
 
 	b.ResetTimer()
