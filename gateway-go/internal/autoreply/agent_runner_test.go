@@ -1,10 +1,12 @@
 package autoreply
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
 // mockLLM implements LLMClient for testing.
@@ -41,7 +43,7 @@ func (m *mockTools) Execute(_ context.Context, call ToolCall) (string, bool, err
 func TestDefaultAgentRunner_SimpleReply(t *testing.T) {
 	runner := NewDefaultAgentRunner(AgentRunnerConfig{
 		LLM: &mockLLM{responses: []*LLMResponse{
-			{Content: "Hello!", StopReason: "end_turn", Usage: TokenUsage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}},
+			{Content: "Hello!", StopReason: "end_turn", Usage: session.TokenUsage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}},
 		}},
 		Logger: testSlogLogger(),
 	})
@@ -75,12 +77,12 @@ func TestDefaultAgentRunner_ToolExecution(t *testing.T) {
 				Content:    "",
 				StopReason: "tool_use",
 				ToolCalls:  []ToolCall{{ID: "t1", Name: "bash", Input: map[string]any{"command": "ls"}}},
-				Usage:      TokenUsage{TotalTokens: 20},
+				Usage:      session.TokenUsage{TotalTokens: 20},
 			},
 			{
 				Content:    "Here are your files.",
 				StopReason: "end_turn",
-				Usage:      TokenUsage{TotalTokens: 10},
+				Usage:      session.TokenUsage{TotalTokens: 10},
 			},
 		}},
 		Tools:  &mockTools{results: map[string]string{"bash": "file1.txt\nfile2.txt"}},
@@ -252,10 +254,10 @@ func TestReminderGuard(t *testing.T) {
 }
 
 func TestFormatUsageSummary(t *testing.T) {
-	if FormatUsageSummary(TokenUsage{}) != "" {
+	if FormatUsageSummary(session.TokenUsage{}) != "" {
 		t.Error("zero usage should return empty")
 	}
-	got := FormatUsageSummary(TokenUsage{InputTokens: 100, OutputTokens: 50, TotalTokens: 150})
+	got := FormatUsageSummary(session.TokenUsage{InputTokens: 100, OutputTokens: 50, TotalTokens: 150})
 	if got != "150 tokens (in: 100, out: 50)" {
 		t.Errorf("got %q", got)
 	}
