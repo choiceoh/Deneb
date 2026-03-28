@@ -1,5 +1,35 @@
 # Changelog
 
+## [3.25.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.24.1...deneb-v3.25.0) (2026-03-28)
+
+
+### ✨ Features
+
+* **chat:** change default model to google/gemini-3.0-flash ([f52d472](https://github.com/choiceoh/Deneb/commit/f52d47227fae280d8a866c335ee37918f17ff55f))
+
+
+### 🐛 Bug Fixes
+
+* **core:** prevent panic in html_to_markdown FFI ([9d03879](https://github.com/choiceoh/Deneb/commit/9d03879908219ce26a8f33837bdee9845d88f67e))
+* **memory:** add per-phase timeouts to AuroraDream dreaming cycle ([aea4893](https://github.com/choiceoh/Deneb/commit/aea48935c57e3bae30298cf6b823504ac2b4afea))
+* **memory:** raise dreaming cycle ceiling to 12 minutes ([b56b6ce](https://github.com/choiceoh/Deneb/commit/b56b6ce2b0cf9c0b1ac0e0d6362a07117d0b6145))
+* **memory:** raise per-phase dreaming budgets to ~15 minutes total ([8e1543f](https://github.com/choiceoh/Deneb/commit/8e1543fa2d915a64d077fb34a7f72a14086429e7))
+* **telegram:** add media group batching, download timeout, and error handling for image processing ([b58139c](https://github.com/choiceoh/Deneb/commit/b58139cd6f8ebe1f006557199073040a6cea81a4))
+
+
+### ⚡ Performance
+
+* **memory:** improve aurora memory recall with higher limits, rebalanced scoring, and embedding cache ([dbe332a](https://github.com/choiceoh/Deneb/commit/dbe332acc99c05c80bffa21809b5d1a058d1550e))
+* **memory:** increase verify batch size to 50 and cap facts at 500 ([a228287](https://github.com/choiceoh/Deneb/commit/a228287e7be9deadac38e0f8cff24de70ca5c025))
+
+
+### 🔧 Internal
+
+* **gateway:** remove copilot background monitor and github-copilot xhigh support ([74d96b6](https://github.com/choiceoh/Deneb/commit/74d96b68c934824b8d57cbf94d7dc41ace0f7d48))
+* remove dead code across core-rs and gateway-go ([3d9b9be](https://github.com/choiceoh/Deneb/commit/3d9b9be00daa07ee73b09393d47bcaae1ad8665b))
+* remove Propus channel (web coding assistant) ([4df5cc7](https://github.com/choiceoh/Deneb/commit/4df5cc7c48e18a112847d07c63dfb76829100afc))
+* remove Propus-only hooks from chat handler (GetReplyFunc, GetBroadcastRaw, ToolProfile, codingTools) ([6ad3550](https://github.com/choiceoh/Deneb/commit/6ad3550292b634bf4620c05e6284be6d1bb825fa))
+
 ## [3.24.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.24.0...deneb-v3.24.1) (2026-03-28)
 
 
