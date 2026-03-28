@@ -30,15 +30,24 @@ import (
 // this code to implement auto-restart loops. Matches EX_TEMPFAIL from sysexits.h.
 const ExitCodeRestart = 75
 
+// Version is the gateway version, injected at build time via ldflags.
+// Falls back to "dev" for untagged builds.
+var Version = "dev"
+
 func main() {
 	configPath := flag.String("config", "", "Path to deneb.json config file")
 	port := flag.Int("port", 0, "Gateway server port (overrides config)")
 	bind := flag.String("bind", "", "Bind address: 'loopback', 'lan', 'all', 'custom', 'tailnet' (overrides config)")
-	version := flag.String("version", "0.1.0-go", "Server version string")
+	version := flag.String("version", "", "Server version string (overrides built-in version)")
 	pidFile := flag.String("pid-file", "", "Path to PID file for daemon mode")
 	daemonMode := flag.Bool("daemon", false, "Run as daemon (write PID file, check for existing)")
 	logLevel := flag.String("log-level", "", "Log level: debug, info, warn, error (overrides config)")
 	flag.Parse()
+
+	// Resolve effective version: --version flag overrides the compiled-in default.
+	if *version == "" {
+		*version = Version
+	}
 
 	// Load .env files before config bootstrap so env-based overrides are available.
 	config.LoadDotenvFiles(slog.Default())
@@ -132,16 +141,21 @@ func main() {
 		)
 	}
 
+	// Probe SGLang server reachability for the banner.
+	const sglangBannerURL = "http://127.0.0.1:30000/v1"
+	sglangStatus := "offline"
+	if vega.IsSglangReachable(sglangBannerURL) {
+		sglangStatus = "online"
+	}
+
 	// Collect banner info for startup display.
 	bannerInfo := logging.BannerInfo{
-		Version:     *version,
-		Addr:        addr,
-		AuthMode:    rtCfg.AuthMode,
-		RustFFI:     ffi.Available,
-		VegaEnabled: vegaEnabled,
+		Version:      *version,
+		Addr:         addr,
+		RustFFI:      ffi.Available,
+		VegaEnabled:  vegaEnabled,
+		SglangStatus: sglangStatus,
 	}
-	// Resolve active channels from config snapshot.
-	bannerInfo.Channels = config.ConfiguredChannelIDs(bootstrap.Snapshot)
 
 	// Resolve config directory for PID file fallback.
 	cfgDir := ""
