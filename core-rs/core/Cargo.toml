@@ -22,7 +22,6 @@ vega = ["dep:deneb-vega"]
 # Serialization
 serde.workspace = true
 serde_json.workspace = true
-jsonschema = "0.45"
 memchr = "2"
 
 # Protobuf runtime
