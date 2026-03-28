@@ -1,5 +1,37 @@
 # Changelog
 
+## [3.28.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.27.2...deneb-v3.28.0) (2026-03-28)
+
+
+### ✨ Features
+
+* **discord:** add rate limit retry, config validation, and comprehensive format tests ([8ae2560](https://github.com/choiceoh/Deneb/commit/8ae25601da167309a5e7295133920d7d40a8cb62))
+* **discord:** code block-aware splitting, file attachment processing, smart reply formatting ([231bb64](https://github.com/choiceoh/Deneb/commit/231bb647cc75e9ee524bd8f4f77cc966a10f7465))
+* **discord:** per-channel workspace mapping, auto-context injection, coding quick commands ([14eab2f](https://github.com/choiceoh/Deneb/commit/14eab2face828fa9f15ad16b886e1994ff3d9084))
+* **discord:** typing throttle, additive reaction support, bot presence, session TTL cleanup ([610980a](https://github.com/choiceoh/Deneb/commit/610980a6a691b1194922e06708a58c0bf63d0d1f))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** cancel in-flight tool calls and memory goroutine on shutdown ([3f6e599](https://github.com/choiceoh/Deneb/commit/3f6e599258895c5c446c087b1387bb1d57a5dc68))
+* **discord:** fix missing brace compile error, data race on seq with atomic, errors.As, remove unused types ([703ff45](https://github.com/choiceoh/Deneb/commit/703ff45e9e213a19bccdee366973ea2be80c8dd1))
+* **ffi,session:** cap grow buffer, guard merge input, raise vega buf, enforce state transitions ([81141fb](https://github.com/choiceoh/Deneb/commit/81141fb3dd18f9474de2c656223fddc29506837c))
+* **ffi:** cap ffiCallWithGrow initialSize, guard merge input, raise vega buffer ([51e84b0](https://github.com/choiceoh/Deneb/commit/51e84b07365e80cf194053a4c90ca36c87dcaba8))
+* **ffi:** eliminate double-free race in CGo Handle via sync.Once ([e0228c5](https://github.com/choiceoh/Deneb/commit/e0228c53ee0a0e5db4131cc920d46867b4471de1))
+* **ffi:** guard DetectMIME slice index against out-of-bounds n ([f2cf3eb](https://github.com/choiceoh/Deneb/commit/f2cf3eb821d8e8b80a61386f384b3c2d7d9aeb01))
+* resolve 8 critical bugs across gateway, aurora, channel, auth, and build ([db5cf61](https://github.com/choiceoh/Deneb/commit/db5cf6173e7653f7ca69e3c05582246fb9f9cfff))
+
+
+### 🔧 Internal
+
+* **chat:** replace 36 hand-written *ToolSchema() functions with YAML + codegen ([99bc92e](https://github.com/choiceoh/Deneb/commit/99bc92e8f4b800c7421037a3abf729091b5d2b34))
+* **core-rs:** replace .unwrap() with ? and .expect() in test code (continued) ([dbe2440](https://github.com/choiceoh/Deneb/commit/dbe244077cfd275423cf04022052bd1888da25c1))
+* **core-rs:** replace .unwrap() with ? and .expect() in test code (final) ([fe2899f](https://github.com/choiceoh/Deneb/commit/fe2899f8f952598ae746cd58a2bfb1c0bf5e732a))
+* **core-rs:** replace .unwrap() with ? and .expect() in test code (partial) ([37228f0](https://github.com/choiceoh/Deneb/commit/37228f0525bd9309a51125356b95af235d844e74))
+* extract server lifecycle methods to separate file ([a1e20ba](https://github.com/choiceoh/Deneb/commit/a1e20ba87bc1a2cfc2de20306968dca5a542b918))
+* **server:** split server.go into http/ws/lifecycle files ([6163624](https://github.com/choiceoh/Deneb/commit/6163624789117eb769a372d7ad42ae61cc5f178c))
+* **session:** use ValidateTransition in Set, tighten comments ([a13282c](https://github.com/choiceoh/Deneb/commit/a13282c5d13c90c06925bd5ca9fe9499a9b0274e))
+
 ## [3.27.2](https://github.com/choiceoh/Deneb/compare/deneb-v3.27.1...deneb-v3.27.2) (2026-03-28)
 
 
