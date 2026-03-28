@@ -42,14 +42,6 @@ func (s *Server) registerSessionRPCMethods() {
 	// Session repair and overflow check methods.
 	rpc.RegisterSessionRepairMethods(s.dispatcher, sessionDeps)
 
-	// Daemon status method.
-	s.dispatcher.Register("daemon.status", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if s.daemon == nil {
-			return protocol.MustResponseOK(req.ID, map[string]string{"state": "not_configured"})
-		}
-		return protocol.MustResponseOK(req.ID, s.daemon.Status())
-	})
-
 	// Chat methods — native agent execution.
 	broadcastFn := func(event string, payload any) (int, []error) {
 		return s.broadcaster.Broadcast(event, payload)

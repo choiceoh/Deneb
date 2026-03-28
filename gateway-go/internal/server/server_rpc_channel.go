@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -16,24 +15,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// registerChannelEventsMethods registers event broadcasting, config reload, monitoring,
-// channel lifecycle, event subscriptions, identity, heartbeat, presence, and model-list methods.
-func (s *Server) registerChannelEventsMethods(broadcastFn func(string, any) (int, []error)) {
-	// Event broadcasting method.
-	s.dispatcher.Register("events.broadcast", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			Event   string `json:"event"`
-			Payload any    `json:"payload"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Event == "" {
-			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrMissingParam, "event is required"))
-		}
-		sent, _ := s.broadcaster.Broadcast(p.Event, p.Payload)
-		return protocol.MustResponseOK(req.ID, map[string]int{"sent": sent})
+func (s *Server) registerEventsBroadcastMethods() {
+	rpc.RegisterEventBroadcastMethods(s.dispatcher, rpc.EventsDeps{
+		Broadcaster: s.broadcaster,
+		Logger:      s.logger,
 	})
+}
 
-	// Config reload method with Go subsystem propagation.
+func (s *Server) registerConfigLifecycleMethods() {
 	rpc.RegisterConfigReloadMethod(s.dispatcher, rpc.ConfigReloadDeps{
 		OnReloaded: func(_ *config.ConfigSnapshot) {
 			// Notify hooks of config change.
@@ -73,27 +62,29 @@ func (s *Server) registerChannelEventsMethods(broadcastFn func(string, any) (int
 			}
 		},
 	})
-
-	// Monitoring methods.
-	rpc.RegisterMonitoringMethods(s.dispatcher, rpc.MonitoringDeps{
-		ChannelHealth: s.channelHealth,
-		Activity:      s.activity,
-	})
-
-	// Channel lifecycle RPC methods.
 	rpc.RegisterChannelLifecycleMethods(s.dispatcher, rpc.ChannelLifecycleDeps{
 		ChannelLifecycle: s.channelLifecycle,
 		Hooks:            s.hooks,
 		Broadcaster:      s.broadcaster,
 	})
+}
 
-	// Event subscription methods.
+func (s *Server) registerMonitoringMethods() {
+	rpc.RegisterMonitoringMethods(s.dispatcher, rpc.MonitoringDeps{
+		ChannelHealth: s.channelHealth,
+		Activity:      s.activity,
+	})
+}
+
+func (s *Server) registerSubscriptionMethods() {
 	rpc.RegisterEventsMethods(s.dispatcher, rpc.EventsDeps{Broadcaster: s.broadcaster, Logger: s.logger})
+}
 
-	// Gateway identity method.
+func (s *Server) registerIdentityMethods() {
 	rpc.RegisterIdentityMethods(s.dispatcher, s.version)
+}
 
-	// Heartbeat methods (last-heartbeat, set-heartbeats).
+func (s *Server) registerHeartbeatMethods(broadcastFn func(string, any) (int, []error)) {
 	if s.heartbeatState == nil {
 		s.heartbeatState = rpc.NewHeartbeatState()
 	}
@@ -101,8 +92,9 @@ func (s *Server) registerChannelEventsMethods(broadcastFn func(string, any) (int
 		State:       s.heartbeatState,
 		Broadcaster: broadcastFn,
 	})
+}
 
-	// System presence methods (system-presence, system-event).
+func (s *Server) registerPresenceMethods(broadcastFn func(string, any) (int, []error)) {
 	if s.presenceStore == nil {
 		s.presenceStore = rpc.NewPresenceStore()
 	}
@@ -110,8 +102,9 @@ func (s *Server) registerChannelEventsMethods(broadcastFn func(string, any) (int
 		Store:       s.presenceStore,
 		Broadcaster: broadcastFn,
 	})
+}
 
-	// Models list method.
+func (s *Server) registerModelsMethods() {
 	rpc.RegisterModelsMethods(s.dispatcher, rpc.ModelsDeps{
 		Providers: s.providers,
 	})
