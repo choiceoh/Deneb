@@ -32,18 +32,18 @@ func repoRoot(t *testing.T) string {
 
 func invokeManual(t *testing.T, workspaceDir string, params map[string]string) string {
 	t.Helper()
-	fn := toolSystemManual(workspaceDir)
+	fn := toolPolaris(workspaceDir)
 	input, _ := json.Marshal(params)
 	result, err := fn(context.Background(), input)
 	if err != nil {
-		t.Fatalf("toolSystemManual returned error: %v", err)
+		t.Fatalf("toolPolaris returned error: %v", err)
 	}
 	return result
 }
 
 func invokeManualExpectErr(t *testing.T, workspaceDir string, params map[string]string) error {
 	t.Helper()
-	fn := toolSystemManual(workspaceDir)
+	fn := toolPolaris(workspaceDir)
 	input, _ := json.Marshal(params)
 	_, err := fn(context.Background(), input)
 	return err
@@ -324,6 +324,87 @@ func TestSystemManualGuidesReadNewGuide(t *testing.T) {
 		if !strings.Contains(result, tc.title) {
 			t.Errorf("guide %q: expected title %q in content", tc.key, tc.title)
 		}
+	}
+}
+
+// --- consistency: every key in builtinGuideOrder must have a builtinGuides entry ---
+
+func TestSystemManualGuideOrderMatchesMap(t *testing.T) {
+	for _, key := range builtinGuideOrder {
+		g, ok := builtinGuides[key]
+		if !ok {
+			t.Errorf("builtinGuideOrder contains %q but builtinGuides has no entry", key)
+			continue
+		}
+		if g.Content == "" {
+			t.Errorf("guide %q has empty content", key)
+		}
+		if g.Key != key {
+			t.Errorf("guide %q: Key field is %q, want %q", key, g.Key, key)
+		}
+	}
+	orderSet := make(map[string]bool, len(builtinGuideOrder))
+	for _, key := range builtinGuideOrder {
+		orderSet[key] = true
+	}
+	for key := range builtinGuides {
+		if !orderSet[key] {
+			t.Errorf("builtinGuides has %q but builtinGuideOrder does not", key)
+		}
+	}
+}
+
+// --- guide categories: completeness ---
+
+func TestSystemManualGuideCategoriesComplete(t *testing.T) {
+	seen := make(map[string]string)
+	for _, cat := range guideCategories {
+		for _, key := range cat.Guides {
+			if prev, ok := seen[key]; ok {
+				t.Errorf("guide %q appears in both %q and %q", key, prev, cat.Key)
+			}
+			seen[key] = cat.Key
+		}
+	}
+	for key := range builtinGuides {
+		if _, ok := seen[key]; !ok {
+			t.Errorf("guide %q is not in any category", key)
+		}
+	}
+}
+
+// --- guide category filter ---
+
+func TestSystemManualGuidesCategoryFilter(t *testing.T) {
+	root := repoRoot(t)
+	result := invokeManual(t, root, map[string]string{
+		"action": "guides",
+		"topic":  "core",
+	})
+	if !strings.Contains(result, "Core Engine") {
+		t.Error("expected 'Core Engine' label")
+	}
+	if !strings.Contains(result, "aurora") {
+		t.Error("expected 'aurora' in core filter")
+	}
+	if strings.Contains(result, "gmail") {
+		t.Error("core filter should not contain 'gmail'")
+	}
+}
+
+// --- guide related guides ---
+
+func TestSystemManualGuidesRelated(t *testing.T) {
+	root := repoRoot(t)
+	result := invokeManual(t, root, map[string]string{
+		"action": "guides",
+		"topic":  "aurora",
+	})
+	if !strings.Contains(result, "## Related Guides") {
+		t.Error("expected 'Related Guides' footer")
+	}
+	if !strings.Contains(result, "compaction") {
+		t.Error("expected 'compaction' in aurora related guides")
 	}
 }
 

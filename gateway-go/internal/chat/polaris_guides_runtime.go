@@ -39,7 +39,17 @@ On message ingest, memory system extracts importance score (0-1) to prioritize w
 ## Key Files
 - docs/concepts/memory.md
 - gateway-go/internal/chat/tool_memory.go (memory_search, memory_get tools)
-- gateway-go/internal/memory/ (Store, Embedder, indexing)`
+- gateway-go/internal/memory/ (Store, Embedder, indexing)
+
+## Common Tasks
+- Search memory: memory_search(query:'user timezone preference')
+- Read today's log: read(file_path:'memory/2026-03-28.md')
+- Store a decision: write(file_path:'MEMORY.md', content:'## Decision: ...', mode:'append')
+
+## Gotchas
+- memory_search is read-only; use write/edit tools to modify memory files
+- MEMORY.md only loaded in main private session, not sub-agent sessions
+- Auto-flush before compaction is skipped if workspace is read-only`
 
 const sessionsGuide = `Sessions represent individual conversations with lifecycle management.
 
@@ -98,7 +108,17 @@ IDLE → RUNNING → DONE / FAILED / KILLED / TIMEOUT
 ## Key Files
 - docs/concepts/session.md
 - gateway-go/internal/session/ (Manager, lifecycle, state machine)
-- gateway-go/internal/chat/tool_sessions.go (8 session tools)`
+- gateway-go/internal/chat/tool_sessions.go (8 session tools)
+
+## Common Tasks
+- Check current session: session_status()
+- Reset session: /new or /reset
+- View session state machine: grep(pattern:'IDLE.*RUNNING\|SessionRunStatus', path:'gateway-go/internal/session/')
+
+## Gotchas
+- Daily reset at 4 AM local; sessions started before reset carry over until idle timeout
+- State transitions are validated; cannot go DONE → RUNNING (must create new run)
+- Session GC evicts terminal sessions after 1 hour; in-memory data is lost`
 
 const architectureGuide = `Deneb: multi-language gateway with three cooperating runtimes on DGX Spark hardware.
 
@@ -173,7 +193,17 @@ Other: approval/, autoreply/ (agent execution engine), dedupe/, device/, events/
 - docs/concepts/architecture.md (20KB)
 - gateway-go/cmd/gateway/main.go (entry, --port/--bind, graceful shutdown)
 - core-rs/core/src/lib.rs (30+ FFI exports, error codes, constants)
-- gateway-go/internal/ffi/ (8 *_cgo.go files + *_noffi.go fallbacks)`
+- gateway-go/internal/ffi/ (8 *_cgo.go files + *_noffi.go fallbacks)
+
+## Common Tasks
+- Check FFI exports: grep(pattern:'//export deneb_', path:'core-rs/core/src/lib.rs')
+- View RPC methods: grep(pattern:'Register.*Method', path:'gateway-go/internal/rpc/')
+- Check gateway startup: read(file_path:'gateway-go/cmd/gateway/main.go')
+
+## Gotchas
+- FFI_MAX_INPUT_LEN is 16 MB; larger inputs return INPUT_TOO_LARGE without processing
+- Rust panics across FFI are caught by ffi_catch() but log as FFI_ERR_PANIC (-99)
+- RPC worker pool is 2x NumCPU (clamped 4-64); exceeding this queues requests`
 
 const channelsGuide = `Channels are messaging surface plugins connecting external platforms to Deneb.
 
@@ -212,7 +242,12 @@ Note: only Telegram is the active deployment target per project philosophy
 ## Key Files
 - gateway-go/internal/channel/ (registry.go, lifecycle manager)
 - docs/channels/telegram.md, channel-routing.md, groups.md
-- gateway-go/internal/telegram/ (Telegram-specific implementation)`
+- gateway-go/internal/telegram/ (Telegram-specific implementation)
+
+## Gotchas
+- Only Telegram is the active deployment target; other channels exist but aren't optimized
+- Forum topics create separate sessions; non-forum groups share one session
+- groupAllowFrom falls back to allowFrom; missing both means no access control`
 
 const telegramGuide = `Telegram is Deneb's primary and most optimized channel, using the grammY framework with native Bot API support.
 
@@ -273,7 +308,13 @@ const telegramGuide = `Telegram is Deneb's primary and most optimized channel, u
 ## Key Files
 - docs/channels/telegram.md
 - gateway-go/internal/telegram/ (Telegram-specific implementation)
-- gateway-go/internal/channel/registry.go`
+- gateway-go/internal/channel/registry.go
+
+## Gotchas
+- 4096 char limit is hard; messages exceeding it are auto-split, potentially breaking formatting
+- MarkdownV2 requires escaping special chars (_, *, [, ], etc.); raw markdown may render wrong
+- /setprivacy toggle requires bot removal/re-add to take effect in existing groups
+- User IDs are numeric; telegram:/tg: prefixes are auto-normalized but not always stripped in logs`
 
 const skillsGuide = `Skills are modular capability packages that extend the agent. Each skill is a directory with a SKILL.md file.
 
@@ -326,7 +367,17 @@ Body: free-form Markdown instructions for the agent.
 
 ## Key Files
 - gateway-go/internal/skills/catalog.go, discovery.go, prompt.go, eligibility.go
-- docs/concepts/skills.md, docs/tools/skills.md`
+- docs/concepts/skills.md, docs/tools/skills.md
+
+## Common Tasks
+- List available skills: grep(pattern:'name:', path:'skills/*/SKILL.md')
+- Check skill eligibility: grep(pattern:'requires:\|always:', path:'skills/*/SKILL.md')
+- View skill prompt injection: read(file_path:'gateway-go/internal/skills/prompt.go')
+
+## Gotchas
+- Max 150 skills and 30K chars in system prompt; excess skills are dropped
+- SKILL.md capped at 256KB; larger files are ignored
+- Agent decides autonomously when to use skills; there's no explicit invocation API`
 
 const pilotGuide = `Pilot is a fast local AI (sglang) that orchestrates tool execution in a single round-trip, avoiding sequential LLM calls.
 
@@ -379,7 +430,22 @@ const pilotGuide = `Pilot is a fast local AI (sglang) that orchestrates tool exe
 - LLM call fails: graceful degradation with raw results
 
 ## Key Files
-- gateway-go/internal/chat/tools_pilot.go`
+- gateway-go/internal/chat/tools_pilot.go
+
+## Common Tasks
+- Quick file analysis: pilot(task:'이 파일 구조 설명', file:'path/to/file.go')
+- Multi-grep analysis: pilot(task:'이 패턴 분석', grep:'pattern', path:'src/')
+- Command output review: pilot(task:'결과 요약', exec:'make test')
+
+## When to Use Pilot vs Direct Tools
+- Need raw output only → direct tools (read, grep, exec)
+- Need analysis/summary of output → pilot
+- Complex multi-step reasoning → main model (not pilot)
+
+## Gotchas
+- Pilot timeout is 2 minutes total; complex source gathering may exceed this
+- Max 10 sources per call; exceeding silently ignores extra sources
+- sglang unavailable → raw results returned without LLM analysis`
 
 const cronGuide = `Cron manages scheduled jobs that trigger agent turns at configured intervals.
 
@@ -436,5 +502,16 @@ const cronGuide = `Cron manages scheduled jobs that trigger agent turns at confi
 ## Key Files
 - gateway-go/internal/cron/service.go, types.go, scheduler.go, isolated_agent.go
 - gateway-go/internal/chat/tool_cron.go (cron tool implementation)
-- docs/automation/cron-jobs.md (25KB, comprehensive user docs)`
+- docs/automation/cron-jobs.md (25KB, comprehensive user docs)
+
+## Common Tasks
+- List cron jobs: cron(action:'list')
+- Add a daily job: cron(action:'add', name:'daily-report', schedule:'0 9 * * *', command:'generate report')
+- Force-run a job: cron(action:'run', jobId:'daily-report')
+- Check service status: cron(action:'status')
+
+## Gotchas
+- Error backoff min 2s between refires; rapid failures don't spam
+- deleteAfterRun=true deletes the job definition after first run (one-shot)
+- Failure alerts have cooldown; consecutive failures within cooldownMs are suppressed`
 

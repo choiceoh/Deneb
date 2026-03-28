@@ -70,7 +70,22 @@ Soft block detection: Cloudflare challenges (cf-challenge-running, cf_chl_opt), 
 - gateway-go/internal/chat/web_fetch.go (fetch pipeline, document processing)
 - gateway-go/internal/chat/web_fetch_stealth.go (stealth profiles, block detection)
 - gateway-go/internal/liteparse/ (document parsing)
-- docs/tools/web.md (17KB, comprehensive user docs)`
+- docs/tools/web.md (17KB, comprehensive user docs)
+
+## Common Tasks
+- Fetch a URL: web(url:'https://example.com')
+- Web search: web(query:'golang error handling')
+- Search + auto-fetch: web(query:'kubernetes pods', fetch:2)
+
+## When to Use Which Mode
+- Specific URL content → fetch (url only)
+- Current info on a topic → search (query only)
+- Research + synthesize → search+fetch (query + fetch:2)
+
+## Gotchas
+- Max download 5 MB; larger files return content_too_large
+- SSRF protection blocks private IPs; internal URLs return ssrf_blocked
+- Stealth fetch escalates through 3 profiles; some sites still block all 3`
 
 const execGuide = `The exec tool runs shell commands, and the process tool manages long-running background sessions.
 
@@ -113,7 +128,18 @@ const execGuide = `The exec tool runs shell commands, and the process tool manag
 ## Key Files
 - gateway-go/internal/chat/tools_core.go (exec tool registration)
 - gateway-go/internal/process/ (Manager, session lifecycle)
-- docs/tools/exec.md (9KB, user docs)`
+- docs/tools/exec.md (9KB, user docs)
+
+## Common Tasks
+- Run a command: exec(command:'ls -la', timeout:10)
+- Background build: exec(command:'make all', background:true)
+- Check background job: process(action:'poll', sessionId:'...')
+- Kill stuck process: process(action:'kill', sessionId:'...')
+
+## Gotchas
+- Default timeout is 30s; long builds need explicit timeout or background mode
+- background=true requires process.Manager; without it, background mode is unavailable
+- Exit code 0 doesn't appear in output; non-zero exit code is emphasized`
 
 const gatewayToolGuide = `The gateway tool provides self-management capabilities: config CRUD, restart, and self-update.
 
@@ -150,7 +176,17 @@ const gatewayToolGuide = `The gateway tool provides self-management capabilities
 
 ## Key Files
 - gateway-go/internal/chat/tool_gateway.go
-- docs/gateway/configuration.md (22KB)`
+- docs/gateway/configuration.md (22KB)
+
+## Common Tasks
+- Read config: gateway(action:'config.get')
+- Patch config: gateway(action:'config.patch', patch:{agents:{defaults:{model:'anthropic/claude-sonnet-4-20250514'}}})
+- Restart gateway: gateway(action:'restart')
+
+## Gotchas
+- config.apply replaces entire config; use config.patch for partial updates
+- SIGUSR1 restart drains connections; in-flight requests may be interrupted
+- update.run has 2min timeout; large repos may exceed this`
 
 const mediaGuide = `Media tools: image analysis (vision), YouTube transcripts, and file delivery.
 
@@ -190,7 +226,17 @@ const mediaGuide = `Media tools: image analysis (vision), YouTube transcripts, a
 - gateway-go/internal/chat/tool_media.go (image, youtube_transcript, send_file)
 - gateway-go/internal/media/ (extraction, formatting)
 - core-rs/core/src/media/ (MIME detection, magic bytes)
-- docs/tools/index.md`
+- docs/tools/index.md
+
+## Common Tasks
+- Analyze image: image(image:'/path/to/screenshot.png', prompt:'이 화면에서 에러가 뭔지 알려줘')
+- Get YouTube transcript: youtube_transcript(url:'https://youtube.com/watch?v=...')
+- Send file to user: send_file(path:'/path/to/report.pdf')
+
+## Gotchas
+- Image tool defaults to claude-sonnet-4 vision model; ensure provider is configured
+- send_file is limited to 50 MB (Telegram); larger files fail silently
+- YouTube transcript extraction has 90s timeout; long videos may fail`
 
 const gmailGuide = `Gmail tool provides native OAuth2 access to Gmail for inbox management, search, read, send, reply, and labeling.
 
@@ -242,7 +288,17 @@ const gmailGuide = `Gmail tool provides native OAuth2 access to Gmail for inbox 
 
 ## Key Files
 - gateway-go/internal/chat/tool_gmail.go
-- gateway-go/internal/gmail/ (OAuth2, API client)`
+- gateway-go/internal/gmail/ (OAuth2, API client)
+
+## Common Tasks
+- Check inbox: gmail(action:'inbox')
+- Search email: gmail(action:'search', query:'from:user@example.com subject:report')
+- Send email: gmail(action:'send', to:'user@example.com', subject:'Hi', body:'Hello')
+
+## Gotchas
+- OAuth2 credentials must be at ~/.deneb/credentials/gmail_client.json + gmail_token.json
+- Contact aliases are auto-learned after send; first send to a new contact requires full email
+- Output language is Korean by default`
 
 const dataToolsGuide = `Data tools: KV store (persistent) and HTTP API client.
 
@@ -285,7 +341,18 @@ const dataToolsGuide = `Data tools: KV store (persistent) and HTTP API client.
 
 ## Key Files
 - gateway-go/internal/chat/tool_kv.go (KV store)
-- gateway-go/internal/chat/tool_http.go (HTTP client)`
+- gateway-go/internal/chat/tool_http.go (HTTP client)
+
+## Common Tasks
+- Store a value: kv(action:'set', key:'my_key', value:'my_value')
+- Read a value: kv(action:'get', key:'my_key')
+- List keys: kv(action:'list', prefix:'gmail.')
+- API call: http(url:'https://api.example.com/data', method:'GET')
+
+## Gotchas
+- KV store is a single JSON file (~/.deneb/kv.json); not suitable for large datasets
+- HTTP tool max response is 5 MB; larger responses are truncated
+- http tool follows redirects by default; 3xx responses are auto-followed`
 
 const sessionToolsGuide = `Session tools provide full session lifecycle management: list, browse history, search, restore, cross-session messaging, and sub-agent spawning.
 
@@ -334,7 +401,18 @@ const sessionToolsGuide = `Session tools provide full session lifecycle manageme
 ## Key Files
 - gateway-go/internal/chat/tool_sessions.go (all 8 tools)
 - gateway-go/internal/session/ (Manager, state machine)
-- docs/concepts/session.md, docs/concepts/session-tool.md`
+- docs/concepts/session.md, docs/concepts/session-tool.md
+
+## Common Tasks
+- List sessions: sessions_list(kinds:['main','group'])
+- Read history: sessions_history(sessionKey:'agent:default:main', limit:10)
+- Spawn sub-agent: sessions_spawn(task:'research X', label:'research')
+- Monitor sub-agents: subagents(action:'list')
+
+## Gotchas
+- sessions_search max is 100 results; broad queries may miss older matches
+- sessions_restore copies messages into current session; this is irreversible
+- Sub-agent session keys include unix timestamp; they're unique per spawn`
 
 const messageGuide = `The message tool sends messages to users via channels, with support for replies, threads, and reactions.
 
@@ -379,4 +457,14 @@ const messageGuide = `The message tool sends messages to users via channels, wit
 
 ## Key Files
 - gateway-go/internal/chat/tool_message.go
-- docs/concepts/messages.md`
+- docs/concepts/messages.md
+
+## Common Tasks
+- Send message: message(action:'send', message:'안녕하세요')
+- Reply to message: message(action:'reply', message:'답변입니다', replyTo:'<msgId>')
+- React to message: message(action:'react', emoji:'👍', messageId:'<msgId>')
+
+## Gotchas
+- react timeout is 10s (shorter than send's 30s)
+- Cross-session messaging requires sessions_send, not message tool
+- Telegram 4096 char limit applies; long messages are auto-split`
