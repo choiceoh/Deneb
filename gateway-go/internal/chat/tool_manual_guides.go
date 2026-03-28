@@ -133,7 +133,7 @@ const agentLoopGuide = `The agent loop is the core execution cycle: intake → c
 - MaxTurns: 25
 - Timeout: 10 minutes (wall-time)
 - MaxTokens: 8192 (max output tokens per LLM call)
-- defaultModel: "zai/glm-5.1"
+- defaultModel: "google/gemini-3.0-flash"
 - maxCompactionRetries: 2 (retry with compacted context on overflow)
 - Context: tokenBudget=100K, freshTailCount=48, maxMessages=100
 - Stop reasons: end_turn, max_tokens, timeout, aborted, max_turns

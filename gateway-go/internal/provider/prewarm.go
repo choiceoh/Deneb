@@ -20,9 +20,9 @@ const (
 	// prewarmMaxRetries is the maximum number of prewarm attempts.
 	prewarmMaxRetries = 2
 	// prewarmDefaultModel is the fallback model when config has none.
-	prewarmDefaultModel = "zai/glm-5.1"
-	// prewarmDefaultBaseURL is the Z.ai Coding Plan global endpoint.
-	prewarmDefaultBaseURL = "https://api.z.ai/api/coding/paas/v4"
+	prewarmDefaultModel = "google/gemini-3.0-flash"
+	// prewarmDefaultBaseURL is the Google AI OpenAI-compatible endpoint.
+	prewarmDefaultBaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
 )
 
 // providerConfig holds credentials and endpoint for an LLM provider.
@@ -134,7 +134,7 @@ func loadPrewarmConfig(logger *slog.Logger) (providerID, modelName string, cfg *
 		return "", "", nil
 	}
 
-	// Resolve default model (e.g. "zai/glm-5.1").
+	// Resolve default model (e.g. "google/gemini-3.0-flash").
 	model := root.Agents.DefaultModel
 	if model == "" {
 		model = extractModelFromDefaults(root.Agents.Defaults)
@@ -207,8 +207,10 @@ func inferPrewarmAPIType(providerID, configAPI string) string {
 // resolvePrewarmBaseURL returns the default base URL for known providers.
 func resolvePrewarmBaseURL(providerID string) string {
 	switch providerID {
+	case "google":
+		return "https://generativelanguage.googleapis.com/v1beta/openai"
 	case "zai":
-		return prewarmDefaultBaseURL
+		return "https://api.z.ai/api/coding/paas/v4"
 	default:
 		return prewarmDefaultBaseURL
 	}

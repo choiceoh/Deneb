@@ -22,14 +22,18 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+// mediaDownloadTimeout bounds how long we wait for Telegram CDN downloads.
+const mediaDownloadTimeout = 30 * time.Second
+
 // InboundProcessor preprocesses incoming Telegram messages through the
 // autoreply pipeline before dispatching to the chat handler.
 type InboundProcessor struct {
-	cmdRegistry *autoreply.CommandRegistry
-	cmdRouter   *autoreply.CommandRouter
-	chatHandler *chat.Handler
-	server      *Server
-	logger      *slog.Logger
+	cmdRegistry      *autoreply.CommandRegistry
+	cmdRouter        *autoreply.CommandRouter
+	chatHandler      *chat.Handler
+	server           *Server
+	logger           *slog.Logger
+	mediaGroupBatch  *MediaGroupBatcher
 }
 
 // NewInboundProcessor creates a processor with the full autoreply command set.
@@ -37,13 +41,21 @@ func NewInboundProcessor(s *Server) *InboundProcessor {
 	registry := autoreply.NewCommandRegistry(autoreply.BuiltinChatCommands())
 	router := autoreply.NewCommandRouter(registry)
 
-	return &InboundProcessor{
+	p := &InboundProcessor{
 		cmdRegistry: registry,
 		cmdRouter:   router,
 		chatHandler: s.chatHandler,
 		server:      s,
 		logger:      s.logger.With("pkg", "inbound"),
 	}
+
+	// Media group batcher: collects multiple photos sent together and
+	// processes them as a single message with all images attached.
+	p.mediaGroupBatch = NewMediaGroupBatcher(func(messages []*telegram.Message) {
+		p.handleMediaGroup(messages)
+	})
+
+	return p
 }
 
 // HandleTelegramUpdate processes an incoming Telegram update through the
@@ -68,6 +80,15 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	// Skip messages with neither text nor processable media.
 	if msgText == "" && !hasMedia {
 		return
+	}
+
+	// Media group batching: when user sends multiple photos at once, Telegram
+	// delivers each as a separate update with the same media_group_id. Buffer
+	// them and process together so the agent sees all images in one run.
+	if hasMedia && msg.MediaGroupID != "" {
+		if p.mediaGroupBatch.Add(msg) {
+			return // buffered; will be dispatched after batch delay
+		}
 	}
 
 	chatID := fmt.Sprintf("%d", msg.Chat.ID)
@@ -156,25 +177,17 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	// Extract media attachments (download + base64-encode).
 	var attachments []chat.ChatAttachment
 	if hasMedia {
-		tgClient := p.server.telegramPlug.Client()
-		if tgClient != nil {
-			mediaAtts := media.ExtractAttachments(
-				context.Background(), tgClient, msg, p.logger,
-			)
-			for _, ma := range mediaAtts {
-				attachments = append(attachments, chat.ChatAttachment{
-					Type:     ma.Type,
-					MimeType: ma.MimeType,
-					Data:     ma.Data,
-					Name:     ma.Name,
-					Size:     ma.Size,
-				})
-			}
-		}
+		attachments = p.extractAttachments(msg)
 
 		// If no text was provided with media, use a default analysis prompt.
 		if agentMessage == "" && len(attachments) > 0 {
 			agentMessage = "이 미디어를 분석해 주세요."
+		}
+		// If media download failed entirely (no attachments extracted) but the
+		// user sent media with no caption, fall back to a notice so the agent
+		// run still fires instead of silently dropping the message.
+		if agentMessage == "" && len(attachments) == 0 {
+			agentMessage = "[이미지 다운로드 실패 — 다시 보내 주세요]"
 		}
 	}
 
@@ -237,6 +250,107 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	resp := p.chatHandler.Send(sendCtx, req)
 	if resp != nil && !resp.OK {
 		p.logger.Warn("chat.send failed for telegram message",
+			"chatId", chatID,
+			"error", resp.Error,
+		)
+	}
+}
+
+// extractAttachments downloads media from a Telegram message with a bounded timeout.
+func (p *InboundProcessor) extractAttachments(msg *telegram.Message) []chat.ChatAttachment {
+	tgClient := p.server.telegramPlug.Client()
+	if tgClient == nil {
+		return nil
+	}
+
+	dlCtx, dlCancel := context.WithTimeout(context.Background(), mediaDownloadTimeout)
+	defer dlCancel()
+
+	mediaAtts := media.ExtractAttachments(dlCtx, tgClient, msg, p.logger)
+
+	var attachments []chat.ChatAttachment
+	for _, ma := range mediaAtts {
+		attachments = append(attachments, chat.ChatAttachment{
+			Type:     ma.Type,
+			MimeType: ma.MimeType,
+			Data:     ma.Data,
+			Name:     ma.Name,
+			Size:     ma.Size,
+		})
+	}
+	return attachments
+}
+
+// handleMediaGroup processes a batch of messages from the same Telegram media group.
+// All photos are extracted and sent as a single chat.send with multiple image attachments.
+func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
+	if len(messages) == 0 {
+		return
+	}
+
+	// Use the first message for metadata (chat, sender, caption).
+	first := messages[0]
+	chatID := fmt.Sprintf("%d", first.Chat.ID)
+	sessionKey := "telegram:" + chatID
+
+	// Collect caption from whichever message has one (Telegram puts the caption
+	// on only one of the media group messages, usually the first).
+	var caption string
+	for _, msg := range messages {
+		if c := media.MessageText(msg); c != "" {
+			caption = c
+			break
+		}
+	}
+
+	// Extract attachments from all messages in the group.
+	var allAttachments []chat.ChatAttachment
+	for _, msg := range messages {
+		atts := p.extractAttachments(msg)
+		allAttachments = append(allAttachments, atts...)
+	}
+
+	agentMessage := caption
+	if agentMessage == "" && len(allAttachments) > 0 {
+		agentMessage = "이 미디어를 분석해 주세요."
+	}
+	if agentMessage == "" && len(allAttachments) == 0 {
+		agentMessage = "[이미지 다운로드 실패 — 다시 보내 주세요]"
+	}
+
+	// Build delivery context from the first message.
+	delivery := map[string]any{
+		"channel": "telegram",
+		"to":      chatID,
+	}
+	if first.MessageID != 0 {
+		delivery["messageId"] = strconv.FormatInt(first.MessageID, 10)
+	}
+
+	sendParams := map[string]any{
+		"sessionKey": sessionKey,
+		"message":    agentMessage,
+		"delivery":   delivery,
+	}
+	if len(allAttachments) > 0 {
+		sendParams["attachments"] = allAttachments
+	}
+
+	req, err := protocol.NewRequestFrame(
+		"tg-"+chatID+"-mg-"+first.MediaGroupID,
+		"chat.send",
+		sendParams,
+	)
+	if err != nil {
+		p.logger.Error("failed to build chat.send for media group", "error", err)
+		return
+	}
+
+	sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer sendCancel()
+	resp := p.chatHandler.Send(sendCtx, req)
+	if resp != nil && !resp.OK {
+		p.logger.Warn("chat.send failed for media group",
 			"chatId", chatID,
 			"error", resp.Error,
 		)
