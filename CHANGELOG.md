@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.24.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.24.0...deneb-v3.24.1) (2026-03-28)
+
+
+### 🔧 Internal
+
+* **propus:** convert Tauri desktop app to web SPA ([f153287](https://github.com/choiceoh/Deneb/commit/f1532870051f4d8b09d09df536344b318887702d))
+
 ## [3.24.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.23.0...deneb-v3.24.0) (2026-03-28)
 
 
