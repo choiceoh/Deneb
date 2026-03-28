@@ -1,5 +1,31 @@
 # Changelog
 
+## [3.23.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.22.0...deneb-v3.23.0) (2026-03-28)
+
+
+### ✨ Features
+
+* **propus:** add auto-updater plugin + update button in sidebar ([5c9f045](https://github.com/choiceoh/Deneb/commit/5c9f045117661922a132df2de030f85a2460c079))
+* **propus:** add markdown rendering, keyboard shortcuts, session resume, tool display improvements, performance optimization, and image preview ([a907f10](https://github.com/choiceoh/Deneb/commit/a907f101c37f2db4dc310a36258d73e857e12e30))
+* **propus:** add Windows icon for Tauri build ([148b0d9](https://github.com/choiceoh/Deneb/commit/148b0d93c4bc5aefb884e21c8be91a5d5d2ef1cd))
+* **propus:** wire Config.Tools to toolProfile, send real model in ConfigStatus, add File/Typing message handling and code block copy button ([0bca78d](https://github.com/choiceoh/Deneb/commit/0bca78de7d2ec46f11ba1e42cb0b22a514315165))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** prevent agent from asking user to do tool-capable actions ([a4180aa](https://github.com/choiceoh/Deneb/commit/a4180aa0339317499d41c5001883311eed516133))
+* **chat:** prevent agent from asking user to do tool-capable actions ([3a69bc2](https://github.com/choiceoh/Deneb/commit/3a69bc2491f8a19f301d8524a5b03889811de1ff))
+* **core:** handle multi-byte UTF-8 in html_to_markdown ([4484cd4](https://github.com/choiceoh/Deneb/commit/4484cd4520f3b37fdd0a690b1563790d2ed3f2cc))
+* **core:** strip trailing punctuation from extracted URLs ([fd4025c](https://github.com/choiceoh/Deneb/commit/fd4025c180d14ce5f5b358248bc17eb2021d0399))
+* **llm:** strengthen retry logic for 429 rate limits ([c7ebb3b](https://github.com/choiceoh/Deneb/commit/c7ebb3b4381b702e7f78fee6b398dc10b28c82d2))
+* **propus:** add bundle config with empty icon to fix Windows build ([c53cf12](https://github.com/choiceoh/Deneb/commit/c53cf12b517a57636903287e06ee8b9c8e16f8f4))
+* **propus:** add main.rs and remove duplicate fn main from lib.rs ([5fb1f24](https://github.com/choiceoh/Deneb/commit/5fb1f24ffe65e26c33aa11bb6e589d514021396c))
+* **propus:** add main.rs binary entry point ([d1d10ea](https://github.com/choiceoh/Deneb/commit/d1d10ea3852ccc4be05dbf3e2f6b8bfb509b7506))
+* **propus:** add standalone workspace to avoid root workspace conflict ([204de2d](https://github.com/choiceoh/Deneb/commit/204de2d837f38487f2e32804a95288e77ba1ecf1))
+* **propus:** exclude from root workspace, add standalone workspace members ([242b5a3](https://github.com/choiceoh/Deneb/commit/242b5a3938df6b8499a6c2b5c4078369bf3ff80c))
+* **propus:** remove invalid app.title from tauri.conf.json for Tauri 2.0 compat ([0223640](https://github.com/choiceoh/Deneb/commit/02236406b84453761133de521422965310a8a93f))
+* **propus:** restore lib.rs with updater commands, remove fn main ([be84779](https://github.com/choiceoh/Deneb/commit/be847795636e6b3ba5a1c2f1012ffcc4951101b0))
+
 ## [3.22.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.21.1...deneb-v3.22.0) (2026-03-28)
 
 
