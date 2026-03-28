@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.27.2](https://github.com/choiceoh/Deneb/compare/deneb-v3.27.1...deneb-v3.27.2) (2026-03-28)
+
+
+### 🔧 Internal
+
+* **core:** apply clippy lint fixes across Rust core crate ([41ae1a5](https://github.com/choiceoh/Deneb/commit/41ae1a5c4c43b359ab806f1a0d34d6365713bc42))
+* **ffi:** extract FFI utilities into ffi_utils.rs ([1e48c08](https://github.com/choiceoh/Deneb/commit/1e48c08931455e98d44c736a59279fa23b7c33c9))
+* **memory:** externalize stop word lists into stop_words module ([3e5bf1a](https://github.com/choiceoh/Deneb/commit/3e5bf1a82eeee7a7f43cbae3f919463d879f0592))
+* **memory:** extract SIMD backends into simd/ submodule ([6d2a1cc](https://github.com/choiceoh/Deneb/commit/6d2a1cc88f5fc19e03f19f4f1c893c52dc420441))
+* **scope:** split resolve.rs into agent_ids, session_keys, config modules ([593568b](https://github.com/choiceoh/Deneb/commit/593568b9f6fb544ffb5f851dc2313e63921c763b))
+* **vega:** extract search, show, system commands to own files (WIP) ([a4056e1](https://github.com/choiceoh/Deneb/commit/a4056e1caddca2ba2dff82ae9e7d86338cc8b718))
+* **vega:** trait-based CommandHandler registry, extract inline commands ([969dce7](https://github.com/choiceoh/Deneb/commit/969dce73742317073b2c05be25e867620a0b2cdc))
+* **vega:** trait-based CommandHandler registry, extract inline commands ([e63e927](https://github.com/choiceoh/Deneb/commit/e63e9276dd398ef136a17d04735554726ea78a8b))
+
 ## [3.27.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.27.0...deneb-v3.27.1) (2026-03-28)
 
 
