@@ -33,6 +33,16 @@ type SessionAbortFunc func(sessionKey string)
 // SessionSaveFunc exports a session transcript to disk and returns the file path.
 type SessionSaveFunc func(sessionKey string) (string, error)
 
+// SessionListFunc returns previews of all available sessions.
+type SessionListFunc func() ([]SessionPreview, error)
+
+// SessionSwitchFunc switches a connection to a different session, returning the
+// session's message history for replay.
+type SessionSwitchFunc func(oldSessionKey, newSessionKey string) ([]SessionHistoryMsg, error)
+
+// SessionSearchFunc searches sessions by query and returns matching previews.
+type SessionSearchFunc func(query string) ([]SessionPreview, error)
+
 // MediaSendFunc delivers a file to the Propus client for a given session.
 type MediaSendFunc func(sessionKey, filePath, mediaType, caption string) error
 
@@ -47,10 +57,13 @@ type Plugin struct {
 	ln     net.Listener
 
 	// Callbacks wired by the gateway after construction.
-	chatSend     ChatSendFunc
-	sessionClear SessionClearFunc
-	sessionAbort SessionAbortFunc
-	sessionSave  SessionSaveFunc
+	chatSend      ChatSendFunc
+	sessionClear  SessionClearFunc
+	sessionAbort  SessionAbortFunc
+	sessionSave   SessionSaveFunc
+	sessionList   SessionListFunc
+	sessionSwitch SessionSwitchFunc
+	sessionSearch SessionSearchFunc
 
 	// Model info for ConfigStatus messages.
 	modelName   string
@@ -101,6 +114,15 @@ func (p *Plugin) SetSessionAbort(fn SessionAbortFunc) { p.sessionAbort = fn }
 
 // SetSessionSave wires the session save/export callback.
 func (p *Plugin) SetSessionSave(fn SessionSaveFunc) { p.sessionSave = fn }
+
+// SetSessionList wires the session listing callback.
+func (p *Plugin) SetSessionList(fn SessionListFunc) { p.sessionList = fn }
+
+// SetSessionSwitch wires the session switch callback.
+func (p *Plugin) SetSessionSwitch(fn SessionSwitchFunc) { p.sessionSwitch = fn }
+
+// SetSessionSearch wires the session search callback.
+func (p *Plugin) SetSessionSearch(fn SessionSearchFunc) { p.sessionSearch = fn }
 
 // SetModelInfo stores the model/service names used in ConfigStatus messages.
 func (p *Plugin) SetModelInfo(model, service string) {
@@ -361,6 +383,53 @@ func (p *Plugin) handleMessage(cc *clientConn, data []byte) {
 	case "SetApiKey":
 		// API key is shared with Deneb — no separate key needed.
 		p.sendToClient(cc, p.configStatusMsg("connected", cc.connID))
+
+	case "ListSessions":
+		if p.sessionList != nil {
+			sessions, err := p.sessionList()
+			if err != nil {
+				p.sendToClient(cc, MsgError("세션 목록 조회 실패: "+err.Error()))
+			} else {
+				p.sendToClient(cc, MsgSessionList(sessions))
+			}
+		}
+
+	case "SwitchSession":
+		var d SwitchSessionData
+		if err := json.Unmarshal(msg.Data, &d); err != nil {
+			p.sendToClient(cc, MsgError("invalid SwitchSession data"))
+			return
+		}
+		if d.SessionKey == "" {
+			return
+		}
+		oldKey := "propus:" + cc.connID
+		if p.sessionSwitch != nil {
+			history, err := p.sessionSwitch(oldKey, d.SessionKey)
+			if err != nil {
+				p.sendToClient(cc, MsgError("세션 전환 실패: "+err.Error()))
+				return
+			}
+			// Notify client: clear current view, replay history, send new config.
+			p.sendToClient(cc, MsgChatCleared())
+			p.sendToClient(cc, MsgSessionHistory(history))
+			p.sendToClient(cc, p.configStatusMsg("connected", cc.connID))
+		}
+
+	case "SearchSessions":
+		var d SearchSessionsData
+		if err := json.Unmarshal(msg.Data, &d); err != nil {
+			p.sendToClient(cc, MsgError("invalid SearchSessions data"))
+			return
+		}
+		if p.sessionSearch != nil {
+			sessions, err := p.sessionSearch(d.Query)
+			if err != nil {
+				p.sendToClient(cc, MsgError("세션 검색 실패: "+err.Error()))
+			} else {
+				p.sendToClient(cc, MsgSessionList(sessions))
+			}
+		}
 
 	default:
 		p.logger.Warn("propus unknown message type", "type", msg.Type)

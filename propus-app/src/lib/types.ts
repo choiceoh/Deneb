@@ -8,7 +8,10 @@ export type ClientMessage =
   | { type: "SaveSession" }
   | { type: "SetApiKey"; data: { key: string } }
   | { type: "StopGeneration" }
-  | { type: "Ping" };
+  | { type: "Ping" }
+  | { type: "ListSessions" }
+  | { type: "SwitchSession"; data: { session_key: string } }
+  | { type: "SearchSessions"; data: { query: string } };
 
 // --- Server → Client ---
 
@@ -36,7 +39,22 @@ export type ServerMessage =
       data: { name: string; media_type: string; size: number; url: string };
     }
   | { type: "Typing" }
-  | { type: "Pong" };
+  | { type: "Pong" }
+  | { type: "SessionList"; data: { sessions: SessionPreview[] } }
+  | {
+      type: "SessionHistory";
+      data: { messages: { role: string; content: string }[] };
+    };
+
+// --- Session browsing types ---
+
+export interface SessionPreview {
+  key: string;
+  title: string;
+  updated_at: number; // unix ms
+  message_count: number;
+  status: "active" | "done" | "idle";
+}
 
 // --- App-level types ---
 
