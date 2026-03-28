@@ -2,16 +2,16 @@ package chat
 
 import (
 	"context"
-	"encoding/base64"
+	b64 "encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -448,4 +448,3 @@ func loadImageBlock(ctx context.Context, path string) (llm.ContentBlock, error) 
 func base64Encode(data []byte) string {
 	return b64.StdEncoding.EncodeToString(data)
 }
-

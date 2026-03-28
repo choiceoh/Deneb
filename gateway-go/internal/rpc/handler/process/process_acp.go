@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync/atomic"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
@@ -11,9 +12,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
-
-	}
-}
 
 // ---------------------------------------------------------------------------
 // ACP (Agent Communication Protocol)
@@ -449,9 +447,3 @@ func acpBindings(deps *ACPDeps) rpcutil.HandlerFunc {
 		})
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Cron Advanced
-// ---------------------------------------------------------------------------
-
-// CronAdvancedDeps holds the dependencies for advanced cron RPC methods.

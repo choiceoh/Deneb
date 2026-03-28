@@ -10,7 +10,6 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -468,4 +467,3 @@ func editFuzzyHint(content, oldStr string) string {
 }
 
 // --- Grep tool ---
-
