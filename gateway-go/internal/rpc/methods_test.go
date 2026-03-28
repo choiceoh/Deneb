@@ -226,41 +226,6 @@ func TestVegaFFISearch_MissingParams(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// ML FFI RPC tests
-// ---------------------------------------------------------------------------
-
-func TestMLEmbed(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "ml.embed", map[string]any{"texts": []string{"hello"}})
-	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
-	}
-}
-
-func TestMLRerank(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "ml.rerank", map[string]any{"query": "test", "docs": []string{"a", "b"}})
-	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
-	}
-}
-
-func TestMLEmbed_MissingParams(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "ml.embed", nil)
-	if resp.OK {
-		t.Error("expected error for missing params")
-	}
-}
-
-func TestMLRerank_MissingParams(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "ml.rerank", nil)
-	if resp.OK {
-		t.Error("expected error for missing params")
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Protocol validate_params RPC tests

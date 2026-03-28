@@ -362,8 +362,8 @@ pub fn cmd_memory_version(_args: &Value, _config: &VegaConfig) -> CommandResult 
             "backend": "rust",
             "features": {
                 "fts5": true,
-                "vector_search": cfg!(feature = "ml"),
-                "reranking": cfg!(feature = "ml"),
+                "vector_search": false,
+                "reranking": false,
             },
         }),
     )
