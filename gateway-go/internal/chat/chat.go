@@ -28,6 +28,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -385,7 +386,7 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 
 	runID := p.IdempotencyKey
 	if runID == "" {
-		runID = fmt.Sprintf("run_%d", time.Now().UnixNano())
+		runID = shortid.New("run")
 	}
 
 	return h.startAsyncRun(req.ID, RunParams{
@@ -417,7 +418,7 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 	// Interrupt any active run for this session.
 	h.interruptActiveRun(p.Key)
 
-	runID := fmt.Sprintf("steer_%d", time.Now().UnixNano())
+	runID := shortid.New("steer")
 
 	return h.startAsyncRun(req.ID, RunParams{
 		SessionKey:  p.Key,

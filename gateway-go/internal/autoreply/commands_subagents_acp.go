@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 )
 
 // ACPCommandDepsConfig holds optional infra dependencies for wiring ACP
@@ -238,7 +240,7 @@ func NewSubagentCommandDepsFromACP(registry *ACPRegistry, cfg ...ACPCommandDepsC
 				if err := config.SessionSendFn(sessionKey, message); err != nil {
 					return &SubagentSendResult{Status: "error", Error: err.Error()}, nil
 				}
-				return &SubagentSendResult{Status: "ok", RunID: fmt.Sprintf("send_%d", time.Now().UnixNano())}, nil
+				return &SubagentSendResult{Status: "ok", RunID: shortid.New("send")}, nil
 			},
 			SteerRun: func(runID, message string) (*SubagentSteerResult, error) {
 				// Find the agent by run ID and send to its session.
