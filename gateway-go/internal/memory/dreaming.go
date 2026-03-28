@@ -23,7 +23,7 @@ import (
 const (
 	DreamingTurnThreshold    = 50
 	DreamingTimeIntervalH    = 8
-	dreamingTimeout          = 12 * time.Minute
+	dreamingTimeout          = 15 * time.Minute
 	dreamingBatchSize        = 20
 	dreamingMaxTokens        = 1024
 	similarityMergeThreshold = 0.78
@@ -31,12 +31,13 @@ const (
 
 	// Per-phase timeouts prevent earlier phases from starving later ones.
 	// If a phase exceeds its budget, it's cut short but subsequent phases still run.
-	phaseTimeoutVerify   = 2 * time.Minute
-	phaseTimeoutMerge    = 2 * time.Minute
-	phaseTimeoutPatterns = 90 * time.Second
-	phaseTimeoutConflict = 90 * time.Second
-	phaseTimeoutUserModel = 60 * time.Second
-	phaseTimeoutMutual   = 60 * time.Second
+	// Sum ~15m; the overall dreamingTimeout acts as a hard ceiling.
+	phaseTimeoutVerify    = 3 * time.Minute
+	phaseTimeoutMerge     = 3 * time.Minute
+	phaseTimeoutPatterns  = 150 * time.Second
+	phaseTimeoutConflict  = 150 * time.Second
+	phaseTimeoutUserModel = 2 * time.Minute
+	phaseTimeoutMutual    = 2 * time.Minute
 )
 
 // DreamingReport summarizes the results of a dreaming cycle.
