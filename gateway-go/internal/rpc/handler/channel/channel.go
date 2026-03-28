@@ -145,9 +145,9 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 		"node.event": nodeEvent,
 
 		// Legacy Go names.
-		"subscribe.session":          subscribeSession,
-		"unsubscribe.session":        unsubscribeSession,
-		"subscribe.session.messages":  subscribeMessages,
+		"subscribe.session":            subscribeSession,
+		"unsubscribe.session":          unsubscribeSession,
+		"subscribe.session.messages":   subscribeMessages,
 		"unsubscribe.session.messages": unsubscribeMessages,
 
 		// TS-compatible aliases.
@@ -155,6 +155,30 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 		"sessions.unsubscribe":          unsubscribeSession,
 		"sessions.messages.subscribe":   subscribeMessages,
 		"sessions.messages.unsubscribe": unsubscribeMessages,
+	}
+}
+
+func eventsBroadcast(deps EventsDeps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p struct {
+			Event   string `json:"event"`
+			Payload any    `json:"payload"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Event == "" {
+			return rpcerr.MissingParam("event").Response(req.ID)
+		}
+		sent, _ := deps.Broadcaster.Broadcast(p.Event, p.Payload)
+		return protocol.MustResponseOK(req.ID, map[string]int{"sent": sent})
+	}
+}
+
+// BroadcastMethods returns the events.broadcast handler.
+func BroadcastMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
+	if deps.Broadcaster == nil {
+		return nil
+	}
+	return map[string]rpcutil.HandlerFunc{
+		"events.broadcast": eventsBroadcast(deps),
 	}
 }
 
