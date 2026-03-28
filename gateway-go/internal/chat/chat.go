@@ -132,6 +132,10 @@ type Handler struct {
 	abortMap map[string]*AbortEntry // clientRunId -> entry
 	done     chan struct{}          // signals abortGCLoop to stop
 
+	// Dual-core: tracks background task progress per session for concurrent responses.
+	taskProgressMu sync.RWMutex
+	taskProgress   map[string]*TaskProgress // sessionKey -> progress
+
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
 	// maxHistoryCount caps the number of messages returned.
@@ -208,6 +212,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		defaultSystem:   cfg.DefaultSystem,
 		maxTokens:       cfg.MaxTokens,
 		abortMap:        make(map[string]*AbortEntry),
+		taskProgress:   make(map[string]*TaskProgress),
 		done:            make(chan struct{}),
 		maxHistoryBytes: cfg.MaxHistoryBytes,
 		maxHistoryCount: cfg.MaxHistoryCount,
@@ -349,17 +354,28 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		return h.handleSlashCommand(req.ID, p.SessionKey, p.Delivery, slashResult)
 	}
 
-	// Interrupt any active run on this session to prevent concurrent runs.
-	h.InterruptActiveRun(p.SessionKey)
-
-	return h.startAsyncRun(req.ID, RunParams{
+	runParams := RunParams{
 		SessionKey:  p.SessionKey,
 		Message:     sanitizeInput(p.Message),
 		Attachments: p.Attachments,
 		Delivery:    p.Delivery,
 		ClientRunID: p.ClientRunID,
 		Model:       p.Model,
-	}, false)
+	}
+
+	// Dual-core: if a task is running, route concurrently or interrupt.
+	if tp := h.getTaskProgress(p.SessionKey); tp != nil {
+		if classifyRoute(p.Message) == RouteConcurrent {
+			// Same brain, parallel response — task continues uninterrupted.
+			return h.startConcurrentResponse(req.ID, runParams, tp)
+		}
+		// Explicit interrupt: fall through to cancel + new task.
+	}
+
+	// Default path: interrupt any active run, start new task.
+	h.InterruptActiveRun(p.SessionKey)
+
+	return h.startAsyncRun(req.ID, runParams, false)
 }
 
 // SessionsSend handles "sessions.send" — interrupts any active run, then starts a new one.
@@ -532,11 +548,17 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 		})
 	}
 
+	// Dual-core: register task progress tracker so concurrent responses
+	// can see what this task is doing.
+	tp := NewTaskProgress(params.SessionKey, params.ClientRunID, params.Message)
+	h.setTaskProgress(params.SessionKey, tp)
+
 	// Spawn async agent run with panic recovery.
 	deps := h.buildRunDeps()
 	go func() {
 		defer runCancel()
 		defer h.cleanupAbort(params.ClientRunID)
+		defer h.clearTaskProgress(params.SessionKey)
 		defer func() {
 			if r := recover(); r != nil {
 				h.logger.Error("panic in agent run",
@@ -558,7 +580,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 				}
 			}
 		}()
-		runAgentAsync(runCtx, params, deps)
+		runAgentAsync(runCtx, params, deps, tp)
 	}()
 
 	// Immediately return with runId.
@@ -583,6 +605,57 @@ func (h *Handler) InterruptActiveRun(sessionKey string) {
 		delete(h.abortMap, id)
 	}
 	h.abortMu.Unlock()
+}
+
+// getTaskProgress returns the live task progress for a session, or nil if no task is running.
+func (h *Handler) getTaskProgress(sessionKey string) *TaskProgress {
+	h.taskProgressMu.RLock()
+	defer h.taskProgressMu.RUnlock()
+	return h.taskProgress[sessionKey]
+}
+
+// setTaskProgress registers a task progress tracker for a session.
+func (h *Handler) setTaskProgress(sessionKey string, tp *TaskProgress) {
+	h.taskProgressMu.Lock()
+	defer h.taskProgressMu.Unlock()
+	h.taskProgress[sessionKey] = tp
+}
+
+// clearTaskProgress removes the task progress tracker when a run completes.
+func (h *Handler) clearTaskProgress(sessionKey string) {
+	h.taskProgressMu.Lock()
+	defer h.taskProgressMu.Unlock()
+	delete(h.taskProgress, sessionKey)
+}
+
+// startConcurrentResponse launches a parallel response run that shares the same
+// identity and conversation history as the running task core. The task core
+// continues uninterrupted. This is the dual-core "multitasking" path.
+func (h *Handler) startConcurrentResponse(reqID string, params RunParams, progress *TaskProgress) *protocol.ResponseFrame {
+	if params.ClientRunID == "" {
+		params.ClientRunID = shortid.New("conc")
+	}
+
+	deps := h.buildRunDeps()
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				h.logger.Error("panic in concurrent response",
+					"session", params.SessionKey,
+					"runId", params.ClientRunID,
+					"panic", r,
+				)
+			}
+		}()
+		runConcurrentResponse(context.Background(), params, deps, progress)
+	}()
+
+	resp, _ := protocol.NewResponseOK(reqID, map[string]any{
+		"runId":  params.ClientRunID,
+		"status": "started",
+		"mode":   "concurrent_response",
+	})
+	return resp
 }
 
 // handleSlashCommand processes a recognized slash command and returns a response.

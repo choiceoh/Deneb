@@ -85,7 +85,8 @@ type runDeps struct {
 // runAgentAsync is the background goroutine that executes an agent run.
 // It persists the user message, assembles context, calls the LLM agent loop,
 // persists the result, and broadcasts completion events.
-func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
+// tp (TaskProgress) tracks live progress for the dual-core concurrent response feature.
+func runAgentAsync(ctx context.Context, params RunParams, deps runDeps, tp *TaskProgress) {
 	logger := deps.logger
 	if logger == nil {
 		logger = slog.Default()
@@ -180,7 +181,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
 
 	// Run the agent and capture result.
-	result, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, statusCtrl, logger, runLog)
+	result, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, statusCtrl, tp, logger, runLog)
 
 	// Stop typing indicator before delivering the reply.
 	if typingSignaler != nil {
@@ -214,6 +215,7 @@ func executeAgentRun(
 	broadcaster *streamBroadcaster,
 	typingSignaler *autoreply.FullTypingSignaler,
 	statusCtrl *channel.StatusReactionController,
+	tp *TaskProgress,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
 ) (*AgentResult, error) {
@@ -441,6 +443,13 @@ func executeAgentRun(
 		APIType:   apiType,
 	}
 
+	// Dual-core: track turn count for concurrent response progress display.
+	if tp != nil {
+		cfg.OnTurn = func(turn int, _ int) {
+			tp.IncrementTurn()
+		}
+	}
+
 	// Mid-run memory extraction removed: it used placeholder context ("[mid-run turn N, M tokens]")
 	// producing low-quality facts. End-of-run extraction (below) has full response text.
 
@@ -491,6 +500,39 @@ func executeAgentRun(
 			// First text delta means we moved past thinking — set thinking
 			// emoji if not already in a tool phase.
 			statusCtrl.SetThinking()
+		}
+	}
+
+	// 10.5. Dual-core: chain TaskProgress updates so concurrent responses
+	// can see live task state (current tool, text output, turn count).
+	if tp != nil {
+		prevOnToolStart := hooks.OnToolStart
+		hooks.OnToolStart = func(name string) {
+			if prevOnToolStart != nil {
+				prevOnToolStart(name)
+			}
+			tp.SetCurrentTool(name)
+		}
+		prevOnToolEmit := hooks.OnToolEmit
+		hooks.OnToolEmit = func(name, toolUseID string) {
+			if prevOnToolEmit != nil {
+				prevOnToolEmit(name, toolUseID)
+			}
+			tp.AppendToolLog(name, toolUseID)
+		}
+		prevOnToolResult := hooks.OnToolResult
+		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
+			if prevOnToolResult != nil {
+				prevOnToolResult(name, toolUseID, result, isErr)
+			}
+			tp.FinishTool(name, result)
+		}
+		prevOnDelta := hooks.OnTextDelta
+		hooks.OnTextDelta = func(text string) {
+			if prevOnDelta != nil {
+				prevOnDelta(text)
+			}
+			tp.AppendText(text)
 		}
 	}
 
@@ -839,7 +881,7 @@ func executeAgentRunWithDelta(
 	})
 	broadcaster := newStreamBroadcaster(deltaRaw, params.SessionKey, params.ClientRunID)
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
-	return executeAgentRun(ctx, params, deps, broadcaster, nil, nil, logger, runLog)
+	return executeAgentRun(ctx, params, deps, broadcaster, nil, nil, nil, logger, runLog)
 }
 
 // resolveDefaultBaseURL returns the default API base URL for a known provider

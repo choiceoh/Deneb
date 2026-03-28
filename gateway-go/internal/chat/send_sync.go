@@ -42,7 +42,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 
 	deps := h.buildRunDeps()
 
-	result, err := executeAgentRun(ctx, params, deps, nil, nil, nil, h.logger, nil)
+	result, err := executeAgentRun(ctx, params, deps, nil, nil, nil, nil, h.logger, nil)
 	if err != nil {
 		return nil, err
 	}
