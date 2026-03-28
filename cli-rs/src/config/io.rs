@@ -56,6 +56,8 @@ pub fn set_config_value(
     path: &str,
     value: serde_json::Value,
 ) -> Result<(), CliError> {
+    validate_config_path(path)?;
+
     let mut full = serde_json::to_value(&*config)
         .map_err(|e| CliError::Config(format!("failed to serialize config: {e}")))?;
 
@@ -79,6 +81,8 @@ pub fn set_config_value(
 
 /// Unset (remove) a value at a dot-separated path in the config.
 pub fn unset_config_value(config: &mut DenebConfig, path: &str) -> Result<bool, CliError> {
+    validate_config_path(path)?;
+
     let mut full = serde_json::to_value(&*config)
         .map_err(|e| CliError::Config(format!("failed to serialize config: {e}")))?;
 
@@ -102,6 +106,22 @@ pub fn unset_config_value(config: &mut DenebConfig, path: &str) -> Result<bool, 
     }
 
     Ok(false)
+}
+
+fn validate_config_path(path: &str) -> Result<(), CliError> {
+    if path.is_empty() {
+        return Err(CliError::Config(
+            "config path must not be empty".to_string(),
+        ));
+    }
+
+    if path.split('.').any(|segment| segment.is_empty()) {
+        return Err(CliError::Config(format!(
+            "invalid config path '{path}': empty path segment",
+        )));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -162,5 +182,28 @@ mod tests {
 
         unset_config_value(&mut config, "gateway.port").unwrap();
         assert_eq!(config.gateway_port(), None);
+    }
+
+    #[test]
+    fn set_config_value_rejects_invalid_path() {
+        let mut config = DenebConfig::default();
+
+        let err = set_config_value(&mut config, "", serde_json::json!(8080)).unwrap_err();
+        assert!(matches!(err, CliError::Config(_)));
+
+        let err =
+            set_config_value(&mut config, "gateway..port", serde_json::json!(8080)).unwrap_err();
+        assert!(matches!(err, CliError::Config(_)));
+    }
+
+    #[test]
+    fn unset_config_value_rejects_invalid_path() {
+        let mut config = DenebConfig::default();
+
+        let err = unset_config_value(&mut config, "").unwrap_err();
+        assert!(matches!(err, CliError::Config(_)));
+
+        let err = unset_config_value(&mut config, ".gateway.port").unwrap_err();
+        assert!(matches!(err, CliError::Config(_)));
     }
 }

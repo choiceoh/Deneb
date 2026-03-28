@@ -6,9 +6,15 @@ package autoreply
 
 import (
 	"context"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/directives"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/pipeline"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 )
 
 // GetReplyFromConfig is the main entry point for generating a reply.
@@ -19,12 +25,12 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 	session := InitSessionForReply(msg, deps)
 
 	// 2. Parse inline directives from message body.
-	directives := ParseInlineDirectives(msg.BodyForAgent, nil)
-	cleanedBody := directives.Cleaned
+	inline := directives.ParseInlineDirectives(msg.BodyForAgent, nil)
+	cleanedBody := inline.Cleaned
 
 	// 3. Handle directive-only messages (no user text).
-	if IsDirectiveOnly(directives) {
-		result := ApplyDirectivesToSession(directives, session, deps)
+	if directives.IsDirectiveOnly(inline) {
+		result := ApplyDirectivesToSession(inline, session, deps)
 		if result != nil {
 			return result, nil
 		}
@@ -32,15 +38,15 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 	}
 
 	// 4. Apply directives to session state.
-	ApplyDirectivesToSession(directives, session, deps)
+	ApplyDirectivesToSession(inline, session, deps)
 
 	// 5. Resolve model.
-	model := ResolveModelForReply(session, directives, deps)
+	selection := ResolveModelForReply(session, inline, deps)
 
 	// 6. Build typing controller.
-	var typingCtrl *TypingController
+	var typingCtrl *typing.TypingController
 	if !opts.SuppressTyping && opts.OnReplyStart != nil {
-		typingCtrl = NewTypingController(TypingControllerConfig{
+		typingCtrl = typing.NewTypingController(typing.TypingControllerConfig{
 			OnStart: opts.OnReplyStart,
 			OnStop:  opts.OnTypingCleanup,
 			Policy:  opts.TypingPolicy,
@@ -53,8 +59,8 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 	agentCfg := AgentTurnConfig{
 		SessionKey:     session.SessionKey,
 		AgentID:        session.AgentID,
-		Model:          model.Model,
-		Provider:       model.Provider,
+		Model:          selection.Model,
+		Provider:       selection.Provider,
 		Message:        cleanedBody,
 		ThinkLevel:     session.ThinkLevel,
 		FastMode:       session.FastMode,
@@ -69,7 +75,7 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 	}
 
 	// 8. Normalize and filter payloads.
-	normalized := FilterReplyPayloads(result.Payloads, NormalizeOpts{
+	normalized := reply.FilterReplyPayloads(result.Payloads, reply.NormalizeOpts{
 		HeartbeatMode:        tokens.StripModeMessage,
 		HeartbeatAckMaxChars: tokens.DefaultHeartbeatAckChars,
 	})
@@ -80,9 +86,9 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 // ReplyDeps provides dependencies for reply generation.
 type ReplyDeps struct {
 	Agent       AgentExecutor
-	Registry    *CommandRegistry
-	Router      *CommandRouter
-	History     *HistoryTracker
+	Registry    *handlers.CommandRegistry
+	Router      *handlers.CommandRouter
+	History     *session.HistoryTracker
 	SessionFunc func(key string) *types.SessionState // resolve session by key
 }
 
@@ -105,29 +111,29 @@ func InitSessionForReply(msg *types.MsgContext, deps ReplyDeps) *types.SessionSt
 
 // ApplyDirectivesToSession applies parsed directives to the session state.
 // Returns reply payloads if the directive was handled inline (e.g., status query).
-func ApplyDirectivesToSession(directives InlineDirectives, session *types.SessionState, deps ReplyDeps) []types.ReplyPayload {
-	if directives.HasThinkDirective {
-		session.ThinkLevel = directives.ThinkLevel
+func ApplyDirectivesToSession(inline directives.InlineDirectives, session *types.SessionState, deps ReplyDeps) []types.ReplyPayload {
+	if inline.HasThinkDirective {
+		session.ThinkLevel = inline.ThinkLevel
 	}
-	if directives.HasVerboseDirective {
-		session.VerboseLevel = directives.VerboseLevel
+	if inline.HasVerboseDirective {
+		session.VerboseLevel = inline.VerboseLevel
 	}
-	if directives.HasFastDirective {
-		session.FastMode = directives.FastMode
+	if inline.HasFastDirective {
+		session.FastMode = inline.FastMode
 	}
-	if directives.HasReasoningDirective {
-		session.ReasoningLevel = directives.ReasoningLevel
+	if inline.HasReasoningDirective {
+		session.ReasoningLevel = inline.ReasoningLevel
 	}
-	if directives.HasElevatedDirective {
-		session.ElevatedLevel = directives.ElevatedLevel
+	if inline.HasElevatedDirective {
+		session.ElevatedLevel = inline.ElevatedLevel
 	}
-	if directives.HasModelDirective && directives.RawModelDirective != "" {
-		session.Model = directives.RawModelDirective
+	if inline.HasModelDirective && inline.RawModelDirective != "" {
+		session.Model = inline.RawModelDirective
 	}
 
 	// Handle /status as inline directive.
-	if directives.HasStatusDirective && deps.Router != nil {
-		result, _ := deps.Router.Dispatch(CommandContext{
+	if inline.HasStatusDirective && deps.Router != nil {
+		result, _ := deps.Router.Dispatch(handlers.CommandContext{
 			Command: "status",
 			Session: session,
 		})
@@ -140,24 +146,24 @@ func ApplyDirectivesToSession(directives InlineDirectives, session *types.Sessio
 }
 
 // ResolveModelForReply determines the model to use for a reply.
-func ResolveModelForReply(session *types.SessionState, directives InlineDirectives, deps ReplyDeps) ModelSelection {
-	model := session.Model
+func ResolveModelForReply(session *types.SessionState, inline directives.InlineDirectives, deps ReplyDeps) model.ModelSelection {
+	modelName := session.Model
 	provider := session.Provider
 
-	if directives.HasModelDirective && directives.RawModelDirective != "" {
+	if inline.HasModelDirective && inline.RawModelDirective != "" {
 		// Parse provider/model from directive.
-		parts := pipeline.SplitProviderModel(directives.RawModelDirective)
+		parts := pipeline.SplitProviderModel(inline.RawModelDirective)
 		if parts[0] != "" {
 			provider = parts[0]
 		}
 		if parts[1] != "" {
-			model = parts[1]
+			modelName = parts[1]
 		}
 	}
 
-	return ModelSelection{
+	return model.ModelSelection{
 		Provider:   provider,
-		Model:      model,
-		IsOverride: directives.HasModelDirective,
+		Model:      modelName,
+		IsOverride: inline.HasModelDirective,
 	}
 }

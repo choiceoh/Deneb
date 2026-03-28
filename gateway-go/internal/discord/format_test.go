@@ -69,6 +69,29 @@ func TestChunkText_LargeCodeBlock(t *testing.T) {
 	}
 }
 
+func TestChunkText_NonPositiveLimit(t *testing.T) {
+	text := "hello world"
+	chunks := ChunkText(text, 0)
+	if len(chunks) != 1 || chunks[0] != text {
+		t.Fatalf("expected single untouched chunk, got %#v", chunks)
+	}
+}
+
+func TestChunkText_LeadingFenceNearBoundaryHonorsDiscordHardLimit(t *testing.T) {
+	// Closing fence is close to TextChunkLimit so the chunker may keep the fenced
+	// block together. Even then, it must stay under Discord's hard 2000-char limit.
+	code := "```go\n" + strings.Repeat("x := 1\n", 270) + "```"
+	chunks := ChunkText(code, TextChunkLimit)
+	if len(chunks) == 0 {
+		t.Fatal("expected chunks")
+	}
+	for i, chunk := range chunks {
+		if len(chunk) > MaxMessageLength {
+			t.Fatalf("chunk %d exceeds hard discord limit: %d", i, len(chunk))
+		}
+	}
+}
+
 func TestLastOpenCodeBlock(t *testing.T) {
 	tests := []struct {
 		name     string

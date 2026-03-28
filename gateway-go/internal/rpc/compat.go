@@ -12,6 +12,7 @@ import (
 	handlerchannel "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/channel"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/chat"
 	handlerffi "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/ffi"
+	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/gateway"
 	handlernode "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/node"
 	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/platform"
 	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/rpc/handler/presence"
@@ -55,6 +56,7 @@ type TalkDeps = handlerplatform.TalkDeps
 type ExtendedDeps = handleragent.ExtendedDeps
 type AgentsDeps = handleragent.AgentsDeps
 type SessionDeps = handlersession.Deps
+type GatewayRuntimeDeps = handlergateway.Deps
 type HeartbeatDeps = handlerpresence.HeartbeatDeps
 type PresenceDeps = handlerpresence.Deps
 type VegaDeps = handlerffi.VegaDeps
@@ -109,6 +111,10 @@ func RegisterChannelLifecycleMethods(d *Dispatcher, deps ChannelLifecycleDeps) {
 
 func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 	d.RegisterDomain(handlerchannel.EventsMethods(deps))
+}
+
+func RegisterEventBroadcastMethods(d *Dispatcher, deps EventsDeps) {
+	d.RegisterDomain(handlerchannel.BroadcastMethods(deps))
 }
 
 func RegisterMessagingMethods(d *Dispatcher, deps MessagingDeps) {
@@ -217,6 +223,10 @@ func RegisterVegaMethods(d *Dispatcher, deps VegaDeps) {
 
 func RegisterAuroraChannelMethods(d *Dispatcher, deps AuroraChannelDeps) {
 	d.RegisterDomain(handleraurorachannel.Methods(deps))
+}
+
+func RegisterGatewayRuntimeMethods(d *Dispatcher, deps GatewayRuntimeDeps) {
+	d.RegisterDomain(handlergateway.RuntimeMethods(deps))
 }
 
 // RegisterBuiltinMethods registers the core Go-native RPC methods.

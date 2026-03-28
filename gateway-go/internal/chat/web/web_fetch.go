@@ -248,7 +248,7 @@ func processHTML(ctx context.Context, html string, url string, sglang *SGLangExt
 	// This removes nav, aside, footer, ads, cookie banners, comments, etc.
 	// Even when SGLang is available, pre-stripping reduces input tokens
 	// and prevents noise from confusing the AI extraction.
-	cleaned := stripNoiseElements(html)
+	cleaned := StripNoiseElements(html)
 
 	// Step 4: Convert to Markdown.
 	var content string

@@ -16,6 +16,10 @@ const (
 // would be split, it closes the block in the current chunk and reopens it
 // in the next chunk with the same language tag.
 func ChunkText(text string, maxLen int) []string {
+	if maxLen <= 0 {
+		return []string{text}
+	}
+
 	if len(text) <= maxLen {
 		return []string{text}
 	}
@@ -30,6 +34,13 @@ func ChunkText(text string, maxLen int) []string {
 		}
 
 		splitAt := findCodeBlockAwareSplit(remaining, maxLen)
+		if splitAt <= 0 || splitAt > len(remaining) {
+			if len(remaining) <= maxLen {
+				splitAt = len(remaining)
+			} else {
+				splitAt = maxLen
+			}
+		}
 		chunks = append(chunks, remaining[:splitAt])
 		remaining = remaining[splitAt:]
 	}
@@ -41,38 +52,34 @@ func ChunkText(text string, maxLen int) []string {
 // If we're inside a code block at the split point, it finds the best split
 // outside a code block, or splits at the code block boundary.
 func findCodeBlockAwareSplit(text string, maxLen int) int {
-	// Check if we're inside a code block at the maxLen boundary.
-	openIdx, lang := lastOpenCodeBlock(text[:maxLen])
-	if openIdx < 0 {
-		// Not inside a code block — use normal split logic.
-		return findSplitPoint(text, maxLen)
+	splitAt := findSplitPoint(text, maxLen)
+	candidate := text[:splitAt]
+	if strings.Count(candidate, "```")%2 == 0 {
+		return splitAt
 	}
 
-	// We're inside a code block. Try to split before the code block starts.
-	if openIdx > maxLen/4 {
-		// Find good split point before the code block.
-		before := text[:openIdx]
-		if idx := strings.LastIndex(before, "\n\n"); idx > maxLen/4 {
-			return idx + 1
+	// Unbalanced fences: prefer splitting before the opening fence.
+	lastFence := strings.LastIndex(candidate, "```")
+	if lastFence > 0 {
+		return lastFence
+	}
+
+	// If text starts with a fence and the closing fence is near, keep the block
+	// together even if that means a modestly oversized chunk.
+	if lastFence == 0 {
+		if closeRel := strings.Index(text[3:], "```"); closeRel >= 0 {
+			closeEnd := 3 + closeRel + 3
+			upperBound := maxLen + (maxLen / 4)
+			if upperBound > MaxMessageLength {
+				upperBound = MaxMessageLength
+			}
+			if closeEnd <= upperBound {
+				return closeEnd
+			}
 		}
-		if idx := strings.LastIndex(before, "\n"); idx > maxLen/4 {
-			return idx + 1
-		}
-		return openIdx
 	}
 
-	// Code block starts near the beginning — split inside it but preserve markers.
-	// Close the block at split point and add a continuation note.
-	lineEnd := strings.LastIndex(text[:maxLen], "\n")
-	if lineEnd > openIdx {
-		// Insert closing ``` at the line boundary.
-		// The caller will need to re-open the code block in the next chunk.
-		// We handle this by appending closing markers.
-		_ = lang // lang available for continuation if needed
-		return lineEnd + 1
-	}
-
-	return maxLen
+	return splitAt
 }
 
 // lastOpenCodeBlock checks if text ends inside an unclosed fenced code block.
@@ -214,14 +221,13 @@ type FormattedReply struct {
 // If the reply contains a single large code block (>1500 chars), it extracts
 // the code block as a file attachment and replaces it with a summary.
 func FormatReply(text string) FormattedReply {
-	// If text fits in a single message, send as-is.
-	if len(text) <= TextChunkLimit {
-		return FormattedReply{Text: text}
-	}
-
 	// Try to extract a dominant code block.
 	block, lang, before, after := extractLargestCodeBlock(text)
 	if block == "" || len(block) < 800 {
+		// If text fits in a single message, send as-is.
+		if len(text) <= TextChunkLimit {
+			return FormattedReply{Text: text}
+		}
 		// No large code block found — send as regular text.
 		return FormattedReply{Text: text}
 	}
@@ -340,4 +346,3 @@ func langToFileExt(lang string) string {
 		return ".txt"
 	}
 }
-

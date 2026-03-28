@@ -1,4 +1,4 @@
-package chat
+package tools
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 // httpToolSchema returns the JSON Schema for the http tool.
 
 // toolHTTP implements the http tool for making structured HTTP requests.
-func toolHTTP() ToolFunc {
+func ToolHTTP() ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			URL             string            `json:"url"`

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
@@ -62,7 +63,7 @@ type DispatchInboundParams struct {
 	AccountID   string
 	ThreadID    string
 	BotUsername string
-	Registry    *CommandRegistry
+	Registry    *handlers.CommandRegistry
 }
 
 func extractCommandKey(text string) string {

@@ -15,6 +15,23 @@ var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
 var multiSpaceRe = regexp.MustCompile(`[ \t]{2,}`)
 var multiNewlineRe = regexp.MustCompile(`\n{3,}`)
 
+// Structural HTML conversion regexps (Go fallback only).
+var (
+	strongRe = regexp.MustCompile(`(?is)<(?:strong)(?:\s[^>]*)?>(.+?)</(?:strong)>`)
+	boldRe   = regexp.MustCompile(`(?is)<b(?:\s[^>]*)?>((?s).+?)</b>`)
+	emRe     = regexp.MustCompile(`(?is)<(?:em)(?:\s[^>]*)?>(.+?)</(?:em)>`)
+	italicRe = regexp.MustCompile(`(?is)<i(?:\s[^>]*)?>((?s).+?)</i>`)
+	codeRe   = regexp.MustCompile(`(?is)<code(?:\s[^>]*)?>(.+?)</code>`)
+	linkRe   = regexp.MustCompile(`(?is)<a\s[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>`)
+	h1Re     = regexp.MustCompile(`(?is)<h1(?:\s[^>]*)?>(.+?)</h1>`)
+	h2Re     = regexp.MustCompile(`(?is)<h2(?:\s[^>]*)?>(.+?)</h2>`)
+	h3Re     = regexp.MustCompile(`(?is)<h3(?:\s[^>]*)?>(.+?)</h3>`)
+	h4Re     = regexp.MustCompile(`(?is)<h4(?:\s[^>]*)?>(.+?)</h4>`)
+	h5Re     = regexp.MustCompile(`(?is)<h5(?:\s[^>]*)?>(.+?)</h5>`)
+	h6Re     = regexp.MustCompile(`(?is)<h6(?:\s[^>]*)?>(.+?)</h6>`)
+	liRe     = regexp.MustCompile(`(?is)<li(?:\s[^>]*)?>(.+?)</li>`)
+)
+
 // ExtractLinks is a pure-Go fallback for URL extraction.
 func ExtractLinks(text string, maxLinks int) ([]string, error) {
 	if len(strings.TrimSpace(text)) == 0 {
@@ -86,7 +103,28 @@ func HtmlToMarkdown(html string) (text string, title string, err error) {
 		}
 	}
 
-	// Strip tags.
+	// Convert structural elements to markdown before stripping all tags.
+	// Links: <a href="X">Y</a> → [Y](X)
+	result = linkRe.ReplaceAllString(result, "[$2]($1)")
+	// Bold: <strong>/<b> → **...**
+	result = strongRe.ReplaceAllString(result, "**$1**")
+	result = boldRe.ReplaceAllString(result, "**$1**")
+	// Italic: <em>/<i> → *...*
+	result = emRe.ReplaceAllString(result, "*$1*")
+	result = italicRe.ReplaceAllString(result, "*$1*")
+	// Inline code: <code> → `...`
+	result = codeRe.ReplaceAllString(result, "`$1`")
+	// Headings: <h1-6> → # prefix
+	result = h1Re.ReplaceAllString(result, "\n# $1\n")
+	result = h2Re.ReplaceAllString(result, "\n## $1\n")
+	result = h3Re.ReplaceAllString(result, "\n### $1\n")
+	result = h4Re.ReplaceAllString(result, "\n#### $1\n")
+	result = h5Re.ReplaceAllString(result, "\n##### $1\n")
+	result = h6Re.ReplaceAllString(result, "\n###### $1\n")
+	// List items: <li> → "- "
+	result = liRe.ReplaceAllString(result, "\n- $1")
+
+	// Strip remaining tags.
 	result = htmlTagRe.ReplaceAllString(result, " ")
 
 	// Decode basic entities.
@@ -96,6 +134,7 @@ func HtmlToMarkdown(html string) (text string, title string, err error) {
 	result = strings.ReplaceAll(result, "&gt;", ">")
 	result = strings.ReplaceAll(result, "&quot;", "\"")
 	result = strings.ReplaceAll(result, "&#39;", "'")
+	result = strings.ReplaceAll(result, "&apos;", "'")
 
 	// Normalize whitespace.
 	result = multiSpaceRe.ReplaceAllString(result, " ")
