@@ -21,30 +21,41 @@ func StripThinkingTags(s string) string {
 
 // ExtractObject removes thinking tags, markdown code fences, and surrounding
 // prose, returning the outermost JSON object substring {...}.
-// Uses brace-depth tracking with string-literal awareness so nested objects
-// and strings containing braces are handled correctly.
+// Uses brace-depth tracking with string-literal awareness so nested objects,
+// strings containing braces, and trailing prose are handled correctly.
 func ExtractObject(s string) string {
 	s = StripThinkingTags(s)
 	s = strings.TrimSpace(s)
+	s = stripCodeFences(s)
 
-	// Strip markdown code fences.
-	if strings.HasPrefix(s, "```json") {
-		s = strings.TrimPrefix(s, "```json")
-	} else if strings.HasPrefix(s, "```") {
-		s = strings.TrimPrefix(s, "```")
+	// Always use brace-depth tracking to find the exact object boundary.
+	// This correctly handles trailing prose: {"a": 1} 이상입니다.
+	return findOutermostObject(s)
+}
+
+// stripCodeFences removes markdown code fences (```json, ```JSON, ```jsonc, ```)
+// surrounding JSON content.
+func stripCodeFences(s string) string {
+	// Check for code fence prefix with optional language tag.
+	if strings.HasPrefix(s, "```") {
+		// Strip ``` and optional language tag on same line.
+		idx := strings.IndexByte(s[3:], '\n')
+		if idx >= 0 {
+			s = s[3+idx+1:]
+		} else {
+			s = strings.TrimPrefix(s, "```")
+		}
 	}
 	if strings.HasSuffix(s, "```") {
-		s = strings.TrimSuffix(s, "```")
+		s = s[:len(s)-3]
 	}
-	s = strings.TrimSpace(s)
+	return strings.TrimSpace(s)
+}
 
-	// If it already starts with '{', it's likely clean JSON.
-	if strings.HasPrefix(s, "{") {
-		return s
-	}
-
-	// Find the outermost JSON object using brace-depth tracking.
-	// Correctly handles prose like: 결과: {"a": {"b": 1}} 이상입니다.
+// findOutermostObject finds the first complete {...} in s using brace-depth
+// tracking with JSON string-literal awareness. Returns s unchanged if no
+// complete object is found (caller decides how to handle).
+func findOutermostObject(s string) string {
 	start := -1
 	depth := 0
 	inString := false
@@ -77,13 +88,17 @@ func ExtractObject(s string) string {
 			}
 		}
 	}
-
 	return s
 }
 
-// ExtractArray finds the first '[' and last ']' in s and returns the substring.
-// Returns ("", false) if no valid bracket pair is found.
+// ExtractArray removes thinking tags, then finds the first '[' and last ']'
+// in s and returns the substring. Returns ("", false) if no valid bracket
+// pair is found.
 func ExtractArray(s string) (string, bool) {
+	s = StripThinkingTags(s)
+	s = strings.TrimSpace(s)
+	s = stripCodeFences(s)
+
 	start := strings.Index(s, "[")
 	if start == -1 {
 		return "", false

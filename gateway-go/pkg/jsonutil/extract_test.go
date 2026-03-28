@@ -2,6 +2,7 @@ package jsonutil
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -36,6 +37,26 @@ func TestStripThinkingTags(t *testing.T) {
 			input: "<think>first</think>\n<think>second</think>\nContent",
 			want:  "Content",
 		},
+		{
+			name:  "thinking tags with JSON inside",
+			input: "<thinking>{\"reasoning\": true}</thinking>\n{\"answer\": 42}",
+			want:  "{\"answer\": 42}",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "only thinking tags",
+			input: "<think>nothing useful</think>",
+			want:  "",
+		},
+		{
+			name:  "nested angle brackets in reasoning",
+			input: "<think>if a < b && c > d</think>\nresult",
+			want:  "result",
+		},
 	}
 
 	for _, tt := range tests {
@@ -62,10 +83,40 @@ func TestExtractObject(t *testing.T) {
 			wantKey:   "results",
 		},
 		{
+			name:      "JSON with trailing prose",
+			input:     `{"answer": "yes"} 좋은 결과입니다!`,
+			wantValid: true,
+			wantKey:   "answer",
+		},
+		{
+			name:      "JSON with trailing newlines and prose",
+			input:     "{\"ok\": true}\n\nI hope this helps!",
+			wantValid: true,
+			wantKey:   "ok",
+		},
+		{
 			name:      "JSON wrapped in code fences",
 			input:     "```json\n{\"results\": [{\"id\": 1}]}\n```",
 			wantValid: true,
 			wantKey:   "results",
+		},
+		{
+			name:      "code fence with uppercase JSON",
+			input:     "```JSON\n{\"data\": true}\n```",
+			wantValid: true,
+			wantKey:   "data",
+		},
+		{
+			name:      "code fence with jsonc",
+			input:     "```jsonc\n{\"value\": 1}\n```",
+			wantValid: true,
+			wantKey:   "value",
+		},
+		{
+			name:      "code fence bare backticks",
+			input:     "```\n{\"bare\": true}\n```",
+			wantValid: true,
+			wantKey:   "bare",
 		},
 		{
 			name:      "prose before JSON",
@@ -110,6 +161,36 @@ func TestExtractObject(t *testing.T) {
 			wantKey:   "content",
 		},
 		{
+			name:      "multiple JSON objects returns first",
+			input:     `{"first": 1} {"second": 2}`,
+			wantValid: true,
+			wantKey:   "first",
+		},
+		{
+			name:      "deeply nested",
+			input:     `{"a":{"b":{"c":{"d":{"e":"deep"}}}}}`,
+			wantValid: true,
+			wantKey:   "a",
+		},
+		{
+			name:      "escaped quotes in strings",
+			input:     `{"msg": "he said \"hello\"", "ok": true}`,
+			wantValid: true,
+			wantKey:   "msg",
+		},
+		{
+			name:      "backslash at end of string",
+			input:     `{"path": "C:\\Users\\test\\"}`,
+			wantValid: true,
+			wantKey:   "path",
+		},
+		{
+			name:      "thinking + code fence + prose combo",
+			input:     "<thinking>hmm</thinking>\nHere:\n```json\n{\"combo\": true}\n```\nDone.",
+			wantValid: true,
+			wantKey:   "combo",
+		},
+		{
 			name:      "empty input",
 			input:     "",
 			wantValid: false,
@@ -117,6 +198,11 @@ func TestExtractObject(t *testing.T) {
 		{
 			name:      "no JSON at all",
 			input:     "This is just plain text with no JSON",
+			wantValid: false,
+		},
+		{
+			name:      "unclosed brace",
+			input:     `{"unclosed": true`,
 			wantValid: false,
 		},
 	}
@@ -161,6 +247,18 @@ func TestExtractArray(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:   "thinking tags before array",
+			input:  "<thinking>reasoning with [stuff]</thinking>\n[\"real\", \"data\"]",
+			want:   `["real", "data"]`,
+			wantOK: true,
+		},
+		{
+			name:   "code fence wrapped array",
+			input:  "```json\n[\"a\", \"b\"]\n```",
+			want:   `["a", "b"]`,
+			wantOK: true,
+		},
+		{
 			name:   "no brackets",
 			input:  `just text`,
 			want:   "",
@@ -175,6 +273,12 @@ func TestExtractArray(t *testing.T) {
 		{
 			name:   "reversed brackets",
 			input:  `] before [`,
+			want:   "",
+			wantOK: false,
+		},
+		{
+			name:   "empty string",
+			input:  "",
 			want:   "",
 			wantOK: false,
 		},
@@ -198,16 +302,31 @@ func TestRecoverTruncated(t *testing.T) {
 		name      string
 		input     string
 		wantValid bool
+		wantCount int // expected number of items in recovered array (-1 to skip)
 	}{
 		{
 			name:      "truncated mid-second object",
 			input:     `{"results": [{"id": 1, "valid": true}, {"id": 2, "val`,
 			wantValid: true,
+			wantCount: 1,
 		},
 		{
 			name:      "truncated after first complete object",
 			input:     `{"facts": [{"content": "good", "importance": 0.8}, {"content": "잘린`,
 			wantValid: true,
+			wantCount: 1,
+		},
+		{
+			name:      "truncated after two complete objects",
+			input:     `{"items": [{"id": 1}, {"id": 2}, {"id": 3, "incomplete`,
+			wantValid: true,
+			wantCount: 2,
+		},
+		{
+			name:      "bare array truncated",
+			input:     `[{"a": 1}, {"b": 2}, {"c":`,
+			wantValid: true,
+			wantCount: 2,
 		},
 		{
 			name:      "no array",
@@ -224,6 +343,11 @@ func TestRecoverTruncated(t *testing.T) {
 			input:     `{"results": [{"id": 1}]}`,
 			wantValid: false,
 		},
+		{
+			name:      "empty string",
+			input:     "",
+			wantValid: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -232,8 +356,27 @@ func TestRecoverTruncated(t *testing.T) {
 			if tt.wantValid && result == "" {
 				t.Error("RecoverTruncated() returned empty, want recovery")
 			}
-			if tt.wantValid && result != "" && !json.Valid([]byte(result)) {
-				t.Errorf("RecoverTruncated() not valid JSON: %s", result)
+			if tt.wantValid && result != "" {
+				if !json.Valid([]byte(result)) {
+					t.Errorf("RecoverTruncated() not valid JSON: %s", result)
+				}
+				// Verify recovered item count if specified.
+				if tt.wantCount > 0 {
+					// Parse to count array items.
+					arrStart := strings.Index(result, "[")
+					if arrStart >= 0 {
+						var items []json.RawMessage
+						sub := result[arrStart:]
+						arrEnd := strings.LastIndex(sub, "]")
+						if arrEnd > 0 {
+							if json.Unmarshal([]byte(sub[:arrEnd+1]), &items) == nil {
+								if len(items) != tt.wantCount {
+									t.Errorf("RecoverTruncated() recovered %d items, want %d", len(items), tt.wantCount)
+								}
+							}
+						}
+					}
+				}
 			}
 			if !tt.wantValid && result != "" {
 				t.Errorf("RecoverTruncated() unexpectedly recovered: %s", result)
@@ -252,6 +395,8 @@ func TestTruncate(t *testing.T) {
 		{"hello world", 5, "hello..."},
 		{"한국어 테스트", 3, "한국어..."},
 		{"", 5, ""},
+		{"a", 1, "a"},
+		{"ab", 1, "a..."},
 	}
 
 	for _, tt := range tests {
@@ -259,5 +404,61 @@ func TestTruncate(t *testing.T) {
 		if got != tt.expected {
 			t.Errorf("Truncate(%q, %d) = %q, want %q", tt.input, tt.max, got, tt.expected)
 		}
+	}
+}
+
+// --- Benchmarks ---
+
+func BenchmarkExtractObject_Clean(b *testing.B) {
+	input := `{"results": [{"id": 1, "name": "test", "valid": true}]}`
+	for b.Loop() {
+		ExtractObject(input)
+	}
+}
+
+func BenchmarkExtractObject_WithProse(b *testing.B) {
+	input := "분석 결과입니다:\n{\"conflicts\": [{\"id\": 1}]}\n이상입니다."
+	for b.Loop() {
+		ExtractObject(input)
+	}
+}
+
+func BenchmarkExtractObject_ThinkingTags(b *testing.B) {
+	input := "<thinking>\nLet me analyze this carefully.\nStep 1: check data\nStep 2: validate\n</thinking>\n{\"answer\": \"yes\", \"confidence\": 0.95}"
+	for b.Loop() {
+		ExtractObject(input)
+	}
+}
+
+func BenchmarkExtractObject_CodeFence(b *testing.B) {
+	input := "```json\n{\"data\": [1, 2, 3], \"status\": \"ok\"}\n```"
+	for b.Loop() {
+		ExtractObject(input)
+	}
+}
+
+func BenchmarkExtractObject_Large(b *testing.B) {
+	// Simulate a large LLM response with thinking + prose + JSON.
+	thinking := "<thinking>" + strings.Repeat("reasoning step. ", 200) + "</thinking>\n"
+	jsonObj := `{"facts": [` + strings.Repeat(`{"content": "사용자가 Go를 선호함", "category": "preference", "importance": 0.8},`, 20)
+	jsonObj = jsonObj[:len(jsonObj)-1] + "]}"
+	input := thinking + "분석 결과:\n" + jsonObj + "\n완료."
+	b.ResetTimer()
+	for b.Loop() {
+		ExtractObject(input)
+	}
+}
+
+func BenchmarkStripThinkingTags(b *testing.B) {
+	input := "<thinking>\n" + strings.Repeat("reasoning step. ", 100) + "\n</thinking>\n{\"result\": true}"
+	for b.Loop() {
+		StripThinkingTags(input)
+	}
+}
+
+func BenchmarkExtractArray(b *testing.B) {
+	input := `<thinking>analyzing</thinking> results: ["term1", "term2", "term3", "term4", "term5"]`
+	for b.Loop() {
+		ExtractArray(input)
 	}
 }
