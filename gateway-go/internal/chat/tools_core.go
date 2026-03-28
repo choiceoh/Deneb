@@ -364,7 +364,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Registered last: uses the registry itself to execute source tools.
 	registry.RegisterTool(ToolDef{
 		Name:        "pilot",
-		Description: "Fast local AI that runs tools + analyzes results in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory, gmail, youtube, polaris, image, ls, vega, agent_logs, gateway_logs. Options: chain (follow-up tools), max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-enables thinking for complex tasks. Falls back to raw results if sglang is down",
+		Description: "Fast local AI — gathers tool outputs and analyzes them in one call (free, no API cost). Best for: summarizing file/command output, reviewing diffs, analyzing test failures, comparing multiple sources, processing grep results. Shortcuts: file, files, exec, grep, find, url, http, diff, test, tree, git_log, health, kv_key, memory, gmail, youtube, polaris, image, ls, vega, agent_logs, gateway_logs. Options: chain, max_length, output_format, post_process",
 		InputSchema: pilotToolSchema(),
 		Fn:          toolPilot(registry, workspaceDir),
 	})

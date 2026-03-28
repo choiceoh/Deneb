@@ -490,6 +490,10 @@ func TestSourceTypeFromTool_NewTools(t *testing.T) {
 		"polaris":            "content",
 		"image":              "content",
 		"vega":               "content",
+		"diff":               "file",
+		"test":               "exec",
+		"tree":               "file",
+		"http":               "exec",
 	}
 	for tool, want := range tests {
 		if got := sourceTypeFromTool(tool); got != want {
@@ -543,6 +547,92 @@ func TestApplyPostProcessSteps_Sort(t *testing.T) {
 	result := applyPostProcessSteps(gathered, steps)
 	if result[0].content != "apple\nbanana\ncherry" {
 		t.Errorf("unexpected sort result: %q", result[0].content)
+	}
+}
+
+func TestExpandShortcuts_Diff(t *testing.T) {
+	// "all" mode.
+	p := pilotParams{Task: "review", Diff: "all"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "diff" {
+		t.Fatalf("expected 1 diff spec, got %d", len(specs))
+	}
+	if specs[0].Label != "diff: all" {
+		t.Errorf("unexpected label: %q", specs[0].Label)
+	}
+
+	// Commit hash mode.
+	p2 := pilotParams{Task: "review", Diff: "abc123"}
+	specs2 := expandShortcuts(p2)
+	if len(specs2) != 1 || specs2[0].Tool != "diff" {
+		t.Fatalf("expected 1 diff spec, got %d", len(specs2))
+	}
+}
+
+func TestExpandShortcuts_Test(t *testing.T) {
+	// Specific path.
+	p := pilotParams{Task: "analyze", Test: "gateway-go/..."}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "test" {
+		t.Fatalf("expected 1 test spec, got %d", len(specs))
+	}
+	if specs[0].Label != "test: gateway-go/..." {
+		t.Errorf("unexpected label: %q", specs[0].Label)
+	}
+
+	// "all" mode.
+	p2 := pilotParams{Task: "analyze", Test: "all"}
+	specs2 := expandShortcuts(p2)
+	if len(specs2) != 1 || specs2[0].Tool != "test" {
+		t.Fatalf("expected 1 test spec, got %d", len(specs2))
+	}
+}
+
+func TestExpandShortcuts_Tree(t *testing.T) {
+	p := pilotParams{Task: "overview", Tree: "/home/user/project"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "tree" {
+		t.Fatalf("expected 1 tree spec, got %d", len(specs))
+	}
+	if specs[0].Label != "tree: /home/user/project" {
+		t.Errorf("unexpected label: %q", specs[0].Label)
+	}
+}
+
+func TestExpandShortcuts_GitLog(t *testing.T) {
+	// "recent" mode.
+	p := pilotParams{Task: "summarize", GitLog: "recent"}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "git" {
+		t.Fatalf("expected 1 git spec, got %d", len(specs))
+	}
+	if specs[0].Label != "git_log: recent" {
+		t.Errorf("unexpected label: %q", specs[0].Label)
+	}
+
+	// "oneline" mode.
+	p2 := pilotParams{Task: "summarize", GitLog: "oneline"}
+	specs2 := expandShortcuts(p2)
+	if len(specs2) != 1 || specs2[0].Tool != "git" {
+		t.Fatalf("expected 1 git spec, got %d", len(specs2))
+	}
+}
+
+func TestExpandShortcuts_Health(t *testing.T) {
+	p := pilotParams{Task: "diagnose", Health: true}
+	specs := expandShortcuts(p)
+	if len(specs) != 1 || specs[0].Tool != "health_check" {
+		t.Fatalf("expected 1 health_check spec, got %d", len(specs))
+	}
+	if specs[0].Label != "health_check" {
+		t.Errorf("unexpected label: %q", specs[0].Label)
+	}
+
+	// Health=false should not add a spec.
+	p2 := pilotParams{Task: "diagnose", Health: false}
+	specs2 := expandShortcuts(p2)
+	if len(specs2) != 0 {
+		t.Errorf("expected 0 specs for health=false, got %d", len(specs2))
 	}
 }
 
