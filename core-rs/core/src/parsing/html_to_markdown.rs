@@ -21,31 +21,41 @@ pub fn html_to_markdown(html: &str) -> HtmlToMarkdownResult {
     let mut text = String::with_capacity(html.len());
     text.push_str(html);
 
-    // 1. Strip <script>, <style>, <noscript> blocks (case-insensitive).
-    text = strip_tag_block(&text, "script");
-    text = strip_tag_block(&text, "style");
-    text = strip_tag_block(&text, "noscript");
+    // Each step is wrapped in catch_unwind so a panic in one step
+    // degrades gracefully instead of aborting the entire conversion.
+    let steps: &[fn(&str) -> String] = &[
+        // 1. Strip <script>, <style>, <noscript> blocks.
+        |s| {
+            let s = strip_tag_block(s, "script");
+            let s = strip_tag_block(&s, "style");
+            strip_tag_block(&s, "noscript")
+        },
+        // 2. Convert <a href="X">label</a> → [label](X).
+        convert_links,
+        // 3. Convert <h1-6>...</h1-6> → # prefix.
+        convert_headings,
+        // 4. Convert <li>...</li> → "- " prefix.
+        convert_list_items,
+        // 5. <br>, <hr> → newline; closing block tags → newline.
+        convert_breaks,
+        // 6. Strip all remaining HTML tags.
+        strip_tags,
+        // 7. Decode HTML entities.
+        decode_entities,
+        // 8. Normalize whitespace.
+        normalize_whitespace,
+    ];
 
-    // 2. Convert <a href="X">label</a> → [label](X).
-    text = convert_links(&text);
-
-    // 3. Convert <h1-6>...</h1-6> → # prefix.
-    text = convert_headings(&text);
-
-    // 4. Convert <li>...</li> → "- " prefix.
-    text = convert_list_items(&text);
-
-    // 5. <br>, <hr> → newline; closing block tags → newline.
-    text = convert_breaks(&text);
-
-    // 6. Strip all remaining HTML tags.
-    text = strip_tags(&text);
-
-    // 7. Decode HTML entities.
-    text = decode_entities(&text);
-
-    // 8. Normalize whitespace.
-    text = normalize_whitespace(&text);
+    for step in steps {
+        let input = text.clone();
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| step(&input))) {
+            Ok(output) => text = output,
+            Err(_) => {
+                // Skip this step and continue with the current text.
+                // The FFI layer will still return a result instead of a panic error.
+            }
+        }
+    }
 
     HtmlToMarkdownResult { text, title }
 }
@@ -56,10 +66,10 @@ fn extract_title(html: &str) -> Option<String> {
     let start_tag = "<title";
     let start_idx = lower.find(start_tag)?;
     // Find the closing > of the opening tag.
-    let after_tag = lower[start_idx..].find('>')? + start_idx + 1;
+    let after_tag = lower.get(start_idx..)?.find('>')? + start_idx + 1;
     let end_tag = "</title>";
-    let end_idx = lower[after_tag..].find(end_tag)? + after_tag;
-    let raw = &html[after_tag..end_idx];
+    let end_idx = lower.get(after_tag..)?.find(end_tag)? + after_tag;
+    let raw = html.get(after_tag..end_idx)?;
     let stripped = strip_tags(raw);
     let decoded = decode_entities(&stripped);
     let normalized = normalize_whitespace(&decoded);
@@ -79,28 +89,34 @@ fn strip_tag_block(input: &str, tag: &str) -> String {
     let mut result = String::with_capacity(input.len());
     let mut cursor = 0;
 
-    while let Some(rel_start) = lower[cursor..].find(&open_prefix) {
+    while let Some(rel_start) = lower.get(cursor..).and_then(|s| s.find(&open_prefix)) {
         let start = cursor + rel_start;
         // Make sure it's actually a tag boundary (next char is whitespace, > or end).
         let after = start + open_prefix.len();
         if after < input.len() {
             let next = input.as_bytes()[after];
             if next != b'>' && next != b' ' && next != b'\t' && next != b'\n' && next != b'\r' {
-                result.push_str(&input[cursor..after]);
+                if let Some(s) = input.get(cursor..after) {
+                    result.push_str(s);
+                }
                 cursor = after;
                 continue;
             }
         }
-        result.push_str(&input[cursor..start]);
+        if let Some(s) = input.get(cursor..start) {
+            result.push_str(s);
+        }
         // Find closing tag.
-        if let Some(rel_end) = lower[start..].find(&close_tag) {
+        if let Some(rel_end) = lower.get(start..).and_then(|s| s.find(&close_tag)) {
             cursor = start + rel_end + close_tag.len();
         } else {
             // No closing tag — strip to end.
             cursor = input.len();
         }
     }
-    result.push_str(&input[cursor..]);
+    if let Some(s) = input.get(cursor..) {
+        result.push_str(s);
+    }
     result
 }
 
@@ -110,27 +126,37 @@ fn convert_links(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
     let mut cursor = 0;
 
-    while let Some(rel_start) = lower[cursor..].find("<a ") {
+    while let Some(rel_start) = lower.get(cursor..).and_then(|s| s.find("<a ")) {
         let start = cursor + rel_start;
-        result.push_str(&input[cursor..start]);
+        if let Some(s) = input.get(cursor..start) {
+            result.push_str(s);
+        }
 
         // Find the closing > of the <a> tag.
-        let tag_end = match input[start..].find('>') {
+        let tag_end = match input.get(start..).and_then(|s| s.find('>')) {
             Some(e) => start + e + 1,
             None => {
-                result.push_str(&input[start..start + 3]);
+                if let Some(s) = input.get(start..start + 3) {
+                    result.push_str(s);
+                }
                 cursor = start + 3;
                 continue;
             }
         };
 
         // Extract href from the tag.
-        let tag_content = &input[start..tag_end];
+        let tag_content = match input.get(start..tag_end) {
+            Some(s) => s,
+            None => {
+                cursor = tag_end;
+                continue;
+            }
+        };
         let href = extract_attr(tag_content, "href");
 
         // Find </a>.
         let close = "</a>";
-        let body_end = match lower[tag_end..].find(close) {
+        let body_end = match lower.get(tag_end..).and_then(|s| s.find(close)) {
             Some(e) => tag_end + e,
             None => {
                 if let Some(h) = &href {
@@ -141,7 +167,7 @@ fn convert_links(input: &str) -> String {
             }
         };
 
-        let body = &input[tag_end..body_end];
+        let body = input.get(tag_end..body_end).unwrap_or("");
         let label = normalize_whitespace(&strip_tags(body));
 
         if let Some(h) = href {
@@ -160,7 +186,9 @@ fn convert_links(input: &str) -> String {
 
         cursor = body_end + close.len();
     }
-    result.push_str(&input[cursor..]);
+    if let Some(s) = input.get(cursor..) {
+        result.push_str(s);
+    }
     result
 }
 
@@ -177,16 +205,17 @@ fn extract_attr(tag: &str, attr: &str) -> Option<String> {
     let quote = bytes[after_eq];
     if quote == b'"' || quote == b'\'' {
         let start = after_eq + 1;
-        let end = tag[start..].find(quote as char).map(|e| start + e)?;
-        Some(tag[start..end].to_string())
+        let end = tag.get(start..)?.find(quote as char).map(|e| start + e)?;
+        Some(tag.get(start..end)?.to_string())
     } else {
         // Unquoted attribute: read until whitespace or >.
         let start = after_eq;
-        let end = tag[start..]
+        let rest = tag.get(start..)?;
+        let end = rest
             .find(|c: char| c.is_ascii_whitespace() || c == '>')
             .map(|e| start + e)
             .unwrap_or(tag.len());
-        Some(tag[start..end].to_string())
+        Some(tag.get(start..end)?.to_string())
     }
 }
 
@@ -197,7 +226,7 @@ fn convert_headings(input: &str) -> String {
     let mut cursor = 0;
 
     while cursor < input.len() {
-        if let Some(rel) = lower[cursor..].find("<h") {
+        if let Some(rel) = lower.get(cursor..).and_then(|s| s.find("<h")) {
             let start = cursor + rel;
             let after_h = start + 2;
             if after_h < input.len() {
@@ -205,13 +234,17 @@ fn convert_headings(input: &str) -> String {
                 if (b'1'..=b'6').contains(&level_byte) {
                     let level = (level_byte - b'0') as usize;
                     // Find closing > of opening tag.
-                    if let Some(gt) = input[after_h..].find('>') {
+                    if let Some(gt) = input.get(after_h..).and_then(|s| s.find('>')) {
                         let body_start = after_h + gt + 1;
                         let close = format!("</h{}>", level);
-                        if let Some(rel_close) = lower[body_start..].find(&close) {
+                        if let Some(rel_close) =
+                            lower.get(body_start..).and_then(|s| s.find(&close))
+                        {
                             let body_end = body_start + rel_close;
-                            result.push_str(&input[cursor..start]);
-                            let body = &input[body_start..body_end];
+                            if let Some(s) = input.get(cursor..start) {
+                                result.push_str(s);
+                            }
+                            let body = input.get(body_start..body_end).unwrap_or("");
                             let label = normalize_whitespace(&strip_tags(body));
                             let prefix = "#".repeat(level.clamp(1, 6));
                             result.push('\n');
@@ -225,13 +258,17 @@ fn convert_headings(input: &str) -> String {
                     }
                 }
             }
-            result.push_str(&input[cursor..start + 1]);
+            if let Some(s) = input.get(cursor..start + 1) {
+                result.push_str(s);
+            }
             cursor = start + 1;
         } else {
             break;
         }
     }
-    result.push_str(&input[cursor..]);
+    if let Some(s) = input.get(cursor..) {
+        result.push_str(s);
+    }
     result
 }
 
@@ -241,12 +278,14 @@ fn convert_list_items(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
     let mut cursor = 0;
 
-    while let Some(rel) = lower[cursor..].find("<li") {
+    while let Some(rel) = lower.get(cursor..).and_then(|s| s.find("<li")) {
         let start = cursor + rel;
-        result.push_str(&input[cursor..start]);
+        if let Some(s) = input.get(cursor..start) {
+            result.push_str(s);
+        }
 
         // Find closing > of <li> tag.
-        let tag_end = match input[start..].find('>') {
+        let tag_end = match input.get(start..).and_then(|s| s.find('>')) {
             Some(e) => start + e + 1,
             None => {
                 cursor = start + 3;
@@ -255,7 +294,7 @@ fn convert_list_items(input: &str) -> String {
         };
 
         let close = "</li>";
-        let body_end = match lower[tag_end..].find(close) {
+        let body_end = match lower.get(tag_end..).and_then(|s| s.find(close)) {
             Some(e) => tag_end + e,
             None => {
                 cursor = tag_end;
@@ -263,7 +302,7 @@ fn convert_list_items(input: &str) -> String {
             }
         };
 
-        let body = &input[tag_end..body_end];
+        let body = input.get(tag_end..body_end).unwrap_or("");
         let label = normalize_whitespace(&strip_tags(body));
         if !label.is_empty() {
             result.push_str("\n- ");
@@ -271,7 +310,9 @@ fn convert_list_items(input: &str) -> String {
         }
         cursor = body_end + close.len();
     }
-    result.push_str(&input[cursor..]);
+    if let Some(s) = input.get(cursor..) {
+        result.push_str(s);
+    }
     result
 }
 
@@ -296,11 +337,16 @@ fn convert_breaks(input: &str) -> String {
     ];
 
     while cursor < input.len() {
+        let lower_rest = match lower.get(cursor..) {
+            Some(s) => s,
+            None => break,
+        };
+
         let mut matched = false;
 
         // Check br/hr tags.
         for tag in &br_hr_tags {
-            if lower[cursor..].starts_with(tag) {
+            if lower_rest.starts_with(tag) {
                 result.push('\n');
                 cursor += tag.len();
                 matched = true;
@@ -313,7 +359,7 @@ fn convert_breaks(input: &str) -> String {
 
         // Check closing block tags.
         for tag in &block_close_tags {
-            if lower[cursor..].starts_with(tag) {
+            if lower_rest.starts_with(tag) {
                 result.push('\n');
                 cursor += tag.len();
                 matched = true;
@@ -324,10 +370,17 @@ fn convert_breaks(input: &str) -> String {
             continue;
         }
 
-        // Advance by full UTF-8 character to avoid panicking on multi-byte chars.
-        let ch = input[cursor..].chars().next().unwrap();
-        result.push(ch);
-        cursor += ch.len_utf8();
+        // Advance by full UTF-8 character.
+        match input.get(cursor..) {
+            Some(rest) => match rest.chars().next() {
+                Some(ch) => {
+                    result.push(ch);
+                    cursor += ch.len_utf8();
+                }
+                None => break,
+            },
+            None => break,
+        }
     }
     result
 }
@@ -358,9 +411,16 @@ fn decode_entities(input: &str) -> String {
     while i < len {
         if bytes[i] != b'&' {
             // Advance by full UTF-8 character to preserve multi-byte chars.
-            let ch = input[i..].chars().next().unwrap();
-            result.push(ch);
-            i += ch.len_utf8();
+            match input.get(i..) {
+                Some(rest) => match rest.chars().next() {
+                    Some(ch) => {
+                        result.push(ch);
+                        i += ch.len_utf8();
+                    }
+                    None => break,
+                },
+                None => break,
+            }
             continue;
         }
 
@@ -377,7 +437,10 @@ fn decode_entities(input: &str) -> String {
 }
 
 fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)> {
-    let rest = &input[pos..];
+    let rest = match input.get(pos..) {
+        Some(s) => s,
+        None => return None,
+    };
 
     // Named entities (case-insensitive).
     let named: &[(&str, char)] = &[
@@ -389,17 +452,27 @@ fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)> {
         ("&#39;", '\''),
         ("&apos;", '\''),
     ];
-    let rest_lower = rest.get(..10).unwrap_or(rest).to_ascii_lowercase();
+
+    // Only lowercase a small bounded prefix — never the entire remaining input.
+    // Find the nearest valid char boundary at or before byte 10.
+    let prefix_end = bounded_char_boundary(rest, 10);
+    let rest_lower = rest[..prefix_end].to_ascii_lowercase();
+
     for &(entity, ch) in named {
         if rest_lower.starts_with(entity) {
             return Some((ch, entity.len()));
         }
     }
 
-    // Hex numeric: &#xHH;
+    // Hex numeric: &#xHH; — cap search to first 12 bytes (covers realistic entities).
     if rest_lower.starts_with("&#x") {
-        let after = &rest[3..];
-        if let Some(semi) = after.find(';') {
+        let after = match rest.get(3..) {
+            Some(s) => s,
+            None => return None,
+        };
+        // Only search for ';' within a reasonable range to avoid scanning megabytes.
+        let search_limit = bounded_char_boundary(after, 12);
+        if let Some(semi) = after[..search_limit].find(';') {
             let hex_str = &after[..semi];
             if let Ok(code) = u32::from_str_radix(hex_str, 16) {
                 if let Some(ch) = char::from_u32(code) {
@@ -407,11 +480,17 @@ fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)> {
                 }
             }
         }
+        return None;
     }
 
     // Decimal numeric: &#DDD;
-    if let Some(after) = rest.strip_prefix("&#") {
-        if let Some(semi) = after.find(';') {
+    if rest_lower.starts_with("&#") {
+        let after = match rest.get(2..) {
+            Some(s) => s,
+            None => return None,
+        };
+        let search_limit = bounded_char_boundary(after, 12);
+        if let Some(semi) = after[..search_limit].find(';') {
             let dec_str = &after[..semi];
             if let Ok(code) = dec_str.parse::<u32>() {
                 if let Some(ch) = char::from_u32(code) {
@@ -422,6 +501,16 @@ fn try_decode_entity(input: &str, pos: usize) -> Option<(char, usize)> {
     }
 
     None
+}
+
+/// Find the largest valid char boundary at or before `max_byte`.
+/// Returns 0 if the string is empty.
+fn bounded_char_boundary(s: &str, max_byte: usize) -> usize {
+    let mut end = max_byte.min(s.len());
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    end
 }
 
 /// Normalize whitespace: collapse runs, trim, etc.
@@ -572,5 +661,106 @@ mod tests {
         let result = html_to_markdown("");
         assert_eq!(result.text, "");
         assert!(result.title.is_none());
+    }
+
+    #[test]
+    fn truncated_tags() {
+        // Truncated tags at end of input must not panic.
+        let cases = [
+            "<h", "<h1", "<h1>", "<a ", "<a href=", "<li", "<li>",
+            "<br", "<hr", "</p", "<script", "<style", "<noscript",
+            "&", "&amp", "&#", "&#x", "&#x4", "&#39",
+        ];
+        for case in cases {
+            let result = html_to_markdown(case);
+            // Just ensure no panic; content correctness is secondary.
+            let _ = result.text;
+        }
+    }
+
+    #[test]
+    fn multibyte_near_entity_boundary() {
+        // Multi-byte chars near entity decode boundaries (byte 10 mid-char).
+        let html = "<p>&amp;한국어텍스트</p>";
+        let result = html_to_markdown(html);
+        assert!(result.text.contains("&"));
+        assert!(result.text.contains("한국어텍스트"));
+    }
+
+    #[test]
+    fn many_ampersands_with_multibyte() {
+        // Many & chars interleaved with multi-byte text.
+        let html = "&한&국&어&amp;테스트";
+        let result = html_to_markdown(html);
+        assert!(result.text.contains("&테스트"));
+    }
+
+    #[test]
+    fn deeply_nested_tags() {
+        let html = "<div>".repeat(100) + "content" + &"</div>".repeat(100);
+        let result = html_to_markdown(&html);
+        assert!(result.text.contains("content"));
+    }
+
+    #[test]
+    fn unbalanced_tags() {
+        let html = "<h1>Title</h2><a href=\"x\">link<p>text</li></a>";
+        let result = html_to_markdown(html);
+        let _ = result.text; // no panic
+    }
+
+    #[test]
+    fn script_with_angle_brackets() {
+        let html = "<script>if (a < b && c > d) { alert('</script>test'); }</script>after";
+        let result = html_to_markdown(html);
+        assert!(result.text.contains("after"));
+    }
+
+    #[test]
+    fn emoji_sequences() {
+        // Complex emoji (multi-codepoint, ZWJ sequences).
+        let html = "<p>👨‍👩‍👧‍👦 family 🏳️‍🌈 flag</p>";
+        let result = html_to_markdown(html);
+        assert!(result.text.contains("family"));
+        assert!(result.text.contains("flag"));
+    }
+
+    #[test]
+    fn null_bytes() {
+        let html = "<p>before\0after</p>";
+        let result = html_to_markdown(html);
+        // Should not panic. The null byte may or may not survive.
+        let _ = result.text;
+    }
+
+    #[test]
+    fn only_tags_no_content() {
+        let html = "<div><p><span></span></p></div>";
+        let result = html_to_markdown(html);
+        assert!(result.text.is_empty() || result.text.trim().is_empty());
+    }
+
+    #[test]
+    fn numeric_entity_edge_cases() {
+        // Invalid code point, huge number, zero.
+        let html = "&#0; &#xFFFFFF; &#999999999; &#xD800; normal";
+        let result = html_to_markdown(html);
+        assert!(result.text.contains("normal"));
+    }
+
+    #[test]
+    fn href_with_multibyte() {
+        let html = r#"<a href="https://example.com/한국">한국어 링크</a>"#;
+        let result = html_to_markdown(html);
+        assert!(result.text.contains("[한국어 링크](https://example.com/한국)"));
+    }
+
+    #[test]
+    fn large_input_no_panic() {
+        // ~1MB of repetitive HTML.
+        let chunk = "<p>Hello &amp; world 한국어 🌍</p><br><hr>\n";
+        let html: String = chunk.repeat(20_000);
+        let result = html_to_markdown(&html);
+        assert!(result.text.contains("Hello"));
     }
 }
