@@ -85,7 +85,9 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 		WorkspaceDir: params.WorkspaceDir,
 		Depth:        depth,
 	}
-	d.ACPRegistry.Register(agent)
+	if err := d.ACPRegistry.Register(agent); err != nil {
+		return SpawnSubagentResult{Error: fmt.Errorf("register agent: %w", err)}
+	}
 
 	// Create session state if SaveSession is available.
 	if d.SaveSession != nil {
@@ -173,10 +175,10 @@ func (d *SubagentInfraDeps) ResetSubagent(agentID, reason string) error {
 		_ = d.AbortSession(agent.SessionKey)
 	}
 
-	// Re-register as idle.
+	// Re-register as idle (update, not new — limit won't apply).
 	agent.Status = "idle"
 	agent.EndedAt = 0
-	d.ACPRegistry.Register(*agent)
+	_ = d.ACPRegistry.Register(*agent)
 
 	return nil
 }

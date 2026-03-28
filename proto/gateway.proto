@@ -36,6 +36,7 @@ enum ErrorCode {
   ERROR_CODE_NODE_DISCONNECTED = 20;
   ERROR_CODE_DEPENDENCY_FAILED = 21;
   ERROR_CODE_FEATURE_DISABLED = 22;
+  ERROR_CODE_RESOURCE_EXHAUSTED = 23;
 }
 
 // ErrorShape is the structured error payload embedded in ResponseFrame.error.

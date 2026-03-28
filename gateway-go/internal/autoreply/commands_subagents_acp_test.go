@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewSubagentCommandDepsFromACP(t *testing.T) {
-	reg := NewACPRegistry()
+	reg := NewACPRegistry(nil)
 	now := time.Now().UnixMilli()
 
 	// Register some agents.
@@ -87,7 +87,7 @@ func TestNewSubagentCommandDepsFromACP(t *testing.T) {
 }
 
 func TestACPSubagentCommandHandler_Handle(t *testing.T) {
-	reg := NewACPRegistry()
+	reg := NewACPRegistry(nil)
 	now := time.Now().UnixMilli()
 	reg.Register(ACPAgent{
 		ID: "run-abc", ParentID: "session:main", Role: "worker",
@@ -124,7 +124,7 @@ func TestACPSubagentCommandHandler_Handle(t *testing.T) {
 }
 
 func TestFormatACPSubagentSummary(t *testing.T) {
-	reg := NewACPRegistry()
+	reg := NewACPRegistry(nil)
 	now := time.Now().UnixMilli()
 
 	// Empty registry.
@@ -143,7 +143,7 @@ func TestFormatACPSubagentSummary(t *testing.T) {
 }
 
 func TestPruneStaleACPAgents(t *testing.T) {
-	reg := NewACPRegistry()
+	reg := NewACPRegistry(nil)
 	now := time.Now().UnixMilli()
 
 	reg.Register(ACPAgent{ID: "old", Status: "done", SpawnedAt: now - 300000, EndedAt: now - 200000})

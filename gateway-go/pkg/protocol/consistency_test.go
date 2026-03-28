@@ -173,6 +173,7 @@ func TestErrorCodeConsistency(t *testing.T) {
 		protocol.ErrNodeDisconnected,
 		protocol.ErrDependencyFailed,
 		protocol.ErrFeatureDisabled,
+		protocol.ErrResourceExhausted,
 	}
 
 	// Build a set from the generated enum (skip UNSPECIFIED = 0).

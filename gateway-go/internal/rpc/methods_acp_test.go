@@ -12,7 +12,7 @@ import (
 )
 
 func testACPDeps() *ACPDeps {
-	registry := autoreply.NewACPRegistry()
+	registry := autoreply.NewACPRegistry(nil)
 	bindings := autoreply.NewSessionBindingService()
 	sessions := session.NewManager()
 
@@ -338,6 +338,7 @@ func TestACPSend_NoSendFn(t *testing.T) {
 
 func TestACPBindUnbind(t *testing.T) {
 	deps := testACPDeps()
+	deps.Sessions.Create("agent:main:main", session.KindDirect)
 	d := testACPDispatcher(deps)
 
 	// Bind.
@@ -363,6 +364,7 @@ func TestACPBindUnbind(t *testing.T) {
 
 func TestACPUnbind_ByConversation(t *testing.T) {
 	deps := testACPDeps()
+	deps.Sessions.Create("agent:main:main", session.KindDirect)
 	d := testACPDispatcher(deps)
 
 	// Bind first.
@@ -396,6 +398,8 @@ func TestACPBind_MissingTargetKey(t *testing.T) {
 
 func TestACPBindings_All(t *testing.T) {
 	deps := testACPDeps()
+	deps.Sessions.Create("agent:main:main", session.KindDirect)
+	deps.Sessions.Create("agent:design:main", session.KindDirect)
 	d := testACPDispatcher(deps)
 
 	// Create some bindings.
@@ -422,6 +426,8 @@ func TestACPBindings_All(t *testing.T) {
 
 func TestACPBindings_FilterBySession(t *testing.T) {
 	deps := testACPDeps()
+	deps.Sessions.Create("agent:main:main", session.KindDirect)
+	deps.Sessions.Create("agent:design:main", session.KindDirect)
 	d := testACPDispatcher(deps)
 
 	dispatchACP(t, d, "acp.bind", map[string]string{
@@ -479,6 +485,68 @@ func TestACPWriteOps_DisabledState(t *testing.T) {
 			requireOK(t, resp)
 		})
 	}
+}
+
+// --- Quality validation tests ---
+
+func TestACPBind_InvalidSessionKey(t *testing.T) {
+	deps := testACPDeps()
+	d := testACPDispatcher(deps)
+
+	// Bind to a session that does not exist in the session manager.
+	resp := dispatchACP(t, d, "acp.bind", map[string]string{
+		"channel":          "telegram",
+		"accountId":        "u1",
+		"conversationId":   "t1",
+		"targetSessionKey": "nonexistent-session",
+	})
+	requireError(t, resp, protocol.ErrNotFound)
+}
+
+func TestACPBind_ValidSession(t *testing.T) {
+	deps := testACPDeps()
+	d := testACPDispatcher(deps)
+
+	// Create a real session first.
+	deps.Sessions.Create("agent:main:main", session.KindDirect)
+
+	resp := dispatchACP(t, d, "acp.bind", map[string]string{
+		"channel":          "telegram",
+		"accountId":        "u1",
+		"conversationId":   "t1",
+		"targetSessionKey": "agent:main:main",
+	})
+	requireOK(t, resp)
+}
+
+func TestACPSpawn_MaxAgentsExceeded(t *testing.T) {
+	// Create a registry with a limit of 2 agents.
+	registry := autoreply.NewACPRegistry(nil, 2)
+	bindings := autoreply.NewSessionBindingService()
+	sessions := session.NewManager()
+
+	deps := &ACPDeps{
+		Registry: registry,
+		Bindings: bindings,
+		Sessions: sessions,
+		Infra: &autoreply.SubagentInfraDeps{
+			ACPRegistry: registry,
+		},
+	}
+	deps.SetEnabled(true)
+	d := NewDispatcher(testLogger())
+	RegisterACPMethods(d, deps)
+
+	// Spawn two agents (should succeed).
+	resp := dispatchACP(t, d, "acp.spawn", map[string]string{"role": "worker-1"})
+	requireOK(t, resp)
+
+	resp = dispatchACP(t, d, "acp.spawn", map[string]string{"role": "worker-2"})
+	requireOK(t, resp)
+
+	// Third spawn should fail with resource exhausted.
+	resp = dispatchACP(t, d, "acp.spawn", map[string]string{"role": "worker-3"})
+	requireError(t, resp, protocol.ErrResourceExhausted)
 }
 
 // --- Methods registration ---

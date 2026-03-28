@@ -6,6 +6,8 @@ package process
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"sync/atomic"
 	"time"
 
@@ -304,12 +306,21 @@ type ACPDeps struct {
 	GatewaySubs  *events.GatewayEventSubscriptions
 	BindingStore *autoreply.BindingStore
 	Translator   *autoreply.ACPTranslator
+	Logger       *slog.Logger
 
 	// SessionSendFn sends a message to a session, triggering an agent run.
 	SessionSendFn func(sessionKey, message string) error
 
 	// enabled tracks whether ACP write operations are active.
 	enabled atomic.Bool
+}
+
+// logger returns the configured logger or a default.
+func (d *ACPDeps) logger() *slog.Logger {
+	if d.Logger != nil {
+		return d.Logger
+	}
+	return slog.Default()
 }
 
 // IsEnabled returns whether ACP is currently enabled.
@@ -393,6 +404,7 @@ func acpStart(deps *ACPDeps) rpcutil.HandlerFunc {
 			})
 		}
 
+		deps.logger().Info("acp started", "wasAlready", wasEnabled)
 		return protocol.MustResponseOK(req.ID, map[string]any{
 			"enabled":        true,
 			"wasAlready":     wasEnabled,
@@ -409,7 +421,9 @@ func acpStop(deps *ACPDeps) rpcutil.HandlerFunc {
 
 		// Persist bindings on stop.
 		if deps.BindingStore != nil && deps.Bindings != nil {
-			_ = deps.BindingStore.SyncFromService(deps.Bindings)
+			if err := deps.BindingStore.SyncFromService(deps.Bindings); err != nil {
+				deps.logger().Warn("failed to persist ACP bindings on stop", "error", err)
+			}
 		}
 
 		if deps.GatewaySubs != nil {
@@ -419,6 +433,7 @@ func acpStop(deps *ACPDeps) rpcutil.HandlerFunc {
 			})
 		}
 
+		deps.logger().Info("acp stopped", "wasEnabled", wasEnabled)
 		return protocol.MustResponseOK(req.ID, map[string]any{
 			"enabled":        false,
 			"wasEnabled":     wasEnabled,
@@ -486,8 +501,17 @@ func acpSpawn(deps *ACPDeps) rpcutil.HandlerFunc {
 			MaxDepth:         p.MaxDepth,
 		})
 		if result.Error != nil {
+			// Distinguish resource exhaustion (depth/agent limit) from other errors.
+			errCode := protocol.ErrConflict
+			if errors.Is(result.Error, autoreply.ErrMaxAgentsReached) {
+				errCode = protocol.ErrResourceExhausted
+			}
+			deps.logger().Warn("acp spawn failed",
+				"role", p.Role,
+				"error", result.Error,
+			)
 			return protocol.NewResponseError(req.ID, protocol.NewError(
-				protocol.ErrConflict, result.Error.Error()))
+				errCode, result.Error.Error()))
 		}
 
 		// Send initial message if provided and send function is available.
@@ -495,6 +519,11 @@ func acpSpawn(deps *ACPDeps) rpcutil.HandlerFunc {
 			_ = deps.SessionSendFn(result.SessionKey, p.InitialMessage)
 		}
 
+		deps.logger().Info("acp agent spawned",
+			"agentId", result.AgentID,
+			"sessionKey", result.SessionKey,
+			"role", p.Role,
+		)
 		return protocol.MustResponseOK(req.ID, map[string]any{
 			"agentId":    result.AgentID,
 			"sessionKey": result.SessionKey,
@@ -530,6 +559,7 @@ func acpKill(deps *ACPDeps) rpcutil.HandlerFunc {
 			}
 		}
 
+		deps.logger().Info("acp agent killed", "agentId", p.AgentID)
 		return protocol.MustResponseOK(req.ID, map[string]any{
 			"killed":  true,
 			"agentId": p.AgentID,
@@ -584,6 +614,7 @@ func acpSend(deps *ACPDeps) rpcutil.HandlerFunc {
 				protocol.ErrDependencyFailed, "send failed: "+err.Error()))
 		}
 
+		deps.logger().Debug("acp message sent", "sessionKey", targetKey)
 		return protocol.MustResponseOK(req.ID, map[string]any{
 			"sent":       true,
 			"sessionKey": targetKey,
@@ -619,6 +650,14 @@ func acpBind(deps *ACPDeps) rpcutil.HandlerFunc {
 				protocol.ErrMissingParam, "targetSessionKey is required"))
 		}
 
+		// Validate that the target session exists.
+		if deps.Sessions != nil {
+			if s := deps.Sessions.Get(p.TargetSessionKey); s == nil {
+				return protocol.NewResponseError(req.ID, protocol.NewError(
+					protocol.ErrNotFound, "target session not found: "+p.TargetSessionKey))
+			}
+		}
+
 		result := deps.Bindings.Bind(autoreply.SessionBindParams{
 			Channel:          p.Channel,
 			AccountID:        p.AccountID,
@@ -629,9 +668,15 @@ func acpBind(deps *ACPDeps) rpcutil.HandlerFunc {
 
 		// Persist after bind.
 		if deps.BindingStore != nil {
-			_ = deps.BindingStore.SyncFromService(deps.Bindings)
+			if err := deps.BindingStore.SyncFromService(deps.Bindings); err != nil {
+				deps.logger().Warn("failed to persist ACP bindings after bind", "error", err)
+			}
 		}
 
+		deps.logger().Info("acp session bound",
+			"bindingId", result.BindingID,
+			"targetKey", result.TargetKey,
+		)
 		return protocol.MustResponseOK(req.ID, map[string]any{
 			"bindingId":      result.BindingID,
 			"conversationId": result.ConversationID,
@@ -681,9 +726,12 @@ func acpUnbind(deps *ACPDeps) rpcutil.HandlerFunc {
 
 		// Persist after unbind.
 		if deps.BindingStore != nil {
-			_ = deps.BindingStore.SyncFromService(deps.Bindings)
+			if err := deps.BindingStore.SyncFromService(deps.Bindings); err != nil {
+				deps.logger().Warn("failed to persist ACP bindings after unbind", "error", err)
+			}
 		}
 
+		deps.logger().Info("acp session unbound", "bindingId", bindingID)
 		return protocol.MustResponseOK(req.ID, map[string]any{
 			"unbound":   true,
 			"bindingId": bindingID,

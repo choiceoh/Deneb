@@ -175,10 +175,10 @@ func TestErrorCodeConstants(t *testing.T) {
 		ErrNotLinked, ErrNotPaired, ErrAgentTimeout, ErrInvalidRequest,
 		ErrUnavailable, ErrMissingParam, ErrNotFound, ErrUnauthorized,
 		ErrValidationFailed, ErrConflict, ErrForbidden, ErrNodeDisconnected,
-		ErrDependencyFailed, ErrFeatureDisabled,
+		ErrDependencyFailed, ErrFeatureDisabled, ErrResourceExhausted,
 	}
-	if len(codes) != 14 {
-		t.Errorf("expected 14 error codes, got %d", len(codes))
+	if len(codes) != 15 {
+		t.Errorf("expected 15 error codes, got %d", len(codes))
 	}
 	seen := make(map[string]bool)
 	for _, c := range codes {

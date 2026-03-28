@@ -38,9 +38,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
-	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/logging"
@@ -55,8 +55,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
-	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -151,8 +151,9 @@ type Server struct {
 	hooksHTTP *HooksHTTPHandler
 
 	// ACP subsystem.
-	acpDeps           *rpc.ACPDeps
-	acpLifecycleUnsub func()
+	acpDeps             *rpc.ACPDeps
+	acpLifecycleUnsub   func()
+	acpStreamTranslator *autoreply.ACPStreamTranslator
 
 	// Phase 5: Autonomous goal-driven execution.
 	autonomousSvc   *autonomous.Service
@@ -325,7 +326,8 @@ func New(addr string, opts ...Option) *Server {
 	s.maintRunner = maintenance.NewRunner(denebDir)
 
 	// ACP subsystem: registry, bindings, persistence, lifecycle sync.
-	acpRegistry := autoreply.NewACPRegistry()
+	acpLogger := s.logger.With("subsystem", "acp")
+	acpRegistry := autoreply.NewACPRegistry(acpLogger)
 	acpBindings := autoreply.NewSessionBindingService()
 	acpBindingStore := autoreply.NewBindingStore(autoreply.DefaultBindingStorePath(denebDir))
 	if err := acpBindingStore.RestoreToService(acpBindings); err != nil {
@@ -340,6 +342,7 @@ func New(addr string, opts ...Option) *Server {
 		GatewaySubs:  s.gatewaySubs,
 		BindingStore: acpBindingStore,
 		Translator:   autoreply.NewACPTranslator(acpRegistry, acpBindings),
+		Logger:       acpLogger,
 	}
 	s.acpDeps.SetEnabled(true)
 
@@ -1006,7 +1009,6 @@ func (s *Server) SetVega(backend vega.Backend) {
 	}
 }
 
-
 // Broadcaster returns the event broadcaster for external use.
 func (s *Server) Broadcaster() *events.Broadcaster {
 	return s.broadcaster
@@ -1174,7 +1176,16 @@ func (s *Server) registerPhase2Methods() {
 	rpc.RegisterChatMethods(s.dispatcher, rpc.ChatDeps{Chat: s.chatHandler})
 
 	// Wire raw broadcast directly to chat handler for streaming event relay.
+	// ACP stream translator intercepts events for ACP sessions and re-emits
+	// them as ACP-shaped events alongside the original gateway events.
+	s.acpStreamTranslator = autoreply.NewACPStreamTranslator(
+		func(event string, data []byte) int {
+			return s.broadcaster.BroadcastRaw(event, data)
+		},
+		s.logger.With("subsystem", "acp"),
+	)
 	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
+		s.acpStreamTranslator.TranslateEvent(event, data)
 		return s.broadcaster.BroadcastRaw(event, data)
 	})
 
@@ -1431,7 +1442,6 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 
 	// Wire autonomous service into agent tools (late-binding, same as SessionSendFn).
 	s.toolDeps.AutonomousSvc = s.autonomousSvc
-
 
 	// Wire AuroraDream adapter if available (created in phase 2).
 	if s.dreamingAdapter != nil {
@@ -1769,8 +1779,6 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 	}
 	return root.Channels.Telegram
 }
-
-
 
 // loadProviderConfigs reads LLM provider configs (apiKey, baseUrl, api) from deneb.json.
 func loadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {

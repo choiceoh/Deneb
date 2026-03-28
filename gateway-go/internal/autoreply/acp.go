@@ -7,6 +7,7 @@ package autoreply
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -27,24 +28,68 @@ type ACPAgent struct {
 	Depth        int    `json:"depth"`
 }
 
+// DefaultMaxAgents is the default maximum number of concurrent active agents.
+const DefaultMaxAgents = 8
+
+// ErrMaxAgentsReached is returned when the active agent limit is exceeded.
+var ErrMaxAgentsReached = fmt.Errorf("max concurrent agents reached")
+
 // ACPRegistry tracks spawned sub-agents.
 type ACPRegistry struct {
-	mu     sync.RWMutex
-	agents map[string]*ACPAgent
+	mu        sync.RWMutex
+	agents    map[string]*ACPAgent
+	maxAgents int
+	logger    *slog.Logger
 }
 
 // NewACPRegistry creates a new ACP agent registry.
-func NewACPRegistry() *ACPRegistry {
+func NewACPRegistry(logger *slog.Logger, maxAgents ...int) *ACPRegistry {
+	limit := DefaultMaxAgents
+	if len(maxAgents) > 0 && maxAgents[0] > 0 {
+		limit = maxAgents[0]
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &ACPRegistry{
-		agents: make(map[string]*ACPAgent),
+		agents:    make(map[string]*ACPAgent),
+		maxAgents: limit,
+		logger:    logger.With("component", "acp.registry"),
 	}
 }
 
-// Register adds a sub-agent to the registry.
-func (r *ACPRegistry) Register(agent ACPAgent) {
+// Register adds a sub-agent to the registry. Returns ErrMaxAgentsReached
+// if the active agent count is at the configured limit.
+func (r *ACPRegistry) Register(agent ACPAgent) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	// If this is a new agent (not an update), enforce the limit.
+	if _, exists := r.agents[agent.ID]; !exists {
+		active := 0
+		for _, a := range r.agents {
+			if a.Status == "idle" || a.Status == "running" {
+				active++
+			}
+		}
+		if active >= r.maxAgents {
+			r.logger.Warn("agent registration rejected: limit reached",
+				"agentId", agent.ID,
+				"active", active,
+				"maxAgents", r.maxAgents,
+			)
+			return ErrMaxAgentsReached
+		}
+	}
+
 	r.agents[agent.ID] = &agent
+	r.logger.Info("agent registered",
+		"agentId", agent.ID,
+		"role", agent.Role,
+		"parentId", agent.ParentID,
+		"depth", agent.Depth,
+	)
+	return nil
 }
 
 // Get returns an agent by ID.
@@ -99,6 +144,10 @@ func (r *ACPRegistry) Kill(id string) bool {
 	}
 	a.Status = "killed"
 	a.EndedAt = time.Now().UnixMilli()
+	r.logger.Info("agent killed",
+		"agentId", id,
+		"sessionKey", a.SessionKey,
+	)
 	return true
 }
 
@@ -107,6 +156,7 @@ func (r *ACPRegistry) Remove(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.agents, id)
+	r.logger.Debug("agent removed", "agentId", id)
 }
 
 // UpdateStatusBySessionKey finds an agent by session key and updates its status.
@@ -120,6 +170,11 @@ func (r *ACPRegistry) UpdateStatusBySessionKey(sessionKey, status string, endedA
 			if endedAt > 0 {
 				a.EndedAt = endedAt
 			}
+			r.logger.Info("agent status updated",
+				"agentId", a.ID,
+				"sessionKey", sessionKey,
+				"newStatus", status,
+			)
 			return true
 		}
 	}

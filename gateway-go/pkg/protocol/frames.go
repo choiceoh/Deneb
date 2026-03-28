@@ -71,6 +71,7 @@ var validErrorCodes = map[string]bool{
 	ErrNotFound: true, ErrUnauthorized: true, ErrValidationFailed: true,
 	ErrConflict: true, ErrForbidden: true, ErrNodeDisconnected: true,
 	ErrDependencyFailed: true, ErrFeatureDisabled: true,
+	ErrResourceExhausted: true,
 }
 
 // NewError creates a new ErrorShape with the given code and message.

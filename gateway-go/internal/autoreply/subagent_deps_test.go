@@ -6,7 +6,7 @@ import (
 )
 
 func TestSubagentCommandDeps_SpawnSubagent(t *testing.T) {
-	acpRegistry := NewACPRegistry()
+	acpRegistry := NewACPRegistry(nil)
 	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,
 	}
@@ -47,7 +47,7 @@ func TestSubagentCommandDeps_SpawnSubagent(t *testing.T) {
 }
 
 func TestSubagentCommandDeps_SpawnSubagent_MaxDepth(t *testing.T) {
-	acpRegistry := NewACPRegistry()
+	acpRegistry := NewACPRegistry(nil)
 	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,
 	}
@@ -71,7 +71,7 @@ func TestSubagentCommandDeps_SpawnSubagent_MaxDepth(t *testing.T) {
 }
 
 func TestSubagentCommandDeps_KillSubagent(t *testing.T) {
-	acpRegistry := NewACPRegistry()
+	acpRegistry := NewACPRegistry(nil)
 	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,
 	}
@@ -104,7 +104,7 @@ func TestSubagentCommandDeps_KillSubagent(t *testing.T) {
 }
 
 func TestSubagentCommandDeps_ListSubagents(t *testing.T) {
-	acpRegistry := NewACPRegistry()
+	acpRegistry := NewACPRegistry(nil)
 	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,
 	}
