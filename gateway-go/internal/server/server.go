@@ -1941,6 +1941,8 @@ func (s *Server) wirePropusChatHandler() {
 	})
 
 	// Outbound: intercept raw broadcast events to relay streaming to Propus clients.
+	// toolNames tracks toolUseId → tool name so completed events can include the name.
+	toolNames := map[string]string{}
 	prevBroadcast := s.chatHandler.GetBroadcastRaw()
 	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
 		n := 0
@@ -1985,10 +1987,16 @@ func (s *Server) wirePropusChatHandler() {
 			toolName := envelope.Payload.Tool
 			switch envelope.Payload.State {
 			case "started":
+				if id := envelope.Payload.ToolUseID; id != "" {
+					toolNames[id] = toolName
+				}
 				s.propusPlug.BroadcastToSession(sk, propus.MsgToolStart(toolName, envelope.Payload.ToolUseID))
 			case "completed":
 				if toolName == "" {
-					toolName = envelope.Payload.ToolUseID
+					if n, ok := toolNames[envelope.Payload.ToolUseID]; ok {
+						toolName = n
+						delete(toolNames, envelope.Payload.ToolUseID)
+					}
 				}
 				s.propusPlug.BroadcastToSession(sk, propus.MsgToolResult(toolName, envelope.Payload.Result))
 			}

@@ -1,0 +1,121 @@
+/* ═══ Propus — Arc-inspired dark theme ═══ */
+
+:root {
+  /* Tokyo Night base */
+  --bg-primary: #1a1b26;
+  --bg-secondary: #1f2335;
+  --bg-tertiary: #24283b;
+  --bg-surface: #292e42;
+
+  /* Sidebar — translucent */
+  --sidebar-bg: rgba(31, 35, 53, 0.85);
+  --sidebar-border: rgba(41, 46, 66, 0.6);
+
+  /* Text */
+  --text-primary: #c0caf5;
+  --text-secondary: #a9b1d6;
+  --text-muted: #565f89;
+  --text-dim: #3b4261;
+
+  /* Accent — Arc purple-blue gradient */
+  --accent-primary: #7aa2f7;
+  --accent-secondary: #bb9af7;
+  --accent-gradient: linear-gradient(135deg, #7aa2f7 0%, #bb9af7 100%);
+
+  /* Status */
+  --success: #9ece6a;
+  --error: #f7768e;
+  --warning: #e0af68;
+
+  /* Tool badge */
+  --tool-bg: #2d3220;
+  --tool-text: #e0af68;
+
+  /* Radii — Arc-style large rounds */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 9999px;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+
+  /* Typography */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace,
+    monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-surface);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+/* Selection */
+::selection {
+  background: rgba(122, 162, 247, 0.3);
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Button reset */
+button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}
+
+/* Input reset */
+input,
+textarea {
+  border: none;
+  background: none;
+  font-family: inherit;
+  color: inherit;
+  outline: none;
+}

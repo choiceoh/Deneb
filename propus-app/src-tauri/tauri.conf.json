@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicbarker/tauri/refs/heads/tauri-v2/crates/tauri-cli/schema.json",
+  "productName": "Propus",
+  "version": "0.1.0",
+  "identifier": "ai.deneb.propus",
+  "build": {
+    "frontendDist": "../build",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "title": "Propus",
+    "windows": [
+      {
+        "title": "Propus — AI Coding Assistant",
+        "width": 1100,
+        "height": 750,
+        "minWidth": 600,
+        "minHeight": 400,
+        "decorations": true,
+        "resizable": true,
+        "transparent": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  }
+}
