@@ -28,6 +28,7 @@ const (
 	dreamingBatchSize        = 20
 	dreamingMaxTokens        = 1024
 	similarityMergeThreshold = 0.78
+	maxMergeDepth            = 2 // cascade prevention: facts at this depth are ineligible for merging
 )
 
 // DreamingReport summarizes the results of a dreaming cycle.
@@ -214,14 +215,17 @@ func verifyBatch(ctx context.Context, store *Store, client *llm.Client, model st
 // --- Phase 2: Duplicate Merging ---
 
 const mergeSystemPrompt = `You are a memory deduplication assistant.
-Given two similar facts, merge them into one concise fact that captures all information.
+Given two facts, decide if they are truly duplicates (same core information, different wording).
+If they describe different information (even if related or overlapping topics), set should_merge to false.
 Return a JSON object:
-- "merged_content": the merged fact (Korean, concise)
+- "should_merge": true only if facts contain the same core information
+- "merged_content": the merged fact (Korean, concise) — empty string if should_merge is false
 - "category": the best category for the merged fact
 - "importance": importance score (0.0-1.0)
 Return ONLY valid JSON, no markdown fences.`
 
 type mergeResponse struct {
+	ShouldMerge   bool    `json:"should_merge"`
 	MergedContent string  `json:"merged_content"`
 	Category      string  `json:"category"`
 	Importance    float64 `json:"importance"`
@@ -232,7 +236,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		return 0, nil
 	}
 
-	embeddings, err := store.LoadEmbeddings(ctx)
+	embeddings, err := store.LoadEmbeddingsForMerge(ctx, maxMergeDepth)
 	if err != nil {
 		return 0, err
 	}
@@ -291,12 +295,20 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 			continue
 		}
 
-		if result.MergedContent == "" {
+		if !result.ShouldMerge || result.MergedContent == "" {
+			logger.Info("aurora-dream: merge rejected by LLM", "a", p.a, "b", p.b, "sim", fmt.Sprintf("%.3f", p.sim))
 			continue
 		}
 		if !isValidCategory(result.Category) {
 			result.Category = factA.Category
 		}
+
+		// Compute merge depth: max of parents + 1.
+		depth := factA.MergeDepth
+		if factB.MergeDepth > depth {
+			depth = factB.MergeDepth
+		}
+		depth++
 
 		// Insert merged fact.
 		newID, err := store.InsertFact(ctx, Fact{
@@ -304,6 +316,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 			Category:   result.Category,
 			Importance: clamp(result.Importance, 0, 1),
 			Source:     SourceDreaming,
+			MergeDepth: depth,
 		})
 		if err != nil {
 			continue
