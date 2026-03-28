@@ -1,5 +1,59 @@
 # Changelog
 
+## [3.18.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.17.0...deneb-v3.18.0) (2026-03-28)
+
+
+### ✨ Features
+
+* **chat:** add agent detail log system for AI self-diagnostics ([15c25b0](https://github.com/choiceoh/Deneb/commit/15c25b0e1095c62f1b9de7420389ed6443f19b8a))
+* **chat:** add agent detail log system for AI self-diagnostics ([7bce087](https://github.com/choiceoh/Deneb/commit/7bce0875d5ab813b6756291580d079b509aaa334))
+* **chat:** add git, analyze, test tools and improve existing tools ([f26880d](https://github.com/choiceoh/Deneb/commit/f26880d28646a61a9836574d978aaef631681662))
+* **chat:** add git, analyze, test tools and improve existing tools ([e76314c](https://github.com/choiceoh/Deneb/commit/e76314c1e8136bbdb715c398d3845fb4cddc138c))
+* **chat:** make agent_logs pilot-only with shortcut and system prompt guidance ([21d434e](https://github.com/choiceoh/Deneb/commit/21d434e07fbba278465ec83186733051ffd326ce))
+* **chat:** update default model from glm-5-turbo to glm-5.1 ([a13aee5](https://github.com/choiceoh/Deneb/commit/a13aee5920f3f8f416bfb16df3fd1eb9b4323a5f))
+* **chat:** update default model to glm-5.1 ([29d41da](https://github.com/choiceoh/Deneb/commit/29d41da62cfedb1dbccbe693b956e100896c769d))
+* **memory:** add data volume trigger for dreaming and fix turn increment bug ([fc8d407](https://github.com/choiceoh/Deneb/commit/fc8d407abb00c264711040ccbfe57931551e2a76))
+* **memory:** add data volume trigger for dreaming and fix turn increment bug ([538d5c6](https://github.com/choiceoh/Deneb/commit/538d5c64b5c84d2797870d65f868d99fe745ed65))
+* **pilot:** add gateway_logs tool for querying gateway process logs ([9f96cd6](https://github.com/choiceoh/Deneb/commit/9f96cd61bc5e3fb590cff68057b5cbc9a0857c73))
+* **pilot:** add gateway_logs tool for querying gateway process logs ([e8ef254](https://github.com/choiceoh/Deneb/commit/e8ef2545fba9c3be531d3144feb830d230c381a1))
+* **vega:** add aurora-memory and autonomous health checks to health_check tool ([d9b9cbf](https://github.com/choiceoh/Deneb/commit/d9b9cbfa6ee7c1209071bd8e0317e595c146f1a1))
+* **vega:** add health_check tool for embedding, reranker, and sglang diagnostics ([74f4ee2](https://github.com/choiceoh/Deneb/commit/74f4ee23d60b45790341c63e5d1ff8220963951a))
+* **vega:** add health_check tool for embedding, reranker, and sglang diagnostics ([fe0ea4f](https://github.com/choiceoh/Deneb/commit/fe0ea4fd36c655b5ef5e01fb51bc8d9303ed8fa7))
+* **vega:** add jina-reranker-v2 cross-encoder reranking to search and memory pipelines ([8f39925](https://github.com/choiceoh/Deneb/commit/8f399257aa72ba867ea8d95df7ec3a38daa617e6))
+
+
+### 🐛 Bug Fixes
+
+* **aurora:** pass Gemini embedder and Jina key as server options to fix init ordering ([5e414e6](https://github.com/choiceoh/Deneb/commit/5e414e69e73218afbfeb51b6583ff0609f3da9c2))
+* **aurora:** pass Gemini embedder and Jina key as server options to fix init ordering ([7031b1f](https://github.com/choiceoh/Deneb/commit/7031b1fc6fa69fa29546f2ada9b6fa8da129a375))
+* **autonomous:** replace lowest-priority goal instead of rejecting when limit reached ([6952adc](https://github.com/choiceoh/Deneb/commit/6952adc0a0de9e69150aa2fff685f2eedcd43c38))
+* **autonomous:** replace lowest-priority goal instead of rejecting when limit reached ([9ec4b50](https://github.com/choiceoh/Deneb/commit/9ec4b501f86ecc693dba08c0a7ecceaeda7f7014))
+* **chat:** use cached sglang status instead of active health probe ([74a15d2](https://github.com/choiceoh/Deneb/commit/74a15d2d22a5342a1a9daa91c39a252ab1a1a3b4))
+* **memory:** add independent dreaming timer and fix silent failures in ShouldDream ([1c924d7](https://github.com/choiceoh/Deneb/commit/1c924d783a4580bcf6a834feb239f5a62f15e81a))
+* **memory:** increase importance maxTokens to 1536 and add truncated JSON recovery ([a0ddcdf](https://github.com/choiceoh/Deneb/commit/a0ddcdf70e343ab4c0eab352b5cc0f95b31d3684))
+* **memory:** increase importance maxTokens to 1536 and add truncated JSON recovery ([0663f59](https://github.com/choiceoh/Deneb/commit/0663f59ae073b67e3f8ed3032c9d7a538b44bf9a))
+* **telegram:** render markdown tables as monospace &lt;pre&gt; blocks ([234929c](https://github.com/choiceoh/Deneb/commit/234929cf5ef972308556ddad0f8475353589a422))
+* **telegram:** render markdown tables as monospace &lt;pre&gt; blocks ([8a6452a](https://github.com/choiceoh/Deneb/commit/8a6452a3728822a16167de458909121a24c57b45))
+* **vega:** extract JSON array from LLM response with preamble text ([42193d7](https://github.com/choiceoh/Deneb/commit/42193d73837dc670014790a2d87626e37d71a026))
+* **vega:** extract JSON array from LLM response with preamble text ([504ce06](https://github.com/choiceoh/Deneb/commit/504ce06f81dc27b6aef124a8420e77cb238af8e1))
+* **vega:** extract JSON array from thinking preamble instead of suppressing reasoning ([2a2aa00](https://github.com/choiceoh/Deneb/commit/2a2aa00bec3ed770454db1ac43cdd6f284d5f787))
+* **vega:** force JSON output format in query expansion LLM request ([926bf58](https://github.com/choiceoh/Deneb/commit/926bf5826209ff45ed0d6b3318e360327791a45b))
+
+
+### ⚡ Performance
+
+* **chat:** speed up multi-tool agent execution ([604020e](https://github.com/choiceoh/Deneb/commit/604020eeefe4dd52680bdd553e1f8ed04df536f5))
+* **chat:** speed up multi-tool agent execution ([7aa9ec5](https://github.com/choiceoh/Deneb/commit/7aa9ec59bfd9b2f1ff67b48faf539c73a6748285))
+* **chat:** speed up multi-tool agent execution ([5ebc5fa](https://github.com/choiceoh/Deneb/commit/5ebc5fae96a83d10f298162f11176cbd6c5b0058))
+
+
+### 🔧 Internal
+
+* **chat:** remove unused clipboard and nodes tools, prune 4 inactive skills ([78570c8](https://github.com/choiceoh/Deneb/commit/78570c83b70f058ac9a986e0b70763c2ecee033d))
+* **chat:** remove unused clipboard and nodes tools, prune 4 inactive skills ([a68c39d](https://github.com/choiceoh/Deneb/commit/a68c39daea1b9da7786d04b1594a64217ffca8f5))
+* **ml:** remove GGUF/deneb-ml local inference in favor of Gemini + Jina APIs ([f7709f4](https://github.com/choiceoh/Deneb/commit/f7709f4e5d7d01a7f238fb7857794e29e27401cb))
+* **ml:** remove GGUF/deneb-ml local inference in favor of Gemini + Jina APIs ([7090da9](https://github.com/choiceoh/Deneb/commit/7090da91d443407d13a6a05e515bae4bd8208f60))
+
 ## [3.17.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.16.0...deneb-v3.17.0) (2026-03-27)
 
 
