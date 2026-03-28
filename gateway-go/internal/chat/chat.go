@@ -216,9 +216,19 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 	return h
 }
 
+// GetBroadcastRaw returns the current raw broadcast function (may be nil).
+func (h *Handler) GetBroadcastRaw() BroadcastRawFunc {
+	return h.broadcastRaw
+}
+
 // SetBroadcastRaw sets the raw broadcast function for streaming event relay.
 func (h *Handler) SetBroadcastRaw(fn BroadcastRawFunc) {
 	h.broadcastRaw = fn
+}
+
+// GetReplyFunc returns the current reply function (may be nil).
+func (h *Handler) GetReplyFunc() ReplyFunc {
+	return h.replyFunc
 }
 
 // SetReplyFunc sets the function that delivers assistant responses back to the
