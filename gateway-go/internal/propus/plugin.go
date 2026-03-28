@@ -2,11 +2,15 @@ package propus
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +30,12 @@ type SessionClearFunc func(sessionKey string)
 // SessionAbortFunc aborts all active runs for a session key.
 type SessionAbortFunc func(sessionKey string)
 
+// SessionSaveFunc exports a session transcript to disk and returns the file path.
+type SessionSaveFunc func(sessionKey string) (string, error)
+
+// MediaSendFunc delivers a file to the Propus client for a given session.
+type MediaSendFunc func(sessionKey, filePath, mediaType, caption string) error
+
 // Plugin implements channel.Plugin for the Propus desktop coding client.
 type Plugin struct {
 	config *Config
@@ -40,17 +50,29 @@ type Plugin struct {
 	chatSend     ChatSendFunc
 	sessionClear SessionClearFunc
 	sessionAbort SessionAbortFunc
+	sessionSave  SessionSaveFunc
 
 	// Active client connections (connID → conn).
 	clients   map[string]*clientConn
 	clientsMu sync.RWMutex
+
+	// Temporary file store for download serving (fileID → fileEntry).
+	files   map[string]*fileEntry
+	filesMu sync.RWMutex
 }
 
 // clientConn tracks a single Propus WebSocket client.
 type clientConn struct {
-	conn   *websocket.Conn
-	connID string
-	mu     sync.Mutex // serializes writes
+	conn     *websocket.Conn
+	connID   string
+	mu       sync.Mutex // serializes writes
+	lastPong time.Time  // last time a Pong was received
+}
+
+// fileEntry is a temporary file registered for HTTP download.
+type fileEntry struct {
+	path      string
+	expiresAt time.Time
 }
 
 // NewPlugin creates a new Propus channel plugin.
@@ -60,6 +82,7 @@ func NewPlugin(cfg *Config, logger *slog.Logger) *Plugin {
 		logger:  logger,
 		status:  channel.Status{Connected: false},
 		clients: make(map[string]*clientConn),
+		files:   make(map[string]*fileEntry),
 	}
 }
 
@@ -71,6 +94,9 @@ func (p *Plugin) SetSessionClear(fn SessionClearFunc) { p.sessionClear = fn }
 
 // SetSessionAbort wires the session abort callback.
 func (p *Plugin) SetSessionAbort(fn SessionAbortFunc) { p.sessionAbort = fn }
+
+// SetSessionSave wires the session save/export callback.
+func (p *Plugin) SetSessionSave(fn SessionSaveFunc) { p.sessionSave = fn }
 
 // --- channel.Plugin interface ---
 
@@ -110,15 +136,13 @@ func (p *Plugin) Start(_ context.Context) error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", p.handleWS)
-	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
+	mux.HandleFunc("/health", p.handleHealth)
+	mux.HandleFunc("/files/", p.handleFileDownload)
 
 	p.server = &http.Server{
 		Handler:      mux,
 		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
 
@@ -128,6 +152,9 @@ func (p *Plugin) Start(_ context.Context) error {
 			p.logger.Error("propus serve error", "error", err)
 		}
 	}()
+
+	// Start background file cleanup goroutine.
+	go p.fileCleanupLoop()
 
 	p.status = channel.Status{Connected: true}
 	return nil
@@ -158,6 +185,19 @@ func (p *Plugin) Status() channel.Status {
 	return p.status
 }
 
+// --- Health endpoint ---
+
+func (p *Plugin) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	p.clientsMu.RLock()
+	clientCount := len(p.clients)
+	p.clientsMu.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	resp := fmt.Sprintf(`{"status":"ok","clients":%d}`, clientCount)
+	_, _ = w.Write([]byte(resp))
+}
+
 // --- WebSocket handler ---
 
 func (p *Plugin) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +210,7 @@ func (p *Plugin) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	connID := fmt.Sprintf("propus-%d", time.Now().UnixNano())
-	cc := &clientConn{conn: conn, connID: connID}
+	cc := &clientConn{conn: conn, connID: connID, lastPong: time.Now()}
 
 	p.clientsMu.Lock()
 	p.clients[connID] = cc
@@ -181,13 +221,19 @@ func (p *Plugin) handleWS(w http.ResponseWriter, r *http.Request) {
 	// Send initial config status.
 	p.sendToClient(cc, MsgConfigStatus("deneb", "Deneb Gateway", "connected"))
 
+	// Start server-side heartbeat for this connection.
+	heartCtx, heartCancel := context.WithCancel(r.Context())
+
 	defer func() {
+		heartCancel()
 		p.clientsMu.Lock()
 		delete(p.clients, connID)
 		p.clientsMu.Unlock()
 		conn.Close(websocket.StatusNormalClosure, "bye")
 		p.logger.Info("propus client disconnected", "connID", connID)
 	}()
+
+	go p.heartbeatLoop(heartCtx, cc)
 
 	// Read loop.
 	for {
@@ -200,6 +246,32 @@ func (p *Plugin) handleWS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		p.handleMessage(cc, data)
+	}
+}
+
+// heartbeatLoop sends periodic Ping messages and disconnects stale clients.
+func (p *Plugin) heartbeatLoop(ctx context.Context, cc *clientConn) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cc.mu.Lock()
+			stale := time.Since(cc.lastPong) > 90*time.Second
+			cc.mu.Unlock()
+
+			if stale {
+				p.logger.Warn("propus client heartbeat timeout, closing", "connID", cc.connID)
+				cc.conn.Close(websocket.StatusGoingAway, "heartbeat timeout")
+				return
+			}
+
+			// Send a Ping message (application-level).
+			p.sendToClient(cc, MsgPong()) // client responds with Ping, server sends Pong
+		}
 	}
 }
 
@@ -237,7 +309,24 @@ func (p *Plugin) handleMessage(cc *clientConn, data []byte) {
 		}
 		p.sendToClient(cc, MsgChatCleared())
 
+	case "SaveSession":
+		sessionKey := "propus:" + cc.connID
+		if p.sessionSave != nil {
+			path, err := p.sessionSave(sessionKey)
+			if err != nil {
+				p.sendToClient(cc, MsgError("세션 저장 실패: "+err.Error()))
+			} else {
+				p.sendToClient(cc, MsgSessionSaved(path))
+			}
+		} else {
+			p.sendToClient(cc, MsgError("session save not configured"))
+		}
+
 	case "Ping":
+		// Update heartbeat timestamp on any client activity.
+		cc.mu.Lock()
+		cc.lastPong = time.Now()
+		cc.mu.Unlock()
 		p.sendToClient(cc, MsgPong())
 
 	case "StopGeneration":
@@ -288,12 +377,108 @@ func (p *Plugin) sendToClient(cc *clientConn, msg ServerMessage) {
 	}
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	if err := cc.conn.Write(ctx, websocket.MessageText, data); err != nil {
-		p.logger.Warn("propus ws write error", "error", err, "connID", cc.connID)
+		// Retry once after a short delay.
+		time.Sleep(500 * time.Millisecond)
+		retryCtx, retryCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer retryCancel()
+		if retryErr := cc.conn.Write(retryCtx, websocket.MessageText, data); retryErr != nil {
+			p.logger.Warn("propus ws write failed after retry",
+				"error", retryErr, "msgType", msg.Type, "connID", cc.connID)
+			// Mark connection as stale; heartbeat loop will clean up.
+		}
 	}
+}
+
+// --- File serving for media delivery ---
+
+// RegisterFile stores a file for temporary HTTP download and returns the file ID.
+func (p *Plugin) RegisterFile(filePath string) string {
+	id := randomFileID()
+	p.filesMu.Lock()
+	p.files[id] = &fileEntry{
+		path:      filePath,
+		expiresAt: time.Now().Add(1 * time.Hour),
+	}
+	p.filesMu.Unlock()
+	return id
+}
+
+// FileDownloadURL returns the full HTTP URL for a registered file.
+func (p *Plugin) FileDownloadURL(fileID string) string {
+	return fmt.Sprintf("http://%s/files/%s", p.config.ListenAddr(), fileID)
+}
+
+func (p *Plugin) handleFileDownload(w http.ResponseWriter, r *http.Request) {
+	fileID := strings.TrimPrefix(r.URL.Path, "/files/")
+	if fileID == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	p.filesMu.RLock()
+	entry, ok := p.files[fileID]
+	p.filesMu.RUnlock()
+
+	if !ok || time.Now().After(entry.expiresAt) {
+		http.NotFound(w, r)
+		return
+	}
+
+	http.ServeFile(w, r, entry.path)
+}
+
+// fileCleanupLoop removes expired file entries every 10 minutes.
+func (p *Plugin) fileCleanupLoop() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		now := time.Now()
+		p.filesMu.Lock()
+		for id, entry := range p.files {
+			if now.After(entry.expiresAt) {
+				delete(p.files, id)
+			}
+		}
+		p.filesMu.Unlock()
+	}
+}
+
+func randomFileID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // Compile-time interface check.
 var _ channel.Plugin = (*Plugin)(nil)
+
+// ListenAddr exposes the configured listen address for use by server wiring.
+func (p *Plugin) ListenAddr() string {
+	return p.config.ListenAddr()
+}
+
+// --- Exported helpers for file delivery via media send ---
+
+// SendFileToSession registers a file for download and notifies the session's client.
+func (p *Plugin) SendFileToSession(sessionKey, filePath, mediaType, caption string) error {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return fmt.Errorf("file not found: %w", err)
+	}
+
+	fileID := p.RegisterFile(filePath)
+	url := p.FileDownloadURL(fileID)
+	name := filepath.Base(filePath)
+
+	p.BroadcastToSession(sessionKey, MsgFile(name, mediaType, info.Size(), url))
+
+	if caption != "" {
+		p.BroadcastToSession(sessionKey, MsgText("📎 "+caption))
+	}
+	return nil
+}

@@ -4209,6 +4209,7 @@ dependencies = [
 name = "propus-client"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "dirs",
  "futures-util",
  "propus-common",

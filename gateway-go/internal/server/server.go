@@ -1618,6 +1618,13 @@ func (s *Server) registerNativeSystemMethods(denebDir string) {
 // command detection, directive parsing, and normalization before reaching the
 // LLM agent.
 func (s *Server) wireTelegramChatHandler() {
+	// Recent-send dedup cache: prevents the same text from being delivered
+	// to the same chat twice within a short window (e.g. when the LLM uses
+	// the message tool AND also produces a text response without NO_REPLY).
+	var recentMu sync.Mutex
+	recentSends := make(map[string]time.Time) // key: "chatID:text[:200]"
+	const recentTTL = 10 * time.Second
+
 	// Set reply function: delivers assistant responses back to Telegram.
 	s.chatHandler.SetReplyFunc(func(ctx context.Context, delivery *chat.DeliveryContext, text string) error {
 		if delivery == nil || delivery.Channel != "telegram" {
@@ -1631,6 +1638,25 @@ func (s *Server) wireTelegramChatHandler() {
 		if err != nil {
 			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
 		}
+
+		// Dedup: skip if the same text was sent to this chat recently.
+		dedupKey := delivery.To + ":" + truncateForDedup(text, 200)
+		recentMu.Lock()
+		if sentAt, dup := recentSends[dedupKey]; dup && time.Since(sentAt) < recentTTL {
+			recentMu.Unlock()
+			s.logger.Info("suppressed duplicate reply to telegram",
+				"chatId", delivery.To, "textLen", len(text))
+			return nil
+		}
+		// Evict stale entries (cheap, single-user so map stays tiny).
+		for k, t := range recentSends {
+			if time.Since(t) >= recentTTL {
+				delete(recentSends, k)
+			}
+		}
+		recentSends[dedupKey] = time.Now()
+		recentMu.Unlock()
+
 		// Parse optional button directive from agent reply.
 		cleanText, keyboard := parseReplyButtons(text)
 		opts := telegram.SendOptions{ParseMode: "HTML", Keyboard: keyboard}
@@ -1639,9 +1665,18 @@ func (s *Server) wireTelegramChatHandler() {
 		return err
 	})
 
-	// Set media send function: delivers files back to Telegram.
+	// Set media send function: delivers files back to Telegram or Propus.
 	s.chatHandler.SetMediaSendFunc(func(ctx context.Context, delivery *chat.DeliveryContext, filePath, mediaType, caption string, silent bool) error {
-		if delivery == nil || delivery.Channel != "telegram" {
+		if delivery == nil {
+			return nil
+		}
+
+		// Propus: register file for HTTP download and notify client.
+		if delivery.Channel == "propus" && s.propusPlug != nil {
+			return s.propusPlug.SendFileToSession(delivery.To, filePath, mediaType, caption)
+		}
+
+		if delivery.Channel != "telegram" {
 			return nil
 		}
 		client := s.telegramPlug.Client()
@@ -1678,10 +1713,20 @@ func (s *Server) wireTelegramChatHandler() {
 		return err
 	})
 
-	// Set typing indicator function: sends "typing" chat action to Telegram
+	// Set typing indicator function: sends "typing" chat action to Telegram or Propus
 	// periodically during agent runs so the user sees "typing..." in the chat.
 	s.chatHandler.SetTypingFunc(func(ctx context.Context, delivery *chat.DeliveryContext) error {
-		if delivery == nil || delivery.Channel != "telegram" {
+		if delivery == nil {
+			return nil
+		}
+
+		// Propus: send Typing message to client.
+		if delivery.Channel == "propus" && s.propusPlug != nil {
+			s.propusPlug.BroadcastToSession(delivery.To, propus.MsgTyping())
+			return nil
+		}
+
+		if delivery.Channel != "telegram" {
 			return nil
 		}
 		client := s.telegramPlug.Client()
@@ -1797,8 +1842,9 @@ func (s *Server) wirePropusChatHandler() {
 	// Inbound: Propus client SendMessage → chat.send RPC.
 	s.propusPlug.SetChatSend(func(sessionKey, message string) {
 		delivery := map[string]any{
-			"channel": "propus",
-			"to":      sessionKey,
+			"channel":     "propus",
+			"to":          sessionKey,
+			"toolProfile": "coding",
 		}
 
 		sendParams := map[string]any{
@@ -1845,6 +1891,39 @@ func (s *Server) wirePropusChatHandler() {
 		if s.sessions != nil {
 			s.sessions.Delete(sessionKey)
 		}
+	})
+
+	// Inbound: Propus client SaveSession → export transcript to file.
+	s.propusPlug.SetSessionSave(func(sessionKey string) (string, error) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("cannot determine home directory: %w", err)
+		}
+
+		transcriptDir := filepath.Join(home, ".deneb", "transcripts")
+		// FileTranscriptStore sanitizes via filepath.Base, so use the same logic.
+		srcPath := filepath.Join(transcriptDir, filepath.Base(sessionKey)+".jsonl")
+		if _, err := os.Stat(srcPath); err != nil {
+			return "", fmt.Errorf("no transcript found for session")
+		}
+
+		exportDir := filepath.Join(home, ".deneb", "exports")
+		if err := os.MkdirAll(exportDir, 0o755); err != nil {
+			return "", fmt.Errorf("create export dir: %w", err)
+		}
+
+		ts := time.Now().Format("20060102-150405")
+		dstPath := filepath.Join(exportDir, "propus-"+ts+".jsonl")
+
+		src, err := os.ReadFile(srcPath)
+		if err != nil {
+			return "", fmt.Errorf("read transcript: %w", err)
+		}
+		if err := os.WriteFile(dstPath, src, 0o644); err != nil {
+			return "", fmt.Errorf("write export: %w", err)
+		}
+
+		return dstPath, nil
 	})
 
 	// Outbound: reply function — Propus sessions receive streaming deltas via
@@ -1905,21 +1984,21 @@ func (s *Server) wirePropusChatHandler() {
 				s.propusPlug.BroadcastToSession(sk, propus.MsgText(envelope.Payload.Delta))
 			}
 		case "chat.tool":
+			toolName := envelope.Payload.Tool
 			switch envelope.Payload.State {
 			case "started":
 				if id := envelope.Payload.ToolUseID; id != "" {
-					toolNames[id] = envelope.Payload.Tool
+					toolNames[id] = toolName
 				}
-				s.propusPlug.BroadcastToSession(sk, propus.MsgToolStart(envelope.Payload.Tool, ""))
+				s.propusPlug.BroadcastToSession(sk, propus.MsgToolStart(toolName, envelope.Payload.ToolUseID))
 			case "completed":
-				name := envelope.Payload.Tool
-				if name == "" {
+				if toolName == "" {
 					if n, ok := toolNames[envelope.Payload.ToolUseID]; ok {
-						name = n
+						toolName = n
 						delete(toolNames, envelope.Payload.ToolUseID)
 					}
 				}
-				s.propusPlug.BroadcastToSession(sk, propus.MsgToolResult(name, envelope.Payload.Result))
+				s.propusPlug.BroadcastToSession(sk, propus.MsgToolResult(toolName, envelope.Payload.Result))
 			}
 		case "chat":
 			switch envelope.Payload.State {
@@ -2310,4 +2389,12 @@ func (a *pluginRegistryAdapter) GetPluginHealth(id string) *protocol.PluginHealt
 		PluginID: p.ID,
 		Healthy:  p.Enabled,
 	}
+}
+
+// truncateForDedup returns at most maxLen bytes of s for use as a dedup key.
+func truncateForDedup(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen]
 }

@@ -55,6 +55,7 @@ type Fact struct {
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 	SupersededBy   *int64     `json:"superseded_by,omitempty"`
 	Active         bool       `json:"active"`
+	MergeDepth     int        `json:"merge_depth"`
 }
 
 // UserModelEntry is a key-value pair in the user model table.
@@ -104,7 +105,8 @@ CREATE TABLE IF NOT EXISTS facts (
 	verified_at TEXT,
 	expires_at TEXT,
 	superseded_by INTEGER REFERENCES facts(id),
-	active INTEGER NOT NULL DEFAULT 1
+	active INTEGER NOT NULL DEFAULT 1,
+	merge_depth INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_facts_active ON facts(active);
@@ -189,6 +191,8 @@ CREATE TABLE IF NOT EXISTS metadata (
 func migrateSchema(db *sql.DB) {
 	// v1 → v2: add facts_pruned column to dreaming_log.
 	_, _ = db.Exec(`ALTER TABLE dreaming_log ADD COLUMN facts_pruned INTEGER NOT NULL DEFAULT 0`)
+	// v2 → v3: add merge_depth for cascade prevention in fact merging.
+	_, _ = db.Exec(`ALTER TABLE facts ADD COLUMN merge_depth INTEGER NOT NULL DEFAULT 0`)
 }
 
 // CompactMemory is a one-time bulk cleanup that deactivates all low-importance
@@ -297,10 +301,10 @@ func (s *Store) InsertFact(ctx context.Context, f Fact) (int64, error) {
 	}
 
 	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO facts (content, category, importance, source, created_at, updated_at, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO facts (content, category, importance, source, created_at, updated_at, expires_at, merge_depth)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		f.Content, f.Category, f.Importance, f.Source,
-		now, now, nullTimeStr(f.ExpiresAt),
+		now, now, nullTimeStr(f.ExpiresAt), f.MergeDepth,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert fact: %w", err)
@@ -613,6 +617,34 @@ func (s *Store) LoadEmbeddings(ctx context.Context) (map[int64][]float32, error)
 	return result, rows.Err()
 }
 
+// LoadEmbeddingsForMerge returns embeddings for active facts eligible for merging.
+// Facts with merge_depth >= maxDepth are excluded to prevent cascading merges.
+func (s *Store) LoadEmbeddingsForMerge(ctx context.Context, maxDepth int) (map[int64][]float32, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT fe.fact_id, fe.embedding
+		 FROM fact_embeddings fe
+		 JOIN facts f ON f.id = fe.fact_id
+		 WHERE f.active = 1 AND f.merge_depth < ?`, maxDepth)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[int64][]float32)
+	for rows.Next() {
+		var factID int64
+		var blob []byte
+		if err := rows.Scan(&factID, &blob); err != nil {
+			return nil, err
+		}
+		result[factID] = blobToFloat32s(blob)
+	}
+	return result, rows.Err()
+}
+
 // --- Export ---
 
 // ExportToMarkdown generates MEMORY.md content from active facts above ExportMinImportance.
@@ -756,7 +788,7 @@ func scanFactRow(row *sql.Row) (*Fact, error) {
 		&f.ID, &f.Content, &f.Category, &f.Importance, &f.Source,
 		&createdAt, &updatedAt, &lastAccessedAt,
 		&f.AccessCount, &verifiedAt, &expiresAt,
-		&supersededBy, &activeInt,
+		&supersededBy, &activeInt, &f.MergeDepth,
 	)
 	if err != nil {
 		return nil, err
@@ -797,7 +829,7 @@ func scanFactRows(rows *sql.Rows) (*Fact, error) {
 		&f.ID, &f.Content, &f.Category, &f.Importance, &f.Source,
 		&createdAt, &updatedAt, &lastAccessedAt,
 		&f.AccessCount, &verifiedAt, &expiresAt,
-		&supersededBy, &activeInt,
+		&supersededBy, &activeInt, &f.MergeDepth,
 	)
 	if err != nil {
 		return nil, err

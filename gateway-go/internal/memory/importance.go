@@ -141,20 +141,30 @@ func ExtractFacts(ctx context.Context, client *llm.Client, model string, userMes
 		truncate(userMessage, 4000),
 		truncate(agentResponse, 8000))
 
-	text, err := callSglangJSON(ctx, client, model, importanceSystemPrompt, prompt, importanceMaxTokens)
-	if err != nil {
-		return nil, fmt.Errorf("importance extraction: %w", err)
-	}
-	if text == "" || text == "[]" {
-		return nil, nil
-	}
+	var facts []ExtractedFact
+	for attempt := range 2 {
+		text, err := callSglangJSON(ctx, client, model, importanceSystemPrompt, prompt, importanceMaxTokens)
+		if err != nil {
+			return nil, fmt.Errorf("importance extraction: %w", err)
+		}
+		if text == "" || text == "[]" {
+			return nil, nil
+		}
 
-	// Strip markdown code fences if present.
-	text = stripCodeFences(text)
+		text = stripCodeFences(text)
 
-	facts, ok := parseFactsResponse(text)
-	if !ok {
-		logger.Debug("importance: could not parse facts from response",
+		var ok bool
+		facts, ok = parseFactsResponse(text)
+		if ok {
+			break
+		}
+
+		if attempt == 0 {
+			logger.Debug("importance: parse failed, retrying",
+				"raw", truncate(text, 200))
+			continue
+		}
+		logger.Debug("importance: could not parse facts after retry",
 			"raw", truncate(text, 200))
 		return nil, nil
 	}
