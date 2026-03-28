@@ -215,6 +215,26 @@ func pilotToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Shortcut: GET this URL via http tool (expands to sources:[{tool:'http', input:{url:..., method:'GET'}}])",
 			},
+			"diff": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: review code changes. Values: 'all' (uncommitted), 'staged', 'unstaged', or a commit hash (expands to sources:[{tool:'diff', input:{action:...}}])",
+			},
+			"test": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: run tests and analyze results. Value: package path (e.g. 'gateway-go/...', './internal/chat/...') or 'all' (expands to sources:[{tool:'test', input:{action:'run', path:...}}])",
+			},
+			"tree": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: show directory tree structure. Value: directory path (expands to sources:[{tool:'tree', input:{path:..., depth:3}}])",
+			},
+			"git_log": map[string]any{
+				"type":        "string",
+				"description": "Shortcut: show recent commit history. Values: 'recent' (last 20), a number (e.g. '10'), or 'oneline' (compact format) (expands to sources:[{tool:'git', input:{action:'log', ...}}])",
+			},
+			"health": map[string]any{
+				"type":        "boolean",
+				"description": "Shortcut: run infrastructure health check (expands to sources:[{tool:'health_check', input:{}}])",
+			},
 			"kv_key": map[string]any{
 				"type":        "string",
 				"description": "Shortcut: get this key from KV store (expands to sources:[{tool:'kv', input:{action:'get', key:...}}])",
@@ -428,6 +448,11 @@ type pilotParams struct {
 	Path      string   `json:"path"`
 	URL       string   `json:"url"`
 	HTTP      string   `json:"http"`
+	Diff      string   `json:"diff"`
+	Test      string   `json:"test"`
+	Tree      string   `json:"tree"`
+	GitLog    string   `json:"git_log"`
+	Health    bool     `json:"health"`
 	KVKey     string   `json:"kv_key"`
 	Memory    string   `json:"memory"`
 	Gmail     string   `json:"gmail"`
@@ -529,6 +554,74 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 			Tool:  "http",
 			Input: mustJSON(map[string]any{"url": p.HTTP, "method": "GET"}),
 			Label: "http: " + p.HTTP,
+		})
+	}
+
+	if p.Diff != "" {
+		diffInput := map[string]any{}
+		switch p.Diff {
+		case "all":
+			diffInput["action"] = "all"
+		case "staged":
+			diffInput["action"] = "staged"
+		case "unstaged":
+			diffInput["action"] = "unstaged"
+		default:
+			// Treat as a commit hash.
+			diffInput["action"] = "commit"
+			diffInput["commit"] = p.Diff
+		}
+		specs = append(specs, sourceSpec{
+			Tool:  "diff",
+			Input: mustJSON(diffInput),
+			Label: "diff: " + p.Diff,
+		})
+	}
+
+	if p.Test != "" {
+		testInput := map[string]any{"action": "run"}
+		if p.Test != "all" {
+			testInput["path"] = p.Test
+		}
+		specs = append(specs, sourceSpec{
+			Tool:  "test",
+			Input: mustJSON(testInput),
+			Label: "test: " + p.Test,
+		})
+	}
+
+	if p.Tree != "" {
+		specs = append(specs, sourceSpec{
+			Tool:  "tree",
+			Input: mustJSON(map[string]any{"path": p.Tree, "depth": 3}),
+			Label: "tree: " + p.Tree,
+		})
+	}
+
+	if p.GitLog != "" {
+		gitInput := map[string]any{"action": "log"}
+		switch p.GitLog {
+		case "oneline":
+			gitInput["oneline"] = true
+			gitInput["count"] = 30
+		case "recent":
+			gitInput["count"] = 20
+		default:
+			// Treat as a count if numeric, otherwise default.
+			gitInput["count"] = 20
+		}
+		specs = append(specs, sourceSpec{
+			Tool:  "git",
+			Input: mustJSON(gitInput),
+			Label: "git_log: " + p.GitLog,
+		})
+	}
+
+	if p.Health {
+		specs = append(specs, sourceSpec{
+			Tool:  "health_check",
+			Input: mustJSON(map[string]any{}),
+			Label: "health_check",
 		})
 	}
 
@@ -654,9 +747,9 @@ func sourceTypeFromTool(tool string) string {
 		return "find"
 	case "web_fetch":
 		return "url"
-	case "ls":
+	case "ls", "diff", "tree":
 		return "file"
-	case "agent_logs", "gateway_logs":
+	case "agent_logs", "gateway_logs", "test", "http":
 		return "exec"
 	case "gmail", "youtube_transcript", "polaris", "image", "vega":
 		return "content"
