@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -34,7 +35,7 @@ func BuildSubagentList(runs []SubagentRunRecord, recentMinutes int, taskMaxChars
 		taskMaxChars = 110
 	}
 	sorted := SortSubagentRuns(runs)
-	now := currentTimeMs()
+	now := time.Now().UnixMilli()
 	recentCutoff := now - int64(recentMinutes)*60*1000
 
 	var active, recent []SubagentListItem
@@ -204,7 +205,7 @@ func HandleSubagentsInfoAction(ctx *SubagentsCommandContext) *SubagentCommandRes
 	if entry.StartedAt > 0 {
 		end := entry.EndedAt
 		if end == 0 {
-			end = currentTimeMs()
+			end = time.Now().UnixMilli()
 		}
 		runtime = FormatDurationCompact(end - entry.StartedAt)
 	}

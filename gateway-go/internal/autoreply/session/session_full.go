@@ -105,6 +105,15 @@ type TokenUsage struct {
 	CacheWriteTokens int64 `json:"cacheWriteTokens,omitempty"`
 }
 
+// AddUsage accumulates usage from another.
+func (u *TokenUsage) AddUsage(other TokenUsage) {
+	u.InputTokens += other.InputTokens
+	u.OutputTokens += other.OutputTokens
+	u.TotalTokens += other.TotalTokens
+	u.CacheReadTokens += other.CacheReadTokens
+	u.CacheWriteTokens += other.CacheWriteTokens
+}
+
 // SessionRunAccounting tracks run counts and totals.
 type SessionRunAccounting struct {
 	RunCount      int   `json:"runCount"`

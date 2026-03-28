@@ -62,23 +62,6 @@ type AgentTurnResult struct {
 	TurnCount        int
 }
 
-// TokenUsage tracks token consumption for an agent turn.
-type TokenUsage struct {
-	InputTokens      int64 `json:"inputTokens,omitempty"`
-	OutputTokens     int64 `json:"outputTokens,omitempty"`
-	TotalTokens      int64 `json:"totalTokens,omitempty"`
-	CacheReadTokens  int64 `json:"cacheReadTokens,omitempty"`
-	CacheWriteTokens int64 `json:"cacheWriteTokens,omitempty"`
-}
-
-// AddUsage accumulates usage from another.
-func (u *TokenUsage) AddUsage(other TokenUsage) {
-	u.InputTokens += other.InputTokens
-	u.OutputTokens += other.OutputTokens
-	u.TotalTokens += other.TotalTokens
-	u.CacheReadTokens += other.CacheReadTokens
-	u.CacheWriteTokens += other.CacheWriteTokens
-}
 
 // AgentExecutor runs LLM agent turns with tool execution and streaming.
 type AgentExecutor interface {
