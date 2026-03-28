@@ -296,15 +296,15 @@ func (b *Bot) heartbeatLoop(ctx context.Context, conn *websocket.Conn, intervalM
 	defer ticker.Stop()
 
 	for {
-		if err := b.writePayload(ctx, conn, OpcodeHeartbeat, b.seq); err != nil {
-			b.logger.Warn("heartbeat send failed", "error", err)
-			return
-		}
-
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+		}
+
+		if err := b.writePayload(ctx, conn, OpcodeHeartbeat, b.seq); err != nil {
+			b.logger.Warn("heartbeat send failed", "error", err)
+			return
 		}
 	}
 }

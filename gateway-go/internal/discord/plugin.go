@@ -2,6 +2,7 @@ package discord
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 
@@ -84,7 +85,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 	p.bot = NewBot(p.client, p.config, p.handler, p.logger)
 	go func() {
 		if err := p.bot.Start(context.Background()); err != nil {
-			if err != context.Canceled {
+			if !errors.Is(err, context.Canceled) {
 				p.logger.Error("discord bot error", "error", err)
 			}
 		}
