@@ -506,20 +506,18 @@ func executeAgentRun(
 	// 10.5. Dual-core: chain TaskProgress updates so concurrent responses
 	// can see live task state (current tool, text output, turn count).
 	if tp != nil {
+		// OnToolStart fires first with just the tool name — record the new tool.
 		prevOnToolStart := hooks.OnToolStart
 		hooks.OnToolStart = func(name string) {
 			if prevOnToolStart != nil {
 				prevOnToolStart(name)
 			}
-			tp.SetCurrentTool(name)
+			tp.AppendToolLog(name, "")
 		}
-		prevOnToolEmit := hooks.OnToolEmit
-		hooks.OnToolEmit = func(name, toolUseID string) {
-			if prevOnToolEmit != nil {
-				prevOnToolEmit(name, toolUseID)
-			}
-			tp.AppendToolLog(name, toolUseID)
-		}
+		// OnToolEmit fires with name + toolUseID — no additional tracking needed.
+		// (OnToolStart already recorded the tool entry.)
+
+		// OnToolResult fires when a tool completes — mark it done with output.
 		prevOnToolResult := hooks.OnToolResult
 		hooks.OnToolResult = func(name, toolUseID, result string, isErr bool) {
 			if prevOnToolResult != nil {
@@ -527,6 +525,7 @@ func executeAgentRun(
 			}
 			tp.FinishTool(name, result)
 		}
+		// OnTextDelta — accumulate LLM text output for the progress snapshot.
 		prevOnDelta := hooks.OnTextDelta
 		hooks.OnTextDelta = func(text string) {
 			if prevOnDelta != nil {

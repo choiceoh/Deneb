@@ -1,6 +1,9 @@
 package chat
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // RouteDecision indicates how to handle a message when a task is already running.
 type RouteDecision int
@@ -24,26 +27,38 @@ var interruptKeywords = []string{
 	"stop", "cancel", "abort", "kill",
 }
 
+// interruptSlashPrefixes are slash commands that imply task interruption.
+var interruptSlashPrefixes = []string{
+	"/kill", "/stop", "/reset", "/new",
+}
+
 // classifyRoute decides whether a user message during an active task should
 // run concurrently (chat alongside the task) or interrupt the task.
 //
-// Uses keyword matching only — no LLM call — for zero latency.
-// Default is RouteConcurrent (keep the task alive).
+// Design philosophy: default to RouteConcurrent (preserve the running task).
+// Interruption requires unambiguous intent — explicit keywords in short
+// messages or interrupt-specific slash commands. A long, detailed message
+// is treated as concurrent even if it contains interrupt words (e.g.,
+// "중단 없이 계속해" = "continue without stopping").
+//
+// This avoids the latency of an LLM classification call. If the user really
+// wants to stop the task, they can use /kill or send a short "그만".
 func classifyRoute(message string) RouteDecision {
 	lower := strings.ToLower(strings.TrimSpace(message))
-
-	// Slash commands that imply interruption.
-	if strings.HasPrefix(lower, "/kill") ||
-		strings.HasPrefix(lower, "/stop") ||
-		strings.HasPrefix(lower, "/reset") ||
-		strings.HasPrefix(lower, "/new") {
-		return RouteInterrupt
+	if lower == "" {
+		return RouteConcurrent
 	}
 
-	// Check for explicit interrupt keywords.
-	// Only match if the keyword is the entire message or clearly dominant
-	// (short messages ≤ 20 chars containing an interrupt keyword).
-	if len(lower) <= 20 {
+	// Slash commands that imply interruption — always honored regardless of length.
+	for _, prefix := range interruptSlashPrefixes {
+		if strings.HasPrefix(lower, prefix) {
+			return RouteInterrupt
+		}
+	}
+
+	// Short messages (≤ 30 runes) containing interrupt keywords.
+	// Short = likely a standalone command, not an embedded mention.
+	if utf8.RuneCountInString(lower) <= 30 {
 		for _, kw := range interruptKeywords {
 			if strings.Contains(lower, kw) {
 				return RouteInterrupt

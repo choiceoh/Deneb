@@ -130,7 +130,11 @@ func (tp *TaskProgress) FormatContextBlock() string {
 			if !entry.Done {
 				status = "⏳ 진행 중"
 			}
-			fmt.Fprintf(&b, "  %d. %s(%s) → %s", i+1, entry.Name, entry.Input, status)
+			if entry.Input != "" {
+				fmt.Fprintf(&b, "  %d. %s(%s) → %s", i+1, entry.Name, entry.Input, status)
+			} else {
+				fmt.Fprintf(&b, "  %d. %s → %s", i+1, entry.Name, status)
+			}
 			if entry.Done && entry.Output != "" {
 				fmt.Fprintf(&b, " [%s]", entry.Output)
 			}

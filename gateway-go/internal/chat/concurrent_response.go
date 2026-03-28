@@ -20,6 +20,9 @@ const concurrentResponseTimeout = 90 * time.Second
 // This is the same AI doing multitasking: same system prompt, same transcript,
 // same memory — plus awareness of the ongoing background task via the progress
 // tracker injected into the system prompt.
+//
+// The ctx should be cancellable so that a newer concurrent response or an
+// explicit interrupt can abort this one before it delivers a stale reply.
 func runConcurrentResponse(
 	ctx context.Context,
 	params RunParams,
@@ -50,6 +53,18 @@ func runConcurrentResponse(
 			logger.Error("concurrent response: failed to persist user message", "error", err)
 		}
 	}
+	// Sync to Aurora store for compaction tracking.
+	if deps.auroraStore != nil && params.Message != "" {
+		tokenCount := uint64(estimateTokens(params.Message))
+		if _, err := deps.auroraStore.SyncMessage(1, "user", params.Message, tokenCount); err != nil {
+			logger.Warn("concurrent response: aurora sync user message failed", "error", err)
+		}
+	}
+
+	// Bail early if cancelled (e.g., a newer concurrent response replaced us).
+	if ctx.Err() != nil {
+		return
+	}
 
 	// 2. Assemble context from shared transcript (same as task core).
 	var messages []llm.Message
@@ -71,8 +86,10 @@ func runConcurrentResponse(
 	if deps.defaultSystem != "" {
 		systemPrompt = llm.SystemString(deps.defaultSystem)
 	}
-	// Build full system prompt with tools listed (for identity consistency)
-	// but no actual tools will be passed to the LLM call.
+	// Build full system prompt (same identity, same tool awareness).
+	// No actual tools are passed to the LLM call, but the prompt lists them
+	// so the AI's self-awareness stays consistent.
+	var systemPromptParams *SystemPromptParams
 	if len(systemPrompt) == 0 && deps.tools != nil {
 		tz, _ := loadCachedTimezone()
 		spp := SystemPromptParams{
@@ -83,10 +100,12 @@ func runConcurrentResponse(
 			RuntimeInfo:  BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
 			Channel:      deliveryChannel(params.Delivery),
 		}
+		systemPromptParams = &spp
 		systemPrompt = llm.SystemString(BuildSystemPrompt(spp))
 	}
 
 	// 4. Knowledge prefetch (same as task core — uses Vega/Memory).
+	var knowledgeAddition string
 	if params.Message != "" {
 		kDeps := KnowledgeDeps{
 			VegaBackend:    deps.vegaBackend,
@@ -94,15 +113,23 @@ func runConcurrentResponse(
 			MemoryStore:    deps.memoryStore,
 			MemoryEmbedder: deps.memoryEmbedder,
 		}
-		if addition := PrefetchKnowledge(ctx, params.Message, kDeps); addition != "" {
-			systemPrompt = llm.AppendSystemText(systemPrompt, addition)
+		knowledgeAddition = PrefetchKnowledge(ctx, params.Message, kDeps)
+		if knowledgeAddition != "" {
+			systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
 		}
 	}
 
 	// 5. Inject background task progress — this is what makes it "aware"
 	// of the ongoing work, so it can say "I'm currently working on X..."
+	var progressBlock string
 	if progress != nil {
-		systemPrompt = llm.AppendSystemText(systemPrompt, "\n"+progress.FormatContextBlock())
+		progressBlock = progress.FormatContextBlock()
+		systemPrompt = llm.AppendSystemText(systemPrompt, "\n"+progressBlock)
+	}
+
+	// Bail early if cancelled.
+	if ctx.Err() != nil {
+		return
 	}
 
 	// 6. Resolve model and LLM client (same as task core).
@@ -122,32 +149,15 @@ func runConcurrentResponse(
 		return
 	}
 
-	// For Anthropic API: rebuild as ContentBlock array with cache hints.
-	if apiType == "anthropic" && deps.tools != nil {
-		tz, _ := loadCachedTimezone()
-		spp := SystemPromptParams{
-			WorkspaceDir: workspaceDir,
-			ToolDefs:     deps.tools.Definitions(),
-			UserTimezone: tz,
-			ContextFiles: LoadContextFiles(workspaceDir),
-			RuntimeInfo:  BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
-			Channel:      deliveryChannel(params.Delivery),
+	// For Anthropic API: rebuild as ContentBlock array with cache hints,
+	// then re-inject knowledge and progress (already computed above).
+	if apiType == "anthropic" && systemPromptParams != nil {
+		systemPrompt = llm.SystemBlocks(BuildSystemPromptBlocks(*systemPromptParams))
+		if knowledgeAddition != "" {
+			systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)
 		}
-		systemPrompt = llm.SystemBlocks(BuildSystemPromptBlocks(spp))
-		// Re-inject knowledge and task progress after block rebuild.
-		if params.Message != "" {
-			kDeps := KnowledgeDeps{
-				VegaBackend:    deps.vegaBackend,
-				WorkspaceDir:   workspaceDir,
-				MemoryStore:    deps.memoryStore,
-				MemoryEmbedder: deps.memoryEmbedder,
-			}
-			if addition := PrefetchKnowledge(ctx, params.Message, kDeps); addition != "" {
-				systemPrompt = llm.AppendSystemText(systemPrompt, addition)
-			}
-		}
-		if progress != nil {
-			systemPrompt = llm.AppendSystemText(systemPrompt, "\n"+progress.FormatContextBlock())
+		if progressBlock != "" {
+			systemPrompt = llm.AppendSystemText(systemPrompt, "\n"+progressBlock)
 		}
 	}
 
@@ -169,11 +179,21 @@ func runConcurrentResponse(
 
 	result, err := RunAgent(ctx, cfg, messages, client, nil, StreamHooks{}, logger, nil)
 	if err != nil {
+		if ctx.Err() != nil {
+			logger.Info("concurrent response cancelled")
+			return
+		}
 		logger.Error("concurrent response: LLM call failed", "error", err)
 		return
 	}
 
-	// 8. Persist assistant response to shared transcript.
+	// Final cancellation check before delivering — don't send stale replies.
+	if ctx.Err() != nil {
+		logger.Info("concurrent response cancelled before delivery")
+		return
+	}
+
+	// 8. Persist assistant response to shared transcript + Aurora.
 	now := time.Now().UnixMilli()
 	if deps.transcript != nil && result.Text != "" {
 		assistantMsg := ChatMessage{
@@ -183,6 +203,12 @@ func runConcurrentResponse(
 		}
 		if err := deps.transcript.Append(params.SessionKey, assistantMsg); err != nil {
 			logger.Error("concurrent response: failed to persist assistant message", "error", err)
+		}
+	}
+	if deps.auroraStore != nil && result.Text != "" {
+		tokenCount := uint64(estimateTokens(result.Text))
+		if _, err := deps.auroraStore.SyncMessage(1, "assistant", result.Text, tokenCount); err != nil {
+			logger.Warn("concurrent response: aurora sync assistant message failed", "error", err)
 		}
 	}
 
@@ -205,4 +231,3 @@ func runConcurrentResponse(
 		"outputTokens", result.Usage.OutputTokens,
 	)
 }
-

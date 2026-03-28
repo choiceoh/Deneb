@@ -136,6 +136,11 @@ type Handler struct {
 	taskProgressMu sync.RWMutex
 	taskProgress   map[string]*TaskProgress // sessionKey -> progress
 
+	// Dual-core: tracks active concurrent response cancel functions per session.
+	// Only one concurrent response per session at a time; new ones cancel the previous.
+	concRespMu     sync.Mutex
+	concRespCancel map[string]context.CancelFunc // sessionKey -> cancel
+
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
 	// maxHistoryCount caps the number of messages returned.
@@ -212,7 +217,8 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		defaultSystem:   cfg.DefaultSystem,
 		maxTokens:       cfg.MaxTokens,
 		abortMap:        make(map[string]*AbortEntry),
-		taskProgress:   make(map[string]*TaskProgress),
+		taskProgress:    make(map[string]*TaskProgress),
+		concRespCancel:  make(map[string]context.CancelFunc),
 		done:            make(chan struct{}),
 		maxHistoryBytes: cfg.MaxHistoryBytes,
 		maxHistoryCount: cfg.MaxHistoryCount,
@@ -372,7 +378,8 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		// Explicit interrupt: fall through to cancel + new task.
 	}
 
-	// Default path: interrupt any active run, start new task.
+	// Default path: interrupt any active run + concurrent response, start new task.
+	h.cancelConcurrentResponse(p.SessionKey)
 	h.InterruptActiveRun(p.SessionKey)
 
 	return h.startAsyncRun(req.ID, runParams, false)
@@ -628,16 +635,47 @@ func (h *Handler) clearTaskProgress(sessionKey string) {
 	delete(h.taskProgress, sessionKey)
 }
 
+// cancelConcurrentResponse cancels any active concurrent response for a session.
+func (h *Handler) cancelConcurrentResponse(sessionKey string) {
+	h.concRespMu.Lock()
+	defer h.concRespMu.Unlock()
+	if cancel, ok := h.concRespCancel[sessionKey]; ok {
+		cancel()
+		delete(h.concRespCancel, sessionKey)
+	}
+}
+
 // startConcurrentResponse launches a parallel response run that shares the same
 // identity and conversation history as the running task core. The task core
 // continues uninterrupted. This is the dual-core "multitasking" path.
+//
+// Only one concurrent response per session at a time — a new message cancels
+// any in-flight concurrent response before starting a fresh one.
 func (h *Handler) startConcurrentResponse(reqID string, params RunParams, progress *TaskProgress) *protocol.ResponseFrame {
 	if params.ClientRunID == "" {
 		params.ClientRunID = shortid.New("conc")
 	}
 
+	// Cancel any previous concurrent response for this session.
+	h.cancelConcurrentResponse(params.SessionKey)
+
+	// Create a cancellable context for this concurrent response.
+	ctx, cancel := context.WithCancel(context.Background())
+	h.concRespMu.Lock()
+	h.concRespCancel[params.SessionKey] = cancel
+	h.concRespMu.Unlock()
+
 	deps := h.buildRunDeps()
 	go func() {
+		defer cancel()
+		defer func() {
+			// Clean up cancel entry on completion.
+			h.concRespMu.Lock()
+			if h.concRespCancel[params.SessionKey] == cancel {
+				delete(h.concRespCancel, params.SessionKey)
+			}
+			h.concRespMu.Unlock()
+		}()
 		defer func() {
 			if r := recover(); r != nil {
 				h.logger.Error("panic in concurrent response",
@@ -647,7 +685,7 @@ func (h *Handler) startConcurrentResponse(reqID string, params RunParams, progre
 				)
 			}
 		}()
-		runConcurrentResponse(context.Background(), params, deps, progress)
+		runConcurrentResponse(ctx, params, deps, progress)
 	}()
 
 	resp, _ := protocol.NewResponseOK(reqID, map[string]any{

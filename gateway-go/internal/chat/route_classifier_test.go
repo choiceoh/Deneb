@@ -34,6 +34,8 @@ func TestClassifyRoute_ExplicitInterrupt(t *testing.T) {
 		"kill",
 		"중지해",
 		"스톱",
+		"그만해줘",
+		"작업 중단해",
 	}
 	for _, msg := range cases {
 		if got := classifyRoute(msg); got != RouteInterrupt {
@@ -43,24 +45,46 @@ func TestClassifyRoute_ExplicitInterrupt(t *testing.T) {
 }
 
 func TestClassifyRoute_LongMessageWithKeyword(t *testing.T) {
-	// Long messages containing interrupt keywords should NOT trigger interrupt.
-	// Only short messages (≤20 chars) with keywords are treated as interrupts.
-	long := "이 작업을 중단하고 다른 것을 해줄 수 있어? 새로운 기능을 추가하고 싶은데"
-	if got := classifyRoute(long); got != RouteConcurrent {
-		t.Errorf("classifyRoute(long msg with 중단) = %d, want RouteConcurrent", got)
+	// Long messages (> 30 runes) containing interrupt keywords should NOT trigger interrupt.
+	// They're likely conversational context, not standalone commands.
+	cases := []string{
+		"이 작업을 중단하고 다른 것을 해줄 수 있어? 새로운 기능을 추가하고 싶은데",
+		"중단 없이 계속 진행해줘, 잘 하고 있으니까",
+		"can you stop using that library and switch to another approach instead?",
+	}
+	for _, msg := range cases {
+		if got := classifyRoute(msg); got != RouteConcurrent {
+			t.Errorf("classifyRoute(%q) = %d, want RouteConcurrent (long msg)", msg, got)
+		}
 	}
 }
 
 func TestClassifyRoute_SlashCommandsAlwaysInterrupt(t *testing.T) {
 	// Slash commands should interrupt regardless of message length.
 	cases := []string{
-		"/kill please stop everything",
-		"/reset and start fresh",
-		"/new conversation",
+		"/kill please stop everything and start over",
+		"/reset and start fresh with new approach",
+		"/new conversation about something else entirely",
 	}
 	for _, msg := range cases {
 		if got := classifyRoute(msg); got != RouteInterrupt {
 			t.Errorf("classifyRoute(%q) = %d, want RouteInterrupt", msg, got)
+		}
+	}
+}
+
+func TestClassifyRoute_ShortNonInterrupt(t *testing.T) {
+	// Short messages without interrupt keywords should be concurrent.
+	cases := []string{
+		"ㅋㅋ",
+		"ok",
+		"진행 상황은?",
+		"고마워",
+		"네",
+	}
+	for _, msg := range cases {
+		if got := classifyRoute(msg); got != RouteConcurrent {
+			t.Errorf("classifyRoute(%q) = %d, want RouteConcurrent", msg, got)
 		}
 	}
 }
