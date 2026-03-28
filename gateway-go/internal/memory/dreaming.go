@@ -24,7 +24,7 @@ const (
 	DreamingTurnThreshold    = 50
 	DreamingTimeIntervalH    = 8
 	dreamingTimeout          = 15 * time.Minute
-	dreamingBatchSize        = 20
+	dreamingBatchSize        = 50
 	dreamingMaxTokens        = 1024
 	similarityMergeThreshold = 0.78
 	maxMergeDepth            = 2 // cascade prevention: facts at this depth are ineligible for merging
