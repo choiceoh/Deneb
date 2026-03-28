@@ -59,15 +59,6 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			}
 			return count
 		},
-		GetLastActivityAt: func() int64 {
-			if s.activity != nil {
-				return s.activity.LastActivityAt()
-			}
-			return 0
-		},
-		IsAutonomousRunning: func() bool {
-			return false
-		},
 		OnRestartNeeded: func(reason string) {
 			s.logger.Warn("watchdog restart requested, sending SIGUSR1", "reason", reason)
 			// Send SIGUSR1 to self to trigger graceful restart via main's signal handler.
