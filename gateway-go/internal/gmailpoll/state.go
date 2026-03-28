@@ -1,0 +1,85 @@
+// Package gmailpoll implements periodic Gmail polling with LLM-based analysis.
+// New emails are detected, analyzed via a configurable prompt, and reported
+// to the user through Telegram.
+package gmailpoll
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+const (
+	maxSeenIDs       = 200
+	defaultStateFile = "gmail-poll-state.json"
+)
+
+// PollState tracks which emails have been processed across restarts.
+type PollState struct {
+	LastPollAt int64    `json:"lastPollAt"`
+	SeenIDs    []string `json:"seenIds"`
+}
+
+// stateStore handles persistence of poll state to disk.
+type stateStore struct {
+	path string
+}
+
+func newStateStore(stateDir string) *stateStore {
+	return &stateStore{path: filepath.Join(stateDir, defaultStateFile)}
+}
+
+func (s *stateStore) Load() (*PollState, error) {
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &PollState{}, nil
+		}
+		return nil, fmt.Errorf("read poll state: %w", err)
+	}
+	var state PollState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("parse poll state: %w", err)
+	}
+	return &state, nil
+}
+
+func (s *stateStore) Save(state *PollState) error {
+	// Trim SeenIDs to prevent unbounded growth.
+	if len(state.SeenIDs) > maxSeenIDs {
+		state.SeenIDs = state.SeenIDs[len(state.SeenIDs)-maxSeenIDs:]
+	}
+
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal poll state: %w", err)
+	}
+
+	// Ensure directory exists.
+	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
+		return fmt.Errorf("create state dir: %w", err)
+	}
+
+	// Atomic write via temp file + rename.
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		return fmt.Errorf("write temp state: %w", err)
+	}
+	return os.Rename(tmp, s.path)
+}
+
+// hasSeen checks if a message ID has already been processed.
+func (state *PollState) hasSeen(id string) bool {
+	for _, seen := range state.SeenIDs {
+		if seen == id {
+			return true
+		}
+	}
+	return false
+}
+
+// markSeen adds a message ID to the seen list.
+func (state *PollState) markSeen(id string) {
+	state.SeenIDs = append(state.SeenIDs, id)
+}

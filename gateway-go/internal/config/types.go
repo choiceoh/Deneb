@@ -20,6 +20,7 @@ type DenebConfig struct {
 	Channels   *ChannelsConfig   `json:"channels,omitempty"`
 	Session    *SessionConfig    `json:"session,omitempty"`
 	Agents     *AgentsConfig     `json:"agents,omitempty"`
+	GmailPoll  *GmailPollConfig  `json:"gmailPoll,omitempty"`
 }
 
 // MetaConfig tracks config version metadata.
@@ -272,4 +273,14 @@ type AgentEntryConfig struct {
 	ID        string `json:"id,omitempty"`
 	Default   *bool  `json:"default,omitempty"`
 	Workspace string `json:"workspace,omitempty"`
+}
+
+// GmailPollConfig configures the periodic Gmail polling and analysis service.
+type GmailPollConfig struct {
+	Enabled     *bool  `json:"enabled,omitempty"`
+	IntervalMin *int   `json:"intervalMin,omitempty"` // polling interval in minutes (default 30)
+	Query       string `json:"query,omitempty"`       // Gmail search query (default "is:unread newer_than:1h")
+	MaxPerCycle *int   `json:"maxPerCycle,omitempty"` // max emails to process per cycle (default 5)
+	Model       string `json:"model,omitempty"`       // LLM model for analysis
+	PromptFile  string `json:"promptFile,omitempty"`  // path to custom analysis prompt (default ~/.deneb/gmail-analysis-prompt.md)
 }
