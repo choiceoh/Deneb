@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.20.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.20.0...deneb-v3.20.1) (2026-03-28)
+
+
+### 🐛 Bug Fixes
+
+* **gateway:** access GmailPoll via ConfigSnapshot.Config field ([baab8a0](https://github.com/choiceoh/Deneb/commit/baab8a0d1e5c03bec7e054d05a89c55064f6ae80))
+* **memory:** embed Phase 3 pattern facts for future dedup ([840ca6b](https://github.com/choiceoh/Deneb/commit/840ca6b3afd6b5604189f230d379f48167bd99d7))
+* **memory:** improve aurora-dream conflict resolution accuracy ([014d069](https://github.com/choiceoh/Deneb/commit/014d0690f284826366da249f6c710d82a831ae0c))
+* **memory:** prevent removed facts from being used as conflict winners ([b4e97b1](https://github.com/choiceoh/Deneb/commit/b4e97b1e1ccf49e90e991377f5ac9660dba89198))
+* **memory:** retry importance fact extraction on parse failure ([1251025](https://github.com/choiceoh/Deneb/commit/125102518bbb5101cf3493b241af029c910cba5c))
+* **memory:** strengthen Phase 2 merge to reduce false conflicts ([1ea54d8](https://github.com/choiceoh/Deneb/commit/1ea54d8cd52721bfde5bc4563fbbc7b69c1e3ade))
+
 ## [3.20.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.19.1...deneb-v3.20.0) (2026-03-28)
 
 
