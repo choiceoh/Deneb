@@ -47,3 +47,32 @@ impl CliError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::CliError;
+
+    #[test]
+    fn user_message_formats_gateway_request_with_context() {
+        let error = CliError::GatewayRequest {
+            method: String::from("sessions.list"),
+            code: String::from("UNAUTHORIZED"),
+            message: String::from("token missing"),
+        };
+
+        assert_eq!(
+            error.user_message(),
+            "Gateway sessions.list failed [UNAUTHORIZED]: token missing"
+        );
+    }
+
+    #[test]
+    fn user_message_uses_display_for_non_gateway_errors() {
+        let error = CliError::GatewayConnection(String::from("connection reset"));
+
+        assert_eq!(
+            error.user_message(),
+            "gateway connection failed: connection reset"
+        );
+    }
+}
