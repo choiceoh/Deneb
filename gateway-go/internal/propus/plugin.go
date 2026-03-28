@@ -150,10 +150,8 @@ func (p *Plugin) Start(_ context.Context) error {
 	mux.HandleFunc("/files/", p.handleFileDownload)
 
 	p.server = &http.Server{
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Handler:     mux,
+		IdleTimeout: 120 * time.Second,
 	}
 
 	go func() {
@@ -249,7 +247,9 @@ func (p *Plugin) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		heartCancel()
 		p.clientsMu.Lock()
-		delete(p.clients, connID)
+		if current, ok := p.clients[connID]; ok && current == cc {
+			delete(p.clients, connID)
+		}
 		p.clientsMu.Unlock()
 		conn.Close(websocket.StatusNormalClosure, "bye")
 		p.logger.Info("propus client disconnected", "connID", connID)
@@ -291,8 +291,8 @@ func (p *Plugin) heartbeatLoop(ctx context.Context, cc *clientConn) {
 				return
 			}
 
-			// Send a Ping message (application-level).
-			p.sendToClient(cc, MsgPong()) // client responds with Ping, server sends Pong
+			// Send a Ping probe; client responds with Pong to reset lastPong.
+			p.sendToClient(cc, MsgPing())
 		}
 	}
 }
@@ -344,8 +344,14 @@ func (p *Plugin) handleMessage(cc *clientConn, data []byte) {
 			p.sendToClient(cc, MsgError("session save not configured"))
 		}
 
+	case "Pong":
+		// Client responding to server heartbeat Ping.
+		cc.mu.Lock()
+		cc.lastPong = time.Now()
+		cc.mu.Unlock()
+
 	case "Ping":
-		// Update heartbeat timestamp on any client activity.
+		// Legacy: client-initiated ping. Update heartbeat and respond.
 		cc.mu.Lock()
 		cc.lastPong = time.Now()
 		cc.mu.Unlock()
@@ -401,15 +407,9 @@ func (p *Plugin) sendToClient(cc *clientConn, msg ServerMessage) {
 	defer cancel()
 
 	if err := cc.conn.Write(ctx, websocket.MessageText, data); err != nil {
-		// Retry once after a short delay.
-		time.Sleep(500 * time.Millisecond)
-		retryCtx, retryCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer retryCancel()
-		if retryErr := cc.conn.Write(retryCtx, websocket.MessageText, data); retryErr != nil {
-			p.logger.Warn("propus ws write failed after retry",
-				"error", retryErr, "msgType", msg.Type, "connID", cc.connID)
-			// Mark connection as stale; heartbeat loop will clean up.
-		}
+		p.logger.Warn("propus ws write failed, closing connection",
+			"error", err, "msgType", msg.Type, "connID", cc.connID)
+		cc.conn.Close(websocket.StatusGoingAway, "write failed")
 	}
 }
 

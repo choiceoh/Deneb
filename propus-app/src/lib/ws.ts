@@ -6,12 +6,12 @@ export type ConnectionStatus = "disconnected" | "connecting" | "connected";
 export type MessageHandler = (msg: ServerMessage) => void;
 export type StatusHandler = (status: ConnectionStatus) => void;
 
-const PING_INTERVAL_MS = 30_000;
-const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000]; // 5 attempts with exponential backoff
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 30_000;
+const RECONNECT_JITTER = 0.2; // ±20%
 
 export class PropusWebSocket {
   private ws: WebSocket | null = null;
-  private pingTimer: ReturnType<typeof setInterval> | null = null;
   private onMessage: MessageHandler;
   private onStatus: StatusHandler;
   private url = "";
@@ -74,12 +74,16 @@ export class PropusWebSocket {
     this.ws.onopen = () => {
       this.reconnectAttempt = 0;
       this.onStatus("connected");
-      this.startPing();
     };
 
     this.ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data) as ServerMessage;
+        // Respond to server heartbeat at the transport layer.
+        if (msg.type === "Ping") {
+          this.send({ type: "Pong" });
+          return;
+        }
         this.onMessage(msg);
       } catch {
         // ignore malformed messages
@@ -87,7 +91,6 @@ export class PropusWebSocket {
     };
 
     this.ws.onclose = () => {
-      this.stopPing();
       if (!this.intentionalClose) {
         this.onStatus("disconnected");
         this.tryReconnect();
@@ -100,9 +103,9 @@ export class PropusWebSocket {
   }
 
   private tryReconnect(): void {
-    if (this.reconnectAttempt >= RECONNECT_DELAYS.length) return;
-
-    const delay = RECONNECT_DELAYS[this.reconnectAttempt]!;
+    const raw = Math.min(RECONNECT_BASE_MS * 2 ** this.reconnectAttempt, RECONNECT_MAX_MS);
+    const jitter = 1 + (Math.random() * 2 - 1) * RECONNECT_JITTER;
+    const delay = Math.round(raw * jitter);
     this.reconnectAttempt++;
 
     setTimeout(() => {
@@ -112,22 +115,7 @@ export class PropusWebSocket {
     }, delay);
   }
 
-  private startPing(): void {
-    this.stopPing();
-    this.pingTimer = setInterval(() => {
-      this.send({ type: "Ping" });
-    }, PING_INTERVAL_MS);
-  }
-
-  private stopPing(): void {
-    if (this.pingTimer) {
-      clearInterval(this.pingTimer);
-      this.pingTimer = null;
-    }
-  }
-
   private cleanup(): void {
-    this.stopPing();
     if (this.ws) {
       this.ws.onopen = null;
       this.ws.onmessage = null;

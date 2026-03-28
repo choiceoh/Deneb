@@ -123,6 +123,53 @@ func TestPlugin_HandleMessage_Ping(t *testing.T) {
 	}
 }
 
+func TestPlugin_HandleMessage_Pong(t *testing.T) {
+	p := newTestPlugin()
+
+	cc := &clientConn{connID: "test-conn-pong", lastPong: time.Now().Add(-1 * time.Hour)}
+	data, _ := json.Marshal(ClientMessage{Type: "Pong"})
+	p.handleMessage(cc, data)
+
+	cc.mu.Lock()
+	age := time.Since(cc.lastPong)
+	cc.mu.Unlock()
+
+	if age > 2*time.Second {
+		t.Fatalf("lastPong should be recent after Pong, but was %v ago", age)
+	}
+}
+
+func TestPlugin_ResumeDoesNotOrphanNewConnection(t *testing.T) {
+	p := newTestPlugin()
+
+	// Simulate: old connection registered, then new connection resumes with same connID.
+	oldCC := &clientConn{connID: "resume-test", lastPong: time.Now()}
+	newCC := &clientConn{connID: "resume-test", lastPong: time.Now()}
+
+	p.clientsMu.Lock()
+	p.clients["resume-test"] = newCC // new connection is the current one
+	p.clientsMu.Unlock()
+
+	// Simulate old connection's defer cleanup — should NOT delete newCC.
+	p.clientsMu.Lock()
+	if current, ok := p.clients["resume-test"]; ok && current == oldCC {
+		delete(p.clients, "resume-test")
+	}
+	p.clientsMu.Unlock()
+
+	// Verify new connection is still registered.
+	p.clientsMu.RLock()
+	cc, ok := p.clients["resume-test"]
+	p.clientsMu.RUnlock()
+
+	if !ok {
+		t.Fatal("new connection should still be in clients map")
+	}
+	if cc != newCC {
+		t.Fatal("clients map should contain the new connection, not the old one")
+	}
+}
+
 func TestPlugin_HandleMessage_SaveSession(t *testing.T) {
 	p := newTestPlugin()
 

@@ -8,7 +8,8 @@ export type ClientMessage =
   | { type: "SaveSession" }
   | { type: "SetApiKey"; data: { key: string } }
   | { type: "StopGeneration" }
-  | { type: "Ping" };
+  | { type: "Ping" }
+  | { type: "Pong" };
 
 // --- Server → Client ---
 
@@ -36,6 +37,7 @@ export type ServerMessage =
       data: { name: string; media_type: string; size: number; url: string };
     }
   | { type: "Typing" }
+  | { type: "Ping" }
   | { type: "Pong" };
 
 // --- App-level types ---

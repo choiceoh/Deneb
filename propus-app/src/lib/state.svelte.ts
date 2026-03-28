@@ -176,7 +176,9 @@ class PropusState {
         }, 3000);
         break;
 
+      case "Ping":
       case "Pong":
+        // Handled at the transport layer (ws.ts); included for type exhaustiveness.
         break;
     }
   }

@@ -65,6 +65,10 @@ func MsgChatCleared() ServerMessage {
 	return ServerMessage{Type: "ChatCleared"}
 }
 
+func MsgPing() ServerMessage {
+	return ServerMessage{Type: "Ping"}
+}
+
 func MsgPong() ServerMessage {
 	return ServerMessage{Type: "Pong"}
 }
