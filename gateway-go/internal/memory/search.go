@@ -36,9 +36,9 @@ type SearchResult struct {
 
 // Scoring weights.
 const (
-	weightHybrid     = 0.50
+	weightHybrid     = 0.45
 	weightImportance = 0.25
-	weightRecency    = 0.10
+	weightRecency    = 0.15
 	weightFrequency  = 0.15
 )
 
@@ -196,7 +196,7 @@ func (s *Store) vectorSearch(ctx context.Context, queryVec []float32) (map[int64
 	results := make(map[int64]float64, len(embeddings))
 	for factID, vec := range embeddings {
 		sim := cosineSimilarity(queryVec, vec)
-		if sim > 0.3 { // min threshold
+		if sim > 0.20 { // min threshold (lowered to catch thematically related facts)
 			results[factID] = sim
 		}
 	}
