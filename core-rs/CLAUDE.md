@@ -1,0 +1,82 @@
+# Rust Core Library
+
+Rust workspace providing protocol validation, security, media, memory search, markdown parsing, context engine, compaction, and FFI exports for the Go gateway.
+
+## Build & Test
+
+| Command | Description |
+|---------|-------------|
+| `make rust` | Release build, minimal (no vega/ml) — produces `libdeneb_core.a` |
+| `make rust-vega` | Release + Vega FTS search |
+| `make rust-debug` | Debug build, all crates (fast iteration) |
+| `make rust-test` | Run all workspace tests |
+| `make rust-clippy` | Lint all crates |
+| `make rust-fmt` | Check formatting |
+
+## Workspace Crates
+
+| Crate | Path | Purpose |
+|-------|------|---------|
+| `deneb-core` | `core/` | Main crate: FFI exports, protocol, security, media, memory search, markdown, context engine, compaction |
+| `deneb-vega` | `vega/` | SQLite FTS5 search engine (optional `ml` feature for semantic search) |
+| `deneb-agent-runtime` | `agent-runtime/` | Agent lifecycle, model selection |
+
+## Feature Flags
+
+`vega` → `ml` → `cuda` → `vega-ml` → `dgx` (full DGX Spark)
+
+- `make rust` builds `deneb-core --no-default-features` (CGo static lib only)
+- `make rust-vega` adds FTS search
+- `make rust-dgx` adds ML + CUDA for production DGX Spark deployment
+
+## FFI Exports
+
+All C FFI functions are in `core/src/lib.rs` with `deneb_*` naming convention.
+
+### Adding a New FFI Function
+
+1. Add the function in `core/src/lib.rs` with `#[unsafe(no_mangle)] pub extern "C" fn deneb_*`
+2. Create Go wrapper in `gateway-go/internal/ffi/*_cgo.go`
+3. Create fallback in `gateway-go/internal/ffi/*_noffi.go`
+4. If adding new error codes, update all 3 locations:
+   - `proto/gateway.proto` (`ErrorCode` enum)
+   - `core/src/protocol/error_codes.rs`
+   - `gateway-go/internal/ffi/errors.go`
+5. Run `make error-code-sync` to verify sync
+
+### Stateful FFI Pattern
+
+For multi-step operations (context engine, compaction):
+```
+*_new() → handle → *_start(handle) → *_step(handle, response) → *_drop(handle)
+```
+Handle management: `gateway-go/internal/ffi/handle.go`
+
+## Protobuf Code Generation
+
+Automatic via `prost-build` in `core/build.rs`. Requires `protoc` installed.
+
+Proto files: `proto/gateway.proto`, `channel.proto`, `session.proto`, `plugin.proto`, `provider.proto`, `agent.proto`
+
+Generated output goes to `OUT_DIR`, included by `core/src/protocol/gen.rs`.
+
+## Key Source Directories
+
+| Path | Purpose |
+|------|---------|
+| `core/src/lib.rs` | 30+ C FFI exports |
+| `core/src/protocol/` | Gateway frame validation, error codes |
+| `core/src/security/` | `constant_time_eq`, `sanitize_html`, `is_safe_url`, `is_valid_session_key` |
+| `core/src/media/` | Magic-byte MIME detection (21 formats), MIME-to-extension (35+ types) |
+| `core/src/memory_search/` | SIMD cosine similarity, BM25, FTS query builder, hybrid search |
+| `core/src/markdown/` | Markdown-to-IR parser, fenced code block detection |
+| `core/src/context_engine/` | Aurora context assembly/expansion state machines |
+| `core/src/compaction/` | Compaction evaluation and sweep state machines |
+| `core/src/parsing/` | Link extraction, HTML-to-Markdown, base64, media token parsing |
+
+## Linting
+
+Workspace lint config in root `Cargo.toml`:
+- `clippy::unwrap_used` = deny (use `map_err`/`ok_or` instead)
+- `unsafe_code` = deny (except FFI exports in `lib.rs`)
+- `print_stdout`/`print_stderr` = deny

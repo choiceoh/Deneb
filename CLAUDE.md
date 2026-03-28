@@ -20,6 +20,22 @@
 
 ---
 
+## Agent Quick-Start
+
+> Run these when starting a new coding session.
+
+1. **Check environment:** `./scripts/check-dev-env.sh`
+2. **Build Rust core:** `make rust` (required before Go gateway)
+3. **Build Go gateway:** `make go`
+4. **Run tests:** `make test` (Rust + Go + CLI)
+5. **Fast iteration:** `make rust-debug` (debug mode, faster) + `make go-dev` (auto-restart)
+
+**Build order:** Proto schemas → Rust core (static lib) → Go gateway (links Rust via CGo)
+
+**Module guides:** Each module (`gateway-go/`, `core-rs/`, `proto/`, `skills/`) has its own `CLAUDE.md` with targeted build/test/contribution guidance.
+
+---
+
 ## Project Philosophy & Deployment Context
 
 > **All AI agents MUST read and internalize this section before making any changes.** This defines the fundamental constraints and design principles for the entire project.
