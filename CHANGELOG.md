@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.21.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.20.1...deneb-v3.21.0) (2026-03-28)
+
+
+### ✨ Features
+
+* **propus:** enhance to production level with session save, file delivery, heartbeat, typing, and tests ([475039d](https://github.com/choiceoh/Deneb/commit/475039d1aeaf59742ec123c489901a328079b5ca))
+* **propus:** wire tool event broadcasting and coding tool profile ([c437ce8](https://github.com/choiceoh/Deneb/commit/c437ce8d66a50ec8ba41083fae8267b4c5547e36))
+
+
+### 🐛 Bug Fixes
+
+* **memory:** prevent cascading fact merges in aurora-dream ([0e51696](https://github.com/choiceoh/Deneb/commit/0e51696204a075ea8e99adbfa87f7e2dc4f3c8fa))
+* **telegram:** reduce dedup TTL from 60s to 10s ([08c1abf](https://github.com/choiceoh/Deneb/commit/08c1abf9d383a6bb468117617585ebc5677ed8db))
+* **telegram:** suppress duplicate reply delivery via recent-send dedup cache ([30e7dee](https://github.com/choiceoh/Deneb/commit/30e7deeb5c67a5160481c01fe494294957827226))
+
 ## [3.20.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.20.0...deneb-v3.20.1) (2026-03-28)
 
 
