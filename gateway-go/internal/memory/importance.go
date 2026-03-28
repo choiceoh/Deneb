@@ -371,41 +371,11 @@ func extractJSONArray(s string) (string, bool) {
 	return s[start : end+1], true
 }
 
+// stripCodeFences removes thinking tags and markdown code fences from LLM output.
+// Used by ExtractFacts which has its own multi-strategy parseFactsResponse.
+// Dream phases use callLLMJSON → extractJSON (in sglang.go) instead.
 func stripCodeFences(s string) string {
-	s = stripThinkingTags(s)
-	s = strings.TrimSpace(s)
-	if strings.HasPrefix(s, "```json") {
-		s = strings.TrimPrefix(s, "```json")
-	} else if strings.HasPrefix(s, "```") {
-		s = strings.TrimPrefix(s, "```")
-	}
-	if strings.HasSuffix(s, "```") {
-		s = strings.TrimSuffix(s, "```")
-	}
-	return strings.TrimSpace(s)
-}
-
-// extractJSONObject extracts the outermost JSON object ({...}) from a string
-// that may contain surrounding prose, code fences, or thinking tags.
-// Falls back to stripCodeFences if no brace-delimited object is found.
-func extractJSONObject(s string) string {
-	s = stripCodeFences(s)
-
-	// If it already starts with '{', return as-is.
-	if strings.HasPrefix(s, "{") {
-		return s
-	}
-
-	// Find the first '{' and last '}' — extract the JSON object from prose.
-	start := strings.Index(s, "{")
-	if start == -1 {
-		return s
-	}
-	end := strings.LastIndex(s, "}")
-	if end == -1 || end <= start {
-		return s
-	}
-	return s[start : end+1]
+	return extractJSON(s)
 }
 
 func isValidCategory(c string) bool {

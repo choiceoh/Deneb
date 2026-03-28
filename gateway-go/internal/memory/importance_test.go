@@ -105,46 +105,66 @@ func TestParseFactsResponse(t *testing.T) {
 	}
 }
 
-func TestExtractJSONObject(t *testing.T) {
+func TestExtractJSON(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
-		wantValid bool // whether the result is valid JSON
+		wantValid bool // whether the result is valid JSON object
+		wantKey   string
 	}{
 		{
 			name:      "clean JSON object",
 			input:     `{"results": [{"id": 1, "valid": true}]}`,
 			wantValid: true,
+			wantKey:   "results",
 		},
 		{
 			name:      "JSON wrapped in code fences",
-			input:     "```json\n{\"results\": [{\"id\": 1, \"valid\": true}]}\n```",
+			input:     "```json\n{\"results\": [{\"id\": 1}]}\n```",
 			wantValid: true,
+			wantKey:   "results",
 		},
 		{
 			name:      "prose before JSON",
-			input:     "Here is the result:\n{\"results\": [{\"id\": 1, \"valid\": true}]}",
+			input:     "Here is the result:\n{\"results\": [{\"id\": 1}]}",
 			wantValid: true,
+			wantKey:   "results",
 		},
 		{
 			name:      "prose before and after JSON",
 			input:     "분석 결과입니다:\n{\"conflicts\": []}\n이상입니다.",
 			wantValid: true,
+			wantKey:   "conflicts",
 		},
 		{
-			name:      "thinking tags wrapping JSON",
+			name:      "think tags wrapping JSON",
 			input:     "<think>Let me analyze...</think>\n{\"patterns\": []}",
 			wantValid: true,
+			wantKey:   "patterns",
 		},
 		{
-			name:      "thinking tags (long form) wrapping JSON",
+			name:      "thinking tags (long form)",
 			input:     "<thinking>Reasoning about facts...</thinking>\n{\"results\": []}",
 			wantValid: true,
+			wantKey:   "results",
 		},
 		{
 			name:      "code fences with prose before",
-			input:     "결과:\n```json\n{\"merged_content\": \"test\", \"category\": \"decision\", \"importance\": 0.8}\n```",
+			input:     "결과:\n```json\n{\"merged_content\": \"test\"}\n```",
 			wantValid: true,
+			wantKey:   "merged_content",
+		},
+		{
+			name:      "nested objects in prose",
+			input:     "분석:\n{\"a\": {\"b\": {\"c\": 1}}} 완료",
+			wantValid: true,
+			wantKey:   "a",
+		},
+		{
+			name:      "JSON with string containing braces",
+			input:     `{"content": "use fmt.Sprintf(\"%s{%s}\")", "importance": 0.5}`,
+			wantValid: true,
+			wantKey:   "content",
 		},
 		{
 			name:      "empty input",
@@ -160,14 +180,68 @@ func TestExtractJSONObject(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractJSONObject(tt.input)
+			result := extractJSON(tt.input)
 			var obj map[string]json.RawMessage
 			err := json.Unmarshal([]byte(result), &obj)
 			if tt.wantValid && err != nil {
-				t.Errorf("extractJSONObject() result is not valid JSON: %v\nresult: %s", err, result)
+				t.Errorf("extractJSON() not valid JSON: %v\nresult: %q", err, result)
 			}
 			if !tt.wantValid && err == nil {
-				t.Errorf("extractJSONObject() unexpectedly returned valid JSON: %s", result)
+				t.Errorf("extractJSON() unexpectedly valid JSON: %s", result)
+			}
+			if tt.wantValid && tt.wantKey != "" {
+				if _, ok := obj[tt.wantKey]; !ok {
+					t.Errorf("extractJSON() missing expected key %q in: %s", tt.wantKey, result)
+				}
+			}
+		})
+	}
+}
+
+func TestRecoverTruncatedObject(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantValid bool
+	}{
+		{
+			name:      "truncated mid-second object",
+			input:     `{"results": [{"id": 1, "valid": true}, {"id": 2, "val`,
+			wantValid: true,
+		},
+		{
+			name:      "truncated after first complete object",
+			input:     `{"facts": [{"content": "good", "importance": 0.8}, {"content": "잘린`,
+			wantValid: true,
+		},
+		{
+			name:      "no array",
+			input:     `{"key": "val`,
+			wantValid: false,
+		},
+		{
+			name:      "no complete object in array",
+			input:     `{"facts": [{"content": "잘린`,
+			wantValid: false,
+		},
+		{
+			name:      "already valid JSON",
+			input:     `{"results": [{"id": 1}]}`,
+			wantValid: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := recoverTruncatedObject(tt.input)
+			if tt.wantValid && result == "" {
+				t.Error("recoverTruncatedObject() returned empty, want recovery")
+			}
+			if tt.wantValid && result != "" && !json.Valid([]byte(result)) {
+				t.Errorf("recoverTruncatedObject() not valid JSON: %s", result)
+			}
+			if !tt.wantValid && result != "" {
+				t.Errorf("recoverTruncatedObject() unexpectedly recovered: %s", result)
 			}
 		})
 	}
