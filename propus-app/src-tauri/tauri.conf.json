@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Propus \u2014 AI Coding Assistant",
+        "label": "main",
         "width": 1100,
         "height": 750,
         "minWidth": 600,
@@ -24,6 +24,12 @@
     ],
     "security": {
       "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://github.com/choiceoh/deneb/releases/latest/download/latest.json"],
+      "pubkey": ""
     }
   }
 }

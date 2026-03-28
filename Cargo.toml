@@ -1,6 +1,6 @@
 [workspace]
 members = ["cli-rs"]
-exclude = ["core-rs"]
+exclude = ["core-rs", "propus-app"]
 resolver = "2"
 
 # Shared lint configuration for CLI workspace crates.

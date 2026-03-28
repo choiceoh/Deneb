@@ -7,6 +7,31 @@
     { icon: "🔍", label: "코드 리뷰", prompt: "최근 변경사항을 리뷰해줘" },
     { icon: "🧪", label: "테스트 실행", prompt: "테스트를 실행하고 결과를 알려줘" },
   ];
+
+  let updateStatus = $state("");
+  let updating = $state(false);
+
+  async function checkForUpdate() {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const result = await invoke("check_update");
+      updateStatus = result || "이미 최신 버전입니다";
+    } catch (e: any) {
+      updateStatus = "확인 실패: " + e;
+    }
+  }
+
+  async function doUpdate() {
+    updating = true;
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("install_update");
+      updateStatus = "업데이트 완료! 재시작 중...";
+    } catch (e: any) {
+      updateStatus = "업데이트 실패: " + e;
+    }
+    updating = false;
+  }
 </script>
 
 {#if app.sidebarVisible}
@@ -32,6 +57,17 @@
       <div class="section">
         <span class="section-label">작업</span>
         <button class="action-btn" onclick={() => app.saveSession()}>세션 저장</button>
+        <button class="action-btn" onclick={checkForUpdate}>🔄 업데이트 확인</button>
+        {#if updateStatus}
+          <div class="update-info">
+            <span class="update-text">{updateStatus}</span>
+            {#if updateStatus.includes("→")}
+              <button class="update-btn" onclick={doUpdate} disabled={updating}>
+                {updating ? "설치 중..." : "업데이트 설치"}
+              </button>
+            {/if}
+          </div>
+        {/if}
       </div>
 
       <div class="spacer"></div>
@@ -171,5 +207,31 @@
   .stat-line {
     color: var(--text-dim);
     font-size: 11px;
+  }
+
+  .update-info {
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    background: rgba(122, 162, 247, 0.08);
+  }
+
+  .update-text {
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .update-btn {
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    background: var(--accent-gradient);
+    color: white;
+    font-weight: 600;
+  }
+
+  .update-btn:disabled {
+    opacity: 0.5;
   }
 </style>
