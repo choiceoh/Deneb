@@ -75,19 +75,30 @@ func autoSetGoalsFromFacts(goalStore *autonomous.GoalStore, facts []memory.Searc
 		priority := factToPriority(f.Importance)
 
 		desc := truncateRunes(f.Content, autonomous.MaxDescriptionLen)
-		goal, err := goalStore.Add(desc, priority)
+		goal, replacedID, err := goalStore.AddOrReplace(desc, priority)
 		if err != nil {
 			slog.Warn("auto-goal: failed to add goal", "error", err, "factId", f.ID)
 			continue
 		}
 
-		slog.Info("auto-goal: created from memory fact",
-			"goalId", goal.ID,
-			"factId", f.ID,
-			"category", f.Category,
-			"importance", f.Importance,
-			"priority", priority,
-		)
+		if replacedID != "" {
+			slog.Info("auto-goal: replaced lower-priority goal",
+				"goalId", goal.ID,
+				"replacedGoalId", replacedID,
+				"factId", f.ID,
+				"category", f.Category,
+				"importance", f.Importance,
+				"priority", priority,
+			)
+		} else {
+			slog.Info("auto-goal: created from memory fact",
+				"goalId", goal.ID,
+				"factId", f.ID,
+				"category", f.Category,
+				"importance", f.Importance,
+				"priority", priority,
+			)
+		}
 		created++
 
 		// Add to activeGoals for subsequent dedup within this cycle.
