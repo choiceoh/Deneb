@@ -248,6 +248,20 @@ func WithHooksHTTP(h *HooksHTTPHandler) Option {
 	}
 }
 
+// WithGeminiEmbedder sets the Gemini embedder for the memory subsystem.
+func WithGeminiEmbedder(e *embedding.GeminiEmbedder) Option {
+	return func(s *Server) {
+		s.geminiEmbedder = e
+	}
+}
+
+// WithJinaAPIKey sets the Jina API key for cross-encoder reranking.
+func WithJinaAPIKey(key string) Option {
+	return func(s *Server) {
+		s.jinaAPIKey = key
+	}
+}
+
 // New creates a new gateway server bound to the given address.
 func New(addr string, opts ...Option) *Server {
 	s := &Server{
@@ -975,15 +989,6 @@ func (s *Server) SetVega(backend vega.Backend) {
 	}
 }
 
-// SetGeminiEmbedder stores the Gemini embedder for the memory subsystem.
-func (s *Server) SetGeminiEmbedder(e *embedding.GeminiEmbedder) {
-	s.geminiEmbedder = e
-}
-
-// SetJinaAPIKey stores the Jina API key for cross-encoder reranking.
-func (s *Server) SetJinaAPIKey(key string) {
-	s.jinaAPIKey = key
-}
 
 // Broadcaster returns the event broadcaster for external use.
 func (s *Server) Broadcaster() *events.Broadcaster {
@@ -1118,6 +1123,7 @@ func (s *Server) registerPhase2Methods() {
 		LLMClient:    chatCfg.LLMClient,
 		Transcript:   transcriptStore,
 		AgentLog:     agentLogWriter,
+		MemoryStore:  chatCfg.MemoryStore,
 	}
 
 	// Register core tools (file I/O, exec, process, sessions, gateway, cron, image).

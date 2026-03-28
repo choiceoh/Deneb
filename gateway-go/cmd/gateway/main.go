@@ -101,14 +101,6 @@ func main() {
 
 	addr := fmt.Sprintf("%s:%d", rtCfg.BindHost, rtCfg.Port)
 
-	useColor := logFormat != "json"
-	srv := server.New(addr,
-		server.WithLogger(logger),
-		server.WithVersion(*version),
-		server.WithConfig(rtCfg),
-		server.WithLogColor(useColor),
-	)
-
 	// Initialize Gemini embedder for semantic search and memory.
 	geminiEmbedder := embedding.NewGeminiEmbedder(os.Getenv("GEMINI_API_KEY"), logger)
 	if geminiEmbedder != nil {
@@ -117,14 +109,21 @@ func main() {
 		logger.Info("gemini: embedding disabled (GEMINI_API_KEY not set)")
 	}
 
+	// Resolve Jina API key for cross-encoder reranking.
+	jinaKey := vega.GetJinaAPIKey()
+
+	useColor := logFormat != "json"
+	srv := server.New(addr,
+		server.WithLogger(logger),
+		server.WithVersion(*version),
+		server.WithConfig(rtCfg),
+		server.WithLogColor(useColor),
+		server.WithGeminiEmbedder(geminiEmbedder),
+		server.WithJinaAPIKey(jinaKey),
+	)
+
 	// Initialize Vega backend (Gemini embedding + SGLang expansion + Jina reranking + Rust FTS).
 	initVega(srv, logger, geminiEmbedder)
-
-	// Share Gemini embedder and Jina API key with the memory subsystem.
-	srv.SetGeminiEmbedder(geminiEmbedder)
-	if jinaKey := vega.GetJinaAPIKey(); jinaKey != "" {
-		srv.SetJinaAPIKey(jinaKey)
-	}
 
 	if bootstrap.GeneratedToken != "" {
 		logger.Info("gateway auth token auto-generated",
