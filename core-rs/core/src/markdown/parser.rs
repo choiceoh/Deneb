@@ -1009,6 +1009,92 @@ mod tests {
     }
 
     #[test]
+    fn table_bullets_trimmed_cells() {
+        let ir = parse_with(
+            "| Name  | Value |\n|-------|-------|\n|  A    |   1   |",
+            ParseOptions {
+                table_mode: TableMode::Bullets,
+                ..Default::default()
+            },
+        );
+        assert!(
+            ir.text.contains("Value: 1"),
+            "expected trimmed value output, got {:?}",
+            ir.text
+        );
+        assert!(!ir.text.contains("Value:   1"), "text={:?}", ir.text);
+    }
+
+    #[test]
+    fn table_bullets_skip_empty_value_cells() {
+        let ir = parse_with(
+            "| Name | Value |\n|------|-------|\n| A | |\n| B | 2 |",
+            ParseOptions {
+                table_mode: TableMode::Bullets,
+                ..Default::default()
+            },
+        );
+        assert!(ir.text.contains("B"));
+        assert!(ir.text.contains("Value: 2"));
+        assert!(!ir.text.contains("Value: \n"), "text={:?}", ir.text);
+    }
+
+    #[test]
+    fn table_bullets_fallback_column_name_when_header_empty() {
+        let ir = parse_with(
+            "| Name | |\n|------|--|\n| A | 1 |",
+            ParseOptions {
+                table_mode: TableMode::Bullets,
+                ..Default::default()
+            },
+        );
+        assert!(
+            ir.text.contains("Column 1: 1"),
+            "expected fallback column label, got {:?}",
+            ir.text
+        );
+    }
+
+    #[test]
+    fn table_bullets_preserve_links_and_styles() {
+        let ir = parse_with(
+            "| Name | Notes |\n|------|-------|\n| A | **[site](https://example.com)** |",
+            ParseOptions {
+                table_mode: TableMode::Bullets,
+                ..Default::default()
+            },
+        );
+        assert!(ir.text.contains("site"));
+        assert_eq!(ir.links.len(), 1);
+        assert_eq!(ir.links[0].href, "https://example.com");
+        assert!(
+            ir.styles.iter().any(|s| s.style == MarkdownStyle::Bold),
+            "expected bold style spans for row labels or cell styles"
+        );
+    }
+
+    #[test]
+    fn table_code_trims_and_aligns_columns() {
+        let ir = parse_with(
+            "| Name | Value |\n|------|-------|\n|  A   |   1   |\n| B | 22 |",
+            ParseOptions {
+                table_mode: TableMode::Code,
+                ..Default::default()
+            },
+        );
+        let expected = "| Name | Value |\n| ---- | ----- |\n| A    | 1     |\n| B    | 22    |\n";
+        assert!(
+            ir.text.contains(expected),
+            "expected aligned table block, got {:?}",
+            ir.text
+        );
+        assert!(ir
+            .styles
+            .iter()
+            .any(|s| s.style == MarkdownStyle::CodeBlock));
+    }
+
+    #[test]
     fn has_tables_flag() {
         let (_, has_tables) = markdown_to_ir_with_meta(
             "| A |\n|---|\n| 1 |",
@@ -1024,6 +1110,25 @@ mod tests {
     fn no_tables_flag() {
         let (_, has_tables) = markdown_to_ir_with_meta("just text", &ParseOptions::default());
         assert!(!has_tables);
+    }
+
+    #[test]
+    fn table_mode_off_does_not_report_table_meta() {
+        let (_, has_tables) =
+            markdown_to_ir_with_meta("| A |\n|---|\n| 1 |", &ParseOptions::default());
+        assert!(!has_tables);
+    }
+
+    #[test]
+    fn has_tables_flag_in_code_mode() {
+        let (_, has_tables) = markdown_to_ir_with_meta(
+            "| A |\n|---|\n| 1 |",
+            &ParseOptions {
+                table_mode: TableMode::Code,
+                ..Default::default()
+            },
+        );
+        assert!(has_tables);
     }
 
     #[test]
