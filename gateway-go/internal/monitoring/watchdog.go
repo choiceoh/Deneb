@@ -4,7 +4,7 @@
 // src/gateway/monitoring/channel-health-monitor.ts from the TypeScript codebase.
 //
 // Two-tier monitoring:
-// 1. Self-watchdog: detects stuck gateway (server not listening, no channels, stale activity)
+// 1. Self-watchdog: detects stuck gateway (server not listening, no channels connected)
 // 2. Channel health monitor: detects half-dead channels (connected but no events)
 package monitoring
 
@@ -26,12 +26,6 @@ type WatchdogDeps struct {
 	GetExpectedChannelCount func() int
 	// GetConnectedChannelCount returns the number of currently connected channels.
 	GetConnectedChannelCount func() int
-	// GetLastActivityAt returns the unix ms timestamp of the last inbound/outbound event.
-	GetLastActivityAt func() int64
-	// IsAutonomousRunning returns true if the autonomous service is actively running.
-	// When true, the stale-activity check is skipped because background cycles
-	// prove the process is alive even without user interaction.
-	IsAutonomousRunning func() bool
 	// OnRestartNeeded is called when the watchdog determines a restart is needed.
 	OnRestartNeeded func(reason string)
 }
@@ -40,17 +34,15 @@ type WatchdogDeps struct {
 type WatchdogConfig struct {
 	CheckIntervalMs  int64 // default: 120000 (2 min)
 	StartupGraceMs   int64 // default: 180000 (3 min)
-	StaleThresholdMs int64 // default: 1800000 (30 min)
-	MaxAutoRestarts  int   // default: 3 per hour
+	MaxAutoRestarts int // default: 3 per hour
 }
 
 // DefaultWatchdogConfig returns sensible defaults.
 func DefaultWatchdogConfig() WatchdogConfig {
 	return WatchdogConfig{
-		CheckIntervalMs:  2 * 60 * 1000,
-		StartupGraceMs:   3 * 60 * 1000,
-		StaleThresholdMs: 30 * 60 * 1000,
-		MaxAutoRestarts:  3,
+		CheckIntervalMs: 2 * 60 * 1000,
+		StartupGraceMs:  3 * 60 * 1000,
+		MaxAutoRestarts: 3,
 	}
 }
 
@@ -117,20 +109,10 @@ func (w *Watchdog) check() {
 		}
 	}
 
-	// Check 3: Activity stale.
-	// Skip when autonomous service is running — background cycles prove the
-	// process is alive even without user HTTP/WS activity.
-	autonomousActive := w.deps.IsAutonomousRunning != nil && w.deps.IsAutonomousRunning()
-	if !autonomousActive && w.deps.GetLastActivityAt != nil {
-		lastActivity := w.deps.GetLastActivityAt()
-		if lastActivity > 0 {
-			staleMs := now.UnixMilli() - lastActivity
-			if staleMs > w.cfg.StaleThresholdMs {
-				w.triggerRestart("no activity for " + itoa(int(staleMs/60000)) + " minutes")
-				return
-			}
-		}
-	}
+	// Note: stale-activity check removed. For a single-user deployment,
+	// inactivity is normal and should not trigger a gateway restart.
+	// The server-listening and channels-connected checks above are
+	// sufficient to detect a truly stuck gateway.
 }
 
 func (w *Watchdog) triggerRestart(reason string) {

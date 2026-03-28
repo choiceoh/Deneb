@@ -15,10 +15,9 @@ func TestWatchdog_SkipsGracePeriod(t *testing.T) {
 		IsServerListening: func() bool { return false },
 		OnRestartNeeded:   func(_ string) { restartCalled.Store(true) },
 	}, WatchdogConfig{
-		CheckIntervalMs:  50,
-		StartupGraceMs:   5000, // 5 seconds grace
-		StaleThresholdMs: 1000,
-		MaxAutoRestarts:  3,
+		CheckIntervalMs: 50,
+		StartupGraceMs:  5000, // 5 seconds grace
+		MaxAutoRestarts: 3,
 	}, slog.Default())
 
 	// During grace period, check should not trigger restart.
@@ -38,10 +37,9 @@ func TestWatchdog_TriggersRestart_ServerNotListening(t *testing.T) {
 			restartReason = reason
 		},
 	}, WatchdogConfig{
-		CheckIntervalMs:  50,
-		StartupGraceMs:   0, // no grace
-		StaleThresholdMs: 30 * 60 * 1000,
-		MaxAutoRestarts:  3,
+		CheckIntervalMs: 50,
+		StartupGraceMs:  0, // no grace
+		MaxAutoRestarts: 3,
 	}, slog.Default())
 
 	w.startedAt = time.Now().Add(-1 * time.Hour) // simulate past startup
@@ -63,10 +61,9 @@ func TestWatchdog_NoChannelsConnected(t *testing.T) {
 		GetConnectedChannelCount: func() int { return 0 },
 		OnRestartNeeded:          func(_ string) { restartCalled.Store(true) },
 	}, WatchdogConfig{
-		CheckIntervalMs:  50,
-		StartupGraceMs:   0,
-		StaleThresholdMs: 30 * 60 * 1000,
-		MaxAutoRestarts:  3,
+		CheckIntervalMs: 50,
+		StartupGraceMs:  0,
+		MaxAutoRestarts: 3,
 	}, slog.Default())
 
 	w.startedAt = time.Now().Add(-1 * time.Hour)
@@ -83,10 +80,9 @@ func TestWatchdog_RateLimitsRestarts(t *testing.T) {
 		IsServerListening: func() bool { return false },
 		OnRestartNeeded:   func(_ string) { restartCount++ },
 	}, WatchdogConfig{
-		CheckIntervalMs:  50,
-		StartupGraceMs:   0,
-		StaleThresholdMs: 30 * 60 * 1000,
-		MaxAutoRestarts:  2,
+		CheckIntervalMs: 50,
+		StartupGraceMs:  0,
+		MaxAutoRestarts: 2,
 	}, slog.Default())
 
 	w.startedAt = time.Now().Add(-1 * time.Hour)
@@ -97,29 +93,6 @@ func TestWatchdog_RateLimitsRestarts(t *testing.T) {
 
 	if restartCount != 2 {
 		t.Errorf("expected 2 restarts (rate limited), got %d", restartCount)
-	}
-}
-
-func TestWatchdog_StaleActivity(t *testing.T) {
-	restartCalled := atomic.Bool{}
-	w := NewWatchdog(WatchdogDeps{
-		IsServerListening: func() bool { return true },
-		GetLastActivityAt: func() int64 {
-			return time.Now().Add(-1 * time.Hour).UnixMilli()
-		},
-		OnRestartNeeded: func(_ string) { restartCalled.Store(true) },
-	}, WatchdogConfig{
-		CheckIntervalMs:  50,
-		StartupGraceMs:   0,
-		StaleThresholdMs: 10 * 1000, // 10 seconds
-		MaxAutoRestarts:  3,
-	}, slog.Default())
-
-	w.startedAt = time.Now().Add(-1 * time.Hour)
-	w.check()
-
-	if !restartCalled.Load() {
-		t.Error("should trigger restart for stale activity")
 	}
 }
 
@@ -238,10 +211,9 @@ func TestWatchdog_RunContext(t *testing.T) {
 	w := NewWatchdog(WatchdogDeps{
 		IsServerListening: func() bool { return true },
 	}, WatchdogConfig{
-		CheckIntervalMs:  10,
-		StartupGraceMs:   100000,
-		StaleThresholdMs: 100000,
-		MaxAutoRestarts:  3,
+		CheckIntervalMs: 10,
+		StartupGraceMs:  100000,
+		MaxAutoRestarts: 3,
 	}, slog.Default())
 
 	done := make(chan struct{})
