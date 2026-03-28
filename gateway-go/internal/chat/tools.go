@@ -28,6 +28,7 @@ type ToolDef struct {
 	Description string
 	InputSchema map[string]any
 	Fn          ToolFunc
+	Hidden      bool // if true, excluded from LLMTools() but still callable via Execute (e.g. pilot-only tools)
 }
 
 // ToolRegistry maps tool names to tool definitions (executor + schema + description).
@@ -182,6 +183,9 @@ func (r *ToolRegistry) LLMTools() []llm.Tool {
 	tools := make([]llm.Tool, 0, len(r.order))
 	for _, name := range r.order {
 		def := r.tools[name]
+		if def.Hidden {
+			continue
+		}
 		schema := def.InputSchema
 		if schema == nil {
 			schema = map[string]any{"type": "object"}

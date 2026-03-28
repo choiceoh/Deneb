@@ -112,7 +112,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, dynamicText str
 		s.WriteString("- Do NOT use pilot for: complex multi-turn reasoning, or when you need full uncompressed output.\n")
 		s.WriteString("- Multiple independent reads/greps → call them in parallel directly (no pilot needed).\n")
 		s.WriteString("- Long-running autonomous task → sessions_spawn instead of pilot.\n")
-		s.WriteString("- Tool chaining: use `\"$ref\": \"<tool_use_id>\"` to pass one tool's output to another (injected as `_ref_content`, 30s timeout).\n\n")
+		s.WriteString("- Tool chaining: use `\"$ref\": \"<tool_use_id>\"` to pass one tool's output to another (injected as `_ref_content`, 30s timeout).\n")
+		s.WriteString("- **Agent run logs**: Use `pilot` with `agent_logs` shortcut to diagnose issues from previous runs. Values: 'all' (recent logs), 'tools' (tool calls only), 'errors' (errors only), or a specific run_id. Example: `{\"task\": \"이전 런에서 뭐가 실패했는지 분석해줘\", \"agent_logs\": \"errors\"}`\n\n")
 	}
 
 	// Coding.

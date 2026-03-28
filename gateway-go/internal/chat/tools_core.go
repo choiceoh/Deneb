@@ -326,19 +326,21 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolAutonomous(deps),
 	})
 
-	// -- Agent logs tool (query past run detail logs for diagnostics) --
+	// -- Agent logs tool (pilot-only: query past run detail logs for diagnostics) --
+	// Hidden from the main LLM to avoid context bloat; use via pilot shortcut.
 	registry.RegisterTool(ToolDef{
 		Name:        "agent_logs",
 		Description: "현재 세션의 이전 에이전트 런 상세 로그를 조회합니다. 문제 진단, 이전 실행 결과 확인, 도구 실행 시간 분석에 사용합니다",
 		InputSchema: agentLogsToolSchema(),
 		Fn:          toolAgentLogs(deps.AgentLog),
+		Hidden:      true,
 	})
 
 	// -- Pilot tool (fast local AI that orchestrates other tools) --
 	// Registered last: uses the registry itself to execute source tools.
 	registry.RegisterTool(ToolDef{
 		Name:        "pilot",
-		Description: "Fast local AI that runs tools + analyzes results in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory, gmail, youtube, polaris, image, ls, vega. Options: chain (follow-up tools), max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-enables thinking for complex tasks. Falls back to raw results if sglang is down",
+		Description: "Fast local AI that runs tools + analyzes results in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory, gmail, youtube, polaris, image, ls, vega, agent_logs. Options: chain (follow-up tools), max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-enables thinking for complex tasks. Falls back to raw results if sglang is down",
 		InputSchema: pilotToolSchema(),
 		Fn:          toolPilot(registry, workspaceDir),
 	})
