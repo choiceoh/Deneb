@@ -56,7 +56,7 @@ chrono.workspace = true
 chrono-tz.workspace = true
 
 # Markdown parsing
-pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
+pulldown-cmark = { version = "0.13", default-features = false, features = ["simd"] }
 
 # Optional workspace crates
 deneb-vega = { path = "../vega", optional = true }
