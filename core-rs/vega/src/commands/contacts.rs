@@ -8,12 +8,12 @@ use crate::config::VegaConfig;
 use super::{open_db, CommandResult};
 
 static NAME_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"([가-힣]{2,4})\s*(과장|대리|부장|사원|팀장|차장|이사|사장|실장|수석|선임|책임|매니저|담당|주임|부사장|전무|상무)?").unwrap()
+    Regex::new(r"([가-힣]{2,4})\s*(과장|대리|부장|사원|팀장|차장|이사|사장|실장|수석|선임|책임|매니저|담당|주임|부사장|전무|상무)?").expect("valid regex")
 });
 static PHONE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})").unwrap());
+    Lazy::new(|| Regex::new(r"(0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4})").expect("valid regex"));
 static EMAIL_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})").unwrap()
+    Regex::new(r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})").expect("valid regex")
 });
 
 /// Extract contacts (names, phones, emails) from project text using regex patterns.

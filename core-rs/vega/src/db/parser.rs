@@ -28,25 +28,25 @@ pub struct Section {
 
 // -- Regex patterns (compiled once) --
 
-static HEADING_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^(#{1,3})\s+(.+)").unwrap());
+static HEADING_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^(#{1,3})\s+(.+)").expect("valid regex"));
 
 static TABLE_ROW_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?m)^\|\s*\*?\*?(.+?)\*?\*?\s*\|\s*(.+?)\s*\|").unwrap());
+    Lazy::new(|| Regex::new(r"(?m)^\|\s*\*?\*?(.+?)\*?\*?\s*\|\s*(.+?)\s*\|").expect("valid regex"));
 
-static STATUS_EMOJI_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[🟢🟡🟠🔴⚪]").unwrap());
+static STATUS_EMOJI_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[🟢🟡🟠🔴⚪]").expect("valid regex"));
 
 static DATE_HEADING_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^(20\d{2}[-/]\d{2}[-/]\d{2})").unwrap());
+    Lazy::new(|| Regex::new(r"^(20\d{2}[-/]\d{2}[-/]\d{2})").expect("valid regex"));
 
-static TABLE_LINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^\|.+\|$").unwrap());
+static TABLE_LINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^\|.+\|$").expect("valid regex"));
 
 // Comm entry patterns (bolded/unbolded, with/without sender)
 static COMM_PAT_BOLD_SENDER: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[-*]\s*\*{1,2}(.+?)\*{1,2}\s*\(([^)]+)\)\s*$").unwrap());
+    Lazy::new(|| Regex::new(r"^[-*]\s*\*{1,2}(.+?)\*{1,2}\s*\(([^)]+)\)\s*$").expect("valid regex"));
 static COMM_PAT_PLAIN_SENDER: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[-*]\s+(.+?)\s*\(([^)]+)\)\s*$").unwrap());
+    Lazy::new(|| Regex::new(r"^[-*]\s+(.+?)\s*\(([^)]+)\)\s*$").expect("valid regex"));
 static COMM_PAT_BOLD_ONLY: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[-*]\s*\*{1,2}(.+?)\*{1,2}\s*$").unwrap());
+    Lazy::new(|| Regex::new(r"^[-*]\s*\*{1,2}(.+?)\*{1,2}\s*$").expect("valid regex"));
 
 /// Field mapping from Korean table header to metadata key.
 fn field_map() -> HashMap<&'static str, &'static str> {
@@ -79,7 +79,7 @@ pub fn extract_table_meta(text: &str) -> HashMap<String, String> {
     let mut meta = HashMap::new();
 
     // Project name from first # heading
-    if let Some(caps) = Regex::new(r"(?m)^#\s+(.+)").unwrap().captures(text) {
+    if let Some(caps) = Regex::new(r"(?m)^#\s+(.+)").expect("valid regex").captures(text) {
         meta.insert("name".into(), caps[1].trim().to_string());
     }
 
@@ -149,9 +149,9 @@ pub fn split_sections(text: &str) -> (Vec<Section>, Vec<CommEntry>) {
     let caps_vec: Vec<_> = HEADING_RE.captures_iter(text).collect();
     for (i, caps) in caps_vec.iter().enumerate() {
         let heading = caps[2].trim().to_string();
-        let match_end = caps.get(0).unwrap().end();
+        let match_end = caps.get(0).expect("capture group 0 always exists").end();
         let body_end = if i + 1 < caps_vec.len() {
-            caps_vec[i + 1].get(0).unwrap().start()
+            caps_vec[i + 1].get(0).expect("capture group 0 always exists").start()
         } else {
             text.len()
         };

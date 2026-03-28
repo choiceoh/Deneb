@@ -10,7 +10,7 @@ pub fn validate_config_get_params(
     if !require_object(value, path, errors) {
         return;
     }
-    check_no_additional_properties(value.as_object().unwrap(), &[], path, errors);
+    check_no_additional_properties(value.as_object().expect("validated by require_object"), &[], path, errors);
 }
 
 pub fn validate_config_set_params(
@@ -21,7 +21,7 @@ pub fn validate_config_set_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().unwrap();
+    let obj = value.as_object().expect("validated by require_object");
     check_no_additional_properties(obj, &["raw", "baseHash"], path, errors);
     if check_required(obj, "raw", path, errors) {
         check_non_empty_string(&obj["raw"], &format!("{path}/raw"), errors);
@@ -39,7 +39,7 @@ fn validate_config_apply_like(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().unwrap();
+    let obj = value.as_object().expect("validated by require_object");
     let allowed = &["raw", "baseHash", "sessionKey", "note", "restartDelayMs"];
     check_no_additional_properties(obj, allowed, path, errors);
     if check_required(obj, "raw", path, errors) {
@@ -83,7 +83,7 @@ pub fn validate_config_schema_params(
     if !require_object(value, path, errors) {
         return;
     }
-    check_no_additional_properties(value.as_object().unwrap(), &[], path, errors);
+    check_no_additional_properties(value.as_object().expect("validated by require_object"), &[], path, errors);
 }
 
 pub fn validate_config_schema_lookup_params(
@@ -94,14 +94,14 @@ pub fn validate_config_schema_lookup_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().unwrap();
+    let obj = value.as_object().expect("validated by require_object");
     check_no_additional_properties(obj, &["path"], path, errors);
     if check_required(obj, "path", path, errors) {
         let p_path = format!("{path}/path");
         check_non_empty_string(&obj["path"], &p_path, errors);
         check_max_length(&obj["path"], &p_path, 1024, errors);
         static PATH_RE: once_cell::sync::Lazy<regex::Regex> =
-            once_cell::sync::Lazy::new(|| regex::Regex::new(r"^[A-Za-z0-9_./\[\]\-*]+$").unwrap());
+            once_cell::sync::Lazy::new(|| regex::Regex::new(r"^[A-Za-z0-9_./\[\]\-*]+$").expect("valid regex"));
         check_pattern(&obj["path"], &p_path, &PATH_RE, errors);
     }
 }
@@ -114,7 +114,7 @@ pub fn validate_update_run_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().unwrap();
+    let obj = value.as_object().expect("validated by require_object");
     let allowed = &["sessionKey", "note", "restartDelayMs", "timeoutMs"];
     check_no_additional_properties(obj, allowed, path, errors);
     check_optional(obj, "sessionKey", path, errors, |v, p, e| {

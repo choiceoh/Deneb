@@ -33,7 +33,7 @@ manual_let_else = "warn"
 uninlined_format_args = "warn"
 doc_markdown = "warn"
 # Restriction subset — opt-in rules for safety.
-unwrap_used = "warn"
+unwrap_used = "deny"
 expect_used = "warn"
 dbg_macro = "deny"
 print_stdout = "deny"

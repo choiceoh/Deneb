@@ -142,14 +142,12 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
         );
     }
 
-    let mut stats = json!({
-        "files_scanned": 0,
-        "files_updated": 0,
-        "files_skipped": 0,
-        "chunks_created": 0,
-        "chunks_deleted": 0,
-        "errors": [],
-    });
+    let mut files_scanned: i64 = 0;
+    let mut files_updated: i64 = 0;
+    let mut files_skipped: i64 = 0;
+    let mut chunks_created: i64 = 0;
+    let mut chunks_deleted: i64 = 0;
+    let mut errors: Vec<String> = Vec::new();
 
     let entries: Vec<_> = match fs::read_dir(md_dir) {
         Ok(rd) => rd.filter_map(|e| e.ok()).collect(),
@@ -162,14 +160,12 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
             continue;
         }
 
-        *stats.get_mut("files_scanned").unwrap() =
-            json!(stats["files_scanned"].as_i64().unwrap() + 1);
+        files_scanned += 1;
 
         let content = match fs::read_to_string(&path) {
             Ok(c) => c,
             Err(e) => {
-                let errors = stats["errors"].as_array_mut().unwrap();
-                errors.push(json!(format!("{}: {e}", path.display())));
+                errors.push(format!("{}: {e}", path.display()));
                 continue;
             }
         };
@@ -188,8 +184,7 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
                 .ok();
 
             if existing_hash.as_deref() == Some(&hash) {
-                *stats.get_mut("files_skipped").unwrap() =
-                    json!(stats["files_skipped"].as_i64().unwrap() + 1);
+                files_skipped += 1;
                 continue;
             }
         }
@@ -213,8 +208,7 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
             )
             .unwrap_or(0) as i64;
 
-        *stats.get_mut("chunks_deleted").unwrap() =
-            json!(stats["chunks_deleted"].as_i64().unwrap() + deleted);
+        chunks_deleted += deleted;
 
         // Parse sections and insert chunks
         let chunks = parse_md_sections(&content);
@@ -231,8 +225,7 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
             created += 1;
         }
 
-        *stats.get_mut("chunks_created").unwrap() =
-            json!(stats["chunks_created"].as_i64().unwrap() + created);
+        chunks_created += created;
 
         // Update file hash
         conn.execute(
@@ -241,11 +234,20 @@ pub fn cmd_memory_update(args: &Value, config: &VegaConfig) -> CommandResult {
         )
         .ok();
 
-        *stats.get_mut("files_updated").unwrap() =
-            json!(stats["files_updated"].as_i64().unwrap() + 1);
+        files_updated += 1;
     }
 
-    CommandResult::ok("memory-update", stats)
+    CommandResult::ok(
+        "memory-update",
+        json!({
+            "files_scanned": files_scanned,
+            "files_updated": files_updated,
+            "files_skipped": files_skipped,
+            "chunks_created": chunks_created,
+            "chunks_deleted": chunks_deleted,
+            "errors": errors,
+        }),
+    )
 }
 
 /// Parse markdown into (section_name, content) pairs.

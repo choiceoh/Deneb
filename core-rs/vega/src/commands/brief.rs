@@ -13,7 +13,7 @@ use crate::config::VegaConfig;
 use crate::utils::extract_bullets;
 
 static RISK_KEYWORD_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(이슈|리스크|지연|미정|보류|주의|대응|중단|긴급)").unwrap());
+    Lazy::new(|| Regex::new(r"(이슈|리스크|지연|미정|보류|주의|대응|중단|긴급)").expect("valid regex"));
 
 use super::{find_project_id, open_db, CommandResult};
 

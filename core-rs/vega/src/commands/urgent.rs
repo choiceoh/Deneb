@@ -7,7 +7,7 @@ use super::{open_db, CommandResult};
 use crate::config::VegaConfig;
 
 static DATE_EXTRACT_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})").unwrap());
+    Lazy::new(|| Regex::new(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})").expect("valid regex"));
 
 /// Urgent items query: red-status projects, stale projects, overdue actions, overloaded persons.
 pub fn cmd_urgent(_args: &Value, config: &VegaConfig) -> CommandResult {

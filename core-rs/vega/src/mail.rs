@@ -13,9 +13,9 @@ use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
 static COMM_SECTION_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?m)^##\s+커뮤니케이션").unwrap());
+    Lazy::new(|| Regex::new(r"(?m)^##\s+커뮤니케이션").expect("valid regex"));
 static HISTORY_SECTION_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?m)^##\s+이력").unwrap());
+    Lazy::new(|| Regex::new(r"(?m)^##\s+이력").expect("valid regex"));
 
 use crate::config::VegaConfig;
 
@@ -205,7 +205,7 @@ fn find_project_for_mail(
             }
         }
 
-        if score > 0 && (best.is_none() || score > best.as_ref().unwrap().3) {
+        if score > 0 && best.as_ref().is_none_or(|b| score > b.3) {
             best = Some((*id, name.clone(), sf.clone(), score));
         }
     }

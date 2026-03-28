@@ -145,18 +145,18 @@ pub fn fold_marker_text_impl(input: &str) -> String {
 // ---------------------------------------------------------------------------
 
 static MARKER_CHECK: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)external[\s_]+untrusted[\s_]+content").unwrap());
+    Lazy::new(|| Regex::new(r"(?i)external[\s_]+untrusted[\s_]+content").expect("valid regex"));
 
 static MARKER_START_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(?i)<<<\s*EXTERNAL[\s_]+UNTRUSTED[\s_]+CONTENT(?:\s+id="[^"]{1,128}")?\s*>>>"#)
-        .unwrap()
+        .expect("valid regex")
 });
 
 static MARKER_END_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r#"(?i)<<<\s*END[\s_]+EXTERNAL[\s_]+UNTRUSTED[\s_]+CONTENT(?:\s+id="[^"]{1,128}")?\s*>>>"#,
     )
-    .unwrap()
+    .expect("valid regex")
 });
 
 /// Replace spoofed security boundary markers in content.

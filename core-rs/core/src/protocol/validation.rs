@@ -258,7 +258,7 @@ pub fn check_integer(
         None => {
             // Try u64 for large positive values.
             if value.is_u64() {
-                let n = value.as_u64().unwrap();
+                let n = value.as_u64().expect("validated as u64");
                 if let Some(max) = maximum {
                     if n > max as u64 {
                         errors.push(ValidationError {

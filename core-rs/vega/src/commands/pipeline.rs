@@ -8,12 +8,12 @@ use crate::config::VegaConfig;
 use super::{open_db, CommandResult};
 
 static BILLIONS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(\d+(?:\.\d+)?)\s*억\s*(?:(\d+(?:\.\d+)?)\s*만)?\s*원?").unwrap()
+    Regex::new(r"(\d+(?:\.\d+)?)\s*억\s*(?:(\d+(?:\.\d+)?)\s*만)?\s*원?").expect("valid regex")
 });
 static TEN_THOUSANDS_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(\d+(?:,\d+)?(?:\.\d+)?)\s*만\s*원").unwrap());
+    Lazy::new(|| Regex::new(r"(\d+(?:,\d+)?(?:\.\d+)?)\s*만\s*원").expect("valid regex"));
 static WON_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(\d{1,3}(?:,\d{3})+)\s*원").unwrap());
+    Lazy::new(|| Regex::new(r"(\d{1,3}(?:,\d{3})+)\s*원").expect("valid regex"));
 
 /// Pipeline analysis: extract monetary amounts from project text,
 /// classify project stages, and aggregate pipeline metrics.

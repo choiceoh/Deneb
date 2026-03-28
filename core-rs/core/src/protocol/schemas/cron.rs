@@ -10,7 +10,7 @@ pub fn validate_cron_list_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().unwrap();
+    let obj = value.as_object().expect("validated by require_object");
     let allowed = &[
         "includeDisabled",
         "limit",
@@ -52,7 +52,7 @@ pub fn validate_cron_status_params(
     if !require_object(value, path, errors) {
         return;
     }
-    check_no_additional_properties(value.as_object().unwrap(), &[], path, errors);
+    check_no_additional_properties(value.as_object().expect("validated by require_object"), &[], path, errors);
 }
 
 pub fn validate_cron_add_params(
@@ -63,7 +63,7 @@ pub fn validate_cron_add_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().unwrap();
+    let obj = value.as_object().expect("validated by require_object");
     let allowed = &[
         "name",
         "agentId",
@@ -132,7 +132,7 @@ fn validate_cron_schedule(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().unwrap();
+    let obj = value.as_object().expect("validated by require_object");
     match obj.get("kind").and_then(|v| v.as_str()) {
         Some("at") => {
             check_no_additional_properties(obj, &["kind", "at"], path, errors);
@@ -213,7 +213,7 @@ fn validate_cron_payload(value: &serde_json::Value, path: &str, errors: &mut Vec
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().unwrap();
+    let obj = value.as_object().expect("validated by require_object");
     match obj.get("kind").and_then(|v| v.as_str()) {
         Some("systemEvent") => {
             check_no_additional_properties(obj, &["kind", "text"], path, errors);
@@ -266,7 +266,7 @@ fn validate_cron_id_or_job_id(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().unwrap();
+    let obj = value.as_object().expect("validated by require_object");
     let has_id = obj.contains_key("id");
     let has_job_id = obj.contains_key("jobId");
 
@@ -333,7 +333,7 @@ pub fn validate_cron_runs_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().unwrap();
+    let obj = value.as_object().expect("validated by require_object");
     let allowed = &[
         "scope",
         "id",
@@ -355,7 +355,7 @@ pub fn validate_cron_runs_params(
 
     // id and jobId use CronRunLogJobIdSchema: minLength 1, pattern ^[^/\\]+$
     static JOB_ID_RE: once_cell::sync::Lazy<regex::Regex> =
-        once_cell::sync::Lazy::new(|| regex::Regex::new(r"^[^/\\]+$").unwrap());
+        once_cell::sync::Lazy::new(|| regex::Regex::new(r"^[^/\\]+$").expect("valid regex"));
     for f in &["id", "jobId"] {
         check_optional(obj, f, path, errors, |v, p, e| {
             check_non_empty_string(v, p, e);
