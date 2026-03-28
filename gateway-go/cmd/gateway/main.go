@@ -49,8 +49,14 @@ func main() {
 		*version = Version
 	}
 
+	// Build a minimal logger using the --log-level CLI flag so that .env loading
+	// and config bootstrap emit messages at the correct level. The full structured
+	// logger (with format, color, etc.) is constructed below after config is loaded.
+	earlyLevel := parseLogLevel(*logLevel)
+	earlyLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: earlyLevel}))
+
 	// Load .env files before config bootstrap so env-based overrides are available.
-	config.LoadDotenvFiles(slog.Default())
+	config.LoadDotenvFiles(earlyLogger)
 
 	// Bootstrap config from ~/.deneb/deneb.json (or --config path).
 	bootstrap, err := config.BootstrapGatewayConfig(config.BootstrapOptions{

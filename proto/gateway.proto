@@ -42,7 +42,11 @@ enum ErrorCode {
 message ErrorShape {
   string code = 1;    // ErrorCode string (e.g., "NOT_FOUND").
   string message = 2; // Human-readable error description.
-  google.protobuf.Value details = 3; // Optional structured details (varies by error code).
+  // Optional structured details (schema varies by error code).
+  // This field is absent when no details are provided. Clients MUST treat it
+  // as nullable — never assume it is a non-null object or a specific type
+  // without checking the enclosing error code first.
+  google.protobuf.Value details = 3;
   optional bool retryable = 4;       // Hint: client may retry the request.
   optional uint64 retry_after_ms = 5; // Suggested retry delay in milliseconds.
   optional string cause = 6;         // Underlying cause for debugging.

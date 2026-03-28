@@ -6,7 +6,11 @@ import (
 )
 
 // FFI return codes from core-rs C ABI functions.
-// These MUST match the constants in core-rs/core/src/lib.rs.
+// These MUST stay in sync with the Rust definitions in:
+//   - core-rs/core/src/lib.rs          (C ABI return values)
+//   - core-rs/core/src/protocol/error_codes.rs (canonical Rust error codes)
+// When adding a new code here, mirror it in both Rust files and run:
+//   make error-code-sync
 const (
 	rcNullPointer    = -1
 	rcInvalidUTF8    = -2
