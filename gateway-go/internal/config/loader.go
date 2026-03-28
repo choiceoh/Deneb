@@ -189,10 +189,17 @@ func LoadConfigFromDefaultPath() (*ConfigSnapshot, error) {
 	return LoadConfig(ResolveConfigPath())
 }
 
+// supportedChannels lists channel IDs that the gateway actually implements.
+// Config entries for unknown channels are silently ignored so stale config
+// keys (e.g., removed plugins) don't appear in the startup banner.
+var supportedChannels = map[string]bool{
+	"telegram": true,
+}
+
 // ConfiguredChannelIDs extracts the top-level keys from the "channels"
-// object in the raw config JSON. These represent the configured channel
-// plugins (e.g., "telegram", "discord"). Used for lazy loading: only
-// configured channels are started at boot.
+// object in the raw config JSON, filtered to only channels the gateway
+// actually supports. Used for lazy loading: only configured channels are
+// started at boot.
 func ConfiguredChannelIDs(snap *ConfigSnapshot) []string {
 	if snap == nil || snap.Raw == "" {
 		return nil
@@ -208,7 +215,12 @@ func ConfiguredChannelIDs(snap *ConfigSnapshot) []string {
 	}
 	ids := make([]string, 0, len(raw.Channels))
 	for k := range raw.Channels {
-		ids = append(ids, k)
+		if supportedChannels[k] {
+			ids = append(ids, k)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
 	}
 	return ids
 }

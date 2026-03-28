@@ -13,6 +13,10 @@
        error-code-sync \
        info
 
+# Version from package.json, injected into Go binary via ldflags.
+DENEB_VERSION := $(shell node -p "require('./package.json').version" 2>/dev/null || echo "dev")
+GO_LDFLAGS := -ldflags '-X main.Version=$(DENEB_VERSION)'
+
 # Default: build Rust first (produces .a), then Go (links it via CGo), then CLI.
 all: rust go cli
 
@@ -56,11 +60,11 @@ rust-clean:
 go: go-ffi
 
 go-ffi:
-	cd gateway-go && go build ./...
+	cd gateway-go && go build $(GO_LDFLAGS) ./...
 
 # Pure-Go build with fallback implementations (no Rust required).
 go-pure:
-	cd gateway-go && CGO_ENABLED=0 go build -tags no_ffi ./...
+	cd gateway-go && CGO_ENABLED=0 go build $(GO_LDFLAGS) -tags no_ffi ./...
 
 go-run: go
 	cd gateway-go && go run ./cmd/gateway/
@@ -70,7 +74,7 @@ go-run: go
 go-dev:
 	@echo "Starting Go gateway in dev mode (auto-restart on SIGUSR1)..."
 	@while true; do \
-		cd gateway-go && go build -o /tmp/deneb-gateway-dev ./cmd/gateway/ && /tmp/deneb-gateway-dev $(ARGS); \
+		cd gateway-go && go build $(GO_LDFLAGS) -o /tmp/deneb-gateway-dev ./cmd/gateway/ && /tmp/deneb-gateway-dev $(ARGS); \
 		EXIT=$$?; \
 		if [ $$EXIT -eq 75 ]; then \
 			echo "[go-dev] Restarting gateway (SIGUSR1)..."; \
@@ -105,7 +109,7 @@ go-lint-all:
 	cd gateway-go && golangci-lint run ./...
 
 go-binary: rust go
-	cd gateway-go && go build -o ../dist/deneb-gateway ./cmd/gateway/
+	cd gateway-go && go build $(GO_LDFLAGS) -o ../dist/deneb-gateway ./cmd/gateway/
 
 # Build production gateway: Go binary + CLI, copies both to dist/.
 gateway-prod: go-binary cli
