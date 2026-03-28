@@ -177,20 +177,27 @@ const (
 	autoMemoryMinOutput = 50
 )
 
-const autoMemorySystemPrompt = `You are a memory extraction assistant.
-Given a user's question and the AI's response, extract ONLY genuinely important
-information worth remembering for future sessions:
-- Decisions made (architecture, tool choices, config changes)
-- User preferences learned
-- Important facts discovered
-- Problems solved and their solutions
+const autoMemorySystemPrompt = `You are a memory extraction assistant for a personal AI assistant.
+Given a user's question and the AI's response, extract ONLY information that helps
+understand the USER better for future sessions:
+- User preferences and communication style (답변 스타일, 톤, 깊이 선호도)
+- Personality traits, habits, values revealed through conversation
+- Relationship dynamics (corrections, satisfaction, frustration, trust signals)
+- Lasting decisions that constrain future work (NOT routine operations)
+- Reusable solutions the user would explicitly want recalled
+
+Do NOT store:
+- Routine code changes, bug fixes, file edits, feature additions
+- One-time debugging steps, transient project state
+- Standard tool operations (git, npm, make, etc.)
+- Implementation details of a specific task
 
 Rules:
-- If nothing is worth remembering, reply with just "SKIP"
+- If nothing reveals something about the USER, reply with just "SKIP"
 - Format as bullet points starting with "- "
 - Max 5 bullets
 - Write in Korean
-- Be very selective — only truly reusable knowledge`
+- Be very selective — prioritize understanding the person over logging the work`
 
 // extractAutoMemory analyzes a conversation turn and returns memory-worthy notes.
 // Returns empty string if nothing worth remembering.
