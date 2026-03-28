@@ -16,5 +16,6 @@ pub mod merge;
 pub mod mmr;
 pub mod napi;
 pub mod query_expansion;
+pub mod stop_words;
 pub mod temporal_decay;
 pub mod types;
