@@ -5,9 +5,6 @@
   let searchInput = $state("");
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
-  let updateStatus = $state("");
-  let updating = $state(false);
-
   // Group sessions by date.
   function groupByDate(sessions: SessionPreview[]): { label: string; items: SessionPreview[] }[] {
     const now = new Date();
@@ -51,28 +48,6 @@
   function clearSearch() {
     searchInput = "";
     app.searchSessions("");
-  }
-
-  async function checkForUpdate() {
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const result = await invoke("check_update");
-      updateStatus = result || "이미 최신 버전입니다";
-    } catch (e: any) {
-      updateStatus = "확인 실패: " + e;
-    }
-  }
-
-  async function doUpdate() {
-    updating = true;
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("install_update");
-      updateStatus = "업데이트 완료! 재시작 중...";
-    } catch (e: any) {
-      updateStatus = "업데이트 실패: " + e;
-    }
-    updating = false;
   }
 
   let sessionGroups = $derived(groupByDate(app.sessions));
@@ -145,17 +120,6 @@
           <span class="stat-line">{app.usageText}</span>
         {/if}
         <button class="action-btn" onclick={() => app.saveSession()}>세션 저장</button>
-        <button class="action-btn" onclick={checkForUpdate}>업데이트 확인</button>
-        {#if updateStatus}
-          <div class="update-info">
-            <span class="update-text">{updateStatus}</span>
-            {#if updateStatus.includes("→")}
-              <button class="update-btn" onclick={doUpdate} disabled={updating}>
-                {updating ? "설치 중..." : "업데이트 설치"}
-              </button>
-            {/if}
-          </div>
-        {/if}
       </div>
     </div>
   </aside>
@@ -389,29 +353,4 @@
     color: var(--text-primary);
   }
 
-  .update-info {
-    padding: 6px 8px;
-    border-radius: var(--radius-sm);
-    background: rgba(122, 162, 247, 0.08);
-  }
-
-  .update-text {
-    font-size: 11px;
-    color: var(--text-secondary);
-    display: block;
-    margin-bottom: 4px;
-  }
-
-  .update-btn {
-    padding: 3px 8px;
-    border-radius: var(--radius-sm);
-    font-size: 11px;
-    background: var(--accent-gradient);
-    color: white;
-    font-weight: 600;
-  }
-
-  .update-btn:disabled {
-    opacity: 0.5;
-  }
 </style>

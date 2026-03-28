@@ -2,6 +2,5 @@ node_modules/
 build/
 .svelte-kit/
 dist/
-src-tauri/target/
 *.sw?
 .DS_Store

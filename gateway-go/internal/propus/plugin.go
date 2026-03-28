@@ -46,7 +46,7 @@ type SessionSearchFunc func(query string) ([]SessionPreview, error)
 // MediaSendFunc delivers a file to the Propus client for a given session.
 type MediaSendFunc func(sessionKey, filePath, mediaType, caption string) error
 
-// Plugin implements channel.Plugin for the Propus desktop coding client.
+// Plugin implements channel.Plugin for the Propus web coding client.
 type Plugin struct {
 	config *Config
 	logger *slog.Logger
@@ -138,7 +138,7 @@ func (p *Plugin) Meta() channel.Meta {
 	return channel.Meta{
 		ID:    "propus",
 		Label: "Propus",
-		Blurb: "Desktop coding assistant channel",
+		Blurb: "Web coding assistant channel",
 	}
 }
 
@@ -170,6 +170,11 @@ func (p *Plugin) Start(_ context.Context) error {
 	mux.HandleFunc("/ws", p.handleWS)
 	mux.HandleFunc("/health", p.handleHealth)
 	mux.HandleFunc("/files/", p.handleFileDownload)
+
+	// Serve the built Propus web SPA if WebDir is configured.
+	if p.config.WebDir != "" {
+		p.registerSPAHandler(mux)
+	}
 
 	p.server = &http.Server{
 		Handler:      mux,
@@ -540,6 +545,32 @@ func randomFileID() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// registerSPAHandler mounts a static file server for the built Propus web UI.
+// Unknown paths fall back to index.html so SvelteKit client-side routing works.
+func (p *Plugin) registerSPAHandler(mux *http.ServeMux) {
+	webDir := p.config.WebDir
+	if _, err := os.Stat(webDir); err != nil {
+		p.logger.Warn("propus web_dir not found, skipping SPA serving", "path", webDir)
+		return
+	}
+
+	fs := http.FileServer(http.Dir(webDir))
+	indexPath := filepath.Join(webDir, "index.html")
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Try to serve the exact file first.
+		path := filepath.Join(webDir, filepath.Clean(r.URL.Path))
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			fs.ServeHTTP(w, r)
+			return
+		}
+		// SPA fallback: serve index.html for all other paths.
+		http.ServeFile(w, r, indexPath)
+	})
+
+	p.logger.Info("propus serving web UI", "dir", webDir)
 }
 
 // Compile-time interface check.

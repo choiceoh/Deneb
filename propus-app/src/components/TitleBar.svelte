@@ -49,7 +49,7 @@
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--bg-surface);
     flex-shrink: 0;
-    -webkit-app-region: drag;
+    /* web — no window drag */
   }
 
   .titlebar-left,
@@ -57,7 +57,7 @@
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    -webkit-app-region: no-drag;
+    /* web — no drag region needed */
   }
 
   .sidebar-toggle {

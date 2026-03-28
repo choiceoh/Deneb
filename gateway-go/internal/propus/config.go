@@ -12,6 +12,9 @@ type Config struct {
 	Bind string `json:"bind"`
 	// Tools selects the tool set: "coding" (default) restricts to code tools.
 	Tools string `json:"tools"`
+	// WebDir is the path to the built Propus SPA static files.
+	// When set, the gateway serves the web UI on the same port as the WebSocket.
+	WebDir string `json:"web_dir"`
 }
 
 // DefaultConfig returns sensible defaults for local-only coding use.

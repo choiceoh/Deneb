@@ -2,7 +2,7 @@
 
 import type { ChatMessage, ServerMessage, SessionPreview } from "./types";
 import { parseSegments } from "./types";
-import { PropusWebSocket, loadSavedUrl, saveUrl, saveConnId } from "./ws";
+import { PropusWebSocket, loadSavedUrl, saveUrl, saveConnId, deriveWsUrl } from "./ws";
 import type { ConnectionStatus } from "./ws";
 
 let nextId = 0;
@@ -15,7 +15,7 @@ class PropusState {
   streamingText = $state("");
   isStreaming = $state(false);
   connectionStatus = $state<ConnectionStatus>("disconnected");
-  needsServerUrl = $state(true);
+  needsServerUrl = $state(false);
   needsApiKey = $state(false);
   modelName = $state("");
   serviceName = $state("");
@@ -314,12 +314,13 @@ class PropusState {
   }
 
   initAutoConnect(): void {
+    // Web mode: auto-derive WebSocket URL from page origin (gateway serves both SPA and /ws).
+    // Falls back to a manually saved URL if one exists (e.g. during dev with a different gateway).
     const saved = loadSavedUrl();
-    if (saved) {
-      this.needsServerUrl = false;
-      this.statusText = `저장된 서버: ${saved}`;
-      this.ws.connect(saved);
-    }
+    const url = saved || deriveWsUrl();
+    this.needsServerUrl = false;
+    this.statusText = "연결 중...";
+    this.ws.connect(url);
   }
 }
 
