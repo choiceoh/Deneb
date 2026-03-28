@@ -16,6 +16,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+const (
+	// maxRPCBodyBytes limits the HTTP RPC request body to 1 MB.
+	maxRPCBodyBytes = 1 * 1024 * 1024
+)
+
 func (s *Server) buildMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
