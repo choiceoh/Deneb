@@ -219,12 +219,6 @@ func lookPathManual(bin string) bool {
 	return false
 }
 
-// ResetBinaryCache clears the binary lookup cache (useful for testing).
-func ResetBinaryCache() {
-	hasBinaryCacheMu.Lock()
-	hasBinaryCache = make(map[string]bool)
-	hasBinaryCacheMu.Unlock()
-}
 
 // FilterEligibleSkills filters a slice of entries by eligibility.
 func FilterEligibleSkills(entries []SkillEntry, ctx EligibilityContext) []SkillEntry {

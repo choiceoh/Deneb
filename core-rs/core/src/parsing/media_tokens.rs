@@ -228,8 +228,6 @@ fn normalize_media_source(src: &str) -> String {
 #[derive(Debug)]
 struct InlineDirective {
     key: String,
-    #[allow(dead_code)]
-    value: Option<String>,
 }
 
 /// Parse and strip all `[[...]]` inline directives from text.
@@ -246,12 +244,10 @@ fn strip_inline_directives(text: &str) -> (String, Vec<InlineDirective>) {
             let directive = if let Some(eq_pos) = inner.find('=') {
                 InlineDirective {
                     key: inner[..eq_pos].trim().to_string(),
-                    value: Some(inner[eq_pos + 1..].trim().to_string()),
                 }
             } else {
                 InlineDirective {
                     key: inner.trim().to_string(),
-                    value: None,
                 }
             };
             result.push_str(&rest[..start]);

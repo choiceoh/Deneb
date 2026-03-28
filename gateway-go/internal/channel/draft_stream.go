@@ -130,23 +130,6 @@ func (l *DraftStreamLoop) Stop() {
 	}
 }
 
-// ResetPending clears pending text without stopping the loop.
-func (l *DraftStreamLoop) ResetPending() {
-	l.mu.Lock()
-	l.pendingText = ""
-	l.mu.Unlock()
-}
-
-// ResetThrottleWindow resets the throttle window so the next update sends immediately.
-func (l *DraftStreamLoop) ResetThrottleWindow() {
-	l.mu.Lock()
-	l.lastSentAt = time.Time{}
-	if l.timer != nil {
-		l.timer.Stop()
-		l.timer = nil
-	}
-	l.mu.Unlock()
-}
 
 // WaitForInFlight waits for any in-flight send to complete.
 func (l *DraftStreamLoop) WaitForInFlight() {

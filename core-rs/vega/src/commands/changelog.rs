@@ -66,16 +66,6 @@ pub fn cmd_changelog(args: &Value, config: &VegaConfig) -> CommandResult {
 // Snapshot types and helpers
 // ---------------------------------------------------------------------------
 
-/// A project snapshot entry.
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct ProjectSnapshot {
-    id: i64,
-    name: String,
-    status: Option<String>,
-    comm_count: i64,
-    chunk_hashes: HashMap<String, String>,
-}
 
 /// Determine the path for `.snapshot.json` (sits next to the DB file).
 fn snapshot_path(config: &VegaConfig) -> PathBuf {

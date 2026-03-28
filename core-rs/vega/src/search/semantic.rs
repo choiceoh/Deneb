@@ -176,18 +176,7 @@ pub fn semantic_search_with_vec(
 
 // -- Utility functions --
 
-/// Convert a f32 vector to a byte blob (little-endian).
-#[allow(dead_code)]
-fn f32_vec_to_blob(vec: &[f32]) -> Vec<u8> {
-    let mut blob = Vec::with_capacity(vec.len() * 4);
-    for &v in vec {
-        blob.extend_from_slice(&v.to_le_bytes());
-    }
-    blob
-}
-
 /// Convert a byte blob (little-endian) to a f32 vector.
-#[allow(dead_code)]
 fn blob_to_f32_vec(blob: &[u8]) -> Vec<f32> {
     blob.chunks_exact(4)
         .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
@@ -196,7 +185,6 @@ fn blob_to_f32_vec(blob: &[u8]) -> Vec<f32> {
 
 /// Dot product of two f32 vectors (cosine similarity for L2-normalized vectors).
 /// SIMD-optimized: uses NEON on aarch64, SSE on x86_64, scalar fallback otherwise.
-#[allow(dead_code)]
 fn dot_product_simd(a: &[f32], b: &[f32]) -> f64 {
     let len = a.len().min(b.len());
     if len == 0 {
@@ -217,7 +205,7 @@ fn dot_product_simd(a: &[f32], b: &[f32]) -> f64 {
 /// NEON-accelerated f32 dot product for aarch64.
 /// Processes 4 f32 elements per iteration using 128-bit NEON registers.
 #[cfg(target_arch = "aarch64")]
-#[allow(unsafe_code, dead_code)]
+#[allow(unsafe_code)]
 fn dot_product_neon(a: &[f32], b: &[f32]) -> f64 {
     use std::arch::aarch64::*;
 
@@ -249,7 +237,6 @@ fn dot_product_neon(a: &[f32], b: &[f32]) -> f64 {
 }
 
 /// Scalar f32 dot product fallback.
-#[allow(dead_code)]
 fn dot_product_scalar(a: &[f32], b: &[f32]) -> f64 {
     a.iter()
         .zip(b.iter())
@@ -260,6 +247,15 @@ fn dot_product_scalar(a: &[f32], b: &[f32]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Convert a f32 vector to a byte blob (little-endian).
+    fn f32_vec_to_blob(vec: &[f32]) -> Vec<u8> {
+        let mut blob = Vec::with_capacity(vec.len() * 4);
+        for &v in vec {
+            blob.extend_from_slice(&v.to_le_bytes());
+        }
+        blob
+    }
 
     #[test]
     fn test_f32_blob_roundtrip() {

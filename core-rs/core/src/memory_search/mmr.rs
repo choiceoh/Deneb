@@ -37,8 +37,11 @@ impl TokenSet {
         self.tokens().collect()
     }
 
+}
+
+#[cfg(test)]
+impl TokenSet {
     /// Whether the token set has no tokens.
-    #[allow(dead_code)]
     fn is_empty(&self) -> bool {
         self.ranges.is_empty()
     }

@@ -323,21 +323,6 @@ func (c *StatusReactionController) SetTool(toolName string) {
 	c.scheduleEmoji(emoji, false, false)
 }
 
-// SetCompacting sets the compacting reaction (debounced).
-func (c *StatusReactionController) SetCompacting() {
-	c.scheduleEmoji(c.emojis.Compacting, false, false)
-}
-
-// CancelPending cancels any pending debounced emoji.
-func (c *StatusReactionController) CancelPending() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.debounceTimer != nil {
-		c.debounceTimer.Stop()
-		c.debounceTimer = nil
-	}
-	c.pendingEmoji = ""
-}
 
 // SetDone sets the done reaction (terminal state).
 func (c *StatusReactionController) SetDone() {
@@ -367,47 +352,6 @@ func (c *StatusReactionController) finishWithEmoji(emoji string) {
 	})
 }
 
-// Clear removes all known reactions.
-func (c *StatusReactionController) Clear() {
-	c.mu.Lock()
-	if !c.enabled {
-		c.mu.Unlock()
-		return
-	}
-	c.clearAllTimers()
-	c.finished = true
-	c.mu.Unlock()
-
-	c.enqueue(func() {
-		if c.adapter.RemoveReaction != nil {
-			for emoji := range c.knownEmojis {
-				if err := c.adapter.RemoveReaction(emoji); err != nil && c.onError != nil {
-					c.onError(err)
-				}
-			}
-		}
-		c.currentEmoji = ""
-		c.pendingEmoji = ""
-	})
-}
-
-// RestoreInitial resets to the initial state.
-func (c *StatusReactionController) RestoreInitial() {
-	c.mu.Lock()
-	if !c.enabled {
-		c.mu.Unlock()
-		return
-	}
-	c.clearAllTimers()
-	c.finished = false
-	initial := c.emojis.Queued
-	c.mu.Unlock()
-
-	c.enqueue(func() {
-		c.applyEmoji(initial)
-		c.pendingEmoji = ""
-	})
-}
 
 // CloseAfterDrain waits for all enqueued operations (including the terminal
 // emoji from SetDone/SetError) to complete before stopping the run loop.
