@@ -1,6 +1,7 @@
 package jsonutil
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -64,6 +65,84 @@ func TestUnmarshalInto(t *testing.T) {
 	})
 }
 
+func TestStripTrailingCommas(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "trailing comma in object",
+			input: `{"a": 1, "b": 2,}`,
+			want:  `{"a": 1, "b": 2}`,
+		},
+		{
+			name:  "trailing comma in array",
+			input: `[1, 2, 3,]`,
+			want:  `[1, 2, 3]`,
+		},
+		{
+			name:  "nested trailing commas",
+			input: `{"a": [1, 2,], "b": {"c": 3,},}`,
+			want:  `{"a": [1, 2], "b": {"c": 3}}`,
+		},
+		{
+			name:  "trailing comma with whitespace",
+			input: "{\"a\": 1 ,\n}",
+			want:  "{\"a\": 1 \n}",
+		},
+		{
+			name:  "comma in string preserved",
+			input: `{"msg": "hello, world,", "ok": true}`,
+			want:  `{"msg": "hello, world,", "ok": true}`,
+		},
+		{
+			name:  "no commas",
+			input: `{"a": 1}`,
+			want:  `{"a": 1}`,
+		},
+		{
+			name:  "empty object",
+			input: `{}`,
+			want:  `{}`,
+		},
+		{
+			name:  "comma before value not stripped",
+			input: `{"a": 1, "b": 2}`,
+			want:  `{"a": 1, "b": 2}`,
+		},
+		{
+			name:  "string with escaped quote and comma",
+			input: `{"msg": "say \"hi,\"",}`,
+			want:  `{"msg": "say \"hi,\""}`,
+		},
+		{
+			name:  "LLM facts with trailing comma",
+			input: `{"facts": [{"content": "사용자가 Go를 선호", "importance": 0.8,},]}`,
+			want:  `{"facts": [{"content": "사용자가 Go를 선호", "importance": 0.8}]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := StripTrailingCommas(tt.input)
+			if got != tt.want {
+				t.Errorf("StripTrailingCommas()\n got: %s\nwant: %s", got, tt.want)
+			}
+			// Verify the result is valid JSON if the expected output is valid.
+			if tt.want != "" {
+				var v any
+				if err := json.Unmarshal([]byte(tt.want), &v); err == nil {
+					// Expected is valid JSON, so result must also be valid.
+					if err := json.Unmarshal([]byte(got), &v); err != nil {
+						t.Errorf("StripTrailingCommas() result is not valid JSON: %v", err)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestUnmarshalLLM(t *testing.T) {
 	type result struct {
 		Answer string `json:"answer"`
@@ -98,6 +177,35 @@ func TestUnmarshalLLM(t *testing.T) {
 		}
 		if r.Answer != "hello" {
 			t.Errorf("got %+v", r)
+		}
+	})
+
+	t.Run("trailing comma auto-fix", func(t *testing.T) {
+		raw := `{"answer": "yes",}`
+		r, err := UnmarshalLLM[result](raw)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if r.Answer != "yes" {
+			t.Errorf("got %+v", r)
+		}
+	})
+
+	t.Run("LLM facts with trailing commas", func(t *testing.T) {
+		type facts struct {
+			Facts []struct {
+				Content    string  `json:"content"`
+				Importance float64 `json:"importance"`
+			} `json:"facts"`
+		}
+		raw := `<thinking>let me analyze</thinking>
+{"facts": [{"content": "사용자가 Go를 선호", "importance": 0.8,}, {"content": "DGX Spark 사용", "importance": 0.7,},]}`
+		r, err := UnmarshalLLM[facts](raw)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(r.Facts) != 2 {
+			t.Errorf("expected 2 facts, got %d", len(r.Facts))
 		}
 	})
 

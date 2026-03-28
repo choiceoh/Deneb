@@ -495,3 +495,17 @@ func BenchmarkExtractArray(b *testing.B) {
 		ExtractArray(input)
 	}
 }
+
+func BenchmarkStripTrailingCommas(b *testing.B) {
+	input := `{"facts": [{"content": "사용자가 Go를 선호", "importance": 0.8,}, {"content": "DGX Spark 사용", "importance": 0.7,},]}`
+	for b.Loop() {
+		StripTrailingCommas(input)
+	}
+}
+
+func BenchmarkStripTrailingCommas_NoCommas(b *testing.B) {
+	input := `{"facts": [{"content": "clean", "importance": 0.8}]}`
+	for b.Loop() {
+		StripTrailingCommas(input)
+	}
+}

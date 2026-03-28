@@ -3,6 +3,7 @@ package jsonutil
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // Unmarshal decodes JSON data into T with consistent error wrapping.
@@ -33,8 +34,11 @@ func UnmarshalInto(context string, data []byte, v any) error {
 }
 
 // UnmarshalLLM extracts a JSON object from noisy LLM output and unmarshals
-// into T. Pipeline: StripThinkingTags -> ExtractObject -> json.Unmarshal,
-// with RecoverTruncated as fallback.
+// into T. Pipeline:
+//  1. StripThinkingTags + ExtractObject (strip noise, find {...})
+//  2. json.Unmarshal (try clean parse)
+//  3. StripTrailingCommas + retry (fix common LLM mistake: {"a":1,})
+//  4. RecoverTruncated (fix token-limit truncation)
 //
 // Does NOT include retry or transport logic — callers handle their own retry.
 func UnmarshalLLM[T any](raw string) (T, error) {
@@ -42,12 +46,21 @@ func UnmarshalLLM[T any](raw string) (T, error) {
 
 	cleaned := ExtractObject(raw)
 
+	// Step 1: try direct parse.
 	var result T
 	if json.Unmarshal([]byte(cleaned), &result) == nil {
 		return result, nil
 	}
 
-	// Try truncated JSON recovery.
+	// Step 2: strip trailing commas (most common LLM JSON mistake).
+	sanitized := StripTrailingCommas(cleaned)
+	if sanitized != cleaned {
+		if json.Unmarshal([]byte(sanitized), &result) == nil {
+			return result, nil
+		}
+	}
+
+	// Step 3: truncated JSON recovery.
 	if recovered := RecoverTruncated(cleaned); recovered != "" {
 		if json.Unmarshal([]byte(recovered), &result) == nil {
 			return result, nil
@@ -55,4 +68,64 @@ func UnmarshalLLM[T any](raw string) (T, error) {
 	}
 
 	return zero, fmt.Errorf("unmarshal LLM output: invalid JSON: %s", Truncate(raw, 300))
+}
+
+// StripTrailingCommas removes trailing commas before } and ] in JSON.
+// This fixes the most common LLM JSON generation mistake:
+//
+//	{"items": [1, 2, 3,]}  →  {"items": [1, 2, 3]}
+//	{"a": 1, "b": 2,}      →  {"a": 1, "b": 2}
+//
+// Correctly handles commas inside strings (does not modify those).
+func StripTrailingCommas(s string) string {
+	// Fast path: no trailing comma patterns possible.
+	if !strings.ContainsAny(s, ",") {
+		return s
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+	inString := false
+	escaped := false
+
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+
+		if escaped {
+			escaped = false
+			b.WriteByte(c)
+			continue
+		}
+		if c == '\\' && inString {
+			escaped = true
+			b.WriteByte(c)
+			continue
+		}
+		if c == '"' {
+			inString = !inString
+			b.WriteByte(c)
+			continue
+		}
+		if inString {
+			b.WriteByte(c)
+			continue
+		}
+
+		// Outside string: check for trailing comma.
+		if c == ',' {
+			// Look ahead past whitespace for } or ].
+			j := i + 1
+			for j < len(s) && (s[j] == ' ' || s[j] == '\t' || s[j] == '\n' || s[j] == '\r') {
+				j++
+			}
+			if j < len(s) && (s[j] == '}' || s[j] == ']') {
+				// Skip the comma (trailing comma before closing bracket).
+				continue
+			}
+		}
+
+		b.WriteByte(c)
+	}
+
+	return b.String()
 }
