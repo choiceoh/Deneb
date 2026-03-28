@@ -10,10 +10,9 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
-    "title": "Propus",
     "windows": [
       {
-        "title": "Propus — AI Coding Assistant",
+        "title": "Propus \u2014 AI Coding Assistant",
         "width": 1100,
         "height": 750,
         "minWidth": 600,
