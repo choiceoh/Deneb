@@ -25,14 +25,16 @@ pub fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
     }
 }
 
-/// Final cosine computation: dot / (√norm_a × √norm_b).
+/// Final cosine computation: dot / √(norm_a × norm_b).
 /// Returns 0.0 for zero-norm vectors to avoid division by zero.
+///
+/// Uses `√(norm_a × norm_b)` instead of `√norm_a × √norm_b` — one fewer sqrt call.
 #[inline]
 fn finish(dot: f64, norm_a: f64, norm_b: f64) -> f64 {
     if norm_a == 0.0 || norm_b == 0.0 {
         return 0.0;
     }
-    dot / (norm_a.sqrt() * norm_b.sqrt())
+    dot / (norm_a * norm_b).sqrt()
 }
 
 #[cfg(test)]
