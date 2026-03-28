@@ -20,14 +20,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
-	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/device"
-	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
@@ -47,7 +44,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
-	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -60,17 +56,12 @@ type Server struct {
 	addr             string
 	httpServer       *http.Server
 	dispatcher       *rpc.Dispatcher
-	sessions         *session.Manager
 	channels         *channel.Registry
 	channelLifecycle *channel.LifecycleManager
-	keyCache         *session.KeyCache
 	dedupe           *dedupe.Tracker
 	broadcaster      *events.Broadcaster
 	processes        *process.Manager
-	cron             *cron.Scheduler
-	cronRunLog       *cron.PersistentRunLog
 	daemon           *daemon.Daemon
-	hooks            *hooks.Registry
 	runtimeCfg       *config.GatewayRuntimeConfig
 	authValidator    *auth.Validator
 	clients          sync.Map     // connID → *WsClient; concurrent-safe client tracking
@@ -83,12 +74,15 @@ type Server struct {
 	ready            atomic.Bool
 	shutdownOnce     sync.Once
 
+	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
+	*SessionManager // sessions, keyCache, transcript, presenceStore, heartbeatState
+	*ChatManager    // chatHandler, toolDeps, telegramPlug, discordPlug
+	*HookManager    // hooks, hooksHTTP, cron, cronRunLog
+
 	// Phase 2 additions.
 	gatewaySubs     *events.GatewayEventSubscriptions
-	chatHandler     *chat.Handler
 	providers       *provider.Registry
 	authManager     *provider.AuthManager
-	transcript      *transcript.Writer
 	authRateLimiter *auth.AuthRateLimiter
 	watchdog        *monitoring.Watchdog
 	channelHealth   *monitoring.ChannelHealthMonitor
@@ -111,24 +105,15 @@ type Server struct {
 	// Phase 4: Native system methods (migrated from bridge).
 	usageTracker *usage.Tracker
 	maintRunner  *maintenance.Runner
-	telegramPlug *telegram.Plugin
-	discordPlug  *discord.Plugin
 
 	// Phase 4: Native agent execution.
 	jobTracker *agent.JobTracker
-
-	// Phase 5: Enhanced RPC subsystems.
-	heartbeatState *rpc.HeartbeatState
-	presenceStore  *rpc.PresenceStore
 
 	// Phase 5: Plugin full registry (discovery, manifests, hooks).
 	pluginFullRegistry *plugin.FullRegistry
 
 	// Phase 5: HTTP routing for plugins.
 	pluginRouter *PluginHTTPRouter
-
-	// Phase 5: Hooks HTTP webhook handler.
-	hooksHTTP *HooksHTTPHandler
 
 	// ACP subsystem.
 	acpDeps           *rpc.ACPDeps
@@ -137,10 +122,6 @@ type Server struct {
 	// AuroraDream: memory consolidation lifecycle.
 	autonomousSvc   *autonomous.Service
 	dreamingAdapter *memory.DreamingAdapter // stored in phase 2, wired to autonomous svc
-
-	// toolDeps holds core tool dependencies; stored on the server so late-binding
-	// fields can be set from other init phases.
-	toolDeps *chat.CoreToolDeps
 
 	// GmailPoll: periodic Gmail polling with LLM analysis.
 	gmailPollSvc *gmailpoll.Service
@@ -248,15 +229,17 @@ func WithJinaAPIKey(key string) Option {
 func New(addr string, opts ...Option) *Server {
 	s := &Server{
 		addr:     addr,
-		sessions: session.NewManager(),
 		channels: channel.NewRegistry(),
 		rustFFI:  ffi.Available,
 		dedupe: dedupe.NewTracker(
 			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,
 			protocol.DedupeMax,
 		),
-		version: "0.1.0-go",
-		logger:  slog.New(slog.NewJSONHandler(os.Stderr, nil)),
+		version:        "0.1.0-go",
+		logger:         slog.New(slog.NewJSONHandler(os.Stderr, nil)),
+		SessionManager: &SessionManager{sessions: session.NewManager()},
+		ChatManager:    &ChatManager{},
+		HookManager:    &HookManager{},
 	}
 	for _, opt := range opts {
 		opt(s)
