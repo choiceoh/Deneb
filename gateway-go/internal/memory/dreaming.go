@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,7 +27,7 @@ const (
 	dreamingTimeout          = 5 * time.Minute
 	dreamingBatchSize        = 20
 	dreamingMaxTokens        = 1024
-	similarityMergeThreshold = 0.85
+	similarityMergeThreshold = 0.78
 )
 
 // DreamingReport summarizes the results of a dreaming cycle.
@@ -79,7 +80,7 @@ func RunDreamingCycle(ctx context.Context, store *Store, embedder *Embedder, cli
 	}
 
 	// Phase 3: Pattern extraction.
-	patterns, err := extractPatterns(ctx, store, client, model, logger)
+	patterns, err := extractPatterns(ctx, store, embedder, client, model, logger)
 	if err != nil {
 		logger.Warn("aurora-dream: pattern extraction failed", "error", err)
 	} else {
@@ -237,7 +238,10 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 	}
 
 	// Find similar pairs above threshold.
-	type pair struct{ a, b int64 }
+	type pair struct {
+		a, b int64
+		sim  float64
+	}
 	var pairs []pair
 
 	ids := make([]int64, 0, len(embeddings))
@@ -249,7 +253,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		for j := i + 1; j < len(ids); j++ {
 			sim := cosineSimilarity(embeddings[ids[i]], embeddings[ids[j]])
 			if sim >= similarityMergeThreshold {
-				pairs = append(pairs, pair{ids[i], ids[j]})
+				pairs = append(pairs, pair{ids[i], ids[j], sim})
 			}
 		}
 	}
@@ -258,9 +262,15 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		return 0, nil
 	}
 
+	// Process most similar pairs first so the obvious duplicates are merged
+	// before hitting the per-cycle limit.
+	sort.Slice(pairs, func(i, j int) bool {
+		return pairs[i].sim > pairs[j].sim
+	})
+
 	merged := 0
 	// Limit merges per cycle to avoid excessive LLM calls.
-	maxMerges := 10
+	maxMerges := 25
 	for _, p := range pairs {
 		if merged >= maxMerges {
 			break
@@ -309,7 +319,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		}
 
 		merged++
-		logger.Info("aurora-dream: merged facts", "old_a", p.a, "old_b", p.b, "new", newID)
+		logger.Info("aurora-dream: merged facts", "old_a", p.a, "old_b", p.b, "new", newID, "sim", fmt.Sprintf("%.3f", p.sim))
 	}
 
 	return merged, nil
@@ -318,10 +328,16 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 // --- Phase 4: Conflict Resolution ---
 
 const conflictSystemPrompt = `You are a fact conflict resolution assistant.
-Given a list of facts in the same category, identify contradictions or superseded information.
-Return a JSON object with a "conflicts" array:
-{"conflicts": [{"keep_id": <fact ID to keep>, "remove_id": <fact ID to deactivate>, "reason": "brief explanation (Korean)"}, ...]}
-If no conflicts found, return {"conflicts": []}.
+Given a list of facts in the same category, identify genuine contradictions — facts that are mutually incompatible and cannot both be true.
+
+Rules:
+- Only flag TRUE contradictions (logically incompatible facts). Do NOT flag duplicates, overlapping, or complementary facts — those are handled separately.
+- For each conflict, keep the fact that is more specific, has higher importance, or is more recent.
+- Each remove_id must appear at most ONCE across all conflicts.
+- If no genuine contradictions exist, return an empty array.
+
+Return a JSON object:
+{"conflicts": [{"keep_id": <ID>, "remove_id": <ID>, "reason": "brief Korean explanation"}, ...]}
 Return ONLY valid JSON.`
 
 type conflictResult struct {
@@ -347,10 +363,17 @@ func resolveConflicts(ctx context.Context, store *Store, client *llm.Client, mod
 	}
 
 	resolved := 0
+	removed := map[int64]bool{} // track already-removed IDs across all categories
 	for cat, catFacts := range categories {
 		if len(catFacts) < 3 {
 			continue // too few to have conflicts
 		}
+
+		// Sort by importance descending so the most important facts are included
+		// when we hit the per-category limit.
+		sort.Slice(catFacts, func(i, j int) bool {
+			return catFacts[i].Importance > catFacts[j].Importance
+		})
 
 		var sb strings.Builder
 		limit := 20
@@ -368,11 +391,18 @@ func resolveConflicts(ctx context.Context, store *Store, client *llm.Client, mod
 		}
 
 		for _, r := range wrapper.Conflicts {
-			if r.KeepID > 0 && r.RemoveID > 0 && r.KeepID != r.RemoveID {
-				_ = store.SupersedeFact(ctx, r.RemoveID, r.KeepID)
-				resolved++
-				logger.Info("aurora-dream: resolved conflict", "keep", r.KeepID, "remove", r.RemoveID, "reason", r.Reason)
+			if r.KeepID <= 0 || r.RemoveID <= 0 || r.KeepID == r.RemoveID {
+				continue
 			}
+			// Skip if remove target was already removed or if the keep target
+			// was previously removed (prevents using a deactivated fact as winner).
+			if removed[r.RemoveID] || removed[r.KeepID] {
+				continue
+			}
+			_ = store.SupersedeFact(ctx, r.RemoveID, r.KeepID)
+			removed[r.RemoveID] = true
+			resolved++
+			logger.Info("aurora-dream: resolved conflict", "keep", r.KeepID, "remove", r.RemoveID, "reason", r.Reason)
 		}
 	}
 
@@ -406,7 +436,7 @@ type patternResponse struct {
 	Patterns []ExtractedFact `json:"patterns"`
 }
 
-func extractPatterns(ctx context.Context, store *Store, client *llm.Client, model string, logger *slog.Logger) (int, error) {
+func extractPatterns(ctx context.Context, store *Store, embedder *Embedder, client *llm.Client, model string, logger *slog.Logger) (int, error) {
 	facts, err := store.GetActiveFacts(ctx)
 	if err != nil {
 		return 0, err
@@ -450,14 +480,20 @@ func extractPatterns(ctx context.Context, store *Store, client *llm.Client, mode
 		if p.Category == CategoryMutual {
 			cat = CategoryMutual
 		}
-		_, err := store.InsertFact(ctx, Fact{
+		id, err := store.InsertFact(ctx, Fact{
 			Content:    p.Content,
 			Category:   cat,
 			Importance: clamp(p.Importance, 0.7, 1.0),
 			Source:     SourceDreaming,
 		})
-		if err == nil {
-			count++
+		if err != nil {
+			continue
+		}
+		count++
+
+		// Embed the pattern so Phase 2 can detect duplicates in future cycles.
+		if embedder != nil {
+			_ = embedder.EmbedAndStore(ctx, id, p.Content)
 		}
 	}
 
