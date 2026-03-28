@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.26.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.25.0...deneb-v3.26.0) (2026-03-28)
+
+
+### ✨ Features
+
+* **pilot:** add diff, test, tree, git_log, health shortcuts and improve agent guidance ([1c95bd2](https://github.com/choiceoh/Deneb/commit/1c95bd2845dbfd19725acab90fc9599ad65aa54e))
+
+
+### 🐛 Bug Fixes
+
+* **gateway:** inject version via ldflags and filter unsupported channels from banner ([b3a4e03](https://github.com/choiceoh/Deneb/commit/b3a4e035495fa92a0f348193b0bbf34efe432138))
+* **gateway:** remove auth from banner, add sglang status ([b50d5d9](https://github.com/choiceoh/Deneb/commit/b50d5d967f136d262ea1c3c07e776d1778dbad9c))
+* **gateway:** use git tag version and remove channels from banner ([c066976](https://github.com/choiceoh/Deneb/commit/c0669760a8363acb1c3ce02a1f38ca056e3cdfdb))
+
+
+### 🔧 Internal
+
+* **autonomous:** remove goal system and autonomous tool, keep dreaming lifecycle ([2bf7047](https://github.com/choiceoh/Deneb/commit/2bf70474b619c8236101a09ad7861841b5303f20))
+* **chat:** remove 5 redundant tools (ls, apply_patch, memory_get, session_status, sessions_restore) ([384cfc0](https://github.com/choiceoh/Deneb/commit/384cfc08f3533a96581604240183919d88e6417d))
+* **core-rs:** eliminate all production unwrap() calls, enforce clippy::unwrap_used deny ([e89ed32](https://github.com/choiceoh/Deneb/commit/e89ed32c531c29f753cd3fed5389608c794ecb48))
+* **gateway:** complete tools_pilot split and add hooks_http_exec ([c7e2cfa](https://github.com/choiceoh/Deneb/commit/c7e2cfa4bbb182b2fed92ea56649fa87e1194ce8))
+* **gateway:** split large files in chat package for readability ([e4caa0e](https://github.com/choiceoh/Deneb/commit/e4caa0eda2081b98d834dfb54c2d79e60b1e2141))
+* **gateway:** split server.go, process.go, and move cron stub ([9e52c92](https://github.com/choiceoh/Deneb/commit/9e52c929d78faf7328f690906d25189589a83f1f))
+* **gateway:** split tools_pilot, tool_stubs, hooks_http, tool_manual ([721ab55](https://github.com/choiceoh/Deneb/commit/721ab55a867f965e11a76a9c752c0caf7a97fe3f))
+
 ## [3.25.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.24.1...deneb-v3.25.0) (2026-03-28)
 
 

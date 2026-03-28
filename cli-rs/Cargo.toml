@@ -1,6 +1,6 @@
 [package]
 name = "deneb-cli"
-version = "3.25.0" # x-release-please-version
+version = "3.26.0" # x-release-please-version
 edition = "2021"
 description = "Deneb CLI — high-performance command-line interface"
 
