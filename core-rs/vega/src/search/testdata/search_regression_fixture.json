@@ -1,0 +1,72 @@
+{
+  "projects": [
+    {
+      "name": "비금도 해상태양광",
+      "client": "한국전력",
+      "status": "진행중",
+      "person_internal": "김대희",
+      "source_file": "bigeum.md",
+      "chunks": [
+        {
+          "section_heading": "현재 상황",
+          "content": "해저케이블 154kV 설치 진행중. EPC 시공 방식으로 본선 공정 마무리 단계.",
+          "chunk_type": "status"
+        },
+        {
+          "section_heading": "기술 사양",
+          "content": "모듈은 진코 600W, 인버터는 화웨이 장비를 사용한다.",
+          "chunk_type": "technical"
+        }
+      ],
+      "comms": [
+        {
+          "log_date": "2025-03-01",
+          "sender": "김대희",
+          "subject": "설계 검토 완료",
+          "summary": "KEPCO 계통연계 승인 대기중"
+        }
+      ]
+    },
+    {
+      "name": "울릉도 ESS 증설",
+      "client": "동해에너지",
+      "status": "준비중",
+      "person_internal": "박지수",
+      "source_file": "ulleung-ess.md",
+      "chunks": [
+        {
+          "section_heading": "프로젝트 개요",
+          "content": "BESS 120MWh 증설, PCS 교체 일정 수립 및 인허가 검토 진행.",
+          "chunk_type": "overview"
+        },
+        {
+          "section_heading": "리스크",
+          "content": "배터리 선적 지연 가능성 및 항만 하역 일정 변동 리스크 관리 필요.",
+          "chunk_type": "risk"
+        }
+      ],
+      "comms": [
+        {
+          "log_date": "2025-02-18",
+          "sender": "박지수",
+          "subject": "예산 재검토",
+          "summary": "PCS 단가 상승 반영한 예산안 재작성 요청"
+        }
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "query": "비금도 해저케이블",
+      "expected_project": "비금도 해상태양광"
+    },
+    {
+      "query": "울릉도 배터리 선적 지연",
+      "expected_project": "울릉도 ESS 증설"
+    },
+    {
+      "query": "한국전력 계통연계",
+      "expected_project": "비금도 해상태양광"
+    }
+  ]
+}

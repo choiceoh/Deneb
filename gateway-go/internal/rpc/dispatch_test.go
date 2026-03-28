@@ -54,6 +54,47 @@ func TestDispatchUnknownMethodReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestDispatchTimeoutReturnsAgentTimeout(t *testing.T) {
+	d := NewDispatcher(testLogger())
+	d.Register("slow", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		<-ctx.Done()
+		return protocol.NewResponseError(req.ID, protocol.NewError(protocol.ErrUnavailable, "unexpected return"))
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go cancel()
+
+	req := &protocol.RequestFrame{Type: "req", ID: "timeout-1", Method: "slow"}
+	resp := d.Dispatch(ctx, req)
+	if resp.OK {
+		t.Fatal("expected timeout error response")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrAgentTimeout {
+		t.Fatalf("expected AGENT_TIMEOUT, got %+v", resp.Error)
+	}
+}
+
+func TestDispatchCanceledContextReturnsAgentTimeout(t *testing.T) {
+	d := NewDispatcher(testLogger())
+	d.Register("cancelled", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		<-ctx.Done()
+		return protocol.NewResponseError(req.ID, protocol.NewError(protocol.ErrUnavailable, "unexpected return"))
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // pre-cancel before dispatch
+
+	req := &protocol.RequestFrame{Type: "req", ID: "cancel-1", Method: "cancelled"}
+	resp := d.Dispatch(ctx, req)
+	if resp.OK {
+		t.Fatal("expected timeout error response for canceled context")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrAgentTimeout {
+		t.Fatalf("expected AGENT_TIMEOUT, got %+v", resp.Error)
+	}
+}
+
 func TestMethods(t *testing.T) {
 	d := NewDispatcher(testLogger())
 	d.Register("health", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {

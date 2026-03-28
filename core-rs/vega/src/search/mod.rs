@@ -217,8 +217,51 @@ impl SearchRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use serde::Deserialize;
     use tempfile::TempDir;
+
+    #[derive(Debug, Deserialize)]
+    struct RegressionFixture {
+        projects: Vec<FixtureProject>,
+        queries: Vec<RegressionQuery>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct FixtureProject {
+        name: String,
+        client: String,
+        status: String,
+        person_internal: String,
+        source_file: String,
+        chunks: Vec<FixtureChunk>,
+        comms: Vec<FixtureComm>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct FixtureChunk {
+        section_heading: String,
+        content: String,
+        chunk_type: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct FixtureComm {
+        log_date: String,
+        sender: String,
+        subject: String,
+        summary: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct RegressionQuery {
+        query: String,
+        expected_project: String,
+    }
+
+    fn load_regression_fixture() -> Result<RegressionFixture, Box<dyn std::error::Error>> {
+        let raw = include_str!("testdata/search_regression_fixture.json");
+        Ok(serde_json::from_str(raw)?)
+    }
 
     fn setup_test_env() -> Result<(TempDir, VegaConfig), Box<dyn std::error::Error>> {
         let dir = TempDir::new()?;
@@ -232,53 +275,80 @@ mod tests {
             ..VegaConfig::default()
         };
 
-        // Initialize DB and insert test data
+        let fixture = load_regression_fixture()?;
+
+        // Initialize DB and insert deterministic regression fixture data.
         let conn = Connection::open(&db_path)?;
         init_db(&conn)?;
 
-        conn.execute(
-            "INSERT INTO projects (name, client, status, person_internal, source_file)
-             VALUES ('비금도 해상태양광', '한국전력', '진행중', '김대희', 'bigeum.md')",
-            [],
-        )?;
+        for project in &fixture.projects {
+            conn.execute(
+                "INSERT INTO projects (name, client, status, person_internal, source_file)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                (
+                    &project.name,
+                    &project.client,
+                    &project.status,
+                    &project.person_internal,
+                    &project.source_file,
+                ),
+            )?;
+            let project_id = conn.last_insert_rowid();
 
-        conn.execute(
-            "INSERT INTO chunks (project_id, section_heading, content, chunk_type)
-             VALUES (1, '현재 상황', '해저케이블 154kV 설치 진행중. EPC 시공 방식.', 'status')",
-            [],
-        )?;
-        conn.execute(
-            "INSERT INTO chunks (project_id, section_heading, content, chunk_type)
-             VALUES (1, '기술 사양', '모듈: 진코 600W, 인버터: 화웨이', 'technical')",
-            [],
-        )?;
-        conn.execute(
-            "INSERT INTO comm_log (project_id, log_date, sender, subject, summary)
-             VALUES (1, '2025-03-01', '김대희', '설계 검토 완료', 'KEPCO 계통연계 승인 대기중')",
-            [],
-        )?;
+            for chunk in &project.chunks {
+                conn.execute(
+                    "INSERT INTO chunks (project_id, section_heading, content, chunk_type)
+                     VALUES (?1, ?2, ?3, ?4)",
+                    (
+                        project_id,
+                        &chunk.section_heading,
+                        &chunk.content,
+                        &chunk.chunk_type,
+                    ),
+                )?;
+            }
+
+            for comm in &project.comms {
+                conn.execute(
+                    "INSERT INTO comm_log (project_id, log_date, sender, subject, summary)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    (
+                        project_id,
+                        &comm.log_date,
+                        &comm.sender,
+                        &comm.subject,
+                        &comm.summary,
+                    ),
+                )?;
+            }
+        }
 
         drop(conn);
         Ok((dir, config))
     }
 
     #[test]
-    fn test_search_router_basic() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_search_router_regression_queries() -> Result<(), Box<dyn std::error::Error>> {
+        let fixture = load_regression_fixture()?;
         let (_dir, config) = setup_test_env()?;
         let router = SearchRouter::new(config);
 
-        let result = router.search("비금도")?;
-        assert!(!result.unified.is_empty(), "Should find results for 비금도");
-        Ok(())
-    }
+        for case in &fixture.queries {
+            let result = router.search(&case.query)?;
+            assert!(
+                !result.unified.is_empty(),
+                "expected results for query: {}",
+                case.query
+            );
 
-    #[test]
-    fn test_search_router_keyword() -> Result<(), Box<dyn std::error::Error>> {
-        let (_dir, config) = setup_test_env()?;
-        let router = SearchRouter::new(config);
+            let top = &result.unified[0];
+            assert_eq!(
+                top.project_name, case.expected_project,
+                "top project mismatch for query: {}",
+                case.query
+            );
+        }
 
-        let result = router.search("해저케이블")?;
-        assert!(!result.unified.is_empty(), "Should find 해저케이블 results");
         Ok(())
     }
 
