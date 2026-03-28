@@ -1118,6 +1118,7 @@ func (s *Server) registerPhase2Methods() {
 		LLMClient:    chatCfg.LLMClient,
 		Transcript:   transcriptStore,
 		AgentLog:     agentLogWriter,
+		MemoryStore:  chatCfg.MemoryStore,
 	}
 
 	// Register core tools (file I/O, exec, process, sessions, gateway, cron, image).
