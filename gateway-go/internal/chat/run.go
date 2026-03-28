@@ -64,7 +64,8 @@ type runDeps struct {
 	replyFunc       ReplyFunc                 // optional; delivers response to originating channel
 	mediaSendFn     MediaSendFunc             // optional; delivers files to originating channel
 	typingFn        TypingFunc                // optional; sends typing indicator during run
-	reactionFn      ReactionFunc              // optional; sets emoji reaction for status phases
+	reactionFn        ReactionFunc              // optional; sets emoji reaction for status phases
+	removeReactionFn  ReactionFunc              // optional; removes emoji reaction (Discord additive)
 	providerConfigs map[string]ProviderConfig // optional; config-based provider credentials
 	logger          *slog.Logger              // required (defaults to slog.Default)
 
@@ -138,16 +139,15 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 
 	// Set up status reaction controller for phase-aware emoji on the user's message.
-	// Uses Telegram Bot API-compatible emojis only.
 	// Shows: 👀 queued → 🤔 thinking → 🔥 tool → ⚡ web → 👍 done.
 	var statusCtrl *channel.StatusReactionController
 	if deps.reactionFn != nil && params.Delivery != nil && params.Delivery.MessageID != "" {
 		delivery := params.Delivery
-		telegramEmojis := channel.StatusReactionEmojis{
+		phaseEmojis := channel.StatusReactionEmojis{
 			Queued:     "👀",
 			Thinking:   "🤔",
 			Tool:       "🔥",
-			Coding:     "🔥", // Telegram bots may not support 👨‍💻 ZWJ; use 🔥
+			Coding:     "🔥",
 			Web:        "⚡",
 			Done:       "👍",
 			Error:      "😱",
@@ -155,19 +155,25 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			StallHard:  "😨",
 			Compacting: "🤔",
 		}
+		adapter := channel.StatusReactionAdapter{
+			SetReaction: func(emoji string) error {
+				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+				defer cancel()
+				return deps.reactionFn(rctx, delivery, emoji)
+			},
+		}
+		// Discord uses additive reactions: need RemoveReaction to clear previous phase.
+		if deliveryChannel(params.Delivery) == "discord" && deps.removeReactionFn != nil {
+			adapter.RemoveReaction = func(emoji string) error {
+				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+				defer cancel()
+				return deps.removeReactionFn(rctx, delivery, emoji)
+			}
+		}
 		statusCtrl = channel.NewStatusReactionController(channel.StatusReactionControllerParams{
 			Enabled: true,
-			Adapter: channel.StatusReactionAdapter{
-				SetReaction: func(emoji string) error {
-					// Detach from the run context so the final reaction (done/error)
-					// survives runCancel(). WithoutCancel preserves context values
-					// while removing the cancellation signal.
-					rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-					defer cancel()
-					return deps.reactionFn(rctx, delivery, emoji)
-				},
-			},
-			Emojis: &telegramEmojis,
+			Adapter: adapter,
+			Emojis:  &phaseEmojis,
 			OnError: func(err error) {
 				logger.Warn("status reaction failed", "error", err)
 			},

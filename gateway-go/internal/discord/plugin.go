@@ -87,6 +87,9 @@ func (p *Plugin) Start(ctx context.Context) error {
 		if err := p.bot.Start(context.Background()); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				p.logger.Error("discord bot error", "error", err)
+				p.mu.Lock()
+				p.status = channel.Status{Connected: false, Error: "gateway disconnected: " + err.Error()}
+				p.mu.Unlock()
 			}
 		}
 	}()

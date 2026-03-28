@@ -314,7 +314,12 @@ func (s *Server) wireDiscordChatHandler() {
 		return err
 	})
 
-	// Chain typing indicator.
+	// Chain typing indicator with throttling.
+	// Discord typing expires after 10s; throttle to avoid excessive API calls.
+	var lastTypingMu sync.Mutex
+	lastTypingAt := make(map[string]time.Time) // channelID → last typing time
+	const typingThrottle = 8 * time.Second     // refresh before 10s expiry
+
 	prevTyping := s.chatHandler.TypingFunc()
 	s.chatHandler.SetTypingFunc(func(ctx context.Context, delivery *chat.DeliveryContext) error {
 		if delivery == nil || delivery.Channel != "discord" {
@@ -323,6 +328,16 @@ func (s *Server) wireDiscordChatHandler() {
 			}
 			return nil
 		}
+
+		// Throttle: skip if last typing was recent.
+		lastTypingMu.Lock()
+		if last, ok := lastTypingAt[delivery.To]; ok && time.Since(last) < typingThrottle {
+			lastTypingMu.Unlock()
+			return nil
+		}
+		lastTypingAt[delivery.To] = time.Now()
+		lastTypingMu.Unlock()
+
 		client := s.discordPlug.Client()
 		if client == nil {
 			return nil
@@ -344,6 +359,22 @@ func (s *Server) wireDiscordChatHandler() {
 			return nil
 		}
 		return client.CreateReaction(ctx, delivery.To, delivery.MessageID, emoji)
+	})
+
+	// Chain remove reaction function (Discord additive reactions need explicit removal).
+	prevRemoveReaction := s.chatHandler.RemoveReactionFunc()
+	s.chatHandler.SetRemoveReactionFunc(func(ctx context.Context, delivery *chat.DeliveryContext, emoji string) error {
+		if delivery == nil || delivery.Channel != "discord" || delivery.MessageID == "" {
+			if prevRemoveReaction != nil {
+				return prevRemoveReaction(ctx, delivery, emoji)
+			}
+			return nil
+		}
+		client := s.discordPlug.Client()
+		if client == nil {
+			return nil
+		}
+		return client.DeleteOwnReaction(ctx, delivery.To, delivery.MessageID, emoji)
 	})
 
 	// Route Discord messages through the autoreply inbound processor for

@@ -26,10 +26,13 @@ import (
 )
 
 // discordSessionSeen tracks which sessions have received initial context.
+// Uses timestamps for TTL-based cleanup (24h expiry).
 var (
-	discordSessionSeen   = make(map[string]bool)
+	discordSessionSeen   = make(map[string]time.Time)
 	discordSessionSeenMu sync.Mutex
 )
+
+const discordSessionTTL = 24 * time.Hour
 
 // HandleDiscordMessage processes an incoming Discord message through the
 // autoreply pipeline: command detection → directive parsing → chat.send dispatch.
@@ -129,9 +132,18 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	// workspace context (git branch, status) so the agent has immediate
 	// project awareness for coding tasks.
 	discordSessionSeenMu.Lock()
-	isFirstMessage := !discordSessionSeen[sessionKey]
+	lastSeen, exists := discordSessionSeen[sessionKey]
+	isFirstMessage := !exists || time.Since(lastSeen) > discordSessionTTL
 	if isFirstMessage {
-		discordSessionSeen[sessionKey] = true
+		discordSessionSeen[sessionKey] = time.Now()
+	}
+	// Periodic cleanup: remove expired entries when map grows.
+	if len(discordSessionSeen) > 100 {
+		for k, t := range discordSessionSeen {
+			if time.Since(t) > discordSessionTTL {
+				delete(discordSessionSeen, k)
+			}
+		}
 	}
 	discordSessionSeenMu.Unlock()
 

@@ -125,7 +125,8 @@ type Handler struct {
 	replyFunc   ReplyFunc     // optional: delivers response to originating channel
 	mediaSendFn MediaSendFunc // optional: delivers files to originating channel
 	typingFn    TypingFunc    // optional: sends typing indicator during agent run
-	reactionFn  ReactionFunc  // optional: sets emoji reaction on triggering message
+	reactionFn       ReactionFunc // optional: sets emoji reaction on triggering message
+	removeReactionFn ReactionFunc // optional: removes emoji reaction (Discord additive)
 
 	abortMu  sync.Mutex
 	abortMap map[string]*AbortEntry // clientRunId -> entry
@@ -244,6 +245,17 @@ func (h *Handler) SetTypingFunc(fn TypingFunc) {
 // triggering message to indicate agent status phases (thinking, tool use, done).
 func (h *Handler) SetReactionFunc(fn ReactionFunc) {
 	h.reactionFn = fn
+}
+
+// SetRemoveReactionFunc sets the function that removes an emoji reaction
+// from the triggering message. Needed for Discord's additive reaction model.
+func (h *Handler) SetRemoveReactionFunc(fn ReactionFunc) {
+	h.removeReactionFn = fn
+}
+
+// RemoveReactionFunc returns the current remove reaction function (for chaining).
+func (h *Handler) RemoveReactionFunc() ReactionFunc {
+	return h.removeReactionFn
 }
 
 // ReplyFunc returns the current reply function (for chaining).
@@ -692,8 +704,9 @@ func (h *Handler) buildRunDeps() runDeps {
 		replyFunc:       h.replyFunc,
 		mediaSendFn:     h.mediaSendFn,
 		typingFn:        h.typingFn,
-		reactionFn:      h.reactionFn,
-		providerConfigs: h.providerConfigs,
+		reactionFn:       h.reactionFn,
+		removeReactionFn: h.removeReactionFn,
+		providerConfigs:  h.providerConfigs,
 		logger:          h.logger,
 		auroraStore:     h.auroraStore,
 		vegaBackend:     h.vegaBackend,

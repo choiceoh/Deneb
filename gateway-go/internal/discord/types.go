@@ -62,9 +62,22 @@ type HelloData struct {
 
 // IdentifyData is the payload for opcode 2 (Identify).
 type IdentifyData struct {
-	Token      string            `json:"token"`
-	Intents    int               `json:"intents"`
-	Properties IdentifyProperties `json:"properties"`
+	Token      string              `json:"token"`
+	Intents    int                 `json:"intents"`
+	Properties IdentifyProperties  `json:"properties"`
+	Presence   *PresenceUpdate     `json:"presence,omitempty"`
+}
+
+// PresenceUpdate sets the bot's presence/activity on connect.
+type PresenceUpdate struct {
+	Status     string     `json:"status"` // "online", "idle", "dnd", "invisible"
+	Activities []Activity `json:"activities,omitempty"`
+}
+
+// Activity represents a Discord activity (e.g., "Playing", "Watching").
+type Activity struct {
+	Name string `json:"name"`
+	Type int    `json:"type"` // 0=Playing, 1=Streaming, 2=Listening, 3=Watching, 5=Competing
 }
 
 // IdentifyProperties contains OS/browser/device info for identification.

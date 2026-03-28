@@ -179,7 +179,7 @@ func (b *Bot) runGateway(ctx context.Context, gatewayURL string) error {
 			return fmt.Errorf("send resume: %w", err)
 		}
 	} else {
-		// Fresh identify.
+		// Fresh identify with coding bot presence.
 		identifyData := IdentifyData{
 			Token:   b.config.BotToken,
 			Intents: IntentGuilds | IntentGuildMessages | IntentMessageContent | IntentDirectMessages,
@@ -187,6 +187,12 @@ func (b *Bot) runGateway(ctx context.Context, gatewayURL string) error {
 				OS:      "linux",
 				Browser: "deneb",
 				Device:  "deneb",
+			},
+			Presence: &PresenceUpdate{
+				Status: "online",
+				Activities: []Activity{
+					{Name: "Coding", Type: 0}, // "Playing Coding"
+				},
 			},
 		}
 		if err := b.writePayload(ctx, conn, OpcodeIdentify, identifyData); err != nil {
