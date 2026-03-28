@@ -412,11 +412,12 @@ mod tests {
     }
 
     #[test]
-    fn resolve_agent_config_found() {
+    fn resolve_agent_config_found() -> Result<(), Box<dyn std::error::Error>> {
         let list = vec![json!({"id": "alpha", "name": "Alpha Agent", "workspace": "/tmp/alpha"})];
-        let config = resolve_agent_config(&list, "alpha").unwrap();
+        let config = resolve_agent_config(&list, "alpha").ok_or("resolve_agent_config returned None")?;
         assert_eq!(config.name.as_deref(), Some("Alpha Agent"));
         assert_eq!(config.workspace.as_deref(), Some("/tmp/alpha"));
+        Ok(())
     }
 
     #[test]

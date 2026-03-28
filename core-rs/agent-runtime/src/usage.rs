@@ -197,7 +197,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalize_anthropic_usage() {
+    fn normalize_anthropic_usage() -> Result<(), Box<dyn std::error::Error>> {
         let raw = UsageLike {
             input: Some(100.0),
             output: Some(50.0),
@@ -205,36 +205,39 @@ mod tests {
             cache_creation_input_tokens: Some(10.0),
             ..Default::default()
         };
-        let result = normalize_usage(&raw).unwrap();
+        let result = normalize_usage(&raw).ok_or("normalize_usage returned None")?;
         assert_eq!(result.input, Some(100.0));
         assert_eq!(result.output, Some(50.0));
         assert_eq!(result.cache_read, Some(200.0));
         assert_eq!(result.cache_write, Some(10.0));
+        Ok(())
     }
 
     #[test]
-    fn normalize_openai_usage() {
+    fn normalize_openai_usage() -> Result<(), Box<dyn std::error::Error>> {
         let raw = UsageLike {
             prompt_tokens: Some(500.0),
             completion_tokens: Some(200.0),
             total_tokens: Some(700.0),
             ..Default::default()
         };
-        let result = normalize_usage(&raw).unwrap();
+        let result = normalize_usage(&raw).ok_or("normalize_usage returned None")?;
         assert_eq!(result.input, Some(500.0));
         assert_eq!(result.output, Some(200.0));
         assert_eq!(result.total, Some(700.0));
+        Ok(())
     }
 
     #[test]
-    fn normalize_negative_input_clamped() {
+    fn normalize_negative_input_clamped() -> Result<(), Box<dyn std::error::Error>> {
         let raw = UsageLike {
             input: Some(-50.0),
             output: Some(100.0),
             ..Default::default()
         };
-        let result = normalize_usage(&raw).unwrap();
+        let result = normalize_usage(&raw).ok_or("normalize_usage returned None")?;
         assert_eq!(result.input, Some(0.0));
+        Ok(())
     }
 
     #[test]

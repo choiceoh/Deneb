@@ -438,17 +438,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_agent_session_key_valid() {
-        let parsed = parse_agent_session_key("agent:mybot:main").unwrap();
+    fn parse_agent_session_key_valid() -> Result<(), Box<dyn std::error::Error>> {
+        let parsed = parse_agent_session_key("agent:mybot:main").ok_or("parse_agent_session_key returned None")?;
         assert_eq!(parsed.agent_id, "mybot");
         assert_eq!(parsed.rest, "main");
+        Ok(())
     }
 
     #[test]
-    fn parse_agent_session_key_with_rest() {
-        let parsed = parse_agent_session_key("agent:mybot:cron:daily:run:123").unwrap();
+    fn parse_agent_session_key_with_rest() -> Result<(), Box<dyn std::error::Error>> {
+        let parsed = parse_agent_session_key("agent:mybot:cron:daily:run:123").ok_or("parse_agent_session_key returned None")?;
         assert_eq!(parsed.agent_id, "mybot");
         assert_eq!(parsed.rest, "cron:daily:run:123");
+        Ok(())
     }
 
     #[test]

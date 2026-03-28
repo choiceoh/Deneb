@@ -548,7 +548,7 @@ mod tests {
                     obj["seq"] = serde_json::json!(s);
                 }
                 let json = obj.to_string();
-                let frame = validate_frame(&json).unwrap();
+                let frame = validate_frame(&json).expect("valid event json should parse");
                 match frame {
                     GatewayFrame::Event(ev) => {
                         prop_assert_eq!(ev.event, event);

@@ -1038,17 +1038,19 @@ mod tests {
     }
 
     #[test]
-    fn parse_model_ref_with_provider() {
-        let result = parse_model_ref("anthropic/claude-opus-4-6", DEFAULT_PROVIDER).unwrap();
+    fn parse_model_ref_with_provider() -> Result<(), Box<dyn std::error::Error>> {
+        let result = parse_model_ref("anthropic/claude-opus-4-6", DEFAULT_PROVIDER).ok_or("parse_model_ref returned None")?;
         assert_eq!(result.provider, "anthropic");
         assert_eq!(result.model, "claude-opus-4-6");
+        Ok(())
     }
 
     #[test]
-    fn parse_model_ref_without_provider() {
-        let result = parse_model_ref("claude-opus-4-6", DEFAULT_PROVIDER).unwrap();
+    fn parse_model_ref_without_provider() -> Result<(), Box<dyn std::error::Error>> {
+        let result = parse_model_ref("claude-opus-4-6", DEFAULT_PROVIDER).ok_or("parse_model_ref returned None")?;
         assert_eq!(result.provider, "anthropic");
         assert_eq!(result.model, "claude-opus-4-6");
+        Ok(())
     }
 
     #[test]
@@ -1186,14 +1188,15 @@ mod tests {
     }
 
     #[test]
-    fn build_configured_allowlist_keys_basic() {
+    fn build_configured_allowlist_keys_basic() -> Result<(), Box<dyn std::error::Error>> {
         let keys = vec![
             "anthropic/claude-opus-4-6".to_string(),
             "openai/gpt-4o".to_string(),
         ];
-        let result = build_configured_allowlist_keys(&keys, DEFAULT_PROVIDER).unwrap();
+        let result = build_configured_allowlist_keys(&keys, DEFAULT_PROVIDER).ok_or("build_configured_allowlist_keys returned None")?;
         assert!(result.contains("anthropic/claude-opus-4-6"));
         assert!(result.contains("openai/gpt-4o"));
+        Ok(())
     }
 
     #[test]
@@ -1202,7 +1205,7 @@ mod tests {
     }
 
     #[test]
-    fn build_model_alias_index_basic() {
+    fn build_model_alias_index_basic() -> Result<(), Box<dyn std::error::Error>> {
         let mut models = std::collections::HashMap::new();
         models.insert(
             "anthropic/claude-opus-4-6".to_string(),
@@ -1210,14 +1213,15 @@ mod tests {
         );
         let index = build_model_alias_index(&models, DEFAULT_PROVIDER);
         assert!(index.by_alias.contains_key("opus"));
-        let (alias, model_ref) = index.by_alias.get("opus").unwrap();
+        let (alias, model_ref) = index.by_alias.get("opus").ok_or("alias 'opus' not found in index")?;
         assert_eq!(alias, "opus");
         assert_eq!(model_ref.provider, "anthropic");
         assert_eq!(model_ref.model, "claude-opus-4-6");
+        Ok(())
     }
 
     #[test]
-    fn resolve_model_ref_from_string_alias() {
+    fn resolve_model_ref_from_string_alias() -> Result<(), Box<dyn std::error::Error>> {
         let mut models = std::collections::HashMap::new();
         models.insert(
             "anthropic/claude-opus-4-6".to_string(),
@@ -1225,17 +1229,19 @@ mod tests {
         );
         let index = build_model_alias_index(&models, DEFAULT_PROVIDER);
         let (model_ref, alias) =
-            resolve_model_ref_from_string("opus", DEFAULT_PROVIDER, Some(&index)).unwrap();
+            resolve_model_ref_from_string("opus", DEFAULT_PROVIDER, Some(&index)).ok_or("resolve_model_ref_from_string returned None")?;
         assert_eq!(model_ref.model, "claude-opus-4-6");
         assert_eq!(alias, Some("opus".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn resolve_model_ref_from_string_no_alias() {
+    fn resolve_model_ref_from_string_no_alias() -> Result<(), Box<dyn std::error::Error>> {
         let (model_ref, alias) =
-            resolve_model_ref_from_string("claude-opus-4-6", DEFAULT_PROVIDER, None).unwrap();
+            resolve_model_ref_from_string("claude-opus-4-6", DEFAULT_PROVIDER, None).ok_or("resolve_model_ref_from_string returned None")?;
         assert_eq!(model_ref.model, "claude-opus-4-6");
         assert!(alias.is_none());
+        Ok(())
     }
 
     #[test]
@@ -1542,13 +1548,14 @@ mod tests {
     }
 
     #[test]
-    fn resolve_hooks_gmail_model_basic() {
+    fn resolve_hooks_gmail_model_basic() -> Result<(), Box<dyn std::error::Error>> {
         let models = std::collections::HashMap::new();
         let result = resolve_hooks_gmail_model(Some("openai/gpt-4o"), &models, DEFAULT_PROVIDER);
         assert!(result.is_some());
-        let model_ref = result.unwrap();
+        let model_ref = result.ok_or("resolve_hooks_gmail_model returned None")?;
         assert_eq!(model_ref.provider, "openai");
         assert_eq!(model_ref.model, "gpt-4o");
+        Ok(())
     }
 
     #[test]
@@ -1603,7 +1610,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_allowed_model_ref_valid() {
+    fn resolve_allowed_model_ref_valid() -> Result<(), Box<dyn std::error::Error>> {
         let agents: Vec<serde_json::Value> = vec![];
         let models = std::collections::HashMap::new();
         let result = resolve_allowed_model_ref(&ResolveAllowedModelRefParams {
@@ -1617,9 +1624,10 @@ mod tests {
             agents_defaults_model: None,
         });
         assert!(result.is_ok());
-        let (model_ref, key) = result.unwrap();
+        let (model_ref, key) = result?;
         assert_eq!(model_ref.provider, "anthropic");
         assert_eq!(key, "anthropic/claude-opus-4-6");
+        Ok(())
     }
 
     #[test]
