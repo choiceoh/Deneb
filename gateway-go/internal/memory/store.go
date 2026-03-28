@@ -198,6 +198,10 @@ func migrateSchema(db *sql.DB) {
 	_, _ = db.Exec(`ALTER TABLE dreaming_log ADD COLUMN facts_pruned INTEGER NOT NULL DEFAULT 0`)
 	// v2 → v3: add merge_depth for cascade prevention in fact merging.
 	_, _ = db.Exec(`ALTER TABLE facts ADD COLUMN merge_depth INTEGER NOT NULL DEFAULT 0`)
+	// v3 → v4: explicit index on fact_embeddings.fact_id for DELETE CASCADE
+	// performance. Older databases created before fact_id was the PRIMARY KEY
+	// may not have an implicit B-tree index, causing O(N) scans on fact deletion.
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_fact_embeddings_fact_id ON fact_embeddings(fact_id)`)
 }
 
 // CompactMemory is a one-time bulk cleanup that deactivates all low-importance
@@ -607,7 +611,17 @@ func (s *Store) StoreEmbedding(ctx context.Context, factID int64, vec []float32,
 		factID, blob, modelName, now,
 	)
 	if err == nil && s.embCacheReady {
-		s.embCache[factID] = vec
+		// Copy-on-write: callers that received a reference to the old cache map
+		// via LoadEmbeddings may still be iterating it after we released the
+		// read lock. Mutating the map in-place while another goroutine reads it
+		// is a data race. Instead, build a new map and replace the reference so
+		// existing snapshots remain stable and immutable.
+		newCache := make(map[int64][]float32, len(s.embCache)+1)
+		for k, v := range s.embCache {
+			newCache[k] = v
+		}
+		newCache[factID] = vec
+		s.embCache = newCache
 	}
 	return err
 }

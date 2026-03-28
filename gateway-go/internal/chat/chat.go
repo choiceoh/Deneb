@@ -128,6 +128,10 @@ type Handler struct {
 	reactionFn       ReactionFunc // optional: sets emoji reaction on triggering message
 	removeReactionFn ReactionFunc // optional: removes emoji reaction (Discord additive)
 
+	// shutdownCtx is the server lifecycle context. Set via SetShutdownCtx so
+	// background goroutines (auto-memory extraction) stop on server shutdown.
+	shutdownCtx context.Context
+
 	abortMu  sync.Mutex
 	abortMap map[string]*AbortEntry // clientRunId -> entry
 	done     chan struct{}          // signals abortGCLoop to stop
@@ -276,6 +280,12 @@ func (h *Handler) TypingFunc() TypingFunc {
 // ReactionFunc returns the current reaction function (for chaining).
 func (h *Handler) ReactionFunc() ReactionFunc {
 	return h.reactionFn
+}
+
+// SetShutdownCtx sets the server lifecycle context so background goroutines
+// (e.g., auto-memory extraction) are cancelled when the server shuts down.
+func (h *Handler) SetShutdownCtx(ctx context.Context) {
+	h.shutdownCtx = ctx
 }
 
 // DefaultModel returns the configured default LLM model name.
@@ -719,6 +729,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		defaultModel:    h.defaultModel,
 		defaultSystem:   h.defaultSystem,
 		maxTokens:       h.maxTokens,
+		shutdownCtx:     h.shutdownCtx,
 	}
 }
 

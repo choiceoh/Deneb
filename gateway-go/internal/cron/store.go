@@ -150,8 +150,25 @@ func (s *Store) Save(store *CronStoreFile) error {
 	rand.Read(randBytes)
 	tmp := fmt.Sprintf("%s.%d.%s.tmp", s.path, os.Getpid(), hex.EncodeToString(randBytes))
 
-	if err := os.WriteFile(tmp, serialized, 0o600); err != nil {
+	// Write and fsync the temp file before renaming so the data is durable
+	// even if the process crashes between write and rename.
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("create cron store temp: %w", err)
+	}
+	if _, err := f.Write(serialized); err != nil {
+		f.Close()
+		os.Remove(tmp)
 		return fmt.Errorf("write cron store temp: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return fmt.Errorf("fsync cron store temp: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("close cron store temp: %w", err)
 	}
 
 	// Backup existing file (best-effort).
@@ -160,14 +177,14 @@ func (s *Store) Save(store *CronStoreFile) error {
 		_ = copyFile(s.path, backupPath)
 	}
 
-	// Atomic rename.
+	// Atomic rename. The temp file is in the same directory as s.path so
+	// this is always an intra-filesystem rename on Linux (POSIX-atomic).
+	// The non-atomic copy fallback is intentionally removed: if os.Rename
+	// fails on the same filesystem it indicates a real OS error that the
+	// caller should surface rather than silently writing a partial file.
 	if err := os.Rename(tmp, s.path); err != nil {
-		// Fallback: copy + remove on rename failure (e.g., Windows).
-		if copyErr := copyFile(tmp, s.path); copyErr != nil {
-			os.Remove(tmp)
-			return fmt.Errorf("rename cron store: %w", err)
-		}
 		os.Remove(tmp)
+		return fmt.Errorf("rename cron store: %w", err)
 	}
 
 	s.cached = store

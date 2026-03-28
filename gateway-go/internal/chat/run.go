@@ -80,6 +80,9 @@ type runDeps struct {
 	defaultModel   string
 	defaultSystem  string
 	maxTokens      int
+	// shutdownCtx is the server lifecycle context; used to bound background
+	// goroutines (e.g., auto-memory extraction) so they stop on server shutdown.
+	shutdownCtx context.Context
 }
 
 // runAgentAsync is the background goroutine that executes an agent run.

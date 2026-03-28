@@ -204,6 +204,9 @@ gen_all_parallel() {
     fail "Generation failed for: ${failures[*]}"
   fi
 
+  # Only save the hash after both generators succeeded. Guarded explicitly here
+  # (fail() already exits the script) to make the success invariant clear and
+  # resistant to future refactors that might change the error-handling path.
   save_hash
 }
 

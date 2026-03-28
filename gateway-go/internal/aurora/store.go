@@ -218,19 +218,14 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) flush() error {
-	s.mu.RLock()
-	raw, err := json.Marshal(s.data)
-	s.mu.RUnlock()
-	if err != nil {
-		return err
-	}
-
-	// Atomic write via temp file.
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	// Hold the exclusive write lock for the entire flush operation.
+	// Using RLock here was unsafe: between releasing the read lock after
+	// json.Marshal and writing the temp file, a concurrent PersistLeaf /
+	// PersistCondensed could call flushLocked() with newer data, then
+	// flush() would overwrite the file with the stale marshaled snapshot.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.flushLocked()
 }
 
 // msgKey converts a uint64 message ID to a map key.
