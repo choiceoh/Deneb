@@ -7,11 +7,16 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -91,6 +96,16 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 		}
 	}
 
+	// Process file attachments (code files uploaded by user).
+	var attachments []chat.ChatAttachment
+	if len(msg.Attachments) > 0 {
+		attachments = p.downloadDiscordAttachments(msg.Attachments)
+		// If no text but has attachments, use a default prompt.
+		if agentMessage == "" && len(attachments) > 0 {
+			agentMessage = "이 파일을 분석해 주세요."
+		}
+	}
+
 	if agentMessage == "" {
 		return
 	}
@@ -110,6 +125,9 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 		"sessionKey": sessionKey,
 		"message":    agentMessage,
 		"delivery":   delivery,
+	}
+	if len(attachments) > 0 {
+		sendParams["attachments"] = attachments
 	}
 
 	req, err := protocol.NewRequestFrame(
@@ -153,5 +171,109 @@ func (p *InboundProcessor) sendDiscordCommandReply(channelID string, result *aut
 	defer cancel()
 	if _, err := discord.SendText(ctx, client, channelID, replyText, ""); err != nil {
 		p.logger.Warn("failed to send discord command reply", "channelId", channelID, "error", err)
+	}
+}
+
+// maxAttachmentSize is the max file size to download from Discord (1 MB).
+const maxAttachmentSize = 1 * 1024 * 1024
+
+// downloadDiscordAttachments downloads file attachments from a Discord message
+// and converts them to ChatAttachments for the agent pipeline.
+func (p *InboundProcessor) downloadDiscordAttachments(attachments []discord.Attachment) []chat.ChatAttachment {
+	var result []chat.ChatAttachment
+	for _, att := range attachments {
+		if att.Size > maxAttachmentSize {
+			p.logger.Info("skipping large discord attachment",
+				"filename", att.Filename, "size", att.Size)
+			continue
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		data, err := downloadURL(ctx, att.URL)
+		cancel()
+		if err != nil {
+			p.logger.Warn("failed to download discord attachment",
+				"filename", att.Filename, "error", err)
+			continue
+		}
+
+		// Determine type: code files → "file", images → "image".
+		attType := "file"
+		lang := discord.DetectCodeLanguage(att.Filename)
+		if isImageFilename(att.Filename) {
+			attType = "image"
+		}
+
+		ca := chat.ChatAttachment{
+			Type:     attType,
+			Name:     att.Filename,
+			Data:     base64.StdEncoding.EncodeToString(data),
+			MimeType: guessMimeType(att.Filename),
+		}
+		_ = lang // language info available if needed for context
+
+		result = append(result, ca)
+	}
+	return result
+}
+
+// downloadURL fetches raw bytes from a URL.
+func downloadURL(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, maxAttachmentSize+1))
+}
+
+// isImageFilename checks if a filename looks like an image.
+func isImageFilename(name string) bool {
+	lower := strings.ToLower(name)
+	for _, ext := range []string{".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"} {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+// guessMimeType returns a MIME type based on file extension.
+func guessMimeType(name string) string {
+	lower := strings.ToLower(name)
+	switch {
+	case strings.HasSuffix(lower, ".go"):
+		return "text/x-go"
+	case strings.HasSuffix(lower, ".py"):
+		return "text/x-python"
+	case strings.HasSuffix(lower, ".js"):
+		return "text/javascript"
+	case strings.HasSuffix(lower, ".ts"):
+		return "text/typescript"
+	case strings.HasSuffix(lower, ".rs"):
+		return "text/x-rust"
+	case strings.HasSuffix(lower, ".json"):
+		return "application/json"
+	case strings.HasSuffix(lower, ".yaml"), strings.HasSuffix(lower, ".yml"):
+		return "text/yaml"
+	case strings.HasSuffix(lower, ".md"):
+		return "text/markdown"
+	case strings.HasSuffix(lower, ".png"):
+		return "image/png"
+	case strings.HasSuffix(lower, ".jpg"), strings.HasSuffix(lower, ".jpeg"):
+		return "image/jpeg"
+	case strings.HasSuffix(lower, ".gif"):
+		return "image/gif"
+	case strings.HasSuffix(lower, ".webp"):
+		return "image/webp"
+	default:
+		return "application/octet-stream"
 	}
 }

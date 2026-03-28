@@ -67,7 +67,7 @@ func SendCodeBlock(ctx context.Context, c *Client, channelID string, code string
 	}
 
 	// Too long for inline — send as file attachment.
-	ext := langToExt(lang)
+	ext := langToFileExt(lang)
 	return sendAsFile(ctx, c, channelID, code, replyToID, "output"+ext)
 }
 
@@ -101,30 +101,3 @@ func summarizeContent(text string) string {
 	return fmt.Sprintf("📎 Output (%d lines, %d chars)", lines, len(text))
 }
 
-// langToExt maps language identifiers to file extensions.
-func langToExt(lang string) string {
-	switch lang {
-	case "go":
-		return ".go"
-	case "rust":
-		return ".rs"
-	case "python":
-		return ".py"
-	case "javascript":
-		return ".js"
-	case "typescript":
-		return ".ts"
-	case "bash", "sh":
-		return ".sh"
-	case "json":
-		return ".json"
-	case "yaml":
-		return ".yaml"
-	case "diff":
-		return ".diff"
-	case "sql":
-		return ".sql"
-	default:
-		return ".txt"
-	}
-}

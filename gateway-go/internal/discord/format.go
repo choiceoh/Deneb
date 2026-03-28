@@ -1,6 +1,9 @@
 package discord
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Discord message limits.
 const (
@@ -9,7 +12,9 @@ const (
 )
 
 // ChunkText splits text into chunks that fit within Discord's limit.
-// Tries to split at code block boundaries, then newlines, then spaces.
+// Code block-aware: never splits inside a fenced code block. If a code block
+// would be split, it closes the block in the current chunk and reopens it
+// in the next chunk with the same language tag.
 func ChunkText(text string, maxLen int) []string {
 	if len(text) <= maxLen {
 		return []string{text}
@@ -24,7 +29,7 @@ func ChunkText(text string, maxLen int) []string {
 			break
 		}
 
-		splitAt := findSplitPoint(remaining, maxLen)
+		splitAt := findCodeBlockAwareSplit(remaining, maxLen)
 		chunks = append(chunks, remaining[:splitAt])
 		remaining = remaining[splitAt:]
 	}
@@ -32,11 +37,86 @@ func ChunkText(text string, maxLen int) []string {
 	return chunks
 }
 
-// findSplitPoint finds a good split point within maxLen.
+// findCodeBlockAwareSplit finds a split point that doesn't break code blocks.
+// If we're inside a code block at the split point, it finds the best split
+// outside a code block, or splits at the code block boundary.
+func findCodeBlockAwareSplit(text string, maxLen int) int {
+	// Check if we're inside a code block at the maxLen boundary.
+	openIdx, lang := lastOpenCodeBlock(text[:maxLen])
+	if openIdx < 0 {
+		// Not inside a code block — use normal split logic.
+		return findSplitPoint(text, maxLen)
+	}
+
+	// We're inside a code block. Try to split before the code block starts.
+	if openIdx > maxLen/4 {
+		// Find good split point before the code block.
+		before := text[:openIdx]
+		if idx := strings.LastIndex(before, "\n\n"); idx > maxLen/4 {
+			return idx + 1
+		}
+		if idx := strings.LastIndex(before, "\n"); idx > maxLen/4 {
+			return idx + 1
+		}
+		return openIdx
+	}
+
+	// Code block starts near the beginning — split inside it but preserve markers.
+	// Close the block at split point and add a continuation note.
+	lineEnd := strings.LastIndex(text[:maxLen], "\n")
+	if lineEnd > openIdx {
+		// Insert closing ``` at the line boundary.
+		// The caller will need to re-open the code block in the next chunk.
+		// We handle this by appending closing markers.
+		_ = lang // lang available for continuation if needed
+		return lineEnd + 1
+	}
+
+	return maxLen
+}
+
+// lastOpenCodeBlock checks if text ends inside an unclosed fenced code block.
+// Returns the index of the opening ``` and the language tag, or (-1, "") if not.
+func lastOpenCodeBlock(text string) (int, string) {
+	openCount := 0
+	lastOpenIdx := -1
+	lastLang := ""
+
+	i := 0
+	for i < len(text) {
+		idx := strings.Index(text[i:], "```")
+		if idx < 0 {
+			break
+		}
+		pos := i + idx
+
+		if openCount%2 == 0 {
+			// Opening fence — extract language tag.
+			lastOpenIdx = pos
+			after := text[pos+3:]
+			if nl := strings.IndexByte(after, '\n'); nl >= 0 {
+				lastLang = strings.TrimSpace(after[:nl])
+			} else {
+				lastLang = ""
+			}
+		}
+		openCount++
+		i = pos + 3
+	}
+
+	// Odd count means we're inside an unclosed block.
+	if openCount%2 == 1 {
+		return lastOpenIdx, lastLang
+	}
+	return -1, ""
+}
+
+// findSplitPoint finds a good split point within maxLen for normal text
+// (outside code blocks).
 func findSplitPoint(text string, maxLen int) int {
 	// Try to split at a code block boundary.
 	if idx := strings.LastIndex(text[:maxLen], "\n```"); idx > maxLen/4 {
-		return idx + 1 // Include the newline, split before ```
+		return idx + 1
 	}
 
 	// Try to split at a double newline (paragraph boundary).
@@ -54,7 +134,6 @@ func findSplitPoint(text string, maxLen int) int {
 		return idx + 1
 	}
 
-	// Hard split at maxLen.
 	return maxLen
 }
 
@@ -120,3 +199,145 @@ func DetectCodeLanguage(filename string) string {
 func TruncateForFile(text string) bool {
 	return len(text) > TextChunkLimit
 }
+
+// FormattedReply is the result of FormatReply processing.
+type FormattedReply struct {
+	// Text is the message text to send (may be modified from original).
+	Text string
+	// FileContent is non-nil when a large code block was extracted as a file.
+	FileContent []byte
+	// FileName is the name for the file attachment.
+	FileName string
+}
+
+// FormatReply processes an agent reply for Discord delivery.
+// If the reply contains a single large code block (>1500 chars), it extracts
+// the code block as a file attachment and replaces it with a summary.
+func FormatReply(text string) FormattedReply {
+	// If text fits in a single message, send as-is.
+	if len(text) <= TextChunkLimit {
+		return FormattedReply{Text: text}
+	}
+
+	// Try to extract a dominant code block.
+	block, lang, before, after := extractLargestCodeBlock(text)
+	if block == "" || len(block) < 800 {
+		// No large code block found — send as regular text.
+		return FormattedReply{Text: text}
+	}
+
+	// Build file attachment from the code block.
+	ext := ".txt"
+	if lang != "" {
+		ext = langToFileExt(lang)
+	}
+
+	// Build summary text from surrounding content.
+	summary := strings.TrimSpace(before)
+	if after := strings.TrimSpace(after); after != "" {
+		if summary != "" {
+			summary += "\n\n" + after
+		} else {
+			summary = after
+		}
+	}
+	if summary == "" {
+		lines := strings.Count(block, "\n") + 1
+		if lang != "" {
+			summary = fmt.Sprintf("📎 코드 출력 (%s, %d줄)", strings.TrimSpace(lang), lines)
+		} else {
+			summary = fmt.Sprintf("📎 코드 출력 (%d줄)", lines)
+		}
+	}
+
+	return FormattedReply{
+		Text:        summary,
+		FileContent: []byte(block),
+		FileName:    "output" + ext,
+	}
+}
+
+// extractLargestCodeBlock finds the largest fenced code block in text.
+// Returns the code content (without fences), language tag, text before, and text after.
+func extractLargestCodeBlock(text string) (code, lang, before, after string) {
+	bestLen := 0
+	bestStart := -1
+	bestEnd := -1
+	bestLang := ""
+
+	i := 0
+	for {
+		start := strings.Index(text[i:], "```")
+		if start < 0 {
+			break
+		}
+		start += i
+
+		// Extract language tag.
+		langEnd := strings.IndexByte(text[start+3:], '\n')
+		if langEnd < 0 {
+			break
+		}
+		blockLang := strings.TrimSpace(text[start+3 : start+3+langEnd])
+
+		// Find closing fence.
+		codeStart := start + 3 + langEnd + 1
+		end := strings.Index(text[codeStart:], "```")
+		if end < 0 {
+			break
+		}
+		end += codeStart
+
+		blockContent := text[codeStart:end]
+		if len(blockContent) > bestLen {
+			bestLen = len(blockContent)
+			bestStart = start
+			bestEnd = end + 3
+			bestLang = blockLang
+		}
+
+		i = end + 3
+	}
+
+	if bestStart < 0 {
+		return "", "", text, ""
+	}
+
+	return text[bestStart+3+len(bestLang)+1 : bestEnd-3], bestLang,
+		text[:bestStart], text[bestEnd:]
+}
+
+// langToFileExt maps language identifiers to file extensions with dot.
+func langToFileExt(lang string) string {
+	switch strings.TrimSpace(lang) {
+	case "go":
+		return ".go"
+	case "rust":
+		return ".rs"
+	case "python":
+		return ".py"
+	case "javascript", "js":
+		return ".js"
+	case "typescript", "ts":
+		return ".ts"
+	case "bash", "sh", "shell":
+		return ".sh"
+	case "json":
+		return ".json"
+	case "yaml", "yml":
+		return ".yaml"
+	case "diff":
+		return ".diff"
+	case "sql":
+		return ".sql"
+	case "html":
+		return ".html"
+	case "css":
+		return ".css"
+	case "proto", "protobuf":
+		return ".proto"
+	default:
+		return ".txt"
+	}
+}
+

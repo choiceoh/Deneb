@@ -278,7 +278,15 @@ func (s *Server) wireDiscordChatHandler() {
 		recentSends[dedupKey] = time.Now()
 		recentMu.Unlock()
 
-		_, err := discord.SendText(ctx, client, delivery.To, text, delivery.MessageID)
+		// Smart formatting: extract large code blocks and send as file attachments.
+		formatted := discord.FormatReply(text)
+		if formatted.FileContent != nil {
+			// Send file attachment with summary text.
+			_, err := client.SendMessageWithFile(ctx, delivery.To,
+				formatted.Text, formatted.FileName, formatted.FileContent)
+			return err
+		}
+		_, err := discord.SendText(ctx, client, delivery.To, formatted.Text, delivery.MessageID)
 		return err
 	})
 
