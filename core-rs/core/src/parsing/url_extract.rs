@@ -138,12 +138,75 @@ fn find_bare_urls(text: &str) -> Vec<&str> {
                 i += 1;
             }
             // Safety: the original text is valid UTF-8 and we split on ASCII boundaries.
-            results.push(&text[start..i]);
+            let candidate = &text[start..i];
+            let cleaned = strip_url_tail(candidate);
+            // At minimum "http://x" (8 chars).
+            if cleaned.len() > 8 {
+                results.push(cleaned);
+            }
         } else {
             i += 1;
         }
     }
     results
+}
+
+/// Strip trailing punctuation that is not part of the URL.
+/// Handles balanced brackets: `(`, `)`, `[`, `]`, `{`, `}`, `<`, `>`.
+/// Always strips trailing: `,`, `.`, `;`, `:`, `!`, `?`, `'`, `"`.
+fn strip_url_tail(url: &str) -> &str {
+    let bytes = url.as_bytes();
+    let mut end = bytes.len();
+
+    loop {
+        if end == 0 {
+            break;
+        }
+        match bytes[end - 1] {
+            // Always-strip trailing punctuation.
+            b',' | b'.' | b';' | b'!' | b'?' | b'\'' | b'"' => {
+                end -= 1;
+            }
+            b':' => {
+                end -= 1;
+            }
+            // Closing brackets: strip only when unbalanced within the URL.
+            b')' => {
+                if count_byte(&bytes[..end], b'(') < count_byte(&bytes[..end], b')') {
+                    end -= 1;
+                } else {
+                    break;
+                }
+            }
+            b']' => {
+                if count_byte(&bytes[..end], b'[') < count_byte(&bytes[..end], b']') {
+                    end -= 1;
+                } else {
+                    break;
+                }
+            }
+            b'}' => {
+                if count_byte(&bytes[..end], b'{') < count_byte(&bytes[..end], b'}') {
+                    end -= 1;
+                } else {
+                    break;
+                }
+            }
+            b'>' => {
+                if count_byte(&bytes[..end], b'<') < count_byte(&bytes[..end], b'>') {
+                    end -= 1;
+                } else {
+                    break;
+                }
+            }
+            _ => break,
+        }
+    }
+    &url[..end]
+}
+
+fn count_byte(bytes: &[u8], needle: u8) -> usize {
+    bytes.iter().filter(|&&b| b == needle).count()
 }
 
 /// Check if a raw URL string is allowed (valid URL, http/https scheme, passes SSRF check).
@@ -261,5 +324,70 @@ mod tests {
         let urls = extract_links(text, &cfg);
         assert_eq!(urls.len(), 1);
         assert_eq!(urls[0], "https://ok.example.com");
+    }
+
+    #[test]
+    fn trailing_punctuation_stripped() {
+        let cfg = ExtractLinksConfig::default();
+        // Trailing comma
+        assert_eq!(
+            find_bare_urls("https://example.com,")[0],
+            "https://example.com"
+        );
+        // Trailing period (end of sentence)
+        assert_eq!(
+            find_bare_urls("Visit https://example.com.")[0],
+            "https://example.com"
+        );
+        // Trailing semicolon
+        assert_eq!(
+            find_bare_urls("https://example.com;")[0],
+            "https://example.com"
+        );
+        // Trailing exclamation
+        assert_eq!(
+            find_bare_urls("https://example.com!")[0],
+            "https://example.com"
+        );
+        // Multiple trailing punctuation
+        assert_eq!(
+            find_bare_urls(r#"https://example.com"),"#)[0],
+            "https://example.com"
+        );
+        // JSON array context (the reported bug)
+        let urls = extract_links(
+            r#"["https://github.com/choiceoh/deneb/releases/latest/download/latest.json"],"#,
+            &cfg,
+        );
+        assert_eq!(urls.len(), 1);
+        assert_eq!(
+            urls[0],
+            "https://github.com/choiceoh/deneb/releases/latest/download/latest.json"
+        );
+    }
+
+    #[test]
+    fn balanced_parens_preserved() {
+        // Wikipedia-style URL with balanced parens should be kept intact.
+        let urls = find_bare_urls(
+            "https://en.wikipedia.org/wiki/Rust_(programming_language)",
+        );
+        assert_eq!(
+            urls[0],
+            "https://en.wikipedia.org/wiki/Rust_(programming_language)"
+        );
+    }
+
+    #[test]
+    fn unbalanced_closing_paren_stripped() {
+        // URL wrapped in prose parens: "(see https://example.com)"
+        let urls = find_bare_urls("(see https://example.com)");
+        assert_eq!(urls[0], "https://example.com");
+    }
+
+    #[test]
+    fn trailing_quotes_stripped() {
+        let urls = find_bare_urls(r#""https://example.com""#);
+        assert_eq!(urls[0], "https://example.com");
     }
 }
