@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/discord"
@@ -69,7 +70,7 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	}
 
 	// Normalize inbound context.
-	autoreply.FinalizeInboundContext(msgCtx)
+	inbound.FinalizeInboundContext(msgCtx)
 
 	// Resolve per-channel workspace directory.
 	workspaceDir := ""
