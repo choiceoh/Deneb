@@ -974,24 +974,26 @@ mod tests {
     }
 
     #[test]
-    fn test_grep_mode_serde() {
+    fn test_grep_mode_serde() -> Result<(), Box<dyn std::error::Error>> {
         let mode = GrepMode::Regex;
-        let json = serde_json::to_string(&mode).unwrap();
+        let json = serde_json::to_string(&mode)?;
         assert_eq!(json, "\"regex\"");
 
-        let mode: GrepMode = serde_json::from_str("\"full_text\"").unwrap();
+        let mode: GrepMode = serde_json::from_str("\"full_text\"")?;
         assert_eq!(mode, GrepMode::FullText);
+        Ok(())
     }
 
     #[test]
-    fn test_grep_scope_serde() {
+    fn test_grep_scope_serde() -> Result<(), Box<dyn std::error::Error>> {
         let scope = GrepScope::Both;
-        let json = serde_json::to_string(&scope).unwrap();
+        let json = serde_json::to_string(&scope)?;
         assert_eq!(json, "\"both\"");
+        Ok(())
     }
 
     #[test]
-    fn test_retrieval_command_serde_roundtrip() {
+    fn test_retrieval_command_serde_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let cmd = RetrievalCommand::Grep {
             query: "test".to_string(),
             mode: GrepMode::Regex,
@@ -1001,8 +1003,8 @@ mod tests {
             before_ms: None,
             limit: Some(10),
         };
-        let json = serde_json::to_string(&cmd).unwrap();
-        let parsed: RetrievalCommand = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&cmd)?;
+        let parsed: RetrievalCommand = serde_json::from_str(&json)?;
         match parsed {
             RetrievalCommand::Grep {
                 query,
@@ -1016,5 +1018,6 @@ mod tests {
             }
             _ => panic!("Wrong variant"),
         }
+        Ok(())
     }
 }

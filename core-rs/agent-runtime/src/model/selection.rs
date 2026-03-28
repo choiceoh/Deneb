@@ -1416,17 +1416,19 @@ mod tests {
     }
 
     #[test]
-    fn to_agent_model_list_like_string() {
+    fn to_agent_model_list_like_string() -> Result<(), Box<dyn std::error::Error>> {
         let val = serde_json::json!("claude-opus-4-6");
-        let result = to_agent_model_list_like(Some(&val)).unwrap();
+        let result = to_agent_model_list_like(Some(&val)).ok_or("to_agent_model_list_like returned None")?;
         assert_eq!(result["primary"], "claude-opus-4-6");
+        Ok(())
     }
 
     #[test]
-    fn to_agent_model_list_like_object() {
+    fn to_agent_model_list_like_object() -> Result<(), Box<dyn std::error::Error>> {
         let val = serde_json::json!({"primary": "m1", "fallbacks": ["m2"]});
-        let result = to_agent_model_list_like(Some(&val)).unwrap();
+        let result = to_agent_model_list_like(Some(&val)).ok_or("to_agent_model_list_like returned None")?;
         assert_eq!(result["primary"], "m1");
+        Ok(())
     }
 
     #[test]
