@@ -403,8 +403,10 @@ func handlePendingInterrupt(
 	copy(snapshot, messages)
 	snapshot = append(snapshot, llm.NewTextMessage("user", pending.Message))
 
-	// Same model as main task for tone consistency, but with thinking
-	// disabled and no tools — fast, lightweight response.
+	// Same model as main task for tone consistency — no tools, small
+	// MaxTokens for a quick response. No thinking/reasoning: zai (OpenAI-
+	// compatible) doesn't have extended thinking, and for Anthropic we
+	// omit the Thinking field so it defaults to off.
 	quickReq := llm.ChatRequest{
 		Model:     cfg.Model,
 		Messages:  snapshot,
@@ -412,7 +414,6 @@ func handlePendingInterrupt(
 		MaxTokens: 1024,
 		Tools:     nil,
 		Stream:    true,
-		Thinking:  &llm.ThinkingConfig{Type: "disabled"},
 	}
 
 	var events <-chan llm.StreamEvent
