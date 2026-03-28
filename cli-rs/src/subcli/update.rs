@@ -28,18 +28,7 @@ pub async fn run(args: &UpdateArgs) -> Result<(), CliError> {
     // The Rust CLI delegates update to the Node.js CLI
     // since it manages git/npm operations
     let mut cmd = std::process::Command::new("deneb");
-    cmd.arg("update");
-    cmd.arg("--channel").arg(&args.channel);
-
-    if let Some(ref tag) = args.tag {
-        cmd.arg("--tag").arg(tag);
-    }
-    if args.dry_run {
-        cmd.arg("--dry-run");
-    }
-    if args.no_restart {
-        cmd.arg("--no-restart");
-    }
+    cmd.args(build_update_argv(args));
 
     println!(
         "{}",
@@ -65,4 +54,80 @@ pub async fn run(args: &UpdateArgs) -> Result<(), CliError> {
     }
 
     Ok(())
+}
+
+fn build_update_argv(args: &UpdateArgs) -> Vec<String> {
+    let mut argv = vec![
+        "update".to_string(),
+        "--channel".to_string(),
+        args.channel.clone(),
+    ];
+
+    if let Some(ref tag) = args.tag {
+        argv.push("--tag".to_string());
+        argv.push(tag.clone());
+    }
+    if args.dry_run {
+        argv.push("--dry-run".to_string());
+    }
+    if args.no_restart {
+        argv.push("--no-restart".to_string());
+    }
+
+    argv
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_update_argv, UpdateArgs};
+
+    #[test]
+    fn build_update_argv_contains_required_channel_args() {
+        let args = UpdateArgs {
+            channel: "stable".to_string(),
+            tag: None,
+            dry_run: false,
+            no_restart: false,
+        };
+
+        assert_eq!(build_update_argv(&args), ["update", "--channel", "stable"]);
+    }
+
+    #[test]
+    fn build_update_argv_includes_tag_when_provided() {
+        let args = UpdateArgs {
+            channel: "beta".to_string(),
+            tag: Some("v3.29.0-beta.1".to_string()),
+            dry_run: false,
+            no_restart: false,
+        };
+
+        assert_eq!(
+            build_update_argv(&args),
+            ["update", "--channel", "beta", "--tag", "v3.29.0-beta.1"]
+        );
+    }
+
+    #[test]
+    fn build_update_argv_appends_flags_in_expected_order() {
+        let args = UpdateArgs {
+            channel: "dev".to_string(),
+            tag: Some("latest".to_string()),
+            dry_run: true,
+            no_restart: true,
+        };
+
+        assert_eq!(
+            build_update_argv(&args),
+            [
+                "update",
+                "--channel",
+                "dev",
+                "--tag",
+                "latest",
+                "--dry-run",
+                "--no-restart"
+            ]
+        );
+    }
 }
