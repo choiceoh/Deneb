@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -93,6 +94,20 @@ func waitForSessionStatus(sm *session.Manager, key string, want session.RunStatu
 		return s.Status
 	}
 	return ""
+}
+
+// waitForGoroutineCountAtMost polls runtime.NumGoroutine until the count is at
+// most max, or times out. It allows short-lived goroutines spawned by net/http
+// and test helpers to settle before asserting leak-free shutdown paths.
+func waitForGoroutineCountAtMost(max int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if runtime.NumGoroutine() <= max {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return runtime.NumGoroutine() <= max
 }
 
 // newIntegrationHandler creates a Handler wired with an httptest LLM server,
@@ -286,6 +301,8 @@ func TestIntegration_ToolCallFlow(t *testing.T) {
 // TestIntegration_AbortActiveRun tests that aborting an active run transitions
 // the session correctly and cancels the LLM call.
 func TestIntegration_AbortActiveRun(t *testing.T) {
+	baseline := runtime.NumGoroutine()
+
 	// LLM server that blocks indefinitely until context is canceled.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -299,11 +316,9 @@ func TestIntegration_AbortActiveRun(t *testing.T) {
 		// Block until client disconnects.
 		<-r.Context().Done()
 	}))
-	defer server.Close()
 
 	transcript := NewMemoryTranscriptStore()
 	h, sm, _, _ := newIntegrationHandler(server, transcript)
-	defer h.Close()
 
 	// Start a run.
 	sendReq := makeReq("1", "chat.send", map[string]any{
@@ -330,6 +345,19 @@ func TestIntegration_AbortActiveRun(t *testing.T) {
 	json.Unmarshal(abortResp.Payload, &abortPayload)
 	if abortPayload["status"] != "aborted" {
 		t.Errorf("abort status = %v, want aborted", abortPayload["status"])
+	}
+
+	// Explicitly close all long-lived resources, then ensure no goroutine leak
+	// remains from the cancel path (run goroutine + abort GC loop).
+	h.Close()
+	server.Close()
+
+	if ok := waitForGoroutineCountAtMost(baseline+2, 2*time.Second); !ok {
+		t.Fatalf(
+			"possible goroutine leak after abort path: before=%d after=%d",
+			baseline,
+			runtime.NumGoroutine(),
+		)
 	}
 }
 
