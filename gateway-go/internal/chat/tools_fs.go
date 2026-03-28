@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -52,8 +54,8 @@ func toolRead(defaultDir string) ToolFunc {
 			Limit    int    `json:"limit"`
 			Function string `json:"function"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid read params: %w", err)
+		if err := jsonutil.UnmarshalInto("read params", input, &p); err != nil {
+			return "", err
 		}
 		if p.FilePath == "" {
 			return "", fmt.Errorf("file_path is required")
@@ -266,8 +268,8 @@ func toolWrite(defaultDir string) ToolFunc {
 			FilePath string `json:"file_path"`
 			Content  string `json:"content"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid write params: %w", err)
+		if err := jsonutil.UnmarshalInto("write params", input, &p); err != nil {
+			return "", err
 		}
 		if p.FilePath == "" {
 			return "", fmt.Errorf("file_path is required")
@@ -336,8 +338,8 @@ func toolEdit(defaultDir string) ToolFunc {
 			Regex      bool   `json:"regex"`
 			Line       int    `json:"line"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid edit params: %w", err)
+		if err := jsonutil.UnmarshalInto("edit params", input, &p); err != nil {
+			return "", err
 		}
 		if p.FilePath == "" {
 			return "", fmt.Errorf("file_path is required")
@@ -548,8 +550,8 @@ func toolGrep(defaultDir string) ToolFunc {
 			Multiline    bool   `json:"multiline"`
 			Mode         string `json:"mode"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid grep params: %w", err)
+		if err := jsonutil.UnmarshalInto("grep params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Pattern == "" {
 			return "", fmt.Errorf("pattern is required")
@@ -696,8 +698,8 @@ func toolFind(defaultDir string) ToolFunc {
 			Path       string `json:"path"`
 			ShowHidden bool   `json:"showHidden"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid find params: %w", err)
+		if err := jsonutil.UnmarshalInto("find params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Pattern == "" {
 			return "", fmt.Errorf("pattern is required")
@@ -816,8 +818,8 @@ func toolLs(defaultDir string) ToolFunc {
 		var p struct {
 			Path string `json:"path"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid ls params: %w", err)
+		if err := jsonutil.UnmarshalInto("ls params", input, &p); err != nil {
+			return "", err
 		}
 
 		dir := defaultDir

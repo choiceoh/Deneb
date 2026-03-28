@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // MediaSendFunc delivers a file to the originating channel (e.g., Telegram).
@@ -51,8 +53,8 @@ func toolSendFile() ToolFunc {
 			Caption  string `json:"caption"`
 			Silent   bool   `json:"silent"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid send_file params: %w", err)
+		if err := jsonutil.UnmarshalInto("send_file params", input, &p); err != nil {
+			return "", err
 		}
 		if p.FilePath == "" {
 			return "", fmt.Errorf("file_path is required")

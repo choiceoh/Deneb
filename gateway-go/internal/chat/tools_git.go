@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // --- Git tool ---
@@ -187,8 +189,8 @@ func gitToolSchema() map[string]any {
 func toolGit(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p gitParams
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid git params: %w", err)
+		if err := jsonutil.UnmarshalInto("git params", input, &p); err != nil {
+			return "", err
 		}
 
 		switch p.Action {

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // Extended for single-user DGX Spark: memory files rarely change between messages.
@@ -203,8 +205,8 @@ func toolMemorySearch(workspaceDir string) ToolFunc {
 		var p struct {
 			Query string `json:"query"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid memory_search params: %w", err)
+		if err := jsonutil.UnmarshalInto("memory_search params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Query == "" {
 			return "", fmt.Errorf("query is required")
@@ -239,8 +241,8 @@ func toolMemoryGet(workspaceDir string) ToolFunc {
 			StartLine int    `json:"startLine"`
 			EndLine   int    `json:"endLine"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid memory_get params: %w", err)
+		if err := jsonutil.UnmarshalInto("memory_get params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Path == "" {
 			return "", fmt.Errorf("path is required")

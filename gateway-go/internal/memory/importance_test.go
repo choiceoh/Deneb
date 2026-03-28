@@ -3,6 +3,8 @@ package memory
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 func TestParseFactsResponse(t *testing.T) {
@@ -198,89 +200,25 @@ func TestExtractJSON(t *testing.T) {
 	}
 }
 
-func TestRecoverTruncatedObject(t *testing.T) {
-	tests := []struct {
-		name      string
-		input     string
-		wantValid bool
-	}{
-		{
-			name:      "truncated mid-second object",
-			input:     `{"results": [{"id": 1, "valid": true}, {"id": 2, "val`,
-			wantValid: true,
-		},
-		{
-			name:      "truncated after first complete object",
-			input:     `{"facts": [{"content": "good", "importance": 0.8}, {"content": "잘린`,
-			wantValid: true,
-		},
-		{
-			name:      "no array",
-			input:     `{"key": "val`,
-			wantValid: false,
-		},
-		{
-			name:      "no complete object in array",
-			input:     `{"facts": [{"content": "잘린`,
-			wantValid: false,
-		},
-		{
-			name:      "already valid JSON",
-			input:     `{"results": [{"id": 1}]}`,
-			wantValid: true,
-		},
-	}
+// RecoverTruncated and StripThinkingTags tests have moved to pkg/jsonutil/extract_test.go.
+// These tests verify the integration still works through the jsonutil package.
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := recoverTruncatedObject(tt.input)
-			if tt.wantValid && result == "" {
-				t.Error("recoverTruncatedObject() returned empty, want recovery")
-			}
-			if tt.wantValid && result != "" && !json.Valid([]byte(result)) {
-				t.Errorf("recoverTruncatedObject() not valid JSON: %s", result)
-			}
-			if !tt.wantValid && result != "" {
-				t.Errorf("recoverTruncatedObject() unexpectedly recovered: %s", result)
-			}
-		})
+func TestRecoverTruncated_Integration(t *testing.T) {
+	// Verify jsonutil.RecoverTruncated works for the truncated facts case.
+	input := `{"facts": [{"content": "good", "importance": 0.8}, {"content": "잘린`
+	result := jsonutil.RecoverTruncated(input)
+	if result == "" {
+		t.Error("RecoverTruncated() returned empty, want recovery")
+	}
+	if result != "" && !json.Valid([]byte(result)) {
+		t.Errorf("RecoverTruncated() not valid JSON: %s", result)
 	}
 }
 
-func TestStripThinkingTags(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "think tags",
-			input: "<think>reasoning here</think>\n{\"facts\": []}",
-			want:  "{\"facts\": []}",
-		},
-		{
-			name:  "thinking tags",
-			input: "<thinking>reasoning here</thinking>\n{\"facts\": []}",
-			want:  "{\"facts\": []}",
-		},
-		{
-			name:  "multiline thinking",
-			input: "<thinking>\nstep 1\nstep 2\n</thinking>\n{\"result\": true}",
-			want:  "{\"result\": true}",
-		},
-		{
-			name:  "no tags",
-			input: "{\"facts\": []}",
-			want:  "{\"facts\": []}",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := stripThinkingTags(tt.input)
-			if got != tt.want {
-				t.Errorf("stripThinkingTags() = %q, want %q", got, tt.want)
-			}
-		})
+func TestStripThinkingTags_Integration(t *testing.T) {
+	got := jsonutil.StripThinkingTags("<thinking>reasoning</thinking>\n{\"facts\": []}")
+	want := "{\"facts\": []}"
+	if got != want {
+		t.Errorf("StripThinkingTags() = %q, want %q", got, want)
 	}
 }

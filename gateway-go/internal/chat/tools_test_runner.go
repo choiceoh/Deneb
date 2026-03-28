@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // --- Test/Build runner tool ---
@@ -71,8 +73,8 @@ func testToolSchema() map[string]any {
 func toolTest(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p testParams
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid test params: %w", err)
+		if err := jsonutil.UnmarshalInto("test params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Framework == "" {
 			p.Framework = "go"

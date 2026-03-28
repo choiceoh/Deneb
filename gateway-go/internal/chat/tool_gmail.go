@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/gmail"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // gmailParams holds parsed input for the gmail tool.
@@ -101,8 +102,8 @@ func gmailToolSchema() map[string]any {
 func toolGmail() ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p gmailParams
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid gmail params: %w", err)
+		if err := jsonutil.UnmarshalInto("gmail params", input, &p); err != nil {
+			return "", err
 		}
 
 		client, err := gmail.GetClient()

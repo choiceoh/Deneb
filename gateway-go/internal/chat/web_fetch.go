@@ -19,7 +19,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"regexp"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"strconv"
 	"strings"
 	"sync"
@@ -569,16 +569,11 @@ func (s *sglangExtractor) extract(ctx context.Context, html string, url string, 
 	}
 
 	extracted := result.Choices[0].Message.Content
-	extracted = stripThinkingTags(extracted)
+	extracted = jsonutil.StripThinkingTags(extracted)
 
 	return strings.TrimSpace(extracted), nil
 }
 
-var thinkingTagRe = regexp.MustCompile(`(?s)<think>.*?</think>\s*`)
-
-func stripThinkingTags(s string) string {
-	return thinkingTagRe.ReplaceAllString(s, "")
-}
 
 // --- Error classification ---
 

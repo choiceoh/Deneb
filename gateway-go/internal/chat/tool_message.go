@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // messageToolSchema returns the JSON Schema for the message tool.
@@ -66,8 +68,8 @@ func toolMessage() ToolFunc {
 			MessageID string `json:"messageId"`
 			Silent    bool   `json:"silent"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid message params: %w", err)
+		if err := jsonutil.UnmarshalInto("message params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Action == "" {
 			p.Action = "send"

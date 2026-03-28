@@ -8,6 +8,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 const (
@@ -52,8 +54,8 @@ func toolGatewayLogs() ToolFunc {
 			Pattern string `json:"pattern"`
 			Pkg     string `json:"pkg"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid input: %w", err)
+		if err := jsonutil.UnmarshalInto("gateway_logs params", input, &p); err != nil {
+			return "", err
 		}
 
 		if p.Lines <= 0 {
