@@ -1,4 +1,4 @@
-package chat
+package polaris
 
 const compactionGuide = `Compaction summarizes older conversation history to stay within model context window limits.
 

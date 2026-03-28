@@ -1,4 +1,4 @@
-package chat
+package polaris
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 // until it finds the docs/ directory.
 func repoRoot(t *testing.T) string {
 	t.Helper()
-	// The test runs from gateway-go/internal/chat; walk up to find docs/.
+	// The test runs from gateway-go/internal/chat/polaris; walk up to find docs/.
 	dir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -32,18 +32,18 @@ func repoRoot(t *testing.T) string {
 
 func invokeManual(t *testing.T, workspaceDir string, params map[string]string) string {
 	t.Helper()
-	fn := toolPolaris(workspaceDir)
+	fn := NewHandler(workspaceDir)
 	input, _ := json.Marshal(params)
 	result, err := fn(context.Background(), input)
 	if err != nil {
-		t.Fatalf("toolPolaris returned error: %v", err)
+		t.Fatalf("NewHandler returned error: %v", err)
 	}
 	return result
 }
 
 func invokeManualExpectErr(t *testing.T, workspaceDir string, params map[string]string) error {
 	t.Helper()
-	fn := toolPolaris(workspaceDir)
+	fn := NewHandler(workspaceDir)
 	input, _ := json.Marshal(params)
 	_, err := fn(context.Background(), input)
 	return err

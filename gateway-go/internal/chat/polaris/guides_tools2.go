@@ -1,4 +1,4 @@
-package chat
+package polaris
 
 const webGuide = `The web tool provides search, fetch, and combined search+fetch capabilities for retrieving web content.
 

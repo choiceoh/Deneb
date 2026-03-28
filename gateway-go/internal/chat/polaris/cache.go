@@ -1,4 +1,6 @@
-package chat
+// Package polaris implements the polaris agent tool: a searchable index of
+// Deneb's documentation tree plus AI-curated system guides.
+package polaris
 
 import (
 	"context"
@@ -182,8 +184,6 @@ func getDocTree(docsDir string) []docEntry {
 	return entries
 }
 
-// --- Schema ---
-
 // --- Docs directory resolution ---
 
 // resolveDocsDir finds the docs/ directory by checking multiple locations:
@@ -279,7 +279,8 @@ func hasDocsContent(dir string) bool {
 
 // --- Tool implementation ---
 
-func toolPolaris(workspaceDir string) ToolFunc {
+// NewHandler returns the polaris tool handler function for use with ToolRegistry.
+func NewHandler(workspaceDir string) func(context.Context, json.RawMessage) (string, error) {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		docsDir := resolveDocsDir(workspaceDir)
 		var p struct {

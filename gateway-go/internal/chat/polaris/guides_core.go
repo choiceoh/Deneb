@@ -1,4 +1,4 @@
-package chat
+package polaris
 
 // Guide content constants for the polaris tool's "guides" action.
 // Each guide is a curated summary of a Deneb subsystem, written for AI agents.

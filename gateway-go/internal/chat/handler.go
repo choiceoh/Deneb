@@ -1,0 +1,233 @@
+package chat
+
+import (
+	"context"
+	"log/slog"
+	"sync"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
+	"github.com/choiceoh/deneb/gateway-go/internal/provider"
+	"github.com/choiceoh/deneb/gateway-go/internal/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/vega"
+)
+
+// Handler manages chat RPC methods.
+type Handler struct {
+	sessions     *session.Manager
+	broadcast    BroadcastFunc
+	broadcastRaw streaming.BroadcastRawFunc
+	logger       *slog.Logger
+
+	// Native agent execution deps.
+	llmClient       *llm.Client
+	transcript      TranscriptStore
+	tools           *ToolRegistry
+	authManager     *provider.AuthManager
+	jobTracker      *agent.JobTracker
+	providerConfigs map[string]ProviderConfig
+	auroraStore     *aurora.Store             // Aurora hierarchical compaction store
+	vegaBackend     vega.Backend              // optional; knowledge prefetch
+	memoryStore     *memory.Store             // optional; structured memory (Honcho-style)
+	memoryEmbedder  *memory.Embedder          // optional; fact embedding
+	dreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
+	agentLog        *agentlog.Writer          // optional; agent detail logging
+
+	// Agent run configuration.
+	contextCfg    ContextConfig
+	compactionCfg CompactionConfig
+	defaultModel  string
+	defaultSystem string
+	maxTokens     int
+
+	replyFunc        ReplyFunc     // optional: delivers response to originating channel
+	mediaSendFn      MediaSendFunc // optional: delivers files to originating channel
+	typingFn         TypingFunc    // optional: sends typing indicator during agent run
+	reactionFn       ReactionFunc  // optional: sets emoji reaction on triggering message
+	removeReactionFn ReactionFunc  // optional: removes emoji reaction (Discord additive)
+
+	// shutdownCtx is the server lifecycle context. Set via SetShutdownCtx so
+	// background goroutines (auto-memory extraction) stop on server shutdown.
+	shutdownCtx context.Context
+
+	abortMu  sync.Mutex
+	abortMap map[string]*AbortEntry // clientRunId -> entry
+	done     chan struct{}          // signals abortGCLoop to stop
+
+	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
+	maxHistoryBytes int
+	// maxHistoryCount caps the number of messages returned.
+	maxHistoryCount int
+	// maxMessageBytes caps a single message body before truncation.
+	maxMessageBytes int
+}
+
+// HandlerConfig configures the chat handler.
+type HandlerConfig struct {
+	MaxHistoryBytes int
+	MaxHistoryCount int
+	MaxMessageBytes int
+
+	// Native agent execution config.
+	LLMClient       *llm.Client
+	Transcript      TranscriptStore
+	Tools           *ToolRegistry
+	AuthManager     *provider.AuthManager
+	JobTracker      *agent.JobTracker
+	ProviderConfigs map[string]ProviderConfig // provider ID → config
+	AuroraStore     *aurora.Store             // Aurora hierarchical compaction store
+	VegaBackend     vega.Backend              // optional; enables knowledge prefetch in chat
+	MemoryStore     *memory.Store             // optional; structured memory (Honcho-style)
+	MemoryEmbedder  *memory.Embedder          // optional; fact embedding via SGLang
+	DreamTurnFn     func(ctx context.Context) // optional; increments dream turn via autonomous
+	AgentLog        *agentlog.Writer          // optional; agent detail logging
+	ContextCfg      ContextConfig
+	CompactionCfg   CompactionConfig
+	DefaultModel    string
+	DefaultSystem   string
+	MaxTokens       int
+}
+
+// DefaultHandlerConfig returns sensible defaults.
+func DefaultHandlerConfig() HandlerConfig {
+	return HandlerConfig{
+		MaxHistoryBytes: 2 * 1024 * 1024, // 2 MB
+		MaxHistoryCount: 200,
+		MaxMessageBytes: 128 * 1024, // 128 KB
+		ContextCfg:      DefaultContextConfig(),
+		CompactionCfg:   DefaultCompactionConfig(),
+		MaxTokens:       defaultMaxTokens,
+	}
+}
+
+// NewHandler creates a new chat handler.
+func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog.Logger, cfg HandlerConfig) *Handler {
+	if cfg.MaxHistoryBytes == 0 {
+		defaults := DefaultHandlerConfig()
+		cfg.MaxHistoryBytes = defaults.MaxHistoryBytes
+		cfg.MaxHistoryCount = defaults.MaxHistoryCount
+		cfg.MaxMessageBytes = defaults.MaxMessageBytes
+	}
+	h := &Handler{
+		sessions:        sessions,
+		broadcast:       broadcast,
+		logger:          logger,
+		llmClient:       cfg.LLMClient,
+		transcript:      cfg.Transcript,
+		tools:           cfg.Tools,
+		authManager:     cfg.AuthManager,
+		jobTracker:      cfg.JobTracker,
+		providerConfigs: cfg.ProviderConfigs,
+		auroraStore:     cfg.AuroraStore,
+		vegaBackend:     cfg.VegaBackend,
+		memoryStore:     cfg.MemoryStore,
+		memoryEmbedder:  cfg.MemoryEmbedder,
+		dreamTurnFn:     cfg.DreamTurnFn,
+		agentLog:        cfg.AgentLog,
+		contextCfg:      cfg.ContextCfg,
+		compactionCfg:   cfg.CompactionCfg,
+		defaultModel:    cfg.DefaultModel,
+		defaultSystem:   cfg.DefaultSystem,
+		maxTokens:       cfg.MaxTokens,
+		abortMap:        make(map[string]*AbortEntry),
+		done:            make(chan struct{}),
+		maxHistoryBytes: cfg.MaxHistoryBytes,
+		maxHistoryCount: cfg.MaxHistoryCount,
+		maxMessageBytes: cfg.MaxMessageBytes,
+	}
+	go h.abortGCLoop()
+	return h
+}
+
+// SetBroadcastRaw sets the raw broadcast function for streaming event relay.
+func (h *Handler) SetBroadcastRaw(fn streaming.BroadcastRawFunc) {
+	h.broadcastRaw = fn
+}
+
+// SetReplyFunc sets the function that delivers assistant responses back to the
+// originating channel (e.g., Telegram). Called after each successful agent run
+// when a DeliveryContext is present.
+func (h *Handler) SetReplyFunc(fn ReplyFunc) {
+	h.replyFunc = fn
+}
+
+// SetMediaSendFunc sets the function that delivers files back to the
+// originating channel (e.g., Telegram). Used by the send_file tool.
+func (h *Handler) SetMediaSendFunc(fn MediaSendFunc) {
+	h.mediaSendFn = fn
+}
+
+// SetTypingFunc sets the function that sends typing indicators to the
+// originating channel (e.g., Telegram "typing..." status) during agent runs.
+func (h *Handler) SetTypingFunc(fn TypingFunc) {
+	h.typingFn = fn
+}
+
+// SetReactionFunc sets the function that manages emoji reactions on the
+// triggering message to indicate agent status phases (thinking, tool use, done).
+func (h *Handler) SetReactionFunc(fn ReactionFunc) {
+	h.reactionFn = fn
+}
+
+// SetRemoveReactionFunc sets the function that removes an emoji reaction
+// from the triggering message. Needed for Discord's additive reaction model.
+func (h *Handler) SetRemoveReactionFunc(fn ReactionFunc) {
+	h.removeReactionFn = fn
+}
+
+// RemoveReactionFunc returns the current remove reaction function (for chaining).
+func (h *Handler) RemoveReactionFunc() ReactionFunc {
+	return h.removeReactionFn
+}
+
+// ReplyFunc returns the current reply function (for chaining).
+func (h *Handler) ReplyFunc() ReplyFunc {
+	return h.replyFunc
+}
+
+// MediaSendFunc returns the current media send function (for chaining).
+func (h *Handler) MediaSendFunc() MediaSendFunc {
+	return h.mediaSendFn
+}
+
+// TypingFunc returns the current typing function (for chaining).
+func (h *Handler) TypingFunc() TypingFunc {
+	return h.typingFn
+}
+
+// ReactionFunc returns the current reaction function (for chaining).
+func (h *Handler) ReactionFunc() ReactionFunc {
+	return h.reactionFn
+}
+
+// SetShutdownCtx sets the server lifecycle context so background goroutines
+// (e.g., auto-memory extraction) are cancelled when the server shuts down.
+func (h *Handler) SetShutdownCtx(ctx context.Context) {
+	h.shutdownCtx = ctx
+}
+
+// DefaultModel returns the configured default LLM model name.
+func (h *Handler) DefaultModel() string {
+	return h.defaultModel
+}
+
+// Close stops background goroutines and cancels all active abort entries.
+func (h *Handler) Close() {
+	// Signal abortGCLoop to exit.
+	select {
+	case <-h.done:
+	default:
+		close(h.done)
+	}
+
+	h.abortMu.Lock()
+	defer h.abortMu.Unlock()
+	for _, entry := range h.abortMap {
+		entry.CancelFn()
+	}
+	h.abortMap = make(map[string]*AbortEntry)
+}

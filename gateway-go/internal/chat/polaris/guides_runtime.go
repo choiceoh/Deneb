@@ -1,4 +1,4 @@
-package chat
+package polaris
 
 const memoryGuide = `Deneb memory is plain Markdown in the agent workspace. Files on disk are the source of truth.
 

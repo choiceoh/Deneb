@@ -1,4 +1,4 @@
-package chat
+package polaris
 
 const providerGuide = `The provider system manages LLM provider plugins, model discovery, and runtime model resolution.
 
