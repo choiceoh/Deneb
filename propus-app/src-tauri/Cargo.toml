@@ -3,6 +3,9 @@ name = "propus-app"
 version = "0.1.0"
 edition = "2021"
 
+# Standalone crate, not part of root workspace
+[workspace]
+
 [lib]
 name = "propus_app_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
