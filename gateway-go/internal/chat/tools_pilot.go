@@ -240,10 +240,6 @@ func pilotToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Shortcut: analyze image file or URL (expands to sources:[{tool:'image', input:{paths:[...]}}])",
 			},
-			"clipboard": map[string]any{
-				"type":        "string",
-				"description": "Shortcut: get clipboard item by key (expands to sources:[{tool:'clipboard', input:{action:'get', key:...}}])",
-			},
 			"ls": map[string]any{
 				"type":        "string",
 				"description": "Shortcut: list directory contents (expands to sources:[{tool:'ls', input:{path:...}}])",
@@ -431,7 +427,6 @@ type pilotParams struct {
 	YouTube   string   `json:"youtube"`
 	Polaris   string   `json:"polaris"`
 	Image     string   `json:"image"`
-	Clipboard string   `json:"clipboard"`
 	Ls        string   `json:"ls"`
 	Vega      string   `json:"vega"`
 }
@@ -576,14 +571,6 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 		})
 	}
 
-	if p.Clipboard != "" {
-		specs = append(specs, sourceSpec{
-			Tool:  "clipboard",
-			Input: mustJSON(map[string]any{"action": "get", "key": p.Clipboard}),
-			Label: "clipboard: " + p.Clipboard,
-		})
-	}
-
 	if p.Ls != "" {
 		specs = append(specs, sourceSpec{
 			Tool:  "ls",
@@ -620,7 +607,7 @@ func sourceTypeFromTool(tool string) string {
 		return "url"
 	case "ls":
 		return "file"
-	case "gmail", "youtube_transcript", "polaris", "clipboard", "image", "vega":
+	case "gmail", "youtube_transcript", "polaris", "image", "vega":
 		return "content"
 	default:
 		return "content"

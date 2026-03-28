@@ -244,7 +244,7 @@ const gmailGuide = `Gmail tool provides native OAuth2 access to Gmail for inbox 
 - gateway-go/internal/chat/tool_gmail.go
 - gateway-go/internal/gmail/ (OAuth2, API client)`
 
-const dataToolsGuide = `Data tools: KV store (persistent), clipboard (in-memory), and HTTP API client.
+const dataToolsGuide = `Data tools: KV store (persistent) and HTTP API client.
 
 ## KV Store (kv tool)
 ### Storage
@@ -262,25 +262,6 @@ const dataToolsGuide = `Data tools: KV store (persistent), clipboard (in-memory)
 - Contact aliases (gmail.contacts.*)
 - User preferences, cached lookups
 - Cross-session persistent state
-
-## Clipboard (clipboard tool)
-### Storage
-- In-memory ring buffer, max 32 items (lost on gateway restart)
-- Thread-safe singleton (sync.RWMutex, sync.Once)
-
-### clipEntry
-- Content (string), Label (string, optional), CreatedAt (Unix timestamp)
-
-### Actions
-- set: content (required), optional label; returns label + char count
-- get: returns most recent entry (newest)
-- list: all entries newest-first, 80-char preview per item
-- clear: removes all entries, returns count removed
-
-### Use Cases
-- Temporary data passing between tool calls
-- Clipboard for copy/paste workflows
-- Quick scratch storage (non-persistent)
 
 ## HTTP Tool (http tool)
 ### Schema
@@ -304,7 +285,6 @@ const dataToolsGuide = `Data tools: KV store (persistent), clipboard (in-memory)
 
 ## Key Files
 - gateway-go/internal/chat/tool_kv.go (KV store)
-- gateway-go/internal/chat/tool_clipboard.go (clipboard)
 - gateway-go/internal/chat/tool_http.go (HTTP client)`
 
 const sessionToolsGuide = `Session tools provide full session lifecycle management: list, browse history, search, restore, cross-session messaging, and sub-agent spawning.

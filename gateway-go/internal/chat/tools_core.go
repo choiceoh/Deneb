@@ -133,7 +133,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// -- System manual tool (queryable Deneb documentation) --
 	registry.RegisterTool(ToolDef{
 		Name:        "polaris",
-		Description: "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (28 AI-curated system guides: aurora, vega, agent-loop, compaction, tools, system-prompt, memory, sessions, architecture, channels, telegram, skills, pilot, cron, autonomous, web, exec, gateway-tool, media, gmail, data-tools, sessions-tools, message, provider, liteparse, metrics, nodes, transcript)",
+		Description: "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (27 AI-curated system guides: aurora, vega, agent-loop, compaction, tools, system-prompt, memory, sessions, architecture, channels, telegram, skills, pilot, cron, autonomous, web, exec, gateway-tool, media, gmail, data-tools, sessions-tools, message, provider, liteparse, metrics, transcript)",
 		InputSchema: systemManualToolSchema(),
 		Fn:          toolSystemManual(workspaceDir),
 	})
@@ -256,14 +256,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolYouTubeTranscript(),
 	})
 
-	// -- Nodes tool --
-	registry.RegisterTool(ToolDef{
-		Name:        "nodes",
-		Description: "Discover and control paired mobile nodes (status/notify/camera/run)",
-		InputSchema: nodesToolSchema(),
-		Fn:          toolNodes(),
-	})
-
 	// -- Send file tool (media delivery to channel) --
 	registry.RegisterTool(ToolDef{
 		Name:        "send_file",
@@ -296,14 +288,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolGmail(),
 	})
 
-	// -- Clipboard tool (temporary content sharing) --
-	registry.RegisterTool(ToolDef{
-		Name:        "clipboard",
-		Description: "Temporary in-memory clipboard (ring buffer, 32 items max). Actions: set, get, list, clear",
-		InputSchema: clipboardToolSchema(),
-		Fn:          toolClipboard(),
-	})
-
 	// -- Autonomous tool (goal-driven execution management) --
 	registry.RegisterTool(ToolDef{
 		Name:        "autonomous",
@@ -316,7 +300,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Registered last: uses the registry itself to execute source tools.
 	registry.RegisterTool(ToolDef{
 		Name:        "pilot",
-		Description: "Fast local AI that runs tools + analyzes results in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory, gmail, youtube, polaris, image, clipboard, ls, vega. Options: chain (follow-up tools), max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-enables thinking for complex tasks. Falls back to raw results if sglang is down",
+		Description: "Fast local AI that runs tools + analyzes results in one call. Shortcuts: file, files, exec, grep, find, url, http, kv_key, memory, gmail, youtube, polaris, image, ls, vega. Options: chain (follow-up tools), max_length (brief/normal/detailed), output_format (text/json/list), conditional sources (only_if/skip_if), post_process steps. Auto-enables thinking for complex tasks. Falls back to raw results if sglang is down",
 		InputSchema: pilotToolSchema(),
 		Fn:          toolPilot(registry, workspaceDir),
 	})

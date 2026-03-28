@@ -142,38 +142,6 @@ RPCInstrumentation() middleware wraps RPC handlers:
 - gateway-go/internal/middleware/ (RPCInstrumentation)
 - gateway-go/internal/server/ (/metrics endpoint registration)`
 
-const nodesGuide = `The nodes tool provides paired mobile device discovery and control.
-
-## Actions (7)
-- status: check node connection status (online/offline)
-- describe: get node details (device model, OS, capabilities)
-- notify: send push notification (title + body params)
-- camera_snap: capture photo from device camera
-- location_get: fetch current device GPS location
-- run: execute command array on device
-- invoke: generic invocation for extensible operations
-
-## Parameters
-- action (string, required): one of the 7 actions above
-- node (string): node ID or name (for multi-node targeting)
-- title (string): notification title (for notify action)
-- body (string): notification body (for notify action)
-- command (array): command array (for run action)
-
-## Current Status
-Framework is in place but returns "No paired nodes found" when no mobile nodes are connected.
-Designed for future Samsung Galaxy S25 integration via Deneb mobile companion.
-
-## Architecture
-- Node registration via WebSocket pairing
-- Event relay: gateway-go/internal/node/ handles mobile/desktop event forwarding
-- Device management: gateway-go/internal/device/ tracks paired devices
-
-## Key Files
-- gateway-go/internal/chat/tools_core.go (nodes tool registration)
-- gateway-go/internal/node/ (node event relay)
-- gateway-go/internal/device/ (device management)`
-
 const transcriptGuide = `The transcript system persists session conversation history as JSONL (newline-delimited JSON) files.
 
 ## Storage Format

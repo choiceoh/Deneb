@@ -777,7 +777,7 @@ var builtinGuides = map[string]guideEntry{
 	"data-tools": {
 		Key:     "data-tools",
 		Title:   "Data Tools (KV, Clipboard, HTTP)",
-		Summary: "Persistent KV store, in-memory clipboard, HTTP API client",
+		Summary: "Persistent KV store and HTTP API client",
 		Content: dataToolsGuide,
 	},
 	"sessions-tools": {
@@ -809,12 +809,6 @@ var builtinGuides = map[string]guideEntry{
 		Title:   "Metrics & Observability",
 		Summary: "Prometheus-compatible counters, histograms, /metrics endpoint",
 		Content: metricsGuide,
-	},
-	"nodes": {
-		Key:     "nodes",
-		Title:   "Mobile Nodes",
-		Summary: "Paired device discovery, notify, camera, location, command execution",
-		Content: nodesGuide,
 	},
 	"transcript": {
 		Key:     "transcript",
