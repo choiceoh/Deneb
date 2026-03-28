@@ -7,6 +7,116 @@
 //!
 //! This design avoids callbacks across FFI boundaries while keeping all
 //! algorithmic logic in Rust.
+//!
+//! ## State Machine Diagram
+//!
+//! ```text
+//!  ┌────────────────────────────────────────────────────────────────────────┐
+//!  │                         SweepEngine FSM                                │
+//!  └────────────────────────────────────────────────────────────────────────┘
+//!
+//!  start() → FetchTokenCount
+//!
+//!  ┌──────┐
+//!  │ Init │──(count ≤ threshold && !force)──────────────────────────► Done
+//!  └──────┘
+//!      │ (count > threshold || force)
+//!      ▼
+//!  ┌────────────────┐
+//!  │ FetchingItems  │──(items empty)──────────────────────────────── ► Done
+//!  └────────────────┘
+//!      │ (msg IDs present)       │ (no msg IDs)
+//!      ▼                         │
+//!  ┌──────────────────────┐      │
+//!  │ PrefetchingMessages  │      │
+//!  └──────────────────────┘      │
+//!      └──────────────────────────┘
+//!      ▼
+//!  ══════════════════════════════ Phase 1: Leaf passes ══════════════════════
+//!
+//!  ┌────────────┐ ◄─────────────────────────────────────────────────────────┐
+//!  │ LeafSelect │──(iter ≥ max || no chunk)──► transition_to_condensed_phase │
+//!  └────────────┘                                                            │
+//!      │ (prior summaries needed & uncached)                                 │
+//!      ▼                                                                     │
+//!  ┌───────────────────────┐                                                 │
+//!  │ LeafFetchPriorSumm.   │                                                 │
+//!  └───────────────────────┘                                                 │
+//!      │ (either path above)                                                 │
+//!      ▼  [prepare_leaf_summarize]                                           │
+//!  ┌──────────────────────┐                                                  │
+//!  │ LeafSummarizeNormal  │──(summary < source tokens)──► LeafPersist path  │
+//!  └──────────────────────┘                                                  │
+//!      │ (not reduced enough)                                                │
+//!      ▼                                                                     │
+//!  ┌────────────────────────────┐                                            │
+//!  │ LeafSummarizeAggressive    │──(any outcome)─────► LeafPersist path     │
+//!  └────────────────────────────┘                                            │
+//!      ▼  [prepare_leaf_persist]                                             │
+//!  ┌─────────────┐                                                           │
+//!  │ LeafPersist │                                                           │
+//!  └─────────────┘                                                           │
+//!      ▼                                                                     │
+//!  ┌──────────────────────┐                                                  │
+//!  │ LeafPostTokenCount   │                                                  │
+//!  └──────────────────────┘                                                  │
+//!      ▼                                                                     │
+//!  ┌───────────────────┐                                                     │
+//!  │ LeafPersistEvent  │──► FetchingItems ──────────────────────────────────┘
+//!  └───────────────────┘    (re-fetch after mutation, loop back to LeafSelect)
+//!
+//!  ══════════════════════════════ Phase 2: Condensed passes ════════════════
+//!  (entered when leaf iterations exhausted or no more leaf chunks)
+//!
+//!  ┌───────────────────────┐
+//!  │ CondensedFetchDepths  │──(iter ≥ max || no candidate)─────────► Done
+//!  └───────────────────────┘
+//!      │ (summaries missing from cache)
+//!      ▼
+//!  ┌─────────────────────────┐
+//!  │ CondensedFetchSummaries │──(no candidate found)──────────────► Done
+//!  └─────────────────────────┘
+//!      │ (candidate found; either path above converges here)
+//!      ▼  [prepare_condensed_summarize]
+//!  ┌──────────────────────────────┐
+//!  │ CondensedFetchPriorSummaries │  (depth=0 only, if uncached)
+//!  └──────────────────────────────┘
+//!      │ (either path above)
+//!      ▼  [emit_condensed_summarize]
+//!  ┌─────────────────────────────┐
+//!  │ CondensedSummarizeNormal    │──(summary < source tokens)──► Condensed persist path
+//!  └─────────────────────────────┘
+//!      │ (not reduced enough)
+//!      ▼
+//!  ┌─────────────────────────────────┐
+//!  │ CondensedSummarizeAggressive    │──(any outcome)──► Condensed persist path
+//!  └─────────────────────────────────┘
+//!      ▼  [prepare_condensed_persist]
+//!  ┌──────────────────┐
+//!  │ CondensedPersist │
+//!  └──────────────────┘
+//!      ▼
+//!  ┌─────────────────────────┐
+//!  │ CondensedPostTokenCount │
+//!  └─────────────────────────┘
+//!      ▼
+//!  ┌──────────────────────────┐
+//!  │ CondensedPersistEvent    │──► FetchingItems ──► LeafSelect
+//!  └──────────────────────────┘    (re-fetch; LeafSelect re-enters condensed
+//!                                   phase since leaf_iter already at max)
+//!  ┌──────┐
+//!  │ Done │  (yields SweepCommand::Done { result: CompactionResult })
+//!  └──────┘
+//! ```
+//!
+//! ### Summarization escalation (both phases)
+//!
+//! Each summarization step tries three levels in order, stopping at the first
+//! that produces a smaller token count than the source:
+//!
+//! ```text
+//!  Normal ──(not smaller)──► Aggressive ──(not smaller)──► Fallback (deterministic)
+//! ```
 
 use super::*;
 use serde::{Deserialize, Serialize};
@@ -149,6 +259,13 @@ pub enum SweepResponse {
 ///
 /// Each phase follows: select chunk → fetch context → LLM summarize (normal →
 /// aggressive → fallback) → persist → check if budget is satisfied → repeat.
+///
+/// See the module-level doc for the full state diagram.
+///
+/// Key loops:
+/// - After each leaf persist: `LeafPersistEvent → FetchingItems → LeafSelect`
+/// - After each condensed persist: `CondensedPersistEvent → FetchingItems → LeafSelect → CondensedFetchDepths`
+/// - Loop exits when no more chunks (leaf) or no more candidates (condensed).
 #[derive(Debug, Clone)]
 enum Phase {
     /// Initial: fetch token count to evaluate threshold.

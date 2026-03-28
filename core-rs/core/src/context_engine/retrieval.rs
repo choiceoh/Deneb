@@ -7,6 +7,71 @@
 //!
 //! Each operation uses the same command/response pattern as the assembly and
 //! compaction sweep engines: Rust drives the algorithm, the host executes I/O.
+//!
+//! ## State Machine Diagrams
+//!
+//! ### GrepEngine (2 steps, trivial)
+//!
+//! ```text
+//!  start() → Grep{query, mode, scope, ...}
+//!
+//!  [Start] ──► host executes Grep ──► step(GrepResults) ──► GrepDone
+//! ```
+//!
+//! ### DescribeEngine (2 steps, trivial)
+//!
+//! ```text
+//!  start() → FetchLineage{summary_id}
+//!
+//!  [Start] ──► host fetches lineage ──► step(Lineage) ──► DescribeDone
+//! ```
+//!
+//! ### ExpandEngine (multi-step DAG traversal)
+//!
+//! ```text
+//!  start() → FetchSummary{root_summary_id}
+//!
+//!  ┌───────────┐
+//!  │ FetchRoot │
+//!  └───────────┘
+//!      │ kind="condensed" && max_depth > 0        │ kind="leaf" && include_messages
+//!      ▼                                           ▼
+//!  ┌──────────────────┐                    ┌─────────────────┐
+//!  │ FetchingChildren │                    │ FetchingMessages│
+//!  └──────────────────┘                    └─────────────────┘
+//!      │                                           │
+//!      ▼  [process_next_child]                     ▼
+//!   iterate children:                         accumulate messages
+//!   • add child to result                     (respects token cap)
+//!   • if condensed child && depth>1:               │
+//!     push to expand_stack                         ▼
+//!   • if token cap hit → truncated=true       ┌──────┐
+//!   • when all children done:                 │ Done │
+//!     [process_expand_stack]                  └──────┘
+//!      │
+//!      ▼  [process_expand_stack]
+//!   pop from expand_stack:
+//!   ┌─────────────────────┐
+//!   │ ExpandingChild      │──► FetchChildren{summary_id}
+//!   └─────────────────────┘
+//!      │ (host returns children; merge into result with token cap check)
+//!      │ loop back to process_expand_stack
+//!      │
+//!      ▼  (stack empty)
+//!   if include_messages && any leaf children:
+//!   ┌─────────────────┐
+//!   │ FetchingMessages│──► accumulate messages ──► Done
+//!   └─────────────────┘
+//!      │ (no leaf children)
+//!      ▼
+//!   ┌──────┐
+//!   │ Done │  (yields ExpandDone { children, messages, estimated_tokens, truncated })
+//!   └──────┘
+//!
+//!  Early exits (any phase):
+//!    • result.truncated=true  → skip remaining children/stack → Done
+//!    • FetchRoot: kind neither "condensed"(expandable) nor "leaf"(with msgs) → Done
+//! ```
 
 use serde::{Deserialize, Serialize};
 
@@ -347,6 +412,26 @@ impl DescribeEngine {
 // ── Expand engine ────────────────────────────────────────────────────────────
 
 /// Expand state machine phase.
+///
+/// Transitions:
+/// ```text
+///  FetchRoot ──(condensed && depth>0)──► FetchingChildren
+///           ──(leaf && include_messages)──► FetchingMessages
+///           ──(otherwise)──────────────► Done
+///
+///  FetchingChildren ──► [process_next_child loop]
+///    • all children processed ──► [process_expand_stack]
+///    • token cap hit ──────────► Done (truncated=true)
+///
+///  [process_expand_stack]
+///    • stack not empty ──► ExpandingChild (FetchChildren for next condensed child)
+///    • stack empty && leaf children && include_messages ──► FetchingMessages
+///    • stack empty, no more work ──────────────────────► Done
+///
+///  ExpandingChild ──(host returns children)──► [merge children] ──► [process_expand_stack]
+///
+///  FetchingMessages ──(host returns messages)──► Done
+/// ```
 #[derive(Debug, Clone)]
 enum ExpandPhase {
     /// Fetch the root summary to determine kind.
