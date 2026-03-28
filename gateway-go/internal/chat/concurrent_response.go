@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 )
 
 // concurrentResponseTimeout is the max wall time for a concurrent response run.
@@ -226,8 +227,40 @@ func runConcurrentResponse(
 		}
 	}
 
+	// 10. Auto-memory extraction (same as task core — learn from concurrent conversations).
+	if params.Message != "" && result.Text != "" {
+		go extractConcurrentMemory(params, deps, result.Text, logger)
+	}
+
 	logger.Info("concurrent response completed",
 		"inputTokens", result.Usage.InputTokens,
 		"outputTokens", result.Usage.OutputTokens,
 	)
+}
+
+// extractConcurrentMemory runs auto-memory extraction for a concurrent response.
+// Same logic as the task core's memory extraction in handleRunSuccess, but
+// decoupled so it doesn't block response delivery.
+func extractConcurrentMemory(params RunParams, deps runDeps, responseText string, logger *slog.Logger) {
+	memCtx, memCancel := context.WithTimeout(context.Background(), autoMemoryTimeout)
+	defer memCancel()
+
+	if deps.memoryStore != nil {
+		sglangClient := getSglangClient()
+		facts, err := memory.ExtractFacts(memCtx, sglangClient, sglangModel, params.Message, responseText, logger)
+		if err != nil {
+			logger.Debug("concurrent response: memory extraction failed", "error", err)
+			return
+		}
+		if len(facts) > 0 {
+			memory.InsertExtractedFacts(memCtx, deps.memoryStore, deps.memoryEmbedder, facts, logger)
+		}
+	} else {
+		// Legacy: append to MEMORY.md.
+		notes := extractAutoMemory(memCtx, params.Message, responseText, logger)
+		if notes != "" {
+			workspaceDir := resolveWorkspaceDirForPrompt()
+			appendToMemoryFile(workspaceDir, notes, logger)
+		}
+	}
 }
