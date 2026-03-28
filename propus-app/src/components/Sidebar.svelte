@@ -1,15 +1,57 @@
 <script lang="ts">
   import { app } from "$lib/state.svelte";
+  import type { SessionPreview } from "$lib/types";
 
-  const suggestions = [
-    { icon: "📂", label: "프로젝트 구조 분석", prompt: "이 프로젝트의 구조를 분석해줘" },
-    { icon: "📖", label: "README 요약", prompt: "README.md를 읽고 요약해줘" },
-    { icon: "🔍", label: "코드 리뷰", prompt: "최근 변경사항을 리뷰해줘" },
-    { icon: "🧪", label: "테스트 실행", prompt: "테스트를 실행하고 결과를 알려줘" },
-  ];
+  let searchInput = $state("");
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   let updateStatus = $state("");
   let updating = $state(false);
+
+  // Group sessions by date.
+  function groupByDate(sessions: SessionPreview[]): { label: string; items: SessionPreview[] }[] {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterday = today - 86400000;
+    const weekAgo = today - 7 * 86400000;
+
+    const groups: Record<string, SessionPreview[]> = {};
+    const order: string[] = [];
+
+    for (const s of sessions) {
+      let label: string;
+      if (s.updated_at >= today) {
+        label = "오늘";
+      } else if (s.updated_at >= yesterday) {
+        label = "어제";
+      } else if (s.updated_at >= weekAgo) {
+        label = "이번 주";
+      } else {
+        label = "이전";
+      }
+      if (!groups[label]) {
+        groups[label] = [];
+        order.push(label);
+      }
+      groups[label].push(s);
+    }
+
+    return order.map((label) => ({ label, items: groups[label] }));
+  }
+
+  function handleSearchInput(e: Event) {
+    const value = (e.target as HTMLInputElement).value;
+    searchInput = value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      app.searchSessions(value);
+    }, 300);
+  }
+
+  function clearSearch() {
+    searchInput = "";
+    app.searchSessions("");
+  }
 
   async function checkForUpdate() {
     try {
@@ -32,32 +74,78 @@
     }
     updating = false;
   }
+
+  let sessionGroups = $derived(groupByDate(app.sessions));
 </script>
 
 {#if app.sidebarVisible}
   <aside class="sidebar">
     <div class="sidebar-content">
+      <!-- New Chat button -->
       <button class="new-chat-btn" onclick={() => app.clearChat()}>
         <span class="plus">+</span>
         <span>새 대화</span>
       </button>
 
-      <div class="section">
-        <span class="section-label">빠른 시작</span>
-        <div class="suggestions">
-          {#each suggestions as s}
-            <button class="suggestion" onclick={() => app.sendMessage(s.prompt)}>
-              <span class="suggestion-icon">{s.icon}</span>
-              <span class="suggestion-label">{s.label}</span>
-            </button>
-          {/each}
-        </div>
+      <!-- Search -->
+      <div class="search-wrapper">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path
+            d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.868-3.834zm-5.242.656a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"
+          />
+        </svg>
+        <input
+          class="search-input"
+          type="text"
+          placeholder="검색..."
+          value={searchInput}
+          oninput={handleSearchInput}
+        />
+        {#if searchInput}
+          <button class="search-clear" onclick={clearSearch}>×</button>
+        {/if}
       </div>
 
-      <div class="section">
-        <span class="section-label">작업</span>
+      <!-- Session list -->
+      <div class="session-list">
+        {#if app.sessions.length === 0}
+          <div class="empty-state">
+            <span class="empty-text">세션 없음</span>
+          </div>
+        {:else}
+          {#each sessionGroups as group}
+            <div class="date-group">
+              <span class="date-label">{group.label}</span>
+              {#each group.items as session}
+                <button
+                  class="session-item"
+                  class:active={session.key === app.currentSessionKey}
+                  onclick={() => app.switchSession(session.key)}
+                  title={session.title}
+                >
+                  <span
+                    class="session-dot"
+                    class:dot-active={session.status === "active"}
+                    class:dot-done={session.status === "done"}
+                  ></span>
+                  <div class="session-info">
+                    <span class="session-title">{session.title}</span>
+                    <span class="session-meta">{session.message_count}개 메시지</span>
+                  </div>
+                </button>
+              {/each}
+            </div>
+          {/each}
+        {/if}
+      </div>
+
+      <!-- Bottom actions -->
+      <div class="bottom-actions">
+        {#if app.usageText}
+          <span class="stat-line">{app.usageText}</span>
+        {/if}
         <button class="action-btn" onclick={() => app.saveSession()}>세션 저장</button>
-        <button class="action-btn" onclick={checkForUpdate}>🔄 업데이트 확인</button>
+        <button class="action-btn" onclick={checkForUpdate}>업데이트 확인</button>
         {#if updateStatus}
           <div class="update-info">
             <span class="update-text">{updateStatus}</span>
@@ -69,24 +157,13 @@
           </div>
         {/if}
       </div>
-
-      <div class="spacer"></div>
-
-      <div class="stats">
-        {#if app.usageText}
-          <span class="stat-line">{app.usageText}</span>
-        {/if}
-        {#if app.msgCount > 0}
-          <span class="stat-line">메시지 {app.msgCount}</span>
-        {/if}
-      </div>
     </div>
   </aside>
 {/if}
 
 <style>
   .sidebar {
-    width: 240px;
+    width: 260px;
     flex-shrink: 0;
     background: var(--sidebar-bg);
     backdrop-filter: blur(20px);
@@ -100,24 +177,25 @@
   .sidebar-content {
     display: flex;
     flex-direction: column;
-    padding: var(--space-md);
-    gap: var(--space-md);
     height: 100%;
-    overflow-y: auto;
+    overflow: hidden;
   }
 
+  /* --- New Chat button --- */
   .new-chat-btn {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: var(--space-sm);
     padding: 10px;
+    margin: var(--space-md) var(--space-md) 0;
     background: var(--accent-gradient);
     border-radius: var(--radius-md);
     color: white;
     font-size: 13px;
     font-weight: 600;
     transition: opacity var(--transition-fast);
+    flex-shrink: 0;
   }
 
   .new-chat-btn:hover {
@@ -129,60 +207,179 @@
     font-weight: 700;
   }
 
-  .section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
+  /* --- Search --- */
+  .search-wrapper {
+    position: relative;
+    margin: var(--space-sm) var(--space-md);
+    flex-shrink: 0;
   }
 
-  .section-label {
+  .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-dim);
+    pointer-events: none;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 7px 28px 7px 32px;
+    border: 1px solid var(--bg-surface);
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+    transition: border-color var(--transition-fast);
+  }
+
+  .search-input::placeholder {
+    color: var(--text-dim);
+  }
+
+  .search-input:focus {
+    border-color: var(--accent-primary);
+  }
+
+  .search-clear {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  .search-clear:hover {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+  }
+
+  /* --- Session list --- */
+  .session-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 var(--space-sm);
+  }
+
+  .empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xl) 0;
+  }
+
+  .empty-text {
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+
+  .date-group {
+    margin-bottom: var(--space-sm);
+  }
+
+  .date-label {
+    display: block;
     color: var(--text-muted);
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    padding-left: 4px;
+    letter-spacing: 0.5px;
+    padding: var(--space-sm) var(--space-sm) 4px;
   }
 
-  .suggestions {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-  }
-
-  .suggestion {
+  .session-item {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    padding: 8px 12px;
+    width: 100%;
+    padding: 8px var(--space-sm);
     border-radius: var(--radius-sm);
     text-align: left;
     transition: background var(--transition-fast);
+    cursor: pointer;
   }
 
-  .suggestion:hover {
-    background: rgba(122, 162, 247, 0.1);
+  .session-item:hover {
+    background: rgba(122, 162, 247, 0.08);
   }
 
-  .suggestion-icon {
-    font-size: 14px;
+  .session-item.active {
+    background: rgba(122, 162, 247, 0.15);
+  }
+
+  .session-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-dim);
     flex-shrink: 0;
   }
 
-  .suggestion-label {
-    color: var(--text-secondary);
-    font-size: 12px;
+  .session-dot.dot-active {
+    background: var(--success);
   }
 
-  .suggestion:hover .suggestion-label {
+  .session-dot.dot-done {
+    background: var(--text-muted);
+  }
+
+  .session-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .session-title {
+    color: var(--text-secondary);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .session-item:hover .session-title,
+  .session-item.active .session-title {
     color: var(--text-primary);
   }
 
+  .session-meta {
+    color: var(--text-dim);
+    font-size: 10px;
+  }
+
+  /* --- Bottom actions --- */
+  .bottom-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+    border-top: 1px solid var(--bg-surface);
+    flex-shrink: 0;
+  }
+
+  .stat-line {
+    color: var(--text-dim);
+    font-size: 11px;
+    padding-bottom: 4px;
+  }
+
   .action-btn {
-    padding: 8px 12px;
+    padding: 6px 8px;
     border-radius: var(--radius-sm);
-    color: var(--text-secondary);
-    font-size: 13px;
+    color: var(--text-muted);
+    font-size: 12px;
     text-align: left;
     transition: all var(--transition-fast);
   }
@@ -192,25 +389,8 @@
     color: var(--text-primary);
   }
 
-  .spacer {
-    flex: 1;
-  }
-
-  .stats {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    border-top: 1px solid var(--bg-surface);
-    padding-top: var(--space-sm);
-  }
-
-  .stat-line {
-    color: var(--text-dim);
-    font-size: 11px;
-  }
-
   .update-info {
-    padding: 8px 12px;
+    padding: 6px 8px;
     border-radius: var(--radius-sm);
     background: rgba(122, 162, 247, 0.08);
   }
@@ -219,11 +399,11 @@
     font-size: 11px;
     color: var(--text-secondary);
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
 
   .update-btn {
-    padding: 4px 10px;
+    padding: 3px 8px;
     border-radius: var(--radius-sm);
     font-size: 11px;
     background: var(--accent-gradient);

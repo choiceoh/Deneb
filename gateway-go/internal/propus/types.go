@@ -95,3 +95,44 @@ func MsgConfigStatus(model, service, denebStatus, connID string) ServerMessage {
 		"conn_id":       connID,
 	}}
 }
+
+// --- Session browsing types ---
+
+// SessionPreview is a lightweight summary of a session for the sidebar list.
+type SessionPreview struct {
+	Key          string `json:"key"`
+	Title        string `json:"title"`
+	UpdatedAt    int64  `json:"updated_at"`    // unix ms
+	MessageCount int    `json:"message_count"`
+	Status       string `json:"status"` // "active", "done", "idle"
+}
+
+// SwitchSessionData is the payload for ClientMessage type "SwitchSession".
+type SwitchSessionData struct {
+	SessionKey string `json:"session_key"`
+}
+
+// SearchSessionsData is the payload for ClientMessage type "SearchSessions".
+type SearchSessionsData struct {
+	Query string `json:"query"`
+}
+
+func MsgSessionList(sessions []SessionPreview) ServerMessage {
+	return ServerMessage{Type: "SessionList", Data: map[string]any{
+		"sessions": sessions,
+	}}
+}
+
+// MsgSessionHistory sends the full message history for a switched session.
+func MsgSessionHistory(messages []SessionHistoryMsg) ServerMessage {
+	return ServerMessage{Type: "SessionHistory", Data: map[string]any{
+		"messages": messages,
+	}}
+}
+
+// SessionHistoryMsg is a message in a session's history, sent to the client
+// when switching sessions.
+type SessionHistoryMsg struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
