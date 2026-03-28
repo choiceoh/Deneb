@@ -46,11 +46,14 @@ func TestKeyCacheMissExpires(t *testing.T) {
 
 	// Manually insert an expired miss entry.
 	c.mu.Lock()
-	c.entries["expired"] = &keyCacheEntry{
-		isHit:     false,
-		expiresAt: time.Now().Add(-1 * time.Second),
+	elem := c.order.PushBack("expired")
+	c.items["expired"] = &keyCacheItem{
+		entry: &keyCacheEntry{
+			isHit:     false,
+			expiresAt: time.Now().Add(-1 * time.Second),
+		},
+		element: elem,
 	}
-	c.order = append(c.order, "expired")
 	c.mu.Unlock()
 
 	_, ok := c.Get("expired")
