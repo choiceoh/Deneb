@@ -381,4 +381,101 @@ mod tests {
         let orphans = reg.detect_orphans();
         assert!(orphans.is_empty());
     }
+
+    #[test]
+    fn set_output_success() {
+        let mut reg = SubagentRegistry::new();
+        reg.register(make_run("r1", "child:1", "parent:main"));
+        assert!(reg.set_output("r1", "결과 텍스트".to_string()));
+        let run = reg.get_by_child_session_key("child:1").unwrap();
+        assert_eq!(run.output.as_deref(), Some("결과 텍스트"));
+    }
+
+    #[test]
+    fn set_output_nonexistent_returns_false() {
+        let mut reg = SubagentRegistry::new();
+        assert!(!reg.set_output("no-such-run", "output".to_string()));
+    }
+
+    #[test]
+    fn list_for_controller() {
+        let mut reg = SubagentRegistry::new();
+        let mut r = make_run("r1", "child:1", "parent:main");
+        r.controller_session_key = "ctrl:session".to_string();
+        reg.register(r);
+        reg.register(make_run("r2", "child:2", "parent:main"));
+        assert_eq!(reg.list_for_controller("ctrl:session").len(), 1);
+        assert_eq!(reg.list_for_controller("ctrl:session")[0].run_id, "r1");
+        assert_eq!(reg.list_for_controller("parent:main").len(), 1);
+        assert_eq!(reg.list_for_controller("nonexistent").len(), 0);
+    }
+
+    #[test]
+    fn count_pending_descendants_basic() {
+        let mut reg = SubagentRegistry::new();
+        // Parent run for root:main.
+        reg.register(make_run("r-parent", "child:parent", "root:main"));
+        // Grandchild run: child:gc requested by child:parent (descendant of root:main).
+        let mut gc = make_run("r-gc", "child:gc", "child:parent");
+        gc.requester_session_key = "child:parent:root:main".to_string(); // contains root:main
+        reg.register(gc);
+        let count = reg.count_pending_descendants("root:main");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn count_pending_descendants_empty() {
+        let mut reg = SubagentRegistry::new();
+        reg.register(make_run("r1", "child:1", "parent:main"));
+        // No descendant runs exist for "other:session".
+        assert_eq!(reg.count_pending_descendants("other:session"), 0);
+    }
+
+    #[test]
+    fn clear_empties_registry() {
+        let mut reg = SubagentRegistry::new();
+        reg.register(make_run("r1", "child:1", "parent:main"));
+        reg.register(make_run("r2", "child:2", "parent:main"));
+        assert_eq!(reg.len(), 2);
+        reg.clear();
+        assert!(reg.is_empty());
+        // Child index should also be cleared.
+        assert!(reg.get_by_child_session_key("child:1").is_none());
+    }
+
+    #[test]
+    fn all_runs_returns_all() {
+        let mut reg = SubagentRegistry::new();
+        reg.register(make_run("r1", "child:1", "parent:main"));
+        reg.register(make_run("r2", "child:2", "parent:main"));
+        reg.register(make_run("r3", "child:3", "parent:other"));
+        assert_eq!(reg.all_runs().len(), 3);
+    }
+
+    #[test]
+    fn release_clears_child_index() {
+        let mut reg = SubagentRegistry::new();
+        reg.register(make_run("r1", "child:1", "parent:main"));
+        assert!(reg.get_by_child_session_key("child:1").is_some());
+        reg.release("r1");
+        assert!(reg.get_by_child_session_key("child:1").is_none());
+    }
+
+    #[test]
+    fn register_updates_child_index_on_duplicate() {
+        let mut reg = SubagentRegistry::new();
+        // Register two runs with the same child session key (re-spawn scenario).
+        reg.register(make_run("r1", "child:shared", "parent:main"));
+        reg.register(make_run("r2", "child:shared", "parent:main"));
+        // Index should point to the latest run.
+        let run = reg.get_by_child_session_key("child:shared").unwrap();
+        assert_eq!(run.run_id, "r2");
+        assert_eq!(reg.len(), 2);
+    }
+
+    #[test]
+    fn update_status_nonexistent_returns_false() {
+        let mut reg = SubagentRegistry::new();
+        assert!(!reg.update_status("no-such-run", SubagentRunStatus::Completed, Some(9000)));
+    }
 }

@@ -645,4 +645,42 @@ mod tests {
         assert_eq!(sanitize_fts_single(""), None);
         assert_eq!(sanitize_fts_single("비금도"), Some("비금도".into()));
     }
+
+    #[test]
+    fn test_sanitize_fts_reserved_or() {
+        // "OR" is in FTS_RESERVED and must be quoted to avoid being treated as operator.
+        assert_eq!(sanitize_fts_single("OR"), Some("\"OR\"".into()));
+        // Case-insensitive: lowercase "or" matches uppercase reserved set.
+        assert_eq!(sanitize_fts_single("or"), Some("\"or\"".into()));
+    }
+
+    #[test]
+    fn test_sanitize_fts_reserved_not() {
+        assert_eq!(sanitize_fts_single("NOT"), Some("\"NOT\"".into()));
+        assert_eq!(sanitize_fts_single("NEAR"), Some("\"NEAR\"".into()));
+    }
+
+    #[test]
+    fn test_sanitize_fts_no_alnum_returns_none() {
+        // Whitespace-only trims to empty → None.
+        assert_eq!(sanitize_fts_single("   "), None);
+        // Special chars (e.g. dashes) are first matched by SPECIAL_CHARS → quoted, not None.
+        assert_eq!(sanitize_fts_single("---"), Some("\"---\"".into()));
+    }
+
+    #[test]
+    fn test_person_filter() -> Result<(), Box<dyn std::error::Error>> {
+        let conn = setup_test_db()?;
+        let extracted = ExtractedFields {
+            persons: vec!["김대희".into()],
+            ..Default::default()
+        };
+        let result = sqlite_search(&conn, "김대희", &extracted);
+        // The test DB inserts a chunk with person_internal="김대희" and a comm from "김대희".
+        assert!(
+            !result.chunks.is_empty() || !result.comms.is_empty(),
+            "expected at least one result for person filter"
+        );
+        Ok(())
+    }
 }
