@@ -10,6 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -486,4 +487,15 @@ func (r *ToolRegistry) Definitions() []ToolDef {
 		defs = append(defs, r.tools[name])
 	}
 	return defs
+}
+
+// toPromptToolDefs converts chat.ToolDef slice to the minimal prompt.ToolDef
+// slice needed for system prompt assembly. Only the Name field is required
+// by the prompt package; the full ToolDef (with Fn, Schema, etc.) stays in chat/.
+func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
+	out := make([]prompt.ToolDef, len(defs))
+	for i, d := range defs {
+		out[i] = prompt.ToolDef{Name: d.Name}
+	}
+	return out
 }

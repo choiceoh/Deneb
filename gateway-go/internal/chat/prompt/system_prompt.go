@@ -1,4 +1,4 @@
-package chat
+package prompt
 
 import (
 	"fmt"
@@ -11,6 +11,19 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
 
+// SilentReplyToken is the token that suppresses message delivery when the LLM
+// replies with exactly this value (with optional surrounding whitespace).
+// Mirrors chat.SilentReplyToken — both must stay in sync.
+const SilentReplyToken = "NO_REPLY"
+
+// ToolDef describes a tool entry for the system prompt (name only; used to
+// build the compact tool list and conditional prompt sections).
+// This is a minimal view of chat.ToolDef — only the fields needed for prompt
+// assembly are included to avoid a circular import between chat/ and chat/prompt/.
+type ToolDef struct {
+	Name string
+}
+
 // cachedTimezone and cachedTimezoneLocation cache the resolved timezone
 // at startup to avoid time.LoadLocation() on every chat message.
 var (
@@ -19,8 +32,10 @@ var (
 	cachedTimezoneOnce sync.Once
 )
 
-// loadCachedTimezone resolves and caches timezone once.
-func loadCachedTimezone() (string, *time.Location) {
+// LoadCachedTimezone resolves and caches timezone once.
+// Exported so callers (e.g., chat/run.go) can read the resolved timezone
+// without duplicating the resolution logic.
+func LoadCachedTimezone() (string, *time.Location) {
 	cachedTimezoneOnce.Do(func() {
 		cachedTimezone = resolveTimezone()
 		loc, err := time.LoadLocation(cachedTimezone)
@@ -29,6 +44,11 @@ func loadCachedTimezone() (string, *time.Location) {
 		}
 	})
 	return cachedTimezone, cachedTimezoneLoc
+}
+
+// loadCachedTimezone is the unexported alias used within this package.
+func loadCachedTimezone() (string, *time.Location) {
+	return LoadCachedTimezone()
 }
 
 // SystemPromptParams holds all parameters for building the agent system prompt.
