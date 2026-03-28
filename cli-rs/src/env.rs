@@ -29,22 +29,18 @@ fn expand_tilde(path: &str) -> PathBuf {
 #[allow(dead_code)]
 pub fn is_truthy_env(key: &str) -> bool {
     std::env::var(key).ok().is_some_and(|v| {
-        let trimmed = v.trim();
-        trimmed == "1"
-            || trimmed.eq_ignore_ascii_case("true")
-            || trimmed.eq_ignore_ascii_case("yes")
+        let normalized = v.trim();
+        normalized == "1"
+            || normalized.eq_ignore_ascii_case("true")
+            || normalized.eq_ignore_ascii_case("yes")
     })
 }
 
 /// Get a trimmed, non-empty env var or `None`.
 pub fn get_env_trimmed(key: &str) -> Option<String> {
     std::env::var(key).ok().and_then(|v| {
-        let trimmed = v.trim().to_string();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed)
-        }
+        let trimmed = v.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_owned())
     })
 }
 
