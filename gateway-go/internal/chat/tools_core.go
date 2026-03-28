@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
+	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
@@ -44,6 +45,10 @@ type CoreToolDeps struct {
 	// AgentLog is the optional agent detail log writer.
 	// The agent_logs tool gracefully degrades when this is nil.
 	AgentLog *agentlog.Writer
+
+	// MemoryStore is the optional aurora-memory structured store.
+	// The health_check tool uses this to probe memory subsystem health.
+	MemoryStore *memory.Store
 }
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
@@ -126,6 +131,14 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Description: "Read specific line range from a memory file. Use after memory_search to get full context",
 		InputSchema: memoryGetToolSchema(),
 		Fn:          toolMemoryGet(workspaceDir),
+	})
+
+	// -- Health check tool (embedding, reranker, sglang, memory, autonomous diagnostics) --
+	registry.RegisterTool(ToolDef{
+		Name:        "health_check",
+		Description: "인프라 상태 점검: embedding (Gemini), reranker (Jina), sglang (로컬 LLM), memory (aurora-memory DB), autonomous (자율 실행). component: all (기본), embedding, reranker, sglang, memory, autonomous",
+		InputSchema: healthCheckToolSchema(),
+		Fn:          toolHealthCheck(deps),
 	})
 
 	// -- Vega tool (project knowledge search) --
