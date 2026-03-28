@@ -21,8 +21,6 @@ const (
 	// MaxFileSize is the maximum file upload size (25 MB for non-boosted servers).
 	MaxFileSize = 25 * 1024 * 1024
 
-	// HeartbeatJitterMs is the jitter applied to heartbeat intervals.
-	HeartbeatJitterMs = 500
 )
 
 // Gateway opcodes.
@@ -149,18 +147,6 @@ type Channel struct {
 	Name     string `json:"name,omitempty"`
 	Type     int    `json:"type"`
 	ParentID string `json:"parent_id,omitempty"`
-}
-
-// Emoji represents a Discord emoji for reactions.
-type Emoji struct {
-	Name string `json:"name"`
-	ID   string `json:"id,omitempty"`
-}
-
-// APIResponse wraps Discord REST API responses.
-type APIResponse struct {
-	Code    int    `json:"code,omitempty"`
-	Message string `json:"message,omitempty"`
 }
 
 // SendMessageRequest is the request body for POST /channels/{id}/messages.

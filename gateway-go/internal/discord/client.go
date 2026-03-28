@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -156,15 +157,7 @@ func retryDelay(attempt int, err error) time.Duration {
 
 // isDiscordAPIError checks if err is or wraps an *APIError.
 func isDiscordAPIError(err error, target **APIError) bool {
-	if err == nil {
-		return false
-	}
-	e, ok := err.(*APIError)
-	if ok {
-		*target = e
-		return true
-	}
-	return false
+	return errors.As(err, target)
 }
 
 // Call makes a JSON request to the Discord REST API.

@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"nhooyr.io/websocket"
@@ -29,7 +30,7 @@ type Bot struct {
 	stopFunc  context.CancelFunc
 	sessionID string
 	resumeURL string
-	seq       int64
+	seq       atomic.Int64
 	botUser   *User
 
 	// threadParents caches thread ID → parent channel ID for allowlist checks.
@@ -173,7 +174,7 @@ func (b *Bot) runGateway(ctx context.Context, gatewayURL string) error {
 		resumeData := ResumeData{
 			Token:     b.config.BotToken,
 			SessionID: b.sessionID,
-			Seq:       b.seq,
+			Seq:       b.seq.Load(),
 		}
 		if err := b.writePayload(ctx, conn, OpcodeResume, resumeData); err != nil {
 			return fmt.Errorf("send resume: %w", err)
@@ -215,7 +216,7 @@ func (b *Bot) runGateway(ctx context.Context, gatewayURL string) error {
 
 		// Update sequence number.
 		if payload.S != nil {
-			b.seq = *payload.S
+			b.seq.Store(*payload.S)
 		}
 
 		switch payload.Op {
@@ -224,7 +225,7 @@ func (b *Bot) runGateway(ctx context.Context, gatewayURL string) error {
 
 		case OpcodeHeartbeat:
 			// Server requests immediate heartbeat.
-			if err := b.writePayload(ctx, conn, OpcodeHeartbeat, b.seq); err != nil {
+			if err := b.writePayload(ctx, conn, OpcodeHeartbeat, b.seq.Load()); err != nil {
 				return fmt.Errorf("heartbeat response: %w", err)
 			}
 
@@ -237,7 +238,7 @@ func (b *Bot) runGateway(ctx context.Context, gatewayURL string) error {
 			b.logger.Warn("discord gateway invalid session, re-identifying")
 			b.sessionID = ""
 			b.resumeURL = ""
-			b.seq = 0
+			b.seq.Store(0)
 			conn.Close(websocket.StatusNormalClosure, "invalid session")
 			return nil
 
@@ -358,7 +359,7 @@ func (b *Bot) heartbeatLoop(ctx context.Context, conn *websocket.Conn, intervalM
 		case <-ticker.C:
 		}
 
-		if err := b.writePayload(ctx, conn, OpcodeHeartbeat, b.seq); err != nil {
+		if err := b.writePayload(ctx, conn, OpcodeHeartbeat, b.seq.Load()); err != nil {
 			b.logger.Warn("heartbeat send failed", "error", err)
 			return
 		}

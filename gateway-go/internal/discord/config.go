@@ -41,6 +41,7 @@ func (c *Config) WorkspaceForChannel(channelID string) string {
 		return ws
 	}
 	return c.DefaultWorkspace
+}
 
 // IsEnabled returns whether this Discord account is active.
 func (c *Config) IsEnabled() bool {
