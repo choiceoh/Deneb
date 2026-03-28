@@ -7,7 +7,7 @@ export type MessageHandler = (msg: ServerMessage) => void;
 export type StatusHandler = (status: ConnectionStatus) => void;
 
 const PING_INTERVAL_MS = 30_000;
-const RECONNECT_DELAYS = [1000, 2000, 4000]; // 3 attempts with exponential backoff
+const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000]; // 5 attempts with exponential backoff
 
 export class PropusWebSocket {
   private ws: WebSocket | null = null;
@@ -56,8 +56,16 @@ export class PropusWebSocket {
     this.cleanup();
     this.onStatus("connecting");
 
+    // On reconnect, append ?resume=<connID> to reuse the server-side session.
+    let connectUrl = this.url;
+    const savedConn = loadSavedConnId();
+    if (savedConn) {
+      const sep = this.url.includes("?") ? "&" : "?";
+      connectUrl = `${this.url}${sep}resume=${encodeURIComponent(savedConn)}`;
+    }
+
     try {
-      this.ws = new WebSocket(this.url);
+      this.ws = new WebSocket(connectUrl);
     } catch {
       this.onStatus("disconnected");
       return;
@@ -139,6 +147,7 @@ export class PropusWebSocket {
 // --- localStorage helpers for saved server URL ---
 
 const STORAGE_KEY = "propus_server_url";
+const CONN_ID_KEY = "propus_conn_id";
 
 export function loadSavedUrl(): string | null {
   try {
@@ -151,6 +160,22 @@ export function loadSavedUrl(): string | null {
 export function saveUrl(url: string): void {
   try {
     localStorage.setItem(STORAGE_KEY, url);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function loadSavedConnId(): string | null {
+  try {
+    return localStorage.getItem(CONN_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveConnId(connId: string): void {
+  try {
+    localStorage.setItem(CONN_ID_KEY, connId);
   } catch {
     // ignore storage errors
   }

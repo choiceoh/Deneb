@@ -219,17 +219,29 @@ func (p *Plugin) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	connID := fmt.Sprintf("propus-%d", time.Now().UnixNano())
+	// Support session resume: if client passes ?resume=<connID>, reuse that ID
+	// so the server-side session key (propus:<connID>) is preserved.
+	resumeID := r.URL.Query().Get("resume")
+	var connID string
+	if resumeID != "" {
+		connID = resumeID
+		p.logger.Info("propus client resuming session", "connID", connID)
+	} else {
+		connID = fmt.Sprintf("propus-%d", time.Now().UnixNano())
+		p.logger.Info("propus client connected", "connID", connID)
+	}
 	cc := &clientConn{conn: conn, connID: connID, lastPong: time.Now()}
 
+	// If resuming, close the old connection for this connID (if any).
 	p.clientsMu.Lock()
+	if old, ok := p.clients[connID]; ok && old.conn != conn {
+		old.conn.Close(websocket.StatusGoingAway, "replaced by resume")
+	}
 	p.clients[connID] = cc
 	p.clientsMu.Unlock()
 
-	p.logger.Info("propus client connected", "connID", connID)
-
-	// Send initial config status with real model info.
-	p.sendToClient(cc, p.configStatusMsg("connected"))
+	// Send initial config status with conn_id so client can resume later.
+	p.sendToClient(cc, p.configStatusMsg("connected", connID))
 
 	// Start server-side heartbeat for this connection.
 	heartCtx, heartCancel := context.WithCancel(r.Context())
@@ -348,7 +360,7 @@ func (p *Plugin) handleMessage(cc *clientConn, data []byte) {
 
 	case "SetApiKey":
 		// API key is shared with Deneb — no separate key needed.
-		p.sendToClient(cc, p.configStatusMsg("connected"))
+		p.sendToClient(cc, p.configStatusMsg("connected", cc.connID))
 
 	default:
 		p.logger.Warn("propus unknown message type", "type", msg.Type)
@@ -465,7 +477,7 @@ func randomFileID() string {
 var _ channel.Plugin = (*Plugin)(nil)
 
 // configStatusMsg builds a ConfigStatus message with stored model info.
-func (p *Plugin) configStatusMsg(denebStatus string) ServerMessage {
+func (p *Plugin) configStatusMsg(denebStatus, connID string) ServerMessage {
 	model := p.modelName
 	if model == "" {
 		model = "deneb"
@@ -474,7 +486,7 @@ func (p *Plugin) configStatusMsg(denebStatus string) ServerMessage {
 	if svc == "" {
 		svc = "Deneb Gateway"
 	}
-	return MsgConfigStatus(model, svc, denebStatus)
+	return MsgConfigStatus(model, svc, denebStatus, connID)
 }
 
 // ToolProfile returns the configured tool profile (e.g. "coding").

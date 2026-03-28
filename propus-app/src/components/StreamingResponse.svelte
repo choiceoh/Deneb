@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from "$lib/state.svelte";
   import CodeBlock from "./CodeBlock.svelte";
+  import MarkdownText from "./MarkdownText.svelte";
 </script>
 
 {#if app.streamingText || app.isStreaming}
@@ -19,7 +20,7 @@
           {#if seg.type === "code"}
             <CodeBlock code={seg.content} language={seg.language} />
           {:else}
-            <p class="text-segment">{seg.content}</p>
+            <MarkdownText content={seg.content} />
           {/if}
         {/each}
       {:else if app.isStreaming}

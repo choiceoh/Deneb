@@ -17,12 +17,42 @@
     }
     return text.slice(0, max) + "...";
   }
+
+  // Map tool names to icons for visual clarity.
+  const toolIcons: Record<string, string> = {
+    read: "📄",
+    write: "✏️",
+    edit: "📝",
+    exec: "⚙️",
+    grep: "🔍",
+    find: "📁",
+    ls: "📂",
+    web: "🌐",
+    web_search: "🌐",
+    http: "🌐",
+  };
+
+  function getToolIcon(name?: string): string {
+    if (!name) return "🔧";
+    // Strip " ✓" suffix for lookup.
+    const base = name.replace(/ ✓$/, "").toLowerCase();
+    return toolIcons[base] ?? "🔧";
+  }
+
+  function formatDuration(ms?: number): string {
+    if (ms == null) return "";
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
 </script>
 
 <div class="tool-msg">
   <button class="tool-header" onclick={toggle}>
-    <span class="tool-badge">T</span>
+    <span class="tool-icon">{getToolIcon(message.toolName)}</span>
     <span class="tool-name">{message.toolName}</span>
+    {#if message.toolDuration}
+      <span class="tool-duration">{formatDuration(message.toolDuration)}</span>
+    {/if}
     <span class="tool-chevron">{expanded ? "▼" : "▶"}</span>
   </button>
 
@@ -60,24 +90,23 @@
     background: rgba(45, 50, 32, 0.3);
   }
 
-  .tool-badge {
-    width: 22px;
-    height: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 5px;
-    background: var(--tool-bg);
-    color: var(--tool-text);
-    font-size: 10px;
-    font-weight: 700;
+  .tool-icon {
+    font-size: 14px;
     flex-shrink: 0;
+    width: 22px;
+    text-align: center;
   }
 
   .tool-name {
     color: var(--tool-text);
     font-size: 12px;
     font-weight: 600;
+  }
+
+  .tool-duration {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-family: var(--font-mono);
   }
 
   .tool-chevron {

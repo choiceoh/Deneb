@@ -5,6 +5,7 @@
 
   let container: HTMLDivElement;
   let editor: any = null;
+  let monacoLoaded = $state(false);
   let copied = $state(false);
 
   async function copyToClipboard() {
@@ -26,11 +27,40 @@
     }, 2000);
   }
 
-  // Monaco is loaded lazily to avoid blocking initial render.
-  onMount(async () => {
-    const monaco = await import("monaco-editor");
+  // Module-level Monaco cache: loaded once, reused across all CodeBlock instances.
+  let monacoModule: typeof import("monaco-editor") | null = null;
+  let monacoLoading: Promise<typeof import("monaco-editor")> | null = null;
+  let themeRegistered = false;
 
-    // Register Tokyo Night theme (once).
+  async function loadMonaco() {
+    if (monacoModule) return monacoModule;
+    if (!monacoLoading) {
+      monacoLoading = import("monaco-editor");
+    }
+    monacoModule = await monacoLoading;
+    return monacoModule;
+  }
+
+  // Map common fence labels to Monaco language IDs.
+  const langMap: Record<string, string> = {
+    js: "javascript",
+    ts: "typescript",
+    py: "python",
+    rb: "ruby",
+    rs: "rust",
+    sh: "shell",
+    bash: "shell",
+    zsh: "shell",
+    yml: "yaml",
+    dockerfile: "dockerfile",
+    md: "markdown",
+  };
+
+  onMount(async () => {
+    const monaco = await loadMonaco();
+    monacoLoaded = true;
+
+    // Register Tokyo Night theme once.
     if (!themeRegistered) {
       monaco.editor.defineTheme("tokyo-night", {
         base: "vs-dark",
@@ -56,20 +86,6 @@
       themeRegistered = true;
     }
 
-    // Map common fence labels to Monaco language IDs.
-    const langMap: Record<string, string> = {
-      js: "javascript",
-      ts: "typescript",
-      py: "python",
-      rb: "ruby",
-      rs: "rust",
-      sh: "shell",
-      bash: "shell",
-      zsh: "shell",
-      yml: "yaml",
-      dockerfile: "dockerfile",
-      md: "markdown",
-    };
     const monacoLang = langMap[language] ?? language ?? "plaintext";
 
     editor = monaco.editor.create(container, {
@@ -108,8 +124,6 @@
 
     return () => editor?.dispose();
   });
-
-  let themeRegistered = false;
 </script>
 
 <div class="code-block">
@@ -119,7 +133,12 @@
       {copied ? "복사됨" : "복사"}
     </button>
   </div>
-  <div class="code-container" bind:this={container}></div>
+  {#if monacoLoaded}
+    <div class="code-container" bind:this={container}></div>
+  {:else}
+    <pre class="code-fallback"><code>{code}</code></pre>
+    <div class="code-container" bind:this={container} style="display:none"></div>
+  {/if}
 </div>
 
 <style>
@@ -165,5 +184,19 @@
   .code-container {
     min-height: 48px;
     max-height: 400px;
+  }
+
+  .code-fallback {
+    background: #141620;
+    color: #a9b1d6;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 12px;
+    margin: 0;
+    overflow-x: auto;
+    max-height: 400px;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 </style>

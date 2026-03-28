@@ -28,6 +28,7 @@ export type ServerMessage =
         model: string;
         service: string;
         deneb_status: string;
+        conn_id: string;
       };
     }
   | {
@@ -47,6 +48,7 @@ export interface ChatMessage {
   segments: ContentSegment[];
   toolName?: string;
   toolResult?: string;
+  toolDuration?: number; // milliseconds elapsed for tool execution
   expanded?: boolean;
   /** File message fields. */
   fileName?: string;

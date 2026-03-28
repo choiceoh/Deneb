@@ -2,7 +2,7 @@
 
 import type { ChatMessage, ServerMessage } from "./types";
 import { parseSegments } from "./types";
-import { PropusWebSocket, loadSavedUrl, saveUrl } from "./ws";
+import { PropusWebSocket, loadSavedUrl, saveUrl, saveConnId } from "./ws";
 import type { ConnectionStatus } from "./ws";
 
 let nextId = 0;
@@ -26,6 +26,7 @@ class PropusState {
   sidebarVisible = $state(true);
 
   private _typingTimer: ReturnType<typeof setTimeout> | undefined;
+  private _toolStartTimes = new Map<string, number>();
 
   streamingSegments = $derived(parseSegments(this.streamingText));
 
@@ -58,6 +59,7 @@ class PropusState {
 
       case "ToolStart":
         this.flushStreaming();
+        this._toolStartTimes.set(msg.data.name, Date.now());
         this.messages = [
           ...this.messages,
           {
@@ -72,7 +74,10 @@ class PropusState {
         this.msgCount = this.messages.length;
         break;
 
-      case "ToolResult":
+      case "ToolResult": {
+        const startTime = this._toolStartTimes.get(msg.data.name);
+        const duration = startTime ? Date.now() - startTime : undefined;
+        this._toolStartTimes.delete(msg.data.name);
         this.messages = [
           ...this.messages,
           {
@@ -82,11 +87,13 @@ class PropusState {
             segments: [],
             toolName: `${msg.data.name} ✓`,
             toolResult: msg.data.result,
+            toolDuration: duration,
             expanded: false,
           },
         ];
         this.msgCount = this.messages.length;
         break;
+      }
 
       case "Usage":
         this.usageText = `입력 ${msg.data.prompt}  출력 ${msg.data.completion}  합계 ${msg.data.total}`;
@@ -135,6 +142,10 @@ class PropusState {
           this.statusText = msg.data.deneb_status
             ? `준비됨 (Deneb ${msg.data.deneb_status})`
             : "준비됨";
+        }
+        // Save conn_id for session resume on reconnect.
+        if (msg.data.conn_id) {
+          saveConnId(msg.data.conn_id);
         }
         break;
 
