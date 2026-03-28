@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.21.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.21.0...deneb-v3.21.1) (2026-03-28)
+
+
+### 🐛 Bug Fixes
+
+* **propus:** remove duplicate SaveSession switch case ([0d85b85](https://github.com/choiceoh/Deneb/commit/0d85b85e4328773d9a303749b60d7dfd9ee65df8))
+
 ## [3.21.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.20.1...deneb-v3.21.0) (2026-03-28)
 
 
