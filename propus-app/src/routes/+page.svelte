@@ -9,19 +9,63 @@
   import InputArea from "$components/InputArea.svelte";
 
   let chatContainer: HTMLDivElement | undefined = $state();
+  let isNearBottom = $state(true);
+  let showScrollButton = $state(false);
 
-  // Auto-scroll to bottom when messages or streaming text change.
+  // Auto-scroll only when user is near the bottom (within 80px).
   $effect(() => {
-    // Track reactive dependencies.
     void app.messages.length;
     void app.streamingText;
 
     tick().then(() => {
-      if (chatContainer) {
+      if (chatContainer && isNearBottom) {
         chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
+      if (chatContainer && !isNearBottom && app.messages.length > 0) {
+        showScrollButton = true;
       }
     });
   });
+
+  function handleScroll() {
+    if (!chatContainer) return;
+    const distFromBottom =
+      chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight;
+    isNearBottom = distFromBottom < 80;
+    if (isNearBottom) showScrollButton = false;
+  }
+
+  function scrollToBottom() {
+    if (chatContainer) {
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+      isNearBottom = true;
+      showScrollButton = false;
+    }
+  }
+
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    const mod = e.metaKey || e.ctrlKey;
+    if (!mod) return;
+
+    switch (e.key) {
+      case "n":
+        e.preventDefault();
+        app.clearChat();
+        break;
+      case "s":
+        e.preventDefault();
+        app.saveSession();
+        break;
+      case "\\":
+        e.preventDefault();
+        app.toggleSidebar();
+        break;
+      case "l":
+        e.preventDefault();
+        document.getElementById("chat-input")?.focus();
+        break;
+    }
+  }
 
   onMount(() => {
     app.initAutoConnect();
@@ -34,6 +78,8 @@
     { icon: "🧪", label: "테스트 실행", prompt: "테스트를 실행하고 결과를 알려줘" },
   ];
 </script>
+
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 {#if app.needsServerUrl || app.needsApiKey}
   <ConnectScreen />
@@ -55,7 +101,7 @@
       <Sidebar />
 
       <div class="chat-area">
-        <div class="chat-scroll" bind:this={chatContainer}>
+        <div class="chat-scroll" bind:this={chatContainer} onscroll={handleScroll}>
           {#if app.messages.length === 0 && !app.streamingText && !app.isStreaming}
             <div class="welcome">
               <h1 class="welcome-title">PROPUS</h1>
@@ -80,6 +126,12 @@
             <StreamingResponse />
           </div>
         </div>
+
+        {#if showScrollButton}
+          <button class="scroll-bottom-btn" onclick={scrollToBottom} title="최신 메시지로">
+            ↓
+          </button>
+        {/if}
 
         <InputArea />
       </div>
@@ -141,6 +193,7 @@
     flex-direction: column;
     flex: 1;
     overflow: hidden;
+    position: relative;
   }
 
   .chat-scroll {
@@ -215,5 +268,31 @@
 
   .welcome-card:hover .card-label {
     color: var(--text-primary);
+  }
+
+  .scroll-bottom-btn {
+    position: absolute;
+    bottom: 90px;
+    right: 24px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--bg-surface);
+    color: var(--text-secondary);
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .scroll-bottom-btn:hover {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
   }
 </style>

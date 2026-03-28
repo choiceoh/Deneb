@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ChatMessage as ChatMsg } from "$lib/types";
   import CodeBlock from "./CodeBlock.svelte";
+  import MarkdownText from "./MarkdownText.svelte";
   import ToolMessage from "./ToolMessage.svelte";
 
   let { message }: { message: ChatMsg } = $props();
@@ -10,6 +11,11 @@
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function isImageType(mediaType?: string): boolean {
+    if (!mediaType) return false;
+    return mediaType.startsWith("image/");
   }
 </script>
 
@@ -22,10 +28,17 @@
       <span class="msg-author">Propus</span>
     </div>
     <div class="msg-content">
-      <a class="file-link" href={message.fileUrl} target="_blank" download={message.fileName}>
-        <span class="file-name">{message.fileName}</span>
-        <span class="file-size">{formatFileSize(message.fileSize)}</span>
-      </a>
+      {#if isImageType(message.fileMediaType)}
+        <a class="image-preview-link" href={message.fileUrl} target="_blank" title={message.fileName}>
+          <img class="image-preview" src={message.fileUrl} alt={message.fileName} />
+        </a>
+        <span class="file-meta">{message.fileName} · {formatFileSize(message.fileSize)}</span>
+      {:else}
+        <a class="file-link" href={message.fileUrl} target="_blank" download={message.fileName}>
+          <span class="file-name">{message.fileName}</span>
+          <span class="file-size">{formatFileSize(message.fileSize)}</span>
+        </a>
+      {/if}
     </div>
   </div>
 {:else}
@@ -45,6 +58,8 @@
       {#each message.segments as seg}
         {#if seg.type === "code"}
           <CodeBlock code={seg.content} language={seg.language} />
+        {:else if message.role === "assistant"}
+          <MarkdownText content={seg.content} />
         {:else}
           <p class="text-segment">{seg.content}</p>
         {/if}
@@ -141,6 +156,24 @@
   }
 
   .file-size {
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  .image-preview-link {
+    display: block;
+    margin-bottom: var(--space-xs);
+  }
+
+  .image-preview {
+    max-width: 100%;
+    max-height: 400px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--bg-surface);
+    object-fit: contain;
+  }
+
+  .file-meta {
     color: var(--text-muted);
     font-size: 11px;
   }

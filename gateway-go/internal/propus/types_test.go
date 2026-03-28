@@ -78,11 +78,12 @@ func TestMsgTyping(t *testing.T) {
 }
 
 func TestMsgConfigStatus(t *testing.T) {
-	msg := MsgConfigStatus("gpt-4", "openai", "running")
+	msg := MsgConfigStatus("gpt-4", "openai", "running", "propus-123")
 	assertMsgType(t, msg, "ConfigStatus")
 	assertDataField(t, msg, "model", "gpt-4")
 	assertDataField(t, msg, "service", "openai")
 	assertDataField(t, msg, "deneb_status", "running")
+	assertDataField(t, msg, "conn_id", "propus-123")
 }
 
 // --- helpers ---

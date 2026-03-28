@@ -86,11 +86,12 @@ func MsgTyping() ServerMessage {
 	return ServerMessage{Type: "Typing"}
 }
 
-func MsgConfigStatus(model, service, denebStatus string) ServerMessage {
+func MsgConfigStatus(model, service, denebStatus, connID string) ServerMessage {
 	return ServerMessage{Type: "ConfigStatus", Data: map[string]any{
 		"needs_api_key": false,
 		"model":         model,
 		"service":       service,
 		"deneb_status":  denebStatus,
+		"conn_id":       connID,
 	}}
 }

@@ -33,6 +33,7 @@
 <div class="input-area">
   <div class="input-wrapper">
     <textarea
+      id="chat-input"
       bind:this={textarea}
       bind:value={inputText}
       onkeydown={handleKeydown}
