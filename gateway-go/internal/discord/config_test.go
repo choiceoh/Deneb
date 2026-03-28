@@ -104,3 +104,34 @@ func TestConfig_Validate(t *testing.T) {
 		t.Errorf("expected nil, got %v", err)
 	}
 }
+
+func TestConfig_WorkspaceForChannel(t *testing.T) {
+	cfg := &Config{}
+
+	// No workspaces configured: empty.
+	if ws := cfg.WorkspaceForChannel("123"); ws != "" {
+		t.Errorf("expected empty, got %q", ws)
+	}
+
+	// DefaultWorkspace fallback.
+	cfg.DefaultWorkspace = "/home/user/default"
+	if ws := cfg.WorkspaceForChannel("123"); ws != "/home/user/default" {
+		t.Errorf("expected default workspace, got %q", ws)
+	}
+
+	// Explicit channel mapping.
+	cfg.Workspaces = map[string]string{
+		"456": "/home/user/backend",
+		"789": "/home/user/frontend",
+	}
+	if ws := cfg.WorkspaceForChannel("456"); ws != "/home/user/backend" {
+		t.Errorf("expected backend workspace, got %q", ws)
+	}
+	if ws := cfg.WorkspaceForChannel("789"); ws != "/home/user/frontend" {
+		t.Errorf("expected frontend workspace, got %q", ws)
+	}
+	// Unmapped channel falls back to default.
+	if ws := cfg.WorkspaceForChannel("999"); ws != "/home/user/default" {
+		t.Errorf("expected default workspace for unmapped channel, got %q", ws)
+	}
+}
