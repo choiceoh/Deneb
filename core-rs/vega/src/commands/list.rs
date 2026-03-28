@@ -49,3 +49,62 @@ pub(super) fn cmd_list(_args: &Value, config: &VegaConfig) -> CommandResult {
 
     CommandResult::ok("list", json!({ "projects": projects }))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use rusqlite::params;
+    use serde_json::json;
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::db::schema::init_db;
+
+    fn setup_db() -> Result<(TempDir, VegaConfig), Box<dyn std::error::Error>> {
+        let tmp = tempfile::tempdir()?;
+        let db_path = tmp.path().join("projects.db");
+        let conn = rusqlite::Connection::open(&db_path)?;
+        init_db(&conn)?;
+
+        conn.execute(
+            "INSERT INTO projects (id, name, client, status, person_internal, capacity)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![1_i64, "Alpha", "ClientA", "진행중", "Kim", "80%"],
+        )?;
+        conn.execute(
+            "INSERT INTO chunks (project_id, section_heading, content, chunk_type)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![1_i64, "상태", "본문", "status"],
+        )?;
+        conn.execute(
+            "INSERT INTO comm_log (project_id, log_date, sender, subject, summary)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![1_i64, "2026-03-20", "tester@deneb.ai", "업데이트", "정상"],
+        )?;
+
+        let cfg = VegaConfig {
+            db_path,
+            md_dir: PathBuf::from("projects"),
+            ..VegaConfig::default()
+        };
+        Ok((tmp, cfg))
+    }
+
+    #[test]
+    fn cmd_list_returns_project_counts() -> Result<(), Box<dyn std::error::Error>> {
+        let (_tmp, cfg) = setup_db()?;
+
+        let result = cmd_list(&json!({}), &cfg);
+        assert!(result.success);
+        let projects = result
+            .data
+            .get("projects")
+            .and_then(|v| v.as_array())
+            .expect("projects should be an array");
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].get("chunks").and_then(|v| v.as_i64()), Some(1));
+        assert_eq!(projects[0].get("comms").and_then(|v| v.as_i64()), Some(1));
+        Ok(())
+    }
+}
