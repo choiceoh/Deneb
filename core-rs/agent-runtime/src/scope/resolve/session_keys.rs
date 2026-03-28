@@ -168,6 +168,7 @@ pub fn derive_session_chat_type(session_key: &str) -> SessionKeyChatType {
         return SessionKeyChatType::Direct;
     }
     // Legacy Discord keys: discord:<accountId>:guild-<guildId>:channel-<channelId>
+    #[allow(clippy::expect_used)]
     static DISCORD_LEGACY_RE: Lazy<Regex> =
         Lazy::new(|| Regex::new(r"^discord:(?:[^:]+:)?guild-[^:]+:channel-[^:]+$").expect("valid regex"));
     if DISCORD_LEGACY_RE.is_match(&scoped) {
@@ -178,6 +179,7 @@ pub fn derive_session_chat_type(session_key: &str) -> SessionKeyChatType {
 
 /// Check if a session key represents a cron run.
 pub fn is_cron_run_session_key(session_key: &str) -> bool {
+    #[allow(clippy::expect_used)]
     static CRON_RUN_RE: Lazy<Regex> =
         Lazy::new(|| Regex::new(r"^cron:[^:]+:run:[^:]+$").expect("valid regex"));
     parse_agent_session_key(session_key)

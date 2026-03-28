@@ -10,14 +10,23 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 // Pre-compiled regex patterns for hot-path functions.
+#[allow(clippy::expect_used)]
 static KOREAN_TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9]+").expect("valid regex"));
+#[allow(clippy::expect_used)]
 static DAYS_FLAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"--days\s+(\d+)").expect("valid regex"));
+#[allow(clippy::expect_used)]
 static DAYS_IL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*일").expect("valid regex"));
+#[allow(clippy::expect_used)]
 static DAYS_JU_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*주").expect("valid regex"));
+#[allow(clippy::expect_used)]
 static DAYS_GAEWOL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*개월").expect("valid regex"));
+#[allow(clippy::expect_used)]
 static LIMIT_FLAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"--limit\s+(\d+)").expect("valid regex"));
+#[allow(clippy::expect_used)]
 static LIMIT_GAE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d+)\s*개").expect("valid regex"));
+#[allow(clippy::expect_used)]
 static BULLET_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[\-•*]+\s*").expect("valid regex"));
+#[allow(clippy::expect_used)]
 static NUMBERED_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+[.)]\s*").expect("valid regex"));
 
 /// Escape special SQL LIKE characters (%, _, \).

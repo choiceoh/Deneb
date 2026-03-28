@@ -12,6 +12,7 @@ use crate::config::VegaConfig;
 
 use super::{open_db, CommandResult};
 
+#[allow(clippy::expect_used)]
 static STATUS_TABLE_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?m)^\|\s*\*?\*?상태\*?\*?\s*\|\s*(.*?)\s*\|").expect("valid regex")
 });
@@ -95,7 +96,7 @@ pub fn cmd_sync_back(args: &Value, config: &VegaConfig) -> CommandResult {
         let mut new_content = content.clone();
         if let Some(st) = status {
             if let Some(cap) = status_re.captures(&content) {
-                let old = cap.get(1).expect("capture group 1 exists").as_str();
+                let old = cap.get(1).unwrap_or_else(|| unreachable!("capture group 1 exists")).as_str();
                 if old.trim() != st.trim() {
                     new_content = status_re
                         .replace(&new_content, |caps: &regex::Captures| {

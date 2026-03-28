@@ -7,6 +7,7 @@ use std::collections::HashSet;
 
 use super::types::{MmrConfig, MmrItem};
 
+#[allow(clippy::expect_used)]
 static MMR_TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[a-z0-9_]+").expect("valid regex"));
 
 /// Pre-tokenized text that avoids per-token heap allocations.

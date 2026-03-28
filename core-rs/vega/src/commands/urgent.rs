@@ -6,6 +6,7 @@ use serde_json::{json, Value};
 use super::{open_db, CommandResult};
 use crate::config::VegaConfig;
 
+#[allow(clippy::expect_used)]
 static DATE_EXTRACT_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})").expect("valid regex"));
 
@@ -264,6 +265,7 @@ fn days_to_ymd(days_since_epoch: i64) -> (i64, i64, i64) {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 

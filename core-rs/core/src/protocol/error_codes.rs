@@ -112,6 +112,7 @@ pub fn is_valid_error_code(code: &str) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 

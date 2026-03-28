@@ -44,11 +44,14 @@ pub fn is_query_stop_word_token(token: &str) -> bool {
 // Tokenization
 // ---------------------------------------------------------------------------
 
+#[allow(clippy::expect_used)]
 static SPLIT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[\s\p{P}]+").expect("valid regex"));
+#[allow(clippy::expect_used)]
 static JP_PART_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"[a-z0-9_]+|[\x{30A0}-\x{30FF}ー]+|[\x{4E00}-\x{9FFF}]+|[\x{3040}-\x{309F}]{2,}")
         .expect("valid regex")
 });
+#[allow(clippy::expect_used)]
 static PUNCT_SYMBOL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[\p{P}\p{S}]+$").expect("valid regex"));
 
 #[inline]

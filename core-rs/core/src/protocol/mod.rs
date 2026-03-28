@@ -236,6 +236,7 @@ pub fn validate_frame(json: &str) -> Result<GatewayFrame, FrameError> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 

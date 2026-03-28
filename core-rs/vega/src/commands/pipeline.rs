@@ -7,11 +7,14 @@ use crate::config::VegaConfig;
 
 use super::{open_db, CommandResult};
 
+#[allow(clippy::expect_used)]
 static BILLIONS_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(\d+(?:\.\d+)?)\s*억\s*(?:(\d+(?:\.\d+)?)\s*만)?\s*원?").expect("valid regex")
 });
+#[allow(clippy::expect_used)]
 static TEN_THOUSANDS_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(\d+(?:,\d+)?(?:\.\d+)?)\s*만\s*원").expect("valid regex"));
+#[allow(clippy::expect_used)]
 static WON_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(\d{1,3}(?:,\d{3})+)\s*원").expect("valid regex"));
 

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 /// Resolve the home directory, respecting `DENEB_HOME` override.
+#[allow(clippy::expect_used)]
 pub fn resolve_home_dir() -> PathBuf {
     if let Ok(v) = std::env::var("DENEB_HOME") {
         let v = v.trim().to_string();
@@ -12,6 +13,7 @@ pub fn resolve_home_dir() -> PathBuf {
 }
 
 /// Expand a leading `~` to the user's home directory.
+#[allow(clippy::expect_used)]
 fn expand_tilde(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
         let home = dirs::home_dir().expect("cannot determine home directory");

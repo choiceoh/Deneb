@@ -60,15 +60,19 @@ pub struct SqliteSearchResult {
 static FTS_RESERVED: Lazy<HashSet<&'static str>> =
     Lazy::new(|| ["AND", "OR", "NOT", "NEAR"].into_iter().collect());
 
+#[allow(clippy::expect_used)]
 static SPECIAL_CHARS: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[&|!@#$%^*()\-+=\[\]{}<>?/\\~`]").expect("valid regex"));
 
+#[allow(clippy::expect_used)]
 static HAS_ALNUM: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣a-zA-Z0-9]").expect("valid regex"));
 
+#[allow(clippy::expect_used)]
 static KO_JOSA: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(은|는|이|가|을|를|의|에|에서|으로|로|와|과|만|까지|부터|에게|한테|께|보다|처럼|같이|에서도|까지도|만도|부터도|라고|이라고|이란)$").expect("valid regex")
 });
 
+#[allow(clippy::expect_used)]
 static TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[가-힣A-Za-z0-9&+/.\-]+").expect("valid regex"));
 
 /// Sanitize a single FTS5 search term.
@@ -98,7 +102,11 @@ fn is_strong_term(term: &str) -> bool {
         return false;
     }
     let bare = term.trim_matches('"');
-    if Regex::new(r"[A-Za-z0-9]").expect("valid regex").is_match(bare) {
+    #[allow(clippy::expect_used)]
+    if Regex::new(r"[A-Za-z0-9]")
+        .expect("valid regex")
+        .is_match(bare)
+    {
         return true;
     }
     bare.chars().count() >= 3

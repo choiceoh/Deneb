@@ -468,9 +468,9 @@ fn get_agents_list_mut(cfg: &mut config::DenebConfig) -> &mut Vec<serde_json::Va
     // Safety: we just ensured the key exists and is an array
     agents
         .get_mut("list")
-        .unwrap()
+        .unwrap_or_else(|| unreachable!("list key was just inserted"))
         .as_array_mut()
-        .expect("agents.list must be an array")
+        .unwrap_or_else(|| unreachable!("list was initialized as a JSON array"))
 }
 
 /// Parse a binding spec "channel[:accountId]" into a JSON object.
@@ -508,9 +508,9 @@ fn add_bindings_to_config(
 
     let bindings_arr = routing
         .get_mut("bindings")
-        .unwrap()
+        .unwrap_or_else(|| unreachable!("bindings key was just inserted"))
         .as_array_mut()
-        .expect("routing.bindings must be an array");
+        .unwrap_or_else(|| unreachable!("bindings was initialized as a JSON array"));
 
     let mut added = Vec::new();
     for spec in specs {

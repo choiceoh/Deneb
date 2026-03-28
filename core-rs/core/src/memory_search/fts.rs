@@ -3,6 +3,7 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
+#[allow(clippy::expect_used)]
 static FTS_TOKEN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[\p{L}\p{N}_]+").expect("valid regex"));
 
 /// Build an FTS5 query from raw text.

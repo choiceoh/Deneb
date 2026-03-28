@@ -328,6 +328,7 @@ If any answer is uncertain, expand first.";
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 

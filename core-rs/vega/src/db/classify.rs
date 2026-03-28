@@ -67,6 +67,7 @@ pub fn extract_tags(
         }
     }
     if let Some(person) = meta.get("person_internal") {
+        #[allow(clippy::expect_used)]
         let splitter = Regex::new(r"[,/·]").expect("valid regex");
         for p in splitter.split(person) {
             let p = p.trim();

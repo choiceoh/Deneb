@@ -47,7 +47,8 @@ static SUSPICIOUS_PATTERNS: Lazy<Vec<SuspiciousPattern>> = Lazy::new(|| {
     patterns
         .iter()
         .map(|&p| SuspiciousPattern {
-            regex: Regex::new(p).expect("valid suspicious pattern regex"),
+            regex: Regex::new(p)
+                .unwrap_or_else(|_| unreachable!("suspicious pattern regex is always valid")),
             source: p,
         })
         .collect()
@@ -145,18 +146,21 @@ pub fn fold_marker_text_impl(input: &str) -> String {
 // ---------------------------------------------------------------------------
 
 static MARKER_CHECK: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)external[\s_]+untrusted[\s_]+content").expect("valid regex"));
+    Lazy::new(|| {
+        Regex::new(r"(?i)external[\s_]+untrusted[\s_]+content")
+            .unwrap_or_else(|_| unreachable!("marker check regex is always valid"))
+    });
 
 static MARKER_START_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(?i)<<<\s*EXTERNAL[\s_]+UNTRUSTED[\s_]+CONTENT(?:\s+id="[^"]{1,128}")?\s*>>>"#)
-        .expect("valid regex")
+        .unwrap_or_else(|_| unreachable!("marker start regex is always valid"))
 });
 
 static MARKER_END_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r#"(?i)<<<\s*END[\s_]+EXTERNAL[\s_]+UNTRUSTED[\s_]+CONTENT(?:\s+id="[^"]{1,128}")?\s*>>>"#,
     )
-    .expect("valid regex")
+    .unwrap_or_else(|_| unreachable!("marker end regex is always valid"))
 });
 
 /// Replace spoofed security boundary markers in content.

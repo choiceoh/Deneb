@@ -6,7 +6,7 @@ fn validate_empty_object(value: &serde_json::Value, path: &str, errors: &mut Vec
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().expect("validated by require_object");
+    let Some(obj) = value.as_object() else { return; };
     check_no_additional_properties(obj, &[], path, errors);
 }
 
@@ -18,7 +18,7 @@ fn validate_request_id_only(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().expect("validated by require_object");
+    let Some(obj) = value.as_object() else { return; };
     check_no_additional_properties(obj, &["requestId"], path, errors);
     if check_required(obj, "requestId", path, errors) {
         check_non_empty_string(&obj["requestId"], &format!("{path}/requestId"), errors);
@@ -33,7 +33,7 @@ fn validate_device_id_only(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().expect("validated by require_object");
+    let Some(obj) = value.as_object() else { return; };
     check_no_additional_properties(obj, &["deviceId"], path, errors);
     if check_required(obj, "deviceId", path, errors) {
         check_non_empty_string(&obj["deviceId"], &format!("{path}/deviceId"), errors);
@@ -80,7 +80,7 @@ pub fn validate_device_token_rotate_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().expect("validated by require_object");
+    let Some(obj) = value.as_object() else { return; };
     check_no_additional_properties(obj, &["deviceId", "role", "scopes"], path, errors);
     if check_required(obj, "deviceId", path, errors) {
         check_non_empty_string(&obj["deviceId"], &format!("{path}/deviceId"), errors);
@@ -107,7 +107,7 @@ pub fn validate_device_token_revoke_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().expect("validated by require_object");
+    let Some(obj) = value.as_object() else { return; };
     check_no_additional_properties(obj, &["deviceId", "role"], path, errors);
     if check_required(obj, "deviceId", path, errors) {
         check_non_empty_string(&obj["deviceId"], &format!("{path}/deviceId"), errors);
