@@ -338,4 +338,18 @@ impl super::CommandHandler for PipelineHandler {
     fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
         cmd_pipeline(args, config)
     }
+
+    fn ai_hints(&self, data: &serde_json::Value) -> Vec<serde_json::Value> {
+        let _ = data;
+        vec![json!({"situation": "pipeline_view",
+            "guide": "금액/수주 현황입니다. 총액과 상위 프로젝트를 먼저 언급하세요."})]
+    }
+
+    fn summary(&self, data: &serde_json::Value) -> String {
+        let total = data
+            .get("total_amount")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        format!("파이프라인 총 {:.1}억원", total)
+    }
 }

@@ -16,6 +16,99 @@ impl super::CommandHandler for SearchHandler {
     fn execute(&self, config: &VegaConfig, args: &Value) -> CommandResult {
         cmd_search(args, config)
     }
+
+    fn compact_result(&self, data: &Value) -> Value {
+        let projects = data
+            .get("projects")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .take(5)
+                    .map(|p| {
+                        json!({
+                            "id": p.get("id"), "name": p.get("name"),
+                            "status": p.get("status"), "score": p.get("score"),
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        json!({
+            "projects": projects,
+            "result_count": data.get("result_count"),
+            "matched_keywords": data.get("matched_keywords"),
+            "follow_up_hint": data.get("follow_up_hint"),
+        })
+    }
+
+    fn ai_hints(&self, data: &Value) -> Vec<Value> {
+        let mut hints: Vec<Value> = Vec::new();
+        let n = data
+            .get("result_count")
+            .and_then(|rc| rc.get("projects"))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        if n == 0 {
+            hints.push(json!({"situation": "no_results",
+                "guide": "검색 결과가 없습니다. suggestions 필드의 후보를 안내하거나 키워드 변경을 제안하세요."}));
+        } else if n == 1 {
+            let pid = data
+                .get("projects")
+                .and_then(|v| v.as_array())
+                .and_then(|a| a.first())
+                .and_then(|p| p.get("id"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            hints.push(json!({"situation": "single_match",
+                "guide": format!("정확히 1개 프로젝트 매칭. 추가 정보: brief {}", pid)}));
+        } else if n > 5 {
+            hints.push(json!({"situation": "too_many_results",
+                "guide": "결과가 많습니다. 상위 3개만 언급하고 조건 좁히기를 제안하세요."}));
+        }
+        if data
+            .get("search_meta")
+            .and_then(|m| m.get("semantic_used"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            hints.push(json!({"situation": "semantic_enriched",
+                "guide": "의미 검색이 추가 결과를 포함합니다."}));
+        }
+        if data.get("_auto_brief").is_some() {
+            hints.push(json!({"situation": "fuzzy_matched",
+                "guide": "정확한 검색 결과는 없지만 유사 프로젝트가 _auto_brief에 있습니다. 이 정보로 답변하세요."}));
+        }
+        hints
+    }
+
+    fn summary(&self, data: &Value) -> String {
+        let rc = data.get("result_count").unwrap_or(&Value::Null);
+        let projects = rc.get("projects").and_then(|v| v.as_i64()).unwrap_or(0);
+        let comms = rc
+            .get("communications")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        let top_names: Vec<String> = data
+            .get("projects")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .take(3)
+                    .filter_map(|p| p.get("name").and_then(|v| v.as_str()).map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if top_names.is_empty() {
+            format!("검색 결과: {}개 프로젝트, {}건 커뮤니케이션", projects, comms)
+        } else {
+            format!(
+                "검색 결과: {} ({}개 프로젝트, {}건 커뮤니케이션)",
+                top_names.join(", "),
+                projects,
+                comms
+            )
+        }
+    }
 }
 
 /// search: Full hybrid search with fusion ranking.

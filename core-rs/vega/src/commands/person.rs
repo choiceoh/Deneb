@@ -203,4 +203,60 @@ impl super::CommandHandler for PersonHandler {
     fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
         cmd_person(args, config)
     }
+
+    fn compact_result(&self, data: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "person": data.get("person"), "project_count": data.get("project_count"),
+            "projects": data.get("projects").and_then(|v| v.as_array()).map(|arr| {
+                arr.iter().map(|p| json!({
+                    "id": p.get("id"), "name": p.get("name"), "status": p.get("status"),
+                })).collect::<Vec<_>>()
+            }),
+        })
+    }
+
+    fn ai_hints(&self, data: &serde_json::Value) -> Vec<serde_json::Value> {
+        let count = data
+            .get("project_count")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        if count >= 5 {
+            vec![json!({"situation": "overloaded",
+                "guide": format!("이 인물이 {}개 프로젝트를 담당합니다. 과부하 상태임을 언급하세요.", count)})]
+        } else {
+            vec![]
+        }
+    }
+
+    fn build_bundle(&self, data: &serde_json::Value, conn: Option<&rusqlite::Connection>) -> serde_json::Value {
+        let conn = match conn {
+            Some(c) => c,
+            None => return json!({}),
+        };
+        let mut bundle = json!({});
+        if let Ok(mut stmt) = conn.prepare(
+            "SELECT COUNT(*) FROM comm_log cl JOIN projects p ON p.id = cl.project_id
+             WHERE p.person_internal LIKE ?1 AND cl.log_date >= date('now', '-7 days')",
+        ) {
+            let person = data.get("person").and_then(|v| v.as_str()).unwrap_or("");
+            if !person.is_empty() {
+                let pattern = format!("%{}%", crate::utils::escape_like(person));
+                if let Ok(count) =
+                    stmt.query_row(rusqlite::params![pattern], |r| r.get::<_, i64>(0))
+                {
+                    bundle["this_week_activity"] = json!({"comm_count": count});
+                }
+            }
+        }
+        bundle
+    }
+
+    fn summary(&self, data: &serde_json::Value) -> String {
+        let name = data.get("person").and_then(|v| v.as_str()).unwrap_or("?");
+        let count = data
+            .get("project_count")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        format!("{}: 프로젝트 {}개", name, count)
+    }
 }

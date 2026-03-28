@@ -182,4 +182,12 @@ impl super::CommandHandler for WeeklyHandler {
     fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
         cmd_weekly(args, config)
     }
+
+    fn summary(&self, data: &serde_json::Value) -> String {
+        let active = data
+            .get("active_projects")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        format!("활성 프로젝트 {}개", active)
+    }
 }

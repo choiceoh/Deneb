@@ -1,6 +1,6 @@
 //! Show command — detailed project info.
 
-use rusqlite::params;
+use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
 use crate::config::VegaConfig;
@@ -12,6 +12,78 @@ pub struct ShowHandler;
 impl super::CommandHandler for ShowHandler {
     fn execute(&self, config: &VegaConfig, args: &Value) -> CommandResult {
         cmd_show(args, config)
+    }
+
+    fn compact_result(&self, data: &Value) -> Value {
+        json!({
+            "id": data.get("id").or(data.get("project").and_then(|p| p.get("id"))),
+            "name": data.get("name").or(data.get("project").and_then(|p| p.get("name"))),
+            "status": data.get("status").or(data.get("project").and_then(|p| p.get("status"))),
+            "client": data.get("client").or(data.get("project").and_then(|p| p.get("client"))),
+            "person_internal": data.get("person_internal").or(data.get("project").and_then(|p| p.get("person_internal"))),
+            "section_count": data.get("sections").and_then(|v| v.as_array()).map(|a| a.len()),
+            "comm_count": data.get("communications").and_then(|v| v.as_array()).map(|a| a.len()),
+        })
+    }
+
+    fn ai_hints(&self, data: &Value) -> Vec<Value> {
+        let pid = data
+            .get("id")
+            .or(data.get("project").and_then(|p| p.get("id")))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        if pid > 0 {
+            vec![json!({"situation": "show_detail",
+                "guide": format!("프로젝트 상세입니다. 요약: brief {}, 이력: timeline {}.", pid, pid)})]
+        } else {
+            vec![]
+        }
+    }
+
+    fn build_bundle(&self, data: &Value, conn: Option<&Connection>) -> Value {
+        let conn = match conn {
+            Some(c) => c,
+            None => return json!({}),
+        };
+        let mut bundle = json!({});
+        let client = data
+            .get("project")
+            .and_then(|p| p.get("client"))
+            .and_then(|v| v.as_str())
+            .or_else(|| data.get("client").and_then(|v| v.as_str()))
+            .unwrap_or("");
+        let show_pid = data
+            .get("project")
+            .and_then(|p| p.get("id"))
+            .and_then(|v| v.as_i64())
+            .or_else(|| data.get("id").and_then(|v| v.as_i64()));
+        if !client.is_empty() {
+            if let (Some(pid), Some(first_word)) = (show_pid, client.split_whitespace().next()) {
+                if let Ok(mut stmt) = conn.prepare(
+                    "SELECT id, name, status FROM projects WHERE client LIKE ?1 AND id != ?2 LIMIT 3",
+                ) {
+                    let pattern = format!("%{}%", crate::utils::escape_like(first_word));
+                    if let Ok(rows) = stmt.query_map(rusqlite::params![pattern, pid], |r| {
+                        Ok(json!({"id": r.get::<_, i64>(0)?, "name": r.get::<_, String>(1)?, "status": r.get::<_, String>(2)?}))
+                    }) {
+                        let related: Vec<Value> = rows.flatten().collect();
+                        if !related.is_empty() {
+                            bundle["same_client_projects"] = json!(related);
+                        }
+                    }
+                }
+            }
+        }
+        bundle
+    }
+
+    fn summary(&self, data: &Value) -> String {
+        let name = data
+            .get("project")
+            .and_then(|p| p.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("?");
+        format!("프로젝트 상세: {}", name)
     }
 }
 

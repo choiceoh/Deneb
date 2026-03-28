@@ -244,4 +244,30 @@ impl super::CommandHandler for DashboardHandler {
     fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
         cmd_dashboard(args, config)
     }
+
+    fn compact_result(&self, data: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "total_projects": data.get("total_projects"),
+            "active_projects": data.get("active_projects"),
+            "overloaded_persons": data.get("overloaded_persons"),
+        })
+    }
+
+    fn ai_hints(&self, data: &serde_json::Value) -> Vec<serde_json::Value> {
+        let _ = data;
+        vec![json!({"situation": "dashboard_overview",
+            "guide": "전체 현황입니다. 긴급: urgent, 금액: pipeline으로 확인하세요."})]
+    }
+
+    fn summary(&self, data: &serde_json::Value) -> String {
+        let total = data
+            .get("total_projects")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        let active = data
+            .get("active_projects")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        format!("전체 {}개 중 활성 {}개", total, active)
+    }
 }
