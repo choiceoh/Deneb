@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"mime/multipart"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -40,8 +42,63 @@ func NewClient(token string, logger *slog.Logger) *Client {
 	}
 }
 
-// doRequest executes an HTTP request with Discord auth headers.
+// doRequest executes an HTTP request with Discord auth headers and automatic
+// rate limit retry. On 429 responses, it waits for the Retry-After duration
+// and retries up to maxRetries times.
 func (c *Client) doRequest(ctx context.Context, method, path string, body io.Reader, contentType string) ([]byte, error) {
+	// If body is a Reader, we need to be able to replay it for retries.
+	// Buffer it if needed.
+	var bodyBytes []byte
+	if body != nil {
+		var err error
+		bodyBytes, err = io.ReadAll(body)
+		if err != nil {
+			return nil, fmt.Errorf("read request body: %w", err)
+		}
+	}
+
+	var lastErr error
+	for attempt := 0; attempt <= c.maxRetries; attempt++ {
+		if attempt > 0 {
+			delay := retryDelay(attempt, lastErr)
+			c.logger.Info("retrying discord API call",
+				"method", method, "path", path,
+				"attempt", attempt, "delay", delay)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		var reqBody io.Reader
+		if bodyBytes != nil {
+			reqBody = bytes.NewReader(bodyBytes)
+		}
+
+		result, err := c.doRequestOnce(ctx, method, path, reqBody, contentType)
+		if err == nil {
+			return result, nil
+		}
+
+		lastErr = err
+
+		// Only retry on rate limits (429) and server errors (5xx).
+		var apiErr *APIError
+		if isDiscordAPIError(err, &apiErr) {
+			if apiErr.IsRateLimited() || apiErr.StatusCode >= 500 {
+				continue
+			}
+			return nil, err // Non-retryable API error.
+		}
+		// Network errors are retryable.
+	}
+
+	return nil, fmt.Errorf("discord %s %s: max retries exceeded: %w", method, path, lastErr)
+}
+
+// doRequestOnce executes a single HTTP request (no retry).
+func (c *Client) doRequestOnce(ctx context.Context, method, path string, body io.Reader, contentType string) ([]byte, error) {
 	url := BaseURL + path
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
@@ -65,13 +122,49 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, &APIError{
+		apiErr := &APIError{
 			StatusCode: resp.StatusCode,
 			Body:       string(respBody),
 		}
+		// Parse Retry-After header for rate limits.
+		if resp.StatusCode == 429 {
+			if ra := resp.Header.Get("Retry-After"); ra != "" {
+				if secs, err := strconv.ParseFloat(ra, 64); err == nil {
+					apiErr.RetryAfter = time.Duration(secs * float64(time.Second))
+				}
+			}
+		}
+		return nil, apiErr
 	}
 
 	return respBody, nil
+}
+
+// retryDelay computes the delay before retrying, respecting Retry-After from 429s.
+func retryDelay(attempt int, err error) time.Duration {
+	var apiErr *APIError
+	if isDiscordAPIError(err, &apiErr) && apiErr.RetryAfter > 0 {
+		return apiErr.RetryAfter
+	}
+	// Exponential backoff: 1s, 2s, 4s, 8s capped at 15s.
+	delay := time.Duration(math.Pow(2, float64(attempt-1))) * time.Second
+	if delay > 15*time.Second {
+		delay = 15 * time.Second
+	}
+	return delay
+}
+
+// isDiscordAPIError checks if err is or wraps an *APIError.
+func isDiscordAPIError(err error, target **APIError) bool {
+	if err == nil {
+		return false
+	}
+	e, ok := err.(*APIError)
+	if ok {
+		*target = e
+		return true
+	}
+	return false
 }
 
 // Call makes a JSON request to the Discord REST API.
@@ -204,6 +297,7 @@ func (c *Client) CreateThread(ctx context.Context, channelID, messageID, name st
 type APIError struct {
 	StatusCode int
 	Body       string
+	RetryAfter time.Duration // parsed from Retry-After header on 429s
 }
 
 func (e *APIError) Error() string {

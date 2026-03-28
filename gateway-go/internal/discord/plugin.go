@@ -65,8 +65,8 @@ func (p *Plugin) Start(ctx context.Context) error {
 		return nil
 	}
 
-	if p.config.BotToken == "" {
-		p.status = channel.Status{Connected: false, Error: "no bot token configured"}
+	if err := p.config.Validate(); err != nil {
+		p.status = channel.Status{Connected: false, Error: err.Error()}
 		return nil
 	}
 

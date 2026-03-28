@@ -1,5 +1,7 @@
 package discord
 
+import "fmt"
+
 // Config holds Discord channel configuration loaded from deneb.json.
 type Config struct {
 	// BotToken is the Discord bot token.
@@ -58,4 +60,23 @@ func (c *Config) IsUserAllowed(userID string) bool {
 		}
 	}
 	return false
+}
+
+// Validate checks the config for common mistakes and returns an error if invalid.
+func (c *Config) Validate() error {
+	if c.BotToken == "" {
+		return fmt.Errorf("discord: botToken is required")
+	}
+	if len(c.BotToken) < 50 {
+		return fmt.Errorf("discord: botToken looks too short (expected ~70 chars)")
+	}
+	if c.GuildID != "" && len(c.GuildID) < 17 {
+		return fmt.Errorf("discord: guildId looks invalid (expected snowflake ID)")
+	}
+	for _, ch := range c.AllowedChannels {
+		if len(ch) < 17 {
+			return fmt.Errorf("discord: allowedChannels entry %q looks invalid (expected snowflake ID)", ch)
+		}
+	}
+	return nil
 }
