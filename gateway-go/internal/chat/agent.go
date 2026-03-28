@@ -371,11 +371,12 @@ func consumeStream(ctx context.Context, events <-chan llm.StreamEvent, hooks Str
 }
 
 // handlePendingInterrupt checks the InterruptBox for a queued user message.
-// If one is present, it appends the user message to the conversation, makes
-// a quick tool-free LLM call using the existing client and system prompt,
-// streams the response (reusing hooks for Telegram delivery), persists both
-// messages, and delivers the reply. The updated messages slice is returned
-// so the main agent loop sees the exchange on its next turn.
+// If one is present, it fires a fast, tool-free LLM call via the local sglang
+// model (no reasoning overhead, sub-second TTFT) using the already-assembled
+// system prompt and message history for context. The response is persisted to
+// the transcript and delivered to Telegram, but NOT inserted into the agent
+// loop's messages slice — this preserves the main model's prompt prefix cache
+// so the ongoing task resumes without a cache miss.
 func handlePendingInterrupt(
 	ctx context.Context,
 	cfg AgentConfig,
@@ -396,41 +397,49 @@ func handlePendingInterrupt(
 
 	logger.Info("handling pending interrupt", "message", pending.Message)
 
-	// 1. Append user message to conversation.
-	messages = append(messages, llm.NewTextMessage("user", pending.Message))
+	// Build a read-only snapshot of messages + the interrupt question.
+	// We do NOT modify the original messages slice.
+	snapshot := make([]llm.Message, len(messages), len(messages)+1)
+	copy(snapshot, messages)
+	snapshot = append(snapshot, llm.NewTextMessage("user", pending.Message))
 
-	// 2. Quick tool-free LLM call — same client, same system prompt.
+	// Use local sglang for speed: no reasoning, no tool overhead, fast TTFT.
+	sglangClient := getSglangClient()
 	quickReq := llm.ChatRequest{
-		Model:     cfg.Model,
-		Messages:  messages,
+		Model:     sglangModel,
+		Messages:  snapshot,
 		System:    cfg.System,
-		MaxTokens: 4096,
-		Tools:     nil, // no tools — fast response only
+		MaxTokens: 1024,
+		Tools:     nil,
 		Stream:    true,
 	}
-	var events <-chan llm.StreamEvent
-	var err error
-	if cfg.APIType == "anthropic" {
-		events, err = client.StreamChat(ctx, quickReq)
-	} else {
-		events, err = client.StreamChatOpenAI(ctx, quickReq)
-	}
+
+	events, err := sglangClient.StreamChatOpenAI(ctx, quickReq)
 	if err != nil {
-		logger.Warn("interrupt response: LLM call failed", "error", err)
-		return messages
+		logger.Warn("interrupt response: sglang call failed", "error", err)
+		// Fallback: try the main client (slower but better than silence).
+		quickReq.Model = cfg.Model
+		quickReq.MaxTokens = 1024
+		if cfg.APIType == "anthropic" {
+			events, err = client.StreamChat(ctx, quickReq)
+		} else {
+			events, err = client.StreamChatOpenAI(ctx, quickReq)
+		}
+		if err != nil {
+			logger.Warn("interrupt response: fallback LLM call also failed", "error", err)
+			return messages
+		}
 	}
 
-	// 3. Consume the stream (reuses hooks for Telegram real-time delivery).
+	// Consume the stream — hooks relay text deltas to Telegram in real time.
 	turnResult, err := consumeStream(ctx, events, hooks)
 	if err != nil || turnResult.text == "" {
-		logger.Warn("interrupt response: stream consumption failed or empty", "error", err)
+		logger.Warn("interrupt response: empty or failed", "error", err)
 		return messages
 	}
 
-	// 4. Append assistant response so the main loop sees the exchange.
-	messages = append(messages, llm.NewTextMessage("assistant", turnResult.text))
-
-	// 5. Persist to transcript.
+	// Persist to transcript (shows in chat history) but skip messages array
+	// so the main model's prompt cache stays intact.
 	now := time.Now().UnixMilli()
 	if deps.transcript != nil {
 		_ = deps.transcript.Append(deps.sessionKey, ChatMessage{
@@ -441,7 +450,7 @@ func handlePendingInterrupt(
 		})
 	}
 
-	// 6. Deliver reply to originating channel (e.g., Telegram).
+	// Deliver reply to originating channel (e.g., Telegram).
 	if deps.replyFunc != nil && pending.Delivery != nil {
 		replyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
