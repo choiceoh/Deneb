@@ -257,6 +257,11 @@ func (h *Handler) SetReactionFunc(fn ReactionFunc) {
 	h.reactionFn = fn
 }
 
+// DefaultModel returns the configured default LLM model name.
+func (h *Handler) DefaultModel() string {
+	return h.defaultModel
+}
+
 // HandleBtw processes a side question (/btw) without affecting the main
 // session context. It dispatches a lightweight chat.send-style request
 // with the side question, using the fast model default.

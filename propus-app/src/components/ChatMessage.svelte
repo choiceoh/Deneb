@@ -4,10 +4,30 @@
   import ToolMessage from "./ToolMessage.svelte";
 
   let { message }: { message: ChatMsg } = $props();
+
+  function formatFileSize(bytes?: number): string {
+    if (bytes == null) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
 </script>
 
 {#if message.role === "tool"}
   <ToolMessage {message} />
+{:else if message.role === "file"}
+  <div class="chat-msg file-msg">
+    <div class="msg-header">
+      <div class="avatar">P</div>
+      <span class="msg-author">Propus</span>
+    </div>
+    <div class="msg-content">
+      <a class="file-link" href={message.fileUrl} target="_blank" download={message.fileName}>
+        <span class="file-name">{message.fileName}</span>
+        <span class="file-size">{formatFileSize(message.fileSize)}</span>
+      </a>
+    </div>
+  </div>
 {:else}
   <div class="chat-msg" class:user={message.role === "user"}>
     <!-- Avatar + Name -->
@@ -96,5 +116,32 @@
 
   .text-segment + .text-segment {
     margin-top: var(--space-sm);
+  }
+
+  .file-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    border: 1px solid var(--bg-surface);
+    color: var(--accent-primary, #7aa2f7);
+    font-size: 13px;
+    text-decoration: none;
+    transition: border-color var(--transition-fast);
+  }
+
+  .file-link:hover {
+    border-color: var(--accent-primary, #7aa2f7);
+  }
+
+  .file-name {
+    font-weight: 600;
+  }
+
+  .file-size {
+    color: var(--text-muted);
+    font-size: 11px;
   }
 </style>
