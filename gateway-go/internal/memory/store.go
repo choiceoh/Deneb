@@ -617,32 +617,35 @@ func (s *Store) LoadEmbeddings(ctx context.Context) (map[int64][]float32, error)
 	return result, rows.Err()
 }
 
-// LoadEmbeddingsForMerge returns embeddings for active facts eligible for merging.
+// LoadEmbeddingsForMerge returns embeddings and merge depths for active facts eligible for merging.
 // Facts with merge_depth >= maxDepth are excluded to prevent cascading merges.
-func (s *Store) LoadEmbeddingsForMerge(ctx context.Context, maxDepth int) (map[int64][]float32, error) {
+func (s *Store) LoadEmbeddingsForMerge(ctx context.Context, maxDepth int) (map[int64][]float32, map[int64]int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT fe.fact_id, fe.embedding
+		`SELECT fe.fact_id, fe.embedding, f.merge_depth
 		 FROM fact_embeddings fe
 		 JOIN facts f ON f.id = fe.fact_id
 		 WHERE f.active = 1 AND f.merge_depth < ?`, maxDepth)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 
-	result := make(map[int64][]float32)
+	embeddings := make(map[int64][]float32)
+	depths := make(map[int64]int)
 	for rows.Next() {
 		var factID int64
 		var blob []byte
-		if err := rows.Scan(&factID, &blob); err != nil {
-			return nil, err
+		var depth int
+		if err := rows.Scan(&factID, &blob, &depth); err != nil {
+			return nil, nil, err
 		}
-		result[factID] = blobToFloat32s(blob)
+		embeddings[factID] = blobToFloat32s(blob)
+		depths[factID] = depth
 	}
-	return result, rows.Err()
+	return embeddings, depths, rows.Err()
 }
 
 // --- Export ---
