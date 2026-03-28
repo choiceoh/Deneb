@@ -85,7 +85,7 @@ func DetectMIME(data []byte) string {
 	dataPtr := (*C.uchar)(unsafe.Pointer(&data[0]))
 	outPtr := (*C.uchar)(unsafe.Pointer(&out[0]))
 	n := C.deneb_detect_mime(dataPtr, C.ulong(len(data)), outPtr, C.ulong(len(out)))
-	if n <= 0 {
+	if n <= 0 || int(n) > len(out) {
 		return "application/octet-stream"
 	}
 	return string(out[:n])
