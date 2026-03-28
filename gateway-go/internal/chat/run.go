@@ -47,7 +47,7 @@ const (
 	defaultMaxTokens     = 8192
 	defaultMaxTurns      = 25
 	defaultAgentTimeout  = 10 * time.Minute
-	defaultModel         = "zai/glm-5-turbo"
+	defaultModel         = "zai/glm-5.1"
 	maxCompactionRetries = 2
 )
 
@@ -371,7 +371,7 @@ func executeAgentRun(
 		model = defaultModel
 	}
 
-	// Parse provider prefix from model (e.g., "zai/glm-5-turbo" → provider="zai", model="glm-5-turbo").
+	// Parse provider prefix from model (e.g., "zai/glm-5.1" → provider="zai", model="glm-5.1").
 	providerID, modelName := parseModelID(model)
 	model = modelName
 

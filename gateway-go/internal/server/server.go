@@ -1696,7 +1696,7 @@ func loadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {
 func resolveDefaultModel(logger *slog.Logger) string {
 	snapshot, err := config.LoadConfigFromDefaultPath()
 	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
-		return "zai/glm-5-turbo"
+		return "zai/glm-5.1"
 	}
 	var root struct {
 		Agents struct {
@@ -1706,7 +1706,7 @@ func resolveDefaultModel(logger *slog.Logger) string {
 	}
 	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
 		logger.Warn("failed to parse agents config for model", "error", err)
-		return "zai/glm-5-turbo"
+		return "zai/glm-5.1"
 	}
 	if root.Agents.DefaultModel != "" {
 		return root.Agents.DefaultModel
@@ -1717,7 +1717,7 @@ func resolveDefaultModel(logger *slog.Logger) string {
 			return model
 		}
 	}
-	return "zai/glm-5-turbo"
+	return "zai/glm-5.1"
 }
 
 // extractModelFromDefaults handles both string and object forms of the model field.

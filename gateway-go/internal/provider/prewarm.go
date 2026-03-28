@@ -20,7 +20,7 @@ const (
 	// prewarmMaxRetries is the maximum number of prewarm attempts.
 	prewarmMaxRetries = 2
 	// prewarmDefaultModel is the fallback model when config has none.
-	prewarmDefaultModel = "zai/glm-5-turbo"
+	prewarmDefaultModel = "zai/glm-5.1"
 	// prewarmDefaultBaseURL is the Z.ai Coding Plan global endpoint.
 	prewarmDefaultBaseURL = "https://api.z.ai/api/coding/paas/v4"
 )
@@ -134,7 +134,7 @@ func loadPrewarmConfig(logger *slog.Logger) (providerID, modelName string, cfg *
 		return "", "", nil
 	}
 
-	// Resolve default model (e.g. "zai/glm-5-turbo").
+	// Resolve default model (e.g. "zai/glm-5.1").
 	model := root.Agents.DefaultModel
 	if model == "" {
 		model = extractModelFromDefaults(root.Agents.Defaults)

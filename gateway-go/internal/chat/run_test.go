@@ -15,7 +15,7 @@ func TestParseModelID(t *testing.T) {
 		wantProv   string
 		wantModel  string
 	}{
-		{"zai/glm-5-turbo", "zai", "glm-5-turbo"},
+		{"zai/glm-5.1", "zai", "glm-5.1"},
 		{"anthropic/claude-3-opus", "anthropic", "claude-3-opus"},
 		{"gpt-4", "", "gpt-4"},
 		{"claude-3-sonnet", "", "claude-3-sonnet"},
