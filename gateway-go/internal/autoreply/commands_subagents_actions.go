@@ -553,26 +553,6 @@ type SubagentFocusDeps struct {
 	BindSession func(params SessionBindParams) (*SessionBindResult, error)
 }
 
-// SessionBindParams holds params for binding a session to a conversation.
-type SessionBindParams struct {
-	TargetSessionKey string
-	TargetKind       string // "subagent" or "session"
-	Channel          string
-	AccountID        string
-	ConversationID   string
-	Placement        string // "current" or "child"
-	Label            string
-	AgentID          string
-	BoundBy          string
-}
-
-// SessionBindResult holds the result of a session binding.
-type SessionBindResult struct {
-	BindingID      string
-	ConversationID string
-	TargetKey      string
-}
-
 // HandleSubagentsFocusAction binds a conversation to a subagent session.
 func HandleSubagentsFocusAction(ctx *SubagentsCommandContext, deps *SubagentFocusDeps) *SubagentCommandResult {
 	channel := ctx.Channel
@@ -637,13 +617,6 @@ type SubagentUnfocusDeps struct {
 	Unbind         func(bindingID string) error
 }
 
-// SessionBindingEntry represents an active session binding.
-type SessionBindingEntry struct {
-	BindingID        string
-	TargetSessionKey string
-	BoundBy          string
-}
-
 // HandleSubagentsUnfocusAction unbinds a conversation from its session.
 func HandleSubagentsUnfocusAction(ctx *SubagentsCommandContext, deps *SubagentUnfocusDeps) *SubagentCommandResult {
 	channel := ctx.Channel
@@ -700,17 +673,6 @@ func HandleSubagentsUnfocusAction(ctx *SubagentsCommandContext, deps *SubagentUn
 // SubagentAgentsDeps provides dependencies for the agents action.
 type SubagentAgentsDeps struct {
 	ListBindings func(sessionKey string) []AgentBindingEntry
-}
-
-// AgentBindingEntry represents a session binding for display.
-type AgentBindingEntry struct {
-	ConversationID string
-	Channel        string
-	AccountID      string
-	Status         string
-	TargetKind     string
-	TargetKey      string
-	Label          string
 }
 
 // HandleSubagentsAgentsAction displays active agents and their bindings.

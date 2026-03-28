@@ -40,7 +40,7 @@ func handleModelCommand(ctx CommandContext) (*CommandResult, error) {
 
 	return &CommandResult{
 		Reply:      fmt.Sprintf("🤖 Model set to: %s", FormatProviderModelRef(provider, model)),
-		SessionMod: &SessionModification{Model: model, Provider: provider},
+		SessionMod: &types.SessionModification{Model: model, Provider: provider},
 		SkipAgent:  true,
 	}, nil
 }
@@ -112,7 +112,7 @@ func handleThinkCommand(ctx CommandContext) (*CommandResult, error) {
 	}
 	return &CommandResult{
 		Reply:      fmt.Sprintf("🧠 Thinking set to: **%s**", level),
-		SessionMod: &SessionModification{ThinkLevel: level},
+		SessionMod: &types.SessionModification{ThinkLevel: level},
 		SkipAgent:  true,
 	}, nil
 }
@@ -132,7 +132,7 @@ func handleFastCommand(ctx CommandContext) (*CommandResult, error) {
 	}
 	return &CommandResult{
 		Reply:      fmt.Sprintf("⚡ Fast mode: **%s**", boolToOnOff(val)),
-		SessionMod: &SessionModification{FastMode: &val},
+		SessionMod: &types.SessionModification{FastMode: &val},
 		SkipAgent:  true,
 	}, nil
 }
@@ -152,7 +152,7 @@ func handleVerboseCommand(ctx CommandContext) (*CommandResult, error) {
 	}
 	return &CommandResult{
 		Reply:      fmt.Sprintf("📝 Verbose: **%s**", level),
-		SessionMod: &SessionModification{VerboseLevel: level},
+		SessionMod: &types.SessionModification{VerboseLevel: level},
 		SkipAgent:  true,
 	}, nil
 }
@@ -172,7 +172,7 @@ func handleReasoningCommand(ctx CommandContext) (*CommandResult, error) {
 	}
 	return &CommandResult{
 		Reply:      fmt.Sprintf("💭 Reasoning: **%s**", level),
-		SessionMod: &SessionModification{ReasoningLevel: level},
+		SessionMod: &types.SessionModification{ReasoningLevel: level},
 		SkipAgent:  true,
 	}, nil
 }
@@ -192,7 +192,7 @@ func handleElevatedCommand(ctx CommandContext) (*CommandResult, error) {
 	}
 	return &CommandResult{
 		Reply:      fmt.Sprintf("🔓 Elevated: **%s**", level),
-		SessionMod: &SessionModification{ElevatedLevel: level},
+		SessionMod: &types.SessionModification{ElevatedLevel: level},
 		SkipAgent:  true,
 	}, nil
 }

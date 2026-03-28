@@ -12,6 +12,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
@@ -138,7 +139,7 @@ func IsFullDirectiveOnly(directives FullInlineDirectives, cleanedBody string, is
 		return false
 	}
 
-	stripped := StripStructuralPrefixes(cleanedBody)
+	stripped := inbound.StripStructuralPrefixes(cleanedBody)
 	if isGroup {
 		stripped = stripAllMentions(stripped)
 	}

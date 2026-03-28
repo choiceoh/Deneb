@@ -21,7 +21,7 @@ type DirectiveHandlingResult struct {
 	// Whether the message is directive-only (no user text).
 	IsDirectiveOnly bool
 	// Session modifications to apply.
-	SessionMod *SessionModification
+	SessionMod *types.SessionModification
 	// Immediate reply (e.g., for /status in directive form).
 	ImmediateReply *types.ReplyPayload
 	// Acknowledgment text for mode changes.
@@ -72,7 +72,7 @@ func HandleDirectives(body string, session *types.SessionState, opts DirectiveHa
 	result.IsDirectiveOnly = IsDirectiveOnly(directives)
 
 	// 2. Validate and resolve each directive.
-	mod := &SessionModification{}
+	mod := &types.SessionModification{}
 	hasAnyChange := false
 
 	// Think level.
@@ -261,7 +261,7 @@ func resolveModelDirective(rawModel, rawProfile string, opts DirectiveHandlingOp
 		var bestCandidate *ModelCandidate
 		bestScore := 0
 		for i := range opts.ModelCandidates {
-			score := scoreFuzzyMatch(strings.ToLower(rawModel), opts.ModelCandidates[i])
+			score := ScoreFuzzyMatch(strings.ToLower(rawModel), opts.ModelCandidates[i])
 			if score > bestScore {
 				bestScore = score
 				bestCandidate = &opts.ModelCandidates[i]

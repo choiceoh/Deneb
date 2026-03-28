@@ -67,7 +67,7 @@ func TestHandleDirectives_ElevatedBlocked(t *testing.T) {
 func TestPersistDirectives(t *testing.T) {
 	session := &types.SessionState{}
 	result := DirectiveHandlingResult{
-		SessionMod: &SessionModification{
+		SessionMod: &types.SessionModification{
 			ThinkLevel: types.ThinkHigh,
 			FastMode:   boolPtr(true),
 		},

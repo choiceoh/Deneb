@@ -3,6 +3,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"strings"
 )
@@ -62,7 +63,7 @@ func BuildInboundCommandContext(params struct {
 		if params.Channel != nil {
 			botUsername = params.Channel.BotUsername
 		}
-		bodyForNormalize = StripMentions(rawBodyNormalized, botUsername)
+		bodyForNormalize = inbound.StripMentions(rawBodyNormalized, botUsername)
 	}
 
 	commandBodyNormalized := bodyForNormalize

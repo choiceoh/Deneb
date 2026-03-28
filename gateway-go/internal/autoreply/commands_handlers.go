@@ -76,7 +76,7 @@ type ChannelHealthEntry struct {
 type CommandResult struct {
 	Reply      string
 	Payloads   []types.ReplyPayload
-	SessionMod *SessionModification
+	SessionMod *types.SessionModification
 	SkipAgent  bool
 	IsError    bool
 	BtwContext *BtwContext
@@ -87,25 +87,6 @@ type CommandResult struct {
 // for the agent turn without modifying the main session state.
 type BtwContext struct {
 	Question string `json:"question"`
-}
-
-// SessionModification describes changes to apply to the session.
-type SessionModification struct {
-	Reset           bool
-	Model           string
-	Provider        string
-	ThinkLevel      types.ThinkLevel
-	VerboseLevel    types.VerboseLevel
-	FastMode        *bool
-	ReasoningLevel  types.ReasoningLevel
-	ElevatedLevel   types.ElevatedLevel
-	SendPolicy      string
-	GroupActivation types.GroupActivationMode
-	SystemPrompt    *string
-	Label           *string
-	// Session lifecycle.
-	IdleTimeoutMs int64
-	MaxAgeMs      int64
 }
 
 // CommandRouter dispatches commands to their handlers.

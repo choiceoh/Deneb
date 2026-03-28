@@ -12,7 +12,7 @@ import (
 func handleNewCommand(ctx CommandContext) (*CommandResult, error) {
 	return &CommandResult{
 		Reply:      "🔄 New session started.",
-		SessionMod: &SessionModification{Reset: true},
+		SessionMod: &types.SessionModification{Reset: true},
 		SkipAgent:  true,
 	}, nil
 }
@@ -20,7 +20,7 @@ func handleNewCommand(ctx CommandContext) (*CommandResult, error) {
 func handleResetCommand(ctx CommandContext) (*CommandResult, error) {
 	return &CommandResult{
 		Reply:      "🔄 Session reset.",
-		SessionMod: &SessionModification{Reset: true},
+		SessionMod: &types.SessionModification{Reset: true},
 		SkipAgent:  true,
 	}, nil
 }
@@ -111,13 +111,13 @@ func handleSessionLifecycleCommand(ctx CommandContext) (*CommandResult, error) {
 		if durationMs == 0 {
 			return &CommandResult{
 				Reply:      "⏱ Session idle timeout disabled.",
-				SessionMod: &SessionModification{IdleTimeoutMs: 0},
+				SessionMod: &types.SessionModification{IdleTimeoutMs: 0},
 				SkipAgent:  true,
 			}, nil
 		}
 		return &CommandResult{
 			Reply:      fmt.Sprintf("⏱ Session idle timeout set to %s.", formatDurationHuman(durationMs)),
-			SessionMod: &SessionModification{IdleTimeoutMs: durationMs},
+			SessionMod: &types.SessionModification{IdleTimeoutMs: durationMs},
 			SkipAgent:  true,
 		}, nil
 
@@ -125,13 +125,13 @@ func handleSessionLifecycleCommand(ctx CommandContext) (*CommandResult, error) {
 		if durationMs == 0 {
 			return &CommandResult{
 				Reply:      "⏱ Session max age disabled.",
-				SessionMod: &SessionModification{MaxAgeMs: 0},
+				SessionMod: &types.SessionModification{MaxAgeMs: 0},
 				SkipAgent:  true,
 			}, nil
 		}
 		return &CommandResult{
 			Reply:      fmt.Sprintf("⏱ Session max age set to %s.", formatDurationHuman(durationMs)),
-			SessionMod: &SessionModification{MaxAgeMs: durationMs},
+			SessionMod: &types.SessionModification{MaxAgeMs: durationMs},
 			SkipAgent:  true,
 		}, nil
 
@@ -161,7 +161,7 @@ func handleActivationCommand(ctx CommandContext) (*CommandResult, error) {
 	}
 	return &CommandResult{
 		Reply:      fmt.Sprintf("👥 Group activation: **%s**", mode),
-		SessionMod: &SessionModification{GroupActivation: mode},
+		SessionMod: &types.SessionModification{GroupActivation: mode},
 		SkipAgent:  true,
 	}, nil
 }
@@ -181,7 +181,7 @@ func handleSendPolicyCommand(ctx CommandContext) (*CommandResult, error) {
 	}
 	return &CommandResult{
 		Reply:      fmt.Sprintf("📤 Send policy: **%s**", policy),
-		SessionMod: &SessionModification{SendPolicy: string(policy)},
+		SessionMod: &types.SessionModification{SendPolicy: string(policy)},
 		SkipAgent:  true,
 	}, nil
 }

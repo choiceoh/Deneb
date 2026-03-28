@@ -1,0 +1,150 @@
+package acp
+
+import (
+	"context"
+	"testing"
+)
+
+func TestSubagentCommandDeps_SpawnSubagent(t *testing.T) {
+	acpRegistry := NewACPRegistry()
+	deps := &SubagentInfraDeps{
+		ACPRegistry: acpRegistry,
+	}
+
+	result := deps.SpawnSubagent(context.Background(), SpawnSubagentParams{
+		ParentSessionKey: "parent-session",
+		ParentAgentID:    "parent-agent",
+		Role:             "researcher",
+		WorkspaceDir:     "/tmp/workspace",
+		Model:            "claude-opus-4.6",
+		Provider:         "anthropic",
+	})
+
+	if result.Error != nil {
+		t.Fatalf("SpawnSubagent() error = %v", result.Error)
+	}
+	if result.AgentID == "" {
+		t.Error("expected non-empty agent ID")
+	}
+	if result.SessionKey == "" {
+		t.Error("expected non-empty session key")
+	}
+
+	// Agent should be registered.
+	agent := acpRegistry.Get(result.AgentID)
+	if agent == nil {
+		t.Fatal("expected agent in registry")
+	}
+	if agent.Role != "researcher" {
+		t.Errorf("role = %q, want 'researcher'", agent.Role)
+	}
+	if agent.Status != "idle" {
+		t.Errorf("status = %q, want 'idle'", agent.Status)
+	}
+	if agent.Depth != 0 {
+		t.Errorf("depth = %d, want 0 (parent not in registry)", agent.Depth)
+	}
+}
+
+func TestSubagentCommandDeps_SpawnSubagent_MaxDepth(t *testing.T) {
+	acpRegistry := NewACPRegistry()
+	deps := &SubagentInfraDeps{
+		ACPRegistry: acpRegistry,
+	}
+
+	// Register a deep parent.
+	acpRegistry.Register(ACPAgent{
+		ID:    "deep-parent",
+		Depth: 4,
+	})
+
+	result := deps.SpawnSubagent(context.Background(), SpawnSubagentParams{
+		ParentSessionKey: "session",
+		ParentAgentID:    "deep-parent",
+		Role:             "child",
+		MaxDepth:         5,
+	})
+
+	if result.Error == nil {
+		t.Error("expected error for max depth exceeded")
+	}
+}
+
+func TestSubagentCommandDeps_KillSubagent(t *testing.T) {
+	acpRegistry := NewACPRegistry()
+	deps := &SubagentInfraDeps{
+		ACPRegistry: acpRegistry,
+	}
+
+	acpRegistry.Register(ACPAgent{
+		ID:       "agent-1",
+		Status:   "running",
+		ParentID: "",
+	})
+	acpRegistry.Register(ACPAgent{
+		ID:       "agent-2",
+		Status:   "running",
+		ParentID: "agent-1",
+	})
+
+	err := deps.KillSubagent("agent-1")
+	if err != nil {
+		t.Fatalf("KillSubagent() error = %v", err)
+	}
+
+	// Both should be killed.
+	parent := acpRegistry.Get("agent-1")
+	if parent.Status != "killed" {
+		t.Errorf("parent status = %q, want 'killed'", parent.Status)
+	}
+	child := acpRegistry.Get("agent-2")
+	if child.Status != "killed" {
+		t.Errorf("child status = %q, want 'killed'", child.Status)
+	}
+}
+
+func TestSubagentCommandDeps_ListSubagents(t *testing.T) {
+	acpRegistry := NewACPRegistry()
+	deps := &SubagentInfraDeps{
+		ACPRegistry: acpRegistry,
+	}
+
+	// No agents.
+	result := deps.ListSubagents("")
+	if result != "No active subagents." {
+		t.Errorf("expected 'No active subagents.', got %q", result)
+	}
+
+	// Add some agents.
+	acpRegistry.Register(ACPAgent{
+		ID:       "agent-1",
+		Role:     "researcher",
+		Status:   "running",
+		ParentID: "parent",
+	})
+	result = deps.ListSubagents("parent")
+	if result == "No active subagents." {
+		t.Error("expected agent in list")
+	}
+}
+
+func TestSubagentCommandDeps_NilRegistry(t *testing.T) {
+	deps := &SubagentInfraDeps{}
+
+	result := deps.SpawnSubagent(context.Background(), SpawnSubagentParams{
+		Role: "test",
+	})
+	if result.Error == nil {
+		t.Error("expected error for nil registry")
+	}
+
+	err := deps.KillSubagent("agent-1")
+	if err == nil {
+		t.Error("expected error for nil registry")
+	}
+
+	list := deps.ListSubagents("")
+	if list == "" {
+		t.Error("expected non-empty message for nil registry")
+	}
+}

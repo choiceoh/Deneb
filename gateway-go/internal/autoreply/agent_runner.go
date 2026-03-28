@@ -6,6 +6,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"encoding/json"
@@ -24,7 +25,7 @@ type AgentTurnConfig struct {
 	Provider       string
 	SystemPrompt   string
 	Message        string
-	Attachments    []MediaAttachment
+	Attachments    []media.MediaAttachment
 	ThinkLevel     types.ThinkLevel
 	FastMode       bool
 	VerboseLevel   types.VerboseLevel
@@ -46,7 +47,7 @@ type AgentTurnConfig struct {
 // AgentTurnResult holds the outcome of an agent turn.
 type AgentTurnResult struct {
 	Payloads         []types.ReplyPayload
-	ToolMeta         *ToolMeta
+	ToolMeta         *media.ToolMeta
 	OutputText       string
 	Summary          string
 	TokensUsed       TokenUsage
@@ -226,7 +227,7 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 	result := &AgentTurnResult{
 		ModelUsed:    cfg.Model,
 		ProviderUsed: cfg.Provider,
-		ToolMeta:     NewToolMeta(),
+		ToolMeta:     media.NewToolMeta(),
 	}
 
 	// Apply timeout.
@@ -420,7 +421,7 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 				output, isError, toolErr := r.executeTool(runCtx, call, cfg)
 				toolDuration := time.Since(toolStart).Milliseconds()
 
-				result.ToolMeta.Record(ToolInvocation{
+				result.ToolMeta.Record(media.ToolInvocation{
 					Name:     call.Name,
 					ID:       call.ID,
 					Input:    formatToolInput(call.Input),

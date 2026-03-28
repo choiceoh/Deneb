@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+var multiSpaceRe = regexp.MustCompile(`\s+`)
+
 // InlineDirectives holds all parsed inline directives from a message body.
 type InlineDirectives struct {
 	Cleaned string // message body with all directives removed

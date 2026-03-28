@@ -3,6 +3,7 @@ package autoreply
 import (
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 )
 
@@ -129,5 +130,5 @@ func (m *AbortMemory) Clear(sessionKey string) {
 }
 
 var currentTimeMs = func() int64 {
-	return timeNowMs()
+	return time.Now().UnixMilli()
 }

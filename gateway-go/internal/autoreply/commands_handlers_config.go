@@ -2,6 +2,7 @@
 package autoreply
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"fmt"
 	"strings"
 )
@@ -47,13 +48,13 @@ func handleSystemPromptCommand(ctx CommandContext) (*CommandResult, error) {
 	if raw == "" {
 		return &CommandResult{
 			Reply:      "System prompt cleared.",
-			SessionMod: &SessionModification{SystemPrompt: strPtr("")},
+			SessionMod: &types.SessionModification{SystemPrompt: strPtr("")},
 			SkipAgent:  true,
 		}, nil
 	}
 	return &CommandResult{
 		Reply:      "✅ System prompt updated.",
-		SessionMod: &SessionModification{SystemPrompt: &raw},
+		SessionMod: &types.SessionModification{SystemPrompt: &raw},
 		SkipAgent:  true,
 	}, nil
 }
