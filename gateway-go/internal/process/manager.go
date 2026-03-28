@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 )
 
@@ -105,7 +106,7 @@ func (m *Manager) SetApprover(cb ApprovalCallback) {
 // and no approver is configured or approval is denied, returns StatusDenied.
 func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	if req.ID == "" {
-		req.ID = fmt.Sprintf("proc-%d", time.Now().UnixNano())
+		req.ID = shortid.New("proc")
 	}
 
 	tracked := &TrackedProcess{

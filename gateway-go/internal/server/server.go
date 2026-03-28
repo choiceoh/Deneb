@@ -54,6 +54,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
+	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
@@ -1143,7 +1144,7 @@ func (s *Server) registerPhase2Methods() {
 	// Wire SessionSendFn after handler creation to avoid circular deps.
 	s.toolDeps.SessionSendFn = func(sessionKey, message string) error {
 		fakeReq := &protocol.RequestFrame{
-			ID:     fmt.Sprintf("tool_send_%d", time.Now().UnixNano()),
+			ID:     shortid.New("tool_send"),
 			Method: "sessions.send",
 		}
 		params := map[string]string{"key": sessionKey, "message": message}

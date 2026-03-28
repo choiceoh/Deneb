@@ -3,7 +3,8 @@ package chat
 import (
 	"context"
 	"fmt"
-	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 )
 
 // SyncResult holds the outcome of a synchronous agent run.
@@ -36,7 +37,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 		SessionKey:  sessionKey,
 		Message:     sanitizeInput(message),
 		Model:       model,
-		ClientRunID: fmt.Sprintf("sync_%d", time.Now().UnixNano()),
+		ClientRunID: shortid.New("sync"),
 	}
 
 	deps := h.buildRunDeps()
@@ -78,7 +79,7 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		SessionKey:  sessionKey,
 		Message:     sanitizeInput(message),
 		Model:       model,
-		ClientRunID: fmt.Sprintf("stream_%d", time.Now().UnixNano()),
+		ClientRunID: shortid.New("stream"),
 	}
 
 	deps := h.buildRunDeps()

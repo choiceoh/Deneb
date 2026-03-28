@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
@@ -27,7 +28,7 @@ type autonomousAgentAdapter struct {
 
 // RunAgentTurn implements autonomous.AgentRunner.
 func (a *autonomousAgentAdapter) RunAgentTurn(ctx context.Context, sessionKey, message string) (string, error) {
-	runID := fmt.Sprintf("autonomous_%d", time.Now().UnixNano())
+	runID := shortid.New("autonomous")
 
 	// Subscribe to transcript appends for this session BEFORE starting the run,
 	// so we don't miss any assistant messages. Accumulate all assistant content

@@ -1,13 +1,15 @@
 package autoreply
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/queue"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 )
 
 // SubagentInfraDeps provides the full dependency interface for subagent/ACP
@@ -69,7 +71,7 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 	}
 
 	// Generate agent ID and session key.
-	agentID := fmt.Sprintf("sub_%s_%d", sanitizeAgentID(params.Role), time.Now().UnixNano())
+	agentID := shortid.New("sub_" + sanitizeAgentID(params.Role))
 	sessionKey := fmt.Sprintf("acp:%s:%s", params.ParentSessionKey, agentID)
 
 	// Register in ACP registry.
