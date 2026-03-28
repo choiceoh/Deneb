@@ -18,6 +18,20 @@ func Unmarshal[T any](context string, data []byte) (T, error) {
 	return v, nil
 }
 
+// UnmarshalInto decodes JSON data into v (pointer) with consistent error wrapping.
+// Use this for anonymous structs where Unmarshal[T] cannot be used:
+//
+//	var p struct { Name string `json:"name"` }
+//	if err := jsonutil.UnmarshalInto("user params", input, &p); err != nil {
+//	    return "", err
+//	}
+func UnmarshalInto(context string, data []byte, v any) error {
+	if err := json.Unmarshal(data, v); err != nil {
+		return fmt.Errorf("parse %s: %w", context, err)
+	}
+	return nil
+}
+
 // UnmarshalLLM extracts a JSON object from noisy LLM output and unmarshals
 // into T. Pipeline: StripThinkingTags -> ExtractObject -> json.Unmarshal,
 // with RecoverTruncated as fallback.

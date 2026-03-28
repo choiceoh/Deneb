@@ -39,6 +39,31 @@ func TestUnmarshal(t *testing.T) {
 	})
 }
 
+func TestUnmarshalInto(t *testing.T) {
+	t.Run("valid JSON", func(t *testing.T) {
+		var p struct {
+			Name string `json:"name"`
+		}
+		if err := UnmarshalInto("test params", []byte(`{"name":"Bob"}`), &p); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.Name != "Bob" {
+			t.Errorf("got %+v", p)
+		}
+	})
+
+	t.Run("invalid JSON wraps error with context", func(t *testing.T) {
+		var p struct{}
+		err := UnmarshalInto("test params", []byte(`{bad`), &p)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "parse test params:") {
+			t.Errorf("error should contain context, got: %v", err)
+		}
+	})
+}
+
 func TestUnmarshalLLM(t *testing.T) {
 	type result struct {
 		Answer string `json:"answer"`
