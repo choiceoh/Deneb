@@ -368,6 +368,10 @@ func (s *Store) FetchSummaryStats(conversationID uint64) (SummaryStats, error) {
 	return stats, nil
 }
 
+// maxCompactionEvents is the maximum number of compaction events retained on disk.
+// Older entries are pruned to prevent unbounded file growth.
+const maxCompactionEvents = 500
+
 // PersistLeafSummary inserts a leaf summary and replaces compacted messages.
 func (s *Store) PersistLeafSummary(input PersistLeafInput) error {
 	s.mu.Lock()
@@ -420,6 +424,11 @@ func (s *Store) PersistLeafSummary(input PersistLeafInput) error {
 
 	sort.Slice(kept, func(i, j int) bool { return kept[i].Ordinal < kept[j].Ordinal })
 	s.data.ContextItems = kept
+
+	// Prune compacted message records — they are now captured by the leaf summary.
+	for _, msgID := range input.MessageIDs {
+		delete(s.data.Messages, msgKey(msgID))
+	}
 
 	return s.flushLocked()
 }
@@ -477,6 +486,13 @@ func (s *Store) PersistCondensedSummary(input PersistCondensedInput) error {
 	sort.Slice(kept, func(i, j int) bool { return kept[i].Ordinal < kept[j].Ordinal })
 	s.data.ContextItems = kept
 
+	// Prune condensed child summary records — they are now captured by the condensed summary.
+	for _, parentID := range input.ParentSummaryIDs {
+		delete(s.data.Summaries, parentID)
+		delete(s.data.SummaryParents, parentID)
+		delete(s.data.SummaryMessages, parentID)
+	}
+
 	return s.flushLocked()
 }
 
@@ -494,6 +510,11 @@ func (s *Store) PersistEvent(input PersistEventInput) error {
 		CreatedSummaryID: input.CreatedSummaryID,
 		CreatedAt:        time.Now().UnixMilli(),
 	})
+
+	// Cap the event log to prevent unbounded file growth.
+	if len(s.data.CompactionEvents) > maxCompactionEvents {
+		s.data.CompactionEvents = s.data.CompactionEvents[len(s.data.CompactionEvents)-maxCompactionEvents:]
+	}
 
 	return s.flushLocked()
 }

@@ -106,15 +106,32 @@ func ResolveProbeAuth(cfg CredentialConfig) *CredentialPlan {
 
 // readEnvCredential reads a credential from an environment variable.
 // Returns empty string if not set or contains only whitespace.
-// Rejects unresolved secret references like ${VAR_NAME}.
+// Rejects values that contain unresolved shell expansion patterns
+// ($VAR, ${VAR}, $(cmd)) to prevent accidentally storing a literal
+// placeholder as a secret.
 func readEnvCredential(key string) string {
 	val := strings.TrimSpace(os.Getenv(key))
 	if val == "" {
 		return ""
 	}
-	// Reject unresolved secret references (e.g., "${SOME_VAR}").
-	if strings.HasPrefix(val, "${") && strings.HasSuffix(val, "}") {
+	if containsShellExpansion(val) {
 		return ""
 	}
 	return val
+}
+
+// containsShellExpansion reports whether s contains a shell variable or
+// command substitution pattern: $VAR, ${VAR}, or $(cmd).
+func containsShellExpansion(s string) bool {
+	for i := 0; i < len(s)-1; i++ {
+		if s[i] != '$' {
+			continue
+		}
+		next := s[i+1]
+		if next == '{' || next == '(' || next == '_' ||
+			(next >= 'A' && next <= 'Z') || (next >= 'a' && next <= 'z') {
+			return true
+		}
+	}
+	return false
 }

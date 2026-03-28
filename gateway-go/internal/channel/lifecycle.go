@@ -170,6 +170,20 @@ func (lm *LifecycleManager) HealthCheck() []ChannelHealth {
 		idx := i
 		i++
 		go func(id string, p Plugin, idx int) {
+			// Recover from panics so a misbehaving plugin cannot deadlock the
+			// health-check channel (ch has a fixed capacity of count).
+			defer func() {
+				if r := recover(); r != nil {
+					lm.logger.Error("channel status panicked", "id", id, "panic", r)
+					ch <- indexedHealth{
+						idx: idx,
+						health: ChannelHealth{
+							ID:    id,
+							Error: fmt.Sprintf("status panic: %v", r),
+						},
+					}
+				}
+			}()
 			start := time.Now()
 			status := p.Status()
 			latency := time.Since(start).Milliseconds()
@@ -226,12 +240,12 @@ func (lm *LifecycleManager) RestartChannel(ctx context.Context, id string) error
 
 	lm.mu.Lock()
 	attempt := lm.restartCount[id]
-	lm.restartCount[id] = attempt + 1
-	lm.mu.Unlock()
-
 	if attempt >= restartMaxRetries {
+		lm.mu.Unlock()
 		return fmt.Errorf("channel %q exceeded max restart attempts (%d)", id, restartMaxRetries)
 	}
+	lm.restartCount[id] = attempt + 1
+	lm.mu.Unlock()
 
 	// Exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s.
 	delay := restartBaseDelay << uint(attempt)

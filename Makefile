@@ -74,7 +74,11 @@ go-run: go
 go-dev:
 	@echo "Starting Go gateway in dev mode (auto-restart on SIGUSR1)..."
 	@while true; do \
-		cd gateway-go && go build $(GO_LDFLAGS) -o /tmp/deneb-gateway-dev ./cmd/gateway/ && /tmp/deneb-gateway-dev $(ARGS); \
+		if ! go build -C gateway-go $(GO_LDFLAGS) -o /tmp/deneb-gateway-dev ./cmd/gateway/; then \
+			echo "[go-dev] Build failed, aborting."; \
+			exit 1; \
+		fi; \
+		/tmp/deneb-gateway-dev $(ARGS); \
 		EXIT=$$?; \
 		if [ $$EXIT -eq 75 ]; then \
 			echo "[go-dev] Restarting gateway (SIGUSR1)..."; \
