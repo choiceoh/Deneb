@@ -422,4 +422,50 @@ mod tests {
         // "비금도" should be in clients, "해저케이블" should be in keywords
         assert!(!analysis.extracted.keywords.is_empty() || !analysis.extracted.clients.is_empty());
     }
+
+    #[test]
+    fn test_analyze_person_query() {
+        let analysis = analyze_query("김대희 담당 프로젝트");
+        assert!(
+            analysis.extracted.persons.contains(&"김대희".to_string()),
+            "expected 김대희 in persons, got {:?}",
+            analysis.extracted.persons
+        );
+    }
+
+    #[test]
+    fn test_analyze_status_query() {
+        let analysis = analyze_query("긴급 처리 필요한 프로젝트");
+        assert!(
+            !analysis.extracted.statuses.is_empty(),
+            "expected at least one status term extracted"
+        );
+        assert!(analysis.extracted.statuses.iter().any(|s| s.contains("긴급")));
+    }
+
+    #[test]
+    fn test_has_semantic_pattern_true() {
+        assert!(has_semantic_pattern("어떻게 하면 되나요"));
+        assert!(has_semantic_pattern("화재 사고 원인이 뭔가요"));
+        assert!(!has_semantic_pattern("비금도"));
+    }
+
+    #[test]
+    fn test_analyze_confidence_in_range() {
+        for query in &[
+            "비금도",
+            "기아 리스크 분석",
+            "어떻게 되나요",
+            "해저케이블 기술적 방식",
+            "",
+        ] {
+            let analysis = analyze_query(query);
+            assert!(
+                analysis.confidence >= 0.0 && analysis.confidence <= 1.0,
+                "confidence out of [0,1] for {:?}: {}",
+                query,
+                analysis.confidence
+            );
+        }
+    }
 }

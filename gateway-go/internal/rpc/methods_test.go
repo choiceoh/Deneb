@@ -375,3 +375,200 @@ func TestSessionsList(t *testing.T) {
 		t.Fatalf("expected ok, got error: %+v", resp.Error)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Channel method contract tests
+// ---------------------------------------------------------------------------
+
+func TestChannelsList(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "channels.list", nil)
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+}
+
+func TestChannelsGet_MissingID(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "channels.get", map[string]any{})
+	if resp.OK {
+		t.Error("expected error for missing id")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("expected MISSING_PARAM, got %+v", resp.Error)
+	}
+}
+
+func TestChannelsGet_NotFound(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "channels.get", map[string]string{"id": "nonexistent-chan"})
+	if resp.OK {
+		t.Error("expected error for nonexistent channel")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrNotFound {
+		t.Errorf("expected NOT_FOUND, got %+v", resp.Error)
+	}
+}
+
+func TestChannelsStatus(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "channels.status", nil)
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Security method contract tests
+// ---------------------------------------------------------------------------
+
+func TestSecurityValidateSessionKey_Valid(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "security.validate_session_key", map[string]string{"key": "valid-session-key"})
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+	var payload map[string]any
+	json.Unmarshal(resp.Payload, &payload)
+	if _, ok := payload["valid"]; !ok {
+		t.Error("expected valid field in response")
+	}
+}
+
+func TestSecurityValidateSessionKey_EmptyKey(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "security.validate_session_key", map[string]string{"key": ""})
+	if !resp.OK {
+		t.Fatalf("expected ok (valid=false), got error: %+v", resp.Error)
+	}
+	var payload map[string]any
+	json.Unmarshal(resp.Payload, &payload)
+	if payload["valid"] != false {
+		t.Errorf("expected valid=false for empty key, got %v", payload["valid"])
+	}
+}
+
+func TestSecuritySanitizeHTML_Valid(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "security.sanitize_html", map[string]string{
+		"input": "<b>hello</b><script>alert(1)</script>",
+	})
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+	var payload map[string]any
+	json.Unmarshal(resp.Payload, &payload)
+	if _, ok := payload["output"]; !ok {
+		t.Error("expected output field in response")
+	}
+}
+
+func TestSecurityIsURL_ReturnsOK(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "security.is_safe_url", map[string]string{
+		"url": "https://example.com/path",
+	})
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+	var payload map[string]any
+	json.Unmarshal(resp.Payload, &payload)
+	if _, ok := payload["safe"]; !ok {
+		t.Error("expected safe field in response")
+	}
+}
+
+func TestSecurityValidateErrorCode_KnownCode(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "security.validate_error_code", map[string]string{"code": "NOT_FOUND"})
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+	var payload map[string]any
+	json.Unmarshal(resp.Payload, &payload)
+	if payload["valid"] != true {
+		t.Errorf("expected valid=true for NOT_FOUND code, got %v", payload["valid"])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Memory method contract tests
+// ---------------------------------------------------------------------------
+
+func TestMemoryBuildFTSQuery_Valid(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "memory.build_fts_query", map[string]string{"raw": "hello world"})
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+}
+
+func TestMemoryBm25RankToScore_Valid(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "memory.bm25_rank_to_score", map[string]any{"rank": -3.5})
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+	var payload map[string]any
+	json.Unmarshal(resp.Payload, &payload)
+	if _, ok := payload["score"]; !ok {
+		t.Error("expected score field in response")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Markdown method contract tests
+// ---------------------------------------------------------------------------
+
+func TestMarkdownDetectFences_Valid(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "markdown.detect_fences", map[string]string{
+		"text": "```go\nfmt.Println(\"hello\")\n```",
+	})
+	if !resp.OK {
+		t.Fatalf("expected ok, got error: %+v", resp.Error)
+	}
+	var payload map[string]any
+	json.Unmarshal(resp.Payload, &payload)
+	if _, ok := payload["fences"]; !ok {
+		t.Error("expected fences field in response")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Compaction sweep.step and context.assembly.step contract tests
+// ---------------------------------------------------------------------------
+
+func TestCompactionSweepStep_MissingHandle(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "compaction.sweep.step", map[string]any{})
+	if resp.OK {
+		t.Error("expected error for missing handle")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("expected MISSING_PARAM, got %+v", resp.Error)
+	}
+}
+
+func TestCompactionSweepStep_MissingResponse(t *testing.T) {
+	d := testDispatcher()
+	// Handle is provided but response is missing.
+	resp := dispatch(t, d, "compaction.sweep.step", map[string]any{"handle": 42})
+	if resp.OK {
+		t.Error("expected error for missing response")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("expected MISSING_PARAM, got %+v", resp.Error)
+	}
+}
+
+func TestContextAssemblyStep_MissingHandle(t *testing.T) {
+	d := testDispatcher()
+	resp := dispatch(t, d, "context.assembly.step", map[string]any{})
+	if resp.OK {
+		t.Error("expected error for missing handle")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("expected MISSING_PARAM, got %+v", resp.Error)
+	}
+}
