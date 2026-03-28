@@ -107,7 +107,6 @@ var toolCompressSkipSet = map[string]bool{
 	"memory_search":  true,
 	"memory_get":     true,
 	"kv":             true,
-	"clipboard":      true,
 	"session_status": true,
 	"sessions_list":  true,
 }

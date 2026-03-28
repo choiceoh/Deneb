@@ -122,10 +122,10 @@ Exec: exec, process
 AI: pilot (local sglang orchestrator)
 Web: web (search + fetch + search+fetch), http
 Memory: memory_search, memory_get, polaris
-System: nodes, cron, autonomous, message, gateway
+System: cron, autonomous, message, gateway
 Sessions: sessions_list/history/search/restore/send/spawn, subagents, session_status
 Media: image, youtube_transcript, send_file
-Data: gmail, kv, clipboard
+Data: gmail, kv
 
 ## Compression
 Any tool call accepts "compress": true. Large outputs auto-summarized by local sglang (SGLANG_BASE_URL, default http://127.0.0.1:30000/v1).
@@ -151,7 +151,6 @@ Tools access runtime context via context.Context:
 - gateway-go/internal/chat/tool_message.go (messaging)
 - gateway-go/internal/chat/tool_media.go (image/youtube/send_file)
 - gateway-go/internal/chat/tool_kv.go (KV store)
-- gateway-go/internal/chat/tool_clipboard.go (clipboard)
 - gateway-go/internal/chat/tool_gmail.go (Gmail)
 - gateway-go/internal/chat/tool_autonomous.go (autonomous goals)`
 

@@ -65,10 +65,10 @@ var toolCategories = []struct {
 	{"AI", []string{"pilot"}},
 	{"Web", []string{"web", "http"}},
 	{"Memory", []string{"memory_search", "memory_get", "polaris", "vega"}},
-	{"System", []string{"nodes", "cron", "autonomous", "message", "gateway"}},
+	{"System", []string{"cron", "autonomous", "message", "gateway"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_restore", "sessions_send", "sessions_spawn", "subagents", "session_status"}},
 	{"Media", []string{"image", "youtube_transcript", "send_file"}},
-	{"Data", []string{"gmail", "kv", "clipboard"}},
+	{"Data", []string{"gmail", "kv"}},
 }
 
 // buildPromptSections assembles the system prompt into static and dynamic parts.

@@ -440,14 +440,6 @@ func TestExpandShortcuts_Image(t *testing.T) {
 	}
 }
 
-func TestExpandShortcuts_Clipboard(t *testing.T) {
-	p := pilotParams{Task: "analyze", Clipboard: "latest"}
-	specs := expandShortcuts(p)
-	if len(specs) != 1 || specs[0].Tool != "clipboard" {
-		t.Errorf("expected 1 clipboard spec, got %d", len(specs))
-	}
-}
-
 func TestExpandShortcuts_Ls(t *testing.T) {
 	p := pilotParams{Task: "overview", Ls: "/home/user/project"}
 	specs := expandShortcuts(p)
@@ -466,24 +458,23 @@ func TestExpandShortcuts_Vega(t *testing.T) {
 
 func TestExpandShortcuts_AllNew(t *testing.T) {
 	p := pilotParams{
-		Task:      "analyze everything",
-		Gmail:     "invoice",
-		YouTube:   "https://youtube.com/watch?v=x",
-		Polaris:   "tools",
-		Image:     "/tmp/img.png",
-		Clipboard: "draft",
-		Ls:        "/tmp",
-		Vega:      "프로젝트 현황",
+		Task:    "analyze everything",
+		Gmail:   "invoice",
+		YouTube: "https://youtube.com/watch?v=x",
+		Polaris: "tools",
+		Image:   "/tmp/img.png",
+		Ls:      "/tmp",
+		Vega:    "프로젝트 현황",
 	}
 	specs := expandShortcuts(p)
-	if len(specs) != 7 {
-		t.Fatalf("expected 7 specs, got %d", len(specs))
+	if len(specs) != 6 {
+		t.Fatalf("expected 6 specs, got %d", len(specs))
 	}
 	tools := make([]string, len(specs))
 	for i, s := range specs {
 		tools[i] = s.Tool
 	}
-	expected := []string{"gmail", "youtube_transcript", "polaris", "image", "clipboard", "ls", "vega"}
+	expected := []string{"gmail", "youtube_transcript", "polaris", "image", "ls", "vega"}
 	for i, want := range expected {
 		if tools[i] != want {
 			t.Errorf("spec[%d].Tool = %q, want %q", i, tools[i], want)
@@ -497,7 +488,6 @@ func TestSourceTypeFromTool_NewTools(t *testing.T) {
 		"gmail":              "content",
 		"youtube_transcript": "content",
 		"polaris":            "content",
-		"clipboard":          "content",
 		"image":              "content",
 		"vega":               "content",
 	}
