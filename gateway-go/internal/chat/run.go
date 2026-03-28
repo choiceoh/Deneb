@@ -30,13 +30,14 @@ var (
 
 // RunParams holds all parameters for an async agent run.
 type RunParams struct {
-	SessionKey  string
-	Message     string
-	Attachments []ChatAttachment
-	Model       string
-	System      string // system prompt override
-	ClientRunID string
-	Delivery    *DeliveryContext
+	SessionKey   string
+	Message      string
+	Attachments  []ChatAttachment
+	Model        string
+	System       string // system prompt override
+	ClientRunID  string
+	Delivery     *DeliveryContext
+	WorkspaceDir string // per-channel workspace override (empty = use global default)
 }
 
 // Agent run defaults.
@@ -63,7 +64,8 @@ type runDeps struct {
 	replyFunc       ReplyFunc                 // optional; delivers response to originating channel
 	mediaSendFn     MediaSendFunc             // optional; delivers files to originating channel
 	typingFn        TypingFunc                // optional; sends typing indicator during run
-	reactionFn      ReactionFunc              // optional; sets emoji reaction for status phases
+	reactionFn        ReactionFunc              // optional; sets emoji reaction for status phases
+	removeReactionFn  ReactionFunc              // optional; removes emoji reaction (Discord additive)
 	providerConfigs map[string]ProviderConfig // optional; config-based provider credentials
 	logger          *slog.Logger              // required (defaults to slog.Default)
 
@@ -137,16 +139,15 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 
 	// Set up status reaction controller for phase-aware emoji on the user's message.
-	// Uses Telegram Bot API-compatible emojis only.
 	// Shows: 👀 queued → 🤔 thinking → 🔥 tool → ⚡ web → 👍 done.
 	var statusCtrl *channel.StatusReactionController
 	if deps.reactionFn != nil && params.Delivery != nil && params.Delivery.MessageID != "" {
 		delivery := params.Delivery
-		telegramEmojis := channel.StatusReactionEmojis{
+		phaseEmojis := channel.StatusReactionEmojis{
 			Queued:     "👀",
 			Thinking:   "🤔",
 			Tool:       "🔥",
-			Coding:     "🔥", // Telegram bots may not support 👨‍💻 ZWJ; use 🔥
+			Coding:     "🔥",
 			Web:        "⚡",
 			Done:       "👍",
 			Error:      "😱",
@@ -154,19 +155,25 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			StallHard:  "😨",
 			Compacting: "🤔",
 		}
+		adapter := channel.StatusReactionAdapter{
+			SetReaction: func(emoji string) error {
+				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+				defer cancel()
+				return deps.reactionFn(rctx, delivery, emoji)
+			},
+		}
+		// Discord uses additive reactions: need RemoveReaction to clear previous phase.
+		if deliveryChannel(params.Delivery) == "discord" && deps.removeReactionFn != nil {
+			adapter.RemoveReaction = func(emoji string) error {
+				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+				defer cancel()
+				return deps.removeReactionFn(rctx, delivery, emoji)
+			}
+		}
 		statusCtrl = channel.NewStatusReactionController(channel.StatusReactionControllerParams{
 			Enabled: true,
-			Adapter: channel.StatusReactionAdapter{
-				SetReaction: func(emoji string) error {
-					// Detach from the run context so the final reaction (done/error)
-					// survives runCancel(). WithoutCancel preserves context values
-					// while removing the cancellation signal.
-					rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-					defer cancel()
-					return deps.reactionFn(rctx, delivery, emoji)
-				},
-			},
-			Emojis: &telegramEmojis,
+			Adapter: adapter,
+			Emojis:  &phaseEmojis,
 			OnError: func(err error) {
 				logger.Warn("status reaction failed", "error", err)
 			},
@@ -241,7 +248,10 @@ func executeAgentRun(
 	// hint that reduces the agent's first-turn exploration (saves 1-3 turns).
 	type proactiveResult struct{ hint string }
 	proactiveCh := make(chan proactiveResult, 1)
-	workspaceDir := resolveWorkspaceDirForPrompt()
+	workspaceDir := params.WorkspaceDir
+	if workspaceDir == "" {
+		workspaceDir = resolveWorkspaceDirForPrompt()
+	}
 	if params.Message != "" && len(params.Message) >= proactiveMinMsgLen {
 		go func() {
 			hint := buildProactiveContext(ctx, params.Message, workspaceDir, logger)
@@ -276,7 +286,12 @@ func executeAgentRun(
 		// Defer format choice: only build the format we'll actually use.
 		// BuildSystemPrompt (string) is the default; overridden to blocks
 		// for Anthropic API after apiType is resolved below.
-		systemPrompt = llm.SystemString(BuildSystemPrompt(spp))
+		// Discord channel uses the coding-focused system prompt.
+		if spp.Channel == "discord" {
+			systemPrompt = llm.SystemString(BuildCodingSystemPrompt(spp))
+		} else {
+			systemPrompt = llm.SystemString(BuildSystemPrompt(spp))
+		}
 	}
 
 	logger.Info("pipeline: system prompt built", "ms", time.Since(promptStart).Milliseconds())
@@ -393,16 +408,25 @@ func executeAgentRun(
 	}
 
 	// 8. Build tool list from registry (uses stored descriptions and schemas).
+	// Discord channel uses the coding profile (subset of tools).
 	var tools []llm.Tool
 	if deps.tools != nil {
-		tools = deps.tools.LLMTools()
+		if deliveryChannel(params.Delivery) == "discord" {
+			tools = deps.tools.LLMToolsForProfile("coding")
+		} else {
+			tools = deps.tools.LLMTools()
+		}
 	}
 
 	// For Anthropic API: rebuild system prompt as ContentBlock array with
 	// cache_control breakpoints, and mark the last tool for caching.
 	if apiType == "anthropic" {
 		if systemPromptParams != nil {
-			systemPrompt = llm.SystemBlocks(BuildSystemPromptBlocks(*systemPromptParams))
+			if systemPromptParams.Channel == "discord" {
+				systemPrompt = llm.SystemBlocks(BuildCodingSystemPromptBlocks(*systemPromptParams))
+			} else {
+				systemPrompt = llm.SystemBlocks(BuildSystemPromptBlocks(*systemPromptParams))
+			}
 			// Re-apply knowledge prefetch (the rebuild above replaces the prompt).
 			if knowledgeAddition != "" {
 				systemPrompt = llm.AppendSystemText(systemPrompt, knowledgeAddition)

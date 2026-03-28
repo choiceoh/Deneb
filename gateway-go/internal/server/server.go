@@ -27,6 +27,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/device"
+	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
@@ -111,6 +112,7 @@ type Server struct {
 	usageTracker *usage.Tracker
 	maintRunner  *maintenance.Runner
 	telegramPlug *telegram.Plugin
+	discordPlug  *discord.Plugin
 
 	// Phase 4: Native agent execution.
 	jobTracker *agent.JobTracker

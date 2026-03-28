@@ -125,7 +125,8 @@ type Handler struct {
 	replyFunc   ReplyFunc     // optional: delivers response to originating channel
 	mediaSendFn MediaSendFunc // optional: delivers files to originating channel
 	typingFn    TypingFunc    // optional: sends typing indicator during agent run
-	reactionFn  ReactionFunc  // optional: sets emoji reaction on triggering message
+	reactionFn       ReactionFunc // optional: sets emoji reaction on triggering message
+	removeReactionFn ReactionFunc // optional: removes emoji reaction (Discord additive)
 
 	abortMu  sync.Mutex
 	abortMap map[string]*AbortEntry // clientRunId -> entry
@@ -246,6 +247,37 @@ func (h *Handler) SetReactionFunc(fn ReactionFunc) {
 	h.reactionFn = fn
 }
 
+// SetRemoveReactionFunc sets the function that removes an emoji reaction
+// from the triggering message. Needed for Discord's additive reaction model.
+func (h *Handler) SetRemoveReactionFunc(fn ReactionFunc) {
+	h.removeReactionFn = fn
+}
+
+// RemoveReactionFunc returns the current remove reaction function (for chaining).
+func (h *Handler) RemoveReactionFunc() ReactionFunc {
+	return h.removeReactionFn
+}
+
+// ReplyFunc returns the current reply function (for chaining).
+func (h *Handler) ReplyFunc() ReplyFunc {
+	return h.replyFunc
+}
+
+// MediaSendFunc returns the current media send function (for chaining).
+func (h *Handler) MediaSendFunc() MediaSendFunc {
+	return h.mediaSendFn
+}
+
+// TypingFunc returns the current typing function (for chaining).
+func (h *Handler) TypingFunc() TypingFunc {
+	return h.typingFn
+}
+
+// ReactionFunc returns the current reaction function (for chaining).
+func (h *Handler) ReactionFunc() ReactionFunc {
+	return h.reactionFn
+}
+
 // DefaultModel returns the configured default LLM model name.
 func (h *Handler) DefaultModel() string {
 	return h.defaultModel
@@ -313,12 +345,13 @@ func (h *Handler) Close() {
 // Sanitizes input, starts an async agent run, and immediately returns.
 func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	var p struct {
-		SessionKey  string           `json:"sessionKey"`
-		Message     string           `json:"message"`
-		Attachments []ChatAttachment `json:"attachments,omitempty"`
-		Delivery    *DeliveryContext `json:"delivery,omitempty"`
-		ClientRunID string           `json:"clientRunId,omitempty"`
-		Model       string           `json:"model,omitempty"`
+		SessionKey   string           `json:"sessionKey"`
+		Message      string           `json:"message"`
+		Attachments  []ChatAttachment `json:"attachments,omitempty"`
+		Delivery     *DeliveryContext `json:"delivery,omitempty"`
+		ClientRunID  string           `json:"clientRunId,omitempty"`
+		Model        string           `json:"model,omitempty"`
+		WorkspaceDir string           `json:"workspaceDir,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
 		return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -347,12 +380,13 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 	h.InterruptActiveRun(p.SessionKey)
 
 	return h.startAsyncRun(req.ID, RunParams{
-		SessionKey:  p.SessionKey,
-		Message:     sanitizeInput(p.Message),
-		Attachments: p.Attachments,
-		Delivery:    p.Delivery,
-		ClientRunID: p.ClientRunID,
-		Model:       p.Model,
+		SessionKey:   p.SessionKey,
+		Message:      sanitizeInput(p.Message),
+		Attachments:  p.Attachments,
+		Delivery:     p.Delivery,
+		ClientRunID:  p.ClientRunID,
+		Model:        p.Model,
+		WorkspaceDir: p.WorkspaceDir,
 	}, false)
 }
 
@@ -670,8 +704,9 @@ func (h *Handler) buildRunDeps() runDeps {
 		replyFunc:       h.replyFunc,
 		mediaSendFn:     h.mediaSendFn,
 		typingFn:        h.typingFn,
-		reactionFn:      h.reactionFn,
-		providerConfigs: h.providerConfigs,
+		reactionFn:       h.reactionFn,
+		removeReactionFn: h.removeReactionFn,
+		providerConfigs:  h.providerConfigs,
 		logger:          h.logger,
 		auroraStore:     h.auroraStore,
 		vegaBackend:     h.vegaBackend,

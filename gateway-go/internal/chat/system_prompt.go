@@ -260,6 +260,16 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	}
 }
 
+// BuildCodingSystemPromptBlocks returns the coding system prompt as Anthropic
+// ContentBlocks with cache_control breakpoints for the Discord coding channel.
+func BuildCodingSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
+	text := BuildCodingSystemPrompt(params)
+	ephemeral := &llm.CacheControl{Type: "ephemeral"}
+	return []llm.ContentBlock{
+		{Type: "text", Text: text, CacheControl: ephemeral},
+	}
+}
+
 // writePolarisSection writes the Polaris system manual usage guide.
 func writePolarisSection(sb *strings.Builder) {
 	sb.WriteString("## Polaris (System Manual)\n")
@@ -355,4 +365,109 @@ func BuildDefaultRuntimeInfo(model, defaultModel string) *RuntimeInfo {
 		Model:        model,
 		DefaultModel: defaultModel,
 	}
+}
+
+// codingToolCategories defines tool groupings for the coding profile.
+var codingToolCategories = []struct {
+	Label string
+	Names []string
+}{
+	{"File", []string{"read", "write", "edit", "multi_edit", "grep", "find", "tree", "diff"}},
+	{"Exec", []string{"exec", "process"}},
+	{"Git", []string{"git"}},
+	{"Code", []string{"analyze", "test"}},
+}
+
+// BuildCodingSystemPrompt builds a system prompt optimized for coding tasks
+// on the Discord channel. Strips non-coding sections and emphasizes the
+// code editing workflow.
+func BuildCodingSystemPrompt(params SystemPromptParams) string {
+	toolSet := make(map[string]bool, len(params.ToolDefs))
+	for _, def := range params.ToolDefs {
+		toolSet[def.Name] = true
+	}
+
+	var s strings.Builder
+
+	// Identity — coding-focused.
+	s.WriteString("You are a coding assistant running inside Deneb (Discord coding channel).\n")
+	s.WriteString("Your sole purpose is to help with code editing, debugging, testing, and version control.\n\n")
+
+	// Tooling — coding tools only.
+	s.WriteString("## Tooling\n")
+	s.WriteString("Available tools (see tool schemas for details). Names are case-sensitive.\n")
+	for _, cat := range codingToolCategories {
+		var present []string
+		for _, name := range cat.Names {
+			if toolSet[name] {
+				present = append(present, name)
+			}
+		}
+		if len(present) > 0 {
+			fmt.Fprintf(&s, "%s: %s\n", cat.Label, strings.Join(present, ", "))
+		}
+	}
+	s.WriteString("\n")
+
+	// Tool Usage — coding-optimized.
+	s.WriteString("## Tool Usage\n")
+	s.WriteString("- Call multiple tools in parallel when independent.\n")
+	s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
+	s.WriteString("- Do not narrate routine tool calls. Act immediately.\n")
+	s.WriteString("- Outputs over 64K chars are auto-trimmed (head+tail).\n\n")
+
+	// Coding Workflow — core section.
+	s.WriteString("## Coding Workflow\n")
+	s.WriteString("1. `tree` → understand project structure.\n")
+	s.WriteString("2. `analyze(action:'outline')` → see file structure (functions, types, imports).\n")
+	s.WriteString("3. `read` / `read(function:'FuncName')` → examine specific code.\n")
+	s.WriteString("4. `edit` / `multi_edit` → make changes. Use `multi_edit` for coordinated changes across files.\n")
+	s.WriteString("5. `test(action:'build')` → verify edits compile.\n")
+	s.WriteString("6. `test(action:'run')` → run tests, check pass/fail/skip counts.\n")
+	s.WriteString("7. `diff` → review changes. `git(action:'status')` → check working tree.\n")
+	s.WriteString("8. `git(action:'commit')` → commit with a descriptive message.\n")
+	s.WriteString("- Always verify edits compile before committing.\n")
+	s.WriteString("- Use `grep` to find usages before renaming/refactoring.\n\n")
+
+	// Response Style — Discord-optimized.
+	s.WriteString("## Response Style\n")
+	s.WriteString("- Default language: Korean. Switch to English for code/technical output.\n")
+	s.WriteString("- Discord message limit: 2000 chars. Long outputs are sent as file attachments.\n")
+	s.WriteString("- For code changes: show the change, not the whole file.\n")
+	s.WriteString("- Be direct. Lead with the answer, not the reasoning.\n")
+	s.WriteString("- Use code blocks with language tags (```go, ```diff, etc.).\n\n")
+
+	// Workspace.
+	s.WriteString("## Workspace\n")
+	fmt.Fprintf(&s, "Your working directory is: %s\n", params.WorkspaceDir)
+	s.WriteString("Treat this directory as the single global workspace for file operations.\n\n")
+
+	// Context files.
+	contextPrompt := FormatContextFilesForPrompt(params.ContextFiles)
+	if contextPrompt != "" {
+		s.WriteString(contextPrompt)
+	}
+
+	// Current Date & Time.
+	tz := params.UserTimezone
+	if tz == "" {
+		tz, _ = loadCachedTimezone()
+	}
+	now := time.Now()
+	_, cachedLoc := loadCachedTimezone()
+	if cachedLoc != nil && tz == cachedTimezone {
+		now = now.In(cachedLoc)
+	} else if loc, err := time.LoadLocation(tz); err == nil {
+		now = now.In(loc)
+	}
+	s.WriteString("## Current Date & Time\n")
+	fmt.Fprintf(&s, "%s\n", now.Format("Monday, January 2, 2006 — 15:04"))
+	fmt.Fprintf(&s, "Time zone: %s\n\n", tz)
+
+	// Runtime.
+	s.WriteString("## Runtime\n")
+	s.WriteString(buildRuntimeLine(params.RuntimeInfo, "discord"))
+	s.WriteString("\n")
+
+	return s.String()
 }
