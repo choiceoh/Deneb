@@ -1,16 +1,17 @@
 use indicatif::{ProgressBar, ProgressStyle};
 
 /// Create a spinner with a label message.
+/// Uses minimal dot-rotation glyphs for a clean, geometric feel.
 pub fn spinner(message: &str) -> ProgressBar {
     let pb = ProgressBar::new_spinner();
     pb.set_style(
         ProgressStyle::default_spinner()
-            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
-            .template("{spinner:.cyan} {msg}")
+            .tick_strings(&["◐", "◓", "◑", "◒"])
+            .template("{spinner:.white} {msg}")
             .expect("valid template"),
     );
     pb.set_message(message.to_string());
-    pb.enable_steady_tick(std::time::Duration::from_millis(80));
+    pb.enable_steady_tick(std::time::Duration::from_millis(100));
     pb
 }
 

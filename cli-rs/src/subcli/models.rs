@@ -149,23 +149,28 @@ async fn cmd_list(
         .or_else(|| result.get("models").and_then(|v| v.as_array()));
 
     if let Some(models) = models {
+        use crate::terminal::Symbols;
         let bold = Palette::bold();
         let muted = Palette::muted();
 
+        println!();
         println!(
-            "{}",
-            bold.apply_to(format!("Models ({} found)", models.len()))
+            "  {}  {}  {}",
+            bold.apply_to("Models"),
+            muted.apply_to(Symbols::ARROW),
+            muted.apply_to(format!("{} found", models.len()))
         );
+        println!();
 
         let mut table = crate::terminal::table::styled_table();
         table.set_header(vec!["Model", "Provider", "Type"]);
 
         for model in models {
-            let id = model.get("id").and_then(|v| v.as_str()).unwrap_or("-");
+            let id = model.get("id").and_then(|v| v.as_str()).unwrap_or(Symbols::DASH);
             let prov = model
                 .get("provider")
                 .and_then(|v| v.as_str())
-                .unwrap_or("-");
+                .unwrap_or(Symbols::DASH);
             let kind = model
                 .get("type")
                 .or_else(|| model.get("kind"))
@@ -175,9 +180,11 @@ async fn cmd_list(
         }
 
         println!("{table}");
+        println!();
 
         if models.is_empty() {
-            println!("  {}", muted.apply_to("No models found."));
+            println!("    {}", muted.apply_to("No models found."));
+            println!();
         }
     } else {
         println!("{}", serde_json::to_string_pretty(&result)?);
@@ -219,25 +226,28 @@ async fn cmd_status(
     let muted = Palette::muted();
     let success = Palette::success();
 
-    println!("{}", bold.apply_to("Model Status"));
+    println!();
+    println!("  {}", bold.apply_to("Model Status"));
+    println!();
 
     if let Some(obj) = result.as_object() {
         if let Some(default) = obj.get("defaultModel").and_then(|v| v.as_str()) {
-            println!("  Default: {}", success.apply_to(default));
+            println!("    Default      {}", success.apply_to(default));
         }
         if let Some(fallbacks) = obj.get("fallbacks").and_then(|v| v.as_array()) {
             if !fallbacks.is_empty() {
                 let names: Vec<&str> = fallbacks.iter().filter_map(|v| v.as_str()).collect();
-                println!("  Fallbacks: {}", muted.apply_to(names.join(", ")));
+                println!("    Fallbacks    {}", muted.apply_to(names.join(", ")));
             }
         }
         if let Some(providers) = obj.get("providers").and_then(|v| v.as_array()) {
             println!(
-                "  Providers: {}",
+                "    Providers    {}",
                 muted.apply_to(format!("{} configured", providers.len()))
             );
         }
     }
+    println!();
 
     Ok(())
 }

@@ -100,7 +100,7 @@ fn health_fails_without_gateway() {
         .env("DENEB_STATE_DIR", "/tmp/deneb-test-nonexistent")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("Error:"));
+        .stderr(predicate::str::contains("\u{2717}")); // ✗ error symbol
 }
 
 // --- Dashboard no-open (local, no gateway) ---
@@ -111,7 +111,7 @@ fn dashboard_no_open_shows_url() {
         .args(["dashboard", "--no-open"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Dashboard URL:"));
+        .stdout(predicate::str::contains("Dashboard"));
 }
 
 // --- Completion (local) ---

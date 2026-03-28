@@ -77,22 +77,33 @@ pub async fn run(args: &SetupArgs) -> Result<(), CliError> {
         });
         println!("{}", serde_json::to_string_pretty(&out)?);
     } else {
+        use crate::terminal::Symbols;
         let success = Palette::success();
         let muted = Palette::muted();
-        println!("{}", success.apply_to("Setup complete."));
+        println!();
         println!(
-            "  Config: {}",
+            "    {}  {}",
+            success.apply_to(Symbols::SUCCESS),
+            success.apply_to("Setup complete")
+        );
+        println!();
+        println!(
+            "    Config      {}",
             muted.apply_to(config_path.to_string_lossy())
         );
-        println!("  State:  {}", muted.apply_to(state_dir.to_string_lossy()));
         println!(
-            "  Workspace: {}",
+            "    State       {}",
+            muted.apply_to(state_dir.to_string_lossy())
+        );
+        println!(
+            "    Workspace   {}",
             muted.apply_to(workspace.to_string_lossy())
         );
         println!(
-            "  Sessions:  {}",
+            "    Sessions    {}",
             muted.apply_to(sessions_dir.to_string_lossy())
         );
+        println!();
     }
 
     Ok(())

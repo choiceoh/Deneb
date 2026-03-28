@@ -157,18 +157,23 @@ async fn cmd_list(json: bool) -> Result<(), CliError> {
         return Ok(());
     }
 
+    use crate::terminal::Symbols;
     let bold = Palette::bold();
     let muted = Palette::muted();
 
     if agents.is_empty() {
-        println!("{}", muted.apply_to("No agents configured."));
+        println!("    {}", muted.apply_to("No agents configured."));
         return Ok(());
     }
 
+    println!();
     println!(
-        "{}",
-        bold.apply_to(format!("Agents ({} configured)", agents.len()))
+        "  {}  {}  {}",
+        bold.apply_to("Agents"),
+        muted.apply_to(Symbols::ARROW),
+        muted.apply_to(format!("{} configured", agents.len()))
     );
+    println!();
 
     for agent in &agents {
         let id = agent
@@ -188,14 +193,15 @@ async fn cmd_list(json: bool) -> Result<(), CliError> {
         } else {
             id.to_string()
         };
-        println!("  {}", accent.apply_to(&label));
+        println!("    {} {}", muted.apply_to(Symbols::ARROW), accent.apply_to(&label));
 
         if let Some(name) = name {
-            println!("    Name: {}", muted.apply_to(name));
+            println!("      Name     {}", muted.apply_to(name));
         }
         if let Some(model) = model {
-            println!("    Model: {}", muted.apply_to(model));
+            println!("      Model    {}", muted.apply_to(model));
         }
+        println!();
     }
 
     Ok(())
@@ -285,8 +291,13 @@ async fn cmd_add(
     if json_mode {
         println!("{}", serde_json::to_string_pretty(&entry)?);
     } else {
+        use crate::terminal::Symbols;
         let success = Palette::success();
-        println!("{}", success.apply_to(format!("Agent '{agent_id}' added.")));
+        println!(
+            "    {}  {}",
+            success.apply_to(Symbols::SUCCESS),
+            success.apply_to(format!("Agent '{agent_id}' added"))
+        );
     }
 
     Ok(())
@@ -351,8 +362,13 @@ async fn cmd_delete(id: &str, force: bool, json: bool) -> Result<(), CliError> {
             serde_json::to_string_pretty(&serde_json::json!({ "deleted": id }))?
         );
     } else {
+        use crate::terminal::Symbols;
         let success = Palette::success();
-        println!("{}", success.apply_to(format!("Agent '{id}' deleted.")));
+        println!(
+            "    {}  {}",
+            success.apply_to(Symbols::SUCCESS),
+            success.apply_to(format!("Agent '{id}' deleted"))
+        );
     }
 
     Ok(())
@@ -376,11 +392,13 @@ async fn cmd_bind(agent: &str, bindings: &[String], json: bool) -> Result<(), Cl
     if json_mode {
         println!("{}", serde_json::to_string_pretty(&added)?);
     } else {
+        use crate::terminal::Symbols;
         let success = Palette::success();
         println!(
-            "{}",
+            "    {}  {}",
+            success.apply_to(Symbols::SUCCESS),
             success.apply_to(format!(
-                "Added {} binding(s) to agent '{agent}'.",
+                "Added {} binding(s) to agent '{agent}'",
                 added.len()
             ))
         );
@@ -420,11 +438,13 @@ async fn cmd_unbind(
             serde_json::to_string_pretty(&serde_json::json!({ "removed": removed }))?
         );
     } else {
+        use crate::terminal::Symbols;
         let success = Palette::success();
         println!(
-            "{}",
+            "    {}  {}",
+            success.apply_to(Symbols::SUCCESS),
             success.apply_to(format!(
-                "Removed {removed} binding(s) from agent '{agent}'."
+                "Removed {removed} binding(s) from agent '{agent}'"
             ))
         );
     }

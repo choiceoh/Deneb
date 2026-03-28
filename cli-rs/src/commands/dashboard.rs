@@ -44,26 +44,32 @@ pub async fn run(args: &DashboardArgs) -> Result<(), CliError> {
     };
 
     let muted = Palette::muted();
-    println!("Dashboard URL: {}", muted.apply_to(&dashboard_url));
+    println!();
+    println!("    Dashboard   {}", muted.apply_to(&dashboard_url));
 
     if !args.no_open {
         match open::that(&dashboard_url) {
             Ok(()) => {
+                use crate::terminal::Symbols;
                 let success = Palette::success();
                 println!(
-                    "{}",
-                    success.apply_to("Opened in your browser. Keep that tab to control Deneb.")
+                    "    {}  {}",
+                    success.apply_to(Symbols::SUCCESS),
+                    success.apply_to("Opened in browser")
                 );
             }
             Err(_) => {
+                use crate::terminal::Symbols;
                 let warn = Palette::warn();
                 println!(
-                    "{}",
-                    warn.apply_to("Could not open browser. Copy the URL above manually.")
+                    "    {}  {}",
+                    warn.apply_to(Symbols::WARNING),
+                    warn.apply_to("Could not open browser — copy the URL above")
                 );
             }
         }
     }
+    println!();
 
     Ok(())
 }

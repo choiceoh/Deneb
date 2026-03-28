@@ -242,31 +242,38 @@ pub async fn run(args: &PluginsArgs) -> Result<(), CliError> {
 }
 
 fn print_plugins_table(result: &serde_json::Value) {
+    use crate::terminal::Symbols;
     let plugins = result
         .as_array()
         .or_else(|| result.get("plugins").and_then(|p| p.as_array()));
     let Some(plugins) = plugins else {
-        println!("{}", Palette::muted().apply_to("No plugins installed."));
+        println!("    {}", Palette::muted().apply_to("No plugins installed."));
         return;
     };
     let bold = Palette::bold();
+    let muted = Palette::muted();
+    println!();
     println!(
-        "{}",
-        bold.apply_to(format!("Plugins ({} installed)", plugins.len()))
+        "  {}  {}  {}",
+        bold.apply_to("Plugins"),
+        muted.apply_to(Symbols::ARROW),
+        muted.apply_to(format!("{} installed", plugins.len()))
     );
+    println!();
     let mut table = styled_table();
     table.set_header(vec!["ID", "Version", "Enabled"]);
     for p in plugins {
-        let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("-");
-        let version = p.get("version").and_then(|v| v.as_str()).unwrap_or("-");
+        let id = p.get("id").and_then(|v| v.as_str()).unwrap_or(Symbols::DASH);
+        let version = p.get("version").and_then(|v| v.as_str()).unwrap_or(Symbols::DASH);
         let enabled = p
             .get("enabled")
             .and_then(|v| v.as_bool())
-            .map(|b| if b { "yes" } else { "no" })
-            .unwrap_or("-");
+            .map(|b| if b { Symbols::DOT_FILLED } else { Symbols::DASH })
+            .unwrap_or(Symbols::DASH);
         table.add_row(vec![id, version, enabled]);
     }
     println!("{table}");
+    println!();
 }
 
 async fn rpc_simple(
@@ -322,7 +329,12 @@ async fn rpc_action(p: RpcActionParams<'_>) -> Result<(), CliError> {
     if json_mode {
         println!("{}", serde_json::to_string_pretty(&result)?);
     } else {
-        println!("{}", Palette::success().apply_to(p.success_msg));
+        use crate::terminal::Symbols;
+        println!(
+            "    {}  {}",
+            Palette::success().apply_to(Symbols::SUCCESS),
+            Palette::success().apply_to(p.success_msg)
+        );
     }
     Ok(())
 }
