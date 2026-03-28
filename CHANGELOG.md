@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.28.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.28.0...deneb-v3.28.1) (2026-03-28)
+
+
+### 🐛 Bug Fixes
+
+* **core:** resolve clippy::expect_used warnings across workspace ([9954485](https://github.com/choiceoh/Deneb/commit/995448584541eb2a96de0a2cbdf149f36b3457e7))
+* **core:** resolve clippy::expect_used warnings across workspace ([28fa335](https://github.com/choiceoh/Deneb/commit/28fa335e47953e3ca49b65a40089e21bcbf931e4))
+* **plugin:** replace runtime panic with error logging in TypedHookRunner ([34a478c](https://github.com/choiceoh/Deneb/commit/34a478c3cce1bb12ad7ddaba9814d401bf740a38))
+
+
+### 🔧 Internal
+
+* **agent-runtime:** split selection.rs into focused submodules ([355879f](https://github.com/choiceoh/Deneb/commit/355879fe3b5d755a6f54a34d139a8b6ead61a126))
+* **autoreply:** complete session/, directives/ subpackages with compat shims ([c80e99e](https://github.com/choiceoh/Deneb/commit/c80e99ebc940f21868d452a33a9f2337cbbdeac1))
+* **autoreply:** extract commands/ subpackage with compat shim ([5ad47b2](https://github.com/choiceoh/Deneb/commit/5ad47b249f0872934571612ac0fb6fff5651b227))
+* **autoreply:** extract domain subpackages — Phase 0–4 + compat layer ([f44482a](https://github.com/choiceoh/Deneb/commit/f44482a4ba202197aa44b71bd5d310ef86133691))
+* **autoreply:** extract session/, directives/ subpackages; update acp callers ([9b2b746](https://github.com/choiceoh/Deneb/commit/9b2b746a017cad68bcef419af6197a40b5722fc2))
+* **autoreply:** replace hardcoded xhigh/adaptive thinking model vars with YAML + codegen ([3ece1aa](https://github.com/choiceoh/Deneb/commit/3ece1aa2cf554809bfc71bdb0a2df8d1a27568c7))
+* **autoreply:** update rpc acp test imports for acp/ subpackage ([0bebf48](https://github.com/choiceoh/Deneb/commit/0bebf482f9ef3e9db7e503727a527dfe06ca95e2))
+* **chat:** begin sub-package extraction (web, streaming, prompt) ([5547de1](https://github.com/choiceoh/Deneb/commit/5547de186bb8dd9fb084f3226303d9cc27a0ee4d))
+* **chat:** complete Track A + Track C sub-package extraction ([948569c](https://github.com/choiceoh/Deneb/commit/948569c9374650ef3a6964e48bbb0e43622c512a))
+* **chat:** complete Track B — extract chat/streaming/ sub-package ([fef542a](https://github.com/choiceoh/Deneb/commit/fef542a7c5428bffda8c647409614e3f2c8cf264))
+* **chat:** fix comment in prompt/system_prompt.go ([378ffe7](https://github.com/choiceoh/Deneb/commit/378ffe7a47422575a7e8c4d164424bc4090ceb30))
+* **chat:** WIP sub-package extraction progress ([51c81a7](https://github.com/choiceoh/Deneb/commit/51c81a7d2e64d721d4eb6d26c356d96cf7e303f8))
+
 ## [3.28.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.27.2...deneb-v3.28.0) (2026-03-28)
 
 
