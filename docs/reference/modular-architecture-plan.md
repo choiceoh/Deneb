@@ -1,3 +1,9 @@
+---
+title: Modular Architecture Plan
+summary: Phased approach to improve maintainability and reduce coupling in the Deneb codebase.
+read_when: ["Planning codebase refactoring", "Understanding module boundaries", "Reviewing long-term architecture goals"]
+---
+
 # Deneb Modular Architecture Plan
 
 ## Executive Summary

@@ -1,3 +1,9 @@
+---
+title: ACP Bridge
+summary: How the Deneb ACP bridge maps IDE sessions to Gateway sessions over stdio.
+read_when: ["Integrating IDEs with Deneb", "Understanding ACP session mapping", "Developing ACP client tooling"]
+---
+
 # Deneb ACP Bridge
 
 This document describes how the Deneb ACP (Agent Client Protocol) bridge works,

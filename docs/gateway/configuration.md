@@ -29,7 +29,7 @@ See the [full reference](/gateway/configuration-reference) for every available f
 // ~/.deneb/deneb.json
 {
   agents: { defaults: { workspace: "~/.deneb/workspace" } },
-  channels: { whatsapp: { allowFrom: ["+15555550123"] } },
+  channels: { telegram: { botToken: "123:abc", dmPolicy: "allowlist" } },
 }
 ```
 
@@ -74,17 +74,8 @@ When validation fails:
 ## Common tasks
 
 <AccordionGroup>
-  <Accordion title="Set up a channel (WhatsApp, Telegram, Discord, etc.)">
-    Each channel has its own config section under `channels.<provider>`. See the dedicated channel page for setup steps:
-
-    - WhatsApp — `channels.whatsapp`
-    - [Telegram](/channels/telegram) — `channels.telegram`
-    - [Discord](/channels/discord) — `channels.discord`
-    - [Slack](/channels/slack) — `channels.slack`
-    - [Signal](/channels/signal) — `channels.signal`
-    - [iMessage](/channels/imessage) — `channels.imessage`
-    - [Google Chat](/channels/googlechat) — `channels.googlechat`
-    - [Mattermost](/channels/mattermost) — `channels.mattermost`
+  <Accordion title="Set up Telegram">
+    Deneb connects to Telegram via the Bot API. See [Telegram](/channels/telegram) for complete setup instructions including how to create a bot token and configure it.
 
     All channels share the same DM policy pattern:
 
@@ -161,14 +152,14 @@ When validation fails:
         ],
       },
       channels: {
-        whatsapp: {
+        telegram: {
           groups: { "*": { requireMention: true } },
         },
       },
     }
     ```
 
-    - **Metadata mentions**: native @-mentions (WhatsApp tap-to-mention, Telegram @bot, etc.)
+    - **Metadata mentions**: native @-mentions (Telegram @bot)
     - **Text patterns**: safe regex patterns in `mentionPatterns`
     - See [full reference](/gateway/configuration-reference#group-chat-mention-gating) for per-channel overrides and self-chat mode.
 
@@ -226,7 +217,7 @@ When validation fails:
     ```
 
     - `dmScope`: `main` (shared) | `per-peer` | `per-channel-peer` | `per-account-channel-peer`
-    - `threadBindings`: global defaults for thread-bound session routing (Discord supports `/focus`, `/unfocus`, `/agents`, `/session idle`, and `/session max-age`).
+    - `threadBindings`: global defaults for thread-bound session routing.
     - See [Session Management](/concepts/session) for scoping, identity links, and send policy.
     - See [full reference](/gateway/configuration-reference#session) for all fields.
 
