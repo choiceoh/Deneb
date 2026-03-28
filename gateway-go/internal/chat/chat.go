@@ -349,7 +349,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 	}
 
 	// Interrupt any active run on this session to prevent concurrent runs.
-	h.interruptActiveRun(p.SessionKey)
+	h.InterruptActiveRun(p.SessionKey)
 
 	return h.startAsyncRun(req.ID, RunParams{
 		SessionKey:  p.SessionKey,
@@ -381,7 +381,7 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 	}
 
 	// Interrupt any active run for this session.
-	h.interruptActiveRun(p.Key)
+	h.InterruptActiveRun(p.Key)
 
 	runID := p.IdempotencyKey
 	if runID == "" {
@@ -415,7 +415,7 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 	}
 
 	// Interrupt any active run for this session.
-	h.interruptActiveRun(p.Key)
+	h.InterruptActiveRun(p.Key)
 
 	runID := shortid.New("steer")
 
@@ -568,8 +568,8 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	return resp
 }
 
-// interruptActiveRun cancels all active runs for a session key.
-func (h *Handler) interruptActiveRun(sessionKey string) {
+// InterruptActiveRun cancels all active runs for a session key.
+func (h *Handler) InterruptActiveRun(sessionKey string) {
 	h.abortMu.Lock()
 	var toDelete []string
 	for id, entry := range h.abortMap {
@@ -595,7 +595,7 @@ func (h *Handler) handleSlashCommand(
 	switch cmd.Command {
 	case "reset":
 		// Abort any active run and clear transcript.
-		h.interruptActiveRun(sessionKey)
+		h.InterruptActiveRun(sessionKey)
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
 				h.logger.Warn("failed to delete transcript on reset", "error", err)
@@ -608,7 +608,7 @@ func (h *Handler) handleSlashCommand(
 		h.deliverSlashResponse(delivery, "세션이 초기화되었습니다.")
 
 	case "kill":
-		h.interruptActiveRun(sessionKey)
+		h.InterruptActiveRun(sessionKey)
 		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
