@@ -155,6 +155,8 @@ func MarkdownToTelegramHTML(markdown string) string {
 
 	inCodeBlock := false
 	var codeBlockBuf strings.Builder
+	inTable := false
+	var tableBuf strings.Builder
 
 	for i, line := range lines {
 		// Handle fenced code blocks.
@@ -180,6 +182,25 @@ func MarkdownToTelegramHTML(markdown string) string {
 			}
 			codeBlockBuf.WriteString(line)
 			continue
+		}
+
+		// Handle markdown tables: buffer lines and render as <pre>.
+		if isTableLine(line) {
+			if tableBuf.Len() > 0 {
+				tableBuf.WriteByte('\n')
+			}
+			tableBuf.WriteString(line)
+			inTable = true
+			continue
+		}
+		if inTable {
+			out.WriteString("<pre>")
+			out.WriteString(escapeHTML(tableBuf.String()))
+			out.WriteString("</pre>")
+			tableBuf.Reset()
+			inTable = false
+			out.WriteByte('\n')
+			// Fall through to process current non-table line.
 		}
 
 		// Blockquote: "> text"
@@ -208,6 +229,13 @@ func MarkdownToTelegramHTML(markdown string) string {
 		if i < len(lines)-1 {
 			out.WriteByte('\n')
 		}
+	}
+
+	// Handle unclosed table.
+	if inTable {
+		out.WriteString("<pre>")
+		out.WriteString(escapeHTML(tableBuf.String()))
+		out.WriteString("</pre>")
 	}
 
 	// Handle unclosed code block.
@@ -419,6 +447,13 @@ func findTripleBacktick(runes []rune, start int) int {
 		}
 	}
 	return -1
+}
+
+// isTableLine returns true if the line looks like a markdown table row
+// (trimmed, starts and ends with |, length > 1).
+func isTableLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return len(trimmed) > 1 && trimmed[0] == '|' && trimmed[len(trimmed)-1] == '|'
 }
 
 func isLangTag(s string) bool {
