@@ -114,6 +114,80 @@ func TestMarkdownToTelegramHTML_Mixed(t *testing.T) {
 	}
 }
 
+// --- Table tests ---
+
+func TestIsTableLine(t *testing.T) {
+	tests := []struct {
+		line string
+		want bool
+	}{
+		{"| a | b |", true},
+		{"  | a | b |  ", true},
+		{"| --- | --- |", true},
+		{"| single |", true},
+		{"not a table", false},
+		{"|", false},
+		{"| a | b", false},  // no trailing pipe
+		{"a | b |", false},  // no leading pipe
+		{"", false},
+	}
+	for _, tt := range tests {
+		got := isTableLine(tt.line)
+		if got != tt.want {
+			t.Errorf("isTableLine(%q) = %v, want %v", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestMarkdownToTelegramHTML_Table(t *testing.T) {
+	md := "| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bob | 25 |"
+	got := MarkdownToTelegramHTML(md)
+	want := "<pre>| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bob | 25 |</pre>"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestMarkdownToTelegramHTML_TableWithSpecialChars(t *testing.T) {
+	md := "| Expr | Result |\n| --- | --- |\n| a < b | true |\n| x & y | false |"
+	got := MarkdownToTelegramHTML(md)
+	want := "<pre>| Expr | Result |\n| --- | --- |\n| a &lt; b | true |\n| x &amp; y | false |</pre>"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestMarkdownToTelegramHTML_TableWithSurroundingText(t *testing.T) {
+	md := "Here is a table:\n| A | B |\n| - | - |\n| 1 | 2 |\nAnd more text."
+	got := MarkdownToTelegramHTML(md)
+	if !strings.Contains(got, "Here is a table:") {
+		t.Errorf("missing leading text: %q", got)
+	}
+	if !strings.Contains(got, "<pre>| A | B |\n| - | - |\n| 1 | 2 |</pre>") {
+		t.Errorf("missing table pre block: %q", got)
+	}
+	if !strings.Contains(got, "And more text.") {
+		t.Errorf("missing trailing text: %q", got)
+	}
+}
+
+func TestMarkdownToTelegramHTML_TableAtEnd(t *testing.T) {
+	md := "Summary:\n| X | Y |\n| - | - |\n| a | b |"
+	got := MarkdownToTelegramHTML(md)
+	if !strings.HasSuffix(got, "| a | b |</pre>") {
+		t.Errorf("table at end not flushed: %q", got)
+	}
+}
+
+func TestMarkdownToTelegramHTML_TableWithEmoji(t *testing.T) {
+	md := "| 카테고리 | PR |\n| --- | --- |\n| 🧠 메모리 | #484 |\n| ⚡ 성능 | #469 |"
+	got := MarkdownToTelegramHTML(md)
+	want := "<pre>| 카테고리 | PR |\n| --- | --- |\n| 🧠 메모리 | #484 |\n| ⚡ 성능 | #469 |</pre>"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 // --- Chunking tests ---
 
 func TestChunkText_Short(t *testing.T) {
