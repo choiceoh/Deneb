@@ -7,7 +7,7 @@ description = "Deneb core library — protocol validation, security, and media p
 [lib]
 # cdylib: Node.js native addon (via napi-rs, requires "napi_binding" feature).
 # staticlib: Go gateway CGo linking (built with --no-default-features).
-# rlib: workspace crate consumers (vega, ml).
+# rlib: workspace crate consumers (vega).
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [features]
@@ -17,14 +17,6 @@ default = ["napi_binding"]
 napi_binding = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
 # Enable Vega project search engine (Rust port of Python vega/).
 vega = ["dep:deneb-vega"]
-# Enable local ML inference (GGUF models via llama.cpp).
-ml = ["dep:deneb-ml"]
-# Enable CUDA-accelerated ML inference (implies ml). Requires CUDA toolkit.
-cuda = ["ml", "deneb-ml/cuda"]
-# Enable ML-powered semantic search inside Vega (combines vega + ml).
-vega-ml = ["vega", "ml", "deneb-vega/ml"]
-# Full DGX Spark build: Vega + ML + CUDA.
-dgx = ["vega-ml", "cuda"]
 
 [dependencies]
 # Serialization
@@ -68,7 +60,7 @@ pulldown-cmark = { version = "0.12", default-features = false, features = ["simd
 
 # Optional workspace crates
 deneb-vega = { path = "../vega", optional = true }
-deneb-ml = { path = "../ml", optional = true }
+
 
 [dev-dependencies]
 proptest = "1.5"

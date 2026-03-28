@@ -30,7 +30,7 @@ Config: agents.defaults.compaction.memoryFlush:
 - MMR re-ranking: Maximal Marginal Relevance for result diversity (avoids duplicate-ish results)
 - Temporal decay: recency boost with configurable halfLife (default 30 days)
 - Index: ~/.deneb/memory/<agentId>.sqlite (auto-created on first search)
-- Embedding providers: local (deneb-ml GGUF), openai, gemini, voyage, mistral, ollama
+- Embedding providers: gemini, openai, voyage, mistral, ollama
 - Provider config: agents.defaults.memory.embedding.provider + model
 
 ## Importance Extraction
@@ -133,7 +133,6 @@ FFI_ERR_NULL_PTR=-1, INVALID_UTF8=-2, OUTPUT_TOO_SMALL=-3, INPUT_TOO_LARGE=-4, J
 - **Compaction**: deneb_compaction_evaluate, deneb_compaction_sweep_new/_start/_step/_drop
 - **Context**: deneb_context_assembly_new/_start/_step, deneb_context_expand_new/_start/_step, deneb_context_engine_drop
 - **Vega**: deneb_vega_execute, deneb_vega_search
-- **ML** (feature-gated): deneb_ml_embed, deneb_ml_rerank
 
 ### Stateful FFI Pattern (compaction, context engine)
 *_new() → handle → *_start(handle) → *_step(handle, response) → *_drop(handle)
@@ -141,10 +140,9 @@ Rust yields commands (FetchMessages, Summarize), Go executes I/O, feeds response
 
 ## Rust Crates (core-rs/)
 - deneb-core: 30+ FFI exports. Modules: protocol, security, media, memory_search, markdown, context_engine, compaction, parsing
-- deneb-vega: SQLite FTS5 search engine (optional ml feature for semantic)
-- deneb-ml: GGUF inference via llama-cpp-2 (optional cuda feature for GPU)
+- deneb-vega: SQLite FTS5 search engine with semantic search (pre-computed embeddings)
 - deneb-agent-runtime: agent lifecycle, model selection
-- Feature flag chain: default → vega → ml → cuda → dgx (full DGX Spark)
+- Feature flags: default → vega
 
 ## RPC System (gateway-go/internal/rpc/)
 - Dispatcher: routes methods, middleware chain, panic recovery
