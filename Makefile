@@ -10,7 +10,7 @@
        deny machete \
        test clean check fmt \
        proto proto-go proto-rust proto-check proto-lint proto-watch \
-       tool-schemas \
+       tool-schemas model-caps \
        error-code-sync \
        info
 
@@ -226,6 +226,13 @@ tool-schemas:
 	cd gateway-go && python3 cmd/tool-schema-gen/gen.py \
 		-yaml internal/chat/tool_schemas.yaml \
 		-out  internal/chat/tool_schemas_gen.go
+
+# Regenerate gateway-go/internal/autoreply/model_caps_gen.go from model_caps.yaml.
+# Requires: python3, pyyaml, gofmt
+model-caps:
+	cd gateway-go && python3 cmd/model-caps-gen/gen.py \
+		-yaml internal/autoreply/thinking/model_caps.yaml \
+		-out  internal/autoreply/thinking/model_caps_gen.go
 
 # --- Error code sync ---
 

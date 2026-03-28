@@ -2,7 +2,6 @@ package thinking
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
-	"regexp"
 	"strings"
 )
 
@@ -12,22 +11,6 @@ type ThinkingCatalogEntry struct {
 	ID        string `json:"id"`
 	Reasoning bool   `json:"reasoning,omitempty"`
 }
-
-// Model regexes for xhigh/adaptive thinking support detection.
-var (
-	anthropicClaude46ModelRe     = regexp.MustCompile("(?i)^claude-(?:opus|sonnet)-4(?:\\.|-)6(?:$|[-.])")
-	amazonBedrockClaude46ModelRe = regexp.MustCompile("(?i)claude-(?:opus|sonnet)-4(?:\\.|-)6(?:$|[-.])")
-)
-
-// Model IDs that support xhigh thinking.
-var (
-	openaiXHighModelIDs = []string{
-		"gpt-5.4", "gpt-5.4-pro", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.2",
-	}
-	openaiCodexXHighModelIDs = []string{
-		"gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2-codex", "gpt-5.1-codex",
-	}
-)
 
 // matchesExactOrPrefix checks if a model ID exactly matches or is a prefix match
 // for any of the candidate IDs.
@@ -49,11 +32,8 @@ func SupportsBuiltInXHighThinking(provider, model string) bool {
 	if providerID == "" || modelID == "" {
 		return false
 	}
-	switch providerID {
-	case "openai":
-		return matchesExactOrPrefix(modelID, openaiXHighModelIDs)
-	case "openai-codex":
-		return matchesExactOrPrefix(modelID, openaiCodexXHighModelIDs)
+	if ids, ok := xhighThinkingModelIDs[providerID]; ok {
+		return matchesExactOrPrefix(modelID, ids)
 	}
 	return false
 }
@@ -107,12 +87,8 @@ func ResolveThinkingDefaultForModel(provider, model string, catalog []ThinkingCa
 	normalizedProvider := types.NormalizeProviderId(provider)
 	modelID := strings.TrimSpace(model)
 
-	// Anthropic Claude 4.6+ defaults to adaptive.
-	if normalizedProvider == "anthropic" && anthropicClaude46ModelRe.MatchString(modelID) {
-		return types.ThinkAdaptive
-	}
-	// Amazon Bedrock Claude 4.6+ defaults to adaptive.
-	if normalizedProvider == "amazon-bedrock" && amazonBedrockClaude46ModelRe.MatchString(modelID) {
+	// Check adaptive thinking regex patterns (defined in model_caps.yaml).
+	if re, ok := adaptiveThinkingModelRes[normalizedProvider]; ok && re.MatchString(modelID) {
 		return types.ThinkAdaptive
 	}
 
