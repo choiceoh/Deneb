@@ -21,57 +21,6 @@ const (
 	maxRPCBodyBytes = 1 * 1024 * 1024
 )
 
-func (s *Server) buildMux() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", s.handleHealth)
-	mux.HandleFunc("GET /healthz", s.handleHealth)
-	mux.HandleFunc("GET /ready", s.handleReady)
-	mux.HandleFunc("GET /readyz", s.handleReady)
-	mux.HandleFunc("GET /metrics", s.handleMetrics)
-	mux.HandleFunc("POST /api/v1/rpc", s.handleRPC)
-	mux.HandleFunc("GET /ws", s.handleWsUpgrade)
-
-	// HTTP API endpoints (P2 migration).
-	mux.HandleFunc("POST /tools/invoke", s.handleToolsInvoke)
-	mux.HandleFunc("POST /sessions/{key}/kill", s.handleSessionKill)
-	mux.HandleFunc("GET /sessions/{key}/history", s.handleSessionHistory)
-
-	// OpenAI-compatible HTTP API endpoints.
-	mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
-	mux.HandleFunc("POST /v1/responses", s.handleResponses)
-
-	// Hooks HTTP webhook endpoint — intercepts /hooks/* before the fallback.
-	if s.hooksHTTP != nil {
-		hooksHandler := s.hooksHTTP
-		mux.HandleFunc("/hooks/", func(w http.ResponseWriter, r *http.Request) {
-			if !hooksHandler.Handle(w, r) {
-				http.NotFound(w, r)
-			}
-		})
-		mux.HandleFunc("/hooks", func(w http.ResponseWriter, r *http.Request) {
-			if !hooksHandler.Handle(w, r) {
-				http.NotFound(w, r)
-			}
-		})
-	}
-
-	// Catch-all handler: plugin HTTP routes → root fallback.
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Plugin HTTP routes.
-		if s.pluginRouter != nil && s.pluginRouter.Handle(w, r) {
-			return
-		}
-		// Root fallback for exact "/" GET.
-		if r.Method == http.MethodGet && r.URL.Path == "/" {
-			s.handleRoot(w, r)
-			return
-		}
-		http.NotFound(w, r)
-	})
-
-	return mux
-}
-
 // handleMetrics responds with Prometheus-compatible text exposition of all metrics.
 func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
@@ -294,12 +243,4 @@ func extractBearerToken(r *http.Request) string {
 		return authHeader[len(prefix):]
 	}
 	return ""
-}
-
-func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
-	s.writeJSON(w, http.StatusOK, map[string]any{
-		"name":    "deneb-gateway",
-		"version": s.version,
-		"status":  "ok",
-	})
 }
