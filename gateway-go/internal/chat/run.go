@@ -395,14 +395,9 @@ func executeAgentRun(
 	}
 
 	// 8. Build tool list from registry (uses stored descriptions and schemas).
-	// Apply tool profile filtering if the delivery context specifies one (e.g., "coding").
 	var tools []llm.Tool
 	if deps.tools != nil {
-		toolProfile := ""
-		if params.Delivery != nil {
-			toolProfile = params.Delivery.ToolProfile
-		}
-		tools = deps.tools.LLMToolsForProfile(toolProfile)
+		tools = deps.tools.LLMTools()
 	}
 
 	// For Anthropic API: rebuild system prompt as ContentBlock array with
