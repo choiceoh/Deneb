@@ -1,20 +1,18 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/auth"
-	"github.com/choiceoh/deneb/gateway-go/internal/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/metrics"
-	"github.com/choiceoh/deneb/gateway-go/internal/middleware"
-	"github.com/choiceoh/deneb/gateway-go/internal/vega"
+	"github.com/choiceoh/deneb/gateway-go/internal/process"
+	"github.com/choiceoh/deneb/gateway-go/internal/rpc"
+	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -300,4 +298,3 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 		"status":  "ok",
 	})
 }
-
