@@ -6,11 +6,11 @@ package autoreply
 
 import (
 	"context"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/directives"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/pipeline"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/reply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/rules"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
@@ -25,11 +25,11 @@ func GetReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.G
 	session := InitSessionForReply(msg, deps)
 
 	// 2. Parse inline directives from message body.
-	inline := directives.ParseInlineDirectives(msg.BodyForAgent, nil)
+	inline := rules.ParseInlineDirectives(msg.BodyForAgent, nil)
 	cleanedBody := inline.Cleaned
 
 	// 3. Handle directive-only messages (no user text).
-	if directives.IsDirectiveOnly(inline) {
+	if rules.IsDirectiveOnly(inline) {
 		result := ApplyDirectivesToSession(inline, session, deps)
 		if result != nil {
 			return result, nil
@@ -111,7 +111,7 @@ func InitSessionForReply(msg *types.MsgContext, deps ReplyDeps) *types.SessionSt
 
 // ApplyDirectivesToSession applies parsed directives to the session state.
 // Returns reply payloads if the directive was handled inline (e.g., status query).
-func ApplyDirectivesToSession(inline directives.InlineDirectives, session *types.SessionState, deps ReplyDeps) []types.ReplyPayload {
+func ApplyDirectivesToSession(inline rules.InlineDirectives, session *types.SessionState, deps ReplyDeps) []types.ReplyPayload {
 	if inline.HasThinkDirective {
 		session.ThinkLevel = inline.ThinkLevel
 	}
@@ -146,7 +146,7 @@ func ApplyDirectivesToSession(inline directives.InlineDirectives, session *types
 }
 
 // ResolveModelForReply determines the model to use for a reply.
-func ResolveModelForReply(session *types.SessionState, inline directives.InlineDirectives, deps ReplyDeps) model.ModelSelection {
+func ResolveModelForReply(session *types.SessionState, inline rules.InlineDirectives, deps ReplyDeps) model.ModelSelection {
 	modelName := session.Model
 	provider := session.Provider
 
