@@ -76,6 +76,93 @@ pub trait CommandHandler: Send + Sync {
     fn execute(&self, config: &VegaConfig, args: &Value) -> CommandResult;
 }
 
+pub(super) struct CommandContext {
+    pub conn: Connection,
+    pub config: VegaConfig,
+}
+
+impl CommandContext {
+    pub fn new(config: &VegaConfig) -> Result<Self, String> {
+        let conn = open_db(config)?;
+        Ok(Self {
+            conn,
+            config: config.clone(),
+        })
+    }
+
+    pub fn find_project(&self, query: &str) -> Option<i64> {
+        if let Ok(id) = query.parse::<i64>() {
+            let exists: bool = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM projects WHERE id=?1",
+                    params![id],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if exists {
+                return Some(id);
+            }
+        }
+
+        let escaped = crate::utils::escape_like(query);
+        let like_result = self
+            .conn
+            .query_row(
+                "SELECT id FROM projects WHERE name LIKE ?1 ESCAPE '\\' LIMIT 1",
+                params![format!("%{}%", escaped)],
+                |r| r.get::<_, i64>(0),
+            )
+            .ok();
+        if like_result.is_some() {
+            return like_result;
+        }
+
+        crate::utils::find_project_id_in_text(&self.conn, query, 0.55).map(|(id, _, _)| id)
+    }
+
+    pub fn query_project_rows(&self, pid: i64, sql: &str) -> Result<Vec<Value>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(sql)
+            .map_err(|e| {
+                format!(
+                    "쿼리 준비 실패({}): {e}",
+                    self.config.db_path.display()
+                )
+            })?;
+        let rows = stmt
+            .query_map(params![pid], |r| {
+                let mut row = serde_json::Map::new();
+                for i in 0..r.as_ref().column_count() {
+                    let col_name = r
+                        .as_ref()
+                        .column_name(i)
+                        .map_or_else(|_| format!("col_{i}"), ToString::to_string);
+                    let val = match r.get_ref(i)? {
+                        rusqlite::types::ValueRef::Null => Value::Null,
+                        rusqlite::types::ValueRef::Integer(v) => json!(v),
+                        rusqlite::types::ValueRef::Real(v) => json!(v),
+                        rusqlite::types::ValueRef::Text(v) => {
+                            Value::String(String::from_utf8_lossy(v).to_string())
+                        }
+                        rusqlite::types::ValueRef::Blob(_) => Value::String("<blob>".to_string()),
+                    };
+                    row.insert(col_name, val);
+                }
+                Ok(Value::Object(row))
+            })
+            .map_err(|e| {
+                format!(
+                    "쿼리 실행 실패({}): {e}",
+                    self.config.db_path.display()
+                )
+            })?;
+
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+}
+
 /// Route patterns: NL query → command name.
 /// Full port of Python NL_ROUTES from core.py.
 static ROUTE_PATTERNS: &[(&str, &str)] = &[
@@ -366,38 +453,8 @@ pub(super) fn open_db(config: &VegaConfig) -> Result<Connection, String> {
 }
 
 pub(super) fn find_project_id(config: &VegaConfig, query: &str) -> Option<i64> {
-    let conn = Connection::open(&config.db_path).ok()?;
-    let _ = init_db(&conn);
-
-    // Try exact ID
-    if let Ok(id) = query.parse::<i64>() {
-        let exists: bool = conn
-            .query_row(
-                "SELECT COUNT(*) > 0 FROM projects WHERE id=?1",
-                params![id],
-                |r| r.get(0),
-            )
-            .unwrap_or(false);
-        if exists {
-            return Some(id);
-        }
-    }
-
-    // Try LIKE search (with proper escaping)
-    let escaped = crate::utils::escape_like(query);
-    let like_result = conn
-        .query_row(
-            "SELECT id FROM projects WHERE name LIKE ?1 ESCAPE '\\' LIMIT 1",
-            params![format!("%{}%", escaped)],
-            |r| r.get::<_, i64>(0),
-        )
-        .ok();
-    if like_result.is_some() {
-        return like_result;
-    }
-
-    // Fuzzy fallback: match against all project names
-    crate::utils::find_project_id_in_text(&conn, query, 0.55).map(|(id, _, _)| id)
+    let ctx = CommandContext::new(config).ok()?;
+    ctx.find_project(query)
 }
 
 pub(super) fn truncate(s: &str, max: usize) -> String {
