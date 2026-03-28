@@ -19,7 +19,7 @@ const (
 const expandSystemPrompt = `프로젝트 관리 DB 검색 쿼리 확장기.
 주어진 검색 쿼리에서 3-5개 추가 검색어를 생성하라.
 한국어 동의어, 관련 기술 용어, 약어, 영문 대응어를 포함하라.
-JSON 문자열 배열만 반환. 설명 없이 배열만.
+반드시 JSON 문자열 배열만 출력하라. 사고 과정, 설명, 마크다운 없이 순수 JSON 배열만.
 예: ["태양광", "solar", "PV", "발전소"]`
 
 // LLMExpander generates expanded search terms via SGLang chat completion.
@@ -81,10 +81,16 @@ func (e *LLMExpander) Expand(ctx context.Context, query string) []string {
 		text = strings.TrimSpace(text)
 	}
 
+	// Parse JSON array from response. The model may emit thinking/reasoning
+	// text before the actual JSON, so extract the first valid JSON array.
 	var terms []string
 	if err := json.Unmarshal([]byte(text), &terms); err != nil {
-		e.logger.Debug("query expansion parse failed", "raw", text, "error", err)
-		return nil
+		if extracted := extractJSONArray(text); extracted != nil {
+			terms = extracted
+		} else {
+			e.logger.Debug("query expansion parse failed", "raw", text, "error", err)
+			return nil
+		}
 	}
 
 	if len(terms) > 10 {
@@ -154,4 +160,22 @@ func (eq ExpandedSearchQuery) FormatForLog() string {
 		return eq.Original
 	}
 	return fmt.Sprintf("%s (+%d terms)", eq.Original, len(eq.Expanded))
+}
+
+// extractJSONArray finds and parses the first JSON array in text that may
+// contain thinking/reasoning preamble before the actual JSON output.
+func extractJSONArray(text string) []string {
+	start := strings.Index(text, "[")
+	if start < 0 {
+		return nil
+	}
+	end := strings.LastIndex(text, "]")
+	if end <= start {
+		return nil
+	}
+	var terms []string
+	if json.Unmarshal([]byte(text[start:end+1]), &terms) == nil {
+		return terms
+	}
+	return nil
 }
