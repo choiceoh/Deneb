@@ -27,7 +27,7 @@ const (
 	dreamingTimeout          = 5 * time.Minute
 	dreamingBatchSize        = 20
 	dreamingMaxTokens        = 1024
-	similarityMergeThreshold = 0.85
+	similarityMergeThreshold = 0.78
 )
 
 // DreamingReport summarizes the results of a dreaming cycle.
@@ -238,7 +238,10 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 	}
 
 	// Find similar pairs above threshold.
-	type pair struct{ a, b int64 }
+	type pair struct {
+		a, b int64
+		sim  float64
+	}
 	var pairs []pair
 
 	ids := make([]int64, 0, len(embeddings))
@@ -250,7 +253,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		for j := i + 1; j < len(ids); j++ {
 			sim := cosineSimilarity(embeddings[ids[i]], embeddings[ids[j]])
 			if sim >= similarityMergeThreshold {
-				pairs = append(pairs, pair{ids[i], ids[j]})
+				pairs = append(pairs, pair{ids[i], ids[j], sim})
 			}
 		}
 	}
@@ -259,9 +262,15 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		return 0, nil
 	}
 
+	// Process most similar pairs first so the obvious duplicates are merged
+	// before hitting the per-cycle limit.
+	sort.Slice(pairs, func(i, j int) bool {
+		return pairs[i].sim > pairs[j].sim
+	})
+
 	merged := 0
 	// Limit merges per cycle to avoid excessive LLM calls.
-	maxMerges := 10
+	maxMerges := 25
 	for _, p := range pairs {
 		if merged >= maxMerges {
 			break
@@ -310,7 +319,7 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 		}
 
 		merged++
-		logger.Info("aurora-dream: merged facts", "old_a", p.a, "old_b", p.b, "new", newID)
+		logger.Info("aurora-dream: merged facts", "old_a", p.a, "old_b", p.b, "new", newID, "sim", fmt.Sprintf("%.3f", p.sim))
 	}
 
 	return merged, nil
