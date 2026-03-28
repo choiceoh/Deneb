@@ -141,13 +141,20 @@ func main() {
 		)
 	}
 
+	// Probe SGLang server reachability for the banner.
+	const sglangBannerURL = "http://127.0.0.1:30000/v1"
+	sglangStatus := "offline"
+	if vega.IsSglangReachable(sglangBannerURL) {
+		sglangStatus = "online"
+	}
+
 	// Collect banner info for startup display.
 	bannerInfo := logging.BannerInfo{
-		Version:     *version,
-		Addr:        addr,
-		AuthMode:    rtCfg.AuthMode,
-		RustFFI:     ffi.Available,
-		VegaEnabled: vegaEnabled,
+		Version:      *version,
+		Addr:         addr,
+		RustFFI:      ffi.Available,
+		VegaEnabled:  vegaEnabled,
+		SglangStatus: sglangStatus,
 	}
 
 	// Resolve config directory for PID file fallback.

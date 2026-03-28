@@ -14,12 +14,12 @@ import (
 
 // BannerInfo holds the values displayed in the startup banner.
 type BannerInfo struct {
-	Version     string
-	Addr        string
-	AuthMode    string
-	RustFFI     bool
-	VegaEnabled bool
-	PID         int // non-zero in daemon mode
+	Version       string
+	Addr          string
+	RustFFI       bool
+	VegaEnabled   bool
+	SglangStatus  string // "online", "offline", or empty to hide
+	PID           int    // non-zero in daemon mode
 }
 
 // PrintBanner writes a compact startup block to w.
@@ -30,8 +30,8 @@ type BannerInfo struct {
 //	  0.1.0-go · rust-ffi
 //
 //	  addr      127.0.0.1:18789
-//	  auth      token
 //	  vega      enabled
+//	  sglang    online
 //
 //	  ready.
 func PrintBanner(w io.Writer, info BannerInfo, color bool) {
@@ -60,13 +60,16 @@ func PrintBanner(w io.Writer, info BannerInfo, color bool) {
 	}
 
 	kv("addr", info.Addr)
-	kv("auth", info.AuthMode)
 
 	vegaStatus := "disabled"
 	if info.VegaEnabled {
 		vegaStatus = "enabled"
 	}
 	kv("vega", vegaStatus)
+
+	if info.SglangStatus != "" {
+		kv("sglang", info.SglangStatus)
+	}
 
 	if info.PID > 0 {
 		kv("pid", fmt.Sprintf("%d", info.PID))
