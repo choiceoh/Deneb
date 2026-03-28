@@ -37,10 +37,11 @@ var noiseClassIDPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)id=["'](cookie[-_]?(?:banner|consent|notice)|gdpr|sidebar|comments|disqus_thread|ad[-_]container)["']`),
 }
 
-// stripNoiseElements removes non-content HTML elements before Markdown conversion.
+// StripNoiseElements removes non-content HTML elements before Markdown conversion.
 // This is a critical preprocessing step: without it, nav menus, cookie banners,
 // and ad blocks consume tokens that should be spent on actual content.
-func stripNoiseElements(html string) string {
+// Exported for use by link_enrichment and other callers that convert HTML.
+func StripNoiseElements(html string) string {
 	// Phase 1: Strip known noise tag blocks.
 	result := html
 	for _, tag := range noiseTagNames {

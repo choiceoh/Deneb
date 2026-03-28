@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/web"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
 )
@@ -118,7 +119,9 @@ func fetchAndConvert(ctx context.Context, url string, fetchFn FetchFunc, logger 
 	var title, content string
 
 	if isHTMLContent(contentType) {
-		text, t, err := ffi.HtmlToMarkdown(string(data))
+		// Strip noise elements (nav, ads, cookie banners) before conversion.
+		cleaned := web.StripNoiseElements(string(data))
+		text, t, err := ffi.HtmlToMarkdown(cleaned)
 		if err != nil {
 			logger.Debug("html-to-markdown failed", "url", url, "error", err)
 			// Fall back to raw text with basic tag stripping.
