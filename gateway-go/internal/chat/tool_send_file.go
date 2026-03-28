@@ -17,33 +17,6 @@ import (
 // mediaType is one of: photo, document, video, audio, voice (empty = auto-detect).
 type MediaSendFunc func(ctx context.Context, delivery *DeliveryContext, filePath, mediaType, caption string, silent bool) error
 
-// sendFileToolSchema returns the JSON Schema for the send_file tool.
-func sendFileToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"file_path": map[string]any{
-				"type":        "string",
-				"description": "Path to the file to send",
-			},
-			"type": map[string]any{
-				"type":        "string",
-				"description": "Media type. Auto-detected from MIME if omitted",
-				"enum":        []string{"photo", "document", "video", "audio", "voice"},
-			},
-			"caption": map[string]any{
-				"type":        "string",
-				"description": "Caption text (optional)",
-			},
-			"silent": map[string]any{
-				"type":        "boolean",
-				"description": "Send without notification sound",
-			},
-		},
-		"required": []string{"file_path"},
-	}
-}
-
 // toolSendFile implements the send_file tool for delivering files to the user via channel.
 func toolSendFile() ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {

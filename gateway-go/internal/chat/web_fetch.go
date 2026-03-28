@@ -1,9 +1,10 @@
 // web_fetch.go — Unified web tool: search, fetch, and search+fetch in one.
 //
 // Three modes via parameter dispatch:
-//   {"url": "..."}                        → Fetch mode (extract content from URL)
-//   {"query": "..."}                      → Search mode (web search results)
-//   {"query": "...", "fetch": N}          → Search+fetch (search then auto-fetch top N)
+//
+//	{"url": "..."}                        → Fetch mode (extract content from URL)
+//	{"query": "..."}                      → Search mode (web search results)
+//	{"query": "...", "fetch": N}          → Search+fetch (search then auto-fetch top N)
 //
 // Designed for AI agent consumption with structured metadata, machine-readable
 // errors, aggressive noise removal, SGLang AI extraction, and bot-block evasion.
@@ -15,11 +16,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
-	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,34 +32,6 @@ import (
 )
 
 // --- Tool schema ---
-
-func webToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"url": map[string]any{
-				"type":        "string",
-				"description": "URL to fetch and extract content from",
-			},
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Web search query (uses Brave Search or DuckDuckGo)",
-			},
-			"fetch": map[string]any{
-				"type":        "number",
-				"description": "When used with query: auto-fetch top N search results (1-3, default: 0 = search only)",
-			},
-			"maxChars": map[string]any{
-				"type":        "number",
-				"description": "Maximum content characters per result (default: 50000)",
-			},
-			"count": map[string]any{
-				"type":        "number",
-				"description": "Number of search results (default: 5)",
-			},
-		},
-	}
-}
 
 // --- Structured output types ---
 
@@ -573,7 +546,6 @@ func (s *sglangExtractor) extract(ctx context.Context, html string, url string, 
 
 	return strings.TrimSpace(extracted), nil
 }
-
 
 // --- Error classification ---
 

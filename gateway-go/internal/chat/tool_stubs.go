@@ -14,32 +14,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-func gatewayToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "Gateway action",
-				"enum":        []string{"restart", "config.get", "config.schema.lookup", "config.apply", "config.patch", "update.run"},
-			},
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Config path for schema.lookup",
-			},
-			"raw": map[string]any{
-				"type":        "string",
-				"description": "Raw config JSON for apply/patch",
-			},
-			"reason": map[string]any{
-				"type":        "string",
-				"description": "Reason for restart",
-			},
-		},
-		"required": []string{"action"},
-	}
-}
-
 func toolGateway(repoDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {

@@ -17,27 +17,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-func subagentsToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "Sub-agent management action",
-				"enum":        []string{"list", "kill", "steer"},
-			},
-			"target": map[string]any{
-				"type":        "string",
-				"description": "Target sub-agent ID or label",
-			},
-			"message": map[string]any{
-				"type":        "string",
-				"description": "Steering message for steer action",
-			},
-		},
-	}
-}
-
 func toolSubagents(deps *CoreToolDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -295,31 +274,6 @@ func resolveChildTarget(children []*session.Session, target string) (*session.Se
 // --- session_status tool ---
 
 // --- image tool ---
-
-func imageToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"prompt": map[string]any{
-				"type":        "string",
-				"description": "What to analyze in the image(s)",
-			},
-			"image": map[string]any{
-				"type":        "string",
-				"description": "Single image path or URL",
-			},
-			"images": map[string]any{
-				"type":        "array",
-				"items":       map[string]any{"type": "string"},
-				"description": "Multiple image paths or URLs (up to 20)",
-			},
-			"model": map[string]any{
-				"type":        "string",
-				"description": "Vision model to use",
-			},
-		},
-	}
-}
 
 func toolImage(client *llm.Client) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {

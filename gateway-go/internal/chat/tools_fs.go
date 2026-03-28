@@ -17,34 +17,6 @@ import (
 
 // --- Read tool ---
 
-func readToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"file_path": map[string]any{
-				"type":        "string",
-				"description": "The absolute path to the file to read",
-			},
-			"offset": map[string]any{
-				"type":        "number",
-				"description": "The line number to start reading from (1-based)",
-				"minimum":     1,
-			},
-			"limit": map[string]any{
-				"type":        "number",
-				"description": "The number of lines to read (default: 2000)",
-				"default":     2000,
-				"minimum":     1,
-			},
-			"function": map[string]any{
-				"type":        "string",
-				"description": "Read only this function/method/type. For .go files uses AST; for others uses regex. Overrides offset/limit",
-			},
-		},
-		"required": []string{"file_path"},
-	}
-}
-
 func toolRead(defaultDir string) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -244,23 +216,6 @@ func formatFunctionLines(displayPath string, lines []string, start, end int, fun
 
 // --- Write tool ---
 
-func writeToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"file_path": map[string]any{
-				"type":        "string",
-				"description": "The absolute path to the file to write",
-			},
-			"content": map[string]any{
-				"type":        "string",
-				"description": "The content to write to the file",
-			},
-		},
-		"required": []string{"file_path", "content"},
-	}
-}
-
 func toolWrite(defaultDir string) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -290,42 +245,6 @@ func toolWrite(defaultDir string) ToolFunc {
 }
 
 // --- Edit tool ---
-
-func editToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"file_path": map[string]any{
-				"type":        "string",
-				"description": "The absolute path to the file to modify",
-			},
-			"old_string": map[string]any{
-				"type":        "string",
-				"description": "The text to replace (must be unique unless replace_all is true). When regex=true, treated as a regex pattern",
-			},
-			"new_string": map[string]any{
-				"type":        "string",
-				"description": "The text to replace it with. When regex=true, supports $1/$2 backreferences",
-			},
-			"replace_all": map[string]any{
-				"type":        "boolean",
-				"description": "Replace all occurrences instead of requiring a unique match (default: false)",
-				"default":     false,
-			},
-			"regex": map[string]any{
-				"type":        "boolean",
-				"description": "Treat old_string as a regex pattern (default: false)",
-				"default":     false,
-			},
-			"line": map[string]any{
-				"type":        "number",
-				"description": "Replace at a specific line number (1-based). When set, old_string matches only on this line",
-				"minimum":     1,
-			},
-		},
-		"required": []string{"file_path", "old_string", "new_string"},
-	}
-}
 
 func toolEdit(defaultDir string) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {

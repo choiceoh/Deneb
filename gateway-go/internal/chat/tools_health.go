@@ -12,18 +12,6 @@ import (
 )
 
 // healthCheckToolSchema returns the JSON Schema for the health_check tool.
-func healthCheckToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"component": map[string]any{
-				"type":        "string",
-				"enum":        []string{"all", "embedding", "reranker", "sglang", "memory"},
-				"description": "Component to check (default: all). embedding=Gemini API, reranker=Jina API, sglang=local LLM, memory=aurora-memory DB",
-			},
-		},
-	}
-}
 
 // toolHealthCheck creates the health_check ToolFunc.
 func toolHealthCheck(deps *CoreToolDeps) ToolFunc {
@@ -144,7 +132,6 @@ func formatMemoryHealth(ctx context.Context, deps *CoreToolDeps) string {
 	}
 	return fmt.Sprintf("## Aurora-Memory 상태\n\n%s %s (latency: %s)\n%s", icon, ch.Name, latency, ch.Detail)
 }
-
 
 // --- Shared helpers ---
 

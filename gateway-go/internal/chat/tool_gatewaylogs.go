@@ -18,34 +18,6 @@ const (
 	gatewayLogDefault  = 100
 )
 
-func gatewayLogsToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"lines": map[string]any{
-				"type":        "integer",
-				"description": "최근 N줄 반환 (기본 100, 최대 500)",
-				"default":     gatewayLogDefault,
-				"minimum":     1,
-				"maximum":     gatewayLogMaxLines,
-			},
-			"level": map[string]any{
-				"type":        "string",
-				"description": "로그 레벨 필터: error, warn, info, debug (해당 레벨 이상만 표시)",
-				"enum":        []string{"error", "warn", "info", "debug"},
-			},
-			"pattern": map[string]any{
-				"type":        "string",
-				"description": "정규식 패턴 필터 (매칭되는 줄만 표시)",
-			},
-			"pkg": map[string]any{
-				"type":        "string",
-				"description": "패키지 필터 (예: server, chat, telegram, rpc)",
-			},
-		},
-	}
-}
-
 func toolGatewayLogs() ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {

@@ -100,31 +100,6 @@ func (s *kvStore) list(prefix string) map[string]string {
 }
 
 // kvToolSchema returns the JSON Schema for the kv tool.
-func kvToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "KV store action",
-				"enum":        []string{"get", "set", "delete", "list"},
-			},
-			"key": map[string]any{
-				"type":        "string",
-				"description": "Key name (dot-separated for namespaces, e.g., 'prefs.timezone')",
-			},
-			"value": map[string]any{
-				"type":        "string",
-				"description": "Value to store (for set action)",
-			},
-			"prefix": map[string]any{
-				"type":        "string",
-				"description": "Key prefix filter (for list action)",
-			},
-		},
-		"required": []string{"action"},
-	}
-}
 
 // toolKV implements the kv tool for lightweight key-value persistence.
 func toolKV() ToolFunc {

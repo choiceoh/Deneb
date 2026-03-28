@@ -12,72 +12,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-func grepToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"pattern": map[string]any{
-				"type":        "string",
-				"description": "Regular expression pattern to search for",
-			},
-			"path": map[string]any{
-				"type":        "string",
-				"description": "File or directory to search in",
-			},
-			"include": map[string]any{
-				"type":        "string",
-				"description": "Glob pattern to filter files (e.g. \"*.ts\")",
-			},
-			"contextLines": map[string]any{
-				"type":        "number",
-				"description": "Lines of context around each match (0-10)",
-				"default":     0,
-				"minimum":     0,
-				"maximum":     10,
-			},
-			"before": map[string]any{
-				"type":        "number",
-				"description": "Lines of context before each match (overrides contextLines for before)",
-				"minimum":     0,
-				"maximum":     10,
-			},
-			"after": map[string]any{
-				"type":        "number",
-				"description": "Lines of context after each match (overrides contextLines for after)",
-				"minimum":     0,
-				"maximum":     10,
-			},
-			"ignoreCase": map[string]any{
-				"type":        "boolean",
-				"description": "Case-insensitive search",
-				"default":     false,
-			},
-			"maxResults": map[string]any{
-				"type":        "number",
-				"description": "Maximum matches to return",
-				"default":     100,
-				"minimum":     1,
-				"maximum":     500,
-			},
-			"fileType": map[string]any{
-				"type":        "string",
-				"description": "File type filter for ripgrep --type (e.g. \"go\", \"py\", \"js\")",
-			},
-			"multiline": map[string]any{
-				"type":        "boolean",
-				"description": "Enable multiline matching (patterns can span lines, . matches newlines)",
-				"default":     false,
-			},
-			"mode": map[string]any{
-				"type":        "string",
-				"description": "Output mode: content (default, matching lines), files_only (file paths only), count (match counts per file)",
-				"enum":        []string{"content", "files_only", "count"},
-			},
-		},
-		"required": []string{"pattern"},
-	}
-}
-
 func toolGrep(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -211,28 +145,6 @@ func clampInt(v, min, max int) int {
 }
 
 // --- Find tool ---
-
-func findToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"pattern": map[string]any{
-				"type":        "string",
-				"description": "Glob pattern to match files (supports ** for recursive matching, e.g. \"**/*.go\")",
-			},
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Directory to search in",
-			},
-			"showHidden": map[string]any{
-				"type":        "boolean",
-				"description": "Include hidden directories (starting with .) in search",
-				"default":     false,
-			},
-		},
-		"required": []string{"pattern"},
-	}
-}
 
 func toolFind(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
