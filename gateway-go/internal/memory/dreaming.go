@@ -382,12 +382,18 @@ func resolveConflicts(ctx context.Context, store *Store, client *llm.Client, mod
 		}
 
 		for _, r := range wrapper.Conflicts {
-			if r.KeepID > 0 && r.RemoveID > 0 && r.KeepID != r.RemoveID && !removed[r.RemoveID] {
-				_ = store.SupersedeFact(ctx, r.RemoveID, r.KeepID)
-				removed[r.RemoveID] = true
-				resolved++
-				logger.Info("aurora-dream: resolved conflict", "keep", r.KeepID, "remove", r.RemoveID, "reason", r.Reason)
+			if r.KeepID <= 0 || r.RemoveID <= 0 || r.KeepID == r.RemoveID {
+				continue
 			}
+			// Skip if remove target was already removed or if the keep target
+			// was previously removed (prevents using a deactivated fact as winner).
+			if removed[r.RemoveID] || removed[r.KeepID] {
+				continue
+			}
+			_ = store.SupersedeFact(ctx, r.RemoveID, r.KeepID)
+			removed[r.RemoveID] = true
+			resolved++
+			logger.Info("aurora-dream: resolved conflict", "keep", r.KeepID, "remove", r.RemoveID, "reason", r.Reason)
 		}
 	}
 
