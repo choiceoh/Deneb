@@ -6,21 +6,21 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 func testACPDeps() *ACPDeps {
-	registry := autoreply.NewACPRegistry()
-	bindings := autoreply.NewSessionBindingService()
+	registry := acp.NewACPRegistry()
+	bindings := acp.NewSessionBindingService()
 	sessions := session.NewManager()
 
 	deps := &ACPDeps{
 		Registry: registry,
 		Bindings: bindings,
 		Sessions: sessions,
-		Infra: &autoreply.SubagentInfraDeps{
+		Infra: &acp.SubagentInfraDeps{
 			ACPRegistry: registry,
 		},
 	}
@@ -100,10 +100,10 @@ func TestACPStatus_WithAgents(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
-	deps.Registry.Register(autoreply.ACPAgent{
+	deps.Registry.Register(acp.ACPAgent{
 		ID: "agent-1", Status: "running", SessionKey: "acp:test:agent-1",
 	})
-	deps.Registry.Register(autoreply.ACPAgent{
+	deps.Registry.Register(acp.ACPAgent{
 		ID: "agent-2", Status: "done", SessionKey: "acp:test:agent-2",
 	})
 
@@ -164,10 +164,10 @@ func TestACPList_WithParentFilter(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
-	deps.Registry.Register(autoreply.ACPAgent{
+	deps.Registry.Register(acp.ACPAgent{
 		ID: "child-1", ParentID: "parent-a", Status: "running",
 	})
-	deps.Registry.Register(autoreply.ACPAgent{
+	deps.Registry.Register(acp.ACPAgent{
 		ID: "child-2", ParentID: "parent-b", Status: "running",
 	})
 
@@ -221,7 +221,7 @@ func TestACPKill_Success(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
-	deps.Registry.Register(autoreply.ACPAgent{
+	deps.Registry.Register(acp.ACPAgent{
 		ID: "agent-kill", Status: "running", SessionKey: "acp:test:agent-kill",
 	})
 
@@ -271,7 +271,7 @@ func TestACPSend_ByAgentID(t *testing.T) {
 		return nil
 	}
 
-	deps.Registry.Register(autoreply.ACPAgent{
+	deps.Registry.Register(acp.ACPAgent{
 		ID: "agent-send", Status: "running", SessionKey: "acp:test:agent-send",
 	})
 
@@ -323,7 +323,7 @@ func TestACPSend_NoSendFn(t *testing.T) {
 	deps.SessionSendFn = nil
 	d := testACPDispatcher(deps)
 
-	deps.Registry.Register(autoreply.ACPAgent{
+	deps.Registry.Register(acp.ACPAgent{
 		ID: "agent-x", Status: "running", SessionKey: "acp:test:agent-x",
 	})
 

@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
@@ -130,14 +130,14 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	// Set up phase-aware typing indicator for channel delivery (e.g., Telegram).
 	// Uses TypingController (5s keepalive matching Telegram's sendChatAction TTL)
 	// with FullTypingSignaler for phase-aware signals (text, thinking, tool use).
-	var typingSignaler *autoreply.FullTypingSignaler
+	var typingSignaler *typing.FullTypingSignaler
 	if deps.typingFn != nil && params.Delivery != nil {
 		delivery := params.Delivery
-		typingCtrl := autoreply.NewTypingController(autoreply.TypingControllerConfig{
+		typingCtrl := typing.NewTypingController(typing.TypingControllerConfig{
 			OnStart:    func() { _ = deps.typingFn(ctx, delivery) },
 			IntervalMs: 5000, // Telegram typing expires after 5s
 		})
-		typingSignaler = autoreply.NewFullTypingSignaler(typingCtrl, autoreply.TypingModeInstant, false)
+		typingSignaler = typing.NewFullTypingSignaler(typingCtrl, typing.TypingModeInstant, false)
 		typingSignaler.SignalRunStart()
 	}
 
@@ -220,7 +220,7 @@ func executeAgentRun(
 	params RunParams,
 	deps runDeps,
 	broadcaster *streamBroadcaster,
-	typingSignaler *autoreply.FullTypingSignaler,
+	typingSignaler *typing.FullTypingSignaler,
 	statusCtrl *channel.StatusReactionController,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,

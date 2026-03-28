@@ -100,3 +100,22 @@ func BuildSessionHint(flags SessionHintFlags) string {
 	}
 	return strings.Join(hints, " ")
 }
+
+// SessionModification describes changes to apply to the session.
+type SessionModification struct {
+	Reset           bool
+	Model           string
+	Provider        string
+	ThinkLevel      ThinkLevel
+	VerboseLevel    VerboseLevel
+	FastMode        *bool
+	ReasoningLevel  ReasoningLevel
+	ElevatedLevel   ElevatedLevel
+	SendPolicy      string
+	GroupActivation GroupActivationMode
+	SystemPrompt    *string
+	Label           *string
+	// Session lifecycle.
+	IdleTimeoutMs int64
+	MaxAgeMs      int64
+}

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
@@ -118,12 +119,12 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	}
 
 	// Normalize inbound context (defaults for CommandBody, BodyForAgent, etc.).
-	autoreply.FinalizeInboundContext(msgCtx)
+	inbound.FinalizeInboundContext(msgCtx)
 
 	// Strip bot mentions in group chats.
 	if msgCtx.IsGroup {
-		msgCtx.BodyForAgent = autoreply.StripMentions(msgCtx.BodyForAgent, "")
-		msgCtx.BodyForCommands = autoreply.StripMentions(msgCtx.BodyForCommands, "")
+		msgCtx.BodyForAgent = inbound.StripMentions(msgCtx.BodyForAgent, "")
+		msgCtx.BodyForCommands = inbound.StripMentions(msgCtx.BodyForCommands, "")
 	}
 
 	// Try slash command dispatch (only for text messages with commands).

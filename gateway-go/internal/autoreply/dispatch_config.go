@@ -189,20 +189,6 @@ func needsFollowup(result *AgentTurnResult) bool {
 	return false
 }
 
-// ACPDispatch handles ACP (Agent Control Protocol) routing.
-type ACPDispatch struct {
-	Enabled     bool
-	TargetAgent string
-	Mode        string // "stream", "batch"
-}
-
-// ACPDelivery handles delivering ACP results.
-type ACPDelivery struct {
-	SessionKey string
-	AgentID    string
-	Result     *AgentTurnResult
-}
-
 // ACPStreamSettings configures ACP streaming behavior.
 type ACPStreamSettings struct {
 	Enabled    bool
