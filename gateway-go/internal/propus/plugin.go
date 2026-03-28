@@ -52,6 +52,10 @@ type Plugin struct {
 	sessionAbort SessionAbortFunc
 	sessionSave  SessionSaveFunc
 
+	// Model info for ConfigStatus messages.
+	modelName   string
+	serviceName string
+
 	// Active client connections (connID → conn).
 	clients   map[string]*clientConn
 	clientsMu sync.RWMutex
@@ -97,6 +101,12 @@ func (p *Plugin) SetSessionAbort(fn SessionAbortFunc) { p.sessionAbort = fn }
 
 // SetSessionSave wires the session save/export callback.
 func (p *Plugin) SetSessionSave(fn SessionSaveFunc) { p.sessionSave = fn }
+
+// SetModelInfo stores the model/service names used in ConfigStatus messages.
+func (p *Plugin) SetModelInfo(model, service string) {
+	p.modelName = model
+	p.serviceName = service
+}
 
 // --- channel.Plugin interface ---
 
@@ -218,8 +228,8 @@ func (p *Plugin) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	p.logger.Info("propus client connected", "connID", connID)
 
-	// Send initial config status.
-	p.sendToClient(cc, MsgConfigStatus("deneb", "Deneb Gateway", "connected"))
+	// Send initial config status with real model info.
+	p.sendToClient(cc, p.configStatusMsg("connected"))
 
 	// Start server-side heartbeat for this connection.
 	heartCtx, heartCancel := context.WithCancel(r.Context())
@@ -338,7 +348,7 @@ func (p *Plugin) handleMessage(cc *clientConn, data []byte) {
 
 	case "SetApiKey":
 		// API key is shared with Deneb — no separate key needed.
-		p.sendToClient(cc, MsgConfigStatus("deneb", "Deneb Gateway", "connected"))
+		p.sendToClient(cc, p.configStatusMsg("connected"))
 
 	default:
 		p.logger.Warn("propus unknown message type", "type", msg.Type)
@@ -453,6 +463,24 @@ func randomFileID() string {
 
 // Compile-time interface check.
 var _ channel.Plugin = (*Plugin)(nil)
+
+// configStatusMsg builds a ConfigStatus message with stored model info.
+func (p *Plugin) configStatusMsg(denebStatus string) ServerMessage {
+	model := p.modelName
+	if model == "" {
+		model = "deneb"
+	}
+	svc := p.serviceName
+	if svc == "" {
+		svc = "Deneb Gateway"
+	}
+	return MsgConfigStatus(model, svc, denebStatus)
+}
+
+// ToolProfile returns the configured tool profile (e.g. "coding").
+func (p *Plugin) ToolProfile() string {
+	return p.config.Tools
+}
 
 // ListenAddr exposes the configured listen address for use by server wiring.
 func (p *Plugin) ListenAddr() string {

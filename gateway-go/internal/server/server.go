@@ -1844,7 +1844,7 @@ func (s *Server) wirePropusChatHandler() {
 		delivery := map[string]any{
 			"channel":     "propus",
 			"to":          sessionKey,
-			"toolProfile": "coding",
+			"toolProfile": s.propusPlug.ToolProfile(),
 		}
 
 		sendParams := map[string]any{
@@ -2015,6 +2015,9 @@ func (s *Server) wirePropusChatHandler() {
 
 		return n
 	})
+
+	// Inject real model info so ConfigStatus messages include the actual model name.
+	s.propusPlug.SetModelInfo(s.chatHandler.DefaultModel(), "Deneb Gateway")
 
 	s.logger.Info("propus chat handler wired")
 }

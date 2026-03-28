@@ -5,6 +5,26 @@
 
   let container: HTMLDivElement;
   let editor: any = null;
+  let copied = $state(false);
+
+  async function copyToClipboard() {
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = code;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    copied = true;
+    setTimeout(() => {
+      copied = false;
+    }, 2000);
+  }
 
   // Monaco is loaded lazily to avoid blocking initial render.
   onMount(async () => {
@@ -93,9 +113,12 @@
 </script>
 
 <div class="code-block">
-  {#if language}
-    <div class="code-lang">{language}</div>
-  {/if}
+  <div class="code-header">
+    <span class="code-lang">{language || ""}</span>
+    <button class="copy-btn" onclick={copyToClipboard} title="복사">
+      {copied ? "복사됨" : "복사"}
+    </button>
+  </div>
   <div class="code-container" bind:this={container}></div>
 </div>
 
@@ -107,13 +130,36 @@
     margin: var(--space-sm) 0;
   }
 
-  .code-lang {
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: 6px 12px;
     background: rgba(26, 30, 48, 0.8);
+    border-bottom: 1px solid var(--bg-surface);
+  }
+
+  .code-lang {
     color: var(--text-muted);
     font-size: 11px;
     font-family: var(--font-mono);
-    border-bottom: 1px solid var(--bg-surface);
+  }
+
+  .copy-btn {
+    background: transparent;
+    border: 1px solid var(--bg-surface);
+    border-radius: 4px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .copy-btn:hover {
+    color: var(--accent-primary, #7aa2f7);
+    border-color: var(--accent-primary, #7aa2f7);
   }
 
   .code-container {
