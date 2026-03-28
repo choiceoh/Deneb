@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.20.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.19.1...deneb-v3.20.0) (2026-03-28)
+
+
+### ✨ Features
+
+* **cron:** add morning-letter skill and cron job for daily 8AM KST briefing ([4b9b6f5](https://github.com/choiceoh/Deneb/commit/4b9b6f575a549a616ce946a6cf6ee46ce4542ae8))
+* **gmail:** add periodic Gmail polling with LLM analysis ([dd64ccb](https://github.com/choiceoh/Deneb/commit/dd64ccbac21b180e72aaa2fce9e763ddd395a458))
+
+
+### 🐛 Bug Fixes
+
+* **gateway:** remove stale embedResult reference in startup banner ([bec6c84](https://github.com/choiceoh/Deneb/commit/bec6c849bbf456fc8c54273db3b6366db7702ac8))
+* **propus:** wire StopGeneration abort, fix graceful shutdown, and improve error handling ([168ff47](https://github.com/choiceoh/Deneb/commit/168ff477da7beec8d96686f1453049c913812e4c))
+
 ## [3.19.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.19.0...deneb-v3.19.1) (2026-03-28)
 
 
