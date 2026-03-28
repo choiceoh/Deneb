@@ -43,6 +43,12 @@ func runConcurrentResponse(
 	ctx, cancel := context.WithTimeout(ctx, concurrentResponseTimeout)
 	defer cancel()
 
+	// Bail immediately if already cancelled (e.g., replaced by newer concurrent response).
+	// Check BEFORE persisting the user message to avoid orphaned messages.
+	if ctx.Err() != nil {
+		return
+	}
+
 	// 1. Persist user message to transcript (shared with task core).
 	if deps.transcript != nil && params.Message != "" {
 		userMsg := ChatMessage{
