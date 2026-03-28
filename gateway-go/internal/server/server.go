@@ -38,6 +38,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/device"
 	"github.com/choiceoh/deneb/gateway-go/internal/embedding"
+	"github.com/choiceoh/deneb/gateway-go/internal/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
@@ -163,6 +164,9 @@ type Server struct {
 
 	// Copilot: background system monitor using local sglang.
 	copilotSvc *copilot.Service
+
+	// GmailPoll: periodic Gmail polling with LLM analysis.
+	gmailPollSvc *gmailpoll.Service
 }
 
 // safeGo starts a goroutine with panic recovery that logs and continues.
@@ -437,6 +441,13 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		})
 	}
 
+	// Start Gmail polling service.
+	if s.gmailPollSvc != nil {
+		s.safeGo("gmailpoll:start", func() {
+			s.gmailPollSvc.Start(ctx)
+		})
+	}
+
 	// Fire gateway.start hooks.
 	if s.hooks != nil {
 		addr := ln.Addr().String()
@@ -560,6 +571,11 @@ func (s *Server) doShutdown() error {
 	// 6c. Stop copilot service.
 	if s.copilotSvc != nil {
 		s.copilotSvc.Stop()
+	}
+
+	// 6d. Stop Gmail poll service.
+	if s.gmailPollSvc != nil {
+		s.gmailPollSvc.Stop()
 	}
 
 	// 7. Fire gateway.stop hooks.
@@ -1484,6 +1500,60 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 	rpc.RegisterCopilotMethods(s.dispatcher, rpc.CopilotDeps{
 		Copilot: s.copilotSvc,
 	})
+
+	// Gmail polling service: periodic new-email analysis via LLM.
+	s.initGmailPoll()
+}
+
+// initGmailPoll initializes the Gmail polling service if enabled in config.
+func (s *Server) initGmailPoll() {
+	snap, err := config.LoadConfigFromDefaultPath()
+	if err != nil || snap == nil {
+		return
+	}
+	pollCfg := snap.GmailPoll
+	if pollCfg == nil || pollCfg.Enabled == nil || !*pollCfg.Enabled {
+		return
+	}
+
+	home, _ := os.UserHomeDir()
+	stateDir := filepath.Join(home, ".deneb")
+
+	cfg := gmailpoll.Config{
+		StateDir:   stateDir,
+		LLMBaseURL: "http://127.0.0.1:30000/v1",
+	}
+	if pollCfg.IntervalMin != nil {
+		cfg.IntervalMin = *pollCfg.IntervalMin
+	}
+	if pollCfg.Query != "" {
+		cfg.Query = pollCfg.Query
+	}
+	if pollCfg.MaxPerCycle != nil {
+		cfg.MaxPerCycle = *pollCfg.MaxPerCycle
+	}
+	if pollCfg.Model != "" {
+		cfg.Model = pollCfg.Model
+	}
+	if pollCfg.PromptFile != "" {
+		cfg.PromptFile = pollCfg.PromptFile
+	}
+
+	s.gmailPollSvc = gmailpoll.NewService(cfg, s.logger)
+
+	// Wire Telegram notifier.
+	if s.telegramPlug != nil {
+		tgCfg := s.telegramPlug.Config()
+		if tgCfg != nil && len(tgCfg.AllowFrom.IDs) > 0 {
+			s.gmailPollSvc.SetNotifier(&telegramNotifier{
+				plugin: s.telegramPlug,
+				chatID: tgCfg.AllowFrom.IDs[0],
+				logger: s.logger,
+			})
+		}
+	}
+
+	s.logger.Info("gmailpoll service initialized")
 }
 
 // registerNativeSystemMethods registers native Go system RPC methods:
