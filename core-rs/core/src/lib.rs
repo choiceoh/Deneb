@@ -46,28 +46,19 @@ pub mod safe_regex;
 ///
 /// # Safety
 /// `json_ptr` must point to a valid UTF-8 byte buffer of length `json_len`.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_validate_frame(json_ptr: *const u8, json_len: usize) -> i32 {
-    if json_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    if json_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: json_ptr is null-checked above, json_len is bounded by FFI_MAX_INPUT_LEN.
-    // The Go caller guarantees the buffer is valid for json_len bytes.
-    let slice = std::slice::from_raw_parts(json_ptr, json_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let json_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_int!(
+    /// C FFI: Validate a gateway frame (JSON bytes).
+    /// Returns 0 on success, negative error code on failure.
+    ///
+    /// # Safety
+    /// `json_ptr` must point to a valid UTF-8 byte buffer of length `json_len`.
+    fn deneb_validate_frame(json_ptr, json_len, max_len = FFI_MAX_INPUT_LEN, json_str) {
         match protocol::validate_frame(json_str) {
             Ok(_) => 0,
             Err(_) => FFI_ERR_VALIDATION,
         }
-    })
-}
+    }
+);
 
 /// C FFI: Constant-time secret comparison.
 /// Returns 0 if equal, non-zero otherwise.
@@ -131,28 +122,20 @@ pub unsafe extern "C" fn deneb_detect_mime(
 ///
 /// # Safety
 /// `key_ptr` must point to a valid UTF-8 byte buffer of length `key_len`.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_validate_session_key(key_ptr: *const u8, key_len: usize) -> i32 {
-    if key_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    if key_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: key_ptr is null-checked above, key_len bounded by FFI_MAX_INPUT_LEN.
-    let slice = std::slice::from_raw_parts(key_ptr, key_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let key_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_int!(
+    /// C FFI: Validate a session key string.
+    /// Returns 0 if valid, -1 if null pointer, -2 if invalid UTF-8, -3 if invalid key.
+    ///
+    /// # Safety
+    /// `key_ptr` must point to a valid UTF-8 byte buffer of length `key_len`.
+    fn deneb_validate_session_key(key_ptr, key_len, max_len = FFI_MAX_INPUT_LEN, key_str) {
         if security::is_valid_session_key(key_str) {
             0
         } else {
             FFI_ERR_VALIDATION
         }
-    })
-}
+    }
+);
 
 /// C FFI: Sanitize HTML in a string.
 /// Writes the sanitized output into `out_ptr` (max `out_len` bytes).
@@ -161,28 +144,22 @@ pub unsafe extern "C" fn deneb_validate_session_key(key_ptr: *const u8, key_len:
 /// # Safety
 /// `input_ptr` must be valid UTF-8 of `input_len` bytes.
 /// `out_ptr` must be writable for `out_len` bytes.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_sanitize_html(
-    input_ptr: *const u8,
-    input_len: usize,
-    out_ptr: *mut u8,
-    out_len: usize,
-) -> i32 {
-    if input_ptr.is_null() || out_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    if input_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: input_ptr and out_ptr are null-checked above, input_len bounded
-    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
-    let slice = std::slice::from_raw_parts(input_ptr, input_len);
-    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let input_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_buffer!(
+    /// C FFI: Sanitize HTML in a string.
+    /// Writes the sanitized output into `out_ptr` (max `out_len` bytes).
+    /// Returns the number of bytes written, or negative on error.
+    ///
+    /// # Safety
+    /// `input_ptr` must be valid UTF-8 of `input_len` bytes.
+    /// `out_ptr` must be writable for `out_len` bytes.
+    fn deneb_sanitize_html(
+        input_ptr,
+        input_len,
+        out = (out_ptr, out_len),
+        max_len = FFI_MAX_INPUT_LEN,
+        input_str,
+        out_slice
+    ) {
         let sanitized = security::sanitize_html(input_str);
         let bytes = sanitized.as_bytes();
         if bytes.len() > out_slice.len() {
@@ -190,68 +167,54 @@ pub unsafe extern "C" fn deneb_sanitize_html(
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
-    })
-}
+    }
+);
 
 /// C FFI: Check if a URL is safe (not targeting internal networks).
 /// Returns 0 if safe, 1 if unsafe, negative on error.
 ///
 /// # Safety
 /// `url_ptr` must point to valid UTF-8 of `url_len` bytes.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_is_safe_url(url_ptr: *const u8, url_len: usize) -> i32 {
-    if url_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    // URLs should not be extremely long; cap at 8 KB.
-    // Returns 1 (unsafe) rather than FFI_ERR_INPUT_TOO_LARGE because an
-    // oversized URL is a policy rejection (SSRF risk), not a parameter error.
-    if url_len > 8192 {
-        return 1;
-    }
-    // SAFETY: url_ptr is null-checked above, url_len capped at 8 KB.
-    let slice = std::slice::from_raw_parts(url_ptr, url_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let url_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_int!(
+    /// C FFI: Check if a URL is safe (not targeting internal networks).
+    /// Returns 0 if safe, 1 if unsafe, negative on error.
+    ///
+    /// # Safety
+    /// `url_ptr` must point to valid UTF-8 of `url_len` bytes.
+    fn deneb_is_safe_url(
+        url_ptr,
+        url_len,
+        max_len = 8192,
+        too_large = 1,
+        url_str
+    ) {
         if security::is_safe_url(url_str) {
             0
         } else {
             1
         }
-    })
-}
+    }
+);
 
 /// C FFI: Validate an error code string.
 /// Returns 0 if valid, 1 if unknown, negative on error.
 ///
 /// # Safety
 /// `code_ptr` must point to valid UTF-8 of `code_len` bytes.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_validate_error_code(code_ptr: *const u8, code_len: usize) -> i32 {
-    if code_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    // Cap input length for consistency with other FFI functions.
-    if code_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: code_ptr is null-checked above, code_len bounded by FFI_MAX_INPUT_LEN.
-    let slice = std::slice::from_raw_parts(code_ptr, code_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let code_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_int!(
+    /// C FFI: Validate an error code string.
+    /// Returns 0 if valid, 1 if unknown, negative on error.
+    ///
+    /// # Safety
+    /// `code_ptr` must point to valid UTF-8 of `code_len` bytes.
+    fn deneb_validate_error_code(code_ptr, code_len, max_len = FFI_MAX_INPUT_LEN, code_str) {
         if protocol::error_codes::is_valid_error_code(code_str) {
             0
         } else {
             1
         }
-    })
-}
+    }
+);
 
 // ---------------------------------------------------------------------------
 // Vega FFI exports (requires "vega" feature)
@@ -268,28 +231,26 @@ pub unsafe extern "C" fn deneb_validate_error_code(code_ptr: *const u8, code_len
 /// # Safety
 /// `cmd_ptr` must point to valid UTF-8 of `cmd_len` bytes.
 /// `out_ptr` must be writable for `out_len` bytes.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_vega_execute(
-    cmd_ptr: *const u8,
-    cmd_len: usize,
-    out_ptr: *mut u8,
-    out_len: usize,
-) -> i32 {
-    if cmd_ptr.is_null() || out_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    if cmd_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: cmd_ptr and out_ptr are null-checked above, cmd_len bounded by
-    // FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
-    let slice = std::slice::from_raw_parts(cmd_ptr, cmd_len);
-    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let cmd_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_buffer!(
+    /// C FFI: Execute a Vega command.
+    /// Takes a JSON command string `{"command":"search","args":{...}}`,
+    /// writes JSON result to output buffer.
+    /// Returns bytes written on success, negative on error.
+    ///
+    /// When the `vega` feature is enabled, dispatches to deneb-vega command registry.
+    /// Otherwise returns `{"error":"vega backend unavailable"}`.
+    ///
+    /// # Safety
+    /// `cmd_ptr` must point to valid UTF-8 of `cmd_len` bytes.
+    /// `out_ptr` must be writable for `out_len` bytes.
+    fn deneb_vega_execute(
+        cmd_ptr,
+        cmd_len,
+        out = (out_ptr, out_len),
+        max_len = FFI_MAX_INPUT_LEN,
+        cmd_str,
+        out_slice
+    ) {
         let result_json = vega_execute_impl(cmd_str);
         let result_bytes = result_json.as_bytes();
         if result_bytes.len() > out_slice.len() {
@@ -297,8 +258,8 @@ pub unsafe extern "C" fn deneb_vega_execute(
         }
         out_slice[..result_bytes.len()].copy_from_slice(result_bytes);
         result_bytes.len() as i32
-    })
-}
+    }
+);
 
 /// Cached VegaConfig to avoid reading 7+ env vars on every FFI call.
 /// Initialized once on first use; env vars are stable at runtime.
@@ -364,28 +325,23 @@ fn vega_execute_impl(_cmd_json: &str) -> String {
 /// # Safety
 /// `query_ptr` must point to valid UTF-8 of `query_len` bytes.
 /// `out_ptr` must be writable for `out_len` bytes.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_vega_search(
-    query_ptr: *const u8,
-    query_len: usize,
-    out_ptr: *mut u8,
-    out_len: usize,
-) -> i32 {
-    if query_ptr.is_null() || out_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    if query_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: query_ptr and out_ptr are null-checked above, query_len bounded
-    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
-    let slice = std::slice::from_raw_parts(query_ptr, query_len);
-    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let query_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_buffer!(
+    /// C FFI: Execute a Vega search query.
+    /// Takes a JSON query string `{"query":"검색어","config":{...}}`,
+    /// writes JSON results to output buffer.
+    /// Returns bytes written on success, negative on error.
+    ///
+    /// # Safety
+    /// `query_ptr` must point to valid UTF-8 of `query_len` bytes.
+    /// `out_ptr` must be writable for `out_len` bytes.
+    fn deneb_vega_search(
+        query_ptr,
+        query_len,
+        out = (out_ptr, out_len),
+        max_len = FFI_MAX_INPUT_LEN,
+        query_str,
+        out_slice
+    ) {
         let result_json = vega_search_impl(query_str);
         let result_bytes = result_json.as_bytes();
         if result_bytes.len() > out_slice.len() {
@@ -393,8 +349,8 @@ pub unsafe extern "C" fn deneb_vega_search(
         }
         out_slice[..result_bytes.len()].copy_from_slice(result_bytes);
         result_bytes.len() as i32
-    })
-}
+    }
+);
 
 /// Internal Vega search dispatch.
 /// Supports optional `query_embedding` field for SGLang-generated vectors.
@@ -464,7 +420,6 @@ fn vega_search_with_config(
 fn vega_search_impl(_query_json: &str) -> String {
     r#"{"results":[],"phase":0}"#.to_string()
 }
-
 
 // ---------------------------------------------------------------------------
 // Protocol schema validation FFI (validates RPC parameters in Rust)
@@ -755,28 +710,20 @@ pub extern "C" fn deneb_memory_bm25_rank_to_score(rank: f64) -> f64 {
 ///
 /// # Safety
 /// `raw_ptr` must be valid UTF-8. `out_ptr` must be writable for `out_len` bytes.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_memory_build_fts_query(
-    raw_ptr: *const u8,
-    raw_len: usize,
-    out_ptr: *mut u8,
-    out_len: usize,
-) -> i32 {
-    if raw_ptr.is_null() || out_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    if raw_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: raw_ptr and out_ptr are null-checked above, raw_len bounded
-    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
-    let slice = std::slice::from_raw_parts(raw_ptr, raw_len);
-    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let raw_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_buffer!(
+    /// C FFI: Build FTS query from raw text.
+    /// Writes the query string to `out_ptr`. Returns bytes written, or 0 if no tokens.
+    ///
+    /// # Safety
+    /// `raw_ptr` must be valid UTF-8. `out_ptr` must be writable for `out_len` bytes.
+    fn deneb_memory_build_fts_query(
+        raw_ptr,
+        raw_len,
+        out = (out_ptr, out_len),
+        max_len = FFI_MAX_INPUT_LEN,
+        raw_str,
+        out_slice
+    ) {
         match memory_search::fts::build_fts_query(raw_str) {
             Some(query) => {
                 let bytes = query.as_bytes();
@@ -788,8 +735,8 @@ pub unsafe extern "C" fn deneb_memory_build_fts_query(
             }
             None => 0,
         }
-    })
-}
+    }
+);
 
 /// C FFI: Merge hybrid search results.
 /// Takes JSON `MergeParams`, writes JSON `MergedResult` array to output.
@@ -797,28 +744,21 @@ pub unsafe extern "C" fn deneb_memory_build_fts_query(
 ///
 /// # Safety
 /// `params_ptr` must be valid UTF-8 JSON. `out_ptr` must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_memory_merge_hybrid_results(
-    params_ptr: *const u8,
-    params_len: usize,
-    out_ptr: *mut u8,
-    out_len: usize,
-) -> i32 {
-    if params_ptr.is_null() || out_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    if params_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: params_ptr and out_ptr are null-checked above, params_len bounded
-    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
-    let slice = std::slice::from_raw_parts(params_ptr, params_len);
-    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let params_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_buffer!(
+    /// C FFI: Merge hybrid search results.
+    /// Takes JSON `MergeParams`, writes JSON `MergedResult` array to output.
+    /// Returns bytes written, or negative on error.
+    ///
+    /// # Safety
+    /// `params_ptr` must be valid UTF-8 JSON. `out_ptr` must be writable.
+    fn deneb_memory_merge_hybrid_results(
+        params_ptr,
+        params_len,
+        out = (out_ptr, out_len),
+        max_len = FFI_MAX_INPUT_LEN,
+        params_str,
+        out_slice
+    ) {
         let params: memory_search::types::MergeParams = match serde_json::from_str(params_str) {
             Ok(p) => p,
             Err(_) => return FFI_ERR_JSON_ERROR,
@@ -834,36 +774,28 @@ pub unsafe extern "C" fn deneb_memory_merge_hybrid_results(
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
-    })
-}
+    }
+);
 
 /// C FFI: Extract keywords from a query for FTS.
 /// Writes JSON string array to output. Returns bytes written.
 ///
 /// # Safety
 /// `query_ptr` must be valid UTF-8. `out_ptr` must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_memory_extract_keywords(
-    query_ptr: *const u8,
-    query_len: usize,
-    out_ptr: *mut u8,
-    out_len: usize,
-) -> i32 {
-    if query_ptr.is_null() || out_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    if query_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: query_ptr and out_ptr are null-checked above, query_len bounded
-    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
-    let slice = std::slice::from_raw_parts(query_ptr, query_len);
-    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let query_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_buffer!(
+    /// C FFI: Extract keywords from a query for FTS.
+    /// Writes JSON string array to output. Returns bytes written.
+    ///
+    /// # Safety
+    /// `query_ptr` must be valid UTF-8. `out_ptr` must be writable.
+    fn deneb_memory_extract_keywords(
+        query_ptr,
+        query_len,
+        out = (out_ptr, out_len),
+        max_len = FFI_MAX_INPUT_LEN,
+        query_str,
+        out_slice
+    ) {
         let keywords = memory_search::query_expansion::extract_keywords(query_str);
         let json = match serde_json::to_string(&keywords) {
             Ok(j) => j,
@@ -875,8 +807,8 @@ pub unsafe extern "C" fn deneb_memory_extract_keywords(
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
-    })
-}
+    }
+);
 
 // ---------------------------------------------------------------------------
 // Parsing FFI exports (pre-LLM heavy parsing for Go gateway)
@@ -955,28 +887,21 @@ pub unsafe extern "C" fn deneb_extract_links(
 ///
 /// # Safety
 /// `html_ptr` must be valid UTF-8. `out_ptr` must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_html_to_markdown(
-    html_ptr: *const u8,
-    html_len: usize,
-    out_ptr: *mut u8,
-    out_len: usize,
-) -> i32 {
-    if html_ptr.is_null() || out_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    if html_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: html_ptr and out_ptr are null-checked above, html_len bounded
-    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
-    let html_slice = std::slice::from_raw_parts(html_ptr, html_len);
-    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let html_str = match std::str::from_utf8(html_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_buffer!(
+    /// C FFI: Convert HTML to Markdown.
+    /// Writes JSON `{"text":"...","title":"..."}` to `out_ptr`.
+    /// Returns bytes written, or negative on error.
+    ///
+    /// # Safety
+    /// `html_ptr` must be valid UTF-8. `out_ptr` must be writable.
+    fn deneb_html_to_markdown(
+        html_ptr,
+        html_len,
+        out = (out_ptr, out_len),
+        max_len = FFI_MAX_INPUT_LEN,
+        html_str,
+        out_slice
+    ) {
         let result = parsing::html_to_markdown::html_to_markdown(html_str);
         let json = match serde_json::to_string(&result) {
             Ok(j) => j,
@@ -988,8 +913,8 @@ pub unsafe extern "C" fn deneb_html_to_markdown(
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
-    })
-}
+    }
+);
 
 /// C FFI: Estimate decoded size of a base64 string.
 /// Returns estimated byte count (>= 0) on success, negative on error.
@@ -1022,28 +947,21 @@ pub unsafe extern "C" fn deneb_base64_estimate(input_ptr: *const u8, input_len: 
 ///
 /// # Safety
 /// `input_ptr` must be valid UTF-8. `out_ptr` must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_base64_canonicalize(
-    input_ptr: *const u8,
-    input_len: usize,
-    out_ptr: *mut u8,
-    out_len: usize,
-) -> i32 {
-    if input_ptr.is_null() || out_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    if input_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: input_ptr and out_ptr are null-checked above, input_len bounded
-    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
-    let slice = std::slice::from_raw_parts(input_ptr, input_len);
-    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let input_str = match std::str::from_utf8(slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_buffer!(
+    /// C FFI: Canonicalize a base64 string (strip whitespace, validate).
+    /// Writes the canonical base64 string to `out_ptr`.
+    /// Returns bytes written on success, -3 if invalid, other negatives on error.
+    ///
+    /// # Safety
+    /// `input_ptr` must be valid UTF-8. `out_ptr` must be writable.
+    fn deneb_base64_canonicalize(
+        input_ptr,
+        input_len,
+        out = (out_ptr, out_len),
+        max_len = FFI_MAX_INPUT_LEN,
+        input_str,
+        out_slice
+    ) {
         match parsing::base64_util::canonicalize_base64(input_str) {
             Some(canonical) => {
                 let bytes = canonical.as_bytes();
@@ -1055,8 +973,8 @@ pub unsafe extern "C" fn deneb_base64_canonicalize(
             }
             None => FFI_ERR_VALIDATION, // invalid base64
         }
-    })
-}
+    }
+);
 
 /// C FFI: Parse MEDIA: tokens from text output.
 /// Writes JSON `{"text":"...","media_urls":[...],"audio_as_voice":bool}` to `out_ptr`.
@@ -1064,28 +982,21 @@ pub unsafe extern "C" fn deneb_base64_canonicalize(
 ///
 /// # Safety
 /// `text_ptr` must be valid UTF-8. `out_ptr` must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_parse_media_tokens(
-    text_ptr: *const u8,
-    text_len: usize,
-    out_ptr: *mut u8,
-    out_len: usize,
-) -> i32 {
-    if text_ptr.is_null() || out_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    if text_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: text_ptr and out_ptr are null-checked above, text_len bounded
-    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
-    let text_slice = std::slice::from_raw_parts(text_ptr, text_len);
-    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let text_str = match std::str::from_utf8(text_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_buffer!(
+    /// C FFI: Parse MEDIA: tokens from text output.
+    /// Writes JSON `{"text":"...","media_urls":[...],"audio_as_voice":bool}` to `out_ptr`.
+    /// Returns bytes written, or negative on error.
+    ///
+    /// # Safety
+    /// `text_ptr` must be valid UTF-8. `out_ptr` must be writable.
+    fn deneb_parse_media_tokens(
+        text_ptr,
+        text_len,
+        out = (out_ptr, out_len),
+        max_len = FFI_MAX_INPUT_LEN,
+        text_str,
+        out_slice
+    ) {
         let result = parsing::media_tokens::split_media_from_output(text_str);
         let json = match serde_json::to_string(&result) {
             Ok(j) => j,
@@ -1097,8 +1008,8 @@ pub unsafe extern "C" fn deneb_parse_media_tokens(
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
-    })
-}
+    }
+);
 
 // ---------------------------------------------------------------------------
 // Markdown FFI exports (IR parsing for Go gateway)
@@ -1188,28 +1099,21 @@ pub unsafe extern "C" fn deneb_markdown_to_ir(
 ///
 /// # Safety
 /// `text_ptr` must be valid UTF-8. `out_ptr` must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn deneb_markdown_detect_fences(
-    text_ptr: *const u8,
-    text_len: usize,
-    out_ptr: *mut u8,
-    out_len: usize,
-) -> i32 {
-    if text_ptr.is_null() || out_ptr.is_null() {
-        return FFI_ERR_NULL_POINTER;
-    }
-    if text_len > FFI_MAX_INPUT_LEN {
-        return FFI_ERR_INPUT_TOO_LARGE;
-    }
-    // SAFETY: text_ptr and out_ptr are null-checked above, text_len bounded
-    // by FFI_MAX_INPUT_LEN. The Go caller guarantees both buffers are valid.
-    let text_slice = std::slice::from_raw_parts(text_ptr, text_len);
-    let out_slice = std::slice::from_raw_parts_mut(out_ptr, out_len);
-    ffi_catch(FFI_ERR_RUST_PANIC, move || {
-        let text_str = match std::str::from_utf8(text_slice) {
-            Ok(s) => s,
-            Err(_) => return FFI_ERR_INVALID_UTF8,
-        };
+ffi_string_to_buffer!(
+    /// C FFI: Detect fenced code blocks in text.
+    /// Writes JSON array of fence block objects to `out_ptr`.
+    /// Returns bytes written, or negative on error.
+    ///
+    /// # Safety
+    /// `text_ptr` must be valid UTF-8. `out_ptr` must be writable.
+    fn deneb_markdown_detect_fences(
+        text_ptr,
+        text_len,
+        out = (out_ptr, out_len),
+        max_len = FFI_MAX_INPUT_LEN,
+        text_str,
+        out_slice
+    ) {
         let fences = markdown::fences::parse_fence_spans(text_str);
         let json = match serde_json::to_string(&fences) {
             Ok(j) => j,
@@ -1221,8 +1125,8 @@ pub unsafe extern "C" fn deneb_markdown_detect_fences(
         }
         out_slice[..bytes.len()].copy_from_slice(bytes);
         bytes.len() as i32
-    })
-}
+    }
+);
 
 // ---------------------------------------------------------------------------
 // C FFI exports — Context Engine
@@ -1529,7 +1433,6 @@ mod tests {
         assert!(result.contains("results"));
         Ok(())
     }
-
 
     #[test]
     fn test_extract_links_ffi() -> Result<(), Box<dyn std::error::Error>> {
