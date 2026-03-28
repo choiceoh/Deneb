@@ -60,10 +60,10 @@ var toolCategories = []struct {
 	Label string
 	Names []string
 }{
-	{"File", []string{"read", "write", "edit", "multi_edit", "grep", "find", "tree", "diff"}},
-	{"Exec", []string{"exec", "process"}},
+	{"File", []string{"read", "write", "edit", "grep", "find"}},
+	{"Code", []string{"multi_edit", "tree", "diff", "analyze", "test"}},
 	{"Git", []string{"git"}},
-	{"Code", []string{"analyze", "test"}},
+	{"Exec", []string{"exec", "process"}},
 	{"AI", []string{"pilot"}},
 	{"Web", []string{"web", "http"}},
 	{"Memory", []string{"memory_search", "polaris", "vega"}},
@@ -128,13 +128,12 @@ func buildPromptSections(params SystemPromptParams) (staticText, dynamicText str
 	// Coding.
 	s.WriteString("## Coding\n")
 	s.WriteString("- Use `tree` to understand project structure before diving into code.\n")
-	s.WriteString("- Use `analyze(action:'outline')` to see file structure (functions, types, imports).\n")
-	s.WriteString("- Use `multi_edit` for coordinated changes across files (renames, refactors, import updates).\n")
-	s.WriteString("- Use `diff` to review changes. `git(action:'status')` to check working tree.\n")
-	s.WriteString("- Use `test(action:'run')` for structured test results (pass/fail/skip counts).\n")
-	s.WriteString("- Use `git(action:'commit')` to commit changes. Use `read(function:'FuncName')` to read a specific function.\n")
-	s.WriteString("- Workflow: analyze → edit/multi_edit → test → git(commit).\n")
-	s.WriteString("- Always verify edits compile: `test(action:'build')` or `test(action:'check')` after changes.\n\n")
+	s.WriteString("- Use `analyze(action:'outline')` to see file structure. `analyze(action:'symbols')` to find definitions.\n")
+	s.WriteString("- Use `edit` for single changes, `multi_edit` for coordinated changes across files.\n")
+	s.WriteString("- Use `diff` to review changes, `git(action:'status')` to check working tree.\n")
+	s.WriteString("- Use `test(action:'run')` for structured test results. Always verify with `test(action:'build')` after edits.\n")
+	s.WriteString("- Use `git(action:'commit')` to commit. `read(function:'FuncName')` reads a specific function.\n")
+	s.WriteString("- Workflow: tree/analyze → edit/multi_edit → diff → test → git(commit).\n\n")
 
 	// Safety.
 	s.WriteString("## Safety\n")
