@@ -55,7 +55,18 @@ Every model run triggers four lifecycle points:
 - docs/concepts/context-engine.md
 - core-rs/core/src/context_engine/mod.rs, assembler.rs, retrieval.rs
 - gateway-go/internal/chat/compaction.go
-- gateway-go/internal/aurora/`
+- gateway-go/internal/aurora/
+
+## Common Tasks
+- Check context budget config: grep(pattern:'tokenBudget\|freshTailCount', path:'gateway-go/internal/chat/')
+- View Aurora FFI exports: grep(pattern:'deneb_context', path:'core-rs/core/src/lib.rs')
+- Search message history: aurora_grep with keyword
+- Trace compaction trigger: grep(pattern:'compaction.*threshold\|0.85', path:'gateway-go/internal/chat/')
+
+## Gotchas
+- estimatedTokens in AssembleResult drives compaction; returning 0 disables auto-compaction silently
+- aurora_expand_query takes ~120s; do not use for simple keyword lookups
+- Go and Rust have different default thresholds (0.85 vs 0.75); check which side triggers first`
 
 const vegaGuide = `Vega is Deneb's project search engine providing BM25 + semantic hybrid search over indexed content.
 
@@ -108,7 +119,17 @@ Rust workspace crate (core-rs/vega/) with Go bindings (gateway-go/internal/vega/
 ## Key Files
 - core-rs/vega/src/search/
 - gateway-go/internal/vega/
-- docs/concepts/architecture.md (Vega section)`
+- docs/concepts/architecture.md (Vega section)
+
+## Common Tasks
+- Search project knowledge: vega(action:'search', query:'session lifecycle')
+- Check Vega activation: grep(pattern:'VegaActivation\|autodetect', path:'gateway-go/internal/vega/')
+- Verify embedding config: exec(command:'echo $GEMINI_API_KEY | head -c 8')
+
+## Gotchas
+- Without GEMINI_API_KEY, Vega falls back to BM25-only (no semantic search)
+- Hybrid fusion weights are internal; there's no user-facing config to adjust BM25 vs semantic balance
+- FTS5 queries are tokenized differently from semantic queries; exact matches work better with BM25 mode`
 
 const agentLoopGuide = `The agent loop is the core execution cycle: intake → context assembly → model inference → tool execution → streaming → persistence.
 
@@ -186,4 +207,14 @@ Three streams emitted during a run:
 ## Key Files
 - docs/concepts/agent-loop.md
 - gateway-go/internal/chat/agent.go, run.go
-- gateway-go/internal/chat/tools.go (ToolRegistry, Execute)`
+- gateway-go/internal/chat/tools.go (ToolRegistry, Execute)
+
+## Common Tasks
+- Check agent config defaults: grep(pattern:'MaxTurns\|Timeout.*10\|MaxTokens.*8192', path:'gateway-go/internal/chat/agent.go')
+- View current run flow: read(file_path:'gateway-go/internal/chat/run.go')
+- Check hook points: grep(pattern:'before_tool_call\|after_tool_call\|agent_end', path:'gateway-go/internal/chat/')
+
+## Gotchas
+- MaxTurns=25 is a hard limit; hitting it ends the run without error, just stop_reason=max_turns
+- Tool outputs over 64K are silently trimmed by OutputTrimmer (head+tail preserved)
+- $ref resolution has 30s timeout; slow tools may cause dependent tools to fail`

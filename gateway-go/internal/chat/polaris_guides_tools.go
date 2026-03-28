@@ -59,7 +59,17 @@ The active context engine owns compaction behavior:
 - docs/concepts/compaction.md
 - core-rs/core/src/compaction/mod.rs, sweep.rs
 - gateway-go/internal/chat/compaction.go
-- gateway-go/internal/transcript/compressor.go`
+- gateway-go/internal/transcript/compressor.go
+
+## Common Tasks
+- Force compaction: /compact [optional instructions]
+- Check compaction config: grep(pattern:'reserveTokensFloor\|identifierPolicy\|memoryFlush', path:'gateway-go/internal/')
+- View compaction state machine: read(file_path:'core-rs/core/src/compaction/sweep.rs')
+
+## Gotchas
+- Fresh tail (8 messages) is always protected; compacting a short session may do nothing
+- Memory flush runs silently before compaction; if workspace is read-only, it's skipped without error
+- maxCompactionRetries=2; after that the agent run fails with context overflow`
 
 const toolsGuide = `The tool system provides the AI agent with 34 capabilities to interact with the filesystem, execute commands, search the web, and more.
 
@@ -150,7 +160,17 @@ Tools access runtime context via context.Context:
 - gateway-go/internal/chat/tool_message.go (messaging)
 - gateway-go/internal/chat/tool_media.go (image/youtube/send_file)
 - gateway-go/internal/chat/tool_kv.go (KV store)
-- gateway-go/internal/chat/tool_gmail.go (Gmail)`
+- gateway-go/internal/chat/tool_gmail.go (Gmail)
+
+## Common Tasks
+- List all registered tools: grep(pattern:'Name:.*"', path:'gateway-go/internal/chat/tools_core.go')
+- Check tool schema: grep(pattern:'func.*ToolSchema', path:'gateway-go/internal/chat/')
+- View post-processors: read(file_path:'gateway-go/internal/chat/tool_postprocess.go')
+
+## Gotchas
+- OutputTrimmer caps at 64K chars (head+tail); large tool outputs lose middle content silently
+- Tool names are case-sensitive; "Exec" won't match "exec"
+- $ref waits up to 30s; if the referenced tool hasn't finished, it times out`
 
 const systemPromptGuide = `The system prompt is the instruction set injected into every LLM call. It defines the agent's identity, available tools, and behavioral rules.
 
@@ -205,4 +225,14 @@ Load order: CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md
 ## Key Files
 - gateway-go/internal/chat/system_prompt.go (assembly, writePolarisSection, writeMessagingSection, etc.)
 - gateway-go/internal/chat/context_files.go (file loader, budget enforcement, caching)
-- gateway-go/internal/chat/run.go (SystemPromptParams construction, deferred format for Anthropic)`
+- gateway-go/internal/chat/run.go (SystemPromptParams construction, deferred format for Anthropic)
+
+## Common Tasks
+- View system prompt assembly: read(file_path:'gateway-go/internal/chat/system_prompt.go')
+- Check context file loading: grep(pattern:'CLAUDE.md\|SOUL.md\|MEMORY.md', path:'gateway-go/internal/chat/context_files.go')
+- View skill injection: grep(pattern:'BuildSkillsPrompt\|available_skills', path:'gateway-go/internal/')
+
+## Gotchas
+- Context files have a 20K char/file and 150K total budget; exceeding triggers truncation (head 70% + tail 20%)
+- Anthropic cache_control requires static block to be stable across turns; modifying it invalidates the cache
+- AGENTS.md is only loaded in minimal mode (sub-agents); CLAUDE.md is loaded in full mode`

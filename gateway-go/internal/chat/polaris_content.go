@@ -10,7 +10,7 @@ import (
 
 // --- topics action ---
 
-func manualTopics(docsDir, filter string) (string, error) {
+func polarisTopics(docsDir, filter string) (string, error) {
 	if _, err := os.Stat(docsDir); err != nil {
 		return "No docs/ directory found in workspace.", nil
 	}
@@ -133,7 +133,7 @@ func categoryDescription(entries []docEntry) string {
 
 // --- search action ---
 
-func manualSearch(docsDir, query string) (string, error) {
+func polarisSearch(docsDir, query string) (string, error) {
 	if query == "" {
 		return "", fmt.Errorf("query is required for search action")
 	}
@@ -262,8 +262,8 @@ func manualSearch(docsDir, query string) (string, error) {
 
 	// Cap results.
 	truncated := false
-	if len(matches) > manualMaxSearchResults {
-		matches = matches[:manualMaxSearchResults]
+	if len(matches) > polarisMaxSearchResults {
+		matches = matches[:polarisMaxSearchResults]
 		truncated = true
 	}
 
@@ -284,7 +284,7 @@ func manualSearch(docsDir, query string) (string, error) {
 
 // --- read action ---
 
-func manualRead(docsDir, topic string) (string, error) {
+func polarisRead(docsDir, topic string) (string, error) {
 	if topic == "" {
 		return "", fmt.Errorf("topic is required for read action (e.g. 'concepts/session')")
 	}
@@ -304,9 +304,9 @@ func manualRead(docsDir, topic string) (string, error) {
 	body = strings.TrimSpace(body)
 
 	// Truncate if too long: head 75% + tail 25% to minimize content loss.
-	if len(body) > manualMaxReadChars {
-		headSize := manualMaxReadChars * 3 / 4
-		tailSize := manualMaxReadChars - headSize
+	if len(body) > polarisMaxReadChars {
+		headSize := polarisMaxReadChars * 3 / 4
+		tailSize := polarisMaxReadChars - headSize
 		body = body[:headSize] + "\n\n... [truncated — use search for specific sections] ...\n\n" + body[len(body)-tailSize:]
 	}
 
@@ -548,7 +548,7 @@ var builtinGuides = map[string]guideEntry{
 	},
 }
 
-func manualGuides(topic string) (string, error) {
+func polarisGuides(topic string) (string, error) {
 	if topic == "" {
 		// Categorized listing of all guides.
 		var sb strings.Builder

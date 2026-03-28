@@ -14,15 +14,15 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// manualDocCacheTTL is the TTL for the doc tree index cache.
+// polarisCacheTTL is the TTL for the doc tree index cache.
 // Docs rarely change in a running gateway, so 60s is generous.
-const manualDocCacheTTL = 60 * time.Second
+const polarisCacheTTL = 60 * time.Second
 
-// manualMaxReadChars caps the output of the read action to avoid context bloat.
-const manualMaxReadChars = 8000
+// polarisMaxReadChars caps the output of the read action to avoid context bloat.
+const polarisMaxReadChars = 8000
 
-// manualMaxSearchResults caps keyword search results.
-const manualMaxSearchResults = 15
+// polarisMaxSearchResults caps keyword search results.
+const polarisMaxSearchResults = 15
 
 // --- Doc tree index cache ---
 
@@ -39,7 +39,7 @@ type docTreeCache struct {
 	expiresAt time.Time
 }
 
-var manualTreeCache = &docTreeCache{}
+var polarisTreeCache = &docTreeCache{}
 
 func (c *docTreeCache) get(docsDir string) ([]docEntry, bool) {
 	c.mu.Lock()
@@ -58,18 +58,18 @@ func (c *docTreeCache) set(docsDir string, entries []docEntry) {
 	defer c.mu.Unlock()
 	c.docsDir = docsDir
 	c.entries = entries
-	c.expiresAt = time.Now().Add(manualDocCacheTTL)
+	c.expiresAt = time.Now().Add(polarisCacheTTL)
 }
 
 // --- Doc content cache (mtime-based, same pattern as tool_memory.go) ---
 
-type manualContentEntry struct {
+type polarisContentEntry struct {
 	content string
 	mtime   time.Time
 }
 
-var manualContentCacheMu sync.Mutex
-var manualContentCacheMap = make(map[string]*manualContentEntry)
+var polarisContentCacheMu sync.Mutex
+var polarisContentCacheMap = make(map[string]*polarisContentEntry)
 
 func readDocFile(path string) (string, error) {
 	info, err := os.Stat(path)
@@ -78,13 +78,13 @@ func readDocFile(path string) (string, error) {
 	}
 	mtime := info.ModTime()
 
-	manualContentCacheMu.Lock()
-	if entry, ok := manualContentCacheMap[path]; ok && entry.mtime.Equal(mtime) {
+	polarisContentCacheMu.Lock()
+	if entry, ok := polarisContentCacheMap[path]; ok && entry.mtime.Equal(mtime) {
 		content := entry.content
-		manualContentCacheMu.Unlock()
+		polarisContentCacheMu.Unlock()
 		return content, nil
 	}
-	manualContentCacheMu.Unlock()
+	polarisContentCacheMu.Unlock()
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -92,9 +92,9 @@ func readDocFile(path string) (string, error) {
 	}
 	content := string(data)
 
-	manualContentCacheMu.Lock()
-	manualContentCacheMap[path] = &manualContentEntry{content: content, mtime: mtime}
-	manualContentCacheMu.Unlock()
+	polarisContentCacheMu.Lock()
+	polarisContentCacheMap[path] = &polarisContentEntry{content: content, mtime: mtime}
+	polarisContentCacheMu.Unlock()
 
 	return content, nil
 }
@@ -174,17 +174,17 @@ func scanDocTree(docsDir string) []docEntry {
 }
 
 func getDocTree(docsDir string) []docEntry {
-	if cached, ok := manualTreeCache.get(docsDir); ok {
+	if cached, ok := polarisTreeCache.get(docsDir); ok {
 		return cached
 	}
 	entries := scanDocTree(docsDir)
-	manualTreeCache.set(docsDir, entries)
+	polarisTreeCache.set(docsDir, entries)
 	return entries
 }
 
 // --- Schema ---
 
-func systemManualToolSchema() map[string]any {
+func polarisToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -301,7 +301,7 @@ func hasDocsContent(dir string) bool {
 
 // --- Tool implementation ---
 
-func toolSystemManual(workspaceDir string) ToolFunc {
+func toolPolaris(workspaceDir string) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		docsDir := resolveDocsDir(workspaceDir)
 		var p struct {
@@ -315,13 +315,13 @@ func toolSystemManual(workspaceDir string) ToolFunc {
 
 		switch p.Action {
 		case "topics":
-			return manualTopics(docsDir, p.Topic)
+			return polarisTopics(docsDir, p.Topic)
 		case "search":
-			return manualSearch(docsDir, p.Query)
+			return polarisSearch(docsDir, p.Query)
 		case "read":
-			return manualRead(docsDir, p.Topic)
+			return polarisRead(docsDir, p.Topic)
 		case "guides":
-			return manualGuides(p.Topic)
+			return polarisGuides(p.Topic)
 		default:
 			return "", fmt.Errorf("unknown action %q (valid: topics, search, read, guides)", p.Action)
 		}

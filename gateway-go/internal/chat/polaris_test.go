@@ -32,18 +32,18 @@ func repoRoot(t *testing.T) string {
 
 func invokeManual(t *testing.T, workspaceDir string, params map[string]string) string {
 	t.Helper()
-	fn := toolSystemManual(workspaceDir)
+	fn := toolPolaris(workspaceDir)
 	input, _ := json.Marshal(params)
 	result, err := fn(context.Background(), input)
 	if err != nil {
-		t.Fatalf("toolSystemManual returned error: %v", err)
+		t.Fatalf("toolPolaris returned error: %v", err)
 	}
 	return result
 }
 
 func invokeManualExpectErr(t *testing.T, workspaceDir string, params map[string]string) error {
 	t.Helper()
-	fn := toolSystemManual(workspaceDir)
+	fn := toolPolaris(workspaceDir)
 	input, _ := json.Marshal(params)
 	_, err := fn(context.Background(), input)
 	return err
