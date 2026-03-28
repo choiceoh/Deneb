@@ -58,6 +58,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
+	"github.com/choiceoh/deneb/gateway-go/internal/propus"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
@@ -132,6 +133,7 @@ type Server struct {
 	usageTracker *usage.Tracker
 	maintRunner  *maintenance.Runner
 	telegramPlug *telegram.Plugin
+	propusPlug   *propus.Plugin
 
 	// Phase 4: Native agent execution.
 	jobTracker *agent.JobTracker
@@ -1524,6 +1526,21 @@ func (s *Server) registerNativeSystemMethods(denebDir string) {
 	if s.telegramPlug != nil && s.chatHandler != nil {
 		s.wireTelegramChatHandler()
 	}
+
+	// Propus desktop coding channel plugin.
+	// Loads Propus config from deneb.json if available.
+	if s.runtimeCfg != nil {
+		propusCfg := loadPropusConfig(s.runtimeCfg)
+		if propusCfg != nil && propusCfg.Enabled {
+			s.propusPlug = propus.NewPlugin(propusCfg, s.logger)
+			s.channels.Register(s.propusPlug)
+		}
+	}
+
+	// Wire Propus client messages → chat.send pipeline + streaming events → ServerMessage.
+	if s.propusPlug != nil && s.chatHandler != nil {
+		s.wirePropusChatHandler()
+	}
 }
 
 // wireTelegramChatHandler connects the Telegram polling handler to the chat
@@ -1663,6 +1680,171 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 		return nil
 	}
 	return root.Channels.Telegram
+}
+
+// loadPropusConfig extracts Propus channel config from deneb.json.
+// Returns nil if Propus is not configured.
+func loadPropusConfig(_ *config.GatewayRuntimeConfig) *propus.Config {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || !snapshot.Valid {
+		return nil
+	}
+
+	if snapshot.Raw == "" {
+		return nil
+	}
+
+	var root struct {
+		Channels struct {
+			Propus *propus.Config `json:"propus"`
+		} `json:"channels"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		return nil
+	}
+	if root.Channels.Propus == nil {
+		return nil
+	}
+	// Apply defaults for zero-valued fields.
+	cfg := root.Channels.Propus
+	if cfg.Port == 0 {
+		cfg.Port = 3710
+	}
+	if cfg.Bind == "" {
+		cfg.Bind = "loopback"
+	}
+	if cfg.Tools == "" {
+		cfg.Tools = "coding"
+	}
+	return cfg
+}
+
+// wirePropusChatHandler connects the Propus plugin's chat callbacks to the
+// chat handler so inbound messages dispatch through chat.send, and streaming
+// events (text deltas, tool starts/results, usage, done) are converted to
+// Propus ServerMessages and pushed back to the originating WebSocket client.
+func (s *Server) wirePropusChatHandler() {
+	// Inbound: Propus client SendMessage → chat.send RPC.
+	s.propusPlug.SetChatSend(func(sessionKey, message string) {
+		delivery := map[string]any{
+			"channel": "propus",
+			"to":      sessionKey,
+		}
+
+		sendParams := map[string]any{
+			"sessionKey": sessionKey,
+			"message":    message,
+			"delivery":   delivery,
+		}
+
+		req, err := protocol.NewRequestFrame(
+			shortid.New("propus"),
+			"chat.send",
+			sendParams,
+		)
+		if err != nil {
+			s.logger.Error("propus: failed to build chat.send request", "error", err)
+			return
+		}
+
+		sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer sendCancel()
+		resp := s.chatHandler.Send(sendCtx, req)
+		if resp != nil && !resp.OK {
+			s.logger.Warn("propus: chat.send failed",
+				"session", sessionKey,
+				"error", resp.Error,
+			)
+			s.propusPlug.BroadcastToSession(sessionKey, propus.MsgError("chat.send failed"))
+		}
+	})
+
+	// Inbound: Propus client ClearChat → session clear.
+	s.propusPlug.SetSessionClear(func(sessionKey string) {
+		if s.sessions != nil {
+			s.sessions.Delete(sessionKey)
+		}
+	})
+
+	// Outbound: reply function — Propus sessions receive streaming deltas via
+	// broadcastRaw, so skip final-text delivery to avoid duplicates.
+	prevReply := s.chatHandler.GetReplyFunc()
+	s.chatHandler.SetReplyFunc(func(ctx context.Context, delivery *chat.DeliveryContext, text string) error {
+		if delivery != nil && delivery.Channel == "propus" {
+			// Streaming deltas + Done already sent via broadcastRaw; no final delivery needed.
+			return nil
+		}
+		if prevReply != nil {
+			return prevReply(ctx, delivery, text)
+		}
+		return nil
+	})
+
+	// Outbound: intercept raw broadcast events to relay streaming to Propus clients.
+	prevBroadcast := s.chatHandler.GetBroadcastRaw()
+	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
+		n := 0
+		if prevBroadcast != nil {
+			n = prevBroadcast(event, data)
+		}
+
+		// Parse the event and route to Propus clients.
+		var envelope struct {
+			Event   string `json:"event"`
+			Payload struct {
+				SessionKey string `json:"sessionKey"`
+				Delta      string `json:"delta"`
+				State      string `json:"state"`
+				Tool       string `json:"tool"`
+				ToolUseID  string `json:"toolUseId"`
+				Result     string `json:"result"`
+				IsError    bool   `json:"isError"`
+				Text       string `json:"text"`
+				Error      string `json:"error"`
+				Usage      struct {
+					Input  int `json:"inputTokens"`
+					Output int `json:"outputTokens"`
+				} `json:"usage"`
+			} `json:"payload"`
+		}
+		if err := json.Unmarshal(data, &envelope); err != nil {
+			return n
+		}
+
+		sk := envelope.Payload.SessionKey
+		if !strings.HasPrefix(sk, "propus:") {
+			return n
+		}
+
+		switch envelope.Event {
+		case "chat.delta":
+			if envelope.Payload.Delta != "" {
+				s.propusPlug.BroadcastToSession(sk, propus.MsgText(envelope.Payload.Delta))
+			}
+		case "chat.tool":
+			switch envelope.Payload.State {
+			case "started":
+				s.propusPlug.BroadcastToSession(sk, propus.MsgToolStart(envelope.Payload.Tool, ""))
+			case "completed":
+				s.propusPlug.BroadcastToSession(sk, propus.MsgToolResult(envelope.Payload.Tool, envelope.Payload.Result))
+			}
+		case "chat":
+			switch envelope.Payload.State {
+			case "done":
+				usage := envelope.Payload.Usage
+				s.propusPlug.BroadcastToSession(sk, propus.MsgUsage(usage.Input, usage.Output, usage.Input+usage.Output))
+				s.propusPlug.BroadcastToSession(sk, propus.MsgDone())
+			case "error":
+				s.propusPlug.BroadcastToSession(sk, propus.MsgError(envelope.Payload.Error))
+			case "aborted":
+				s.propusPlug.BroadcastToSession(sk, propus.MsgError("generation aborted"))
+			}
+		}
+
+		return n
+	})
+
+	s.logger.Info("propus chat handler wired")
 }
 
 // loadProviderConfigs reads LLM provider configs (apiKey, baseUrl, api) from deneb.json.

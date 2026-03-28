@@ -480,6 +480,26 @@ When Mattermost native commands are enabled:
 - `channels.mattermost.requireMention`: require `@mention` before replying in channels.
 - Optional `channels.mattermost.defaultAccount` overrides default account selection when it matches a configured account id.
 
+### Propus
+
+```json5
+{
+  channels: {
+    propus: {
+      enabled: true,
+      port: 3710,          // WebSocket listen port
+      bind: "loopback",    // "loopback" (127.0.0.1) or "all" (0.0.0.0)
+      tools: "coding",     // tool profile: "coding" restricts to code tools
+    },
+  },
+}
+```
+
+- `channels.propus.enabled`: start the Propus desktop coding channel (default `false`).
+- `channels.propus.port`: WebSocket listen port (default `3710`).
+- `channels.propus.bind`: listen address scope. `"loopback"` binds to 127.0.0.1 only; `"all"` binds to 0.0.0.0. Default `"loopback"`.
+- `channels.propus.tools`: tool profile selection. Default `"coding"`.
+
 ### Signal
 
 ```json5
