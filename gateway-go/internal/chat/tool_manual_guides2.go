@@ -180,7 +180,7 @@ Two build modes:
 10. Workspace: working directory path
 11. Reply Tags: [[reply_to_current]] for native replies
 12. Messaging: channel routing, sessions_send, message tool
-13. Response Style: Korean default, concise for Telegram (4096 char limit), bullet points
+13. Response Style: Korean default, concise for Telegram (4096 char limit), bullet points, natural emoji
 14. Current Date & Time: local time with timezone (Asia/Seoul)
 15. Context Files: workspace + ancestor directories
 16. Silent Replies: __SILENT_REPLY__ (NO_REPLY) token for suppressing delivery

@@ -194,6 +194,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, dynamicText str
 	d.WriteString("- Keep responses concise for Telegram (4096 char limit). Split with message tool if needed.\n")
 	d.WriteString("- For code changes: show the change, not the whole file.\n")
 	d.WriteString("- For status/info: bullet points over paragraphs.\n")
+	d.WriteString("- Use emoji naturally to convey tone and emotion.\n")
 	d.WriteString("- Be direct. Lead with the answer, not the reasoning.\n\n")
 
 	// Current Date & Time.
