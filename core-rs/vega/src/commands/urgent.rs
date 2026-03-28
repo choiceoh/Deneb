@@ -326,4 +326,37 @@ impl super::CommandHandler for UrgentHandler {
     fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
         cmd_urgent(args, config)
     }
+
+    fn compact_result(&self, data: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "total": data.get("total"), "critical": data.get("critical"),
+            "overdue": data.get("overdue"), "stale": data.get("stale"),
+            "items": data.get("items").and_then(|v| v.as_array()).map(|arr| {
+                arr.iter().take(5).map(|i| json!({
+                    "project_name": i.get("project_name"),
+                    "priority": i.get("priority"), "reason": i.get("reason"),
+                })).collect::<Vec<_>>()
+            }),
+        })
+    }
+
+    fn ai_hints(&self, data: &serde_json::Value) -> Vec<serde_json::Value> {
+        let mut hints: Vec<serde_json::Value> = Vec::new();
+        let critical = data.get("critical").and_then(|v| v.as_i64()).unwrap_or(0);
+        let total = data.get("total").and_then(|v| v.as_i64()).unwrap_or(0);
+        if critical > 0 {
+            hints.push(json!({"situation": "has_critical", "tone": "alert",
+                "guide": "긴급 프로젝트가 있습니다. 이것을 먼저 언급하세요."}));
+        } else if total == 0 {
+            hints.push(json!({"situation": "all_clear", "tone": "reassuring",
+                "guide": "긴급 항목이 없습니다. 짧게 '현재 긴급한 것은 없습니다'라고 답하세요."}));
+        }
+        hints
+    }
+
+    fn summary(&self, data: &serde_json::Value) -> String {
+        let total = data.get("total").and_then(|v| v.as_i64()).unwrap_or(0);
+        let critical = data.get("critical").and_then(|v| v.as_i64()).unwrap_or(0);
+        format!("관심 필요 {}건 (긴급 {}건)", total, critical)
+    }
 }

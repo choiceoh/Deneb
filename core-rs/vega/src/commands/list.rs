@@ -12,6 +12,27 @@ impl super::CommandHandler for ListHandler {
     fn execute(&self, config: &VegaConfig, args: &Value) -> CommandResult {
         cmd_list(args, config)
     }
+
+    fn compact_result(&self, data: &Value) -> Value {
+        json!({
+            "total": data.get("projects").and_then(|v| v.as_array()).map(|a| a.len()),
+            "projects": data.get("projects").and_then(|v| v.as_array()).map(|arr| {
+                arr.iter().map(|p| json!({
+                    "id": p.get("id"), "name": p.get("name"), "status": p.get("status"),
+                })).collect::<Vec<_>>()
+            }),
+        })
+    }
+
+    fn ai_hints(&self, data: &Value) -> Vec<Value> {
+        let count = data
+            .get("projects")
+            .and_then(|v| v.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+        vec![json!({"situation": "project_list",
+            "guide": format!("{}개 프로젝트 목록입니다. 상세는 brief <ID>로 확인하세요.", count)})]
+    }
 }
 
 /// list: List all projects.

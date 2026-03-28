@@ -13,6 +13,12 @@ impl super::CommandHandler for TimelineHandler {
     fn execute(&self, config: &VegaConfig, args: &Value) -> CommandResult {
         cmd_timeline(args, config)
     }
+
+    fn ai_hints(&self, data: &Value) -> Vec<Value> {
+        let _ = data;
+        vec![json!({"situation": "timeline_view",
+            "guide": "이력/일정입니다. 시간순으로 핵심 이벤트를 요약하세요."})]
+    }
 }
 
 /// timeline: Project communication timeline.

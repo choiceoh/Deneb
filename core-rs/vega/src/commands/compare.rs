@@ -235,6 +235,19 @@ impl super::CommandHandler for CompareHandler {
     fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
         cmd_compare(args, config)
     }
+
+    fn compact_result(&self, data: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "project_count": data.get("project_count"),
+            "projects": data.get("projects").and_then(|v| v.as_array()).map(|arr| {
+                arr.iter().map(|p| json!({
+                    "id": p.get("id"), "name": p.get("name"),
+                    "status": p.get("status"), "client": p.get("client"),
+                })).collect::<Vec<_>>()
+            }),
+            "shared": data.get("shared"), "summary": data.get("summary"),
+        })
+    }
 }
 
 pub struct StatsHandler;
@@ -242,5 +255,13 @@ pub struct StatsHandler;
 impl super::CommandHandler for StatsHandler {
     fn execute(&self, config: &crate::config::VegaConfig, args: &serde_json::Value) -> super::CommandResult {
         cmd_stats(args, config)
+    }
+
+    fn compact_result(&self, data: &serde_json::Value) -> serde_json::Value {
+        json!({
+            "projects": data.get("projects"),
+            "communication": {"total": data.get("communication").and_then(|c| c.get("total"))},
+            "summary": data.get("summary"),
+        })
     }
 }

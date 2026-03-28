@@ -72,8 +72,40 @@ impl CommandResult {
 }
 
 /// Trait implemented by every command handler.
+///
+/// The optional AI helper methods (compact_result, ai_hints, build_bundle, summary)
+/// replace the centralised `match command { ... }` dispatch in ai.rs so each command
+/// owns its own presentation and hint logic.
 pub trait CommandHandler: Send + Sync {
     fn execute(&self, config: &VegaConfig, args: &Value) -> CommandResult;
+
+    /// E-2: Return a compact / brief representation of a successful result.
+    /// Default: return data unchanged.
+    fn compact_result(&self, data: &Value) -> Value {
+        data.clone()
+    }
+
+    /// E-3: Return situational AI hint objects for LLM context injection.
+    /// Default: no hints.
+    fn ai_hints(&self, data: &Value) -> Vec<Value> {
+        let _ = data;
+        vec![]
+    }
+
+    /// E-4: Return a proactive data bundle (related data the AI might need next).
+    /// `conn` is `None` when DB access is unavailable.
+    /// Default: empty object.
+    fn build_bundle(&self, data: &Value, conn: Option<&Connection>) -> Value {
+        let _ = (data, conn);
+        json!({})
+    }
+
+    /// Generate a short Korean summary string for this command's result.
+    /// Default: empty string (caller falls back to generic).
+    fn summary(&self, data: &Value) -> String {
+        let _ = data;
+        String::new()
+    }
 }
 
 pub(super) struct CommandContext {
@@ -377,9 +409,15 @@ fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
         }
     }
 
-    // E-2: Apply depth
+    let registry = REGISTRY.get_or_init(build_registry);
+
+    // E-2: Apply depth via per-command trait method
     if depth != "normal" && result.success {
-        result.data = crate::ai::apply_depth(&result.data, command, depth);
+        if let Some(handler) = registry.get(command) {
+            if matches!(depth, "compact" | "brief") {
+                result.data = handler.compact_result(&result.data);
+            }
+        }
     }
 
     // E-6: Apply format
@@ -388,20 +426,32 @@ fn cmd_ask(args: &Value, config: &VegaConfig) -> CommandResult {
     }
 
     if result.success {
-        // E-3: AI behavioral hints (compute before mutable borrow)
-        let ai_hint = crate::ai::build_ai_hint(command, &result.data);
-        let has_hints = ai_hint
-            .get("hints")
-            .and_then(|v| v.as_array())
-            .map(|a| !a.is_empty())
-            .unwrap_or(false);
+        // E-3: AI behavioral hints via per-command trait method
+        let (ai_hint, has_hints) = if let Some(handler) = registry.get(command) {
+            let hints = handler.ai_hints(&result.data);
+            let has = !hints.is_empty();
+            (
+                json!({
+                    "command": command,
+                    "has_results": !result.data.is_null(),
+                    "hints": hints,
+                }),
+                has,
+            )
+        } else {
+            (json!({}), false)
+        };
 
-        // E-4: Proactive data bundle (compute before mutable borrow)
+        // E-4: Proactive data bundle via per-command trait method
         let bundle = if depth != "brief" {
-            let conn = Connection::open(&config.db_path).ok();
-            let b = crate::ai::build_bundle(command, &result.data, conn.as_ref());
-            if b.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
-                Some(b)
+            if let Some(handler) = registry.get(command) {
+                let conn = Connection::open(&config.db_path).ok();
+                let b = handler.build_bundle(&result.data, conn.as_ref());
+                if b.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
+                    Some(b)
+                } else {
+                    None
+                }
             } else {
                 None
             }
