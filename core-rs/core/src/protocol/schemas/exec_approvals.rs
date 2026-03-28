@@ -10,7 +10,8 @@ pub fn validate_exec_approvals_get_params(
     if !require_object(value, path, errors) {
         return;
     }
-    check_no_additional_properties(value.as_object().expect("validated by require_object"), &[], path, errors);
+    let Some(obj) = value.as_object() else { return; };
+    check_no_additional_properties(obj, &[], path, errors);
 }
 
 pub fn validate_exec_approvals_set_params(
@@ -21,7 +22,7 @@ pub fn validate_exec_approvals_set_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().expect("validated by require_object");
+    let Some(obj) = value.as_object() else { return; };
     check_no_additional_properties(obj, &["file", "baseHash"], path, errors);
     if check_required(obj, "file", path, errors) {
         // ExecApprovalsFileSchema is complex; validate as object.
@@ -40,7 +41,7 @@ pub fn validate_exec_approval_request_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().expect("validated by require_object");
+    let Some(obj) = value.as_object() else { return; };
     let allowed = &[
         "id",
         "command",
@@ -124,7 +125,7 @@ pub fn validate_exec_approval_resolve_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().expect("validated by require_object");
+    let Some(obj) = value.as_object() else { return; };
     check_no_additional_properties(obj, &["id", "decision"], path, errors);
     if check_required(obj, "id", path, errors) {
         check_non_empty_string(&obj["id"], &format!("{path}/id"), errors);
@@ -142,7 +143,7 @@ pub fn validate_exec_approvals_node_get_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().expect("validated by require_object");
+    let Some(obj) = value.as_object() else { return; };
     check_no_additional_properties(obj, &["nodeId"], path, errors);
     if check_required(obj, "nodeId", path, errors) {
         check_non_empty_string(&obj["nodeId"], &format!("{path}/nodeId"), errors);
@@ -157,7 +158,7 @@ pub fn validate_exec_approvals_node_set_params(
     if !require_object(value, path, errors) {
         return;
     }
-    let obj = value.as_object().expect("validated by require_object");
+    let Some(obj) = value.as_object() else { return; };
     check_no_additional_properties(obj, &["nodeId", "file", "baseHash"], path, errors);
     if check_required(obj, "nodeId", path, errors) {
         check_non_empty_string(&obj["nodeId"], &format!("{path}/nodeId"), errors);

@@ -13,7 +13,7 @@ pub fn format_timestamp(epoch_ms: i64, timezone: &str) -> String {
     let dt = DateTime::from_timestamp_millis(epoch_ms).unwrap_or_else(|| {
         Utc.timestamp_opt(0, 0)
             .single()
-            .expect("Unix epoch is always valid")
+            .unwrap_or_else(|| unreachable!("Unix epoch timestamp is always valid"))
     });
 
     if timezone == "UTC" || timezone.is_empty() {

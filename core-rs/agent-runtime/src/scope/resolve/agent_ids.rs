@@ -16,15 +16,20 @@ pub const DEFAULT_MAIN_KEY: &str = "main";
 pub const DEFAULT_ACCOUNT_ID: &str = "default";
 
 // Pre-compiled regexes for agent ID normalization.
+#[allow(clippy::expect_used)]
 pub(super) static VALID_ID_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").expect("valid regex"));
+#[allow(clippy::expect_used)]
 pub(super) static INVALID_CHARS_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[^a-z0-9_-]+").expect("valid regex"));
+#[allow(clippy::expect_used)]
 pub(super) static LEADING_DASH_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^-+").expect("valid regex"));
+#[allow(clippy::expect_used)]
 pub(super) static TRAILING_DASH_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"-+$").expect("valid regex"));
 
+#[allow(clippy::expect_used)]
 static VALID_ACCOUNT_ID_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$").expect("valid regex"));
 

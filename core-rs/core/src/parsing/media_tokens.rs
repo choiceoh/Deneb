@@ -331,7 +331,12 @@ pub fn split_media_from_output(raw: &str) -> MediaParseResult {
         }
 
         // Extract the payload after "MEDIA:".
-        let media_idx = trimmed_start.find("MEDIA:").expect("MEDIA: prefix verified by starts_with check");
+        let Some(media_idx) = trimmed_start.find("MEDIA:") else {
+            // Verified by starts_with above; unreachable in practice.
+            kept_lines.push(line.to_string());
+            line_offset += line.len() + 1;
+            continue;
+        };
         let payload = &trimmed_start[media_idx + 6..];
         let payload = payload.trim();
         // Strip optional wrapping backtick.

@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use crate::config::VegaConfig;
 use crate::utils::extract_bullets;
 
+#[allow(clippy::expect_used)]
 static RISK_KEYWORD_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(이슈|리스크|지연|미정|보류|주의|대응|중단|긴급)").expect("valid regex"));
 
@@ -256,6 +257,7 @@ pub fn cmd_brief(args: &Value, config: &VegaConfig) -> CommandResult {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::db::schema::init_db;

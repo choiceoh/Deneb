@@ -12,8 +12,10 @@ use regex::Regex;
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
+#[allow(clippy::expect_used)]
 static COMM_SECTION_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?m)^##\s+커뮤니케이션").expect("valid regex"));
+#[allow(clippy::expect_used)]
 static HISTORY_SECTION_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?m)^##\s+이력").expect("valid regex"));
 

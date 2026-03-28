@@ -139,7 +139,9 @@ where
         // Close items in LIFO order at this position
         while let Some(&(_, end)) = stack.last() {
             if end == pos {
-                let (close, _) = stack.pop().expect("stack non-empty after last() check");
+                let (close, _) = stack
+                    .pop()
+                    .unwrap_or_else(|| unreachable!("stack non-empty after last() check"));
                 out.push_str(close);
             } else {
                 break;

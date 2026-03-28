@@ -266,6 +266,7 @@ fn diff_snapshots(prev: &HashMap<i64, Value>, current: &HashMap<i64, Value>) -> 
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 
