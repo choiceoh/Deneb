@@ -324,8 +324,10 @@ fn convert_breaks(input: &str) -> String {
             continue;
         }
 
-        result.push(input.as_bytes()[cursor] as char);
-        cursor += 1;
+        // Advance by full UTF-8 character to avoid panicking on multi-byte chars.
+        let ch = input[cursor..].chars().next().unwrap();
+        result.push(ch);
+        cursor += ch.len_utf8();
     }
     result
 }
@@ -355,8 +357,10 @@ fn decode_entities(input: &str) -> String {
 
     while i < len {
         if bytes[i] != b'&' {
-            result.push(bytes[i] as char);
-            i += 1;
+            // Advance by full UTF-8 character to preserve multi-byte chars.
+            let ch = input[i..].chars().next().unwrap();
+            result.push(ch);
+            i += ch.len_utf8();
             continue;
         }
 
@@ -543,6 +547,24 @@ mod tests {
         let html = "<p>  hello   world  </p>";
         let result = html_to_markdown(html);
         assert_eq!(result.text, "hello world");
+    }
+
+    #[test]
+    fn multibyte_utf8() {
+        // Korean + emoji: must not panic on multi-byte characters.
+        let html = "<p>안녕하세요 🌍</p><br><p>세계</p>";
+        let result = html_to_markdown(html);
+        assert!(result.text.contains("안녕하세요"));
+        assert!(result.text.contains("🌍"));
+        assert!(result.text.contains("세계"));
+    }
+
+    #[test]
+    fn multibyte_entities_mixed() {
+        // Multi-byte chars mixed with HTML entities.
+        let html = "<p>한국어 &amp; 日本語</p>";
+        let result = html_to_markdown(html);
+        assert_eq!(result.text, "한국어 & 日本語");
     }
 
     #[test]
