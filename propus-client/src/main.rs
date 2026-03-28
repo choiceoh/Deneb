@@ -2,6 +2,7 @@ mod ws_client;
 
 use propus_common::{ClientMessage, ServerMessage};
 use slint::{Model, ModelRc, SharedString, VecModel};
+use std::io::Write;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
 use tokio::time::Duration;
@@ -24,6 +25,23 @@ async fn main() {
     if let Some(ref url) = saved_url {
         *server_url.blocking_lock() = Some(url.clone());
         app.set_status_text(SharedString::from(&format!("저장된 서버: {url}")));
+    }
+
+    // Restore last session's history.
+    let history = load_history(100);
+    if !history.is_empty() {
+        let vec_model = std::rc::Rc::new(VecModel::<ChatMessage>::default());
+        for (role, content) in &history {
+            vec_model.push(ChatMessage {
+                role: SharedString::from(role.as_str()),
+                content: SharedString::from(content.as_str()),
+                is_tool: false,
+                tool_name: SharedString::default(),
+                is_expanded: false,
+            });
+        }
+        app.set_msg_count(vec_model.row_count() as i32);
+        app.set_messages(ModelRc::from(vec_model));
     }
 
     // ─── Connect to server ───
@@ -51,6 +69,7 @@ async fn main() {
             *server_url.lock().await = Some(url.clone());
             match ws_client::connect(&url).await {
                 Ok(handle) => {
+                    let tx = handle.tx.clone();
                     *ws_tx.lock().await = Some(handle.tx);
 
                     let aw = app_weak.clone();
@@ -62,6 +81,8 @@ async fn main() {
                         }
                     });
 
+                    // Start heartbeat ping loop.
+                    spawn_heartbeat(tx);
                     // Start receiving messages
                     spawn_receiver(app_weak, handle.rx);
                 }
@@ -141,6 +162,7 @@ async fn main() {
                     app.set_usage_text(SharedString::default());
                     app.set_msg_count(0);
                     app.set_status_text(SharedString::from("대화 초기화됨"));
+                    clear_history();
                 }
             });
         });
@@ -215,6 +237,7 @@ async fn main() {
 
                 match ws_client::connect(&url).await {
                     Ok(handle) => {
+                        let tx = handle.tx.clone();
                         *ws_tx.lock().await = Some(handle.tx);
                         let aw = app_weak.clone();
                         let _ = slint::invoke_from_event_loop(move || {
@@ -223,6 +246,7 @@ async fn main() {
                                 app.set_status_text(SharedString::from("서버 재연결됨"));
                             }
                         });
+                        spawn_heartbeat(tx);
                         spawn_receiver(app_weak, handle.rx);
                         return;
                     }
@@ -251,6 +275,7 @@ async fn main() {
         tokio::spawn(async move {
             match ws_client::connect(&url).await {
                 Ok(handle) => {
+                    let tx = handle.tx.clone();
                     *ws_tx_clone.lock().await = Some(handle.tx);
                     let aw = app_weak.clone();
                     let _ = slint::invoke_from_event_loop(move || {
@@ -260,6 +285,7 @@ async fn main() {
                             app.set_status_text(SharedString::from("서버 연결됨"));
                         }
                     });
+                    spawn_heartbeat(tx);
                     spawn_receiver(app_weak, handle.rx);
                 }
                 Err(_) => {
@@ -414,6 +440,7 @@ fn spawn_receiver(
                             app.set_usage_text(SharedString::default());
                             app.set_msg_count(0);
                             app.set_status_text(SharedString::from("대화 초기화됨"));
+                            clear_history();
                         }
                     });
                 }
@@ -440,6 +467,30 @@ fn spawn_receiver(
                     });
                 }
                 ServerMessage::Pong => {}
+                ServerMessage::File {
+                    name,
+                    media_type,
+                    size,
+                    url,
+                } => {
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(app) = app_weak.upgrade() {
+                            let size_str = format_file_size(size);
+                            let msg = format!("📎 {name} ({media_type}, {size_str})\n{url}");
+                            push_message(&app, "assistant", &msg, false, "");
+                        }
+                    });
+                }
+                ServerMessage::Typing => {
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(app) = app_weak.upgrade() {
+                            if !app.get_is_streaming() {
+                                app.set_is_streaming(true);
+                                app.set_status_text(SharedString::from("생성 중..."));
+                            }
+                        }
+                    });
+                }
             }
         }
 
@@ -539,6 +590,11 @@ fn push_message(app: &App, role: &str, content: &str, is_tool: bool, tool_name: 
     let count = vec_model.row_count() as i32;
     app.set_messages(ModelRc::from(vec_model));
     app.set_msg_count(count);
+
+    // Persist to local history (skip tool messages to keep history concise).
+    if !is_tool {
+        append_history(role, content);
+    }
 }
 
 fn clone_model(model: &ModelRc<ChatMessage>) -> std::rc::Rc<VecModel<ChatMessage>> {
@@ -559,6 +615,108 @@ fn safe_truncate(s: &str, max_chars: usize) -> String {
     }
     let truncated: String = s.chars().take(max_chars).collect();
     format!("{truncated}...")
+}
+
+// ─── Heartbeat ───
+
+/// Spawn a background task that sends Ping every 25 seconds to keep the connection alive.
+fn spawn_heartbeat(tx: mpsc::UnboundedSender<ClientMessage>) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(25));
+        loop {
+            interval.tick().await;
+            if tx.send(ClientMessage::Ping).is_err() {
+                break; // Channel closed, connection dropped
+            }
+        }
+    });
+}
+
+// ─── File Size Formatting ───
+
+fn format_file_size(bytes: i64) -> String {
+    if bytes < 1024 {
+        format!("{bytes} B")
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+    }
+}
+
+// ─── Local History ───
+
+fn history_dir() -> std::path::PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".propus")
+        .join("history")
+}
+
+fn current_history_path() -> std::path::PathBuf {
+    history_dir().join("current.jsonl")
+}
+
+/// Append a message to the local history file.
+fn append_history(role: &str, content: &str) {
+    let path = current_history_path();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let entry = serde_json::json!({
+        "role": role,
+        "content": content,
+        "ts": chrono::Utc::now().to_rfc3339(),
+    });
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = writeln!(f, "{}", entry);
+    }
+}
+
+/// Load the last N messages from local history.
+fn load_history(limit: usize) -> Vec<(String, String)> {
+    let path = current_history_path();
+    let data = match std::fs::read_to_string(&path) {
+        Ok(d) => d,
+        Err(_) => return Vec::new(),
+    };
+    let mut messages = Vec::new();
+    for line in data.lines() {
+        if line.is_empty() {
+            continue;
+        }
+        if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
+            let role = entry
+                .get("role")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let content = entry
+                .get("content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if !role.is_empty() && !content.is_empty() {
+                messages.push((role, content));
+            }
+        }
+    }
+    // Return only the last `limit` messages.
+    if messages.len() > limit {
+        messages.split_off(messages.len() - limit)
+    } else {
+        messages
+    }
+}
+
+/// Clear local history file.
+fn clear_history() {
+    let path = current_history_path();
+    let _ = std::fs::remove_file(path);
 }
 
 // ─── Client Config ───

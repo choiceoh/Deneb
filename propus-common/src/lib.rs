@@ -51,4 +51,13 @@ pub enum ServerMessage {
     },
     /// Pong response to Ping
     Pong,
+    /// File available for download
+    File {
+        name: String,
+        media_type: String,
+        size: i64,
+        url: String,
+    },
+    /// Agent is actively processing (typing indicator)
+    Typing,
 }

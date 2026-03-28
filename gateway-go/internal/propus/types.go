@@ -69,6 +69,23 @@ func MsgPong() ServerMessage {
 	return ServerMessage{Type: "Pong"}
 }
 
+func MsgSessionSaved(path string) ServerMessage {
+	return ServerMessage{Type: "SessionSaved", Data: map[string]string{"path": path}}
+}
+
+func MsgFile(name, mediaType string, size int64, url string) ServerMessage {
+	return ServerMessage{Type: "File", Data: map[string]any{
+		"name":       name,
+		"media_type": mediaType,
+		"size":       size,
+		"url":        url,
+	}}
+}
+
+func MsgTyping() ServerMessage {
+	return ServerMessage{Type: "Typing"}
+}
+
 func MsgConfigStatus(model, service, denebStatus string) ServerMessage {
 	return ServerMessage{Type: "ConfigStatus", Data: map[string]any{
 		"needs_api_key": false,

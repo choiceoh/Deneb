@@ -1639,9 +1639,18 @@ func (s *Server) wireTelegramChatHandler() {
 		return err
 	})
 
-	// Set media send function: delivers files back to Telegram.
+	// Set media send function: delivers files back to Telegram or Propus.
 	s.chatHandler.SetMediaSendFunc(func(ctx context.Context, delivery *chat.DeliveryContext, filePath, mediaType, caption string, silent bool) error {
-		if delivery == nil || delivery.Channel != "telegram" {
+		if delivery == nil {
+			return nil
+		}
+
+		// Propus: register file for HTTP download and notify client.
+		if delivery.Channel == "propus" && s.propusPlug != nil {
+			return s.propusPlug.SendFileToSession(delivery.To, filePath, mediaType, caption)
+		}
+
+		if delivery.Channel != "telegram" {
 			return nil
 		}
 		client := s.telegramPlug.Client()
@@ -1678,10 +1687,20 @@ func (s *Server) wireTelegramChatHandler() {
 		return err
 	})
 
-	// Set typing indicator function: sends "typing" chat action to Telegram
+	// Set typing indicator function: sends "typing" chat action to Telegram or Propus
 	// periodically during agent runs so the user sees "typing..." in the chat.
 	s.chatHandler.SetTypingFunc(func(ctx context.Context, delivery *chat.DeliveryContext) error {
-		if delivery == nil || delivery.Channel != "telegram" {
+		if delivery == nil {
+			return nil
+		}
+
+		// Propus: send Typing message to client.
+		if delivery.Channel == "propus" && s.propusPlug != nil {
+			s.propusPlug.BroadcastToSession(delivery.To, propus.MsgTyping())
+			return nil
+		}
+
+		if delivery.Channel != "telegram" {
 			return nil
 		}
 		client := s.telegramPlug.Client()
@@ -1845,6 +1864,39 @@ func (s *Server) wirePropusChatHandler() {
 		if s.sessions != nil {
 			s.sessions.Delete(sessionKey)
 		}
+	})
+
+	// Inbound: Propus client SaveSession → export transcript to file.
+	s.propusPlug.SetSessionSave(func(sessionKey string) (string, error) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("cannot determine home directory: %w", err)
+		}
+
+		transcriptDir := filepath.Join(home, ".deneb", "transcripts")
+		// FileTranscriptStore sanitizes via filepath.Base, so use the same logic.
+		srcPath := filepath.Join(transcriptDir, filepath.Base(sessionKey)+".jsonl")
+		if _, err := os.Stat(srcPath); err != nil {
+			return "", fmt.Errorf("no transcript found for session")
+		}
+
+		exportDir := filepath.Join(home, ".deneb", "exports")
+		if err := os.MkdirAll(exportDir, 0o755); err != nil {
+			return "", fmt.Errorf("create export dir: %w", err)
+		}
+
+		ts := time.Now().Format("20060102-150405")
+		dstPath := filepath.Join(exportDir, "propus-"+ts+".jsonl")
+
+		src, err := os.ReadFile(srcPath)
+		if err != nil {
+			return "", fmt.Errorf("read transcript: %w", err)
+		}
+		if err := os.WriteFile(dstPath, src, 0o644); err != nil {
+			return "", fmt.Errorf("write export: %w", err)
+		}
+
+		return dstPath, nil
 	})
 
 	// Outbound: reply function — Propus sessions receive streaming deltas via
