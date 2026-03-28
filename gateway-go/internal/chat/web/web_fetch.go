@@ -8,7 +8,7 @@
 //
 // Designed for AI agent consumption with structured metadata, machine-readable
 // errors, aggressive noise removal, SGLang AI extraction, and bot-block evasion.
-package chat
+package web
 
 import (
 	"bytes"
@@ -68,7 +68,7 @@ type webFetchErr struct {
 
 // --- Unified tool implementation ---
 
-func toolWeb(cache *FetchCache, sglang *sglangExtractor) ToolFunc {
+func Tool(cache *FetchCache, sglang *SGLangExtractor) func(context.Context, json.RawMessage) (string, error) {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			URL      string `json:"url"`
@@ -113,7 +113,7 @@ func toolWeb(cache *FetchCache, sglang *sglangExtractor) ToolFunc {
 
 // --- Fetch mode ---
 
-func webFetchURL(ctx context.Context, cache *FetchCache, sglang *sglangExtractor, targetURL string, maxChars int) (string, error) {
+func webFetchURL(ctx context.Context, cache *FetchCache, sglang *SGLangExtractor, targetURL string, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 50000
 	}
@@ -189,7 +189,7 @@ func webFetchURL(ctx context.Context, cache *FetchCache, sglang *sglangExtractor
 
 // webSearchAndFetch searches the web and auto-fetches the top N results.
 // Uses webSearchWithURLs() to get both formatted output and fetchable URLs.
-func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *sglangExtractor, query string, count, fetchTop, maxChars int) (string, error) {
+func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *SGLangExtractor, query string, count, fetchTop, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 30000
 	}
@@ -237,7 +237,7 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, sglang *sglangExt
 // 2. Detect quality signals
 // 3. Strip noise elements (nav, aside, footer, ads, cookie banners)
 // 4. Convert to Markdown (SGLang AI or FFI fallback)
-func processHTML(ctx context.Context, html string, url string, sglang *sglangExtractor, meta *webFetchMeta) string {
+func processHTML(ctx context.Context, html string, url string, sglang *SGLangExtractor, meta *webFetchMeta) string {
 	// Step 1: Extract metadata from raw HTML (before any stripping).
 	extractHTMLMeta(html, meta)
 
@@ -360,7 +360,7 @@ func ffiConvert(html string) string {
 
 // --- SGLang AI-powered content extraction ---
 
-type sglangExtractor struct {
+type SGLangExtractor struct {
 	mu      sync.Mutex
 	client  *http.Client
 	baseURL string
@@ -378,7 +378,7 @@ const (
 	sglangReprobeInterval = 5 * time.Minute
 )
 
-func newSGLangExtractor() *sglangExtractor {
+func NewSGLangExtractor() *SGLangExtractor {
 	baseURL := os.Getenv("SGLANG_BASE_URL")
 	if baseURL == "" {
 		baseURL = "http://127.0.0.1:30000/v1"
@@ -391,7 +391,7 @@ func newSGLangExtractor() *sglangExtractor {
 	if model == "" {
 		model = "Qwen/Qwen3.5-35B-A3B"
 	}
-	return &sglangExtractor{
+	return &SGLangExtractor{
 		client:  &http.Client{Timeout: 60 * time.Second},
 		baseURL: baseURL,
 		apiKey:  apiKey,
@@ -401,7 +401,7 @@ func newSGLangExtractor() *sglangExtractor {
 
 // available checks if SGLang is reachable. Probes on first call,
 // then re-probes periodically if previously unavailable.
-func (s *sglangExtractor) available() bool {
+func (s *SGLangExtractor) available() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -468,7 +468,7 @@ RULES:
 - Empty extraction is better than including noise`
 
 // extract calls SGLang for intelligent content extraction from pre-cleaned HTML.
-func (s *sglangExtractor) extract(ctx context.Context, html string, url string, language string) (string, error) {
+func (s *SGLangExtractor) extract(ctx context.Context, html string, url string, language string) (string, error) {
 	// Convert HTML to markdown via FFI first to reduce token count.
 	mdContent := ffiConvert(html)
 

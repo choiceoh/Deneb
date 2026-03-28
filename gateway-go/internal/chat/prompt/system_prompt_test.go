@@ -1,4 +1,4 @@
-package chat
+package prompt
 
 import (
 	"strings"
@@ -9,9 +9,9 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/home/user/project",
 		ToolDefs: []ToolDef{
-			{Name: "read", Description: "Read file contents"},
-			{Name: "exec", Description: "Run shell commands"},
-			{Name: "memory_search", Description: "Semantic memory search"},
+			{Name: "read"},
+			{Name: "exec"},
+			{Name: "memory_search"},
 		},
 		UserTimezone: "Asia/Seoul",
 		RuntimeInfo: &RuntimeInfo{
@@ -58,10 +58,10 @@ func TestBuildSystemPromptCompactToolList(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
-			{Name: "read", Description: "Read files"},
-			{Name: "write", Description: "Write files"},
-			{Name: "exec", Description: "Run commands"},
-			{Name: "pilot", Description: "Local AI"},
+			{Name: "read"},
+			{Name: "write"},
+			{Name: "exec"},
+			{Name: "pilot"},
 		},
 	}
 
@@ -114,7 +114,7 @@ func TestBuildSystemPromptNoMemoryWithoutTools(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
-			{Name: "read", Description: "Read files"},
+			{Name: "read"},
 		},
 	}
 
@@ -196,7 +196,7 @@ func TestBuildSystemPrompt_MessageToolSilentReply(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
-			{Name: "message", Description: "Send messages"},
+			{Name: "message"},
 		},
 	}
 
@@ -210,7 +210,7 @@ func TestBuildSystemPrompt_NoMessageTool(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
-			{Name: "read", Description: "Read files"},
+			{Name: "read"},
 		},
 	}
 
@@ -244,7 +244,7 @@ func TestBuildSystemPromptPilotSection(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
-			{Name: "pilot", Description: "Fast local AI"},
+			{Name: "pilot"},
 		},
 	}
 
@@ -261,7 +261,7 @@ func TestBuildSystemPromptNoPilotSection(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
-			{Name: "read", Description: "Read files"},
+			{Name: "read"},
 		},
 	}
 
@@ -275,9 +275,9 @@ func TestBuildSystemPromptBlocksMatchesString(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
-			{Name: "read", Description: "Read files"},
-			{Name: "exec", Description: "Run commands"},
-			{Name: "pilot", Description: "Local AI"},
+			{Name: "read"},
+			{Name: "exec"},
+			{Name: "pilot"},
 		},
 		UserTimezone: "UTC",
 	}

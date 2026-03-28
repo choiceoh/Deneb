@@ -1,4 +1,4 @@
-package chat
+package streaming
 
 import (
 	"encoding/json"
@@ -6,6 +6,9 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 )
+
+// BroadcastRawFunc sends pre-serialized event data to all matching subscribers.
+type BroadcastRawFunc func(event string, data []byte) int
 
 // Stream event names matching the TypeScript wire format.
 const (
@@ -19,18 +22,19 @@ const (
 	maxBroadcastResultLen = 4096
 )
 
-// streamBroadcaster relays agent streaming events to WebSocket clients
+// Broadcaster relays agent streaming events to WebSocket clients
 // via the gateway's raw broadcast function. All methods are safe to call
 // when broadcastRaw is nil (they silently no-op).
-type streamBroadcaster struct {
+type Broadcaster struct {
 	broadcastRaw BroadcastRawFunc
 	sessionKey   string
 	clientRunID  string
 	seq          atomic.Int64
 }
 
-func newStreamBroadcaster(broadcastRaw BroadcastRawFunc, sessionKey, clientRunID string) *streamBroadcaster {
-	return &streamBroadcaster{
+// NewBroadcaster creates a new Broadcaster for a given session/run.
+func NewBroadcaster(broadcastRaw BroadcastRawFunc, sessionKey, clientRunID string) *Broadcaster {
+	return &Broadcaster{
 		broadcastRaw: broadcastRaw,
 		sessionKey:   sessionKey,
 		clientRunID:  clientRunID,
@@ -38,7 +42,7 @@ func newStreamBroadcaster(broadcastRaw BroadcastRawFunc, sessionKey, clientRunID
 }
 
 // EmitDelta broadcasts a streaming text delta to WS clients.
-func (sb *streamBroadcaster) EmitDelta(text string) {
+func (sb *Broadcaster) EmitDelta(text string) {
 	if text == "" {
 		return
 	}
@@ -48,7 +52,7 @@ func (sb *streamBroadcaster) EmitDelta(text string) {
 }
 
 // EmitToolStart broadcasts a tool invocation start event.
-func (sb *streamBroadcaster) EmitToolStart(name, toolUseID string) {
+func (sb *Broadcaster) EmitToolStart(name, toolUseID string) {
 	sb.emit(eventTool, map[string]any{
 		"state":     "started",
 		"tool":      name,
@@ -57,7 +61,7 @@ func (sb *streamBroadcaster) EmitToolStart(name, toolUseID string) {
 }
 
 // EmitToolResult broadcasts a tool execution result event.
-func (sb *streamBroadcaster) EmitToolResult(name, toolUseID, result string, isError bool) {
+func (sb *Broadcaster) EmitToolResult(name, toolUseID, result string, isError bool) {
 	sb.emit(eventTool, map[string]any{
 		"state":     "completed",
 		"tool":      name,
@@ -68,7 +72,7 @@ func (sb *streamBroadcaster) EmitToolResult(name, toolUseID, result string, isEr
 }
 
 // EmitComplete broadcasts the final chat completion event.
-func (sb *streamBroadcaster) EmitComplete(text string, usage llm.TokenUsage) {
+func (sb *Broadcaster) EmitComplete(text string, usage llm.TokenUsage) {
 	sb.emit(eventChat, map[string]any{
 		"state": "done",
 		"text":  text,
@@ -80,7 +84,7 @@ func (sb *streamBroadcaster) EmitComplete(text string, usage llm.TokenUsage) {
 }
 
 // EmitError broadcasts an error event for the run.
-func (sb *streamBroadcaster) EmitError(errMsg string) {
+func (sb *Broadcaster) EmitError(errMsg string) {
 	sb.emit(eventChat, map[string]any{
 		"state": "error",
 		"error": errMsg,
@@ -88,14 +92,14 @@ func (sb *streamBroadcaster) EmitError(errMsg string) {
 }
 
 // EmitStarted broadcasts that the agent run has started.
-func (sb *streamBroadcaster) EmitStarted() {
+func (sb *Broadcaster) EmitStarted() {
 	sb.emit(eventChat, map[string]any{
 		"state": "started",
 	})
 }
 
 // EmitAborted broadcasts that the agent run was aborted.
-func (sb *streamBroadcaster) EmitAborted(partialText string) {
+func (sb *Broadcaster) EmitAborted(partialText string) {
 	sb.emit(eventChat, map[string]any{
 		"state": "aborted",
 		"text":  partialText,
@@ -104,7 +108,7 @@ func (sb *streamBroadcaster) EmitAborted(partialText string) {
 
 // emit is the shared broadcast path. It injects common fields (sessionKey,
 // clientRunId, seq) and serializes to JSON. No-ops when broadcastRaw is nil.
-func (sb *streamBroadcaster) emit(event string, payload map[string]any) {
+func (sb *Broadcaster) emit(event string, payload map[string]any) {
 	if sb.broadcastRaw == nil {
 		return
 	}

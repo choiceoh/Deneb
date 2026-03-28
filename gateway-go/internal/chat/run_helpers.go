@@ -10,6 +10,8 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
@@ -21,7 +23,7 @@ func handleRunSuccess(
 	_ context.Context,
 	params RunParams,
 	deps runDeps,
-	broadcaster *streamBroadcaster,
+	broadcaster *streaming.Broadcaster,
 	logger *slog.Logger,
 	result *AgentResult,
 	now int64,
@@ -144,7 +146,7 @@ func handleRunError(
 	ctx context.Context,
 	params RunParams,
 	deps runDeps,
-	broadcaster *streamBroadcaster,
+	broadcaster *streaming.Broadcaster,
 	logger *slog.Logger,
 	err error,
 	now int64,
@@ -287,7 +289,7 @@ func executeAgentRunWithDelta(
 	onDelta func(string),
 	logger *slog.Logger,
 ) (*AgentResult, error) {
-	deltaRaw := BroadcastRawFunc(func(event string, data []byte) int {
+	deltaRaw := streaming.BroadcastRawFunc(func(event string, data []byte) int {
 		if onDelta == nil || event != "chat.delta" {
 			return 0
 		}
@@ -301,7 +303,7 @@ func executeAgentRunWithDelta(
 		}
 		return 1
 	})
-	broadcaster := newStreamBroadcaster(deltaRaw, params.SessionKey, params.ClientRunID)
+	broadcaster := streaming.NewBroadcaster(deltaRaw, params.SessionKey, params.ClientRunID)
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
 	return executeAgentRun(ctx, params, deps, broadcaster, nil, nil, logger, runLog)
 }
@@ -485,4 +487,15 @@ func (r *ToolRegistry) Definitions() []ToolDef {
 		defs = append(defs, r.tools[name])
 	}
 	return defs
+}
+
+// toPromptToolDefs converts chat.ToolDef slice to the minimal prompt.ToolDef
+// slice needed for system prompt assembly. Only the Name field is required
+// by the prompt package; the full ToolDef (with Fn, Schema, etc.) stays in chat/.
+func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
+	out := make([]prompt.ToolDef, len(defs))
+	for i, d := range defs {
+		out[i] = prompt.ToolDef{Name: d.Name}
+	}
+	return out
 }

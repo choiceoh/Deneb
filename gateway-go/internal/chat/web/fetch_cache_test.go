@@ -1,4 +1,4 @@
-package chat
+package web
 
 import (
 	"testing"

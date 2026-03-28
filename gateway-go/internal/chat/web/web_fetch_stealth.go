@@ -3,13 +3,13 @@
 // Most websites block non-browser User-Agents immediately. This module provides
 // realistic browser request profiles and a multi-stage escalation strategy:
 //
-//   Stage 0: Standard browser profile (Chrome on macOS)
-//   Stage 1: Alternate profile (Firefox on Windows) + cookie jar
-//   Stage 2: Google cache fallback
+//	Stage 0: Standard browser profile (Chrome on macOS)
+//	Stage 1: Alternate profile (Firefox on Windows) + cookie jar
+//	Stage 2: Google cache fallback
 //
 // Each profile includes the full set of headers a real browser sends:
 // User-Agent, Accept, Accept-Language, Accept-Encoding, Sec-Fetch-*, etc.
-package chat
+package web
 
 import (
 	"context"
@@ -70,9 +70,10 @@ var firefoxProfile = browserProfile{
 
 // stealthFetch fetches a URL with browser-like headers and bot-block evasion.
 // Escalation stages:
-//   0: Chrome profile
-//   1: Firefox profile + cookie jar (handles cookie-gated blocks)
-//   2: Google webcache fallback (bypasses origin server entirely)
+//
+//	0: Chrome profile
+//	1: Firefox profile + cookie jar (handles cookie-gated blocks)
+//	2: Google webcache fallback (bypasses origin server entirely)
 //
 // Returns on first successful non-blocked response.
 func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media.FetchResult, error) {

@@ -4,7 +4,7 @@
 // happens at retrieval time so different maxChars values share cache entries.
 // Single-user deployment: sync.Mutex is sufficient.
 // Uses a doubly-linked list + map index for O(1) insert/remove/evict.
-package chat
+package web
 
 import (
 	"container/list"

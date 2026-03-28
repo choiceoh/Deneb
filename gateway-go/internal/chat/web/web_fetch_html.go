@@ -1,13 +1,13 @@
 // web_fetch_html.go — HTML preprocessing for agent-oriented content extraction.
 //
 // Handles three critical tasks BEFORE the HTML→Markdown conversion:
-//   1. Noise element stripping (nav, aside, footer, ads, cookie banners)
-//   2. Metadata extraction (OG, JSON-LD, meta tags, charset)
-//   3. Quality signal detection (login walls, SPA shells, bot blocks)
+//  1. Noise element stripping (nav, aside, footer, ads, cookie banners)
+//  2. Metadata extraction (OG, JSON-LD, meta tags, charset)
+//  3. Quality signal detection (login walls, SPA shells, bot blocks)
 //
 // This Go-side preprocessing is the first line of defense for content quality.
 // It runs regardless of whether SGLang AI extraction is available.
-package chat
+package web
 
 import (
 	"encoding/json"
@@ -266,7 +266,7 @@ var (
 	jsonLDRe = regexp.MustCompile(`(?is)<script[^>]+type=["']application/ld\+json["'][^>]*>(.*?)</script>`)
 
 	// Charset from meta.
-	metaCharsetRe    = regexp.MustCompile(`(?i)<meta[^>]+charset=["']?([^"'\s;>]+)["']?`)
+	metaCharsetRe     = regexp.MustCompile(`(?i)<meta[^>]+charset=["']?([^"'\s;>]+)["']?`)
 	metaContentTypeRe = regexp.MustCompile(`(?i)<meta[^>]+content=["'][^"']*charset=([^"'\s;]+)`)
 )
 

@@ -1,4 +1,4 @@
-package chat
+package prompt
 
 import (
 	"fmt"
@@ -110,7 +110,7 @@ func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]ti
 
 	var files []ContextFile
 	totalChars := 0
-	seen := make(map[string]bool)           // track resolved paths for dedup
+	seen := make(map[string]bool)            // track resolved paths for dedup
 	resolvedMtimes := make(map[string]time.Time) // for cache validation
 
 	for _, name := range contextFileNames {

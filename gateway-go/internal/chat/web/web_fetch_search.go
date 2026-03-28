@@ -4,7 +4,7 @@
 // Perplexity returns AI-synthesized answers with citations — ideal for agents.
 // Brave returns traditional search results (title, URL, snippet).
 // DuckDuckGo is the zero-config fallback (no API key needed).
-package chat
+package web
 
 import (
 	"bytes"

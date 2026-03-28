@@ -13,6 +13,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/prompt"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
@@ -59,7 +61,7 @@ type runDeps struct {
 	tools           *ToolRegistry             // optional; no tool use if nil
 	authManager     *provider.AuthManager     // optional; uses pre-configured client if nil
 	broadcast       BroadcastFunc             // optional
-	broadcastRaw    BroadcastRawFunc          // optional
+	broadcastRaw    streaming.BroadcastRawFunc // optional
 	jobTracker      *agent.JobTracker         // optional
 	replyFunc       ReplyFunc                 // optional; delivers response to originating channel
 	mediaSendFn     MediaSendFunc             // optional; delivers files to originating channel
@@ -108,9 +110,9 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 
 	// Create streaming broadcaster for this run.
-	var broadcaster *streamBroadcaster
+	var broadcaster *streaming.Broadcaster
 	if deps.broadcastRaw != nil {
-		broadcaster = newStreamBroadcaster(deps.broadcastRaw, params.SessionKey, params.ClientRunID)
+		broadcaster = streaming.NewBroadcaster(deps.broadcastRaw, params.SessionKey, params.ClientRunID)
 		broadcaster.EmitStarted()
 	}
 
@@ -219,7 +221,7 @@ func executeAgentRun(
 	ctx context.Context,
 	params RunParams,
 	deps runDeps,
-	broadcaster *streamBroadcaster,
+	broadcaster *streaming.Broadcaster,
 	typingSignaler *typing.FullTypingSignaler,
 	statusCtrl *channel.StatusReactionController,
 	logger *slog.Logger,
@@ -269,20 +271,20 @@ func executeAgentRun(
 	// The prompt format is deferred: if Anthropic is the provider, we use
 	// ContentBlock arrays with cache_control breakpoints; otherwise plain string.
 	var systemPrompt json.RawMessage
-	var systemPromptParams *SystemPromptParams // non-nil when dynamic build is needed
+	var systemPromptParams *prompt.SystemPromptParams // non-nil when dynamic build is needed
 	if params.System != "" {
 		systemPrompt = llm.SystemString(params.System)
 	} else if deps.defaultSystem != "" {
 		systemPrompt = llm.SystemString(deps.defaultSystem)
 	}
 	if len(systemPrompt) == 0 && deps.tools != nil {
-		tz, _ := loadCachedTimezone()
-		spp := SystemPromptParams{
+		tz, _ := prompt.LoadCachedTimezone()
+		spp := prompt.SystemPromptParams{
 			WorkspaceDir: workspaceDir,
-			ToolDefs:     deps.tools.Definitions(),
+			ToolDefs:     toPromptToolDefs(deps.tools.Definitions()),
 			UserTimezone: tz,
-			ContextFiles: LoadContextFiles(workspaceDir),
-			RuntimeInfo:  BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
+			ContextFiles: prompt.LoadContextFiles(workspaceDir),
+			RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
 			Channel:      deliveryChannel(params.Delivery),
 		}
 		systemPromptParams = &spp
@@ -291,9 +293,9 @@ func executeAgentRun(
 		// for Anthropic API after apiType is resolved below.
 		// Discord channel uses the coding-focused system prompt.
 		if spp.Channel == "discord" {
-			systemPrompt = llm.SystemString(BuildCodingSystemPrompt(spp))
+			systemPrompt = llm.SystemString(prompt.BuildCodingSystemPrompt(spp))
 		} else {
-			systemPrompt = llm.SystemString(BuildSystemPrompt(spp))
+			systemPrompt = llm.SystemString(prompt.BuildSystemPrompt(spp))
 		}
 	}
 
@@ -426,9 +428,9 @@ func executeAgentRun(
 	if apiType == "anthropic" {
 		if systemPromptParams != nil {
 			if systemPromptParams.Channel == "discord" {
-				systemPrompt = llm.SystemBlocks(BuildCodingSystemPromptBlocks(*systemPromptParams))
+				systemPrompt = llm.SystemBlocks(prompt.BuildCodingSystemPromptBlocks(*systemPromptParams))
 			} else {
-				systemPrompt = llm.SystemBlocks(BuildSystemPromptBlocks(*systemPromptParams))
+				systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(*systemPromptParams))
 			}
 			// Re-apply knowledge prefetch (the rebuild above replaces the prompt).
 			if knowledgeAddition != "" {

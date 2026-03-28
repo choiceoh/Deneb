@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/web"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
@@ -140,13 +141,13 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	})
 
 	// -- Web tools --
-	webCache := NewFetchCache()
-	sglang := newSGLangExtractor()
+	webCache := web.NewFetchCache()
+	sglang := web.NewSGLangExtractor()
 	registry.RegisterTool(ToolDef{
 		Name:        "web",
 		Description: "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch, {query:...} search, {query:...,fetch:N} search+fetch",
 		InputSchema: webToolSchema(),
-		Fn:          toolWeb(webCache, sglang),
+		Fn:          web.Tool(webCache, sglang),
 	})
 	registry.RegisterTool(ToolDef{
 		Name:        "http",
