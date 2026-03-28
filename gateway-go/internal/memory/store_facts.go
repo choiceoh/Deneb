@@ -1,0 +1,247 @@
+// store_facts.go — Fact CRUD operations for the memory store.
+package memory
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+// CompactMemory is a one-time bulk cleanup that deactivates all low-importance
+// noise facts regardless of age. Same criteria as PruneNoiseFacts but without
+// the age restriction. Safe: uses soft-delete (active = 0).
+func (s *Store) CompactMemory(ctx context.Context) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Format(time.RFC3339)
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE facts SET active = 0, updated_at = ?
+		 WHERE active = 1
+		   AND importance <= 0.6
+		   AND category = ?
+		   AND source = ?
+		   AND access_count = 0
+		   AND verified_at IS NULL`,
+		now, CategoryContext, SourceAutoExtract,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// InsertFact stores a new fact and returns its ID.
+// Checks for exact content duplicates before inserting.
+func (s *Store) InsertFact(ctx context.Context, f Fact) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	if f.Category == "" {
+		f.Category = CategoryContext
+	}
+	if f.Importance <= 0 {
+		f.Importance = 0.5
+	}
+	if f.Source == "" {
+		f.Source = SourceAutoExtract
+	}
+
+	// Dedup: skip if an active fact with identical content exists.
+	var existingID int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM facts WHERE content = ? AND active = 1 LIMIT 1`,
+		f.Content,
+	).Scan(&existingID)
+	if err == nil {
+		// Exact duplicate exists — update importance if new one is higher.
+		if f.Importance > 0 {
+			_, _ = s.db.ExecContext(ctx,
+				`UPDATE facts SET importance = MAX(importance, ?), updated_at = ? WHERE id = ?`,
+				f.Importance, now, existingID,
+			)
+		}
+		return existingID, nil
+	}
+
+	result, err := s.db.ExecContext(ctx,
+		`INSERT INTO facts (content, category, importance, source, created_at, updated_at, expires_at, merge_depth)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		f.Content, f.Category, f.Importance, f.Source,
+		now, now, nullTimeStr(f.ExpiresAt), f.MergeDepth,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert fact: %w", err)
+	}
+	return result.LastInsertId()
+}
+
+// GetFact retrieves a fact by ID and increments its access count.
+func (s *Store) GetFact(ctx context.Context, id int64) (*Fact, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, _ = s.db.ExecContext(ctx,
+		`UPDATE facts SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?`,
+		now, id,
+	)
+
+	return s.scanFact(ctx, `SELECT * FROM facts WHERE id = ?`, id)
+}
+
+// GetFactReadOnly retrieves a fact by ID without updating access counts.
+// Use for internal operations (dreaming, merging) that shouldn't inflate access stats.
+func (s *Store) GetFactReadOnly(ctx context.Context, id int64) (*Fact, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.scanFact(ctx, `SELECT * FROM facts WHERE id = ?`, id)
+}
+
+// GetActiveFacts returns all active facts, ordered by importance desc.
+func (s *Store) GetActiveFacts(ctx context.Context) ([]Fact, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.queryFacts(ctx,
+		`SELECT * FROM facts WHERE active = 1 ORDER BY importance DESC, created_at DESC`)
+}
+
+// GetActiveFactsAboveImportance returns active facts at or above a minimum importance score.
+func (s *Store) GetActiveFactsAboveImportance(ctx context.Context, minImportance float64) ([]Fact, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.queryFacts(ctx,
+		`SELECT * FROM facts WHERE active = 1 AND importance >= ? ORDER BY importance DESC, created_at DESC`,
+		minImportance)
+}
+
+// GetFactsByCategory returns active facts of a given category.
+func (s *Store) GetFactsByCategory(ctx context.Context, category string) ([]Fact, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.queryFacts(ctx,
+		`SELECT * FROM facts WHERE active = 1 AND category = ? ORDER BY importance DESC`, category)
+}
+
+// GetFactsForDreaming returns active facts not verified in the last 24 hours.
+func (s *Store) GetFactsForDreaming(ctx context.Context) ([]Fact, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	cutoff := time.Now().Add(-24 * time.Hour).UTC().Format(time.RFC3339)
+	return s.queryFacts(ctx,
+		`SELECT * FROM facts WHERE active = 1 AND (verified_at IS NULL OR verified_at < ?)
+		 ORDER BY created_at ASC LIMIT 500`, cutoff)
+}
+
+// UpdateImportance sets a fact's importance score.
+func (s *Store) UpdateImportance(ctx context.Context, id int64, importance float64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE facts SET importance = ?, updated_at = ? WHERE id = ?`,
+		importance, now, id,
+	)
+	return err
+}
+
+// MarkVerified updates the verified_at timestamp for a fact.
+func (s *Store) MarkVerified(ctx context.Context, id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE facts SET verified_at = ?, updated_at = ? WHERE id = ?`,
+		now, now, id,
+	)
+	return err
+}
+
+// DeactivateFact marks a fact as inactive.
+func (s *Store) DeactivateFact(ctx context.Context, id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE facts SET active = 0, updated_at = ? WHERE id = ?`,
+		now, id,
+	)
+	if err == nil {
+		s.embCacheReady = false
+	}
+	return err
+}
+
+// CleanupExpired deactivates all facts whose expires_at is in the past.
+// Returns the number of expired facts.
+func (s *Store) CleanupExpired(ctx context.Context) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Format(time.RFC3339)
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE facts SET active = 0, updated_at = ?
+		 WHERE active = 1 AND expires_at IS NOT NULL AND expires_at < ?`,
+		now, now,
+	)
+	if err != nil {
+		return 0, err
+	}
+	n, err := result.RowsAffected()
+	if n > 0 {
+		s.embCacheReady = false
+	}
+	return n, err
+}
+
+// PruneNoiseFacts deactivates low-quality noise facts matching ALL criteria:
+// context category, auto_extract source, importance <= maxImportance,
+// older than maxAge, never accessed, and never verified by dreaming.
+func (s *Store) PruneNoiseFacts(ctx context.Context, maxImportance float64, maxAge time.Duration) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC()
+	cutoff := now.Add(-maxAge).Format(time.RFC3339)
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE facts SET active = 0, updated_at = ?
+		 WHERE active = 1
+		   AND importance <= ?
+		   AND category = ?
+		   AND source = ?
+		   AND created_at < ?
+		   AND access_count = 0
+		   AND verified_at IS NULL`,
+		now.Format(time.RFC3339), maxImportance, CategoryContext, SourceAutoExtract, cutoff,
+	)
+	if err != nil {
+		return 0, err
+	}
+	n, err := result.RowsAffected()
+	if n > 0 {
+		s.embCacheReady = false
+	}
+	return n, err
+}
+
+// SupersedeFact marks oldID as superseded by newID and deactivates it.
+func (s *Store) SupersedeFact(ctx context.Context, oldID, newID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE facts SET active = 0, superseded_by = ?, updated_at = ? WHERE id = ?`,
+		newID, now, oldID,
+	)
+	if err == nil {
+		s.embCacheReady = false
+	}
+	return err
+}
+
+// ActiveFactCount returns the number of active facts.
+func (s *Store) ActiveFactCount(ctx context.Context) (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM facts WHERE active = 1`).Scan(&count)
+	return count, err
+}
