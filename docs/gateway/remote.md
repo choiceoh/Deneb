@@ -36,10 +36,8 @@ This is ideal when your laptop sleeps often but you want the agent always-on.
 
 The laptop does **not** run the agent. It connects remotely:
 
-- Use the macOS app’s **Remote over SSH** mode (Settings → General → “Deneb runs”).
-- The app opens and manages the tunnel, so WebChat + health checks “just work.”
-
-Runbook: [macOS remote access](/platforms/mac/remote).
+- Use SSH tunnel to the laptop from other machines.
+- The tunnel enables secure remote access to the Gateway.
 
 ### 3) Laptop runs the Gateway, remote access from other machines
 
@@ -126,11 +124,9 @@ WebChat no longer uses a separate HTTP port. The SwiftUI chat UI connects direct
 - Forward `18789` over SSH (see above), then connect clients to `ws://127.0.0.1:18789`.
 - On macOS, prefer the app’s “Remote over SSH” mode, which manages the tunnel automatically.
 
-## macOS app "Remote over SSH"
+## SSH tunnel setup
 
-The macOS menu bar app can drive the same setup end-to-end (remote status checks, WebChat, and Voice Wake forwarding).
-
-Runbook: [macOS remote access](/platforms/mac/remote).
+Remote access requires a secure tunnel from your client machine to the Gateway server. SSH tunneling is the recommended approach for secure communication.
 
 ## Security rules (remote/VPN)
 

@@ -36,7 +36,7 @@ deneb pairing list telegram
 deneb pairing approve telegram <CODE>
 ```
 
-Supported channels: `telegram`, `whatsapp`, `signal`, `imessage`, `discord`, `slack`, `feishu`.
+Supported channels: `telegram`.
 
 ### Where the state lives
 
@@ -83,10 +83,4 @@ Stored under `~/.deneb/devices/`:
 
 - Security model + prompt injection: [Security](/gateway/security)
 - Updating safely (run doctor): [Updating](/install/updating)
-- Channel configs:
-  - Telegram: [Telegram](/channels/telegram)
-  - WhatsApp: [WhatsApp](/channels/whatsapp)
-  - Signal: [Signal](/channels/signal)
-  - iMessage: [iMessage](/channels/imessage)
-  - Discord: [Discord](/channels/discord)
-  - Slack: [Slack](/channels/slack)
+- Telegram channel config: [Telegram](/channels/telegram)

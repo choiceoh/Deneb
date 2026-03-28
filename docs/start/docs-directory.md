@@ -39,21 +39,10 @@ For a complete map of the docs, see [Docs hubs](/start/hubs).
 - [WebChat](/web/webchat)
 - [Control UI (browser)](/web/control-ui)
 - [Telegram](/channels/telegram)
-- [Discord](/channels/discord)
-- [Mattermost (plugin)](/channels/mattermost)
-- [iMessage](/channels/imessage)
 - [Groups](/channels/groups)
 - [WhatsApp group messages](/channels/group-messages)
 - [Media images](/nodes/images)
 - [Media audio](/nodes/audio)
-
-## Companion apps
-
-- [macOS app](/platforms/macos)
-- [iOS app](/platforms/ios)
-- [Android app](/platforms/android)
-- [Windows (WSL2)](/platforms/windows)
-- [Linux app](/platforms/linux)
 
 ## Operations and safety
 

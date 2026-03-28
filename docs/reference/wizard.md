@@ -88,11 +88,6 @@ For a high-level overview, see [Onboarding (CLI)](/start/wizard).
   <Step title="Channels">
     - WhatsApp: optional QR login.
     - [Telegram](/channels/telegram): bot token.
-    - [Discord](/channels/discord): bot token.
-    - [Google Chat](/channels/googlechat): service account JSON + webhook audience.
-    - [Mattermost](/channels/mattermost) (plugin): bot token + base URL.
-    - [Signal](/channels/signal): optional `signal-cli` install + account config.
-    - [iMessage](/channels/imessage): `imsg` CLI path + DB access.
     - DM security: default is pairing. First DM sends a code; approve via `deneb pairing approve <channel> <code>` or use allowlists.
   </Step>
   <Step title="Web search">
@@ -122,7 +117,7 @@ For a high-level overview, see [Onboarding (CLI)](/start/wizard).
     - Installs optional dependencies (some use Homebrew on macOS).
   </Step>
   <Step title="Finish">
-    - Summary + next steps, including iOS/Android/macOS apps for extra features.
+    - Summary + next steps.
   </Step>
 </Steps>
 
@@ -230,5 +225,5 @@ will prompt to install it (npm or a local path) before it can be configured.
 - Onboarding overview: [Onboarding (CLI)](/start/wizard)
 - macOS app onboarding: [Onboarding](/start/onboarding)
 - Config reference: [Gateway configuration](/gateway/configuration)
-- Providers: [WhatsApp](/channels/whatsapp), [Telegram](/channels/telegram), [Discord](/channels/discord), [Google Chat](/channels/googlechat), [Signal](/channels/signal), [iMessage](/channels/imessage)
+- Providers: [Telegram](/channels/telegram)
 - Skills: [Skills](/tools/skills), [Skills config](/tools/skills-config)
