@@ -38,11 +38,11 @@ All C FFI functions are in `core/src/lib.rs` with `deneb_*` naming convention.
 1. Add the function in `core/src/lib.rs` with `#[unsafe(no_mangle)] pub extern "C" fn deneb_*`
 2. Create Go wrapper in `gateway-go/internal/ffi/*_cgo.go`
 3. Create fallback in `gateway-go/internal/ffi/*_noffi.go`
-4. If adding new error codes, update all 3 locations:
-   - `proto/gateway.proto` (`ErrorCode` enum)
-   - `core/src/protocol/error_codes.rs`
-   - `gateway-go/internal/ffi/errors.go`
-5. Run `make error-code-sync` to verify sync
+4. If adding new error codes:
+   - Edit `proto/gateway.proto` (`ErrorCode` enum); add `// retryable` on retryable codes.
+   - Run `make proto-error-codes-gen` to regenerate `core/src/protocol/error_codes.rs`.
+   - Never edit `error_codes.rs` by hand — it is auto-generated.
+5. Run `make proto-error-codes-gen-check` to verify the generated file is up to date.
 
 ### Stateful FFI Pattern
 

@@ -11,7 +11,8 @@
        test clean check fmt \
        proto proto-go proto-rust proto-check proto-lint proto-watch \
        tool-schemas model-caps \
-       ffi-gen ffi-gen-check error-code-sync \
+       ffi-gen ffi-gen-check \
+       proto-error-codes-gen proto-error-codes-gen-check error-code-sync \
        info
 
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
@@ -190,7 +191,7 @@ test: rust-test go-test cli-test
 clean: rust-clean go-clean cli-clean
 	@echo "Cleaned Rust, Go, and CLI build artifacts"
 
-check: proto-check ffi-gen-check error-code-sync rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-fmt go-vet go-test
+check: proto-check ffi-gen-check proto-error-codes-gen-check rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-fmt go-vet go-test
 	@echo "All checks passed"
 
 fmt:
@@ -247,11 +248,21 @@ ffi-gen:
 ffi-gen-check:
 	./scripts/gen-ffi-errors.sh --check
 
-# --- Error code sync ---
+# --- Protocol error code generation ---
+#
+# proto/gateway.proto is the single source of truth for the ErrorCode enum.
+# error_codes.rs is generated from it — never edit it by hand.
 
-# Check protocol error codes (proto ↔ Rust error_codes.rs) are in sync.
-error-code-sync:
-	./scripts/error-code-sync-check.sh
+# Regenerate core-rs/core/src/protocol/error_codes.rs from proto/gateway.proto.
+proto-error-codes-gen:
+	./scripts/gen-proto-error-codes.sh
+
+# Verify error_codes.rs is up to date (fails if proto and Rust are out of sync).
+proto-error-codes-gen-check:
+	./scripts/gen-proto-error-codes.sh --check
+
+# Legacy alias — kept for compatibility with external scripts.
+error-code-sync: proto-error-codes-gen-check
 
 # --- Info ---
 

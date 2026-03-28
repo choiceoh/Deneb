@@ -36,15 +36,22 @@ Shared type definitions compiled to Go and Rust. Source of truth for cross-langu
 3. Run `make go` to rebuild Go gateway
 4. Run `make proto-check` to verify no uncommitted diffs
 
-## Error Code Sync
+## Error Code Generation
 
-When changing `ErrorCode` enum in `gateway.proto`, you must update 3 files:
+`proto/gateway.proto` is the **single source of truth** for the `ErrorCode` enum.
+`core-rs/core/src/protocol/error_codes.rs` is **auto-generated** — never edit it by hand.
 
-1. `gateway.proto` — proto enum (`ERROR_CODE_*` prefix)
-2. `core-rs/core/src/protocol/error_codes.rs` — Rust `as_str()` match block
-3. `gateway-go/internal/ffi/errors.go` — Go constants
+When changing the `ErrorCode` enum:
 
-Run `make error-code-sync` to validate consistency.
+1. Edit `gateway.proto` — add/remove/rename `ERROR_CODE_*` values.
+   - Mark retryable codes with a trailing `// retryable` comment.
+2. Run `make proto-error-codes-gen` to regenerate `error_codes.rs`.
+3. Commit both files together.
+
+```
+make proto-error-codes-gen        # regenerate Rust file
+make proto-error-codes-gen-check  # verify it is up to date (used by make check)
+```
 
 ## Config
 
