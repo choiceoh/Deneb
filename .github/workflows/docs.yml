@@ -1,0 +1,99 @@
+# Validate docs on every docs-touching PR and main push.
+# Jobs: spellcheck → link-check → build
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "scripts/docs-spellcheck.sh"
+      - "scripts/codespell-dictionary.txt"
+      - "scripts/codespell-ignore.txt"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "scripts/docs-spellcheck.sh"
+      - "scripts/codespell-dictionary.txt"
+      - "scripts/codespell-ignore.txt"
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  # ── 1. Spellcheck ────────────────────────────────────────────
+  spellcheck:
+    name: Spellcheck
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install codespell
+        run: pip install --quiet codespell
+
+      - name: Run spellcheck
+        run: bash scripts/docs-spellcheck.sh
+
+  # ── 2. Link check (external URLs) ───────────────────────────
+  link-check:
+    name: Link Check
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - name: Check links with lychee
+        uses: lycheeverse/lychee-action@v2
+        with:
+          # Scan all Markdown files in docs/ and the root README.
+          args: >
+            --no-progress
+            --exclude-loopback
+            --exclude-mail
+            --timeout 30
+            --retry-wait-time 5
+            --max-retries 3
+            --exclude-path docs/assets
+            --exclude-path docs/images
+            --accept 200,204,206,301,302,307,308,429
+            "docs/**/*.md"
+            "README.md"
+          fail: true
+          jobSummary: true
+
+  # ── 3. Mintlify build check ──────────────────────────────────
+  build:
+    name: Mintlify Build Check
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Mintlify CLI
+        run: npm install -g mintlify@latest --quiet
+
+      - name: Validate docs config and internal links
+        working-directory: docs
+        run: mintlify check
