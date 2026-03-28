@@ -30,5 +30,45 @@ pub(super) fn cmd_embed(_args: &Value, config: &VegaConfig) -> CommandResult {
         );
     }
 
-    CommandResult::err("embed", "임베딩 백엔드가 설정되지 않았습니다 (VEGA_INFERENCE=sglang 권장)")
+    CommandResult::err(
+        "embed",
+        "임베딩 백엔드가 설정되지 않았습니다 (VEGA_INFERENCE=sglang 권장)",
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn cmd_embed_returns_sglang_guidance_when_backend_is_sglang() {
+        let config = VegaConfig::default();
+
+        let result = cmd_embed(&json!({}), &config);
+        assert!(result.success);
+        assert_eq!(result.command, "embed");
+        assert_eq!(
+            result.data.get("backend").and_then(|v| v.as_str()),
+            Some("sglang")
+        );
+    }
+
+    #[test]
+    fn cmd_embed_fails_when_backend_is_not_sglang() {
+        let config = VegaConfig {
+            inference_backend: "sqlite_only".to_string(),
+            ..VegaConfig::default()
+        };
+
+        let result = cmd_embed(&json!({}), &config);
+        assert!(!result.success);
+        assert_eq!(result.command, "embed");
+        assert!(result
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("임베딩 백엔드가 설정되지 않았습니다"));
+    }
 }
