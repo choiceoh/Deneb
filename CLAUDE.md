@@ -148,8 +148,8 @@ Primary runtime — HTTP/WS gateway server.
 - `internal/auth/` — Token auth, allowlists, security paths, credentials, probe auth.
 - `pkg/protocol/` — Hand-written JSON wire types + generated protobuf types in `gen/`.
 - `pkg/protocol/consistency_test.go` — Bidirectional reflection tests ensuring hand-written and generated types stay in sync.
-- `internal/chat/tools_core.go` — Core tool registration (exec, process, read, write, edit, grep, find, ls, web) with full JSON schemas.
-- `internal/chat/tools_fs.go` — File system tool implementations (read with line numbers, write with dir creation, edit with uniqueness check, grep via rg, find via WalkDir, ls).
+- `internal/chat/toolreg_core.go` — Core tool registration (exec, process, read, write, edit, grep, find, ls, web) with full JSON schemas.
+- `internal/chat/tools/fs.go` — File system tool implementations (read with line numbers, write with dir creation, edit with uniqueness check, grep via rg, find via WalkDir, ls).
 - `internal/chat/system_prompt.go` — System prompt assembly (identity, tooling, tool call style, safety, skills, memory recall, workspace, reply tags, messaging, timestamp, context files, silent replies, runtime).
 - `internal/chat/context_files.go` — Workspace context file loader (AGENTS.md, CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md). Budget: 20K chars/file, 150K total.
 - `internal/chat/silent_reply.go` — SILENT_REPLY_TOKEN (NO_REPLY) detection and stripping for delivery suppression.
