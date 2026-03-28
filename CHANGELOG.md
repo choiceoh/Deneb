@@ -1,5 +1,31 @@
 # Changelog
 
+## [3.24.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.23.0...deneb-v3.24.0) (2026-03-28)
+
+
+### ✨ Features
+
+* **propus:** add session history browser with search and session switching ([c081893](https://github.com/choiceoh/Deneb/commit/c08189372e090925b8a497700a9a39c0abb44376))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** add StripTrailingCommas to UnmarshalLLM pipeline ([7ba1d92](https://github.com/choiceoh/Deneb/commit/7ba1d926baabfd5395635184ae509d31078d0500))
+* **chat:** fix ExtractObject trailing prose bug, harden extraction ([356e77f](https://github.com/choiceoh/Deneb/commit/356e77f2798c257db3e43fd684b431b8074084da))
+* **memory:** remove data volume trigger from dreaming to prevent infinite re-trigger loop ([2f77d80](https://github.com/choiceoh/Deneb/commit/2f77d80a4d9c890feca789aad8d17b0671152922))
+
+
+### ⚡ Performance
+
+* **chat:** replace regex with scanner, unify bracket-depth tracking ([431750c](https://github.com/choiceoh/Deneb/commit/431750c9f4c1a693217e1e4af7dc0ef1db47e558))
+
+
+### 🔧 Internal
+
+* **chat:** adopt jsonutil.UnmarshalInto in remaining tool handlers (batch 2) ([77d8475](https://github.com/choiceoh/Deneb/commit/77d84752b4a798feedc0de78b16ba5928beee0c5))
+* **chat:** adopt jsonutil.UnmarshalInto in tool handlers (batch 1) ([9822588](https://github.com/choiceoh/Deneb/commit/98225888e023565dc4da5a0c3c225cd3fb1fb770))
+* **chat:** extract shared JSON parsing into pkg/jsonutil ([c24ade5](https://github.com/choiceoh/Deneb/commit/c24ade59113bd9c1dcd3b840d68eaff367972144))
+
 ## [3.23.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.22.0...deneb-v3.23.0) (2026-03-28)
 
 
