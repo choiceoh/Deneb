@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.19.1](https://github.com/choiceoh/Deneb/compare/deneb-v3.19.0...deneb-v3.19.1) (2026-03-28)
+
+
+### 🐛 Bug Fixes
+
+* **chat:** add missing RunLogger arg to executeAgentRun call in send_sync ([87f6af5](https://github.com/choiceoh/Deneb/commit/87f6af5ae780420e68a8310d6d4e2c457166f167))
+
 ## [3.19.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.18.0...deneb-v3.19.0) (2026-03-28)
 
 
