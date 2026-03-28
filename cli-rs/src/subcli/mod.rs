@@ -1,6 +1,5 @@
 pub mod acp;
 pub mod approvals;
-pub mod autonomous;
 pub mod backup;
 pub mod browser;
 pub mod channels;

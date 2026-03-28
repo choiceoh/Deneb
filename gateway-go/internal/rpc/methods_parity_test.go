@@ -7,7 +7,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
-	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
@@ -157,11 +156,6 @@ func fullDispatcher() *Dispatcher {
 	RegisterWizardMethods(d, WizardDeps{Engine: wizard.NewEngine()})
 	RegisterSecretMethods(d, SecretDeps{Resolver: secret.NewResolver()})
 	RegisterTalkMethods(d, TalkDeps{Talk: talk.NewState()})
-	RegisterAutonomousMethods(d, AutonomousDeps{
-		Autonomous: autonomous.NewService(autonomous.ServiceConfig{
-			GoalStorePath: "/tmp/test-autonomous-goals.json",
-		}, nil, testLogger()),
-	})
 	// Session state methods (patch/reset/preview/resolve/compact).
 	RegisterSessionMethods(d, SessionDeps{
 		Sessions:    deps.Sessions,

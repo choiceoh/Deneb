@@ -68,7 +68,7 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			return 0
 		},
 		IsAutonomousRunning: func() bool {
-			return s.autonomousSvc != nil && s.autonomousSvc.IsRunning()
+			return false
 		},
 		OnRestartNeeded: func(reason string) {
 			s.logger.Warn("watchdog restart requested, sending SIGUSR1", "reason", reason)

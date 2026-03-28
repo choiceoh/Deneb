@@ -38,14 +38,6 @@ func (h *HooksHTTPHandler) handleWake(w http.ResponseWriter, body map[string]any
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "mode must be \"now\" or \"next-heartbeat\""})
 		return
 	}
-	// Check for autonomous target.
-	target, _ := body["target"].(string)
-	if target == "autonomous" && h.dispatchers.DispatchAutonomousWake != nil {
-		h.dispatchers.DispatchAutonomousWake(text)
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "target": "autonomous"})
-		return
-	}
-
 	h.dispatchers.DispatchWake(text, mode)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "mode": mode})
 }

@@ -154,12 +154,12 @@ type Server struct {
 	acpDeps           *rpc.ACPDeps
 	acpLifecycleUnsub func()
 
-	// Phase 5: Autonomous goal-driven execution.
+	// AuroraDream: memory consolidation lifecycle.
 	autonomousSvc   *autonomous.Service
-	dreamingAdapter *memory.DreamingAdapter // stored in phase 2, wired to autonomous in phase 3
+	dreamingAdapter *memory.DreamingAdapter // stored in phase 2, wired to autonomous svc
 
 	// toolDeps holds core tool dependencies; stored on the server so late-binding
-	// fields (e.g. AutonomousSvc) can be set from other init phases.
+	// fields can be set from other init phases.
 	toolDeps *chat.CoreToolDeps
 
 	// GmailPoll: periodic Gmail polling with LLM analysis.
@@ -424,11 +424,9 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		})
 	}
 
-	// Start autonomous service (Phase 2 attention timer).
+	// Start autonomous service (dreaming lifecycle).
 	if s.autonomousSvc != nil {
-		s.safeGo("autonomous:start", func() {
-			s.autonomousSvc.Start(ctx, autonomous.DefaultAttentionConfig())
-		})
+		s.autonomousSvc.Start()
 	}
 
 	// Start Gmail polling service.
@@ -553,7 +551,7 @@ func (s *Server) doShutdown() error {
 		s.cron.Close()
 	}
 
-	// 6b. Stop autonomous service.
+	// 6b. Stop autonomous service (dreaming).
 	if s.autonomousSvc != nil {
 		s.autonomousSvc.Stop()
 	}

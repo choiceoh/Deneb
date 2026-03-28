@@ -69,7 +69,6 @@ async fn main() {
         Commands::Devices(args) => subcli::devices::run(args).await,
         Commands::Pairing(args) => subcli::pairing::run(args).await,
         Commands::Qr(args) => subcli::qr::run(args).await,
-        Commands::Autonomous(args) => subcli::autonomous::run(args).await,
         Commands::Cron(args) => subcli::cron::run(args).await,
         Commands::Hooks(args) => subcli::hooks::run(args).await,
         Commands::Webhooks(args) => subcli::webhooks::run(args).await,

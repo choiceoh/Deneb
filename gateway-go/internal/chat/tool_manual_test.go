@@ -299,7 +299,7 @@ func TestSystemManualGuidesNewEntries(t *testing.T) {
 		"action": "guides",
 	})
 
-	for _, key := range []string{"telegram", "skills", "pilot", "cron", "autonomous"} {
+	for _, key := range []string{"telegram", "skills", "pilot", "cron"} {
 		if !strings.Contains(result, key) {
 			t.Errorf("expected new guide %q in listing", key)
 		}
@@ -316,7 +316,6 @@ func TestSystemManualGuidesReadNewGuide(t *testing.T) {
 		{"skills", "Skills System"},
 		{"pilot", "Pilot Tool"},
 		{"cron", "Cron Scheduler"},
-		{"autonomous", "Autonomous System"},
 	} {
 		result := invokeManual(t, root, map[string]string{
 			"action": "guides",

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
@@ -205,7 +204,7 @@ func (s *Server) registerPhase2Methods() {
 	s.logger.Info("resolved agent workspace directory", "workspaceDir", workspaceDir)
 
 	// Build core tool dependencies. Stored on the server so later init phases
-	// (e.g. registerAdvancedWorkflowMethods) can late-bind fields like AutonomousSvc.
+	// can late-bind fields.
 	s.toolDeps = &chat.CoreToolDeps{
 		ProcessMgr:   s.processes,
 		WorkspaceDir: workspaceDir,
@@ -492,38 +491,20 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 		Talk: s.talkState,
 	})
 
-	// Autonomous goal-driven execution.
-	homeDir, _ := os.UserHomeDir()
-	s.autonomousSvc = autonomous.NewService(autonomous.ServiceConfig{
-		GoalStorePath: autonomous.DefaultGoalStorePath(homeDir),
-	}, &autonomousAgentAdapter{
-		chatHandler: s.chatHandler,
-		jobTracker:  s.jobTracker,
-		transcript:  s.transcript,
-		sessions:    s.sessions,
-	}, s.logger)
-
-	// Wire autonomous service into agent tools (late-binding, same as SessionSendFn).
-	s.toolDeps.AutonomousSvc = s.autonomousSvc
-
+	// AuroraDream: memory consolidation service (dreaming-only, no goal cycles).
+	s.autonomousSvc = autonomous.NewService(s.logger)
 
 	// Wire AuroraDream adapter if available (created in phase 2).
 	if s.dreamingAdapter != nil {
 		s.autonomousSvc.SetDreamer(s.dreamingAdapter)
 	}
 
-	// Broadcast autonomous cycle events (including dreaming) to WebSocket clients.
+	// Broadcast dreaming events to WebSocket clients.
 	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
-		if strings.HasPrefix(event.Type, "dreaming_") {
-			broadcastFn("dreaming.cycle", event)
-		} else {
-			broadcastFn("autonomous.cycle", event)
-		}
+		broadcastFn("dreaming.cycle", event)
 	})
 
-	// Wire Telegram notifier for significant autonomous events (goal completion,
-	// auto-pause, consecutive errors). Single-user deployment: use the first
-	// allowed user ID as the DM chat ID.
+	// Wire Telegram notifier for dreaming events.
 	if s.telegramPlug != nil {
 		tgCfg := s.telegramPlug.Config()
 		if tgCfg != nil && len(tgCfg.AllowFrom.IDs) > 0 {
@@ -533,23 +514,6 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 				logger: s.logger,
 			})
 		}
-	}
-
-	rpc.RegisterAutonomousMethods(s.dispatcher, rpc.AutonomousDeps{
-		Autonomous: s.autonomousSvc,
-	})
-
-	// Wire autonomous wake dispatcher into hooks HTTP handler.
-	if s.hooksHTTP != nil {
-		s.hooksHTTP.SetAutonomousWakeDispatcher(func(text string) {
-			if s.autonomousSvc != nil && s.autonomousSvc.Goals() != nil {
-				s.safeGo("autonomous:external-wake", func() {
-					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-					defer cancel()
-					s.autonomousSvc.RunCycle(ctx)
-				})
-			}
-		})
 	}
 
 	// Gmail polling service: periodic new-email analysis via LLM.

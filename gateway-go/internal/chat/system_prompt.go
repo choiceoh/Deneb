@@ -67,7 +67,7 @@ var toolCategories = []struct {
 	{"AI", []string{"pilot"}},
 	{"Web", []string{"web", "http"}},
 	{"Memory", []string{"memory_search", "polaris", "vega"}},
-	{"System", []string{"cron", "autonomous", "message", "gateway"}},
+	{"System", []string{"cron", "message", "gateway"}},
 	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
 	{"Media", []string{"image", "youtube_transcript", "send_file"}},
 	{"Data", []string{"gmail", "kv"}},
