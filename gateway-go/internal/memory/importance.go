@@ -9,21 +9,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// thinkingTagRe matches <think>...</think> and <thinking>...</thinking> blocks
-// that Qwen3.5 and other reasoning models may emit.
-var thinkingTagRe = regexp.MustCompile(`(?s)<think(?:ing)?>.*?</think(?:ing)?>\s*`)
-
-// stripThinkingTags removes <think>...</think> blocks from Qwen3.5 responses.
-func stripThinkingTags(s string) string {
-	return thinkingTagRe.ReplaceAllString(s, "")
-}
 
 const (
 	importanceTimeout   = 30 * time.Second
@@ -324,7 +316,7 @@ func parseFactsResponse(text string) ([]ExtractedFact, bool) {
 	}
 
 	// Case 5: bracket extraction fallback (prose-wrapped arrays).
-	if extracted, ok := extractJSONArray(text); ok {
+	if extracted, ok := jsonutil.ExtractArray(text); ok {
 		var fallback []ExtractedFact
 		if err := json.Unmarshal([]byte(extracted), &fallback); err == nil {
 			return fallback, true
@@ -377,25 +369,11 @@ func tryRecoverTruncatedJSON(text string) ([]ExtractedFact, bool) {
 	return nil, false
 }
 
-// extractJSONArray finds the first '[' and last ']' in s and returns the
-// substring between them. Handles cases where the model wraps JSON in prose.
-func extractJSONArray(s string) (string, bool) {
-	start := strings.Index(s, "[")
-	if start == -1 {
-		return "", false
-	}
-	end := strings.LastIndex(s, "]")
-	if end == -1 || end <= start {
-		return "", false
-	}
-	return s[start : end+1], true
-}
-
 // stripCodeFences removes thinking tags and markdown code fences from LLM output.
 // Used by ExtractFacts which has its own multi-strategy parseFactsResponse.
-// Dream phases use callLLMJSON → extractJSON (in sglang.go) instead.
+// Dream phases use callLLMJSON → jsonutil.ExtractObject instead.
 func stripCodeFences(s string) string {
-	return extractJSON(s)
+	return jsonutil.ExtractObject(s)
 }
 
 func isValidCategory(c string) bool {

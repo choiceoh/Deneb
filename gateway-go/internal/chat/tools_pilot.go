@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // Pilot tool: the AI agent's fast local helper that can orchestrate other tools.
@@ -101,8 +102,6 @@ func shouldUseThinking(task string, sourceCount int) bool {
 	return false
 }
 
-// stripThinkingTags is defined in web_fetch.go (shared with web_fetch's sglang pipeline).
-// It removes <think>...</think> blocks from Qwen3.5 responses.
 
 // --- System prompt ---
 
@@ -374,7 +373,7 @@ func toolPilot(tools ToolExecutor, workspaceDir string) ToolFunc {
 
 		// Strip thinking tags from response.
 		if thinking {
-			result = strings.TrimSpace(stripThinkingTags(result))
+			result = strings.TrimSpace(jsonutil.StripThinkingTags(result))
 		}
 
 		// Phase 3 (optional): Chaining — let LLM request follow-up tool calls.

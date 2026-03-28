@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // callSglang sends a streaming chat request to the local SGLang model and collects the full response.
@@ -68,19 +69,9 @@ func callLLMJSON[T any](ctx context.Context, client *llm.Client, model, system, 
 			return zero, err
 		}
 
-		cleaned := extractJSON(raw)
-
-		var result T
-		if json.Unmarshal([]byte(cleaned), &result) == nil {
+		result, err := jsonutil.UnmarshalLLM[T](raw)
+		if err == nil {
 			return result, nil
-		}
-
-		// Try truncated JSON recovery: find the last complete object in an array,
-		// close the array/object, and attempt to parse the partial result.
-		if recovered := recoverTruncatedObject(cleaned); recovered != "" {
-			if json.Unmarshal([]byte(recovered), &result) == nil {
-				return result, nil
-			}
 		}
 
 		// First attempt failed — retry once. The model may produce cleaner output
@@ -89,112 +80,16 @@ func callLLMJSON[T any](ctx context.Context, client *llm.Client, model, system, 
 			continue
 		}
 
-		return zero, fmt.Errorf("callLLMJSON: parse failed after retry: raw=%s", truncate(raw, 300))
+		return zero, fmt.Errorf("callLLMJSON: parse failed after retry: raw=%s", jsonutil.Truncate(raw, 300))
 	}
 
 	return zero, fmt.Errorf("callLLMJSON: unreachable")
 }
 
-// extractJSON removes thinking tags, code fences, and surrounding prose,
-// returning the JSON object substring. Uses brace-depth tracking to find
-// the complete outermost {...} rather than naive first/last index matching.
+// extractJSON delegates to jsonutil.ExtractObject for backward compatibility
+// within this package. Other packages should use jsonutil.ExtractObject directly.
 func extractJSON(s string) string {
-	s = stripThinkingTags(s)
-	s = strings.TrimSpace(s)
-
-	// Strip markdown code fences.
-	if strings.HasPrefix(s, "```json") {
-		s = strings.TrimPrefix(s, "```json")
-	} else if strings.HasPrefix(s, "```") {
-		s = strings.TrimPrefix(s, "```")
-	}
-	if strings.HasSuffix(s, "```") {
-		s = strings.TrimSuffix(s, "```")
-	}
-	s = strings.TrimSpace(s)
-
-	// If it already starts with '{', it's likely clean JSON.
-	if strings.HasPrefix(s, "{") {
-		return s
-	}
-
-	// Find the outermost JSON object using brace-depth tracking.
-	// This correctly handles prose like: 결과: {"a": {"b": 1}} 이상입니다.
-	start := -1
-	depth := 0
-	inString := false
-	escaped := false
-	for i, r := range s {
-		if escaped {
-			escaped = false
-			continue
-		}
-		if r == '\\' && inString {
-			escaped = true
-			continue
-		}
-		if r == '"' {
-			inString = !inString
-			continue
-		}
-		if inString {
-			continue
-		}
-		if r == '{' {
-			if depth == 0 {
-				start = i
-			}
-			depth++
-		} else if r == '}' {
-			depth--
-			if depth == 0 && start >= 0 {
-				return s[start : i+1]
-			}
-		}
-	}
-
-	return s
-}
-
-// recoverTruncatedObject attempts to recover a parseable JSON object from
-// truncated output (e.g. token limit hit mid-stream). It finds the start of
-// an array value, locates the last complete object in it, closes the
-// array and outer object. Returns empty string if recovery fails.
-func recoverTruncatedObject(s string) string {
-	arrStart := strings.Index(s, "[")
-	if arrStart == -1 {
-		return ""
-	}
-
-	// Find the prefix before the array (e.g. `{"results": `).
-	prefix := strings.TrimSpace(s[:arrStart])
-
-	sub := s[arrStart:]
-	lastBrace := strings.LastIndex(sub, "}")
-	if lastBrace == -1 {
-		return ""
-	}
-
-	// Close the array.
-	candidate := sub[:lastBrace+1] + "]"
-
-	// If there was an outer object, close it too.
-	if strings.HasPrefix(prefix, "{") {
-		candidate = prefix + candidate + "}"
-	}
-
-	// Verify it's valid JSON before returning.
-	if json.Valid([]byte(candidate)) {
-		return candidate
-	}
-
-	// Fallback: try just the array portion.
-	arrayOnly := sub[:lastBrace+1] + "]"
-	if json.Valid([]byte(arrayOnly)) {
-		return arrayOnly
-	}
-
-	return ""
+	return jsonutil.ExtractObject(s)
 }
 
 // collectStream gathers all text deltas from an OpenAI-compatible streaming response.
