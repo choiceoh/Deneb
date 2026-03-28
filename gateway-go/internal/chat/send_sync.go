@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/shortid"
 )
 
@@ -86,8 +87,8 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 
 	// Create a custom broadcaster that calls the onDelta callback.
 	// We reuse executeAgentRun's emitDelta path via a custom streamBroadcaster.
-	var dummyBroadcast BroadcastRawFunc = func(_ string, _ []byte) int { return 0 }
-	broadcaster := newStreamBroadcaster(dummyBroadcast, sessionKey, params.ClientRunID)
+	var dummyBroadcast streaming.BroadcastRawFunc = func(_ string, _ []byte) int { return 0 }
+	broadcaster := streaming.NewBroadcaster(dummyBroadcast, sessionKey, params.ClientRunID)
 
 	// Override the emitDelta on the agent run by calling onDelta directly.
 	// We achieve this by passing the onDelta via the broadcaster's EmitDelta,

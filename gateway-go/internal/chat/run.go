@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
@@ -59,7 +60,7 @@ type runDeps struct {
 	tools           *ToolRegistry             // optional; no tool use if nil
 	authManager     *provider.AuthManager     // optional; uses pre-configured client if nil
 	broadcast       BroadcastFunc             // optional
-	broadcastRaw    BroadcastRawFunc          // optional
+	broadcastRaw    streaming.BroadcastRawFunc // optional
 	jobTracker      *agent.JobTracker         // optional
 	replyFunc       ReplyFunc                 // optional; delivers response to originating channel
 	mediaSendFn     MediaSendFunc             // optional; delivers files to originating channel
@@ -108,9 +109,9 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 
 	// Create streaming broadcaster for this run.
-	var broadcaster *streamBroadcaster
+	var broadcaster *streaming.Broadcaster
 	if deps.broadcastRaw != nil {
-		broadcaster = newStreamBroadcaster(deps.broadcastRaw, params.SessionKey, params.ClientRunID)
+		broadcaster = streaming.NewBroadcaster(deps.broadcastRaw, params.SessionKey, params.ClientRunID)
 		broadcaster.EmitStarted()
 	}
 
@@ -219,7 +220,7 @@ func executeAgentRun(
 	ctx context.Context,
 	params RunParams,
 	deps runDeps,
-	broadcaster *streamBroadcaster,
+	broadcaster *streaming.Broadcaster,
 	typingSignaler *typing.FullTypingSignaler,
 	statusCtrl *channel.StatusReactionController,
 	logger *slog.Logger,
