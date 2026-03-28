@@ -1,36 +1,42 @@
 package ffi
 
-import "runtime"
+import (
+	"runtime"
+	"sync"
+)
 
 // Handle wraps a Rust-side opaque handle (uint32) with automatic cleanup.
 // Uses Go's GC finalizer as a safety net: if Drop is not called explicitly,
 // the finalizer calls the Rust `*_drop(handle)` function to prevent resource
 // leaks. Callers should still prefer explicit Drop() for deterministic cleanup.
+//
+// Drop() is safe to call concurrently or multiple times; sync.Once guarantees
+// the Rust drop function is invoked exactly once, eliminating the double-free
+// race between an explicit Drop() and the GC finalizer.
 type Handle struct {
-	id      uint32
-	dropFn  func(uint32)
-	dropped bool
+	id     uint32
+	dropFn func(uint32)
+	once   sync.Once
 }
 
 // NewHandle creates a managed Handle. The dropFn is called exactly once,
 // either via an explicit Drop() call or via the GC finalizer.
 func NewHandle(id uint32, dropFn func(uint32)) *Handle {
 	h := &Handle{id: id, dropFn: dropFn}
-	runtime.SetFinalizer(h, func(h *Handle) { h.Drop() })
+	runtime.SetFinalizer(h, (*Handle).Drop)
 	return h
 }
 
 // ID returns the raw handle value for passing to FFI functions.
 func (h *Handle) ID() uint32 { return h.id }
 
-// Drop releases the Rust-side resources. Safe to call multiple times.
+// Drop releases the Rust-side resources. Safe to call concurrently or
+// multiple times; the Rust drop function is invoked exactly once.
 func (h *Handle) Drop() {
-	if h.dropped {
-		return
-	}
-	h.dropped = true
-	h.dropFn(h.id)
-	runtime.SetFinalizer(h, nil)
+	h.once.Do(func() {
+		h.dropFn(h.id)
+	})
+	runtime.SetFinalizer(h, nil) // clear finalizer to allow earlier GC; idempotent
 }
 
 // NewCompactionSweepHandle creates a compaction sweep and returns a managed Handle.
