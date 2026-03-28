@@ -52,11 +52,12 @@ func (e *LLMExpander) Expand(ctx context.Context, query string) []string {
 	defer cancel()
 
 	req := llm.ChatRequest{
-		Model:     e.model,
-		Messages:  []llm.Message{llm.NewTextMessage("user", query)},
-		System:    llm.SystemString(expandSystemPrompt),
-		MaxTokens: expandMaxTokens,
-		Stream:    true,
+		Model:          e.model,
+		Messages:       []llm.Message{llm.NewTextMessage("user", query)},
+		System:         llm.SystemString(expandSystemPrompt),
+		MaxTokens:      expandMaxTokens,
+		Stream:         true,
+		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	}
 
 	events, err := e.client.StreamChatOpenAI(ctx, req)
@@ -81,15 +82,15 @@ func (e *LLMExpander) Expand(ctx context.Context, query string) []string {
 		text = strings.TrimSpace(text)
 	}
 
-	// Extract JSON array even if the LLM produced preamble text.
+	// Parse response: try JSON array first, then JSON object with array value.
 	var terms []string
 	if err := json.Unmarshal([]byte(text), &terms); err != nil {
-		// Try to find a JSON array embedded in the response.
-		if start := strings.Index(text, "["); start >= 0 {
-			if end := strings.LastIndex(text, "]"); end > start {
-				if err2 := json.Unmarshal([]byte(text[start:end+1]), &terms); err2 != nil {
-					e.logger.Debug("query expansion parse failed", "raw", text, "error", err2)
-					return nil
+		// json_object mode may return {"key": [...]}: extract first array value.
+		var obj map[string]json.RawMessage
+		if err2 := json.Unmarshal([]byte(text), &obj); err2 == nil {
+			for _, v := range obj {
+				if json.Unmarshal(v, &terms) == nil && len(terms) > 0 {
+					break
 				}
 			}
 		}
