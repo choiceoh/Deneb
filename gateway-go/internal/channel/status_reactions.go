@@ -74,7 +74,7 @@ func DefaultStatusTiming() StatusReactionTiming {
 
 // Tool name tokens for emoji resolution.
 var codingToolTokens = []string{
-	"exec", "process", "read", "write", "edit", "session_status", "bash",
+	"exec", "process", "read", "write", "edit", "bash",
 }
 
 var webToolTokens = []string{

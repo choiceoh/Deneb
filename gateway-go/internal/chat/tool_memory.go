@@ -105,27 +105,6 @@ func memorySearchToolSchema() map[string]any {
 	}
 }
 
-// memoryGetToolSchema returns the JSON Schema for the memory_get tool.
-func memoryGetToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Path to memory file (relative to workspace)",
-			},
-			"startLine": map[string]any{
-				"type":        "number",
-				"description": "Start line (1-based)",
-			},
-			"endLine": map[string]any{
-				"type":        "number",
-				"description": "End line (1-based, inclusive)",
-			},
-		},
-		"required": []string{"path"},
-	}
-}
 
 // MemoryMatch represents a single keyword match in a memory file.
 type MemoryMatch struct {
@@ -233,52 +212,6 @@ func toolMemorySearch(workspaceDir string) ToolFunc {
 	}
 }
 
-// toolMemoryGet implements reading specific lines from a memory file.
-func toolMemoryGet(workspaceDir string) ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
-		var p struct {
-			Path      string `json:"path"`
-			StartLine int    `json:"startLine"`
-			EndLine   int    `json:"endLine"`
-		}
-		if err := jsonutil.UnmarshalInto("memory_get params", input, &p); err != nil {
-			return "", err
-		}
-		if p.Path == "" {
-			return "", fmt.Errorf("path is required")
-		}
-
-		path := resolvePath(p.Path, workspaceDir)
-		content, err := readMemoryFile(path)
-		if err != nil {
-			return "", fmt.Errorf("failed to read memory file: %w", err)
-		}
-
-		lines := strings.Split(content, "\n")
-
-		// Apply line range if specified.
-		start := 0
-		end := len(lines)
-		if p.StartLine > 0 {
-			start = p.StartLine - 1
-		}
-		if p.EndLine > 0 && p.EndLine <= len(lines) {
-			end = p.EndLine
-		}
-		if start > end {
-			start = end
-		}
-		if start > len(lines) {
-			start = len(lines)
-		}
-
-		var sb strings.Builder
-		for i := start; i < end; i++ {
-			fmt.Fprintf(&sb, "%d\t%s\n", i+1, lines[i])
-		}
-		return sb.String(), nil
-	}
-}
 
 // collectMemoryFiles finds MEMORY.md and memory/*.md in the workspace.
 // Results are cached with a short TTL to avoid repeated directory scans

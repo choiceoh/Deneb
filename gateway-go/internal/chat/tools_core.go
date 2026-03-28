@@ -89,12 +89,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		InputSchema: findToolSchema(),
 		Fn:          toolFind(workspaceDir),
 	})
-	registry.RegisterTool(ToolDef{
-		Name:        "ls",
-		Description: "List directory contents with sizes. Use find for recursive search",
-		InputSchema: lsToolSchema(),
-		Fn:          toolLs(workspaceDir),
-	})
 
 	// -- Exec/process tools --
 	registry.RegisterTool(ToolDef{
@@ -126,12 +120,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Description: "Search MEMORY.md + memory/*.md by keyword. Returns matched lines with context",
 		InputSchema: memorySearchToolSchema(),
 		Fn:          toolMemorySearch(workspaceDir),
-	})
-	registry.RegisterTool(ToolDef{
-		Name:        "memory_get",
-		Description: "Read specific line range from a memory file. Use after memory_search to get full context",
-		InputSchema: memoryGetToolSchema(),
-		Fn:          toolMemoryGet(workspaceDir),
 	})
 
 	// -- Health check tool (embedding, reranker, sglang, memory, autonomous diagnostics) --
@@ -166,13 +154,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolMessage(),
 	})
 
-	// -- Apply patch tool --
-	registry.RegisterTool(ToolDef{
-		Name:        "apply_patch",
-		Description: "Apply multi-file unified diff patches. Tries git apply first, falls back to patch -p1",
-		InputSchema: applyPatchToolSchema(),
-		Fn:          toolApplyPatch(workspaceDir),
-	})
 
 	// -- Coding tools (implemented in tools_coding.go) --
 	registry.RegisterTool(ToolDef{
@@ -254,12 +235,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolSessionsSearch(deps.Transcript),
 	})
 	registry.RegisterTool(ToolDef{
-		Name:        "sessions_restore",
-		Description: "Restore a past session's conversation into the current session for continuation",
-		InputSchema: sessionsRestoreToolSchema(),
-		Fn:          toolSessionsRestore(deps.Transcript),
-	})
-	registry.RegisterTool(ToolDef{
 		Name:        "sessions_send",
 		Description: "Send a message to another session (defaults to \"main\" if sessionKey omitted)",
 		InputSchema: sessionsSendToolSchema(),
@@ -276,12 +251,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Description: "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
 		InputSchema: subagentsToolSchema(),
 		Fn:          toolSubagents(deps),
-	})
-	registry.RegisterTool(ToolDef{
-		Name:        "session_status",
-		Description: "Show current session info: kind, status, model, token usage, runtime",
-		InputSchema: sessionStatusToolSchema(),
-		Fn:          toolSessionStatus(deps.Sessions),
 	})
 
 	// -- Image tool --
@@ -364,7 +333,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Registered last: uses the registry itself to execute source tools.
 	registry.RegisterTool(ToolDef{
 		Name:        "pilot",
-		Description: "Fast local AI — gathers tool outputs and analyzes them in one call (free, no API cost). Best for: summarizing file/command output, reviewing diffs, analyzing test failures, comparing multiple sources, processing grep results. Shortcuts: file, files, exec, grep, find, url, http, diff, test, tree, git_log, health, kv_key, memory, gmail, youtube, polaris, image, ls, vega, agent_logs, gateway_logs. Options: chain, max_length, output_format, post_process",
+		Description: "Fast local AI — gathers tool outputs and analyzes them in one call (free, no API cost). Best for: summarizing file/command output, reviewing diffs, analyzing test failures, comparing multiple sources, processing grep results. Shortcuts: file, files, exec, grep, find, url, http, diff, test, tree, git_log, health, kv_key, memory, gmail, youtube, polaris, image, vega, agent_logs, gateway_logs. Options: chain, max_length, output_format, post_process",
 		InputSchema: pilotToolSchema(),
 		Fn:          toolPilot(registry, workspaceDir),
 	})
@@ -645,53 +614,3 @@ func toolYouTubeTranscript() ToolFunc {
 	}
 }
 
-// --- Apply patch tool ---
-
-func applyPatchToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"patch": map[string]any{
-				"type":        "string",
-				"description": "The unified diff patch to apply",
-			},
-		},
-		"required": []string{"patch"},
-	}
-}
-
-func toolApplyPatch(defaultDir string) ToolFunc {
-	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		var p struct {
-			Patch string `json:"patch"`
-		}
-		if err := jsonutil.UnmarshalInto("apply_patch params", input, &p); err != nil {
-			return "", err
-		}
-		if p.Patch == "" {
-			return "", fmt.Errorf("patch is required")
-		}
-
-		// Use `git apply` for reliable patch application.
-		cmd := exec.CommandContext(ctx, "git", "apply", "--allow-empty", "-")
-		cmd.Dir = defaultDir
-		cmd.Stdin = strings.NewReader(p.Patch)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			// Fall back to `patch -p1` if git apply fails.
-			cmd2 := exec.CommandContext(ctx, "patch", "-p1", "--no-backup-if-mismatch")
-			cmd2.Dir = defaultDir
-			cmd2.Stdin = strings.NewReader(p.Patch)
-			out2, err2 := cmd2.CombinedOutput()
-			if err2 != nil {
-				return fmt.Sprintf("git apply failed: %s\npatch -p1 failed: %s", string(out), string(out2)), nil
-			}
-			return fmt.Sprintf("Patch applied (via patch -p1):\n%s", string(out2)), nil
-		}
-		result := "Patch applied successfully."
-		if len(out) > 0 {
-			result += "\n" + string(out)
-		}
-		return result, nil
-	}
-}

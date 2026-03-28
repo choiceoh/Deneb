@@ -197,7 +197,7 @@ func RegisterDefaultPostProcessors(registry *ToolRegistry) {
 	pp.Add("exec", ExecAnnotator)
 
 	// JSON formatting for structured tools.
-	for _, tool := range []string{"http", "kv", "sessions_list", "session_status"} {
+	for _, tool := range []string{"http", "kv", "sessions_list"} {
 		pp.Add(tool, StructuredFormatter)
 	}
 
