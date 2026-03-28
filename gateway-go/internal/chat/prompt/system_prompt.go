@@ -13,7 +13,7 @@ import (
 
 // SilentReplyToken is the token that suppresses message delivery when the LLM
 // replies with exactly this value (with optional surrounding whitespace).
-// Mirrors chat.SilentReplyToken — both must stay in sync.
+// The same value is defined independently in chat/silent_reply.go — both must stay in sync.
 const SilentReplyToken = "NO_REPLY"
 
 // ToolDef describes a tool entry for the system prompt (name only; used to
