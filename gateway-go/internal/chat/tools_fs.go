@@ -799,59 +799,6 @@ func findWithRipgrep(ctx context.Context, dir, pattern string, showHidden bool, 
 	return matches, nil
 }
 
-// --- Ls tool ---
-
-func lsToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Directory to list (defaults to workspace root)",
-			},
-		},
-	}
-}
-
-func toolLs(defaultDir string) ToolFunc {
-	return func(_ context.Context, input json.RawMessage) (string, error) {
-		var p struct {
-			Path string `json:"path"`
-		}
-		if err := jsonutil.UnmarshalInto("ls params", input, &p); err != nil {
-			return "", err
-		}
-
-		dir := defaultDir
-		if p.Path != "" {
-			dir = resolvePath(p.Path, defaultDir)
-		}
-
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			return "", fmt.Errorf("failed to read directory: %w", err)
-		}
-
-		var sb strings.Builder
-		for _, entry := range entries {
-			if entry.IsDir() {
-				fmt.Fprintf(&sb, "%s/\n", entry.Name())
-			} else {
-				info, _ := entry.Info()
-				if info != nil {
-					fmt.Fprintf(&sb, "%s (%d bytes)\n", entry.Name(), info.Size())
-				} else {
-					fmt.Fprintf(&sb, "%s\n", entry.Name())
-				}
-			}
-		}
-		if sb.Len() == 0 {
-			return "(empty directory)", nil
-		}
-		return sb.String(), nil
-	}
-}
-
 // --- Helpers ---
 
 // resolvePath resolves a potentially relative path against the default directory.

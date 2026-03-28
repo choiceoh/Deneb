@@ -627,7 +627,6 @@ var coreSections = []coreSection{
 		{"read", "Read file contents", []ToolProfileID{ProfileCoding}},
 		{"write", "Create or overwrite files", []ToolProfileID{ProfileCoding}},
 		{"edit", "Make precise edits", []ToolProfileID{ProfileCoding}},
-		{"apply_patch", "Patch files (OpenAI)", []ToolProfileID{ProfileCoding}},
 	}},
 	{"runtime", "Runtime", []coreTool{
 		{"exec", "Run shell commands", []ToolProfileID{ProfileCoding}},
@@ -638,18 +637,15 @@ var coreSections = []coreSection{
 	}},
 	{"memory", "Memory", []coreTool{
 		{"memory_search", "Semantic search", []ToolProfileID{ProfileCoding}},
-		{"memory_get", "Read memory files", []ToolProfileID{ProfileCoding}},
 	}},
 	{"sessions", "Sessions", []coreTool{
 		{"sessions_list", "List sessions", []ToolProfileID{ProfileCoding, ProfileMessaging}},
 		{"sessions_history", "Session history", []ToolProfileID{ProfileCoding, ProfileMessaging}},
 		{"sessions_search", "Search sessions", []ToolProfileID{ProfileCoding, ProfileMessaging}},
-		{"sessions_restore", "Restore session", []ToolProfileID{ProfileCoding, ProfileMessaging}},
 		{"sessions_send", "Send to session", []ToolProfileID{ProfileCoding, ProfileMessaging}},
 		{"sessions_spawn", "Spawn sub-agent", []ToolProfileID{ProfileCoding}},
 		{"sessions_yield", "End turn to receive sub-agent results", []ToolProfileID{ProfileCoding}},
 		{"subagents", "Manage sub-agents", []ToolProfileID{ProfileCoding}},
-		{"session_status", "Session status", []ToolProfileID{ProfileMinimal, ProfileCoding, ProfileMessaging}},
 	}},
 	{"messaging", "Messaging", []coreTool{
 		{"message", "Send messages", []ToolProfileID{ProfileMessaging}},

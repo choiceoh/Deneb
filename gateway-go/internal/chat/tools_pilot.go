@@ -259,10 +259,6 @@ func pilotToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Shortcut: analyze image file or URL (expands to sources:[{tool:'image', input:{paths:[...]}}])",
 			},
-			"ls": map[string]any{
-				"type":        "string",
-				"description": "Shortcut: list directory contents (expands to sources:[{tool:'ls', input:{path:...}}])",
-			},
 			"vega": map[string]any{
 				"type":        "string",
 				"description": "Shortcut: search project knowledge base (expands to sources:[{tool:'vega', input:{query:...}}])",
@@ -459,7 +455,6 @@ type pilotParams struct {
 	YouTube   string   `json:"youtube"`
 	Polaris   string   `json:"polaris"`
 	Image     string   `json:"image"`
-	Ls        string   `json:"ls"`
 	Vega        string `json:"vega"`
 	AgentLogs   string `json:"agent_logs"`
 	GatewayLogs string `json:"gateway_logs"`
@@ -673,14 +668,6 @@ func expandShortcuts(p pilotParams) []sourceSpec {
 		})
 	}
 
-	if p.Ls != "" {
-		specs = append(specs, sourceSpec{
-			Tool:  "ls",
-			Input: mustJSON(map[string]any{"path": p.Ls}),
-			Label: "ls: " + p.Ls,
-		})
-	}
-
 	if p.Vega != "" {
 		specs = append(specs, sourceSpec{
 			Tool:  "vega",
@@ -747,7 +734,7 @@ func sourceTypeFromTool(tool string) string {
 		return "find"
 	case "web_fetch":
 		return "url"
-	case "ls", "diff", "tree":
+	case "diff", "tree":
 		return "file"
 	case "agent_logs", "gateway_logs", "test", "http":
 		return "exec"

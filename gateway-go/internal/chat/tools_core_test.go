@@ -61,16 +61,13 @@ func TestToolSchemas(t *testing.T) {
 		"process":            processToolSchema,
 		"web":               webToolSchema,
 		"youtubeTranscript":  youtubeTranscriptToolSchema,
-		"applyPatch":         applyPatchToolSchema,
 		"memorySearch":       memorySearchToolSchema,
-		"memoryGet":          memoryGetToolSchema,
 		"message":            messageToolSchema,
 		"read":               readToolSchema,
 		"write":              writeToolSchema,
 		"edit":               editToolSchema,
 		"grep":               grepToolSchema,
 		"find":               findToolSchema,
-		"ls":                 lsToolSchema,
 		"vega":               vegaToolSchema,
 	}
 
@@ -103,13 +100,13 @@ func TestRegisterCoreTools(t *testing.T) {
 
 	// Verify expected tools are registered.
 	expectedTools := []string{
-		"read", "write", "edit", "grep", "find", "ls",
+		"read", "write", "edit", "grep", "find",
 		"exec", "process", "web",
-		"memory_search", "memory_get", "polaris", "vega", "message",
-		"apply_patch", "cron", "gateway",
-		"sessions_list", "sessions_history", "sessions_search", "sessions_restore",
+		"memory_search", "polaris", "vega", "message",
+		"cron", "gateway",
+		"sessions_list", "sessions_history", "sessions_search",
 		"sessions_send", "sessions_spawn",
-		"subagents", "session_status", "image", "youtube_transcript",
+		"subagents", "image", "youtube_transcript",
 	}
 
 	registered := make(map[string]bool)

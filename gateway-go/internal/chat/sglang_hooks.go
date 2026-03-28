@@ -109,9 +109,7 @@ const (
 var toolCompressSkipSet = map[string]bool{
 	"pilot":          true,
 	"memory_search":  true,
-	"memory_get":     true,
 	"kv":             true,
-	"session_status": true,
 	"sessions_list":  true,
 }
 

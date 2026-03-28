@@ -60,15 +60,15 @@ var toolCategories = []struct {
 	Label string
 	Names []string
 }{
-	{"File", []string{"read", "write", "edit", "multi_edit", "apply_patch", "grep", "find", "ls", "tree", "diff"}},
+	{"File", []string{"read", "write", "edit", "multi_edit", "grep", "find", "tree", "diff"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Git", []string{"git"}},
 	{"Code", []string{"analyze", "test"}},
 	{"AI", []string{"pilot"}},
 	{"Web", []string{"web", "http"}},
-	{"Memory", []string{"memory_search", "memory_get", "polaris", "vega"}},
+	{"Memory", []string{"memory_search", "polaris", "vega"}},
 	{"System", []string{"cron", "autonomous", "message", "gateway"}},
-	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_restore", "sessions_send", "sessions_spawn", "subagents", "session_status"}},
+	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
 	{"Media", []string{"image", "youtube_transcript", "send_file"}},
 	{"Data", []string{"gmail", "kv"}},
 }
@@ -164,7 +164,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, dynamicText str
 	}
 
 	// Memory Recall.
-	if toolSet["memory_search"] || toolSet["memory_get"] {
+	if toolSet["memory_search"] {
 		d.WriteString("## Memory Recall\n")
 		d.WriteString("관련 프로젝트 지식과 메모리가 이 프롬프트의 '관련 지식' 섹션에 자동 포함됩니다.\n")
 		d.WriteString("추가 정보가 필요하면 memory_search로 메모리 파일을 더 탐색하세요.\n\n")
