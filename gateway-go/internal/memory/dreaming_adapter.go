@@ -38,19 +38,30 @@ func NewDreamingAdapter(store *Store, embedder *Embedder, client *llm.Client, mo
 
 // IncrementTurn records a conversation turn for threshold tracking.
 func (da *DreamingAdapter) IncrementTurn(ctx context.Context) {
-	countStr, _ := da.store.GetMeta(ctx, metaTurnCount)
+	countStr, err := da.store.GetMeta(ctx, metaTurnCount)
+	if err != nil {
+		da.logger.Warn("aurora-dream: failed to read turn count", "error", err)
+		return
+	}
 	count, _ := strconv.Atoi(countStr)
 	count++
-	_ = da.store.SetMeta(ctx, metaTurnCount, strconv.Itoa(count))
+	if err := da.store.SetMeta(ctx, metaTurnCount, strconv.Itoa(count)); err != nil {
+		da.logger.Warn("aurora-dream: failed to write turn count", "error", err)
+	}
 }
 
 // ShouldDream checks if dreaming conditions are met:
 // turn count >= 50, time >= 8 hours, or active facts >= data threshold.
 func (da *DreamingAdapter) ShouldDream(ctx context.Context) bool {
 	// Check turn threshold.
-	countStr, _ := da.store.GetMeta(ctx, metaTurnCount)
+	countStr, err := da.store.GetMeta(ctx, metaTurnCount)
+	if err != nil {
+		da.logger.Warn("aurora-dream: failed to read turn count for ShouldDream", "error", err)
+		return false
+	}
 	count, _ := strconv.Atoi(countStr)
 	if count >= DreamingTurnThreshold {
+		da.logger.Info("aurora-dream: turn threshold reached", "turns", count)
 		return true
 	}
 
@@ -61,20 +72,30 @@ func (da *DreamingAdapter) ShouldDream(ctx context.Context) bool {
 		// to avoid re-triggering immediately after a cycle that didn't reduce
 		// fact count below the threshold.
 		if count > 0 {
+			da.logger.Info("aurora-dream: data volume threshold reached", "facts", factCount, "turns", count)
 			return true
 		}
 	}
 
 	// Check time threshold.
-	lastRunStr, _ := da.store.GetMeta(ctx, metaLastDreaming)
+	lastRunStr, err := da.store.GetMeta(ctx, metaLastDreaming)
+	if err != nil {
+		da.logger.Warn("aurora-dream: failed to read last dreaming time", "error", err)
+		return false
+	}
 	if lastRunStr != "" {
-		if lastRun, err := time.Parse(time.RFC3339, lastRunStr); err == nil {
-			return time.Since(lastRun).Hours() >= float64(DreamingTimeIntervalH)
+		if lastRun, parseErr := time.Parse(time.RFC3339, lastRunStr); parseErr == nil {
+			elapsed := time.Since(lastRun)
+			if elapsed.Hours() >= float64(DreamingTimeIntervalH) {
+				da.logger.Info("aurora-dream: time threshold reached", "elapsed", elapsed.Round(time.Minute))
+				return true
+			}
 		}
 	} else {
 		// No previous run recorded — set initial timestamp so the first
 		// dreaming cycle fires after the full interval, not immediately.
 		_ = da.store.SetMeta(ctx, metaLastDreaming, time.Now().UTC().Format(time.RFC3339))
+		da.logger.Info("aurora-dream: initialized last-run timestamp")
 	}
 
 	return false

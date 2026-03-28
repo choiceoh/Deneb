@@ -62,8 +62,9 @@ type Service struct {
 	notifier  Notifier // optional: delivers significant events to the user
 
 	// AuroraDream: memory consolidation integrated into autonomous lifecycle.
-	dreamer       Dreamer
-	dreamRunning  bool
+	dreamer            Dreamer
+	dreamRunning       bool
+	dreamTimerCancel   context.CancelFunc // independent dreaming check timer
 }
 
 // EventListener receives autonomous cycle events.
@@ -159,6 +160,10 @@ func (s *Service) Stop() {
 
 	if s.attention != nil {
 		s.attention.StopTimer()
+	}
+	if s.dreamTimerCancel != nil {
+		s.dreamTimerCancel()
+		s.dreamTimerCancel = nil
 	}
 	if s.cycleCancel != nil {
 		s.cycleCancel()
@@ -260,11 +265,44 @@ func (s *Service) SetNotifier(n Notifier) {
 }
 
 // SetDreamer sets the optional dreamer for AuroraDream memory consolidation.
-// When set, dreaming cycles are triggered after goal cycles and on turn increments.
+// When set, dreaming cycles are triggered after goal cycles, on turn increments,
+// and by an independent periodic timer (every 30 min) that catches time-based
+// triggers even when autonomous cycles are disabled or the user is inactive.
 func (s *Service) SetDreamer(d Dreamer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.dreamer = d
+
+	// Start independent dreaming check timer if not already running.
+	if d != nil && s.dreamTimerCancel == nil && s.svcCtx != nil {
+		ctx, cancel := context.WithCancel(s.svcCtx)
+		s.dreamTimerCancel = cancel
+		go s.dreamTimerLoop(ctx)
+	}
+}
+
+// dreamTimerLoop periodically checks dreaming conditions independently of
+// goal cycles and user activity. This ensures time-based and data-volume
+// triggers fire even when autonomous is disabled or the user is idle.
+func (s *Service) dreamTimerLoop(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.mu.Lock()
+			dreamer := s.dreamer
+			dreamRunning := s.dreamRunning
+			s.mu.Unlock()
+
+			if dreamer != nil && !dreamRunning && dreamer.ShouldDream(ctx) {
+				s.runDreamingAsync()
+			}
+		}
+	}
 }
 
 // IncrementDreamTurn records a conversation turn and triggers dreaming if conditions are met.
@@ -275,7 +313,12 @@ func (s *Service) IncrementDreamTurn(ctx context.Context) {
 	dreamRunning := s.dreamRunning
 	s.mu.Unlock()
 
-	if dreamer == nil || dreamRunning {
+	if dreamer == nil {
+		s.logger.Debug("aurora-dream: skipping turn increment, dreamer not configured")
+		return
+	}
+	if dreamRunning {
+		s.logger.Debug("aurora-dream: skipping turn increment, dream cycle in progress")
 		return
 	}
 
