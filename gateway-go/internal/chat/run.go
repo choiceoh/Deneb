@@ -30,13 +30,14 @@ var (
 
 // RunParams holds all parameters for an async agent run.
 type RunParams struct {
-	SessionKey  string
-	Message     string
-	Attachments []ChatAttachment
-	Model       string
-	System      string // system prompt override
-	ClientRunID string
-	Delivery    *DeliveryContext
+	SessionKey   string
+	Message      string
+	Attachments  []ChatAttachment
+	Model        string
+	System       string // system prompt override
+	ClientRunID  string
+	Delivery     *DeliveryContext
+	WorkspaceDir string // per-channel workspace override (empty = use global default)
 }
 
 // Agent run defaults.
@@ -241,7 +242,10 @@ func executeAgentRun(
 	// hint that reduces the agent's first-turn exploration (saves 1-3 turns).
 	type proactiveResult struct{ hint string }
 	proactiveCh := make(chan proactiveResult, 1)
-	workspaceDir := resolveWorkspaceDirForPrompt()
+	workspaceDir := params.WorkspaceDir
+	if workspaceDir == "" {
+		workspaceDir = resolveWorkspaceDirForPrompt()
+	}
 	if params.Message != "" && len(params.Message) >= proactiveMinMsgLen {
 		go func() {
 			hint := buildProactiveContext(ctx, params.Message, workspaceDir, logger)

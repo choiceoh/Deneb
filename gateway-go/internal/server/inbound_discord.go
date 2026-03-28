@@ -6,12 +6,16 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
@@ -19,6 +23,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/discord"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+)
+
+// discordSessionSeen tracks which sessions have received initial context.
+var (
+	discordSessionSeen   = make(map[string]bool)
+	discordSessionSeenMu sync.Mutex
 )
 
 // HandleDiscordMessage processes an incoming Discord message through the
@@ -58,8 +68,21 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	// Normalize inbound context.
 	autoreply.FinalizeInboundContext(msgCtx)
 
-	// Try slash command dispatch.
+	// Resolve per-channel workspace directory.
+	workspaceDir := ""
+	if p.server.discordPlug != nil {
+		workspaceDir = p.server.discordPlug.Config().WorkspaceForChannel(channelID)
+	}
+
+	// Try coding quick commands first (Discord-specific, no agent needed).
 	trimmed := strings.TrimSpace(msgCtx.BodyForCommands)
+	if strings.HasPrefix(trimmed, "/") {
+		if handled := p.handleCodingQuickCommand(channelID, trimmed, workspaceDir); handled {
+			return
+		}
+	}
+
+	// Try standard slash command dispatch.
 	if strings.HasPrefix(trimmed, "/") {
 		cmdKey := extractCommandKey(trimmed)
 		if cmdKey != "" && p.cmdRouter.HasHandler(cmdKey) {
@@ -78,6 +101,12 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 				Deps: p.buildCommandDeps(),
 			})
 			if err == nil && result != nil && result.SkipAgent {
+				// Reset auto-context on session lifecycle commands.
+				if cmdKey == "new" || cmdKey == "reset" {
+					discordSessionSeenMu.Lock()
+					delete(discordSessionSeen, sessionKey)
+					discordSessionSeenMu.Unlock()
+				}
 				p.sendDiscordCommandReply(channelID, result)
 				return
 			}
@@ -93,6 +122,22 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 		directives := autoreply.ParseInlineDirectives(agentMessage, nil)
 		if directives.Cleaned != "" {
 			agentMessage = directives.Cleaned
+		}
+	}
+
+	// Auto-context injection: on first message in a session, prepend
+	// workspace context (git branch, status) so the agent has immediate
+	// project awareness for coding tasks.
+	discordSessionSeenMu.Lock()
+	isFirstMessage := !discordSessionSeen[sessionKey]
+	if isFirstMessage {
+		discordSessionSeen[sessionKey] = true
+	}
+	discordSessionSeenMu.Unlock()
+
+	if isFirstMessage && workspaceDir != "" {
+		if ctx := buildWorkspaceContext(workspaceDir); ctx != "" {
+			agentMessage = ctx + "\n\n---\n\n" + agentMessage
 		}
 	}
 
@@ -130,6 +175,11 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 		sendParams["attachments"] = attachments
 	}
 
+	// Pass per-channel workspace to the agent pipeline.
+	if workspaceDir != "" {
+		sendParams["workspaceDir"] = workspaceDir
+	}
+
 	req, err := protocol.NewRequestFrame(
 		"dc-"+channelID+"-"+msg.ID,
 		"chat.send",
@@ -148,6 +198,94 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 			"channelId", channelID,
 			"error", resp.Error,
 		)
+	}
+}
+
+// handleCodingQuickCommand handles Discord-specific coding shortcuts that
+// return results directly without going through the agent.
+// Returns true if the command was handled.
+func (p *InboundProcessor) handleCodingQuickCommand(channelID, text, workspaceDir string) bool {
+	if workspaceDir == "" {
+		return false
+	}
+
+	cmd := extractCommandKey(text)
+	switch cmd {
+	case "diff":
+		output := runGitCmd(workspaceDir, "diff", "--stat")
+		if output == "" {
+			output = "No changes."
+		}
+		p.sendDiscordQuickReply(channelID, "```diff\n"+output+"\n```")
+		return true
+
+	case "gdiff":
+		output := runGitCmd(workspaceDir, "diff")
+		if output == "" {
+			output = "No changes."
+		}
+		p.sendDiscordQuickReply(channelID, "```diff\n"+output+"\n```")
+		return true
+
+	case "tree":
+		depth := "2"
+		// Parse optional depth: /tree 3
+		parts := strings.Fields(text)
+		if len(parts) > 1 {
+			depth = parts[1]
+		}
+		output := runCmd(workspaceDir, "find", ".", "-maxdepth", depth,
+			"-not", "-path", "*/.*", "-not", "-path", "*/node_modules/*",
+			"-not", "-path", "*/target/*")
+		if output == "" {
+			output = "(empty)"
+		}
+		p.sendDiscordQuickReply(channelID, "```\n"+output+"\n```")
+		return true
+
+	case "branch", "branches":
+		output := runGitCmd(workspaceDir, "branch", "-v", "--no-color")
+		if output == "" {
+			output = "No git branches."
+		}
+		p.sendDiscordQuickReply(channelID, "```\n"+output+"\n```")
+		return true
+
+	case "log":
+		count := "10"
+		parts := strings.Fields(text)
+		if len(parts) > 1 {
+			count = parts[1]
+		}
+		output := runGitCmd(workspaceDir, "log", "--oneline", "-"+count, "--no-color")
+		if output == "" {
+			output = "No commits."
+		}
+		p.sendDiscordQuickReply(channelID, "```\n"+output+"\n```")
+		return true
+
+	case "ws", "workspace":
+		ctx := buildWorkspaceContext(workspaceDir)
+		if ctx == "" {
+			ctx = "Workspace: `" + workspaceDir + "`"
+		}
+		p.sendDiscordQuickReply(channelID, ctx)
+		return true
+	}
+
+	return false
+}
+
+// sendDiscordQuickReply sends a quick reply to a Discord channel.
+func (p *InboundProcessor) sendDiscordQuickReply(channelID, text string) {
+	client := p.server.discordPlug.Client()
+	if client == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, err := discord.SendText(ctx, client, channelID, text, ""); err != nil {
+		p.logger.Warn("failed to send discord quick reply", "channelId", channelID, "error", err)
 	}
 }
 
@@ -276,4 +414,63 @@ func guessMimeType(name string) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+// buildWorkspaceContext gathers lightweight workspace info for first-message context.
+// Returns a formatted string with git branch, short status, and project root files.
+func buildWorkspaceContext(workspaceDir string) string {
+	if _, err := os.Stat(workspaceDir); err != nil {
+		return ""
+	}
+
+	var parts []string
+
+	// Git branch + short status.
+	if branch := runGitCmd(workspaceDir, "rev-parse", "--abbrev-ref", "HEAD"); branch != "" {
+		parts = append(parts, "**Branch:** `"+branch+"`")
+	}
+	if status := runGitCmd(workspaceDir, "status", "--short"); status != "" {
+		lines := strings.Split(strings.TrimSpace(status), "\n")
+		if len(lines) > 15 {
+			lines = append(lines[:15], fmt.Sprintf("... and %d more files", len(lines)-15))
+		}
+		parts = append(parts, "**Git Status:**\n```\n"+strings.Join(lines, "\n")+"\n```")
+	} else if len(parts) > 0 {
+		parts = append(parts, "**Git Status:** clean")
+	}
+
+	// Top-level directory listing.
+	if ls := runCmd(workspaceDir, "ls", "-1"); ls != "" {
+		lines := strings.Split(strings.TrimSpace(ls), "\n")
+		if len(lines) > 20 {
+			lines = append(lines[:20], fmt.Sprintf("... and %d more", len(lines)-20))
+		}
+		parts = append(parts, "**Project Root:**\n```\n"+strings.Join(lines, "\n")+"\n```")
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return "## Workspace Context\n`" + workspaceDir + "`\n\n" + strings.Join(parts, "\n")
+}
+
+// runGitCmd runs a git command in the given directory and returns trimmed stdout.
+func runGitCmd(dir string, args ...string) string {
+	return runCmd(dir, "git", args...)
+}
+
+// runCmd runs a command in the given directory with a 5-second timeout.
+func runCmd(dir string, name string, args ...string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = io.Discard
+	if err := cmd.Run(); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out.String())
 }

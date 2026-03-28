@@ -333,12 +333,13 @@ func (h *Handler) Close() {
 // Sanitizes input, starts an async agent run, and immediately returns.
 func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	var p struct {
-		SessionKey  string           `json:"sessionKey"`
-		Message     string           `json:"message"`
-		Attachments []ChatAttachment `json:"attachments,omitempty"`
-		Delivery    *DeliveryContext `json:"delivery,omitempty"`
-		ClientRunID string           `json:"clientRunId,omitempty"`
-		Model       string           `json:"model,omitempty"`
+		SessionKey   string           `json:"sessionKey"`
+		Message      string           `json:"message"`
+		Attachments  []ChatAttachment `json:"attachments,omitempty"`
+		Delivery     *DeliveryContext `json:"delivery,omitempty"`
+		ClientRunID  string           `json:"clientRunId,omitempty"`
+		Model        string           `json:"model,omitempty"`
+		WorkspaceDir string           `json:"workspaceDir,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
 		return protocol.NewResponseError(req.ID, protocol.NewError(
@@ -367,12 +368,13 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 	h.InterruptActiveRun(p.SessionKey)
 
 	return h.startAsyncRun(req.ID, RunParams{
-		SessionKey:  p.SessionKey,
-		Message:     sanitizeInput(p.Message),
-		Attachments: p.Attachments,
-		Delivery:    p.Delivery,
-		ClientRunID: p.ClientRunID,
-		Model:       p.Model,
+		SessionKey:   p.SessionKey,
+		Message:      sanitizeInput(p.Message),
+		Attachments:  p.Attachments,
+		Delivery:     p.Delivery,
+		ClientRunID:  p.ClientRunID,
+		Model:        p.Model,
+		WorkspaceDir: p.WorkspaceDir,
 	}, false)
 }
 

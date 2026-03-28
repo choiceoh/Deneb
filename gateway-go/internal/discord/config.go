@@ -24,7 +24,23 @@ type Config struct {
 	// RequireMention requires @bot mention to trigger a response.
 	// When true, messages without a mention are ignored. Default: false.
 	RequireMention bool `json:"requireMention,omitempty"`
+
+	// Workspaces maps channel IDs to project directories.
+	// Example: {"123456789": "/home/user/Projects/backend"}
+	// If a channel is not mapped, falls back to DefaultWorkspace, then global default.
+	Workspaces map[string]string `json:"workspaces,omitempty"`
+
+	// DefaultWorkspace is the fallback workspace for channels not in the Workspaces map.
+	DefaultWorkspace string `json:"defaultWorkspace,omitempty"`
 }
+
+// WorkspaceForChannel returns the workspace directory for a channel ID.
+// Falls back to DefaultWorkspace, then empty string (use global default).
+func (c *Config) WorkspaceForChannel(channelID string) string {
+	if ws, ok := c.Workspaces[channelID]; ok {
+		return ws
+	}
+	return c.DefaultWorkspace
 
 // IsEnabled returns whether this Discord account is active.
 func (c *Config) IsEnabled() bool {
