@@ -28,10 +28,12 @@ fn expand_tilde(path: &str) -> PathBuf {
 /// Check if an environment variable is set to a truthy value (1, true, yes).
 #[allow(dead_code)]
 pub fn is_truthy_env(key: &str) -> bool {
-    std::env::var(key)
-        .ok()
-        .map(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"))
-        .unwrap_or(false)
+    std::env::var(key).ok().is_some_and(|v| {
+        let trimmed = v.trim();
+        trimmed == "1"
+            || trimmed.eq_ignore_ascii_case("true")
+            || trimmed.eq_ignore_ascii_case("yes")
+    })
 }
 
 /// Get a trimmed, non-empty env var or `None`.
