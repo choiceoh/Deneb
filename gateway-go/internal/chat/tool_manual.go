@@ -650,7 +650,7 @@ var builtinGuideOrder = []string{
 	"telegram", "skills", "pilot", "cron", "autonomous",
 	"web", "exec", "gateway-tool", "media", "gmail",
 	"data-tools", "sessions-tools", "message",
-	"provider", "liteparse", "metrics", "nodes", "transcript",
+	"provider", "liteparse", "metrics", "transcript",
 }
 
 // builtinGuides contains AI-curated system knowledge.

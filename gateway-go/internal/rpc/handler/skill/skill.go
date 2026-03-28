@@ -658,10 +658,7 @@ var coreSections = []coreSection{
 		{"cron", "Schedule tasks", []ToolProfileID{ProfileCoding}},
 		{"gateway", "Gateway control", []ToolProfileID{}},
 	}},
-	{"nodes", "Nodes", []coreTool{
-		{"nodes", "Nodes + devices", []ToolProfileID{}},
-	}},
-	{"media", "Media", []coreTool{
+{"media", "Media", []coreTool{
 		{"image", "Image understanding", []ToolProfileID{ProfileCoding}},
 	}},
 }

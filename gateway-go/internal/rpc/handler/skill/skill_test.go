@@ -47,7 +47,7 @@ func TestBuildCoreToolCatalog_KnownGroups(t *testing.T) {
 	expectedIDs := map[string]bool{
 		"fs": true, "runtime": true, "web": true, "memory": true,
 		"sessions": true, "messaging": true, "automation": true,
-		"nodes": true, "media": true,
+		"media": true,
 	}
 
 	for _, g := range groups {
