@@ -102,9 +102,91 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+
+  # ── Propus client (Windows + macOS) ──
+  build-propus:
+    needs: release-please
+    if: needs.release-please.outputs.release-created == 'true'
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            suffix: windows-x64
+            ext: .exe
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            suffix: windows-arm64
+            ext: .exe
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            suffix: macos-x64
+            ext: ""
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            suffix: macos-arm64
+            ext: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: propus-client
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: choco install cmake --installargs '"ADD_CMAKE_TO_PATH=System"' -y
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake
+
+      - name: Detect pre-release
+        id: prerelease
+        shell: bash
+        run: |
+          VERSION="${{ needs.release-please.outputs.version }}"
+          if echo "$VERSION" | grep -qE '(alpha|beta|rc|pre)'; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build propus-client (${{ matrix.suffix }})
+        run: cargo build --release -p propus-client --target ${{ matrix.target }}
+
+      - name: Prepare artifacts
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            certutil -hashfile propus-client.exe SHA256 | grep -v ":" | tr -d " \r\n" > ../../../propus-client-${{ matrix.suffix }}.sha256
+            echo "  propus-client-${{ matrix.suffix }}.exe" >> ../../../propus-client-${{ matrix.suffix }}.sha256
+            cp propus-client.exe ../../../propus-client-${{ matrix.suffix }}.exe
+          else
+            shasum -a 256 propus-client > ../../../propus-client-${{ matrix.suffix }}.sha256
+            cp propus-client ../../../propus-client-${{ matrix.suffix }}
+          fi
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag }}
+          files: |
+            propus-client-${{ matrix.suffix }}${{ matrix.ext }}
+            propus-client-${{ matrix.suffix }}.sha256
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # ── Release summary with stats ──
   release-summary:
-    needs: [release-please, post-release]
+    needs: [release-please, post-release, build-propus]
     if: needs.release-please.outputs.release-created == 'true'
     runs-on: ubuntu-latest
     steps:
