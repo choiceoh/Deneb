@@ -6,8 +6,6 @@
 package autoreply
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/media"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,6 +13,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/media"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/model"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
 // AgentTurnConfig configures a single agent turn execution.
@@ -50,18 +53,17 @@ type AgentTurnResult struct {
 	ToolMeta         *media.ToolMeta
 	OutputText       string
 	Summary          string
-	TokensUsed       TokenUsage
+	TokensUsed       session.TokenUsage
 	ModelUsed        string
 	ProviderUsed     string
 	DurationMs       int64
 	WasAborted       bool
 	Error            error
 	FallbackActive   bool
-	FallbackAttempts []FallbackAttempt
+	FallbackAttempts []model.FallbackAttempt
 	CompactedAt      int64
 	TurnCount        int
 }
-
 
 // AgentExecutor runs LLM agent turns with tool execution and streaming.
 type AgentExecutor interface {
@@ -80,7 +82,7 @@ type LLMClient interface {
 type LLMResponse struct {
 	Content    string
 	ToolCalls  []ToolCall
-	Usage      TokenUsage
+	Usage      session.TokenUsage
 	StopReason string // "end_turn", "tool_use", "max_tokens"
 }
 
@@ -101,12 +103,12 @@ type LLMStreamIterator interface {
 
 // LLMStreamEvent represents a single streaming event.
 type LLMStreamEvent struct {
-	Type       string      // "text", "tool_use_start", "tool_use_input", "tool_use_end", "thinking", "done"
-	Text       string      // for "text" events
-	ToolCall   *ToolCall   // for "tool_use_start"
-	ToolInput  string      // for "tool_use_input" (JSON delta)
-	Usage      *TokenUsage // for "done" events
-	StopReason string      // for "done" events
+	Type       string              // "text", "tool_use_start", "tool_use_input", "tool_use_end", "thinking", "done"
+	Text       string              // for "text" events
+	ToolCall   *ToolCall           // for "tool_use_start"
+	ToolInput  string              // for "tool_use_input" (JSON delta)
+	Usage      *session.TokenUsage // for "done" events
+	StopReason string              // for "done" events
 }
 
 // ToolExecutor runs tool calls and returns results.
@@ -335,7 +337,7 @@ func (r *DefaultAgentRunner) RunTurn(ctx context.Context, cfg AgentTurnConfig) (
 					cfg.Model = parts[1]
 					payload.Model = cfg.Model
 					result.FallbackActive = true
-					result.FallbackAttempts = append(result.FallbackAttempts, FallbackAttempt{
+					result.FallbackAttempts = append(result.FallbackAttempts, model.FallbackAttempt{
 						Provider: cfg.Provider,
 						Model:    cfg.Model,
 						Error:    llmErr.Error(),
@@ -548,7 +550,7 @@ func BuildAgentPayload(cfg AgentTurnConfig, history []AgentMessage, tools []Agen
 
 	maxTokens := cfg.MaxTokens
 	if maxTokens <= 0 {
-		maxTokens = DefaultMaxTokens
+		maxTokens = model.DefaultMaxTokens
 	}
 
 	payload := AgentRunnerPayload{
@@ -594,7 +596,7 @@ type AgentRunnerMemory struct {
 
 func NewAgentRunnerMemory(maxTokens int) *AgentRunnerMemory {
 	if maxTokens <= 0 {
-		maxTokens = DefaultContextTokens
+		maxTokens = model.DefaultContextTokens
 	}
 	return &AgentRunnerMemory{maxTokens: maxTokens}
 }
@@ -603,7 +605,7 @@ func (m *AgentRunnerMemory) Append(msg AgentMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.history = append(m.history, msg)
-	m.usedTokens += EstimateTokens(msg.Content)
+	m.usedTokens += model.EstimateTokens(msg.Content)
 }
 
 func (m *AgentRunnerMemory) History() []AgentMessage {
@@ -632,7 +634,7 @@ func (m *AgentRunnerMemory) Compact() int {
 		// Remove the second message (oldest non-system).
 		oldest := m.history[1]
 		m.history = append(m.history[:1], m.history[2:]...)
-		tokens := EstimateTokens(oldest.Content)
+		tokens := model.EstimateTokens(oldest.Content)
 		m.usedTokens -= tokens
 		removed++
 	}
@@ -661,7 +663,7 @@ func (m *AgentRunnerMemory) CompactWithSummary(summary string) int {
 	// Calculate tokens being removed.
 	removedTokens := 0
 	for i := 1; i <= removeCount; i++ {
-		removedTokens += EstimateTokens(m.history[i].Content)
+		removedTokens += model.EstimateTokens(m.history[i].Content)
 	}
 
 	// Replace removed messages with summary.
@@ -677,7 +679,7 @@ func (m *AgentRunnerMemory) CompactWithSummary(summary string) int {
 
 	m.history = newHistory
 	m.usedTokens -= removedTokens
-	m.usedTokens += EstimateTokens(summary)
+	m.usedTokens += model.EstimateTokens(summary)
 	m.compactionCount++
 	m.totalCompacted += removeCount
 	return removeCount
@@ -714,10 +716,10 @@ type MemoryFlush struct {
 	AgentID    string
 	Messages   []AgentMessage
 	Timestamp  int64
-	Usage      TokenUsage
+	Usage      session.TokenUsage
 }
 
-func BuildMemoryFlush(memory *AgentRunnerMemory, sessionKey, agentID string, usage TokenUsage) MemoryFlush {
+func BuildMemoryFlush(memory *AgentRunnerMemory, sessionKey, agentID string, usage session.TokenUsage) MemoryFlush {
 	return MemoryFlush{
 		SessionKey: sessionKey,
 		AgentID:    agentID,
@@ -729,7 +731,7 @@ func BuildMemoryFlush(memory *AgentRunnerMemory, sessionKey, agentID string, usa
 
 // --- Utility functions ---
 
-func FormatUsageSummary(usage TokenUsage) string {
+func FormatUsageSummary(usage session.TokenUsage) string {
 	if usage.TotalTokens == 0 {
 		return ""
 	}

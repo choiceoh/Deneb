@@ -3,12 +3,13 @@ package autoreply
 import (
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
 // DetectResetTrigger checks if the message body is a session reset command.
 // This function stays in autoreply because it depends on *CommandRegistry.
-func DetectResetTrigger(body string, registry *CommandRegistry) types.SessionResetTrigger {
+func DetectResetTrigger(body string, registry *handlers.CommandRegistry) types.SessionResetTrigger {
 	trimmed := strings.TrimSpace(body)
 	if trimmed == "" {
 		return types.ResetNone
