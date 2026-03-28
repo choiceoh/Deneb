@@ -4,6 +4,7 @@
 
 .PHONY: all rust rust-vega rust-all rust-debug rust-test rust-fmt rust-clippy rust-bench rust-clean \
        go go-ffi go-pure go-run go-dev go-test go-test-pure go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod \
+       propus-web \
        cli cli-debug cli-test cli-fmt cli-clippy cli-bench cli-clean \
        cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 \
        cli-cross-win-x64 cli-cross-all \
@@ -115,6 +116,12 @@ gateway-prod: go-binary cli
 go-clean:
 	cd gateway-go && go clean ./...
 
+# --- Propus web UI ---
+
+# Build the Propus SPA (outputs to propus-app/build/).
+propus-web:
+	cd propus-app && pnpm install --frozen-lockfile && pnpm build
+
 # --- Rust CLI ---
 
 cli:
@@ -224,6 +231,7 @@ info:
 	@echo "  make rust-all   - Build all Rust workspace crates"
 	@echo "  make go         - Build Go gateway"
 	@echo "  make go-dev     - Run Go gateway in dev mode (auto-restart on SIGUSR1)"
+	@echo "  make propus-web - Build Propus web UI (SvelteKit SPA)"
 	@echo "  make cli        - Build Rust CLI (release)"
 	@echo "  make go-binary  - Build Go gateway binary to dist/"
 	@echo "  make test       - Run Rust + Go + CLI tests"

@@ -1,11 +1,21 @@
 <script lang="ts">
   import { app } from "$lib/state.svelte";
+  import { deriveWsUrl, saveUrl } from "$lib/ws";
 
   let serverUrl = $state("");
   let apiKey = $state("");
+  let showManualUrl = $state(false);
 
   function handleConnect() {
-    if (serverUrl.trim()) app.connectToServer(serverUrl.trim());
+    const url = serverUrl.trim();
+    if (url) {
+      saveUrl(url);
+      app.connectToServer(url);
+    }
+  }
+
+  function handleAutoConnect() {
+    app.connectToServer(deriveWsUrl());
   }
 
   function handleApiKey() {
@@ -39,14 +49,22 @@
     {:else}
       <div class="form-section">
         <h2>서버 연결</h2>
-        <p class="hint">Propus 서버의 WebSocket 주소를 입력하세요.</p>
-        <input
-          type="text"
-          bind:value={serverUrl}
-          placeholder="ws://192.168.1.100:3710/ws"
-          onkeydown={(e) => handleKeydown(e, handleConnect)}
-        />
-        <button class="primary-btn" onclick={handleConnect}>연결</button>
+        <p class="hint">게이트웨이에 연결합니다.</p>
+        <button class="primary-btn" onclick={handleAutoConnect}>연결</button>
+
+        {#if !showManualUrl}
+          <button class="link-btn" onclick={() => (showManualUrl = true)}>
+            다른 서버에 연결...
+          </button>
+        {:else}
+          <input
+            type="text"
+            bind:value={serverUrl}
+            placeholder="ws://192.168.1.100:3710/ws"
+            onkeydown={(e) => handleKeydown(e, handleConnect)}
+          />
+          <button class="secondary-btn" onclick={handleConnect}>수동 연결</button>
+        {/if}
       </div>
     {/if}
 
@@ -150,6 +168,32 @@
 
   .primary-btn:hover {
     opacity: 0.9;
+  }
+
+  .secondary-btn {
+    width: 100%;
+    padding: 10px;
+    background: var(--bg-surface);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    transition: background var(--transition-fast);
+  }
+
+  .secondary-btn:hover {
+    background: rgba(122, 162, 247, 0.15);
+  }
+
+  .link-btn {
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+    transition: color var(--transition-fast);
+  }
+
+  .link-btn:hover {
+    color: var(--accent-primary);
   }
 
   .status {

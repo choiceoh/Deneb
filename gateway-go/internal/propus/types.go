@@ -1,6 +1,6 @@
-// Package propus implements the Propus desktop coding channel for Deneb.
+// Package propus implements the Propus web coding channel for Deneb.
 //
-// Propus is a Slint-based desktop coding assistant that connects to Deneb
+// Propus is a SvelteKit-based web coding assistant that connects to Deneb
 // via WebSocket. This package bridges the Propus client protocol
 // (ClientMessage/ServerMessage JSON) with Deneb's internal chat pipeline.
 package propus
@@ -9,7 +9,7 @@ import "encoding/json"
 
 // --- Inbound: Propus client → Deneb ---
 
-// ClientMessage is the envelope for all messages from the Propus desktop client.
+// ClientMessage is the envelope for all messages from the Propus web client.
 // Wire format: {"type":"SendMessage","data":{"text":"..."}}
 type ClientMessage struct {
 	Type string          `json:"type"`

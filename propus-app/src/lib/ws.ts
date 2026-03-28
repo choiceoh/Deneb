@@ -144,7 +144,7 @@ export class PropusWebSocket {
   }
 }
 
-// --- localStorage helpers for saved server URL ---
+// --- localStorage helpers ---
 
 const STORAGE_KEY = "propus_server_url";
 const CONN_ID_KEY = "propus_conn_id";
@@ -179,4 +179,13 @@ export function saveConnId(connId: string): void {
   } catch {
     // ignore storage errors
   }
+}
+
+// Derive the WebSocket URL from the current page origin.
+// In production the gateway serves both the SPA and the /ws endpoint on the same
+// host:port, so we can compute the URL automatically.
+export function deriveWsUrl(): string {
+  const loc = window.location;
+  const proto = loc.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${loc.host}/ws`;
 }
