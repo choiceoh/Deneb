@@ -220,11 +220,11 @@ mod tests {
     use std::io::Write;
     use tempfile::TempDir;
 
-    fn setup_test_env() -> (TempDir, VegaConfig) {
-        let dir = TempDir::new().unwrap();
+    fn setup_test_env() -> Result<(TempDir, VegaConfig), Box<dyn std::error::Error>> {
+        let dir = TempDir::new()?;
         let db_path = dir.path().join("test.db");
         let md_dir = dir.path().join("projects");
-        std::fs::create_dir_all(&md_dir).unwrap();
+        std::fs::create_dir_all(&md_dir)?;
 
         let config = VegaConfig {
             db_path: db_path.clone(),
@@ -233,63 +233,62 @@ mod tests {
         };
 
         // Initialize DB and insert test data
-        let conn = Connection::open(&db_path).unwrap();
-        init_db(&conn).unwrap();
+        let conn = Connection::open(&db_path)?;
+        init_db(&conn)?;
 
         conn.execute(
             "INSERT INTO projects (name, client, status, person_internal, source_file)
              VALUES ('비금도 해상태양광', '한국전력', '진행중', '김대희', 'bigeum.md')",
             [],
-        )
-        .unwrap();
+        )?;
 
         conn.execute(
             "INSERT INTO chunks (project_id, section_heading, content, chunk_type)
              VALUES (1, '현재 상황', '해저케이블 154kV 설치 진행중. EPC 시공 방식.', 'status')",
             [],
-        )
-        .unwrap();
+        )?;
         conn.execute(
             "INSERT INTO chunks (project_id, section_heading, content, chunk_type)
              VALUES (1, '기술 사양', '모듈: 진코 600W, 인버터: 화웨이', 'technical')",
             [],
-        )
-        .unwrap();
+        )?;
         conn.execute(
             "INSERT INTO comm_log (project_id, log_date, sender, subject, summary)
              VALUES (1, '2025-03-01', '김대희', '설계 검토 완료', 'KEPCO 계통연계 승인 대기중')",
             [],
-        )
-        .unwrap();
+        )?;
 
         drop(conn);
-        (dir, config)
+        Ok((dir, config))
     }
 
     #[test]
-    fn test_search_router_basic() {
-        let (_dir, config) = setup_test_env();
+    fn test_search_router_basic() -> Result<(), Box<dyn std::error::Error>> {
+        let (_dir, config) = setup_test_env()?;
         let router = SearchRouter::new(config);
 
-        let result = router.search("비금도").unwrap();
+        let result = router.search("비금도")?;
         assert!(!result.unified.is_empty(), "Should find results for 비금도");
+        Ok(())
     }
 
     #[test]
-    fn test_search_router_keyword() {
-        let (_dir, config) = setup_test_env();
+    fn test_search_router_keyword() -> Result<(), Box<dyn std::error::Error>> {
+        let (_dir, config) = setup_test_env()?;
         let router = SearchRouter::new(config);
 
-        let result = router.search("해저케이블").unwrap();
+        let result = router.search("해저케이블")?;
         assert!(!result.unified.is_empty(), "Should find 해저케이블 results");
+        Ok(())
     }
 
     #[test]
-    fn test_search_router_empty() {
-        let (_dir, config) = setup_test_env();
+    fn test_search_router_empty() -> Result<(), Box<dyn std::error::Error>> {
+        let (_dir, config) = setup_test_env()?;
         let router = SearchRouter::new(config);
 
-        let result = router.search("").unwrap();
+        let result = router.search("")?;
         assert!(result.unified.is_empty());
+        Ok(())
     }
 }

@@ -130,16 +130,17 @@ mod tests {
     }
 
     #[test]
-    fn test_db_exists_real_file() {
-        let dir = tempfile::tempdir().unwrap();
+    fn test_db_exists_real_file() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
         let db_path = dir.path().join("test.db");
-        fs::write(&db_path, b"fake-db").unwrap();
+        fs::write(&db_path, b"fake-db")?;
 
         let cfg = VegaConfig {
             db_path,
             ..Default::default()
         };
         assert!(cfg.db_exists());
+        Ok(())
     }
 
     #[test]
@@ -152,36 +153,39 @@ mod tests {
     }
 
     #[test]
-    fn test_md_dir_valid_empty_dir() {
-        let dir = tempfile::tempdir().unwrap();
+    fn test_md_dir_valid_empty_dir() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
         let cfg = VegaConfig {
             md_dir: dir.path().to_path_buf(),
             ..Default::default()
         };
         assert!(!cfg.md_dir_valid());
+        Ok(())
     }
 
     #[test]
-    fn test_md_dir_valid_with_md_files() {
-        let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("project.md"), b"# Project").unwrap();
+    fn test_md_dir_valid_with_md_files() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        fs::write(dir.path().join("project.md"), b"# Project")?;
 
         let cfg = VegaConfig {
             md_dir: dir.path().to_path_buf(),
             ..Default::default()
         };
         assert!(cfg.md_dir_valid());
+        Ok(())
     }
 
     #[test]
-    fn test_md_dir_valid_no_md_files() {
-        let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("readme.txt"), b"text").unwrap();
+    fn test_md_dir_valid_no_md_files() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        fs::write(dir.path().join("readme.txt"), b"text")?;
 
         let cfg = VegaConfig {
             md_dir: dir.path().to_path_buf(),
             ..Default::default()
         };
         assert!(!cfg.md_dir_valid());
+        Ok(())
     }
 }

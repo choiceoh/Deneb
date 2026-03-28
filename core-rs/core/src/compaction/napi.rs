@@ -229,30 +229,32 @@ mod tests {
     }
 
     #[test]
-    fn test_compaction_evaluate_napi() {
-        let config_json = serde_json::to_string(&CompactionConfig::default()).unwrap();
+    fn test_compaction_evaluate_napi() -> Result<(), Box<dyn std::error::Error>> {
+        let config_json = serde_json::to_string(&CompactionConfig::default())?;
         let result = compaction_evaluate(config_json, 800, 0, 1000);
-        let decision: CompactionDecision = serde_json::from_str(&result).unwrap();
+        let decision: CompactionDecision = serde_json::from_str(&result)?;
         assert!(decision.should_compact);
+        Ok(())
     }
 
     #[test]
-    fn test_sweep_lifecycle() {
-        let config_json = serde_json::to_string(&CompactionConfig::default()).unwrap();
+    fn test_sweep_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
+        let config_json = serde_json::to_string(&CompactionConfig::default())?;
         let handle = compaction_sweep_new(config_json, 1, 1000, false, false, 1000.0);
         assert!(handle > 0);
 
         let cmd_json = compaction_sweep_start(handle);
-        let cmd: SweepCommand = serde_json::from_str(&cmd_json).unwrap();
+        let cmd: SweepCommand = serde_json::from_str(&cmd_json)?;
         assert!(matches!(cmd, SweepCommand::FetchTokenCount { .. }));
 
         // Feed below-threshold tokens to get Done
-        let resp = serde_json::to_string(&SweepResponse::TokenCount { count: 500 }).unwrap();
+        let resp = serde_json::to_string(&SweepResponse::TokenCount { count: 500 })?;
         let cmd_json = compaction_sweep_step(handle, resp);
-        let cmd: SweepCommand = serde_json::from_str(&cmd_json).unwrap();
+        let cmd: SweepCommand = serde_json::from_str(&cmd_json)?;
         assert!(matches!(cmd, SweepCommand::Done { .. }));
 
         compaction_sweep_drop(handle);
+        Ok(())
     }
 
     #[test]

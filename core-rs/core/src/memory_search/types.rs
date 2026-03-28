@@ -106,7 +106,7 @@ mod tests {
     }
 
     #[test]
-    fn test_hybrid_result_serde_roundtrip() {
+    fn test_hybrid_result_serde_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let result = HybridResult {
             id: "doc1".into(),
             path: "memory/2026-01-15.md".into(),
@@ -116,18 +116,19 @@ mod tests {
             snippet: "test snippet".into(),
             score: 0.95,
         };
-        let json = serde_json::to_string(&result).unwrap();
+        let json = serde_json::to_string(&result)?;
         assert!(json.contains("\"startLine\":1"));
         assert!(json.contains("\"endLine\":10"));
 
-        let deserialized: HybridResult = serde_json::from_str(&json).unwrap();
+        let deserialized: HybridResult = serde_json::from_str(&json)?;
         assert_eq!(deserialized.id, "doc1");
         assert_eq!(deserialized.start_line, 1);
         assert!((deserialized.score - 0.95).abs() < f64::EPSILON);
+        Ok(())
     }
 
     #[test]
-    fn test_merged_result_serde_roundtrip() {
+    fn test_merged_result_serde_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let result = MergedResult {
             path: "notes/topic.md".into(),
             start_line: 5,
@@ -136,14 +137,15 @@ mod tests {
             snippet: "merged snippet".into(),
             source: "hybrid".into(),
         };
-        let json = serde_json::to_string(&result).unwrap();
-        let deserialized: MergedResult = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&result)?;
+        let deserialized: MergedResult = serde_json::from_str(&json)?;
         assert_eq!(deserialized.path, "notes/topic.md");
         assert!((deserialized.score - 0.8).abs() < f64::EPSILON);
+        Ok(())
     }
 
     #[test]
-    fn test_merge_params_serde() {
+    fn test_merge_params_serde() -> Result<(), Box<dyn std::error::Error>> {
         let params = MergeParams {
             vector: vec![],
             keyword: vec![],
@@ -153,39 +155,42 @@ mod tests {
             temporal_decay: None,
             now_ms: Some(1700000000000.0),
         };
-        let json = serde_json::to_string(&params).unwrap();
+        let json = serde_json::to_string(&params)?;
         assert!(json.contains("\"vectorWeight\":0.6"));
         assert!(json.contains("\"textWeight\":0.4"));
 
-        let deserialized: MergeParams = serde_json::from_str(&json).unwrap();
+        let deserialized: MergeParams = serde_json::from_str(&json)?;
         assert!((deserialized.vector_weight - 0.6).abs() < f64::EPSILON);
         assert!(deserialized.mmr.is_some());
         assert!(deserialized.temporal_decay.is_none());
+        Ok(())
     }
 
     #[test]
-    fn test_expanded_query_serde() {
+    fn test_expanded_query_serde() -> Result<(), Box<dyn std::error::Error>> {
         let query = ExpandedQuery {
             original: "test query".into(),
             keywords: vec!["test".into(), "query".into()],
             expanded: "test OR query".into(),
         };
-        let json = serde_json::to_string(&query).unwrap();
-        let deserialized: ExpandedQuery = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&query)?;
+        let deserialized: ExpandedQuery = serde_json::from_str(&json)?;
         assert_eq!(deserialized.original, "test query");
         assert_eq!(deserialized.keywords.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_mmr_item_serde() {
+    fn test_mmr_item_serde() -> Result<(), Box<dyn std::error::Error>> {
         let item = MmrItem {
             id: "item1".into(),
             score: 0.85,
             content: "some content".into(),
         };
-        let json = serde_json::to_string(&item).unwrap();
-        let deserialized: MmrItem = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&item)?;
+        let deserialized: MmrItem = serde_json::from_str(&json)?;
         assert_eq!(deserialized.id, "item1");
         assert!((deserialized.score - 0.85).abs() < f64::EPSILON);
+        Ok(())
     }
 }

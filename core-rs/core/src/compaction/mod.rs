@@ -995,22 +995,24 @@ mod tests {
     }
 
     #[test]
-    fn test_config_serde_roundtrip() {
+    fn test_config_serde_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let config = CompactionConfig::default();
-        let json = serde_json::to_string(&config).unwrap();
-        let parsed: CompactionConfig = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&config)?;
+        let parsed: CompactionConfig = serde_json::from_str(&json)?;
         assert_eq!(parsed.context_threshold, 0.75);
         assert_eq!(parsed.fresh_tail_count, 8);
         assert_eq!(parsed.max_rounds, 10);
+        Ok(())
     }
 
     #[test]
-    fn test_config_from_partial_json() {
+    fn test_config_from_partial_json() -> Result<(), Box<dyn std::error::Error>> {
         let json = r#"{"contextThreshold": 0.5}"#;
-        let config: CompactionConfig = serde_json::from_str(json).unwrap();
+        let config: CompactionConfig = serde_json::from_str(json)?;
         assert_eq!(config.context_threshold, 0.5);
         assert_eq!(config.fresh_tail_count, 8); // default
         assert_eq!(config.max_rounds, 10); // default
+        Ok(())
     }
 
     #[test]
