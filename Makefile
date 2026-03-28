@@ -8,7 +8,7 @@
        cli-cross-linux-x64 cli-cross-linux-arm64 cli-cross-darwin-x64 cli-cross-darwin-arm64 \
        cli-cross-win-x64 cli-cross-all \
        deny machete \
-       test clean check fmt \
+       test clean check fmt generate generate-check \
        proto proto-go proto-rust proto-check proto-lint proto-watch \
        tool-schemas model-caps \
        ffi-gen ffi-gen-check \
@@ -191,8 +191,17 @@ test: rust-test go-test cli-test
 clean: rust-clean go-clean cli-clean
 	@echo "Cleaned Rust, Go, and CLI build artifacts"
 
-check: proto-check ffi-gen-check proto-error-codes-gen-check rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-fmt go-vet go-test
+check: generate-check rust-fmt rust-clippy rust-test cli-fmt cli-clippy cli-test go-fmt go-vet go-test
 	@echo "All checks passed"
+
+# Run all code generation pipelines in dependency order.
+generate: proto tool-schemas model-caps ffi-gen proto-error-codes-gen
+	@echo "All code generation pipelines completed"
+
+# Verify generated sources are up to date.
+generate-check:
+	@$(MAKE) generate
+	@git diff --exit-code -- .
 
 fmt:
 	cd core-rs && cargo fmt --all
@@ -280,6 +289,8 @@ info:
 	@echo "  make go-lint    - Run golangci-lint on Go gateway"
 	@echo "  make go-fmt     - Check Go formatting"
 	@echo "  make check      - Run all checks (Rust + Go + CLI)"
+	@echo "  make generate   - Run all code generation pipelines"
+	@echo "  make generate-check - Verify generated files are up to date"
 	@echo "  make clean      - Clean Rust, Go, and CLI build artifacts"
 	@echo "  make go-bench   - Run Go gateway benchmarks"
 	@echo "  make deny       - Check Rust deps (security, license, bans)"
