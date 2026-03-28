@@ -298,7 +298,7 @@ When validation fails:
     - `DENEB_APNS_RELAY_BASE_URL` and `DENEB_APNS_RELAY_TIMEOUT_MS` still work as temporary env overrides.
     - `DENEB_APNS_RELAY_ALLOW_HTTP=true` remains a loopback-only development escape hatch; do not persist HTTP relay URLs in config.
 
-    See [iOS App](/platforms/ios#relay-backed-push-for-official-builds) for the end-to-end flow and [Authentication and trust flow](/platforms/ios#authentication-and-trust-flow) for the relay security model.
+    The relay server handles push notifications for connected nodes.
 
   </Accordion>
 

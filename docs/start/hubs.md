@@ -71,12 +71,6 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Model providers hub](/providers/models)
 - WhatsApp
 - [Telegram](/channels/telegram)
-- [Slack](/channels/slack)
-- [Discord](/channels/discord)
-- [Mattermost](/channels/mattermost) (plugin)
-- [Signal](/channels/signal)
-- [iMessage](/channels/imessage)
-- [Location parsing](/channels/location)
 - [WebChat](/web/webchat)
 - [Webhooks](/automation/webhook)
 - [Gmail Pub/Sub](/automation/gmail-pubsub)
@@ -129,34 +123,13 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Location command](/nodes/location-command)
 - [Talk mode](/nodes/talk)
 
-## Platforms
+## Web surfaces
 
-- [Platforms overview](/platforms)
-- [macOS](/platforms/macos)
-- [iOS](/platforms/ios)
-- [Android](/platforms/android)
-- [Windows (WSL2)](/platforms/windows)
-- [Linux](/platforms/linux)
 - [Web surfaces](/web)
-
-## macOS companion app (advanced)
-
-- [macOS dev setup](/platforms/mac/dev-setup)
-- [macOS menu bar](/platforms/mac/menu-bar)
-- [macOS voice overlay](/platforms/mac/voice-overlay)
-- [macOS WebChat](/platforms/mac/webchat)
-- [macOS Canvas](/platforms/mac/canvas)
-- [macOS child process](/platforms/mac/child-process)
-- [macOS health](/platforms/mac/health)
-- [macOS icon](/platforms/mac/icon)
-- [macOS logging](/platforms/mac/logging)
-- [macOS permissions](/platforms/mac/permissions)
-- [macOS remote](/platforms/mac/remote)
-- [macOS signing](/platforms/mac/signing)
-- [macOS gateway (launchd)](/platforms/mac/bundled-gateway)
-- [macOS XPC](/platforms/mac/xpc)
-- [macOS skills](/platforms/mac/skills)
-- [macOS Peekaboo](/platforms/mac/peekaboo)
+- [Dashboard](/web/dashboard)
+- [Control UI](/web/control-ui)
+- [WebChat](/web/webchat)
+- [Terminal UI](/web/tui)
 
 ## Extensions + plugins
 

@@ -63,10 +63,6 @@ marketplace source with `--marketplace`.
 
 These are published to npm and installed with `deneb plugins install`:
 
-| Plugin | Package         | Docs                       |
-| ------ | --------------- | -------------------------- |
-| Matrix | `@deneb/matrix` | [Matrix](/channels/matrix) |
-| Nostr  | `@deneb/nostr`  | [Nostr](/channels/nostr)   |
 
 Packaged installs also ship install-on-demand metadata for heavyweight official
 plugins. Today that includes WhatsApp and `memory-lancedb`: onboarding,

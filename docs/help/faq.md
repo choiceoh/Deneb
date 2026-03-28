@@ -383,7 +383,7 @@ Short version: it works, but expect rough edges.
 - Start without channels/skills, then add them one by one.
 - If you hit weird binary issues, it is usually an **ARM compatibility** problem.
 
-Docs: [Linux](/platforms/linux), [Install](/install).
+Docs: [Install](/install).
 
 ### It is stuck on wake up my friend onboarding will not hatch What now
 
@@ -584,7 +584,6 @@ Two common Windows issues:
 - Close and reopen PowerShell after updating PATH.
 
 If you want the smoothest Windows setup, use **WSL2** instead of native Windows.
-Docs: [Windows](/platforms/windows).
 
 ### Windows exec output shows garbled Chinese text what should I do
 
@@ -627,9 +626,8 @@ More detail: [Install](/install) and [Installer flags](/install/installer).
 
 ### How do I install Deneb on Linux
 
-Short answer: follow the Linux guide, then run onboarding.
+Short answer: follow the installer guide, then run onboarding.
 
-- Linux quick path + service install: [Linux](/platforms/linux).
 - Full walkthrough: [Getting Started](/start/getting-started).
 - Installer + updates: [Install & updates](/install/updating).
 
@@ -801,22 +799,21 @@ Pick region-pinned endpoints. OpenRouter exposes US-hosted options for MiniMax, 
 No. Deneb runs on macOS or Linux (Windows via WSL2). A Mac mini is optional - some people
 buy one as an always-on host, but a small VPS, home server, or Raspberry Pi-class box works too.
 
-You only need a Mac **for macOS-only tools**. For iMessage, use the built-in [iMessage](/channels/imessage) channel (requires a Mac signed into Messages). If you want other macOS-only tools, run the Gateway on a Mac or pair a macOS node.
+You only need a Mac **for macOS-only tools**. If you want macOS-only tools, run the Gateway on a Mac or pair a macOS node.
 
-Docs: [iMessage](/channels/imessage), [Nodes](/nodes), [Mac remote mode](/platforms/mac/remote).
+Docs: [Nodes](/nodes).
 
 ### Do I need a Mac mini for iMessage support
 
 You need **some macOS device** signed into Messages. It does **not** have to be a Mac mini -
-any Mac works. iMessage is a [built-in channel](/channels/imessage) that requires the Gateway to run on macOS (or connect to a Mac via SSH).
+any Mac works. Running the Gateway requires macOS (or connect to a Mac via SSH).
 
 Common setups:
 
-- Run the Gateway on a Mac signed into Messages.
-- Run the Gateway on Linux/VPS and use an SSH wrapper to reach a Mac signed into Messages.
+- Run the Gateway on a Mac.
+- Run the Gateway on Linux/VPS and use an SSH wrapper to reach a Mac.
 
-Docs: [iMessage](/channels/imessage), [Nodes](/nodes),
-[Mac remote mode](/platforms/mac/remote).
+Docs: [Nodes](/nodes).
 
 ### If I buy a Mac mini to run Deneb can I connect it to my MacBook Pro
 
@@ -956,9 +953,9 @@ Deneb is lightweight. For a basic Gateway + one chat channel:
 - **Absolute minimum:** 1 vCPU, 1GB RAM, ~500MB disk.
 - **Recommended:** 1-2 vCPU, 2GB RAM or more for headroom (logs, media, multiple channels). Node tools and browser automation can be resource hungry.
 
-OS: use **Ubuntu LTS** (or any modern Debian/Ubuntu). The Linux install path is best tested there.
+OS: use **Ubuntu LTS** (or any modern Debian/Ubuntu). The installer is best tested there.
 
-Docs: [Linux](/platforms/linux), [VPS hosting](/vps).
+Docs: [VPS hosting](/vps).
 
 ### Can I run Deneb in a VM and what are the requirements
 
@@ -972,7 +969,7 @@ Baseline guidance:
 - **OS:** Ubuntu LTS or another modern Debian/Ubuntu.
 
 If you are on Windows, **WSL2 is the easiest VM style setup** and has the best tooling
-compatibility. See [Windows](/platforms/windows), [VPS hosting](/vps).
+compatibility. See [VPS hosting](/vps).
 If you are running macOS in a VM, see [macOS VM](/install/macos-vm).
 
 ## What is Deneb?
@@ -1617,7 +1614,7 @@ No separate TCP bridge is required; nodes connect over the Gateway WebSocket.
 Security reminder: pairing a macOS node allows `system.run` on that machine. Only
 pair devices you trust, and review [Security](/gateway/security).
 
-Docs: [Nodes](/nodes), [Gateway protocol](/gateway/protocol), [macOS remote mode](/platforms/mac/remote), [Security](/gateway/security).
+Docs: [Nodes](/nodes), [Gateway protocol](/gateway/protocol), [Security](/gateway/security).
 
 ### Tailscale is connected but I get no replies What now
 
@@ -1781,7 +1778,7 @@ Recommended setup:
    deneb devices approve <requestId>
    ```
 
-Docs: [Gateway protocol](/gateway/protocol), [Discovery](/gateway/discovery), [macOS remote mode](/platforms/mac/remote).
+Docs: [Gateway protocol](/gateway/protocol), [Discovery](/gateway/discovery).
 
 ## Env vars and .env loading
 
@@ -2683,7 +2680,7 @@ If you run it manually (no service), use:
 deneb gateway run
 ```
 
-Docs: [Windows (WSL2)](/platforms/windows), [Gateway service runbook](/gateway).
+Docs: [Gateway service runbook](/gateway).
 
 ### The Gateway is up but replies never arrive What should I check
 

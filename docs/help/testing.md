@@ -148,7 +148,6 @@ Use this decision table:
 - Optional target overrides:
   - `DENEB_ANDROID_NODE_ID` or `DENEB_ANDROID_NODE_NAME`.
   - `DENEB_ANDROID_GATEWAY_URL` / `DENEB_ANDROID_GATEWAY_TOKEN` / `DENEB_ANDROID_GATEWAY_PASSWORD`.
-- Full Android setup details: [Android App](/platforms/android)
 
 ## Live: model smoke (profile keys)
 

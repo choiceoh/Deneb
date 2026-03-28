@@ -19,7 +19,7 @@ Local mode (default) walks you through:
 - Model and auth setup (OpenAI Code subscription OAuth, Anthropic API key or setup token, plus MiniMax, GLM, Ollama, Moonshot, and AI Gateway options)
 - Workspace location and bootstrap files
 - Gateway settings (port, bind, auth, tailscale)
-- Channels and providers (Telegram, WhatsApp, Discord, Google Chat, Mattermost plugin, Signal)
+- Channels and providers (Telegram, WhatsApp)
 - Daemon install (LaunchAgent or systemd user unit)
 - Health check
 - Skills setup
@@ -64,11 +64,6 @@ It does not install or modify anything on the remote host.
   <Step title="Channels">
     - WhatsApp: optional QR login
     - [Telegram](/channels/telegram): bot token
-    - [Discord](/channels/discord): bot token
-    - [Google Chat](/channels/googlechat): service account JSON + webhook audience
-    - [Mattermost](/channels/mattermost) plugin: bot token + base URL
-    - [Signal](/channels/signal): optional `signal-cli` install + account config
-    - [iMessage](/channels/imessage): `imsg` CLI path + DB access
     - DM security: default is pairing. First DM sends a code; approve via
       `deneb pairing approve <channel> <code>` or use allowlists.
   </Step>
@@ -90,7 +85,7 @@ It does not install or modify anything on the remote host.
     - Installs optional dependencies (some use Homebrew on macOS).
   </Step>
   <Step title="Finish">
-    - Summary and next steps, including iOS, Android, and macOS app options.
+    - Summary and next steps.
   </Step>
 </Steps>
 
