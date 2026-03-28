@@ -1,4 +1,4 @@
-package chat
+package tools
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 // Essential for refactoring: rename a symbol, update imports, or make coordinated
 // changes across files without multiple round-trips.
 
-func toolMultiEdit(defaultDir string) ToolFunc {
+func ToolMultiEdit(defaultDir string) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Edits []struct {
@@ -52,7 +52,7 @@ func toolMultiEdit(defaultDir string) ToolFunc {
 				continue
 			}
 
-			path := resolvePath(edit.FilePath, defaultDir)
+			path := ResolvePath(edit.FilePath, defaultDir)
 
 			// Read file (from cache or disk).
 			content, cached := fileCache[path]
@@ -126,7 +126,7 @@ var skipDirs = map[string]bool{
 	".next": true, ".nuxt": true, ".cache": true,
 }
 
-func toolTree(defaultDir string) ToolFunc {
+func ToolTree(defaultDir string) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Path       string `json:"path"`
@@ -141,7 +141,7 @@ func toolTree(defaultDir string) ToolFunc {
 
 		dir := defaultDir
 		if p.Path != "" {
-			dir = resolvePath(p.Path, defaultDir)
+			dir = ResolvePath(p.Path, defaultDir)
 		}
 		maxDepth := p.Depth
 		if maxDepth <= 0 {
@@ -245,7 +245,7 @@ func buildTree(sb *strings.Builder, dir, prefix string, maxDepth, currentDepth i
 // Shows git diff, file comparison, or uncommitted changes.
 // Coding agents need diff to review changes before committing.
 
-func toolDiff(defaultDir string) ToolFunc {
+func ToolDiff(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Mode         string `json:"mode"`
@@ -354,8 +354,8 @@ func diffFiles(file1, file2, defaultDir string) (string, error) {
 		return "", fmt.Errorf("files mode requires path (first file) and ref2 (second file)")
 	}
 
-	path1 := resolvePath(file1, defaultDir)
-	path2 := resolvePath(file2, defaultDir)
+	path1 := ResolvePath(file1, defaultDir)
+	path2 := ResolvePath(file2, defaultDir)
 
 	cmd := exec.Command("diff", "-u", "--color=never", path1, path2)
 	out, err := cmd.CombinedOutput()

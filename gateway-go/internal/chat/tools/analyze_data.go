@@ -1,4 +1,4 @@
-package chat
+package tools
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func analyzeReferences(ctx context.Context, p analyzeParams, defaultDir string) 
 
 	searchDir := defaultDir
 	if p.Path != "" {
-		searchDir = resolvePath(p.Path, defaultDir)
+		searchDir = ResolvePath(p.Path, defaultDir)
 	}
 
 	var sb strings.Builder
@@ -89,7 +89,7 @@ func analyzeImports(p analyzeParams, defaultDir string) (string, error) {
 
 	if p.File != "" && !p.Reverse {
 		// Show imports of a single file.
-		path := resolvePath(p.File, defaultDir)
+		path := ResolvePath(p.File, defaultDir)
 		if isGoFile(path) {
 			return importsGoFile(path, p.File)
 		}
@@ -166,7 +166,7 @@ func importsRustFile(path, displayPath string) (string, error) {
 func reverseImports(query, searchPath, defaultDir string) (string, error) {
 	dir := defaultDir
 	if searchPath != "" {
-		dir = resolvePath(searchPath, defaultDir)
+		dir = ResolvePath(searchPath, defaultDir)
 	}
 
 	var sb strings.Builder
@@ -238,7 +238,7 @@ func analyzeSignature(p analyzeParams, defaultDir string) (string, error) {
 	}
 
 	if p.File != "" {
-		path := resolvePath(p.File, defaultDir)
+		path := ResolvePath(p.File, defaultDir)
 		if isGoFile(path) {
 			return signatureGoFile(path, query, p.File)
 		}

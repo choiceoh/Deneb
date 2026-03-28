@@ -1,4 +1,4 @@
-package chat
+package tools
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 
 // --- Read tool ---
 
-func toolRead(defaultDir string) ToolFunc {
+func ToolRead(defaultDir string) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			FilePath string `json:"file_path"`
@@ -32,7 +32,7 @@ func toolRead(defaultDir string) ToolFunc {
 			return "", fmt.Errorf("file_path is required")
 		}
 
-		path := resolvePath(p.FilePath, defaultDir)
+		path := ResolvePath(p.FilePath, defaultDir)
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return "", fmt.Errorf("failed to read file: %w", err)
@@ -216,7 +216,7 @@ func formatFunctionLines(displayPath string, lines []string, start, end int, fun
 
 // --- Write tool ---
 
-func toolWrite(defaultDir string) ToolFunc {
+func ToolWrite(defaultDir string) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			FilePath string `json:"file_path"`
@@ -229,7 +229,7 @@ func toolWrite(defaultDir string) ToolFunc {
 			return "", fmt.Errorf("file_path is required")
 		}
 
-		path := resolvePath(p.FilePath, defaultDir)
+		path := ResolvePath(p.FilePath, defaultDir)
 
 		// Ensure parent directory exists.
 		dir := filepath.Dir(path)
@@ -246,7 +246,7 @@ func toolWrite(defaultDir string) ToolFunc {
 
 // --- Edit tool ---
 
-func toolEdit(defaultDir string) ToolFunc {
+func ToolEdit(defaultDir string) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			FilePath   string `json:"file_path"`
@@ -266,7 +266,7 @@ func toolEdit(defaultDir string) ToolFunc {
 			return "", fmt.Errorf("old_string is required")
 		}
 
-		path := resolvePath(p.FilePath, defaultDir)
+		path := ResolvePath(p.FilePath, defaultDir)
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return "", fmt.Errorf("failed to read file: %w", err)
