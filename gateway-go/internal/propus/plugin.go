@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +23,9 @@ type ChatSendFunc func(sessionKey, message string)
 // SessionClearFunc clears a session's conversation history.
 type SessionClearFunc func(sessionKey string)
 
+// SessionAbortFunc aborts all active runs for a session key.
+type SessionAbortFunc func(sessionKey string)
+
 // Plugin implements channel.Plugin for the Propus desktop coding client.
 type Plugin struct {
 	config *Config
@@ -35,6 +39,7 @@ type Plugin struct {
 	// Callbacks wired by the gateway after construction.
 	chatSend     ChatSendFunc
 	sessionClear SessionClearFunc
+	sessionAbort SessionAbortFunc
 
 	// Active client connections (connID → conn).
 	clients   map[string]*clientConn
@@ -63,6 +68,9 @@ func (p *Plugin) SetChatSend(fn ChatSendFunc) { p.chatSend = fn }
 
 // SetSessionClear wires the session clear callback.
 func (p *Plugin) SetSessionClear(fn SessionClearFunc) { p.sessionClear = fn }
+
+// SetSessionAbort wires the session abort callback.
+func (p *Plugin) SetSessionAbort(fn SessionAbortFunc) { p.sessionAbort = fn }
 
 // --- channel.Plugin interface ---
 
@@ -128,6 +136,14 @@ func (p *Plugin) Start(_ context.Context) error {
 func (p *Plugin) Stop(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	// Close all active WebSocket connections so read loops exit.
+	p.clientsMu.Lock()
+	for id, cc := range p.clients {
+		cc.conn.Close(websocket.StatusGoingAway, "server shutting down")
+		delete(p.clients, id)
+	}
+	p.clientsMu.Unlock()
 
 	if p.server != nil {
 		_ = p.server.Shutdown(ctx)
@@ -213,6 +229,9 @@ func (p *Plugin) handleMessage(cc *clientConn, data []byte) {
 
 	case "ClearChat":
 		sessionKey := "propus:" + cc.connID
+		if p.sessionAbort != nil {
+			p.sessionAbort(sessionKey)
+		}
 		if p.sessionClear != nil {
 			p.sessionClear(sessionKey)
 		}
@@ -222,8 +241,11 @@ func (p *Plugin) handleMessage(cc *clientConn, data []byte) {
 		p.sendToClient(cc, MsgPong())
 
 	case "StopGeneration":
-		// TODO: wire to chat abort
-		p.logger.Info("propus stop generation requested", "connID", cc.connID)
+		sessionKey := "propus:" + cc.connID
+		if p.sessionAbort != nil {
+			p.sessionAbort(sessionKey)
+		}
+		p.logger.Info("propus generation stopped", "connID", cc.connID)
 
 	case "SetApiKey":
 		// API key is shared with Deneb — no separate key needed.
@@ -247,13 +269,12 @@ func (p *Plugin) BroadcastToAll(msg ServerMessage) {
 
 // BroadcastToSession sends a ServerMessage to the client owning the given session key.
 func (p *Plugin) BroadcastToSession(sessionKey string, msg ServerMessage) {
+	connID := strings.TrimPrefix(sessionKey, "propus:")
 	p.clientsMu.RLock()
-	defer p.clientsMu.RUnlock()
-	for _, cc := range p.clients {
-		if "propus:"+cc.connID == sessionKey {
-			p.sendToClient(cc, msg)
-			return
-		}
+	cc, ok := p.clients[connID]
+	p.clientsMu.RUnlock()
+	if ok {
+		p.sendToClient(cc, msg)
 	}
 }
 
@@ -266,7 +287,9 @@ func (p *Plugin) sendToClient(cc *clientConn, msg ServerMessage) {
 	defer cc.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = cc.conn.Write(ctx, websocket.MessageText, data)
+	if err := cc.conn.Write(ctx, websocket.MessageText, data); err != nil {
+		p.logger.Warn("propus ws write error", "error", err, "connID", cc.connID)
+	}
 }
 
 // Compile-time interface check.

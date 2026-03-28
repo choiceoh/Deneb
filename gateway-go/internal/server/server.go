@@ -1829,6 +1829,17 @@ func (s *Server) wirePropusChatHandler() {
 		}
 	})
 
+	// Inbound: Propus client StopGeneration → abort active run.
+	s.propusPlug.SetSessionAbort(func(sessionKey string) {
+		s.chatHandler.InterruptActiveRun(sessionKey)
+		if s.sessions != nil {
+			s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
+				Phase: session.PhaseEnd,
+				Ts:    time.Now().UnixMilli(),
+			})
+		}
+	})
+
 	// Inbound: Propus client ClearChat → session clear.
 	s.propusPlug.SetSessionClear(func(sessionKey string) {
 		if s.sessions != nil {
