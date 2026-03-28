@@ -13,8 +13,8 @@
        error-code-sync \
        info
 
-# Version from package.json, injected into Go binary via ldflags.
-DENEB_VERSION := $(shell node -p "require('./package.json').version" 2>/dev/null || echo "dev")
+# Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
+DENEB_VERSION := $(shell git describe --tags --match 'deneb-v*' --abbrev=0 2>/dev/null | sed 's/^deneb-v//' || echo "dev")
 GO_LDFLAGS := -ldflags '-X main.Version=$(DENEB_VERSION)'
 
 # Default: build Rust first (produces .a), then Go (links it via CGo), then CLI.

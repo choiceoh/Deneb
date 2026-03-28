@@ -17,7 +17,6 @@ type BannerInfo struct {
 	Version     string
 	Addr        string
 	AuthMode    string
-	Channels    []string
 	RustFFI     bool
 	VegaEnabled bool
 	PID         int // non-zero in daemon mode
@@ -32,7 +31,6 @@ type BannerInfo struct {
 //
 //	  addr      127.0.0.1:18789
 //	  auth      token
-//	  channels  telegram
 //	  vega      enabled
 //
 //	  ready.
@@ -63,10 +61,6 @@ func PrintBanner(w io.Writer, info BannerInfo, color bool) {
 
 	kv("addr", info.Addr)
 	kv("auth", info.AuthMode)
-
-	if len(info.Channels) > 0 {
-		kv("channels", strings.Join(info.Channels, ", "))
-	}
 
 	vegaStatus := "disabled"
 	if info.VegaEnabled {

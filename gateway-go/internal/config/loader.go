@@ -189,42 +189,6 @@ func LoadConfigFromDefaultPath() (*ConfigSnapshot, error) {
 	return LoadConfig(ResolveConfigPath())
 }
 
-// supportedChannels lists channel IDs that the gateway actually implements.
-// Config entries for unknown channels are silently ignored so stale config
-// keys (e.g., removed plugins) don't appear in the startup banner.
-var supportedChannels = map[string]bool{
-	"telegram": true,
-}
-
-// ConfiguredChannelIDs extracts the top-level keys from the "channels"
-// object in the raw config JSON, filtered to only channels the gateway
-// actually supports. Used for lazy loading: only configured channels are
-// started at boot.
-func ConfiguredChannelIDs(snap *ConfigSnapshot) []string {
-	if snap == nil || snap.Raw == "" {
-		return nil
-	}
-	var raw struct {
-		Channels map[string]json.RawMessage `json:"channels"`
-	}
-	if err := json.Unmarshal([]byte(snap.Raw), &raw); err != nil {
-		return nil
-	}
-	if len(raw.Channels) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(raw.Channels))
-	for k := range raw.Channels {
-		if supportedChannels[k] {
-			ids = append(ids, k)
-		}
-	}
-	if len(ids) == 0 {
-		return nil
-	}
-	return ids
-}
-
 // validateConfig performs basic structural validation on the config.
 func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) {
 	if cfg.Gateway != nil {

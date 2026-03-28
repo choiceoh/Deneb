@@ -149,8 +149,6 @@ func main() {
 		RustFFI:     ffi.Available,
 		VegaEnabled: vegaEnabled,
 	}
-	// Resolve active channels from config snapshot.
-	bannerInfo.Channels = config.ConfiguredChannelIDs(bootstrap.Snapshot)
 
 	// Resolve config directory for PID file fallback.
 	cfgDir := ""

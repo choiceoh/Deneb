@@ -10,10 +10,9 @@ import (
 func TestPrintBanner_NoColor(t *testing.T) {
 	var buf bytes.Buffer
 	info := BannerInfo{
-		Version:     "0.1.0-go",
+		Version:     "3.25.0",
 		Addr:        "127.0.0.1:18789",
 		AuthMode:    "token",
-		Channels:    []string{"telegram"},
 		RustFFI:     true,
 		VegaEnabled: true,
 	}
@@ -22,11 +21,10 @@ func TestPrintBanner_NoColor(t *testing.T) {
 	got := buf.String()
 	for _, want := range []string{
 		"deneb gateway",
-		"0.1.0-go",
+		"3.25.0",
 		"rust-ffi",
 		"127.0.0.1:18789",
 		"token",
-		"telegram",
 		"enabled",
 		"ready.",
 	} {
@@ -44,7 +42,7 @@ func TestPrintBanner_NoColor(t *testing.T) {
 func TestPrintBanner_WithColor(t *testing.T) {
 	var buf bytes.Buffer
 	info := BannerInfo{
-		Version:     "0.1.0-go",
+		Version:     "3.25.0",
 		Addr:        "127.0.0.1:18789",
 		AuthMode:    "none",
 		RustFFI:     false,
@@ -59,16 +57,12 @@ func TestPrintBanner_WithColor(t *testing.T) {
 	if !strings.Contains(got, "disabled") {
 		t.Errorf("vega should show disabled:\n%s", got)
 	}
-	// No channels line when empty.
-	if strings.Contains(got, "channels") {
-		t.Errorf("should not show channels when none configured:\n%s", got)
-	}
 }
 
 func TestPrintBanner_DaemonMode(t *testing.T) {
 	var buf bytes.Buffer
 	info := BannerInfo{
-		Version:  "0.1.0-go",
+		Version:  "3.25.0",
 		Addr:     "127.0.0.1:18789",
 		AuthMode: "token",
 		PID:      12345,
