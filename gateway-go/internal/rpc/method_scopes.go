@@ -120,12 +120,6 @@ var methodScopes = map[string]auth.Scope{
 	"autonomous.cycle.stop":   auth.ScopeWrite,
 	"autonomous.enable":       auth.ScopeWrite,
 
-	// --- Copilot (background system monitor) ---
-	"copilot.status":  auth.ScopeRead,
-	"copilot.check":   auth.ScopeWrite,
-	"copilot.enable":  auth.ScopeWrite,
-	"copilot.disable": auth.ScopeWrite,
-
 	// --- Hooks (read/admin) ---
 	"hooks.list":       auth.ScopeRead,
 	"hooks.register":   auth.ScopeAdmin,

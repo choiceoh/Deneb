@@ -32,7 +32,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/copilot"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/dedupe"
@@ -161,9 +161,6 @@ type Server struct {
 	// toolDeps holds core tool dependencies; stored on the server so late-binding
 	// fields (e.g. AutonomousSvc) can be set from other init phases.
 	toolDeps *chat.CoreToolDeps
-
-	// Copilot: background system monitor using local sglang.
-	copilotSvc *copilot.Service
 
 	// GmailPoll: periodic Gmail polling with LLM analysis.
 	gmailPollSvc *gmailpoll.Service
@@ -434,13 +431,6 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		})
 	}
 
-	// Start copilot background system monitor.
-	if s.copilotSvc != nil {
-		s.safeGo("copilot:start", func() {
-			s.copilotSvc.Start(ctx)
-		})
-	}
-
 	// Start Gmail polling service.
 	if s.gmailPollSvc != nil {
 		s.safeGo("gmailpoll:start", func() {
@@ -568,12 +558,7 @@ func (s *Server) doShutdown() error {
 		s.autonomousSvc.Stop()
 	}
 
-	// 6c. Stop copilot service.
-	if s.copilotSvc != nil {
-		s.copilotSvc.Stop()
-	}
-
-	// 6d. Stop Gmail poll service.
+	// 6c. Stop Gmail poll service.
 	if s.gmailPollSvc != nil {
 		s.gmailPollSvc.Stop()
 	}
@@ -1477,29 +1462,6 @@ func (s *Server) registerAdvancedWorkflowMethods() {
 			}
 		})
 	}
-
-	// Copilot: background system monitor using local sglang.
-	s.copilotSvc = copilot.NewService(copilot.ServiceConfig{
-		CheckIntervalMin: 15,
-		SglangBaseURL:    "http://127.0.0.1:30000/v1",
-		SglangModel:      "Qwen/Qwen3.5-35B-A3B",
-	}, s.logger)
-
-	// Wire Telegram notifier for copilot alerts.
-	if s.telegramPlug != nil {
-		tgCfg := s.telegramPlug.Config()
-		if tgCfg != nil && len(tgCfg.AllowFrom.IDs) > 0 {
-			s.copilotSvc.SetNotifier(&telegramNotifier{
-				plugin: s.telegramPlug,
-				chatID: tgCfg.AllowFrom.IDs[0],
-				logger: s.logger,
-			})
-		}
-	}
-
-	rpc.RegisterCopilotMethods(s.dispatcher, rpc.CopilotDeps{
-		Copilot: s.copilotSvc,
-	})
 
 	// Gmail polling service: periodic new-email analysis via LLM.
 	s.initGmailPoll()
