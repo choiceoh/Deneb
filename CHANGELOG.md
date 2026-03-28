@@ -1,5 +1,33 @@
 # Changelog
 
+## [3.19.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.18.0...deneb-v3.19.0) (2026-03-28)
+
+
+### ✨ Features
+
+* **cli:** refine terminal design with Apple aesthetic philosophy ([6f445d8](https://github.com/choiceoh/Deneb/commit/6f445d85381710a5dc506eca31adb104b1a41f07))
+* **propus:** add Propus client main.rs ([ba00245](https://github.com/choiceoh/Deneb/commit/ba00245b859697162407c66a343fa8a703bd0008))
+* **propus:** add Propus client source and Go channel plugin ([c84c22d](https://github.com/choiceoh/Deneb/commit/c84c22dab66a5ae94d06fac79b8460d5aa2b8938))
+* **propus:** add Propus desktop coding channel ([c95c30d](https://github.com/choiceoh/Deneb/commit/c95c30d116047d395d1f37df3552e51e272c3570))
+* **propus:** add Propus Slint UI (app.slint) ([5e5f7cc](https://github.com/choiceoh/Deneb/commit/5e5f7cce27e649d9752aa62ef24bb17bd96e1d62))
+* **propus:** wire Propus channel registration, chat.send pipeline, and streaming events ([a3bf5d5](https://github.com/choiceoh/Deneb/commit/a3bf5d54113165fd0a52815a9f45f7a95d763399))
+
+
+### 🐛 Bug Fixes
+
+* **session:** update keycache_test to match refactored KeyCache struct ([671a723](https://github.com/choiceoh/Deneb/commit/671a72350c194930bbcd532e2c2cdcc0b0de6d98))
+
+
+### ⚡ Performance
+
+* **aurora:** rebalance memory extraction prompts to prioritize personal/relational facts over routine system operations ([2fdf69f](https://github.com/choiceoh/Deneb/commit/2fdf69f2059ee23a02db3fc1b3d4d8778a89e2a0))
+
+
+### 🔧 Internal
+
+* **autonomous:** remove auto-goal creation from memory facts ([6bd9e89](https://github.com/choiceoh/Deneb/commit/6bd9e89e975de1f3e40640483d660505780e5d66))
+* shorten process IDs with base62-encoded nanosecond timestamps ([63a79c9](https://github.com/choiceoh/Deneb/commit/63a79c9811bc0d989a8de935685215c272a7d950))
+
 ## [3.18.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.17.0...deneb-v3.18.0) (2026-03-28)
 
 
