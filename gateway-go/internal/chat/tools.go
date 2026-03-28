@@ -223,53 +223,6 @@ func (r *ToolRegistry) LLMTools() []llm.Tool {
 	return out
 }
 
-// codingTools is the set of tools available in the "coding" profile.
-// Tools not in this set are excluded when toolProfile="coding".
-var codingTools = map[string]bool{
-	"read": true, "write": true, "edit": true, "grep": true, "find": true, "ls": true,
-	"exec": true, "process": true, "web": true,
-	"multi_edit": true, "tree": true, "diff": true, "git": true,
-	"analyze": true, "test": true, "apply_patch": true,
-	"memory_search": true, "memory_get": true,
-	"vega": true, "polaris": true,
-	"send_file": true, "http": true, "image": true,
-	"health_check": true, "session_status": true,
-}
-
-// LLMToolsForProfile returns tools filtered by the given profile.
-// Empty profile returns all tools (same as LLMTools).
-func (r *ToolRegistry) LLMToolsForProfile(profile string) []llm.Tool {
-	if profile == "" {
-		return r.LLMTools()
-	}
-
-	allowed := codingTools
-	if profile != "coding" {
-		return r.LLMTools() // unknown profile: return all
-	}
-
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	tools := make([]llm.Tool, 0)
-	for _, name := range r.order {
-		def := r.tools[name]
-		if def.Hidden || !allowed[name] {
-			continue
-		}
-		schema := def.InputSchema
-		if schema == nil {
-			schema = map[string]any{"type": "object"}
-		}
-		tools = append(tools, llm.Tool{
-			Name:        def.Name,
-			Description: def.Description,
-			InputSchema: schema,
-		})
-	}
-	return tools
-}
-
 // Summaries returns a map of tool name → description for system prompt assembly.
 func (r *ToolRegistry) Summaries() map[string]string {
 	r.mu.RLock()

@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -60,7 +59,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
-	"github.com/choiceoh/deneb/gateway-go/internal/propus"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/internal/transcript"
@@ -135,7 +133,6 @@ type Server struct {
 	usageTracker *usage.Tracker
 	maintRunner  *maintenance.Runner
 	telegramPlug *telegram.Plugin
-	propusPlug   *propus.Plugin
 
 	// Phase 4: Native agent execution.
 	jobTracker *agent.JobTracker
@@ -1598,20 +1595,6 @@ func (s *Server) registerNativeSystemMethods(denebDir string) {
 		s.wireTelegramChatHandler()
 	}
 
-	// Propus desktop coding channel plugin.
-	// Loads Propus config from deneb.json if available.
-	if s.runtimeCfg != nil {
-		propusCfg := loadPropusConfig(s.runtimeCfg)
-		if propusCfg != nil && propusCfg.Enabled {
-			s.propusPlug = propus.NewPlugin(propusCfg, s.logger)
-			s.channels.Register(s.propusPlug)
-		}
-	}
-
-	// Wire Propus client messages → chat.send pipeline + streaming events → ServerMessage.
-	if s.propusPlug != nil && s.chatHandler != nil {
-		s.wirePropusChatHandler()
-	}
 }
 
 // wireTelegramChatHandler connects the Telegram polling handler to the chat
@@ -1666,15 +1649,10 @@ func (s *Server) wireTelegramChatHandler() {
 		return err
 	})
 
-	// Set media send function: delivers files back to Telegram or Propus.
+	// Set media send function: delivers files back to Telegram.
 	s.chatHandler.SetMediaSendFunc(func(ctx context.Context, delivery *chat.DeliveryContext, filePath, mediaType, caption string, silent bool) error {
 		if delivery == nil {
 			return nil
-		}
-
-		// Propus: register file for HTTP download and notify client.
-		if delivery.Channel == "propus" && s.propusPlug != nil {
-			return s.propusPlug.SendFileToSession(delivery.To, filePath, mediaType, caption)
 		}
 
 		if delivery.Channel != "telegram" {
@@ -1714,16 +1692,10 @@ func (s *Server) wireTelegramChatHandler() {
 		return err
 	})
 
-	// Set typing indicator function: sends "typing" chat action to Telegram or Propus
+	// Set typing indicator function: sends "typing" chat action to Telegram
 	// periodically during agent runs so the user sees "typing..." in the chat.
 	s.chatHandler.SetTypingFunc(func(ctx context.Context, delivery *chat.DeliveryContext) error {
 		if delivery == nil {
-			return nil
-		}
-
-		// Propus: send Typing message to client.
-		if delivery.Channel == "propus" && s.propusPlug != nil {
-			s.propusPlug.BroadcastToSession(delivery.To, propus.MsgTyping())
 			return nil
 		}
 
@@ -1798,351 +1770,7 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 	return root.Channels.Telegram
 }
 
-// loadPropusConfig extracts Propus channel config from deneb.json.
-// Returns nil if Propus is not configured.
-func loadPropusConfig(_ *config.GatewayRuntimeConfig) *propus.Config {
-	snapshot, err := config.LoadConfigFromDefaultPath()
-	if err != nil || !snapshot.Valid {
-		return nil
-	}
 
-	if snapshot.Raw == "" {
-		return nil
-	}
-
-	var root struct {
-		Channels struct {
-			Propus *propus.Config `json:"propus"`
-		} `json:"channels"`
-	}
-	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
-		return nil
-	}
-	if root.Channels.Propus == nil {
-		return nil
-	}
-	// Apply defaults for zero-valued fields.
-	cfg := root.Channels.Propus
-	if cfg.Port == 0 {
-		cfg.Port = 3710
-	}
-	if cfg.Bind == "" {
-		cfg.Bind = "loopback"
-	}
-	if cfg.Tools == "" {
-		cfg.Tools = "coding"
-	}
-	return cfg
-}
-
-// wirePropusChatHandler connects the Propus plugin's chat callbacks to the
-// chat handler so inbound messages dispatch through chat.send, and streaming
-// events (text deltas, tool starts/results, usage, done) are converted to
-// Propus ServerMessages and pushed back to the originating WebSocket client.
-func (s *Server) wirePropusChatHandler() {
-	// Inbound: Propus client SendMessage → chat.send RPC.
-	s.propusPlug.SetChatSend(func(sessionKey, message string) {
-		delivery := map[string]any{
-			"channel":     "propus",
-			"to":          sessionKey,
-			"toolProfile": s.propusPlug.ToolProfile(),
-		}
-
-		sendParams := map[string]any{
-			"sessionKey": sessionKey,
-			"message":    message,
-			"delivery":   delivery,
-		}
-
-		req, err := protocol.NewRequestFrame(
-			shortid.New("propus"),
-			"chat.send",
-			sendParams,
-		)
-		if err != nil {
-			s.logger.Error("propus: failed to build chat.send request", "error", err)
-			return
-		}
-
-		sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer sendCancel()
-		resp := s.chatHandler.Send(sendCtx, req)
-		if resp != nil && !resp.OK {
-			s.logger.Warn("propus: chat.send failed",
-				"session", sessionKey,
-				"error", resp.Error,
-			)
-			s.propusPlug.BroadcastToSession(sessionKey, propus.MsgError("chat.send failed"))
-		}
-	})
-
-	// Inbound: Propus client StopGeneration → abort active run.
-	s.propusPlug.SetSessionAbort(func(sessionKey string) {
-		s.chatHandler.InterruptActiveRun(sessionKey)
-		if s.sessions != nil {
-			s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
-				Phase: session.PhaseEnd,
-				Ts:    time.Now().UnixMilli(),
-			})
-		}
-	})
-
-	// Inbound: Propus client ClearChat → session clear.
-	s.propusPlug.SetSessionClear(func(sessionKey string) {
-		if s.sessions != nil {
-			s.sessions.Delete(sessionKey)
-		}
-	})
-
-	// Inbound: Propus client SaveSession → export transcript to file.
-	s.propusPlug.SetSessionSave(func(sessionKey string) (string, error) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("cannot determine home directory: %w", err)
-		}
-
-		transcriptDir := filepath.Join(home, ".deneb", "transcripts")
-		// FileTranscriptStore sanitizes via filepath.Base, so use the same logic.
-		srcPath := filepath.Join(transcriptDir, filepath.Base(sessionKey)+".jsonl")
-		if _, err := os.Stat(srcPath); err != nil {
-			return "", fmt.Errorf("no transcript found for session")
-		}
-
-		exportDir := filepath.Join(home, ".deneb", "exports")
-		if err := os.MkdirAll(exportDir, 0o755); err != nil {
-			return "", fmt.Errorf("create export dir: %w", err)
-		}
-
-		ts := time.Now().Format("20060102-150405")
-		dstPath := filepath.Join(exportDir, "propus-"+ts+".jsonl")
-
-		src, err := os.ReadFile(srcPath)
-		if err != nil {
-			return "", fmt.Errorf("read transcript: %w", err)
-		}
-		if err := os.WriteFile(dstPath, src, 0o644); err != nil {
-			return "", fmt.Errorf("write export: %w", err)
-		}
-
-		return dstPath, nil
-	})
-
-	// Inbound: Propus client ListSessions → list all session transcripts.
-	s.propusPlug.SetSessionList(func() ([]propus.SessionPreview, error) {
-		if s.toolDeps == nil || s.toolDeps.Transcript == nil {
-			return nil, fmt.Errorf("transcript store not available")
-		}
-		keys, err := s.toolDeps.Transcript.ListKeys()
-		if err != nil {
-			return nil, err
-		}
-		var previews []propus.SessionPreview
-		for _, key := range keys {
-			msgs, total, err := s.toolDeps.Transcript.Load(key, 0)
-			if err != nil || total == 0 {
-				continue
-			}
-			// Extract title from first user message.
-			title := key
-			var updatedAt int64
-			for _, m := range msgs {
-				if m.Role == "user" && m.Content != "" {
-					title = m.Content
-					break
-				}
-			}
-			// Truncate title to 50 chars.
-			if len([]rune(title)) > 50 {
-				title = string([]rune(title)[:50]) + "..."
-			}
-			// Use last message timestamp as updated_at.
-			if last := msgs[len(msgs)-1]; last.Timestamp > 0 {
-				updatedAt = last.Timestamp
-			}
-			// Determine status from session manager.
-			status := "idle"
-			if s.sessions != nil {
-				if sess := s.sessions.Get(key); sess != nil {
-					switch sess.Status {
-					case session.StatusRunning:
-						status = "active"
-					case session.StatusDone, session.StatusFailed, session.StatusKilled:
-						status = "done"
-					}
-				}
-			}
-			previews = append(previews, propus.SessionPreview{
-				Key:          key,
-				Title:        title,
-				UpdatedAt:    updatedAt,
-				MessageCount: total,
-				Status:       status,
-			})
-		}
-		// Sort by updated_at descending (most recent first).
-		sort.Slice(previews, func(i, j int) bool {
-			return previews[i].UpdatedAt > previews[j].UpdatedAt
-		})
-		return previews, nil
-	})
-
-	// Inbound: Propus client SwitchSession → load target session's history.
-	s.propusPlug.SetSessionSwitch(func(oldSessionKey, newSessionKey string) ([]propus.SessionHistoryMsg, error) {
-		if s.toolDeps == nil || s.toolDeps.Transcript == nil {
-			return nil, fmt.Errorf("transcript store not available")
-		}
-		// Abort any active run on the old session.
-		if s.chatHandler != nil {
-			s.chatHandler.InterruptActiveRun(oldSessionKey)
-		}
-		// Load message history for the target session.
-		msgs, _, err := s.toolDeps.Transcript.Load(newSessionKey, 0)
-		if err != nil {
-			return nil, fmt.Errorf("load session: %w", err)
-		}
-		var history []propus.SessionHistoryMsg
-		for _, m := range msgs {
-			if m.Role == "user" || m.Role == "assistant" {
-				history = append(history, propus.SessionHistoryMsg{
-					Role:    m.Role,
-					Content: m.Content,
-				})
-			}
-		}
-		return history, nil
-	})
-
-	// Inbound: Propus client SearchSessions → search transcripts by query.
-	s.propusPlug.SetSessionSearch(func(query string) ([]propus.SessionPreview, error) {
-		if s.toolDeps == nil || s.toolDeps.Transcript == nil {
-			return nil, fmt.Errorf("transcript store not available")
-		}
-		results, err := s.toolDeps.Transcript.Search(query, 50)
-		if err != nil {
-			return nil, err
-		}
-		var previews []propus.SessionPreview
-		for _, r := range results {
-			title := r.SessionKey
-			if len(r.Matches) > 0 {
-				// Use the first matched message content as preview title.
-				title = r.Matches[0].Message.Content
-			}
-			if len([]rune(title)) > 50 {
-				title = string([]rune(title)[:50]) + "..."
-			}
-			// Load full session to get metadata.
-			msgs, total, _ := s.toolDeps.Transcript.Load(r.SessionKey, 0)
-			var updatedAt int64
-			if len(msgs) > 0 {
-				updatedAt = msgs[len(msgs)-1].Timestamp
-			}
-			previews = append(previews, propus.SessionPreview{
-				Key:          r.SessionKey,
-				Title:        title,
-				UpdatedAt:    updatedAt,
-				MessageCount: total,
-				Status:       "idle",
-			})
-		}
-		return previews, nil
-	})
-
-	// Outbound: reply function — Propus sessions receive streaming deltas via
-	// broadcastRaw, so skip final-text delivery to avoid duplicates.
-	prevReply := s.chatHandler.GetReplyFunc()
-	s.chatHandler.SetReplyFunc(func(ctx context.Context, delivery *chat.DeliveryContext, text string) error {
-		if delivery != nil && delivery.Channel == "propus" {
-			// Streaming deltas + Done already sent via broadcastRaw; no final delivery needed.
-			return nil
-		}
-		if prevReply != nil {
-			return prevReply(ctx, delivery, text)
-		}
-		return nil
-	})
-
-	// Outbound: intercept raw broadcast events to relay streaming to Propus clients.
-	// toolNames tracks toolUseId → tool name so completed events can include the name.
-	toolNames := map[string]string{}
-	prevBroadcast := s.chatHandler.GetBroadcastRaw()
-	s.chatHandler.SetBroadcastRaw(func(event string, data []byte) int {
-		n := 0
-		if prevBroadcast != nil {
-			n = prevBroadcast(event, data)
-		}
-
-		// Parse the event and route to Propus clients.
-		var envelope struct {
-			Event   string `json:"event"`
-			Payload struct {
-				SessionKey string `json:"sessionKey"`
-				Delta      string `json:"delta"`
-				State      string `json:"state"`
-				Tool       string `json:"tool"`
-				ToolUseID  string `json:"toolUseId"`
-				Result     string `json:"result"`
-				IsError    bool   `json:"isError"`
-				Text       string `json:"text"`
-				Error      string `json:"error"`
-				Usage      struct {
-					Input  int `json:"inputTokens"`
-					Output int `json:"outputTokens"`
-				} `json:"usage"`
-			} `json:"payload"`
-		}
-		if err := json.Unmarshal(data, &envelope); err != nil {
-			return n
-		}
-
-		sk := envelope.Payload.SessionKey
-		if !strings.HasPrefix(sk, "propus:") {
-			return n
-		}
-
-		switch envelope.Event {
-		case "chat.delta":
-			if envelope.Payload.Delta != "" {
-				s.propusPlug.BroadcastToSession(sk, propus.MsgText(envelope.Payload.Delta))
-			}
-		case "chat.tool":
-			toolName := envelope.Payload.Tool
-			switch envelope.Payload.State {
-			case "started":
-				if id := envelope.Payload.ToolUseID; id != "" {
-					toolNames[id] = toolName
-				}
-				s.propusPlug.BroadcastToSession(sk, propus.MsgToolStart(toolName, envelope.Payload.ToolUseID))
-			case "completed":
-				if toolName == "" {
-					if n, ok := toolNames[envelope.Payload.ToolUseID]; ok {
-						toolName = n
-						delete(toolNames, envelope.Payload.ToolUseID)
-					}
-				}
-				s.propusPlug.BroadcastToSession(sk, propus.MsgToolResult(toolName, envelope.Payload.Result))
-			}
-		case "chat":
-			switch envelope.Payload.State {
-			case "done":
-				usage := envelope.Payload.Usage
-				s.propusPlug.BroadcastToSession(sk, propus.MsgUsage(usage.Input, usage.Output, usage.Input+usage.Output))
-				s.propusPlug.BroadcastToSession(sk, propus.MsgDone())
-			case "error":
-				s.propusPlug.BroadcastToSession(sk, propus.MsgError(envelope.Payload.Error))
-			case "aborted":
-				s.propusPlug.BroadcastToSession(sk, propus.MsgError("generation aborted"))
-			}
-		}
-
-		return n
-	})
-
-	// Inject real model info so ConfigStatus messages include the actual model name.
-	s.propusPlug.SetModelInfo(s.chatHandler.DefaultModel(), "Deneb Gateway")
-
-	s.logger.Info("propus chat handler wired")
-}
 
 // loadProviderConfigs reads LLM provider configs (apiKey, baseUrl, api) from deneb.json.
 func loadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {

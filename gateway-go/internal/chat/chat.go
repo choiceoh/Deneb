@@ -63,8 +63,7 @@ type DeliveryContext struct {
 	To          string `json:"to,omitempty"`
 	AccountID   string `json:"accountId,omitempty"`
 	ThreadID    string `json:"threadId,omitempty"`
-	MessageID   string `json:"messageId,omitempty"`   // triggering message ID for reply threading
-	ToolProfile string `json:"toolProfile,omitempty"` // optional: "coding" restricts to code-related tools
+	MessageID string `json:"messageId,omitempty"` // triggering message ID for reply threading
 }
 
 // ChatMessage represents a message in a session transcript.
@@ -217,19 +216,9 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 	return h
 }
 
-// GetBroadcastRaw returns the current raw broadcast function (may be nil).
-func (h *Handler) GetBroadcastRaw() BroadcastRawFunc {
-	return h.broadcastRaw
-}
-
 // SetBroadcastRaw sets the raw broadcast function for streaming event relay.
 func (h *Handler) SetBroadcastRaw(fn BroadcastRawFunc) {
 	h.broadcastRaw = fn
-}
-
-// GetReplyFunc returns the current reply function (may be nil).
-func (h *Handler) GetReplyFunc() ReplyFunc {
-	return h.replyFunc
 }
 
 // SetReplyFunc sets the function that delivers assistant responses back to the
