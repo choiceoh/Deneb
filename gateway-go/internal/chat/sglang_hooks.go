@@ -41,6 +41,10 @@ func buildProactiveContext(ctx context.Context, userMessage, workspaceDir string
 	if len(userMessage) < proactiveMinMsgLen {
 		return ""
 	}
+	// Skip if local sglang is not reachable (avoids 5s timeout waste).
+	if !checkSglangHealth() {
+		return ""
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, proactiveTimeout)
 	defer cancel()
@@ -130,6 +134,10 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 	if toolCompressSkipSet[toolName] {
 		return output
 	}
+	// Skip if local sglang is not reachable (avoids 10s timeout waste per tool).
+	if !checkSglangHealth() {
+		return output
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, compressTimeout)
 	defer cancel()
@@ -188,6 +196,10 @@ Rules:
 // Returns empty string if nothing worth remembering.
 func extractAutoMemory(ctx context.Context, userMessage, agentResponse string, logger *slog.Logger) string {
 	if len(userMessage) < autoMemoryMinInput || len(agentResponse) < autoMemoryMinOutput {
+		return ""
+	}
+	// Skip if local sglang is not reachable (avoids 45s timeout waste).
+	if !checkSglangHealth() {
 		return ""
 	}
 

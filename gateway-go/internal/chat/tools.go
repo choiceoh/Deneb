@@ -33,10 +33,11 @@ type ToolDef struct {
 
 // ToolRegistry maps tool names to tool definitions (executor + schema + description).
 type ToolRegistry struct {
-	mu          sync.RWMutex
-	tools       map[string]ToolDef
-	order       []string // preserves registration order
-	postProcess *PostProcessRegistry
+	mu             sync.RWMutex
+	tools          map[string]ToolDef
+	order          []string // preserves registration order
+	postProcess    *PostProcessRegistry
+	cachedLLMTools []llm.Tool // cached tool list; invalidated on RegisterTool
 }
 
 // NewToolRegistry creates an empty tool registry.
@@ -65,6 +66,7 @@ func (r *ToolRegistry) RegisterTool(def ToolDef) {
 		r.order = append(r.order, def.Name)
 	}
 	r.tools[def.Name] = def
+	r.cachedLLMTools = nil // invalidate cache
 }
 
 // Execute runs the named tool. Returns an error if the tool is not found.
@@ -142,7 +144,7 @@ func resolveRef(ctx context.Context, input json.RawMessage) json.RawMessage {
 		return input
 	}
 
-	result, ok := tc.Wait(meta.Ref, refWaitTimeout)
+	result, ok := tc.Wait(ctx, meta.Ref, refWaitTimeout)
 	if !ok {
 		// Timeout — inject error message as ref content.
 		return injectRefContent(input, fmt.Sprintf("[ref timeout: %s not available within %s]", meta.Ref, refWaitTimeout))
@@ -176,10 +178,28 @@ func (r *ToolRegistry) Names() []string {
 }
 
 // LLMTools returns tool definitions formatted for LLM API requests,
-// in registration order.
+// in registration order. Results are cached and only rebuilt when tools change.
 func (r *ToolRegistry) LLMTools() []llm.Tool {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
+	if r.cachedLLMTools != nil {
+		// Return a copy so callers (e.g., Anthropic cache_control injection)
+		// can mutate their slice without corrupting the cache.
+		out := make([]llm.Tool, len(r.cachedLLMTools))
+		copy(out, r.cachedLLMTools)
+		r.mu.RUnlock()
+		return out
+	}
+	r.mu.RUnlock()
+
+	// Cache miss — build and store under write lock.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Double-check after acquiring write lock.
+	if r.cachedLLMTools != nil {
+		out := make([]llm.Tool, len(r.cachedLLMTools))
+		copy(out, r.cachedLLMTools)
+		return out
+	}
 	tools := make([]llm.Tool, 0, len(r.order))
 	for _, name := range r.order {
 		def := r.tools[name]
@@ -196,7 +216,10 @@ func (r *ToolRegistry) LLMTools() []llm.Tool {
 			InputSchema: schema,
 		})
 	}
-	return tools
+	r.cachedLLMTools = tools
+	out := make([]llm.Tool, len(tools))
+	copy(out, tools)
+	return out
 }
 
 // Summaries returns a map of tool name → description for system prompt assembly.

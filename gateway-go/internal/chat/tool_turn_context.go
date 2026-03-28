@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -60,9 +61,10 @@ func (tc *TurnContext) Load(toolUseID string) *turnResult_ {
 	return tc.results[toolUseID]
 }
 
-// Wait blocks until the result for toolUseID is stored, or the timeout expires.
-// Returns the result and true if available, or nil and false on timeout.
-func (tc *TurnContext) Wait(toolUseID string, timeout time.Duration) (*turnResult_, bool) {
+// Wait blocks until the result for toolUseID is stored, the timeout expires,
+// or the context is cancelled (e.g., agent run aborted).
+// Returns the result and true if available, or nil and false on timeout/cancel.
+func (tc *TurnContext) Wait(ctx context.Context, toolUseID string, timeout time.Duration) (*turnResult_, bool) {
 	tc.mu.Lock()
 
 	// Already available — fast path.
@@ -76,7 +78,7 @@ func (tc *TurnContext) Wait(toolUseID string, timeout time.Duration) (*turnResul
 	tc.waiters[toolUseID] = append(tc.waiters[toolUseID], ch)
 	tc.mu.Unlock()
 
-	// Wait for signal or timeout.
+	// Wait for signal, timeout, or context cancellation.
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
@@ -88,6 +90,8 @@ func (tc *TurnContext) Wait(toolUseID string, timeout time.Duration) (*turnResul
 		tc.mu.Unlock()
 		return r, true
 	case <-timer.C:
+		return nil, false
+	case <-ctx.Done():
 		return nil, false
 	}
 }

@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+// Pre-compiled regex for ExecAnnotator (avoid re-compiling on every tool call).
+var exitCodeRe = regexp.MustCompile(`Exit code: (\d+)`)
+
 // PostProcessor transforms a tool's output after execution.
 // Returning the input unchanged is valid (no-op).
 type PostProcessor func(ctx context.Context, toolName string, output string) string
@@ -174,8 +177,7 @@ func ExecAnnotator(_ context.Context, toolName string, output string) string {
 		return output
 	}
 	// Extract exit code for emphasis.
-	re := regexp.MustCompile(`Exit code: (\d+)`)
-	if matches := re.FindStringSubmatch(output); len(matches) == 2 && matches[1] != "0" {
+	if matches := exitCodeRe.FindStringSubmatch(output); len(matches) == 2 && matches[1] != "0" {
 		return fmt.Sprintf("[command failed with exit code %s]\n%s", matches[1], output)
 	}
 	return output

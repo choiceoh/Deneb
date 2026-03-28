@@ -172,12 +172,12 @@ func RunAgent(
 		toolResults := make([]llm.ContentBlock, len(turnResult.toolCalls))
 		var wg sync.WaitGroup
 		for i, tc := range turnResult.toolCalls {
-			if hooks.OnToolStart != nil {
-				hooks.OnToolStart(tc.Name)
-			}
 			wg.Add(1)
 			go func(idx int, tc llm.ContentBlock) {
 				defer wg.Done()
+				if hooks.OnToolStart != nil {
+					hooks.OnToolStart(tc.Name)
+				}
 				logger.Info("executing tool", "name", tc.Name, "turn", turn)
 
 				start := time.Now()

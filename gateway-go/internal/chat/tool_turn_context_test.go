@@ -39,7 +39,7 @@ func TestTurnContext_Wait_AlreadyAvailable(t *testing.T) {
 	tc := NewTurnContext()
 	tc.Store("toolu_1", &turnResult_{ToolName: "grep", Output: "match"})
 
-	r, ok := tc.Wait("toolu_1", 1*time.Second)
+	r, ok := tc.Wait(context.Background(), "toolu_1", 1*time.Second)
 	if !ok {
 		t.Fatal("expected ok=true for already-available result")
 	}
@@ -58,7 +58,7 @@ func TestTurnContext_Wait_BlocksUntilStored(t *testing.T) {
 	var ok bool
 	go func() {
 		defer wg.Done()
-		result, ok = tc.Wait("toolu_1", 5*time.Second)
+		result, ok = tc.Wait(context.Background(), "toolu_1", 5*time.Second)
 	}()
 
 	// Simulate delayed store.
@@ -77,12 +77,37 @@ func TestTurnContext_Wait_BlocksUntilStored(t *testing.T) {
 func TestTurnContext_Wait_Timeout(t *testing.T) {
 	tc := NewTurnContext()
 
-	r, ok := tc.Wait("toolu_never", 50*time.Millisecond)
+	r, ok := tc.Wait(context.Background(), "toolu_never", 50*time.Millisecond)
 	if ok {
 		t.Fatal("expected ok=false on timeout")
 	}
 	if r != nil {
 		t.Error("expected nil result on timeout")
+	}
+}
+
+func TestTurnContext_Wait_ContextCancelled(t *testing.T) {
+	tc := NewTurnContext()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Cancel after a short delay — should return before the 5s timeout.
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	r, ok := tc.Wait(ctx, "toolu_never", 5*time.Second)
+	elapsed := time.Since(start)
+
+	if ok {
+		t.Fatal("expected ok=false on context cancellation")
+	}
+	if r != nil {
+		t.Error("expected nil result on context cancellation")
+	}
+	if elapsed > 1*time.Second {
+		t.Errorf("Wait should have returned quickly on cancel, took %v", elapsed)
 	}
 }
 
