@@ -23,7 +23,7 @@ import (
 const (
 	DreamingTurnThreshold    = 50
 	DreamingTimeIntervalH    = 8
-	dreamingTimeout          = 8 * time.Minute
+	dreamingTimeout          = 12 * time.Minute
 	dreamingBatchSize        = 20
 	dreamingMaxTokens        = 1024
 	similarityMergeThreshold = 0.78
