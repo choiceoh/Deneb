@@ -123,7 +123,7 @@ func main() {
 	)
 
 	// Initialize Vega backend (Gemini embedding + SGLang expansion + Jina reranking + Rust FTS).
-	initVega(srv, logger, geminiEmbedder)
+	vegaEnabled := initVega(srv, logger, geminiEmbedder)
 
 	if bootstrap.GeneratedToken != "" {
 		logger.Info("gateway auth token auto-generated",
@@ -138,7 +138,7 @@ func main() {
 		Addr:        addr,
 		AuthMode:    rtCfg.AuthMode,
 		RustFFI:     ffi.Available,
-		VegaEnabled: embedResult.Endpoint != nil,
+		VegaEnabled: vegaEnabled,
 	}
 	// Resolve active channels from config snapshot.
 	bannerInfo.Channels = config.ConfiguredChannelIDs(bootstrap.Snapshot)
@@ -241,7 +241,7 @@ func runWithSignals(run func(ctx context.Context) error, logger *slog.Logger) in
 }
 
 // initVega sets up the Vega search backend with Gemini embedding and query expansion.
-func initVega(srv *server.Server, logger *slog.Logger, embedder *embedding.GeminiEmbedder) {
+func initVega(srv *server.Server, logger *slog.Logger, embedder *embedding.GeminiEmbedder) bool {
 	const (
 		sglangURL   = "http://127.0.0.1:30000/v1"
 		sglangModel = "Qwen/Qwen3.5-35B-A3B"
@@ -249,7 +249,7 @@ func initVega(srv *server.Server, logger *slog.Logger, embedder *embedding.Gemin
 
 	if !vega.ShouldEnableVega(ffi.Available, sglangURL, logger) {
 		logger.Info("vega: disabled (FFI not available)")
-		return
+		return false
 	}
 
 	cfg := vega.EnhancedBackendConfig{
@@ -262,6 +262,7 @@ func initVega(srv *server.Server, logger *slog.Logger, embedder *embedding.Gemin
 
 	backend := vega.NewEnhancedBackend(cfg)
 	srv.SetVega(backend)
+	return true
 }
 
 func parseLogLevel(s string) slog.Level {
