@@ -15,6 +15,7 @@ func TestParseModelID(t *testing.T) {
 		wantProv   string
 		wantModel  string
 	}{
+		{"google/gemini-3.0-flash", "google", "gemini-3.0-flash"},
 		{"zai/glm-5.1", "zai", "glm-5.1"},
 		{"anthropic/claude-3-opus", "anthropic", "claude-3-opus"},
 		{"gpt-4", "", "gpt-4"},
@@ -125,6 +126,7 @@ func TestResolveDefaultBaseURL(t *testing.T) {
 		wantURL  string
 	}{
 		{"anthropic", llm.DefaultAnthropicBaseURL},
+		{"google", "https://generativelanguage.googleapis.com/v1beta/openai"},
 		{"zai", defaultZaiBaseURL},
 		{"sglang", defaultSglangBaseURL},
 		{"openai", ""},
