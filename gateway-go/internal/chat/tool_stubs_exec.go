@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -178,7 +178,6 @@ func toolCron(cronSched *cron.Scheduler, deps *CoreToolDeps) ToolFunc {
 
 // --- gateway tool ---
 
-
 func sessionsListToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -190,8 +189,8 @@ func sessionsListToolSchema() map[string]any {
 				"minimum":     1,
 			},
 			"kinds": map[string]any{
-				"type":  "array",
-				"items": map[string]any{"type": "string", "enum": []string{"main", "group", "cron", "hook"}},
+				"type":        "array",
+				"items":       map[string]any{"type": "string", "enum": []string{"main", "group", "cron", "hook"}},
 				"description": "Filter by session kind",
 			},
 		},
@@ -518,4 +517,3 @@ func toolSessionsSpawn(deps *CoreToolDeps) ToolFunc {
 }
 
 // --- subagents tool ---
-

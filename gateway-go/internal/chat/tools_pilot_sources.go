@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
-	"time"
 )
 
 func expandShortcuts(p pilotParams) []sourceSpec {

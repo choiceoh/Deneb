@@ -10,6 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
+
 // Pilot tool: the AI agent's fast local helper that can orchestrate other tools.
 //
 // The agent specifies a task and data sources. Pilot:
@@ -30,47 +31,6 @@ const (
 	sglangHealthTTL  = 30 * time.Second
 	sglangHealthPing = 3 * time.Second // HTTP timeout for health check
 )
-
-// --- sglang health check (cached) ---
-
-var (
-	sglangHealthy   atomic.Bool
-	sglangLastCheck atomic.Int64 // unix timestamp
-)
-
-// checkSglangHealth returns true if the local sglang server is reachable.
-// Result is cached for sglangHealthTTL to avoid per-call overhead.
-func checkSglangHealth() bool {
-	now := time.Now().Unix()
-	last := sglangLastCheck.Load()
-	if now-last < int64(sglangHealthTTL.Seconds()) {
-		return sglangHealthy.Load()
-	}
-
-	// Probe /v1/models — lightweight endpoint.
-	ctx, cancel := context.WithTimeout(context.Background(), sglangHealthPing)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, defaultSglangBaseURL+"/models", nil)
-	if err != nil {
-		sglangHealthy.Store(false)
-		sglangLastCheck.Store(now)
-		return false
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		sglangHealthy.Store(false)
-		sglangLastCheck.Store(now)
-		return false
-	}
-	resp.Body.Close()
-
-	healthy := resp.StatusCode == http.StatusOK
-	sglangHealthy.Store(healthy)
-	sglangLastCheck.Store(now)
-	return healthy
-}
 
 // --- Thinking mode for Qwen3.5 ---
 
@@ -94,7 +54,6 @@ func shouldUseThinking(task string, sourceCount int) bool {
 	}
 	return false
 }
-
 
 // --- System prompt ---
 
@@ -429,29 +388,29 @@ type pilotParams struct {
 	PostProcess  []postProcessStep `json:"post_process"`
 
 	// Shortcuts.
-	File      string   `json:"file"`
-	Files     []string `json:"files"`
-	Exec      string   `json:"exec"`
-	Grep      string   `json:"grep"`
-	Find      string   `json:"find"`
-	Path      string   `json:"path"`
-	URL       string   `json:"url"`
-	HTTP      string   `json:"http"`
-	Diff      string   `json:"diff"`
-	Test      string   `json:"test"`
-	Tree      string   `json:"tree"`
-	GitLog    string   `json:"git_log"`
-	Health    bool     `json:"health"`
-	KVKey     string   `json:"kv_key"`
-	Memory    string   `json:"memory"`
-	Gmail     string   `json:"gmail"`
-	YouTube   string   `json:"youtube"`
-	Polaris   string   `json:"polaris"`
-	Image     string   `json:"image"`
-	Ls        string   `json:"ls"`
-	Vega        string `json:"vega"`
-	AgentLogs   string `json:"agent_logs"`
-	GatewayLogs string `json:"gateway_logs"`
+	File        string   `json:"file"`
+	Files       []string `json:"files"`
+	Exec        string   `json:"exec"`
+	Grep        string   `json:"grep"`
+	Find        string   `json:"find"`
+	Path        string   `json:"path"`
+	URL         string   `json:"url"`
+	HTTP        string   `json:"http"`
+	Diff        string   `json:"diff"`
+	Test        string   `json:"test"`
+	Tree        string   `json:"tree"`
+	GitLog      string   `json:"git_log"`
+	Health      bool     `json:"health"`
+	KVKey       string   `json:"kv_key"`
+	Memory      string   `json:"memory"`
+	Gmail       string   `json:"gmail"`
+	YouTube     string   `json:"youtube"`
+	Polaris     string   `json:"polaris"`
+	Image       string   `json:"image"`
+	Ls          string   `json:"ls"`
+	Vega        string   `json:"vega"`
+	AgentLogs   string   `json:"agent_logs"`
+	GatewayLogs string   `json:"gateway_logs"`
 }
 
 // postProcessStep is a programmatic transformation applied to gathered data.
