@@ -53,7 +53,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	procMgr := deps.ProcessMgr
 	workspaceDir := deps.WorkspaceDir
 	cronSched := deps.CronSched
-	// -- File system tools (implemented in tools_fs.go) --
+	// -- File tools (tools_fs.go, tools_fs_search.go) --
 	registry.RegisterTool(ToolDef{
 		Name:        "read",
 		Description: "Read file contents with line numbers (default: 2000 lines). Use offset/limit for large files",
@@ -85,72 +85,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolFind(workspaceDir),
 	})
 
-	// -- Exec/process tools --
-	registry.RegisterTool(ToolDef{
-		Name:        "exec",
-		Description: "Run a shell command (bash -c). Default timeout 30s, max 5min. Use background=true for long tasks, then process to check",
-		InputSchema: execToolSchema(),
-		Fn:          toolExec(procMgr, workspaceDir),
-	})
-	registry.RegisterTool(ToolDef{
-		Name:        "process",
-		Description: "Manage background exec sessions: list running, poll/log output, kill by sessionId",
-		InputSchema: processToolSchema(),
-		Fn:          toolProcess(procMgr),
-	})
-
-	// -- Web tool (unified search + fetch) --
-	webCache := NewFetchCache()
-	sglang := newSGLangExtractor()
-	registry.RegisterTool(ToolDef{
-		Name:        "web",
-		Description: "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch, {query:...} search, {query:...,fetch:N} search+fetch",
-		InputSchema: webToolSchema(),
-		Fn:          toolWeb(webCache, sglang),
-	})
-
-	// -- Memory tools --
-	registry.RegisterTool(ToolDef{
-		Name:        "memory_search",
-		Description: "Search MEMORY.md + memory/*.md by keyword. Returns matched lines with context",
-		InputSchema: memorySearchToolSchema(),
-		Fn:          toolMemorySearch(workspaceDir),
-	})
-
-	// -- Health check tool (embedding, reranker, sglang, memory diagnostics) --
-	registry.RegisterTool(ToolDef{
-		Name:        "health_check",
-		Description: "인프라 상태 점검: embedding (Gemini), reranker (Jina), sglang (로컬 LLM), memory (aurora-memory DB). component: all (기본), embedding, reranker, sglang, memory",
-		InputSchema: healthCheckToolSchema(),
-		Fn:          toolHealthCheck(deps),
-	})
-
-	// -- Vega tool (project knowledge search) --
-	registry.RegisterTool(ToolDef{
-		Name:        "vega",
-		Description: "Search project knowledge base (Vega). Hybrid BM25 + semantic search across all projects. Actions: search (default), ask",
-		InputSchema: vegaToolSchema(),
-		Fn:          toolVega(deps),
-	})
-
-	// -- System manual tool (queryable Deneb documentation) --
-	registry.RegisterTool(ToolDef{
-		Name:        "polaris",
-		Description: "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (27 AI-curated system guides in 4 categories: core, tools, runtime, infra). Use guides with category key to browse",
-		InputSchema: polarisToolSchema(),
-		Fn:          toolPolaris(workspaceDir),
-	})
-
-	// -- Message tool (proactive channel sends via context-injected ReplyFunc) --
-	registry.RegisterTool(ToolDef{
-		Name:        "message",
-		Description: "Send messages to the user's channel. Actions: send, reply, react, thread-reply. Use for proactive sends",
-		InputSchema: messageToolSchema(),
-		Fn:          toolMessage(),
-	})
-
-
-	// -- Coding tools (implemented in tools_coding.go) --
+	// -- Code tools (tools_coding.go, tools_analyze.go, tools_test_runner.go) --
 	registry.RegisterTool(ToolDef{
 		Name:        "multi_edit",
 		Description: "Batch search-and-replace across multiple files in one call. Up to 50 edits. Essential for refactoring, renaming symbols, updating imports",
@@ -169,24 +104,12 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		InputSchema: diffToolSchema(),
 		Fn:          toolDiff(workspaceDir),
 	})
-
-	// -- Git tool (structured git operations, complements diff) --
-	registry.RegisterTool(ToolDef{
-		Name:        "git",
-		Description: "Git operations: status, commit, log, branch, stash, blame, tag, merge, rebase, cherry_pick, reset, remote, clean. Use diff tool for viewing diffs, apply_patch for applying patches",
-		InputSchema: gitToolSchema(),
-		Fn:          toolGit(workspaceDir),
-	})
-
-	// -- Code analysis tool (Go AST + regex-based for Rust/others) --
 	registry.RegisterTool(ToolDef{
 		Name:        "analyze",
 		Description: "Code analysis: outline (file structure), symbols (find definitions), references (find usages), imports (dependency graph), signature (function signatures). Supports Go (AST) and Rust (regex)",
 		InputSchema: analyzeToolSchema(),
 		Fn:          toolAnalyze(workspaceDir),
 	})
-
-	// -- Test/build runner tool --
 	registry.RegisterTool(ToolDef{
 		Name:        "test",
 		Description: "Run tests/builds with structured results. Actions: run (tests with pass/fail/skip counts), build (compile check), check (lint/vet). Frameworks: go, cargo, make. Parses go test -json for structured output",
@@ -194,15 +117,83 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolTest(workspaceDir),
 	})
 
-	// -- Cron tool --
+	// -- Git tool (tools_git.go) --
+	registry.RegisterTool(ToolDef{
+		Name:        "git",
+		Description: "Git operations: status, commit, log, branch, stash, blame, tag, merge, rebase, cherry_pick, reset, remote, clean. Use diff tool for viewing diffs, apply_patch for applying patches",
+		InputSchema: gitToolSchema(),
+		Fn:          toolGit(workspaceDir),
+	})
+
+	// -- Exec/process tools --
+	registry.RegisterTool(ToolDef{
+		Name:        "exec",
+		Description: "Run a shell command (bash -c). Default timeout 30s, max 5min. Use background=true for long tasks, then process to check",
+		InputSchema: execToolSchema(),
+		Fn:          toolExec(procMgr, workspaceDir),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "process",
+		Description: "Manage background exec sessions: list running, poll/log output, kill by sessionId",
+		InputSchema: processToolSchema(),
+		Fn:          toolProcess(procMgr),
+	})
+
+	// -- Web tools --
+	webCache := NewFetchCache()
+	sglang := newSGLangExtractor()
+	registry.RegisterTool(ToolDef{
+		Name:        "web",
+		Description: "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch, {query:...} search, {query:...,fetch:N} search+fetch",
+		InputSchema: webToolSchema(),
+		Fn:          toolWeb(webCache, sglang),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "http",
+		Description: "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
+		InputSchema: httpToolSchema(),
+		Fn:          toolHTTP(),
+	})
+
+	// -- Memory tools --
+	registry.RegisterTool(ToolDef{
+		Name:        "memory_search",
+		Description: "Search MEMORY.md + memory/*.md by keyword. Returns matched lines with context",
+		InputSchema: memorySearchToolSchema(),
+		Fn:          toolMemorySearch(workspaceDir),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "vega",
+		Description: "Search project knowledge base (Vega). Hybrid BM25 + semantic search across all projects. Actions: search (default), ask",
+		InputSchema: vegaToolSchema(),
+		Fn:          toolVega(deps),
+	})
+	registry.RegisterTool(ToolDef{
+		Name:        "polaris",
+		Description: "Query Deneb system manual. actions: topics (doc tree), search (keyword search), read (read a doc), guides (27 AI-curated system guides in 4 categories: core, tools, runtime, infra). Use guides with category key to browse",
+		InputSchema: polarisToolSchema(),
+		Fn:          toolPolaris(workspaceDir),
+	})
+
+	// -- System tools --
+	registry.RegisterTool(ToolDef{
+		Name:        "health_check",
+		Description: "인프라 상태 점검: embedding (Gemini), reranker (Jina), sglang (로컬 LLM), memory (aurora-memory DB). component: all (기본), embedding, reranker, sglang, memory",
+		InputSchema: healthCheckToolSchema(),
+		Fn:          toolHealthCheck(deps),
+	})
 	registry.RegisterTool(ToolDef{
 		Name:        "cron",
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
 		InputSchema: cronToolSchema(),
 		Fn:          toolCron(cronSched, deps),
 	})
-
-	// -- Gateway tool --
+	registry.RegisterTool(ToolDef{
+		Name:        "message",
+		Description: "Send messages to the user's channel. Actions: send, reply, react, thread-reply. Use for proactive sends",
+		InputSchema: messageToolSchema(),
+		Fn:          toolMessage(),
+	})
 	registry.RegisterTool(ToolDef{
 		Name:        "gateway",
 		Description: "Gateway self-management: config read/write, restart (SIGUSR1), git pull + rebuild",
@@ -248,23 +239,19 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolSubagents(deps),
 	})
 
-	// -- Image tool --
+	// -- Media tools --
 	registry.RegisterTool(ToolDef{
 		Name:        "image",
 		Description: "Analyze images with a vision model (up to 20 local files or URLs). Accepts optional prompt",
 		InputSchema: imageToolSchema(),
 		Fn:          toolImage(deps.LLMClient),
 	})
-
-	// -- YouTube transcript tool --
 	registry.RegisterTool(ToolDef{
 		Name:        "youtube_transcript",
 		Description: "Extract transcript/subtitles and metadata from a YouTube video",
 		InputSchema: youtubeTranscriptToolSchema(),
 		Fn:          toolYouTubeTranscript(),
 	})
-
-	// -- Send file tool (media delivery to channel) --
 	registry.RegisterTool(ToolDef{
 		Name:        "send_file",
 		Description: "Send a file to the user (auto-detects: photo/video/audio/document). Max 50 MB",
@@ -272,23 +259,13 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolSendFile(),
 	})
 
-	// -- HTTP tool (structured API requests) --
-	registry.RegisterTool(ToolDef{
-		Name:        "http",
-		Description: "Make HTTP API requests with headers, JSON body, and auth. Returns status + headers + body",
-		InputSchema: httpToolSchema(),
-		Fn:          toolHTTP(),
-	})
-
-	// -- KV tool (lightweight key-value persistence) --
+	// -- Data tools --
 	registry.RegisterTool(ToolDef{
 		Name:        "kv",
 		Description: "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
 		InputSchema: kvToolSchema(),
 		Fn:          toolKV(),
 	})
-
-	// -- Gmail tool (structured Gmail operations via native API) --
 	registry.RegisterTool(ToolDef{
 		Name:        "gmail",
 		Description: "Gmail (native OAuth2): inbox summary, search, read, send, reply, labels with contact aliases. Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
@@ -296,8 +273,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolGmail(),
 	})
 
-	// -- Agent logs tool (pilot-only: query past run detail logs for diagnostics) --
-	// Hidden from the main LLM to avoid context bloat; use via pilot shortcut.
+	// -- Hidden tools (pilot-only) --
 	registry.RegisterTool(ToolDef{
 		Name:        "agent_logs",
 		Description: "현재 세션의 이전 에이전트 런 상세 로그를 조회합니다. 문제 진단, 이전 실행 결과 확인, 도구 실행 시간 분석에 사용합니다",
@@ -305,9 +281,6 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          toolAgentLogs(deps.AgentLog),
 		Hidden:      true,
 	})
-
-	// -- Gateway logs tool (pilot-only: query gateway process logs) --
-	// Hidden from the main LLM; use via pilot shortcut.
 	registry.RegisterTool(ToolDef{
 		Name:        "gateway_logs",
 		Description: "게이트웨이 프로세스 로그를 조회합니다. 레벨/패키지/패턴 필터링 지원. 서버 오류 진단, 요청 추적, 성능 분석에 사용합니다",
@@ -316,8 +289,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Hidden:      true,
 	})
 
-	// -- Pilot tool (fast local AI that orchestrates other tools) --
-	// Registered last: uses the registry itself to execute source tools.
+	// -- Pilot (registered last: uses the registry itself) --
 	registry.RegisterTool(ToolDef{
 		Name:        "pilot",
 		Description: "Fast local AI — gathers tool outputs and analyzes them in one call (free, no API cost). Best for: summarizing file/command output, reviewing diffs, analyzing test failures, comparing multiple sources, processing grep results. Shortcuts: file, files, exec, grep, find, url, http, diff, test, tree, git_log, health, kv_key, memory, gmail, youtube, polaris, image, vega, agent_logs, gateway_logs. Options: chain, max_length, output_format, post_process",
