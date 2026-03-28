@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/commands"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
@@ -13,7 +14,7 @@ var activationCmdRe = regexp.MustCompile(`(?i)^/activation(?:\s+([a-zA-Z]+))?\s*
 // Returns hasCommand=true if the text is an activation command, with an
 // optional mode if one was specified.
 // This function stays in autoreply because it depends on *CommandRegistry.
-func ParseActivationCommand(raw string, registry *CommandRegistry) (hasCommand bool, mode types.GroupActivationMode) {
+func ParseActivationCommand(raw string, registry *commands.CommandRegistry) (hasCommand bool, mode types.GroupActivationMode) {
 	if raw == "" {
 		return false, ""
 	}

@@ -1,8 +1,6 @@
 package autoreply
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"fmt"
 	"log/slog"
@@ -10,6 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/chunk"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/commands"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
 
@@ -123,7 +124,7 @@ type DispatchInboundParams struct {
 	AccountID   string
 	ThreadID    string
 	BotUsername string
-	Registry    *CommandRegistry
+	Registry    *commands.CommandRegistry
 }
 
 func extractCommandKey(text string) string {

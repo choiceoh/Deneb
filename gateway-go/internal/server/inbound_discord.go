@@ -18,7 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/commands"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/directives"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/inbound"
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/chat"
@@ -90,7 +91,7 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	if strings.HasPrefix(trimmed, "/") {
 		cmdKey := extractCommandKey(trimmed)
 		if cmdKey != "" && p.cmdRouter.HasHandler(cmdKey) {
-			result, err := p.cmdRouter.Dispatch(autoreply.CommandContext{
+			result, err := p.cmdRouter.Dispatch(commands.CommandContext{
 				Command:    cmdKey,
 				Body:       msgCtx.Body,
 				SessionKey: sessionKey,
@@ -123,9 +124,9 @@ func (p *InboundProcessor) HandleDiscordMessage(msg *discord.Message) {
 	// Parse inline directives (/model, /think, etc.) and clean the message body.
 	agentMessage := msgCtx.BodyForAgent
 	if agentMessage != "" {
-		directives := autoreply.ParseInlineDirectives(agentMessage, nil)
-		if directives.Cleaned != "" {
-			agentMessage = directives.Cleaned
+		parsed := directives.ParseInlineDirectives(agentMessage, nil)
+		if parsed.Cleaned != "" {
+			agentMessage = parsed.Cleaned
 		}
 	}
 
@@ -303,7 +304,7 @@ func (p *InboundProcessor) sendDiscordQuickReply(channelID, text string) {
 }
 
 // sendDiscordCommandReply delivers a command result back to the Discord channel.
-func (p *InboundProcessor) sendDiscordCommandReply(channelID string, result *autoreply.CommandResult) {
+func (p *InboundProcessor) sendDiscordCommandReply(channelID string, result *commands.CommandResult) {
 	replyText := result.Reply
 	if replyText == "" && len(result.Payloads) > 0 {
 		replyText = result.Payloads[0].Text

@@ -6,9 +6,12 @@
 package autoreply
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 	"context"
 	"sync"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/commands"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/autoreply/types"
 )
 
 // DispatchConfig holds the resolved configuration for message dispatch.
@@ -36,7 +39,7 @@ type DispatchResult struct {
 // DispatchFromConfig runs the full reply dispatch pipeline from config.
 func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg DispatchConfig, deps ReplyDeps) DispatchResult {
 	// 1. Check for abort trigger.
-	if IsAbortRequestText(msg.Body) {
+	if session.IsAbortRequestText(msg.Body) {
 		return DispatchResult{Handled: true}
 	}
 
@@ -46,7 +49,7 @@ func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg Dispatch
 		if deps.Registry.HasControlCommand(normalized, "") {
 			cmdKey := extractCommandKey(normalized)
 			args := extractCommandArgs(normalized, cmdKey)
-			result, err := deps.Router.Dispatch(CommandContext{
+			result, err := deps.Router.Dispatch(commands.CommandContext{
 				Command:    cmdKey,
 				Args:       args,
 				Body:       msg.Body,
@@ -75,7 +78,7 @@ func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg Dispatch
 	return DispatchResult{Payloads: payloads, Handled: true}
 }
 
-func extractCommandArgs(normalized, cmdKey string) *CommandArgs {
+func extractCommandArgs(normalized, cmdKey string) *commands.CommandArgs {
 	prefix := "/" + cmdKey
 	if len(normalized) <= len(prefix) {
 		return nil
@@ -83,7 +86,7 @@ func extractCommandArgs(normalized, cmdKey string) *CommandArgs {
 	rest := normalized[len(prefix):]
 	if len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
 		raw := rest[1:]
-		return &CommandArgs{Raw: raw}
+		return &commands.CommandArgs{Raw: raw}
 	}
 	return nil
 }
