@@ -62,6 +62,8 @@ var toolCategories = []struct {
 }{
 	{"File", []string{"read", "write", "edit", "multi_edit", "apply_patch", "grep", "find", "ls", "tree", "diff"}},
 	{"Exec", []string{"exec", "process"}},
+	{"Git", []string{"git"}},
+	{"Code", []string{"analyze", "test"}},
 	{"AI", []string{"pilot"}},
 	{"Web", []string{"web", "http"}},
 	{"Memory", []string{"memory_search", "memory_get", "polaris", "vega"}},
@@ -116,10 +118,13 @@ func buildPromptSections(params SystemPromptParams) (staticText, dynamicText str
 	// Coding.
 	s.WriteString("## Coding\n")
 	s.WriteString("- Use `tree` to understand project structure before diving into code.\n")
+	s.WriteString("- Use `analyze(action:'outline')` to see file structure (functions, types, imports).\n")
 	s.WriteString("- Use `multi_edit` for coordinated changes across files (renames, refactors, import updates).\n")
-	s.WriteString("- Use `diff` to review changes before committing. `diff(mode:'all')` shows everything vs HEAD.\n")
-	s.WriteString("- For large refactors: tree → grep → read → multi_edit → diff → exec(tests).\n")
-	s.WriteString("- Always verify edits compile: run build/lint after multi-file changes.\n\n")
+	s.WriteString("- Use `diff` to review changes. `git(action:'status')` to check working tree.\n")
+	s.WriteString("- Use `test(action:'run')` for structured test results (pass/fail/skip counts).\n")
+	s.WriteString("- Use `git(action:'commit')` to commit changes. Use `read(function:'FuncName')` to read a specific function.\n")
+	s.WriteString("- Workflow: analyze → edit/multi_edit → test → git(commit).\n")
+	s.WriteString("- Always verify edits compile: `test(action:'build')` or `test(action:'check')` after changes.\n\n")
 
 	// Safety.
 	s.WriteString("## Safety\n")

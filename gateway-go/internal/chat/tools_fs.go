@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -31,6 +35,10 @@ func readToolSchema() map[string]any {
 				"default":     2000,
 				"minimum":     1,
 			},
+			"function": map[string]any{
+				"type":        "string",
+				"description": "Read only this function/method/type. For .go files uses AST; for others uses regex. Overrides offset/limit",
+			},
 		},
 		"required": []string{"file_path"},
 	}
@@ -42,6 +50,7 @@ func toolRead(defaultDir string) ToolFunc {
 			FilePath string `json:"file_path"`
 			Offset   int    `json:"offset"`
 			Limit    int    `json:"limit"`
+			Function string `json:"function"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("invalid read params: %w", err)
@@ -54,6 +63,11 @@ func toolRead(defaultDir string) ToolFunc {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return "", fmt.Errorf("failed to read file: %w", err)
+		}
+
+		// Function extraction mode.
+		if p.Function != "" {
+			return readFunction(path, p.FilePath, string(data), p.Function)
 		}
 
 		lines := strings.Split(string(data), "\n")
@@ -90,6 +104,141 @@ func toolRead(defaultDir string) ToolFunc {
 		}
 		return sb.String(), nil
 	}
+}
+
+// readFunction extracts a specific function/type from a file.
+// For .go files, uses go/ast for precise extraction.
+// For other files, uses regex heuristics.
+func readFunction(path, displayPath, content, funcName string) (string, error) {
+	lines := strings.Split(content, "\n")
+
+	if strings.HasSuffix(path, ".go") {
+		return readGoFunction(path, displayPath, lines, funcName)
+	}
+
+	// Regex fallback for non-Go files.
+	return readFunctionRegex(displayPath, lines, funcName)
+}
+
+// readGoFunction uses go/ast to find and extract a function or type declaration.
+func readGoFunction(path, displayPath string, lines []string, funcName string) (string, error) {
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+	if err != nil {
+		// Fall back to regex if parsing fails.
+		return readFunctionRegex(displayPath, lines, funcName)
+	}
+
+	// Search all declarations.
+	for _, decl := range node.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			if !strings.EqualFold(d.Name.Name, funcName) {
+				continue
+			}
+			start := fset.Position(d.Pos()).Line
+			end := fset.Position(d.End()).Line
+
+			// Include doc comments.
+			if d.Doc != nil {
+				docStart := fset.Position(d.Doc.Pos()).Line
+				if docStart < start {
+					start = docStart
+				}
+			}
+			return formatFunctionLines(displayPath, lines, start, end, funcName)
+
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				ts, ok := spec.(*ast.TypeSpec)
+				if !ok || !strings.EqualFold(ts.Name.Name, funcName) {
+					continue
+				}
+				start := fset.Position(d.Pos()).Line
+				end := fset.Position(d.End()).Line
+				if d.Doc != nil {
+					docStart := fset.Position(d.Doc.Pos()).Line
+					if docStart < start {
+						start = docStart
+					}
+				}
+				return formatFunctionLines(displayPath, lines, start, end, funcName)
+			}
+		}
+	}
+
+	return "", fmt.Errorf("symbol %q not found in %s", funcName, displayPath)
+}
+
+// readFunctionRegex uses regex to find a function definition and extract it.
+func readFunctionRegex(displayPath string, lines []string, funcName string) (string, error) {
+	// Patterns for common languages.
+	patterns := []string{
+		`(?i)^(\s*)(pub\s+)?(async\s+)?fn\s+` + regexp.QuoteMeta(funcName),          // Rust
+		`(?i)^(\s*)(export\s+)?(async\s+)?function\s+` + regexp.QuoteMeta(funcName), // JS/TS
+		`(?i)^(\s*)def\s+` + regexp.QuoteMeta(funcName),                             // Python
+		`(?i)^(\s*)(pub\s+)?struct\s+` + regexp.QuoteMeta(funcName),                 // Rust struct
+		`(?i)^(\s*)class\s+` + regexp.QuoteMeta(funcName),                           // Python/JS class
+	}
+
+	for _, pat := range patterns {
+		re := regexp.MustCompile(pat)
+		for i, line := range lines {
+			if re.MatchString(line) {
+				// Find the end of the block by tracking brace depth.
+				end := findBlockEnd(lines, i)
+				return formatFunctionLines(displayPath, lines, i+1, end+1, funcName)
+			}
+		}
+	}
+
+	return "", fmt.Errorf("symbol %q not found in %s", funcName, displayPath)
+}
+
+// findBlockEnd finds the end of a code block starting at startIdx by tracking brace depth.
+func findBlockEnd(lines []string, startIdx int) int {
+	depth := 0
+	started := false
+
+	for i := startIdx; i < len(lines); i++ {
+		for _, ch := range lines[i] {
+			if ch == '{' || ch == '(' {
+				depth++
+				started = true
+			} else if ch == '}' || ch == ')' {
+				depth--
+			}
+		}
+		if started && depth <= 0 {
+			return i
+		}
+		// Safety: don't scan more than 500 lines.
+		if i-startIdx > 500 {
+			return i
+		}
+	}
+	// If no braces found, return a reasonable block (30 lines).
+	end := startIdx + 30
+	if end >= len(lines) {
+		end = len(lines) - 1
+	}
+	return end
+}
+
+func formatFunctionLines(displayPath string, lines []string, start, end int, funcName string) (string, error) {
+	if start < 1 {
+		start = 1
+	}
+	if end > len(lines) {
+		end = len(lines)
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "[%s: %s (lines %d-%d)]\n", displayPath, funcName, start, end)
+	for i := start - 1; i < end; i++ {
+		fmt.Fprintf(&sb, "%6d\t%s\n", i+1, lines[i])
+	}
+	return sb.String(), nil
 }
 
 // --- Write tool ---
@@ -151,16 +300,26 @@ func editToolSchema() map[string]any {
 			},
 			"old_string": map[string]any{
 				"type":        "string",
-				"description": "The text to replace (must be unique unless replace_all is true)",
+				"description": "The text to replace (must be unique unless replace_all is true). When regex=true, treated as a regex pattern",
 			},
 			"new_string": map[string]any{
 				"type":        "string",
-				"description": "The text to replace it with",
+				"description": "The text to replace it with. When regex=true, supports $1/$2 backreferences",
 			},
 			"replace_all": map[string]any{
 				"type":        "boolean",
 				"description": "Replace all occurrences instead of requiring a unique match (default: false)",
 				"default":     false,
+			},
+			"regex": map[string]any{
+				"type":        "boolean",
+				"description": "Treat old_string as a regex pattern (default: false)",
+				"default":     false,
+			},
+			"line": map[string]any{
+				"type":        "number",
+				"description": "Replace at a specific line number (1-based). When set, old_string matches only on this line",
+				"minimum":     1,
 			},
 		},
 		"required": []string{"file_path", "old_string", "new_string"},
@@ -174,6 +333,8 @@ func toolEdit(defaultDir string) ToolFunc {
 			OldString  string `json:"old_string"`
 			NewString  string `json:"new_string"`
 			ReplaceAll bool   `json:"replace_all"`
+			Regex      bool   `json:"regex"`
+			Line       int    `json:"line"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("invalid edit params: %w", err)
@@ -192,12 +353,24 @@ func toolEdit(defaultDir string) ToolFunc {
 		}
 
 		content := string(data)
+
+		// Regex-based replacement.
+		if p.Regex {
+			return editWithRegex(path, p.FilePath, content, p.OldString, p.NewString, p.ReplaceAll)
+		}
+
+		// Line-targeted replacement.
+		if p.Line > 0 {
+			return editAtLine(path, p.FilePath, content, p.OldString, p.NewString, p.Line)
+		}
+
 		count := strings.Count(content, p.OldString)
 		if count == 0 {
-			return "", fmt.Errorf("old_string not found in file")
+			hint := editFuzzyHint(content, p.OldString)
+			return "", fmt.Errorf("old_string not found in file%s", hint)
 		}
 		if count > 1 && !p.ReplaceAll {
-			return "", fmt.Errorf("old_string is not unique in file (%d occurrences). Use replace_all=true to replace all", count)
+			return "", fmt.Errorf("old_string is not unique in file (%d occurrences). Use replace_all=true to replace all, or use line= to target a specific line", count)
 		}
 
 		var newContent string
@@ -214,6 +387,82 @@ func toolEdit(defaultDir string) ToolFunc {
 		}
 		return fmt.Sprintf("Successfully edited %s", p.FilePath), nil
 	}
+}
+
+// editWithRegex performs regex-based search and replace.
+func editWithRegex(path, displayPath, content, pattern, replacement string, replaceAll bool) (string, error) {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", fmt.Errorf("invalid regex pattern: %w", err)
+	}
+
+	matches := re.FindAllStringIndex(content, -1)
+	if len(matches) == 0 {
+		return "", fmt.Errorf("regex pattern not found in file")
+	}
+	if len(matches) > 1 && !replaceAll {
+		return "", fmt.Errorf("regex pattern matches %d times. Use replace_all=true to replace all", len(matches))
+	}
+
+	var newContent string
+	if replaceAll {
+		newContent = re.ReplaceAllString(content, replacement)
+	} else {
+		// Replace only the first match.
+		loc := matches[0]
+		newContent = content[:loc[0]] + re.ReplaceAllString(content[loc[0]:loc[1]], replacement) + content[loc[1]:]
+	}
+
+	if err := os.WriteFile(path, []byte(newContent), 0o644); err != nil {
+		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+	return fmt.Sprintf("Successfully edited %s (regex, %d matches)", displayPath, len(matches)), nil
+}
+
+// editAtLine performs replacement only on a specific line.
+func editAtLine(path, displayPath, content, oldStr, newStr string, lineNum int) (string, error) {
+	lines := strings.Split(content, "\n")
+	if lineNum > len(lines) {
+		return "", fmt.Errorf("line %d out of range (file has %d lines)", lineNum, len(lines))
+	}
+
+	idx := lineNum - 1
+	if !strings.Contains(lines[idx], oldStr) {
+		return "", fmt.Errorf("old_string not found on line %d: %q", lineNum, lines[idx])
+	}
+
+	lines[idx] = strings.Replace(lines[idx], oldStr, newStr, 1)
+	newContent := strings.Join(lines, "\n")
+
+	if err := os.WriteFile(path, []byte(newContent), 0o644); err != nil {
+		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+	return fmt.Sprintf("Successfully edited %s (line %d)", displayPath, lineNum), nil
+}
+
+// editFuzzyHint provides a hint when old_string is not found.
+func editFuzzyHint(content, oldStr string) string {
+	// Check if it's a whitespace issue.
+	normalized := strings.Join(strings.Fields(oldStr), " ")
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		normalizedLine := strings.Join(strings.Fields(line), " ")
+		if strings.Contains(normalizedLine, normalized) {
+			return fmt.Sprintf(". Possible whitespace mismatch on line %d", i+1)
+		}
+	}
+
+	// Check first line of old_string for partial match.
+	firstLine := strings.Split(oldStr, "\n")[0]
+	if firstLine != "" {
+		for i, line := range lines {
+			if strings.Contains(line, strings.TrimSpace(firstLine)) {
+				return fmt.Sprintf(". Similar text found on line %d — check for whitespace or trailing characters", i+1)
+			}
+		}
+	}
+
+	return ""
 }
 
 // --- Grep tool ---
@@ -241,6 +490,18 @@ func grepToolSchema() map[string]any {
 				"minimum":     0,
 				"maximum":     10,
 			},
+			"before": map[string]any{
+				"type":        "number",
+				"description": "Lines of context before each match (overrides contextLines for before)",
+				"minimum":     0,
+				"maximum":     10,
+			},
+			"after": map[string]any{
+				"type":        "number",
+				"description": "Lines of context after each match (overrides contextLines for after)",
+				"minimum":     0,
+				"maximum":     10,
+			},
 			"ignoreCase": map[string]any{
 				"type":        "boolean",
 				"description": "Case-insensitive search",
@@ -257,6 +518,16 @@ func grepToolSchema() map[string]any {
 				"type":        "string",
 				"description": "File type filter for ripgrep --type (e.g. \"go\", \"py\", \"js\")",
 			},
+			"multiline": map[string]any{
+				"type":        "boolean",
+				"description": "Enable multiline matching (patterns can span lines, . matches newlines)",
+				"default":     false,
+			},
+			"mode": map[string]any{
+				"type":        "string",
+				"description": "Output mode: content (default, matching lines), files_only (file paths only), count (match counts per file)",
+				"enum":        []string{"content", "files_only", "count"},
+			},
 		},
 		"required": []string{"pattern"},
 	}
@@ -269,9 +540,13 @@ func toolGrep(defaultDir string) ToolFunc {
 			Path         string `json:"path"`
 			Include      string `json:"include"`
 			ContextLines int    `json:"contextLines"`
+			Before       int    `json:"before"`
+			After        int    `json:"after"`
 			IgnoreCase   bool   `json:"ignoreCase"`
 			MaxResults   int    `json:"maxResults"`
 			FileType     string `json:"fileType"`
+			Multiline    bool   `json:"multiline"`
+			Mode         string `json:"mode"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("invalid grep params: %w", err)
@@ -306,9 +581,32 @@ func toolGrep(defaultDir string) ToolFunc {
 		if p.IgnoreCase {
 			args = append(args, "-i")
 		}
-		if contextLines > 0 {
-			args = append(args, "-C", fmt.Sprintf("%d", contextLines))
+		if p.Multiline {
+			args = append(args, "-U", "--multiline-dotall")
 		}
+
+		// Output mode.
+		switch p.Mode {
+		case "files_only":
+			args = append(args, "-l")
+		case "count":
+			args = append(args, "-c")
+		default:
+			// content mode (default): use context lines.
+			if p.Before > 0 || p.After > 0 {
+				before := clampInt(p.Before, 0, 10)
+				after := clampInt(p.After, 0, 10)
+				if before > 0 {
+					args = append(args, "-B", fmt.Sprintf("%d", before))
+				}
+				if after > 0 {
+					args = append(args, "-A", fmt.Sprintf("%d", after))
+				}
+			} else if contextLines > 0 {
+				args = append(args, "-C", fmt.Sprintf("%d", contextLines))
+			}
+		}
+
 		if p.Include != "" {
 			args = append(args, "--glob", p.Include)
 		}
@@ -324,7 +622,7 @@ func toolGrep(defaultDir string) ToolFunc {
 			if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
 				return "No matches found.", nil
 			}
-			// Fall back to grep (fileType is rg-only, skip it here).
+			// Fall back to grep (fileType/multiline are rg-only, skip them here).
 			grepArgs := []string{"-rn", fmt.Sprintf("--max-count=%d", maxResults)}
 			if p.IgnoreCase {
 				grepArgs = append(grepArgs, "-i")
@@ -334,6 +632,12 @@ func toolGrep(defaultDir string) ToolFunc {
 			}
 			if p.Include != "" {
 				grepArgs = append(grepArgs, "--include="+p.Include)
+			}
+			switch p.Mode {
+			case "files_only":
+				grepArgs = append(grepArgs, "-l")
+			case "count":
+				grepArgs = append(grepArgs, "-c")
 			}
 			grepArgs = append(grepArgs, p.Pattern, searchPath)
 			cmd2 := exec.CommandContext(ctx, "grep", grepArgs...)
@@ -348,6 +652,17 @@ func toolGrep(defaultDir string) ToolFunc {
 		}
 		return string(out), nil
 	}
+}
+
+// clampInt clamps v to [min, max].
+func clampInt(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
 
 // --- Find tool ---
