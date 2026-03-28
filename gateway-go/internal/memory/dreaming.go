@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -318,10 +319,16 @@ func mergeDuplicates(ctx context.Context, store *Store, embedder *Embedder, clie
 // --- Phase 4: Conflict Resolution ---
 
 const conflictSystemPrompt = `You are a fact conflict resolution assistant.
-Given a list of facts in the same category, identify contradictions or superseded information.
-Return a JSON object with a "conflicts" array:
-{"conflicts": [{"keep_id": <fact ID to keep>, "remove_id": <fact ID to deactivate>, "reason": "brief explanation (Korean)"}, ...]}
-If no conflicts found, return {"conflicts": []}.
+Given a list of facts in the same category, identify genuine contradictions — facts that are mutually incompatible and cannot both be true.
+
+Rules:
+- Only flag TRUE contradictions (logically incompatible facts). Do NOT flag duplicates, overlapping, or complementary facts — those are handled separately.
+- For each conflict, keep the fact that is more specific, has higher importance, or is more recent.
+- Each remove_id must appear at most ONCE across all conflicts.
+- If no genuine contradictions exist, return an empty array.
+
+Return a JSON object:
+{"conflicts": [{"keep_id": <ID>, "remove_id": <ID>, "reason": "brief Korean explanation"}, ...]}
 Return ONLY valid JSON.`
 
 type conflictResult struct {
@@ -347,10 +354,17 @@ func resolveConflicts(ctx context.Context, store *Store, client *llm.Client, mod
 	}
 
 	resolved := 0
+	removed := map[int64]bool{} // track already-removed IDs across all categories
 	for cat, catFacts := range categories {
 		if len(catFacts) < 3 {
 			continue // too few to have conflicts
 		}
+
+		// Sort by importance descending so the most important facts are included
+		// when we hit the per-category limit.
+		sort.Slice(catFacts, func(i, j int) bool {
+			return catFacts[i].Importance > catFacts[j].Importance
+		})
 
 		var sb strings.Builder
 		limit := 20
@@ -368,8 +382,9 @@ func resolveConflicts(ctx context.Context, store *Store, client *llm.Client, mod
 		}
 
 		for _, r := range wrapper.Conflicts {
-			if r.KeepID > 0 && r.RemoveID > 0 && r.KeepID != r.RemoveID {
+			if r.KeepID > 0 && r.RemoveID > 0 && r.KeepID != r.RemoveID && !removed[r.RemoveID] {
 				_ = store.SupersedeFact(ctx, r.RemoveID, r.KeepID)
+				removed[r.RemoveID] = true
 				resolved++
 				logger.Info("aurora-dream: resolved conflict", "keep", r.KeepID, "remove", r.RemoveID, "reason", r.Reason)
 			}
