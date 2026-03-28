@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"nhooyr.io/websocket"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
 
 // MessageHandler is called for each incoming message.
@@ -20,14 +22,13 @@ type MessageHandler func(ctx context.Context, msg *Message)
 // Bot manages the Discord bot lifecycle: Gateway WebSocket connection,
 // heartbeating, and dispatching message events.
 type Bot struct {
+	channel.RunState             // provides IsRunning(), Stop(), BeginRun(), EndRun()
 	client  *Client
 	config  *Config
-	handler MessageHandler
 	logger  *slog.Logger
 
-	mu        sync.Mutex
-	running   bool
-	stopFunc  context.CancelFunc
+	stateMu   sync.Mutex // protects handler, sessionID, resumeURL, botUser
+	handler   MessageHandler
 	sessionID string
 	resumeURL string
 	seq       atomic.Int64
@@ -54,55 +55,28 @@ func NewBot(client *Client, config *Config, handler MessageHandler, logger *slog
 // Start connects to the Discord Gateway and begins receiving events.
 // Blocks until context is cancelled.
 func (b *Bot) Start(ctx context.Context) error {
-	b.mu.Lock()
-	if b.running {
-		b.mu.Unlock()
+	botCtx, ok := b.BeginRun(ctx)
+	if !ok {
 		return nil
 	}
-	botCtx, cancel := context.WithCancel(ctx)
-	b.running = true
-	b.stopFunc = cancel
-	b.mu.Unlock()
-
-	defer func() {
-		b.mu.Lock()
-		b.running = false
-		b.stopFunc = nil
-		b.mu.Unlock()
-	}()
+	defer b.EndRun()
 
 	b.logger.Info("discord bot starting")
 	return b.connectLoop(botCtx)
 }
 
-// Stop stops the bot.
-func (b *Bot) Stop() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.stopFunc != nil {
-		b.stopFunc()
-	}
-}
-
 // SetHandler replaces the message handler. Safe to call while running.
 func (b *Bot) SetHandler(h MessageHandler) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.stateMu.Lock()
+	defer b.stateMu.Unlock()
 	b.handler = h
 }
 
 // BotUser returns the authenticated bot user (set after READY). Returns nil before Start.
 func (b *Bot) BotUser() *User {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.stateMu.Lock()
+	defer b.stateMu.Unlock()
 	return b.botUser
-}
-
-// IsRunning returns whether the bot is currently connected.
-func (b *Bot) IsRunning() bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.running
 }
 
 // connectLoop manages the Gateway connection with automatic reconnection.
@@ -257,11 +231,11 @@ func (b *Bot) handleDispatch(ctx context.Context, payload *GatewayPayload) {
 			b.logger.Error("decode READY", "error", err)
 			return
 		}
-		b.mu.Lock()
+		b.stateMu.Lock()
 		b.sessionID = ready.SessionID
 		b.resumeURL = ready.ResumeURL
 		b.botUser = ready.User
-		b.mu.Unlock()
+		b.stateMu.Unlock()
 		b.logger.Info("discord bot ready",
 			"username", ready.User.Username,
 			"id", ready.User.ID,
@@ -305,9 +279,9 @@ func (b *Bot) handleDispatch(ctx context.Context, payload *GatewayPayload) {
 		}
 
 		// Dispatch to handler asynchronously.
-		b.mu.Lock()
+		b.stateMu.Lock()
 		handler := b.handler
-		b.mu.Unlock()
+		b.stateMu.Unlock()
 		if handler != nil {
 			go handler(ctx, &msg)
 		}

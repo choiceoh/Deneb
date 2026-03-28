@@ -14,12 +14,12 @@ import (
 
 // Plugin implements the channel.Plugin interface for Telegram.
 type Plugin struct {
-	mu      sync.Mutex
+	channel.PluginBase          // status field + Status() + SetStatus()
+	mu      sync.Mutex          // protects client, bot, botUser, handler
 	client  *Client
 	bot     *Bot
 	config  *Config
 	logger  *slog.Logger
-	status  channel.Status
 	botUser *User
 	handler UpdateHandler // stored until bot is created in Start()
 }
@@ -29,7 +29,6 @@ func NewPlugin(cfg *Config, logger *slog.Logger) *Plugin {
 	return &Plugin{
 		config: cfg,
 		logger: logger,
-		status: channel.Status{Connected: false},
 	}
 }
 
@@ -63,12 +62,12 @@ func (p *Plugin) Start(ctx context.Context) error {
 	defer p.mu.Unlock()
 
 	if !p.config.IsEnabled() {
-		p.status = channel.Status{Connected: false, Error: "account disabled"}
+		p.SetStatus(channel.Status{Connected: false, Error: "account disabled"})
 		return nil
 	}
 
 	if p.config.BotToken == "" {
-		p.status = channel.Status{Connected: false, Error: "no bot token configured"}
+		p.SetStatus(channel.Status{Connected: false, Error: "no bot token configured"})
 		return nil
 	}
 
@@ -80,7 +79,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 	if p.config.Proxy != "" {
 		proxyURL, err := url.Parse(p.config.Proxy)
 		if err != nil {
-			p.status = channel.Status{Connected: false, Error: "invalid proxy URL: " + err.Error()}
+			p.SetStatus(channel.Status{Connected: false, Error: "invalid proxy URL: " + err.Error()})
 			return nil
 		}
 		// Overlay proxy on the existing transport.
@@ -98,7 +97,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 	// Verify bot token.
 	me, err := p.client.GetMe(ctx)
 	if err != nil {
-		p.status = channel.Status{Connected: false, Error: "getMe failed: " + err.Error()}
+		p.SetStatus(channel.Status{Connected: false, Error: "getMe failed: " + err.Error()})
 		return nil
 	}
 	p.logger.Info("telegram bot verified", "username", me.Username, "id", me.ID)
@@ -117,7 +116,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 		}
 	}()
 
-	p.status = channel.Status{Connected: true}
+	p.SetStatus(channel.Status{Connected: true})
 	return nil
 }
 
@@ -129,15 +128,8 @@ func (p *Plugin) Stop(_ context.Context) error {
 	if p.bot != nil {
 		p.bot.Stop()
 	}
-	p.status = channel.Status{Connected: false}
+	p.SetStatus(channel.Status{Connected: false})
 	return nil
-}
-
-// Status implements channel.Plugin.
-func (p *Plugin) Status() channel.Status {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.status
 }
 
 // Client returns the underlying Telegram API client (for RPC methods).
