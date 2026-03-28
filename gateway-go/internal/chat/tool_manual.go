@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // manualDocCacheTTL is the TTL for the doc tree index cache.
@@ -307,8 +309,8 @@ func toolSystemManual(workspaceDir string) ToolFunc {
 			Query  string `json:"query"`
 			Topic  string `json:"topic"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid polaris params: %w", err)
+		if err := jsonutil.UnmarshalInto("polaris params", input, &p); err != nil {
+			return "", err
 		}
 
 		switch p.Action {

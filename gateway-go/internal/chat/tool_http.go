@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // httpToolSchema returns the JSON Schema for the http tool.
@@ -67,8 +69,8 @@ func toolHTTP() ToolFunc {
 			Timeout         float64           `json:"timeout"`
 			MaxResponseChar int               `json:"max_response_chars"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid http params: %w", err)
+		if err := jsonutil.UnmarshalInto("http params", input, &p); err != nil {
+			return "", err
 		}
 		if p.URL == "" {
 			return "", fmt.Errorf("url is required")

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 func autonomousToolSchema() map[string]any {
@@ -64,8 +65,8 @@ func toolAutonomous(deps *CoreToolDeps) ToolFunc {
 			Filter      string `json:"filter"`
 			Count       int    `json:"count"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid autonomous params: %w", err)
+		if err := jsonutil.UnmarshalInto("autonomous params", input, &p); err != nil {
+			return "", err
 		}
 
 		svc := deps.AutonomousSvc

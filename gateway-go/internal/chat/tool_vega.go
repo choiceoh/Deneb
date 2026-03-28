@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/vega"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // vegaToolSchema returns the JSON Schema for the vega tool.
@@ -47,8 +48,8 @@ func toolVega(deps *CoreToolDeps) ToolFunc {
 			Limit  int    `json:"limit"`
 			Mode   string `json:"mode"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid vega input: %w", err)
+		if err := jsonutil.UnmarshalInto("vega params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Query == "" {
 			return "", fmt.Errorf("query is required")

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -417,8 +418,8 @@ func toolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 			Background bool    `json:"background"`
 			Structured bool    `json:"structured"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid exec params: %w", err)
+		if err := jsonutil.UnmarshalInto("exec params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Command == "" {
 			return "", fmt.Errorf("command is required")
@@ -565,8 +566,8 @@ func toolProcess(procMgr *process.Manager) ToolFunc {
 			Action    string `json:"action"`
 			SessionID string `json:"sessionId"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid process params: %w", err)
+		if err := jsonutil.UnmarshalInto("process params", input, &p); err != nil {
+			return "", err
 		}
 		if procMgr == nil {
 			return "Process manager not available.", nil
@@ -622,8 +623,8 @@ func toolYouTubeTranscript() ToolFunc {
 		var p struct {
 			URL string `json:"url"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid youtube_transcript params: %w", err)
+		if err := jsonutil.UnmarshalInto("youtube_transcript params", input, &p); err != nil {
+			return "", err
 		}
 		if p.URL == "" {
 			return "", fmt.Errorf("url is required")
@@ -664,8 +665,8 @@ func toolApplyPatch(defaultDir string) ToolFunc {
 		var p struct {
 			Patch string `json:"patch"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid apply_patch params: %w", err)
+		if err := jsonutil.UnmarshalInto("apply_patch params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Patch == "" {
 			return "", fmt.Errorf("patch is required")

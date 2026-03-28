@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/media"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // --- HTML noise stripping tests ---
@@ -505,9 +506,9 @@ func TestStripThinkingTags(t *testing.T) {
 		{"<think>\nmulti\nline\n</think>\n\nAfter", "After"},
 	}
 	for _, tt := range tests {
-		got := stripThinkingTags(tt.input)
+		got := jsonutil.StripThinkingTags(tt.input)
 		if got != tt.want {
-			t.Errorf("stripThinkingTags(%q) = %q, want %q", tt.input, got, tt.want)
+			t.Errorf("StripThinkingTags(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }

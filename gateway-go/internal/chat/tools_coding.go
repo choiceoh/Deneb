@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // --- Multi-edit tool ---
@@ -64,8 +66,8 @@ func toolMultiEdit(defaultDir string) ToolFunc {
 				ReplaceAll bool   `json:"replace_all"`
 			} `json:"edits"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid multi_edit params: %w", err)
+		if err := jsonutil.UnmarshalInto("multi_edit params", input, &p); err != nil {
+			return "", err
 		}
 		if len(p.Edits) == 0 {
 			return "", fmt.Errorf("edits array is required and must not be empty")
@@ -204,8 +206,8 @@ func toolTree(defaultDir string) ToolFunc {
 			DirsOnly   bool   `json:"dirs_only"`
 			Pattern    string `json:"pattern"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid tree params: %w", err)
+		if err := jsonutil.UnmarshalInto("tree params", input, &p); err != nil {
+			return "", err
 		}
 
 		dir := defaultDir
@@ -362,8 +364,8 @@ func toolDiff(defaultDir string) ToolFunc {
 			StatOnly     bool   `json:"stat_only"`
 			ContextLines int    `json:"context_lines"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid diff params: %w", err)
+		if err := jsonutil.UnmarshalInto("diff params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Mode == "" {
 			p.Mode = "unstaged"

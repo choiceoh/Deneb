@@ -30,7 +30,7 @@ func TestShouldUseThinking(t *testing.T) {
 	}
 }
 
-// stripThinkingTags is tested in web_fetch_test.go (shared function).
+// StripThinkingTags is now tested in pkg/jsonutil/extract_test.go.
 
 func TestCleanJSONResponse(t *testing.T) {
 	tests := []struct {

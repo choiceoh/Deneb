@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 const (
@@ -85,8 +86,11 @@ func (e *LLMExpander) Expand(ctx context.Context, query string) []string {
 	// text before the actual JSON, so extract the first valid JSON array.
 	var terms []string
 	if err := json.Unmarshal([]byte(text), &terms); err != nil {
-		if extracted := extractJSONArray(text); extracted != nil {
-			terms = extracted
+		if arr, ok := jsonutil.ExtractArray(text); ok {
+			if json.Unmarshal([]byte(arr), &terms) != nil {
+				e.logger.Debug("query expansion parse failed", "raw", text, "error", err)
+				return nil
+			}
 		} else {
 			e.logger.Debug("query expansion parse failed", "raw", text, "error", err)
 			return nil
@@ -162,20 +166,3 @@ func (eq ExpandedSearchQuery) FormatForLog() string {
 	return fmt.Sprintf("%s (+%d terms)", eq.Original, len(eq.Expanded))
 }
 
-// extractJSONArray finds and parses the first JSON array in text that may
-// contain thinking/reasoning preamble before the actual JSON output.
-func extractJSONArray(text string) []string {
-	start := strings.Index(text, "[")
-	if start < 0 {
-		return nil
-	}
-	end := strings.LastIndex(text, "]")
-	if end <= start {
-		return nil
-	}
-	var terms []string
-	if json.Unmarshal([]byte(text[start:end+1]), &terms) == nil {
-		return terms
-	}
-	return nil
-}

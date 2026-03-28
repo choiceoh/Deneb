@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 func agentLogsToolSchema() map[string]any {
@@ -43,8 +44,8 @@ func toolAgentLogs(w *agentlog.Writer) ToolFunc {
 			Type  string `json:"type"`
 			Limit int    `json:"limit"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid input: %w", err)
+		if err := jsonutil.UnmarshalInto("agent_logs params", input, &p); err != nil {
+			return "", err
 		}
 
 		sessionKey := SessionKeyFromContext(ctx)

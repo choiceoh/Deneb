@@ -51,7 +51,7 @@ func (da *DreamingAdapter) IncrementTurn(ctx context.Context) {
 }
 
 // ShouldDream checks if dreaming conditions are met:
-// turn count >= 50, time >= 8 hours, or active facts >= data threshold.
+// turn count >= 50 or time >= 8 hours.
 func (da *DreamingAdapter) ShouldDream(ctx context.Context) bool {
 	// Check turn threshold.
 	countStr, err := da.store.GetMeta(ctx, metaTurnCount)
@@ -63,18 +63,6 @@ func (da *DreamingAdapter) ShouldDream(ctx context.Context) bool {
 	if count >= DreamingTurnThreshold {
 		da.logger.Info("aurora-dream: turn threshold reached", "turns", count)
 		return true
-	}
-
-	// Check data volume threshold — trigger when stored facts accumulate
-	// beyond the threshold, even if time and turns haven't reached limits.
-	if factCount, err := da.store.ActiveFactCount(ctx); err == nil && factCount >= DreamingDataThreshold {
-		// Only trigger if there has been at least one turn since last dream,
-		// to avoid re-triggering immediately after a cycle that didn't reduce
-		// fact count below the threshold.
-		if count > 0 {
-			da.logger.Info("aurora-dream: data volume threshold reached", "facts", factCount, "turns", count)
-			return true
-		}
 	}
 
 	// Check time threshold.

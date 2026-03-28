@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/autoreply"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
@@ -69,8 +70,8 @@ func toolCron(cronSched *cron.Scheduler, deps *CoreToolDeps) ToolFunc {
 			Command  string         `json:"command"`
 			Text     string         `json:"text"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid cron params: %w", err)
+		if err := jsonutil.UnmarshalInto("cron params", input, &p); err != nil {
+			return "", err
 		}
 
 		if cronSched == nil {
@@ -221,8 +222,8 @@ func toolGateway(repoDir string) ToolFunc {
 			Patch  map[string]any `json:"patch"`
 			Config map[string]any `json:"config"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid gateway params: %w", err)
+		if err := jsonutil.UnmarshalInto("gateway params", input, &p); err != nil {
+			return "", err
 		}
 
 		switch p.Action {
@@ -442,8 +443,8 @@ func toolSessionsHistory(transcript TranscriptStore) ToolFunc {
 			SessionKey string `json:"sessionKey"`
 			Limit      int    `json:"limit"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid sessions_history params: %w", err)
+		if err := jsonutil.UnmarshalInto("sessions_history params", input, &p); err != nil {
+			return "", err
 		}
 		if p.SessionKey == "" {
 			return "", fmt.Errorf("sessionKey is required")
@@ -506,8 +507,8 @@ func toolSessionsSearch(transcript TranscriptStore) ToolFunc {
 			Query      string `json:"query"`
 			MaxResults int    `json:"maxResults"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid sessions_search params: %w", err)
+		if err := jsonutil.UnmarshalInto("sessions_search params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Query == "" {
 			return "", fmt.Errorf("query is required")
@@ -593,8 +594,8 @@ func toolSessionsRestore(transcript TranscriptStore) ToolFunc {
 			SourceSessionKey string `json:"sourceSessionKey"`
 			Limit            int    `json:"limit"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid sessions_restore params: %w", err)
+		if err := jsonutil.UnmarshalInto("sessions_restore params", input, &p); err != nil {
+			return "", err
 		}
 		if p.SourceSessionKey == "" {
 			return "", fmt.Errorf("sourceSessionKey is required")
@@ -657,8 +658,8 @@ func toolSessionsSend(deps *CoreToolDeps) ToolFunc {
 			SessionKey string `json:"sessionKey"`
 			Message    string `json:"message"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid sessions_send params: %w", err)
+		if err := jsonutil.UnmarshalInto("sessions_send params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Message == "" {
 			return "", fmt.Errorf("message is required")
@@ -710,8 +711,8 @@ func toolSessionsSpawn(deps *CoreToolDeps) ToolFunc {
 			Label string `json:"label"`
 			Model string `json:"model"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid sessions_spawn params: %w", err)
+		if err := jsonutil.UnmarshalInto("sessions_spawn params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Task == "" {
 			return "", fmt.Errorf("task is required")
@@ -776,8 +777,8 @@ func toolSubagents(deps *CoreToolDeps) ToolFunc {
 			Target  string `json:"target"`
 			Message string `json:"message"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid subagents params: %w", err)
+		if err := jsonutil.UnmarshalInto("subagents params", input, &p); err != nil {
+			return "", err
 		}
 		if p.Action == "" {
 			p.Action = "list"
@@ -1146,8 +1147,8 @@ func toolImage(client *llm.Client) ToolFunc {
 			Images []string `json:"images"`
 			Model  string   `json:"model"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid image params: %w", err)
+		if err := jsonutil.UnmarshalInto("image params", input, &p); err != nil {
+			return "", err
 		}
 
 		// Collect all image paths/URLs.

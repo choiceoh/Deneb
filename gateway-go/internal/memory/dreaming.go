@@ -23,7 +23,6 @@ import (
 const (
 	DreamingTurnThreshold    = 50
 	DreamingTimeIntervalH    = 8
-	DreamingDataThreshold    = 200 // active fact count that triggers dreaming regardless of time/turns
 	dreamingTimeout          = 5 * time.Minute
 	dreamingBatchSize        = 20
 	dreamingMaxTokens        = 1024

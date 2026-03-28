@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // kvStore is the in-memory key-value store backed by a JSON file.
@@ -133,8 +135,8 @@ func toolKV() ToolFunc {
 			Value  string `json:"value"`
 			Prefix string `json:"prefix"`
 		}
-		if err := json.Unmarshal(input, &p); err != nil {
-			return "", fmt.Errorf("invalid kv params: %w", err)
+		if err := jsonutil.UnmarshalInto("kv params", input, &p); err != nil {
+			return "", err
 		}
 
 		store := getKVStore()
