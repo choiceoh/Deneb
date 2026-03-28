@@ -815,29 +815,18 @@ mod tests {
     }
 
     #[test]
-    fn bold_text() {
-        let ir = parse("**bold**");
-        assert_eq!(ir.text, "bold");
-        assert_eq!(ir.styles.len(), 1);
-        assert_eq!(ir.styles[0].style, MarkdownStyle::Bold);
-        assert_eq!(ir.styles[0].start, 0);
-        assert_eq!(ir.styles[0].end, 4);
-    }
-
-    #[test]
-    fn italic_text() {
-        let ir = parse("*italic*");
-        assert_eq!(ir.text, "italic");
-        assert_eq!(ir.styles.len(), 1);
-        assert_eq!(ir.styles[0].style, MarkdownStyle::Italic);
-    }
-
-    #[test]
-    fn strikethrough_text() {
-        let ir = parse("~~strike~~");
-        assert_eq!(ir.text, "strike");
-        assert_eq!(ir.styles.len(), 1);
-        assert_eq!(ir.styles[0].style, MarkdownStyle::Strikethrough);
+    fn inline_styles() {
+        let cases: &[(&str, &str, MarkdownStyle)] = &[
+            ("**bold**", "bold", MarkdownStyle::Bold),
+            ("*italic*", "italic", MarkdownStyle::Italic),
+            ("~~strike~~", "strike", MarkdownStyle::Strikethrough),
+        ];
+        for (input, want_text, want_style) in cases {
+            let ir = parse(input);
+            assert_eq!(ir.text, *want_text, "input={input:?}");
+            assert_eq!(ir.styles.len(), 1, "input={input:?}");
+            assert_eq!(ir.styles[0].style, *want_style, "input={input:?}");
+        }
     }
 
     #[test]

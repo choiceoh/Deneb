@@ -450,23 +450,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_constant_time_eq_same() {
-        assert!(constant_time_eq(b"hello", b"hello"));
-    }
-
-    #[test]
-    fn test_constant_time_eq_different() {
-        assert!(!constant_time_eq(b"hello", b"world"));
-    }
-
-    #[test]
-    fn test_constant_time_eq_different_length() {
-        assert!(!constant_time_eq(b"short", b"longer"));
-    }
-
-    #[test]
-    fn test_constant_time_eq_empty() {
-        assert!(constant_time_eq(b"", b""));
+    fn test_constant_time_eq() {
+        let cases: &[(&[u8], &[u8], bool)] = &[
+            (b"hello", b"hello", true),
+            (b"hello", b"world", false),
+            (b"short", b"longer", false),
+            (b"", b"", true),
+        ];
+        for (a, b, want) in cases {
+            assert_eq!(
+                constant_time_eq(a, b),
+                *want,
+                "constant_time_eq({a:?}, {b:?})"
+            );
+        }
     }
 
     #[test]

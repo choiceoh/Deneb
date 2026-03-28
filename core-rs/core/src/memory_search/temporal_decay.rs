@@ -154,67 +154,44 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_dated_path() {
-        assert_eq!(
-            parse_memory_date_from_path("memory/2026-01-07.md"),
-            Some((2026, 1, 7))
-        );
+    fn test_parse_memory_date_from_path() {
+        let cases: &[(&str, Option<(i32, u32, u32)>)] = &[
+            ("memory/2026-01-07.md", Some((2026, 1, 7))),
+            ("some/dir/memory/2024-12-25.md", Some((2024, 12, 25))),
+            ("memory\\2026-01-07.md", Some((2026, 1, 7))),
+            ("memory/topics.md", None),
+            ("MEMORY.md", None),
+            ("memory/2024-13-01.md", None), // invalid month
+            ("memory/2024-02-30.md", None), // invalid day
+        ];
+        for (path, want) in cases {
+            assert_eq!(
+                parse_memory_date_from_path(path),
+                *want,
+                "parse_memory_date_from_path({path:?})"
+            );
+        }
     }
 
     #[test]
-    fn test_parse_dated_path_nested() {
-        assert_eq!(
-            parse_memory_date_from_path("some/dir/memory/2024-12-25.md"),
-            Some((2024, 12, 25))
-        );
-    }
-
-    #[test]
-    fn test_parse_dated_path_backslash() {
-        assert_eq!(
-            parse_memory_date_from_path("memory\\2026-01-07.md"),
-            Some((2026, 1, 7))
-        );
-    }
-
-    #[test]
-    fn test_parse_non_dated_path() {
-        assert_eq!(parse_memory_date_from_path("memory/topics.md"), None);
-        assert_eq!(parse_memory_date_from_path("MEMORY.md"), None);
-    }
-
-    #[test]
-    fn test_parse_invalid_date() {
-        assert_eq!(parse_memory_date_from_path("memory/2024-13-01.md"), None);
-        assert_eq!(parse_memory_date_from_path("memory/2024-02-30.md"), None);
-    }
-
-    #[test]
-    fn test_evergreen_root() {
-        assert!(is_evergreen_memory_path("MEMORY.md"));
-        assert!(is_evergreen_memory_path("memory.md"));
-    }
-
-    #[test]
-    fn test_evergreen_topic() {
-        assert!(is_evergreen_memory_path("memory/topics.md"));
-        assert!(is_evergreen_memory_path("memory/api-design.md"));
-    }
-
-    #[test]
-    fn test_not_evergreen_dated() {
-        assert!(!is_evergreen_memory_path("memory/2026-01-07.md"));
-    }
-
-    #[test]
-    fn test_not_evergreen_non_memory() {
-        assert!(!is_evergreen_memory_path("src/main.rs"));
-    }
-
-    #[test]
-    fn test_evergreen_dotslash() {
-        assert!(is_evergreen_memory_path("./MEMORY.md"));
-        assert!(is_evergreen_memory_path("./memory/topics.md"));
+    fn test_is_evergreen_memory_path() {
+        let cases: &[(&str, bool)] = &[
+            ("MEMORY.md", true),
+            ("memory.md", true),
+            ("memory/topics.md", true),
+            ("memory/api-design.md", true),
+            ("./MEMORY.md", true),
+            ("./memory/topics.md", true),
+            ("memory/2026-01-07.md", false),
+            ("src/main.rs", false),
+        ];
+        for (path, want) in cases {
+            assert_eq!(
+                is_evergreen_memory_path(path),
+                *want,
+                "is_evergreen_memory_path({path:?})"
+            );
+        }
     }
 
     #[test]
