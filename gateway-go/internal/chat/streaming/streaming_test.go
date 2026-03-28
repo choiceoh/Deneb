@@ -1,4 +1,4 @@
-package chat
+package streaming
 
 import (
 	"encoding/json"
@@ -32,7 +32,7 @@ func TestTruncateForBroadcast(t *testing.T) {
 
 func TestStreamBroadcasterNilSafe(t *testing.T) {
 	// All methods should be safe to call with nil broadcastRaw.
-	sb := newStreamBroadcaster(nil, "session-1", "run-1")
+	sb := NewBroadcaster(nil, "session-1", "run-1")
 
 	// None of these should panic.
 	sb.EmitDelta("text")
@@ -47,7 +47,7 @@ func TestStreamBroadcasterNilSafe(t *testing.T) {
 func TestStreamBroadcasterEmitDelta(t *testing.T) {
 	t.Run("skips empty text", func(t *testing.T) {
 		called := false
-		sb := newStreamBroadcaster(func(event string, data []byte) int {
+		sb := NewBroadcaster(func(event string, data []byte) int {
 			called = true
 			return 0
 		}, "s1", "r1")
@@ -62,7 +62,7 @@ func TestStreamBroadcasterEmitDelta(t *testing.T) {
 			event string
 			data  []byte
 		}
-		sb := newStreamBroadcaster(func(event string, data []byte) int {
+		sb := NewBroadcaster(func(event string, data []byte) int {
 			captured.event = event
 			captured.data = data
 			return 1
@@ -95,7 +95,7 @@ func TestStreamBroadcasterEvents(t *testing.T) {
 		data  map[string]any
 	}
 
-	sb := newStreamBroadcaster(func(event string, data []byte) int {
+	sb := NewBroadcaster(func(event string, data []byte) int {
 		var parsed map[string]any
 		json.Unmarshal(data, &parsed)
 		mu.Lock()
@@ -138,7 +138,7 @@ func TestStreamBroadcasterEvents(t *testing.T) {
 
 func TestStreamBroadcasterToolResult(t *testing.T) {
 	var captured map[string]any
-	sb := newStreamBroadcaster(func(event string, data []byte) int {
+	sb := NewBroadcaster(func(event string, data []byte) int {
 		json.Unmarshal(data, &captured)
 		return 1
 	}, "s1", "r1")
@@ -162,7 +162,7 @@ func TestStreamBroadcasterToolResult(t *testing.T) {
 
 func TestStreamBroadcasterError(t *testing.T) {
 	var captured map[string]any
-	sb := newStreamBroadcaster(func(event string, data []byte) int {
+	sb := NewBroadcaster(func(event string, data []byte) int {
 		json.Unmarshal(data, &captured)
 		return 1
 	}, "s1", "r1")
@@ -180,7 +180,7 @@ func TestStreamBroadcasterError(t *testing.T) {
 
 func TestStreamBroadcasterAborted(t *testing.T) {
 	var captured map[string]any
-	sb := newStreamBroadcaster(func(event string, data []byte) int {
+	sb := NewBroadcaster(func(event string, data []byte) int {
 		json.Unmarshal(data, &captured)
 		return 1
 	}, "s1", "r1")

@@ -23,6 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/aurora"
+	"github.com/choiceoh/deneb/gateway-go/internal/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/memory"
 	"github.com/choiceoh/deneb/gateway-go/internal/provider"
@@ -34,9 +35,6 @@ import (
 
 // BroadcastFunc sends an event to all matching subscribers.
 type BroadcastFunc func(event string, payload any) (int, []error)
-
-// BroadcastRawFunc sends pre-serialized event data to all matching subscribers.
-type BroadcastRawFunc func(event string, data []byte) int
 
 // ReplyFunc delivers the assistant response back to the originating channel.
 // Called with the delivery context (channel + recipient) and the response text.
@@ -98,7 +96,7 @@ type AbortEntry struct {
 type Handler struct {
 	sessions     *session.Manager
 	broadcast    BroadcastFunc
-	broadcastRaw BroadcastRawFunc
+	broadcastRaw streaming.BroadcastRawFunc
 	logger       *slog.Logger
 
 	// Native agent execution deps.
@@ -222,7 +220,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 }
 
 // SetBroadcastRaw sets the raw broadcast function for streaming event relay.
-func (h *Handler) SetBroadcastRaw(fn BroadcastRawFunc) {
+func (h *Handler) SetBroadcastRaw(fn streaming.BroadcastRawFunc) {
 	h.broadcastRaw = fn
 }
 
