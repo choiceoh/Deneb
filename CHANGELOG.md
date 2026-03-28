@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.27.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.26.0...deneb-v3.27.0) (2026-03-28)
+
+
+### ✨ Features
+
+* **polaris:** add guide categorization, nodes guide, and cross-references ([3dec4f0](https://github.com/choiceoh/Deneb/commit/3dec4f0afc3b40edf909dfea947da72276ded4a2))
+
+
+### 🐛 Bug Fixes
+
+* **core:** use ? operator for option returns in html_to_markdown ([d479993](https://github.com/choiceoh/Deneb/commit/d47999351c666f0668212c77903c194083730598))
+* **monitoring:** remove stale-activity watchdog check that kills gateway after 30min idle ([9415597](https://github.com/choiceoh/Deneb/commit/94155973f22a3b419fc7b859553fc8df44a040ec))
+
+
+### 🔧 Internal
+
+* **core:** extract FFI layer into ffi/ module and split stop words ([f3e71c0](https://github.com/choiceoh/Deneb/commit/f3e71c000b52755bd4d0ed67060dbd5542648c90))
+* **polaris:** AI 에이전트 실용성 개선 ([0090a1f](https://github.com/choiceoh/Deneb/commit/0090a1fa7b680feced56ee9b3067c3e4c919b26e))
+* **polaris:** rename files, add Common Tasks/Gotchas to all guides ([eccdac6](https://github.com/choiceoh/Deneb/commit/eccdac6485e9f82a856fda159605daaeb3e4c0b3))
+
 ## [3.26.0](https://github.com/choiceoh/Deneb/compare/deneb-v3.25.0...deneb-v3.26.0) (2026-03-28)
 
 
