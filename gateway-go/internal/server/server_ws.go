@@ -21,6 +21,11 @@ import (
 	"nhooyr.io/websocket"
 )
 
+const (
+	// maxWebSocketClients limits the number of concurrent WebSocket connections.
+	maxWebSocketClients = 256
+)
+
 // jsonBufPool reduces GC pressure for writeFrame by reusing marshal buffers.
 var jsonBufPool = sync.Pool{
 	New: func() any {
