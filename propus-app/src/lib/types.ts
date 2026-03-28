@@ -30,19 +30,29 @@ export type ServerMessage =
         deneb_status: string;
       };
     }
+  | {
+      type: "File";
+      data: { name: string; media_type: string; size: number; url: string };
+    }
+  | { type: "Typing" }
   | { type: "Pong" };
 
 // --- App-level types ---
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant" | "tool";
+  role: "user" | "assistant" | "tool" | "file";
   content: string;
   /** Parsed content segments for rendering (only for assistant messages). */
   segments: ContentSegment[];
   toolName?: string;
   toolResult?: string;
   expanded?: boolean;
+  /** File message fields. */
+  fileName?: string;
+  fileUrl?: string;
+  fileSize?: number;
+  fileMediaType?: string;
 }
 
 export interface ContentSegment {

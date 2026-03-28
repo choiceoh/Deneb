@@ -22,7 +22,10 @@ class PropusState {
   statusText = $state("서버 연결 대기 중...");
   usageText = $state("");
   msgCount = $state(0);
+  isTyping = $state(false);
   sidebarVisible = $state(true);
+
+  private _typingTimer: ReturnType<typeof setTimeout> | undefined;
 
   streamingSegments = $derived(parseSegments(this.streamingText));
 
@@ -50,6 +53,7 @@ class PropusState {
     switch (msg.type) {
       case "Text":
         this.streamingText += msg.data.content;
+        this.isTyping = false;
         break;
 
       case "ToolStart":
@@ -91,6 +95,7 @@ class PropusState {
       case "Done":
         this.flushStreaming();
         this.isStreaming = false;
+        this.isTyping = false;
         this.statusText = "준비됨";
         break;
 
@@ -131,6 +136,33 @@ class PropusState {
             ? `준비됨 (Deneb ${msg.data.deneb_status})`
             : "준비됨";
         }
+        break;
+
+      case "File":
+        this.flushStreaming();
+        this.messages = [
+          ...this.messages,
+          {
+            id: genId(),
+            role: "file",
+            content: msg.data.name,
+            segments: [],
+            fileName: msg.data.name,
+            fileUrl: msg.data.url,
+            fileSize: msg.data.size,
+            fileMediaType: msg.data.media_type,
+          },
+        ];
+        this.msgCount = this.messages.length;
+        break;
+
+      case "Typing":
+        this.isTyping = true;
+        this.statusText = "입력 중...";
+        clearTimeout(this._typingTimer);
+        this._typingTimer = setTimeout(() => {
+          this.isTyping = false;
+        }, 3000);
         break;
 
       case "Pong":
