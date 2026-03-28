@@ -52,12 +52,11 @@ func (e *LLMExpander) Expand(ctx context.Context, query string) []string {
 	defer cancel()
 
 	req := llm.ChatRequest{
-		Model:          e.model,
-		Messages:       []llm.Message{llm.NewTextMessage("user", query)},
-		System:         llm.SystemString(expandSystemPrompt),
-		MaxTokens:      expandMaxTokens,
-		Stream:         true,
-		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+		Model:     e.model,
+		Messages:  []llm.Message{llm.NewTextMessage("user", query)},
+		System:    llm.SystemString(expandSystemPrompt),
+		MaxTokens: expandMaxTokens,
+		Stream:    true,
 	}
 
 	events, err := e.client.StreamChatOpenAI(ctx, req)
@@ -82,19 +81,13 @@ func (e *LLMExpander) Expand(ctx context.Context, query string) []string {
 		text = strings.TrimSpace(text)
 	}
 
-	// Parse response: try JSON array first, then JSON object with array value.
+	// Parse JSON array from response. The model may emit thinking/reasoning
+	// text before the actual JSON, so extract the first valid JSON array.
 	var terms []string
 	if err := json.Unmarshal([]byte(text), &terms); err != nil {
-		// json_object mode may return {"key": [...]}: extract first array value.
-		var obj map[string]json.RawMessage
-		if err2 := json.Unmarshal([]byte(text), &obj); err2 == nil {
-			for _, v := range obj {
-				if json.Unmarshal(v, &terms) == nil && len(terms) > 0 {
-					break
-				}
-			}
-		}
-		if terms == nil {
+		if extracted := extractJSONArray(text); extracted != nil {
+			terms = extracted
+		} else {
 			e.logger.Debug("query expansion parse failed", "raw", text, "error", err)
 			return nil
 		}
@@ -167,4 +160,22 @@ func (eq ExpandedSearchQuery) FormatForLog() string {
 		return eq.Original
 	}
 	return fmt.Sprintf("%s (+%d terms)", eq.Original, len(eq.Expanded))
+}
+
+// extractJSONArray finds and parses the first JSON array in text that may
+// contain thinking/reasoning preamble before the actual JSON output.
+func extractJSONArray(text string) []string {
+	start := strings.Index(text, "[")
+	if start < 0 {
+		return nil
+	}
+	end := strings.LastIndex(text, "]")
+	if end <= start {
+		return nil
+	}
+	var terms []string
+	if json.Unmarshal([]byte(text[start:end+1]), &terms) == nil {
+		return terms
+	}
+	return nil
 }
