@@ -6,6 +6,8 @@ import (
 	"math/rand/v2"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/channel"
 )
 
 // UpdateHandler is called for each incoming update.
@@ -14,17 +16,15 @@ type UpdateHandler func(ctx context.Context, update *Update)
 // Bot manages the Telegram bot lifecycle: long-polling for updates,
 // dispatching to handlers, and tracking update offsets.
 type Bot struct {
-	client  *Client
-	config  *Config
-	handler UpdateHandler
-	logger  *slog.Logger
-
-	mu       sync.Mutex
-	offset   int64
-	running  bool
-	stopFunc context.CancelFunc
-	messages []*Message // buffered inbound messages for poll RPC
-	msgMu    sync.Mutex
+	channel.RunState             // provides IsRunning(), Stop(), BeginRun(), EndRun()
+	client    *Client
+	config    *Config
+	logger    *slog.Logger
+	handlerMu sync.Mutex
+	handler   UpdateHandler
+	offset    int64
+	messages  []*Message // buffered inbound messages for poll RPC
+	msgMu     sync.Mutex
 
 	// Update deduplication.
 	seen   map[int64]time.Time
@@ -44,48 +44,21 @@ func NewBot(client *Client, config *Config, handler UpdateHandler, logger *slog.
 
 // Start begins the long-polling loop. Blocks until context is cancelled.
 func (b *Bot) Start(ctx context.Context) error {
-	b.mu.Lock()
-	if b.running {
-		b.mu.Unlock()
+	pollCtx, ok := b.BeginRun(ctx)
+	if !ok {
 		return nil
 	}
-	pollCtx, cancel := context.WithCancel(ctx)
-	b.running = true
-	b.stopFunc = cancel
-	b.mu.Unlock()
-
-	defer func() {
-		b.mu.Lock()
-		b.running = false
-		b.stopFunc = nil
-		b.mu.Unlock()
-	}()
+	defer b.EndRun()
 
 	b.logger.Info("telegram bot polling started")
 	return b.pollLoop(pollCtx)
 }
 
-// Stop stops the polling loop.
-func (b *Bot) Stop() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.stopFunc != nil {
-		b.stopFunc()
-	}
-}
-
 // SetHandler replaces the update handler. Safe to call while polling.
 func (b *Bot) SetHandler(h UpdateHandler) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.handlerMu.Lock()
+	defer b.handlerMu.Unlock()
 	b.handler = h
-}
-
-// IsRunning returns whether the bot is currently polling.
-func (b *Bot) IsRunning() bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.running
 }
 
 // DrainMessages returns and clears the buffered inbound messages.

@@ -11,12 +11,12 @@ import (
 
 // Plugin implements the channel.Plugin interface for Discord.
 type Plugin struct {
-	mu      sync.Mutex
+	channel.PluginBase          // status field + Status() + SetStatus()
+	mu      sync.Mutex          // protects client, bot, botUser, handler
 	client  *Client
 	bot     *Bot
 	config  *Config
 	logger  *slog.Logger
-	status  channel.Status
 	botUser *User
 	handler MessageHandler
 }
@@ -26,7 +26,6 @@ func NewPlugin(cfg *Config, logger *slog.Logger) *Plugin {
 	return &Plugin{
 		config: cfg,
 		logger: logger,
-		status: channel.Status{Connected: false},
 	}
 }
 
@@ -61,12 +60,12 @@ func (p *Plugin) Start(ctx context.Context) error {
 	defer p.mu.Unlock()
 
 	if !p.config.IsEnabled() {
-		p.status = channel.Status{Connected: false, Error: "account disabled"}
+		p.SetStatus(channel.Status{Connected: false, Error: "account disabled"})
 		return nil
 	}
 
 	if err := p.config.Validate(); err != nil {
-		p.status = channel.Status{Connected: false, Error: err.Error()}
+		p.SetStatus(channel.Status{Connected: false, Error: err.Error()})
 		return nil
 	}
 
@@ -75,7 +74,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 	// Verify bot token.
 	me, err := p.client.GetCurrentUser(ctx)
 	if err != nil {
-		p.status = channel.Status{Connected: false, Error: "token verification failed: " + err.Error()}
+		p.SetStatus(channel.Status{Connected: false, Error: "token verification failed: " + err.Error()})
 		return nil
 	}
 	p.logger.Info("discord bot verified", "username", me.Username, "id", me.ID)
@@ -87,14 +86,12 @@ func (p *Plugin) Start(ctx context.Context) error {
 		if err := p.bot.Start(context.Background()); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				p.logger.Error("discord bot error", "error", err)
-				p.mu.Lock()
-				p.status = channel.Status{Connected: false, Error: "gateway disconnected: " + err.Error()}
-				p.mu.Unlock()
+				p.SetStatus(channel.Status{Connected: false, Error: "gateway disconnected: " + err.Error()})
 			}
 		}
 	}()
 
-	p.status = channel.Status{Connected: true}
+	p.SetStatus(channel.Status{Connected: true})
 	return nil
 }
 
@@ -106,15 +103,8 @@ func (p *Plugin) Stop(_ context.Context) error {
 	if p.bot != nil {
 		p.bot.Stop()
 	}
-	p.status = channel.Status{Connected: false}
+	p.SetStatus(channel.Status{Connected: false})
 	return nil
-}
-
-// Status implements channel.Plugin.
-func (p *Plugin) Status() channel.Status {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.status
 }
 
 // Client returns the underlying Discord REST API client.
