@@ -1,5 +1,5 @@
 [workspace]
-members = ["cli-rs", "propus-common", "propus-client"]
+members = ["cli-rs"]
 exclude = ["core-rs"]
 resolver = "2"
 

@@ -103,61 +103,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 
-  # ── Propus client (Windows + macOS) ──
-  build-propus:
-    needs: release-please
-    if: needs.release-please.outputs.release-created == 'true'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: propus-client
-
-      - name: Install dependencies
-        run: choco install cmake --installargs '"ADD_CMAKE_TO_PATH=System"' -y
-
-      - name: Detect pre-release
-        id: prerelease
-        shell: bash
-        run: |
-          VERSION="${{ needs.release-please.outputs.version }}"
-          if echo "$VERSION" | grep -qE '(alpha|beta|rc|pre)'; then
-            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build propus-client
-        run: cargo build --release -p propus-client --target x86_64-pc-windows-msvc
-
-      - name: Prepare artifacts
-        shell: bash
-        run: |
-          cd target/x86_64-pc-windows-msvc/release
-          echo "  propus-client-windows-x64.exe" >> ../../../propus-client-windows-x64.sha256
-          cp propus-client.exe ../../../propus-client-windows-x64.exe
-          fi
-
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.release-please.outputs.tag }}
-          files: |
-            propus-client-windows-x64.exe
-            propus-client-windows-x64.sha256
-          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # ── Propus app (Tauri 2.0) — placeholder for future CI ──
+  # build-propus:
+  #   needs: release-please
+  #   if: needs.release-please.outputs.release-created == 'true'
+  #   runs-on: windows-latest
+  #   steps:
+  #     - TODO: Replace with Tauri 2.0 build pipeline (propus-app/)
 
   # ── Release summary with stats ──
   release-summary:
-    needs: [release-please, post-release, build-propus]
+    needs: [release-please, post-release]
     if: needs.release-please.outputs.release-created == 'true'
     runs-on: ubuntu-latest
     steps:

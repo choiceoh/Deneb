@@ -247,6 +247,9 @@ func (p *Plugin) handleMessage(cc *clientConn, data []byte) {
 		}
 		p.logger.Info("propus generation stopped", "connID", cc.connID)
 
+	case "SaveSession":
+		p.sendToClient(cc, MsgError("session save not yet supported"))
+
 	case "SetApiKey":
 		// API key is shared with Deneb — no separate key needed.
 		p.sendToClient(cc, MsgConfigStatus("deneb", "Deneb Gateway", "connected"))
