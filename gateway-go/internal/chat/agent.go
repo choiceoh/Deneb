@@ -403,32 +403,28 @@ func handlePendingInterrupt(
 	copy(snapshot, messages)
 	snapshot = append(snapshot, llm.NewTextMessage("user", pending.Message))
 
-	// Use local sglang for speed: no reasoning, no tool overhead, fast TTFT.
-	sglangClient := getSglangClient()
+	// Same model as main task for tone consistency, but with thinking
+	// disabled and no tools — fast, lightweight response.
 	quickReq := llm.ChatRequest{
-		Model:     sglangModel,
+		Model:     cfg.Model,
 		Messages:  snapshot,
 		System:    cfg.System,
 		MaxTokens: 1024,
 		Tools:     nil,
 		Stream:    true,
+		Thinking:  &llm.ThinkingConfig{Type: "disabled"},
 	}
 
-	events, err := sglangClient.StreamChatOpenAI(ctx, quickReq)
+	var events <-chan llm.StreamEvent
+	var err error
+	if cfg.APIType == "anthropic" {
+		events, err = client.StreamChat(ctx, quickReq)
+	} else {
+		events, err = client.StreamChatOpenAI(ctx, quickReq)
+	}
 	if err != nil {
-		logger.Warn("interrupt response: sglang call failed", "error", err)
-		// Fallback: try the main client (slower but better than silence).
-		quickReq.Model = cfg.Model
-		quickReq.MaxTokens = 1024
-		if cfg.APIType == "anthropic" {
-			events, err = client.StreamChat(ctx, quickReq)
-		} else {
-			events, err = client.StreamChatOpenAI(ctx, quickReq)
-		}
-		if err != nil {
-			logger.Warn("interrupt response: fallback LLM call also failed", "error", err)
-			return messages
-		}
+		logger.Warn("interrupt response: LLM call failed", "error", err)
+		return messages
 	}
 
 	// Consume the stream — hooks relay text deltas to Telegram in real time.
